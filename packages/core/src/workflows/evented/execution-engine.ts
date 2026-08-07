@@ -14,7 +14,7 @@ import type {
 } from '../types';
 import { cleanStepResult, hydrateSerializedStepErrors } from '../utils';
 import type { WorkflowEventProcessor } from './workflow-event-processor';
-import { getStep } from './workflow-event-processor/utils';
+import { getStepId } from './workflow-event-processor/utils';
 
 export class EventedExecutionEngine extends ExecutionEngine {
   protected eventProcessor: WorkflowEventProcessor;
@@ -44,9 +44,9 @@ export class EventedExecutionEngine extends ExecutionEngine {
    * branches need access to the workflow's step graph by id, so prefer the
    * internal registry when present.
    */
-  private resolveWorkflow(workflowId: string) {
-    if (this.mastra?.__hasInternalWorkflow(workflowId)) {
-      return this.mastra.__getInternalWorkflow(workflowId);
+  private resolveWorkflow(workflowId: string, runId?: string) {
+    if (this.mastra?.__hasInternalWorkflow(workflowId, runId)) {
+      return this.mastra.__getInternalWorkflow(workflowId, runId);
     }
     return this.mastra!.getWorkflow(workflowId);
   }
@@ -134,8 +134,8 @@ export class EventedExecutionEngine extends ExecutionEngine {
     // Wrap in try/catch to ensure proper cleanup and rejection on errors
     try {
       if (params.resume) {
-        const prevStep = getStep(this.resolveWorkflow(params.workflowId), params.resume.resumePath);
-        const prevResult = params.resume.stepResults[prevStep?.id ?? 'input'];
+        const prevStepId = getStepId(this.resolveWorkflow(params.workflowId, params.runId), params.resume.resumePath);
+        const prevResult = params.resume.stepResults[prevStepId ?? 'input'];
         // Extract state from stepResults.__state or use initialState
         const resumeState = params.resume.stepResults?.__state ?? params.initialState ?? {};
 
@@ -160,8 +160,11 @@ export class EventedExecutionEngine extends ExecutionEngine {
           },
         });
       } else if (params.timeTravel) {
-        const prevStep = getStep(this.resolveWorkflow(params.workflowId), params.timeTravel.executionPath);
-        const prevResult = params.timeTravel.stepResults[prevStep?.id ?? 'input'];
+        const prevStepId = getStepId(
+          this.resolveWorkflow(params.workflowId, params.runId),
+          params.timeTravel.executionPath,
+        );
+        const prevResult = params.timeTravel.stepResults[prevStepId ?? 'input'];
         await pubsub.publish('workflows', {
           type: 'workflow.start',
           runId: params.runId,
@@ -179,8 +182,8 @@ export class EventedExecutionEngine extends ExecutionEngine {
           },
         });
       } else if (params.restart) {
-        const prevStep = getStep(this.resolveWorkflow(params.workflowId), params.restart.activePaths);
-        const prevResult = params.restart.stepResults[prevStep?.id ?? 'input'];
+        const prevStepId = getStepId(this.resolveWorkflow(params.workflowId, params.runId), params.restart.activePaths);
+        const prevResult = params.restart.stepResults[prevStepId ?? 'input'];
         await pubsub.publish('workflows', {
           type: 'workflow.start',
           runId: params.runId,

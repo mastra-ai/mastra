@@ -1,4 +1,4 @@
-import { PageLayout } from '@mastra/playground-ui';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { RequestContext, RequestContextWrapper } from '@/domains/agents/components/request-context';
 
 export default function RequestContextPage() {

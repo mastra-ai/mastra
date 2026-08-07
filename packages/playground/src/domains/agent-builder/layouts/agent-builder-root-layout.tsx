@@ -1,4 +1,8 @@
-import { Button, EmptyState, Spinner, Toaster, TooltipProvider } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { Toaster } from '@mastra/playground-ui/components/Toaster';
+import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { AlertTriangle, ArrowLeft, Eye, LockIcon, Settings } from 'lucide-react';
 import { Navigate, Outlet, useLocation, useNavigate } from 'react-router';
 import { useBuilderAgentAccess } from '../hooks/use-builder-agent-access';
@@ -19,7 +23,7 @@ export const AgentBuilderRootLayout = ({ paths }: AgentBuilderRootLayoutProps) =
 
   if (isLoading) {
     return (
-      <div className="h-screen w-full flex items-center justify-center">
+      <div className="flex h-screen w-full items-center justify-center">
         <Spinner />
       </div>
     );
@@ -40,7 +44,7 @@ const AgentBuilderPermissionsGuard = ({ paths }: AgentBuilderRootLayoutProps) =>
 
   if (isLoading) {
     return (
-      <div className="h-screen w-full flex items-center justify-center">
+      <div className="flex h-screen w-full items-center justify-center">
         <Spinner />
       </div>
     );
@@ -109,7 +113,7 @@ function AccessDeniedScreen() {
           descriptionSlot="You don't have permission to access the Agent Builder."
         />
         <div className="flex items-center gap-2">
-          <Button as="a" href="/agents" variant="outline" size="sm">
+          <Button as={Link} href="/agents" variant="outline" size="sm">
             <ArrowLeft className="h-3.5 w-3.5" />
             Back to Studio
           </Button>

@@ -1,4 +1,5 @@
-import { Breadcrumb, Button, Crumb } from '@mastra/playground-ui';
+import { Breadcrumb, Crumb } from '@mastra/playground-ui/components/Breadcrumb';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { RefreshCwIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Link } from 'react-router';
@@ -37,16 +38,16 @@ export const EditTopBar = ({
   return (
     <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 px-4 pt-4 md:px-10">
       <Breadcrumb label="Agent navigation" className="min-w-0" listClassName="min-w-0">
-        <Crumb as={Link} to="/agent-builder/agents">
+        <Crumb as={Link} to="/agent-builder/agents" data-testid="agent-builder-back-to-list">
           Agent list
         </Crumb>
         <Crumb as="span" isCurrent>
           <AgentBuilderTitle isLoading={isLoading} />
         </Crumb>
       </Breadcrumb>
-      <div className="justify-self-end flex items-center gap-2 shrink-0">
-        {rightAside && <div className="shrink-0 mr-1">{rightAside}</div>}
-        {primaryAction && <div className="shrink-0 flex">{primaryAction}</div>}
+      <div className="flex shrink-0 items-center gap-2 justify-self-end">
+        {rightAside && <div className="mr-1 shrink-0">{rightAside}</div>}
+        {primaryAction && <div className="flex shrink-0">{primaryAction}</div>}
         {mobileExtra && <div className="shrink-0 lg:hidden">{mobileExtra}</div>}
         {mode && onModeToggle && (
           <Button
@@ -54,7 +55,7 @@ export const EditTopBar = ({
             size="sm"
             onClick={onModeToggle}
             disabled={modeToggleDisabled}
-            className="hidden lg:inline-flex shrink-0"
+            className="hidden shrink-0 lg:inline-flex"
             data-testid="agent-builder-mode-toggle"
             aria-label={toggleLabel}
           >

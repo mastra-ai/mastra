@@ -1,16 +1,13 @@
 import type { StoredSkillResponse } from '@mastra/client-js';
-import {
-  Button,
-  EmptyState,
-  ErrorState,
-  ListSearch,
-  PageHeader,
-  PageLayout,
-  PermissionDenied,
-  SessionExpired,
-  is401UnauthorizedError,
-  is403ForbiddenError,
-} from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
+import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
+import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
+import { PageHeader } from '@mastra/playground-ui/components/PageHeader';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
+import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { DownloadIcon, PlusIcon, SparklesIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
@@ -83,7 +80,7 @@ export default function AgentBuilderSkillsPage() {
       return (
         <div className="flex items-center justify-center pt-16">
           <EmptyState
-            iconSlot={<SparklesIcon className="h-8 w-8 text-neutral3" />}
+            iconSlot={<SparklesIcon className="text-neutral3 h-8 w-8" />}
             titleSlot="No skills yet"
             descriptionSlot="Create your first skill to give agents new capabilities."
             actionSlot={
@@ -123,7 +120,7 @@ export default function AgentBuilderSkillsPage() {
               <PageHeader.Description>Skills you've created.</PageHeader.Description>
             </PageHeader>
             {skills.length > 0 && canWriteSkills && (
-              <div className="w-full shrink-0 flex flex-col items-stretch gap-2 md:w-auto md:flex-row md:items-center">
+              <div className="flex w-full shrink-0 flex-col items-stretch gap-2 md:w-auto md:flex-row md:items-center">
                 {enabledRegistry && (
                   <Button
                     variant="default"

@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { MessageList } from '../../agent';
 import type { MastraDBMessage } from '../../agent';
+import { createSignal } from '../../agent/signals';
 import { RequestContext } from '../../request-context';
 import type { MemoryStorage } from '../../storage';
 import type { MastraEmbeddingModel, MastraVector } from '../../vector';
@@ -2470,6 +2471,135 @@ describe('SemanticRecall', () => {
       ).resolves.not.toThrow();
 
       expect(mockVector.createIndex).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('Signal-Delivered User Messages', () => {
+    // Regression for https://github.com/mastra-ai/mastra/issues/17797:
+    // user turns sent through the agent signal pipeline (agent.sendMessage,
+    // used by the Studio playground) are stored as role 'signal' rows and only
+    // projected to role 'user' at prompt time — after input processors run —
+    // so recall must extract its query from user-type signals too.
+    const USER_TEXT = 'What was my secret code word?';
+    const OTHER_THREAD = 'thread-OTHER';
+
+    let processor: SemanticRecall;
+
+    beforeEach(() => {
+      // The planted message lives in a different thread (cross-thread recall
+      // with scope: 'resource').
+      const plantedMessage: MastraDBMessage = {
+        id: 'msg-planted',
+        role: 'user',
+        threadId: OTHER_THREAD,
+        resourceId: 'resource-1',
+        content: {
+          format: 2,
+          content: 'Remember: my secret code word is Orchid-7.',
+          parts: [{ type: 'text', text: 'Remember: my secret code word is Orchid-7.' }],
+        },
+        createdAt: new Date(Date.now() - 60_000),
+      };
+
+      vi.mocked(mockEmbedder.doEmbed).mockResolvedValue({ embeddings: [[0.1, 0.2, 0.3]] });
+      vi.mocked(mockVector.listIndexes).mockResolvedValue(['mastra_memory_text_embedding_3_small']);
+      vi.mocked(mockVector.query).mockResolvedValue([
+        { id: 'vec-1', score: 0.95, metadata: { message_id: 'msg-planted', thread_id: OTHER_THREAD } },
+      ]);
+      vi.mocked(mockStorage.listMessages).mockResolvedValue({
+        messages: [plantedMessage],
+        total: 1,
+        page: 1,
+        perPage: false,
+        hasMore: false,
+      });
+
+      processor = new SemanticRecall({
+        storage: mockStorage,
+        vector: mockVector,
+        embedder: mockEmbedder,
+        topK: 3,
+        scope: 'resource',
+      });
+    });
+
+    async function runProcessor(messageList: MessageList) {
+      // Mirrors ProcessorRunner.runInputProcessors: processors receive
+      // messageList.get.input.db() as `messages`.
+      return processor.processInput({
+        messages: messageList.get.input.db(),
+        messageList,
+        abort: vi.fn() as any,
+        requestContext,
+      });
+    }
+
+    function recalledBlock(messageList: MessageList): string | undefined {
+      return messageList
+        .getSystemMessages('memory')
+        .map(m => (typeof m.content === 'string' ? m.content : ''))
+        .find(c => c.includes('<remembered_from_other_conversation>'));
+    }
+
+    it('should inject recalled context for a plain user message', async () => {
+      const messageList = new MessageList({ threadId: 'thread-1', resourceId: 'resource-1' });
+      messageList.add(
+        {
+          id: 'msg-new',
+          role: 'user',
+          threadId: 'thread-1',
+          resourceId: 'resource-1',
+          content: { format: 2, content: USER_TEXT, parts: [] },
+          createdAt: new Date(),
+        },
+        'input',
+      );
+
+      await runProcessor(messageList);
+
+      expect(mockEmbedder.doEmbed).toHaveBeenCalledWith({ values: [USER_TEXT] });
+      expect(mockVector.query).toHaveBeenCalledTimes(1);
+
+      const block = recalledBlock(messageList);
+      expect(block).toBeDefined();
+      expect(block).toContain('Orchid-7');
+    });
+
+    it('should inject recalled context for a user-message signal (Studio sendMessage path)', async () => {
+      // This is how a playground turn reaches input processors: useChat →
+      // agent.sendMessage → thread-stream-runtime wakes the idle thread with
+      // agent.stream(signal, ...) → the signal is added to the MessageList as
+      // a role: 'signal' DB row.
+      const signal = createSignal({ type: 'user-message', contents: USER_TEXT });
+
+      const messageList = new MessageList({ threadId: 'thread-1', resourceId: 'resource-1' });
+      messageList.addSignal(signal, { source: 'input' });
+
+      const inputMessages = messageList.get.input.db();
+      expect(inputMessages).toHaveLength(1);
+      expect(inputMessages[0]!.role).toBe('signal');
+
+      await runProcessor(messageList);
+
+      expect(mockEmbedder.doEmbed).toHaveBeenCalledWith({ values: [USER_TEXT] });
+      expect(mockVector.query).toHaveBeenCalledTimes(1);
+
+      const block = recalledBlock(messageList);
+      expect(block).toBeDefined();
+      expect(block).toContain('Orchid-7');
+    });
+
+    it('should not run recall for non-user signals', async () => {
+      const signal = createSignal({ type: 'system-reminder', contents: 'The deploy finished.' });
+
+      const messageList = new MessageList({ threadId: 'thread-1', resourceId: 'resource-1' });
+      messageList.addSignal(signal, { source: 'input' });
+
+      await runProcessor(messageList);
+
+      expect(mockEmbedder.doEmbed).not.toHaveBeenCalled();
+      expect(mockVector.query).not.toHaveBeenCalled();
+      expect(recalledBlock(messageList)).toBeUndefined();
     });
   });
 });

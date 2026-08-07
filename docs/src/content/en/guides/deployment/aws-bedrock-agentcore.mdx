@@ -5,7 +5,7 @@ description: "Learn how to deploy a Mastra application to Amazon Bedrock AgentCo
 
 # Deploy Mastra to Amazon Bedrock AgentCore
 
-Deploy your Mastra application to [Amazon Bedrock AgentCore Runtime](https://docs.aws.amazon.com/bedrock-agentcore/) using the [AgentCore CLI](https://github.com/aws/agentcore-cli). The CLI scaffolds a bring-your-own-code (BYO) TypeScript project, builds the container with AWS CodeBuild, and provisions the runtime. A local Docker daemon is not required for deployment.
+Deploy your Mastra application to [Amazon Bedrock AgentCore Runtime](https://docs.aws.amazon.com/bedrock-agentcore/) using the [AgentCore CLI](https://github.com/aws/agentcore-cli). The CLI scaffolds a bring-your-own-code (BYO) TypeScript project, builds the container with AWS CodeBuild, and provisions the runtime. A local Docker daemon isn't required for deployment.
 
 This guide follows the [official AgentCore TypeScript walkthrough](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/runtime-get-started-cli-typescript.html) and adapts it to call a Mastra agent from the invocation handler.
 
@@ -103,7 +103,7 @@ export const weatherAgent = new Agent({
 
 :::
 
-Replace the generated `src/mastra/index.ts` to remove the default file-based storage and observability config. AgentCore Runtime containers run as a non-root user with a read-only application directory, so the default `LibSQLStore` cannot open `./mastra.db` and the runtime fails at startup:
+Replace the generated `src/mastra/index.ts` to remove the default file-based storage and observability config. AgentCore Runtime containers run as a non-root user with a read-only application directory, so the default `LibSQLStore` can't open `./mastra.db` and the runtime fails at startup:
 
 ```ts title="app/MastraAgent/src/mastra/index.ts"
 import { Mastra } from '@mastra/core/mastra'
@@ -285,7 +285,7 @@ Run `agentcore status` to view the runtime ARN, endpoint, and recent invocations
 npx @aws/agentcore invoke "What is the weather in Tokyo?"
 ```
 
-To stream tokens as they are generated, use `--stream`:
+To stream tokens as they're generated, use `--stream`:
 
 ```bash
 npx @aws/agentcore invoke --stream "Plan a 3-day trip to Tokyo"

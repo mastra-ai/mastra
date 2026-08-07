@@ -198,7 +198,12 @@ describe('PgVector', () => {
 
       it('should provide access to pool configuration via public pool field', () => {
         expect(testDB.pool.options).toBeDefined();
-        expect(testDB.pool.options.connectionString).toBe(connectionString);
+        // The connection string is parsed into discrete fields (host/port/database)
+        // by the shared pool-config helper rather than forwarded verbatim, so an
+        // explicit `ssl` option can win over the URL's sslmode. See issue #17307.
+        expect(testDB.pool.options.connectionString).toBeUndefined();
+        expect(testDB.pool.options.host).toBeDefined();
+        expect(testDB.pool.options.database).toBeDefined();
         expect(testDB.pool.options.max).toBeDefined();
         expect(testDB.pool.options.idleTimeoutMillis).toBeDefined();
       });

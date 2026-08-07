@@ -1,5 +1,6 @@
 import type { StoredSkillResponse } from '@mastra/client-js';
-import { Checkbox, Txt } from '@mastra/playground-ui';
+import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useFormContext } from 'react-hook-form';
 import type { AgentBuilderEditFormValues } from '../../../schemas';
 
@@ -48,7 +49,7 @@ interface SkillItemProps {
 const SkillItem = ({ skill, editable, onToggle, isChecked }: SkillItemProps) => {
   return (
     <label
-      className="flex cursor-pointer items-start gap-3 px-6 py-4 transition-colors hover:bg-surface2"
+      className="hover:bg-surface2 flex cursor-pointer items-start gap-3 px-6 py-4 transition-colors"
       aria-disabled={!editable}
     >
       <div className="mt-0.5">
@@ -59,11 +60,11 @@ const SkillItem = ({ skill, editable, onToggle, isChecked }: SkillItemProps) => 
         />
       </div>
       <div className="flex min-w-0 flex-col">
-        <Txt variant="ui-sm" className="font-medium text-neutral6">
+        <Txt variant="ui-sm" className="text-neutral6 font-medium">
           {skill.name}
         </Txt>
         {skill.description && (
-          <Txt variant="ui-xs" className="mt-0.5 truncate text-neutral3" title={skill.description}>
+          <Txt variant="ui-xs" className="text-neutral3 mt-0.5 truncate" title={skill.description}>
             {skill.description}
           </Txt>
         )}

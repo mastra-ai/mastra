@@ -3,6 +3,7 @@ import { describe, it, expect } from 'vitest';
 import { RequestContext } from '../../request-context';
 import { AISDKV4LegacyLanguageModel } from './aisdk/v4/model';
 import { AISDKV5LanguageModel } from './aisdk/v5/model';
+import { AISDKV7LanguageModel } from './aisdk/v7/model';
 import { resolveModelConfig } from './resolve-model';
 import { ModelRouterLanguageModel } from './router';
 
@@ -73,10 +74,28 @@ describe('resolveModelConfig', () => {
     await expect(resolveModelConfig({} as any)).rejects.toThrow('Invalid model configuration');
   });
 
+  describe('v4 (LanguageModelV4 / AI SDK v7) handling', () => {
+    it('should wrap a v4 model in AISDKV7LanguageModel', async () => {
+      const model = {
+        specificationVersion: 'v4',
+        provider: 'openai.responses',
+        modelId: 'gpt-5',
+        supportedUrls: {},
+        doGenerate: async () => ({}),
+        doStream: async () => ({}),
+      };
+      const result = await resolveModelConfig(model as any);
+      expect(result).toBeInstanceOf(AISDKV7LanguageModel);
+      expect(result.specificationVersion).toBe('v4');
+      expect(result.modelId).toBe('gpt-5');
+      expect(result.provider).toBe('openai.responses');
+    });
+  });
+
   describe('unknown specificationVersion handling', () => {
     it('should wrap a model with unknown specificationVersion as AISDKV5LanguageModel when it has doStream/doGenerate', async () => {
       const model = {
-        specificationVersion: 'v4',
+        specificationVersion: 'v99',
         provider: 'ollama.responses',
         modelId: 'llama3.2',
         supportedUrls: {},
@@ -92,7 +111,7 @@ describe('resolveModelConfig', () => {
 
     it('should pass through a model with unknown specificationVersion when it lacks doStream/doGenerate', async () => {
       const model = {
-        specificationVersion: 'v4',
+        specificationVersion: 'v99',
         provider: 'test',
         modelId: 'test-model',
       };

@@ -1,8 +1,15 @@
-// @vitest-environment jsdom
-import { cleanup, render, fireEvent } from '@testing-library/react';
+import { MastraReactProvider } from '@mastra/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { cleanup, render, fireEvent, waitFor } from '@testing-library/react';
+import { http, HttpResponse } from 'msw';
+import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router';
 import type * as ReactRouter from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { ViewPageProvider, useViewPage } from '../view-page-context';
+import { buildBuilderSettings } from './fixtures/builder';
+import { server } from '@/test/msw-server';
 
 type StoredAgentMock = {
   id: string;
@@ -13,9 +20,11 @@ type StoredAgentMock = {
   browser?: unknown;
 };
 
+const BASE_URL = 'http://localhost:4111';
 const navigateMock = vi.fn();
-let browserFeatureEnabled = false;
 
+// `useNavigate` is an allowed thin seam: we assert the redirect *target*, not
+// real navigation. The agent chat panel is a heavy child with its own tests.
 vi.mock('react-router', async () => {
   const actual = await vi.importActual<typeof ReactRouter>('react-router');
   return {
@@ -24,22 +33,9 @@ vi.mock('react-router', async () => {
   };
 });
 
-vi.mock('@/domains/agent-builder/hooks/use-builder-agent-features', () => ({
-  useBuilderAgentFeatures: () => ({
-    tools: false,
-    memory: false,
-    workflows: false,
-    agents: false,
-    skills: false,
-    browser: browserFeatureEnabled,
-  }),
-}));
-
 vi.mock('@/domains/agent-builder/components/agent-edit/agent-chat-panel', () => ({
   AgentChatPanelProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
-
-import { ViewPageProvider, useViewPage } from '../view-page-context';
 
 const baseAgent: StoredAgentMock = {
   id: 'agent-1',
@@ -74,9 +70,17 @@ interface RenderOpts {
   canWrite?: boolean;
 }
 
-const renderProbe = ({ storedAgent, currentUserId = 'owner-1', canWrite = true }: RenderOpts = {}) =>
-  render(
-    <MemoryRouter>
+const renderProbe = ({ storedAgent, currentUserId = 'owner-1', canWrite = true }: RenderOpts = {}) => {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const Providers = ({ children }: { children: ReactNode }) => (
+    <MastraReactProvider baseUrl={BASE_URL}>
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter>{children}</MemoryRouter>
+      </QueryClientProvider>
+    </MastraReactProvider>
+  );
+  return render(
+    <Providers>
       <ViewPageProvider
         agentId="agent-1"
         storedAgent={{ ...baseAgent, ...(storedAgent ?? {}) } as never}
@@ -85,70 +89,92 @@ const renderProbe = ({ storedAgent, currentUserId = 'owner-1', canWrite = true }
       >
         <Probe />
       </ViewPageProvider>
-    </MemoryRouter>,
+    </Providers>,
   );
+};
 
 describe('ViewPageProvider', () => {
   beforeEach(() => {
     navigateMock.mockReset();
-    browserFeatureEnabled = false;
+    server.use(http.get(`${BASE_URL}/api/editor/builder/settings`, () => HttpResponse.json(buildBuilderSettings())));
   });
 
   afterEach(() => {
     cleanup();
   });
 
-  it('marks the page as publishable only when the saved visibility is public', () => {
-    const first = renderProbe({ storedAgent: { visibility: 'public' } });
-    expect(first.getByTestId('is-publishable').textContent).toBe('true');
-    cleanup();
+  describe('when computing publishability from saved visibility', () => {
+    it('marks public agents as publishable', () => {
+      const { getByTestId } = renderProbe({ storedAgent: { visibility: 'public' } });
+      expect(getByTestId('is-publishable').textContent).toBe('true');
+    });
 
-    const second = renderProbe({ storedAgent: { visibility: 'private' } });
-    expect(second.getByTestId('is-publishable').textContent).toBe('false');
+    it('marks private agents as not publishable', () => {
+      const { getByTestId } = renderProbe({ storedAgent: { visibility: 'private' } });
+      expect(getByTestId('is-publishable').textContent).toBe('false');
+    });
   });
 
-  it('grants canModify only when canWrite AND isOwner are both true', () => {
-    const first = renderProbe({ canWrite: false });
-    expect(first.getByTestId('is-owner').textContent).toBe('true');
-    expect(first.getByTestId('can-modify').textContent).toBe('false');
-    cleanup();
+  describe('when computing canModify from canWrite and ownership', () => {
+    it('denies canModify when the owner lacks write access', () => {
+      const { getByTestId } = renderProbe({ canWrite: false });
+      expect(getByTestId('is-owner').textContent).toBe('true');
+      expect(getByTestId('can-modify').textContent).toBe('false');
+    });
 
-    const second = renderProbe({ storedAgent: { authorId: 'someone-else' } });
-    expect(second.getByTestId('is-owner').textContent).toBe('false');
-    expect(second.getByTestId('can-modify').textContent).toBe('false');
+    it('denies canModify when the writer is not the owner', () => {
+      const { getByTestId } = renderProbe({ storedAgent: { authorId: 'someone-else' } });
+      expect(getByTestId('is-owner').textContent).toBe('false');
+      expect(getByTestId('can-modify').textContent).toBe('false');
+    });
   });
 
-  it('exposes a mode-toggle that navigates to the edit page for owners', () => {
-    const { getByTestId } = renderProbe();
-    expect(getByTestId('has-mode-toggle').textContent).toBe('true');
-    fireEvent.click(getByTestId('toggle-btn'));
-    expect(navigateMock).toHaveBeenLastCalledWith('/agent-builder/agents/agent-1/edit', { viewTransition: true });
+  describe('when the viewer is the owner', () => {
+    it('exposes a mode-toggle that navigates to the edit page', () => {
+      const { getByTestId } = renderProbe();
+      expect(getByTestId('has-mode-toggle').textContent).toBe('true');
+      fireEvent.click(getByTestId('toggle-btn'));
+      expect(navigateMock).toHaveBeenLastCalledWith('/agent-builder/agents/agent-1/edit', { viewTransition: true });
+    });
   });
 
-  it('returns no mode-toggle for non-owners', () => {
-    const { getByTestId } = renderProbe({ storedAgent: { authorId: 'someone-else' } });
-    expect(getByTestId('has-mode-toggle').textContent).toBe('false');
+  describe('when the viewer is not the owner', () => {
+    it('returns no mode-toggle', () => {
+      const { getByTestId } = renderProbe({ storedAgent: { authorId: 'someone-else' } });
+      expect(getByTestId('has-mode-toggle').textContent).toBe('false');
+    });
   });
 
-  it('hasBrowser stays false when the browser feature is off, even if the agent has a browser config', () => {
-    browserFeatureEnabled = false;
-    const { getByTestId } = renderProbe({ storedAgent: { browser: { sessionId: 'sess-1' } } });
-    expect(getByTestId('has-browser').textContent).toBe('false');
+  describe('when the browser feature is disabled', () => {
+    it('keeps hasBrowser false even if the agent has a browser config', async () => {
+      const { getByTestId } = renderProbe({ storedAgent: { browser: { sessionId: 'sess-1' } } });
+      // Settings resolve with browser off; hasBrowser must remain false.
+      await waitFor(() => expect(getByTestId('agent-id').textContent).toBe('agent-1'));
+      expect(getByTestId('has-browser').textContent).toBe('false');
+    });
   });
 
-  it('hasBrowser is true only when the feature is on AND the agent has a browser config', () => {
-    browserFeatureEnabled = true;
-    const { getByTestId } = renderProbe({ storedAgent: { browser: { sessionId: 'sess-1' } } });
-    expect(getByTestId('has-browser').textContent).toBe('true');
+  describe('when the browser feature is enabled', () => {
+    it('sets hasBrowser true only when the agent also has a browser config', async () => {
+      server.use(
+        http.get(`${BASE_URL}/api/editor/builder/settings`, () =>
+          HttpResponse.json(buildBuilderSettings({ browser: true })),
+        ),
+      );
+      const { getByTestId } = renderProbe({ storedAgent: { browser: { sessionId: 'sess-1' } } });
+      await waitFor(() => expect(getByTestId('has-browser').textContent).toBe('true'));
+    });
   });
 
-  it('threadId falls back to the agent id when there is no current user id', () => {
-    const { getByTestId } = renderProbe({ currentUserId: null });
-    expect(getByTestId('thread-id').textContent).toBe('agent-1');
-  });
+  describe('when deriving the thread id', () => {
+    it('falls back to the agent id when there is no current user', () => {
+      const { getByTestId } = renderProbe({ currentUserId: null });
+      expect(getByTestId('thread-id').textContent).toBe('agent-1');
+    });
 
-  it('threadId combines current user id and agent id when available', () => {
-    const { getByTestId } = renderProbe({ currentUserId: 'user-7' });
-    expect(getByTestId('thread-id').textContent).toBe('user-7-agent-1');
+    it('combines the current user id and agent id when both are present', () => {
+      const { getByTestId } = renderProbe({ currentUserId: 'user-7' });
+      expect(getByTestId('thread-id').textContent).toBe('user-7-agent-1');
+    });
   });
 });

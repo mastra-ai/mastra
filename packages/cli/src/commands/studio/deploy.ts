@@ -5,12 +5,15 @@ import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import * as p from '@clack/prompts';
-import archiver from 'archiver';
+import { ZipArchive } from 'archiver';
 import { config } from 'dotenv';
+
+import { bucketApiHost, getAnalytics } from '../../analytics/index.js';
+import type { CLI_ORIGIN } from '../../analytics/index.js';
 import { runBuild } from '../../utils/run-build.js';
 import { checkBuildStaleness } from '../../utils/source-hash.js';
 import { fetchOrgs } from '../auth/api.js';
-import { MASTRA_STUDIO_URL } from '../auth/client.js';
+import { MASTRA_STUDIO_URL, MASTRA_PLATFORM_API_URL } from '../auth/client.js';
 import { getToken, getCurrentOrgId } from '../auth/credentials.js';
 import { preflightBuildOutput, printPreflightIssues } from '../deploy-preflight.js';
 import { fetchProjects, createProject, uploadDeploy, pollDeploy } from './platform-api.js';
@@ -70,7 +73,7 @@ async function zipOutput(projectDir: string): Promise<string> {
 
   return new Promise((resolvePromise, reject) => {
     const output = createWriteStream(zipPath);
-    const archive = archiver('zip', { zlib: { level: 6 } });
+    const archive = new ZipArchive({ zlib: { level: 6 } });
 
     output.on('close', () => resolvePromise(zipPath));
     archive.on('error', reject);
@@ -112,7 +115,7 @@ export function loadDeployEnvFromDotenv(projectDir: string): void {
   });
 }
 
-async function getDeployEnvFiles(projectDir: string): Promise<string[]> {
+export async function getDeployEnvFiles(projectDir: string): Promise<string[]> {
   const entries = await readdir(projectDir, { withFileTypes: true });
 
   return entries
@@ -359,19 +362,42 @@ async function resolveProject(
 /*  Main deploy action                                                */
 /* ------------------------------------------------------------------ */
 
-export async function deployAction(
-  dir: string | undefined,
-  opts: {
-    org?: string;
-    project?: string;
-    yes?: boolean;
-    config?: string;
-    skipBuild?: boolean;
-    skipPreflight?: boolean;
-    debug?: boolean;
-    envFile?: string;
-  },
-) {
+type StudioDeployOptions = {
+  org?: string;
+  project?: string;
+  yes?: boolean;
+  config?: string;
+  skipBuild?: boolean;
+  skipPreflight?: boolean;
+  debug?: boolean;
+  envFile?: string;
+};
+
+export async function deployAction(dir: string | undefined, opts: StudioDeployOptions) {
+  const analytics = getAnalytics();
+  if (!analytics) {
+    return runStudioDeploy(dir, opts);
+  }
+  return analytics.trackCommandExecution({
+    command: 'mastra studio deploy',
+    args: {
+      yes: Boolean(opts.yes),
+      skipBuild: Boolean(opts.skipBuild),
+      skipPreflight: Boolean(opts.skipPreflight),
+      hasOrg: Boolean(opts.org),
+      hasProject: Boolean(opts.project),
+      hasEnvFile: Boolean(opts.envFile),
+      hasConfig: Boolean(opts.config),
+      debug: Boolean(opts.debug),
+      headless: Boolean(process.env.MASTRA_API_TOKEN),
+      targetApi: bucketApiHost(MASTRA_PLATFORM_API_URL),
+    },
+    execution: () => runStudioDeploy(dir, opts),
+    origin: process.env.MASTRA_ANALYTICS_ORIGIN as CLI_ORIGIN | undefined,
+  });
+}
+
+async function runStudioDeploy(dir: string | undefined, opts: StudioDeployOptions) {
   const targetDir = resolve(dir || process.cwd());
   // Seed MASTRA_PROJECT_ID / MASTRA_ORG_ID from the project's .env so deploys
   // auto-link to the project that `mastra init --observability` provisioned.
@@ -527,17 +553,32 @@ export async function deployAction(
     throw new Error('.mastra/output/index.mjs not found — did the build succeed?');
   }
 
-  const envVars = await readEnvVars(targetDir, { autoAccept, envFile: opts.envFile });
+  // If the user didn't pass --env-file and no ambient .env* file exists,
+  // skip the local env-var upload entirely and let the platform use the
+  // env vars stored on the project. The server-side deploy handler merges
+  // request envVars over the stored vars, so an empty (absent) envVars
+  // payload cleanly falls back to what's already stored.
+  let envVars: Record<string, string> = {};
+  const hasEnvFile = opts.envFile ? true : (await getDeployEnvFiles(targetDir)).length > 0;
+  if (hasEnvFile) {
+    envVars = await readEnvVars(targetDir, { autoAccept, envFile: opts.envFile });
+  }
   const envCount = Object.keys(envVars).length;
   if (envCount > 0) {
     p.log.step(`Found ${envCount} env var(s)`);
-  } else {
+  } else if (hasEnvFile) {
     p.log.step('No env vars found in selected env file');
+  } else {
+    p.log.step('No local env file — using env vars stored on the project');
   }
 
   // Pre-upload validation — catch USER-attributable errors before zipping/shipping.
+  // Unlike `mastra deploy` / `mastra server deploy`, the studio platform API has
+  // no endpoint to read stored env vars, so preflight only sees the local env
+  // file. Platform-provided vars (MASTRA_*, etc.) are still trusted via the
+  // preflight allowlist.
   if (!skipPreflight) {
-    const issues = await preflightBuildOutput(targetDir, envVars);
+    const issues = await preflightBuildOutput(targetDir, envVars, { hasEnvFile });
     const outcome = await printPreflightIssues(issues, { autoAccept });
     if (outcome === 'blocked') {
       p.cancel('Deploy blocked by preflight errors.');

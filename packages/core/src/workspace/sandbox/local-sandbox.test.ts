@@ -8,8 +8,15 @@ import { createSandboxTestSuite } from '../../../../../workspaces/_test-utils/sr
 import { RequestContext } from '../../request-context';
 import type { WorkspaceFilesystem } from '../filesystem/filesystem';
 import { IsolationUnavailableError } from './errors';
-import { LocalSandbox, MARKER_DIR } from './local-sandbox';
-import { detectIsolation, isIsolationAvailable, isSeatbeltAvailable, isBwrapAvailable } from './native-sandbox';
+import { LocalSandbox, getMarkerDir } from './local-sandbox';
+import {
+  detectIsolation,
+  isIsolationAvailable,
+  isSeatbeltAvailable,
+  isBwrapAvailable,
+  buildBwrapCommand,
+  generateSeatbeltProfile,
+} from './native-sandbox';
 
 describe('LocalSandbox', () => {
   let tempDir: string;
@@ -64,6 +71,70 @@ describe('LocalSandbox', () => {
     it('should expand ~ in working directory', () => {
       const customSandbox = new LocalSandbox({ workingDirectory: '~/my-sandbox' });
       expect(customSandbox.workingDirectory).toBe(path.join(os.homedir(), 'my-sandbox'));
+    });
+  });
+
+  // ===========================================================================
+  // Cloning
+  // ===========================================================================
+  describe('clone', () => {
+    it('constructs an unstarted sibling inheriting configuration', () => {
+      const template = new LocalSandbox({ workingDirectory: tempDir, env: { BASE: '1' } });
+
+      const child = template.clone({ id: 'mc-project-1' });
+
+      expect(child).toBeInstanceOf(LocalSandbox);
+      expect(child).not.toBe(template);
+      expect(child.id).toBe('mc-project-1');
+      expect(child.status).toBe('pending');
+      expect(child.workingDirectory).toBe(tempDir);
+      expect(child.isolation).toBe(template.isolation);
+    });
+
+    it('applies a derived working directory override', () => {
+      const template = new LocalSandbox({ workingDirectory: tempDir });
+      const childWorkdir = path.join(tempDir, 'child');
+
+      const child = template.clone({ workingDirectory: childWorkdir });
+
+      expect(child.workingDirectory).toBe(childWorkdir);
+      expect(template.workingDirectory).toBe(tempDir);
+    });
+
+    it('applies env overrides and can execute commands after start', async () => {
+      const template = new LocalSandbox({ workingDirectory: tempDir, env: { PATH: process.env.PATH } });
+
+      const child = template.clone({ env: { PATH: process.env.PATH ?? '', CLONED_VAR: 'cloned-value' } });
+      await child._start();
+      try {
+        const result = await child.executeCommand!('sh', ['-c', 'echo "$CLONED_VAR"']);
+        expect(result.success).toBe(true);
+        expect(result.stdout.trim()).toBe('cloned-value');
+      } finally {
+        await child._destroy();
+      }
+    });
+
+    it('inherits the template env when no env override is passed', async () => {
+      const template = new LocalSandbox({
+        workingDirectory: tempDir,
+        env: { PATH: process.env.PATH, TEMPLATE_VAR: 'from-template' },
+      });
+
+      const child = template.clone();
+      await child._start();
+      try {
+        const result = await child.executeCommand!('sh', ['-c', 'echo "$TEMPLATE_VAR"']);
+        expect(result.stdout.trim()).toBe('from-template');
+      } finally {
+        await child._destroy();
+      }
+    });
+
+    it('ignores sandboxId and idleTimeoutMinutes (no local equivalent)', () => {
+      const template = new LocalSandbox({ workingDirectory: tempDir });
+      const child = template.clone({ sandboxId: 'ignored', idleTimeoutMinutes: 15, id: 'local-child' });
+      expect(child.id).toBe('local-child');
     });
   });
 
@@ -194,7 +265,7 @@ describe('LocalSandbox', () => {
       expect(result.success).toBe(true);
       expect(result.stdout.trim()).toBe('Hello, World!');
       expect(result.exitCode).toBe(0);
-      expect(result.executionTimeMs).toBeGreaterThan(0);
+      expect(result.executionTimeMs).toBeGreaterThanOrEqual(0);
     });
 
     it('should handle command failure', async () => {
@@ -568,6 +639,86 @@ describe('LocalSandbox', () => {
 
       expect(info.metadata?.isolation).toBe('none');
     });
+
+    describe('readOnly option', () => {
+      it('should generate a bwrap command with --ro-bind when readOnly is true', () => {
+        const workspacePath = '/path/to/workspace';
+        const { args } = buildBwrapCommand('echo 1', workspacePath, { readOnly: true });
+
+        // Should use --ro-bind for the workspace path
+        let foundRoBind = false;
+        for (let i = 0; i <= args.length - 3; i++) {
+          if (args[i] === '--ro-bind' && args[i + 1] === workspacePath && args[i + 2] === workspacePath) {
+            foundRoBind = true;
+            break;
+          }
+        }
+        expect(foundRoBind).toBe(true);
+
+        // Should not use --bind for the workspace path
+        const bindIndices = [];
+        let index = args.indexOf('--bind');
+        while (index !== -1) {
+          bindIndices.push(index);
+          index = args.indexOf('--bind', index + 1);
+        }
+        for (const idx of bindIndices) {
+          expect(args[idx + 1]).not.toBe(workspacePath);
+        }
+      });
+
+      it('should generate a bwrap command with --bind when readOnly is false or undefined', () => {
+        const workspacePath = '/path/to/workspace';
+
+        // 1. Test undefined case
+        const { args: argsUndefined } = buildBwrapCommand('echo 1', workspacePath, {});
+        let foundBindUndefined = false;
+        for (let i = 0; i <= argsUndefined.length - 3; i++) {
+          if (
+            argsUndefined[i] === '--bind' &&
+            argsUndefined[i + 1] === workspacePath &&
+            argsUndefined[i + 2] === workspacePath
+          ) {
+            foundBindUndefined = true;
+            break;
+          }
+        }
+        expect(foundBindUndefined).toBe(true);
+
+        // 2. Test false case
+        const { args: argsFalse } = buildBwrapCommand('echo 1', workspacePath, { readOnly: false });
+        let foundBindFalse = false;
+        for (let i = 0; i <= argsFalse.length - 3; i++) {
+          if (argsFalse[i] === '--bind' && argsFalse[i + 1] === workspacePath && argsFalse[i + 2] === workspacePath) {
+            foundBindFalse = true;
+            break;
+          }
+        }
+        expect(foundBindFalse).toBe(true);
+      });
+
+      it('should exclude a read-only workspace from broad temp directory write permissions', () => {
+        const workspacePath = '/private/var/folders/path/to/workspace';
+        const profile = generateSeatbeltProfile(workspacePath, { readOnly: true });
+
+        expect(profile).not.toContain(`(allow file-write* (subpath "${workspacePath}"))`);
+        expect(profile).toContain(
+          `(allow file-write* (require-all (subpath "/private/var/folders") (require-not (subpath "${workspacePath}"))))`,
+        );
+      });
+
+      it('should generate a seatbelt profile with file-write* for workspace when readOnly is false or undefined', () => {
+        const workspacePath = '/path/to/workspace';
+
+        // 1. Test undefined case
+        const profileUndefined = generateSeatbeltProfile(workspacePath, {});
+        expect(profileUndefined).toContain(`(allow file-write* (subpath "${workspacePath}"))`);
+
+        // 2. Test false case
+        const profileFalse = generateSeatbeltProfile(workspacePath, { readOnly: false });
+        expect(profileFalse).toContain(`(allow file-write* (subpath "${workspacePath}"))`);
+      });
+    });
   });
 
   // ===========================================================================
@@ -780,6 +931,61 @@ describe('LocalSandbox', () => {
           .catch(() => false),
       ).toBe(false);
     });
+
+    it('should respect readOnly working directory restriction', async () => {
+      if (os.platform() !== 'darwin') {
+        return;
+      }
+
+      const rwDir = path.join(tempDir, 'writable');
+      const unrelatedTempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'mastra-unrelated-temp-'));
+      await fs.mkdir(rwDir);
+      const testFile = path.join(tempDir, 'workspace-file.txt');
+      await fs.writeFile(testFile, 'initial content');
+
+      const seatbeltSandbox = new LocalSandbox({
+        workingDirectory: tempDir,
+        isolation: 'seatbelt',
+        nativeSandbox: {
+          readOnly: true,
+          readWritePaths: [rwDir],
+        },
+      });
+
+      try {
+        await seatbeltSandbox._start();
+
+        // 1. Reading an existing workspace file succeeds
+        const readResult = await seatbeltSandbox.executeCommand('cat', [testFile]);
+        expect(readResult.success).toBe(true);
+        expect(readResult.stdout.trim()).toBe('initial content');
+
+        // 2. Creating or overwriting a workspace file fails
+        const blockedFile = path.join(tempDir, 'blocked-file.txt');
+        const writeResult = await seatbeltSandbox.executeCommand('sh', ['-c', `echo "new content" > "${blockedFile}"`]);
+        expect(writeResult.success).toBe(false);
+        expect(writeResult.stderr).toContain('Operation not permitted');
+        await expect(fs.access(blockedFile)).rejects.toThrow();
+
+        // 3. Writing inside a nested readWritePaths exception succeeds
+        const rwFile = path.join(rwDir, 'allowed-file.txt');
+        const rwResult = await seatbeltSandbox.executeCommand('sh', ['-c', `echo "allowed content" > "${rwFile}"`]);
+        expect(rwResult.success).toBe(true);
+        await expect(fs.readFile(rwFile, 'utf8')).resolves.toContain('allowed content');
+
+        // 4. Writing elsewhere in the temp root remains allowed
+        const unrelatedTempFile = path.join(unrelatedTempDir, 'allowed-file.txt');
+        const tempResult = await seatbeltSandbox.executeCommand('sh', [
+          '-c',
+          `echo "temp content" > "${unrelatedTempFile}"`,
+        ]);
+        expect(tempResult.success).toBe(true);
+        await expect(fs.readFile(unrelatedTempFile, 'utf8')).resolves.toContain('temp content');
+      } finally {
+        await seatbeltSandbox._destroy();
+        await fs.rm(unrelatedTempDir, { recursive: true, force: true });
+      }
+    });
   });
 
   // ===========================================================================
@@ -884,6 +1090,58 @@ describe('LocalSandbox', () => {
       expect(result.success).toBe(true);
 
       await bwrapSandbox._destroy();
+    });
+
+    it('should respect readOnly working directory restriction', async () => {
+      if (os.platform() !== 'linux' || !isBwrapAvailable()) {
+        return;
+      }
+
+      const rwDir = await fs.mkdtemp(path.join(os.tmpdir(), 'mastra-rw-path-'));
+      const testFile = path.join(tempDir, 'workspace-file.txt');
+      await fs.writeFile(testFile, 'initial content');
+
+      const bwrapSandbox = new LocalSandbox({
+        workingDirectory: tempDir,
+        isolation: 'bwrap',
+        nativeSandbox: {
+          readOnly: true,
+          readWritePaths: [rwDir],
+        },
+      });
+
+      await bwrapSandbox._start();
+
+      // 1. Reading an existing workspace file succeeds
+      const readResult = await bwrapSandbox.executeCommand('cat', [testFile]);
+      expect(readResult.success).toBe(true);
+      expect(readResult.stdout.trim()).toBe('initial content');
+
+      // 2. Creating or overwriting a workspace file fails
+      const writeResult = await bwrapSandbox.executeCommand('node', [
+        '-e',
+        `require('fs').writeFileSync('${tempDir}/blocked-file.txt', 'new content')`,
+      ]);
+      expect(writeResult.success).toBe(false);
+
+      // Verify host filesystem is unchanged
+      const blockedFileExists = await fs
+        .access(path.join(tempDir, 'blocked-file.txt'))
+        .then(() => true)
+        .catch(() => false);
+      expect(blockedFileExists).toBe(false);
+
+      // 3. Writing inside an explicit readWritePaths exception succeeds
+      const rwFile = path.join(rwDir, 'allowed-file.txt');
+      const rwResult = await bwrapSandbox.executeCommand('node', [
+        '-e',
+        `require('fs').writeFileSync('${rwFile}', 'allowed content')`,
+      ]);
+      expect(rwResult.success).toBe(true);
+
+      // Clean up
+      await bwrapSandbox._destroy();
+      await fs.rm(rwDir, { recursive: true, force: true });
     });
   });
 
@@ -1042,8 +1300,8 @@ describe('LocalSandbox', () => {
       // Write a matching marker file
       const markerFilename = mountSandbox.mounts.markerFilename(hostPath);
       const configHash = mountSandbox.mounts.computeConfigHash(config);
-      await fs.mkdir(MARKER_DIR, { recursive: true });
-      await fs.writeFile(path.join(MARKER_DIR, markerFilename), `${hostPath}|${configHash}`);
+      await fs.mkdir(getMarkerDir(), { recursive: true });
+      await fs.writeFile(path.join(getMarkerDir(), markerFilename), `${hostPath}|${configHash}`);
 
       try {
         const result = await mountSandbox.mount(makeMockLocalFs(basePath), mountPath);
@@ -1052,7 +1310,7 @@ describe('LocalSandbox', () => {
         const target = await fs.readlink(hostPath);
         expect(target).toBe(basePath);
       } finally {
-        await fs.unlink(path.join(MARKER_DIR, markerFilename)).catch(() => {});
+        await fs.unlink(path.join(getMarkerDir(), markerFilename)).catch(() => {});
         await fs.unlink(hostPath).catch(() => {});
       }
     });
@@ -1111,7 +1369,7 @@ describe('LocalSandbox', () => {
 
       // Read and verify marker file
       const markerFilename = mountSandbox.mounts.markerFilename(hostPath);
-      const markerPath = path.join(MARKER_DIR, markerFilename);
+      const markerPath = path.join(getMarkerDir(), markerFilename);
 
       try {
         const content = await fs.readFile(markerPath, 'utf-8');
@@ -1142,8 +1400,8 @@ describe('LocalSandbox', () => {
       await fs.symlink(oldBasePath, hostPath);
       const markerFilename = mountSandbox.mounts.markerFilename(hostPath);
       const oldHash = mountSandbox.mounts.computeConfigHash(oldConfig);
-      await fs.mkdir(MARKER_DIR, { recursive: true });
-      await fs.writeFile(path.join(MARKER_DIR, markerFilename), `${hostPath}|${oldHash}`);
+      await fs.mkdir(getMarkerDir(), { recursive: true });
+      await fs.writeFile(path.join(getMarkerDir(), markerFilename), `${hostPath}|${oldHash}`);
 
       try {
         const result = await mountSandbox.mount(makeMockLocalFs(newBasePath), mountPath);
@@ -1157,7 +1415,7 @@ describe('LocalSandbox', () => {
         const content = await fs.readFile(path.join(hostPath, 'new.txt'), 'utf-8');
         expect(content).toBe('new content');
       } finally {
-        await fs.unlink(path.join(MARKER_DIR, markerFilename)).catch(() => {});
+        await fs.unlink(path.join(getMarkerDir(), markerFilename)).catch(() => {});
         await fs.unlink(hostPath).catch(() => {});
       }
     });

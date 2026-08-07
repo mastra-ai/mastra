@@ -59,7 +59,9 @@ const LinkComponentContext = createContext<{
   navigate: (path: string) => void;
   paths: LinkComponentPaths;
 }>({
-  Link: forwardRef<HTMLAnchorElement, LinkComponentProps>(() => null),
+  Link: forwardRef<HTMLAnchorElement, LinkComponentProps>(function DefaultLink(_props, _ref) {
+    return null;
+  }),
   navigate: () => {},
   paths: {
     agentLink: () => '',

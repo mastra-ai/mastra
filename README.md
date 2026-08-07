@@ -26,7 +26,7 @@ Some highlights include:
 
 - [**Human-in-the-loop**](https://mastra.ai/docs/workflows/suspend-and-resume) - Suspend an agent or workflow and await user input or approval before resuming. Mastra uses [storage](https://mastra.ai/docs/server-db/storage) to remember execution state, so you can pause indefinitely and resume where you left off.
 
-- **Context management** - Give your agents the right context at the right time. Provide [conversation history](https://mastra.ai/docs/memory/conversation-history), [retrieve](https://mastra.ai/docs/rag/overview) data from your sources (APIs, databases, files), and add human-like [working](https://mastra.ai/docs/memory/working-memory) and [semantic](https://mastra.ai/docs/memory/semantic-recall) memory so your agents behave coherently.
+- **Context management** - Give your agents the right context at the right time. Provide [conversation history](https://mastra.ai/docs/memory/conversation-history), [retrieve](https://mastra.ai/docs/rag/overview) data from your sources (APIs, databases, files), and add human-like memory with [Observational Memory](https://mastra.ai/docs/memory/observational-memory) so your agents behave coherently.
 
 - **Integrations** - Bundle agents and workflows into existing React, Next.js, or Node.js apps, or ship them as standalone endpoints. When building UIs, integrate with agentic libraries like Vercel's AI SDK UI and CopilotKit to bring your AI assistant to life on the web.
 
@@ -42,9 +42,34 @@ The **recommended** way to get started with Mastra is by running the command bel
 npm create mastra@latest
 ```
 
-Follow the [Installation guide](https://mastra.ai/docs/getting-started/installation) for step-by-step setup with the CLI or a manual install.
+Follow the [Installation guide](https://mastra.ai/guides/getting-started/quickstart) for step-by-step setup with the CLI or a manual install.
 
 If you're new to AI agents, check out our [templates](https://mastra.ai/docs/getting-started/templates), [course](https://mastra.ai/course), and [YouTube videos](https://youtube.com/@mastra-ai) to start building with Mastra today.
+
+<details>
+
+<summary><strong>Alternative:</strong> Use this pre-built prompt to get started</summary>
+
+```md
+Create a new Mastra project. Mastra is a framework for AI applications and agents on a modern TypeScript stack. Before running the command, ask these questions one at a time and wait for each answer unless it was already provided:
+
+Project name? (default: "my-mastra-app")
+Provider? (required; options: "openai", "anthropic", "google", "xai")
+
+If the provider isn't supported, ask again and list the supported values.
+
+Run: npm create mastra@latest <project-name> -- --llm <provider>
+
+The command creates a default Mastra project, installs Mastra skills for detected coding assistants, and initializes Git when appropriate.
+
+After creation, enter the project directory and start the dev server: npx bgproc start -n <project-name> -w -- npm run dev
+
+Open Mastra Studio at http://localhost:4111. Studio is the interface for building, testing, and managing agents, workflows, and tools.
+
+Also mention that the Mastra model router provides access to thousands of models: https://mastra.ai/models
+```
+
+</details>
 
 ## Documentation
 
@@ -52,7 +77,7 @@ Visit our [official documentation](https://mastra.ai/docs).
 
 ## Build with AI
 
-Learn how to make your agent a Mastra expert by following the [Build with AI guide](https://mastra.ai/docs/getting-started/build-with-ai).
+Learn how to make your agent a Mastra expert by following the [Build with AI guide](https://mastra.ai/reference/build-with-ai).
 
 ## Contributing
 

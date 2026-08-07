@@ -1,21 +1,21 @@
+import { Button } from '@mastra/playground-ui/components/Button';
+import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
 import {
-  Button,
-  Checkbox,
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogBody,
   DialogFooter,
-  Input,
-  Label,
-  ScrollArea,
-  Spinner,
-  Textarea,
-  Txt,
-  Icon,
-  toast,
-} from '@mastra/playground-ui';
+} from '@mastra/playground-ui/components/Dialog';
+import { Input } from '@mastra/playground-ui/components/Input';
+import { Label } from '@mastra/playground-ui/components/Label';
+import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { Textarea } from '@mastra/playground-ui/components/Textarea';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { toast } from '@mastra/playground-ui/utils/toast';
 import { Sparkles, Trash2, Plus } from 'lucide-react';
 import { useState, useCallback, useRef } from 'react';
 
@@ -204,6 +204,7 @@ export function GenerateReviewDialog({
   const [generatedItems, setGeneratedItems] = useState<GeneratedItem[]>(initialItems);
   const [selectedIndices, setSelectedIndices] = useState<Set<number>>(new Set(initialItems.map((_, i) => i)));
   const [expandedIndices, setExpandedIndices] = useState<Set<number>>(new Set([0]));
+  const generatedItemCount = generatedItems.length;
 
   const { batchInsertItems } = useDatasetMutations();
 
@@ -256,12 +257,12 @@ export function GenerateReviewDialog({
   }, []);
 
   const toggleAll = useCallback(() => {
-    if (selectedIndices.size === generatedItems.length) {
+    if (selectedIndices.size === generatedItemCount) {
       setSelectedIndices(new Set());
     } else {
-      setSelectedIndices(new Set(generatedItems.map((_, i) => i)));
+      setSelectedIndices(new Set(Array.from({ length: generatedItemCount }, (_, i) => i)));
     }
-  }, [selectedIndices.size, generatedItems.length]);
+  }, [selectedIndices.size, generatedItemCount]);
 
   const handleRemoveItem = useCallback((index: number) => {
     setGeneratedItems(prev => prev.filter((_, i) => i !== index));
@@ -289,8 +290,8 @@ export function GenerateReviewDialog({
         <DialogHeader>
           <DialogTitle>Review Generated Items</DialogTitle>
         </DialogHeader>
-        <DialogBody className="max-h-[70vh] flex flex-col">
-          <div className="flex flex-col flex-1 min-h-0 gap-4">
+        <DialogBody className="flex max-h-[70vh] flex-col">
+          <div className="flex min-h-0 flex-1 flex-col gap-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Checkbox checked={selectedIndices.size === generatedItems.length} onCheckedChange={toggleAll} />
@@ -305,10 +306,10 @@ export function GenerateReviewDialog({
               )}
             </div>
 
-            <ScrollArea className="flex-1 min-h-0">
+            <ScrollArea className="min-h-0 flex-1">
               <div className="space-y-2">
                 {generatedItems.map((item, index) => (
-                  <div key={index} className="border border-border1 rounded-lg">
+                  <div key={index} className="border-border1 rounded-lg border">
                     <div className="flex items-center gap-2 px-3 py-2">
                       <Checkbox checked={selectedIndices.has(index)} onCheckedChange={() => toggleIndex(index)} />
                       <button type="button" className="flex-1 text-left" onClick={() => toggleExpanded(index)}>
@@ -324,12 +325,12 @@ export function GenerateReviewDialog({
                     </div>
 
                     {expandedIndices.has(index) && (
-                      <div className="border-t border-border1 px-3 py-2 space-y-2">
+                      <div className="border-border1 space-y-2 border-t px-3 py-2">
                         <div>
                           <Txt variant="ui-xs" className="text-neutral3 font-medium">
                             Input
                           </Txt>
-                          <pre className="text-xs text-neutral5 bg-surface1 rounded px-2 py-1.5 overflow-x-auto whitespace-pre-wrap wrap-break-word max-h-32 overflow-y-auto mt-1">
+                          <pre className="text-neutral5 bg-surface1 mt-1 max-h-32 overflow-x-auto overflow-y-auto rounded px-2 py-1.5 text-xs wrap-break-word whitespace-pre-wrap">
                             {JSON.stringify(item.input, null, 2)}
                           </pre>
                         </div>
@@ -338,7 +339,7 @@ export function GenerateReviewDialog({
                             <Txt variant="ui-xs" className="text-neutral3 font-medium">
                               Ground Truth
                             </Txt>
-                            <pre className="text-xs text-neutral5 bg-surface1 rounded px-2 py-1.5 overflow-x-auto whitespace-pre-wrap wrap-break-word max-h-32 overflow-y-auto mt-1">
+                            <pre className="text-neutral5 bg-surface1 mt-1 max-h-32 overflow-x-auto overflow-y-auto rounded px-2 py-1.5 text-xs wrap-break-word whitespace-pre-wrap">
                               {JSON.stringify(item.groundTruth, null, 2)}
                             </pre>
                           </div>

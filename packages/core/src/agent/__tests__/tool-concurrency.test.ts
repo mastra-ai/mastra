@@ -257,7 +257,6 @@ async function verifyToolExecutionOrder(
 
 describe('Tool Concurrency', () => {
   const mockMemory = new MockMemory();
-  const mockStorage = new InMemoryStore();
 
   // Helper to create a mock model that triggers two tools
   function createMockModel() {
@@ -333,7 +332,7 @@ describe('Tool Concurrency', () => {
     const mastra = new Mastra({
       agents: { agent: new Agent(agentConfig) },
       logger: false,
-      storage: mockStorage,
+      storage: new InMemoryStore(),
     });
 
     const agent = mastra.getAgent('agent');
@@ -378,7 +377,7 @@ describe('Tool Concurrency', () => {
     const mastra = new Mastra({
       agents: { agent: new Agent(agentConfig) },
       logger: false,
-      storage: mockStorage,
+      storage: new InMemoryStore(),
     });
 
     const agent = mastra.getAgent('agent');
@@ -435,7 +434,7 @@ describe('Tool Concurrency', () => {
     const mastra = new Mastra({
       agents: { agent: new Agent(agentConfig) },
       logger: false,
-      storage: mockStorage,
+      storage: new InMemoryStore(),
     });
 
     const agent = mastra.getAgent('agent');
@@ -512,7 +511,7 @@ describe('Tool Concurrency', () => {
     const mastra = new Mastra({
       agents: { agent: new Agent(agentConfig) },
       logger: false,
-      storage: mockStorage,
+      storage: new InMemoryStore(),
     });
 
     const agent = mastra.getAgent('agent');

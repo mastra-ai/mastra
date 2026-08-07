@@ -1,4 +1,9 @@
-import { MODEL_NOT_ALLOWED_CODE } from '@mastra/core/agent-builder/ee';
+/**
+ * The wire-level error code the server emits on a 422 when a model is blocked
+ * by the admin's builder policy. Kept as a local literal so the browser bundle
+ * never imports server-only agent-builder EE code.
+ */
+const MODEL_NOT_ALLOWED_CODE = 'MODEL_NOT_ALLOWED';
 
 export interface ModelNotAllowedDetails {
   message: string;

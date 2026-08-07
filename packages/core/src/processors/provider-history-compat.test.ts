@@ -9,6 +9,7 @@ import {
   isMaybeCerebras,
   ProviderHistoryCompat,
 } from './provider-history-compat';
+import type { CompatRule } from './provider-history-compat';
 import { ProcessorRunner } from './runner';
 import type { ProcessAPIErrorArgs, ProcessLLMRequestArgs } from './index';
 
@@ -189,6 +190,27 @@ describe('ProviderHistoryCompat', () => {
     const result = await handler.processAPIError(args);
 
     expect(result).toEqual({ retry: true });
+  });
+
+  it('runs custom reactive compat rules for matching API errors', async () => {
+    const customRule: CompatRule = {
+      name: 'custom-history-fix',
+      errorPatterns: [/custom provider rejected history/i],
+      fix(messages) {
+        const assistant = messages.find(message => message.role === 'assistant');
+        if (!assistant) return false;
+        assistant.content.parts = [{ type: 'text', text: 'custom fixed' }];
+        return true;
+      },
+    };
+    const handler = new ProviderHistoryCompat({ additionalRules: [customRule] });
+    const args = makeArgs({ error: new Error('custom provider rejected history') });
+
+    const result = await handler.processAPIError(args);
+
+    expect(result).toEqual({ retry: true });
+    const assistant = args.messageList.get.all.db().find(message => message.role === 'assistant');
+    expect(assistant?.content.parts).toEqual([{ type: 'text', text: 'custom fixed' }]);
   });
 
   it('should sanitize multiple invalid IDs consistently', async () => {
@@ -590,6 +612,36 @@ describe('ProviderHistoryCompat.processLLMRequest', () => {
     expect(result).toEqual({ prompt: expect.any(Array) });
     const assistant = (result as { prompt: LanguageModelV2Prompt }).prompt.find(m => m.role === 'assistant')!;
     expect((assistant.content as any[]).map(p => p.type)).toEqual(['text']);
+  });
+
+  it('runs custom prompt compat rules after built-in prompt rewrites', async () => {
+    const customRule: CompatRule = {
+      name: 'custom-mark-provider-prompt',
+      applyToPrompt: ({ prompt, model }) => {
+        const assistant = prompt.find(m => m.role === 'assistant')!;
+        expect((assistant.content as any[]).map(p => p.type)).toEqual(['text']);
+        return [
+          ...prompt,
+          {
+            role: 'user',
+            content: [{ type: 'text', text: `custom:${(model as any).provider}` }],
+          },
+        ];
+      },
+    };
+    const handler = new ProviderHistoryCompat({ additionalRules: [customRule] });
+    const args = makeRequestArgs(promptWithReasoning(), {
+      provider: 'cerebras.chat',
+      modelId: 'zai-glm-4.7',
+    });
+
+    const result = await handler.processLLMRequest(args);
+
+    expect(result).toEqual({ prompt: expect.any(Array) });
+    expect((result as { prompt: LanguageModelV2Prompt }).prompt.at(-1)).toEqual({
+      role: 'user',
+      content: [{ type: 'text', text: 'custom:cerebras.chat' }],
+    });
   });
 });
 

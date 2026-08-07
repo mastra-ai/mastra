@@ -41,6 +41,9 @@ describe('dynamic filesystem tools', () => {
     const workspace = new Workspace({ filesystem: resolver });
     const tools = await createWorkspaceTools(workspace);
 
+    const beforeToolCall = new Date(Date.now() - 1000);
+    workspace.lastAccessedAt = beforeToolCall;
+
     const ctx = { requestContext: new RequestContext() };
     const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE].execute(
       { path: 'hello.txt', showLineNumbers: false },
@@ -48,6 +51,7 @@ describe('dynamic filesystem tools', () => {
     );
 
     expect(result).toContain('dynamic content');
+    expect(workspace.lastAccessedAt.getTime()).toBeGreaterThan(beforeToolCall.getTime());
   });
 
   it('should resolve different filesystems per request', async () => {

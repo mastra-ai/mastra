@@ -1,4 +1,6 @@
 export * from './base';
+export * from './factory-storage';
+export * from './retention';
 export * from './types';
 export * from './constants';
 export * from './mock';
@@ -6,5 +8,8 @@ export * from './filesystem';
 export * from './filesystem-db';
 export * from './filesystem-versioned';
 export * from './git-history';
+export * from './source-control';
+export * from './providers';
 export * from './domains';
 export * from './utils';
+export * from './workflow-snapshot';

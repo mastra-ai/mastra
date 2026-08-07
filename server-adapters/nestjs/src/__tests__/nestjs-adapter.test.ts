@@ -108,7 +108,12 @@ describe('NestJS Server Adapter', () => {
 
       // Check if this is a streaming response
       const contentType = response.headers.get('content-type') || '';
-      if (contentType.includes('text/event-stream') || contentType.includes('text/plain')) {
+      if (
+        contentType.includes('text/event-stream') ||
+        contentType.includes('text/plain') ||
+        contentType.includes('audio/') ||
+        contentType.includes('application/octet-stream')
+      ) {
         // Return streaming response
         const headers: Record<string, string> = {};
         response.headers.forEach((value, key) => {

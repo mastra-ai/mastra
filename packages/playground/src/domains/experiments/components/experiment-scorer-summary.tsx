@@ -1,6 +1,7 @@
 import type { ClientScoreRowData } from '@mastra/client-js';
 import type { ExperimentStatus } from '@mastra/core/storage';
-import { EmptyState, ItemList } from '@mastra/playground-ui';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
+import { ItemList } from '@mastra/playground-ui/components/ItemList';
 import { GaugeIcon } from 'lucide-react';
 import { useMemo } from 'react';
 
@@ -61,7 +62,7 @@ export function ExperimentScorerSummary({ scoresByItemId, experimentStatus }: Ex
     return (
       <div className="flex h-full items-center justify-center py-12">
         <EmptyState
-          iconSlot={<GaugeIcon className="w-8 h-8 text-neutral3" />}
+          iconSlot={<GaugeIcon className="text-neutral3 h-8 w-8" />}
           titleSlot={title}
           descriptionSlot={description}
         />

@@ -8,6 +8,7 @@ import type { InMemoryTaskStore } from '../../a2a/store';
 import type { OpenAPIRoute } from '../openapi-utils';
 import { A2A_ROUTES } from './a2a';
 import { AGENT_BUILDER_ROUTES } from './agent-builder';
+import { AGENT_CONTROLLER_ROUTES } from './agent-controller';
 import { AGENTS_ROUTES } from './agents';
 import type { AgentRoutes } from './agents';
 import { AUTH_ROUTES } from './auth';
@@ -32,6 +33,7 @@ import { STORED_MCP_CLIENTS_ROUTES } from './stored-mcp-clients';
 import { STORED_PROMPT_BLOCKS_ROUTES } from './stored-prompt-blocks';
 import { STORED_SCORERS_ROUTES } from './stored-scorers';
 import { STORED_SKILLS_ROUTES } from './stored-skills';
+import { STORED_WORKFLOWS_ROUTES } from './stored-workflows';
 import { STORED_WORKSPACES_ROUTES } from './stored-workspaces';
 import type { MastraStreamReturn } from './stream-types';
 import { SYSTEM_ROUTES } from './system';
@@ -54,6 +56,8 @@ export type ServerContext = {
   abortSignal: AbortSignal;
   /** The route prefix configured for the server (e.g., '/api') */
   routePrefix?: string;
+  /** The web-standard Request object for accessing headers, cookies, etc. */
+  request?: Request;
 };
 
 /**
@@ -176,6 +180,7 @@ export const SERVER_ROUTES: readonly ServerRoute[] = [
   ...LEGACY_ROUTES,
   ...MCP_ROUTES,
   ...STORED_AGENTS_ROUTES,
+  ...STORED_WORKFLOWS_ROUTES,
   ...STORED_MCP_CLIENTS_ROUTES,
   ...STORED_PROMPT_BLOCKS_ROUTES,
   ...STORED_SCORERS_ROUTES,
@@ -190,6 +195,7 @@ export const SERVER_ROUTES: readonly ServerRoute[] = [
   ...AGENT_BUILDER_ROUTES,
   ...SCHEDULES_ROUTES,
   ...CHANNELS_ROUTES,
+  ...AGENT_CONTROLLER_ROUTES,
 ];
 
 /**

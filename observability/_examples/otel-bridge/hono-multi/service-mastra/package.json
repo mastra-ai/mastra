@@ -30,7 +30,7 @@
     "@types/node": "^20.19.30",
     "mastra": "latest",
     "prettier": "^3.6.2",
-    "tsx": "^4.21.0",
+    "tsx": "catalog:",
     "typescript": "catalog:"
   }
 }

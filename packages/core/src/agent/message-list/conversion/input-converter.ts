@@ -46,8 +46,10 @@ export function inputToMastraDBMessage(
     );
   }
 
-  // Validate resourceId matches
+  // Validate resourceId matches (except for memory messages, which can carry a
+  // system resourceId — e.g. observational-memory continuation messages)
   if (
+    messageSource !== `memory` &&
     `resourceId` in message &&
     message.resourceId &&
     context.memoryInfo?.resourceId &&
@@ -108,7 +110,7 @@ export function inputToMastraDBMessage(
   }
 
   if (TypeDetector.isAIV5CoreMessage(message)) {
-    const dbMsg = AIV5Adapter.fromModelMessage(message, messageSource);
+    const dbMsg = AIV5Adapter.fromModelMessage(message, messageSource, context);
     // Only use the original createdAt from input message metadata, not the generated one from the static method
     // This fixes issue #10683 where messages without createdAt would get shuffled
     const rawCreatedAt =
@@ -220,10 +222,10 @@ export function hydrateMastraDBMessageFields(
 
   if (!message.threadId && context.memoryInfo?.threadId) {
     message.threadId = context.memoryInfo.threadId;
+  }
 
-    if (!message.resourceId && context.memoryInfo?.resourceId) {
-      message.resourceId = context.memoryInfo.resourceId;
-    }
+  if (!message.resourceId && context.memoryInfo?.resourceId) {
+    message.resourceId = context.memoryInfo.resourceId;
   }
 
   return message;

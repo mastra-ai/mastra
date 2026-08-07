@@ -1,4 +1,3 @@
-import { convertAsyncIterableToArray } from '@ai-sdk/provider-utils-v5/test';
 import type {
   LanguageModelV2CallOptions,
   LanguageModelV2FunctionTool,
@@ -21,6 +20,7 @@ import {
   createMessageListWithUserMessage,
   stripMastraCreatedAt,
 } from './utils';
+import { convertAsyncIterableToArray } from './stream-helpers';
 
 export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: string }) {
   describe('options.abortSignal', () => {
@@ -7565,7 +7565,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                     {
                       "content": [
                         {
-                          "providerOptions": undefined,
                           "text": "test-input",
                           "type": "text",
                         },
@@ -7575,22 +7574,18 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                     {
                       "content": [
                         {
-                          "providerOptions": undefined,
                           "text": "Thinking...I'm thinking...",
                           "type": "reasoning",
                         },
                         {
-                          "providerOptions": undefined,
                           "text": "Hello, world!",
                           "type": "text",
                         },
                         {
-                          "providerOptions": undefined,
                           "text": "This is a test.",
                           "type": "text",
                         },
                         {
-                          "providerOptions": undefined,
                           "text": "Separate thoughts",
                           "type": "reasoning",
                         },
@@ -7602,22 +7597,18 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                     {
                       "content": [
                         {
-                          "providerOptions": undefined,
                           "text": "Thinking...I'm thinking...",
                           "type": "reasoning",
                         },
                         {
-                          "providerOptions": undefined,
                           "text": "Hello, world!",
                           "type": "text",
                         },
                         {
-                          "providerOptions": undefined,
                           "text": "This is a test.",
                           "type": "text",
                         },
                         {
-                          "providerOptions": undefined,
                           "text": "Separate thoughts",
                           "type": "reasoning",
                         },
@@ -7629,7 +7620,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                     {
                       "content": [
                         {
-                          "providerOptions": undefined,
                           "text": "test-input",
                           "type": "text",
                         },
@@ -7667,22 +7657,18 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                           {
                             "content": [
                               {
-                                "providerOptions": undefined,
                                 "text": "Thinking...I'm thinking...",
                                 "type": "reasoning",
                               },
                               {
-                                "providerOptions": undefined,
                                 "text": "Hello, world!",
                                 "type": "text",
                               },
                               {
-                                "providerOptions": undefined,
                                 "text": "This is a test.",
                                 "type": "text",
                               },
                               {
-                                "providerOptions": undefined,
                                 "text": "Separate thoughts",
                                 "type": "reasoning",
                               },
@@ -7746,7 +7732,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                     {
                       "content": [
                         {
-                          "providerOptions": undefined,
                           "text": "test-input",
                           "type": "text",
                         },
@@ -7756,22 +7741,18 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                     {
                       "content": [
                         {
-                          "providerOptions": undefined,
                           "text": "Thinking...I'm thinking...",
                           "type": "reasoning",
                         },
                         {
-                          "providerOptions": undefined,
                           "text": "Hello, world!",
                           "type": "text",
                         },
                         {
-                          "providerOptions": undefined,
                           "text": "This is a test.",
                           "type": "text",
                         },
                         {
-                          "providerOptions": undefined,
                           "text": "Separate thoughts",
                           "type": "reasoning",
                         },
@@ -7783,22 +7764,18 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                     {
                       "content": [
                         {
-                          "providerOptions": undefined,
                           "text": "Thinking...I'm thinking...",
                           "type": "reasoning",
                         },
                         {
-                          "providerOptions": undefined,
                           "text": "Hello, world!",
                           "type": "text",
                         },
                         {
-                          "providerOptions": undefined,
                           "text": "This is a test.",
                           "type": "text",
                         },
                         {
-                          "providerOptions": undefined,
                           "text": "Separate thoughts",
                           "type": "reasoning",
                         },
@@ -7810,7 +7787,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                     {
                       "content": [
                         {
-                          "providerOptions": undefined,
                           "text": "test-input",
                           "type": "text",
                         },
@@ -7848,22 +7824,18 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                           {
                             "content": [
                               {
-                                "providerOptions": undefined,
                                 "text": "Thinking...I'm thinking...",
                                 "type": "reasoning",
                               },
                               {
-                                "providerOptions": undefined,
                                 "text": "Hello, world!",
                                 "type": "text",
                               },
                               {
-                                "providerOptions": undefined,
                                 "text": "This is a test.",
                                 "type": "text",
                               },
                               {
-                                "providerOptions": undefined,
                                 "text": "Separate thoughts",
                                 "type": "reasoning",
                               },
@@ -8064,7 +8036,8 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
               model: new MockLanguageModelV2({
                 doStream: async () => ({
                   stream: new ReadableStream({
-                    pull(controller) {
+                    async pull(controller) {
+                      await new Promise(resolve => setTimeout(resolve, 0));
                       switch (pullCalls++) {
                         case 0:
                           controller.enqueue({
@@ -8149,6 +8122,16 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
               },
               "runId": "test-run-id",
               "type": "text-start",
+            },
+            {
+              "from": "AGENT",
+              "payload": {
+                "id": "id-2",
+                "providerMetadata": undefined,
+                "text": "Hello",
+              },
+              "runId": "test-run-id",
+              "type": "text-delta",
             },
             {
               "from": "AGENT",
@@ -8262,7 +8245,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                       streamCalls++;
                       pullCalls = 0;
                     },
-                    pull(controller) {
+                    pull: async function (controller) {
                       if (streamCalls === 1) {
                         switch (pullCalls++) {
                           case 0:
@@ -8288,7 +8271,8 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                             controller.close();
                             break;
                         }
-                      } else
+                      } else {
+                        await new Promise(resolve => setTimeout(resolve, 0));
                         switch (pullCalls++) {
                           case 0:
                             controller.enqueue({
@@ -8314,6 +8298,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                             controller.error(new DOMException('The user aborted a request.', 'AbortError'));
                             break;
                         }
+                      }
                     },
                   }),
                 }),
@@ -8709,6 +8694,16 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
               },
               "runId": "test-run-id",
               "type": "text-start",
+            },
+            {
+              "from": "AGENT",
+              "payload": {
+                "id": "id-2",
+                "providerMetadata": undefined,
+                "text": "Hello",
+              },
+              "runId": "test-run-id",
+              "type": "text-delta",
             },
             {
               "from": "AGENT",

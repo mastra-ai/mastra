@@ -36,12 +36,12 @@ export function useAutosaveAgent({
   const requestSeqRef = useRef(0);
   const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const clearSavedTimer = () => {
+  const clearSavedTimer = useCallback(() => {
     if (savedTimerRef.current) {
       clearTimeout(savedTimerRef.current);
       savedTimerRef.current = null;
     }
-  };
+  }, []);
 
   const performSave = useCallback(async () => {
     const seq = ++requestSeqRef.current;
@@ -65,13 +65,15 @@ export function useAutosaveAgent({
       setStatus('error');
       setLastError(err instanceof Error ? err : new Error(String(err)));
     }
-  }, [save, savedDisplayMs]);
+  }, [clearSavedTimer, save, savedDisplayMs]);
 
   const debouncedSave = useDebouncedCallback(() => {
     void performSave();
   }, debounceMs);
 
-  // Subscribe to form changes. RHF's watch callback fires only on change, not on subscribe.
+  // Subscribe to form changes. RHF's watch callback fires only when
+  // form values change (not on subscribe). Integration tool loading
+  // does NOT modify form values, so it won't trigger this callback.
   useEffect(() => {
     const subscription = formMethods.watch(values => {
       latestValuesRef.current = values as AgentBuilderEditFormValues;
@@ -88,7 +90,7 @@ export function useAutosaveAgent({
       debouncedSave.flush();
       clearSavedTimer();
     };
-  }, [debouncedSave]);
+  }, [clearSavedTimer, debouncedSave]);
 
   const retry = useCallback(() => {
     void performSave();

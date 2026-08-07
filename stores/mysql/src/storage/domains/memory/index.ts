@@ -5,12 +5,14 @@ import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { StorageThreadType } from '@mastra/core/memory';
 import {
   MemoryStorage,
+  OBSERVATIONAL_MEMORY_TABLE_SCHEMA,
   TABLE_MESSAGES,
   TABLE_RESOURCES,
   TABLE_THREADS,
   TABLE_SCHEMAS,
   calculatePagination,
   normalizePerPage,
+  validateStorageMetadataFilter,
   createStorageErrorId,
 } from '@mastra/core/storage';
 import type {
@@ -29,6 +31,7 @@ import type {
   StorageListMessagesOutput,
   StorageListThreadsInput,
   StorageListThreadsOutput,
+  StorageMetadataFilter,
   StorageResourceType,
   SwapBufferedReflectionToActiveInput,
   SwapBufferedToActiveInput,
@@ -144,6 +147,28 @@ function parseJSON<T>(value: T | string | null | undefined): T | null {
   }
 }
 
+function addMySQLMessageMetadataFilter(
+  conditions: string[],
+  params: any[],
+  metadataFilter: StorageMetadataFilter | undefined,
+): void {
+  if (!metadataFilter) return;
+
+  for (const [key, value] of Object.entries(metadataFilter)) {
+    const path = `$.metadata.${key}`;
+    conditions.push(`JSON_VALID(${quoteIdentifier('content', 'column name')})`);
+    conditions.push(`JSON_CONTAINS_PATH(${quoteIdentifier('content', 'column name')}, 'one', ?)`);
+    params.push(path);
+    if (value === null) {
+      conditions.push(`JSON_TYPE(JSON_EXTRACT(${quoteIdentifier('content', 'column name')}, ?)) = 'NULL'`);
+      params.push(path);
+    } else {
+      conditions.push(`JSON_EXTRACT(${quoteIdentifier('content', 'column name')}, ?) = CAST(? AS JSON)`);
+      params.push(path, JSON.stringify(value));
+    }
+  }
+}
+
 export class MemoryMySQL extends MemoryStorage {
   readonly supportsObservationalMemory = true;
 
@@ -177,14 +202,15 @@ export class MemoryMySQL extends MemoryStorage {
     await this.operations.createTable({ tableName: TABLE_MESSAGES, schema: TABLE_SCHEMAS[TABLE_MESSAGES] });
     await this.operations.createTable({ tableName: TABLE_RESOURCES, schema: TABLE_SCHEMAS[TABLE_RESOURCES] });
 
-    // Dynamically import OM schema to avoid crashing on older @mastra/core versions
-    let omSchema: Record<string, any> | undefined;
-    try {
-      const { OBSERVATIONAL_MEMORY_TABLE_SCHEMA } = await import('@mastra/core/storage');
-      omSchema = OBSERVATIONAL_MEMORY_TABLE_SCHEMA?.[OM_TABLE];
-    } catch {
-      // Older @mastra/core without OM support
-    }
+    // Static import — `await import('@mastra/core/storage')` deadlocks
+    // `mastra build` output: bundlers rewrite the dynamic import to point at
+    // the entry chunk that statically depends on this file, so the cycle never
+    // resolves when storage initializes during module evaluation (#18298). The
+    // peerDependency on `@mastra/core` is already `>=1.42.1` (the version that
+    // introduced `OBSERVATIONAL_MEMORY_TABLE_SCHEMA`), so the older-core compat
+    // the dynamic import was guarding against can no longer occur via npm
+    // resolution.
+    const omSchema = OBSERVATIONAL_MEMORY_TABLE_SCHEMA?.[OM_TABLE];
 
     if (omSchema) {
       await this.operations.createTable({
@@ -447,9 +473,22 @@ export class MemoryMySQL extends MemoryStorage {
 
     const includeMessages: MastraDBMessage[] = [];
     const seenIds = new Set<string>();
+    const unresolvedIds = include.filter(inc => !inc.threadId).map(inc => inc.id);
+    const resolvedThreadIds = new Map<string, string>();
+
+    if (unresolvedIds.length > 0) {
+      const placeholders = unresolvedIds.map(() => '?').join(', ');
+      const [rows] = await this.pool.execute<RowDataPacket[]>(
+        `SELECT id, thread_id FROM ${formatTableName(TABLE_MESSAGES)} WHERE id IN (${placeholders})`,
+        unresolvedIds,
+      );
+      for (const row of rows) {
+        resolvedThreadIds.set(row.id, row.thread_id);
+      }
+    }
 
     for (const inc of include) {
-      const targetThreadId = inc.threadId ?? threadId;
+      const targetThreadId = inc.threadId ?? resolvedThreadIds.get(inc.id) ?? threadId;
 
       let threadMessages = messagesByThread.get(targetThreadId);
       if (!threadMessages) {
@@ -460,6 +499,7 @@ export class MemoryMySQL extends MemoryStorage {
 
       // If the current cached set might be partial (e.g., paginated main thread), reload full thread
       const needsContext =
+        !threadMessages.some(message => message.id === inc.id) ||
         (inc.withPreviousMessages ?? 0) > 0 ||
         (inc.withNextMessages ?? 0) > 0 ||
         threadMessages.length < (inc.withNextMessages ?? 0) + (inc.withPreviousMessages ?? 0) + 1;
@@ -600,15 +640,22 @@ export class MemoryMySQL extends MemoryStorage {
         hasMore: perPageInput === false ? false : offset + perPageNormalized < total,
       };
     } catch (error) {
-      throw new MastraError(
+      // Re-throw USER errors (validation errors) directly so callers get proper 400 responses
+      if (error instanceof MastraError && error.category === ErrorCategory.USER) {
+        throw error;
+      }
+      const mastraError = new MastraError(
         {
-          id: 'MYSQL_MEMORY_LIST_THREADS_FAILED',
+          id: createStorageErrorId('MYSQL', 'LIST_THREADS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { filter: JSON.stringify(filter ?? {}) },
         },
         error,
       );
+      this.logger?.error?.(mastraError.toString());
+      this.logger?.trackException?.(mastraError);
+      throw mastraError;
     }
   }
 
@@ -1202,6 +1249,7 @@ export class MemoryMySQL extends MemoryStorage {
       }
     ).selectBy;
     const include = args.include ?? selectBy?.include;
+    const metadataFilter = validateStorageMetadataFilter(filter?.metadata);
 
     // Normalize threadId to array
     const threadIds = Array.isArray(threadId) ? threadId : [threadId];
@@ -1262,6 +1310,8 @@ export class MemoryMySQL extends MemoryStorage {
         conditions.push(`${quoteIdentifier('createdAt', 'column name')} ${endOp} ?`);
         params.push(transformToSqlValue(filter.dateRange.end));
       }
+
+      addMySQLMessageMetadataFilter(conditions, params, metadataFilter);
 
       if (selectBy?.vectorSearchString) {
         conditions.push(`${quoteIdentifier('content', 'column name')} LIKE ?`);
@@ -1370,7 +1420,7 @@ export class MemoryMySQL extends MemoryStorage {
       const mainThreadMessageCount = messages.filter(
         msg => msg.threadId !== undefined && threadIdSet.has(msg.threadId),
       ).length;
-      const hasMore = include && include.length ? (mainThreadMessageCount >= total ? false : baseHasMore) : baseHasMore;
+      const hasMore = metadataFilter || !include?.length || mainThreadMessageCount < total ? baseHasMore : false;
 
       return {
         messages,
@@ -1380,9 +1430,13 @@ export class MemoryMySQL extends MemoryStorage {
         hasMore,
       };
     } catch (error) {
+      // Re-throw USER errors (validation errors) directly so callers get proper 400 responses
+      if (error instanceof MastraError && error.category === ErrorCategory.USER) {
+        throw error;
+      }
       const mastraError = new MastraError(
         {
-          id: 'MYSQL_MEMORY_GET_MESSAGES_PAGINATED_FAILED',
+          id: createStorageErrorId('MYSQL', 'LIST_MESSAGES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -1395,7 +1449,7 @@ export class MemoryMySQL extends MemoryStorage {
       );
       this.logger?.error?.(mastraError.toString());
       this.logger?.trackException?.(mastraError);
-      return { messages: [], total: 0, page, perPage, hasMore: false };
+      throw mastraError;
     }
   }
 
@@ -1403,6 +1457,7 @@ export class MemoryMySQL extends MemoryStorage {
     args: StorageListMessagesByResourceIdInput,
   ): Promise<StorageListMessagesOutput> {
     const { resourceId, include, filter, perPage: perPageInput, page = 0, orderBy } = args;
+    const metadataFilter = validateStorageMetadataFilter(filter?.metadata);
 
     if (!resourceId || typeof resourceId !== 'string' || resourceId.trim().length === 0) {
       throw new MastraError(
@@ -1451,6 +1506,8 @@ export class MemoryMySQL extends MemoryStorage {
         conditions.push(`${quoteIdentifier('createdAt', 'column name')} ${endOp} ?`);
         params.push(transformToSqlValue(filter.dateRange.end));
       }
+
+      addMySQLMessageMetadataFilter(conditions, params, metadataFilter);
 
       const whereSql = `WHERE ${conditions.join(' AND ')}`;
       const tableName = formatTableName(TABLE_MESSAGES);
@@ -1537,9 +1594,13 @@ export class MemoryMySQL extends MemoryStorage {
         hasMore,
       };
     } catch (error) {
+      // Re-throw USER errors (validation errors) directly so callers get proper 400 responses
+      if (error instanceof MastraError && error.category === ErrorCategory.USER) {
+        throw error;
+      }
       const mastraError = new MastraError(
         {
-          id: createStorageErrorId('MYSQL', 'LIST_MESSAGES', 'FAILED'),
+          id: createStorageErrorId('MYSQL', 'LIST_MESSAGES_BY_RESOURCE_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { resourceId },
@@ -1548,13 +1609,7 @@ export class MemoryMySQL extends MemoryStorage {
       );
       this.logger?.error?.(mastraError.toString());
       this.logger?.trackException?.(mastraError);
-      return {
-        messages: [],
-        total: 0,
-        page,
-        perPage: perPageForResponse,
-        hasMore: false,
-      };
+      throw mastraError;
     }
   }
 
@@ -2059,6 +2114,9 @@ export class MemoryMySQL extends MemoryStorage {
           createdAt: new Date(),
           suggestedContinuation: input.chunk.suggestedContinuation,
           currentTask: input.chunk.currentTask,
+          threadTitle: input.chunk.threadTitle,
+          extractedValues: input.chunk.extractedValues,
+          extractionFailures: input.chunk.extractionFailures,
         };
 
         const newChunks = [...existingChunks, newChunk];

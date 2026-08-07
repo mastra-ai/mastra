@@ -1,6 +1,9 @@
 import { describe, expectTypeOf, it } from 'vitest';
 import { z } from 'zod/v4';
-import { createStep, createWorkflow } from './workflow';
+import { Agent } from '../agent';
+import { createTool } from '../tools';
+import { createWorkflow } from './create';
+import { createStep } from './workflow';
 
 describe('Workflow schema type inference', () => {
   describe('schemas with .optional().default()', () => {
@@ -548,5 +551,247 @@ describe('Workflow schema type inference', () => {
       // @ts-expect-error - step's requestContextSchema does not match the workflow's
       workflow.parallel([step]);
     });
+  });
+
+  // Regression: https://github.com/mastra-ai/mastra/issues/14627
+  // createWorkflow must infer the workflow state type from stateSchema so that
+  // `state` in dowhile/dountil condition callbacks is typed from the schema,
+  // not `unknown`. (state was already correct inside createStep; the factory
+  // is what lost the inference.) These tests guard against regressing it.
+  describe('stateSchema inference (issue #14627)', () => {
+    const stateSchema = z.object({
+      attempts: z.number(),
+      lastError: z.string().optional(),
+    });
+    const ioSchema = z.object({ value: z.number() });
+
+    const loopStep = createStep({
+      id: 'loop-step',
+      inputSchema: ioSchema,
+      outputSchema: ioSchema,
+      stateSchema,
+      execute: async ({ inputData }) => ({ value: inputData.value + 1 }),
+    });
+
+    it('types `state` in the dowhile condition from the workflow stateSchema', () => {
+      const workflow = createWorkflow({
+        id: 'dowhile-state',
+        inputSchema: ioSchema,
+        outputSchema: ioSchema,
+        stateSchema,
+      });
+
+      workflow.dowhile(loopStep, async ({ state }) => {
+        expectTypeOf(state).not.toBeUnknown();
+        expectTypeOf(state).not.toBeAny();
+        expectTypeOf(state.attempts).toBeNumber();
+        expectTypeOf(state.lastError).toEqualTypeOf<string | undefined>();
+        return state.attempts < 5;
+      });
+    });
+
+    it('types `state` in the dountil condition from the workflow stateSchema', () => {
+      const workflow = createWorkflow({
+        id: 'dountil-state',
+        inputSchema: ioSchema,
+        outputSchema: ioSchema,
+        stateSchema,
+      });
+
+      workflow.dountil(loopStep, async ({ state }) => {
+        expectTypeOf(state).not.toBeUnknown();
+        expectTypeOf(state).not.toBeAny();
+        expectTypeOf(state.attempts).toBeNumber();
+        expectTypeOf(state.lastError).toEqualTypeOf<string | undefined>();
+        return state.attempts >= 5;
+      });
+    });
+
+    it('leaves `state` as unknown when no stateSchema is declared', () => {
+      const workflow = createWorkflow({
+        id: 'no-state',
+        inputSchema: ioSchema,
+        outputSchema: ioSchema,
+      });
+
+      workflow.dowhile(loopStep, async ({ state }) => {
+        expectTypeOf(state).toBeUnknown();
+        return true;
+      });
+    });
+  });
+});
+
+/**
+ * Type-level inference for the declarative `agent` / `tool` / `mapping` builders.
+ *
+ * These assertions lock in the output-type inference rules so downstream
+ * `.then` / `.map` see the right previous-step schema.
+ */
+const agent = new Agent({
+  id: 'typed-agent',
+  name: 'typed-agent',
+  instructions: 'noop',
+  model: {} as any,
+});
+
+const numberTool = createTool({
+  id: 'number-tool',
+  description: 'tool',
+  inputSchema: z.object({ value: z.number() }),
+  outputSchema: z.object({ doubled: z.number() }),
+  execute: async ({ value }) => ({ doubled: value * 2 }),
+});
+
+describe('declarative builder output inference', () => {
+  it('.agent() (no structuredOutput) advances prev schema to { text: string }', () => {
+    createWorkflow({ id: 'wf', inputSchema: z.object({ prompt: z.string() }), outputSchema: z.any() })
+      .agent(agent)
+      .map(async ({ inputData }) => {
+        expectTypeOf(inputData).toEqualTypeOf<{ text: string }>();
+        return inputData;
+      });
+  });
+
+  it('.agent() with structuredOutput advances prev schema to the structured type', () => {
+    createWorkflow({ id: 'wf', inputSchema: z.object({ prompt: z.string() }), outputSchema: z.any() })
+      .agent(agent, { structuredOutput: { schema: z.object({ score: z.number() }) } })
+      .map(async ({ inputData }) => {
+        expectTypeOf(inputData).toEqualTypeOf<{ score: number }>();
+        return inputData;
+      });
+  });
+
+  it('.tool() advances prev schema to the tool output type', () => {
+    createWorkflow({ id: 'wf', inputSchema: z.object({ value: z.number() }), outputSchema: z.any() })
+      .tool(numberTool)
+      .map(async ({ inputData }) => {
+        expectTypeOf(inputData.doubled).toBeNumber();
+        return inputData;
+      });
+  });
+
+  it('.then(createStep(agent)) infers { text: string } (option B)', () => {
+    createWorkflow({ id: 'wf', inputSchema: z.object({ prompt: z.string() }), outputSchema: z.any() })
+      .then(createStep(agent))
+      .map(async ({ inputData }) => {
+        expectTypeOf(inputData).toEqualTypeOf<{ text: string }>();
+        return inputData;
+      });
+  });
+
+  it('.then(createStep(tool)) infers the tool output type (option B)', () => {
+    createWorkflow({ id: 'wf', inputSchema: z.object({ value: z.number() }), outputSchema: z.any() })
+      .then(createStep(numberTool))
+      .map(async ({ inputData }) => {
+        expectTypeOf(inputData.doubled).toBeNumber();
+        return inputData;
+      });
+  });
+
+  it('string-id .agent() falls back to { text: string }', () => {
+    createWorkflow({ id: 'wf', inputSchema: z.object({ prompt: z.string() }), outputSchema: z.any() })
+      .agent('some-registered-agent')
+      .map(async ({ inputData }) => {
+        expectTypeOf(inputData).toEqualTypeOf<{ text: string }>();
+        return inputData;
+      });
+  });
+
+  it('string-id .tool() falls back to unknown', () => {
+    createWorkflow({ id: 'wf', inputSchema: z.object({ value: z.number() }), outputSchema: z.any() })
+      .tool('some-registered-tool')
+      .map(async ({ inputData }) => {
+        expectTypeOf(inputData).toBeUnknown();
+        return inputData;
+      });
+  });
+});
+
+/**
+ * Input-chaining constraints for the declarative builders: the previous step's
+ * output must be assignable to the next step's input. These lock in that
+ * `.tool()` / `.agent()` (and the `.then(createStep(...))` paths) reject
+ * mismatched chains, not just infer the output direction.
+ */
+describe('declarative builder input chaining', () => {
+  // tool consuming `{ doubled: number }` (the output of `numberTool`)
+  const halveTool = createTool({
+    id: 'halve-tool',
+    description: 'tool',
+    inputSchema: z.object({ doubled: z.number() }),
+    outputSchema: z.object({ halved: z.number() }),
+    execute: async ({ doubled }) => ({ halved: doubled / 2 }),
+  });
+
+  // step that produces a concrete `{ prompt: string }` output (so a downstream
+  // agent receives a real type rather than `any`)
+  const toPrompt = createStep({
+    id: 'to-prompt',
+    inputSchema: z.object({ value: z.number() }),
+    outputSchema: z.object({ prompt: z.string() }),
+    execute: async () => ({ prompt: 'x' }),
+  });
+
+  // step whose output is intentionally incompatible with `numberTool`'s input
+  const wrongShape = createStep({
+    id: 'wrong-shape',
+    inputSchema: z.object({ value: z.number() }),
+    outputSchema: z.object({ nope: z.boolean() }),
+    execute: async () => ({ nope: true }),
+  });
+
+  it('.tool() accepts a chain whose prev output matches the tool input', () => {
+    const wf = createWorkflow({ id: 'wf', inputSchema: z.object({ value: z.number() }), outputSchema: z.any() })
+      .tool(numberTool) // -> { doubled: number }
+      .tool(halveTool); // input { doubled: number } -> OK
+    expectTypeOf(wf).not.toBeNever();
+  });
+
+  it('.tool() rejects chaining a tool whose input does not match the prev output', () => {
+    createWorkflow({ id: 'wf', inputSchema: z.object({ value: z.number() }), outputSchema: z.any() })
+      .tool(numberTool) // -> { doubled: number }
+      // @ts-expect-error - { doubled: number } is not assignable to tool input { value: number }
+      .tool(numberTool);
+  });
+
+  it('.tool() rejects a tool after a step producing the wrong shape', () => {
+    createWorkflow({ id: 'wf', inputSchema: z.object({ value: z.number() }), outputSchema: z.any() })
+      .then(wrongShape) // -> { nope: boolean }
+      // @ts-expect-error - { nope: boolean } is not assignable to tool input { value: number }
+      .tool(numberTool);
+  });
+
+  it('.tool() keeps the `.map()` (any output) escape hatch', () => {
+    const wf = createWorkflow({ id: 'wf', inputSchema: z.object({ value: z.number() }), outputSchema: z.any() })
+      .map(async () => ({ anything: 'goes' })) // map output is `any`
+      .tool(numberTool); // compiles via the `any` escape hatch
+    expectTypeOf(wf).not.toBeNever();
+  });
+
+  it('.agent() accepts a chain whose prev output is { prompt: string }', () => {
+    const wf = createWorkflow({ id: 'wf', inputSchema: z.object({ value: z.number() }), outputSchema: z.any() })
+      .then(toPrompt) // -> { prompt: string }
+      .agent(agent); // input { prompt: string } -> OK
+    expectTypeOf(wf).not.toBeNever();
+  });
+
+  it('.agent() rejects a chain whose prev output is not { prompt: string }', () => {
+    createWorkflow({ id: 'wf', inputSchema: z.object({ value: z.number() }), outputSchema: z.any() })
+      // @ts-expect-error - { value: number } is not assignable to agent input { prompt: string }
+      .agent(agent);
+  });
+
+  it('.then(createStep(tool)) rejects a mismatched prev output', () => {
+    createWorkflow({ id: 'wf', inputSchema: z.object({ value: z.number() }), outputSchema: z.any() })
+      .tool(numberTool) // -> { doubled: number }
+      // @ts-expect-error - { doubled: number } is not assignable to tool input { value: number }
+      .then(createStep(numberTool));
+  });
+
+  it('.then(createStep(agent)) requires { prompt: string } (locks in createStepFromAgent input type)', () => {
+    createWorkflow({ id: 'wf', inputSchema: z.object({ value: z.number() }), outputSchema: z.any() })
+      // @ts-expect-error - { value: number } is not assignable to agent input { prompt: string }
+      .then(createStep(agent));
   });
 });

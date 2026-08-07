@@ -3,8 +3,41 @@ import { randomUUID } from 'crypto';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { serve } from '@hono/node-server';
+import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { Hono } from 'hono';
 import getPort from 'get-port';
+
+/**
+ * Create a mock language model so the test agent can generate traces
+ * in CI without live LLM API keys.
+ */
+function createMockModel(mockText: string) {
+  return new MockLanguageModelV2({
+    doGenerate: async () => ({
+      rawCall: { rawPrompt: null, rawSettings: {} },
+      finishReason: 'stop',
+      usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+      content: [{ type: 'text', text: mockText }],
+      warnings: [],
+    }),
+    doStream: async () => ({
+      rawCall: { rawPrompt: null, rawSettings: {} },
+      warnings: [],
+      stream: convertArrayToReadableStream([
+        { type: 'stream-start', warnings: [] },
+        { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+        { type: 'text-start', id: 'text-1' },
+        { type: 'text-delta', id: 'text-1', delta: mockText },
+        { type: 'text-end', id: 'text-1' },
+        {
+          type: 'finish',
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        },
+      ]),
+    }),
+  });
+}
 
 /**
  * Configuration for the test server setup factory
@@ -104,10 +137,16 @@ export function createTestServerSetup(config: TestServerSetupConfig) {
     const port = await getPort();
     const baseUrl = `http://localhost:${port}`;
 
-    // Create storage
+    // Create storage. LibSQL's `:memory:` URL gives each pooled connection its own
+    // private in-memory database, so a table created by one connection is invisible
+    // to the next — which the evented agentic-loop tickles by spreading workflow
+    // snapshot reads/writes across multiple operations. Use a per-process temp file
+    // so all pooled connections open the same on-disk database (mirrors the vector
+    // store treatment already in place below).
+    const libSqlDbPath = `file:${join(tmpdir(), `mastra-libsql-${randomUUID()}.db`)}`;
     const libSqlStore = new LibSQLStore({
       id: storageId,
-      url: ':memory:',
+      url: libSqlDbPath,
     });
 
     const inMemoryStore = new InMemoryStore({
@@ -173,12 +212,13 @@ export function createTestServerSetup(config: TestServerSetupConfig) {
 
     addWorkflow.then(addStep).commit();
 
-    // Create a simple test agent with memory and tools
+    // Create a simple test agent with memory and tools.
+    // Use a mock model so trace generation works in CI without live LLM API keys.
     const testAgent = new Agent({
       id: 'testAgent',
       name: 'testAgent',
       instructions: 'You are a helpful test assistant.',
-      model: 'openai/gpt-4.1-mini',
+      model: createMockModel('Hello! I am a helpful test assistant.'),
       memory,
       tools: { calculator: calculatorTool, greeter: greeterTool },
     });

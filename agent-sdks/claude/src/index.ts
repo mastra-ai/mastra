@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { ReadableStream } from 'node:stream/web';
 
 import { query } from '@anthropic-ai/claude-agent-sdk';
-import type { ModelUsage, SDKMessage } from '@anthropic-ai/claude-agent-sdk';
+import type { ModelUsage, Options as ClaudeQueryOptions, SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 
 import { Agent } from '@mastra/core/agent';
 import type { MessageListInput } from '@mastra/core/agent/message-list';
@@ -25,6 +25,8 @@ import {
   enqueueFinishChunks,
   enqueueStartChunks,
   enqueueTextDelta,
+  getStructuredOutputFromValue,
+  getStructuredOutputSchema,
   promptToText,
   sumDefined,
   toFullOutput,
@@ -44,22 +46,7 @@ type ClaudeUsageTotals = {
   modelUsage?: Record<string, ModelUsage>;
 };
 
-export type ClaudePermissionMode = 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan' | 'dontAsk' | 'auto';
-
-export type ClaudeSDKOptions = {
-  abortController?: AbortController;
-  additionalDirectories?: string[];
-  cwd?: string;
-  model?: string;
-  maxTurns?: number;
-  permissionMode?: ClaudePermissionMode;
-  tools?: string[] | { type: 'preset'; preset: 'claude_code' };
-  allowedTools?: string[];
-  disallowedTools?: string[];
-  mcpServers?: Record<string, unknown>;
-  env?: Record<string, string>;
-  pathToClaudeCodeExecutable?: string;
-};
+export type ClaudeSDKOptions = ClaudeQueryOptions;
 
 export type ClaudeAgentOptions = {
   /**
@@ -79,6 +66,45 @@ export type ClaudeAgentOptions = {
    */
   sdkOptions?: ClaudeSDKOptions;
 };
+
+export type ClaudeSDKAgentRunOptions<OUTPUT = unknown> = SDKAgentRunOptions<OUTPUT> & {
+  /**
+   * Claude Agent SDK query options for this run. These are merged over the
+   * wrapper's `sdkOptions`, which allows per-call session continuation options
+   * such as `resume` or `continue`.
+   */
+  sdkOptions?: ClaudeSDKOptions;
+};
+
+export type ClaudeSDKAgentResumeData =
+  | {
+      /**
+       * Message to send while resuming the Claude SDK session.
+       */
+      message: MessageListInput;
+      /**
+       * Claude session id to resume.
+       */
+      sessionId: string;
+      /**
+       * Fork the resumed session into a new session.
+       */
+      forkSession?: boolean;
+      /**
+       * Resume the session up to a specific assistant message UUID.
+       */
+      resumeSessionAt?: string;
+    }
+  | {
+      /**
+       * Message to send while continuing the latest Claude SDK session.
+       */
+      message: MessageListInput;
+      /**
+       * Continue the latest Claude session in the current working directory.
+       */
+      continue: true;
+    };
 
 export class ClaudeSDKAgent extends Agent {
   readonly options: ClaudeAgentOptions;
@@ -109,7 +135,7 @@ export class ClaudeSDKAgent extends Agent {
 
   async generate<OUTPUT = undefined>(
     messages: MessageListInput,
-    options?: SDKAgentRunOptions<OUTPUT>,
+    options?: ClaudeSDKAgentRunOptions<OUTPUT>,
   ): Promise<FullOutput<OUTPUT>> {
     const prompt = promptToText(messages);
     const runId = options?.runId ?? randomUUID();
@@ -136,9 +162,7 @@ export class ClaudeSDKAgent extends Agent {
     });
     let result: SDKModelGenerateResult;
     try {
-      result = await telemetry.execute(() =>
-        runClaudeGenerate(prompt, this.options, telemetry, options?.abortSignal ?? options?.signal),
-      );
+      result = await telemetry.execute(() => runClaudeGenerate(prompt, this.options, telemetry, options));
       telemetry.endGenerate(result);
     } catch (error) {
       telemetry.fail(error);
@@ -150,13 +174,13 @@ export class ClaudeSDKAgent extends Agent {
       runId,
       provider: PROVIDER,
       result,
-      options: telemetry.outputOptions(),
+      options: { ...telemetry.outputOptions(), structuredOutput: options?.structuredOutput as any },
     });
   }
 
   async stream<OUTPUT = undefined>(
     messages: MessageListInput,
-    options?: SDKAgentRunOptions<OUTPUT>,
+    options?: ClaudeSDKAgentRunOptions<OUTPUT>,
   ): Promise<MastraModelOutput<OUTPUT>> {
     const runId = options?.runId ?? randomUUID();
     const prompt = promptToText(messages);
@@ -188,24 +212,95 @@ export class ClaudeSDKAgent extends Agent {
       runId,
       modelId,
       provider: PROVIDER,
-      stream: telemetry.wrapStream(
-        runClaudeAsMastraStream(prompt, this.options, runId, telemetry, options?.abortSignal ?? options?.signal),
-      ),
-      options: telemetry.outputOptions(),
+      stream: telemetry.wrapStream(runClaudeAsMastraStream(prompt, this.options, runId, telemetry, options)),
+      options: { ...telemetry.outputOptions(), structuredOutput: options?.structuredOutput as any },
     });
   }
+
+  async resumeGenerate<OUTPUT = undefined>(
+    resumeData: ClaudeSDKAgentResumeData,
+    options?: ClaudeSDKAgentRunOptions<OUTPUT>,
+  ): Promise<FullOutput<OUTPUT>> {
+    const data = validateClaudeResumeData(resumeData);
+    return this.generate(data.message, createClaudeResumeRunOptions(data, options));
+  }
+
+  async resumeStream<OUTPUT = undefined>(
+    resumeData: ClaudeSDKAgentResumeData,
+    options?: ClaudeSDKAgentRunOptions<OUTPUT>,
+  ): Promise<MastraModelOutput<OUTPUT>> {
+    const data = validateClaudeResumeData(resumeData);
+    return this.stream(data.message, createClaudeResumeRunOptions(data, options));
+  }
+}
+
+function validateClaudeResumeData(resumeData: ClaudeSDKAgentResumeData): ClaudeSDKAgentResumeData {
+  if (!isRecord(resumeData) || !('message' in resumeData)) {
+    throw new Error('ClaudeSDKAgent resumeData must include a message.');
+  }
+
+  const hasSessionId = 'sessionId' in resumeData;
+  const hasContinue = 'continue' in resumeData;
+
+  if (hasSessionId && hasContinue) {
+    throw new Error('ClaudeSDKAgent resumeData must include either sessionId or continue: true, not both.');
+  }
+
+  if (hasSessionId) {
+    if (typeof resumeData.sessionId !== 'string') {
+      throw new Error('ClaudeSDKAgent resumeData.sessionId must be a string.');
+    }
+    return resumeData;
+  }
+
+  if (hasContinue) {
+    if (resumeData.continue !== true) {
+      throw new Error('ClaudeSDKAgent resumeData.continue must be true when provided.');
+    }
+    return resumeData;
+  }
+
+  throw new Error('ClaudeSDKAgent resumeData must include sessionId or continue: true.');
+}
+
+function createClaudeResumeRunOptions<OUTPUT>(
+  resumeData: ClaudeSDKAgentResumeData,
+  options?: ClaudeSDKAgentRunOptions<OUTPUT>,
+): ClaudeSDKAgentRunOptions<OUTPUT> {
+  const sdkOptions: ClaudeSDKOptions = { ...options?.sdkOptions };
+
+  if ('sessionId' in resumeData && typeof resumeData.sessionId === 'string') {
+    sdkOptions.resume = resumeData.sessionId;
+    if (resumeData.forkSession !== undefined) {
+      sdkOptions.forkSession = resumeData.forkSession;
+    }
+    if (resumeData.resumeSessionAt !== undefined) {
+      sdkOptions.resumeSessionAt = resumeData.resumeSessionAt;
+    }
+  } else {
+    sdkOptions.continue = true;
+  }
+
+  return {
+    ...options,
+    sdkOptions,
+  };
 }
 
 async function runClaudeGenerate<OUTPUT>(
   prompt: string,
   options: ClaudeAgentOptions,
   telemetry: SDKAgentTelemetry<OUTPUT>,
-  signal?: AbortSignal,
+  runOptions?: ClaudeSDKAgentRunOptions<OUTPUT>,
 ): Promise<SDKModelGenerateResult> {
   let text = '';
+  let structuredOutputValue: unknown;
   const usage = createClaudeUsageCollector();
 
-  for await (const message of observeClaudeMessages(runClaude(prompt, options, signal), telemetry)) {
+  for await (const message of observeClaudeMessages(
+    runClaude(prompt, options, runOptions?.abortSignal ?? runOptions?.signal, runOptions),
+    telemetry,
+  )) {
     usage.record(message);
     if (message.type === 'result') {
       if (message.subtype !== 'success') {
@@ -213,10 +308,15 @@ async function runClaudeGenerate<OUTPUT>(
       }
 
       text = message.result;
+      structuredOutputValue = getClaudeStructuredOutput(message);
     }
   }
 
   const totals = usage.totals();
+  const object = await getStructuredOutputFromValue(
+    structuredOutputValue === undefined ? text : structuredOutputValue,
+    runOptions?.structuredOutput,
+  );
 
   return {
     content: [{ type: 'text', text }],
@@ -229,6 +329,7 @@ async function runClaudeGenerate<OUTPUT>(
     },
     providerMetadata: getClaudeProviderMetadata(options, totals),
     costContext: getClaudeCostContext(options, totals),
+    object,
   };
 }
 
@@ -237,7 +338,7 @@ function runClaudeAsMastraStream<OUTPUT>(
   options: ClaudeAgentOptions,
   runId: string,
   telemetry: SDKAgentTelemetry<OUTPUT>,
-  signal?: AbortSignal,
+  runOptions?: ClaudeSDKAgentRunOptions<OUTPUT>,
 ): ReadableStream<ChunkType> {
   return new ReadableStream<ChunkType>({
     start: async controller => {
@@ -246,6 +347,7 @@ function runClaudeAsMastraStream<OUTPUT>(
       const modelId = getModelId(options);
       const usage = createClaudeUsageCollector();
       let text = '';
+      let structuredOutputValue: unknown;
       let sawDelta = false;
 
       try {
@@ -258,7 +360,10 @@ function runClaudeAsMastraStream<OUTPUT>(
           providerMetadata: getClaudeProviderMetadata(options, usage.totals()),
         });
 
-        for await (const message of observeClaudeMessages(runClaude(prompt, options, signal), telemetry)) {
+        for await (const message of observeClaudeMessages(
+          runClaude(prompt, options, runOptions?.abortSignal ?? runOptions?.signal, runOptions),
+          telemetry,
+        )) {
           usage.record(message);
           const delta = getTextDelta(message);
           if (delta) {
@@ -276,6 +381,7 @@ function runClaudeAsMastraStream<OUTPUT>(
               text += message.result;
               enqueueTextDelta(controller, runId, textId, message.result);
             }
+            structuredOutputValue = getClaudeStructuredOutput(message);
           }
         }
 
@@ -291,6 +397,10 @@ function runClaudeAsMastraStream<OUTPUT>(
           usage: usage.toLanguageModelUsage(),
           providerMetadata,
           costContext: getClaudeCostContext(options, totals),
+          object: await getStructuredOutputFromValue(
+            structuredOutputValue === undefined ? text : structuredOutputValue,
+            runOptions?.structuredOutput,
+          ),
         });
         controller.close();
       } catch (error) {
@@ -306,11 +416,24 @@ function runClaudeAsMastraStream<OUTPUT>(
   });
 }
 
-function runClaude(prompt: string, options: ClaudeAgentOptions, signal?: AbortSignal): AsyncIterable<SDKMessage> {
+function runClaude<OUTPUT>(
+  prompt: string,
+  options: ClaudeAgentOptions,
+  signal?: AbortSignal,
+  runOptions?: ClaudeSDKAgentRunOptions<OUTPUT>,
+): AsyncIterable<SDKMessage> {
   const abortController = createAbortController(signal);
-  const queryOptions = {
+  const queryOptions: ClaudeSDKOptions = {
     ...options.sdkOptions,
+    ...runOptions?.sdkOptions,
   };
+  const outputSchema = getStructuredOutputSchema(runOptions?.structuredOutput);
+  if (outputSchema) {
+    queryOptions.outputFormat = {
+      type: 'json_schema',
+      schema: outputSchema,
+    };
+  }
   if (abortController) {
     queryOptions.abortController = abortController;
   }
@@ -319,6 +442,14 @@ function runClaude(prompt: string, options: ClaudeAgentOptions, signal?: AbortSi
     prompt,
     options: queryOptions as Parameters<typeof query>[0]['options'],
   }) as AsyncIterable<SDKMessage>;
+}
+
+function getClaudeStructuredOutput(message: SDKMessage): unknown {
+  if (message.type !== 'result') {
+    return undefined;
+  }
+
+  return (message as { structured_output?: unknown }).structured_output;
 }
 
 async function* observeClaudeMessages<OUTPUT>(

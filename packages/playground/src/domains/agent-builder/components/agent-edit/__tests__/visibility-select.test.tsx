@@ -1,13 +1,12 @@
-// @vitest-environment jsdom
-import { TooltipProvider } from '@mastra/playground-ui';
+import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { FormProvider, useForm } from 'react-hook-form';
 import { MemoryRouter } from 'react-router';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { AgentBuilderEditFormValues } from '../../../schemas';
 import { VisibilitySelect } from '../visibility-select';
 import { server } from '@/test/msw-server';
@@ -44,7 +43,30 @@ const FormHarness = ({ defaultVisibility = 'private', children }: FormHarnessPro
   );
 };
 
+type DependentsStub = {
+  dependents: Array<{ id: string; name: string }>;
+  hiddenCount?: number;
+};
+
+const stubAgentDependents = (agentId: string, payload: DependentsStub = { dependents: [] }) => {
+  server.use(
+    http.get(`${BASE_URL}/api/stored/agents/${agentId}/dependents`, () =>
+      HttpResponse.json({
+        dependents: payload.dependents,
+        hiddenCount: payload.hiddenCount ?? 0,
+      }),
+    ),
+  );
+};
+
 describe('VisibilitySelect', () => {
+  beforeEach(() => {
+    stubAgentDependents(AGENT_ID);
+    // The visibility mutation reads auth capabilities to gate workspace writes;
+    // default to auth-disabled so permission checks pass without network noise.
+    server.use(http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json({ enabled: false, login: null })));
+  });
+
   afterEach(() => {
     cleanup();
   });
@@ -139,9 +161,7 @@ describe('VisibilitySelect', () => {
     );
 
     fireEvent.click(screen.getByTestId('agent-builder-visibility-add'));
-    await act(async () => {
-      fireEvent.click(await screen.findByTestId('agent-builder-visibility-confirm-yes'));
-    });
+    fireEvent.click(await screen.findByTestId('agent-builder-visibility-confirm-yes'));
 
     await waitFor(() => {
       expect(capturedBody).toEqual({ visibility: 'public' });
@@ -189,9 +209,7 @@ describe('VisibilitySelect', () => {
     );
 
     fireEvent.click(screen.getByTestId('agent-builder-visibility-add'));
-    await act(async () => {
-      fireEvent.click(await screen.findByTestId('agent-builder-visibility-confirm-yes'));
-    });
+    fireEvent.click(await screen.findByTestId('agent-builder-visibility-confirm-yes'));
 
     await waitFor(() => {
       expect(screen.queryByTestId('agent-builder-visibility-confirm-dialog')).toBeNull();
@@ -199,5 +217,45 @@ describe('VisibilitySelect', () => {
     expect(screen.getByTestId('agent-builder-visibility-add')).toBeTruthy();
     expect(screen.getByTestId('form-visibility').textContent).toBe('private');
     expect(screen.getByTestId('form-dirty').textContent).toBe('false');
+  });
+
+  it('renders impact warnings on the make-private confirm dialog when there are dependents', async () => {
+    stubAgentDependents(AGENT_ID, {
+      dependents: [{ id: 'a1', name: 'Coordinator' }],
+      hiddenCount: 2,
+    });
+
+    render(
+      <FormHarness defaultVisibility="public">
+        <VisibilitySelect agentId={AGENT_ID} />
+      </FormHarness>,
+    );
+
+    fireEvent.click(screen.getByTestId('agent-builder-visibility-remove'));
+
+    await screen.findByTestId('agent-builder-visibility-confirm-dialog');
+    const dependents = await screen.findByTestId('agent-impact-dependents-warning');
+    expect(dependents.textContent).toContain('Coordinator');
+    expect(dependents.textContent).toContain('Making this agent private');
+    const hidden = await screen.findByTestId('agent-impact-hidden-warning');
+    expect(hidden.textContent).toContain('2 other private agents also reference this agent and may stop working.');
+  });
+
+  it('does not render impact warnings on the make-public dialog', async () => {
+    stubAgentDependents(AGENT_ID, {
+      dependents: [{ id: 'a1', name: 'Coordinator' }],
+      hiddenCount: 1,
+    });
+
+    render(
+      <FormHarness>
+        <VisibilitySelect agentId={AGENT_ID} />
+      </FormHarness>,
+    );
+
+    fireEvent.click(screen.getByTestId('agent-builder-visibility-add'));
+
+    await screen.findByTestId('agent-builder-visibility-confirm-dialog');
+    expect(screen.queryByTestId('agent-impact-warnings')).toBeNull();
   });
 });

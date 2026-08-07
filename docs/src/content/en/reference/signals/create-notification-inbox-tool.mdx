@@ -1,0 +1,128 @@
+---
+title: "Reference: createNotificationInboxTool() | Signals"
+description: "API reference for createNotificationInboxTool(), which creates a tool for reading and managing notification inbox records."
+packages:
+  - "@mastra/core"
+---
+
+# createNotificationInboxTool()
+
+**Added in:** `@mastra/core@1.39.0`
+
+`createNotificationInboxTool()` creates a Mastra tool that lets an agent inspect and manage notification inbox records for the current thread.
+
+Use this tool with durable notification signals. For sending notification records, see [`Agent.sendNotificationSignal()`](/reference/agents/agent#sendnotificationsignalnotification-options).
+
+## Usage example
+
+The following example adds the inbox tool to an agent.
+
+```typescript title="src/mastra/agents/support-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { createNotificationInboxTool } from '@mastra/core/notifications'
+
+const notificationsStorage = await storage.getStore('notifications')
+
+export const supportAgent = new Agent({
+  id: 'support-agent',
+  name: 'Support Agent',
+  instructions: 'Help the user triage updates.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  tools: {
+    notificationInbox: createNotificationInboxTool({ storage: notificationsStorage }),
+  },
+})
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'options',
+    type: 'object',
+    description: 'Tool configuration.',
+    properties: [
+      {
+        type: 'object',
+        parameters: [
+          {
+            name: 'storage',
+            type: 'NotificationsStorage',
+            description: "Notification storage domain returned by `storage.getStore('notifications')`.",
+          },
+        ],
+      },
+    ],
+  },
+]}
+/>
+
+## Tool input
+
+The generated tool has the id `notification-inbox` and accepts these input fields.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'action',
+    type: "'list' | 'read' | 'markSeen' | 'dismiss' | 'archive' | 'search'",
+    description: 'Inbox action to perform.',
+  },
+  {
+    name: 'threadId',
+    type: 'string',
+    isOptional: true,
+    description: 'Thread ID to inspect. Defaults to the current agent thread when available.',
+  },
+  {
+    name: 'id',
+    type: 'string',
+    isOptional: true,
+    description: 'Notification ID. Required for `markSeen`, `dismiss`, and `archive`. Optional for `read`.',
+  },
+  {
+    name: 'status',
+    type: "'pending' | 'delivered' | 'seen' | 'dismissed' | 'archived' | 'discarded'",
+    isOptional: true,
+    description: 'Status filter for list, read, or search actions.',
+  },
+  {
+    name: 'priority',
+    type: "'low' | 'medium' | 'high' | 'urgent'",
+    isOptional: true,
+    description: 'Priority filter for list, read, or search actions.',
+  },
+  {
+    name: 'source',
+    type: 'string',
+    isOptional: true,
+    description: 'Source filter for list, read, or search actions.',
+  },
+  {
+    name: 'query',
+    type: 'string',
+    isOptional: true,
+    description: 'Search query. Required when `action` is `search`.',
+  },
+  {
+    name: 'limit',
+    type: 'number',
+    isOptional: true,
+    description: 'Maximum number of notifications to return. Must be a positive integer.',
+  },
+]}
+/>
+
+## Actions
+
+| Action | Description |
+| - | - |
+| `list` | Returns matching notifications. |
+| `read` | Delivers readable notification contents as signals and marks delivered records as seen. |
+| `markSeen` | Marks one notification as seen. |
+| `dismiss` | Marks one notification as dismissed. |
+| `archive` | Marks one notification as archived. |
+| `search` | Searches notifications by query and optional filters. |
+
+When `read` finds pending or delivered notifications, the tool delivers their contents as notification signals instead of returning the full contents as normal tool output. Use this after a `<notification-summary>` signal when the agent needs the full records behind the summary.

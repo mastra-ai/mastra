@@ -1,17 +1,8 @@
 import type { DraggableProvidedDragHandleProps } from '@hello-pangea/dnd';
-import type { RuleGroup, JsonSchema } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
+import { ContentBlock } from '@mastra/playground-ui/components/ContentBlocks';
 import {
-  Button,
-  CodeEditor,
-  ContentBlock,
-  Input,
-  Label,
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-  Txt,
-  Icon,
-  cn,
   Dialog,
   DialogContent,
   DialogHeader,
@@ -19,7 +10,15 @@ import {
   DialogDescription,
   DialogBody,
   DialogFooter,
-} from '@mastra/playground-ui';
+} from '@mastra/playground-ui/components/Dialog';
+import { Input } from '@mastra/playground-ui/components/Input';
+import { Label } from '@mastra/playground-ui/components/Label';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { cn } from '@mastra/playground-ui/utils/cn';
+import type { JsonSchema } from '@mastra/playground-ui/utils/json-schema';
+import type { RuleGroup } from '@mastra/playground-ui/utils/rule-engine';
 import type { ReactCodeMirrorRef } from '@uiw/react-codemirror';
 import { GripVertical, X, BookmarkPlus } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -195,15 +194,10 @@ const InlineBlockContent = ({
 
   return (
     <>
-      <div
-        className={cn(
-          'relative group rounded-md transition-colors duration-150 hover:bg-surface2/50',
-          !readOnly && 'pr-20',
-        )}
-      >
+      <div className="group hover:bg-surface2/50 relative rounded-md transition-colors duration-150">
         {/* Left gutter — drag handle (visible on hover/focus-within) */}
         {!readOnly && (
-          <div className="absolute -left-8 top-1 flex flex-col items-center transition-opacity duration-150 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100">
+          <div className="absolute top-1 -left-8 flex flex-col items-center opacity-0 transition-opacity duration-150 group-focus-within:opacity-100 group-hover:opacity-100">
             <div {...dragHandleProps} className="text-neutral3 hover:text-neutral6 cursor-grab active:cursor-grabbing">
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -219,7 +213,7 @@ const InlineBlockContent = ({
 
         {/* Right toolbar — conditions + save as ref + delete (visible on hover/focus-within) */}
         {!readOnly && (
-          <div className="absolute right-0 top-1 z-10 flex items-center gap-0.5 transition-opacity duration-150 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100">
+          <div className="absolute top-1 right-0 z-10 flex items-center gap-0.5 opacity-0 transition-opacity duration-150 group-focus-within:opacity-100 group-hover:opacity-100">
             <DisplayConditionsDialog
               entityName={`Block ${index + 1}`}
               schema={schema}
@@ -252,7 +246,8 @@ const InlineBlockContent = ({
           value={block.content}
           onChange={handleContentChange}
           placeholder={placeholder}
-          className="border-none rounded-none bg-transparent min-h-12"
+          variant="embedded"
+          className="min-h-12"
           language="markdown"
           highlightVariables
           showCopyButton={false}

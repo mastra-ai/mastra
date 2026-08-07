@@ -1,7 +1,10 @@
 'use client';
 
 import type { DatasetItem } from '@mastra/client-js';
-import { KeyValueList, Sections, SideDialog, TextAndIcon } from '@mastra/playground-ui';
+import { KeyValueList } from '@mastra/playground-ui/components/KeyValueList';
+import { Sections } from '@mastra/playground-ui/components/Sections';
+import { SideDialog } from '@mastra/playground-ui/components/SideDialog';
+import { TextAndIcon } from '@mastra/playground-ui/components/Text';
 import { format } from 'date-fns/format';
 import { HashIcon, FileInputIcon, FileOutputIcon, TagIcon, RouteIcon } from 'lucide-react';
 
@@ -31,11 +34,11 @@ function DatasetItemContent({ item }: { item: DatasetItem }) {
   return (
     <>
       <div className="mb-4">
-        <h3 className="text-lg font-medium flex items-center gap-2">
-          <FileInputIcon className="w-5 h-5" /> Dataset Item
+        <h3 className="flex items-center gap-2 text-lg font-medium">
+          <FileInputIcon className="h-5 w-5" /> Dataset Item
         </h3>
         <TextAndIcon>
-          <HashIcon className="w-4 h-4" /> {item.id}
+          <HashIcon className="h-4 w-4" /> {item.id}
         </TextAndIcon>
       </div>
 

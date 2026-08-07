@@ -1,0 +1,14 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "userMessage": "Create OM settings persistence thread."
+      },
+      "response": {
+        "content": "OM settings thread ready."
+      }
+    }
+  ]
+}

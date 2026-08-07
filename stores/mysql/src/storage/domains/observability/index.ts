@@ -117,6 +117,7 @@ export class ObservabilityMySQL extends ObservabilityStorage {
       generateTableSQL({
         tableName: TABLE_SPANS,
         schema: TABLE_SCHEMAS[TABLE_SPANS],
+        compositePrimaryKey: ['traceId', 'spanId'],
       }),
     );
 

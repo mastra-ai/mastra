@@ -16,6 +16,8 @@ import type {
   FavoriteToggleResponse,
   ExportStoredAgentParams,
   ExportStoredAgentResponse,
+  OpenStoredAgentChangeRequestParams,
+  OpenStoredAgentChangeRequestResponse,
 } from '../types';
 import { requestContextQueryString } from '../utils';
 
@@ -72,6 +74,16 @@ export class StoredAgent extends BaseResource {
    */
   export(params: ExportStoredAgentParams): Promise<ExportStoredAgentResponse> {
     return this.request(`/stored/agents/${encodeURIComponent(this.storedAgentId)}/export`, {
+      method: 'POST',
+      body: params,
+    });
+  }
+
+  /**
+   * Opens a source-provider change request for deterministic agent JSON without mutating storage.
+   */
+  openChangeRequest(params: OpenStoredAgentChangeRequestParams): Promise<OpenStoredAgentChangeRequestResponse> {
+    return this.request(`/stored/agents/${encodeURIComponent(this.storedAgentId)}/change-request`, {
       method: 'POST',
       body: params,
     });

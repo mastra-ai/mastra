@@ -7,11 +7,20 @@ packages:
 
 # Memory.cloneThread()
 
-The `.cloneThread()` method creates a copy of an existing conversation thread, including all its messages. This enables creating divergent conversation paths from a specific point in a conversation. When semantic recall is enabled, the method also creates vector embeddings for the cloned messages.
+The `.cloneThread()` method creates a copy of an existing conversation thread, including all its messages. It supports creating divergent conversation paths from a specific point in a conversation. When semantic recall is enabled, the method also creates vector embeddings for the cloned messages.
 
 ## Usage example
 
+The following example creates a `Memory` instance and clones an existing thread.
+
 ```typescript
+import { Memory } from '@mastra/memory'
+import { LibSQLStore } from '@mastra/libsql'
+
+const memory = new Memory({
+  storage: new LibSQLStore({ id: 'memory-store', url: 'file:./memory.db' }),
+})
+
 const { thread, clonedMessages } = await memory.cloneThread({
   sourceThreadId: 'original-thread-123',
 })
@@ -42,7 +51,8 @@ const { thread, clonedMessages } = await memory.cloneThread({
   {
     name: 'title',
     type: 'string',
-    description: "Optional title for the cloned thread. Defaults to '[source title] (Copy)'.",
+    description:
+      'Optional title for the cloned thread. If omitted, the clone uses `Clone of ${sourceThread.title}` when the source thread has a title. Otherwise, the title is empty.',
     isOptional: true,
   },
   {
@@ -127,7 +137,7 @@ const { thread, clonedMessages } = await memory.cloneThread({
 ]}
 />
 
-### Clone Metadata
+### Clone metadata
 
 The cloned thread's metadata includes a `clone` property with:
 
@@ -191,8 +201,18 @@ const { thread: dateFilteredClone } = await memory.cloneThread({
   },
 })
 
+// Clone specific messages
+const { thread: selectedMessagesClone } = await memory.cloneThread({
+  sourceThreadId: 'original-thread-123',
+  options: {
+    messageFilter: {
+      messageIds: ['message-1', 'message-2'],
+    },
+  },
+})
+
 // Continue conversation on the cloned thread
-const response = await agent.generate("Let's try a different approach", {
+const response = await agent.generate('Try a different approach', {
   memory: {
     thread: fullClone.id,
     resource: fullClone.resourceId,
@@ -200,9 +220,13 @@ const response = await agent.generate("Let's try a different approach", {
 })
 ```
 
+Pass the cloned `thread.id` and `thread.resourceId` to `agent.generate()` to continue the conversation from the cloned thread.
+
 ## Vector embeddings
 
-When the Memory instance has semantic recall enabled (with a vector store and embedder configured), `cloneThread()` automatically creates vector embeddings for all cloned messages. This ensures that semantic search works correctly on the cloned thread.
+When the Memory instance has semantic recall enabled with a vector store and embedder configured, `cloneThread()` automatically creates vector embeddings for all cloned messages. It ensures that semantic search works correctly on the cloned thread.
+
+In this example, `embeddingModel` is the embedding model configured for the project.
 
 ```typescript
 import { Memory } from '@mastra/memory'
@@ -229,6 +253,14 @@ const results = await memory.recall({
 })
 ```
 
+## Working memory
+
+When working memory is enabled, `cloneThread()` copies or shares working memory based on the working-memory scope and the clone's `resourceId`:
+
+- **Thread-scoped working memory**: The working memory is copied to the cloned thread.
+- **Resource-scoped working memory with the same `resourceId`**: The working memory is shared because the source and cloned threads belong to the same resource.
+- **Resource-scoped working memory with a different `resourceId`**: The working memory is copied to the cloned thread's resource.
+
 ## Observational Memory
 
 When [Observational Memory](/docs/memory/observational-memory) is enabled, `cloneThread()` automatically clones the OM records associated with the source thread. The behavior depends on the OM scope:
@@ -237,4 +269,4 @@ When [Observational Memory](/docs/memory/observational-memory) is enabled, `clon
 - **Resource-scoped OM (same `resourceId`)**: The OM record is shared between the source and cloned threads since they belong to the same resource. No duplication occurs.
 - **Resource-scoped OM (different `resourceId`)**: The OM record is cloned to the new resource. Message IDs are remapped and any thread-identifying tags within observations are updated to reference the cloned thread.
 
-Only the current (most recent) OM generation is cloned — older history generations aren't copied. Transient processing state (observation/reflection in-progress flags) is reset on the cloned record.
+Only the current (most recent) OM generation is cloned. Older history generations aren't copied. Transient processing state (observation/reflection in-progress flags) is reset on the cloned record.

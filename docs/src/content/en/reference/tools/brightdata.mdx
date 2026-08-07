@@ -1,5 +1,5 @@
 ---
-title: "Reference: Bright Data tools | Tools & MCP"
+title: "Reference: Bright Data tools | Tools and MCP"
 description: "API reference for @mastra/brightdata, which provides web search and fetch tools backed by Bright Data's SERP API and Web Unlocker."
 packages:
   - "@mastra/brightdata"
@@ -7,7 +7,7 @@ packages:
 
 # Bright Data tools
 
-The `@mastra/brightdata` package wraps the [Bright Data SDK](https://github.com/brightdata/bright-data-sdk-node) as Mastra-compatible tools. It exposes factory functions for web search and web fetch — each returning a tool created with [`createTool()`](./create-tool) that includes full Zod input/output schemas.
+The `@mastra/brightdata` package wraps the [Bright Data SDK](https://github.com/brightdata/bright-data-sdk-node) as Mastra-compatible tools. It exposes factory functions for web search and web fetch. Each function returns a tool created with [`createTool()`](./create-tool) that includes full Zod input/output schemas.
 
 The search tool is backed by Bright Data's [SERP API](https://brightdata.com/products/serp-api) and the fetch tool by [Web Unlocker](https://brightdata.com/products/web-unlocker). Both bypass bot detection and CAPTCHAs.
 
@@ -207,7 +207,7 @@ const agent = new Agent({
 
 | Variable | Description |
 | - | - |
-| `BRIGHTDATA_API_TOKEN` | Your Bright Data API token. Used as the default when `apiKey` is not passed to a factory function. |
+| `BRIGHTDATA_API_TOKEN` | Your Bright Data API token. Used as the default when `apiKey` isn't passed to a factory function. |
 
 ## Related
 

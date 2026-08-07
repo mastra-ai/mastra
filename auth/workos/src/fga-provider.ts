@@ -19,8 +19,8 @@ import type {
   FGARoleParams,
   FGAListRoleAssignmentsOptions,
   MastraFGAPermissionInput,
-} from '@mastra/core/auth/ee';
-import { FGADeniedError } from '@mastra/core/auth/ee';
+} from '@internal/auth/ee';
+import { FGADeniedError } from '@internal/auth/ee';
 import { WorkOS } from '@workos-inc/node';
 
 import type { MastraFGAWorkosOptions, FGAResourceMappingEntry, WorkOSUser } from './types';
@@ -72,7 +72,7 @@ export class WorkOSFGAMembershipResolutionError extends Error {
  * @example Basic usage
  * ```typescript
  * import { MastraFGAWorkos } from '@mastra/auth-workos';
- * import { MastraFGAPermissions } from '@mastra/core/auth/ee';
+ * import { MastraFGAPermissions } from '@internal/auth/ee';
  *
  * const fga = new MastraFGAWorkos({
  *   resourceMapping: {

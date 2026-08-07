@@ -13,7 +13,7 @@ Persists traces to Mastra's configured storage with automatic batching and retry
 
 :::note
 
-`MastraStorageExporter` was previously called `DefaultExporter`. The original `DefaultExporter` class is still exported from `@mastra/observability` so existing imports keep working, but it is deprecated and will be removed in a future major version. New code should use `MastraStorageExporter`.
+`MastraStorageExporter` was previously called `DefaultExporter`. The original `DefaultExporter` class is still exported from `@mastra/observability` so existing imports keep working, but it's deprecated and will be removed in a future major version. New code should use `MastraStorageExporter`.
 
 :::
 
@@ -206,7 +206,7 @@ const customExporter = new MastraStorageExporter({
 
 ## Migrating from `DefaultExporter`
 
-The two classes share the same constructor signature and behavior. To migrate, replace the import and constructor:
+Both classes share the same constructor signature and behavior. To migrate, replace the import and constructor:
 
 ```typescript
 // Before
@@ -225,7 +225,7 @@ The original `DefaultExporter` is preserved unchanged so dashboards or alert rul
 ### Documentation
 
 - [Tracing Overview](/docs/observability/tracing/overview): Complete guide
-- [Exporters](/docs/observability/tracing/overview#exporters): Exporter concepts
+- [Exporters](/docs/observability/integrations/overview#exporters): Exporter concepts
 
 ### Other Exporters
 

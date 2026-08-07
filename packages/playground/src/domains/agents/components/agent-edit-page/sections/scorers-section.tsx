@@ -1,17 +1,12 @@
-import {
-  Collapsible,
-  CollapsibleTrigger,
-  CollapsibleContent,
-  MultiCombobox,
-  Button,
-  Input,
-  Label,
-  RadioGroup,
-  RadioGroupItem,
-  Textarea,
-  JudgeIcon,
-  Icon,
-} from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@mastra/playground-ui/components/Collapsible';
+import { Combobox } from '@mastra/playground-ui/components/Combobox';
+import { Input } from '@mastra/playground-ui/components/Input';
+import { Label } from '@mastra/playground-ui/components/Label';
+import { RadioGroup, RadioGroupItem } from '@mastra/playground-ui/components/RadioGroup';
+import { Textarea } from '@mastra/playground-ui/components/Textarea';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { JudgeIcon } from '@mastra/playground-ui/icons/JudgeIcon';
 import { Trash2, ChevronRight } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { Control } from 'react-hook-form';
@@ -48,7 +43,7 @@ export function ScorersSection({ control, error, readOnly = false }: ScorersSect
   };
 
   return (
-    <div className="rounded-md border border-border1 bg-surface2">
+    <div className="border-border1 bg-surface2 rounded-md border">
       <Controller
         name="scorers"
         control={control}
@@ -90,9 +85,9 @@ export function ScorersSection({ control, error, readOnly = false }: ScorersSect
           return (
             <>
               <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-                <div className="flex items-center justify-between p-3 bg-surface3">
-                  <CollapsibleTrigger className="flex items-center gap-1 w-full">
-                    <ChevronRight className="h-4 w-4 text-neutral3" />
+                <div className="bg-surface3 flex items-center justify-between p-3">
+                  <CollapsibleTrigger className="flex w-full items-center gap-1">
+                    <ChevronRight className="text-neutral3 h-4 w-4" />
                     <SectionTitle icon={<JudgeIcon className="text-neutral3" />}>
                       Scorers{count > 0 && <span className="text-neutral3 font-normal">({count})</span>}
                     </SectionTitle>
@@ -100,9 +95,10 @@ export function ScorersSection({ control, error, readOnly = false }: ScorersSect
                 </div>
 
                 <CollapsibleContent>
-                  <div className="p-3 border-t border-border1">
+                  <div className="border-border1 border-t p-3">
                     <div className="flex flex-col gap-2">
-                      <MultiCombobox
+                      <Combobox
+                        multiple
                         options={options}
                         value={selectedIds}
                         onValueChange={handleValueChange}
@@ -111,11 +107,10 @@ export function ScorersSection({ control, error, readOnly = false }: ScorersSect
                         emptyText="No scorers available"
                         disabled={isLoading || readOnly}
                         error={error}
-                        variant="default"
                       />
 
                       {selectedOptions.length > 0 && (
-                        <div className="flex flex-col gap-3 mt-2">
+                        <div className="mt-2 flex flex-col gap-3">
                           {selectedOptions.map(scorer => (
                             <ScorerConfigPanel
                               key={scorer.value}
@@ -187,7 +182,7 @@ function ScorerConfigPanel({
           <Icon size="sm">
             <JudgeIcon className="text-neutral3" />
           </Icon>
-          <span className="text-xs font-medium text-neutral6">{scorerName}</span>
+          <span className="text-neutral6 text-xs font-medium">{scorerName}</span>
         </div>
         {!readOnly && (
           <Button type="button" tooltip={`Remove ${scorerName}`} onClick={onRemove} variant="ghost" size="icon-sm">
@@ -201,13 +196,13 @@ function ScorerConfigPanel({
         value={description}
         onChange={e => onDescriptionChange(e.target.value)}
         placeholder="Custom description for this scorer..."
-        className="min-h-[40px] text-xs bg-surface3 border-dashed px-2 py-1"
+        className="bg-surface3 min-h-[40px] border-dashed px-2 py-1 text-xs"
         size="sm"
         disabled={readOnly}
       />
 
       <div className="flex flex-col gap-2">
-        <Label htmlFor={`sampling-type-${scorerId}`} className="text-xs text-neutral4">
+        <Label htmlFor={`sampling-type-${scorerId}`} className="text-neutral4 text-xs">
           Sampling
         </Label>
         <RadioGroup
@@ -219,21 +214,21 @@ function ScorerConfigPanel({
         >
           <div className="flex items-center gap-2">
             <RadioGroupItem value="none" id={`${scorerId}-none`} disabled={readOnly} />
-            <Label htmlFor={`${scorerId}-none`} className="text-sm text-neutral5 cursor-pointer">
+            <Label htmlFor={`${scorerId}-none`} className="text-neutral5 cursor-pointer text-sm">
               None (evaluate all)
             </Label>
           </div>
           <div className="flex items-center gap-2">
             <RadioGroupItem value="ratio" id={`${scorerId}-ratio`} disabled={readOnly} />
-            <Label htmlFor={`${scorerId}-ratio`} className="text-sm text-neutral5 cursor-pointer">
+            <Label htmlFor={`${scorerId}-ratio`} className="text-neutral5 cursor-pointer text-sm">
               Ratio (percentage)
             </Label>
           </div>
         </RadioGroup>
 
         {samplingType === 'ratio' && (
-          <div className="flex flex-col gap-1.5 mt-1">
-            <Label htmlFor={`rate-${scorerId}`} className="text-xs text-neutral4">
+          <div className="mt-1 flex flex-col gap-1.5">
+            <Label htmlFor={`rate-${scorerId}`} className="text-neutral4 text-xs">
               Sample Rate (0-1)
             </Label>
             <Input

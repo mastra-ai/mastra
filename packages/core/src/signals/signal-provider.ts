@@ -1,4 +1,5 @@
 import type { Agent } from '../agent/agent';
+import type { AgentSignalIfIdleOptions } from '../agent/types';
 import type { Mastra } from '../mastra';
 import type { SendNotificationSignalInput } from '../notifications/types';
 import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../processors';
@@ -12,6 +13,8 @@ export type SignalProviderTarget = {
   threadId: string;
   resourceId: string;
   agentId?: string;
+  /** Options for signal delivery when the target thread is idle — forwarded to sendNotificationSignal */
+  ifIdle?: AgentSignalIfIdleOptions<unknown>;
 };
 
 /**
@@ -416,7 +419,8 @@ export abstract class SignalProvider<TId extends string = string> {
    * Override to parse the payload, match it to subscriptions,
    * and emit notification signals.
    *
-   * The framework routes `POST /api/signals/:providerId` to this method.
+   * Call this method from an application-defined HTTP endpoint after
+   * performing provider-specific webhook verification.
    */
   handleWebhook?(request: SignalProviderWebhookRequest): Promise<{ status?: number; body?: unknown }>;
 
@@ -458,6 +462,7 @@ export abstract class SignalProvider<TId extends string = string> {
     await agent.sendNotificationSignal(notification, {
       resourceId: target.resourceId,
       threadId: target.threadId,
+      ...(target.ifIdle ? { ifIdle: target.ifIdle } : {}),
     });
   }
 

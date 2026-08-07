@@ -3,11 +3,14 @@ import type { Mastra } from '@mastra/core';
 import { HTTPException } from '../http-exception';
 import {
   agentFeaturesSchema,
+  builderAvailableModelsResponseSchema,
   builderSettingsResponseSchema,
   infrastructureStatusResponseSchema,
 } from '../schemas/editor-builder';
 import type { AgentFeatures, InfrastructureStatus } from '../schemas/editor-builder';
 import { createRoute } from '../server-adapter/routes/route-builder';
+import { resolveBuilderModelPolicy } from '../utils/resolve-builder-model-policy';
+import { buildProvidersList } from './agents';
 import { handleError } from './error';
 
 /**
@@ -169,6 +172,64 @@ export const GET_EDITOR_BUILDER_SETTINGS_ROUTE = createRoute({
       };
     } catch (error) {
       return handleError(error, 'Error getting builder settings');
+    }
+  },
+});
+
+/**
+ * GET /editor/builder/models/available
+ *
+ * Returns the configured AI providers/models the agent builder may use. The
+ * server is the single authority: it scopes the list to providers with a
+ * configured API key (`connected`) and applies the active builder model
+ * policy via `isModelAllowed`, so the Studio surfaces can render the response
+ * verbatim without importing any EE matcher into the browser.
+ *
+ * - Providers without a configured API key are always omitted — the builder
+ *   decides the agent's model from this list, so an unconnected provider would
+ *   produce an agent that can never run.
+ * - Policy inactive (or no allowlist) ⇒ all connected providers are returned.
+ * - Policy active with an allowlist ⇒ each connected provider's models are
+ *   filtered, and providers left with no allowed models are omitted entirely.
+ */
+export const GET_EDITOR_BUILDER_AVAILABLE_MODELS_ROUTE = createRoute({
+  method: 'GET',
+  path: '/editor/builder/models/available',
+  responseType: 'json',
+  responseSchema: builderAvailableModelsResponseSchema,
+  summary: 'List builder-available AI models',
+  description: 'Returns AI providers/models filtered by the active agent-builder model policy.',
+  tags: ['Editor'],
+  requiresAuth: true,
+  requiresPermission: 'stored-agents:read',
+  handler: async ({ mastra }) => {
+    try {
+      // Only surface providers whose API key is configured (`connected`). The
+      // agent builder decides the agent's model from this list, so including
+      // providers without a key lets it pick a model that can never run. We
+      // scope to connected providers so every choice is actually usable.
+      const providers = (await buildProvidersList(mastra)).filter(provider => provider.connected);
+      const policy = await resolveBuilderModelPolicy(mastra.getEditor());
+
+      // Inactive policy (or no allowlist) ⇒ no allowlist filtering to apply.
+      if (!policy.active || !policy.allowed || policy.allowed.length === 0) {
+        return { providers };
+      }
+
+      // Lazy-load the EE matcher (server-only); mirrors the convention used by
+      // resolve-builder-model-policy and the settings handler.
+      const { isModelAllowed } = await import('@mastra/core/agent-builder/ee');
+
+      const filtered = providers
+        .map(provider => ({
+          ...provider,
+          models: provider.models.filter(modelId => isModelAllowed(policy.allowed, { provider: provider.id, modelId })),
+        }))
+        .filter(provider => provider.models.length > 0);
+
+      return { providers: filtered };
+    } catch (error) {
+      return handleError(error, 'Error fetching available models');
     }
   },
 });

@@ -22,7 +22,8 @@ import type {
   ListMCPClientVersionsInput,
   ListMCPClientVersionsOutput,
 } from '@mastra/core/storage/domains/mcp-clients';
-import { PgDB, resolvePgConfig } from '../../db';
+import { parseSqlIdentifier } from '@mastra/core/utils';
+import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL } from '../../db';
 import type { PgDomainConfig } from '../../db';
 import { getTableName, getSchemaName, parseJsonResilient } from '../utils';
 
@@ -45,15 +46,43 @@ export class MCPClientsPG extends MCPClientsStorage {
     this.#indexes = indexes?.filter(idx => (MCPClientsPG.MANAGED_TABLES as readonly string[]).includes(idx.table));
   }
 
-  getDefaultIndexDefinitions(): CreateIndexOptions[] {
+  static getDefaultIndexDefs(schemaPrefix: string): CreateIndexOptions[] {
     return [
       {
-        name: 'idx_mcp_client_versions_client_version',
+        name: `${schemaPrefix}idx_mcp_client_versions_client_version`,
         table: TABLE_MCP_CLIENT_VERSIONS,
         columns: ['mcpClientId', 'versionNumber'],
         unique: true,
       },
     ];
+  }
+
+  static getExportDDL(schemaName?: string): string[] {
+    const statements: string[] = [];
+    const parsedSchema = schemaName ? parseSqlIdentifier(schemaName, 'schema name') : '';
+    const schemaPrefix = parsedSchema && parsedSchema !== 'public' ? `${parsedSchema}_` : '';
+
+    for (const tableName of MCPClientsPG.MANAGED_TABLES) {
+      statements.push(
+        generateTableSQL({
+          tableName,
+          schema: TABLE_SCHEMAS[tableName],
+          schemaName,
+          includeAllConstraints: true,
+        }),
+      );
+    }
+
+    for (const idx of MCPClientsPG.getDefaultIndexDefs(schemaPrefix)) {
+      statements.push(generateIndexSQL(idx, schemaName));
+    }
+
+    return statements;
+  }
+
+  getDefaultIndexDefinitions(): CreateIndexOptions[] {
+    const schemaPrefix = this.#schema !== 'public' ? `${this.#schema}_` : '';
+    return MCPClientsPG.getDefaultIndexDefs(schemaPrefix);
   }
 
   async createDefaultIndexes(): Promise<void> {

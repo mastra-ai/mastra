@@ -1,16 +1,11 @@
 'use client';
-
-import {
-  Button,
-  ButtonsGroup,
-  Chip,
-  Column,
-  DropdownMenu,
-  SearchFieldBlock,
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
+import { Chip } from '@mastra/playground-ui/components/Chip';
+import { Column } from '@mastra/playground-ui/components/Columns';
+import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
+import { SearchFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import {
   Plus,
   Upload,
@@ -154,7 +149,7 @@ export function DatasetItemsToolbar({
         <div className="flex gap-5">
           <Tooltip>
             <TooltipTrigger asChild>
-              <div className="text-sm text-neutral3 flex items-center gap-2">
+              <div className="text-neutral3 flex items-center gap-2 text-sm">
                 <Chip
                   size="large"
                   color={
@@ -200,7 +195,7 @@ export function DatasetItemsToolbar({
   }
 
   return (
-    <div className="flex items-center justify-between gap-4 w-full">
+    <div className="flex w-full items-center justify-between gap-4">
       <SearchFieldBlock
         name="search-items"
         label="Search"
@@ -249,7 +244,7 @@ export function DatasetItemsToolbar({
 
         {!isItemPanelOpen && !isVersionsPanelOpen && (
           <Button onClick={onVersionsClick} aria-label="View versions">
-            <History className="w-4 h-4" />
+            <History className="h-4 w-4" />
             Versions
           </Button>
         )}

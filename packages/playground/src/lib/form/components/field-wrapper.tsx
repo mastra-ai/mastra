@@ -1,5 +1,5 @@
 import type { FieldWrapperProps } from '@autoform/react';
-import { Txt } from '@mastra/playground-ui';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import React from 'react';
 
 const DISABLED_LABELS = ['boolean', 'object', 'array'];
@@ -10,7 +10,7 @@ export const FieldWrapper: React.FC<FieldWrapperProps> = ({ label, children, id,
   return (
     <div className="pb-4 last:pb-0">
       {!isDisabled && (
-        <Txt as="label" variant="ui-sm" className="text-neutral3 pb-1 block" htmlFor={id}>
+        <Txt as="label" variant="ui-sm" className="text-neutral3 block pb-1" htmlFor={id}>
           {label}
           {field.required && <span className="text-accent2"> *</span>}
         </Txt>

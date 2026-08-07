@@ -2,6 +2,16 @@
   overflow: hidden;
 }
 
+:global([data-contextual-sidebar='true']) .categoryLink:global(.menu__link--active):not(:global(.menu__link--sublist)) {
+  overflow: visible;
+}
+
+:global([data-contextual-sidebar='true'])
+  .categoryLink:global(.menu__link--active):not(:global(.menu__link--sublist))
+  .categoryLinkLabel {
+  color: inherit;
+}
+
 /*
 TODO merge this logic back in Infima?
  */

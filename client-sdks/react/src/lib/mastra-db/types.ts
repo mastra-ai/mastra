@@ -52,11 +52,27 @@ export type CompletionResult = {
  * fields are all optional so a single record can carry the union without forcing
  * narrowing on the consumer side.
  */
+/**
+ * Metadata key carrying a client-generated correlation id. The optimistic
+ * pending user bubble and the outgoing `sendMessage` request both stamp this
+ * id; the server echoes it back on the `data-user-message` data part so the
+ * accumulator can reconcile the pending bubble deterministically (decoupled
+ * from the server-assigned signal id). This is transient client state and is
+ * stripped once the echo is reconciled and on reload.
+ */
+export const CLIENT_MESSAGE_ID_KEY = 'clientMessageId';
+
 export type MastraDBMessageMetadata = {
   /** Which run mode produced this message. */
   mode?: 'generate' | 'stream' | 'network';
-  /** Streaming/abort/error/tripwire surface status. */
-  status?: 'warning' | 'error' | 'tripwire';
+  /** Client-generated correlation id (see {@link CLIENT_MESSAGE_ID_KEY}). */
+  clientMessageId?: string;
+  /**
+   * Streaming/abort/error/tripwire surface status. `'pending'` marks an
+   * optimistically-appended user message that is awaiting its server signal
+   * echo; it is cleared once the echo arrives and is stripped on reload.
+   */
+  status?: 'warning' | 'error' | 'tripwire' | 'pending';
   /** Reason recorded by the upstream stream when it finishes. */
   finishReason?: string;
   /** Tripwire metadata when status === 'tripwire'. */

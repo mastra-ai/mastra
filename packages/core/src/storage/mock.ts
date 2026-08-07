@@ -19,7 +19,9 @@ import { InMemorySchedulesStorage } from './domains/schedules/inmemory';
 import { InMemoryScorerDefinitionsStorage } from './domains/scorer-definitions/inmemory';
 import { ScoresInMemory } from './domains/scores/inmemory';
 import { InMemorySkillsStorage } from './domains/skills/inmemory';
+import { InMemoryThreadStateStorage } from './domains/thread-state/inmemory';
 import { InMemoryToolProviderConnectionsStorage } from './domains/tool-provider-connections/inmemory';
+import { InMemoryWorkflowDefinitionsStorage } from './domains/workflow-definitions/inmemory';
 import { WorkflowsInMemory } from './domains/workflows/inmemory';
 import { InMemoryWorkspacesStorage } from './domains/workspaces/inmemory';
 /**
@@ -63,6 +65,7 @@ export class InMemoryStore extends MastraCompositeStore {
     this.stores = {
       memory: new InMemoryMemory({ db: this.#db }),
       workflows: new WorkflowsInMemory({ db: this.#db }),
+      workflowDefinitions: new InMemoryWorkflowDefinitionsStorage({ db: this.#db }),
       scores: new ScoresInMemory({ db: this.#db }),
       observability: new ObservabilityInMemory({ db: this.#db }),
       agents: new InMemoryAgentsStorage({ db: this.#db }),
@@ -82,6 +85,7 @@ export class InMemoryStore extends MastraCompositeStore {
       schedules: new InMemorySchedulesStorage({ db: this.#db }),
       harness: new InMemoryHarness(),
       toolProviderConnections: new InMemoryToolProviderConnectionsStorage({ db: this.#db }),
+      threadState: new InMemoryThreadStateStorage(),
     };
   }
 

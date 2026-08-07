@@ -1,5 +1,4 @@
-// @vitest-environment jsdom
-import { stringToColor } from '@mastra/playground-ui';
+import { stringToColor } from '@mastra/playground-ui/utils/colors';
 import { cleanup, render } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AgentColors } from '../agent-color-context';

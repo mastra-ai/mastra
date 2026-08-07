@@ -1,4 +1,5 @@
 import { z } from 'zod/v4';
+import { providerSchema } from './agents';
 
 /**
  * Agent feature flags for the builder.
@@ -219,6 +220,20 @@ export const infrastructureStatusResponseSchema = z.object({
     }),
   }),
 });
+
+/**
+ * Response schema for GET /editor/builder/models/available.
+ *
+ * Same provider shape as GET /agents/providers, but each provider's `models`
+ * list is already filtered by the active builder model policy (server applies
+ * the EE allowlist). Providers with no allowed models are omitted entirely so
+ * the Studio model picker can render the response verbatim.
+ */
+export const builderAvailableModelsResponseSchema = z.object({
+  providers: z.array(providerSchema),
+});
+
+export type BuilderAvailableModelsResponse = z.infer<typeof builderAvailableModelsResponseSchema>;
 
 export type InfrastructureStatus = z.infer<typeof infrastructureStatusResponseSchema>;
 

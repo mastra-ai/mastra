@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { Mastra } from '../mastra';
 import { MockStore } from '../storage/mock';
+import { createWorkflow } from './create';
 import {
   createWorkflowStateReader,
   getWorkflowResumeLabel,
@@ -12,7 +13,7 @@ import {
   getWorkflowSuspendedSteps,
 } from './state-reader';
 import type { WorkflowRunState, WorkflowState } from './types';
-import { createStep, createWorkflow } from './workflow';
+import { createStep } from './workflow';
 
 describe('workflow state reader', () => {
   const baseState: WorkflowState = {

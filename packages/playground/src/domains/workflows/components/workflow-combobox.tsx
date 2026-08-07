@@ -1,5 +1,6 @@
-import { Combobox, toast } from '@mastra/playground-ui';
-import type { ComboboxProps } from '@mastra/playground-ui';
+import { Combobox } from '@mastra/playground-ui/components/Combobox';
+import type { ComboboxProps } from '@mastra/playground-ui/components/Combobox';
+import { toast } from '@mastra/playground-ui/utils/toast';
 import { useEffect } from 'react';
 import { useWorkflows } from '../hooks/use-workflows';
 import { useLinkComponent } from '@/lib/framework';
@@ -23,7 +24,7 @@ export function WorkflowCombobox({
   emptyText = 'No workflows found.',
   className,
   disabled = false,
-  variant = 'default',
+  variant,
 }: WorkflowComboboxProps) {
   const { data: workflows = {}, isLoading, isError, error } = useWorkflows();
   const { navigate, paths } = useLinkComponent();

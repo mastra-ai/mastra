@@ -8,7 +8,7 @@ import {
   calculatePagination,
   normalizePerPage,
 } from '@mastra/core/storage';
-import type { PaginationInfo, StoragePagination, CreateIndexOptions } from '@mastra/core/storage';
+import type { PaginationInfo, StoragePagination, CreateIndexOptions, ScoreTenancyFilters } from '@mastra/core/storage';
 import type { Pool } from 'mysql2/promise';
 import type { StoreOperationsMySQL } from '../operations';
 import { generateTableSQL, generateIndexSQL } from '../operations';
@@ -45,6 +45,11 @@ interface ScoreRow {
   entityId: string | null;
   source: string | null;
   resourceId: string | null;
+  organizationId: string | null;
+  projectId: string | null;
+  batchId: string | null;
+  datasetId: string | null;
+  datasetItemId: string | null;
   threadId: string | null;
   createdAt: Date | string;
   updatedAt: Date | string;
@@ -97,7 +102,7 @@ export class ScoresMySQL extends ScoresStorage {
     await this.operations.alterTable({
       tableName: TABLE_SCORERS,
       schema: SCORERS_SCHEMA,
-      ifNotExists: ['spanId', 'requestContext'],
+      ifNotExists: ['spanId', 'requestContext', 'organizationId', 'projectId', 'batchId', 'datasetId', 'datasetItemId'],
     });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
@@ -182,6 +187,11 @@ export class ScoresMySQL extends ScoresStorage {
       entityId: row.entityId ?? undefined,
       source: (row.source ?? undefined) as ScoreRowData['source'],
       resourceId: row.resourceId ?? undefined,
+      organizationId: row.organizationId ?? undefined,
+      projectId: row.projectId ?? undefined,
+      batchId: row.batchId ?? undefined,
+      datasetId: row.datasetId ?? undefined,
+      datasetItemId: row.datasetItemId ?? undefined,
       threadId: row.threadId ?? undefined,
       createdAt: parseDateTime(row.createdAt) ?? new Date(),
       updatedAt: parseDateTime(row.updatedAt) ?? new Date(),
@@ -219,6 +229,11 @@ export class ScoresMySQL extends ScoresStorage {
       entity: toJson(score.entity),
       entityId: score.entityId ?? null,
       resourceId: score.resourceId ?? null,
+      organizationId: score.organizationId ?? null,
+      projectId: score.projectId ?? null,
+      batchId: score.batchId ?? null,
+      datasetId: score.datasetId ?? null,
+      datasetItemId: score.datasetItemId ?? null,
       threadId: score.threadId ?? null,
       source: score.source ?? null,
       createdAt,
@@ -325,11 +340,16 @@ export class ScoresMySQL extends ScoresStorage {
     entityId?: string;
     entityType?: string;
     source?: ScoringSource;
+    filters?: ScoreTenancyFilters;
   }): Promise<ListScoresResult> {
     return this.listScoresByScorerId(args);
   }
 
-  async getScoresByRunId(args: { runId: string; pagination: StoragePagination }): Promise<ListScoresResult> {
+  async getScoresByRunId(args: {
+    runId: string;
+    pagination: StoragePagination;
+    filters?: ScoreTenancyFilters;
+  }): Promise<ListScoresResult> {
     return this.listScoresByRunId(args);
   }
 
@@ -337,6 +357,7 @@ export class ScoresMySQL extends ScoresStorage {
     entityId: string;
     entityType: string;
     pagination: StoragePagination;
+    filters?: ScoreTenancyFilters;
   }): Promise<ListScoresResult> {
     return this.listScoresByEntityId(args);
   }
@@ -345,6 +366,7 @@ export class ScoresMySQL extends ScoresStorage {
     traceId: string;
     spanId: string;
     pagination: StoragePagination;
+    filters?: ScoreTenancyFilters;
   }): Promise<ListScoresResult> {
     return this.listScoresBySpan(args);
   }
@@ -355,14 +377,26 @@ export class ScoresMySQL extends ScoresStorage {
     entityId,
     entityType,
     source,
+    filters,
   }: {
     scorerId: string;
     pagination: StoragePagination;
     entityId?: string;
     entityType?: string;
     source?: ScoringSource;
+    filters?: ScoreTenancyFilters;
   }): Promise<ListScoresResult> {
-    return this.fetchScores(this.buildWhereClause({ scorerId, entityId, entityType, source }), pagination);
+    return this.fetchScores(
+      this.buildWhereClause({
+        scorerId,
+        entityId,
+        entityType,
+        source,
+        organizationId: filters?.organizationId,
+        projectId: filters?.projectId,
+      }),
+      pagination,
+    );
   }
 
   async listScoresByRunId({
@@ -371,26 +405,47 @@ export class ScoresMySQL extends ScoresStorage {
     entityId,
     entityType,
     source,
+    filters,
   }: {
     runId: string;
     pagination: StoragePagination;
     entityId?: string;
     entityType?: string;
     source?: ScoringSource;
+    filters?: ScoreTenancyFilters;
   }): Promise<ListScoresResult> {
-    return this.fetchScores(this.buildWhereClause({ runId, entityId, entityType, source }), pagination);
+    return this.fetchScores(
+      this.buildWhereClause({
+        runId,
+        entityId,
+        entityType,
+        source,
+        organizationId: filters?.organizationId,
+        projectId: filters?.projectId,
+      }),
+      pagination,
+    );
   }
-
   async listScoresBySpan({
     traceId,
     spanId,
     pagination,
+    filters,
   }: {
     traceId: string;
     spanId: string;
     pagination: StoragePagination;
+    filters?: ScoreTenancyFilters;
   }): Promise<ListScoresResult> {
-    return this.fetchScores(this.buildWhereClause({ traceId, spanId }), pagination);
+    return this.fetchScores(
+      this.buildWhereClause({
+        traceId,
+        spanId,
+        organizationId: filters?.organizationId,
+        projectId: filters?.projectId,
+      }),
+      pagination,
+    );
   }
 
   async listScoresByEntityId({
@@ -398,12 +453,23 @@ export class ScoresMySQL extends ScoresStorage {
     pagination,
     entityType,
     source,
+    filters,
   }: {
     entityId: string;
     pagination: StoragePagination;
     entityType?: string;
     source?: ScoringSource;
+    filters?: ScoreTenancyFilters;
   }): Promise<ListScoresResult> {
-    return this.fetchScores(this.buildWhereClause({ entityId, entityType, source }), pagination);
+    return this.fetchScores(
+      this.buildWhereClause({
+        entityId,
+        entityType,
+        source,
+        organizationId: filters?.organizationId,
+        projectId: filters?.projectId,
+      }),
+      pagination,
+    );
   }
 }

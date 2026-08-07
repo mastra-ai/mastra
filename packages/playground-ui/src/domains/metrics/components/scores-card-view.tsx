@@ -1,10 +1,13 @@
 import { useMemo } from 'react';
-import { MetricsCard } from '../../../ds/components/MetricsCard';
-import { MetricsDataTable } from '../../../ds/components/MetricsDataTable';
-import { MetricsLineChart } from '../../../ds/components/MetricsLineChart';
-import { Tab, TabContent, TabList, Tabs } from '../../../ds/components/Tabs';
+import { DataList } from '../../../ds/components/DataList/data-list';
+import { MetricsCard } from '../../../ds/components/MetricsCard/metrics-card';
+import { MetricsLineChart } from '../../../ds/components/MetricsLineChart/metrics-line-chart';
+import { TabContent } from '../../../ds/components/Tabs/tabs-content';
+import { TabList } from '../../../ds/components/Tabs/tabs-list';
+import { Tabs } from '../../../ds/components/Tabs/tabs-root';
+import { Tab } from '../../../ds/components/Tabs/tabs-tab';
 import type { ScorerSummary, ScoresOverTimePoint } from '../hooks/use-scores-metrics';
-import { CHART_COLORS } from './metrics-utils';
+import { CHART_COLORS, METRICS_DATA_LIST_PROPS } from './metrics-utils';
 
 const SERIES_COLORS = [
   CHART_COLORS.green,
@@ -13,7 +16,7 @@ const SERIES_COLORS = [
   CHART_COLORS.orange,
   CHART_COLORS.pink,
   CHART_COLORS.yellow,
-];
+] as const;
 
 export interface ScoresCardViewProps {
   data:
@@ -36,7 +39,7 @@ export function ScoresCardView({ data, isLoading, isError }: ScoresCardViewProps
     return data.scorerNames.map((name, i) => ({
       dataKey: name,
       label: name,
-      color: SERIES_COLORS[i % SERIES_COLORS.length],
+      color: SERIES_COLORS[i % SERIES_COLORS.length] ?? SERIES_COLORS[0],
       aggregate: (points: Record<string, unknown>[]) => ({
         value:
           points.length > 0
@@ -74,16 +77,26 @@ export function ScoresCardView({ data, isLoading, isError }: ScoresCardViewProps
                 )}
               </TabContent>
               <TabContent value="summary">
-                <MetricsDataTable
-                  columns={[
-                    { label: 'Scorer', value: row => row.scorer },
-                    { label: 'Avg', value: row => row.avg.toFixed(2), highlight: true },
-                    { label: 'Min', value: row => row.min.toFixed(2) },
-                    { label: 'Max', value: row => row.max.toFixed(2) },
-                    { label: 'Count', value: row => row.count.toLocaleString() },
-                  ]}
-                  data={data.summaryData.map(row => ({ ...row, key: row.scorer }))}
-                />
+                <DataList columns="auto auto auto auto auto" {...METRICS_DATA_LIST_PROPS}>
+                  <DataList.Top>
+                    <DataList.TopCell sticky="start">Scorer</DataList.TopCell>
+                    <DataList.TopCell className="justify-end text-right">Avg</DataList.TopCell>
+                    <DataList.TopCell className="justify-end text-right">Min</DataList.TopCell>
+                    <DataList.TopCell className="justify-end text-right">Max</DataList.TopCell>
+                    <DataList.TopCell className="justify-end text-right">Count</DataList.TopCell>
+                  </DataList.Top>
+                  {data.summaryData.map(row => (
+                    <DataList.RowStatic key={row.scorer}>
+                      <DataList.RowHeaderCell height="compact" className="text-ui-sm">
+                        {row.scorer}
+                      </DataList.RowHeaderCell>
+                      <DataList.NumberCell highlight>{row.avg.toFixed(2)}</DataList.NumberCell>
+                      <DataList.NumberCell>{row.min.toFixed(2)}</DataList.NumberCell>
+                      <DataList.NumberCell>{row.max.toFixed(2)}</DataList.NumberCell>
+                      <DataList.NumberCell>{row.count.toLocaleString()}</DataList.NumberCell>
+                    </DataList.RowStatic>
+                  ))}
+                </DataList>
               </TabContent>
             </Tabs>
           )}

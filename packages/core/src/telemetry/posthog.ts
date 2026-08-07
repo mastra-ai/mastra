@@ -10,7 +10,9 @@ let client: PostHog | null = null;
 
 export type EEEventName = 'ee_license_check' | 'ee_feature_used';
 
-export function isEETelemetryEnabled(): boolean {
+export type TelemetryEventName = EEEventName | 'mastra_model_token_usage' | 'mastra_feature_usage';
+
+export function isTelemetryEnabled(): boolean {
   const value = process.env['MASTRA_TELEMETRY_DISABLED'];
   if (!value) {
     return true;
@@ -31,7 +33,7 @@ export function getEETelemetryFallbackDistinctId(): string {
 }
 
 function getClient(): PostHog | null {
-  if (!isEETelemetryEnabled()) {
+  if (!isTelemetryEnabled()) {
     return null;
   }
 
@@ -58,8 +60,8 @@ function getSystemProperties(): Record<string, unknown> {
   };
 }
 
-export function captureEEEvent(
-  event: EEEventName,
+export function captureTelemetryEvent(
+  event: TelemetryEventName,
   distinctId: string | undefined,
   properties?: Record<string, unknown>,
 ): void {
@@ -80,6 +82,14 @@ export function captureEEEvent(
   } catch {
     // Telemetry must never affect auth or EE feature behavior.
   }
+}
+
+export function captureEEEvent(
+  event: EEEventName,
+  distinctId: string | undefined,
+  properties?: Record<string, unknown>,
+): void {
+  captureTelemetryEvent(event, distinctId, properties);
 }
 
 export function resetEETelemetryForTests(): void {

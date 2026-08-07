@@ -1,0 +1,57 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "userMessage": "Create a concise implementation plan for the plan approval e2e test.",
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_plan_approval_e2e_write",
+            "name": "write_file",
+            "arguments": {
+              "path": ".mastracode/plans/e2e-approval-plan.md",
+              "content": "# E2E Approval Plan\n\n## Overview\nApprove this plan from the real TUI.\n\n## Steps\n1. Render the submitted plan.\n2. Approve it.\n3. Start the build handoff.\n\n## Verification\nConfirm the build-mode acknowledgement renders.\n",
+              "overwrite": true
+            }
+          }
+        ]
+      },
+      "streamingProfile": {
+        "ttft": 200,
+        "tps": 30
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "turnIndex": 1
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_plan_approval_e2e_submit",
+            "name": "submit_plan",
+            "arguments": {
+              "path": ".mastracode/plans/e2e-approval-plan.md"
+            }
+          }
+        ]
+      },
+      "streamingProfile": {
+        "ttft": 200,
+        "tps": 30
+      }
+    },
+    {
+      "match": {},
+      "response": {
+        "content": "Build handoff e2e acknowledged."
+      }
+    }
+  ]
+}

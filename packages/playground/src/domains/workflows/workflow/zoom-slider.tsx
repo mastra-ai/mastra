@@ -1,15 +1,18 @@
-import { Button, Slider, cn } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { Slider } from '@mastra/playground-ui/components/Slider';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import type { PanelProps } from '@xyflow/react';
 import { Panel, useViewport, useReactFlow } from '@xyflow/react';
 import { Maximize, Minus, Plus } from 'lucide-react';
 import { forwardRef } from 'react';
 
-export const ZoomSlider = forwardRef<HTMLDivElement, Omit<PanelProps, 'children'>>(({ className, ...props }) => {
+export const ZoomSlider = forwardRef<HTMLDivElement, Omit<PanelProps, 'children'>>(({ className, ...props }, ref) => {
   const { zoom } = useViewport();
   const { zoomTo, zoomIn, zoomOut, fitView } = useReactFlow();
 
   return (
     <Panel
+      ref={ref}
       className={cn(
         'flex items-center gap-1 rounded-full border border-border1 bg-surface2 p-1 text-neutral6',
         className,

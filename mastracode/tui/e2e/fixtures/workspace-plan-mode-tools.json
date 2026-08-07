@@ -1,0 +1,24 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "endpoint": "chat",
+        "model": "gpt-5.4-mini",
+        "userMessage": "Record the build-mode workspace tool list."
+      },
+      "response": {
+        "content": "Build-mode workspace tools observed."
+      }
+    },
+    {
+      "match": {
+        "endpoint": "chat",
+        "model": "gpt-5.4-mini",
+        "userMessage": "Record the plan-mode workspace tool list."
+      },
+      "response": {
+        "content": "Plan-mode workspace tools observed."
+      }
+    }
+  ]
+}

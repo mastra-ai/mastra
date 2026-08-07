@@ -1,7 +1,9 @@
 import type { MastraDBMessage, MastraToolInvocationPart } from '@mastra/core/agent/message-list';
+import { MessageList } from '@mastra/core/agent/message-list';
 import type { ChunkType } from '@mastra/core/stream';
 import { describe, expect, it } from 'vitest';
 import { accumulateChunk, finishStreamingAssistantMessage } from './accumulator';
+import { CLIENT_MESSAGE_ID_KEY } from './types';
 import type { BackgroundTaskEntry, MastraDBMessageMetadata, MastraReasoningPart, MastraTextPart } from './types';
 
 const RUN_ID = 'run-1';
@@ -20,8 +22,13 @@ const startChunk = (messageId = 'asst-1'): ChunkType =>
     payload: { messageId },
   }) as unknown as ChunkType;
 
-const stepStartChunk = (): ChunkType =>
-  ({ type: 'step-start', runId: RUN_ID, from: 'AGENT', payload: {} }) as unknown as ChunkType;
+const stepStartChunk = (messageId?: string): ChunkType =>
+  ({
+    type: 'step-start',
+    runId: RUN_ID,
+    from: 'AGENT',
+    payload: { ...(messageId ? { messageId } : {}) },
+  }) as unknown as ChunkType;
 
 const stepFinishChunk = (): ChunkType =>
   ({ type: 'step-finish', runId: RUN_ID, from: 'AGENT', payload: {} }) as unknown as ChunkType;
@@ -297,6 +304,14 @@ const fileChunkPlain = (mimeType: string, data: string): ChunkType =>
     payload: { mimeType, data, base64: false },
   }) as unknown as ChunkType;
 
+const fileChunkBinary = (mimeType: string, data: Uint8Array): ChunkType =>
+  ({
+    type: 'file',
+    runId: RUN_ID,
+    from: 'AGENT',
+    payload: { mimeType, data },
+  }) as unknown as ChunkType;
+
 const isTaskCompleteChunk = (passed: boolean, suppressFeedback = false): ChunkType =>
   ({
     type: 'is-task-complete',
@@ -310,6 +325,26 @@ const isTaskCompleteChunk = (passed: boolean, suppressFeedback = false): ChunkTy
       timedOut: false,
       reason: 'done',
       maxIterationReached: false,
+    },
+  }) as unknown as ChunkType;
+
+const goalChunk = (passed: boolean): ChunkType =>
+  ({
+    type: 'goal',
+    runId: RUN_ID,
+    from: 'AGENT',
+    payload: {
+      objective: 'Ship the feature',
+      iteration: 1,
+      maxRuns: 50,
+      passed,
+      status: passed ? 'done' : 'active',
+      results: [],
+      reason: passed ? 'Goal achieved' : 'Not yet',
+      duration: 5,
+      timedOut: false,
+      maxRunsReached: false,
+      suppressFeedback: false,
     },
   }) as unknown as ChunkType;
 
@@ -347,13 +382,37 @@ const dataPartChunk = (suffix: string, data: unknown): ChunkType =>
 
 // The live server emits the signal echo with `data.type: 'user'`; default to
 // that real wire value so the fixture cannot drift back to masking the guard.
-const dataUserMessageChunk = (id: string, contents: unknown, dataType: 'user' | 'user-message' = 'user'): ChunkType =>
+const dataUserMessageChunk = (
+  id: string,
+  contents: unknown,
+  dataType: 'user' | 'user-message' = 'user',
+  clientMessageId?: string,
+): ChunkType =>
   ({
     type: 'data-user-message',
     runId: RUN_ID,
     from: 'AGENT',
-    data: { type: dataType, id, contents },
+    data: {
+      type: dataType,
+      id,
+      contents,
+      ...(clientMessageId ? { metadata: { [CLIENT_MESSAGE_ID_KEY]: clientMessageId } } : {}),
+    },
   }) as unknown as ChunkType;
+
+// An optimistically-appended user message awaiting its server echo. Mirrors what
+// `useChat.sendMessage` puts into local state on the signal path: a client-side
+// id plus the transient `clientMessageId` correlation key.
+const pendingUserMessage = (id: string, text: string, clientMessageId = id): MastraDBMessage => ({
+  id,
+  role: 'user',
+  createdAt: new Date(),
+  content: {
+    format: 2,
+    parts: [{ type: 'text', text }],
+    metadata: { mode: 'stream', status: 'pending', [CLIENT_MESSAGE_ID_KEY]: clientMessageId },
+  },
+});
 
 const passthroughChunk = (type: string): ChunkType =>
   ({ type, runId: RUN_ID, from: 'AGENT', payload: {} }) as unknown as ChunkType;
@@ -389,10 +448,52 @@ describe('accumulateChunk - lifecycle', () => {
     expect(out).toHaveLength(1);
   });
 
-  it('step-start is a no-op', () => {
+  it('step-start without a message id is a no-op', () => {
     const initial = reduce([startChunk()]);
     const out = reduce([stepStartChunk()], streamMeta(), initial);
     expect(out).toEqual(initial);
+  });
+
+  it('step-start with the current message id is a no-op', () => {
+    const initial = reduce([startChunk('asst-1')]);
+    const out = reduce([stepStartChunk('asst-1')], streamMeta(), initial);
+    expect(out).toEqual(initial);
+  });
+
+  it('step-start with a rotated message id re-keys the empty pending assistant message', () => {
+    const out = reduce([startChunk('asst-1'), stepStartChunk('rotated-1')]);
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({ id: 'rotated-1', role: 'assistant', content: { parts: [] } });
+  });
+
+  it('step-start with a rotated message id re-keys a pending message that only holds data-* parts', () => {
+    const out = reduce([
+      startChunk('asst-1'),
+      dataPartChunk('om-status', { status: 'buffering' }),
+      stepStartChunk('rotated-1'),
+    ]);
+    expect(out).toHaveLength(1);
+    expect(out[0].id).toBe('rotated-1');
+    expect(out[0].content.parts).toMatchObject([{ type: 'data-om-status', data: { status: 'buffering' } }]);
+  });
+
+  it('step-start with a rotated message id splits after content has streamed', () => {
+    const out = reduce([
+      startChunk('asst-1'),
+      stepStartChunk('asst-1'),
+      textStartChunk('t1'),
+      textDeltaChunk('t1', 'hello'),
+      textEndChunk('t1'),
+      stepStartChunk('rotated-1'),
+      textStartChunk('t2'),
+      textDeltaChunk('t2', 'world'),
+      textEndChunk('t2'),
+    ]);
+    expect(out).toHaveLength(2);
+    expect(out[0].id).toBe('asst-1');
+    expect(out[0].content.parts).toMatchObject([{ type: 'text', text: 'hello', state: 'done' }]);
+    expect(out[1].id).toBe('rotated-1');
+    expect(out[1].content.parts).toMatchObject([{ type: 'text', text: 'world' }]);
   });
 
   it('step-finish is a no-op', () => {
@@ -491,6 +592,126 @@ describe('accumulateChunk - text streaming', () => {
     const out = reduce([startChunk(), textStartChunk('t1'), textDeltaChunk('t1', 'hi'), finishChunk('stop')]);
     const text = out[0].content.parts.find(p => p.type === 'text') as MastraTextPart;
     expect(text.state).toBe('done');
+  });
+});
+
+// =============================================================================
+// INTERLEAVED TEXT + TOOL ORDERING (regression: live view merged text segments
+// across a tool call — https://github.com/mastra-ai/mastra/issues/18964)
+// =============================================================================
+
+describe('accumulateChunk - interleaved text and tool calls', () => {
+  it('keeps text → tool → text ordering with distinct textIds', () => {
+    const out = reduce([
+      startChunk(),
+      textStartChunk('t1'),
+      textDeltaChunk('t1', 'Before'),
+      textEndChunk('t1'),
+      toolCallChunk('tc-1', 'search', { q: 'x' }),
+      textStartChunk('t2'),
+      textDeltaChunk('t2', 'After'),
+      textEndChunk('t2'),
+    ]);
+
+    const types = out[0].content.parts.map(p => p.type);
+    expect(types).toEqual(['text', 'tool-invocation', 'text']);
+    expect((out[0].content.parts[0] as MastraTextPart).text).toBe('Before');
+    expect((out[0].content.parts[2] as MastraTextPart).text).toBe('After');
+  });
+
+  it('does not merge the second text segment into the first when the textId is reused across a tool call', () => {
+    const out = reduce([
+      startChunk(),
+      textStartChunk('t1'),
+      textDeltaChunk('t1', 'Before'),
+      textEndChunk('t1'),
+      toolCallChunk('tc-1', 'search', { q: 'x' }),
+      // Some providers reuse the same text id for the post-tool continuation.
+      textStartChunk('t1'),
+      textDeltaChunk('t1', 'After'),
+      textEndChunk('t1'),
+    ]);
+
+    const types = out[0].content.parts.map(p => p.type);
+    expect(types).toEqual(['text', 'tool-invocation', 'text']);
+    expect((out[0].content.parts[0] as MastraTextPart).text).toBe('Before');
+    expect((out[0].content.parts[2] as MastraTextPart).text).toBe('After');
+  });
+
+  it('does not merge the second text segment into the first when text-delta carries no textId', () => {
+    const out = reduce([
+      startChunk(),
+      textDeltaChunk(undefined as unknown as string, 'Before'),
+      toolCallChunk('tc-1', 'search', { q: 'x' }),
+      textDeltaChunk(undefined as unknown as string, 'After'),
+    ]);
+
+    const types = out[0].content.parts.map(p => p.type);
+    expect(types).toEqual(['text', 'tool-invocation', 'text']);
+    expect((out[0].content.parts[0] as MastraTextPart).text).toBe('Before');
+    expect((out[0].content.parts[2] as MastraTextPart).text).toBe('After');
+  });
+});
+
+describe('accumulateChunk - interleaved text and non-text parts (general closing rule)', () => {
+  // A tool call is not special: any non-text part (reasoning, citation, file,
+  // step marker, …) closes the current text run. A reused text id after one of
+  // them must open a NEW text part rather than merging back into the earlier one.
+
+  it('keeps text → reasoning → text ordering when the textId is reused', () => {
+    const out = reduce([
+      startChunk(),
+      textStartChunk('t1'),
+      textDeltaChunk('t1', 'Before'),
+      textEndChunk('t1'),
+      reasoningStartChunk(),
+      reasoningDeltaChunk('thinking'),
+      reasoningEndChunk(),
+      // Reused text id for the post-reasoning continuation.
+      textStartChunk('t1'),
+      textDeltaChunk('t1', 'After'),
+      textEndChunk('t1'),
+    ]);
+
+    const types = out[0].content.parts.map(p => p.type);
+    expect(types).toEqual(['text', 'reasoning', 'text']);
+    expect((out[0].content.parts[0] as MastraTextPart).text).toBe('Before');
+    expect((out[0].content.parts[2] as MastraTextPart).text).toBe('After');
+  });
+
+  it('splits the text run when a reused-id continuation arrives as a bare delta after reasoning (no second text-start)', () => {
+    const out = reduce([
+      startChunk(),
+      textStartChunk('t1'),
+      textDeltaChunk('t1', 'Before'),
+      reasoningStartChunk(),
+      reasoningDeltaChunk('thinking'),
+      // Continuation reuses t1 but never re-announces text-start.
+      textDeltaChunk('t1', 'After'),
+    ]);
+
+    const types = out[0].content.parts.map(p => p.type);
+    expect(types).toEqual(['text', 'reasoning', 'text']);
+    expect((out[0].content.parts[0] as MastraTextPart).text).toBe('Before');
+    expect((out[0].content.parts[2] as MastraTextPart).text).toBe('After');
+  });
+
+  it('keeps text → citation → text ordering when the textId is reused', () => {
+    const out = reduce([
+      startChunk(),
+      textStartChunk('t1'),
+      textDeltaChunk('t1', 'Before'),
+      textEndChunk('t1'),
+      sourceUrlChunk('s-1', 'https://example.com', 'Example'),
+      textStartChunk('t1'),
+      textDeltaChunk('t1', 'After'),
+      textEndChunk('t1'),
+    ]);
+
+    const types = out[0].content.parts.map(p => p.type);
+    expect(types).toEqual(['text', 'source-url', 'text']);
+    expect((out[0].content.parts[0] as MastraTextPart).text).toBe('Before');
+    expect((out[0].content.parts[2] as MastraTextPart).text).toBe('After');
   });
 });
 
@@ -848,18 +1069,35 @@ describe('accumulateChunk - content', () => {
 
   it('file with base64 string data produces a base64 data URL', () => {
     const out = reduce([startChunk(), fileChunkBase64('image/png', 'aGVsbG8=')]);
-    const filePart = out[0].content.parts.find(p => p.type === 'file') as unknown as {
-      url: string;
-      mediaType: string;
-    };
-    expect(filePart.mediaType).toBe('image/png');
-    expect(filePart.url).toBe('data:image/png;base64,aGVsbG8=');
+    const filePart = out[0].content.parts.find(p => p.type === 'file');
+    expect(filePart).toMatchObject({
+      type: 'file',
+      mimeType: 'image/png',
+      data: 'data:image/png;base64,aGVsbG8=',
+    });
   });
 
   it('file with plain string data percent-encodes into a data URL', () => {
     const out = reduce([startChunk(), fileChunkPlain('text/plain', 'hello world')]);
-    const filePart = out[0].content.parts.find(p => p.type === 'file') as unknown as { url: string };
-    expect(filePart.url).toBe('data:text/plain,hello%20world');
+    const filePart = out[0].content.parts.find(p => p.type === 'file');
+    expect(filePart).toMatchObject({
+      type: 'file',
+      mimeType: 'text/plain',
+      data: 'data:text/plain,hello%20world',
+    });
+  });
+
+  it('file with large Uint8Array binary data does not overflow the call stack', () => {
+    const bytes = new Uint8Array(200_000);
+    bytes.fill(0x41);
+    const out = reduce([startChunk(), fileChunkBinary('application/octet-stream', bytes)]);
+    const filePart = out[0].content.parts.find(p => p.type === 'file');
+    const expectedBase64 = Buffer.from(bytes).toString('base64');
+    expect(filePart).toMatchObject({
+      type: 'file',
+      mimeType: 'application/octet-stream',
+      data: `data:application/octet-stream;base64,${expectedBase64}`,
+    });
   });
 
   it('is-task-complete emits an assistant feedback message with completionResult', () => {
@@ -874,6 +1112,15 @@ describe('accumulateChunk - content', () => {
     const initial = reduce([startChunk()]);
     const out = reduce([isTaskCompleteChunk(true, true)], streamMeta(), initial);
     expect(out).toEqual(initial);
+  });
+
+  // The goal chunk is a consumer-only signal: the core goal step already injects
+  // its feedback into the message history, so the accumulator must NOT surface it
+  // as its own DB message (unlike is-task-complete).
+  it('goal chunk returns the conversation unchanged (no DB message)', () => {
+    const initial = reduce([startChunk()]);
+    expect(reduce([goalChunk(false)], streamMeta(), initial)).toEqual(initial);
+    expect(reduce([goalChunk(true)], streamMeta(), initial)).toEqual(initial);
   });
 });
 
@@ -920,6 +1167,15 @@ describe('accumulateChunk - signal echo (data-user-message)', () => {
     expect(user.content.parts[0]).toEqual({ type: 'text', text: 'hello back' });
   });
 
+  it('drops an empty trailing assistant before appending the echoed user message', () => {
+    const out = reduce([startChunk('asst-1'), dataUserMessageChunk('sig-1', 'hello back')]);
+
+    expect(out).toHaveLength(1);
+    expect(out[0].role).toBe('user');
+    expect(out[0].id).toBe('sig-1');
+    expect(out[0].content.parts[0]).toEqual({ type: 'text', text: 'hello back' });
+  });
+
   it('dedupes by signalId', () => {
     const out = reduce([
       startChunk('asst-1'),
@@ -929,6 +1185,125 @@ describe('accumulateChunk - signal echo (data-user-message)', () => {
     const userMessages = out.filter(m => m.role === 'user');
     expect(userMessages).toHaveLength(1);
     expect(userMessages[0].id).toBe('sig-1');
+  });
+
+  it('reconciles the optimistic message by clientMessageId even when the echoed id differs', () => {
+    // Production reality: the optimistic bubble carries a client-generated id
+    // (`client-1`), but the server mints and echoes its own signal id
+    // (`server-1`). Matching on the `clientMessageId` correlation key keeps the
+    // single bubble and adopts the server id.
+    const pending = pendingUserMessage('client-1', 'hello', 'corr-1');
+    const out = reduce(
+      [startChunk('asst-1'), dataUserMessageChunk('server-1', 'hello', 'user', 'corr-1')],
+      streamMeta(),
+      [pending],
+    );
+
+    const userMessages = out.filter(m => m.role === 'user');
+    expect(userMessages).toHaveLength(1);
+    expect(userMessages[0].id).toBe('server-1');
+    expect(userMessages[0].content.metadata?.status).toBeUndefined();
+    // The correlation key is retained through reconciliation so the rendered row
+    // key stays stable across the id swap (no unmount/remount). It is stripped
+    // only later, on reload, by `resolveInitialMessages`.
+    expect(userMessages[0].content.metadata?.[CLIENT_MESSAGE_ID_KEY]).toBe('corr-1');
+  });
+
+  it('drops the empty assistant shell when reconciling a pending user echo', () => {
+    const pending = pendingUserMessage('client-1', 'weather in paris', 'corr-1');
+    const out = reduce(
+      [startChunk('asst-1'), dataUserMessageChunk('server-1', 'weather in paris', 'user', 'corr-1')],
+      streamMeta(),
+      [pending],
+    );
+
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({
+      id: 'server-1',
+      role: 'user',
+      content: {
+        parts: [{ type: 'text', text: 'weather in paris' }],
+      },
+    });
+  });
+
+  it('reconciled pending bubble keeps echoed binary attachment data', () => {
+    const pending: MastraDBMessage = {
+      id: 'client-1',
+      role: 'user',
+      createdAt: new Date(),
+      content: {
+        format: 2,
+        parts: [
+          { type: 'text', text: 'see this' },
+          // Optimistic bubble may start with empty file data before echoed contents merge in.
+          { type: 'file', mimeType: 'image/png', data: '' },
+        ],
+        metadata: { mode: 'stream', status: 'pending', [CLIENT_MESSAGE_ID_KEY]: 'corr-1' },
+      },
+    };
+
+    const out = reduce(
+      [
+        dataUserMessageChunk(
+          'server-1',
+          [
+            { type: 'text', text: 'see this' },
+            { type: 'file', data: 'data:image/png;base64,abc123', mediaType: 'image/png' },
+          ],
+          'user',
+          'corr-1',
+        ),
+      ],
+      streamMeta(),
+      [pending],
+    );
+
+    const user = out.find(m => m.role === 'user');
+    expect(user?.content.parts).toEqual([
+      { type: 'text', text: 'see this' },
+      { type: 'file', mimeType: 'image/png', data: 'data:image/png;base64,abc123' },
+    ]);
+  });
+
+  it('keeps the correlation key but adopts the server id and clears pending on reconciliation', () => {
+    // Regression guard for the streaming layout shift: the rendered row key
+    // prefers `clientMessageId`, so it must survive the id swap unchanged while
+    // the transient pending status is cleared and the server id is adopted.
+    const pending = pendingUserMessage('client-1', 'hello', 'corr-1');
+    const out = reduce([dataUserMessageChunk('server-1', 'hello', 'user', 'corr-1')], streamMeta(), [pending]);
+
+    const user = out.find(m => m.role === 'user');
+    expect(user?.id).toBe('server-1');
+    expect(user?.content.metadata?.status).toBeUndefined();
+    expect(user?.content.metadata?.[CLIENT_MESSAGE_ID_KEY]).toBe('corr-1');
+  });
+
+  it('only resolves the optimistic message whose clientMessageId matches the echo', () => {
+    const pendingA = pendingUserMessage('client-1', 'first', 'corr-1');
+    const pendingB = pendingUserMessage('client-2', 'second', 'corr-2');
+    const out = reduce([dataUserMessageChunk('server-2', 'second', 'user', 'corr-2')], streamMeta(), [
+      pendingA,
+      pendingB,
+    ]);
+
+    const resolved = out.find(m => m.id === 'server-2');
+    const stillPending = out.find(m => m.id === 'client-1');
+    expect(resolved?.content.metadata?.status).toBeUndefined();
+    // Resolved bubble keeps its correlation key for a stable render key.
+    expect(resolved?.content.metadata?.[CLIENT_MESSAGE_ID_KEY]).toBe('corr-2');
+    expect(stillPending?.content.metadata?.status).toBe('pending');
+    expect(out.filter(m => m.role === 'user')).toHaveLength(2);
+  });
+
+  it('appends an echo that matches no optimistic bubble (foreign/server-injected message)', () => {
+    const pending = pendingUserMessage('client-1', 'mine', 'corr-1');
+    const out = reduce([dataUserMessageChunk('server-x', 'not mine', 'user', 'corr-other')], streamMeta(), [pending]);
+
+    const userMessages = out.filter(m => m.role === 'user');
+    expect(userMessages).toHaveLength(2);
+    // The optimistic bubble is untouched and still pending.
+    expect(userMessages.find(m => m.id === 'client-1')?.content.metadata?.status).toBe('pending');
   });
 
   // The server emits the echo with `data.type: 'user'` while the signal input
@@ -958,7 +1333,28 @@ describe('accumulateChunk - signal echo (data-user-message)', () => {
     expect(user?.id).toBe('sig-1');
     expect(user?.content.parts).toEqual([
       { type: 'text', text: 'see this' },
-      { type: 'file', mediaType: 'image/png', url: 'data:image/png;base64,abc123', filename: 'image.png' },
+      { type: 'file', mimeType: 'image/png', data: 'data:image/png;base64,abc123', filename: 'image.png' },
+    ]);
+  });
+
+  it('signal file parts convert to AI SDK UI messages without crashing', () => {
+    const out = reduce([
+      startChunk('asst-1'),
+      dataUserMessageChunk('sig-1', [
+        { type: 'text', text: 'have a look at this' },
+        { type: 'file', data: 'https://example.com/shot.png', mediaType: 'image/png' },
+      ]),
+    ]);
+
+    const user = out.find(m => m.role === 'user');
+    expect(user).toBeDefined();
+
+    const uiMessages = new MessageList().add([user!], 'memory').get.all.aiV6.ui();
+    expect(uiMessages).toHaveLength(1);
+    // Issue #19356 expected behavior: the attachment survives conversion as a
+    // usable AI SDK UI file part, with the original URL and media type intact.
+    expect(uiMessages[0]?.parts.filter(part => part.type === 'file')).toEqual([
+      { type: 'file', url: 'https://example.com/shot.png', mediaType: 'image/png' },
     ]);
   });
 });
@@ -1086,6 +1482,11 @@ describe('finishStreamingAssistantMessage', () => {
       },
     ];
     expect(finishStreamingAssistantMessage(userOnly)).toBe(userOnly);
+  });
+
+  it('drops an empty trailing assistant message', () => {
+    const out = reduce([startChunk('asst-1')]);
+    expect(finishStreamingAssistantMessage(out)).toEqual([]);
   });
 });
 

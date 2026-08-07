@@ -1,0 +1,32 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "userMessage": "Open https://openclaw.ai in the browser",
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_navigate_openclaw",
+            "name": "stagehand_navigate",
+            "arguments": { "url": "https://openclaw.ai" }
+          }
+        ]
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "toolCallId": "call_navigate_openclaw",
+        "hasToolResult": true
+      },
+      "response": {
+        "content": "Opened https://openclaw.ai in the browser."
+      }
+    }
+  ]
+}

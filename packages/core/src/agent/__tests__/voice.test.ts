@@ -1,7 +1,9 @@
 import { PassThrough } from 'node:stream';
 import { openai } from '@ai-sdk/openai-v5';
 import { beforeEach, describe, expect, it, expectTypeOf, vi } from 'vitest';
+import { Mastra } from '../../mastra';
 import { RequestContext } from '../../request-context';
+import { createTool } from '../../tools';
 import { CompositeVoice } from '../../voice/composite-voice';
 import { MastraVoice } from '../../voice/voice';
 import { Agent } from '../agent';
@@ -270,6 +272,49 @@ describe('voice capabilities', () => {
       });
 
       expect(() => agent.voice).toThrow('Voice is not compatible when voice is a function');
+    });
+  });
+
+  describe('mastra context injection (issue #18283)', () => {
+    it('tools passed to a static voice via getVoice() receive context.mastra', async () => {
+      let capturedMastra: unknown;
+
+      const probeTool = createTool({
+        id: 'probe',
+        description: 'records context.mastra',
+        inputSchema: { type: 'object' as const, properties: {} },
+        outputSchema: { type: 'object' as const, properties: {} },
+        execute: async (_input: unknown, context: any) => {
+          capturedMastra = context?.mastra;
+          return {};
+        },
+      });
+
+      let capturedTools: Record<string, any> = {};
+      class SpyVoice extends MockVoice {
+        addTools(tools: Record<string, any>) {
+          capturedTools = tools;
+        }
+      }
+
+      const agent = new Agent({
+        id: 'voice-mastra-agent',
+        name: 'Voice Mastra Agent',
+        instructions: 'You are a voice assistant.',
+        model: openai('gpt-4o-mini'),
+        tools: { probe: probeTool },
+        voice: new SpyVoice({ speaker: 'mock-voice' }),
+      });
+
+      new Mastra({ agents: { 'voice-mastra-agent': agent } });
+
+      await agent.getVoice();
+
+      // The wrapped execute should inject mastra into the context
+      expect(capturedTools['probe']).toBeDefined();
+      await capturedTools['probe'].execute!({}, {});
+      expect(capturedMastra).toBeDefined();
+      expect((capturedMastra as Mastra).getAgent('voice-mastra-agent')).toBe(agent);
     });
   });
 });

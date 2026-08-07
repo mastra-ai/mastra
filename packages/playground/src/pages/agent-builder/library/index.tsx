@@ -1,15 +1,12 @@
 import type { ListStoredAgentsParams } from '@mastra/client-js';
-import {
-  EmptyState,
-  ErrorState,
-  ListSearch,
-  PageHeader,
-  PageLayout,
-  PermissionDenied,
-  SessionExpired,
-  is401UnauthorizedError,
-  is403ForbiddenError,
-} from '@mastra/playground-ui';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
+import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
+import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
+import { PageHeader } from '@mastra/playground-ui/components/PageHeader';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
+import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { LibraryIcon, SparklesIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
@@ -77,7 +74,7 @@ export default function AgentBuilderLibraryPage() {
         return (
           <div className="flex items-center justify-center pt-16">
             <EmptyState
-              iconSlot={<LibraryIcon className="h-8 w-8 text-neutral3" />}
+              iconSlot={<LibraryIcon className="text-neutral3 h-8 w-8" />}
               titleSlot="No public agents yet"
               descriptionSlot="Mark an agent as Public to share it with the team library."
             />
@@ -101,7 +98,7 @@ export default function AgentBuilderLibraryPage() {
       return (
         <div className="flex items-center justify-center pt-16">
           <EmptyState
-            iconSlot={<SparklesIcon className="h-8 w-8 text-neutral3" />}
+            iconSlot={<SparklesIcon className="text-neutral3 h-8 w-8" />}
             titleSlot="No public skills yet"
             descriptionSlot="Mark a skill as Public to share it with the team library."
           />
@@ -134,7 +131,7 @@ export default function AgentBuilderLibraryPage() {
           </div>
           <div className="flex items-center gap-4">
             {features.skills && (
-              <div className="flex rounded-lg border border-border1 overflow-hidden">
+              <div className="border-border1 flex overflow-hidden rounded-lg border">
                 <button
                   onClick={() => setTab('agents')}
                   className={`px-3 py-1.5 text-xs font-medium transition-colors ${
@@ -153,7 +150,7 @@ export default function AgentBuilderLibraryPage() {
                 </button>
               </div>
             )}
-            <div className="flex-1 max-w-120">
+            <div className="max-w-120 flex-1">
               <ListSearch onSearch={setSearch} label="Filter library" placeholder="Filter by name or description" />
             </div>
           </div>

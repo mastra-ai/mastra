@@ -6,10 +6,12 @@ import { CursorSDKAgent } from './index';
 
 const createCursorAgent = vi.fn();
 const cursorCreateMock = vi.hoisted(() => vi.fn());
+const cursorResumeMock = vi.hoisted(() => vi.fn());
 
 vi.mock('@cursor/sdk', () => ({
   Agent: {
     create: cursorCreateMock,
+    resume: cursorResumeMock,
   },
 }));
 
@@ -106,6 +108,7 @@ describe('CursorSDKAgent', () => {
   beforeEach(() => {
     createCursorAgent.mockReset();
     cursorCreateMock.mockReset();
+    cursorResumeMock.mockReset();
   });
 
   it('is compatible with the Agent/SubAgent contract', () => {
@@ -287,7 +290,7 @@ describe('CursorSDKAgent', () => {
     const agent = new CursorSDKAgent({
       id: 'cursor-agent',
       description: 'Cursor',
-      agent: sdkAgent,
+      agent: () => sdkAgent,
       sdkOptions: {
         mcpServers: {
           filesystem: { command: 'node', args: ['server.js'] },
@@ -387,5 +390,91 @@ describe('CursorSDKAgent', () => {
       'step-finish',
       'finish',
     ]);
+  });
+
+  it('does not force structured output when the Cursor SDK has no native schema output API', async () => {
+    const { sdkAgent, send } = createSDKAgent(createRun({ result: '{"answer":"yes"}' }));
+    const agent = new CursorSDKAgent({
+      id: 'cursor-agent',
+      description: 'Cursor',
+      agent: sdkAgent,
+    });
+
+    const options = {
+      structuredOutput: {
+        schema: {
+          type: 'object',
+          properties: {
+            answer: { type: 'string' },
+          },
+          required: ['answer'],
+        },
+      },
+    } as const;
+
+    await expect(agent.generate<{ answer: string }>('Return a JSON answer', options)).rejects.toThrow(
+      'CursorSDKAgent does not support structuredOutput',
+    );
+    await expect(agent.stream<{ answer: string }>('Return a JSON answer', options)).rejects.toThrow(
+      'CursorSDKAgent does not support structuredOutput',
+    );
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it('resumeGenerate reuses the wrapped Cursor SDK agent when agentId is omitted', async () => {
+    const { sdkAgent, send } = createSDKAgent(createRun({ result: 'continued text' }));
+    const agent = new CursorSDKAgent({
+      id: 'cursor-agent',
+      description: 'Cursor',
+      agent: sdkAgent,
+    });
+
+    const result = await agent.resumeGenerate({ message: 'Continue prompt' }, { runId: 'resume-run' });
+
+    expect(result.text).toBe('continued text');
+    expect(result.runId).toBe('resume-run');
+    expect(send).toHaveBeenCalledWith('Continue prompt', expect.objectContaining({ onDelta: expect.any(Function) }));
+    expect(cursorResumeMock).not.toHaveBeenCalled();
+  });
+
+  it('resumeStream resumes a Cursor SDK agent by agentId when provided', async () => {
+    const { sdkAgent, send } = createSDKAgent(
+      createRun({
+        id: 'resumed-run',
+        result: 'resumed text',
+        streamMessages: [createTaskMessage('resumed '), createTaskMessage('text')],
+      }),
+    );
+    cursorResumeMock.mockResolvedValueOnce(sdkAgent);
+    const agent = new CursorSDKAgent({
+      id: 'cursor-agent',
+      description: 'Cursor',
+      sdkOptions: {
+        model: { id: '__GATEWAY_OPENAI_MODEL__' },
+      },
+    });
+
+    const stream = await agent.resumeStream(
+      {
+        message: 'Continue prompt',
+        agentId: 'cursor-agent-id',
+        sdkOptions: {
+          model: { id: '__GATEWAY_OPENAI_MODEL_BASE__' },
+        },
+      },
+      { runId: 'resume-run' },
+    );
+    for await (const _chunk of stream.fullStream) {
+      // drain
+    }
+
+    expect(await stream.text).toBe('resumed text');
+    expect(cursorResumeMock).toHaveBeenCalledWith(
+      'cursor-agent-id',
+      expect.objectContaining({
+        model: { id: '__GATEWAY_OPENAI_MODEL_BASE__' },
+      }),
+    );
+    expect(send).toHaveBeenCalledWith('Continue prompt', expect.objectContaining({ onDelta: expect.any(Function) }));
   });
 });

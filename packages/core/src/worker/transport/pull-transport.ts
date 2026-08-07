@@ -8,12 +8,25 @@ const TOPIC_WORKFLOWS = 'workflows';
 export class PullTransport implements WorkerTransport {
   #pubsub: PubSub;
   #group: string;
+  #topic: string;
   #logger?: IMastraLogger;
   #callbacks: Array<{ topic: string; cb: EventCallback }> = [];
 
-  constructor({ pubsub, group, logger }: { pubsub: PubSub; group: string; logger?: IMastraLogger }) {
+  constructor({
+    pubsub,
+    group,
+    topic,
+    logger,
+  }: {
+    pubsub: PubSub;
+    group: string;
+    /** Pubsub topic to subscribe to. Defaults to the workflows topic. */
+    topic?: string;
+    logger?: IMastraLogger;
+  }) {
     this.#pubsub = pubsub;
     this.#group = group;
+    this.#topic = topic ?? TOPIC_WORKFLOWS;
     this.#logger = logger;
   }
 
@@ -22,7 +35,7 @@ export class PullTransport implements WorkerTransport {
       this.#logger?.debug('[PullTransport] start() called while already subscribed; ignoring duplicate call');
       return;
     }
-    const workflowCb: EventCallback = (event, ack, nack) => {
+    const cb: EventCallback = (event, ack, nack) => {
       // route() is async; surface unexpected rejections as a nack instead
       // of an unhandledRejection. The router's own try/catch already turns
       // expected processing errors into nack — this guard only catches
@@ -38,8 +51,8 @@ export class PullTransport implements WorkerTransport {
         }
       });
     };
-    await this.#pubsub.subscribe(TOPIC_WORKFLOWS, workflowCb, { group: this.#group });
-    this.#callbacks.push({ topic: TOPIC_WORKFLOWS, cb: workflowCb });
+    await this.#pubsub.subscribe(this.#topic, cb, { group: this.#group });
+    this.#callbacks.push({ topic: this.#topic, cb });
   }
 
   async stop(): Promise<void> {

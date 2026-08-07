@@ -54,10 +54,32 @@ export function useSetAgentToolsTool({ availableAgentTools }: UseSetAgentToolsTo
       outputSchema: z.object({ success: z.boolean() }),
       execute: async (inputData: any) => {
         if (Array.isArray(inputData?.tools)) {
-          const { tools, agents, workflows } = routeToolInputToFormKeys(availableAgentTools, inputData.tools);
+          const { tools, agents, workflows, toolProvidersFragment } = routeToolInputToFormKeys(
+            availableAgentTools,
+            inputData.tools,
+          );
           formMethods.setValue('tools', tools, { shouldDirty: true });
           formMethods.setValue('agents', agents, { shouldDirty: true });
           formMethods.setValue('workflows', workflows, { shouldDirty: true });
+
+          // `set-agent-tools` is a full state set (like `tools`/`agents`/
+          // `workflows` above), so replace each provider's `tools` map with
+          // the fragment's — clearing stale selections for providers the
+          // call omits — while preserving every `connections` map.
+          const currentProviders = (formMethods.getValues('toolProviders') ?? {}) as Record<
+            string,
+            { tools?: Record<string, { toolkit: string; description?: string }>; connections?: unknown }
+          >;
+          const providerIds = new Set([...Object.keys(currentProviders), ...Object.keys(toolProvidersFragment)]);
+          const nextProviders: typeof currentProviders = {};
+          for (const providerId of providerIds) {
+            const existing = currentProviders[providerId] ?? { tools: {}, connections: {} };
+            nextProviders[providerId] = {
+              ...existing,
+              tools: toolProvidersFragment[providerId] ?? {},
+            };
+          }
+          formMethods.setValue('toolProviders', nextProviders as never, { shouldDirty: true });
         }
         return { success: true };
       },

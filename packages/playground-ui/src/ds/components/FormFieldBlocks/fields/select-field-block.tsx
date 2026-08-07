@@ -31,7 +31,7 @@ export function SelectFieldBlock({
   errorMsg,
   required = false,
   disabled = false,
-  size = 'default',
+  size = 'md',
   value,
   label,
   labelIsHidden = false,

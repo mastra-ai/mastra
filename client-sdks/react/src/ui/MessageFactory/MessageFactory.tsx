@@ -57,10 +57,18 @@ const getPartKey = (part: RuntimePart, index: number): string => {
     return part.toolCallId ?? `${part.type}-${index}`;
   }
   switch (part.type) {
-    case 'text':
+    case 'text': {
       // Intrinsic cast: the `'text'`-narrowed member is `(v4 text part) | MastraTextPart`;
       // only `MastraTextPart` carries `textId`, so this is an optional structural read.
-      return (part as { textId?: string }).textId ?? `text-${index}`;
+      // Include index so two segments with the same textId (e.g. DeepSeek reuses txt-0)
+      // get distinct keys after interleaved tool calls.
+      // NOTE: mixing index into the key assumes parts are append-only during
+      // streaming (they are today — the accumulator only pushes). If a part is
+      // ever inserted ahead of a streaming text block, the trailing indices shift
+      // and those text nodes remount. Revisit this key if insertion is added.
+      const textId = (part as { textId?: string }).textId;
+      return textId ? `${textId}-${index}` : `text-${index}`;
+    }
     case 'reasoning':
       // Intrinsic cast: same as `textId` — only the Mastra reasoning member has `reasoningId`.
       return (part as { reasoningId?: string }).reasoningId ?? `reasoning-${index}`;
@@ -108,7 +116,10 @@ const renderPart = (
     case 'file':
       return renderers.File?.(part) ?? fallback?.(part) ?? null;
     case 'step-start':
-      return renderers.StepStart?.(part) ?? fallback?.(part) ?? null;
+      // `step-start` is an internal step-framing marker with no user-facing
+      // content. Absent an explicit opt-in renderer it renders nothing and is
+      // intentionally NOT routed to `fallback`.
+      return renderers.StepStart?.(part) ?? null;
     case 'tool-invocation':
       return renderers.ToolInvocation?.(part) ?? fallback?.(part) ?? null;
     case 'source':
@@ -216,6 +227,13 @@ const MessageFactoryComponent = ({ message, roles, status, fallback, ...renderer
         ))}
       </>
     );
+
+    // Wrapping `Pending` slot: when the optimistic user bubble is still
+    // "sending", wrap the parts walk so the consumer can apply a sending style
+    // without the message disappearing from the list.
+    if (metadata?.status === 'pending' && status?.Pending) {
+      content = status.Pending({ children: content, text: joinText(parts), message });
+    }
 
     // Adjacent `Task` slot: when a completion verdict exists it renders after
     // the parts. The factory always invokes `Task` when a verdict is present —

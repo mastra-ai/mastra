@@ -24,6 +24,7 @@ import type {
   ListSkillVersionsInput,
   ListSkillVersionsOutput,
 } from '@mastra/core/storage/domains/skills';
+import { skillSnapshotFieldValuesEqual } from '@mastra/core/storage/domains/skills';
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
 import { buildSelectColumns, buildSelectColumnsWithAlias } from '../../db/utils';
@@ -250,8 +251,10 @@ export class SkillsLibSQL extends SkillsStorage {
         const changedFields = configFieldNames.filter(
           field =>
             field in configFields &&
-            JSON.stringify(configFields[field as keyof typeof configFields]) !==
-              JSON.stringify(latestConfig[field as keyof typeof latestConfig]),
+            !skillSnapshotFieldValuesEqual(
+              configFields[field as keyof typeof configFields],
+              latestConfig[field as keyof typeof latestConfig],
+            ),
         );
 
         if (changedFields.length > 0) {

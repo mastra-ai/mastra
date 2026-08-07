@@ -1,9 +1,4 @@
 import { fail } from 'node:assert';
-import {
-  convertArrayToReadableStream,
-  convertAsyncIterableToArray,
-  convertReadableStreamToArray,
-} from '@ai-sdk/provider-utils-v5/test';
 import type { LanguageModelV2CallWarning, LanguageModelV2StreamPart } from '@ai-sdk/provider-v5';
 import { jsonSchema, NoObjectGeneratedError, pipeTextStreamToResponse } from '@internal/ai-sdk-v5';
 import type { FinishReason, LanguageModelResponseMetadata, LanguageModelUsage } from '@internal/ai-sdk-v5';
@@ -12,6 +7,7 @@ import { assert, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import type { loop } from '../loop';
 import { createMockServerResponse } from './mock-server-response';
+import { convertArrayToReadableStream, convertAsyncIterableToArray } from './stream-helpers';
 import { createMessageListWithUserMessage, mockDate, stripMastraCreatedAt, testUsage } from './utils';
 
 function createTestModels({
@@ -520,6 +516,8 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
           const response = stripMastraCreatedAt(await result.response);
 
           expect(response.id).toBe('id-0');
+          // With direct execution (default), timestamps remain as Date objects.
+          // With evented execution they would be serialized to ISO strings via JSON.stringify.
           expect(response.timestamp).toEqual(new Date(0));
           expect(response).toMatchObject({
             modelId: 'mock-model-id',

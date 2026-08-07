@@ -1,6 +1,2 @@
-/**
- * Session provider implementations.
- */
-
-export { MemorySessionProvider, type MemorySessionProviderOptions } from './memory';
-export { CookieSessionProvider, type CookieSessionProviderOptions } from './cookie';
+export { MemorySessionProvider, CookieSessionProvider } from '@internal/auth/session';
+export type { MemorySessionProviderOptions, CookieSessionProviderOptions } from '@internal/auth/session';

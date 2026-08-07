@@ -10,7 +10,7 @@ export interface StudioConfigProviderProps {
   defaultApiPrefix?: string;
 }
 
-const LOCAL_STORAGE_KEY = 'mastra-studio-config';
+export const MASTRA_STUDIO_CONFIG_LOCAL_STORAGE_KEY = 'mastra-studio-config';
 const AUTH_HEADER_PARAM = 'auth_header';
 const AUTH_HEADER_NAME = 'Authorization';
 
@@ -64,7 +64,7 @@ export const StudioConfigProvider = ({
     // Don't run the effect during the fetch request
     if (!instanceStatus?.status) return;
 
-    const storedConfig = localStorage.getItem(LOCAL_STORAGE_KEY);
+    const storedConfig = localStorage.getItem(MASTRA_STUDIO_CONFIG_LOCAL_STORAGE_KEY);
     if (storedConfig) {
       const parsedConfig = JSON.parse(storedConfig);
 
@@ -76,7 +76,10 @@ export const StudioConfigProvider = ({
           apiPrefix: parsedConfig.apiPrefix ?? defaultApiPrefix,
         };
         if (hasUrlHeaders) {
-          localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(getPersistentConfig(normalizedConfig)));
+          localStorage.setItem(
+            MASTRA_STUDIO_CONFIG_LOCAL_STORAGE_KEY,
+            JSON.stringify(getPersistentConfig(normalizedConfig)),
+          );
         }
         return setConfig({ ...normalizedConfig, isLoading: false });
       }
@@ -85,7 +88,7 @@ export const StudioConfigProvider = ({
     if (instanceStatus.status === 'active') {
       const nextConfig = { baseUrl: endpoint, headers: urlHeaders, apiPrefix: defaultApiPrefix };
       if (hasUrlHeaders) {
-        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(getPersistentConfig(nextConfig)));
+        localStorage.setItem(MASTRA_STUDIO_CONFIG_LOCAL_STORAGE_KEY, JSON.stringify(getPersistentConfig(nextConfig)));
       }
       return setConfig({ ...nextConfig, isLoading: false });
     }
@@ -97,7 +100,7 @@ export const StudioConfigProvider = ({
     setConfig(prev => {
       const nextConfig = { ...prev, ...partialNewConfig };
       const persistentConfig = hasUrlHeaders ? getPersistentConfig(nextConfig) : nextConfig;
-      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(persistentConfig));
+      localStorage.setItem(MASTRA_STUDIO_CONFIG_LOCAL_STORAGE_KEY, JSON.stringify(persistentConfig));
       return nextConfig;
     });
   };

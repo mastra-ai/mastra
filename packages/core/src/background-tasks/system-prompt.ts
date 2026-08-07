@@ -54,5 +54,7 @@ Guidelines:
 - Use background execution when the user doesn't need the result immediately, or when you're launching multiple independent tasks.
 - Use foreground execution when the user is directly waiting for the result and the conversation can't continue without it.
 - If you don't include "_background", the tool's default configuration is used.
-- When a tool runs in the background, you'll receive a placeholder result with a task ID. You can reference this in your response to the user.`;
+- When a tool runs in the background, you'll receive a placeholder result with a task ID. You can reference this in your response to the user.
+
+IMPORTANT: "_background" field is always an object. The fields in the _background field should be inside the _background object, not outside of it.`;
 }

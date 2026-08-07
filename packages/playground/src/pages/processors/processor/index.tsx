@@ -1,10 +1,7 @@
-import {
-  PermissionDenied,
-  SessionExpired,
-  Skeleton,
-  is401UnauthorizedError,
-  is403ForbiddenError,
-} from '@mastra/playground-ui';
+import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
+import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
+import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { useParams, Navigate } from 'react-router';
 import { ProcessorPanel } from '@/domains/processors/components/processor-panel';
 import { useProcessor } from '@/domains/processors/hooks/use-processors';
@@ -39,7 +36,7 @@ export function Processor() {
   if (isLoading) {
     return (
       <div className="p-6">
-        <Skeleton className="h-8 w-48 mb-4" />
+        <Skeleton className="mb-4 h-8 w-48" />
         <Skeleton className="h-32 w-full" />
       </div>
     );

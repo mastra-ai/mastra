@@ -1,4 +1,16 @@
-# How to add a new template
+# Mastra templates
+
+This directory contains standalone Mastra project templates.
+
+## New Gateway-first templates
+
+- `template-docs-expert`: Answers documentation questions with Gateway web search, citations, memory, and structured responses.
+- `template-browser-agent`: Uses AgentBrowser to browse, inspect, and interact with web pages.
+- `template-meeting-notes`: Turns Zoom transcripts or uploaded transcripts into structured notes with decisions and action items.
+- `template-company-knowledge`: Indexes Linear and Notion content into pgvector and answers internal knowledge questions.
+- `template-claw-assistant`: Operates a workspace with filesystem, sandbox, browser, and web-search tools.
+
+## How to add a new template
 
 To add a new template to the `templates/` directory, follow these steps:
 

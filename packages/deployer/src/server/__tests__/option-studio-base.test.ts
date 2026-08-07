@@ -93,6 +93,7 @@ describe('Mastra Studio "studioBase" functionality', () => {
 
     mockMastra = {
       getServer: vi.fn(() => ({})),
+      getStudio: vi.fn(() => undefined),
       getServerMiddleware: vi.fn(() => []),
       getLogger: vi.fn(() => ({
         info: vi.fn(),

@@ -166,32 +166,29 @@ export class MongoDBMCPClientsStorage extends MCPClientsStorage {
         updatedAt: now,
       };
 
-      await collection.insertOne(this.serializeMCPClient(newMCPClient));
-
       // Extract snapshot config from flat input
       const snapshotConfig: Record<string, any> = {};
       for (const field of SNAPSHOT_FIELDS) {
-        if ((mcpClient as any)[field] !== undefined) {
-          snapshotConfig[field] = (mcpClient as any)[field];
-        }
+        if ((mcpClient as any)[field] !== undefined) snapshotConfig[field] = (mcpClient as any)[field];
+      }
+      const versionId = randomUUID();
+      const versionDoc: Record<string, any> = {
+        id: versionId,
+        mcpClientId: mcpClient.id,
+        versionNumber: 1,
+        changedFields: Object.keys(snapshotConfig),
+        changeMessage: 'Initial version',
+        createdAt: new Date(),
+      };
+      for (const field of SNAPSHOT_FIELDS) {
+        if (snapshotConfig[field] !== undefined) versionDoc[field] = snapshotConfig[field];
       }
 
-      // Create version 1
-      const versionId = randomUUID();
-      try {
-        await this.createVersion({
-          id: versionId,
-          mcpClientId: mcpClient.id,
-          versionNumber: 1,
-          ...snapshotConfig,
-          changedFields: Object.keys(snapshotConfig),
-          changeMessage: 'Initial version',
-        } as CreateMCPClientVersionInput);
-      } catch (versionError) {
-        // Clean up the orphaned client record
-        await collection.deleteOne({ id: mcpClient.id });
-        throw versionError;
-      }
+      await this.#connector.withTransaction(async session => {
+        await collection.insertOne(this.serializeMCPClient(newMCPClient), { session });
+        const versionsCol = await this.getCollection(TABLE_MCP_CLIENT_VERSIONS);
+        await versionsCol.insertOne(versionDoc, { session });
+      });
 
       return newMCPClient;
     } catch (error) {
@@ -284,12 +281,12 @@ export class MongoDBMCPClientsStorage extends MCPClientsStorage {
 
   async delete(id: string): Promise<void> {
     try {
-      // Delete all versions first
-      await this.deleteVersionsByParentId(id);
-
-      // Then delete the MCP client
-      const collection = await this.getCollection(TABLE_MCP_CLIENTS);
-      await collection.deleteOne({ id });
+      await this.#connector.withTransaction(async session => {
+        const versionsCol = await this.getCollection(TABLE_MCP_CLIENT_VERSIONS);
+        await versionsCol.deleteMany({ mcpClientId: id }, { session });
+        const col = await this.getCollection(TABLE_MCP_CLIENTS);
+        await col.deleteOne({ id }, { session });
+      });
     } catch (error) {
       throw new MastraError(
         {

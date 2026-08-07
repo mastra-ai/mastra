@@ -37,7 +37,7 @@ import type { IMastraLogger } from '../logger';
 import { RequestContext } from '../request-context';
 import type { MastraVector } from '../vector';
 
-import { WorkspaceError, SearchNotAvailableError } from './errors';
+import { WorkspaceError, SearchNotAvailableError, WorkspaceNotReadyError } from './errors';
 import { CompositeFilesystem, LocalFilesystem } from './filesystem';
 import type { WorkspaceFilesystem, FilesystemInfo } from './filesystem';
 import { MastraFilesystem } from './filesystem/mastra-filesystem';
@@ -49,7 +49,15 @@ import type { LSPConfig } from './lsp/types';
 import type { WorkspaceSandbox, OnMountHook } from './sandbox';
 import { LocalSandbox } from './sandbox/local-sandbox';
 import { MastraSandbox } from './sandbox/mastra-sandbox';
-import type { BM25Config, Embedder, SearchOptions, SearchResult, IndexDocument } from './search';
+import type {
+  BM25Config,
+  BM25SearchConfig,
+  TokenizeOptions,
+  Embedder,
+  SearchOptions,
+  SearchResult,
+  IndexDocument,
+} from './search';
 import { SearchEngine, splitIntoChunks } from './search';
 import type { WorkspaceSkills, SkillsResolver, SkillSource } from './skills';
 import { WorkspaceSkillsImpl, LocalSkillSource } from './skills';
@@ -244,7 +252,7 @@ export interface WorkspaceConfig<
    * use `Agent.browser` for SDK providers.
    *
    * The browser is launched via Playwright and exposes a CDP URL that CLI tools
-   * (`agent-browser`, `browser-use`, `browse-cli`) can connect to.
+   * (`agent-browser`, `browser-use`, `browse`) can connect to.
    *
    * @example
    * ```typescript
@@ -279,9 +287,24 @@ export interface WorkspaceConfig<
 
   /**
    * Enable BM25 keyword search.
-   * Pass true for defaults, or a BM25Config object for custom parameters.
+   * Pass `true` for defaults, a {@link BM25Config} for custom k1/b parameters,
+   * or a `{ bm25?, tokenize? }` object to also customise tokenization.
+   *
+   * The `tokenize` field accepts a {@link TokenizeOptions} object that lets you
+   * tune how text is split into tokens (e.g. for CJK or other non-Latin scripts).
+   *
+   * @example
+   * ```ts
+   * new Workspace({
+   *   bm25: {
+   *     k1: 1.5,
+   *     b: 0.75,
+   *     tokenize: { removePunctuation: false, minLength: 1 },
+   *   },
+   * });
+   * ```
    */
-  bm25?: boolean | BM25Config;
+  bm25?: boolean | BM25Config | { bm25?: BM25Config; tokenize?: TokenizeOptions };
 
   /**
    * Custom index name for the vector store.
@@ -507,6 +530,23 @@ export interface WorkspaceInfo {
  */
 const FS_READ_CONCURRENCY = 8;
 
+/**
+ * Parse the user-facing `bm25` config union into the `BM25SearchConfig` shape
+ * that `SearchEngine` expects.
+ */
+function parseBM25Config(
+  bm25: boolean | BM25Config | { bm25?: BM25Config; tokenize?: TokenizeOptions },
+): BM25SearchConfig {
+  if (typeof bm25 === 'boolean') return {};
+  if ('bm25' in bm25 || 'tokenize' in bm25) {
+    return {
+      bm25: (bm25 as { bm25?: BM25Config }).bm25,
+      tokenize: (bm25 as { tokenize?: TokenizeOptions }).tokenize,
+    };
+  }
+  return { bm25: bm25 as BM25Config };
+}
+
 // =============================================================================
 // Workspace Class
 // =============================================================================
@@ -528,6 +568,7 @@ export class Workspace<
   lastAccessedAt: Date;
 
   private _status: WorkspaceStatus = 'pending';
+  private _destroyPromise?: Promise<void>;
   private readonly _fs?: WorkspaceFilesystem;
   private readonly _filesystemResolver?: WorkspaceFilesystemResolver;
   private readonly _sandbox?: WorkspaceSandbox;
@@ -543,6 +584,8 @@ export class Workspace<
   private readonly _config: WorkspaceConfig<TFilesystem, TSandbox, TMounts>;
   private readonly _searchEngine?: SearchEngine;
   private _skills?: WorkspaceSkills;
+  /** Set as soon as `destroy()` begins, and never cleared. */
+  private _teardownStarted = false;
   private _lsp?: LSPManager;
   private _logger?: IMastraLogger;
 
@@ -657,11 +700,7 @@ export class Workspace<
       };
 
       this._searchEngine = new SearchEngine({
-        bm25: config.bm25
-          ? {
-              bm25: typeof config.bm25 === 'object' ? config.bm25 : undefined,
-            }
-          : undefined,
+        bm25: config.bm25 ? parseBM25Config(config.bm25) : undefined,
         vector:
           config.vectorStore && config.embedder
             ? {
@@ -908,6 +947,8 @@ export class Workspace<
       return undefined;
     }
 
+    this.assertSearchWritable();
+
     // Lazy initialization
     if (!this._skills) {
       // Priority: explicit skillSource > workspace filesystem > LocalSkillSource (read-only from local disk)
@@ -918,6 +959,7 @@ export class Workspace<
         skills: this._config.skills!,
         searchEngine: this._searchEngine,
         validateOnLoad: true,
+        assertAvailable: () => this.assertSearchWritable(),
         checkSkillFileMtime: this._config.checkSkillFileMtime,
       });
     }
@@ -973,6 +1015,7 @@ export class Workspace<
       startLineOffset?: number;
     },
   ): Promise<void> {
+    this.assertSearchWritable();
     if (!this._searchEngine) {
       throw new SearchNotAvailableError();
     }
@@ -1017,6 +1060,7 @@ export class Workspace<
    * indexed directly, directory matches are recursed.
    */
   private async rebuildSearchIndex(paths: string[]): Promise<void> {
+    this.assertSearchWritable();
     if (!this._searchEngine || !this._fs || paths.length === 0) {
       return;
     }
@@ -1244,11 +1288,42 @@ export class Workspace<
   }
 
   /**
+   * Reject search writes once teardown has begun, so that a late caller cannot
+   * repopulate an index that `destroy()` has already released.
+   *
+   * Keyed off `_teardownStarted` rather than `_status`: a failed teardown ends
+   * in `'error'`, which is also the status of a failed `init()`, and the index
+   * has been released either way once `destroy()` has run.
+   */
+  private assertSearchWritable(): void {
+    if (this._teardownStarted) {
+      throw new WorkspaceNotReadyError(this.id, this._status);
+    }
+  }
+
+  /**
    * Destroy the workspace and clean up all resources.
    */
   async destroy(): Promise<void> {
-    this._status = 'destroying';
+    if (this._status === 'destroyed') {
+      return;
+    }
+    if (this._status === 'destroying' && this._destroyPromise) {
+      return await this._destroyPromise;
+    }
 
+    this._teardownStarted = true;
+    this._status = 'destroying';
+    this._destroyPromise = this._performDestroy();
+
+    try {
+      await this._destroyPromise;
+    } finally {
+      this._destroyPromise = undefined;
+    }
+  }
+
+  private async _performDestroy(): Promise<void> {
     try {
       // Shutdown LSP before sandbox — LSP clients need running processes to send shutdown/exit
       if (this._lsp) {
@@ -1283,6 +1358,14 @@ export class Workspace<
     } catch (error) {
       this._status = 'error';
       throw error;
+    } finally {
+      // Release indexed content. The search engine holds the full text of every
+      // indexed document, and the skills registry holds the source of every
+      // loaded skill version; without this a destroyed workspace keeps them
+      // alive for the lifetime of the process. Done in `finally` so a failed
+      // resource shutdown above cannot pin the index either.
+      this._searchEngine?.clear();
+      this._skills = undefined;
     }
   }
 

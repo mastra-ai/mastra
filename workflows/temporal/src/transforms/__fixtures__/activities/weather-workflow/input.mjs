@@ -14,16 +14,20 @@ const fetchWeather = createStep({
   execute: async ({ inputData }) => inputData,
 });
 
-const planActivities = createStep({
-  id: 'plan-activities',
-  inputSchema: z.object({
-    city: z.string(),
-  }),
-  outputSchema: z.object({
-    city: z.string(),
-  }),
-  execute: async ({ inputData }) => inputData,
-});
+function createPlanActivities() {
+  return createStep({
+    id: 'plan-activities',
+    inputSchema: z.object({
+      city: z.string(),
+    }),
+    outputSchema: z.object({
+      city: z.string(),
+    }),
+    execute: async ({ inputData }) => inputData,
+  });
+}
+
+const planActivities = createPlanActivities();
 
 export const weatherWorkflow = createWorkflow({
   id: 'weather-workflow',

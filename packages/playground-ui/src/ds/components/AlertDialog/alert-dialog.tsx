@@ -2,6 +2,7 @@ import { AlertDialog as AlertDialogPrimitive } from '@base-ui/react/alert-dialog
 import * as React from 'react';
 
 import { buttonVariants } from '@/ds/components/Button/Button';
+import { asChildRenderProps } from '@/lib/as-child';
 import { cn } from '@/lib/utils';
 
 import '@/ds/components/Dialog/dialog.css';
@@ -25,15 +26,14 @@ function AlertDialog({
 }
 
 type AlertDialogTriggerProps = AlertDialogPrimitive.Trigger.Props & {
+  /** @deprecated Use Base UI's native `render` prop instead for stronger composition typing. */
   asChild?: boolean;
 };
 
 const AlertDialogTrigger = React.forwardRef<HTMLButtonElement, AlertDialogTriggerProps>(
   ({ asChild, children, ...props }, ref) => {
-    const renderProps = asChild && React.isValidElement(children) ? { render: children as React.ReactElement } : {};
-
     return (
-      <AlertDialogPrimitive.Trigger ref={ref} {...renderProps} {...props}>
+      <AlertDialogPrimitive.Trigger ref={ref} {...asChildRenderProps(asChild, children)} {...props}>
         {asChild ? undefined : children}
       </AlertDialogPrimitive.Trigger>
     );
@@ -68,9 +68,9 @@ const AlertDialogContent = React.forwardRef<HTMLDivElement, AlertDialogContentPr
       data-slot="alert-dialog-content"
       className={cn(
         'dialog-content-anim',
-        'fixed left-[50%] top-[50%] z-50 grid translate-x-[-50%] translate-y-[-50%]',
+        'fixed top-[50%] left-[50%] z-50 grid translate-[-50%]',
         'w-full max-w-[calc(100%-2rem)] sm:max-w-lg',
-        'rounded-xl border border-border1/40 bg-surface2/96 backdrop-blur-md shadow-dialog',
+        'rounded-xl border border-border1/40 bg-surface2/96 shadow-dialog backdrop-blur-md',
         className,
       )}
       {...props}
@@ -90,7 +90,7 @@ const AlertDialogFooter = ({ className, ...props }: React.HTMLAttributes<HTMLDiv
 AlertDialogFooter.displayName = 'AlertDialogFooter';
 
 const AlertDialogBody = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
-  <div className={cn('overflow-y-auto px-4 py-3.5 max-h-[50vh]', className)} {...props} />
+  <div className={cn('max-h-[50vh] overflow-y-auto px-4 py-3.5', className)} {...props} />
 );
 AlertDialogBody.displayName = 'AlertDialogBody';
 
@@ -122,7 +122,7 @@ const AlertDialogAction = React.forwardRef<HTMLButtonElement, AlertDialogActionP
   ({ className, ...props }, ref) => (
     <AlertDialogPrimitive.Close
       ref={ref}
-      className={cn(buttonVariants({ variant: 'primary', size: 'default' }), className)}
+      className={cn(buttonVariants({ variant: 'primary', size: 'lg' }), className)}
       {...props}
     />
   ),
@@ -133,7 +133,7 @@ const AlertDialogCancel = React.forwardRef<HTMLButtonElement, AlertDialogActionP
   ({ className, ...props }, ref) => (
     <AlertDialogPrimitive.Close
       ref={ref}
-      className={cn(buttonVariants({ variant: 'default', size: 'default' }), className)}
+      className={cn(buttonVariants({ variant: 'default', size: 'lg' }), className)}
       {...props}
     />
   ),

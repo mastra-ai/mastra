@@ -2,12 +2,18 @@ import { describe, expect, it, vi } from 'vitest';
 import { Mastra } from '../mastra';
 import { MastraCompositeStore } from '../storage/base';
 import { InMemoryNotificationsStorage } from './storage';
-import { createNotificationDispatchWorkflow, parseNotificationDispatchNow } from './workflow';
+import {
+  buildNotificationDispatchSchedule,
+  createNotificationDispatchWorkflow,
+  NOTIFICATION_DISPATCH_SCHEDULE_ROW_ID,
+  parseNotificationDispatchNow,
+} from './workflow';
 import {
   createNotificationInboxTool,
   createNotificationSignal,
   createNotificationSummarySignal,
   dispatchDueNotifications,
+  MAX_NOTIFICATION_DELIVERY_ATTEMPTS,
   resolveNotificationDeliveryDecision,
   summarizeNotifications,
 } from '.';
@@ -220,7 +226,11 @@ describe('notification inbox', () => {
       resourceId: 'resource-1',
       agentId: 'agent-1',
     });
-    const sendSignal = vi.fn(signal => ({ accepted: true, runId: 'run-1', signal }));
+    const sendSignal = vi.fn(signal => ({
+      accepted: Promise.resolve({ action: 'deliver', runId: 'run-1' }),
+      signal,
+      persisted: Promise.resolve(),
+    }));
     const tool = createNotificationInboxTool({ storage });
 
     await expect(tool.execute?.({ action: 'list' }, { agent: { threadId: 'thread-1' } } as any)).resolves.toMatchObject(
@@ -380,7 +390,7 @@ describe('notification inbox', () => {
     const sent: any[] = [];
     const sendSignal = vi.fn((signal, target) => {
       sent.push({ signal, target });
-      return { accepted: true, runId: 'run-1', signal };
+      return { accepted: Promise.resolve({ action: 'deliver', runId: 'run-1' }), signal };
     });
     const mastra = { getAgentById: vi.fn(async () => ({ sendSignal })) } as any;
     await storage.createNotification({
@@ -421,7 +431,10 @@ describe('notification inbox', () => {
   it('records delivery failure when a notification signal is rejected', async () => {
     const storage = new InMemoryNotificationsStorage();
     const now = new Date('2026-05-30T12:00:00Z');
-    const sendSignal = vi.fn((signal, _target) => ({ accepted: false, runId: 'run-1', signal }));
+    const sendSignal = vi.fn((signal, _target) => ({
+      accepted: Promise.reject(new Error('signal routing failed: no model configured')),
+      signal,
+    }));
     const mastra = { getAgentById: vi.fn(async () => ({ sendSignal })) } as any;
     await storage.createNotification({
       id: 'n1',
@@ -439,20 +452,105 @@ describe('notification inbox', () => {
 
     expect(result.delivered).toEqual([]);
     expect(result.signals).toEqual([]);
-    expect(result.failed).toMatchObject([{ record: { id: 'n1' }, error: 'Notification n1 signal was rejected' }]);
+    expect(result.failed).toMatchObject([
+      { record: { id: 'n1' }, error: 'signal routing failed: no model configured' },
+    ]);
     const stored = await storage.getNotification({ threadId: 'thread-1', id: 'n1' });
     expect(stored).toMatchObject({
       status: 'pending',
       deliveryAttempts: 1,
-      lastDeliveryError: 'Notification n1 signal was rejected',
+      lastDeliveryError: 'signal routing failed: no model configured',
     });
     expect(stored?.deliveredSignalId).toBeUndefined();
+  });
+
+  it('marks a notification failed once delivery attempts are exhausted', async () => {
+    const storage = new InMemoryNotificationsStorage();
+    const now = new Date('2026-05-30T12:00:00Z');
+    const sendSignal = vi.fn((signal, _target) => ({
+      accepted: Promise.reject(new Error('No model selected. Use /models to select a model first.')),
+      signal,
+    }));
+    const mastra = { getAgentById: vi.fn(async () => ({ sendSignal })) } as any;
+    await storage.createNotification({
+      id: 'n1',
+      agentId: 'agent-1',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      source: 'github',
+      kind: 'ci-status',
+      priority: 'high',
+      summary: 'CI failed',
+      deliverAt: now,
+    });
+
+    for (let attempt = 1; attempt < MAX_NOTIFICATION_DELIVERY_ATTEMPTS; attempt++) {
+      await dispatchDueNotifications({ mastra, storage, now });
+      await expect(storage.getNotification({ threadId: 'thread-1', id: 'n1' })).resolves.toMatchObject({
+        status: 'pending',
+        deliveryAttempts: attempt,
+      });
+    }
+
+    await dispatchDueNotifications({ mastra, storage, now });
+
+    await expect(storage.getNotification({ threadId: 'thread-1', id: 'n1' })).resolves.toMatchObject({
+      status: 'failed',
+      deliveryAttempts: MAX_NOTIFICATION_DELIVERY_ATTEMPTS,
+      lastDeliveryError: 'No model selected. Use /models to select a model first.',
+    });
+    await expect(storage.listDueNotifications({ now })).resolves.toEqual([]);
+
+    await dispatchDueNotifications({ mastra, storage, now });
+    expect(sendSignal).toHaveBeenCalledTimes(MAX_NOTIFICATION_DELIVERY_ATTEMPTS);
+  });
+
+  it.each([
+    { label: 'at the cap', attempts: MAX_NOTIFICATION_DELIVERY_ATTEMPTS },
+    { label: 'far past the cap', attempts: 288 },
+  ])('terminalizes a record $label without inflating its attempt count', async ({ attempts }) => {
+    const storage = new InMemoryNotificationsStorage();
+    const now = new Date('2026-05-30T12:00:00Z');
+    const sendSignal = vi.fn((signal, _target) => ({
+      accepted: Promise.reject(new Error('No model selected. Use /models to select a model first.')),
+      signal,
+    }));
+    const mastra = { getAgentById: vi.fn(async () => ({ sendSignal })) } as any;
+    await storage.createNotification({
+      id: 'n1',
+      agentId: 'agent-1',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      source: 'github',
+      kind: 'ci-status',
+      priority: 'high',
+      summary: 'CI failed',
+      deliverAt: now,
+    });
+    await storage.updateNotification({ id: 'n1', threadId: 'thread-1', deliveryAttempts: attempts });
+
+    await dispatchDueNotifications({ mastra, storage, now });
+
+    await expect(storage.getNotification({ threadId: 'thread-1', id: 'n1' })).resolves.toMatchObject({
+      status: 'failed',
+      deliveryAttempts: attempts,
+    });
+    await expect(storage.listDueNotifications({ now })).resolves.toEqual([]);
+    // A record carried over from before the cap existed gets one final
+    // attempt, in case the failure it accumulated has since been resolved.
+    expect(sendSignal).toHaveBeenCalledTimes(1);
+
+    await dispatchDueNotifications({ mastra, storage, now });
+    expect(sendSignal).toHaveBeenCalledTimes(1);
   });
 
   it('groups due summary notifications by agent, resource, and thread', async () => {
     const storage = new InMemoryNotificationsStorage();
     const now = new Date('2026-05-30T12:00:00Z');
-    const sendSignal = vi.fn((signal, _target) => ({ accepted: true, runId: 'run-1', signal }));
+    const sendSignal = vi.fn((signal, _target) => ({
+      accepted: Promise.resolve({ action: 'deliver', runId: 'run-1' }),
+      signal,
+    }));
     const mastra = { getAgentById: vi.fn(async () => ({ sendSignal })) } as any;
     for (const id of ['n1', 'n2']) {
       await storage.createNotification({
@@ -494,7 +592,10 @@ describe('notification inbox', () => {
   it('records summary delivery failure when a notification summary signal is rejected', async () => {
     const storage = new InMemoryNotificationsStorage();
     const now = new Date('2026-05-30T12:00:00Z');
-    const sendSignal = vi.fn((signal, _target) => ({ accepted: false, runId: 'run-1', signal }));
+    const sendSignal = vi.fn((signal, _target) => ({
+      accepted: Promise.reject(new Error('signal routing failed: no model configured')),
+      signal,
+    }));
     const mastra = { getAgentById: vi.fn(async () => ({ sendSignal })) } as any;
     await storage.createNotification({
       id: 'n1',
@@ -513,14 +614,14 @@ describe('notification inbox', () => {
     expect(result.delivered).toEqual([]);
     expect(result.signals).toEqual([]);
     expect(result.failed).toMatchObject([
-      { record: { id: 'n1' }, error: 'Notification summary for thread thread-1 was rejected' },
+      { record: { id: 'n1' }, error: 'signal routing failed: no model configured' },
     ]);
     const stored = await storage.getNotification({ threadId: 'thread-1', id: 'n1' });
     expect(stored).toMatchObject({
       status: 'pending',
       summaryAt: now,
       deliveryAttempts: 1,
-      lastDeliveryError: 'Notification summary for thread thread-1 was rejected',
+      lastDeliveryError: 'signal routing failed: no model configured',
     });
     expect(stored?.summarySignalId).toBeUndefined();
   });
@@ -528,7 +629,10 @@ describe('notification inbox', () => {
   it('summarizes high-priority active notifications before full idle delivery', async () => {
     const storage = new InMemoryNotificationsStorage();
     const now = new Date('2026-05-30T12:00:00Z');
-    const sendSignal = vi.fn((signal, _target) => ({ accepted: true, runId: 'run-1', signal }));
+    const sendSignal = vi.fn((signal, _target) => ({
+      accepted: Promise.resolve({ action: 'deliver', runId: 'run-1' }),
+      signal,
+    }));
     const getPubSub = vi.fn();
     const mastra = { getAgentById: vi.fn(async () => ({ id: 'agent-1', getPubSub, sendSignal })) } as any;
     await storage.createNotification({
@@ -574,7 +678,10 @@ describe('notification inbox', () => {
   it('skips high-priority full delivery after it has already been read', async () => {
     const storage = new InMemoryNotificationsStorage();
     const now = new Date('2026-05-30T12:00:00Z');
-    const sendSignal = vi.fn((signal, _target) => ({ accepted: true, runId: 'run-1', signal }));
+    const sendSignal = vi.fn((signal, _target) => ({
+      accepted: Promise.resolve({ action: 'deliver', runId: 'run-1' }),
+      signal,
+    }));
     const mastra = { getAgentById: vi.fn(async () => ({ id: 'agent-1', sendSignal })) } as any;
     await storage.createNotification({
       id: 'n1',
@@ -601,8 +708,7 @@ describe('notification inbox', () => {
     const storage = new InMemoryNotificationsStorage();
     const now = new Date('2026-05-30T12:00:00Z');
     const sendSignal = vi.fn((signal, _target) => ({
-      accepted: true,
-      runId: 'run-1',
+      accepted: Promise.resolve({ action: 'persist' }),
       signal,
       persisted: Promise.resolve(),
     }));
@@ -680,14 +786,10 @@ describe('notification inbox', () => {
       const workflow = (mastra as any).getWorkflow('__mastra_notification_dispatcher');
       expect(workflow.id).toBe('__mastra_notification_dispatcher');
       expect(mastra.listWorkflows()).not.toHaveProperty('__mastra_notification_dispatcher');
-      expect(workflow.getScheduleConfigs()).toMatchObject([
-        {
-          id: 'dispatch',
-          cron: '*/1 * * * *',
-          inputData: { limit: 100 },
-          metadata: { internal: true, feature: 'notifications' },
-        },
-      ]);
+      // The dispatcher must not declare a schedule — its schedule row is
+      // created lazily on the first deferred notification so idle apps never
+      // start the scheduler (see #18864).
+      expect(workflow.getScheduleConfigs()).toEqual([]);
     } finally {
       await mastra.stopWorkers();
     }
@@ -714,47 +816,33 @@ describe('notification inbox', () => {
     }
   });
 
-  it('uses notification dispatch workflow config when provided', async () => {
-    const notifications = new InMemoryNotificationsStorage();
-    const storage = new MastraCompositeStore({
-      id: 'notification-workflow-config-storage',
-      domains: { notifications },
-    });
-    const mastra = new Mastra({
-      storage,
-      logger: false,
-      notifications: { dispatch: { cron: '*/5 * * * *', batchSize: 25 } },
-    });
+  it('builds the dispatcher schedule row from the dispatch config', () => {
+    const schedule = buildNotificationDispatchSchedule({ cron: '*/5 * * * *', batchSize: 25 });
 
-    try {
-      const workflow = (mastra as any).getWorkflow('__mastra_notification_dispatcher');
-      expect(workflow.getScheduleConfigs()).toMatchObject([
-        {
-          id: 'dispatch',
-          cron: '*/5 * * * *',
-          inputData: { limit: 25 },
-          metadata: { internal: true, feature: 'notifications' },
-        },
-      ]);
-    } finally {
-      await mastra.stopWorkers();
-    }
+    expect(schedule).toMatchObject({
+      id: NOTIFICATION_DISPATCH_SCHEDULE_ROW_ID,
+      cron: '*/5 * * * *',
+      status: 'active',
+      target: {
+        type: 'workflow',
+        workflowId: '__mastra_notification_dispatcher',
+        inputData: { limit: 25 },
+      },
+      metadata: { internal: true, feature: 'notifications' },
+    });
+    expect(schedule.nextFireAt).toBeGreaterThan(Date.now());
+    // Not `wf_`-prefixed: declarative orphan-cleanup must leave it alone.
+    expect(schedule.id.startsWith('wf_')).toBe(false);
   });
 
   it('rejects invalid notification dispatch workflow times', () => {
     expect(() => parseNotificationDispatchNow('not-a-date')).toThrow('Invalid notification dispatch time: not-a-date');
   });
 
-  it('creates a scheduled notification dispatch workflow', () => {
-    const workflow = createNotificationDispatchWorkflow({ cron: '*/5 * * * *', batchSize: 25 });
+  it('creates an unscheduled notification dispatch workflow', () => {
+    const workflow = createNotificationDispatchWorkflow({ batchSize: 25 });
 
     expect(workflow.id).toBe('__mastra_notification_dispatcher');
-    expect((workflow as any).getScheduleConfigs()).toMatchObject([
-      {
-        id: 'dispatch',
-        cron: '*/5 * * * *',
-        inputData: { limit: 25 },
-      },
-    ]);
+    expect((workflow as any).getScheduleConfigs()).toEqual([]);
   });
 });

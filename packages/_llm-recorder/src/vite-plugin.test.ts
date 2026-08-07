@@ -1,3 +1,4 @@
+import path from 'node:path';
 import { describe, it, expect } from 'vitest';
 import { defaultNameGenerator, llmRecorderPlugin } from './vite-plugin';
 
@@ -50,6 +51,14 @@ describe('defaultNameGenerator', () => {
     expect(defaultNameGenerator('packages/memory/integration-tests/src/shared/agent-memory.test.ts')).toBe(
       'memory-integration-tests-src-shared-agent-memory',
     );
+  });
+
+  it('does not match directory suffixes like -auth in worktree paths', () => {
+    expect(
+      defaultNameGenerator(
+        '/Users/yo/mastra-oss/wardpeet-gateway-resolve-auth/packages/core/src/agent/__tests__/workspace-tools-openai.e2e.test.ts',
+      ),
+    ).toBe('core-src-agent-__tests__-workspace-tools-openai.e2e');
   });
 });
 
@@ -204,7 +213,13 @@ describe('My Tests', () => {
     const result = transform('describe("test", () => {});', '/project/packages/core/src/agent.test.ts');
 
     expect(result).not.toBeNull();
-    expect(result!.code).toContain(`import { normalizeRequest as __autoTransformRequest } from "./my-transform";`);
+    const expectedImportPath = path.relative(
+      '/project/packages/core/src',
+      path.resolve(process.cwd(), './my-transform'),
+    );
+    expect(result!.code).toContain(
+      `import { normalizeRequest as __autoTransformRequest } from ${JSON.stringify(expectedImportPath)};`,
+    );
     expect(result!.code).toContain('transformRequest: __autoTransformRequest');
   });
 

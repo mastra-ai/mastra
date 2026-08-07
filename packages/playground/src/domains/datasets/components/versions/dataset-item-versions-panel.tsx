@@ -1,6 +1,10 @@
 'use client';
 
-import { Button, ButtonsGroup, Checkbox, Column, ItemList } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
+import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
+import { Column } from '@mastra/playground-ui/components/Columns';
+import { ItemList } from '@mastra/playground-ui/components/ItemList';
 import { GitCompareIcon } from 'lucide-react';
 import { useState } from 'react';
 import { useDatasetItemVersions } from '../../hooks/use-dataset-item-versions';
@@ -73,7 +77,7 @@ export function DatasetItemVersionsPanel({
   return (
     <Column className="min-w-56">
       {isSelectionActive ? (
-        <Column.Toolbar className="grid justify-stretch gap-3 w-full">
+        <Column.Toolbar className="grid w-full justify-stretch gap-3">
           <ButtonsGroup>
             <Button onClick={handleCancelSelection}>Cancel</Button>
             <Button

@@ -6,6 +6,7 @@ import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { MCPServerBase } from '@mastra/core/mcp';
 import type {
   MCPAuthInfoToUserMapper,
+  MCPServerFGAConfig,
   MCPServerConfig,
   ServerInfo,
   ServerDetailInfo,
@@ -37,12 +38,13 @@ import {
   GetPromptRequestSchema,
   SetLevelRequestSchema,
   PromptSchema,
+  McpError,
+  ErrorCode,
 } from '@modelcontextprotocol/sdk/types.js';
 import type {
   TextResourceContents,
   BlobResourceContents,
   Resource,
-  ResourceTemplate,
   ServerCapabilities,
   CallToolResult,
   ElicitResult,
@@ -56,9 +58,25 @@ import { streamSSE } from 'hono/streaming';
 import { SSETransport } from 'hono-mcp-server-sse-transport';
 
 import { withMastraToolStrictMeta } from '../shared/mastra-tool-meta';
+import { broadcastNotification } from './notificationBroadcast';
 import { ServerPromptActions } from './promptActions';
 import { ServerResourceActions } from './resourceActions';
+import { ServerToolActions } from './toolActions';
 import type { MCPServerPrompts, MCPServerResources, ElicitationActions, MastraPrompt, AppResources } from './types';
+
+// RFC 5424 syslog severity ordering used by the MCP logging utility.
+// Higher numbers are more severe; messages below a client's minimum level are dropped.
+const LOG_LEVEL_SEVERITY: Record<LoggingLevel, number> = {
+  debug: 0,
+  info: 1,
+  notice: 2,
+  warning: 3,
+  error: 4,
+  critical: 5,
+  alert: 6,
+  emergency: 7,
+};
+
 /**
  * MCPServer exposes Mastra tools, agents, and workflows as a Model Context Protocol (MCP) server.
  *
@@ -96,15 +114,22 @@ export class MCPServer extends MCPServerBase {
   // Track server instances for each HTTP session
   private httpServerInstances: Map<string, Server> = new Map();
 
-  private definedResources?: Resource[];
-  private definedResourceTemplates?: ResourceTemplate[];
   private resourceOptions?: MCPServerResources;
+  // Whether any UI (`ui://`) app resources are configured. Captured at construction so
+  // per-request server instances can advertise the MCP Apps extension without relying on
+  // a shared, per-caller resource cache.
+  private hasUiResources: boolean = false;
   private definedPrompts?: MastraPrompt[];
   private promptOptions?: MCPServerPrompts;
   private jsonSchemaValidator?: jsonSchemaValidator;
   private mapAuthInfoToUser?: MCPAuthInfoToUserMapper;
-  private subscriptions: Set<string> = new Set();
-  private currentLoggingLevel: LoggingLevel | undefined;
+  private fga?: MCPServerFGAConfig;
+  // Resource subscriptions per server instance (main + per HTTP session), set via
+  // resources/subscribe. Note: legacy SSE sessions share the main instance, so they
+  // share one subscription set; streamable HTTP sessions are isolated per session.
+  private subscriptionsByInstance: WeakMap<Server, Set<string>> = new WeakMap();
+  // Minimum logging level per server instance (main + per HTTP session), set via logging/setLevel
+  private loggingLevels: WeakMap<Server, LoggingLevel> = new WeakMap();
 
   /**
    * Provides methods to notify clients about resource changes.
@@ -130,6 +155,25 @@ export class MCPServer extends MCPServerBase {
    * ```
    */
   public readonly prompts: ServerPromptActions;
+
+  /**
+   * Provides methods to dynamically manage tools and notify clients about
+   * tool list changes. Named `toolActions` because `tools()` is the tool
+   * registry getter inherited from `MCPServerBase`.
+   *
+   * @example
+   * ```typescript
+   * // Register a new tool at runtime and notify clients
+   * await server.toolActions.add({ myNewTool });
+   *
+   * // Remove a tool and notify clients
+   * await server.toolActions.remove(['myNewTool']);
+   *
+   * // Notify that the tool list changed (e.g. authorization changes)
+   * await server.toolActions.notifyListChanged();
+   * ```
+   */
+  public readonly toolActions: ServerToolActions;
 
   /**
    * Provides methods for interactive user input collection during tool execution.
@@ -304,12 +348,17 @@ export class MCPServer extends MCPServerBase {
 
     // Merge appResources into the resource system
     this.resourceOptions = this.mergeAppResources(opts.resources, opts.appResources);
+    // App resources are auto-registered as `ui://` resources, so their presence is what
+    // gates the MCP Apps extension. Capture it here instead of inferring it from a cached
+    // (and potentially per-caller) resource list.
+    this.hasUiResources = !!opts.appResources && Object.keys(opts.appResources).length > 0;
     this.promptOptions = opts.prompts;
     this.jsonSchemaValidator = opts.jsonSchemaValidator;
     this.mapAuthInfoToUser = opts.mapAuthInfoToUser;
+    this.fga = opts.fga;
 
     const capabilities: ServerCapabilities = {
-      tools: {},
+      tools: { listChanged: true },
       logging: { enabled: true },
     };
 
@@ -358,23 +407,25 @@ export class MCPServer extends MCPServerBase {
     this.registerHandlersOnServer(this.server);
 
     this.resources = new ServerResourceActions({
-      getSubscriptions: () => this.subscriptions,
+      getSubscribedServers: (uri: string) =>
+        this.getAllSdkServers().filter(server => this.subscriptionsByInstance.get(server)?.has(uri)),
       getLogger: () => this.logger,
-      getSdkServer: () => this.server,
-      clearDefinedResources: () => {
-        this.definedResources = undefined;
-      },
-      clearDefinedResourceTemplates: () => {
-        this.definedResourceTemplates = undefined;
-      },
+      getSdkServers: () => this.getAllSdkServers(),
     });
 
     this.prompts = new ServerPromptActions({
       getLogger: () => this.logger,
-      getSdkServer: () => this.server,
+      getSdkServers: () => this.getAllSdkServers(),
       clearDefinedPrompts: () => {
         this.definedPrompts = undefined;
       },
+    });
+
+    this.toolActions = new ServerToolActions({
+      getLogger: () => this.logger,
+      getSdkServers: () => this.getAllSdkServers(),
+      addTools: tools => this.addTools(tools),
+      removeTools: toolIds => this.removeTools(toolIds),
     });
 
     this.elicitation = {
@@ -382,6 +433,130 @@ export class MCPServer extends MCPServerBase {
         return this.handleElicitationRequest(request, undefined, options);
       },
     };
+  }
+
+  /**
+   * Returns every connected SDK server instance: the main instance (stdio/SSE
+   * transports) plus one instance per streamable HTTP session. Used to
+   * broadcast notifications to all connected clients. Instances without a
+   * connected transport are skipped.
+   *
+   * Note: stateless/serverless requests use transient server instances and
+   * cannot receive notifications.
+   */
+  private getAllSdkServers(): Server[] {
+    return [this.server, ...this.httpServerInstances.values()].filter(server => server.transport !== undefined);
+  }
+
+  /**
+   * Determines whether a log message at the given level should be sent to the
+   * client connected to the given server instance, honoring the minimum level
+   * the client set via `logging/setLevel` (RFC 5424 severity ordering).
+   * When the client never set a level, all messages are sent.
+   */
+  private shouldSendLog(serverInstance: Server, level: LoggingLevel): boolean {
+    const minimumLevel = this.loggingLevels.get(serverInstance);
+    if (minimumLevel === undefined) return true;
+    return LOG_LEVEL_SEVERITY[level] >= LOG_LEVEL_SEVERITY[minimumLevel];
+  }
+
+  /**
+   * Sends a `notifications/message` log notification to connected clients.
+   *
+   * The notification is broadcast to every active server instance, honoring
+   * the minimum logging level each client set via `logging/setLevel`.
+   *
+   * @param params - Log message parameters
+   * @param params.level - Log severity level
+   * @param params.data - Arbitrary JSON-serializable data to log
+   * @param params.logger - Optional logger name
+   * @throws {MastraError} If sending the notification fails on all eligible server instances
+   *
+   * @example
+   * ```typescript
+   * await server.sendLoggingMessage({
+   *   level: 'info',
+   *   data: { message: 'Sync completed', itemsProcessed: 42 },
+   * });
+   * ```
+   */
+  public async sendLoggingMessage(params: { level: LoggingLevel; data: unknown; logger?: string }): Promise<void> {
+    const eligibleServers = this.getAllSdkServers().filter(server => this.shouldSendLog(server, params.level));
+    if (eligibleServers.length === 0) {
+      this.logger.debug('No eligible clients for log message; skipping.', { level: params.level });
+      return;
+    }
+    await broadcastNotification({
+      servers: eligibleServers,
+      send: server => server.sendLoggingMessage(params),
+      logger: this.logger,
+      errorId: 'MCP_SERVER_LOGGING_MESSAGE_NOTIFICATION_FAILED',
+      errorText: 'Failed to send logging message notification',
+      errorDetails: { level: params.level },
+    });
+  }
+
+  /**
+   * Registers new tools on the running server. Tools are merged into both the
+   * converted tool registry (used by list/call handlers) and the original
+   * tools config so they survive tool re-conversion when the server is
+   * registered with a Mastra instance.
+   */
+  private addTools(tools: ToolsInput): void {
+    const converted = this.convertTools(tools);
+    for (const key of Object.keys(converted)) {
+      if (this.convertedTools[key]) {
+        this.logger.warn(`Tool '${key}' already exists and will be replaced.`);
+      }
+    }
+    this.convertedTools = { ...this.convertedTools, ...converted };
+    this.originalTools = { ...this.originalTools, ...tools };
+    // Keep the Mastra instance's tool registry in sync, mirroring the
+    // auto-registration done in __registerMastra.
+    if (this.mastra) {
+      for (const [key, tool] of Object.entries(tools)) {
+        if (tool && typeof tool === 'object' && 'id' in tool) {
+          this.mastra.addTool(tool as any, this.mastraToolKey(key, tool));
+        }
+      }
+    }
+  }
+
+  /**
+   * Removes tools from the running server by tool ID.
+   *
+   * @returns The IDs of the tools that were actually removed
+   */
+  private removeTools(toolIds: string[]): string[] {
+    const removed: string[] = [];
+    const convertedTools = { ...this.convertedTools };
+    const originalTools = { ...this.originalTools };
+    for (const toolId of toolIds) {
+      if (convertedTools[toolId]) {
+        const originalTool = originalTools[toolId];
+        delete convertedTools[toolId];
+        delete originalTools[toolId];
+        removed.push(toolId);
+        // Keep the Mastra instance's tool registry in sync.
+        if (this.mastra && originalTool && typeof originalTool === 'object' && 'id' in originalTool) {
+          this.mastra.removeTool(this.mastraToolKey(toolId, originalTool));
+        }
+      } else {
+        this.logger.warn(`Cannot remove tool '${toolId}': tool not found.`);
+      }
+    }
+    this.convertedTools = convertedTools;
+    this.originalTools = originalTools;
+    return removed;
+  }
+
+  /**
+   * The key a tool is registered under in the Mastra instance's tool
+   * registry: the tool's intrinsic ID when present (avoids collisions across
+   * MCP servers), falling back to its record key. Mirrors __registerMastra.
+   */
+  private mastraToolKey(key: string, tool: NonNullable<ToolsInput[string]>): string {
+    return 'id' in tool && typeof (tool as any).id === 'string' ? (tool as any).id : key;
   }
 
   /**
@@ -552,7 +727,7 @@ export class MCPServer extends MCPServerBase {
    */
   private createServerInstance(): Server {
     const capabilities: ServerCapabilities = {
-      tools: {},
+      tools: { listChanged: true },
       logging: { enabled: true },
     };
 
@@ -568,14 +743,11 @@ export class MCPServer extends MCPServerBase {
     const hasUiTools = Object.values(this.convertedTools).some(
       tool => (tool.mcp?._meta as Record<string, any>)?.ui?.resourceUri,
     );
-    if (hasUiTools || this.resourceOptions) {
-      const hasUiResources = this.definedResources?.some(r => r.uri.startsWith('ui://'));
-      if (hasUiTools || hasUiResources) {
-        capabilities.extensions = {
-          ...capabilities.extensions,
-          'io.modelcontextprotocol/ui': {},
-        };
-      }
+    if (hasUiTools || this.hasUiResources) {
+      capabilities.extensions = {
+        ...capabilities.extensions,
+        'io.modelcontextprotocol/ui': {},
+      };
     }
 
     const serverInstance = new Server(
@@ -695,6 +867,47 @@ export class MCPServer extends MCPServerBase {
 
         const proxiedContext = await this.createProxiedRequestContext(extra);
 
+        // Session-aware log emission: sends notifications/message to the calling
+        // client, honoring the minimum level it set via logging/setLevel.
+        const sessionLog = async (
+          level: LoggingLevel,
+          message: string,
+          data?: Record<string, unknown>,
+        ): Promise<void> => {
+          if (!this.shouldSendLog(serverInstance, level)) return;
+          await extra.sendNotification({
+            method: 'notifications/message',
+            params: {
+              level,
+              logger: this.name,
+              data: { message, ...data },
+            },
+          });
+        };
+
+        // Session-aware progress emission: sends notifications/progress with the
+        // progressToken the caller provided. No-op when no token was sent, per spec.
+        const progressToken = extra._meta?.progressToken;
+        const sessionProgress = async (params: {
+          progress: number;
+          total?: number;
+          message?: string;
+        }): Promise<void> => {
+          if (progressToken === undefined) {
+            this.logger.debug('Tool attempted to send progress but the caller sent no progressToken; skipping.', {
+              tool: request.params.name,
+            });
+            return;
+          }
+          await extra.sendNotification({
+            method: 'notifications/progress',
+            params: {
+              progressToken,
+              ...params,
+            },
+          });
+        };
+
         const mcpOptions: MastraToolInvocationOptions = {
           messages: [],
           toolCallId: '',
@@ -703,6 +916,8 @@ export class MCPServer extends MCPServerBase {
           mcp: {
             elicitation: sessionElicitation,
             extra,
+            log: sessionLog,
+            progress: sessionProgress,
           },
           // @ts-expect-error this is to let people know that the elicitation and extra keys are now nested under mcp.elicitation and mcp.extra in tool arguments
           get elicitation() {
@@ -805,9 +1020,10 @@ export class MCPServer extends MCPServerBase {
       }
     });
 
-    // Set logging level handler
+    // Set logging level handler. The level is tracked per server instance so
+    // each HTTP session (which gets its own instance) can set its own level.
     serverInstance.setRequestHandler(SetLevelRequestSchema, async request => {
-      this.currentLoggingLevel = request.params.level;
+      this.loggingLevels.set(serverInstance, request.params.level);
       this.logger.debug('Logging level set', { level: request.params.level });
       return {};
     });
@@ -833,18 +1049,17 @@ export class MCPServer extends MCPServerBase {
     // List resources handler
     if (capturedResourceOptions.listResources) {
       serverInstance.setRequestHandler(ListResourcesRequestSchema, async (_request, extra) => {
-        if (this.definedResources) {
-          return { resources: this.definedResources };
-        } else {
-          try {
-            const resources = await capturedResourceOptions.listResources!({ extra });
-            this.definedResources = resources;
-            this.logger.debug('Fetched and cached resources', { count: this.definedResources.length });
-            return { resources: this.definedResources };
-          } catch (error) {
-            this.logger.error('Error fetching resources', { error });
-            throw error;
-          }
+        // Always re-evaluate the provider with the current request's `extra`. The result
+        // must never be cached on the shared instance: dynamic providers scope resources
+        // per caller (e.g. via `extra.authInfo`), so caching would leak one caller's
+        // resource index to the next. See https://github.com/mastra-ai/mastra/issues/17609
+        try {
+          const resources = await capturedResourceOptions.listResources!({ extra });
+          this.logger.debug('Fetched resources', { count: resources.length });
+          return { resources };
+        } catch (error) {
+          this.logger.error('Error fetching resources', { error });
+          throw error;
         }
       });
     }
@@ -856,17 +1071,15 @@ export class MCPServer extends MCPServerBase {
         const uri = request.params.uri;
         this.logger.debug('Handling ReadResource request', { uri });
 
-        if (!this.definedResources) {
-          const resources = await this.resourceOptions?.listResources?.({ extra });
-          if (!resources) throw new Error('Failed to load resources');
-          this.definedResources = resources;
-        }
-
-        const resource = this.definedResources?.find(r => r.uri === uri);
+        // Resolve the resource list for the current caller's `extra` on every request
+        // rather than from a shared cache, so URI resolution respects per-caller auth.
+        const resources = await capturedResourceOptions.listResources?.({ extra });
+        if (!resources) throw new Error('Failed to load resources');
+        const resource = resources.find(r => r.uri === uri);
 
         if (!resource) {
           this.logger.warn('Unknown resource URI requested', { uri });
-          throw new Error(`Resource not found: ${uri}`);
+          throw new McpError(ErrorCode.InvalidParams, `Resource not found: ${uri}`);
         }
 
         try {
@@ -874,11 +1087,16 @@ export class MCPServer extends MCPServerBase {
           const resourcesContent = Array.isArray(resourcesOrResourceContent)
             ? resourcesOrResourceContent
             : [resourcesOrResourceContent];
+          // Preserve the resource's `_meta` on the read contents. MCP Apps hosts
+          // read the UI CSP (connectDomains) from `contents[]._meta.ui.csp`, so
+          // dropping it here silently ignores appResources CSP config.
+          const resourceMeta = resource._meta ? { _meta: resource._meta } : {};
           const contents: (TextResourceContents | BlobResourceContents)[] = resourcesContent.map(resourceContent => {
             if ('text' in resourceContent && resourceContent.text !== undefined) {
               return {
                 uri: resource.uri,
                 mimeType: resource.mimeType,
+                ...resourceMeta,
                 text: resourceContent.text,
               } as TextResourceContents;
             }
@@ -891,6 +1109,7 @@ export class MCPServer extends MCPServerBase {
             return {
               uri: resource.uri,
               mimeType: resource.mimeType,
+              ...resourceMeta,
               blob,
             } as BlobResourceContents;
           });
@@ -910,18 +1129,17 @@ export class MCPServer extends MCPServerBase {
     // Resource templates handler
     if (capturedResourceOptions.resourceTemplates) {
       serverInstance.setRequestHandler(ListResourceTemplatesRequestSchema, async (_request, extra) => {
-        if (this.definedResourceTemplates) {
-          return { resourceTemplates: this.definedResourceTemplates };
-        } else {
-          try {
-            const templates = await capturedResourceOptions.resourceTemplates!({ extra });
-            this.definedResourceTemplates = templates;
-            this.logger.debug('Fetched and cached resource templates', { count: this.definedResourceTemplates.length });
-            return { resourceTemplates: this.definedResourceTemplates };
-          } catch (error) {
-            this.logger.error('Error fetching resource templates via resourceTemplates():', { error });
-            throw error;
-          }
+        // Always re-evaluate the provider with the current request's `extra`, never from a
+        // shared cache. Like resource lists, dynamic template providers can scope templates
+        // per caller (e.g. via `extra.authInfo`), so caching would leak across callers.
+        // See https://github.com/mastra-ai/mastra/issues/17609
+        try {
+          const templates = await capturedResourceOptions.resourceTemplates!({ extra });
+          this.logger.debug('Fetched resource templates', { count: templates.length });
+          return { resourceTemplates: templates };
+        } catch (error) {
+          this.logger.error('Error fetching resource templates via resourceTemplates():', { error });
+          throw error;
         }
       });
     }
@@ -930,14 +1148,19 @@ export class MCPServer extends MCPServerBase {
     serverInstance.setRequestHandler(SubscribeRequestSchema, async (request: { params: { uri: string } }) => {
       const uri = request.params.uri;
       this.logger.info('Received resources/subscribe request', { uri });
-      this.subscriptions.add(uri);
+      let subscriptions = this.subscriptionsByInstance.get(serverInstance);
+      if (!subscriptions) {
+        subscriptions = new Set();
+        this.subscriptionsByInstance.set(serverInstance, subscriptions);
+      }
+      subscriptions.add(uri);
       return {};
     });
 
     serverInstance.setRequestHandler(UnsubscribeRequestSchema, async (request: { params: { uri: string } }) => {
       const uri = request.params.uri;
       this.logger.info('Received resources/unsubscribe request', { uri });
-      this.subscriptions.delete(uri);
+      this.subscriptionsByInstance.get(serverInstance)?.delete(uri);
       return {};
     });
   }
@@ -997,7 +1220,7 @@ export class MCPServer extends MCPServerBase {
           if (prompt.arguments) {
             for (const arg of prompt.arguments) {
               if (arg.required && (args?.[arg.name] === undefined || args?.[arg.name] === null)) {
-                throw new Error(`Missing required argument: ${arg.name}`);
+                throw new McpError(ErrorCode.InvalidParams, `Missing required argument: ${arg.name}`);
               }
             }
           }
@@ -1224,7 +1447,11 @@ export class MCPServer extends MCPServerBase {
         continue;
       }
 
-      if (typeof toolInstance.execute !== 'function') {
+      if (
+        (typeof toolInstance !== 'object' && typeof toolInstance !== 'function') ||
+        !('execute' in toolInstance) ||
+        typeof toolInstance.execute !== 'function'
+      ) {
         this.logger.warn('Tool has no execute function, skipping', { tool: toolName });
         continue;
       }
@@ -1235,7 +1462,7 @@ export class MCPServer extends MCPServerBase {
         tracingContext: {},
         mastra: this.mastra,
         logger: this.logger,
-        description: toolInstance?.description,
+        description: 'description' in toolInstance ? toolInstance.description : undefined,
       };
 
       const coreTool = makeCoreTool(toolInstance, options) as InternalCoreTool;
@@ -1557,7 +1784,22 @@ export class MCPServer extends MCPServerBase {
     httpPath: string;
     req: http.IncomingMessage;
     res: http.ServerResponse<http.IncomingMessage>;
-    options?: Partial<StreamableHTTPServerTransportOptions> & { serverless?: boolean };
+    options?: Partial<StreamableHTTPServerTransportOptions> & {
+      serverless?: boolean;
+      /**
+       * Opt into request-scoped SSE streaming for serverless requests.
+       *
+       * When `true`, the transient serverless transport is created with
+       * `enableJsonResponse: false`, which allows in-request `notifications/progress`
+       * to stream back to the client before the final result. Defaults to `false`,
+       * preserving the JSON-response behavior that buffers only the final result.
+       *
+       * This only enables notifications scoped to the current request (e.g. progress).
+       * Elicitation, subscriptions, and out-of-request resource/list-change
+       * notifications still require a stateful session or another protocol model.
+       */
+      serverlessStreaming?: boolean;
+    };
   }) {
     this.logger.debug('Received HTTP request', { method: req.method, path: url.pathname });
 
@@ -1574,7 +1816,11 @@ export class MCPServer extends MCPServerBase {
 
     if (isStatelessMode) {
       this.logger.debug('Running in stateless mode');
-      await this.handleServerlessRequest(req, res);
+      // Default to JSON responses for backward compatibility. Opt into request-scoped
+      // SSE streaming (e.g. notifications/progress) via serverlessStreaming or an explicit
+      // enableJsonResponse: false. An explicit enableJsonResponse always takes precedence.
+      const enableJsonResponse = options?.enableJsonResponse ?? !options?.serverlessStreaming;
+      await this.handleServerlessRequest(req, res, { enableJsonResponse });
       return;
     }
 
@@ -1635,12 +1881,20 @@ export class MCPServer extends MCPServerBase {
           if (isInitializeRequest(body)) {
             this.logger.debug('Received initialize request, creating new transport');
 
-            // Create a new transport for the new session
+            // Create a new server instance for this HTTP session
+            const sessionServerInstance = this.createServerInstance();
+
+            // Create a new transport for the new session.
+            // The session ID is only assigned while the transport handles the
+            // initialize request, so the transport and server instance must be
+            // registered in the onsessioninitialized callback.
             transport = new StreamableHTTPServerTransport({
               ...mergedOptions,
               sessionIdGenerator: mergedOptions.sessionIdGenerator,
               onsessioninitialized: id => {
                 this.streamableHTTPTransports.set(id, transport!);
+                this.httpServerInstances.set(id, sessionServerInstance);
+                this.logger.debug('Session initialized and stored', { sessionId: id });
               },
             });
 
@@ -1658,22 +1912,12 @@ export class MCPServer extends MCPServerBase {
               }
             };
 
-            // Create a new server instance for this HTTP session
-            const sessionServerInstance = this.createServerInstance();
-
             // Connect the new server instance to the new transport
             await sessionServerInstance.connect(transport);
 
-            // Store both the transport and server instance when the session is initialized
-            if (transport.sessionId) {
-              this.streamableHTTPTransports.set(transport.sessionId, transport);
-              this.httpServerInstances.set(transport.sessionId, sessionServerInstance);
-              this.logger.debug('Session initialized and stored', { sessionId: transport.sessionId });
-            } else {
-              this.logger.warn('Transport initialized without a session ID');
-            }
-
-            // Handle the initialize request
+            // Handle the initialize request. This assigns the session ID and
+            // triggers onsessioninitialized, which stores the transport and
+            // server instance for the session.
             return await transport.handleRequest(req, res, body);
           } else {
             // POST request but not initialize, and no session ID
@@ -1746,9 +1990,17 @@ export class MCPServer extends MCPServerBase {
    *
    * @param req - Incoming HTTP request
    * @param res - HTTP response object
+   * @param options - Transport options for this request
+   * @param options.enableJsonResponse - When `true` (default), buffers and returns a single
+   *   JSON-RPC response. When `false`, the request is handled with request-scoped SSE streaming,
+   *   so in-request `notifications/progress` reach the client before the final result.
    * @private
    */
-  private async handleServerlessRequest(req: http.IncomingMessage, res: http.ServerResponse<http.IncomingMessage>) {
+  private async handleServerlessRequest(
+    req: http.IncomingMessage,
+    res: http.ServerResponse<http.IncomingMessage>,
+    { enableJsonResponse = true }: { enableJsonResponse?: boolean } = {},
+  ) {
     try {
       this.logger.debug('Received serverless request', { method: req.method });
 
@@ -1760,17 +2012,19 @@ export class MCPServer extends MCPServerBase {
         method: req.method,
         bodyMethod: body?.method,
         id: body?.id,
+        enableJsonResponse,
       });
 
       // Create a transient server instance for this single request
       const transientServer = this.createServerInstance();
 
-      // Create a one-time transport that handles this single request
-      // sessionIdGenerator: undefined disables session management entirely
-      // enableJsonResponse: true forces JSON-RPC responses instead of SSE streaming
+      // Create a one-time transport that handles this single request.
+      // sessionIdGenerator: undefined disables session management entirely.
+      // enableJsonResponse: true (default) buffers a single JSON-RPC response; false enables
+      // request-scoped SSE streaming so notifications/progress can reach the client.
       const tempTransport = new StreamableHTTPServerTransport({
         sessionIdGenerator: undefined,
-        enableJsonResponse: true,
+        enableJsonResponse,
       });
 
       // Connect the transient server to the temporary transport
@@ -1797,13 +2051,14 @@ export class MCPServer extends MCPServerBase {
       // If headers haven't been sent, send an error response
       if (!res.headersSent) {
         res.writeHead(500, { 'Content-Type': 'application/json' });
+        // Error details are logged above; don't echo them to the client
+        // (CodeQL js/stack-trace-exposure)
         res.end(
           JSON.stringify({
             jsonrpc: '2.0',
             error: {
               code: -32603,
               message: 'Internal server error',
-              data: error instanceof Error ? error.message : String(error),
             },
             id: null,
           }),
@@ -2274,12 +2529,18 @@ export class MCPServer extends MCPServerBase {
     if (!user) {
       throw new FGADeniedError({ id: 'unknown' }, { type: 'tool', id: resourceId }, MastraFGAPermissions.TOOLS_EXECUTE);
     }
+    const { resource, permission } = this.resolveToolFGAParams({
+      user,
+      resourceId,
+      requestContext,
+      permission: MastraFGAPermissions.TOOLS_EXECUTE,
+    });
 
     await requireFGA({
       fgaProvider,
       user,
-      resource: { type: 'tool', id: resourceId },
-      permission: MastraFGAPermissions.TOOLS_EXECUTE,
+      resource,
+      permission,
       requestContext,
       context: {
         resourceId,
@@ -2290,6 +2551,36 @@ export class MCPServer extends MCPServerBase {
         toolId,
       },
     });
+  }
+
+  private resolveToolFGAParams({
+    user,
+    resourceId,
+    requestContext,
+    permission,
+  }: {
+    user: unknown;
+    resourceId: string;
+    requestContext?: RequestContext;
+    permission: string;
+  }): { resource: { type: string; id: string }; permission: string } {
+    const mappedPermission = this.fga?.permissionMapping?.[permission] ?? permission;
+    const resourceMapping = this.fga?.resourceMapping?.tool ?? this.fga?.resourceMapping?.tools;
+
+    if (!resourceMapping) {
+      return {
+        resource: { type: 'tool', id: resourceId },
+        permission: mappedPermission,
+      };
+    }
+
+    return {
+      resource: {
+        type: resourceMapping.fgaResourceType,
+        id: resourceMapping.deriveId?.({ user, resourceId, requestContext }) ?? resourceId,
+      },
+      permission: mappedPermission,
+    };
   }
 
   /**
@@ -2464,12 +2755,7 @@ export class MCPServer extends MCPServerBase {
     }
 
     const extra = {} as any;
-    if (this.definedResources) {
-      return { resources: this.definedResources };
-    }
-
     const resources = await this.resourceOptions.listResources({ extra });
-    this.definedResources = resources;
     return { resources };
   }
 }

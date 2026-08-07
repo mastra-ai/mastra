@@ -318,6 +318,13 @@ await agent.streamLegacy('message for agent')
               "Tools that are executed on the 'client' side of the request. These tools do not have execute functions in the definition.",
           },
           {
+            name: 'hooks',
+            type: 'ToolHooks',
+            isOptional: true,
+            description:
+              'Per-execution hooks that run before and after tool calls. Overrides matching agent-level hooks for this execution. `beforeToolCall` can return `{ proceed: false, output }` to skip the tool call.',
+          },
+          {
             name: 'savePerStep',
             type: 'boolean',
             isOptional: true,

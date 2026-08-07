@@ -1,5 +1,8 @@
-import { AgentIcon, LogoWithoutText, MainSidebar, cn, useMainSidebar } from '@mastra/playground-ui';
-import type { NavLink } from '@mastra/playground-ui';
+import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
+import { MainSidebar, useMainSidebar } from '@mastra/playground-ui/components/MainSidebar';
+import type { NavLink } from '@mastra/playground-ui/components/MainSidebar';
+import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { Blocks, LibraryIcon, ServerCogIcon, StarIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import { useLocation } from 'react-router';
@@ -73,10 +76,10 @@ export function AgentBuilderSidebar({ forceExpanded = false }: AgentBuilderSideb
   return (
     <MainSidebar className="h-full">
       {!forceExpanded && (
-        <div className="pt-3 mb-4">
+        <div className="mb-4 pt-3">
           {state === 'collapsed' ? (
-            <div className="flex flex-col gap-3 items-center">
-              <div className="relative grid place-items-center size-9">
+            <div className="flex flex-col items-center gap-3">
+              <div className="relative grid size-9 place-items-center">
                 <Link
                   href="/agents"
                   aria-label="Back to Mastra Studio"
@@ -93,29 +96,29 @@ export function AgentBuilderSidebar({ forceExpanded = false }: AgentBuilderSideb
               {isUserAuthenticated && <AuthStatus />}
             </div>
           ) : isUserAuthenticated ? (
-            <span className="flex items-center justify-between pl-3 pr-2">
-              <span className="flex items-center gap-2 flex-1 min-w-0">
+            <span className="flex items-center justify-between pr-2 pl-3">
+              <span className="flex min-w-0 flex-1 items-center gap-2">
                 <Link
                   href="/agents"
                   aria-label="Back to Mastra Studio"
-                  className="flex items-center gap-2 rounded-sm hover:opacity-80 min-w-0"
+                  className="flex min-w-0 items-center gap-2 rounded-sm hover:opacity-80"
                 >
                   <LogoWithoutText className="h-[1.5rem] w-[1.5rem] shrink-0" />
-                  <span className="font-serif text-sm whitespace-nowrap truncate">Mastra Studio</span>
+                  <span className="font-display truncate text-sm whitespace-nowrap">Mastra Studio</span>
                 </Link>
                 {!isMobile && <MainSidebar.Trigger />}
               </span>
               <AuthStatus />
             </span>
           ) : (
-            <span className="flex items-center gap-2 pl-3 pr-2">
+            <span className="flex items-center gap-2 pr-2 pl-3">
               <Link
                 href="/agents"
                 aria-label="Back to Mastra Studio"
-                className="flex items-center gap-2 rounded-sm hover:opacity-80 min-w-0"
+                className="flex min-w-0 items-center gap-2 rounded-sm hover:opacity-80"
               >
                 <LogoWithoutText className="h-[1.5rem] w-[1.5rem] shrink-0" />
-                <span className="font-serif text-sm whitespace-nowrap truncate">Mastra Studio</span>
+                <span className="font-display truncate text-sm whitespace-nowrap">Mastra Studio</span>
               </Link>
               {!isMobile && <MainSidebar.Trigger />}
             </span>

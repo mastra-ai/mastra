@@ -1,0 +1,8 @@
+packages:
+  - '.'
+
+allowBuilds:
+  agent-browser: true
+  esbuild: true
+  edgedriver: false
+  geckodriver: false

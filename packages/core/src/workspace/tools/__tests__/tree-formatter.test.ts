@@ -199,7 +199,7 @@ level1
     it('should hide dotfiles by default', async () => {
       await fs.writeFile(path.join(tempDir, '.gitignore'), '');
       await fs.writeFile(path.join(tempDir, 'visible.txt'), '');
-      await fs.mkdir(path.join(tempDir, '.git'));
+      await fs.mkdir(path.join(tempDir, '.hidden'));
 
       const result = await formatAsTree(filesystem, '.');
 
@@ -209,6 +209,24 @@ visible.txt`,
       );
       expect(result.fileCount).toBe(1);
       expect(result.dirCount).toBe(0);
+    });
+
+    it('should always exclude .git directory even when showHidden is true', async () => {
+      await fs.mkdir(path.join(tempDir, '.git'));
+      await fs.mkdir(path.join(tempDir, '.git', 'objects'));
+      await fs.mkdir(path.join(tempDir, '.git', 'refs'));
+      await fs.writeFile(path.join(tempDir, '.gitignore'), '');
+      await fs.writeFile(path.join(tempDir, 'visible.txt'), '');
+
+      const result = await formatAsTree(filesystem, '.', { showHidden: true });
+
+      expect(result.tree).toContain('.gitignore');
+      expect(result.tree).toContain('visible.txt');
+      // .git directory should not appear as an entry (check lines individually)
+      const lines = result.tree.split('\n');
+      expect(lines).not.toContain('.git');
+      expect(result.tree).not.toContain('objects');
+      expect(result.tree).not.toContain('refs');
     });
 
     it('should show dotfiles when showHidden is true', async () => {
@@ -517,16 +535,32 @@ src
       await fs.mkdir(path.join(tempDir, 'src'));
       await fs.mkdir(path.join(tempDir, 'node_modules'));
       await fs.mkdir(path.join(tempDir, 'dist'));
-      await fs.mkdir(path.join(tempDir, '.git'));
+      await fs.mkdir(path.join(tempDir, '.hidden'));
       await fs.writeFile(path.join(tempDir, 'index.ts'), '');
 
       const result = await formatAsTree(filesystem, '.', {
         exclude: ['node_modules', 'dist'],
-        showHidden: true, // Show .git to verify it's not excluded
+        showHidden: true, // Show .hidden to verify it's not excluded
       });
 
       expect(result.tree).toContain('src');
-      expect(result.tree).toContain('.git');
+      expect(result.tree).toContain('.hidden');
+      expect(result.tree).toContain('index.ts');
+      expect(result.tree).not.toContain('node_modules');
+      expect(result.tree).not.toContain('dist');
+    });
+
+    it('should support pipe-separated exclude patterns (tree -I syntax)', async () => {
+      await fs.mkdir(path.join(tempDir, 'src'));
+      await fs.mkdir(path.join(tempDir, 'node_modules'));
+      await fs.mkdir(path.join(tempDir, 'dist'));
+      await fs.writeFile(path.join(tempDir, 'index.ts'), '');
+
+      const result = await formatAsTree(filesystem, '.', {
+        exclude: 'node_modules|dist',
+      });
+
+      expect(result.tree).toContain('src');
       expect(result.tree).toContain('index.ts');
       expect(result.tree).not.toContain('node_modules');
       expect(result.tree).not.toContain('dist');

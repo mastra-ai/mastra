@@ -1,13 +1,9 @@
-import {
-  Button,
-  MainContentContent,
-  MainContentLayout,
-  MainHeader,
-  PermissionDenied,
-  SessionExpired,
-  is401UnauthorizedError,
-  is403ForbiddenError,
-} from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { MainContentContent, MainContentLayout } from '@mastra/playground-ui/components/MainContent';
+import { MainHeader } from '@mastra/playground-ui/components/MainHeader';
+import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
+import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { GitCompare, ArrowLeft } from 'lucide-react';
 import { useParams, useSearchParams, Link } from 'react-router';
 import { DatasetExperimentsComparison } from '@/domains/datasets';
@@ -44,9 +40,9 @@ function CompareDatasetExperimentsPage() {
     return (
       <MainContentLayout>
         <MainContentContent>
-          <div className="text-neutral4 text-center py-8">
+          <div className="text-neutral4 py-8 text-center">
             <p>Select two experiments to compare.</p>
-            <p className="text-sm mt-2">
+            <p className="mt-2 text-sm">
               Use the URL format: /datasets/{'{datasetId}'}/experiments?baseline={'{experimentIdA}'}&contender=
               {'{experimentIdB}'}
             </p>
@@ -59,7 +55,7 @@ function CompareDatasetExperimentsPage() {
   return (
     <MainContentLayout>
       <MainContentContent>
-        <div className="max-w-[100rem] w-full px-12 mx-auto grid content-start ">
+        <div className="mx-auto grid w-full max-w-[100rem] content-start px-12">
           <MainHeader>
             <MainHeader.Column>
               <MainHeader.Title>

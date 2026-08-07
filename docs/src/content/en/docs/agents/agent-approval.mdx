@@ -1,6 +1,6 @@
 ---
 title: "Agent approval | Agents"
-description: Learn how to require approvals, suspend tool execution, and automatically resume suspended tools while keeping humans in control of agent workflows.
+description: Learn how to require approvals and suspend tool execution, plus automatically resume suspended tools while keeping humans in control of agent workflows.
 packages:
   - "@mastra/core"
   - "@mastra/libsql"
@@ -13,7 +13,7 @@ Agents sometimes require the same [human-in-the-loop](/docs/workflows/human-in-t
 
 ## When to use agent approval
 
-- **Destructive or irreversible actions** such as deleting records, sending emails, or processing payments.
+- **Destructive or irreversible actions** such as deleting records or sending emails, or alternatively processing payments.
 - **Cost-heavy operations** like calling expensive third-party APIs where you want to verify arguments first.
 - **Conditional confirmation** where a tool starts executing and then discovers it needs the user to confirm or supply extra data before finishing.
 
@@ -57,7 +57,9 @@ for await (const chunk of stream.fullStream) {
 
 :::note
 
-Agent approval uses snapshots to capture request state. Configure a [storage provider](/docs/memory/storage) on your Mastra instance or you'll see a "snapshot not found" error.
+Agent approval uses snapshots to capture request state. Configure a [storage provider](/docs/storage/overview) on your Mastra instance or you'll see a "snapshot not found" error.
+
+Snapshots for agent runs are minimal resume artifacts: they hold only what's needed to resume the suspended run and are deleted once the run finishes. Use [tracing](/docs/observability/overview) for the execution record and [memory](/docs/memory/overview) for the conversation history.
 
 :::
 
@@ -69,7 +71,7 @@ Mastra offers two distinct mechanisms for pausing tool calls: **pre-execution ap
 
 Pre-execution approval pauses a tool call _before_ its `execute` function runs. The LLM still decides which tool to call and provides arguments, but `execute` doesn't run until you explicitly approve.
 
-Two flags control this, combined with OR logic. If _either_ is `true`, the call pauses:
+The flags control this, combined with OR logic. If _either_ is `true`, the call pauses:
 
 | Flag | Where to set it | Scope |
 | - | - | - |
@@ -101,7 +103,7 @@ for await (const chunk of stream.fullStream) {
 
 #### Conditional approval with a function
 
-Instead of a boolean, `requireToolApproval` accepts a function that decides per tool call. It receives the `toolName`, the `args` the model passed, the `requestContext`, and the `workspace`. Return `true` to require approval for that call, or `false` to allow it. This lets you gate approval dynamically — for example, only for tools whose name matches a pattern:
+Instead of a boolean, `requireToolApproval` accepts a function that decides per tool call. It receives the `toolName`, the `args` the model passed, the `requestContext`, and the `workspace`. Return `true` to require approval for that call, or `false` to allow it. This lets you gate approval at runtime, for example, only for tools whose name matches a pattern:
 
 ```typescript
 const stream = await agent.stream('Clean up old records', {
@@ -109,7 +111,7 @@ const stream = await agent.stream('Clean up old records', {
 })
 ```
 
-A tool's own `requireApproval` setting still takes precedence: if a tool defines its own approval rule, that rule decides for that tool and the function above does not override it. If the function throws, the call requires approval (fail-safe).
+A tool's own `requireApproval` setting takes precedence over the function above. Its rule decides whether that tool needs approval. If the function throws, the call requires approval as a fail-safe.
 
 :::note
 
@@ -117,15 +119,110 @@ Function-based `requireToolApproval` is only available on regular `stream()` / `
 
 :::
 
+#### Bind approval to the exact tool arguments
+
+For sensitive tools, bind the approval to the exact tool name and arguments that were shown to the reviewer. If those arguments drift before execution, the tool shouldn't run under the old approval.
+
+The `tool-call-approval` chunk already includes `toolName`, `toolCallId`, and `args`. You can fingerprint those fields when the approval request is shown. The example below uses a JSON string as the fingerprint, but in production you should use a stable hash of the tool name and arguments:
+
+```typescript title="src/mastra/agents/approval-bound-agent.ts"
+import { Agent } from '@mastra/core/agent'
+
+// For your production usecase, build a stable hash of the tool name and args
+function actionFingerprint(toolName: string, args: unknown) {
+  const payload = JSON.stringify({ toolName, args })
+  return `fingerprint-${payload}`
+}
+
+const sensitiveTools = new Set(['issue_refund', 'delete_record'])
+const approvedFingerprints = new Set<string>()
+
+export const approvalBoundAgent = new Agent({
+  id: 'approval-bound-agent',
+  name: 'Approval Bound Agent',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  tools: { issueRefundTool, deleteRecordTool },
+  hooks: {
+    beforeToolCall: ({ toolName, input }) => {
+      if (!sensitiveTools.has(toolName)) return
+
+      const fingerprint = actionFingerprint(toolName, input)
+      if (!approvedFingerprints.delete(fingerprint)) {
+        return {
+          proceed: false,
+          output: `Tool call blocked: approval did not match ${toolName} arguments.`,
+        }
+      }
+    },
+  },
+})
+```
+
+```typescript
+const stream = await approvalBoundAgent.stream('Refund order ord-1042', {
+  requireToolApproval: ({ toolName }) => sensitiveTools.has(toolName),
+})
+
+async function consumeApprovalStream(currentStream: typeof stream) {
+  for await (const chunk of currentStream.fullStream) {
+    if (chunk.type === 'tool-call-approval') {
+      const { toolName, toolCallId, args } = chunk.payload
+      const fingerprint = actionFingerprint(toolName, args)
+
+      // Present toolName, args, and fingerprint to your approval UI.
+      const approved = await showApprovalDialog({ toolName, args, fingerprint })
+
+      const nextStream = approved
+        ? await approveReviewedToolCall(currentStream.runId, toolCallId, fingerprint)
+        : await approvalBoundAgent.declineToolCall({ runId: currentStream.runId, toolCallId })
+
+      await consumeApprovalStream(nextStream)
+    }
+  }
+}
+
+async function approveReviewedToolCall(runId: string, toolCallId: string, fingerprint: string) {
+  approvedFingerprints.add(fingerprint)
+  return approvalBoundAgent.approveToolCall({ runId, toolCallId })
+}
+
+await consumeApprovalStream(stream)
+```
+
+In production, store the approved fingerprint in durable storage scoped to the user, run, tool call, and policy version. The `Set` above is intentionally small so the boundary is clear: the approval is consumed once, and only for the same canonical tool arguments that were reviewed.
+
 ### Runtime suspension with `suspend()`
 
 A tool can also pause _during_ its `execute` function by calling `suspend()`. This is useful when the tool starts running and then discovers it needs additional user input or confirmation before it can finish.
 
 The stream emits a `tool-call-suspended` chunk with a custom payload defined by the tool's `suspendSchema`. You resume by calling `resumeStream()` with data matching the tool's `resumeSchema`.
 
+```typescript
+const weatherTool = createTool({
+  id: 'get-weather',
+  inputSchema: z.object({
+    location: z.string().optional(),
+  }),
+  suspendSchema: z.object({
+    question: z.string(),
+  }),
+  resumeSchema: z.object({
+    location: z.string(),
+  }),
+  execute: async ({ location }, context) => {
+    if (!location) {
+      return await context?.agent?.suspend({
+        question: 'Which city would you like the weather for?',
+      })
+    }
+    return await fetchWeather(location)
+  },
+})
+```
+
 :::note
 
-`suspend()` does not throw — return immediately after calling it (e.g. `return await suspend({ ... })`). Code after `await suspend(...)` still runs before the tool pauses.
+`suspend()` doesn't throw, return immediately after calling it (e.g. `return await suspend({ ... })`). Code after `await suspend(...)` still runs before the tool pauses.
 
 :::
 
@@ -167,12 +264,12 @@ if (output.finishReason === 'suspended') {
 | Result | Stream to iterate | Full output object |
 
 :::note
-`toolCallId` is optional on all four methods. Pass it when multiple tool calls may be pending at the same time (common in supervisor agents). When omitted, the agent resumes the most recent suspended tool call.
+`toolCallId` is optional on all four methods. Pass it when multiple tool calls may be pending (common in supervisor agents). When omitted, the agent resumes the most recent suspended tool call.
 :::
 
 ## Tool-level approval
 
-Instead of pausing every tool call at the agent level, you can mark individual tools as requiring approval. This gives you granular control: only specific tools pause, while others execute immediately.
+Instead of pausing every tool call at the agent level, you can mark individual tools as requiring approval. You get fine-grained control: only specific tools pause, while others execute immediately.
 
 ### Approval using `requireApproval`
 
@@ -299,7 +396,9 @@ const agent = new Agent({
 })
 ```
 
-When enabled, the agent detects suspended tools from message history on the next user message, extracts `resumeData` based on the tool's `resumeSchema`, and automatically resumes the tool. The following example shows a complete conversational flow:
+When enabled, the agent detects suspended tools from message history on the next user message. It extracts `resumeData` based on the tool's `resumeSchema`, then automatically resumes the tool.
+
+The following example shows a complete conversational flow:
 
 ```typescript title="src/mastra/tools/weather-tool.ts"
 import { createTool } from '@mastra/core/tools'
@@ -380,9 +479,51 @@ For automatic tool resumption to work:
 
 Both approaches work with the same tool definitions. Automatic resumption triggers only when suspended tools exist in the message history and the user sends a new message on the same thread.
 
+## Resuming after a restart
+
+The examples above hold on to `stream.runId` between suspension and approval. That works while the process stays alive, but in production the approval often arrives later, after a page refresh, a server restart, or on a different server instance behind a load balancer.
+
+Use [`listSuspendedRuns()`](/reference/agents/listSuspendedRuns) to rediscover the pending run for a conversation from storage:
+
+```typescript
+// In the request handler that receives the user's decision
+const { runs } = await agent.listSuspendedRuns({
+  threadId: 'thread-123',
+  resourceId: 'user-456',
+})
+
+const run = runs[0]
+const toolCall = run?.toolCalls[0]
+
+if (run && toolCall) {
+  let stream
+  if (toolCall.requiresApproval) {
+    // Suspended by requireApproval — approve or decline the tool call
+    stream = await agent.approveToolCall({ runId: run.runId, toolCallId: toolCall.toolCallId })
+  } else {
+    // Suspended by suspend() — resume with the data the tool asked for
+    console.log('Tool asked:', toolCall.suspendPayload)
+    stream = await agent.resumeStream({ name: 'San Francisco' }, { runId: run.runId })
+  }
+  for await (const chunk of stream.textStream) process.stdout.write(chunk)
+}
+```
+
+Each returned run includes the suspended tool calls (`toolCallId`, `toolName`, `args`, and `requiresApproval`). Approval suspensions (`requiresApproval: true`) are answered with `approveToolCall()` / `declineToolCall()`, while `suspend()`-based suspensions carry their `suspendPayload` and expect `resumeStream()` with resume data, so you can rebuild the right UI for either flow without keeping any state in memory.
+
+`sendToolApproval()` uses the same storage-backed discovery automatically: when no active run is found in memory for the thread, it looks up the suspended run in storage before failing. If several suspended runs match the thread, pass a `toolCallId` to disambiguate.
+
+The same discovery is available over HTTP as `GET /agents/:agentId/suspended-runs` and in the client SDK as [`agent.listSuspendedRuns()`](/reference/client-js/agents#listsuspendedruns), so browser-based approval UIs can rediscover pending runs directly.
+
+:::note
+
+Suspended runs only survive restarts when your Mastra instance is configured with a persistent [storage provider](/docs/storage/overview). The default in-memory store loses snapshots when the process exits.
+
+:::
+
 ## Tool approval: Supervisor agents
 
-A [supervisor agent](/docs/agents/supervisor-agents) coordinates multiple subagents using `.stream()` or `.generate()`. When a subagent calls a tool that requires approval, the request propagates up through the delegation chain and surfaces at the supervisor level:
+A [supervisor agent](/docs/capabilities/subagents) coordinates multiple subagents using `.stream()` or `.generate()`. When a subagent calls a tool that requires approval, the request propagates up through the delegation chain and surfaces at the supervisor level:
 
 1. The supervisor delegates a task to a subagent.
 1. The subagent calls a tool that has `requireApproval: true` or uses `suspend()`.

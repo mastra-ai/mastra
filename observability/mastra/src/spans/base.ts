@@ -54,6 +54,7 @@ function isSpanInternal(spanType: SpanType, flags?: InternalSpans): boolean {
     // Tool-related spans
     case SpanType.TOOL_CALL:
     case SpanType.MCP_TOOL_CALL:
+    case SpanType.PROVIDER_TOOL_CALL:
       return (flags & InternalSpans.TOOL) !== 0;
 
     // Model-related spans
@@ -202,10 +203,6 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
       this.deepCleanOptions,
     );
 
-    if (options.requestContext && options.requestContext.size() > 0) {
-      this.requestContext = deepClean(options.requestContext.all, this.deepCleanOptions);
-    }
-
     this.parent = options.parent;
     this.startTime = options.startTime ?? new Date();
     this.observabilityInstance = observabilityInstance;
@@ -229,7 +226,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
 
     this.attributes = deepClean(options.attributes, this.deepCleanOptions) || ({} as SpanTypeMap[TType]);
     if (options.requestContext && options.requestContext.size() > 0) {
-      this.requestContext = deepClean(options.requestContext.all, this.deepCleanOptions);
+      this.requestContext = deepClean(options.requestContext, this.deepCleanOptions);
     }
 
     if (this.isEvent) {

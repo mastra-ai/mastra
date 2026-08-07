@@ -1,10 +1,6 @@
-import {
-  Collapsible,
-  CollapsibleTrigger,
-  CollapsibleContent,
-  MultiCombobox,
-  WorkflowIcon,
-} from '@mastra/playground-ui';
+import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@mastra/playground-ui/components/Collapsible';
+import { Combobox } from '@mastra/playground-ui/components/Combobox';
+import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
 import { ChevronRight } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { Control } from 'react-hook-form';
@@ -42,16 +38,16 @@ export function WorkflowsSection({ control, error, readOnly = false }: Workflows
   };
 
   return (
-    <div className="rounded-md border border-border1 bg-surface2">
+    <div className="border-border1 bg-surface2 rounded-md border">
       <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-        <CollapsibleTrigger className="flex items-center gap-1 w-full p-3 bg-surface3">
-          <ChevronRight className="h-4 w-4 text-neutral3" />
+        <CollapsibleTrigger className="bg-surface3 flex w-full items-center gap-1 p-3">
+          <ChevronRight className="text-neutral3 h-4 w-4" />
           <SectionTitle icon={<WorkflowIcon className="text-accent3" />}>
             Workflows{count > 0 && <span className="text-neutral3 font-normal">({count})</span>}
           </SectionTitle>
         </CollapsibleTrigger>
         <CollapsibleContent>
-          <div className="p-3 border-t border-border1">
+          <div className="border-border1 border-t p-3">
             <Controller
               name="workflows"
               control={control}
@@ -84,7 +80,8 @@ export function WorkflowsSection({ control, error, readOnly = false }: Workflows
 
                 return (
                   <div className="flex flex-col gap-2">
-                    <MultiCombobox
+                    <Combobox
+                      multiple
                       options={options}
                       value={selectedIds}
                       onValueChange={handleValueChange}
@@ -93,10 +90,9 @@ export function WorkflowsSection({ control, error, readOnly = false }: Workflows
                       emptyText="No workflows available"
                       disabled={isLoading || readOnly}
                       error={error}
-                      variant="default"
                     />
                     {selectedOptions.length > 0 && (
-                      <div className="flex flex-col gap-3 mt-2">
+                      <div className="mt-2 flex flex-col gap-3">
                         {selectedOptions.map(workflow => (
                           <EntityAccordionItem
                             key={workflow.value}

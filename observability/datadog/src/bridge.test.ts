@@ -12,6 +12,7 @@ import type {
   TracingEvent,
   AnyExportedSpan,
   CreateSpanOptions,
+  ScoreEvent,
   SpanType as SpanTypeGeneric,
 } from '@mastra/core/observability';
 import { SpanType, TracingEventType } from '@mastra/core/observability';
@@ -30,6 +31,7 @@ const {
   mockScopeActivate,
   mockScopeActive,
   mockStartSpan,
+  mockSubmitEvaluation,
   mockTrace,
 } = vi.hoisted(() => {
   let currentScopeSpan: any = undefined;
@@ -66,8 +68,8 @@ const {
       finish: vi.fn(),
       setTag: vi.fn(),
       context: vi.fn(() => ({
-        toSpanId: (_hex?: boolean) => spanHex,
-        toTraceId: (_hex?: boolean) => traceHex,
+        toSpanId: (hex?: boolean) => (hex ? spanHex : BigInt(`0x${spanHex}`).toString(10)),
+        toTraceId: (hex?: boolean) => (hex ? traceHex : BigInt(`0x${traceHex.slice(-16)}`).toString(10)),
       })),
     };
 
@@ -88,6 +90,7 @@ const {
     mockScopeActivate: activate,
     mockScopeActive: active,
     mockStartSpan: startSpan,
+    mockSubmitEvaluation: vi.fn(),
     mockTrace: vi.fn(),
   };
 });
@@ -111,6 +114,7 @@ vi.mock('dd-trace', () => {
         annotate: mockAnnotate,
         flush: mockFlush,
         trace: mockTrace,
+        submitEvaluation: mockSubmitEvaluation,
       },
       _tracer: {
         started: false,
@@ -145,6 +149,22 @@ function createMockSpan(overrides: Partial<AnyExportedSpan> = {}): AnyExportedSp
 
 function createTracingEvent(type: TracingEventType, span: AnyExportedSpan): TracingEvent {
   return { type, exportedSpan: span } as TracingEvent;
+}
+
+function createScoreEvent(overrides: Partial<ScoreEvent['score']> = {}): ScoreEvent {
+  return {
+    type: 'score',
+    score: {
+      id: 'score-1',
+      traceId: '00000000000000000000000000000001',
+      spanId: '0000000000000001',
+      scorerId: 'scorer-1',
+      scorerName: 'Quality scorer',
+      score: 0.75,
+      timestamp: new Date('2024-01-01T00:00:02Z'),
+      ...overrides,
+    },
+  } as ScoreEvent;
 }
 
 function createMockSpanOptions(
@@ -638,6 +658,59 @@ describe('DatadogBridge', () => {
       );
     });
 
+    it('forwards score events directly with Datadog decimal span ids', async () => {
+      const bridge = new DatadogBridge({ mlApp: 'test', agentless: false });
+      const spanResult = bridge.createSpan(createMockSpanOptions())!;
+
+      const datadogSpanId = BigInt(`0x${spanResult.spanId}`).toString(10);
+
+      await bridge.onScoreEvent(
+        createScoreEvent({
+          traceId: spanResult.traceId,
+          spanId: spanResult.spanId,
+          metadata: { source: 'unit-test' },
+          reason: 'looks good',
+        }),
+      );
+
+      expect(mockSubmitEvaluation).toHaveBeenCalledWith(
+        {
+          traceId: spanResult.traceId,
+          spanId: datadogSpanId,
+        },
+        {
+          label: 'Quality scorer',
+          value: 0.75,
+          metricType: 'score',
+          mlApp: 'test',
+          timestampMs: new Date('2024-01-01T00:00:02Z').getTime(),
+          reasoning: 'looks good',
+          metadata: { source: 'unit-test' },
+        },
+      );
+    });
+
+    it('forwards score events without local finished span context', async () => {
+      const bridge = new DatadogBridge({ mlApp: 'test', agentless: false });
+
+      await bridge.onScoreEvent(
+        createScoreEvent({
+          traceId: 'remote-trace-id',
+          spanId: '000000000000000f',
+        }),
+      );
+
+      expect(mockSubmitEvaluation).toHaveBeenCalledWith(
+        { traceId: 'remote-trace-id', spanId: '15' },
+        expect.objectContaining({
+          label: 'Quality scorer',
+          value: 0.75,
+          metricType: 'score',
+          mlApp: 'test',
+        }),
+      );
+    });
+
     it('releases stored trace context after the last span in a trace finishes', async () => {
       const bridge = new DatadogBridge({ mlApp: 'test', agentless: false });
 
@@ -663,6 +736,68 @@ describe('DatadogBridge', () => {
 
       expect(bridge['traceContext'].size).toBe(0);
       expect(bridge['openSpanCounts'].size).toBe(0);
+    });
+  });
+
+  describe('releaseSpan', () => {
+    it('drops the span map entry and trace state without finishing the dd span', () => {
+      const bridge = new DatadogBridge({ mlApp: 'test', agentless: false });
+      const spanResult = bridge.createSpan(createMockSpanOptions({ metadata: { userId: 'user-123' } }))!;
+      const apmSpan = capturedApmSpans[0];
+
+      bridge.releaseSpan(spanResult.spanId, spanResult.traceId);
+
+      expect(apmSpan.finish).not.toHaveBeenCalled();
+      expect(bridge['ddSpanMap'].size).toBe(0);
+      expect(bridge['openSpanCounts'].size).toBe(0);
+      expect(bridge['traceContext'].size).toBe(0);
+    });
+
+    it('keeps trace state while other spans in the trace remain open', () => {
+      const bridge = new DatadogBridge({ mlApp: 'test', agentless: false });
+      const rootResult = bridge.createSpan(createMockSpanOptions({ name: 'root', metadata: { userId: 'user-123' } }))!;
+      const childResult = bridge.createSpan(
+        createMockSpanOptions({
+          name: 'child',
+          parent: {
+            id: rootResult.spanId,
+            traceId: rootResult.traceId,
+            isInternal: false,
+            metadata: {},
+            getParentSpanId: () => undefined,
+          } as any,
+        }),
+      )!;
+
+      bridge.releaseSpan(childResult.spanId, childResult.traceId);
+
+      expect(bridge['ddSpanMap'].size).toBe(1);
+      expect(bridge['openSpanCounts'].get(rootResult.traceId)).toBe(1);
+      expect(bridge['traceContext'].size).toBe(1);
+    });
+
+    it('does not double-decrement the open-span count on repeated release', () => {
+      const bridge = new DatadogBridge({ mlApp: 'test', agentless: false });
+      const rootResult = bridge.createSpan(createMockSpanOptions({ name: 'root', metadata: { userId: 'user-123' } }))!;
+      const childResult = bridge.createSpan(
+        createMockSpanOptions({
+          name: 'child',
+          parent: {
+            id: rootResult.spanId,
+            traceId: rootResult.traceId,
+            isInternal: false,
+            metadata: {},
+            getParentSpanId: () => undefined,
+          } as any,
+        }),
+      )!;
+
+      bridge.releaseSpan(childResult.spanId, childResult.traceId);
+      bridge.releaseSpan(childResult.spanId, childResult.traceId);
+      bridge.releaseSpan('ffffffffffffffff', childResult.traceId);
+
+      expect(bridge['openSpanCounts'].get(rootResult.traceId)).toBe(1);
+      expect(bridge['traceContext'].size).toBe(1);
     });
   });
 

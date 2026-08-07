@@ -12,6 +12,7 @@ import {
   isZodError,
   normalizeQueryParams,
   redactStreamChunk,
+  serializeStreamChunk,
 } from '@mastra/server/server-adapter';
 import type { Application, NextFunction, Request, Response } from 'express';
 export { createAuthMiddleware } from './auth-middleware';
@@ -177,10 +178,20 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
           // Optionally redact sensitive data (system prompts, tool definitions, API keys) before sending to the client
           const shouldRedact = this.streamOptions?.redact ?? true;
           const outputValue = shouldRedact ? redactStreamChunk(value) : value;
+          // A chunk that can't be serialized must not kill the stream — skip it and keep streaming
+          const serialized = serializeStreamChunk(outputValue);
+          if (!serialized.ok) {
+            this.mastra.getLogger()?.error('Failed to serialize stream chunk, skipping', {
+              path: route.path,
+              chunkType: (outputValue as { type?: string })?.type,
+              error: serialized.error.message,
+            });
+            continue;
+          }
           if (streamFormat === 'sse') {
-            res.write(`data: ${JSON.stringify(outputValue)}\n\n`);
+            res.write(`data: ${serialized.json}\n\n`);
           } else {
-            res.write(JSON.stringify(outputValue) + '\x1E');
+            res.write(serialized.json + '\x1E');
           }
         }
       }
@@ -320,7 +331,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
           this.mastra.getLogger()?.error('Error writing datastream response', {
             error: err instanceof Error ? { message: err.message, stack: err.stack } : err,
           });
-          void reader.cancel('response write error');
+          void reader.cancel('response write error').catch(() => {});
         };
         response.once('error', onResError);
 
@@ -408,7 +419,8 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
     const prefix = prefixParam ?? this.prefix ?? '';
 
     // Determine if body limits should be applied
-    const shouldApplyBodyLimit = this.bodyLimitOptions && ['POST', 'PUT', 'PATCH'].includes(route.method.toUpperCase());
+    const shouldApplyBodyLimit =
+      this.bodyLimitOptions && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(route.method.toUpperCase());
 
     // Get the body size limit for this route (route-specific or default)
     const maxSize = route.maxBodySize ?? this.bodyLimitOptions?.maxSize;
@@ -538,6 +550,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
           taskStore: res.locals.taskStore,
           abortSignal: res.locals.abortSignal,
           routePrefix: prefix,
+          request: toWebRequest(req),
         };
 
         // Check route permission requirement (EE feature)
@@ -573,11 +586,16 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
           const result = await route.handler(handlerParams);
           await this.sendResponse(route, res, result, req, prefix);
         } catch (error) {
-          this.mastra.getLogger()?.error('Error calling handler', {
-            error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
-            path: route.path,
-            method: route.method,
-          });
+          const httpStatus =
+            error && typeof error === 'object' && 'status' in error ? (error as any).status : undefined;
+          const isClientError = typeof httpStatus === 'number' && httpStatus >= 400 && httpStatus < 500;
+          if (!isClientError) {
+            this.mastra.getLogger()?.error('Error calling handler', {
+              error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+              path: route.path,
+              method: route.method,
+            });
+          }
           // Check if it's an HTTPException or MastraError with a status code
           let status = 500;
           if (error && typeof error === 'object') {
@@ -692,6 +710,14 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
 
   registerContextMiddleware(): void {
     this.app.use(this.createContextMiddleware());
+    this.app.use((req, res, next) => {
+      const path = String(req.path || '/');
+      const method = String(req.method || 'GET');
+      res.on('finish', () => {
+        this.warnIfUnregisteredChannelWebhook(path, method, res.statusCode);
+      });
+      next();
+    });
   }
 
   registerAuthMiddleware(): void {

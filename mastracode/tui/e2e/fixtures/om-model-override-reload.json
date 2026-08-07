@@ -1,0 +1,14 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "endpoint": "chat",
+        "model": "gpt-5.4-mini",
+        "userMessage": "Create OM model override thread."
+      },
+      "response": {
+        "content": "OM model override thread ready."
+      }
+    }
+  ]
+}

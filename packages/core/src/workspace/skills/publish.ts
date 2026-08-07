@@ -127,14 +127,24 @@ async function walkSkillDirectory(
 }
 
 /**
+ * Trim slashes from a segment without regex backtracking (CodeQL js/polynomial-redos).
+ */
+function trimSlashes(segment: string, trimLeading: boolean): string {
+  let start = 0;
+  let end = segment.length;
+  if (trimLeading) {
+    while (start < end && segment[start] === '/') start++;
+  }
+  while (end > start && segment[end - 1] === '/') end--;
+  return segment.slice(start, end);
+}
+
+/**
  * Join path segments using forward slashes.
  */
 function joinPath(...segments: string[]): string {
   return segments
-    .map((seg, i) => {
-      if (i === 0) return seg.replace(/\/+$/, '');
-      return seg.replace(/^\/+|\/+$/g, '');
-    })
+    .map((seg, i) => trimSlashes(seg, i > 0))
     .filter(Boolean)
     .join('/');
 }

@@ -7,6 +7,9 @@ import { convertArrayToReadableStream, mockId } from '@internal/ai-sdk-v5/test';
 import { expect } from 'vitest';
 import type { ModelManagerModelConfig } from '../../stream/types';
 import { MessageList } from '../../agent/message-list';
+import { EventEmitterPubSub } from '../../events/event-emitter';
+import { Mastra } from '../../mastra';
+import { InMemoryStore } from '../../storage';
 import { MastraLanguageModelV2Mock as MockLanguageModelV2 } from './MastraLanguageModelV2Mock';
 
 export function stripMastraCreatedAt<T>(value: T): T {
@@ -40,14 +43,17 @@ export function stripMastraCreatedAt<T>(value: T): T {
             Object.entries(providerOptions).filter(([nestedKey]) => nestedKey !== 'mastra'),
           );
 
-          return [
-            key,
-            Object.keys(normalizedMastra).length > 0
-              ? { ...providerOptions, mastra: normalizedMastra }
-              : Object.keys(providerOptionsWithoutMastra).length > 0
-                ? providerOptionsWithoutMastra
-                : undefined,
-          ];
+          if (Object.keys(normalizedMastra).length > 0) {
+            return [key, { ...providerOptions, mastra: normalizedMastra }];
+          }
+
+          if (Object.keys(providerOptionsWithoutMastra).length > 0) {
+            return [key, providerOptionsWithoutMastra];
+          }
+
+          // Drop the providerOptions key entirely so toStrictEqual comparisons
+          // don't fail on a dangling `providerOptions: undefined` property.
+          return null;
         }
       }
 
@@ -65,6 +71,21 @@ export function expectPromptWithoutMastraCreatedAt(actual: unknown, expected: un
 }
 
 export const mockDate = new Date('2024-01-01T00:00:00Z');
+
+export async function createTestMastra(): Promise<{ mastra: Mastra; dispose: () => Promise<void> }> {
+  const mastra = new Mastra({
+    logger: false,
+    storage: new InMemoryStore(),
+    pubsub: new EventEmitterPubSub(),
+  });
+  await mastra.startWorkers();
+  return {
+    mastra,
+    dispose: async () => {
+      await mastra.stopWorkers();
+    },
+  };
+}
 
 export const defaultSettings = () =>
   ({

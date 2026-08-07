@@ -1,24 +1,15 @@
-import {
-  Button,
-  ButtonsGroup,
-  Chip,
-  CodeDiff,
-  Column,
-  Columns,
-  MainContentContent,
-  MainContentLayout,
-  MainHeader,
-  PermissionDenied,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-  SessionExpired,
-  TextAndIcon,
-  is401UnauthorizedError,
-  is403ForbiddenError,
-} from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
+import { Chip } from '@mastra/playground-ui/components/Chip';
+import { CodeDiff } from '@mastra/playground-ui/components/CodeDiff';
+import { Column, Columns } from '@mastra/playground-ui/components/Columns';
+import { MainContentContent, MainContentLayout } from '@mastra/playground-ui/components/MainContent';
+import { MainHeader } from '@mastra/playground-ui/components/MainHeader';
+import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
+import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { TextAndIcon } from '@mastra/playground-ui/components/Text';
+import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { format } from 'date-fns';
 import { ArrowLeft, HistoryIcon, GitCompareIcon, ColumnsIcon, GitCompareArrowsIcon } from 'lucide-react';
 import { Fragment, useState } from 'react';
@@ -97,7 +88,7 @@ function DatasetItemVersionsComparePage() {
     return (
       <MainContentLayout>
         <MainContentContent>
-          <div className="text-neutral4 text-center py-8">
+          <div className="text-neutral4 py-8 text-center">
             <p>Select at least two versions to compare.</p>
           </div>
         </MainContentContent>
@@ -243,8 +234,8 @@ function CompareVersionColumn({
 
   return (
     <Column>
-      <Column.Toolbar className="grid gap-4 grid-cols-[auto_1fr]">
-        <HistoryIcon className="w-6 h-6 opacity-50" />
+      <Column.Toolbar className="grid grid-cols-[auto_1fr] gap-4">
+        <HistoryIcon className="h-6 w-6 opacity-50" />
         <Select
           name={`compare-version-${idx}`}
           value={String(datasetVersion)}

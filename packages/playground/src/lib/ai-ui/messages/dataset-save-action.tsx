@@ -1,16 +1,6 @@
-import { useMessage } from '@assistant-ui/react';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import {
-  Button,
-  CodeEditor,
-  Label,
-  Select,
-  SelectTrigger,
-  SelectValue,
-  SelectContent,
-  SelectItem,
-  Spinner,
-  Icon,
-  toast,
   Dialog,
   DialogContent,
   DialogHeader,
@@ -18,22 +8,19 @@ import {
   DialogDescription,
   DialogBody,
   DialogFooter,
-} from '@mastra/playground-ui';
+} from '@mastra/playground-ui/components/Dialog';
+import { Label } from '@mastra/playground-ui/components/Label';
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@mastra/playground-ui/components/Select';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { toast } from '@mastra/playground-ui/utils/toast';
 import { useMastraClient } from '@mastra/react';
 import { DatabaseIcon, Save } from 'lucide-react';
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 
 import { useDatasetSaveContext } from '../context/dataset-save-context';
 import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
 import { useDatasets } from '@/domains/datasets/hooks/use-datasets';
-
-/** Extract text content from a thread message's content parts */
-function extractTextFromParts(content: readonly { type: string; text?: string }[]): string {
-  return content
-    .filter(part => part.type === 'text' && part.text)
-    .map(part => part.text!)
-    .join('\n');
-}
 
 function DatasetSaveDialog({
   open,
@@ -62,7 +49,7 @@ function DatasetSaveDialog({
 
   const { data, isLoading: isDatasetsLoading } = useDatasets();
   const { addItem } = useDatasetMutations();
-  const datasets = data?.datasets ?? [];
+  const datasets = useMemo(() => data?.datasets ?? [], [data?.datasets]);
 
   const handleSubmit = useCallback(async () => {
     if (!selectedDatasetId) {
@@ -114,7 +101,7 @@ function DatasetSaveDialog({
           <DialogTitle>Save to Dataset</DialogTitle>
           <DialogDescription>Save as a dataset item for evaluation.</DialogDescription>
         </DialogHeader>
-        <DialogBody className="py-1 space-y-4">
+        <DialogBody className="space-y-4 py-1">
           <div className="grid gap-2">
             <Label htmlFor="ds-target">Dataset</Label>
             <Select
@@ -127,7 +114,7 @@ function DatasetSaveDialog({
               </SelectTrigger>
               <SelectContent>
                 {datasets.length === 0 ? (
-                  <div className="px-2 py-4 text-sm text-neutral4 text-center">No datasets available</div>
+                  <div className="text-neutral4 px-2 py-4 text-center text-sm">No datasets available</div>
                 ) : (
                   datasets.map(dataset => (
                     <SelectItem key={dataset.id} value={dataset.id}>
@@ -145,7 +132,7 @@ function DatasetSaveDialog({
               value={input}
               onChange={onInputChange}
               showCopyButton={false}
-              className="min-h-[120px] max-h-[240px]"
+              className="max-h-[240px] min-h-[120px]"
             />
           </div>
 
@@ -155,7 +142,7 @@ function DatasetSaveDialog({
               value={groundTruth}
               onChange={setGroundTruth}
               showCopyButton={false}
-              className="min-h-[80px] max-h-[160px]"
+              className="max-h-[160px] min-h-[80px]"
             />
           </div>
         </DialogBody>
@@ -184,23 +171,26 @@ function DatasetSaveDialog({
  * Dataset save action button shown on user messages in test chat mode.
  * Saves the individual message text as a dataset item.
  */
-export function DatasetSaveAction() {
-  const ctx = useDatasetSaveContext();
-  if (!ctx?.enabled) return null;
-  return <DatasetSaveActionInner />;
+export interface DatasetSaveActionProps {
+  /** Text of the message this action saves to a dataset. */
+  messageText: string;
 }
 
-function DatasetSaveActionInner() {
+export function DatasetSaveAction({ messageText }: DatasetSaveActionProps) {
   const ctx = useDatasetSaveContext();
-  const message = useMessage();
+  if (!ctx?.enabled) return null;
+  return <DatasetSaveActionInner messageText={messageText} />;
+}
+
+function DatasetSaveActionInner({ messageText }: DatasetSaveActionProps) {
+  const ctx = useDatasetSaveContext();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [input, setInput] = useState('');
 
   const handleClick = useCallback(() => {
-    const text = extractTextFromParts(message.content as readonly { type: string; text?: string }[]);
-    setInput(JSON.stringify(text, null, 2));
+    setInput(JSON.stringify(messageText, null, 2));
     setDialogOpen(true);
-  }, [message.content]);
+  }, [messageText]);
 
   return (
     <>
@@ -208,7 +198,7 @@ function DatasetSaveActionInner() {
         variant="default"
         size="icon-md"
         tooltip="Save to dataset"
-        className="bg-transparent text-neutral3 hover:text-neutral6"
+        className="text-neutral3 hover:text-neutral6 bg-transparent"
         onClick={handleClick}
       >
         <DatabaseIcon className="h-4 w-4" />
@@ -278,7 +268,7 @@ function SaveFullConversationInner() {
         type="button"
         onClick={handleClick}
         disabled={isFetching}
-        className="flex items-center gap-1.5 text-neutral3 hover:text-neutral5 transition-colors mx-auto py-3 text-ui-xs leading-ui-xs cursor-pointer disabled:opacity-50"
+        className="text-neutral3 hover:text-neutral5 text-ui-xs leading-ui-xs mx-auto flex cursor-pointer items-center gap-1.5 py-3 transition-colors disabled:opacity-50"
       >
         {isFetching ? <Spinner className="h-3.5 w-3.5" /> : <DatabaseIcon className="h-3.5 w-3.5" />}
         Save full conversation to dataset

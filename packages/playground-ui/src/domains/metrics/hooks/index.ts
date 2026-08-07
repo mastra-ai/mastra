@@ -9,6 +9,12 @@ export { useLatencyMetrics, type LatencyPoint } from './use-latency-metrics';
 export { useTraceVolumeMetrics, type VolumeRow } from './use-trace-volume-metrics';
 export { useScoresMetrics, type ScorerSummary, type ScoresOverTimePoint } from './use-scores-metrics';
 export { useTokenUsageByAgentMetrics, type TokenUsageByAgentRow } from './use-token-usage-by-agent-metrics';
+export {
+  useTokenUsageTimeSeries,
+  type TokenTimelinePoint,
+  type TokenUsageTimeSeriesData,
+  type TokenUsageTimeSeriesInterval,
+} from './use-token-usage-timeseries';
 export { useActiveThreadsKpiMetrics } from './use-active-threads-kpi-metrics';
 export { useActiveResourcesKpiMetrics } from './use-active-resources-kpi-metrics';
 export { useTopActiveThreadsMetrics, type ActiveThreadRow } from './use-top-active-threads-metrics';

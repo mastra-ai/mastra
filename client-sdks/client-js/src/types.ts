@@ -144,6 +144,19 @@ export interface SubscribeAgentThreadParams {
   threadId: string;
 }
 
+export type ListAgentSuspendedRunsParams = GeneratedRequest<QueryParams<'GET /agents/:agentId/suspended-runs'>>;
+
+/**
+ * Listed suspended runs as returned by `agent.listSuspendedRuns()`.
+ * Date fields (e.g. `suspendedAt`) are ISO strings over the wire, matching
+ * the rest of the client SDK.
+ */
+export type ListAgentSuspendedRunsResponse = GeneratedResponse<'GET /agents/:agentId/suspended-runs'>;
+
+export type AgentSuspendedRun = ListAgentSuspendedRunsResponse['runs'][number];
+
+export type AgentSuspendedRunToolCall = AgentSuspendedRun['toolCalls'][number];
+
 /**
  * @experimental Agent signals are experimental and may change in a future release.
  */
@@ -457,8 +470,9 @@ type WithoutMethods<T> = {
 
 export type NetworkStreamParams<OUTPUT = undefined> = {
   messages: MessageListInput;
+  model?: string;
   tracingOptions?: TracingOptions;
-} & MultiPrimitiveExecutionOptions<OUTPUT>;
+} & Omit<MultiPrimitiveExecutionOptions<OUTPUT>, 'model'>;
 
 export interface GetAgentResponse {
   id: string;
@@ -478,6 +492,7 @@ export interface GetAgentResponse {
   provider: string;
   modelId: string;
   modelVersion: string;
+  supportsMemory?: boolean;
   modelList:
     | Array<{
         id: string;
@@ -520,24 +535,32 @@ export interface GetAgentBrowserSessionResponse {
 
 export type GenerateLegacyParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
   messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[];
+  model?: string;
   output?: T;
   experimental_output?: T;
   requestContext?: RequestContext | Record<string, any>;
   clientTools?: ToolsInput;
 } & WithoutMethods<
   // Use `any` to avoid "Type instantiation is excessively deep" error from complex ZodSchema generics
-  Omit<AgentGenerateOptions<any>, 'output' | 'experimental_output' | 'requestContext' | 'clientTools' | 'abortSignal'>
+  Omit<
+    AgentGenerateOptions<any>,
+    'model' | 'output' | 'experimental_output' | 'requestContext' | 'clientTools' | 'abortSignal'
+  >
 >;
 
 export type StreamLegacyParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
   messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[];
+  model?: string;
   output?: T;
   experimental_output?: T;
   requestContext?: RequestContext | Record<string, any>;
   clientTools?: ToolsInput;
 } & WithoutMethods<
   // Use `any` to avoid "Type instantiation is excessively deep" error from complex ZodSchema generics
-  Omit<AgentStreamOptions<any>, 'output' | 'experimental_output' | 'requestContext' | 'clientTools' | 'abortSignal'>
+  Omit<
+    AgentStreamOptions<any>,
+    'model' | 'output' | 'experimental_output' | 'requestContext' | 'clientTools' | 'abortSignal'
+  >
 >;
 
 export type StructuredOutputOptions<OUTPUT = undefined> = Omit<
@@ -547,11 +570,15 @@ export type StructuredOutputOptions<OUTPUT = undefined> = Omit<
   schema: PublicSchema<OUTPUT>;
 };
 export type StreamParamsBase<OUTPUT = undefined> = {
+  model?: string;
   tracingOptions?: TracingOptions;
   requestContext?: RequestContext;
   clientTools?: ToolsInput;
 } & WithoutMethods<
-  Omit<AgentExecutionOptions<OUTPUT>, 'requestContext' | 'clientTools' | 'options' | 'abortSignal' | 'structuredOutput'>
+  Omit<
+    AgentExecutionOptions<OUTPUT>,
+    'model' | 'requestContext' | 'clientTools' | 'options' | 'abortSignal' | 'structuredOutput'
+  >
 >;
 export type StreamParamsBaseWithoutMessages<OUTPUT = undefined> = StreamParamsBase<OUTPUT>;
 export type StreamParams<OUTPUT = undefined> = StreamParamsBase<OUTPUT> & {
@@ -611,6 +638,24 @@ export type ListWorkflowRunsResponse = WorkflowRuns;
 
 export type GetWorkflowRunByIdResponse = WorkflowState;
 
+export type ListStoredWorkflowsParams = GeneratedRequest<QueryParams<'GET /stored/workflows'>>;
+export type ListStoredWorkflowsResponse = GeneratedResponse<'GET /stored/workflows'>;
+export type UpsertStoredWorkflowParams = GeneratedRequest<Body<'POST /stored/workflows'>>;
+export type UpsertStoredWorkflowResponse = GeneratedResponse<'POST /stored/workflows'>;
+type StoredWorkflowDefinitionField =
+  | 'description'
+  | 'inputSchema'
+  | 'outputSchema'
+  | 'stateSchema'
+  | 'requestContextSchema'
+  | 'graph';
+export type StoredWorkflowDefinition = Omit<
+  GeneratedResponse<'GET /stored/workflows/:storedWorkflowId'>,
+  StoredWorkflowDefinitionField
+> &
+  Pick<UpsertStoredWorkflowParams, StoredWorkflowDefinitionField>;
+export type DeleteStoredWorkflowResponse = GeneratedResponse<'DELETE /stored/workflows/:storedWorkflowId'>;
+
 export interface GetWorkflowResponse {
   name: string;
   description?: string;
@@ -648,6 +693,12 @@ export interface GetWorkflowResponse {
   requestContextSchema?: string;
   /** Whether this workflow is a processor workflow (auto-generated from agent processors) */
   isProcessorWorkflow?: boolean;
+  /**
+   * How this workflow got into the live registry. `'code'` for statically
+   * authored or `addWorkflow()`-added workflows, `'stored'` for anything
+   * hydrated or added via `addStoredWorkflow()`. Absent on older servers.
+   */
+  origin?: 'code' | 'stored';
 }
 
 export type WorkflowRunResult = WorkflowResult<any, any, any, any>;
@@ -1246,6 +1297,18 @@ export type ConditionalVariant<T> = StorageConditionalVariant<T>;
 export type ConditionalField<T> = StorageConditionalField<T>;
 
 /**
+ * Resolved author identity. Returned by the server when an auth provider is
+ * configured and the agent's `authorId` could be looked up. All fields except
+ * `id` are optional — providers may not expose every field.
+ */
+export interface ResolvedAuthor {
+  id: string;
+  name?: string;
+  email?: string;
+  avatarUrl?: string;
+}
+
+/**
  * Stored agent data returned from API
  */
 export interface StoredAgentResponse {
@@ -1254,6 +1317,7 @@ export interface StoredAgentResponse {
   status: string;
   activeVersionId?: string;
   authorId?: string;
+  author?: ResolvedAuthor;
   visibility?: 'private' | 'public';
   metadata?: Record<string, unknown>;
   createdAt: string;
@@ -1384,20 +1448,39 @@ export interface CreateStoredAgentParams {
   /** Browser config. `true` = use admin default, `false` = no browser. */
   browser?: ConditionalField<StoredBrowserRef> | boolean | null;
   requestContextSchema?: Record<string, unknown>;
+  /**
+   * Publish the initial version so the agent resolves at `status: 'published'`.
+   * Defaults to true when omitted. Pass false to stage the agent as an unpublished
+   * draft — useful when overriding a code-defined agent, whose code definition keeps
+   * serving traffic until the override is published.
+   */
+  autoPublish?: boolean;
 }
 
 /**
  * Parameters for updating a stored agent
  */
 export type ExportStoredAgentParams = Partial<
-  Omit<CreateStoredAgentParams, 'id' | 'authorId' | 'visibility' | 'metadata'>
+  Omit<CreateStoredAgentParams, 'id' | 'authorId' | 'visibility' | 'metadata' | 'autoPublish'>
 >;
+
+export type OpenStoredAgentChangeRequestParams = ExportStoredAgentParams & {
+  changeMessage?: string;
+  userName?: string;
+  inspectOnly?: boolean;
+};
 
 export interface ExportStoredAgentResponse {
   agentId: string;
   fileName: string;
   content: string;
   config: Record<string, unknown>;
+}
+
+export interface OpenStoredAgentChangeRequestResponse {
+  id?: string | number;
+  url: string;
+  ref?: string;
 }
 
 export interface UpdateStoredAgentParams {
@@ -1431,6 +1514,8 @@ export interface UpdateStoredAgentParams {
   requestContextSchema?: Record<string, unknown>;
   /** Optional message describing the changes for the auto-created version */
   changeMessage?: string;
+  /** Immediately activate the auto-created version. Defaults to false when omitted. */
+  autoPublish?: boolean;
 }
 
 /**
@@ -2553,17 +2638,40 @@ export class MastraClientError extends Error {
 // ============================================
 
 export interface DatasetItemSource {
-  type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result';
+  type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result' | 'candidate-screener';
   referenceId?: string;
+}
+
+/** A single item-level static tool mock (agent targets only). */
+export interface DatasetItemToolMock {
+  /** Name of the tool this mock applies to. */
+  toolName: string;
+  /** Arguments to match against the tool call (deep equality when matchArgs is 'strict'). */
+  args: Record<string, unknown>;
+  /** Output served to the agent when this mock is matched and consumed. */
+  output: unknown;
+  /** Argument matching mode. 'strict' (default) deep-equals args; 'ignore' matches on toolName only. */
+  matchArgs?: 'strict' | 'ignore';
+}
+
+/** Diagnostic receipt for item-level tool mocks, returned on experiment results. */
+export interface ToolMockReport {
+  served: Array<{ mockIndex: number; toolName: string; args: unknown }>;
+  unconsumed: Array<{ mockIndex: number; toolName: string; args: unknown }>;
+  liveCalls: Array<{ toolName: string; args: unknown }>;
+  failure?: { code: 'TOOL_MOCK_MISMATCH' | 'TOOL_MOCK_EXHAUSTED'; toolName: string; args: unknown };
 }
 
 export interface DatasetItem {
   id: string;
   datasetId: string;
   datasetVersion: number;
+  externalId?: string | null;
   input: unknown;
   groundTruth?: unknown;
   expectedTrajectory?: unknown;
+  toolMocks?: DatasetItemToolMock[];
+  scorerIds?: string[];
   requestContext?: Record<string, unknown>;
   metadata?: unknown;
   source?: DatasetItemSource;
@@ -2588,6 +2696,31 @@ export interface DatasetRecord {
   updatedAt: string | Date;
 }
 
+export interface ExperimentProvenance {
+  source?: string;
+  sourceId?: string;
+  sourceVersion?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface ExperimentRunnerAttestation {
+  runnerId: string;
+  invocationId: string;
+  runnerVersion?: string;
+}
+
+export interface ExperimentGrouping {
+  experimentSetId?: string;
+  comparisonId?: string;
+  variantId?: string;
+  trialIndex?: number;
+}
+
+export interface ListExperimentsParams extends ExperimentGrouping {
+  page?: number;
+  perPage?: number;
+}
+
 export interface DatasetExperiment {
   id: string;
   datasetId: string | null;
@@ -2595,6 +2728,16 @@ export interface DatasetExperiment {
   agentVersion: string | null;
   targetType: 'agent' | 'workflow' | 'scorer' | 'processor';
   targetId: string;
+  /** Human-readable name used as the primary label wherever the experiment is displayed. */
+  name?: string;
+  /** Longer description shown as secondary detail (e.g. in a tooltip). */
+  description?: string;
+  provenance: ExperimentProvenance | null;
+  runnerAttestation: ExperimentRunnerAttestation | null;
+  experimentSetId: string | null;
+  comparisonId: string | null;
+  variantId: string | null;
+  trialIndex: number | null;
   status: 'pending' | 'running' | 'completed' | 'failed';
   totalItems: number;
   succeededCount: number;
@@ -2620,6 +2763,8 @@ export interface DatasetExperimentResult {
   traceId: string | null;
   status: 'needs-review' | 'reviewed' | 'complete' | null;
   tags: string[] | null;
+  comment?: string | null;
+  toolMockReport?: ToolMockReport | null;
   scores: Array<{
     scorerId: string;
     scorerName: string;
@@ -2636,6 +2781,7 @@ export interface UpdateExperimentResultParams {
   resultId: string;
   status?: 'needs-review' | 'reviewed' | 'complete' | null;
   tags?: string[];
+  comment?: string | null;
 }
 
 export interface CreateDatasetParams {
@@ -2662,13 +2808,20 @@ export interface UpdateDatasetParams {
   targetType?: string;
   targetIds?: string[];
   scorerIds?: string[] | null;
+  /** Restrict the lookup to a specific tenant organization. */
+  organizationId?: string;
+  /** Restrict the lookup to a specific tenant project. */
+  projectId?: string;
 }
 
 export interface AddDatasetItemParams {
   datasetId: string;
+  externalId?: string;
   input: unknown;
   groundTruth?: unknown;
   expectedTrajectory?: unknown;
+  toolMocks?: DatasetItemToolMock[];
+  scorerIds?: string[];
   requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
   source?: DatasetItemSource;
@@ -2680,6 +2833,8 @@ export interface UpdateDatasetItemParams {
   input?: unknown;
   groundTruth?: unknown;
   expectedTrajectory?: unknown;
+  toolMocks?: DatasetItemToolMock[];
+  scorerIds?: string[] | null;
   requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
   source?: DatasetItemSource;
@@ -2688,9 +2843,12 @@ export interface UpdateDatasetItemParams {
 export interface BatchInsertDatasetItemsParams {
   datasetId: string;
   items: Array<{
+    externalId?: string;
     input: unknown;
     groundTruth?: unknown;
     expectedTrajectory?: unknown;
+    toolMocks?: DatasetItemToolMock[];
+    scorerIds?: string[];
     requestContext?: Record<string, unknown>;
     metadata?: Record<string, unknown>;
     source?: DatasetItemSource;
@@ -2723,10 +2881,15 @@ export interface TriggerDatasetExperimentParams {
   datasetId: string;
   targetType: 'agent' | 'workflow' | 'scorer';
   targetId: string;
+  name?: string;
+  description?: string;
+  metadata?: Record<string, unknown>;
   scorerIds?: string[];
   version?: number;
   agentVersion?: string;
   maxConcurrency?: number;
+  provenance?: ExperimentProvenance;
+  grouping?: ExperimentGrouping;
   requestContext?: Record<string, unknown>;
 }
 
@@ -2750,6 +2913,8 @@ export interface DatasetItemVersionResponse {
   input: unknown;
   groundTruth?: unknown;
   expectedTrajectory?: unknown;
+  toolMocks?: DatasetItemToolMock[];
+  scorerIds?: string[];
   metadata?: Record<string, unknown>;
   validTo: number | null;
   isDeleted: boolean;
@@ -2936,14 +3101,6 @@ export type StreamBackgroundTasksParams = GeneratedRequest<QueryParams<'GET /bac
 
 export type ScheduleStatus = 'active' | 'paused';
 
-export interface ScheduleTarget {
-  type: 'workflow';
-  workflowId: string;
-  inputData?: unknown;
-  initialState?: unknown;
-  requestContext?: Record<string, unknown>;
-}
-
 export interface ScheduleRunSummary {
   status: WorkflowRunStatus;
   startedAt?: number;
@@ -2952,9 +3109,71 @@ export interface ScheduleRunSummary {
   error?: string;
 }
 
-export interface ScheduleResponse {
+/** Attributes rendered onto the signal's XML tag. */
+export type ScheduleSignalAttributes = Record<string, string | number | boolean | null | undefined>;
+
+/** Mirrors the core `AgentSignalType` union. */
+export type ScheduleSignalType = 'user' | 'state' | 'reactive' | 'notification' | 'user-message' | 'system-reminder';
+
+/** Behavior applied when the thread is already streaming. */
+export interface ScheduleIfActive {
+  behavior?: 'deliver' | 'persist' | 'discard';
+  attributes?: ScheduleSignalAttributes;
+}
+
+/**
+ * Behavior applied when the thread is idle, plus a serializable subset of
+ * stream options forwarded to the woken run.
+ */
+export interface ScheduleIfIdle {
+  behavior?: 'wake' | 'persist' | 'discard';
+  attributes?: ScheduleSignalAttributes;
+  streamOptions?: {
+    requestContext?: Record<string, unknown>;
+  };
+}
+
+/**
+ * Flat agent-schedule view returned by the unified `/schedules` surface.
+ * Discriminate from workflow schedules by the presence of `agentId`.
+ */
+export interface AgentSchedule {
   id: string;
-  target: ScheduleTarget;
+  agentId: string;
+  /** Mirror of the workflow-schedule discriminator — always absent on agent schedules. */
+  workflowId?: undefined;
+  /** Workflow-run summary — never hydrated for agent schedules. */
+  lastRun?: undefined;
+  name?: string;
+  threadId?: string;
+  resourceId?: string;
+  prompt: string;
+  cron: string;
+  timezone?: string;
+  status: ScheduleStatus;
+  nextFireAt: number;
+  lastFireAt?: number;
+  lastRunId?: string;
+  signalType?: ScheduleSignalType;
+  tagName?: string;
+  attributes?: ScheduleSignalAttributes;
+  ifActive?: ScheduleIfActive;
+  ifIdle?: ScheduleIfIdle;
+  providerOptions?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+  createdAt: number;
+  updatedAt: number;
+}
+
+/**
+ * Flat workflow-schedule view returned by the unified `/schedules` surface.
+ * Discriminate from agent schedules by the presence of `workflowId`.
+ */
+export interface WorkflowSchedule {
+  id: string;
+  workflowId: string;
+  /** Mirror of the agent-schedule discriminator — always absent on workflow schedules. */
+  agentId?: undefined;
   cron: string;
   timezone?: string;
   status: ScheduleStatus;
@@ -2962,26 +3181,28 @@ export interface ScheduleResponse {
   lastFireAt?: number;
   lastRunId?: string;
   lastRun?: ScheduleRunSummary;
+  inputData?: unknown;
+  initialState?: unknown;
+  requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
-  ownerType?: string;
-  ownerId?: string;
   createdAt: number;
   updatedAt: number;
 }
 
+/** Union of the flat views returned by the unified `/schedules` surface. */
+export type ScheduleResponse = AgentSchedule | WorkflowSchedule;
+
 export type ScheduleTriggerOutcome =
   | 'published'
-  | 'failed'
+  | 'succeeded'
+  | 'delivered'
+  | 'persisted'
+  | 'discarded'
   | 'skipped'
-  | 'acked'
-  | 'alerted'
-  | 'deferred'
-  | 'appended-from-queue'
-  | 'dropped-stale'
-  | 'dropped-superseded'
-  | 'dropped-busy';
+  | 'aborted'
+  | 'failed';
 
-export type ScheduleTriggerKind = 'schedule-fire' | 'queue-drain';
+export type ScheduleTriggerKind = 'schedule-fire' | 'queue-drain' | 'manual';
 
 export interface ScheduleTriggerResponse {
   id?: string;
@@ -2997,10 +3218,19 @@ export interface ScheduleTriggerResponse {
   run?: ScheduleRunSummary;
 }
 
-export type ListSchedulesParams = {
+export interface ListSchedulesParams {
+  /** Scope the list to a single agent's schedules. */
+  agentId?: string;
+  /** Scope the list to a single workflow's schedules. */
   workflowId?: string;
   status?: ScheduleStatus;
-} & ({ ownerType?: undefined; ownerId?: undefined } | { ownerType: string; ownerId?: string });
+  /** Agent-schedule only: match the target threadId. */
+  threadId?: string;
+  /** Agent-schedule only: match the target resourceId. */
+  resourceId?: string;
+  /** Agent-schedule only: match the free-form target name. */
+  name?: string;
+}
 
 export interface ListSchedulesResponse {
   schedules: ScheduleResponse[];
@@ -3014,6 +3244,93 @@ export interface ListScheduleTriggersParams {
 
 export interface ListScheduleTriggersResponse {
   triggers: ScheduleTriggerResponse[];
+}
+
+/**
+ * Agent variant of the `client.createSchedule(...)` body — targets an agent
+ * by `agentId`. Mirrors `CreateAgentScheduleInput` on the core Schedules
+ * service.
+ */
+export interface CreateAgentScheduleInput {
+  /** Optional stable id; normalized to `agent_<slug>`. A random id is generated when omitted. */
+  id?: string;
+  agentId: string;
+  cron: string;
+  prompt: string;
+  name?: string;
+  timezone?: string;
+  threadId?: string;
+  resourceId?: string;
+  signalType?: ScheduleSignalType;
+  tagName?: string;
+  attributes?: ScheduleSignalAttributes;
+  ifActive?: ScheduleIfActive;
+  ifIdle?: ScheduleIfIdle;
+  providerOptions?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Workflow variant of the `client.createSchedule(...)` body — targets a
+ * workflow by `workflowId`. Mirrors `CreateWorkflowScheduleInput` on the
+ * core Schedules service.
+ */
+export interface CreateWorkflowScheduleInput {
+  /** Optional stable id; normalized to `schedule_<slug>`. A random id is generated when omitted. */
+  id?: string;
+  workflowId: string;
+  cron: string;
+  timezone?: string;
+  inputData?: unknown;
+  initialState?: unknown;
+  requestContext?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Body for `client.createSchedule(...)`. Discriminated by which target id is
+ * present: `agentId` creates an agent schedule, `workflowId` a workflow
+ * schedule.
+ */
+export type CreateScheduleInput = CreateAgentScheduleInput | CreateWorkflowScheduleInput;
+
+/**
+ * Patch body for `client.updateSchedule(...)`. Fields apply to the matching
+ * target type; agent-only fields on a workflow schedule are rejected by the
+ * server. `threadId` / `resourceId` are part of an agent schedule's identity
+ * and cannot be changed — to retarget, delete and recreate.
+ */
+export interface UpdateScheduleInput {
+  cron?: string;
+  timezone?: string;
+  status?: ScheduleStatus;
+  metadata?: Record<string, unknown>;
+  // Agent-schedule fields
+  prompt?: string;
+  name?: string;
+  signalType?: ScheduleSignalType;
+  tagName?: string;
+  attributes?: ScheduleSignalAttributes;
+  ifActive?: ScheduleIfActive;
+  ifIdle?: ScheduleIfIdle;
+  providerOptions?: Record<string, unknown>;
+  // Workflow-schedule fields
+  inputData?: unknown;
+  initialState?: unknown;
+  requestContext?: Record<string, unknown>;
+}
+
+/**
+ * Response for POST /schedules/:scheduleId/run.
+ *
+ * The fire runs asynchronously through the same worker pipeline as scheduled
+ * fires. `claimId` is the trigger row's `runId` (used to look up the
+ * resulting trigger row via `listScheduleTriggers`).
+ */
+export interface RunScheduleResponse {
+  scheduleId: string;
+  claimId: string;
+  scheduledFireAt: number;
 }
 
 export interface ExperimentReviewCounts {
@@ -3091,6 +3408,29 @@ export interface BuilderSettingsResponse {
    */
   modelPolicyWarnings?: string[];
 }
+
+/**
+ * Response from GET /editor/builder/models/available.
+ *
+ * Same provider shape as {@link ListAgentsModelProvidersResponse}, but each
+ * provider's `models` list is already filtered by the active builder model
+ * policy (the server applies the EE allowlist). Providers with no allowed
+ * models are omitted, so the picker can render this verbatim.
+ */
+export type BuilderAvailableModelsResponse = GeneratedResponse<'GET /editor/builder/models/available'>;
+
+/**
+ * A valid permission-pattern string (e.g. `agents:read`, `*`).
+ *
+ * Kept as a string alias so the Playground can name the type while the
+ * authoritative set is fetched from the server at runtime.
+ */
+export type PermissionPattern = string;
+
+/**
+ * Response from GET /auth/permission-patterns.
+ */
+export type PermissionPatternsResponse = GeneratedResponse<'GET /auth/permission-patterns'>;
 
 /**
  * Resolved picker visibility section returned in {@link BuilderSettingsResponse}.

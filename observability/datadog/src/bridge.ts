@@ -23,6 +23,7 @@ import type {
   ModelStepAttributes,
   ObservabilityBridge,
   CreateSpanOptions,
+  ScoreEvent,
   SpanType,
   SpanIds,
 } from '@mastra/core/observability';
@@ -195,7 +196,14 @@ export class DatadogBridge extends BaseExporter implements ObservabilityBridge {
       return;
     }
 
-    this.config = { ...config, mlApp, site, apiKey, agentless, env };
+    this.config = {
+      ...config,
+      mlApp,
+      site,
+      apiKey,
+      agentless,
+      env,
+    };
 
     ensureTracer({
       mlApp,
@@ -289,6 +297,40 @@ export class DatadogBridge extends BaseExporter implements ObservabilityBridge {
    */
   executeInContextSync<T>(spanId: string, fn: () => T): T {
     return this.executeWithSpanContext(spanId, fn);
+  }
+
+  async onScoreEvent(event: ScoreEvent): Promise<void> {
+    if (this.isDisabled || !(tracer as any).llmobs?.submitEvaluation) return;
+
+    const { score } = event;
+    if (!score.traceId || !score.spanId) {
+      this.logger.warn('Datadog bridge: dropping score with no traceId/spanId', {
+        scorerId: score.scorerId,
+      });
+      return;
+    }
+
+    try {
+      tracer.llmobs.submitEvaluation(
+        { traceId: score.traceId, spanId: toDatadogSpanId(score.spanId) },
+        {
+          label: score.scorerName ?? score.scorerId,
+          value: score.score,
+          metricType: 'score',
+          mlApp: this.config.mlApp,
+          timestampMs: score.timestamp instanceof Date ? score.timestamp.getTime() : Date.now(),
+          ...(score.reason ? { reasoning: score.reason } : {}),
+          ...(score.metadata ? { metadata: score.metadata } : {}),
+        },
+      );
+    } catch (error) {
+      this.logger.error('Datadog bridge: Failed to submit evaluation', {
+        error,
+        traceId: score.traceId,
+        spanId: score.spanId,
+        scorerId: score.scorerId,
+      });
+    }
   }
 
   private executeWithSpanContext<T>(spanId: string, fn: () => T): T {
@@ -455,6 +497,19 @@ export class DatadogBridge extends BaseExporter implements ObservabilityBridge {
     }
   }
 
+  /**
+   * Release the dd span held for a Mastra span that ended without being exported.
+   *
+   * The dd span is deliberately not finished: finishing it would send a span the
+   * user's filtering just removed. The per-trace context is released too, since
+   * createSpan() counted this span as open.
+   */
+  releaseSpan(spanId: string, traceId: string): void {
+    if (this.ddSpanMap.delete(spanId)) {
+      this.releaseTraceContext(traceId);
+    }
+  }
+
   private captureTraceContext(traceId: string, options: CreateSpanOptions<SpanType>): void {
     const existing = this.traceContext.get(traceId);
     const next: TraceContext = {
@@ -508,7 +563,10 @@ export class DatadogBridge extends BaseExporter implements ObservabilityBridge {
       }
     }
 
-    const knownFields = ['usage', 'model', 'provider', 'parameters'];
+    // `model`/`provider` are surfaced as native LLM Obs fields and `usage` as metrics;
+    // everything else (including `parameters` — model settings like reasoning_effort)
+    // flows into metadata so it reaches Datadog.
+    const knownFields = ['usage', 'model', 'provider'];
     const otherAttributes = omitKeys((span.attributes ?? {}) as Record<string, any>, knownFields);
 
     const contextKeySet = new Set(this.config.requestContextKeys ?? []);
@@ -660,6 +718,13 @@ function fillRandomBytes(bytes: Uint8Array): void {
   for (let i = 0; i < bytes.length; i++) {
     bytes[i] = Math.floor(Math.random() * 256);
   }
+}
+
+function toDatadogSpanId(spanId: string): string {
+  if (/^[0-9a-f]{16}$/i.test(spanId)) {
+    return BigInt(`0x${spanId}`).toString(10);
+  }
+  return spanId;
 }
 
 function generateSpanId(): string {

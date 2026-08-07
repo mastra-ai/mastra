@@ -13,6 +13,14 @@
     "lint": {
       "dependsOn": []
     },
+    "lint:fix": {
+      "dependsOn": [],
+      "cache": false
+    },
+    "//#lint:format": {
+      "dependsOn": [],
+      "cache": false
+    },
     "typecheck": {
       "dependsOn": ["^build"]
     },
@@ -26,6 +34,10 @@
     },
     "validate:package": {
       "dependsOn": []
+    },
+    "//#format:oxfmt": {
+      "dependsOn": [],
+      "cache": false
     }
   }
 }

@@ -31,6 +31,10 @@ export interface BrowserTabState {
 export interface BrowserState {
   tabs: BrowserTabState[];
   activeTabIndex: number;
+  /** Reason the browser was closed, when this is the last known state for a closed browser. */
+  closeReason?: 'agent' | 'user' | 'process_restart' | 'error';
+  /** Who initiated the most recent active URL change, when known. */
+  activeUrlChangeSource?: 'agent' | 'user';
 }
 
 /**
@@ -258,6 +262,7 @@ export abstract class ThreadManager<TManager = unknown> {
     }
 
     const filteredState: BrowserState = {
+      ...state,
       tabs: filteredTabs,
       activeTabIndex: Math.max(0, Math.min(state.activeTabIndex, filteredTabs.length - 1)),
     };

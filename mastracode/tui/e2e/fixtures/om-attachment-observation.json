@@ -1,0 +1,47 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "userMessage": "Please observe this pasted attachment in OM",
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_om_attachment_step",
+            "name": "execute_command",
+            "arguments": {
+              "command": "printf 'OM_ATTACHMENT_STEP_DONE\\n'",
+              "timeout": 5,
+              "cwd": null,
+              "tail": 20,
+              "background": false
+            }
+          }
+        ]
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "userMessage": "## New Message History to Observe"
+      },
+      "response": {
+        "content": "<observations>\nDate: Jun 13, 2026\n* 🟡 (06:20) User submitted an image attachment for OM observation.\n</observations>\n<current-task>\nOM attachment observation e2e complete.\n</current-task>\n<suggested-response>\nContinue the recovery loop.\n</suggested-response>\n<thread-title>\nAttachment observation\n</thread-title>"
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "hasToolResult": true
+      },
+      "response": {
+        "content": "MC OM attachment chat response"
+      }
+    }
+  ]
+}

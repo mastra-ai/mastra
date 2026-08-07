@@ -15,7 +15,7 @@ type Story = StoryObj<typeof Select>;
 export const Default: Story = {
   render: () => (
     <Select>
-      <SelectTrigger className="w-[180px]">
+      <SelectTrigger className="w-45">
         <SelectValue placeholder="Select option" />
       </SelectTrigger>
       <SelectContent>
@@ -30,7 +30,7 @@ export const Default: Story = {
 export const Experimental: Story = {
   render: () => (
     <Select>
-      <SelectTrigger className="w-[180px]" size="default">
+      <SelectTrigger className="w-45" size="md">
         <SelectValue placeholder="Select option" />
       </SelectTrigger>
       <SelectContent>
@@ -42,10 +42,54 @@ export const Experimental: Story = {
   ),
 };
 
+export const Sizes: Story = {
+  render: () => (
+    <div className="flex flex-col items-start gap-3">
+      {(['xs', 'sm', 'md', 'lg'] as const).map(size => (
+        <Select key={size}>
+          <SelectTrigger className="w-45" size={size}>
+            <SelectValue placeholder={size} />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="option1">Option 1</SelectItem>
+            <SelectItem value="option2">Option 2</SelectItem>
+            <SelectItem value="option3">Option 3</SelectItem>
+          </SelectContent>
+        </Select>
+      ))}
+    </div>
+  ),
+};
+
+/**
+ * A select is a field, so it offers the same button looks as everywhere:
+ * `default` (the filled Button surface, the default here too), `outline`
+ * (bordered, transparent) and `ghost` (borderless, for dense toolbars). It does
+ * not expose the high-emphasis `primary` look.
+ */
+export const Variants: Story = {
+  render: () => (
+    <div className="flex flex-col items-start gap-3">
+      {(['default', 'outline', 'ghost'] as const).map(variant => (
+        <Select key={variant}>
+          <SelectTrigger className="w-45" variant={variant}>
+            <SelectValue placeholder={variant} />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="option1">Option 1</SelectItem>
+            <SelectItem value="option2">Option 2</SelectItem>
+            <SelectItem value="option3">Option 3</SelectItem>
+          </SelectContent>
+        </Select>
+      ))}
+    </div>
+  ),
+};
+
 export const WithValue: Story = {
   render: () => (
     <Select defaultValue="option2">
-      <SelectTrigger className="w-[180px]">
+      <SelectTrigger className="w-45">
         <SelectValue placeholder="Select option" />
       </SelectTrigger>
       <SelectContent>
@@ -60,7 +104,7 @@ export const WithValue: Story = {
 export const Disabled: Story = {
   render: () => (
     <Select disabled>
-      <SelectTrigger className="w-[180px]">
+      <SelectTrigger className="w-45">
         <SelectValue placeholder="Select option" />
       </SelectTrigger>
       <SelectContent>
@@ -74,7 +118,7 @@ export const Disabled: Story = {
 export const WithGroups: Story = {
   render: () => (
     <Select>
-      <SelectTrigger className="w-[200px]">
+      <SelectTrigger className="w-50">
         <SelectValue placeholder="Select a fruit" />
       </SelectTrigger>
       <SelectContent>
@@ -91,7 +135,7 @@ export const WithGroups: Story = {
 export const LongOptions: Story = {
   render: () => (
     <Select>
-      <SelectTrigger className="w-[280px]">
+      <SelectTrigger className="w-70">
         <SelectValue placeholder="Select a timezone" />
       </SelectTrigger>
       <SelectContent>
@@ -108,7 +152,7 @@ export const LongOptions: Story = {
 export const ManyOptions: Story = {
   render: () => (
     <Select>
-      <SelectTrigger className="w-[200px]">
+      <SelectTrigger className="w-50">
         <SelectValue placeholder="Select a country" />
       </SelectTrigger>
       <SelectContent>

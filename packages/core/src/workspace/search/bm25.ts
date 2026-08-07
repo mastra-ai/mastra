@@ -76,6 +76,26 @@ export interface TokenizeOptions {
   stopwords?: Set<string>;
   /** Custom split pattern (default: /\s+/) */
   splitPattern?: RegExp;
+  /**
+   * Custom tokenizer function that bypasses the built-in pipeline entirely.
+   * When provided, all other options (lowercase, removePunctuation, etc.) are ignored.
+   * Useful for CJK languages that need morphological analysis or n-gram tokenization.
+   *
+   * @example
+   * ```ts
+   * // Character bigram tokenizer for CJK
+   * tokenizer: (text) => {
+   *   const tokens: string[] = [];
+   *   const normalized = text.toLowerCase();
+   *   for (let i = 0; i < normalized.length - 1; i++) {
+   *     const bigram = normalized.slice(i, i + 2).trim();
+   *     if (bigram.length === 2) tokens.push(bigram);
+   *   }
+   *   return tokens;
+   * }
+   * ```
+   */
+  tokenizer?: (text: string) => string[];
 }
 
 /**
@@ -113,7 +133,7 @@ export const DEFAULT_STOPWORDS = new Set([
 /**
  * Default tokenization options
  */
-const DEFAULT_TOKENIZE_OPTIONS: Required<TokenizeOptions> = {
+const DEFAULT_TOKENIZE_OPTIONS: Omit<Required<TokenizeOptions>, 'tokenizer'> = {
   lowercase: true,
   removePunctuation: true,
   minLength: 2,
@@ -125,6 +145,11 @@ const DEFAULT_TOKENIZE_OPTIONS: Required<TokenizeOptions> = {
  * Tokenize text into an array of terms
  */
 export function tokenize(text: string, options: TokenizeOptions = {}): string[] {
+  // If a custom tokenizer is provided, bypass the built-in pipeline entirely
+  if (options.tokenizer) {
+    return options.tokenizer(text);
+  }
+
   const opts = { ...DEFAULT_TOKENIZE_OPTIONS, ...options };
 
   let processed = text;
@@ -134,9 +159,13 @@ export function tokenize(text: string, options: TokenizeOptions = {}): string[] 
     processed = processed.toLowerCase();
   }
 
-  // Remove punctuation if enabled
+  // Remove punctuation if enabled — use Unicode-aware pattern to preserve
+  // non-Latin characters (CJK, Arabic, Thai, etc.).  \p{L} matches any
+  // Unicode letter, \p{N} any Unicode digit, so the negated class strips
+  // only characters that are neither letters, digits, underscores, nor
+  // whitespace.
   if (opts.removePunctuation) {
-    processed = processed.replace(/[^\w\s]/g, ' ');
+    processed = processed.replace(/[^\p{L}\p{N}_\s]/gu, ' ');
   }
 
   // Split into tokens

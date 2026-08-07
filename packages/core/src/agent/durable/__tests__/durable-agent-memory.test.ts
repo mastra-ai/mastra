@@ -236,6 +236,39 @@ describe('DurableAgent memory configuration', () => {
       expect(JSON.stringify(messages.messages[1]?.content)).toContain('assistant response');
       result.cleanup();
     });
+
+    it('does not persist messages when memory is readOnly', async () => {
+      const mockMemory = new MockMemory();
+      await mockMemory.createThread({ threadId: 'thread-readonly', resourceId: 'resource-readonly' });
+
+      const baseAgent = new Agent({
+        id: 'readonly-persist-agent',
+        name: 'ReadOnly Persist Agent',
+        instructions: 'Test readOnly persistence',
+        model: createTextModel('assistant response') as LanguageModelV2,
+        memory: mockMemory,
+      });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+      const result = await durableAgent.stream('user input', {
+        memory: {
+          thread: 'thread-readonly',
+          resource: 'resource-readonly',
+          options: { readOnly: true },
+        },
+      });
+      for await (const _chunk of result.fullStream as AsyncIterable<any>) {
+      }
+
+      const messages = await mockMemory.recall({
+        threadId: 'thread-readonly',
+        resourceId: 'resource-readonly',
+      });
+
+      // readOnly means "read memory but do not save new messages".
+      expect(messages.messages).toEqual([]);
+      result.cleanup();
+    });
   });
 
   describe('memory.options configuration', () => {
@@ -636,5 +669,68 @@ describe('DurableAgent memory edge cases', () => {
     });
 
     expect(result.workflowInput.state.memoryConfig?.lastMessages).toBe(0);
+  });
+
+  // Regression: the durable finish step never ported the non-durable `#executeOnFinish`
+  // title-generation branch, so `memory.options.generateTitle` silently never fired for
+  // durable/evented agents (and Inngest). See create-durable-agentic-workflow.ts.
+  describe('generateTitle', () => {
+    it('generates a thread title from the first message after a completed durable stream', async () => {
+      const mockMemory = new MockMemory();
+      // Mirror the non-durable title-generation test: a dedicated title model so we can
+      // assert the exact generated title, wired via getMergedThreadConfig.
+      const titleModel = createTextModel('Generated Thread Title');
+      mockMemory.getMergedThreadConfig = () => ({ generateTitle: { model: titleModel as LanguageModelV2 } });
+
+      const baseAgent = new Agent({
+        id: 'title-durable-agent',
+        name: 'Title Durable Agent',
+        instructions: 'Test durable title generation',
+        model: createTextModel('assistant response') as LanguageModelV2,
+        memory: mockMemory,
+      });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+      const result = await durableAgent.stream('What is the weather like today?', {
+        memory: { thread: 'thread-title', resource: 'resource-title' },
+      });
+      for await (const _chunk of result.fullStream as AsyncIterable<any>) {
+      }
+
+      const thread = await mockMemory.getThreadById({ threadId: 'thread-title' });
+      expect(thread?.title).toBe('Generated Thread Title');
+      result.cleanup();
+    });
+
+    it('does not overwrite an existing thread title', async () => {
+      const mockMemory = new MockMemory();
+      await mockMemory.createThread({
+        threadId: 'thread-titled',
+        resourceId: 'resource-titled',
+        title: 'Existing Title',
+      });
+
+      const titleModel = createTextModel('Should Not Be Used');
+      mockMemory.getMergedThreadConfig = () => ({ generateTitle: { model: titleModel as LanguageModelV2 } });
+
+      const baseAgent = new Agent({
+        id: 'title-existing-agent',
+        name: 'Title Existing Agent',
+        instructions: 'Test durable title generation no-overwrite',
+        model: createTextModel('assistant response') as LanguageModelV2,
+        memory: mockMemory,
+      });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+      const result = await durableAgent.stream('user input', {
+        memory: { thread: 'thread-titled', resource: 'resource-titled' },
+      });
+      for await (const _chunk of result.fullStream as AsyncIterable<any>) {
+      }
+
+      const thread = await mockMemory.getThreadById({ threadId: 'thread-titled' });
+      expect(thread?.title).toBe('Existing Title');
+      result.cleanup();
+    });
   });
 });

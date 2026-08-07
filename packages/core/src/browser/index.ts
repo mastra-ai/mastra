@@ -32,6 +32,13 @@ export { ScreencastStream as ScreencastStreamImpl, SCREENCAST_DEFAULTS } from '.
 export type { CdpSessionLike, CdpSessionProvider } from './screencast';
 
 // ============================================================================
+// Recording
+// ============================================================================
+
+export { createBrowserRecordingTools } from './recording';
+export type { BrowserRecordingOptions } from './recording';
+
+// ============================================================================
 // Error handling
 // ============================================================================
 

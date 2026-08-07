@@ -1,0 +1,834 @@
+---
+title: "Reference: Session | AgentController"
+description: "API reference for the AgentController Session, which owns the per-conversation state for a single conversation: identity, threads, mode, model, run state, grants, and the display snapshot."
+packages:
+  - "@mastra/core"
+toc_max_heading_level: 2
+---
+
+# Session
+
+:::experimental
+
+The `AgentController` feature is in beta stage and subject to breaking changes in minor versions until it graduates from its beta status.
+
+:::
+
+A `Session` is the isolated runtime for one resource and optional scope. It owns its event bus, thread binding, state, mode and model selections, run control, approvals, suspensions, follow-ups, and display state. The [`AgentController`](/reference/agent-controller/agent-controller-class) supplies shared agents, configuration, storage, workspaces, and services.
+
+Create sessions through `controller.createSession()`. Direct construction and controller wiring methods aren't application APIs.
+
+For a conceptual introduction, see the [AgentController overview](/docs/harness/agent-controller).
+
+## Usage example
+
+The following example uses the supported controller-to-session flow.
+
+```typescript
+await controller.init()
+
+const session = await controller.createSession({ resourceId: 'project-42' })
+const unsubscribe = session.subscribe(event => {
+  if (event.type === 'display_state_changed') {
+    render(event.displayState)
+  }
+})
+
+await session.sendMessage({ content: 'Review the current project.' })
+unsubscribe()
+```
+
+## Properties
+
+The session is organized into sub-objects, each owning one domain of per-conversation state.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'identity',
+    type: 'SessionIdentity',
+    description: 'Stable session, owner, and resource identity for the conversation. See identity methods below.',
+  },
+  {
+    name: 'thread',
+    type: 'SessionThread',
+    description: 'Active thread binding and thread/message reads. See thread methods below.',
+  },
+  {
+    name: 'mode',
+    type: 'SessionMode',
+    description: 'Active mode selection. See mode methods below.',
+  },
+  {
+    name: 'model',
+    type: 'SessionModel',
+    description: 'Active model selection, including per-mode persistence. See model methods below.',
+  },
+  {
+    name: 'om',
+    type: 'SessionOM',
+    description: 'Observer and reflector model settings for observational memory.',
+  },
+  {
+    name: 'permissions',
+    type: 'SessionPermissions',
+    description: 'Tool and category permission policies represented in session state.',
+  },
+  {
+    name: 'subagents',
+    type: 'SessionSubagents',
+    description: 'Global and per-agent-type subagent model selection.',
+  },
+  {
+    name: 'run',
+    type: 'SessionRun',
+    description: 'Run and trace identity plus abort state for the in-flight run. See run methods below.',
+  },
+  {
+    name: 'stream',
+    type: 'SessionStream',
+    description: 'The live subscription to the agent thread stream. See stream methods below.',
+  },
+  {
+    name: 'suspensions',
+    type: 'SessionSuspensions',
+    description: 'Parked interactive tool calls awaiting a resume. See suspensions methods below.',
+  },
+  {
+    name: 'followUps',
+    type: 'SessionFollowUps',
+    description: 'Queue of messages submitted while a run is in progress. See follow-up methods below.',
+  },
+  {
+    name: 'approval',
+    type: 'SessionApproval',
+    description: 'The pending tool-approval gate. See approval methods below.',
+  },
+  {
+    name: 'displayState',
+    type: 'SessionDisplayState',
+    description:
+      'The canonical AgentControllerDisplayState snapshot a UI renders from. See display-state methods below.',
+  },
+  {
+    name: 'state',
+    type: 'AgentControllerRequestState<TState>',
+    description: 'The schema-validated, session-owned AgentController state. See state methods below.',
+  },
+  {
+    name: 'browser',
+    type: 'MastraBrowser | undefined',
+    description:
+      'The browser automation instance for this session. Set at creation via createSession, or from the AgentController config default. Undefined when no browser is configured.',
+  },
+]}
+/>
+
+## Methods
+
+### Identity and events
+
+#### `getTags()`
+
+Return a copy of the tags supplied when the session was created.
+
+```typescript
+const tags = session.getTags()
+```
+
+Returns: `Record<string, string>`
+
+#### `subscribe(listener)`
+
+Subscribe to this session's isolated event bus. The method returns an unsubscribe function.
+
+```typescript
+const unsubscribe = session.subscribe(event => {
+  console.log(event.type)
+})
+
+unsubscribe()
+```
+
+Returns: `() => void`
+
+### Messages and run control
+
+#### `sendMessage({ content, files?, requestContext? })`
+
+Send a user message. The session creates a thread first when no thread is active.
+
+```typescript
+await session.sendMessage({
+  content: 'Summarize this file.',
+  files: [{ data: fileContents, mediaType: 'text/plain', filename: 'notes.txt' }],
+})
+```
+
+#### `steer({ content, requestContext? })`
+
+Queue steering content into an active run.
+
+```typescript
+await session.steer({ content: 'Focus on the failing tests.' })
+```
+
+#### `followUp({ content, requestContext? })`
+
+Queue a follow-up while a run is active, or send it immediately while idle.
+
+```typescript
+await session.followUp({ content: 'Then propose a fix.' })
+```
+
+#### `getCurrentRunId()`
+
+Return the active stream run identifier, the tracked run identifier, or `null` while idle.
+
+```typescript
+const runId = session.getCurrentRunId()
+```
+
+Returns: `string | null`
+
+#### `abort()`
+
+Abort the active run and clear pending suspension display state.
+
+```typescript
+session.abort()
+```
+
+### Workspace
+
+#### `getWorkspace()`
+
+Return the workspace resolved for this session. This preserves session-level overrides and workspaces selected from the session scope.
+
+```typescript
+const workspace = session.getWorkspace()
+const skill = await workspace.skills?.get('code-review')
+```
+
+Returns: `Workspace`
+
+### Session grants
+
+Session-scoped grants auto-approve tools without prompting. Grants are ephemeral: they reset when the session restarts and are never persisted.
+
+#### `grantCategory(category)`
+
+Grant a tool category for the current session. Tools in this category are auto-approved.
+
+```typescript
+session.grantCategory('edit')
+```
+
+#### `grantTool(toolName)`
+
+Grant a specific tool for the current session.
+
+```typescript
+session.grantTool('mastra_workspace_execute_command')
+```
+
+#### `getGrants()`
+
+Return the currently granted categories and tools.
+
+```typescript
+const grants = session.getGrants()
+// { categories: string[], tools: string[] }
+```
+
+#### `hasCategoryGrant(category)`
+
+Return whether a category has an in-memory session grant.
+
+```typescript
+const allowed = session.hasCategoryGrant('edit')
+```
+
+Returns: `boolean`
+
+#### `hasToolGrant(toolName)`
+
+Return whether a tool has an in-memory session grant.
+
+```typescript
+const allowed = session.hasToolGrant('write_file')
+```
+
+Returns: `boolean`
+
+### Tool approvals
+
+#### `resolveToolApproval(toolName)`
+
+Return the effective policy after applying explicit tool rules, session grants, and category rules.
+
+```typescript
+const policy = session.resolveToolApproval('execute_command')
+```
+
+Returns: `PermissionPolicy`
+
+#### `respondToToolApproval({ decision, toolCallId?, requestContext?, declineContext? })`
+
+Respond to a pending tool approval request, raised by a `tool_approval_required` event. Pass `always_allow_category` to also grant the tool's whole category for the rest of the session.
+
+```typescript
+session.respondToToolApproval({ decision: 'approve' })
+session.respondToToolApproval({ decision: 'decline' })
+session.respondToToolApproval({ decision: 'always_allow_category' })
+```
+
+#### `respondToToolSuspension({ resumeData, toolCallId?, requestContext? })`
+
+Resume a suspended tool with application-provided data. Supply `toolCallId` when several tool calls are suspended.
+
+```typescript
+await session.respondToToolSuspension({
+  toolCallId: event.toolCallId,
+  resumeData: ['src'],
+})
+```
+
+For `submit_plan`, pass `{ action: 'approved' }` or `{ action: 'rejected', feedback }`. Approval can switch to the mode configured by `transitionsTo` before the tool resumes.
+
+### Token usage
+
+#### `getTokenUsage()`
+
+Return a copy of the running token-usage tally for the active thread.
+
+```typescript
+const usage = session.getTokenUsage()
+// { promptTokens, completionTokens, totalTokens, ... }
+```
+
+## Identity
+
+`session.identity` owns the stable identifiers for the conversation: the resource ID, a session `id`, and an `ownerId`. The `id` and `ownerId` are stable for the life of the session and don't change when the resource ID is switched. They mirror the `id` and `ownerId` fields on `SessionRecord` in storage.
+
+### `session.identity.getId()`
+
+Return the stable session identifier.
+
+```typescript
+const sessionId = session.identity.getId()
+```
+
+### `session.identity.getOwnerId()`
+
+Return the stable owner identifier for the session.
+
+```typescript
+const ownerId = session.identity.getOwnerId()
+```
+
+### `session.identity.getResourceId()`
+
+Return the current resource ID.
+
+```typescript
+const resourceId = session.identity.getResourceId()
+```
+
+### `session.identity.getDefaultResourceId()`
+
+Return the resource ID the session was created with.
+
+```typescript
+const defaultResourceId = session.identity.getDefaultResourceId()
+```
+
+To change the resource ID, use [`controller.setResourceId()`](/reference/agent-controller/agent-controller-class#setresourceidsession--resourceid-), which also clears the active thread. The session `id` and `ownerId` aren't affected by resource switches.
+
+## Thread
+
+`session.thread` owns the active thread binding and resource-scoped thread operations. Stored threads and messages can survive controller recreation when storage is configured. The live session and its event bus don't.
+
+### `session.thread.create({ title?, id? })`
+
+Create a thread, bind the session to it, and open its event stream.
+
+```typescript
+const thread = await session.thread.create({
+  id: 'thread-7',
+  title: 'Investigate login failure',
+})
+```
+
+Returns: `Promise<AgentControllerThread>`
+
+### `session.thread.rename({ title })`
+
+Rename the active stored thread.
+
+```typescript
+await session.thread.rename({ title: 'Fix login failure' })
+```
+
+### `session.thread.clone({ sourceThreadId?, title?, resourceId? })`
+
+Clone an owned thread and its messages, then bind the session to the clone.
+
+```typescript
+const clone = await session.thread.clone({
+  sourceThreadId: 'thread-7',
+  title: 'Alternative approach',
+})
+```
+
+Returns: `Promise<AgentControllerThread>`
+
+### `session.thread.switch({ threadId, emitEvent? })`
+
+Switch to an owned stored thread and hydrate its mode, model, and observational memory settings.
+
+```typescript
+await session.thread.switch({ threadId: 'thread-8' })
+```
+
+### `session.thread.delete({ threadId })`
+
+Delete an owned thread. Deleting the active thread also clears the current binding.
+
+```typescript
+await session.thread.delete({ threadId: 'thread-8' })
+```
+
+### `session.thread.getId()`
+
+Return the active thread ID, or `null` when no thread is bound.
+
+```typescript
+const threadId = session.thread.getId()
+```
+
+### `session.thread.list(options?)`
+
+List threads from storage. By default only threads for the current resource are returned, and transient forked subagent threads are hidden.
+
+```typescript
+const threads = await session.thread.list()
+const allThreads = await session.thread.list({ allResources: true })
+const everything = await session.thread.list({ includeForkedSubagents: true })
+```
+
+### `session.thread.getById({ threadId })`
+
+Return a single thread by ID, or `null` if it doesn't exist.
+
+```typescript
+const thread = await session.thread.getById({ threadId: 'thread-abc123' })
+```
+
+### `session.thread.listActiveMessages(options?)`
+
+Retrieve messages for the active thread. Returns an empty array when no thread is bound.
+
+```typescript
+const messages = await session.thread.listActiveMessages({ limit: 50 })
+```
+
+### `session.thread.listMessages({ threadId, limit? })`
+
+Retrieve messages for a specific thread.
+
+```typescript
+const messages = await session.thread.listMessages({ threadId: 'thread-abc123' })
+```
+
+The message-reading methods `listActiveMessages`, `listMessages`, and `firstUserMessage` return `MastraDBMessage` objects, while `firstUserMessages` returns a `Map<string, MastraDBMessage>` keyed by thread ID. Each message has a `role`, an `id`, a `createdAt`, and a `content` object with `content.format` and a `content.parts` array. Read text, reasoning, tool calls, and attachments from `content.parts`. Signals such as system reminders and notifications are returned as separate messages with `role: 'signal'`.
+
+### `session.thread.firstUserMessage({ threadId })`
+
+Retrieve the first user message for a thread, or `null` if none.
+
+```typescript
+const firstMsg = await session.thread.firstUserMessage({
+  threadId: 'thread-abc123',
+})
+```
+
+### `session.thread.firstUserMessages({ threadIds })`
+
+Retrieve the first user message for many threads at once, returned as a map.
+
+```typescript
+const firstByThread = await session.thread.firstUserMessages({
+  threadIds: ['thread-a', 'thread-b'],
+})
+```
+
+### `session.thread.getSetting({ key })`
+
+Read a setting from the active thread metadata.
+
+```typescript
+const value = await session.thread.getSetting({ key: 'omThreshold' })
+```
+
+### `session.thread.setSetting({ key, value })`
+
+Write a setting to the active thread metadata.
+
+```typescript
+await session.thread.setSetting({ key: 'omThreshold', value: 0.8 })
+```
+
+### `session.thread.deleteSetting({ key })`
+
+Remove a setting from the active thread metadata.
+
+```typescript
+await session.thread.deleteSetting({ key: 'omThreshold' })
+```
+
+## Mode
+
+`session.mode` owns the active mode selection.
+
+### `session.mode.get()`
+
+Return the active mode ID.
+
+```typescript
+const modeId = session.mode.get()
+```
+
+### `session.mode.resolve()`
+
+Return the full `AgentControllerMode` object for the active mode, resolved against the controller's configured modes.
+
+```typescript
+const mode = session.mode.resolve()
+```
+
+### `session.mode.switch({ modeId })`
+
+Switch to another mode. The session saves the outgoing mode's model before persisting the new mode on the active thread. It then restores the incoming mode's selected or default model. The session emits `mode_changed` immediately and `model_changed` after model resolution.
+
+```typescript
+await session.mode.switch({ modeId: 'build' })
+```
+
+## Model
+
+`session.model` owns the active model selection, including per-mode model memory.
+
+### `session.model.get()`
+
+Return the active model ID.
+
+```typescript
+const modelId = session.model.get()
+```
+
+### `session.model.displayName()`
+
+Return the last segment of the active model ID as a short display name. Returns `'unknown'` when no model is selected.
+
+```typescript
+const name = session.model.displayName()
+```
+
+### `session.model.hasSelection()`
+
+Check whether a model is currently selected.
+
+```typescript
+if (session.model.hasSelection()) {
+  // Ready to send messages
+}
+```
+
+### `session.model.switch({ modelId, scope?, modeId? })`
+
+Switch the active model. When `scope` is `'thread'` (the default), the model ID is persisted as the per-mode model so it's restored when switching back. Reports the selection to the controller's `modelUseCountTracker` and emits a `model_changed` event.
+
+```typescript
+// Set for the current session only
+await session.model.switch({
+  modelId: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
+  scope: 'global',
+})
+
+// Persist to the current thread (default)
+await session.model.switch({ modelId: '__GATEWAY_ANTHROPIC_MODEL_SONNET__' })
+```
+
+## Observational Memory
+
+The observational-memory model selection, grouped by role under `session.om.observer` and `session.om.reflector`. Both roles expose the same methods. Reads return the value from session state when set, falling back to the controller's `omConfig` defaults.
+
+### `session.om.observer.modelId()` / `session.om.reflector.modelId()`
+
+Return the role's model ID, or `undefined` when neither session state nor `omConfig` provides one.
+
+```typescript
+const observer = session.om.observer.modelId()
+const reflector = session.om.reflector.modelId()
+```
+
+### `session.om.observer.threshold()` / `session.om.reflector.threshold()`
+
+Return the role's threshold in tokens (observation threshold for the observer, reflection threshold for the reflector), or `undefined` when unset.
+
+```typescript
+const observationThreshold = session.om.observer.threshold()
+const reflectionThreshold = session.om.reflector.threshold()
+```
+
+### `session.om.observer.switchModel({ modelId })` / `session.om.reflector.switchModel({ modelId })`
+
+Switch the role's model. Persists the setting to thread metadata and emits an `om_model_changed` event.
+
+```typescript
+await session.om.observer.switchModel({
+  modelId: '__GATEWAY_ANTHROPIC_MODEL_HAIKU__',
+})
+await session.om.reflector.switchModel({
+  modelId: '__GATEWAY_ANTHROPIC_MODEL_HAIKU__',
+})
+```
+
+### `session.om.observer.resolvedModel()` / `session.om.reflector.resolvedModel()`
+
+Resolve the role's model ID to a model instance via the configured model gateways, or `undefined` when no model ID is set or no resolver is configured.
+
+```typescript
+const observerModel = session.om.observer.resolvedModel()
+const reflectorModel = session.om.reflector.resolvedModel()
+```
+
+## Permissions
+
+`session.permissions` owns the tool-approval policy represented in `session.state`: the per-category and per-tool rules consulted during approval resolution. These are distinct from the in-memory grants documented under [Session grants](#session-grants). Grants reset with the live session. Permission rules aren't durable unless the host restores the corresponding session state.
+
+### `session.permissions.getRules()`
+
+Return the current permission rules, or empty rules (`{ categories: {}, tools: {} }`) when none are set.
+
+```typescript
+const rules = session.permissions.getRules()
+// { categories: { execute: 'ask' }, tools: { dangerous_tool: 'deny' } }
+```
+
+### `session.permissions.setForCategory({ category, policy })`
+
+Set the approval policy (`'allow' | 'ask' | 'deny'`) for a tool category. Resolves once the change is persisted to session state.
+
+```typescript
+await session.permissions.setForCategory({ category: 'execute', policy: 'ask' })
+```
+
+### `session.permissions.setForTool({ toolName, policy })`
+
+Set the approval policy for a specific tool. Per-tool policies take precedence over category policies. Resolves once persisted.
+
+```typescript
+await session.permissions.setForTool({ toolName: 'dangerous_tool', policy: 'deny' })
+```
+
+## Subagents
+
+`session.subagents` owns subagent configuration. It currently exposes the subagent model selection under `session.subagents.model`.
+
+### `session.subagents.model.get({ agentType? })`
+
+Return the subagent model ID, preferring the per-`agentType` value when one is given, then the global subagent model, or `null` when neither is set.
+
+```typescript
+const modelId = session.subagents.model.get({ agentType: 'explore' })
+```
+
+### `session.subagents.model.set({ modelId, agentType? })`
+
+Set the subagent model ID. Pass an `agentType` to set a per-type override, or omit it to set the global default. Persists to thread settings and emits a `subagent_model_changed` event.
+
+```typescript
+// Set the global subagent model
+await session.subagents.model.set({ modelId: '__GATEWAY_ANTHROPIC_MODEL_SONNET__' })
+
+// Set a per-type override
+await session.subagents.model.set({
+  modelId: '__GATEWAY_ANTHROPIC_MODEL_HAIKU__',
+  agentType: 'explore',
+})
+```
+
+## Run
+
+`session.run` owns run and trace identity plus abort state for the in-flight run.
+
+### `session.run.getRunId()` / `getTraceId()`
+
+Return the stored run ID and trace ID for the current run, or `null` when idle.
+
+```typescript
+const runId = session.run.getRunId()
+const traceId = session.run.getTraceId()
+```
+
+### `session.run.isRunning()`
+
+Return whether a run is currently in progress.
+
+```typescript
+if (session.run.isRunning()) {
+  // A run is active
+}
+```
+
+## Stream
+
+`session.stream` owns the live subscription to the agent thread stream and its dedup key.
+
+### `session.stream.activeRunId()`
+
+Return the run ID active on the live stream, or `null` when no stream is open.
+
+```typescript
+const runId = session.stream.activeRunId()
+```
+
+### `session.stream.isActive()`
+
+Return whether the stream currently has an active run.
+
+```typescript
+if (session.stream.isActive()) {
+  // The current thread's stream is producing output
+}
+```
+
+## Suspensions
+
+`session.suspensions` owns parked interactive tool calls (such as `ask_user` and `request_access`) awaiting a resume.
+
+### `session.suspensions.hasPending()`
+
+Return whether any tool is currently suspended.
+
+```typescript
+if (session.suspensions.hasPending()) {
+  // At least one interactive tool is waiting for a response
+}
+```
+
+### `session.suspensions.has({ toolCallId })`
+
+Return whether a specific tool call is suspended.
+
+```typescript
+const waiting = session.suspensions.has({ toolCallId: event.toolCallId })
+```
+
+Resume a suspended tool with [`session.respondToToolSuspension()`](#tool-approvals).
+
+## Follow-ups
+
+`session.followUps` owns the FIFO queue of messages submitted while a run is in progress.
+
+### `session.followUps.count()`
+
+Return the number of queued follow-ups.
+
+```typescript
+const queued = session.followUps.count()
+```
+
+### `session.followUps.isEmpty()`
+
+Return whether the follow-up queue is empty.
+
+```typescript
+if (!session.followUps.isEmpty()) {
+  // Messages are waiting to be processed
+}
+```
+
+## Approval
+
+`session.approval` owns the pending tool-approval gate.
+
+### `session.approval.isArmed()`
+
+Return whether a tool is currently awaiting an approval decision.
+
+```typescript
+if (session.approval.isArmed()) {
+  // Show the approval prompt
+}
+```
+
+Respond with [`session.respondToToolApproval()`](#tool-approvals).
+
+## Display state
+
+`session.displayState` owns the canonical `AgentControllerDisplayState` snapshot a UI renders from, and the reducer that keeps it in sync with every session event.
+
+### `session.displayState.get()`
+
+Return the current `AgentControllerDisplayState` snapshot for UI rendering.
+
+```typescript
+const displayState = session.displayState.get()
+```
+
+### `session.displayState.restoreTasks(tasks)`
+
+Restore the task portion of the snapshot after a UI replays persisted task tool history. This is a pure update of the snapshot and doesn't emit an event, so re-render explicitly after calling it.
+
+```typescript
+session.displayState.restoreTasks(replayedTasks)
+```
+
+After every event, the session emits `display_state_changed` with the latest snapshot. Subscribe with [`session.subscribe()`](#identity-and-events) or read the current value from `session.displayState.get()`.
+
+## State
+
+`session.state` owns the schema-validated AgentController state for the conversation. It holds the current snapshot and validates updates against the `stateSchema` passed to the AgentController. Updates are serialized, and every change emits a `state_changed` event.
+
+### `session.state.get()`
+
+Return a readonly copy of the current state snapshot.
+
+```typescript
+const state = session.state.get()
+```
+
+### `session.state.set(updates)`
+
+Merge a partial update into the state. Updates are queued so concurrent calls apply in order, validated against the schema, and emit `state_changed` with the changed keys.
+
+```typescript
+await session.state.set({ yolo: true })
+```
+
+### `session.state.update(updater)`
+
+Run an updater against the current snapshot and apply its result atomically within the write queue. Use this for read-modify-write changes that must see the latest state. The updater returns `updates` to merge, optional `events` to emit, and a `result` value that `update()` resolves to.
+
+```typescript
+const added = await session.state.update(current => ({
+  updates: { count: (current.count ?? 0) + 1 },
+  result: (current.count ?? 0) + 1,
+}))
+```
+
+## Persistence boundaries
+
+A `Session` is a live runtime object. Its event bus, arbitrary `session.state`, permission rules, permission grants, pending approvals, suspensions, follow-ups, run state, and stream state don't automatically survive controller or process recreation. The host must restore any of this state when recreating a session.
+
+With configured storage, threads, messages, and token usage persist. Thread settings restore mode and model choices. They can also restore observational memory settings and subagent model selections, including per-agent-type overrides. A chat channel can map back to stored threads, but channel-to-session and auto-approval state held by `AgentControllerChannels` remains in memory.
+
+## Related
+
+- [AgentController class](/reference/agent-controller/agent-controller-class)
+- [AgentController overview](/docs/harness/agent-controller)
+- [Threads and state](/docs/harness/agent-controller#manage-threads-and-state)
+- [Tool approvals](/docs/harness/agent-controller#approve-tools-and-resume-suspensions)

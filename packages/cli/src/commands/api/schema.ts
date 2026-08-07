@@ -1,5 +1,6 @@
 import { fetchSchemaManifest } from './client.js';
 import { ApiCliError } from './errors.js';
+import { LEARNING_ROUTE_SCHEMAS } from './learning-route-metadata.js';
 import type { ResolvedTarget } from './target.js';
 import type { ApiCommandDescriptor, ApiCommandExample } from './types.js';
 
@@ -8,7 +9,18 @@ export async function getCommandSchema(descriptor: ApiCommandDescriptor, target:
     throw new ApiCliError('SCHEMA_UNAVAILABLE', 'This command does not accept JSON input');
   }
 
-  const manifest = await fetchSchemaManifest(target.baseUrl, target.headers, target.timeoutMs);
+  // Learning routes live on the Mastra platform learning endpoint, which does
+  // not expose a schema manifest; resolve their hand-authored schemas locally.
+  const learningSchema = (
+    LEARNING_ROUTE_SCHEMAS as Partial<
+      Record<string, (typeof LEARNING_ROUTE_SCHEMAS)[keyof typeof LEARNING_ROUTE_SCHEMAS]>
+    >
+  )[`${descriptor.method} ${descriptor.path}`];
+  if (learningSchema) {
+    return buildRouteSchema(descriptor, learningSchema);
+  }
+
+  const manifest = await fetchSchemaManifest(target.baseUrl, target.headers, target.timeoutMs, target.apiPrefix);
   if (!manifest || typeof manifest !== 'object' || !Array.isArray((manifest as { routes?: unknown }).routes)) {
     throw new ApiCliError('SCHEMA_UNAVAILABLE', 'Target server returned an invalid schema manifest', {
       reason: 'invalid_manifest',
@@ -26,6 +38,13 @@ export async function getCommandSchema(descriptor: ApiCommandDescriptor, target:
     });
   }
 
+  return buildRouteSchema(descriptor, route);
+}
+
+function buildRouteSchema(
+  descriptor: ApiCommandDescriptor,
+  route: { pathParamSchema?: any; queryParamSchema?: any; bodySchema?: any; responseSchema?: any },
+): unknown {
   const source = descriptor.method === 'GET' ? 'query' : route.queryParamSchema ? 'query+body' : 'body';
   const inputSchema =
     descriptor.method === 'GET' ? route.queryParamSchema : mergeObjectSchemas(route.queryParamSchema, route.bodySchema);

@@ -1,17 +1,10 @@
 import type { StoredSkillResponse } from '@mastra/client-js';
-import {
-  Button,
-  Icon,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-  SideDialog,
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
+import { SideDialog } from '@mastra/playground-ui/components/SideDialog';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { toast } from '@mastra/playground-ui/utils/toast';
 import { AlertTriangle, ChevronDown, ChevronRight, CopyIcon, Globe, LockIcon, Pencil, Settings2 } from 'lucide-react';
 import { nanoid } from 'nanoid';
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
@@ -25,7 +18,7 @@ import {
   extractSkillInstructions,
   updateNodeContent,
   updateRootFolderName,
-} from './skill-file-tree';
+} from './skill-file-tree-utils';
 import { SkillFolder } from './skill-folder';
 import { SkillSimpleForm } from './skill-simple-form';
 import { AgentColorProvider } from '@/domains/agent-builder/contexts/agent-color-context';
@@ -200,23 +193,35 @@ export function SkillEditDialog({
     }
 
     if (isExistingSkill && skill) {
-      const result = await updateSkill.mutateAsync({
-        id: skill.id,
-        name,
-        description,
-        visibility,
-        instructions,
-      });
+      let result: StoredSkillResponse;
+      try {
+        result = await updateSkill.mutateAsync({
+          id: skill.id,
+          name,
+          description,
+          visibility,
+          instructions,
+        });
+      } catch (error) {
+        toast.error(`Failed to update skill: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        return;
+      }
       onSkillUpdated?.(result);
       onClose();
     } else {
-      const result = await createSkill.mutateAsync({
-        name,
-        description,
-        visibility,
-        workspaceId,
-        files: filesToSave,
-      });
+      let result: StoredSkillResponse;
+      try {
+        result = await createSkill.mutateAsync({
+          name,
+          description,
+          visibility,
+          workspaceId,
+          files: filesToSave,
+        });
+      } catch (error) {
+        toast.error(`Failed to create skill: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        return;
+      }
       onSkillCreated?.(result, workspaceId);
       onClose();
     }
@@ -249,7 +254,7 @@ export function SkillEditDialog({
       className="h-full"
     >
       <SideDialog.Top>
-        <span className="flex-1 flex items-center gap-2">
+        <span className="flex flex-1 items-center gap-2">
           {dialogTitle}
           {isViewMode && skill?.visibility === 'private' && (
             <Tooltip>
@@ -264,7 +269,7 @@ export function SkillEditDialog({
             </Tooltip>
           )}
         </span>
-        <div className="flex items-center gap-2 mr-6">
+        <div className="mr-6 flex items-center gap-2">
           {isViewMode && isOwner && (
             <Button variant="outline" size="sm" onClick={() => setIsEditing(true)}>
               <Pencil className="h-3.5 w-3.5" /> Edit
@@ -341,10 +346,10 @@ export function SkillEditDialog({
 
             {/* Form section — revealed after agent populates or user expands */}
             {showForm ? (
-              <div className="border-t border-border1 pt-4">
+              <div className="border-border1 border-t pt-4">
                 <button
                   onClick={() => setShowForm(false)}
-                  className="flex items-center gap-1.5 text-xs text-neutral3 hover:text-neutral5 transition-colors mb-3"
+                  className="text-neutral3 hover:text-neutral5 mb-3 flex items-center gap-1.5 text-xs transition-colors"
                 >
                   <ChevronDown className="h-3 w-3" />
                   Hide skill details
@@ -352,7 +357,7 @@ export function SkillEditDialog({
 
                 {isAdmin && (!hasFilesystem || !workspaceId) && (
                   <div className="mb-4 flex items-start gap-2 rounded-lg bg-yellow-500/10 p-3 text-xs text-yellow-600">
-                    <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
                     <span>
                       {!workspaceId
                         ? 'No workspace available. The skill will be saved to the database only.'
@@ -388,7 +393,7 @@ export function SkillEditDialog({
                           }
                           setMode('advanced');
                         }}
-                        className="mt-3 flex items-center gap-1.5 text-xs text-neutral3 hover:text-neutral5 transition-colors"
+                        className="text-neutral3 hover:text-neutral5 mt-3 flex items-center gap-1.5 text-xs transition-colors"
                       >
                         <Settings2 className="h-3.5 w-3.5" />
                         Advanced mode
@@ -408,7 +413,7 @@ export function SkillEditDialog({
                           }
                           setMode('simple');
                         }}
-                        className="mb-3 flex items-center gap-1.5 text-xs text-neutral3 hover:text-neutral5 transition-colors"
+                        className="text-neutral3 hover:text-neutral5 mb-3 flex items-center gap-1.5 text-xs transition-colors"
                       >
                         <Pencil className="h-3.5 w-3.5" />
                         Simple mode
@@ -427,10 +432,10 @@ export function SkillEditDialog({
                 )}
               </div>
             ) : (
-              <div className="border-t border-border1 pt-3">
+              <div className="border-border1 border-t pt-3">
                 <button
                   onClick={() => setShowForm(true)}
-                  className="flex items-center gap-1.5 text-xs text-neutral3 hover:text-neutral5 transition-colors"
+                  className="text-neutral3 hover:text-neutral5 flex items-center gap-1.5 text-xs transition-colors"
                 >
                   <ChevronRight className="h-3 w-3" />
                   {hasFields ? 'Show skill details' : 'or fill in manually'}

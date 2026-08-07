@@ -1,6 +1,7 @@
 import { describe, it, expectTypeOf } from 'vitest';
 import { z } from 'zod/v4';
-import { createWorkflow, createStep } from '../workflows/workflow';
+import { createWorkflow } from '../workflows/create';
+import { createStep } from '../workflows/workflow';
 import { Mastra } from './index';
 
 /**

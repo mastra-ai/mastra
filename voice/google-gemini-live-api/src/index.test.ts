@@ -252,7 +252,8 @@ describe('GeminiLiveVoice', () => {
       expect(mockWs.send).toHaveBeenCalled();
       const sentData = JSON.parse(mockWs.send.mock.calls[0][0]);
       expect(sentData).toHaveProperty('realtime_input');
-      expect(sentData.realtime_input).toHaveProperty('media_chunks');
+      expect(sentData.realtime_input).toHaveProperty('audio');
+      expect(sentData.realtime_input).not.toHaveProperty('media_chunks');
     });
 
     it('should handle audio stream', async () => {
@@ -604,6 +605,67 @@ describe('GeminiLiveVoice', () => {
       voice.setAutoReconnect(true);
       const info = voice.getSessionInfo();
       expect(info.config?.enableResumption).toBe(true);
+    });
+
+    describe('sendContext', () => {
+      beforeEach(() => {
+        (voice as any).state = 'connected';
+        (voice as any).ws = {
+          send: vi.fn(),
+          readyState: 1,
+          close: vi.fn(),
+          once: vi.fn(),
+        };
+        (voice as any).connectionManager.setWebSocket((voice as any).ws);
+        mockWs = (voice as any).ws;
+      });
+
+      it('should send client_content with turnComplete: false by default', async () => {
+        await voice.sendContext([
+          { role: 'user', content: 'Hello' },
+          { role: 'assistant', content: 'Hi there!' },
+        ]);
+
+        expect(mockWs.send).toHaveBeenCalledTimes(1);
+        const sentData = JSON.parse(mockWs.send.mock.calls[0][0]);
+        expect(sentData).toHaveProperty('client_content');
+        expect(sentData.client_content.turnComplete).toBe(false);
+        expect(sentData.client_content.turns).toHaveLength(2);
+        expect(sentData.client_content.turns[0]).toEqual({ role: 'user', parts: [{ text: 'Hello' }] });
+        expect(sentData.client_content.turns[1]).toEqual({ role: 'model', parts: [{ text: 'Hi there!' }] });
+      });
+
+      it('should allow turnComplete: true override', async () => {
+        await voice.sendContext([{ role: 'user', content: 'Final message' }], { turnComplete: true });
+
+        const sentData = JSON.parse(mockWs.send.mock.calls[0][0]);
+        expect(sentData.client_content.turnComplete).toBe(true);
+      });
+
+      it('should update local context history', async () => {
+        voice.clearContext();
+        await voice.sendContext([
+          { role: 'user', content: 'Question' },
+          { role: 'assistant', content: 'Answer' },
+        ]);
+
+        const history = voice.getContextHistory();
+        expect(history).toHaveLength(2);
+        expect(history[0].role).toBe('user');
+        expect(history[0].content).toBe('Question');
+        expect(history[1].role).toBe('assistant');
+        expect(history[1].content).toBe('Answer');
+      });
+
+      it('should skip sending when turns array is empty', async () => {
+        await voice.sendContext([]);
+        expect(mockWs.send).not.toHaveBeenCalled();
+      });
+
+      it('should throw when not connected', async () => {
+        (voice as any).state = 'disconnected';
+        await expect(voice.sendContext([{ role: 'user', content: 'Hello' }])).rejects.toThrow('Not connected');
+      });
     });
   });
 

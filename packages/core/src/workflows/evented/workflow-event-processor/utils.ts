@@ -1,30 +1,13 @@
-import type { Step, StepFlowEntry, Workflow } from '../..';
+import type { StepFlowEntry, Workflow } from '../..';
 import type { Mastra } from '../../../mastra';
-import { EventedWorkflow } from '../workflow';
+import { getEntryId, getEntryWorkflow } from '../../step-entry';
+import type { SingleStepEntry } from '../../types';
+import { isSingleStepEntry } from '../../utils';
 import type { ParentWorkflow } from '.';
-
-/**
- * Type guard to check if a step is actually a Workflow.
- * A step is a Workflow if it's an EventedWorkflow instance or has component === 'WORKFLOW'.
- */
-function isWorkflowStep(step: unknown): step is Workflow {
-  if (!step || typeof step !== 'object') {
-    return false;
-  }
-  // Check for EventedWorkflow instance first (most specific)
-  if (step instanceof EventedWorkflow) {
-    return true;
-  }
-  // Check for the 'WORKFLOW' component discriminator (used for nested workflows)
-  if ('component' in step && (step as { component?: string }).component === 'WORKFLOW') {
-    return true;
-  }
-  return false;
-}
 
 export function getNestedWorkflow(
   mastra: Mastra,
-  { workflowId, executionPath, parentWorkflow }: ParentWorkflow,
+  { workflowId, executionPath, parentWorkflow, runId }: ParentWorkflow,
 ): Workflow | null {
   let workflow: Workflow | null = null;
 
@@ -40,11 +23,15 @@ export function getNestedWorkflow(
   // Internal workflows (registered via `Mastra.__registerInternalWorkflow`)
   // aren't visible to `Mastra.getWorkflow` — it only sees the public registry.
   // Prefer the internal registry first so nested-workflow resolution works
-  // for callers like the bg-tasks `__background-task` workflow.
+  // for callers like the bg-tasks `__background-task` workflow. When `runId`
+  // is set we hand it to the registry so concurrent invocations sharing the
+  // same workflow id (e.g. parent + sub-agent each owning their own
+  // `agentic-loop` instance with distinct closures) resolve to the right
+  // closure-bound instance instead of whichever one happened to register last.
   workflow =
     workflow ??
-    (mastra.__hasInternalWorkflow(workflowId)
-      ? mastra.__getInternalWorkflow(workflowId)
+    (mastra.__hasInternalWorkflow(workflowId, runId)
+      ? mastra.__getInternalWorkflow(workflowId, runId)
       : mastra.getWorkflow(workflowId));
   const stepGraph = workflow.stepGraph;
   let parentStep = stepGraph[executionPath[0]!];
@@ -52,49 +39,51 @@ export function getNestedWorkflow(
     parentStep = parentStep.steps[executionPath[1]!];
   }
 
-  if (parentStep?.type === 'step' || parentStep?.type === 'loop') {
-    // Validate that the inner step is actually a Workflow before returning
-    if (isWorkflowStep(parentStep.step)) {
-      return parentStep.step;
-    }
-    // Not a workflow - this is a regular step, return null
-    return null;
+  // `loop` / `foreach` carry their body as a SingleStepEntry.
+  if (parentStep?.type === 'loop' || parentStep?.type === 'foreach') {
+    return getEntryWorkflow(parentStep.step);
   }
 
-  // Handle foreach - validate that the inner step is actually a Workflow
-  if (parentStep?.type === 'foreach') {
-    if (isWorkflowStep(parentStep.step)) {
-      return parentStep.step;
-    }
-    // Not a workflow - this is a regular step in a foreach, return null
-    return null;
+  if (parentStep && isSingleStepEntry(parentStep)) {
+    return getEntryWorkflow(parentStep);
   }
 
   return null;
 }
 
-export function getStep(workflow: Workflow, executionPath: number[]): Step<string, any, any, any, any, any> | null {
-  let idx = 0;
+/**
+ * Resolves the single-step entry addressed by an execution path, or null when
+ * the path doesn't land on a single-step-like entry. For `loop` / `foreach`
+ * the body entry is returned.
+ */
+export function getStepEntry(workflow: Workflow, executionPath: number[]): SingleStepEntry | null {
   const stepGraph = workflow.stepGraph;
   let parentStep = stepGraph[executionPath[0]!];
   if (parentStep?.type === 'parallel' || parentStep?.type === 'conditional') {
     parentStep = parentStep.steps[executionPath[1]!];
-    idx++;
-  } else if (parentStep?.type === 'foreach') {
+  }
+
+  if (parentStep?.type === 'loop' || parentStep?.type === 'foreach') {
     return parentStep.step;
   }
 
-  if (!(parentStep?.type === 'step' || parentStep?.type === 'loop')) {
-    return null;
+  if (parentStep && isSingleStepEntry(parentStep)) {
+    return parentStep;
   }
 
-  if (parentStep instanceof EventedWorkflow) {
-    return getStep(parentStep, executionPath.slice(idx + 1));
-  }
+  return null;
+}
 
-  return parentStep.step;
+/**
+ * Resolves the id of the entry addressed by an execution path, or null when the
+ * path doesn't land on a single-step-like entry. For `loop` / `foreach` the id
+ * of the body entry is returned.
+ */
+export function getStepId(workflow: Workflow, executionPath: number[]): string | null {
+  const entry = getStepEntry(workflow, executionPath);
+  return entry ? getEntryId(entry) : null;
 }
 
 export function isExecutableStep(step: StepFlowEntry<any>) {
-  return step.type === 'step' || step.type === 'loop' || step.type === 'foreach';
+  return isSingleStepEntry(step) || step.type === 'loop' || step.type === 'foreach';
 }

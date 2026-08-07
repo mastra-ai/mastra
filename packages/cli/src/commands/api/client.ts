@@ -8,6 +8,8 @@ export interface ApiRequestOptions {
   descriptor: ApiCommandDescriptor;
   pathParams: Record<string, string>;
   input?: Record<string, unknown>;
+  /** Server API route prefix (e.g. `/api/mastra-studio`). Defaults to `/api`. */
+  apiPrefix?: string;
 }
 
 export async function requestApi(options: ApiRequestOptions): Promise<unknown> {
@@ -16,7 +18,7 @@ export async function requestApi(options: ApiRequestOptions): Promise<unknown> {
 
   try {
     const { queryInput, bodyInput } = splitInput(options.descriptor, options.input);
-    const url = buildUrl(options.baseUrl, options.descriptor.path, options.pathParams, queryInput);
+    const url = buildUrl(options.baseUrl, options.descriptor.path, options.pathParams, queryInput, options.apiPrefix);
     const init: RequestInit = {
       method: options.descriptor.method,
       headers: { ...options.headers },
@@ -56,6 +58,7 @@ export function buildUrl(
   path: string,
   pathParams: Record<string, string>,
   input?: Record<string, unknown>,
+  apiPrefix?: string,
 ): string {
   const pathParamNames = new Set<string>();
   const resolvedPath = path.replace(/:([A-Za-z0-9_]+)/g, (_, name: string) => {
@@ -66,7 +69,7 @@ export function buildUrl(
     }
     return encodeURIComponent(value);
   });
-  const url = new URL(joinUrl(baseUrl, resolvedPath));
+  const url = new URL(joinUrl(baseUrl, resolvedPath, apiPrefix));
 
   for (const [key, value] of Object.entries(pathParams)) {
     if (!pathParamNames.has(key)) url.searchParams.set(key, value);
@@ -123,6 +126,7 @@ export async function fetchSchemaManifest(
   baseUrl: string,
   headers: Record<string, string>,
   timeoutMs: number,
+  apiPrefix?: string,
 ): Promise<any> {
   const descriptor: ApiCommandDescriptor = {
     key: 'schema',
@@ -138,7 +142,7 @@ export async function fetchSchemaManifest(
     queryParams: [],
     bodyParams: [],
   };
-  return requestApi({ baseUrl, headers, timeoutMs, descriptor, pathParams: {} });
+  return requestApi({ baseUrl, headers, timeoutMs, descriptor, pathParams: {}, apiPrefix });
 }
 
 async function parseResponse(response: Response): Promise<unknown> {
@@ -151,9 +155,10 @@ async function parseResponse(response: Response): Promise<unknown> {
   }
 }
 
-function joinUrl(baseUrl: string, path: string): string {
+function joinUrl(baseUrl: string, path: string, apiPrefix = '/api'): string {
   const normalizedBase = baseUrl.replace(/\/$/, '');
   const normalizedPath = path.startsWith('/') ? path : `/${path}`;
-  if (normalizedBase.endsWith('/api')) return `${normalizedBase}${normalizedPath}`;
-  return `${normalizedBase}/api${normalizedPath}`;
+  if (!apiPrefix) return `${normalizedBase}${normalizedPath}`;
+  if (normalizedBase.endsWith(apiPrefix)) return `${normalizedBase}${normalizedPath}`;
+  return `${normalizedBase}${apiPrefix}${normalizedPath}`;
 }

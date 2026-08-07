@@ -1,9 +1,8 @@
 import type { StoredSkillResponse } from '@mastra/client-js';
-import { toast } from '@mastra/playground-ui';
 import { useMastraClient } from '@mastra/react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
-import { extractSkillInstructions, extractSkillLicense } from '../components/agent-cms-pages/skill-file-tree';
+import { extractSkillInstructions, extractSkillLicense } from '../components/agent-cms-pages/skill-file-tree-utils';
 import type { InMemoryFileNode } from '../components/agent-edit-page/utils/form-validation';
 import { usePermissions } from '@/domains/auth/hooks';
 import { useWriteWorkspaceFile } from '@/domains/workspace/hooks';
@@ -78,9 +77,6 @@ export function useCreateSkill() {
       if (variables.workspaceId) {
         void queryClient.invalidateQueries({ queryKey: ['workspace', 'skills', variables.workspaceId] });
       }
-    },
-    onError: error => {
-      toast.error(`Failed to create skill: ${error instanceof Error ? error.message : 'Unknown error'}`);
     },
   });
 }

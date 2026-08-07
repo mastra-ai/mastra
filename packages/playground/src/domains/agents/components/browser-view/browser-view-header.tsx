@@ -1,4 +1,5 @@
-import { StatusBadge, cn } from '@mastra/playground-ui';
+import { StatusBadge } from '@mastra/playground-ui/components/StatusBadge';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { X, ChevronDown, ChevronUp, Minus } from 'lucide-react';
 import type { StreamStatus } from '../../hooks/use-browser-stream';
 
@@ -65,7 +66,7 @@ export function BrowserViewHeader({
       )}
     >
       {/* URL display */}
-      <div className="flex-1 min-w-0 mr-3">
+      <div className="mr-3 min-w-0 flex-1">
         <span className={cn('text-sm text-neutral4 truncate block', !url && 'text-neutral3 italic')}>
           {url || 'No URL'}
         </span>
@@ -81,7 +82,7 @@ export function BrowserViewHeader({
         {onTuck && (
           <button
             onClick={onTuck}
-            className="p-1 rounded hover:bg-surface3 text-neutral3 hover:text-neutral6 transition-colors"
+            className="hover:bg-surface3 text-neutral3 hover:text-neutral6 rounded p-1 transition-colors"
             title="Minimize to pill"
           >
             <Minus className="h-4 w-4" />
@@ -92,7 +93,7 @@ export function BrowserViewHeader({
         {onToggleCollapse && (
           <button
             onClick={onToggleCollapse}
-            className="p-1 rounded hover:bg-surface3 text-neutral3 hover:text-neutral6 transition-colors"
+            className="hover:bg-surface3 text-neutral3 hover:text-neutral6 rounded p-1 transition-colors"
             title={isCollapsed ? 'Expand browser view' : 'Minimize browser view'}
           >
             {isCollapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
@@ -103,7 +104,7 @@ export function BrowserViewHeader({
         {onClose && (
           <button
             onClick={onClose}
-            className="p-1 rounded hover:bg-surface3 text-neutral3 hover:text-neutral6 transition-colors"
+            className="hover:bg-surface3 text-neutral3 hover:text-neutral6 rounded p-1 transition-colors"
             title="Close browser session"
           >
             <X className="h-4 w-4" />

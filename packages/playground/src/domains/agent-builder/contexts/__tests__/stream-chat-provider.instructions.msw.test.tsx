@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, render } from '@testing-library/react';
@@ -107,6 +106,7 @@ describe('StreamChatProvider — modelSettings.instructions on the wire', () => 
     expect(captured.body.modelSettings.maxRetries).toBe(3);
     expect(captured.body.modelSettings.maxOutputTokens).toBe(5000);
     expect(captured.body.modelSettings.temperature).toBe(1);
+    expect(captured.body.providerOptions).toEqual({ openai: { reasoningEffort: 'low' } });
 
     // Confirm the snapshot is NOT smuggled into the user-facing messages array.
     const messages = captured.body.messages ?? [];

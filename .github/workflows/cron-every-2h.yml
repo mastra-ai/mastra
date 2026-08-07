@@ -15,6 +15,8 @@ concurrency:
 jobs:
   discord-github-sync:
     name: Discord to GitHub Sync
+    # Only run on the main repository, not on forks
+    if: ${{ github.repository == 'mastra-ai/mastra' }}
     uses: ./.github/workflows/call-external-mastra-workflow.yml
     with:
       workflow_name: discordSyncWorkflow
@@ -25,6 +27,8 @@ jobs:
 
   discord-triage:
     name: Discord Triage
+    # Only run on the main repository, not on forks
+    if: ${{ github.repository == 'mastra-ai/mastra' }}
     uses: ./.github/workflows/call-external-mastra-workflow.yml
     with:
       workflow_name: discordToGithubWorkflow
@@ -35,6 +39,8 @@ jobs:
 
   github-issues-follow-up:
     name: GitHub Issues Follow-Up
+    # Only run on the main repository, not on forks
+    if: ${{ github.repository == 'mastra-ai/mastra' }}
     uses: ./.github/workflows/call-external-mastra-workflow.yml
     with:
       workflow_name: githubIssueManagerWorkflow

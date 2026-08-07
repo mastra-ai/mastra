@@ -1,10 +1,15 @@
 import type { ChildProcess } from 'node:child_process';
 import { mkdir, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import process from 'node:process';
 import devcert from '@expo/devcert';
-import { FileService } from '@mastra/deployer';
-import { getServerOptions, normalizeStudioBase } from '@mastra/deployer/build';
+import {
+  getServerOptions,
+  normalizeStudioBase,
+  prepareFsAgentsEntry,
+  writeFsAgentsEntry,
+  mirrorFsAgentWorkspaces,
+} from '@mastra/deployer/build';
 import { execa } from 'execa';
 import getPort from 'get-port';
 import pc from 'picocolors';
@@ -12,10 +17,12 @@ import { getAnalytics } from '../../analytics/index.js';
 import { checkMastraPeerDeps, getUpdateCommand, logPeerDepWarnings } from '../../utils/check-peer-deps.js';
 import type { PeerDepMismatch } from '../../utils/check-peer-deps.js';
 import { devLogger } from '../../utils/dev-logger.js';
+import { findMastraEntryFile } from '../../utils/find-mastra-entry.js';
 import { createLogger } from '../../utils/logger.js';
 import type { MastraPackageInfo } from '../../utils/mastra-packages.js';
 import { getMastraPackages } from '../../utils/mastra-packages.js';
 import { loadAndValidatePresets } from '../../utils/validate-presets.js';
+import { resolveFactoryUIDevDist } from '../build/factory-ui-build.js';
 
 import { acquireDevLock, releaseDevLock, updateDevLock } from './dev-lock';
 import { DevBundler } from './DevBundler';
@@ -63,6 +70,7 @@ interface StartOptions {
   https?: HTTPSOptions;
   mastraPackages?: MastraPackageInfo[];
   peerDepMismatches?: PeerDepMismatch[];
+  factory?: boolean;
 }
 
 type ProcessOptions = {
@@ -135,6 +143,15 @@ const startServer = async (
     }
 
     await mkdir(publicDir, { recursive: true });
+
+    // Factory dev: the SPA is not copied into public/ (that only happens during
+    // `mastra build`), so point the server at the UI bundled with the CLI unless
+    // the user has an explicit override or a locally built UI at public/factory.
+    const factoryUiDist =
+      startOptions.factory && !process.env.MASTRACODE_UI_DIST && !env.has('MASTRACODE_UI_DIST')
+        ? resolveFactoryUIDevDist(publicDir)
+        : undefined;
+
     currentServerProcess = execa(process.execPath, commands, {
       cwd: publicDir,
       env: {
@@ -143,12 +160,17 @@ const startServer = async (
         MASTRA_DEV: 'true',
         PORT: port.toString(),
         MASTRA_PACKAGES_FILE: packagesFilePath,
+        MASTRA_TELEMETRY_COMMAND: startOptions.factory ? 'factory dev' : 'dev',
+        MASTRA_PROJECT_ROOT: resolve(dotMastraPath, '..'),
+        ...(getAnalytics()?.getDistinctId() ? { MASTRA_CLI_DISTINCT_ID: getAnalytics()!.getDistinctId() } : {}),
         ...(startOptions?.https
           ? {
               MASTRA_HTTPS_KEY: startOptions.https.key.toString('base64'),
               MASTRA_HTTPS_CERT: startOptions.https.cert.toString('base64'),
             }
           : {}),
+        ...(startOptions.factory ? { MASTRA_FACTORY_DEV: 'true' } : {}),
+        ...(factoryUiDist ? { MASTRACODE_UI_DIST: factoryUiDist } : {}),
       },
       stdio: ['inherit', 'pipe', 'pipe', 'ipc'],
       reject: false,
@@ -414,6 +436,7 @@ export async function dev({
   https,
   requestContextPresets,
   debug,
+  factory,
 }: {
   dir?: string;
   root?: string;
@@ -425,6 +448,7 @@ export async function dev({
   https?: boolean;
   requestContextPresets?: string;
   debug: boolean;
+  factory?: boolean;
 }) {
   const rootDir = root || process.cwd();
   const mastraDir = dir ? (dir.startsWith('/') ? dir : join(process.cwd(), dir)) : join(process.cwd(), 'src', 'mastra');
@@ -433,14 +457,22 @@ export async function dev({
   await mkdir(dotMastraPath, { recursive: true });
   await acquireDevLock(dotMastraPath);
 
-  const fileService = new FileService();
-  const entryFile = fileService.getFirstExistingFile([join(mastraDir, 'index.ts'), join(mastraDir, 'index.js')]);
+  // Look for the user's mastra entry file. When it doesn't exist (fully
+  // file-based project), prepareFsAgentsEntry auto-constructs a Mastra instance.
+  const userEntryFile = findMastraEntryFile(mastraDir);
 
-  const bundler = new DevBundler(env);
+  const bundler = new DevBundler(env, factory);
   bundler.__setLogger(createLogger(debug)); // Keep Pino logger for internal bundler operations
 
-  // Use the bundler's getAllToolPaths method to prepare tools paths
-  const discoveredTools = bundler.getAllToolPaths(mastraDir, tools ?? []);
+  // Discover fs-routed agents under agents/* and, if any exist, wrap the entry so
+  // they are registered onto the user's mastra instance. Falls back to the user
+  // entry unchanged when there are none.
+  const fsAgents = await prepareFsAgentsEntry(mastraDir, userEntryFile, dotMastraPath);
+  const entryFile = fsAgents.entryFile;
+
+  // Use the bundler's getAllToolPaths method to prepare tools paths, plus any
+  // tools defined under agents/*/tools for fs-routed agents.
+  const discoveredTools = bundler.getAllToolPaths(mastraDir, [...(tools ?? []), ...fsAgents.toolPaths]);
 
   const loadedEnv = await bundler.loadEnvVars();
 
@@ -466,7 +498,7 @@ export async function dev({
     }
   }
 
-  const serverOptions = await getServerOptions(entryFile, join(dotMastraPath, 'output'));
+  const serverOptions = userEntryFile ? await getServerOptions(userEntryFile, join(dotMastraPath, 'output')) : null;
   let portToUse = serverOptions?.port ?? process.env.PORT;
   let hostToUse = serverOptions?.host ?? process.env.HOST ?? 'localhost';
   const studioBasePathToUse = normalizeStudioBase(serverOptions?.studioBase ?? '/');
@@ -516,11 +548,33 @@ export async function dev({
     https: httpsOptions,
     mastraPackages,
     peerDepMismatches,
+    factory,
   };
 
   await bundler.prepare(dotMastraPath);
 
-  const watcher = await bundler.watch(entryFile, dotMastraPath, discoveredTools);
+  // Re-assert the lock after prepare() emptied the directory.
+  // The bundler preserves the lock, but this ensures the data is current.
+  await updateDevLock(dotMastraPath, hostToUse, Number(portToUse));
+
+  // Write the generated fs-routed agents wrapper entry. Runs after `prepare()`
+  // empties the output directory so the wrapper is not wiped before the watcher
+  // reads it. No-op when there are no fs-routed agents.
+  await writeFsAgentsEntry(fsAgents);
+
+  // Mirror authored `agents/<name>/workspace/**` seeds into the bundled output
+  // directory, where the generated entry resolves each agent's default
+  // workspace at runtime. Runs after `prepare()` so it is not wiped.
+  if (fsAgents.agentCount > 0) {
+    await mirrorFsAgentWorkspaces(mastraDir, join(dotMastraPath, 'output'));
+  }
+
+  const watcher = await bundler.watch(entryFile, dotMastraPath, discoveredTools, {
+    mastraDir,
+    userEntryFile,
+    outputDirectory: dotMastraPath,
+    preparedEntry: fsAgents,
+  });
 
   await startServer(
     join(dotMastraPath, 'output'),

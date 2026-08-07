@@ -2,7 +2,13 @@ import type { Mastra } from '@mastra/core';
 import type { RequestContext } from '@mastra/core/di';
 import type { Event } from '@mastra/core/events';
 import { createCachingTransformStream, createReplayStream } from '@mastra/core/stream';
-import type { WorkflowInfo, ChunkType, StreamEvent, WorkflowStateField } from '@mastra/core/workflows';
+import type {
+  WorkflowInfo,
+  ChunkType,
+  StreamEvent,
+  WorkflowStateField,
+  WorkflowRunStatus,
+} from '@mastra/core/workflows';
 import { z } from 'zod/v4';
 import { MastraFGAPermissions } from '../fga-permissions';
 import { HTTPException } from '../http-exception';
@@ -33,6 +39,14 @@ import type { Context } from '../types';
 import { getWorkflowInfo, WorkflowRegistry } from '../utils';
 import { handleError } from './error';
 import { getEffectiveResourceId, validateRunOwnership } from './utils';
+
+/**
+ * Statuses a run cannot come back from. Streaming one of these runIds again would
+ * start a fresh execution under the same runId and overwrite its stored snapshot —
+ * the in-memory de-dupe that protects concurrent streams only covers runs still held
+ * in the workflow's run map, and a finished run has already been dropped from it.
+ */
+const TERMINAL_RUN_STATUSES: WorkflowRunStatus[] = ['success', 'failed', 'canceled', 'tripwire'];
 
 export interface WorkflowContext extends Context {
   workflowId?: string;
@@ -157,7 +171,7 @@ export const GET_WORKFLOW_BY_ID_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'Workflow ID is required' });
       }
       const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
-      return getWorkflowInfo(workflow);
+      return getWorkflowInfo(workflow, false);
     } catch (error) {
       return handleError(error, 'Error getting workflow');
     }
@@ -346,6 +360,10 @@ export const CREATE_WORKFLOW_RUN_ROUTE = createRoute({
   description: 'Creates a new workflow execution instance with an optional custom run ID',
   tags: ['Workflows'],
   requiresAuth: true,
+  // Creating a run is part of the execute flow (Studio/UI calls this before
+  // starting/streaming a workflow), so allow either permission. `write` is kept
+  // for back-compat with roles that already grant it.
+  requiresPermission: ['workflows:write', 'workflows:execute'],
   handler: async ({ mastra, workflowId, runId, resourceId, disableScorers, requestContext }) => {
     try {
       // Use effective resourceId (context key takes precedence over client-provided value)
@@ -399,6 +417,17 @@ export const STREAM_WORKFLOW_ROUTE = createRoute({
       if (!workflow) {
         throw new HTTPException(404, { message: 'Workflow not found' });
       }
+
+      const existingRun = await workflow.getWorkflowRunById(runId, { withNestedWorkflows: false });
+
+      if (existingRun && TERMINAL_RUN_STATUSES.includes(existingRun.status)) {
+        throw new HTTPException(409, {
+          message:
+            `Workflow run ${runId} already finished with status "${existingRun.status}". ` +
+            `Use /observe to read its stream back, or stream a new runId.`,
+        });
+      }
+
       const serverCache = mastra.getServerCache();
 
       const run = await workflow.createRun({ runId, resourceId: effectiveResourceId });
@@ -552,10 +581,16 @@ export const START_WORKFLOW_RUN_ROUTE = createRoute({
       await validateRunOwnership(run, effectiveResourceId);
 
       const _run = await workflow.createRun({ runId, resourceId: run.resourceId });
-      void _run.start({
-        ...params,
-        requestContext,
-      });
+      // Fire-and-forget: attach .catch so a rejected start (e.g. invalid input
+      // schema) cannot become an unhandledRejection and tear down the process.
+      void _run
+        .start({
+          ...params,
+          requestContext,
+        })
+        .catch(error => {
+          mastra.getLogger().error('Failed to start workflow run', { error, workflowId, runId });
+        });
 
       return { message: 'Workflow run started' };
     } catch (e) {
@@ -867,7 +902,9 @@ export const RESTART_WORKFLOW_ROUTE = createRoute({
 
       const _run = await workflow.createRun({ runId, resourceId: run.resourceId });
 
-      void _run.restart({ ...params, requestContext });
+      void _run.restart({ ...params, requestContext }).catch(error => {
+        mastra.getLogger().error('Failed to restart workflow run in background', { error, workflowId, runId });
+      });
 
       return { message: 'Workflow run restarted' };
     } catch (error) {
@@ -929,7 +966,9 @@ export const RESTART_ALL_ACTIVE_WORKFLOW_RUNS_ROUTE = createRoute({
         throw new HTTPException(404, { message: 'Workflow not found' });
       }
 
-      void workflow.restartAllActiveWorkflowRuns();
+      void workflow.restartAllActiveWorkflowRuns().catch(error => {
+        mastra.getLogger().error('Failed to restart active workflow runs', { error, workflowId });
+      });
 
       return { message: 'All active workflow runs restarted' };
     } catch (error) {
@@ -1261,11 +1300,11 @@ export const OBSERVE_STREAM_LEGACY_WORKFLOW_ROUTE = createRoute({
 const stepExecutionBodySchema = z.object({
   stepId: z.string(),
   executionPath: z.array(z.number().int().nonnegative()),
-  stepResults: z.record(z.string(), z.any()),
-  state: z.record(z.string(), z.any()),
-  requestContext: z.record(z.string(), z.any()),
-  input: z.any().optional(),
-  resumeData: z.any().optional(),
+  stepResults: z.record(z.string(), z.unknown()),
+  state: z.record(z.string(), z.unknown()),
+  requestContext: z.record(z.string(), z.unknown()),
+  input: z.unknown().optional(),
+  resumeData: z.unknown().optional(),
   retryCount: z.number().int().nonnegative().optional(),
   foreachIdx: z.number().int().nonnegative().optional(),
   format: z.enum(['legacy', 'vnext']).optional(),
@@ -1303,8 +1342,8 @@ async function getStepStrategy(mastra: Mastra): Promise<StepStrategy> {
 }
 
 // Step execution returns the worker's StepResult. Its shape is dynamic
-// (depends on the step's output schema), so we use a permissive z.any().
-const stepExecutionResponseSchema = z.any();
+// and depends on the step's output schema.
+const stepExecutionResponseSchema = z.unknown();
 
 export const EXECUTE_WORKFLOW_STEP_ROUTE = createRoute({
   method: 'POST',
@@ -1407,6 +1446,10 @@ export const RECEIVE_WORKFLOW_EVENT_ROUTE = createRoute({
     'Push-mode entry point for workflow events. Brokers (GCP Pub/Sub push, SNS, EventBridge) POST each event here; Mastra processes it through the same pipeline as pull-mode workers.',
   tags: ['Workflows', 'Worker'],
   requiresAuth: true,
+  // Broker push endpoint: it advances runtime state rather than editing
+  // definitions, so `workflows:execute` is the more accurate fit. `write` is
+  // kept for back-compat with service principals that already grant it.
+  requiresPermission: ['workflows:write', 'workflows:execute'],
   handler: (async ({ mastra, event }: ReceiveWorkflowEventHandlerArgs) => {
     try {
       // The wire schema carries `createdAt` as a string; coerce to Date here

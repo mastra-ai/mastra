@@ -4,19 +4,17 @@ Playwright-based browser viewer for Mastra workspaces with CLI provider support.
 
 ## Overview
 
-`@mastra/browser-viewer` provides `BrowserViewer`, which launches Chrome via Playwright and exposes the CDP URL for CLI tools (agent-browser, browser-use, browse-cli) to connect. This gives you:
+`@mastra/browser-viewer` provides `BrowserViewer`, which launches Chrome via Playwright and exposes the CDP URL for CLI tools (agent-browser, browser-use, or browse) to connect. This gives you:
 
-- **Full screencast support** — Direct page-level CDP sessions
-- **Input injection** — Mouse and keyboard events work correctly
-- **Browser lifecycle control** — Browser starts/stops with the server
-- **CLI flexibility** — Agent uses skills + workspace commands to drive any CLI
+- **Full screencast support**: Direct page-level CDP sessions
+- **Input injection**: Mouse and keyboard events work correctly
+- **Browser lifecycle control**: Browser starts/stops with the server
+- **CLI flexibility**: Agent uses skills + workspace commands to drive any CLI
 
 ## Installation
 
 ```bash
 npm install @mastra/browser-viewer
-# or
-pnpm add @mastra/browser-viewer
 ```
 
 ## Usage
@@ -72,14 +70,14 @@ const workspace = new Workspace({
 
 ## Configuration
 
-| Option           | Type                                               | Default    | Description                                      |
-| ---------------- | -------------------------------------------------- | ---------- | ------------------------------------------------ |
-| `cli`            | `'agent-browser' \| 'browser-use' \| 'browse-cli'` | Required   | Which CLI the agent uses                         |
-| `cdpUrl`         | `string`                                           | -          | Connect to existing browser instead of launching |
-| `headless`       | `boolean`                                          | `true`     | Run browser in headless mode                     |
-| `cdpPort`        | `number`                                           | `0` (auto) | Port for Chrome remote debugging                 |
-| `viewport`       | `{ width, height }`                                | `1280x720` | Browser viewport size                            |
-| `executablePath` | `string`                                           | -          | Path to Chrome executable                        |
+| Option           | Type                                                           | Default    | Description                                      |
+| ---------------- | -------------------------------------------------------------- | ---------- | ------------------------------------------------ |
+| `cli`            | `'agent-browser' \| 'browser-use' \| 'browse' \| 'browse-cli'` | Required   | Which CLI the agent uses                         |
+| `cdpUrl`         | `string`                                                       | -          | Connect to existing browser instead of launching |
+| `headless`       | `boolean`                                                      | `true`     | Run browser in headless mode                     |
+| `cdpPort`        | `number`                                                       | `0` (auto) | Port for Chrome remote debugging                 |
+| `viewport`       | `{ width, height }`                                            | `1280x720` | Browser viewport size                            |
+| `executablePath` | `string`                                                       | -          | Path to Chrome executable                        |
 
 ## How It Works
 
@@ -91,9 +89,9 @@ const workspace = new Workspace({
 
 ## Supported CLIs
 
-- **agent-browser** — Vercel's browser automation CLI (`--cdp <port>`)
-- **browser-use** — Python-based browser automation (`--cdp-url <url>`)
-- **browse-cli** — Browserbase's Stagehand CLI (`--ws <url>`)
+- **agent-browser**: Vercel's browser automation CLI (`--cdp <port>`)
+- **browser-use**: Python-based browser automation (`--cdp-url <url>`)
+- **browse**: Browserbase's CLI (`--ws <url>`)
 
 ## License
 

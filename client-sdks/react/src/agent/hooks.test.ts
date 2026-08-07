@@ -1,9 +1,11 @@
 // @vitest-environment jsdom
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
+import type { TaskItem } from '@mastra/core/signals';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { createElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { CLIENT_MESSAGE_ID_KEY } from '../lib/mastra-db';
 import type { MastraDBMessageMetadata } from '../lib/mastra-db';
 import type { ClientToolsInput } from './types';
 
@@ -11,7 +13,7 @@ import type { ClientToolsInput } from './types';
 // getAgent(). This lets us assert what the React hook actually forwards to the
 // underlying client-js Agent methods.
 const sendSignalMock = vi.fn(async () => ({ accepted: true, runId: 'run-mock' }));
-const sendMessageMock = vi.fn(async () => ({ accepted: true, runId: 'run-mock' }));
+const sendMessageMock = vi.fn(async (_params?: unknown) => ({ accepted: true, runId: 'run-mock' }));
 let nextApproveToolCallChunks: Array<any> = [];
 const approveToolCallProcessDataStreamMock = vi.fn(
   async ({ onChunk }: { onChunk: (chunk: any) => Promise<void> | void }) => {
@@ -197,6 +199,46 @@ describe('useChat forwards clientTools', () => {
     expect(streamMock).toHaveBeenCalledTimes(1);
   });
 
+  it('retains the model override for stream approval', async () => {
+    const { result } = renderHook(() => useChat({ agentId: 'test-agent' }), { wrapper });
+
+    await act(async () => {
+      await result.current.sendMessage({
+        mode: 'stream',
+        message: 'hi',
+        model: 'google/gemini-2.5-flash',
+      });
+      await result.current.approveToolCall('tool-call-approval-1');
+    });
+
+    expect(streamMock).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ model: 'google/gemini-2.5-flash' }),
+    );
+    expect(approveToolCallMock).toHaveBeenCalledWith(expect.objectContaining({ model: 'google/gemini-2.5-flash' }));
+  });
+
+  it('retains the model override for network approval', async () => {
+    const { result } = renderHook(() => useChat({ agentId: 'test-agent' }), { wrapper });
+
+    await act(async () => {
+      await result.current.sendMessage({
+        mode: 'network',
+        message: 'hi',
+        model: 'google/gemini-2.5-flash',
+      });
+      await result.current.approveNetworkToolCall('tool', 'run-net-1');
+    });
+
+    expect(networkMock).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ model: 'google/gemini-2.5-flash' }),
+    );
+    expect(approveNetworkToolCallMock).toHaveBeenCalledWith(
+      expect.objectContaining({ model: 'google/gemini-2.5-flash' }),
+    );
+  });
+
   it('marks subscription streams idle while waiting for tool approval', async () => {
     nextSubscribeChunks = [
       {
@@ -290,7 +332,14 @@ describe('useChat forwards clientTools', () => {
       });
     });
 
-    expect(sendMessageMock).toHaveBeenCalledWith(expect.objectContaining({ message: 'paris', threadId: 'thread-1' }));
+    expect(sendMessageMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: expect.objectContaining({
+          metadata: expect.objectContaining({ [CLIENT_MESSAGE_ID_KEY]: expect.any(String) }),
+        }),
+        threadId: 'thread-1',
+      }),
+    );
     expect(result.current.isRunning).toBe(false);
     expect(result.current.isAwaitingToolApproval).toBe(true);
   });
@@ -659,6 +708,83 @@ describe('useChat forwards clientTools', () => {
     });
   });
 
+  it('strips transient pending status from initial messages on reload', async () => {
+    const initialMessages = [
+      {
+        id: 'msg-was-pending',
+        role: 'user',
+        createdAt: new Date(),
+        content: {
+          format: 2,
+          parts: [{ type: 'text', text: 'hello' }],
+          metadata: {
+            mode: 'stream',
+            status: 'pending',
+            [CLIENT_MESSAGE_ID_KEY]: 'client-msg-leftover',
+          },
+        },
+      },
+    ] satisfies MastraDBMessage[];
+
+    const { result } = renderHook(
+      () =>
+        useChat({
+          agentId: 'test-agent',
+          resourceId: 'resource-1',
+          threadId: 'thread-1',
+          initialMessages,
+        }),
+      { wrapper },
+    );
+
+    await waitFor(() => {
+      const lastMessage = result.current.messages.at(-1);
+      const metadata = lastMessage?.content?.metadata as MastraDBMessageMetadata | undefined;
+      expect(metadata?.status).toBeUndefined();
+      expect(metadata?.[CLIENT_MESSAGE_ID_KEY]).toBeUndefined();
+    });
+    expect(result.current.messages.map(message => message.id)).toEqual(['msg-was-pending']);
+  });
+
+  it('strips a leftover clientMessageId even when the reloaded message is not pending', async () => {
+    // The correlation key is sent to the server with the message and can be
+    // persisted, so a reloaded (non-pending) message may still carry it. It must
+    // never survive into rendered state; the row key falls back to the stable id.
+    const initialMessages = [
+      {
+        id: 'msg-confirmed',
+        role: 'user',
+        createdAt: new Date(),
+        content: {
+          format: 2,
+          parts: [{ type: 'text', text: 'hello' }],
+          metadata: {
+            mode: 'stream',
+            [CLIENT_MESSAGE_ID_KEY]: 'client-msg-leftover',
+          },
+        },
+      },
+    ] satisfies MastraDBMessage[];
+
+    const { result } = renderHook(
+      () =>
+        useChat({
+          agentId: 'test-agent',
+          resourceId: 'resource-1',
+          threadId: 'thread-1',
+          initialMessages,
+        }),
+      { wrapper },
+    );
+
+    await waitFor(() => {
+      const lastMessage = result.current.messages.at(-1);
+      const metadata = lastMessage?.content?.metadata as MastraDBMessageMetadata | undefined;
+      expect(metadata?.[CLIENT_MESSAGE_ID_KEY]).toBeUndefined();
+    });
+    expect(result.current.messages.map(message => message.id)).toEqual(['msg-confirmed']);
+  });
+
   it('unsubscribes without aborting when thread signals are disabled after subscribing', async () => {
     keepSubscriptionOpen = true;
     const { rerender } = renderHook(
@@ -731,6 +857,76 @@ describe('useChat forwards clientTools', () => {
 
     expect(threadSubscriptionAbortMock).toHaveBeenCalledTimes(1);
     expect(threadSubscriptionUnsubscribeMock).toHaveBeenCalledTimes(1);
+  });
+
+  // Regression test for https://github.com/mastra-ai/mastra/issues/18768:
+  // an aborted mount-time subscribe used to stay cached (so no send ever
+  // retried the subscribe fetch) and the rejection escaped stream() uncaught,
+  // leaving isRunning stuck true until a full reload.
+  it('retries an aborted thread subscription on send and never leaves isRunning stuck', async () => {
+    const abortError = Object.assign(new Error('signal is aborted without reason'), { name: 'AbortError' });
+    // Reject both the mount-time subscribe AND the send-time retry so we
+    // exercise the retry and the isRunning cleanup on failure.
+    subscribeToThreadMock.mockRejectedValueOnce(abortError).mockRejectedValueOnce(abortError);
+
+    const { result } = renderHook(
+      () =>
+        useChat({
+          agentId: 'test-agent',
+          resourceId: 'resource-1',
+          threadId: 'thread-1',
+          enableThreadSignals: true,
+        }),
+      { wrapper },
+    );
+
+    // Mount-time subscription attempt fails and is swallowed (isAbortError).
+    await waitFor(() => expect(subscribeToThreadMock).toHaveBeenCalledTimes(1));
+    expect(result.current.isRunning).toBe(false);
+
+    let sendError: unknown;
+    await act(async () => {
+      try {
+        await result.current.sendMessage({ mode: 'stream', message: 'hello', threadId: 'thread-1' });
+      } catch (error) {
+        sendError = error;
+      }
+    });
+
+    // The send path released the dead cached rejection and retried the
+    // subscribe fetch instead of re-awaiting the stale promise.
+    expect(subscribeToThreadMock).toHaveBeenCalledTimes(2);
+    expect((sendError as Error | undefined)?.name).toBe('AbortError');
+    expect(result.current.isRunning).toBe(false);
+  });
+
+  it('resets isRunning when the signal send request itself fails', async () => {
+    sendMessageMock.mockRejectedValueOnce(new Error('network down'));
+
+    const { result } = renderHook(
+      () =>
+        useChat({
+          agentId: 'test-agent',
+          resourceId: 'resource-1',
+          threadId: 'thread-1',
+          enableThreadSignals: true,
+        }),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(subscribeToThreadMock).toHaveBeenCalledTimes(1));
+
+    let sendError: unknown;
+    await act(async () => {
+      try {
+        await result.current.sendMessage({ mode: 'stream', message: 'hello', threadId: 'thread-1' });
+      } catch (error) {
+        sendError = error;
+      }
+    });
+
+    expect((sendError as Error | undefined)?.message).toBe('network down');
+    expect(result.current.isRunning).toBe(false);
   });
 
   it('uses the legacy stream path when thread signals are explicitly disabled', async () => {
@@ -985,5 +1181,361 @@ describe('useChat forwards clientTools', () => {
     const firstUserPart = userMessages[0]?.content.parts[0] as Record<string, unknown>;
     expect(firstUserPart.type).toBe('text');
     expect(firstUserPart.text).toBe('what is the weather');
+  });
+});
+
+describe('useChat optimistic pending user message', () => {
+  beforeEach(() => {
+    sendMessageMock.mockClear();
+    streamMock.mockClear();
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('appends a pending user message on the signal path', async () => {
+    const { result } = renderHook(
+      () =>
+        useChat({
+          agentId: 'test-agent',
+          resourceId: 'resource-1',
+          threadId: 'thread-1',
+          enableThreadSignals: true,
+        }),
+      { wrapper },
+    );
+
+    await act(async () => {
+      await result.current.sendMessage({ mode: 'stream', message: 'hello', threadId: 'thread-1' });
+    });
+
+    const userMessages = result.current.messages.filter(m => m.role === 'user');
+    expect(userMessages).toHaveLength(1);
+    const metadata = userMessages[0]?.content.metadata as MastraDBMessageMetadata | undefined;
+    expect(metadata?.status).toBe('pending');
+    expect(metadata?.mode).toBe('stream');
+
+    const optimisticMessageId = userMessages[0]?.id;
+    expect(optimisticMessageId).toMatch(/^client-set-/);
+
+    // The optimistic bubble carries the same client-set id as its correlation id...
+    const clientMessageId = metadata?.[CLIENT_MESSAGE_ID_KEY];
+    expect(clientMessageId).toBe(optimisticMessageId);
+
+    // ...and the same id is sent to the server in the outgoing message metadata
+    // so the echo can reconcile the pending bubble.
+    expect(sendMessageMock).toHaveBeenCalledTimes(1);
+    const sendArgs = sendMessageMock.mock.calls[0]?.[0] as
+      | { message?: { metadata?: Record<string, unknown> } }
+      | undefined;
+    expect(sendArgs?.message?.metadata?.[CLIENT_MESSAGE_ID_KEY]).toBe(optimisticMessageId);
+  });
+
+  it('merges a multi-message send (text + attachment) into a single pending bubble', async () => {
+    const { result } = renderHook(
+      () =>
+        useChat({
+          agentId: 'test-agent',
+          resourceId: 'resource-1',
+          threadId: 'thread-1',
+          enableThreadSignals: true,
+        }),
+      { wrapper },
+    );
+
+    await act(async () => {
+      await result.current.sendMessage({
+        mode: 'stream',
+        message: 'look at this',
+        threadId: 'thread-1',
+        coreUserMessages: [
+          { role: 'user', content: [{ type: 'image', image: 'https://example.com/cat.png', mimeType: 'image/png' }] },
+        ],
+      });
+    });
+
+    // The whole user turn (text + attachment) renders as one bubble, matching
+    // how memory/reload resolves the persisted multi-part user message. The
+    // single bubble carries the correlation id and pending status so the server
+    // echo reconciles the whole turn.
+    const userMessages = result.current.messages.filter(m => m.role === 'user');
+    expect(userMessages).toHaveLength(1);
+
+    const parts = userMessages[0]?.content.parts ?? [];
+    expect(parts.map(p => p.type)).toEqual(['text', 'file']);
+    expect(parts[0]).toMatchObject({ type: 'text', text: 'look at this' });
+    expect(parts[1]).toMatchObject({ type: 'file', data: 'https://example.com/cat.png' });
+
+    const metadata = userMessages[0]?.content.metadata as MastraDBMessageMetadata | undefined;
+    expect(metadata?.status).toBe('pending');
+    expect(userMessages[0]?.id).toMatch(/^client-set-/);
+    expect(metadata?.[CLIENT_MESSAGE_ID_KEY]).toBe(userMessages[0]?.id);
+  });
+
+  it('keys two sequential sends as independent pending messages', async () => {
+    const { result } = renderHook(
+      () =>
+        useChat({
+          agentId: 'test-agent',
+          resourceId: 'resource-1',
+          threadId: 'thread-1',
+          enableThreadSignals: true,
+        }),
+      { wrapper },
+    );
+
+    await act(async () => {
+      await result.current.sendMessage({ mode: 'stream', message: 'first', threadId: 'thread-1' });
+    });
+    await act(async () => {
+      await result.current.sendMessage({ mode: 'stream', message: 'second', threadId: 'thread-1' });
+    });
+
+    const userMessages = result.current.messages.filter(m => m.role === 'user');
+    expect(userMessages).toHaveLength(2);
+    expect(new Set(userMessages.map(m => m.id)).size).toBe(2);
+    for (const message of userMessages) {
+      expect(message.id).toMatch(/^client-set-/);
+      const metadata = message.content.metadata as MastraDBMessageMetadata | undefined;
+      expect(metadata?.status).toBe('pending');
+      expect(metadata?.[CLIENT_MESSAGE_ID_KEY]).toBe(message.id);
+    }
+  });
+
+  it('does not mark the user message pending on the legacy stream path', async () => {
+    const { result } = renderHook(
+      () =>
+        useChat({
+          agentId: 'test-agent',
+          resourceId: 'resource-1',
+          threadId: 'thread-1',
+        }),
+      { wrapper },
+    );
+
+    await act(async () => {
+      await result.current.sendMessage({ mode: 'stream', message: 'hello', threadId: 'thread-1' });
+    });
+
+    const userMessages = result.current.messages.filter(m => m.role === 'user');
+    expect(userMessages).toHaveLength(1);
+    const metadata = userMessages[0]?.content.metadata as MastraDBMessageMetadata | undefined;
+    expect(metadata?.status).toBeUndefined();
+    expect(metadata?.[CLIENT_MESSAGE_ID_KEY]).toBeUndefined();
+  });
+});
+
+describe('useChat task state', () => {
+  beforeEach(() => {
+    sendSignalMock.mockClear();
+    sendMessageMock.mockClear();
+    streamMock.mockClear();
+    subscribeToThreadMock.mockClear();
+    threadSubscriptionAbortMock.mockClear();
+    threadSubscriptionUnsubscribeMock.mockClear();
+    nextSubscribeChunks = [];
+    keepSubscriptionOpen = false;
+    omitThreadSubscriptionUnsubscribe = false;
+  });
+
+  const firstTask: TaskItem = {
+    id: 'task-plan-menu',
+    content: 'Plan menu',
+    status: 'in_progress',
+    activeForm: 'Planning menu',
+  };
+  const secondTask: TaskItem = {
+    id: 'task-shop',
+    content: 'Create shopping list',
+    status: 'pending',
+    activeForm: 'Creating shopping list',
+  };
+
+  const taskSignalChunk = (tasks: TaskItem[], tagName = 'current-task-list') => ({
+    type: 'data-signal',
+    runId: 'run-tasks',
+    from: 'AGENT',
+    data: {
+      id: 'tasks',
+      type: 'state',
+      tagName,
+      metadata: { value: { tasks } },
+    },
+  });
+
+  it('returns an empty tasks array initially', () => {
+    const { result } = renderHook(
+      () =>
+        useChat({
+          agentId: 'test-agent',
+          resourceId: 'resource-1',
+          threadId: 'thread-1',
+        }),
+      { wrapper },
+    );
+
+    expect(result.current.tasks).toEqual([]);
+  });
+
+  it('updates tasks when a data-signal snapshot chunk arrives', async () => {
+    nextSubscribeChunks = [taskSignalChunk([firstTask])];
+
+    const { result } = renderHook(
+      () =>
+        useChat({
+          agentId: 'test-agent',
+          resourceId: 'resource-1',
+          threadId: 'thread-1',
+          enableThreadSignals: true,
+        }),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(result.current.tasks).toEqual([firstTask]));
+  });
+
+  it('updates tasks when a data-signal delta chunk arrives', async () => {
+    const updatedFirstTask = { ...firstTask, status: 'completed' as const, activeForm: 'Planning menu' };
+    nextSubscribeChunks = [
+      taskSignalChunk([firstTask]),
+      taskSignalChunk([updatedFirstTask, secondTask], 'task-list-update'),
+    ];
+
+    const { result } = renderHook(
+      () =>
+        useChat({
+          agentId: 'test-agent',
+          resourceId: 'resource-1',
+          threadId: 'thread-1',
+          enableThreadSignals: true,
+        }),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(result.current.tasks).toEqual([updatedFirstTask, secondTask]));
+  });
+
+  it('updates tasks when a task tool-result chunk arrives', async () => {
+    nextSubscribeChunks = [
+      {
+        type: 'tool-result',
+        runId: 'run-tasks',
+        from: 'AGENT',
+        payload: {
+          toolCallId: 'tool-call-task-write',
+          toolName: 'task_write',
+          result: { tasks: [firstTask, secondTask] },
+        },
+      },
+    ];
+
+    const { result } = renderHook(
+      () =>
+        useChat({
+          agentId: 'test-agent',
+          resourceId: 'resource-1',
+          threadId: 'thread-1',
+          enableThreadSignals: true,
+        }),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(result.current.tasks).toEqual([firstTask, secondTask]));
+  });
+
+  it('clears tasks when task_write emits an empty task list', async () => {
+    nextSubscribeChunks = [taskSignalChunk([firstTask]), taskSignalChunk([])];
+
+    const { result } = renderHook(
+      () =>
+        useChat({
+          agentId: 'test-agent',
+          resourceId: 'resource-1',
+          threadId: 'thread-1',
+          enableThreadSignals: true,
+        }),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(result.current.tasks).toEqual([]));
+  });
+
+  it('seeds tasks from initialMessages on thread load', () => {
+    const initialMessages: MastraDBMessage[] = [
+      {
+        id: 'msg-task-signal',
+        role: 'assistant',
+        createdAt: new Date(),
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'data-signal',
+              data: {
+                id: 'tasks',
+                type: 'state',
+                tagName: 'current-task-list',
+                metadata: { value: { tasks: [firstTask] } },
+              },
+            },
+          ],
+        },
+      },
+    ];
+
+    const { result } = renderHook(
+      () =>
+        useChat({
+          agentId: 'test-agent',
+          resourceId: 'resource-1',
+          threadId: 'thread-1',
+          initialMessages,
+        }),
+      { wrapper },
+    );
+
+    expect(result.current.tasks).toEqual([firstTask]);
+  });
+
+  it('resets tasks when initialMessages changes', () => {
+    const initialMessages: MastraDBMessage[] = [
+      {
+        id: 'msg-task-signal',
+        role: 'assistant',
+        createdAt: new Date(),
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'data-signal',
+              data: {
+                id: 'tasks',
+                type: 'state',
+                tagName: 'current-task-list',
+                metadata: { value: { tasks: [firstTask] } },
+              },
+            },
+          ],
+        },
+      },
+    ];
+
+    const { result, rerender } = renderHook(
+      ({ messages }) =>
+        useChat({
+          agentId: 'test-agent',
+          resourceId: 'resource-1',
+          threadId: 'thread-1',
+          initialMessages: messages,
+        }),
+      { wrapper, initialProps: { messages: initialMessages } },
+    );
+
+    expect(result.current.tasks).toEqual([firstTask]);
+
+    rerender({ messages: [] });
+
+    expect(result.current.tasks).toEqual([]);
   });
 });

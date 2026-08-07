@@ -20,6 +20,7 @@ import xxhash from 'xxhash-wasm';
 
 import { validateConfig, isCloudSqlConfig, isConnectionStringConfig, isHostConfig } from '../shared/config';
 import type { PgVectorConfig } from '../shared/config';
+import { buildConnectionStringPoolConfig } from '../shared/pool-config';
 import { PGFilterTranslator } from './filter';
 import type { PGVectorFilter } from './filter';
 import { buildFilterQuery, buildDeleteFilterQuery } from './sql-builder';
@@ -126,11 +127,11 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       let poolConfig: pg.PoolConfig;
 
       if (isConnectionStringConfig(config)) {
+        // Delegate to the shared helper so an explicit `ssl` option wins over an
+        // `sslmode=`/`ssl=` query param in the connection string, matching
+        // PostgresStore. See https://github.com/mastra-ai/mastra/issues/17307
         poolConfig = {
-          connectionString: config.connectionString,
-          ssl: config.ssl,
-          max: config.max ?? 20,
-          idleTimeoutMillis: config.idleTimeoutMillis ?? 30000,
+          ...buildConnectionStringPoolConfig(config, { max: 20, idleTimeoutMillis: 30000 }),
           connectionTimeoutMillis: 2000,
           ...config.pgPoolOptions,
         };
@@ -160,6 +161,20 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       }
 
       this.pool = new pg.Pool(poolConfig);
+
+      // pg emits 'error' on the pool when an idle client's connection drops
+      // (backend restart, network partition, cloud proxies reaping idle
+      // sockets). Without a listener Node escalates the event to an
+      // uncaughtException and crashes the process. The pool already discards
+      // the dead client, so warn and let the next checkout reconnect.
+      this.pool.on('error', err => {
+        this.logger?.warn?.(
+          'PgVector: idle pool client error (pool discards the client and reconnects on next checkout)',
+          {
+            err: err instanceof Error ? err.message : err,
+          },
+        );
+      });
 
       // Warm the created indexes cache in background so we don't need to check if indexes exist every time
       // Store the promise so we can wait for it during disconnect to avoid "pool already closed" errors

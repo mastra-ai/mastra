@@ -2,8 +2,8 @@ import { cva } from 'class-variance-authority';
 import type { VariantProps } from 'class-variance-authority';
 import * as React from 'react';
 
-import { formElementSizes } from '@/ds/primitives/form-element';
-import type { FormElementSize } from '@/ds/primitives/form-element';
+import { controlSizeClasses } from '@/ds/primitives/control-size';
+import type { ControlSize } from '@/ds/primitives/control-size';
 import { cn } from '@/lib/utils';
 
 type Orientation = 'horizontal' | 'vertical';
@@ -146,17 +146,18 @@ ButtonsGroupSeparator.displayName = 'ButtonsGroupSeparator';
 
 const buttonsGroupTextVariants = cva(
   cn(
-    'inline-flex items-center justify-center bg-surface3 border border-border1 text-neutral5 select-none',
-    'rounded-full gap-[.75em] px-[1em] whitespace-nowrap shrink-0',
-    '[&>svg]:w-[1.1em] [&>svg]:h-[1.1em] [&>svg]:opacity-50',
+    'inline-flex items-center justify-center border border-border1 bg-surface3 text-neutral5 select-none',
+    'shrink-0 gap-[.75em] rounded-full px-[1em] whitespace-nowrap',
+    '[&>svg]:size-[1.1em] [&>svg]:opacity-50',
   ),
   {
     variants: {
       size: {
-        sm: `${formElementSizes.sm} text-ui-sm`,
-        md: `${formElementSizes.md} text-ui-md`,
-        default: `${formElementSizes.default} text-ui-md`,
-        lg: `${formElementSizes.lg} text-ui-lg`,
+        xs: controlSizeClasses.xs,
+        sm: controlSizeClasses.sm,
+        md: controlSizeClasses.md,
+        default: controlSizeClasses.default,
+        lg: controlSizeClasses.lg,
       },
     },
     defaultVariants: {
@@ -166,7 +167,7 @@ const buttonsGroupTextVariants = cva(
 );
 
 export type ButtonsGroupTextProps = React.ComponentPropsWithoutRef<'div'> & {
-  size?: FormElementSize;
+  size?: ControlSize;
 };
 
 export const ButtonsGroupText = React.forwardRef<HTMLDivElement, ButtonsGroupTextProps>(

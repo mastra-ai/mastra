@@ -1,4 +1,4 @@
-import { toast } from '@mastra/playground-ui';
+import { toast } from '@mastra/playground-ui/utils/toast';
 import { createContext, useContext, useCallback, useState, useRef } from 'react';
 import type { ReactNode } from 'react';
 

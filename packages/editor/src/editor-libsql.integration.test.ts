@@ -7,7 +7,8 @@ import { createWorkflow, createStep } from '@mastra/core/workflows';
 import { createScorer } from '@mastra/core/evals';
 import { RequestContext } from '@mastra/core/request-context';
 import { MastraEditor } from './index';
-import { randomUUID } from 'crypto';
+import { randomUUID } from 'node:crypto';
+import os from 'node:os';
 import { convertArrayToReadableStream, LanguageModelV2, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import {
   ProcessInputArgs,
@@ -26,7 +27,7 @@ import { MastraModelGateway, ProviderConfig } from '@mastra/core/llm';
 const createTestStorage = () => {
   return new LibSQLStore({
     id: `test-${randomUUID()}`,
-    url: ':memory:',
+    url: `file:${os.tmpdir()}/mastra-test-${randomUUID()}.db`,
   });
 };
 
@@ -34,7 +35,7 @@ const createTestStorage = () => {
 const createTestVector = (id: string) => {
   return new LibSQLVector({
     id,
-    url: ':memory:',
+    url: `file:${os.tmpdir()}/mastra-test-${randomUUID()}.db`,
   });
 };
 

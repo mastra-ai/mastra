@@ -13,8 +13,12 @@ Use this file as the default writing guide for Mastra's documentation.
 
 ## Keep docs current
 
-- Use current model names for providers such as OpenAI and Claude.
-- Check `packages/core/src/llm/model/provider-registry.json` for the latest models supported by Mastra.
+- When adding a model name or ID to docs, use a placeholder token from docs/src/plugins/remark-model-tokens/models.ts (remark replaces them at docs build time)
+
+## Accuracy
+
+- Ensure that code examples are validated against the available source code
+- When defining an agent through `new Agent()`, ensure that the agent at least has: `id`, `name`, `instructions`, and `model` properties
 
 ## Scope
 
@@ -22,8 +26,24 @@ Use this file as the default writing guide for Mastra's documentation.
 - Do not explain third-party technologies in depth unless the Mastra-specific integration requires it.
 - Link to external docs when non-Mastra background is helpful.
 
-## Tone and wording
+## Writing style
 
+When writing or editing prose, vary your structure:
+
+- Mix sentence lengths: follow long explanations with short punchy statements
+- Vary paragraph lengths—not every paragraph needs 3-4 sentences
+- Avoid the "topic sentence, three supporting points, conclusion" formula
+- Don't start consecutive paragraphs or sentences with the same word
+- Skip the "In conclusion" wrapper—just end when you're done
+- Let some points stand alone without hedging or qualifications
+- Be willing to be direct, even blunt, rather than diplomatically balanced
+- Avoid AI vocabulary fingerprints: "delve," "tapestry," "multifaceted," "leverage," "foster," "underscores," "comprehensive," "robust"
+- Don't open with generic phrases like "In today's rapidly evolving..."
+- Skip hedging ("It's important to note...") and filler ("in order to")
+- Use commas or periods instead of em-dashes
+- Cut sycophantic openers: "Great question!" "Absolutely!"
+- Prefer simple words: "use" not "utilize," "help" not "facilitate"
+- Start paragraphs with your actual point, not rhetorical wind-up
 - Use a neutral, factual tone.
 - Do not be funny, whimsical, or story-driven.
 - Keep each page self-contained.
@@ -33,6 +53,10 @@ Use this file as the default writing guide for Mastra's documentation.
 - Address the reader in the present tense.
 - Use sentence case for titles.
 - Use conjunctions where they make the sentence sound more natural.
+- Use contractions for common phrases like `don't`, `doesn't`, `can't`, and `isn't`.
+- Remove filler, weak adverbs, weasel words, clichés, and wordy phrases.
+- Do not start sentences with `So`, `There is`, or `There are`.
+- Use inclusive, gender-neutral, person-first wording.
 - Write out abbreviations on first use, then add the abbreviation in parentheses.
 - Avoid gerunds in titles when a clearer verb phrase works.
 - Prefer active voice.
@@ -45,6 +69,7 @@ Use this file as the default writing guide for Mastra's documentation.
 - When an instruction is opinionated, separate the required action from the opinionated choice used in the example.
 - Use `Ensure`, not `make sure`.
 - Use exclamation points rarely.
+- Do not use "Alpha" to mark early-stage features. Only use "Beta" (this also applies to the sidebars)
 
 ## Links and references
 

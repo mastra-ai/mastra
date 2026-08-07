@@ -1,5 +1,5 @@
 import type { ChannelPlatformInfo, ChannelInstallationInfo, ChannelConnectResult } from '@mastra/client-js';
-import { toast } from '@mastra/playground-ui';
+import { toast } from '@mastra/playground-ui/utils/toast';
 import { useMastraClient } from '@mastra/react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback } from 'react';

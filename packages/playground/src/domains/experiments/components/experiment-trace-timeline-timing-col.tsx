@@ -1,4 +1,5 @@
-import { KeyValueList, cn } from '@mastra/playground-ui';
+import { KeyValueList } from '@mastra/playground-ui/components/KeyValueList';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import * as HoverCard from '@radix-ui/react-hover-card';
 import { format } from 'date-fns/format';
 import { ChevronFirstIcon, ChevronLastIcon, ChevronsLeftRightIcon, ChevronsRightIcon, TimerIcon } from 'lucide-react';
@@ -44,7 +45,7 @@ export function ExperimentTraceTimelineTimingCol({
         style={{ border: '2px dashed blue' }}
       >
         <div className={cn('w-full p-2.5 rounded-lg bg-surface4 transition-colors duration-1000 min-w-40')}>
-          <div className="relative w-full h-1.5 rounded-sm">
+          <div className="relative h-1.5 w-full rounded-sm">
             <div
               className={cn('bg-neutral1 absolute rounded-sm h-1.5 top-0')}
               style={{
@@ -60,7 +61,7 @@ export function ExperimentTraceTimelineTimingCol({
       </HoverCard.Trigger>
       <HoverCard.Portal>
         <HoverCard.Content
-          className="z-50 w-auto max-w-[25rem] rounded-md bg-surface4 p-2 px-4 pr-6 text-ui-sm text-neutral5 text-center border border-border1"
+          className="bg-surface4 text-ui-sm text-neutral5 border-border1 z-50 w-auto max-w-[25rem] rounded-md border p-2 px-4 pr-6 text-center"
           sideOffset={5}
           side="top"
         >
@@ -73,7 +74,7 @@ export function ExperimentTraceTimelineTimingCol({
             <TimerIcon /> Span Timing
           </div>
           <KeyValueList
-            className="[&>dd]:text-ui-md [&>dt]:text-ui-md [&>dt]:min-h-0 [&>dd]:min-h-0"
+            className="[&>dd]:text-ui-md [&>dt]:text-ui-md [&>dd]:min-h-0 [&>dt]:min-h-0"
             data={[
               {
                 key: 'Latency',

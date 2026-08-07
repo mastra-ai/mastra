@@ -7,9 +7,9 @@ packages:
 
 # StreamErrorRetryProcessor
 
-`StreamErrorRetryProcessor` is an **error processor** that retries transient errors emitted after an LLM stream starts. It includes built-in matching for OpenAI Responses stream errors and supports additional matchers for other provider-specific stream error shapes.
+`StreamErrorRetryProcessor` is an **error processor** that retries transient LLM API and stream failures. It includes built-in matching for OpenAI Responses stream errors and supports additional matchers for other provider-specific error shapes.
 
-The processor isn't enabled by default in core. Add it to `errorProcessors` for agents that need stream-error retry handling.
+The processor isn't enabled by default in core. Add it to `errorProcessors` for agents that need bounded retry handling.
 
 ## Usage example
 
@@ -20,6 +20,7 @@ import { Agent } from '@mastra/core/agent'
 import { StreamErrorRetryProcessor } from '@mastra/core/processors'
 
 export const agent = new Agent({
+  id: 'openai-agent',
   name: 'openai-agent',
   instructions: 'You are a helpful assistant.',
   model: '__GATEWAY_OPENAI_MODEL_BASE__',
@@ -36,6 +37,76 @@ The processor checks the error and its cause chain for:
 - Matcher results: Any configured matcher that returns `true`
 
 When the error is retryable, the processor returns `{ retry: true }`. It doesn't mutate messages.
+
+When `delayMs` is set, the processor waits before signaling a retry. This is useful for transient network errors like `ECONNRESET` where immediately retrying is likely to fail again. The delay can be a fixed number of milliseconds or a function evaluated with the error args (for example, to implement exponential backoff).
+
+### Retry limits
+
+`maxRetries` defaults to `1` and limits this processor's retry requests. The agent also limits processor retries with `maxProcessorRetries`. When error processors are configured without an agent limit, the runtime cap is `10`.
+
+Set both values explicitly to the same bounded value when you need a single retry budget. Keep model `maxRetries` at `0` for that call to avoid multiplying provider attempts.
+
+### `Retry-After` handling
+
+For retryable errors with a `Retry-After` response header, the processor reads case-insensitive delta-seconds and HTTP-date values through the error cause chain. It waits for the longer of `delayMs` and the bounded server delay.
+
+`maxRetryAfterMs` defaults to `30_000`. It caps only provider-provided wait time. A longer explicit `delayMs` remains unchanged. Invalid or expired headers are ignored.
+
+## Retry unknown errors
+
+Set `retryUnknownErrors` to retry errors that don't match provider metadata, the built-in OpenAI matcher, or a custom matcher. Unknown-error retries use the processor-level `maxRetries` and `delayMs` values. Known authorization failures, including HTTP `401` and `403` responses, aren't retried:
+
+```typescript title="src/mastra/agents/resilient-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { StreamErrorRetryProcessor } from '@mastra/core/processors'
+
+export const agent = new Agent({
+  id: 'resilient-agent',
+  name: 'Resilient agent',
+  instructions: 'You are a helpful assistant.',
+  model: '__GATEWAY_OPENAI_MODEL_BASE__',
+  errorProcessors: [
+    new StreamErrorRetryProcessor({
+      retryUnknownErrors: true,
+      maxRetries: 2,
+      delayMs: 3000,
+    }),
+  ],
+})
+```
+
+Specific matcher policies still take precedence over the unknown-error values. The option defaults to `false`, so unknown errors aren't retried unless you enable it.
+
+## Delaying retries
+
+Use `delayMs` with a custom matcher to retry transient network resets with a wait:
+
+```typescript title="src/mastra/agents/resilient-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { StreamErrorRetryProcessor } from '@mastra/core/processors'
+
+const isECONNRESET = (error: unknown) => {
+  if (!error || typeof error !== 'object') return false
+  const code = (error as { code?: unknown }).code
+  if (typeof code === 'string' && code.toUpperCase() === 'ECONNRESET') return true
+  const message = error instanceof Error ? error.message : undefined
+  return typeof message === 'string' && /econnreset|socket hang up/i.test(message)
+}
+
+export const agent = new Agent({
+  id: 'resilient-agent',
+  name: 'resilient-agent',
+  instructions: 'You are a helpful assistant.',
+  model: '__GATEWAY_OPENAI_MODEL_BASE__',
+  errorProcessors: [
+    new StreamErrorRetryProcessor({
+      maxRetries: 2,
+      delayMs: ({ retryCount }) => Math.min(1000 * 2 ** retryCount, 30000),
+      matchers: [isECONNRESET],
+    }),
+  ],
+})
+```
 
 ## Default OpenAI Responses matcher
 
@@ -66,6 +137,30 @@ When the error is retryable, the processor returns `{ retry: true }`. It doesn't
         description: 'Additional functions that identify provider-specific retryable stream errors.',
         isOptional: true,
         defaultValue: '[]',
+      },
+      {
+        name: 'retryUnknownErrors',
+        type: 'boolean',
+        description:
+          'Whether to retry unknown errors left unmatched by provider metadata, built-in matchers, and custom matchers. Known authorization failures are excluded. Uses the processor-level maxRetries and delayMs values.',
+        isOptional: true,
+        defaultValue: 'false',
+      },
+      {
+        name: 'delayMs',
+        type: 'number | ((args: ProcessAPIErrorArgs) => number | Promise<number>)',
+        description:
+          'Delay in milliseconds to wait before signaling a retry. Accepts a fixed number or a function evaluated with the current error args (for example, for exponential backoff). Negative or non-finite values are clamped to 0.',
+        isOptional: true,
+        defaultValue: '0',
+      },
+      {
+        name: 'maxRetryAfterMs',
+        type: 'number',
+        description:
+          'Maximum provider-controlled delay read from a Retry-After header. This does not cap an explicit delayMs value. Negative or non-finite values are clamped to 0.',
+        isOptional: true,
+        defaultValue: '30000',
       },
     ],
   },

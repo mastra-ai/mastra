@@ -6,8 +6,10 @@ import type {
   UpdateBackgroundTask,
 } from '@mastra/core/background-tasks';
 import { BackgroundTasksStorage, TABLE_BACKGROUND_TASKS } from '@mastra/core/storage';
+import type { PruneOptions, PruneResult, RetentionTablesDescriptor, TableRetentionPolicy } from '@mastra/core/storage';
 import type { MongoDBConnector } from '../../connectors/MongoDBConnector';
 import { resolveMongoDBConfig } from '../../db';
+import { resolveTargets, runPrune } from '../../retention';
 import type { MongoDBDomainConfig, MongoDBIndexConfig } from '../../types';
 
 function toDoc(task: BackgroundTask): Record<string, any> {
@@ -65,6 +67,15 @@ export class BackgroundTasksStorageMongoDB extends BackgroundTasksStorage {
 
   static readonly MANAGED_COLLECTIONS = [TABLE_BACKGROUND_TASKS] as const;
 
+  /**
+   * Anchor is `completedAt`, so age is measured from task completion; it stays
+   * `null` while a task is in-flight, and `null $lt cutoff` never matches, so
+   * pending/running tasks are never pruned regardless of age.
+   */
+  static override readonly retentionTables: RetentionTablesDescriptor = {
+    backgroundTasks: { table: TABLE_BACKGROUND_TASKS, column: 'completedAt', indexed: true },
+  };
+
   constructor(config: MongoDBDomainConfig) {
     super();
     this.#connector = resolveMongoDBConfig(config);
@@ -76,6 +87,21 @@ export class BackgroundTasksStorageMongoDB extends BackgroundTasksStorage {
 
   private async getCollection() {
     return this.#connector.getCollection(TABLE_BACKGROUND_TASKS);
+  }
+
+  /**
+   * Delete tasks completed longer ago than the policy's `maxAge`, batched.
+   * `completedAt` is stored as an ISO-8601 string (see `toDoc`), so the cutoff
+   * uses the `iso` encoding — lexicographic `$lt` on ISO strings is time-ordered.
+   */
+  async prune(policies: Record<string, TableRetentionPolicy>, options?: PruneOptions): Promise<PruneResult[]> {
+    const targets = resolveTargets({
+      policies,
+      descriptor: BackgroundTasksStorageMongoDB.retentionTables,
+      order: ['backgroundTasks'],
+      encodings: { backgroundTasks: 'iso' },
+    });
+    return runPrune({ connector: this.#connector, domain: 'backgroundTasks', targets, options, logger: this.logger });
   }
 
   getDefaultIndexDefinitions(): MongoDBIndexConfig[] {

@@ -1,0 +1,29 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "userMessage": "Start a slow Ctrl F queue run.",
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat"
+      },
+      "chunkSize": 6,
+      "streamingProfile": {
+        "ttft": 500,
+        "tps": 3
+      },
+      "response": {
+        "content": "Initial Ctrl F queue run is still streaming while a queued follow-up waits. Initial Ctrl F queue run completed."
+      }
+    },
+    {
+      "match": {
+        "userMessage": "Queued Ctrl F image follow-up",
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat"
+      },
+      "response": {
+        "content": "Queued Ctrl F follow-up completed."
+      }
+    }
+  ]
+}

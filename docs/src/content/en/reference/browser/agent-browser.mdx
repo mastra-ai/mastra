@@ -91,6 +91,13 @@ then interact with elements using their refs (e.g., @e5).`,
     isOptional: true,
   },
   {
+    name: 'recording',
+    type: 'BrowserRecordingOptions',
+    description:
+      'Alpha option for adding browser recording tools. Provide outputDir to add browser_record and browser_record_caption to the toolset. You can also set maxDurationMs, maxWidth, and maxHeight as defaults for every recording.',
+    isOptional: true,
+  },
+  {
     name: 'excludeTools',
     type: 'BrowserToolName[]',
     description:
@@ -103,6 +110,8 @@ then interact with elements using their refs (e.g., @e5).`,
 ## Tools
 
 `AgentBrowser` provides 16 deterministic tools for browser automation. All tools that interact with elements use refs from the accessibility tree snapshot.
+
+When `recording` is configured, `AgentBrowser` also adds the alpha `browser_record` and `browser_record_caption` tools. See [Browser recording (alpha)](/docs/browser/recording).
 
 ### Core tools
 
@@ -155,7 +164,7 @@ Navigate to a URL.
 
 | Parameter | Type | Description |
 | - | - | - |
-| `url` | `string` | URL to navigate to |
+| `url` | `string` | URL to open |
 | `waitUntil` | `"load" \| "domcontentloaded" \| "networkidle"` | When to consider navigation complete (optional) |
 | `timeout` | `number` | Navigation timeout in ms (optional) |
 
@@ -406,7 +415,7 @@ Execute JavaScript in the page context. Use as an escape hatch when other tools 
 
 ### `browser_screenshot`
 
-Capture a screenshot of the current page as PNG (viewport by default; set `fullPage: true` for full-page capture). Returns image content that vision-capable models can interpret directly. Use `browser_snapshot` when you only need text or structured data.
+Capture a screenshot of the current page as PNG (viewport by default. Set `fullPage: true` for full-page capture). Returns image content that vision-capable models can interpret directly. Use `browser_snapshot` when you only need text or structured data.
 
 ```text
 // Viewport only (default)
@@ -418,7 +427,7 @@ Capture a screenshot of the current page as PNG (viewport by default; set `fullP
 
 | Parameter | Type | Description |
 | - | - | - |
-| `fullPage` | `boolean` | Capture the full scrollable page instead of just the viewport (optional, default: false) |
+| `fullPage` | `boolean` | Capture the full scrollable page instead of only the viewport (optional, default: false) |
 
 ### `browser_close`
 

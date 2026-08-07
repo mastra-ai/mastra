@@ -1,5 +1,6 @@
 import type { DatasetExperiment, DatasetRecord, ExperimentReviewCounts } from '@mastra/client-js';
-import { HorizontalBars, MetricsCard } from '@mastra/playground-ui';
+import { HorizontalBars } from '@mastra/playground-ui/components/HorizontalBars';
+import { MetricsCard } from '@mastra/playground-ui/components/MetricsCard';
 import { useMemo } from 'react';
 
 const REVIEW_COLORS = {

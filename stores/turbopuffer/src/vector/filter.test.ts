@@ -1,10 +1,10 @@
-import type { Filters } from '@turbopuffer/turbopuffer';
+import type { Filter } from '@turbopuffer/turbopuffer/resources/custom';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { TurbopufferFilterTranslator } from './filter';
 import type { TurbopufferVectorFilter } from './filter';
 
 describe('TurbopufferFilterTranslator', () => {
-  let translate: (filter?: TurbopufferVectorFilter) => Filters | undefined;
+  let translate: (filter?: TurbopufferVectorFilter) => Filter | undefined;
 
   beforeEach(() => {
     const translator = new TurbopufferFilterTranslator();

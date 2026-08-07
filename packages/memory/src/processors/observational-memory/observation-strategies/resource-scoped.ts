@@ -1,7 +1,15 @@
 import type { MastraDBMessage } from '@mastra/core/agent';
 import { getThreadOMMetadata, setThreadOMMetadata } from '@mastra/core/memory';
+import type { ThreadOMMetadata } from '@mastra/core/memory';
+import type { ProviderMetadata } from '@mastra/core/stream';
 
 import { OBSERVATIONAL_MEMORY_DEFAULTS } from '../constants';
+import {
+  applyExtractorHooks,
+  buildThreadMetadataFromExtractedValues,
+  getPriorExtractedValues,
+} from '../extracted-values';
+import type { Extractor } from '../extractor';
 import {
   createObservationEndMarker,
   createObservationFailedMarker,
@@ -28,18 +36,32 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
   private messagesByThread = new Map<string, MastraDBMessage[]>();
   private multiThreadResults = new Map<
     string,
-    { observations: string; currentTask?: string; suggestedContinuation?: string; threadTitle?: string }
+    {
+      observations: string;
+      currentTask?: string;
+      suggestedContinuation?: string;
+      threadTitle?: string;
+      extractedValues?: Record<string, unknown>;
+      extractionFailures?: Array<{ slug: string; error: string }>;
+      extractors?: readonly Extractor<any>[];
+    }
   >();
   private totalBatchUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
+  private lastBatchProviderMetadata: ProviderMetadata | undefined;
   private observationResults: Array<{
     threadId: string;
     threadMessages: MastraDBMessage[];
-    result: { observations: string; currentTask?: string; suggestedContinuation?: string; threadTitle?: string };
+    result: {
+      observations: string;
+      currentTask?: string;
+      suggestedContinuation?: string;
+      threadTitle?: string;
+      extractedValues?: Record<string, unknown>;
+      extractionFailures?: Array<{ slug: string; error: string }>;
+      extractors?: readonly Extractor<any>[];
+    };
   }> = [];
-  private priorMetadataByThread = new Map<
-    string,
-    { currentTask?: string; suggestedResponse?: string; threadTitle?: string }
-  >();
+  private priorMetadataByThread = new Map<string, ThreadOMMetadata>();
 
   constructor(deps: StrategyDeps, opts: ObservationRunOpts) {
     super(deps, opts);
@@ -65,12 +87,8 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
     for (const thread of allThreads) {
       const omMetadata = getThreadOMMetadata(thread.metadata);
       threadMetadataMap.set(thread.id, { lastObservedAt: omMetadata?.lastObservedAt });
-      if (omMetadata?.currentTask || omMetadata?.suggestedResponse || omMetadata?.threadTitle) {
-        this.priorMetadataByThread.set(thread.id, {
-          currentTask: omMetadata.currentTask,
-          suggestedResponse: omMetadata.suggestedResponse,
-          threadTitle: omMetadata.threadTitle,
-        });
+      if (omMetadata) {
+        this.priorMetadataByThread.set(thread.id, omMetadata);
       }
     }
 
@@ -258,11 +276,15 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
         this.totalBatchUsage.outputTokens += batchResult.usage.outputTokens ?? 0;
         this.totalBatchUsage.totalTokens += batchResult.usage.totalTokens ?? 0;
       }
+      if (batchResult.providerMetadata) {
+        this.lastBatchProviderMetadata = batchResult.providerMetadata;
+      }
     }
 
     return {
       observations: '',
       usage: this.totalBatchUsage.totalTokens > 0 ? this.totalBatchUsage : undefined,
+      providerMetadata: this.lastBatchProviderMetadata,
     };
   }
 
@@ -277,7 +299,32 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
       const result = this.multiThreadResults.get(threadId);
       if (!result) continue;
 
-      this.observationResults.push({ threadId, threadMessages, result });
+      const previousValues = getPriorExtractedValues(
+        this.priorMetadataByThread.get(threadId),
+        this.observationConfig.extractors,
+      );
+      const hookedValues = await applyExtractorHooks({
+        source: 'observer',
+        extractors: result.extractors ?? this.observationConfig.extractors,
+        values: result.extractedValues,
+        failures: result.extractionFailures,
+        previousValues,
+        threadId,
+        resourceId: this.resourceId,
+        mainAgent: this.opts.agent,
+        memory: this.deps.memory,
+        sendSignal: this.opts.sendSignal,
+        requestContext: this.opts.requestContext,
+      });
+      this.observationResults.push({
+        threadId,
+        threadMessages,
+        result: {
+          ...result,
+          extractedValues: hookedValues.values,
+          extractionFailures: hookedValues.failures,
+        },
+      });
     }
 
     let currentObservations = existingObservations;
@@ -304,6 +351,9 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
         suggestedResponse: result.suggestedContinuation,
         currentTask: result.currentTask,
         threadTitle: result.threadTitle,
+        extracted: result.extractedValues,
+        extractionFailures: result.extractionFailures,
+        extractors: result.extractors,
         lastObservedMessageCursor: getLastObservedMessageCursor(threadMessages),
       });
 
@@ -352,11 +402,20 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
           const oldTitle = thread.title?.trim();
           const newTitle = update.threadTitle?.trim();
           const shouldUpdateThreadTitle = !!newTitle && newTitle.length >= 3 && newTitle !== oldTitle;
+          const previousOmMetadata = getThreadOMMetadata(thread.metadata);
+          const metadataUpdate = buildThreadMetadataFromExtractedValues(
+            update.extractors ?? this.observationConfig.extractors,
+            update.extracted,
+          );
           const newMetadata = setThreadOMMetadata(thread.metadata, {
             lastObservedAt: update.lastObservedAt,
-            suggestedResponse: update.suggestedResponse,
-            currentTask: update.currentTask,
-            threadTitle: update.threadTitle,
+            suggestedResponse: metadataUpdate.suggestedResponse ?? update.suggestedResponse,
+            currentTask: metadataUpdate.currentTask ?? update.currentTask,
+            threadTitle: metadataUpdate.threadTitle ?? update.threadTitle,
+            extracted: {
+              ...(previousOmMetadata?.extracted ?? {}),
+              ...(metadataUpdate.extracted ?? {}),
+            },
             lastObservedMessageCursor: update.lastObservedMessageCursor,
           });
           await this.storage.updateThread({
@@ -421,6 +480,8 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
           observations: result.observations,
           currentTask: result.currentTask,
           suggestedResponse: result.suggestedContinuation,
+          extractedValues: result.extractedValues,
+          extractionFailures: result.extractionFailures,
           recordId: this.opts.record.id,
           threadId,
         });

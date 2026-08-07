@@ -1,6 +1,11 @@
 'use client';
 
-import { Button, CodeEditor, Label, SideDialog, Txt, toast } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
+import { Label } from '@mastra/playground-ui/components/Label';
+import { SideDialog } from '@mastra/playground-ui/components/SideDialog';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { toast } from '@mastra/playground-ui/utils/toast';
 import { ChevronLeftIcon, ChevronRightIcon, DatabaseIcon, Loader2Icon, TrashIcon } from 'lucide-react';
 import { useState, useCallback, useEffect } from 'react';
 import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
@@ -128,7 +133,7 @@ export function BulkTraceReviewDialog({
       </SideDialog.Top>
 
       <SideDialog.Content>
-        <div className="flex items-center justify-between mb-4">
+        <div className="mb-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Button
               tooltip="Previous item"

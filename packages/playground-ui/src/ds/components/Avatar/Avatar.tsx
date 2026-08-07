@@ -31,7 +31,7 @@ export const Avatar = ({ src, name, size = 'sm', interactive = false, color, tex
     <div
       className={cn(
         sizeClasses[size],
-        'border border-border1 shrink-0 overflow-hidden rounded-full flex items-center justify-center',
+        'flex shrink-0 items-center justify-center overflow-hidden rounded-full border border-border1',
         !showFallbackTint && 'bg-surface3',
         transitions.all,
         interactive && 'cursor-pointer hover:scale-105 hover:border-neutral2 hover:shadow-sm',
@@ -39,7 +39,7 @@ export const Avatar = ({ src, name, size = 'sm', interactive = false, color, tex
       style={showFallbackTint ? { backgroundColor: color } : undefined}
     >
       {showImage ? (
-        <img src={src} alt={name} className="h-full w-full object-cover" onError={() => setDidError(true)} />
+        <img src={src} alt={name} className="size-full object-cover" onError={() => setDidError(true)} />
       ) : (
         <Txt
           variant="ui-md"

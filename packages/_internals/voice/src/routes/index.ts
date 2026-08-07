@@ -18,16 +18,16 @@ export const generateSpeechBodySchema = z.object({
 });
 
 export const transcribeSpeechBodySchema = z.object({
-  audio: z.any(),
-  options: z.record(z.string(), z.any()).optional(),
+  audio: z.unknown(),
+  options: z.record(z.string(), z.unknown()).optional(),
 });
 
 export const transcribeSpeechResponseSchema = z.object({
   text: z.string(),
 });
 
-export const getListenerResponseSchema = z.any();
-export const speakResponseSchema = z.any();
+export const getListenerResponseSchema = z.unknown();
+export const speakResponseSchema = z.unknown();
 
 const agentIdPathParams = z.object({
   agentId: z.string().describe('Agent ID'),
@@ -200,7 +200,7 @@ export const GET_SPEAKERS_DEPRECATED_ROUTE = createRoute({
 export const GENERATE_SPEECH_ROUTE = createRoute({
   method: 'POST',
   path: '/agents/:agentId/voice/speak',
-  responseType: 'stream',
+  responseType: 'datastream-response',
   summary: 'Generate speech',
   description: 'Generates speech audio from text using the agent voice configuration',
   tags: ['Agents', 'Voice'],
@@ -237,7 +237,16 @@ export const GENERATE_SPEECH_ROUTE = createRoute({
         throw new HTTPException(500, { message: 'Failed to generate speech' });
       }
 
-      return audioStream as unknown as ReadableStream<any>;
+      const webStream =
+        audioStream instanceof ReadableStream
+          ? audioStream
+          : audioStream instanceof Readable
+            ? (Readable.toWeb(audioStream) as unknown as ReadableStream<any>)
+            : (audioStream as unknown as ReadableStream<any>);
+
+      return new Response(webStream, {
+        headers: { 'Content-Type': 'audio/mpeg' },
+      });
     } catch (error) {
       return handleError(error, 'Error generating speech');
     }
@@ -247,7 +256,7 @@ export const GENERATE_SPEECH_ROUTE = createRoute({
 export const GENERATE_SPEECH_DEPRECATED_ROUTE = createRoute({
   method: 'POST',
   path: '/agents/:agentId/speak',
-  responseType: 'stream',
+  responseType: 'datastream-response',
   summary: 'Convert text to speech',
   description:
     "[DEPRECATED] Use /agents/:agentId/voice/speak instead. Convert text to speech using the agent's voice provider",

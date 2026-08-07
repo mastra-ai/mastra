@@ -377,12 +377,10 @@ export class AudioStreamManager {
       // For real-time streaming
       return {
         realtime_input: {
-          media_chunks: [
-            {
-              mime_type: 'audio/pcm',
-              data: audioData,
-            },
-          ],
+          audio: {
+            mime_type: 'audio/pcm',
+            data: audioData,
+          },
         },
       };
     }

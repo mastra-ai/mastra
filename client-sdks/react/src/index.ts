@@ -4,6 +4,7 @@ export * from './agent/types';
 export type { MastraClientCredentials, MastraClientProviderProps } from './mastra-client-context';
 export { useMastraClient } from './mastra-client-context';
 export * from './lib/mastra-db';
+export type { TaskItem } from '@mastra/core/signals';
 export type {
   MastraDBMessage,
   MastraMessageContentV2,
@@ -16,3 +17,4 @@ export type {
 } from '@mastra/core/agent/message-list';
 export * from './ui';
 export * from './workflows'; // Workflow hooks
+export * from './voice'; // Voice helpers

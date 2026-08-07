@@ -64,7 +64,7 @@ services:
   perf-serverless-redis-http:
     image: hiett/serverless-redis-http:latest
     ports:
-      - '8080:80'
+      - '${PERF_SERVERLESS_REDIS_HTTP_PORT:-8080}:80'
     environment:
       SRH_MODE: env
       SRH_TOKEN: test_token

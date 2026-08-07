@@ -29,7 +29,7 @@ export function TracesDataListNameCell({ name, parentSpanId, showLevelTooltip }:
     </span>
   );
   return (
-    <DataListCell height="compact" className="text-neutral4 text-ui-smd min-w-0 flex items-center gap-2">
+    <DataListCell height="compact" className="text-ui-smd text-neutral4 flex min-w-0 items-center gap-2">
       {showLevelTooltip ? (
         <Tooltip>
           <TooltipTrigger asChild>{icon}</TooltipTrigger>
@@ -61,11 +61,13 @@ export function TracesDataListInputCell({ input }: TracesDataListInputCellProps)
 
 function EntityTypeIcon({ entityType, className }: { entityType: string; className?: string }) {
   const iconClass = cn('size-3.5 shrink-0 text-neutral2', className);
-  switch (entityType) {
-    case 'AGENT':
+  const normalizedEntityType = entityType.toLowerCase();
+
+  switch (normalizedEntityType) {
+    case 'agent':
       return <AgentIcon className={iconClass} aria-hidden />;
-    case 'WORKFLOW':
-    case 'WORKFLOW_RUN':
+    case 'workflow':
+    case 'workflow_run':
       return <WorkflowIcon className={iconClass} aria-hidden />;
     default:
       return null;
@@ -83,7 +85,7 @@ export function TracesDataListEntityCell({ entityType, entityName }: TracesDataL
   return (
     <DataListCell height="compact" className="flex min-w-0 items-center gap-2">
       <EntityTypeIcon entityType={type} />
-      {entityName ? <span className="min-w-0 text-ui-smd truncate">{entityName}</span> : '-'}
+      {entityName ? <span className="text-ui-smd min-w-0 truncate">{entityName}</span> : '-'}
     </DataListCell>
   );
 }
@@ -92,11 +94,15 @@ export function TracesDataListEntityCell({ entityType, entityName }: TracesDataL
 // StatusCell
 // ---------------------------------------------------------------------------
 
+const UNSET_STATUS_CONFIG = { label: '-', color: Colors.neutral4 };
+
 const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
-  completed: { label: 'OK', color: Colors.accent2 },
-  ok: { label: 'OK', color: Colors.accent2 },
+  completed: { label: 'OK', color: Colors.accent1 },
+  ok: { label: 'OK', color: Colors.accent1 },
+  success: { label: 'OK', color: Colors.accent1 },
   error: { label: 'ERR', color: Colors.error },
-  unset: { label: '-', color: Colors.neutral4 },
+  running: { label: 'RUN', color: Colors.neutral4 },
+  unset: UNSET_STATUS_CONFIG,
 };
 
 export interface TracesDataListStatusCellProps {
@@ -105,11 +111,11 @@ export interface TracesDataListStatusCellProps {
 
 export function TracesDataListStatusCell({ status }: TracesDataListStatusCellProps) {
   const key = (status ?? 'unset').toLowerCase();
-  const config = STATUS_CONFIG[key] ?? STATUS_CONFIG['unset'];
+  const config = STATUS_CONFIG[key] ?? UNSET_STATUS_CONFIG;
 
   return (
     <DataListCell height="compact">
-      <span className="uppercase text-ui-sm font-semibold" style={{ color: config.color }}>
+      <span className="text-ui-sm font-semibold uppercase" style={{ color: config.color }}>
         {config.label}
       </span>
     </DataListCell>

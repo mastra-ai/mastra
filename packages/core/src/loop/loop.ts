@@ -16,6 +16,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
   idGenerator,
   messageList,
   includeRawChunks,
+  experimentalTransform,
   modelSettings,
   tools,
   _internal,
@@ -74,11 +75,20 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
     skipBgTaskWait: _internal?.skipBgTaskWait,
     drainPendingSignals: _internal?.drainPendingSignals,
     initialSignalEchoes: _internal?.initialSignalEchoes ? [..._internal.initialSignalEchoes] : undefined,
+    // Forward the tool payload transform policy. Every other consumed field is
+    // rebuilt here and this bag is what hydrates the run scope, so omitting it
+    // silently drops the policy for the whole run (the scope slot stays unset
+    // and `readScoped` falls back to this same bag). See `hydrate-run-scope.ts`.
+    toolPayloadTransform: _internal?.toolPayloadTransform,
   };
 
   let startTimestamp = internalToUse.now?.();
 
-  const messageId = rest.experimental_generateMessageId?.() || internalToUse.generateId?.();
+  let currentResponseMessageId = rest.experimental_generateMessageId?.() || internalToUse.generateId?.();
+  const rotateResponseMessageId = () => {
+    currentResponseMessageId = internalToUse.generateId?.();
+    return currentResponseMessageId!;
+  };
 
   let modelOutput: MastraModelOutput<OUTPUT> | undefined;
   const serializeStreamState = () => {
@@ -104,7 +114,8 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
     tools,
     modelSettings,
     outputProcessors,
-    messageId: messageId!,
+    messageId: currentResponseMessageId!,
+    rotateResponseMessageId,
     agentId,
     requireToolApproval,
     toolCallConcurrency,
@@ -144,9 +155,9 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
     },
     stream,
     messageList,
-    messageId: messageId!,
+    messageId: currentResponseMessageId!,
     options: {
-      runId: runIdToUse!,
+      runId: runIdToUse,
       toolCallStreaming: rest.toolCallStreaming,
       onFinish: rest.options?.onFinish,
       onStepFinish: rest.options?.onStepFinish,
@@ -158,6 +169,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
       requestContext: rest.requestContext,
       processorStates,
       transportRef: internalToUse.transportRef,
+      experimentalTransform,
     },
     initialState: initialStreamState,
   });

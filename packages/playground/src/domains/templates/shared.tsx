@@ -1,4 +1,4 @@
-import { cn } from '@mastra/playground-ui';
+import { cn } from '@mastra/playground-ui/utils/cn';
 
 export function getRepoName(githubUrl: string) {
   return githubUrl.replace(/\/$/, '').split('/').pop();

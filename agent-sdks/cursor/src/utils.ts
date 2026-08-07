@@ -50,6 +50,7 @@ export type SDKModelGenerateResult = {
   };
   providerMetadata?: ProviderMetadata;
   costContext?: CostContext;
+  object?: unknown;
 };
 
 export function createNoopModel({ modelId, provider }: { modelId: string; provider: string }): MastraLanguageModel {
@@ -80,6 +81,7 @@ export function createCompletedMastraStream({
   usage,
   providerMetadata,
   costContext,
+  object,
 }: {
   runId: string;
   prompt: string;
@@ -89,6 +91,7 @@ export function createCompletedMastraStream({
   usage: LanguageModelUsage;
   providerMetadata?: ProviderMetadata;
   costContext?: CostContext;
+  object?: unknown;
 }): ReadableStream<ChunkType> {
   return new ReadableStream<ChunkType>({
     start(controller) {
@@ -114,6 +117,7 @@ export function createCompletedMastraStream({
         usage,
         providerMetadata,
         costContext,
+        object,
       });
       controller.close();
     },
@@ -178,6 +182,7 @@ export function toFullOutput<OUTPUT>({
     usage: toLanguageModelUsage(result.usage),
     providerMetadata: result.providerMetadata,
     costContext: result.costContext,
+    object: result.object,
   });
 
   return createMastraOutput<OUTPUT>({
@@ -685,6 +690,7 @@ export function enqueueFinishChunks(
     usage,
     providerMetadata,
     costContext,
+    object,
   }: {
     runId: string;
     prompt: string;
@@ -695,6 +701,7 @@ export function enqueueFinishChunks(
     usage: LanguageModelUsage;
     providerMetadata?: ProviderMetadata;
     costContext?: CostContext;
+    object?: unknown;
   },
 ): void {
   const timestamp = new Date();
@@ -720,6 +727,14 @@ export function enqueueFinishChunks(
       providerMetadata,
     },
   });
+  if (object !== undefined) {
+    controller.enqueue({
+      type: 'object-result',
+      runId,
+      from: ChunkFrom.AGENT,
+      object,
+    } as unknown as ChunkType);
+  }
   controller.enqueue({
     type: 'step-finish',
     runId,

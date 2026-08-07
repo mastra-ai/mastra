@@ -6,7 +6,7 @@ import {
   createInitialStructure,
   updateNodeContent,
   updateRootFolderName,
-} from '@/domains/agents/components/agent-cms-pages/skill-file-tree';
+} from '@/domains/agents/components/agent-cms-pages/skill-file-tree-utils';
 import { useUpdateSkill } from '@/domains/agents/hooks/use-update-skill';
 
 export type AutosaveStatus = 'idle' | 'saving' | 'saved' | 'error';

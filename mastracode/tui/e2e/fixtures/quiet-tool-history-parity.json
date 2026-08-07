@@ -1,0 +1,48 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "userMessage": "Render quiet mode live tool output."
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_quiet_live_view",
+            "name": "view",
+            "arguments": {
+              "path": "src/quiet-mode-e2e.ts",
+              "offset": 1,
+              "limit": 4
+            }
+          },
+          {
+            "id": "call_quiet_live_task",
+            "name": "task_write",
+            "arguments": {
+              "tasks": [
+                {
+                  "id": "quiet-live-task",
+                  "content": "Verify quiet live task summary",
+                  "status": "pending",
+                  "activeForm": "Verifying quiet live task summary"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "hasToolResult": true
+      },
+      "response": {
+        "content": "Quiet live tool output complete."
+      }
+    }
+  ]
+}

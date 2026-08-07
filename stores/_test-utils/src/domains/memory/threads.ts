@@ -143,6 +143,11 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
       const thread = createSampleThread();
       await memoryStorage.saveThread({ thread });
 
+      const originalUpdatedAtTime = new Date(thread.updatedAt).getTime();
+
+      // Wait a small amount to ensure a different timestamp
+      await new Promise(resolve => setTimeout(resolve, 10));
+
       const newMetadata = { newKey: 'newValue' };
       const updatedThread = await memoryStorage.updateThread({
         id: thread.id,
@@ -155,11 +160,12 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
         ...thread.metadata,
         ...newMetadata,
       });
+      expect(new Date(updatedThread.updatedAt).getTime()).toBeGreaterThan(originalUpdatedAtTime);
 
       // Verify persistence
       const retrievedThread = await memoryStorage.getThreadById({ threadId: thread.id });
-      console.log('retrievedThread', retrievedThread);
       expect(retrievedThread).toEqual(updatedThread);
+      expect(new Date(retrievedThread!.updatedAt).getTime()).toBeGreaterThan(originalUpdatedAtTime);
     });
 
     it('should return consistent timestamps from getThreadById and listThreads (issue #11496)', async () => {

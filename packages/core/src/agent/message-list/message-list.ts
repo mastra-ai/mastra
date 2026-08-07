@@ -14,6 +14,8 @@ import { CacheKeyGenerator } from './cache/CacheKeyGenerator';
 import {
   aiV4CoreMessageToV1PromptMessage,
   aiV5ModelMessageToV2PromptMessage,
+  aiV5PromptToAIV6Prompt,
+  aiV5PromptToAIV7Prompt,
   coreContentToString,
   messagesAreEqual,
   inputToMastraDBMessage as convertInputToMastraDBMessage,
@@ -23,6 +25,7 @@ import {
   systemMessageToAIV4Core,
   StepContentExtractor,
 } from './conversion';
+import type { ToolCallConversionMode } from './conversion';
 import { TypeDetector } from './detection/TypeDetector';
 import { MessageMerger } from './merge';
 import { convertImageFilePart } from './prompt/convert-file';
@@ -76,6 +79,31 @@ function mergeSignalDataParts<T extends { role: string; parts: Array<{ type: str
   }
   return result;
 }
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function mergeBackgroundTasks(
+  existingBgTasks?: Record<string, unknown>,
+  incomingBgTasks?: Record<string, unknown>,
+): Record<string, unknown> | undefined {
+  if (!existingBgTasks && !incomingBgTasks) {
+    return undefined;
+  }
+
+  const merged: Record<string, unknown> = { ...(existingBgTasks ?? {}) };
+  for (const [toolCallId, incomingTask] of Object.entries(incomingBgTasks ?? {})) {
+    const existingTask = merged[toolCallId];
+    merged[toolCallId] =
+      isPlainRecord(existingTask) && isPlainRecord(incomingTask) ? { ...existingTask, ...incomingTask } : incomingTask;
+  }
+  return merged;
+}
+
+type MessageListAddOptions = {
+  merge?: boolean;
+};
 
 export class MessageList {
   private messages: MastraDBMessage[] = [];
@@ -216,9 +244,8 @@ export class MessageList {
     const source = options?.source ?? 'input';
     const createdAt = this.generateCreatedAt(source, new Date());
     const acceptedAt = signal.acceptedAt ?? signal.createdAt;
-    const signalForTranscript = createSignal({
+    const signalInput = {
       id: signal.id,
-      type: signal.type,
       tagName: signal.tagName,
       contents: signal.contents,
       attributes: signal.attributes,
@@ -226,13 +253,17 @@ export class MessageList {
       providerOptions: signal.providerOptions,
       createdAt,
       acceptedAt,
-    });
+    };
+    const signalForTranscript =
+      signal.type === 'state'
+        ? createSignal({ ...signalInput, type: signal.type })
+        : createSignal({ ...signalInput, type: signal.type, transient: signal.transient });
 
     this.addOne(signalForTranscript.toDBMessage(this.memoryInfo ?? undefined), source);
     return signalForTranscript;
   }
 
-  public add(messages: MessageListInput, messageSource: MessageSource) {
+  public add(messages: MessageListInput, messageSource: MessageSource, options: MessageListAddOptions = {}) {
     if (messageSource === `user`) messageSource = `input`;
 
     if (!messages) return this;
@@ -272,6 +303,7 @@ export class MessageList {
                 }
               : nestedMessage,
             messageSource,
+            options,
           );
         }
         continue;
@@ -285,6 +317,7 @@ export class MessageList {
             }
           : messageInput,
         messageSource,
+        options,
       );
     }
     return this;
@@ -341,6 +374,15 @@ export class MessageList {
       this.updateLastCreatedAt(message);
     }
     return this;
+  }
+
+  /**
+   * Suspended tool calls are dropped from the prompt by default. When the caller opts out
+   * they stay visible, but they are still paired with a pending result — providers reject a
+   * tool call that has no result regardless of what the caller prefers.
+   */
+  private get promptConversionMode(): ToolCallConversionMode {
+    return this.filterIncompleteToolCalls ? 'prompt' : 'prompt-with-suspended';
   }
 
   private getMessagesForModelPrompt(): MastraDBMessage[] {
@@ -514,7 +556,7 @@ export class MessageList {
         const modelMessages = convertAIV5UIToModelMessages(
           this.toAIV5UIMessages(promptMessages, { transformToolPayloads: false }),
           promptMessages,
-          this.filterIncompleteToolCalls,
+          this.promptConversionMode,
         );
 
         const messages = [...systemMessages, ...modelMessages];
@@ -537,7 +579,7 @@ export class MessageList {
         const modelMessages = convertAIV5UIToModelMessages(
           this.toAIV5UIMessages(promptMessages, { transformToolPayloads: false }),
           promptMessages,
-          this.filterIncompleteToolCalls,
+          this.promptConversionMode,
         );
 
         const storedModelOutputs = new Map<string, unknown>();
@@ -550,7 +592,10 @@ export class MessageList {
               part.toolInvocation?.state === 'result' &&
               part.providerMetadata?.mastra &&
               typeof part.providerMetadata.mastra === 'object' &&
-              'modelOutput' in (part.providerMetadata.mastra as Record<string, unknown>)
+              // Key off the value, not its presence: a nullish `modelOutput` means the tool's
+              // toModelOutput opted out of mapping, so the raw result must be kept. Keying off
+              // presence would blank out `output` on the tool message sent to the provider.
+              (part.providerMetadata.mastra as Record<string, unknown>).modelOutput != null
             ) {
               storedModelOutputs.set(
                 part.toolInvocation.toolCallId,
@@ -655,6 +700,25 @@ export class MessageList {
     },
     aiV6: {
       ui: () => this.toAIV6UIMessages(this.all.db()),
+
+      // Builds the v5 prompt, then converts it to the shape AI SDK v6 (spec 'v3')
+      // providers require (tool-result `media` -> `image-data`/`file-data`).
+      llmPrompt: async (options?: {
+        downloadConcurrency?: number;
+        downloadRetries?: number;
+        supportedUrls?: Record<string, RegExp[]>;
+      }): Promise<LanguageModelV2Prompt> => aiV5PromptToAIV6Prompt(await this.all.aiV5.llmPrompt(options)),
+    },
+    aiV7: {
+      ui: () => this.toAIV6UIMessages(this.all.db()),
+
+      // Builds the v5 prompt, then converts tool-result `media` parts to the
+      // file content shape AI SDK v7 (spec 'v4') providers require.
+      llmPrompt: async (options?: {
+        downloadConcurrency?: number;
+        downloadRetries?: number;
+        supportedUrls?: Record<string, RegExp[]>;
+      }): Promise<LanguageModelV2Prompt> => aiV5PromptToAIV7Prompt(await this.all.aiV5.llmPrompt(options)),
     },
 
     /* @deprecated use list.get.all.aiV4.prompt() instead */
@@ -1073,6 +1137,8 @@ export class MessageList {
     }
     const toolCallId = inputPart.toolInvocation.toolCallId;
 
+    // Pass 1: exact toolCallId match. Covers client tools and well-behaved
+    // providers where the call and result share an id.
     for (let m = this.messages.length - 1; m >= 0; m--) {
       const msg = this.messages[m]!;
       if (msg.role !== 'assistant' || !msg.content?.parts) continue;
@@ -1080,65 +1146,180 @@ export class MessageList {
       for (let i = 0; i < msg.content.parts.length; i++) {
         const part = msg.content.parts[i];
         if (part?.type === 'tool-invocation' && part.toolInvocation?.toolCallId === toolCallId) {
-          // Cast to access providerExecuted/providerMetadata which exist at runtime but aren't in the base type
-          const originalPart = part as typeof part & { providerExecuted?: boolean; providerMetadata?: unknown };
-          const inputPartWithMeta = inputPart as typeof inputPart & {
-            providerExecuted?: boolean;
-            providerMetadata?: unknown;
-          };
-
-          const mergedProviderMetadata =
-            originalPart.providerMetadata !== undefined || inputPartWithMeta.providerMetadata !== undefined
-              ? ({
-                  ...((originalPart.providerMetadata ?? {}) as Record<string, Record<string, AIV5Type.JSONValue>>),
-                  ...((inputPartWithMeta.providerMetadata ?? {}) as Record<string, Record<string, AIV5Type.JSONValue>>),
-                } as AIV5Type.ProviderMetadata)
-              : undefined;
-
-          msg.content.parts[i] = {
-            ...inputPart,
-            toolInvocation: {
-              ...inputPart.toolInvocation,
-              args: part.toolInvocation.args,
-            },
-            // Preserve providerExecuted from original call if not in result
-            ...(originalPart.providerExecuted !== undefined && inputPartWithMeta.providerExecuted === undefined
-              ? { providerExecuted: originalPart.providerExecuted }
-              : {}),
-            ...(mergedProviderMetadata !== undefined ? { providerMetadata: mergedProviderMetadata } : {}),
-          };
-          this.lastCreatedAt = Math.max(this.lastCreatedAt || 0, Date.now());
-          this.updateLastCreatedAt(msg);
-
-          // `backgroundTasks` is a per-toolCallId record — merge instead of
-          // overwrite so multiple concurrent background dispatches on the
-          // same assistant message don't clobber each other's metadata.
-          const existingMeta = (msg.content.metadata ?? {}) as Record<string, unknown>;
-          const incomingMeta = (metadata ?? {}) as Record<string, unknown>;
-          const existingBgTasks = existingMeta.backgroundTasks as Record<string, unknown> | undefined;
-          const incomingBgTasks = incomingMeta.backgroundTasks as Record<string, unknown> | undefined;
-
-          msg.content.metadata = {
-            ...existingMeta,
-            ...incomingMeta,
-            ...(existingBgTasks || incomingBgTasks
-              ? { backgroundTasks: { ...(existingBgTasks ?? {}), ...(incomingBgTasks ?? {}) } }
-              : {}),
-          };
-
-          // Move the message to the response source so it gets
-          // picked up by drainUnsavedMessages for re-saving.
-          if (!this.stateManager.isResponseMessage(msg)) {
-            this.stateManager.removeMessage(msg);
-            this.stateManager.addToSource(msg, 'response');
-          }
-
+          this.mergeToolResultIntoPart(msg, i, inputPart, metadata);
           return true;
         }
       }
     }
+
+    // Pass 2 (fallback): some providers (e.g. @ai-sdk/google `file_search`
+    // running alongside a client tool) assign the tool-result a DIFFERENT
+    // toolCallId than the tool-call. Match a still-pending provider-executed
+    // call by toolName and overwrite its id with the incoming one so the
+    // next-turn replay sends a consistent id. The providerExecuted + state:'call'
+    // guard leaves client tools (stable ids) untouched, and the legitimate
+    // same-stream case (no state:'call' part exists yet) still returns false.
+    const inputToolName = inputPart.toolInvocation.toolName;
+    for (let m = this.messages.length - 1; m >= 0; m--) {
+      const msg = this.messages[m]!;
+      if (msg.role !== 'assistant' || !msg.content?.parts) continue;
+
+      for (let i = 0; i < msg.content.parts.length; i++) {
+        const part = msg.content.parts[i];
+        if (part?.type !== 'tool-invocation') continue;
+        // Cast to access providerExecuted which exists at runtime but isn't in the base type
+        const candidate = part as typeof part & { providerExecuted?: boolean };
+        if (
+          candidate.providerExecuted === true &&
+          candidate.toolInvocation?.state === 'call' &&
+          candidate.toolInvocation.toolName === inputToolName
+        ) {
+          // Reconcile the stored id so downstream replay uses the result's id.
+          // Pass the prior id so the legacy `toolInvocations` array can be
+          // resynced from its old key (it still holds the original id).
+          const previousToolCallId = candidate.toolInvocation.toolCallId;
+          candidate.toolInvocation.toolCallId = toolCallId;
+          this.mergeToolResultIntoPart(msg, i, inputPart, metadata, previousToolCallId);
+          return true;
+        }
+      }
+    }
+
     this.logger?.warn(`updateToolInvocation: no matching tool call found for toolCallId=${toolCallId}`);
     return false;
+  }
+
+  public updateMessageMetadataByToolCallId(toolCallId: string, metadata: Record<string, unknown>): boolean {
+    if (!toolCallId) {
+      return false;
+    }
+
+    for (let m = this.messages.length - 1; m >= 0; m--) {
+      const msg = this.messages[m]!;
+      if (msg.role !== 'assistant' || !msg.content?.parts) continue;
+
+      const hasToolCall = msg.content.parts.some(
+        part => part?.type === 'tool-invocation' && part.toolInvocation?.toolCallId === toolCallId,
+      );
+      if (!hasToolCall) continue;
+
+      const existingMeta = (msg.content.metadata ?? {}) as Record<string, unknown>;
+      const incomingMeta = (metadata ?? {}) as Record<string, unknown>;
+      const existingBgTasks = existingMeta.backgroundTasks as Record<string, unknown> | undefined;
+      const incomingBgTasks = incomingMeta.backgroundTasks as Record<string, unknown> | undefined;
+      const backgroundTasks = mergeBackgroundTasks(existingBgTasks, incomingBgTasks);
+
+      msg.content.metadata = {
+        ...existingMeta,
+        ...incomingMeta,
+        ...(backgroundTasks ? { backgroundTasks } : {}),
+      };
+
+      this.lastCreatedAt = Math.max(this.lastCreatedAt || 0, Date.now());
+      this.updateLastCreatedAt(msg);
+
+      if (!this.stateManager.isResponseMessage(msg)) {
+        this.stateManager.removeMessage(msg);
+        this.stateManager.addToSource(msg, 'response');
+      }
+
+      return true;
+    }
+
+    this.logger?.warn(`updateMessageMetadataByToolCallId: no matching tool call found for toolCallId=${toolCallId}`);
+    return false;
+  }
+
+  /**
+   * Merge a tool-result `inputPart` into the stored tool-invocation part at
+   * `msg.content.parts[i]`: preserves the original call args, merges
+   * providerExecuted/providerMetadata, merges per-toolCallId `backgroundTasks`
+   * metadata, and moves the message to the response source so it is re-saved.
+   * Shared by both the exact-toolCallId and provider-executed-toolName passes
+   * of {@link updateToolInvocation}.
+   */
+  private mergeToolResultIntoPart(
+    msg: MastraDBMessage,
+    i: number,
+    inputPart: Extract<MastraMessagePart, { type: 'tool-invocation' }>,
+    metadata?: Record<string, unknown>,
+    previousToolCallId?: string,
+  ): void {
+    const part = msg.content.parts![i] as Extract<MastraMessagePart, { type: 'tool-invocation' }>;
+    // The legacy `content.toolInvocations` array (AIV4) is keyed by the id the
+    // part had BEFORE any reconciliation; default to the part's current id.
+    const priorToolCallId = previousToolCallId ?? part.toolInvocation.toolCallId;
+    // Cast to access providerExecuted/providerMetadata which exist at runtime but aren't in the base type
+    const originalPart = part as typeof part & { providerExecuted?: boolean; providerMetadata?: unknown };
+    const inputPartWithMeta = inputPart as typeof inputPart & {
+      providerExecuted?: boolean;
+      providerMetadata?: unknown;
+    };
+
+    const mergedProviderMetadata =
+      originalPart.providerMetadata !== undefined || inputPartWithMeta.providerMetadata !== undefined
+        ? ({
+            ...((originalPart.providerMetadata ?? {}) as Record<string, Record<string, AIV5Type.JSONValue>>),
+            ...((inputPartWithMeta.providerMetadata ?? {}) as Record<string, Record<string, AIV5Type.JSONValue>>),
+          } as AIV5Type.ProviderMetadata)
+        : undefined;
+
+    msg.content.parts![i] = {
+      ...inputPart,
+      toolInvocation: {
+        ...inputPart.toolInvocation,
+        args: part.toolInvocation.args,
+      },
+      // Preserve providerExecuted from original call if not in result
+      ...(originalPart.providerExecuted !== undefined && inputPartWithMeta.providerExecuted === undefined
+        ? { providerExecuted: originalPart.providerExecuted }
+        : {}),
+      ...(mergedProviderMetadata !== undefined ? { providerMetadata: mergedProviderMetadata } : {}),
+    };
+    this.lastCreatedAt = Math.max(this.lastCreatedAt || 0, Date.now());
+    this.updateLastCreatedAt(msg);
+
+    // `backgroundTasks` is a per-toolCallId record — merge instead of
+    // overwrite so multiple concurrent background dispatches on the
+    // same assistant message don't clobber each other's metadata.
+    const existingMeta = (msg.content.metadata ?? {}) as Record<string, unknown>;
+    const incomingMeta = (metadata ?? {}) as Record<string, unknown>;
+    const existingBgTasks = existingMeta.backgroundTasks as Record<string, unknown> | undefined;
+    const incomingBgTasks = incomingMeta.backgroundTasks as Record<string, unknown> | undefined;
+    const backgroundTasks = mergeBackgroundTasks(existingBgTasks, incomingBgTasks);
+
+    msg.content.metadata = {
+      ...existingMeta,
+      ...incomingMeta,
+      ...(backgroundTasks ? { backgroundTasks } : {}),
+    };
+
+    // Keep the legacy AIV4 `content.toolInvocations` array in sync so a later
+    // transformMessageForTranscript() can still map this part back: carry over
+    // the result and the (possibly reconciled) toolCallId, matching the entry by
+    // the id it held before reconciliation. Spread the legacy entry first to
+    // preserve its type, then override only the fields that change here.
+    if (Array.isArray(msg.content.toolInvocations) && inputPart.toolInvocation.state === 'result') {
+      const resultInvocation = inputPart.toolInvocation;
+      msg.content.toolInvocations = msg.content.toolInvocations.map(invocation =>
+        invocation.toolCallId === priorToolCallId
+          ? {
+              ...invocation,
+              toolCallId: resultInvocation.toolCallId,
+              state: 'result' as const,
+              args: part.toolInvocation.args,
+              result: resultInvocation.result,
+            }
+          : invocation,
+      );
+    }
+
+    // Move the message to the response source so it gets
+    // picked up by drainUnsavedMessages for re-saving.
+    if (!this.stateManager.isResponseMessage(msg)) {
+      this.stateManager.removeMessage(msg);
+      this.stateManager.addToSource(msg, 'response');
+    }
   }
 
   /**
@@ -1377,7 +1558,7 @@ export class MessageList {
     };
   }
 
-  private addOne(message: MessageInput, messageSource: MessageSource) {
+  private addOne(message: MessageInput, messageSource: MessageSource, options: MessageListAddOptions = {}) {
     if (
       (!(`content` in message) ||
         (!message.content &&
@@ -1469,6 +1650,7 @@ export class MessageList {
     // but replace-by-id can target an older sealed message elsewhere in the list.
     const isLatestFromMemory = latestMessage ? this.memoryMessages.has(latestMessage) : false;
     const shouldMerge =
+      options.merge !== false &&
       latestMessageIsAfterSealedBoundary &&
       !hasSealedReplacementTarget &&
       MessageMerger.shouldMerge(latestMessage, messageV2, messageSource, isLatestFromMemory, this._agentNetworkAppend);
@@ -1555,13 +1737,15 @@ export class MessageList {
           this.messages.push(messageV2);
         } else {
           const isExistingFromMemory = this.memoryMessages.has(existingMessage);
-          const shouldMergeIntoExisting = MessageMerger.shouldMerge(
-            existingMessage,
-            messageV2,
-            messageSource,
-            isExistingFromMemory,
-            this._agentNetworkAppend,
-          );
+          const shouldMergeIntoExisting =
+            options.merge !== false &&
+            MessageMerger.shouldMerge(
+              existingMessage,
+              messageV2,
+              messageSource,
+              isExistingFromMemory,
+              this._agentNetworkAppend,
+            );
           if (shouldMergeIntoExisting) {
             MessageMerger.merge(existingMessage, messageV2);
             this.updateLastCreatedAt(existingMessage);
@@ -1596,17 +1780,10 @@ export class MessageList {
   private lastCreatedAt?: number;
 
   private updateLastCreatedAt(message: MastraDBMessage): void {
-    const latestMessageTime = message.createdAt.getTime();
-    const latestPartTime = Array.isArray(message.content.parts)
-      ? message.content.parts.reduce((latest, part) => {
-          if (typeof part.createdAt === 'number' && part.createdAt > latest) {
-            return part.createdAt;
-          }
-          return latest;
-        }, latestMessageTime)
-      : latestMessageTime;
-
-    this.lastCreatedAt = Math.max(this.lastCreatedAt || 0, latestPartTime);
+    // Message-level createdAt controls transcript ordering and OM observation boundaries.
+    // Part timestamps are event metadata within a message and must not advance the
+    // ordering watermark used to timestamp later messages/signals.
+    this.lastCreatedAt = Math.max(this.lastCreatedAt || 0, message.createdAt.getTime());
   }
 
   // this makes sure messages added in order will always have a date atleast 1ms apart.
@@ -1632,10 +1809,9 @@ export class MessageList {
 
     const now = new Date();
     const nowTime = startDate?.getTime() || now.getTime();
-    // find the latest createdAt in stored messages and parts
     const lastTime = this.lastCreatedAt || 0;
 
-    // make sure our new message is created later than the latest known message time
+    // make sure our new message is created later than the latest known ordering timestamp
     // it's expected that messages are added to the list in order if they don't have a createdAt date on them
     if (nowTime <= lastTime) {
       const newDate = new Date(lastTime + 1);

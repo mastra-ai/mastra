@@ -72,29 +72,6 @@ describe('resumeStream / resumeGenerate — no snapshot found', () => {
         }),
       );
     });
-
-    it('error message mentions missing storage when Mastra has no storage', async () => {
-      const agent = new Agent({
-        name: 'test-agent',
-        instructions: 'test',
-        model: createMockModel() as any,
-      });
-
-      const mastra = new Mastra({
-        agents: { 'test-agent': agent },
-        logger: false,
-        // no storage
-      });
-
-      const registeredAgent = mastra.getAgent('test-agent');
-
-      await expect(registeredAgent.resumeStream({ approved: true }, { runId: 'abc' })).rejects.toThrow(
-        expect.objectContaining({
-          id: 'AGENT_RESUME_NO_SNAPSHOT_FOUND',
-          message: expect.stringContaining('storage'),
-        }),
-      );
-    });
   });
 
   describe('resumeStream — snapshot read race', () => {

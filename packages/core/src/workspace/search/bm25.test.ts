@@ -75,6 +75,79 @@ describe('tokenize', () => {
     });
     expect(tokens).toEqual(['github_create_issue']);
   });
+
+  it('should preserve CJK characters with default removePunctuation', () => {
+    const tokens = tokenize('カフェでコーヒーを飲む', {
+      stopwords: new Set(),
+      minLength: 1,
+    });
+    // CJK text is contiguous (no whitespace), so it stays as one token
+    expect(tokens.length).toBe(1);
+    expect(tokens[0]).toBe('カフェでコーヒーを飲む');
+  });
+
+  it('should preserve Chinese characters with default removePunctuation', () => {
+    const tokens = tokenize('机器学习是人工智能的一个子集', {
+      stopwords: new Set(),
+      minLength: 1,
+    });
+    expect(tokens.length).toBe(1);
+    expect(tokens[0]).toBe('机器学习是人工智能的一个子集');
+  });
+
+  it('should preserve Korean characters with default removePunctuation', () => {
+    const tokens = tokenize('인공지능 머신러닝', {
+      stopwords: new Set(),
+      minLength: 1,
+    });
+    expect(tokens).toEqual(['인공지능', '머신러닝']);
+  });
+
+  it('should handle mixed CJK and ASCII text', () => {
+    const tokens = tokenize('LINEで友達を追加する', {
+      stopwords: new Set(),
+      minLength: 1,
+    });
+    // "lineで友達を追加する" as a single token (no whitespace separator)
+    expect(tokens.length).toBe(1);
+    expect(tokens[0]).toContain('line');
+  });
+
+  it('should strip CJK punctuation but keep CJK letters', () => {
+    const tokens = tokenize('東京、大阪、名古屋', {
+      stopwords: new Set(),
+      minLength: 1,
+    });
+    // 、 is CJK punctuation — stripped and replaced with spaces
+    expect(tokens).toEqual(['東京', '大阪', '名古屋']);
+  });
+
+  it('should use custom tokenizer function when provided', () => {
+    // Character bigram tokenizer for CJK
+    const bigramTokenizer = (text: string) => {
+      const tokens: string[] = [];
+      const normalized = text.toLowerCase();
+      for (let i = 0; i < normalized.length - 1; i++) {
+        const bigram = normalized.slice(i, i + 2).trim();
+        if (bigram.length === 2) tokens.push(bigram);
+      }
+      return tokens;
+    };
+
+    const tokens = tokenize('カフェ', { tokenizer: bigramTokenizer });
+    expect(tokens).toEqual(['カフ', 'フェ']);
+  });
+
+  it('should ignore other options when custom tokenizer is provided', () => {
+    const customTokenizer = (text: string) => text.split('');
+    const tokens = tokenize('ABC', {
+      tokenizer: customTokenizer,
+      lowercase: true,
+      removePunctuation: true,
+    });
+    // Custom tokenizer returns uppercase because it bypasses the built-in pipeline
+    expect(tokens).toEqual(['A', 'B', 'C']);
+  });
 });
 
 describe('BM25Index', () => {
@@ -215,6 +288,49 @@ describe('BM25Index', () => {
     it('should handle multi-word queries', () => {
       const results = index.search('artificial intelligence machine learning');
       expect(results.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe('CJK content', () => {
+    it('should index and search Japanese content', () => {
+      const cjkIndex = new BM25Index({}, { minLength: 1, stopwords: new Set() });
+      cjkIndex.add('doc1', '東京 大阪 名古屋');
+      cjkIndex.add('doc2', '京都 奈良 神戸');
+
+      const results = cjkIndex.search('東京');
+      expect(results.length).toBe(1);
+      expect(results[0]?.id).toBe('doc1');
+    });
+
+    it('should index and search Korean content', () => {
+      const cjkIndex = new BM25Index({}, { minLength: 1, stopwords: new Set() });
+      cjkIndex.add('doc1', '인공지능 머신러닝');
+      cjkIndex.add('doc2', '딥러닝 자연어처리');
+
+      const results = cjkIndex.search('머신러닝');
+      expect(results.length).toBe(1);
+      expect(results[0]?.id).toBe('doc1');
+    });
+
+    it('should find CJK content with custom tokenizer', () => {
+      // Character bigram tokenizer
+      const bigramTokenizer = (text: string) => {
+        const tokens: string[] = [];
+        const normalized = text.toLowerCase();
+        for (let i = 0; i < normalized.length - 1; i++) {
+          const bigram = normalized.slice(i, i + 2).trim();
+          if (bigram.length === 2) tokens.push(bigram);
+        }
+        return tokens;
+      };
+
+      const cjkIndex = new BM25Index({}, { tokenizer: bigramTokenizer });
+      cjkIndex.add('doc1', 'カフェでコーヒーを飲む');
+      cjkIndex.add('doc2', 'レストランで食事する');
+
+      const results = cjkIndex.search('カフェ');
+      expect(results.length).toBe(1);
+      expect(results[0]?.id).toBe('doc1');
     });
   });
 

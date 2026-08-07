@@ -223,6 +223,40 @@ describe('StagehandBrowser', () => {
       );
     });
 
+    it('forwards local model execution options to Stagehand', async () => {
+      const customBrowser = new StagehandBrowser({
+        scope: 'shared',
+        experimental: true,
+        disableAPI: true,
+      });
+      await customBrowser.launch();
+      await customBrowser.close();
+
+      expect(mockStagehandConstructor).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          experimental: true,
+          disableAPI: true,
+        }),
+      );
+    });
+
+    it('passes model configuration objects through to Stagehand', async () => {
+      const model = {
+        modelName: '__GATEWAY_OPENAI_MODEL__',
+        apiKey: 'test-openai-compatible-key',
+        baseURL: 'https://openai-compatible.example.com/v1',
+      };
+      const customBrowser = new StagehandBrowser({ scope: 'shared', model });
+      await customBrowser.launch();
+      await customBrowser.close();
+
+      expect(mockStagehandConstructor).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          model,
+        }),
+      );
+    });
+
     it('should close successfully', async () => {
       await browser.launch();
       await browser.close();
@@ -290,6 +324,18 @@ describe('StagehandBrowser', () => {
       // expect(tools[STAGEHAND_TOOLS.SCREENSHOT]).toBeDefined();
       expect(tools[STAGEHAND_TOOLS.TABS]).toBeDefined();
       expect(tools[STAGEHAND_TOOLS.CLOSE]).toBeDefined();
+    });
+
+    it('should include recording tools only when opted in', () => {
+      expect(browser.getTools().browser_record).toBeUndefined();
+      expect(browser.getTools().browser_record_caption).toBeUndefined();
+
+      const recordingBrowser = new StagehandBrowser({ scope: 'shared', recording: { outputDir: '/tmp/recordings' } });
+      const tools = recordingBrowser.getTools();
+
+      expect(tools.browser_record).toBeDefined();
+      expect(tools.browser_record_caption).toBeDefined();
+      expect(tools[STAGEHAND_TOOLS.NAVIGATE]).toBeDefined();
     });
   });
 

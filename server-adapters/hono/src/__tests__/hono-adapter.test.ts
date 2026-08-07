@@ -10,8 +10,11 @@ import {
   createRouteAdapterTestSuite,
   createDefaultTestContext,
   createStreamWithSensitiveData,
+  createStreamWithUnserializableChunk,
+  expectSerializedStreamChunks,
   consumeSSEStream,
   createMultipartTestSuite,
+  createBodyLimitTestSuite,
 } from '@internal/server-adapter-test-utils';
 import { Mastra } from '@mastra/core';
 import { registerApiRoute } from '@mastra/core/server';
@@ -105,6 +108,8 @@ describe('Hono Server Adapter', () => {
       const isStream =
         contentType.includes('text/plain') ||
         contentType.includes('text/event-stream') ||
+        contentType.includes('audio/') ||
+        contentType.includes('application/octet-stream') ||
         response.headers?.get('transfer-encoding') === 'chunked';
 
       // Extract headers
@@ -121,11 +126,14 @@ describe('Hono Server Adapter', () => {
           headers,
         };
       } else {
+        // Read the body exactly once; parsing JSON from text avoids consuming
+        // the body twice when the payload is not valid JSON.
+        const rawText = await response.text();
         let data: unknown;
         try {
-          data = await response.json();
+          data = JSON.parse(rawText);
         } catch {
-          data = await response.text();
+          data = rawText;
         }
 
         return {
@@ -222,6 +230,39 @@ describe('Hono Server Adapter', () => {
       } finally {
         await reader.cancel();
       }
+    });
+
+    it('handles a rejected source cancellation when the client disconnects', async () => {
+      const app = new Hono();
+      const adapter = new MastraServer({
+        app,
+        mastra: context.mastra,
+      });
+      const cancel = vi.fn().mockRejectedValue(new Error('cancel failed'));
+
+      const testRoute: ServerRoute<any, any, any> = {
+        method: 'GET',
+        path: '/test/rejected-stream-cancellation',
+        responseType: 'stream',
+        streamFormat: 'sse',
+        sseFlushOnConnect: true,
+        handler: async () =>
+          new ReadableStream({
+            cancel,
+          }),
+      };
+
+      app.use('*', adapter.createContextMiddleware());
+      await adapter.registerRoute(app, testRoute, { prefix: '' });
+
+      const response = await app.request(new Request('http://localhost/test/rejected-stream-cancellation'));
+      const reader = response.body!.getReader();
+
+      await reader.read();
+      await reader.cancel();
+      await waitFor(() => cancel.mock.calls.length === 1);
+
+      expect(cancel).toHaveBeenCalledWith('request aborted');
     });
   });
 
@@ -460,6 +501,50 @@ describe('Hono Server Adapter', () => {
       const textDelta = chunks.find(c => c.type === 'text-delta');
       expect(textDelta).toBeDefined();
       expect(textDelta.textDelta).toBe('Hello');
+    });
+  });
+
+  // Repro for https://github.com/mastra-ai/mastra/issues/17821 — a chunk that
+  // JSON.stringify can't handle (e.g. a BigInt step output) used to throw inside
+  // the stream loop and silently close the HTTP stream, so Studio never received
+  // the remaining chunks and workflow nodes stayed visually "running" forever.
+  describe('Stream Chunk Serialization', () => {
+    let context: AdapterTestContext;
+
+    beforeEach(async () => {
+      context = await createDefaultTestContext();
+    });
+
+    it('serializes BigInt chunks and skips unserializable chunks without killing the stream', async () => {
+      const app = new Hono();
+
+      const adapter = new MastraServer({
+        app,
+        mastra: context.mastra,
+      });
+
+      const testRoute: ServerRoute<any, any, any> = {
+        method: 'POST',
+        path: '/test/unserializable-stream',
+        responseType: 'stream',
+        streamFormat: 'sse',
+        handler: async () => createStreamWithUnserializableChunk(),
+      };
+
+      app.use('*', adapter.createContextMiddleware());
+      await adapter.registerRoute(app, testRoute, { prefix: '' });
+
+      const response = await app.request(
+        new Request('http://localhost/test/unserializable-stream', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({}),
+        }),
+      );
+
+      expect(response.status).toBe(200);
+      const chunks = await consumeSSEStream(response.body);
+      expectSerializedStreamChunks(chunks);
     });
   });
 
@@ -780,6 +865,27 @@ describe('Hono Server Adapter', () => {
 
       expect(spec.paths['/external']).toBeDefined();
       expect(spec.paths['/external'].servers).toEqual([{ url: '/' }]);
+    });
+  });
+
+  describe('Channel webhook diagnostics', () => {
+    it('warns for an unregistered channel webhook when no custom API routes exist', async () => {
+      const mastra = new Mastra({ logger: false });
+      const warnSpy = vi.spyOn(mastra.getLogger(), 'warn');
+      const app = new Hono();
+      const adapter = new MastraServer({ app, mastra });
+
+      await adapter.init();
+
+      const response = await app.request('/api/agents/support/channels/slack/webhook', {
+        method: 'POST',
+      });
+
+      expect(response.status).toBe(404);
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('channels.adapters configuration'), {
+        agentId: 'support',
+        platform: 'slack',
+      });
     });
   });
 
@@ -1180,5 +1286,30 @@ describe('Hono Server Adapter', () => {
         expect(data.isStudio).toBeNull();
       }
     });
+  });
+
+  createBodyLimitTestSuite({
+    suiteName: 'Body Size Limit',
+
+    createApp: () => new Hono(),
+
+    setupAdapter: (app, mastra, bodyLimitOptions) => {
+      const adapter = new MastraServer({ app, mastra, bodyLimitOptions });
+      app.use('*', adapter.createContextMiddleware());
+      return { adapter, app };
+    },
+
+    registerRoute: (adapter, app, route) => adapter.registerRoute(app, route, { prefix: '' }),
+
+    executeRequest: async (app, method, url, options = {}) => {
+      const response = await app.request(
+        new Request(url, {
+          method,
+          headers: options.headers,
+          ...(options.body ? { body: options.body } : {}),
+        }),
+      );
+      return { status: response.status };
+    },
   });
 });

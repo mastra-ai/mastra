@@ -1,9 +1,9 @@
-import React, { Suspense, useState, useEffect } from 'react';
+import React from 'react';
 import Markdown from 'react-markdown';
 import type { Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
-import { highlight } from '@/ds/components/CodeEditor';
+import { Code } from '@/ds/components/Code';
 import { CopyButton } from '@/ds/components/CopyButton';
 import { cn } from '@/lib/utils';
 
@@ -21,53 +21,6 @@ export function MarkdownRenderer({ children }: MarkdownRendererProps) {
   );
 }
 
-interface HighlightedPre extends React.HTMLAttributes<HTMLPreElement> {
-  children: string;
-  language: string;
-}
-
-const HighlightedPre = React.memo(({ children, language, ...props }: HighlightedPre) => {
-  const [tokens, setTokens] = useState<any[]>([]);
-
-  useEffect(() => {
-    void highlight(children, language).then(tokens => {
-      if (tokens) setTokens(tokens);
-    });
-  }, [children, language]);
-
-  if (!tokens.length) {
-    return <pre {...props}>{children}</pre>;
-  }
-
-  return (
-    <pre {...props}>
-      <code>
-        {tokens.map((line, lineIndex) => (
-          <>
-            <span key={lineIndex}>
-              {line.map((token: any, tokenIndex: number) => {
-                const style = typeof token.htmlStyle === 'string' ? undefined : token.htmlStyle;
-
-                return (
-                  <span
-                    key={tokenIndex}
-                    className="text-shiki-light bg-shiki-light-bg dark:text-shiki-dark dark:bg-shiki-dark-bg"
-                    style={style}
-                  >
-                    {token.content}
-                  </span>
-                );
-              })}
-            </span>
-            {lineIndex !== tokens.length - 1 && '\n'}
-          </>
-        ))}
-      </code>
-    </pre>
-  );
-});
-HighlightedPre.displayName = 'HighlightedCode';
-
 interface CodeBlockProps extends React.HTMLAttributes<HTMLPreElement> {
   children: React.ReactNode;
   className?: string;
@@ -78,25 +31,15 @@ const CodeBlock = ({ children, className, language, ...restProps }: CodeBlockPro
   const code = typeof children === 'string' ? children : childrenTakeAllStringContents(children);
 
   const preClass = cn(
-    'overflow-x-scroll rounded-md border bg-surface1/50 p-4 font-mono text-sm [scrollbar-width:none]',
+    '[scrollbar-width:none] overflow-x-scroll rounded-md border bg-surface1/50 p-4 font-mono text-sm',
     className,
   );
 
   return (
     <div className="group/code relative mb-4">
-      <Suspense
-        fallback={
-          <pre className={preClass} {...restProps}>
-            {children}
-          </pre>
-        }
-      >
-        <HighlightedPre language={language} className={preClass}>
-          {code}
-        </HighlightedPre>
-      </Suspense>
+      <Code code={code} lang={language} className={preClass} {...restProps} />
 
-      <div className="invisible absolute right-2 top-2 flex space-x-1 rounded-lg p-1 opacity-0 transition-all duration-200 group-hover/code:visible group-hover/code:opacity-100">
+      <div className="invisible absolute top-2 right-2 flex gap-1 rounded-lg p-1 opacity-0 transition-all duration-200 group-hover/code:visible group-hover/code:opacity-100">
         <CopyButton content={code} copyMessage="Copied code to clipboard" />
       </div>
     </div>
@@ -129,17 +72,17 @@ const COMPONENTS: Components = {
     </h1>
   ),
   h2: ({ children, ...props }) => (
-    <h2 className="font-semibold text-xl" {...props}>
+    <h2 className="text-xl font-semibold" {...props}>
       {children}
     </h2>
   ),
   h3: ({ children, ...props }) => (
-    <h3 className="font-semibold text-lg" {...props}>
+    <h3 className="text-lg font-semibold" {...props}>
       {children}
     </h3>
   ),
   h4: ({ children, ...props }) => (
-    <h4 className="font-semibold text-base" {...props}>
+    <h4 className="text-base font-semibold" {...props}>
       {children}
     </h4>
   ),
@@ -159,7 +102,7 @@ const COMPONENTS: Components = {
     </a>
   ),
   blockquote: ({ children, ...props }) => (
-    <blockquote className="border-l-2 border-neutral6 pl-4" {...props}>
+    <blockquote className="border-neutral6 border-l-2 pl-4" {...props}>
       {children}
     </blockquote>
   ),
@@ -197,13 +140,13 @@ const COMPONENTS: Components = {
     </li>
   ),
   table: ({ children, ...props }) => (
-    <table className="w-full border-collapse overflow-y-auto rounded-md border border-neutral6/20" {...props}>
+    <table className="border-neutral6/20 w-full border-collapse overflow-y-auto rounded-md border" {...props}>
       {children}
     </table>
   ),
   th: ({ children, ...props }) => (
     <th
-      className="border border-neutral6/20 px-4 py-2 text-left font-bold [[align=center]]:text-center [[align=right]]:text-right"
+      className="border-neutral6/20 border px-4 py-2 text-left font-bold [[align=center]]:text-center [[align=right]]:text-right"
       {...props}
     >
       {children}
@@ -211,19 +154,19 @@ const COMPONENTS: Components = {
   ),
   td: ({ children, ...props }) => (
     <td
-      className="border border-neutral6/20 px-4 py-2 text-left [[align=center]]:text-center [[align=right]]:text-right"
+      className="border-neutral6/20 border px-4 py-2 text-left [[align=center]]:text-center [[align=right]]:text-right"
       {...props}
     >
       {children}
     </td>
   ),
   tr: ({ children, ...props }) => (
-    <tr className="m-0 border-t p-0 even:bg-surface4" {...props}>
+    <tr className="even:bg-surface4 m-0 border-t p-0" {...props}>
       {children}
     </tr>
   ),
   p: ({ children, ...props }) => (
-    <p className="whitespace-pre-wrap leading-relaxed" {...props}>
+    <p className="leading-relaxed whitespace-pre-wrap" {...props}>
       {children}
     </p>
   ),

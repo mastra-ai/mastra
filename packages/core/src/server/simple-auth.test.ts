@@ -330,4 +330,37 @@ describe('SimpleAuth', () => {
       expect(result).toEqual(user);
     });
   });
+
+  describe('getUser / getUsers', () => {
+    const userA = { id: 'a', name: 'Alice' };
+    const userB = { id: 'b', name: 'Bob' };
+
+    it('getUser returns the user for a known id', async () => {
+      const auth = new SimpleAuth({ tokens: { ta: userA, tb: userB } });
+      await expect(auth.getUser('a')).resolves.toEqual(userA);
+      await expect(auth.getUser('b')).resolves.toEqual(userB);
+    });
+
+    it('getUser returns null for an unknown id', async () => {
+      const auth = new SimpleAuth({ tokens: { ta: userA } });
+      await expect(auth.getUser('missing')).resolves.toBeNull();
+    });
+
+    it('getUsers returns users in input order, null for unknown ids', async () => {
+      const auth = new SimpleAuth({ tokens: { ta: userA, tb: userB } });
+      const result = await auth.getUsers(['a', 'missing', 'b']);
+      expect(result).toEqual([userA, null, userB]);
+    });
+
+    it('getUsers returns empty array for empty input', async () => {
+      const auth = new SimpleAuth({ tokens: { ta: userA } });
+      await expect(auth.getUsers([])).resolves.toEqual([]);
+    });
+
+    it('getUsers preserves duplicates in input (caller may dedupe)', async () => {
+      const auth = new SimpleAuth({ tokens: { ta: userA } });
+      const result = await auth.getUsers(['a', 'a']);
+      expect(result).toEqual([userA, userA]);
+    });
+  });
 });

@@ -1,4 +1,6 @@
-import { Badge, Icon, cn } from '@mastra/playground-ui';
+import { Badge } from '@mastra/playground-ui/components/Badge';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { ChevronUpIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
@@ -29,7 +31,7 @@ export const BadgeWrapper = ({
 
   return (
     <div className="mb-4" data-testid={dataTestId}>
-      <div className="flex flex-row gap-2 items-center justify-between">
+      <div className="flex flex-row items-center justify-between gap-2">
         <button
           onClick={collapsible ? () => setIsCollapsed(s => !s) : undefined}
           className="flex items-center gap-2 disabled:cursor-not-allowed"
@@ -46,7 +48,7 @@ export const BadgeWrapper = ({
 
       {!isCollapsed && (
         <div className="pt-2">
-          <div className="p-4 rounded-lg bg-surface2 flex flex-col gap-4">{children}</div>
+          <div className="bg-surface2 flex flex-col gap-4 rounded-lg p-4">{children}</div>
         </div>
       )}
     </div>

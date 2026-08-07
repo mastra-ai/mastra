@@ -1,5 +1,8 @@
 import type { DatasetItem } from '@mastra/client-js';
-import { ItemList, Tooltip, TooltipContent, TooltipTrigger, Chip, cn } from '@mastra/playground-ui';
+import { Chip } from '@mastra/playground-ui/components/Chip';
+import { ItemList } from '@mastra/playground-ui/components/ItemList';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { BanIcon, EqualIcon, PenIcon, PlusIcon } from 'lucide-react';
 import { useLinkComponent } from '@/lib/framework';
 
@@ -66,7 +69,7 @@ function VersionInfo({ variant, version }: { variant?: keyof typeof versionInfoC
       <TooltipTrigger asChild>
         <div className="grid grid-cols-[1fr_auto]">
           {version !== undefined && (
-            <span className="pr-3 text-ui-md text-neutral4 min-w-16 flex justify-end">v. {version}</span>
+            <span className="text-ui-md text-neutral4 flex min-w-16 justify-end pr-3">v. {version}</span>
           )}
           <Chip color={color} size="small">
             {icon}
@@ -124,7 +127,7 @@ export function DatasetCompareVersionsList({
                         )}
                       </ItemList.LinkCell>
                     ) : (
-                      <ItemList.Cell className={'justify-center flex  items-center'}>
+                      <ItemList.Cell className={'flex items-center justify-center'}>
                         <EmptyCell
                           red={isANewer}
                           tooltip={isANewer ? 'Deleted in this version' : 'Not present in this version'}
@@ -146,7 +149,7 @@ export function DatasetCompareVersionsList({
                         )}
                       </ItemList.LinkCell>
                     ) : (
-                      <ItemList.Cell className={'justify-center flex items-center'}>
+                      <ItemList.Cell className={'flex items-center justify-center'}>
                         <EmptyCell
                           red={!isANewer}
                           tooltip={!isANewer ? 'Deleted in this version' : 'Not present in this version'}

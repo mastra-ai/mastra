@@ -1,0 +1,14 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "hasToolResult": false
+      },
+      "response": {
+        "content": "I received the notification and I'm processing it now."
+      }
+    }
+  ]
+}

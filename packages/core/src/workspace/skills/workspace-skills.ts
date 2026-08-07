@@ -67,6 +67,8 @@ export interface WorkspaceSkillsImplConfig {
   searchEngine?: SkillSearchEngine;
   /** Validate skills on load (default: true) */
   validateOnLoad?: boolean;
+  /** Assert that the owning workspace can still serve skill operations. */
+  assertAvailable?: () => void;
   /**
    * Check SKILL.md file mtime in addition to directory mtime for staleness detection.
    * Enables detection of in-place file edits (e.g., fixing validation errors).
@@ -84,6 +86,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
   readonly #skillsResolver: SkillsResolver;
   readonly #searchEngine?: SkillSearchEngine;
   readonly #validateOnLoad: boolean;
+  readonly #assertAvailable?: () => void;
   readonly #checkSkillFileMtime: boolean;
 
   /** Map of skill name -> array of candidates (supports same-named skills from different sources) */
@@ -112,6 +115,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
     this.#skillsResolver = config.skills;
     this.#searchEngine = config.searchEngine;
     this.#validateOnLoad = config.validateOnLoad ?? true;
+    this.#assertAvailable = config.assertAvailable;
     this.#checkSkillFileMtime = config.checkSkillFileMtime ?? false;
   }
 
@@ -269,6 +273,8 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
   }
 
   async refresh(): Promise<void> {
+    this.#assertAvailable?.();
+
     // Remove only skill entries from the shared search engine (not workspace content)
     for (const candidates of this.#skills.values()) {
       for (const skill of candidates) {
@@ -311,12 +317,12 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
     // Determine SKILL.md path and dirName
     let skillFilePath: string;
     let dirName: string;
-    if (skillPath.endsWith('/SKILL.md') || skillPath === 'SKILL.md') {
+    if (isSkillFilePath(skillPath)) {
       skillFilePath = skillPath;
-      dirName = this.#getParentPath(skillPath).split('/').pop() || 'unknown';
+      dirName = splitPathSegments(this.#getParentPath(skillPath)).pop() || 'unknown';
     } else {
       skillFilePath = this.#joinPath(skillPath, 'SKILL.md');
-      dirName = skillPath.split('/').pop() || 'unknown';
+      dirName = splitPathSegments(skillPath).pop() || 'unknown';
     }
 
     // Determine source from existing resolved paths
@@ -560,6 +566,8 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
    * Uses a promise to prevent concurrent discovery.
    */
   async #ensureInitialized(): Promise<void> {
+    this.#assertAvailable?.();
+
     if (this.#initialized) {
       return;
     }
@@ -764,13 +772,13 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
   async #discoverDirectSkill(skillsPath: string, source: ContentSource): Promise<boolean> {
     try {
       // Case 1: Path points directly to a SKILL.md file
-      if (skillsPath.endsWith('/SKILL.md') || skillsPath === 'SKILL.md') {
+      if (isSkillFilePath(skillsPath)) {
         if (!(await this.#source.exists(skillsPath))) {
           return true; // It was a direct reference, just doesn't exist — skip subdirectory scan
         }
 
         const skillDir = this.#getParentPath(skillsPath);
-        const dirName = skillDir.split('/').pop() || skillDir;
+        const dirName = splitPathSegments(skillDir).pop() || skillDir;
 
         try {
           const skill = await this.#parseSkillFile(skillsPath, dirName, source);
@@ -788,7 +796,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
       if (await this.#source.exists(skillsPath)) {
         const skillFilePath = this.#joinPath(skillsPath, 'SKILL.md');
         if (await this.#source.exists(skillFilePath)) {
-          const dirName = skillsPath.split('/').pop() || skillsPath;
+          const dirName = splitPathSegments(skillsPath).pop() || skillsPath;
 
           try {
             const skill = await this.#parseSkillFile(skillFilePath, dirName, source);
@@ -1213,12 +1221,14 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
    * Determine the source type based on the path
    */
   #determineSource(skillsPath: string): ContentSource {
-    // Use path segment matching to avoid false positives (e.g., my-node_modules)
-    const segments = skillsPath.split('/');
+    // Use path segment matching to avoid false positives (e.g., my-node_modules).
+    // Consumer-supplied absolute paths may use either separator ('\' on Windows).
+    const segments = splitPathSegments(skillsPath);
     if (segments.includes('node_modules')) {
       return { type: 'external', packagePath: skillsPath };
     }
-    if (skillsPath.includes('/.mastra/skills') || skillsPath.startsWith('.mastra/skills')) {
+    const normalized = skillsPath.replace(/\\/g, '/');
+    if (normalized.includes('/.mastra/skills') || normalized.startsWith('.mastra/skills')) {
       return { type: 'managed', mastraPath: skillsPath };
     }
     return { type: 'local', projectPath: skillsPath };
@@ -1251,9 +1261,26 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
    * Get parent path
    */
   #getParentPath(path: string): string {
-    const lastSlash = path.lastIndexOf('/');
+    const lastSlash = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'));
     return lastSlash > 0 ? path.substring(0, lastSlash) : '/';
   }
+}
+
+/**
+ * Split a path into segments, tolerating both POSIX (`/`) and Windows (`\`)
+ * separators. Workspace-internal paths use forward slashes, but consumer-supplied
+ * absolute paths (e.g. via `new Workspace({ skills: [...] })`) may use backslashes
+ * on Windows.
+ */
+function splitPathSegments(path: string): string[] {
+  return path.split(/[\\/]+/);
+}
+
+/**
+ * Whether a path points directly at a `SKILL.md` file, tolerating both separators.
+ */
+function isSkillFilePath(path: string): boolean {
+  return path === 'SKILL.md' || /[\\/]SKILL\.md$/.test(path);
 }
 
 function stripTrailingSlashes(s: string): string {

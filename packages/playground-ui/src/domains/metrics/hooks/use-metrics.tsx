@@ -68,7 +68,7 @@ export function useMetrics() {
 
 function getDateRangeLabel(preset: DatePreset, customRange: DateRange | undefined) {
   if (preset !== 'custom') {
-    return DATE_PRESETS.find(p => p.value === preset)!.label;
+    return DATE_PRESETS.find(p => p.value === preset)?.label ?? preset;
   }
   if (customRange?.from) {
     if (customRange.to) {

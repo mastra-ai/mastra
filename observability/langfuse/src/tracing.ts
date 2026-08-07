@@ -260,17 +260,43 @@ function mapMastraToLangfuseAttributes(
     attributes['langfuse.release'] = release;
   }
 
-  // Prompt linking: mastra.metadata.langfuse → langfuse.observation.prompt.name / version
+  // mastra.metadata.langfuse holds a user-supplied object with two kinds of keys:
+  //   - the reserved `prompt` key, used for prompt linking, and
+  //   - arbitrary custom keys the user wants as top-level, filterable trace metadata.
+  // Langfuse only allows filtering/grouping traces by top-level metadata
+  // (langfuse.trace.metadata.*), so forward every non-prompt key there. These
+  // attributes may be set on any span in the trace and land on the trace record.
+  // @see https://langfuse.com/integrations/native/opentelemetry#property-mapping
   const langfuseMetadata = attributes['mastra.metadata.langfuse'];
   if (langfuseMetadata) {
     try {
       const parsed = typeof langfuseMetadata === 'string' ? JSON.parse(langfuseMetadata) : langfuseMetadata;
-      if (parsed?.prompt) {
-        if (parsed.prompt.name !== undefined) {
-          attributes['langfuse.observation.prompt.name'] = parsed.prompt.name;
+      if (parsed && typeof parsed === 'object') {
+        // Prompt linking: mastra.metadata.langfuse.prompt → langfuse.observation.prompt.name / version
+        if (parsed.prompt) {
+          if (parsed.prompt.name !== undefined) {
+            attributes['langfuse.observation.prompt.name'] = parsed.prompt.name;
+          }
+          if (parsed.prompt.version !== undefined) {
+            attributes['langfuse.observation.prompt.version'] = parsed.prompt.version;
+          }
         }
-        if (parsed.prompt.version !== undefined) {
-          attributes['langfuse.observation.prompt.version'] = parsed.prompt.version;
+
+        // Custom keys: mastra.metadata.langfuse.<key> → langfuse.trace.metadata.<key>
+        // Reserved identity keys (agentId/agentName/workflowId/workflowName) are set
+        // by the root-span block below, which runs after this loop and takes precedence.
+        for (const [key, value] of Object.entries(parsed)) {
+          if (key === 'prompt' || value === null || value === undefined) {
+            continue;
+          }
+          const traceKey = `langfuse.trace.metadata.${key}`;
+          // Don't overwrite a trace.metadata key already mapped from another attribute.
+          if (attributes[traceKey] === undefined) {
+            // Langfuse maps langfuse.trace.metadata.* as string attributes, so
+            // serialize non-strings with JSON. Langfuse Cloud restores numbers,
+            // booleans, and objects to their original types on ingestion.
+            attributes[traceKey] = typeof value === 'string' ? value : JSON.stringify(value);
+          }
         }
       }
     } catch {

@@ -28,7 +28,7 @@ export const mastra = new Mastra({
 
 :::note
 
-You can omit the constructor parameters if you have the appropriately named environment variables (`WORKOS_API_KEY` and `WORKOS_CLIENT_ID`) set. In that case, use `new MastraAuthWorkos()` without any arguments.
+You can omit the constructor parameters if the required environment variables (`WORKOS_API_KEY` and `WORKOS_CLIENT_ID`) are set. In that case, use `new MastraAuthWorkos()` without any arguments.
 
 :::
 
@@ -127,7 +127,7 @@ By default, `MastraAuthWorkos` authorizes any authenticated WorkOS user whose re
 1. **User Retrieval**: User information is extracted from the verified token
 1. **Authorization Decision**: Access is granted if the resolved user contains the required identifiers
 
-This means that by default, `MastraAuthWorkos` acts as an authentication provider rather than a role gate.
+`MastraAuthWorkos` acts as an authentication provider rather than a role gate by default.
 
 ## FGA membership loading
 
@@ -154,7 +154,7 @@ const auth = new MastraAuthWorkos({
 })
 ```
 
-When `trustJwtClaims` is enabled, Mastra can authenticate verified bearer tokens for service principals even if `getUser()` is not the right lookup path. This is the preferred way to pass pre-resolved `organizationMembershipId` values into FGA checks for machine-to-machine flows.
+When `trustJwtClaims` is enabled, Mastra can authenticate verified bearer tokens for service principals even if `getUser()` isn't the right lookup path. This is the preferred way to pass pre-resolved `organizationMembershipId` values into FGA checks for machine-to-machine flows.
 
 ## Custom authorization
 

@@ -1,0 +1,24 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "userMessage": "Deploy using the standard checklist.\n\nARGUMENTS: prod blue",
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat"
+      },
+      "response": {
+        "content": "MC deploy command response"
+      }
+    },
+    {
+      "match": {
+        "userMessage": "Review src/index.ts src/main.ts",
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat"
+      },
+      "response": {
+        "content": "MC review command response"
+      }
+    }
+  ]
+}

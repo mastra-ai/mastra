@@ -1,4 +1,5 @@
-import { Button, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import { Download } from 'lucide-react';
 import { useState } from 'react';
 import { useWorkflowSchema } from '../../hooks/use-workflow-schema';
@@ -157,11 +158,11 @@ export function SchemaImport({ schemaType, onImport }: SchemaImportProps) {
       )}
 
       <Button size="sm" variant="outline" onClick={handleImport} disabled={!canImport()}>
-        <Download className="w-4 h-4" />
+        <Download className="h-4 w-4" />
         Import
       </Button>
 
-      {showNoSchemaWarning && <span className="text-xs text-neutral3">No {schemaType} schema</span>}
+      {showNoSchemaWarning && <span className="text-neutral3 text-xs">No {schemaType} schema</span>}
     </div>
   );
 }

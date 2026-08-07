@@ -80,8 +80,9 @@ export function defaultNameGenerator(filepath: string): string {
   const normalized = filepath.replace(/\\/g, '/');
 
   // Try to find a meaningful root by looking for common monorepo directory patterns
+  // Use (?:^|\/) to ensure we match at path boundaries, not as suffixes
   const patterns = [
-    /(?:packages|stores|deployers|voice|server-adapters|client-sdks|auth|observability|communications|pubsub|workflows|e2e-tests)\/([^/]+)\/(.*)/,
+    /(?:^|\/)(?:packages|stores|deployers|voice|server-adapters|client-sdks|auth|observability|communications|pubsub|workflows|e2e-tests)\/([^/]+)\/(.*)/,
   ];
 
   for (const pattern of patterns) {

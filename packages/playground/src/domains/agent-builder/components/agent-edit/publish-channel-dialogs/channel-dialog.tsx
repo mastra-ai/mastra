@@ -1,4 +1,4 @@
-import { Dialog, DialogContent } from '@mastra/playground-ui';
+import { Dialog, DialogContent } from '@mastra/playground-ui/components/Dialog';
 import { useEffect, useState } from 'react';
 import { DisconnectChannelContent } from './disconnect-channel-content';
 import { PublishChannelContent } from './publish-channel-content';

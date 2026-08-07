@@ -2161,6 +2161,16 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
         expect(result.costUnit).toBe('usd');
       });
 
+      it('getMetricAggregate returns count_distinct for the requested dimension', async () => {
+        const result = await storage.getMetricAggregate({
+          name: ['mastra_agent_duration_ms'],
+          aggregation: 'count_distinct',
+          distinctColumn: 'entityName',
+        });
+
+        expect(result.value).toBe(2);
+      });
+
       it('listMetrics returns paginated metric records with shared filters', async () => {
         const result = await storage.listMetrics({
           filters: {
@@ -2200,6 +2210,69 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
         expect(code!.value).toBe(500);
         expect(code!.estimatedCost).toBeCloseTo(0.5);
         expect(code!.costUnit).toBe('usd');
+      });
+
+      describe('when a batch of trace IDs is filtered', () => {
+        it('aggregates only metrics from the selected traces', async () => {
+          await storage.batchCreateMetrics({
+            metrics: [
+              {
+                metricId: 'metric-trace-a',
+                timestamp: new Date('2026-01-01T02:00:00Z'),
+                name: 'mastra_trace_filter_test',
+                value: 10,
+                traceId: 'trace-a',
+                labels: {},
+              },
+              {
+                metricId: 'metric-trace-b',
+                timestamp: new Date('2026-01-01T02:00:01Z'),
+                name: 'mastra_trace_filter_test',
+                value: 20,
+                traceId: 'trace-b',
+                labels: {},
+              },
+              {
+                metricId: 'metric-trace-c',
+                timestamp: new Date('2026-01-01T02:00:02Z'),
+                name: 'mastra_trace_filter_test',
+                value: 30,
+                traceId: 'trace-c',
+                labels: {},
+              },
+            ],
+          });
+
+          const result = await storage.getMetricBreakdown({
+            name: ['mastra_trace_filter_test'],
+            groupBy: ['traceId'],
+            aggregation: 'sum',
+            filters: { traceIds: ['trace-a', 'trace-c'] },
+          });
+
+          expect(
+            result.groups
+              .map(group => [group.dimensions.traceId, group.value])
+              .sort(([left], [right]) => String(left).localeCompare(String(right))),
+          ).toEqual([
+            ['trace-a', 10],
+            ['trace-c', 30],
+          ]);
+        });
+      });
+
+      it('getMetricBreakdown honors limit and ascending order direction', async () => {
+        const result = await storage.getMetricBreakdown({
+          name: ['mastra_agent_duration_ms'],
+          groupBy: ['entityName'],
+          aggregation: 'sum',
+          orderDirection: 'ASC',
+          limit: 1,
+        });
+
+        expect(result.groups).toHaveLength(1);
+        expect(result.groups[0]!.dimensions.entityName).toBe('weatherAgent');
+        expect(result.groups[0]!.value).toBe(300);
       });
 
       it('getMetricBreakdown groups by label keys', async () => {

@@ -1,4 +1,5 @@
-import { Button, EmptyState } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { CircleSlashIcon, ExternalLinkIcon, Plus } from 'lucide-react';
 import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
 import { useLinkComponent } from '@/lib/framework';
@@ -37,7 +38,7 @@ export const NoPromptBlocksInfo = () => {
             <Button
               variant="ghost"
               as="a"
-              href="https://mastra.ai/en/docs/editor/prompts"
+              href="https://mastra.ai/docs/editor/overview#prompt-blocks"
               target="_blank"
               rel="noopener noreferrer"
             >

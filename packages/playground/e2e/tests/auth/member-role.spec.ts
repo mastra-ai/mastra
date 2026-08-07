@@ -21,7 +21,7 @@ test.describe('Member Role', () => {
     await resetStorage();
   });
 
-  test.describe('Navigation Access', () => {
+  test.describe('when a member user navigates the studio', () => {
     test('member sees main navigation items', async ({ page }) => {
       await setupMemberAuth(page);
       await page.goto('/agents');
@@ -52,7 +52,7 @@ test.describe('Member Role', () => {
     });
   });
 
-  test.describe('Agents Access - Read Only', () => {
+  test.describe('when a member user accesses agents read-only', () => {
     test('member can view agents list', async ({ page }) => {
       await setupMemberAuth(page);
       await page.goto('/agents');
@@ -89,11 +89,20 @@ test.describe('Member Role', () => {
 
     test('member can view agent tools', async ({ page }) => {
       await setupMemberAuth(page);
-      await page.goto('/agents/weather-agent/chat');
+      await page.goto('/agents/weather-agent/settings');
 
-      // Member should be able to see agent tools (they have agents:read and tools:read)
-      const toolsSection = page.getByText(/weatherInfo|simpleMcpTool/i);
-      await expect(toolsSection.first()).toBeVisible();
+      // Member should be able to see agent tools (they have agents:read and tools:read).
+      await expect(page.getByTestId('agent-settings-view')).toBeVisible({ timeout: 10000 });
+      await expect(page.getByRole('tab', { name: 'General' })).toHaveAttribute('aria-selected', 'true');
+      await expect(page.getByRole('heading', { name: 'Tools' })).toBeVisible({ timeout: 10000 });
+      await expect(page.getByRole('link', { name: 'weatherInfo' })).toHaveAttribute(
+        'href',
+        /\/agents\/weather-agent\/tools\/weatherInfo$/,
+      );
+      await expect(page.getByRole('link', { name: 'simpleMcpTool' })).toHaveAttribute(
+        'href',
+        /\/agents\/weather-agent\/tools\/simpleMcpTool$/,
+      );
     });
 
     test('member does not see agent creation controls', async ({ page }) => {
@@ -121,7 +130,7 @@ test.describe('Member Role', () => {
     });
   });
 
-  test.describe('Workflows Access - Full Permissions', () => {
+  test.describe('when a member user accesses workflows with full permissions', () => {
     test('member can view workflows list', async ({ page }) => {
       await setupMemberAuth(page);
       await page.goto('/workflows');
@@ -182,7 +191,7 @@ test.describe('Member Role', () => {
     });
   });
 
-  test.describe('Tools Access - Read and Execute', () => {
+  test.describe('when a member user accesses tools to read and execute', () => {
     test('member can view tools list', async ({ page }) => {
       await setupMemberAuth(page);
       await page.goto('/tools');
@@ -214,8 +223,7 @@ test.describe('Member Role', () => {
       await page.goto('/tools/weatherInfo');
 
       // Should see the tool execution form/panel
-      const locationInput = page.getByLabel(/location/i).or(page.locator('input[name="location"]'));
-      await expect(locationInput.first()).toBeVisible();
+      await expect(page.locator('[name="location"]')).toBeVisible();
     });
 
     test('member does not see permission denied for tool execution', async ({ page }) => {
@@ -228,7 +236,7 @@ test.describe('Member Role', () => {
     });
   });
 
-  test.describe('Permission Verification', () => {
+  test.describe('when verifying the member permission set', () => {
     test('member has correct permissions', async ({ page }) => {
       // Set up member with explicit permission verification
       await setupMockAuth(page, {
@@ -277,7 +285,7 @@ test.describe('Member Role', () => {
     });
   });
 
-  test.describe('Member vs Other Roles Comparison', () => {
+  test.describe('when comparing the member role to other roles', () => {
     test('member has fewer permissions than admin', async ({ page }) => {
       // First, check member view
       await setupMemberAuth(page);
@@ -327,8 +335,7 @@ test.describe('Member Role', () => {
       await page.goto('/tools/weatherInfo');
 
       // Member should see tool execution panel
-      const locationInput = page.getByLabel(/location/i).or(page.locator('input[name="location"]'));
-      await expect(locationInput.first()).toBeVisible();
+      await expect(page.locator('[name="location"]')).toBeVisible();
 
       // Now check as viewer
       await setupMockAuth(page, {
@@ -344,7 +351,7 @@ test.describe('Member Role', () => {
     });
   });
 
-  test.describe('Restricted Actions', () => {
+  test.describe('when a member user attempts restricted actions', () => {
     test('member cannot see admin-only settings', async ({ page }) => {
       await setupMemberAuth(page);
       await page.goto('/agents');

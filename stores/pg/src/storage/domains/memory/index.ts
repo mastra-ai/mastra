@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import { createRequire } from 'node:module';
 import { MessageList } from '@mastra/core/agent';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
@@ -8,11 +7,14 @@ import {
   MemoryStorage,
   normalizePerPage,
   calculatePagination,
+  OBSERVATIONAL_MEMORY_TABLE_SCHEMA,
   TABLE_MESSAGES,
   TABLE_RESOURCES,
   TABLE_THREADS,
   TABLE_SCHEMAS,
   createStorageErrorId,
+  storageMessageMatchesMetadataFilter,
+  validateStorageMetadataFilter,
 } from '@mastra/core/storage';
 
 /**
@@ -54,18 +56,14 @@ export const OM_MIGRATION_COLUMNS: string[] = [
 ];
 
 /**
- * Try to import the OM schema statically. On older @mastra/core versions that
- * don't export OBSERVATIONAL_MEMORY_TABLE_SCHEMA this will be undefined,
- * and getExportDDL / init() will simply skip the OM table.
+ * The OM schema is imported statically above: the peer dependency range
+ * (`@mastra/core >= 1.49.0`) guarantees the export exists. This used to be a
+ * dynamic `require` guarded by `typeof require === 'function'` for older core
+ * versions, but esbuild rewrites the bare `require` identifier in the ESM
+ * bundle to a shim that always throws, and the silent catch meant the
+ * published ESM build skipped creating the OM table entirely (#18954).
  */
-let _omTableSchema: Record<string, Record<string, any>> | undefined;
-try {
-  const __require = typeof require === 'function' ? require : createRequire(import.meta.url);
-  const storage = __require('@mastra/core/storage');
-  _omTableSchema = storage.OBSERVATIONAL_MEMORY_TABLE_SCHEMA;
-} catch {
-  // OM not available in this version of core
-}
+const _omTableSchema: Record<string, Record<string, any>> = OBSERVATIONAL_MEMORY_TABLE_SCHEMA;
 import type {
   StorageResourceType,
   StorageListMessagesInput,
@@ -89,6 +87,11 @@ import type {
   SwapBufferedReflectionToActiveInput,
   CreateReflectionGenerationInput,
   UpdateObservationalMemoryConfigInput,
+  PruneOptions,
+  PruneResult,
+  RetentionTablesDescriptor,
+  TableRetentionPolicy,
+  TABLE_NAMES,
 } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import {
@@ -100,6 +103,7 @@ import {
   getTableName as dbGetTableName,
 } from '../../db';
 import type { PgDomainConfig } from '../../db';
+import { runPrune, runBatchedDelete, resolveTargets } from '../../retention';
 
 // Database row type that includes timezone-aware columns
 type MessageRowFromDB = {
@@ -132,6 +136,14 @@ function inPlaceholders(count: number, startIndex = 1): string {
   return Array.from({ length: count }, (_, i) => `$${i + startIndex}`).join(', ');
 }
 
+/**
+ * Bind dates as UTC strings because node-postgres serializes Date parameters
+ * for TIMESTAMP columns using the process's local timezone.
+ */
+function toUtcISOString(date: Date): string {
+  return date.toISOString();
+}
+
 function dedupeMessagesForSave(messages: MastraDBMessage[]): MastraDBMessage[] {
   const deduped = new Map<string, MastraDBMessage>();
   for (const message of messages) {
@@ -153,6 +165,19 @@ function dedupeMessagesForSave(messages: MastraDBMessage[]): MastraDBMessage[] {
 
 export class MemoryPG extends MemoryStorage {
   readonly supportsObservationalMemory = true;
+
+  /**
+   * Retention-eligible tables. `threads`, `messages`, and `resources` all anchor
+   * on the timezone-aware `createdAtZ` mirror column (kept in sync by triggers),
+   * and are indexed for fast batched deletes. Cascade order is enforced in
+   * `prune()` (children before threads), not here. Observational memory has no
+   * timestamp anchor and is deliberately excluded.
+   */
+  static override readonly retentionTables: RetentionTablesDescriptor = {
+    messages: { table: TABLE_MESSAGES, column: 'createdAtZ', indexed: true },
+    resources: { table: TABLE_RESOURCES, column: 'createdAtZ', indexed: true },
+    threads: { table: TABLE_THREADS, column: 'createdAtZ', indexed: true },
+  };
 
   #db: PgDB;
   #schema: string;
@@ -177,14 +202,13 @@ export class MemoryPG extends MemoryStorage {
     await this.#db.createTable({ tableName: TABLE_MESSAGES, schema: TABLE_SCHEMAS[TABLE_MESSAGES] });
     await this.#db.createTable({ tableName: TABLE_RESOURCES, schema: TABLE_SCHEMAS[TABLE_RESOURCES] });
 
-    // Dynamically import OM schema to avoid breaking older @mastra/core versions
-    let omSchema: Record<string, any> | undefined;
-    try {
-      const { OBSERVATIONAL_MEMORY_TABLE_SCHEMA } = await import('@mastra/core/storage');
-      omSchema = OBSERVATIONAL_MEMORY_TABLE_SCHEMA?.[OM_TABLE];
-    } catch {
-      // OM not available in this version of core
-    }
+    // Reuse the module-level `_omTableSchema` (static import). Don't switch
+    // this to `await import('@mastra/core/storage')`: that used to deadlock
+    // `mastra build` output, because bundlers rewrite the dynamic import to
+    // point at the entry chunk that statically depends on this file, so the
+    // cycle never resolves when storage initializes during module
+    // evaluation (#18298).
+    const omSchema = _omTableSchema?.[OM_TABLE];
 
     if (omSchema) {
       await this.#db.createTable({
@@ -209,10 +233,38 @@ export class MemoryPG extends MemoryStorage {
         indexName: OM_TABLE,
         schemaName: getSchemaName(this.#schema),
       });
-      await this.#db.client.none(`CREATE INDEX IF NOT EXISTS idx_om_lookup_key ON ${omTableName} ("lookupKey")`);
+      await this.#db.createIndexFromStatement(
+        'idx_om_lookup_key',
+        `CREATE INDEX IF NOT EXISTS idx_om_lookup_key ON ${omTableName} ("lookupKey")`,
+      );
     }
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
+  }
+
+  /**
+   * Lazily ensures a btree index exists on each configured policy's retention
+   * anchor column so age-based `prune()` deletes stay fast on large tables.
+   * Called from the prune path (not init) so only deployments that configure
+   * retention pay the index's write/disk overhead. Best-effort: failures are
+   * logged and pruning proceeds (correct, just slower).
+   * Created even with `skipDefaultIndexes` — retention is an explicit opt-in,
+   * so its supporting index is not part of the default index set.
+   */
+  private async ensureRetentionIndexes(policies: Record<string, TableRetentionPolicy>): Promise<void> {
+    const prefix = this.#schema && this.#schema !== 'public' ? `${this.#schema}_` : '';
+    for (const [key, entry] of Object.entries(MemoryPG.retentionTables)) {
+      if (!entry.indexed || !policies[key]) continue;
+      try {
+        await this.#db.ensureIndex({
+          indexName: `${prefix}mastra_${key}_retention_idx`,
+          tableName: entry.table as TABLE_NAMES,
+          column: entry.column,
+        });
+      } catch (error) {
+        this.logger?.warn?.(`Failed to create retention index for ${entry.table}:`, error);
+      }
+    }
   }
 
   /**
@@ -331,6 +383,79 @@ export class MemoryPG extends MemoryStorage {
     await this.#db.clearTable({ tableName: TABLE_MESSAGES });
     await this.#db.clearTable({ tableName: TABLE_THREADS });
     await this.#db.clearTable({ tableName: TABLE_RESOURCES });
+  }
+
+  /**
+   * Deletes rows older than the configured `maxAge` per table, in bounded,
+   * batched, cancellable chunks. Tables are pruned children-first (messages and
+   * resources before threads) since PostgreSQL has no FK cascade in this schema.
+   * Unset tables are kept forever.
+   *
+   * When a `messages` policy is set, semantic-recall embeddings for pruned
+   * messages are also swept from same-schema `memory_messages*` vector tables
+   * (best-effort, mirroring `deleteThread`). Embeddings held in an external
+   * vector store are out of reach and must be pruned by the operator.
+   */
+  async prune(policies: Record<string, TableRetentionPolicy>, options?: PruneOptions): Promise<PruneResult[]> {
+    await this.ensureRetentionIndexes(policies);
+    const targets = resolveTargets({
+      policies,
+      descriptor: MemoryPG.retentionTables,
+      order: ['messages', 'resources', 'threads'],
+    });
+    const results = await runPrune({ db: this.#db, domain: 'memory', targets, options });
+    if (policies['messages']) {
+      await this.pruneOrphanedVectorRows(policies['messages'], options);
+    }
+    return results;
+  }
+
+  /**
+   * Best-effort sweep of semantic-recall vector rows whose source message no
+   * longer exists (e.g. it was just pruned), so recall doesn't keep returning
+   * embeddings that resolve to nothing. Only same-schema default vector tables
+   * (`memory_messages*`) are covered — the same set `deleteThread` cleans up.
+   * Failures are logged, never thrown: vector cleanup must not fail the prune.
+   */
+  private async pruneOrphanedVectorRows(policy: TableRetentionPolicy, options?: PruneOptions): Promise<void> {
+    try {
+      const schemaName = this.#schema || 'public';
+      const vectorTables = await this.#db.client.manyOrNone<{ tablename: string }>(
+        `
+        SELECT tablename
+        FROM pg_tables
+        WHERE schemaname = $1
+        AND (tablename = 'memory_messages' OR tablename LIKE 'memory_messages_%')
+      `,
+        [schemaName],
+      );
+
+      const messagesTable = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) });
+      for (const { tablename } of vectorTables) {
+        const vectorTableName = getTableName({ indexName: tablename, schemaName: getSchemaName(this.#schema) });
+        await runBatchedDelete({
+          deleteBatch: async limit => {
+            const result = await this.#db.client.query(
+              `
+              DELETE FROM ${vectorTableName}
+              WHERE ctid IN (
+                SELECT v.ctid FROM ${vectorTableName} v
+                WHERE v.metadata->>'message_id' IS NOT NULL
+                AND NOT EXISTS (SELECT 1 FROM ${messagesTable} m WHERE m.id = v.metadata->>'message_id')
+                LIMIT $1
+              )
+            `,
+              [limit],
+            );
+            return result.rowCount ?? 0;
+          },
+          batchSize: policy.batchSize ?? 1000,
+          options,
+        });
+      }
+    } catch (error) {
+      this.logger?.warn?.('Failed to sweep orphaned semantic-recall vector rows after prune:', error);
+    }
   }
 
   /**
@@ -502,6 +627,10 @@ export class MemoryPG extends MemoryStorage {
         hasMore: perPageInput === false ? false : offset + perPage < total,
       };
     } catch (error) {
+      // Re-throw USER errors (validation errors) directly so callers get proper 400 responses
+      if (error instanceof MastraError && error.category === ErrorCategory.USER) {
+        throw error;
+      }
       const mastraError = new MastraError(
         {
           id: createStorageErrorId('PG', 'LIST_THREADS', 'FAILED'),
@@ -517,19 +646,15 @@ export class MemoryPG extends MemoryStorage {
       );
       this.logger?.error?.(mastraError.toString());
       this.logger?.trackException(mastraError);
-      return {
-        threads: [],
-        total: 0,
-        page,
-        perPage: perPageForResponse,
-        hasMore: false,
-      };
+      throw mastraError;
     }
   }
 
   async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
     try {
       const tableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
+      const createdAt = toUtcISOString(thread.createdAt);
+      const updatedAt = toUtcISOString(thread.updatedAt);
       await this.#db.client.none(
         `INSERT INTO ${tableName} (
           id,
@@ -554,10 +679,10 @@ export class MemoryPG extends MemoryStorage {
           thread.resourceId,
           thread.title,
           thread.metadata ? JSON.stringify(thread.metadata) : null,
-          thread.createdAt,
-          thread.createdAt,
-          thread.updatedAt,
-          thread.updatedAt,
+          createdAt,
+          createdAt,
+          updatedAt,
+          updatedAt,
         ],
       );
 
@@ -608,6 +733,7 @@ export class MemoryPG extends MemoryStorage {
 
     try {
       const now = new Date();
+      const nowStr = toUtcISOString(now);
       const thread = await this.#db.client.one<StorageThreadType & { createdAtZ: Date; updatedAtZ: Date }>(
         `UPDATE ${threadTableName}
                     SET
@@ -618,7 +744,7 @@ export class MemoryPG extends MemoryStorage {
                     WHERE id = $5
                     RETURNING *
                 `,
-        [title, mergedMetadata, now, now, id],
+        [title, mergedMetadata, nowStr, nowStr, id],
       );
 
       return {
@@ -867,7 +993,7 @@ export class MemoryPG extends MemoryStorage {
       );
       this.logger?.error?.(mastraError.toString());
       this.logger?.trackException(mastraError);
-      return { messages: [] };
+      throw mastraError;
     }
   }
 
@@ -905,6 +1031,7 @@ export class MemoryPG extends MemoryStorage {
 
     const perPage = normalizePerPage(perPageInput, 40);
     const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+    const metadataFilter = validateStorageMetadataFilter(filter?.metadata);
 
     try {
       const { field, direction } = this.parseOrderBy(orderBy, 'ASC');
@@ -959,14 +1086,27 @@ export class MemoryPG extends MemoryStorage {
         };
       }
 
-      const countQuery = `SELECT COUNT(*) FROM ${tableName} ${whereClause}`;
-      const countResult = await this.#db.client.one(countQuery, queryParams);
-      const total = parseInt(countResult.count, 10);
-
-      const limitValue = perPageInput === false ? total : perPage;
-      const dataQuery = `${selectStatement} FROM ${tableName} ${whereClause} ${orderByStatement} LIMIT $${paramIndex++} OFFSET $${paramIndex++}`;
-      const rows = await this.#db.client.manyOrNone(dataQuery, [...queryParams, limitValue, offset]);
-      const messages: MessageRowFromDB[] = [...(rows || [])];
+      let total: number;
+      let messages: MessageRowFromDB[];
+      if (metadataFilter) {
+        const rows = await this.#db.client.manyOrNone(
+          `${selectStatement} FROM ${tableName} ${whereClause} ${orderByStatement}`,
+          queryParams,
+        );
+        const filteredRows = (rows || []).filter(row =>
+          storageMessageMatchesMetadataFilter(row.content, metadataFilter),
+        );
+        total = filteredRows.length;
+        messages = perPageInput === false ? filteredRows : filteredRows.slice(offset, offset + perPage);
+      } else {
+        const countResult = await this.#db.client.one(`SELECT COUNT(*) FROM ${tableName} ${whereClause}`, queryParams);
+        total = parseInt(countResult.count, 10);
+        const limitValue = perPageInput === false ? total : perPage;
+        const dataQuery = `${selectStatement} FROM ${tableName} ${whereClause} ${orderByStatement} LIMIT $${paramIndex++} OFFSET $${paramIndex++}`;
+        const rows = await this.#db.client.manyOrNone(dataQuery, [...queryParams, limitValue, offset]);
+        messages = [...(rows || [])];
+      }
+      const primaryPageCount = messages.length;
 
       if (total === 0 && messages.length === 0 && (!include || include.length === 0)) {
         return {
@@ -1001,7 +1141,9 @@ export class MemoryPG extends MemoryStorage {
         finalMessages.filter(m => m.threadId && threadIdSet.has(m.threadId)).map(m => m.id),
       );
       const allThreadMessagesReturned = returnedThreadMessageIds.size >= total;
-      const hasMore = perPageInput !== false && !allThreadMessagesReturned && offset + perPage < total;
+      const hasMore = metadataFilter
+        ? perPageInput !== false && offset + primaryPageCount < total
+        : perPageInput !== false && !allThreadMessagesReturned && offset + perPage < total;
 
       return {
         messages: finalMessages,
@@ -1011,6 +1153,10 @@ export class MemoryPG extends MemoryStorage {
         hasMore,
       };
     } catch (error) {
+      // Re-throw USER errors (validation errors) directly so callers get proper 400 responses
+      if (error instanceof MastraError && error.category === ErrorCategory.USER) {
+        throw error;
+      }
       const mastraError = new MastraError(
         {
           id: createStorageErrorId('PG', 'LIST_MESSAGES', 'FAILED'),
@@ -1025,13 +1171,7 @@ export class MemoryPG extends MemoryStorage {
       );
       this.logger?.error?.(mastraError.toString());
       this.logger?.trackException(mastraError);
-      return {
-        messages: [],
-        total: 0,
-        page,
-        perPage: perPageForResponse,
-        hasMore: false,
-      };
+      throw mastraError;
     }
   }
 
@@ -1072,6 +1212,7 @@ export class MemoryPG extends MemoryStorage {
 
     const perPage = normalizePerPage(perPageInput, 40);
     const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+    const metadataFilter = validateStorageMetadataFilter(filter?.metadata);
 
     try {
       const { field, direction } = this.parseOrderBy(orderBy, 'ASC');
@@ -1136,14 +1277,26 @@ export class MemoryPG extends MemoryStorage {
         };
       }
 
-      const countQuery = `SELECT COUNT(*) FROM ${tableName} ${whereClause}`;
-      const countResult = await this.#db.client.one(countQuery, queryParams);
-      const total = parseInt(countResult.count, 10);
-
-      const limitValue = perPageInput === false ? total : perPage;
-      const dataQuery = `${selectStatement} FROM ${tableName} ${whereClause} ${orderByStatement} LIMIT $${paramIndex++} OFFSET $${paramIndex++}`;
-      const rows = await this.#db.client.manyOrNone(dataQuery, [...queryParams, limitValue, offset]);
-      const messages: MessageRowFromDB[] = [...(rows || [])];
+      let total: number;
+      let messages: MessageRowFromDB[];
+      if (metadataFilter) {
+        const rows = await this.#db.client.manyOrNone(
+          `${selectStatement} FROM ${tableName} ${whereClause} ${orderByStatement}`,
+          queryParams,
+        );
+        const filteredRows = (rows || []).filter(row =>
+          storageMessageMatchesMetadataFilter(row.content, metadataFilter),
+        );
+        total = filteredRows.length;
+        messages = perPageInput === false ? filteredRows : filteredRows.slice(offset, offset + perPage);
+      } else {
+        const countResult = await this.#db.client.one(`SELECT COUNT(*) FROM ${tableName} ${whereClause}`, queryParams);
+        total = parseInt(countResult.count, 10);
+        const limitValue = perPageInput === false ? total : perPage;
+        const dataQuery = `${selectStatement} FROM ${tableName} ${whereClause} ${orderByStatement} LIMIT $${paramIndex++} OFFSET $${paramIndex++}`;
+        const rows = await this.#db.client.manyOrNone(dataQuery, [...queryParams, limitValue, offset]);
+        messages = [...(rows || [])];
+      }
 
       if (total === 0 && messages.length === 0 && (!include || include.length === 0)) {
         return {
@@ -1183,6 +1336,10 @@ export class MemoryPG extends MemoryStorage {
         hasMore,
       };
     } catch (error) {
+      // Re-throw USER errors (validation errors) directly so callers get proper 400 responses
+      if (error instanceof MastraError && error.category === ErrorCategory.USER) {
+        throw error;
+      }
       const mastraError = new MastraError(
         {
           id: createStorageErrorId('PG', 'LIST_MESSAGES_BY_RESOURCE_ID', 'FAILED'),
@@ -1196,13 +1353,7 @@ export class MemoryPG extends MemoryStorage {
       );
       this.logger?.error?.(mastraError.toString());
       this.logger?.trackException(mastraError);
-      return {
-        messages: [],
-        total: 0,
-        page,
-        perPage: perPageForResponse,
-        hasMore: false,
-      };
+      throw mastraError;
     }
   }
 
@@ -1258,7 +1409,7 @@ export class MemoryPG extends MemoryStorage {
           const values: unknown[] = [];
           const valuePlaceholders = batch
             .map((message, messageIndex) => {
-              const createdAt = message.createdAt || new Date();
+              const createdAt = toUtcISOString(message.createdAt || new Date());
               values.push(
                 message.id,
                 message.threadId,
@@ -1292,7 +1443,7 @@ export class MemoryPG extends MemoryStorage {
         }
 
         const threadTableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
-        const now = new Date();
+        const now = toUtcISOString(new Date());
         for (const threadIdToUpdate of threadIds) {
           await t.none(
             `UPDATE ${threadTableName}
@@ -1522,11 +1673,15 @@ export class MemoryPG extends MemoryStorage {
   }
 
   async saveResource({ resource }: { resource: StorageResourceType }): Promise<StorageResourceType> {
+    const createdAt = toUtcISOString(resource.createdAt);
+    const updatedAt = toUtcISOString(resource.updatedAt);
     await this.#db.insert({
       tableName: TABLE_RESOURCES,
       record: {
         ...resource,
         metadata: JSON.stringify(resource.metadata),
+        createdAt,
+        updatedAt,
       },
     });
 
@@ -1666,6 +1821,7 @@ export class MemoryPG extends MemoryStorage {
         const sourceMessages = await t.manyOrNone<MessageRowFromDB>(messageQuery, messageParams);
 
         const now = new Date();
+        const nowStr = toUtcISOString(now);
 
         // Determine the last message ID for clone metadata
         const lastMessageId = sourceMessages.length > 0 ? sourceMessages[sourceMessages.length - 1]!.id : undefined;
@@ -1707,10 +1863,10 @@ export class MemoryPG extends MemoryStorage {
             newThread.resourceId,
             newThread.title,
             newThread.metadata ? JSON.stringify(newThread.metadata) : null,
-            now,
-            now,
-            now,
-            now,
+            nowStr,
+            nowStr,
+            nowStr,
+            nowStr,
           ],
         );
 
@@ -1729,6 +1885,7 @@ export class MemoryPG extends MemoryStorage {
           } catch {
             // use content as is
           }
+          const createdAt = toUtcISOString(new Date(normalizedMsg.createdAt));
 
           await t.none(
             `INSERT INTO ${messageTableName} (id, thread_id, content, "createdAt", "createdAtZ", role, type, "resourceId")
@@ -1737,8 +1894,8 @@ export class MemoryPG extends MemoryStorage {
               newMessageId,
               newThreadId,
               typeof normalizedMsg.content === 'string' ? normalizedMsg.content : JSON.stringify(normalizedMsg.content),
-              normalizedMsg.createdAt,
-              normalizedMsg.createdAt,
+              createdAt,
+              createdAt,
               normalizedMsg.role,
               normalizedMsg.type || 'v2',
               targetResourceId,
@@ -2529,6 +2686,8 @@ export class MemoryPG extends MemoryStorage {
         suggestedContinuation: input.chunk.suggestedContinuation,
         currentTask: input.chunk.currentTask,
         threadTitle: input.chunk.threadTitle,
+        extractedValues: input.chunk.extractedValues,
+        extractionFailures: input.chunk.extractionFailures,
       };
 
       // Append chunk to existing array using JSONB concatenation

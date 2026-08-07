@@ -1,5 +1,5 @@
 import type { FeedbackRecord, ListFeedbackResponse } from '@mastra/core/storage';
-import { DataList, DataListSkeleton } from '@mastra/playground-ui';
+import { DataList, DataListSkeleton } from '@mastra/playground-ui/components/DataList';
 import { format } from 'date-fns';
 import { useState } from 'react';
 import { FeedbackDialog } from './feedback-dialog';

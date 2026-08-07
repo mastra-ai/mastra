@@ -1,19 +1,17 @@
+import { Badge } from '@mastra/playground-ui/components/Badge';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
 import {
-  Badge,
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-  ScrollArea,
-  Txt,
-  Icon,
-  cn,
   Dialog,
   DialogContent,
   DialogTitle,
   DialogHeader,
   DialogDescription,
   DialogBody,
-} from '@mastra/playground-ui';
+} from '@mastra/playground-ui/components/Dialog';
+import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { Handle, Position } from '@xyflow/react';
 import type { NodeProps, Node } from '@xyflow/react';
 import { ChevronDown } from 'lucide-react';
@@ -78,7 +76,7 @@ export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
             }
           }}
         >
-          <CollapsibleTrigger className="flex items-center justify-between w-full px-3 py-2">
+          <CollapsibleTrigger className="flex w-full items-center justify-between px-3 py-2">
             <Badge
               icon={
                 IconComponent ? (
@@ -138,7 +136,7 @@ export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
                         >
                           {tokens.map((line, i) => (
                             <div key={i} {...getLineProps({ line })}>
-                              <span className="inline-block mr-2 text-neutral3">{i + 1}</span>
+                              <span className="text-neutral3 mr-2 inline-block">{i + 1}</span>
                               {line.map((token, key) => (
                                 <span key={key} {...getTokenProps({ token })} />
                               ))}
@@ -163,7 +161,7 @@ export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
                             >
                               {({ className, style, tokens, getLineProps, getTokenProps }) => (
                                 <pre
-                                  className={`${className} relative font-mono text-sm overflow-x-auto p-3 w-full rounded-lg mt-2 dark:bg-zinc-800`}
+                                  className={`${className} relative mt-2 w-full overflow-x-auto rounded-lg p-3 font-mono text-sm dark:bg-zinc-800`}
                                   style={{
                                     ...style,
                                     backgroundColor: '#121212',
@@ -172,7 +170,7 @@ export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
                                 >
                                   {tokens.map((line, i) => (
                                     <div key={i} {...getLineProps({ line })}>
-                                      <span className="inline-block mr-2 text-neutral3">{i + 1}</span>
+                                      <span className="text-neutral3 mr-2 inline-block">{i + 1}</span>
                                       {line.map((token, key) => (
                                         <span key={key} {...getTokenProps({ token })} />
                                       ))}
@@ -192,7 +190,7 @@ export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
                       <div className="flex items-center gap-1">
                         {conjBadge}
 
-                        <Txt variant="ui-xs" className=" text-neutral3 flex-1">
+                        <Txt variant="ui-xs" className="text-neutral3 flex-1">
                           {(condition.ref.step as any).id || condition.ref.step}'s {condition.ref.path}{' '}
                           {Object.entries(condition.query).map(([key, value]) => `${key} ${String(value)}`)}
                         </Txt>

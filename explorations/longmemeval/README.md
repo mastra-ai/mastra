@@ -66,7 +66,7 @@ export HF_TOKEN=your_token_here
 pnpm download
 ```
 
-If automatic download fails, see [DOWNLOAD_GUIDE.md](./DOWNLOAD_GUIDE.md) for manual download instructions.
+If automatic download fails, see [DATA_DOWNLOAD_GUIDE.md](./DATA_DOWNLOAD_GUIDE.md) for manual download instructions.
 
 ## Usage
 

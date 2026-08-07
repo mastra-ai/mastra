@@ -1,4 +1,4 @@
-import type { JsonSchema } from '@mastra/playground-ui';
+import type { JsonSchema } from '@mastra/playground-ui/utils/json-schema';
 import { z } from 'zod';
 
 export const promptBlockFormSchema = z.object({

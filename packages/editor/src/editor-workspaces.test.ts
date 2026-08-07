@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -8,7 +9,7 @@ import { Agent } from '@mastra/core/agent';
 import { LibSQLStore } from '@mastra/libsql';
 import { createTool } from '@mastra/core/tools';
 import { Workspace } from '@mastra/core/workspace';
-import type { FilesystemProvider, SandboxProvider } from '@mastra/core/editor';
+import type { FilesystemProvider, SandboxProvider, WorkspaceProvider } from '@mastra/core/editor';
 import { MastraModelGateway, ProviderConfig } from '@mastra/core/llm';
 import { convertArrayToReadableStream, LanguageModelV2, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { MastraEditor } from './index';
@@ -28,7 +29,10 @@ const mockLogger = () => ({
 
 let testStorageCount = 0;
 const createSetup = async (editorConfig?: ConstructorParameters<typeof MastraEditor>[0]) => {
-  const storage = new LibSQLStore({ id: `ws-test-${testStorageCount++}`, url: ':memory:' });
+  const storage = new LibSQLStore({
+    id: `ws-test-${testStorageCount++}`,
+    url: `file:${os.tmpdir()}/mastra-test-${randomUUID()}.db`,
+  });
   const editor = new MastraEditor({ logger: mockLogger() as any, ...editorConfig });
   const mastra = new Mastra({ storage, editor });
   await storage.init();
@@ -489,6 +493,68 @@ describe('editor — provider registry', () => {
 });
 
 // =============================================================================
+// Workspace Provider Tests
+// =============================================================================
+
+describe('editor.workspace — workspace provider registry', () => {
+  it('should resolve a workspace via a registered workspace provider', async () => {
+    const mockWorkspace = new Workspace({
+      id: 'provider-ws',
+      name: 'Provider WS',
+      skills: ['placeholder'],
+    });
+
+    const myProvider: WorkspaceProvider<{ region: string }> = {
+      id: 'my-cloud',
+      name: 'My Cloud',
+      createWorkspace: config => {
+        expect(config.region).toBe('us-east-1');
+        return mockWorkspace;
+      },
+    };
+
+    const { editor } = await createSetup({
+      workspaces: { 'my-cloud': myProvider },
+    });
+
+    const resolved = await editor.workspace.resolveWorkspaceProvider('my-cloud', { region: 'us-east-1' });
+    expect(resolved).toBe(mockWorkspace);
+  });
+
+  it('should throw for an unregistered workspace provider', async () => {
+    const { editor } = await createSetup();
+
+    await expect(editor.workspace.resolveWorkspaceProvider('nonexistent', {})).rejects.toThrow(
+      /Workspace provider "nonexistent" is not registered/,
+    );
+  });
+
+  it('should support async createWorkspace', async () => {
+    const mockWorkspace = new Workspace({
+      id: 'async-ws',
+      name: 'Async WS',
+      skills: ['placeholder'],
+    });
+
+    const asyncProvider: WorkspaceProvider = {
+      id: 'async-cloud',
+      name: 'Async Cloud',
+      createWorkspace: async config => {
+        await new Promise(r => setTimeout(r, 1));
+        return mockWorkspace;
+      },
+    };
+
+    const { editor } = await createSetup({
+      workspaces: { 'async-cloud': asyncProvider },
+    });
+
+    const resolved = await editor.workspace.resolveWorkspaceProvider('async-cloud', {});
+    expect(resolved).toBe(mockWorkspace);
+  });
+});
+
+// =============================================================================
 // Agent + Workspace Integration Tests
 // =============================================================================
 
@@ -705,7 +771,10 @@ describe('editor.agent — workspace execution integration', () => {
   });
 
   const createExecutionSetup = async (extraTools?: Record<string, any>) => {
-    const storage = new LibSQLStore({ id: `ws-exec-${testStorageCount++}`, url: ':memory:' });
+    const storage = new LibSQLStore({
+      id: `ws-exec-${testStorageCount++}`,
+      url: `file:${os.tmpdir()}/mastra-test-${randomUUID()}.db`,
+    });
     const editor = new MastraEditor({ logger: mockLogger() as any });
     const mastra = new Mastra({
       storage,

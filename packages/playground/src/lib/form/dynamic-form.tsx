@@ -1,11 +1,16 @@
-import { Button, Label } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import type { ButtonProps } from '@mastra/playground-ui/components/Button';
+import { Label } from '@mastra/playground-ui/components/Label';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { Loader2 } from 'lucide-react';
+import type { ReactNode } from 'react';
 import { useEffect, useRef, useCallback, useMemo } from 'react';
 import type { UseFormReturn } from 'react-hook-form';
 import { z } from 'zod';
 import { AutoForm } from './auto-form';
+import { isEmptyZodObject } from './is-empty-zod-object';
 import { CustomZodProvider } from './zod-provider';
-import { getShape, getIntersection } from './zod-provider/compat';
+import { getShape } from './zod-provider/compat';
 
 interface DynamicFormProps {
   schema: any;
@@ -14,23 +19,16 @@ interface DynamicFormProps {
   defaultValues?: any;
   isSubmitLoading?: boolean;
   submitButtonLabel?: string;
+  submitButtonClassName?: string;
+  submitButtonIcon?: ReactNode;
+  submitButtonVariant?: ButtonProps['variant'];
+  submitButtonFullWidth?: boolean;
+  disableSubmit?: boolean;
   className?: string;
   readOnly?: boolean;
   children?: React.ReactNode;
-}
-
-function isEmptyZodObject(schema: unknown): boolean {
-  const shape = getShape(schema);
-  if (shape) {
-    return Object.keys(shape).length === 0;
-  }
-
-  const intersection = getIntersection(schema);
-  if (intersection) {
-    return isEmptyZodObject(intersection.left) && isEmptyZodObject(intersection.right);
-  }
-
-  return false;
+  submitActions?: React.ReactNode;
+  leftActions?: React.ReactNode;
 }
 
 function isZodObjectLike(schema: any): boolean {
@@ -44,48 +42,64 @@ export function DynamicForm({
   defaultValues,
   isSubmitLoading,
   submitButtonLabel,
+  submitButtonClassName,
+  submitButtonIcon,
+  submitButtonVariant,
+  submitButtonFullWidth,
+  disableSubmit,
   className,
   readOnly,
   children,
+  submitActions,
+  leftActions,
 }: DynamicFormProps) {
   const subscriptionRef = useRef<{ unsubscribe: () => void } | null>(null);
+  const formRef = useRef<UseFormReturn<any> | null>(null);
   const isNotZodObject = !isZodObjectLike(schema);
   const onValuesChangeRef = useRef(onValuesChange);
+  onValuesChangeRef.current = onValuesChange;
 
-  // Keep the callback ref up to date
-  useEffect(() => {
-    onValuesChangeRef.current = onValuesChange;
-  }, [onValuesChange]);
-
-  // Clean up subscription on unmount
   useEffect(() => {
     return () => {
       subscriptionRef.current?.unsubscribe();
     };
   }, []);
 
-  const handleFormInit = useCallback(
+  const subscribeToValues = useCallback(
     (form: UseFormReturn<any>) => {
-      // Clean up any existing subscription
       subscriptionRef.current?.unsubscribe();
+      subscriptionRef.current = null;
 
-      // Set up value watching for onValuesChange callback
-      if (onValuesChangeRef.current) {
-        subscriptionRef.current = form.watch(values => {
-          const normalizedValues = isNotZodObject
-            ? values && Object.prototype.hasOwnProperty.call(values, '\u200B')
-              ? values['\u200B']
-              : {}
-            : values;
-          onValuesChangeRef.current?.(normalizedValues);
-        });
-      }
+      if (!onValuesChangeRef.current) return;
+
+      subscriptionRef.current = form.watch(values => {
+        const normalizedValues = isNotZodObject
+          ? values && Object.prototype.hasOwnProperty.call(values, '\u200B')
+            ? values['\u200B']
+            : {}
+          : values;
+        onValuesChangeRef.current?.(normalizedValues);
+      });
     },
     [isNotZodObject],
   );
 
-  // Memoize the schema provider to avoid recreating it on every render
-  // This prevents form fields from losing focus when parent components re-render
+  const shouldSubscribeToValues = Boolean(onValuesChange);
+
+  useEffect(() => {
+    if (formRef.current) {
+      subscribeToValues(formRef.current);
+    }
+  }, [shouldSubscribeToValues, subscribeToValues]);
+
+  const handleFormInit = useCallback(
+    (form: UseFormReturn<any>) => {
+      formRef.current = form;
+      subscribeToValues(form);
+    },
+    [subscribeToValues],
+  );
+
   const schemaProvider = useMemo(() => {
     if (!schema) {
       return null;
@@ -96,9 +110,11 @@ export function DynamicForm({
         return z.object({});
       }
       if (isNotZodObject) {
+        const rootSchema = s.description ? s : s.describe('Input');
+
         // using a non-printable character to avoid conflicts with the form data
         return z.object({
-          '\u200B': s,
+          '\u200B': rootSchema,
         });
       }
       return s;
@@ -107,20 +123,46 @@ export function DynamicForm({
     return new CustomZodProvider(normalizeSchema(schema) as any);
   }, [schema, isNotZodObject]);
 
-  // Memoize UI components to prevent unnecessary re-renders
   const uiComponents = useMemo(
     () => ({
       SubmitButton: ({ children: buttonChildren }: { children: React.ReactNode }) =>
         onSubmit ? (
-          <Button className="w-full" disabled={isSubmitLoading}>
-            {isSubmitLoading ? <Loader2 className="animate-spin" /> : submitButtonLabel || buttonChildren}
-          </Button>
+          <div className={cn('flex items-center justify-between gap-1', submitButtonFullWidth && 'block')}>
+            {!submitButtonFullWidth && (leftActions ?? <div />)}
+            <div className={cn('flex items-center gap-1', submitButtonFullWidth && 'w-full')}>
+              {submitActions}
+              <Button
+                variant={submitButtonVariant}
+                disabled={isSubmitLoading || disableSubmit}
+                className={cn(submitButtonFullWidth && 'w-full justify-center', submitButtonClassName)}
+              >
+                {isSubmitLoading ? (
+                  <Loader2 className="animate-spin" />
+                ) : (
+                  <>
+                    {submitButtonIcon}
+                    {submitButtonLabel || buttonChildren}
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
         ) : null,
     }),
-    [onSubmit, isSubmitLoading, submitButtonLabel],
+    [
+      onSubmit,
+      isSubmitLoading,
+      submitButtonLabel,
+      submitButtonClassName,
+      submitButtonIcon,
+      submitButtonVariant,
+      submitButtonFullWidth,
+      submitActions,
+      leftActions,
+      disableSubmit,
+    ],
   );
 
-  // Memoize form components to prevent unnecessary re-renders
   const formComponents = useMemo(
     () => ({
       Label: ({ value }: { value: string }) => <Label className="text-sm font-normal">{value}</Label>,
@@ -128,7 +170,6 @@ export function DynamicForm({
     [],
   );
 
-  // Memoize form props object to prevent unnecessary re-renders
   const formPropsObj = useMemo(
     () => ({
       className,
@@ -137,14 +178,12 @@ export function DynamicForm({
     [className],
   );
 
-  // Memoize normalized default values
   const normalizedDefaultValues = useMemo(
     () =>
       isNotZodObject ? (defaultValues === undefined ? undefined : { '\u200B': defaultValues }) : (defaultValues as any),
     [isNotZodObject, defaultValues],
   );
 
-  // Memoize the submit handler
   const handleSubmit = useCallback(
     async (values: any) => {
       const normalizedValues = isNotZodObject

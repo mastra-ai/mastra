@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -45,7 +44,7 @@ describe('getCodeModeCall', () => {
 
   it('returns null when args have no string code field', () => {
     expect(getCodeModeCall({ command: 'ls' }, { success: true })).toBeNull();
-    expect(getCodeModeCall({ code: 42 } as unknown as Record<string, unknown>, undefined)).toBeNull();
+    expect(getCodeModeCall({ code: 42 }, undefined)).toBeNull();
   });
 
   it('returns null when the result is not a CodeModeResult', () => {

@@ -1,0 +1,104 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "turnIndex": 0,
+        "userMessage": "Create a concise plan for the plan request-changes e2e test.",
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_plan_rc_e2e_initial_write",
+            "name": "write_file",
+            "arguments": {
+              "path": ".mastracode/plans/e2e-request-changes-plan.md",
+              "content": "# E2E Request Changes Plan\n\n## Overview\nInitial plan for the request-changes e2e test.\n\n## Steps\n1. Create the initial feature.\n2. Verify it works.\n\n## Verification\nRun the test suite.\n",
+              "overwrite": true
+            }
+          }
+        ]
+      },
+      "streamingProfile": {
+        "ttft": 200,
+        "tps": 30
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "turnIndex": 1
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_plan_rc_e2e_initial",
+            "name": "submit_plan",
+            "arguments": {
+              "path": ".mastracode/plans/e2e-request-changes-plan.md"
+            }
+          }
+        ]
+      },
+      "streamingProfile": {
+        "ttft": 200,
+        "tps": 30
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "turnIndex": 3
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_plan_rc_e2e_revised",
+            "name": "submit_plan",
+            "arguments": {
+              "path": ".mastracode/plans/e2e-request-changes-plan.md"
+            }
+          }
+        ]
+      },
+      "streamingProfile": {
+        "ttft": 200,
+        "tps": 30
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "userMessage": "Add a testing section with unit and integration tests"
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_plan_rc_e2e_revised_write",
+            "name": "write_file",
+            "arguments": {
+              "path": ".mastracode/plans/e2e-request-changes-plan.md",
+              "content": "# E2E Request Changes Plan\n\n## Overview\nInitial plan for the request-changes e2e test.\n\n## Steps\n1. Create the initial feature.\n2. Write unit tests for all functions.\n3. Write integration tests for the API.\n4. Verify it works.\n\n## Verification\nRun the test suite.\n",
+              "overwrite": true
+            }
+          }
+        ]
+      },
+      "streamingProfile": {
+        "ttft": 200,
+        "tps": 30
+      }
+    },
+    {
+      "match": {},
+      "response": {
+        "content": "Build handoff request-changes e2e acknowledged."
+      }
+    }
+  ]
+}

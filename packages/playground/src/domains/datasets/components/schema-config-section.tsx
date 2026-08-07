@@ -1,16 +1,7 @@
 'use client';
-
-import {
-  Notice,
-  Collapsible,
-  CollapsibleTrigger,
-  CollapsibleContent,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@mastra/playground-ui';
+import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@mastra/playground-ui/components/Collapsible';
+import { Notice } from '@mastra/playground-ui/components/Notice';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import type { JSONSchema7 } from 'json-schema';
 import { ChevronRight } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
@@ -26,9 +17,11 @@ type ScorerTargetType = 'agent' | 'custom';
 interface SchemaConfigSectionProps {
   inputSchema: Record<string, unknown> | null | undefined;
   outputSchema: Record<string, unknown> | null | undefined;
+  requestContextSchema: Record<string, unknown> | null | undefined;
   onChange: (schemas: {
     inputSchema: Record<string, unknown> | null;
     outputSchema: Record<string, unknown> | null;
+    requestContextSchema: Record<string, unknown> | null;
   }) => void;
   disabled?: boolean;
   defaultOpen?: boolean;
@@ -41,6 +34,7 @@ interface SchemaConfigSectionProps {
 export function SchemaConfigSection({
   inputSchema,
   outputSchema,
+  requestContextSchema,
   onChange,
   disabled = false,
   defaultOpen = false,
@@ -137,17 +131,34 @@ export function SchemaConfigSection({
         outputSchema: shouldPopulateOutput
           ? (sourceSchemas.outputSchema as Record<string, unknown>)
           : (outputSchema ?? null),
+        requestContextSchema: requestContextSchema ?? null,
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sourceType, selectedWorkflow, workflowSchema, scorerTargetType]);
 
   const handleInputSchemaChange = (schema: Record<string, unknown> | null) => {
-    onChange({ inputSchema: schema, outputSchema: outputSchema ?? null });
+    onChange({
+      inputSchema: schema,
+      outputSchema: outputSchema ?? null,
+      requestContextSchema: requestContextSchema ?? null,
+    });
   };
 
   const handleOutputSchemaChange = (schema: Record<string, unknown> | null) => {
-    onChange({ inputSchema: inputSchema ?? null, outputSchema: schema });
+    onChange({
+      inputSchema: inputSchema ?? null,
+      outputSchema: schema,
+      requestContextSchema: requestContextSchema ?? null,
+    });
+  };
+
+  const handleRequestContextSchemaChange = (schema: Record<string, unknown> | null) => {
+    onChange({
+      inputSchema: inputSchema ?? null,
+      outputSchema: outputSchema ?? null,
+      requestContextSchema: schema,
+    });
   };
 
   const handleSourceChange = (value: SourceType) => {
@@ -160,12 +171,12 @@ export function SchemaConfigSection({
 
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-      <CollapsibleTrigger className="flex items-center gap-2 text-sm font-medium text-neutral4 hover:text-neutral5 w-full py-2">
-        <ChevronRight className="w-4 h-4" />
+      <CollapsibleTrigger className="text-neutral4 hover:text-neutral5 flex w-full items-center gap-2 py-2 text-sm font-medium">
+        <ChevronRight className="h-4 w-4" />
         Schema Configuration (Optional)
       </CollapsibleTrigger>
 
-      <CollapsibleContent className="pt-4 space-y-4">
+      <CollapsibleContent className="space-y-4 pt-4">
         {/* JSON Schema info notification */}
         <Notice variant="info" title="JSON Schema Format">
           <Notice.Message>
@@ -174,7 +185,7 @@ export function SchemaConfigSection({
               href="https://json-schema.org/"
               target="_blank"
               rel="noopener noreferrer"
-              className="underline hover:text-accent5Lighter"
+              className="hover:text-accent5Lighter underline"
             >
               JSON Schema
             </a>{' '}
@@ -184,7 +195,7 @@ export function SchemaConfigSection({
 
         {/* Source selector */}
         <div className="space-y-2">
-          <label className="text-sm font-medium text-neutral4">Import From</label>
+          <label className="text-neutral4 text-sm font-medium">Import From</label>
           <div className="flex items-center gap-2">
             <Select value={sourceType} onValueChange={v => handleSourceChange(v as SourceType)} disabled={disabled}>
               <SelectTrigger size="sm" className="w-40">
@@ -226,7 +237,7 @@ export function SchemaConfigSection({
 
             {/* Loading indicator for workflow schema */}
             {sourceType === 'workflow' && selectedWorkflow && workflowSchemaLoading && (
-              <span className="text-xs text-neutral3">Loading schema...</span>
+              <span className="text-neutral3 text-xs">Loading schema...</span>
             )}
 
             {/* Scorer target type picker */}
@@ -249,7 +260,7 @@ export function SchemaConfigSection({
 
           {/* Helper text for scorer */}
           {sourceType === 'scorer' && (
-            <p className="text-xs text-neutral3">
+            <p className="text-neutral3 text-xs">
               {scorerTargetType === 'agent'
                 ? 'For calibrating agent-type scorers'
                 : 'For calibrating custom scorers (input/output as any)'}
@@ -274,6 +285,14 @@ export function SchemaConfigSection({
           onChange={handleOutputSchemaChange}
           sourceSchema={isAutoPopulate ? sourceSchemas.outputSchema : undefined}
           autoPopulate={isAutoPopulate}
+        />
+
+        <SchemaField
+          label="Request Context Schema"
+          schemaType="requestContext"
+          value={requestContextSchema}
+          onChange={handleRequestContextSchemaChange}
+          autoPopulate={false}
         />
       </CollapsibleContent>
     </Collapsible>

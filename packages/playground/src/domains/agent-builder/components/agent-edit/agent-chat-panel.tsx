@@ -1,4 +1,5 @@
-import { Avatar, Txt } from '@mastra/playground-ui';
+import { Avatar } from '@mastra/playground-ui/components/Avatar';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { CircleCheckIcon, LightbulbIcon, ListChecksIcon, WrenchIcon } from 'lucide-react';
 import { createContext, useContext, useMemo } from 'react';
 import type { ReactNode } from 'react';
@@ -29,6 +30,8 @@ interface AgentChatMeta {
 }
 
 const AgentChatMetaContext = createContext<AgentChatMeta>({ isConversationLoading: false });
+
+const EMPTY_MESSAGES: never[] = [];
 
 const STARTER_PROMPTS = [
   {
@@ -73,10 +76,7 @@ export const AgentChatPanelProvider = ({
     memory: true,
   });
 
-  // Stable empty array per agentId.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const emptyMessages = useMemo(() => [] as never[], [agentId]);
-  const storedMessages = data?.messages ?? emptyMessages;
+  const storedMessages = data?.messages ?? EMPTY_MESSAGES;
 
   const meta = useMemo<AgentChatMeta>(
     () => ({ isConversationLoading, agentName, agentDescription, agentAvatarUrl }),
@@ -84,7 +84,7 @@ export const AgentChatPanelProvider = ({
   );
 
   return (
-    <StreamChatProvider agentId={agentId} threadId={threadId} initialMessages={storedMessages}>
+    <StreamChatProvider key={threadId} agentId={agentId} threadId={threadId} initialMessages={storedMessages}>
       <AgentChatMetaContext.Provider value={meta}>{children}</AgentChatMetaContext.Provider>
     </StreamChatProvider>
   );
@@ -93,11 +93,9 @@ export const AgentChatPanelProvider = ({
 interface AgentChatPanelChatProps {
   /** When true, renders the browser thumbnail above the composer */
   hasBrowser?: boolean;
-  /** Hide the sidebar button in the browser thumbnail (no sidebar available in Agent Builder) */
-  hideBrowserSidebar?: boolean;
 }
 
-export const AgentChatPanelChat = ({ hasBrowser = false, hideBrowserSidebar = false }: AgentChatPanelChatProps) => {
+export const AgentChatPanelChat = ({ hasBrowser = false }: AgentChatPanelChatProps) => {
   const isRunning = useStreamRunning();
   const send = useStreamSend();
   const { draft, setDraft, trimmed, handleFormSubmit, handleKeyDown } = useChatDraft({ onSubmit: send });
@@ -105,7 +103,7 @@ export const AgentChatPanelChat = ({ hasBrowser = false, hideBrowserSidebar = fa
   return (
     <div className="flex h-full min-h-0 flex-col">
       <AgentChatMessageList onStarterPromptSelect={setDraft} />
-      {hasBrowser && <BrowserThumbnailSlot hideSidebar={hideBrowserSidebar} />}
+      {hasBrowser && <BrowserThumbnailSlot />}
       <ChatComposer
         draft={draft}
         onDraftChange={setDraft}
@@ -123,13 +121,13 @@ export const AgentChatPanelChat = ({ hasBrowser = false, hideBrowserSidebar = fa
   );
 };
 
-/** Shows the browser thumbnail when a session is active and not in modal/sidebar mode */
-const BrowserThumbnailSlot = ({ hideSidebar = false }: { hideSidebar?: boolean }) => {
+/** Shows the browser thumbnail when a session is active and not in modal mode */
+const BrowserThumbnailSlot = () => {
   const { hasSession, viewMode } = useBrowserSession();
-  if (!hasSession || viewMode === 'modal' || viewMode === 'sidebar') return null;
+  if (!hasSession || viewMode === 'modal') return null;
   return (
     <div className="mx-auto mb-2 w-full max-w-3xl">
-      <BrowserThumbnail hideSidebar={hideSidebar} />
+      <BrowserThumbnail />
     </div>
   );
 };
@@ -184,19 +182,19 @@ const AgentChatMessageList = ({ onStarterPromptSelect }: AgentChatMessageListPro
                 onClick={() => onStarterPromptSelect(starterPrompt.prompt)}
                 data-testid={`agent-builder-agent-chat-starter-${starterPrompt.title.toLowerCase().replace(/\s+/g, '-')}`}
                 style={{ animationDelay: `${280 + index * 40}ms` }}
-                className="starter-chip group flex gap-3 rounded-3xl border border-border1 bg-surface2 p-4 text-left transition-colors duration-normal ease-out-custom hover:border-border2 hover:bg-surface3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent1"
+                className="starter-chip group border-border1 bg-surface2 duration-normal ease-out-custom hover:border-border2 hover:bg-surface3 focus-visible:ring-accent1 flex gap-3 rounded-3xl border p-4 text-left transition-colors focus-visible:ring-2 focus-visible:outline-none"
               >
-                <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md bg-surface3 text-neutral4 transition-colors group-hover:text-neutral6">
+                <span className="bg-surface3 text-neutral4 group-hover:text-neutral6 mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md transition-colors">
                   <starterPrompt.Icon className="size-4" aria-hidden="true" />
                 </span>
                 <span className="min-w-0">
                   <Txt
                     variant="ui-sm"
-                    className="text-neutral6 font-medium transition-colors group-hover:text-neutral6"
+                    className="text-neutral6 group-hover:text-neutral6 font-medium transition-colors"
                   >
                     {starterPrompt.title}
                   </Txt>
-                  <Txt variant="ui-xs" className="mt-1 text-neutral4 transition-colors group-hover:text-neutral5">
+                  <Txt variant="ui-xs" className="text-neutral4 group-hover:text-neutral5 mt-1 transition-colors">
                     {starterPrompt.description}
                   </Txt>
                 </span>

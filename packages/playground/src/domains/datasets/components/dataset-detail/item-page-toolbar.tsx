@@ -1,6 +1,6 @@
 'use client';
-
-import { Button, Popover, PopoverContent, PopoverTrigger } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { Popover, PopoverContent, PopoverTrigger } from '@mastra/playground-ui/components/Popover';
 import { Pencil, Trash2, Copy, ChevronDownIcon, ArrowLeft } from 'lucide-react';
 import { useState } from 'react';
 
@@ -39,7 +39,7 @@ export function ItemPageToolbar({ onBack, onEdit, onDelete, isEditing = false }:
                 </Button>
               </PopoverTrigger>
 
-              <PopoverContent align="end" className="w-48 p-1 bg-surface4 ">
+              <PopoverContent align="end" className="bg-surface4 w-48 p-1">
                 <div className="flex flex-col gap-2">
                   <Button
                     variant="ghost"

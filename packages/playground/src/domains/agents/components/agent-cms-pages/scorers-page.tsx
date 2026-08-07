@@ -1,21 +1,15 @@
-import {
-  EntityName,
-  EntityDescription,
-  EntityContent,
-  Entity,
-  Input,
-  Label,
-  RadioGroup,
-  RadioGroupItem,
-  ScrollArea,
-  Searchbar,
-  Section,
-  SubSectionRoot,
-  Switch,
-  JudgeIcon,
-  cn,
-} from '@mastra/playground-ui';
-import type { RuleGroup } from '@mastra/playground-ui';
+import { EntityName, EntityDescription, EntityContent, Entity } from '@mastra/playground-ui/components/Entity';
+import { Input } from '@mastra/playground-ui/components/Input';
+import { InputGroup, InputGroupAddon, InputGroupInput } from '@mastra/playground-ui/components/InputGroup';
+import { Label } from '@mastra/playground-ui/components/Label';
+import { RadioGroup, RadioGroupItem } from '@mastra/playground-ui/components/RadioGroup';
+import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
+import { Section, SubSectionRoot } from '@mastra/playground-ui/components/Section';
+import { Switch } from '@mastra/playground-ui/components/Switch';
+import { JudgeIcon } from '@mastra/playground-ui/icons/JudgeIcon';
+import { cn } from '@mastra/playground-ui/utils/cn';
+import type { RuleGroup } from '@mastra/playground-ui/utils/rule-engine';
+import { SearchIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useWatch } from 'react-hook-form';
 
@@ -120,7 +114,17 @@ export function ScorersPage() {
             <SubSectionHeader title="Available Scorers" icon={<JudgeIcon />} />
           </Section.Header>
 
-          <Searchbar onSearch={setSearch} label="Search scorers" placeholder="Search scorers" />
+          <InputGroup variant="outline">
+            <InputGroupAddon align="inline-start">
+              <SearchIcon />
+            </InputGroupAddon>
+            <InputGroupInput
+              type="search"
+              aria-label="Search scorers"
+              placeholder="Search scorers"
+              onChange={event => setSearch(event.target.value)}
+            />
+          </InputGroup>
 
           {filteredOptions.length > 0 && (
             <div className="flex flex-col gap-1">
@@ -213,7 +217,7 @@ function ScorerConfigPanel({ scorerId, samplingConfig, onSamplingChange, readOnl
   return (
     <div>
       <div className="flex flex-col gap-2">
-        <Label htmlFor={`sampling-type-${scorerId}`} className="text-xs text-neutral4">
+        <Label htmlFor={`sampling-type-${scorerId}`} className="text-neutral4 text-xs">
           Sampling
         </Label>
         <RadioGroup
@@ -238,8 +242,8 @@ function ScorerConfigPanel({ scorerId, samplingConfig, onSamplingChange, readOnl
         </RadioGroup>
 
         {samplingType === 'ratio' && (
-          <div className="flex flex-col gap-1.5 mt-2">
-            <Label htmlFor={`rate-${scorerId}`} className="text-xs text-neutral4">
+          <div className="mt-2 flex flex-col gap-1.5">
+            <Label htmlFor={`rate-${scorerId}`} className="text-neutral4 text-xs">
               Sample Rate (0-1)
             </Label>
             <Input

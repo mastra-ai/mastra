@@ -1,6 +1,7 @@
 import type { LanguageModelV2, LanguageModelV2CallWarning, LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 import type { CoreMessage as CoreMessageV4 } from '@internal/ai-sdk-v4';
 import type { CallSettings, StepResult, ToolChoice } from '@internal/ai-sdk-v5';
+import type { Agent } from '../agent';
 import type { MessageList, MastraDBMessage } from '../agent/message-list';
 import type { AgentSignalInput, AgentStateSignalInput, CreatedAgentSignal } from '../agent/signals';
 import type { ApplyStateSignalResult } from '../agent/state-signals';
@@ -13,7 +14,7 @@ import type { ObservabilityContext } from '../observability';
 import type { RequestContext } from '../request-context';
 import type { InferStandardSchemaOutput, StandardSchemaWithJSON } from '../schema';
 import type { ChunkType } from '../stream';
-import type { DataChunkType, LanguageModelUsage, LLMStepResult } from '../stream/types';
+import type { DataChunkType, LanguageModelUsage, LLMStepResult, ProviderMetadata } from '../stream/types';
 import type { Workflow } from '../workflows';
 import type { StructuredOutputOptions } from './processors';
 import type { ProcessorStepOutput } from './step-schema';
@@ -58,6 +59,8 @@ export interface ProcessorContext<TTripwireMetadata = unknown> extends Partial<O
   abort: (reason?: string, options?: TripWireOptions<TTripwireMetadata>) => never;
   /** Optional runtime context with execution metadata */
   requestContext?: RequestContext;
+  /** Real agent instance when processors are running inside an agent execution. Processor-only workflow contexts may omit it. */
+  agent?: Agent<any, any, any, any>;
   /**
    * Add a signal to the message list, rotate the response message id when supported,
    * and emit the signal as a data-* stream part when a writer is available.
@@ -484,6 +487,13 @@ export interface ProcessOutputStepArgs<TTripwireMetadata = unknown> extends Proc
   stepNumber: number;
   /** The finish reason from the LLM (stop, tool-use, length, etc.) */
   finishReason?: string;
+  /**
+   * Provider-specific metadata for the step that just finished (e.g. AWS
+   * Bedrock guardrail trace under `providerMetadata.bedrock.trace.guardrail`).
+   * Present whenever the underlying model step produced it — including
+   * `content-filter` blocks, for which `steps` is empty.
+   */
+  providerMetadata?: ProviderMetadata;
   /** Tool calls made in this step (if any) */
   toolCalls?: ToolCallInfo[];
   /** Generated text from this step */
@@ -495,6 +505,38 @@ export interface ProcessOutputStepArgs<TTripwireMetadata = unknown> extends Proc
   /** All completed steps so far (including the current step) */
   steps: Array<StepResult<any>>;
   /** Mutable state object that persists across steps */
+  state: Record<string, unknown>;
+}
+
+/**
+ * Arguments for processToolResult method.
+ * Called after each tool's execute() returns successfully and before the
+ * result is appended to the message list / fed to the next LLM call.
+ * Symmetric with processOutputStep, which fires before tool execution.
+ */
+export interface ProcessToolResultArgs<TTripwireMetadata = unknown> extends ProcessorMessageContext<TTripwireMetadata> {
+  /** The current step number (0-indexed) */
+  stepNumber: number;
+  /** Name of the tool that was executed */
+  toolName: string;
+  /** Unique identifier for this specific tool call */
+  toolCallId: string;
+  /** Arguments the LLM passed to the tool */
+  args: unknown;
+  /**
+   * Value returned by the tool. For client-executed tools this is the output of
+   * `tool.execute()` after it has passed through `ensureSerializable`. For
+   * provider-executed tools (e.g. Anthropic `web_search`) it is the raw result
+   * from the provider stream, which is not run through `ensureSerializable`.
+   */
+  result: unknown;
+  /** Whether this result came from a provider-executed tool (e.g. Anthropic web_search) */
+  providerExecuted?: boolean;
+  /** All system messages */
+  systemMessages: CoreMessageV4[];
+  /** All completed steps so far */
+  steps: Array<StepResult<any>>;
+  /** Per-processor state that persists across all method calls within this request */
   state: Record<string, unknown>;
 }
 
@@ -696,6 +738,32 @@ export interface Processor<TId extends string = string, TTripwireMetadata = unkn
   processOutputStep?(args: ProcessOutputStepArgs<TTripwireMetadata>): ProcessorMessageResult;
 
   /**
+   * Process a tool's result after tool.execute() returns successfully and before
+   * the result is added to the message list or fed to the next LLM call.
+   *
+   * Symmetric with processOutputStep (which runs before tool execution). Use this
+   * hook to scan tool output for prompt injection / sensitive data, redact fields,
+   * or abort the run with abort({ retry: true }).
+   *
+   * To replace the tool's result, mutate messageList in place via
+   * messageList.updateToolInvocation. The runtime re-reads the post-processor
+   * result from the message list and overwrites the downstream tool-result
+   * stream chunk before it's enqueued, so streaming clients see the processed
+   * value, not the raw one.
+   *
+   * Note: this hook does not fire when tool.execute() throws — it is called only
+   * for successful tool executions where a result is available.
+   *
+   * @returns Either:
+   *  - MessageList: The same messageList instance passed in (indicates you've mutated it)
+   *  - MastraDBMessage[]: Transformed messages array (for simple transformations)
+   *  - undefined/void: No changes (passthrough)
+   */
+  processToolResult?(
+    args: ProcessToolResultArgs<TTripwireMetadata>,
+  ): Promise<MessageList | MastraDBMessage[] | undefined | void> | MessageList | MastraDBMessage[] | void | undefined;
+
+  /**
    * Process an LLM API rejection error before it's surfaced as a final error.
    * Only called for non-retryable API rejections (e.g., 400/422 status codes),
    * NOT for network errors or retryable server errors (which are handled by p-retry).
@@ -773,13 +841,16 @@ export type InputProcessor<TTripwireMetadata = unknown> =
   | (WithRequired<Processor<string, TTripwireMetadata>, 'id' | 'processLLMResponse'> &
       Processor<string, TTripwireMetadata>);
 
-// OutputProcessor requires either processOutputStream OR processOutputResult OR processOutputStep (or any combination)
+// OutputProcessor requires processOutputStream OR processOutputResult OR processOutputStep
+// OR processToolResult (or any combination)
 export type OutputProcessor<TTripwireMetadata = unknown> =
   | (WithRequired<Processor<string, TTripwireMetadata>, 'id' | 'processOutputStream'> &
       Processor<string, TTripwireMetadata>)
   | (WithRequired<Processor<string, TTripwireMetadata>, 'id' | 'processOutputResult'> &
       Processor<string, TTripwireMetadata>)
   | (WithRequired<Processor<string, TTripwireMetadata>, 'id' | 'processOutputStep'> &
+      Processor<string, TTripwireMetadata>)
+  | (WithRequired<Processor<string, TTripwireMetadata>, 'id' | 'processToolResult'> &
       Processor<string, TTripwireMetadata>);
 
 // ErrorProcessor requires processAPIError
@@ -823,42 +894,24 @@ export type OutputProcessorOrWorkflow<TTripwireMetadata = unknown> =
  */
 export type ErrorProcessorOrWorkflow<TTripwireMetadata = unknown> = ErrorProcessor<TTripwireMetadata>;
 
-/**
- * Type guard to check if an object is a Workflow that can be used as a processor.
- * A ProcessorWorkflow must have 'id', 'inputSchema', 'outputSchema', and 'execute' properties.
- */
-export function isProcessorWorkflow(obj: unknown): obj is ProcessorWorkflow {
-  return (
-    obj !== null &&
-    typeof obj === 'object' &&
-    'id' in obj &&
-    typeof (obj as any).id === 'string' &&
-    'inputSchema' in obj &&
-    'outputSchema' in obj &&
-    'execute' in obj &&
-    typeof (obj as any).execute === 'function' &&
-    // Must NOT have processor-specific methods (to distinguish from Processor)
-    !('processInput' in obj) &&
-    !('processInputStep' in obj) &&
-    !('processOutputStream' in obj) &&
-    !('processOutputResult' in obj) &&
-    !('processOutputStep' in obj) &&
-    !('processLLMRequest' in obj) &&
-    !('processAPIError' in obj)
-  );
-}
+export { isProcessorWorkflow } from './is-processor-workflow';
 
 export * from './processors';
 export { PrefillErrorHandler } from './prefill-error-handler';
 export { ProviderHistoryCompat, anthropicToolIdFormat, cerebrasStripReasoningContent } from './provider-history-compat';
 export {
+  isBadRequestError,
   isRetryableOpenAIResponsesStreamError,
   StreamErrorRetryProcessor,
+  type StreamErrorRetryDelayMs,
   type StreamErrorRetryMatcher,
+  type StreamErrorRetryMatcherConfig,
+  type StreamErrorRetryMatcherEntry,
   type StreamErrorRetryProcessorOptions,
 } from './stream-error-retry-processor';
 export type { CompatRule } from './provider-history-compat';
-export { ProcessorState, ProcessorRunner, createProcessorSendSignal } from './runner';
+export { ProcessorState, ProcessorRunner } from './runner';
+export { createProcessorSendSignal } from './send-signal';
 export * from './memory';
 export type { TripWireOptions } from '../agent/trip-wire';
 export {

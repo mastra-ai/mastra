@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import type { Agent } from '../../agent';
 import { isSupportedLanguageModel } from '../../agent';
 import type { MessageListInput } from '../../agent/message-list';
@@ -6,9 +7,12 @@ import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../eval
 import type { ScoringData } from '../../llm/model/base.types';
 import type { VersionOverrides } from '../../mastra/types';
 import { resolveObservabilityContext } from '../../observability';
-import { RequestContext } from '../../request-context';
+import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '../../request-context';
 import type { TargetType } from '../../storage/types';
+import type { ToolHooks } from '../../tools/types';
 import type { StepResult, Workflow } from '../../workflows';
+import type { ItemToolMock, ToolMockReport, UnmockedToolPolicy } from './tool-mocks';
+import { ToolMockMatcher } from './tool-mocks';
 
 /**
  * Common fields extracted from both FullOutput (v2/v3) and GenerateTextResult/GenerateObjectResult (v1).
@@ -54,6 +58,8 @@ export interface ExecutionResult {
   stepResults?: Record<string, StepResult<any, any, any, any>>;
   /** Order in which workflow steps actually executed */
   stepExecutionPath?: string[];
+  /** Diagnostic receipt for item-level tool mocks (agent targets only) */
+  toolMockReport?: ToolMockReport;
 }
 
 /**
@@ -108,6 +114,7 @@ export async function executeTarget(
   target: Target,
   targetType: TargetType,
   item: {
+    id?: string;
     input: unknown;
     groundTruth?: unknown;
     metadata?: Record<string, unknown>;
@@ -119,6 +126,10 @@ export async function executeTarget(
     requestContext?: Record<string, unknown>;
     experimentId?: string;
     versions?: VersionOverrides;
+    /** Item-level static tool mocks (agent targets only). */
+    toolMocks?: ItemToolMock[];
+    /** Handling for agent tool calls not declared in `toolMocks`. */
+    unmockedToolPolicy?: UnmockedToolPolicy;
   },
 ): Promise<ExecutionResult> {
   try {
@@ -139,6 +150,8 @@ export async function executeTarget(
           options?.requestContext,
           options?.experimentId,
           options?.versions,
+          options?.toolMocks,
+          options?.unmockedToolPolicy,
         );
         break;
       case 'workflow':
@@ -206,11 +219,13 @@ function raceWithSignal<T>(promise: Promise<T>, signal: AbortSignal): Promise<T>
  */
 async function executeAgent(
   agent: Agent,
-  item: { input: unknown; groundTruth?: unknown },
+  item: { id?: string; input: unknown; groundTruth?: unknown },
   signal?: AbortSignal,
   requestContext?: Record<string, unknown>,
   experimentId?: string,
   versions?: VersionOverrides,
+  toolMocks?: ItemToolMock[],
+  unmockedToolPolicy?: UnmockedToolPolicy,
 ): Promise<ExecutionResult> {
   const model = await agent.getModel();
 
@@ -225,27 +240,114 @@ async function executeAgent(
   // Pass experimentId as tracing metadata so it appears on the AGENT_RUN span
   const tracingOptions = experimentId ? { metadata: { experimentId } } : undefined;
 
-  const rawResult = isSupportedLanguageModel(model)
-    ? await agent.generate(input, {
-        scorers: {},
-        returnScorerData: true,
-        abortSignal: signal,
-        ...(reqCtx ? { requestContext: reqCtx } : {}),
-        ...(tracingOptions ? { tracingOptions } : {}),
-        ...(versions ? { versions } : {}),
-      })
-    : await agent.generateLegacy(input, {
-        scorers: {},
-        returnScorerData: true,
-        ...(reqCtx ? { requestContext: reqCtx } : {}),
-        ...(tracingOptions ? { tracingOptions } : {}),
-      });
+  // A memory-enabled agent given a resourceId (e.g. via MASTRA_RESOURCE_ID_KEY set by
+  // auth middleware or the Studio "Run Experiment" field) but no threadId would throw
+  // AGENT_MEMORY_MISSING_RESOURCE_ID downstream — the runner owns no conversation, so
+  // it injects a fresh thread per item, mirroring the multi-turn evals precedent
+  // (runAgentTurns). When an explicit MASTRA_THREAD_ID_KEY is present we decline to
+  // inject and let the context key resolve downstream; memory-less agents are left
+  // untouched. Truthiness (not null-ness) checks match the downstream `||` resolution
+  // in prepare-memory-step: an empty-string resourceId skipped memory before this fix
+  // and must keep doing so.
+  const contextResourceId = requestContext?.[MASTRA_RESOURCE_ID_KEY];
+  const shouldInjectThread =
+    Boolean(contextResourceId) &&
+    !requestContext?.[MASTRA_THREAD_ID_KEY] &&
+    typeof agent.hasOwnMemory === 'function' &&
+    agent.hasOwnMemory();
+  const memoryOption = shouldInjectThread
+    ? {
+        memory: {
+          thread: {
+            id: randomUUID(),
+            // Tag experimentId (and the item id when known) so a large run's threads
+            // map back to their items without matching transcripts.
+            ...(experimentId || item.id
+              ? {
+                  metadata: {
+                    ...(experimentId ? { experimentId } : {}),
+                    ...(item.id ? { experimentItemId: item.id } : {}),
+                  },
+                }
+              : {}),
+          },
+          resource: String(contextResourceId),
+          // Suppress title generation: these threads are runner bookkeeping, so an
+          // extra title LLM call per item (and per retry) is pure waste (precedent:
+          // ephemeral subagent-delegation threads, issue #18738). lastMessages is
+          // deliberately NOT disabled — it also gates the MessageHistory output
+          // processor, and disabling it would persist every injected thread empty.
+          options: { generateTitle: false },
+        },
+      }
+    : undefined;
+
+  // Build a fresh matcher per item run so ordered consumption is deterministic and
+  // not leaked across retries. Compose with the agent's configured hooks.
+  const matcher = new ToolMockMatcher(toolMocks, unmockedToolPolicy);
+  const shouldInterceptTools = matcher.hasMocks || matcher.unmockedToolPolicy === 'deny';
+
+  // When tool calls are intercepted, abort the whole run the instant a tool is
+  // mis-called so the model cannot go on to invoke later (possibly side-effecting,
+  // unmocked) tools live. The mock-abort signal is combined with the outer signal.
+  const mockAbort = shouldInterceptTools ? new AbortController() : undefined;
+  const mockHooks = shouldInterceptTools ? buildToolMockHooks(agent, matcher, mockAbort!) : undefined;
+  const generateSignal =
+    mockAbort && signal ? AbortSignal.any([signal, mockAbort.signal]) : (mockAbort?.signal ?? signal);
+
+  // Force sequential tool execution when mocks exist so the provider's tool-call
+  // order equals the execution (and consumption) order — deterministic ordered
+  // consumption of repeated (toolName, args) mocks. No cost for mock-free runs.
+  const mockConcurrency = shouldInterceptTools ? { toolCallConcurrency: 1 } : undefined;
+
+  let rawResult: unknown;
+  try {
+    rawResult = isSupportedLanguageModel(model)
+      ? await agent.generate(input, {
+          scorers: {},
+          returnScorerData: true,
+          abortSignal: generateSignal,
+          ...memoryOption,
+          ...(reqCtx ? { requestContext: reqCtx } : {}),
+          ...(tracingOptions ? { tracingOptions } : {}),
+          ...(versions ? { versions } : {}),
+          ...(mockHooks ? { hooks: mockHooks } : {}),
+          ...(mockConcurrency ?? {}),
+        })
+      : await agent.generateLegacy(input, {
+          scorers: {},
+          returnScorerData: true,
+          abortSignal: generateSignal,
+          ...memoryOption,
+          ...(reqCtx ? { requestContext: reqCtx } : {}),
+          ...(tracingOptions ? { tracingOptions } : {}),
+          ...(mockHooks ? { hooks: mockHooks } : {}),
+          ...(mockConcurrency ?? {}),
+        });
+  } catch (error) {
+    // A mock failure aborts the run mid-flight: surface the deterministic coded
+    // error instead of the raw abort. Any other error rethrows unchanged.
+    const mockReport = shouldInterceptTools ? matcher.report() : undefined;
+    if (mockReport?.failure) {
+      return toolMockFailureResult(mockReport, null);
+    }
+    throw error;
+  }
 
   // Narrow to the common fields we need — both v1 and v2 results share these
   const result = rawResult as AgentGenerateResult;
 
   const traceId = result.traceId ?? null;
   const scoringData = result.scoringData;
+
+  const toolMockReport = shouldInterceptTools ? matcher.report() : undefined;
+
+  // Fallback for the race where the model finishes a step before the abort
+  // propagates: the matcher still recorded the first failure, so fail the item
+  // deterministically with the coded error. The mis-called tool never ran live.
+  if (toolMockReport?.failure) {
+    return toolMockFailureResult(toolMockReport, traceId);
+  }
 
   // Only persist fields relevant to experiment evaluation — drop provider metadata,
   // duplicate messages, steps trace, and other debugging internals
@@ -268,6 +370,78 @@ async function executeAgent(
     traceId,
     scorerInput: scoringData?.input,
     scorerOutput: scoringData?.output,
+    ...(toolMockReport ? { toolMockReport } : {}),
+  };
+}
+
+/** Build the deterministic, non-retryable failure result for a mis-called mock. */
+function toolMockFailureResult(report: ToolMockReport, traceId: string | null): ExecutionResult {
+  const failure = report.failure!;
+  return {
+    output: null,
+    error: {
+      message:
+        failure.code === 'TOOL_MOCK_NOT_DECLARED'
+          ? `Tool "${failure.toolName}" was called without a declared mock (${failure.code}).`
+          : `Mocked tool "${failure.toolName}" was called with arguments that did not match an available mock (${failure.code}).`,
+      code: failure.code,
+    },
+    traceId,
+    toolMockReport: report,
+  };
+}
+
+/**
+ * Compose item-level tool mocks with the agent's configured tool hooks into a
+ * single set of run-level hooks.
+ *
+ * Composition order (per spec):
+ *  1. User `beforeToolCall` (if `{ proceed: false }`, short-circuit — the mock is
+ *     left unconsumed and reported as such; user `afterToolCall` is NOT called,
+ *     matching the agent's own short-circuit behavior).
+ *  2. Mock matcher — `serve` returns the mocked output; `fail` aborts the run so
+ *     the model cannot call any further (possibly unmocked, side-effecting) tools
+ *     live; `live` falls through to the real tool.
+ *  3. User `afterToolCall` runs for served mocks (the agent skips its own on
+ *     short-circuit, so it is invoked here to honor the documented composition).
+ *
+ * Ordered consumption of repeated `(toolName, args)` mocks is deterministic because
+ * the caller forces `toolCallConcurrency: 1` when mocks exist, so tool calls arrive
+ * (and consume) in the provider's call order — no mutex needed.
+ */
+function buildToolMockHooks(agent: Agent, matcher: ToolMockMatcher, mockAbort: AbortController): ToolHooks {
+  const userHooks = agent.getConfiguredToolHooks();
+
+  return {
+    beforeToolCall: async context => {
+      // 1. User hook first — a short-circuit leaves the mock unconsumed.
+      const userResult = await userHooks?.beforeToolCall?.(context);
+      if (userResult?.proceed === false) {
+        return userResult;
+      }
+
+      // 2. Mock matcher.
+      const resolution = matcher.resolve(context.toolName, context.input);
+      if (resolution.kind === 'serve') {
+        await userHooks?.afterToolCall?.({ ...context, output: resolution.output });
+        return { proceed: false, output: resolution.output };
+      }
+      if (resolution.kind === 'fail') {
+        // Abort the whole run immediately. The matcher recorded the first failure;
+        // the item fails deterministically via the catch path. Short-circuit the
+        // tool here too so the mis-called tool never runs live even before the
+        // abort propagates.
+        mockAbort.abort(new Error(`Tool mock failure for "${context.toolName}" (${resolution.code})`));
+        return { proceed: false, output: { error: resolution.code } };
+      }
+
+      // 3. `live` — fall through to the real tool.
+      return undefined;
+    },
+    // Pass the user's afterToolCall through as-is (preserving undefined) so the
+    // agent skips a no-op call when the user configured no afterToolCall. Served
+    // mocks invoke it manually above, since they short-circuit the real tool.
+    afterToolCall: userHooks?.afterToolCall,
   };
 }
 

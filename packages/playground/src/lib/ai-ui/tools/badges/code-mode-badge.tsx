@@ -1,4 +1,7 @@
-import { CodeBlock, CodeEditor, ToolCoinIcon, formatTypeScript } from '@mastra/playground-ui';
+import { CodeBlock } from '@mastra/playground-ui/components/CodeBlock';
+import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
+import { ToolCoinIcon } from '@mastra/playground-ui/icons/ToolCoinIcon';
+import { formatTypeScript } from '@mastra/playground-ui/utils/formatting';
 import { useEffect, useState } from 'react';
 import { BadgeWrapper } from './badge-wrapper';
 import type { ToolApprovalButtonsProps } from './tool-approval-buttons';
@@ -101,7 +104,7 @@ export const CodeModeBadge = ({
     >
       <div className="space-y-4">
         <div>
-          <p className="font-medium pb-2">Program</p>
+          <p className="pb-2 font-medium">Program</p>
           <div data-testid="code-mode-program">
             <CodeBlock code={formattedCode} lang="typescript" />
           </div>
@@ -109,10 +112,10 @@ export const CodeModeBadge = ({
 
         {error && (
           <div>
-            <p className="font-medium pb-2">Error</p>
+            <p className="pb-2 font-medium">Error</p>
             <pre
               data-testid="code-mode-error"
-              className="whitespace-pre-wrap break-words bg-surface4 p-4 rounded-md text-error font-mono text-sm"
+              className="bg-surface4 text-error rounded-md p-4 font-mono text-sm break-words whitespace-pre-wrap"
             >
               {error.name ? `${error.name}: ` : ''}
               {error.message}
@@ -123,9 +126,9 @@ export const CodeModeBadge = ({
 
         {hasResultValue && (
           <div>
-            <p className="font-medium pb-2">Result</p>
+            <p className="pb-2 font-medium">Result</p>
             {typeof result!.result === 'string' ? (
-              <pre className="whitespace-pre bg-surface4 p-4 rounded-md overflow-x-auto" data-testid="code-mode-result">
+              <pre className="bg-surface4 overflow-x-auto rounded-md p-4 whitespace-pre" data-testid="code-mode-result">
                 {result!.result as string}
               </pre>
             ) : (
@@ -136,10 +139,10 @@ export const CodeModeBadge = ({
 
         {logs.length > 0 && (
           <div>
-            <p className="font-medium pb-2">Logs</p>
+            <p className="pb-2 font-medium">Logs</p>
             <pre
               data-testid="code-mode-logs"
-              className="whitespace-pre-wrap break-words bg-black p-3 rounded-md text-neutral-300 font-mono text-sm overflow-x-auto"
+              className="overflow-x-auto rounded-md bg-black p-3 font-mono text-sm break-words whitespace-pre-wrap text-neutral-300"
             >
               {logs.join('\n')}
             </pre>

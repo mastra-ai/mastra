@@ -51,6 +51,7 @@
               "parameters": {},
               "finishReason": "stop",
               "responseId": "resp-1",
+              "responseModel": "",
               "completionStartTime": "<date>",
               "usage": {
                 "inputTokens": 10,

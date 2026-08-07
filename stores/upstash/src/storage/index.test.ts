@@ -6,6 +6,7 @@ import {
   createDomainDirectTests,
 } from '@internal/storage-test-utils';
 import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
+import type { WorkflowRunState } from '@mastra/core/workflows';
 import { Redis } from '@upstash/redis';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -50,6 +51,20 @@ const createMessage = (thread: StorageThreadType, overrides: Partial<MastraDBMes
   },
 });
 
+const createWorkflowSnapshot = (runId: string, status: WorkflowRunState['status']): WorkflowRunState => ({
+  runId,
+  status,
+  value: {},
+  context: {},
+  activePaths: [],
+  suspendedPaths: {},
+  activeStepsPath: {},
+  serializedStepGraph: [],
+  waitingPaths: {},
+  resumeLabels: {},
+  timestamp: Date.now(),
+});
+
 afterEach(() => {
   vi.restoreAllMocks();
 });
@@ -59,6 +74,7 @@ createTestSuite(
     id: 'upstash-test-store',
     ...TEST_CONFIG,
   }),
+  { deterministicScorePagination: true },
 );
 
 // Configuration validation tests
@@ -305,5 +321,86 @@ describe('updateMessages keeps msg-idx index in sync', () => {
     const { messages } = await memoryDomain.listMessages({ threadId: sourceThread.id });
     expect(messages).toHaveLength(1);
     expect(messages[0]!.threadId).toBe(sourceThread.id);
+  });
+});
+
+describe('StoreMemoryUpstash error propagation (no empty-on-error)', () => {
+  // These reads used to swallow DB errors and return an empty page, so an outage
+  // looked exactly like "no data". They should throw instead.
+  const createFailingDomain = () => {
+    const client = {
+      // listThreads scans keys first
+      scan: vi.fn().mockRejectedValue(new Error('simulated backend outage')),
+      // listMessages reads the thread's sorted set first
+      zrange: vi.fn().mockRejectedValue(new Error('simulated backend outage')),
+      pipeline: vi.fn(),
+    };
+    return new StoreMemoryUpstash({ client: client as any });
+  };
+
+  // Also check the cause is the original error, so a broken mock can't pass as
+  // a real outage.
+  const expectOutage = async (promise: Promise<unknown>, idPattern: RegExp) => {
+    const err: any = await promise.then(
+      () => {
+        throw new Error('expected the read to reject, but it resolved');
+      },
+      e => e,
+    );
+    expect(err).toMatchObject({ id: expect.stringMatching(idPattern) });
+    expect(String(err?.cause?.message ?? err?.message)).toContain('simulated backend outage');
+  };
+
+  it('listThreads re-throws backend failures instead of returning empty', async () => {
+    await expectOutage(createFailingDomain().listThreads({}), /LIST_THREADS.*FAILED/);
+  });
+
+  it('listMessages re-throws backend failures instead of returning empty', async () => {
+    await expectOutage(createFailingDomain().listMessages({ threadId: 'thread-err' }), /LIST_MESSAGES.*FAILED/);
+  });
+});
+
+describe('WorkflowsUpstash.persistWorkflowSnapshot', () => {
+  it('preserves, loads, and deletes a resource-scoped workflow run', async () => {
+    const workflowsDomain = new WorkflowsUpstash({ client: createTestClient() });
+    await workflowsDomain.init();
+
+    const workflowName = `workflow-${randomUUID()}`;
+    const runId = `run-${randomUUID()}`;
+    const resourceId = `resource-${randomUUID()}`;
+    const createdAt = new Date('2024-01-15T10:00:00.000Z');
+    const updatedAt = new Date('2024-06-01T12:00:00.000Z');
+
+    await workflowsDomain.persistWorkflowSnapshot({
+      workflowName,
+      runId,
+      resourceId,
+      snapshot: createWorkflowSnapshot(runId, 'running'),
+      createdAt,
+      updatedAt: createdAt,
+    });
+
+    await workflowsDomain.persistWorkflowSnapshot({
+      workflowName,
+      runId,
+      resourceId,
+      snapshot: createWorkflowSnapshot(runId, 'success'),
+      updatedAt,
+    });
+
+    const loaded = await workflowsDomain.loadWorkflowSnapshot({ namespace: 'workflows', workflowName, runId });
+    expect(loaded?.status).toBe('success');
+
+    const fetched = await workflowsDomain.getWorkflowRunById({ runId, workflowName });
+    expect(fetched?.createdAt.toISOString()).toBe(createdAt.toISOString());
+    expect(fetched?.updatedAt.toISOString()).toBe(updatedAt.toISOString());
+    expect(fetched?.resourceId).toBe(resourceId);
+
+    await workflowsDomain.deleteWorkflowRunById({ runId, workflowName });
+
+    await expect(
+      workflowsDomain.loadWorkflowSnapshot({ namespace: 'workflows', workflowName, runId }),
+    ).resolves.toBeNull();
+    await expect(workflowsDomain.getWorkflowRunById({ runId, workflowName })).resolves.toBeNull();
   });
 });

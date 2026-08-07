@@ -8,6 +8,11 @@ import { MastraAuthWorkos, MastraRBACWorkos } from '@mastra/auth-workos';
 export async function initWorkOS() {
   const mastraAuth = new MastraAuthWorkos({
     redirectUri: process.env.WORKOS_REDIRECT_URI || 'http://localhost:4111/api/auth/callback',
+    // Map each authenticated user to a distinct resource id. This is what a
+    // `caller-supplied` tool connection reads to bucket Composio connected
+    // accounts per tenant. Without it, every caller collapses into the shared
+    // `'default'` bucket and OAuth accounts leak across tenants.
+    mapUserToResourceId: user => user.id,
   });
 
   const rbacProvider = new MastraRBACWorkos({
@@ -19,8 +24,23 @@ export async function initWorkOS() {
       admin: ['*'],
       // Another admin-level role (should be filtered from preview list)
       superadmin: ['*'],
-      // Read and execute across all resources
-      member: [],
+      // Builder member: open the Builder, browse stored agents, populate pickers
+      member: [
+        'agent-builder:*',
+        'agents:read',
+        'agents:execute',
+        'stored-agents:*',
+        'stored-skills:*',
+        'stored-workspaces:*',
+        'tools:read',
+        'tools:execute',
+        'tool-providers:*',
+        'workflows:read',
+        'workflows:execute',
+        'memory:read',
+        'infrastructure:read',
+        'channels:read',
+      ],
       // Can only view and run agents
       operator: ['agents:read', 'agents:execute', 'tools:read', 'workflows:read'],
       // Read-only access — no resources at all

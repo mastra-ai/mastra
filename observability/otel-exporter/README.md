@@ -15,9 +15,7 @@ Both signals are enabled by default and share the same provider configuration. T
 
 ```typescript
 new OtelExporter({
-  provider: {
-    /* ... */
-  },
+  provider: {/* ... */},
   signals: {
     traces: true, // default
     logs: true, // default
@@ -483,6 +481,7 @@ The exporter maps Mastra's tracing data to OTEL-compliant attributes:
 - `gen_ai.operation.name` - Operation type (chat, tool.execute, agent.run, workflow.run)
 - `gen_ai.provider.name` - AI provider (openai, anthropic, etc.)
 - `gen_ai.request.model` - Model identifier
+- `gen_ai.conversation.id` - Conversation/thread identifier, emitted on every span in a run (agent, model generation, tool, MCP tool, workflow) when a thread id is present
 
 #### LLM-Specific Attributes
 
@@ -513,7 +512,6 @@ The exporter maps Mastra's tracing data to OTEL-compliant attributes:
 
 - `gen_ai.agent.id` - Agent identifier
 - `gen_ai.agent.name` - Human-readable agent name
-- `gen_ai.conversation.id` - Conversation/thread/session identifier
 - `agent.id` - Agent identifier (also included for compatibility)
 - `agent.max_steps` - Maximum agent steps
 - `workflow.id` - Workflow identifier
@@ -534,9 +532,7 @@ To enable content attributes:
 
 ```typescript
 new OtelExporter({
-  provider: {
-    /* your provider config */
-  },
+  provider: {/* your provider config */},
   genAiConventions: {
     includeContentAttributes: true, // Default: false
   },

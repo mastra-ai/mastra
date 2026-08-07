@@ -1841,6 +1841,231 @@ describe('MessageList V5 Support', () => {
       expect(toolPart.toolInvocation.result).toEqual({ status: 200, body: 'lots of data here' });
     });
 
+    it('should apply modelOutput from providerOptions on ingested AIV5 tool-result parts (client tool continuation)', async () => {
+      const list = new MessageList({ threadId, resourceId });
+
+      list.add('Take a screenshot', 'input');
+
+      // Mirrors the continuation message a client tool sends back over HTTP:
+      // raw result in output, toModelOutput result in providerOptions.mastra.modelOutput
+      const continuationMessage: AIV5ModelMessage = {
+        role: 'assistant',
+        content: [
+          {
+            type: 'tool-call',
+            toolCallId: 'call-client-1',
+            toolName: 'screenshotTool',
+            input: { url: 'https://example.com' },
+          },
+          {
+            type: 'tool-result',
+            toolCallId: 'call-client-1',
+            toolName: 'screenshotTool',
+            output: { type: 'json', value: { ok: true, _b64: 'base64imagedata' } },
+            providerOptions: {
+              mastra: {
+                modelOutput: {
+                  type: 'content',
+                  value: [{ type: 'media', data: 'base64imagedata', mediaType: 'image/jpeg' }],
+                },
+              },
+            },
+          },
+        ],
+      };
+
+      list.add(continuationMessage, 'input');
+
+      // llmPrompt should surface the transformed multimodal output, not the raw json
+      const prompt = await list.get.all.aiV5.llmPrompt();
+      const toolRole = prompt.find(m => m.role === 'tool');
+      expect(toolRole).toBeDefined();
+      const toolResultPart = (toolRole as any).content.find((p: any) => p.type === 'tool-result');
+      expect(toolResultPart.output).toEqual({
+        type: 'content',
+        value: [{ type: 'media', data: 'base64imagedata', mediaType: 'image/jpeg' }],
+      });
+
+      // Raw result should still be preserved in the stored messages
+      const dbMessages = list.get.all.db();
+      const toolDbMsg = dbMessages.find(m => m.content.parts?.some((p: any) => p.type === 'tool-invocation'));
+      const toolPart = toolDbMsg?.content.parts?.find((p: any) => p.type === 'tool-invocation') as any;
+      expect(toolPart.toolInvocation.result).toEqual({ ok: true, _b64: 'base64imagedata' });
+      expect(toolPart.providerMetadata?.mastra?.modelOutput).toEqual({
+        type: 'content',
+        value: [{ type: 'media', data: 'base64imagedata', mediaType: 'image/jpeg' }],
+      });
+    });
+
+    it('translates tool-result media to image-data for v6 (spec v3) models', async () => {
+      const list = new MessageList({ threadId, resourceId });
+
+      list.add('Take a screenshot', 'input');
+
+      const continuationMessage: AIV5ModelMessage = {
+        role: 'assistant',
+        content: [
+          {
+            type: 'tool-call',
+            toolCallId: 'call-v6-1',
+            toolName: 'screenshotTool',
+            input: { url: 'https://example.com' },
+          },
+          {
+            type: 'tool-result',
+            toolCallId: 'call-v6-1',
+            toolName: 'screenshotTool',
+            output: { type: 'json', value: { ok: true } },
+            providerOptions: {
+              mastra: {
+                modelOutput: {
+                  type: 'content',
+                  value: [{ type: 'media', data: 'base64imagedata', mediaType: 'image/jpeg' }],
+                },
+              },
+            },
+          },
+        ],
+      };
+
+      list.add(continuationMessage, 'input');
+
+      // v6 (spec 'v3') providers only accept image-data/file-data, not media.
+      const prompt = await list.get.all.aiV6.llmPrompt();
+      const toolRole = prompt.find(m => m.role === 'tool');
+      const toolResultPart = (toolRole as any).content.find((p: any) => p.type === 'tool-result');
+      expect(toolResultPart.output).toEqual({
+        type: 'content',
+        value: [{ type: 'image-data', data: 'base64imagedata', mediaType: 'image/jpeg' }],
+      });
+    });
+
+    it('translates non-image tool-result media to file-data for v6 (spec v3) models', async () => {
+      const list = new MessageList({ threadId, resourceId });
+
+      list.add('Fetch a document', 'input');
+
+      const continuationMessage: AIV5ModelMessage = {
+        role: 'assistant',
+        content: [
+          {
+            type: 'tool-call',
+            toolCallId: 'call-v6-2',
+            toolName: 'docTool',
+            input: {},
+          },
+          {
+            type: 'tool-result',
+            toolCallId: 'call-v6-2',
+            toolName: 'docTool',
+            output: { type: 'json', value: { ok: true } },
+            providerOptions: {
+              mastra: {
+                modelOutput: {
+                  type: 'content',
+                  value: [{ type: 'media', data: 'base64pdfdata', mediaType: 'application/pdf' }],
+                },
+              },
+            },
+          },
+        ],
+      };
+
+      list.add(continuationMessage, 'input');
+
+      const prompt = await list.get.all.aiV6.llmPrompt();
+      const toolRole = prompt.find(m => m.role === 'tool');
+      const toolResultPart = (toolRole as any).content.find((p: any) => p.type === 'tool-result');
+      expect(toolResultPart.output).toEqual({
+        type: 'content',
+        value: [{ type: 'file-data', data: 'base64pdfdata', mediaType: 'application/pdf' }],
+      });
+    });
+
+    it('translates image tool-result media to file content for v7 (spec v4) models', async () => {
+      const list = new MessageList({ threadId, resourceId });
+
+      list.add('Take a screenshot', 'input');
+
+      const continuationMessage: AIV5ModelMessage = {
+        role: 'assistant',
+        content: [
+          {
+            type: 'tool-call',
+            toolCallId: 'call-v7-1',
+            toolName: 'screenshotTool',
+            input: { url: 'https://example.com' },
+          },
+          {
+            type: 'tool-result',
+            toolCallId: 'call-v7-1',
+            toolName: 'screenshotTool',
+            output: { type: 'json', value: { ok: true } },
+            providerOptions: {
+              mastra: {
+                modelOutput: {
+                  type: 'content',
+                  value: [{ type: 'media', data: 'base64imagedata', mediaType: 'image/png' }],
+                },
+              },
+            },
+          },
+        ],
+      };
+
+      list.add(continuationMessage, 'input');
+
+      const prompt = await list.get.all.aiV7.llmPrompt();
+      const toolRole = prompt.find(m => m.role === 'tool');
+      const toolResultPart = (toolRole as any).content.find((p: any) => p.type === 'tool-result');
+      expect(toolResultPart.output).toEqual({
+        type: 'content',
+        value: [{ type: 'file', data: { type: 'data', data: 'base64imagedata' }, mediaType: 'image/png' }],
+      });
+    });
+
+    it('translates non-image tool-result media to file content for v7 (spec v4) models', async () => {
+      const list = new MessageList({ threadId, resourceId });
+
+      list.add('Fetch a document', 'input');
+
+      const continuationMessage: AIV5ModelMessage = {
+        role: 'assistant',
+        content: [
+          {
+            type: 'tool-call',
+            toolCallId: 'call-v7-2',
+            toolName: 'docTool',
+            input: {},
+          },
+          {
+            type: 'tool-result',
+            toolCallId: 'call-v7-2',
+            toolName: 'docTool',
+            output: { type: 'json', value: { ok: true } },
+            providerOptions: {
+              mastra: {
+                modelOutput: {
+                  type: 'content',
+                  value: [{ type: 'media', data: 'base64pdfdata', mediaType: 'application/pdf' }],
+                },
+              },
+            },
+          },
+        ],
+      };
+
+      list.add(continuationMessage, 'input');
+
+      const prompt = await list.get.all.aiV7.llmPrompt();
+      const toolRole = prompt.find(m => m.role === 'tool');
+      const toolResultPart = (toolRole as any).content.find((p: any) => p.type === 'tool-result');
+      expect(toolResultPart.output).toEqual({
+        type: 'content',
+        value: [{ type: 'file', data: { type: 'data', data: 'base64pdfdata' }, mediaType: 'application/pdf' }],
+      });
+    });
+
     it('should convert MCP content-array tool results to multimodal model output without providerMetadata duplication', async () => {
       const list = new MessageList({ threadId, resourceId });
 
@@ -1901,7 +2126,9 @@ describe('MessageList V5 Support', () => {
       });
     });
 
-    it('should preserve explicit modelOutput over MCP-style raw content in llmPrompt', async () => {
+    it('should preserve explicit modelOutput without inspecting circular MCP-style raw content', async () => {
+      const circularContentPart: Record<string, unknown> = { type: 'resource' };
+      circularContentPart.self = circularContentPart;
       const list = new MessageList({ threadId, resourceId });
 
       list.add('Summarize tool output', 'input');
@@ -1923,10 +2150,7 @@ describe('MessageList V5 Support', () => {
                   state: 'result',
                   args: {},
                   result: {
-                    content: [
-                      { type: 'text', text: 'raw text' },
-                      { type: 'image', data: 'raw-base64', mimeType: 'image/png' },
-                    ],
+                    content: [circularContentPart, { type: 'image', data: 'raw-base64', mimeType: 'image/png' }],
                   },
                 },
                 providerMetadata: {
@@ -2359,6 +2583,73 @@ describe('MessageList V5 Support', () => {
       // Default AI SDK conversion — json wrapping
       expect(toolResultPart.output.type).toBe('json');
       expect(toolResultPart.output.value).toEqual({ results: ['a', 'b', 'c'] });
+    });
+
+    it('should fall back to the raw result when a stored modelOutput is nullish', async () => {
+      const list = new MessageList({ threadId, resourceId });
+
+      list.add('Read the file', 'input');
+
+      // Durable runs used to persist `mastra.modelOutput: undefined` whenever a tool's
+      // toModelOutput opted out of mapping. Keying off presence blanked out `output`,
+      // and providers throw on a tool-result without one.
+      const toolResultMessage: MastraDBMessage = {
+        id: 'msg-nullish-model-output',
+        role: 'assistant',
+        createdAt: new Date(),
+        threadId,
+        resourceId,
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                toolCallId: 'call-undefined',
+                toolName: 'read_file',
+                state: 'result',
+                args: { path: 'data.txt' },
+                result: { contents: 'the answer is 42' },
+              },
+              providerMetadata: {
+                mastra: { modelOutput: undefined } as any,
+              },
+            },
+            {
+              // Same thing after a JSON round-trip through storage, where `undefined`
+              // may have been normalized to `null`.
+              type: 'tool-invocation',
+              toolInvocation: {
+                toolCallId: 'call-null',
+                toolName: 'read_file_2',
+                state: 'result',
+                args: { path: 'other.txt' },
+                result: { contents: 'still 42' },
+              },
+              providerMetadata: {
+                mastra: { modelOutput: null } as any,
+              },
+            },
+          ],
+        },
+      };
+
+      list.add(toolResultMessage, 'response');
+
+      const prompt = await list.get.all.aiV5.llmPrompt();
+      const toolResults = prompt
+        .filter(m => m.role === 'tool')
+        .flatMap((m: any) => m.content.filter((p: any) => p.type === 'tool-result'));
+
+      const undefinedCase = toolResults.find((p: any) => p.toolCallId === 'call-undefined');
+      expect(undefinedCase.output).toBeDefined();
+      expect(undefinedCase.output.type).toBe('json');
+      expect(undefinedCase.output.value).toEqual({ contents: 'the answer is 42' });
+
+      const nullCase = toolResults.find((p: any) => p.toolCallId === 'call-null');
+      expect(nullCase.output).toBeDefined();
+      expect(nullCase.output.type).toBe('json');
+      expect(nullCase.output.value).toEqual({ contents: 'still 42' });
     });
   });
 });

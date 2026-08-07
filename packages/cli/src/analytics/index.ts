@@ -1,13 +1,11 @@
 import { randomUUID } from 'node:crypto';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { PostHog } from 'posthog-node';
 import { getPackageManager } from '../commands/utils.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const ANALYTICS_CONFIG_PATH = path.join(os.homedir(), '.mastra', 'analytics.json');
 
 interface CommandData {
   command: string;
@@ -18,6 +16,25 @@ interface CommandData {
 }
 
 export type CLI_ORIGIN = 'mastra-cloud' | 'oss';
+
+/**
+ * Bucket the Mastra platform API host into coarse labels for analytics.
+ *
+ * We report the *category* of API surface a deploy is talking to (cloud,
+ * staging, localhost, custom, unknown) rather than the raw host, so
+ * self-hosted or internal domains are never leaked to telemetry.
+ */
+export function bucketApiHost(apiUrl: string): 'cloud' | 'staging' | 'localhost' | 'custom' | 'unknown' {
+  try {
+    const { host, hostname } = new URL(apiUrl);
+    if (hostname === 'localhost' || hostname === '127.0.0.1') return 'localhost';
+    if (host === 'staging.mastra.cloud' || host.endsWith('.staging.mastra.cloud')) return 'staging';
+    if (host === 'platform.mastra.ai' || host === 'mastra.cloud' || host.endsWith('.mastra.cloud')) return 'cloud';
+    return 'custom';
+  } catch {
+    return 'unknown';
+  }
+}
 
 let analyticsInstance: PosthogAnalytics | null = null;
 
@@ -52,36 +69,50 @@ export class PosthogAnalytics {
     }
 
     this.packageManager = getPackageManager();
-    const cliConfigPath = path.join(__dirname, 'mastra-cli.json');
-    if (existsSync(cliConfigPath)) {
-      try {
-        const { distinctId, sessionId } = JSON.parse(readFileSync(cliConfigPath, 'utf-8'));
-        this.distinctId = distinctId;
-        this.sessionId = sessionId;
-      } catch {
-        this.sessionId = randomUUID();
-        this.distinctId = this.getDistinctId();
-      }
-
-      this.writeCliConfig({
-        distinctId: this.distinctId,
-        sessionId: this.sessionId,
-      });
-    } else {
-      this.sessionId = randomUUID();
-      this.distinctId = this.getDistinctId();
-      this.writeCliConfig({
-        distinctId: this.distinctId,
-        sessionId: this.sessionId,
-      });
-    }
+    const { distinctId, sessionId } = this.getOrCreateAnalyticsConfig();
+    this.distinctId = distinctId;
+    this.sessionId = sessionId;
 
     this.initializePostHog(apiKey, host);
   }
 
-  private writeCliConfig({ distinctId, sessionId }: { distinctId: string; sessionId: string }): void {
+  private getOrCreateAnalyticsConfig(configPath = ANALYTICS_CONFIG_PATH): { distinctId: string; sessionId: string } {
     try {
-      writeFileSync(path.join(__dirname, 'mastra-cli.json'), JSON.stringify({ distinctId, sessionId }));
+      if (existsSync(configPath)) {
+        const { distinctId, sessionId } = JSON.parse(readFileSync(configPath, 'utf-8')) as {
+          distinctId?: string;
+          sessionId?: string;
+        };
+        if (distinctId && !this.isHostnameDerivedDistinctId(distinctId)) {
+          const config = {
+            distinctId,
+            sessionId: sessionId || randomUUID(),
+          };
+          if (config.sessionId !== sessionId) {
+            this.writeCliConfig(config, configPath);
+          }
+          return config;
+        }
+      }
+    } catch {
+      // regenerate below
+    }
+
+    const config = {
+      distinctId: this.createDistinctId(),
+      sessionId: randomUUID(),
+    };
+    this.writeCliConfig(config, configPath);
+    return config;
+  }
+
+  private writeCliConfig(
+    { distinctId, sessionId }: { distinctId: string; sessionId: string },
+    configPath = ANALYTICS_CONFIG_PATH,
+  ): void {
+    try {
+      mkdirSync(path.dirname(configPath), { recursive: true });
+      writeFileSync(configPath, JSON.stringify({ distinctId, sessionId }));
     } catch {
       //swallow
     }
@@ -110,11 +141,12 @@ export class PosthogAnalytics {
     return true;
   }
 
-  private getDistinctId(): string {
-    // Use machine-id or generate a persistent ID
-    // This helps track unique CLI installations
-    const machineId = os.hostname();
-    return `mastra-${machineId}`;
+  private createDistinctId(): string {
+    return `mastra-${randomUUID()}`;
+  }
+
+  private isHostnameDerivedDistinctId(distinctId: string): boolean {
+    return distinctId === `mastra-${os.hostname()}`;
   }
 
   private getSystemProperties(): Record<string, any> {
@@ -146,6 +178,10 @@ export class PosthogAnalytics {
         ...this.getSystemProperties(),
       },
     });
+  }
+
+  getDistinctId(): string {
+    return this.distinctId;
   }
 
   trackEvent(eventName: string, properties?: Record<string, any>): void {

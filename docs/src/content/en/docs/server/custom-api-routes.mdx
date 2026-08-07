@@ -270,7 +270,7 @@ For more information about authentication providers, see the [Auth documentation
 
 Built-in streaming helpers such as [`chatRoute()`](/reference/ai-sdk/chat-route) forward the incoming request's `AbortSignal` to `agent.stream()`. That's the right default when a browser disconnect should cancel the model call.
 
-For custom streaming routes that should stop when the client disconnects, pass `c.req.raw.signal` to long-running work such as `agent.stream()`. Mastra's Node-based adapters also stop reading streamed `Response` bodies from custom routes when the client connection closes. Streamed response body errors that are not caused by client disconnects still propagate through the adapter's normal error handling. In Hono, disconnect behavior depends on the host runtime forwarding connection closes to `request.signal`.
+For custom streaming routes that should stop when the client disconnects, pass `c.req.raw.signal` to long-running work such as `agent.stream()`. Mastra's Node-based adapters also stop reading streamed `Response` bodies from custom routes when the client connection closes. Streamed response body errors that aren't caused by client disconnects still propagate through the adapter's normal error handling. In Hono, disconnect behavior depends on the host runtime forwarding connection closes to `request.signal`.
 
 ```typescript title="src/mastra/index.ts"
 registerApiRoute('/stream', {

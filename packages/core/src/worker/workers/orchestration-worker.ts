@@ -128,8 +128,26 @@ export class OrchestrationWorker extends MastraWorker {
       runId: event.runId,
       retry: result.retry,
     });
-    if (nack) {
-      await nack();
+    // Only ask the transport to redeliver on retryable failures. On terminal
+    // failures (e.g. WorkflowEventProcessor exhausted its delivery budget and
+    // already published workflow.fail) we ack so the poisoned event drops out
+    // of the queue instead of looping forever.
+    if (result.retry) {
+      if (nack) {
+        try {
+          await nack();
+        } catch (e) {
+          this.deps?.logger?.error('OrchestrationWorker: error nacking event', { error: e });
+        }
+      }
+      return;
+    }
+    if (ack) {
+      try {
+        await ack();
+      } catch (e) {
+        this.deps?.logger?.error('OrchestrationWorker: error acking terminal event', { error: e });
+      }
     }
   }
 }

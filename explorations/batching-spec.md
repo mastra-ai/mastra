@@ -18,7 +18,7 @@ In the current implementation, **every** signal interrupts the model at the very
 
 Today the model is re-prompted roughly every 250ms. Its context is rewritten on each iteration, its plan destabilizes, and per-token cost balloons because each "iteration" is a fresh model call with a growing input. There is no `minIntervalMs`, no `maxWaitMs`, no `coalesce` — just "drain everything every time."
 
-The agent loop currently owns *both* "is it structurally safe to drain?" (a real concern only it can answer) and "is it strategically wise to drain?" (a producer/consumer cadence question that has nothing to do with the loop). This spec separates the second concern out.
+The agent loop currently owns _both_ "is it structurally safe to drain?" (a real concern only it can answer) and "is it strategically wise to drain?" (a producer/consumer cadence question that has nothing to do with the loop). This spec separates the second concern out.
 
 This branch ships the primitives. Migrating signal delivery onto them is future work.
 
@@ -104,7 +104,7 @@ A batch of N events delivered together produces N consecutive `cb(event, ack, na
 - The signal-saving callback (when that lands) wants per-signal handling anyway.
 - `ack`/`nack` per event preserves redelivery semantics on adapters that support them.
 
-The observable batching property — *temporal grouping* — is captured by callback timing, not signature.
+The observable batching property — _temporal grouping_ — is captured by callback timing, not signature.
 
 ### 3.4 `PubSub.supportsNativeBatching`
 
@@ -143,7 +143,7 @@ Internals (`BatchPolicy`, `AckHandleBuffer`) are intentionally not re-exported t
 - `subscribe(topic, cb, options)` forwards `options` (including `options.batch`) to the inner PubSub.
 - `supportsNativeBatching` returns `this.inner.supportsNativeBatching`.
 
-Consequence to be aware of: wrapping a *non-native* inner adapter (the common case — that's why `CachingPubSub` exists) with `{ batch: {...} }` results in the batch options being passed to an adapter that ignores them. Delivery will be unbatched. This is documented on the `CachingPubSub` class JSDoc; there is no runtime warn (it would fire on every subscribe).
+Consequence to be aware of: wrapping a _non-native_ inner adapter (the common case — that's why `CachingPubSub` exists) with `{ batch: {...} }` results in the batch options being passed to an adapter that ignores them. Delivery will be unbatched. This is documented on the `CachingPubSub` class JSDoc; there is no runtime warn (it would fire on every subscribe).
 
 An earlier draft of this spec had `CachingPubSub` implement cache-backed batching directly, using cache cursors instead of an in-memory buffer. That code was prototyped and removed because the policy state (`BatchPolicy.size`, `firstQueuedAt`, `lastDeliveredAt`, the `setTimeout` handle) lives in-process. Two `CachingPubSub` replicas sharing a `subscriberId` would each run their own `BatchPolicy`, race on `flushOnce` calls, and corrupt the cursor. A correct distributed implementation needs policy state in the cache, a shared scheduler, and a lease/coordinator — which is a substantial design, not a primitive. Deferred.
 
@@ -182,7 +182,7 @@ Partial-batch failure: per-event semantics. If a `cb` throws or rejects for one 
 ## 6. Non-goals
 
 - Changing the `signal` storage role or XML wrapping.
-- Removing the structural boundary check from `llm-execution-step.ts`. The chunk-type whitelist stays — it's about *safety*, not *cadence*.
+- Removing the structural boundary check from `llm-execution-step.ts`. The chunk-type whitelist stays — it's about _safety_, not _cadence_.
 - A `subscribeBatch` API delivering `Event[]`. Per-event callback shape preserved.
 - A `BatchingPubSub` wrapper class. Batching state lives in the adapter that owns the retention.
 - Cache-backed / distributed batching. Deferred (§4.2).
@@ -237,17 +237,17 @@ await pubsub.subscribe('agent-signals:R:T', cb, {
 
 **Timeline (ms):**
 
-| t | Event | Buffer | Notes |
-| --- | --- | --- | --- |
-| 0 | subscribe with above options | — | `AckHandleBuffer` created |
-| 100 | publish `file-changed: src/a.ts` | [1] | firstQueuedAt=100; deadline at t=1600 |
-| 250 | publish `file-changed: src/b.ts` | [2] |  |
-| 400 | publish `file-changed: src/a.ts` | [3] | will be coalesced with the first |
-| 550 | publish `file-changed: src/c.ts` | [4] |  |
-| 700 | publish `user-message: …` | [5] | `isImmediate` matches → flush now |
-| 700 | **batch delivered** | [] | coalesce returns 4 events (one per path + user-message); cb invoked 4× in order; `lastDeliveredAt=700` |
-| 900 | publish `file-changed: src/d.ts` | [1] | firstQueuedAt=900; `minIntervalMs` floor t=1450 < deadline t=2400 → effective t=2400 |
-| 1100 | publish `file-changed: src/d.ts` | [2] | will coalesce |
-| 2400 | maxWaitMs elapsed | — | **batch delivered**: 1 event after coalesce; `lastDeliveredAt=2400` |
+| t    | Event                            | Buffer | Notes                                                                                                  |
+| ---- | -------------------------------- | ------ | ------------------------------------------------------------------------------------------------------ |
+| 0    | subscribe with above options     | —      | `AckHandleBuffer` created                                                                              |
+| 100  | publish `file-changed: src/a.ts` | [1]    | firstQueuedAt=100; deadline at t=1600                                                                  |
+| 250  | publish `file-changed: src/b.ts` | [2]    |                                                                                                        |
+| 400  | publish `file-changed: src/a.ts` | [3]    | will be coalesced with the first                                                                       |
+| 550  | publish `file-changed: src/c.ts` | [4]    |                                                                                                        |
+| 700  | publish `user-message: …`        | [5]    | `isImmediate` matches → flush now                                                                      |
+| 700  | **batch delivered**              | []     | coalesce returns 4 events (one per path + user-message); cb invoked 4× in order; `lastDeliveredAt=700` |
+| 900  | publish `file-changed: src/d.ts` | [1]    | firstQueuedAt=900; `minIntervalMs` floor t=1450 < deadline t=2400 → effective t=2400                   |
+| 1100 | publish `file-changed: src/d.ts` | [2]    | will coalesce                                                                                          |
+| 2400 | maxWaitMs elapsed                | —      | **batch delivered**: 1 event after coalesce; `lastDeliveredAt=2400`                                    |
 
 Net: subscriber invoked five times instead of seven separate dispatches, with the `user-message` preempting correctly and duplicate path events coalesced. No cache, no extra processes — just a buffer inside the emitter.

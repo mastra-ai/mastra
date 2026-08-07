@@ -1,5 +1,7 @@
-import { Combobox, Skeleton, cn } from '@mastra/playground-ui';
-import type { ComboboxProps, ComboboxOption } from '@mastra/playground-ui';
+import { Combobox } from '@mastra/playground-ui/components/Combobox';
+import type { ComboboxOption, ComboboxProps } from '@mastra/playground-ui/components/Combobox';
+import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { Info } from 'lucide-react';
 import type { MouseEvent } from 'react';
 import { useMemo } from 'react';
@@ -24,8 +26,8 @@ export interface LLMProvidersProps {
 export const LLMProviders = ({
   value,
   onValueChange,
-  variant = 'default',
-  size = 'default',
+  variant,
+  size = 'md',
   className,
   open,
   onOpenChange,
@@ -50,7 +52,7 @@ export const LLMProviders = ({
         <div className="relative shrink-0">
           <ProviderLogo providerId={provider.id} size={16} />
           <div
-            className={`absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full ${
+            className={`absolute -top-0.5 -right-0.5 h-1.5 w-1.5 rounded-full ${
               provider.connected ? 'bg-accent1' : 'bg-accent2'
             }`}
             title={provider.connected ? 'Connected' : 'Not connected'}
@@ -79,7 +81,7 @@ export const LLMProviders = ({
   };
 
   if (providersLoading) {
-    return <Skeleton className="w-full h-8" />;
+    return <Skeleton className="h-8 w-full" />;
   }
 
   // Find the matching provider, handling gateway prefix fallback

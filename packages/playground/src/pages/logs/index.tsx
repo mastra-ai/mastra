@@ -1,29 +1,30 @@
+import type { EntityType } from '@mastra/core/observability';
+import { DateTimeRangePicker } from '@mastra/playground-ui/components/DateTimeRangePicker';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { PropertyFilterCreator } from '@mastra/playground-ui/components/PropertyFilter';
+import { LogDetailsView } from '@mastra/playground-ui/domains/logs/components/log-details-view';
+import { LogsErrorContent } from '@mastra/playground-ui/domains/logs/components/logs-error-content';
+import { LogsLayout } from '@mastra/playground-ui/domains/logs/components/logs-layout';
+import { LogsListView } from '@mastra/playground-ui/domains/logs/components/logs-list-view';
+import { LogsToolbar } from '@mastra/playground-ui/domains/logs/components/logs-toolbar';
+import { NoLogsInfo } from '@mastra/playground-ui/domains/logs/components/no-logs-info';
+import { useLogs } from '@mastra/playground-ui/domains/logs/hooks/use-logs';
+import { useLogsFilterPersistence } from '@mastra/playground-ui/domains/logs/hooks/use-logs-filter-persistence';
+import { useLogsListNavigation } from '@mastra/playground-ui/domains/logs/hooks/use-logs-list-navigation';
+import { useLogsUrlState } from '@mastra/playground-ui/domains/logs/hooks/use-logs-url-state';
 import {
-  DateTimeRangePicker,
-  LogDetailsView,
-  LogsErrorContent,
-  LogsLayout,
-  LogsListView,
-  LogsToolbar,
-  NoLogsInfo,
-  PageLayout,
-  PropertyFilterCreator,
-  SpanDetailsView,
-  TraceDetailsView,
   buildLogsListFilters,
   createLogsPropertyFilterFields,
   neutralizeLogsFilterTokens,
-  useEntityNames,
-  useEnvironments,
-  useLogs,
-  useLogsFilterPersistence,
-  useLogsListNavigation,
-  useLogsUrlState,
-  useServiceNames,
-  useSpanDetail,
-  useTags,
-  useTraceLightSpans,
-} from '@mastra/playground-ui';
+} from '@mastra/playground-ui/domains/logs/log-filters';
+import { SpanDetailsView } from '@mastra/playground-ui/domains/traces/components/span-details-view';
+import { TraceDetailsView } from '@mastra/playground-ui/domains/traces/components/trace-details-view';
+import { useEntityNames } from '@mastra/playground-ui/domains/traces/hooks/use-entity-names';
+import { useEnvironments } from '@mastra/playground-ui/domains/traces/hooks/use-environments';
+import { useServiceNames } from '@mastra/playground-ui/domains/traces/hooks/use-service-names';
+import { useSpanDetail } from '@mastra/playground-ui/domains/traces/hooks/use-span-detail';
+import { useTags } from '@mastra/playground-ui/domains/traces/hooks/use-tags';
+import { useTraceLightSpans } from '@mastra/playground-ui/domains/traces/hooks/use-trace-light-spans';
 import { useCallback, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
 
@@ -37,7 +38,7 @@ export default function LogsPage() {
 
   const { data: availableTags = [], isPending: isTagsLoading } = useTags();
   const { data: rootEntityNameSuggestions = [], isPending: isEntityNamesLoading } = useEntityNames({
-    entityType: url.selectedEntityOption?.entityType,
+    entityType: url.selectedEntityOption?.entityType as EntityType | undefined,
     rootOnly: true,
   });
   const { data: discoveredEnvironments = [], isPending: isEnvironmentsLoading } = useEnvironments();
@@ -72,7 +73,7 @@ export default function LogsPage() {
   const logsFilters = useMemo(
     () =>
       buildLogsListFilters({
-        rootEntityType: url.selectedEntityOption?.entityType,
+        rootEntityType: url.selectedEntityOption?.entityType as EntityType | undefined,
         dateFrom: url.selectedDateFrom,
         dateTo: url.selectedDateTo,
         tokens: url.filterTokens,

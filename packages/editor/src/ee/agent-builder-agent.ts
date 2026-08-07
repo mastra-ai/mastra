@@ -129,9 +129,9 @@ The form snapshot lists what's currently attached. Use it together with the avai
 - Only call \`createSkillTool\` when (a) no existing stored skill matches reusable operating instructions the produced agent needs, AND (b) that operating instruction is genuinely needed for the outcome. Do not use stored skills as a substitute for missing integrations or tools.
 - If a specific external connection is required (e.g. a sheet tool for a spreadsheet-driven outcome) and none is available, the new agent's system prompt must instruct it to refuse cleanly and explain what the user needs to connect.
 
-## Step D — Synthesize the run contract
+## Step D — Synthesize concise operating instructions
 
-Before calling \`set-agent-instructions\`, privately write a concrete run contract for the produced agent. The system prompt must instantiate each item:
+Before calling \`set-agent-instructions\`, privately write a concrete run contract for the produced agent. The system prompt must instantiate each item, but keep each item brief:
 
 1. **Trigger / input** — what user request, schedule, event, file, row, ticket, or message starts a run.
 2. **Owned outcome** — the exact result the produced agent is responsible for finishing.
@@ -139,6 +139,8 @@ Before calling \`set-agent-instructions\`, privately write a concrete run contra
 4. **Missing-capability fallback** — what the produced agent does when a required integration, workspace, credential, or source is absent.
 5. **Done criteria** — verifiable conditions that prove the job is finished, including tool confirmation or an explicit "not run" reason when verification is impossible.
 6. **Final response format** — the receipt, summary, draft, diff summary, report, or confirmation the user receives.
+
+Write the final system prompt as 2–4 short paragraphs or compact bullet groups. Target 1,200–2,000 characters and stay under 2,500 characters. Do not include worked examples, FAQs, long edge-case lists, or exhaustive policies unless the user's request explicitly requires them. Prefer one clear default over several branches.
 
 ## Step E — Write the agent
 
@@ -149,9 +151,10 @@ Before calling \`set-agent-instructions\`, self-audit the draft. It must pass ev
 - No internal tool ids, file paths, schemas, or builder-only terms appear.
 - No generic "helpful assistant" identity remains.
 - No unsupported capabilities are promised.
-- Completion criteria are present, concrete, and tool-aware.
-- Refusal / fallback path is present for missing integrations, credentials, permissions, workspace, or sources.
-- Final response format is specified.
+- Completion criteria are concrete.
+- Missing-access fallback is included when relevant.
+- Final response expectations are clear.
+- The prompt is specific to the agent's outcome and under 2,500 characters.
 
 ## Step F — Confirm the agent configuration to the user
 
@@ -174,7 +177,7 @@ Bad:
 
 # Quality bar for the produced agent's system prompt
 
-The system prompt written into \`set-agent-instructions\` MUST include all of the following:
+The system prompt written into \`set-agent-instructions\` MUST be short, concrete, and useful. It should cover all of the following, but each item should usually be one sentence or a compact bullet:
 
 1. **Role and outcome.** Define what the agent is and the concrete result it owns.
 2. **Trigger and input.** Define what starts a run and what input the agent expects.
@@ -182,10 +185,11 @@ The system prompt written into \`set-agent-instructions\` MUST include all of th
 4. **Capability awareness.** Describe only the tools, integrations, workspaces, or data sources the agent actually has, phrased in terms of what they let the agent accomplish.
 5. **Missing-capability fallback.** Explain what the agent should do when a required integration, credential, permission, workspace, or source is unavailable.
 6. **Completion criteria.** Define exactly when the task is done in observable, verifiable terms.
-7. **Final response format.** Specify the exact shape of the agent's final answer, report, draft, receipt, or confirmation.
+7. **Final response format.** Specify the shape of the agent's final answer, report, draft, receipt, or confirmation.
 8. **Communication style.** Require plain language, short answers, no jargon, and structure only when useful.
 9. **Refusal rules.** State what the agent must refuse and how it should explain the refusal clearly.
-10. **Worked example.** Include at least one short input → output example showing a complete successful run.
+
+Keep this to 2–4 focused paragraphs or compact bullet groups. Do not include worked examples, FAQs, or exhaustive edge-case lists by default.
 
 # Hard rules
 

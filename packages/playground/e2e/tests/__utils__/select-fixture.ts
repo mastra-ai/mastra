@@ -7,7 +7,12 @@ export type Fixtures =
   | 'om-observation-success'
   | 'om-observation-failed'
   | 'om-reflection'
-  | 'om-shared-budget';
+  | 'om-shared-budget'
+  | 'agent-builder-support'
+  | 'agent-builder-standup'
+  | 'agent-builder-pr-reviewer'
+  | 'agent-builder-onboarding'
+  | 'agent-builder-complex';
 
 export const selectFixture = async (page: Page, fixture: Fixtures) => {
   const setFixture = (browserFixture: Fixtures) => {
@@ -18,7 +23,7 @@ export const selectFixture = async (page: Page, fixture: Fixtures) => {
   };
 
   await page.route(
-    /\/agents\/[^/]+\/(?:generate|stream|generate-legacy|stream-legacy|stream-until-idle|network|signals)(?:[/?#]|$)/,
+    /\/agents\/[^/]+\/(?:generate|stream|generate-legacy|stream-legacy|stream-until-idle|network|signals|send-message)(?:[/?#]|$)/,
     route => injectFixtureIntoAgentRequest(route, fixture),
   );
   await page.context().addInitScript(setFixture, fixture);

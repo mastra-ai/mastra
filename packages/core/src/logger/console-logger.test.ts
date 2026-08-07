@@ -22,12 +22,15 @@ describe('ConsoleLogger', () => {
 
       // Verify by checking the child only logs at WARN level (inherited from parent)
       const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       child.info('should not log');
       child.warn('should log');
 
-      expect(infoSpy).toHaveBeenCalledTimes(1);
-      expect(infoSpy).toHaveBeenCalledWith('[AGENT] should log');
+      expect(infoSpy).not.toHaveBeenCalled();
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+      expect(warnSpy).toHaveBeenCalledWith('[AGENT] should log');
       infoSpy.mockRestore();
+      warnSpy.mockRestore();
     });
 
     it('inherits filter from parent', () => {
@@ -113,6 +116,7 @@ describe('ConsoleLogger', () => {
       const logger = new ConsoleLogger({ level: LogLevel.DEBUG, filter });
 
       const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
       logger.debug('d');
@@ -126,6 +130,7 @@ describe('ConsoleLogger', () => {
       expect(filter).toHaveBeenCalledWith(expect.objectContaining({ level: LogLevel.ERROR }));
 
       infoSpy.mockRestore();
+      warnSpy.mockRestore();
       errorSpy.mockRestore();
     });
 
@@ -188,6 +193,7 @@ describe('ConsoleLogger', () => {
       const logger = new ConsoleLogger({ level: LogLevel.WARN });
 
       const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
       logger.debug('debug');
@@ -195,12 +201,14 @@ describe('ConsoleLogger', () => {
       logger.warn('warn');
       logger.error('error');
 
-      expect(infoSpy).toHaveBeenCalledTimes(1); // only warn
-      expect(infoSpy).toHaveBeenCalledWith('warn');
+      expect(infoSpy).not.toHaveBeenCalled();
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+      expect(warnSpy).toHaveBeenCalledWith('warn');
       expect(errorSpy).toHaveBeenCalledTimes(1);
       expect(errorSpy).toHaveBeenCalledWith('error');
 
       infoSpy.mockRestore();
+      warnSpy.mockRestore();
       errorSpy.mockRestore();
     });
   });

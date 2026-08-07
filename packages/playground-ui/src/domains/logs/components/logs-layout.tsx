@@ -24,14 +24,14 @@ export function LogsLayout({ listSlot, logPanelSlot, tracePanelSlot, spanPanelSl
 
   return (
     <div
-      className={cn('grid h-full min-h-0 gap-4 items-start', hasSidePanel ? 'grid-cols-[1fr_1fr]' : 'grid-cols-[1fr]')}
+      className={cn('grid h-full min-h-0 items-start gap-4', hasSidePanel ? 'grid-cols-[1fr_1fr]' : 'grid-cols-[1fr]')}
     >
       {listSlot}
 
       {hasSidePanel && (
         <div
           className={cn(
-            'grid gap-4 h-full overflow-auto',
+            'grid h-full gap-4 overflow-auto',
             tracePanelSlot && spanPanelSlot
               ? logCollapsed
                 ? 'grid-rows-[auto_1fr_1fr]'

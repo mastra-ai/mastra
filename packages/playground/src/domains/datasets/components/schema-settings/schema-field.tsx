@@ -1,12 +1,14 @@
 'use client';
 
-import { CodeEditor, Switch, cn } from '@mastra/playground-ui';
+import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
+import { Switch } from '@mastra/playground-ui/components/Switch';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import type { JSONSchema7 } from 'json-schema';
 import { useState, useEffect, useRef } from 'react';
 
 interface SchemaFieldProps {
   label: string;
-  schemaType: 'input' | 'output';
+  schemaType: 'input' | 'output' | 'requestContext';
   value: Record<string, unknown> | null | undefined;
   onChange: (schema: Record<string, unknown> | null) => void;
   error?: string;
@@ -105,8 +107,8 @@ export function SchemaField({
             showCopyButton={false}
             className={cn('h-48 border rounded-md', (parseError || error) && 'border-destructive')}
           />
-          {parseError && <p className="text-xs text-destructive">{parseError}</p>}
-          {error && !parseError && <p className="text-xs text-destructive">{error}</p>}
+          {parseError && <p className="text-destructive text-xs">{parseError}</p>}
+          {error && !parseError && <p className="text-destructive text-xs">{error}</p>}
         </div>
       )}
     </div>

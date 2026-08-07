@@ -1,0 +1,830 @@
+/**
+ * MCP server selector component for managing MCP server connections.
+ * Uses pi-tui overlay pattern with navigation.
+ */
+
+import { Box, Container, getKeybindings, Spacer, Text } from '@earendil-works/pi-tui';
+import type { Focusable, TUI } from '@earendil-works/pi-tui';
+import type { McpServerStatus, McpSkippedServer } from '@mastra/code-sdk/mcp/types';
+import chalk from 'chalk';
+import { decodePrintableShortcut } from '../key-input.js';
+import { theme } from '../theme.js';
+
+// =============================================================================
+// Types
+// =============================================================================
+
+export interface McpSelectorOptions {
+  /** TUI instance for rendering */
+  tui: TUI;
+  /** Server statuses */
+  statuses: McpServerStatus[];
+  /** Skipped servers */
+  skipped: McpSkippedServer[];
+  /** Config file paths for display */
+  configPaths: { project: string; global: string; claude: string };
+  /** Get current statuses (for polling during initial connect) */
+  getStatuses: () => { statuses: McpServerStatus[]; skipped: McpSkippedServer[] };
+  /** Callback to reload all servers — should return fresh statuses/skipped */
+  onReloadAll: () => Promise<{ statuses: McpServerStatus[]; skipped: McpSkippedServer[] }>;
+  /** Callback to reconnect a single server by name — returns updated status */
+  onReconnectServer: (name: string) => Promise<McpServerStatus>;
+  /** Callback to run the OAuth flow for a single server by name — returns updated status */
+  onAuthenticateServer: (name: string) => Promise<McpServerStatus>;
+  /** Callback to cancel a pending OAuth flow for a server by name — resolves true if one was cancelled */
+  onCancelAuthenticateServer: (name: string) => Promise<boolean>;
+  /**
+   * Callback to disable/enable a server by name. `global: true` applies the
+   * change across every project instead of just this one. Rebuilds all
+   * connections (like reload), so it returns fresh statuses/skipped.
+   */
+  onSetServerDisabled: (
+    name: string,
+    disabled: boolean,
+    options?: { global?: boolean },
+  ) => Promise<{ statuses: McpServerStatus[]; skipped: McpSkippedServer[] }>;
+  /** Get captured stderr logs for a server */
+  getServerLogs: (name: string) => string[];
+  /** Show an info message in the chat area */
+  showInfo: (msg: string) => void;
+  /** Callback when selector is dismissed */
+  onClose: () => void;
+}
+
+// =============================================================================
+// Sub-menu actions
+// =============================================================================
+
+interface ServerAction {
+  label: string;
+  key: string;
+}
+
+const DISABLE_ACTIONS: ServerAction[] = [
+  { label: 'Disable (this project)', key: 'disable' },
+  { label: 'Disable globally (all projects)', key: 'disable-global' },
+];
+
+const CONNECTED_ACTIONS: ServerAction[] = [
+  { label: 'View tools', key: 'tools' },
+  { label: 'View logs', key: 'logs' },
+  { label: 'Reconnect', key: 'reconnect' },
+  ...DISABLE_ACTIONS,
+];
+
+const FAILED_ACTIONS: ServerAction[] = [
+  { label: 'View error', key: 'error' },
+  { label: 'View logs', key: 'logs' },
+  { label: 'Reconnect', key: 'reconnect' },
+  ...DISABLE_ACTIONS,
+];
+
+const NEEDS_AUTH_ACTIONS: ServerAction[] = [
+  { label: 'Authenticate', key: 'authenticate' },
+  { label: 'View error', key: 'error' },
+  { label: 'View logs', key: 'logs' },
+  { label: 'Reconnect', key: 'reconnect' },
+  ...DISABLE_ACTIONS,
+];
+
+const DISABLED_ACTIONS: ServerAction[] = [{ label: 'Enable', key: 'enable' }];
+
+const DISABLED_GLOBAL_ACTIONS: ServerAction[] = [{ label: 'Enable globally (all projects)', key: 'enable-global' }];
+
+const CONNECTING_ACTIONS: ServerAction[] = [{ label: 'Waiting for connection...', key: 'none' }];
+
+const AUTHENTICATING_ACTIONS: ServerAction[] = [{ label: 'Cancel authentication', key: 'cancel-authenticate' }];
+
+// =============================================================================
+// McpSelectorComponent
+// =============================================================================
+
+export class McpSelectorComponent extends Box implements Focusable {
+  private listContainer!: Container;
+  private statuses: McpServerStatus[];
+  private skipped: McpSkippedServer[];
+  private selectedIndex = 0;
+  private getStatusesCallback: McpSelectorOptions['getStatuses'];
+  private onReloadAllCallback: McpSelectorOptions['onReloadAll'];
+  private onReconnectServerCallback: McpSelectorOptions['onReconnectServer'];
+  private onAuthenticateServerCallback: McpSelectorOptions['onAuthenticateServer'];
+  private onCancelAuthenticateServerCallback: McpSelectorOptions['onCancelAuthenticateServer'];
+  private onSetServerDisabledCallback: McpSelectorOptions['onSetServerDisabled'];
+  private getServerLogsCallback: McpSelectorOptions['getServerLogs'];
+  private showInfoCallback: McpSelectorOptions['showInfo'];
+  private onCloseCallback: () => void;
+  private tui: TUI;
+  private pollTimer: ReturnType<typeof setInterval> | null = null;
+
+  // Sub-menu state
+  private subMenuOpen = false;
+  private subMenuIndex = 0;
+  private subMenuActions: ServerAction[] = [];
+
+  // Detail view state (tool list / error display)
+  private _detailView = false;
+
+  // Loading state during reload
+  private _reloading = false;
+
+  // Names of servers with an in-flight OAuth flow (so their sub-menu offers a
+  // cancel path while they show as connecting).
+  private _authenticating = new Set<string>();
+
+  // Names of servers the user is actively cancelling. The authenticate flow
+  // resolves with a failed status when cancelled, so we track this to suppress
+  // the misleading "Failed to authenticate" toast on a deliberate cancel.
+  private _cancelling = new Set<string>();
+
+  // Focusable implementation
+  private _focused = false;
+  get focused(): boolean {
+    return this._focused;
+  }
+  set focused(value: boolean) {
+    this._focused = value;
+  }
+
+  constructor(options: McpSelectorOptions) {
+    super(2, 1, text => theme.bg('overlayBg', text));
+
+    this.tui = options.tui;
+    this.statuses = options.statuses;
+    this.skipped = options.skipped;
+    this.getStatusesCallback = options.getStatuses;
+    this.onReloadAllCallback = options.onReloadAll;
+    this.onReconnectServerCallback = options.onReconnectServer;
+    this.onAuthenticateServerCallback = options.onAuthenticateServer;
+    this.onCancelAuthenticateServerCallback = options.onCancelAuthenticateServer;
+    this.onSetServerDisabledCallback = options.onSetServerDisabled;
+    this.getServerLogsCallback = options.getServerLogs;
+    this.showInfoCallback = options.showInfo;
+    this.onCloseCallback = options.onClose;
+
+    this.buildUI();
+    this.startPollingIfNeeded();
+  }
+
+  private buildUI(): void {
+    // Title
+    const titleText = chalk.bgHex('#16c858').white.bold(' Manage MCP servers ');
+    this.addChild(new Text(titleText, 0, 0));
+    this.addChild(new Spacer(1));
+
+    // List container (includes server count + server list)
+    this.listContainer = new Container();
+    this.addChild(this.listContainer);
+
+    // Footer spacer + hints
+    this.addChild(new Spacer(1));
+    this.addChild(new Text(theme.fg('muted', '↑↓ navigate • Enter select • r reload all • Esc close'), 0, 0));
+
+    // Initial render
+    this.updateList();
+  }
+
+  private getTotalItems(): number {
+    return this.statuses.length + this.skipped.length;
+  }
+
+  private updateList(): void {
+    this.listContainer.clear();
+
+    // Server count line
+    const total = this.getTotalItems();
+    const countLabel = this._reloading
+      ? `${total} server${total !== 1 ? 's' : ''} — reconnecting...`
+      : `${total} server${total !== 1 ? 's' : ''}`;
+    this.listContainer.addChild(new Text(theme.fg(this._reloading ? 'warning' : 'muted', countLabel), 0, 0));
+    this.listContainer.addChild(new Spacer(1));
+
+    const totalItems = this.getTotalItems();
+
+    for (let i = 0; i < this.statuses.length; i++) {
+      const status = this.statuses[i]!;
+      const isSelected = i === this.selectedIndex && !this.subMenuOpen;
+
+      let icon: string;
+      let stateText: string;
+      if (status.disabled) {
+        // Disabled wins over the reloading spinner — a disabled server is not
+        // reconnecting during a reload/enable/disable rebuild.
+        icon = theme.fg('muted', '⊘');
+        stateText = theme.fg('muted', status.disabledScope === 'global' ? 'disabled (global)' : 'disabled');
+      } else if (this._reloading) {
+        icon = theme.fg('warning', '⟳');
+        stateText = theme.fg('warning', 'reconnecting...');
+      } else if (this.isAuthenticating(status)) {
+        // A flow is in flight for this server. This is authoritative even if a
+        // polled status refresh from the manager no longer reports `connecting`,
+        // so the "Enter to cancel" affordance never disappears mid-flow. The
+        // manager-owned `authenticating` flag also survives close/reopen of the
+        // selector, when the local set has been discarded with the old instance.
+        icon = theme.fg('warning', '⟳');
+        stateText = theme.fg('warning', 'authenticating — Enter to cancel');
+      } else if (status.connecting) {
+        icon = theme.fg('warning', '⟳');
+        stateText = theme.fg('warning', 'connecting...');
+      } else if (status.connected) {
+        icon = theme.fg('success', '✔');
+        stateText = theme.fg('success', 'connected');
+      } else if (status.needsAuth) {
+        icon = theme.fg('warning', '⚠');
+        stateText = theme.fg('warning', 'needs auth');
+      } else {
+        icon = theme.fg('error', '✗');
+        stateText = theme.fg('error', 'failed');
+      }
+
+      const cursor = isSelected ? theme.fg('accent', '› ') : '  ';
+      const name = isSelected ? theme.bold(theme.fg('accent', status.name)) : status.name;
+      const transport = theme.fg('muted', `[${status.transport}]`);
+      const toolInfo =
+        !this._reloading && status.toolCount > 0 ? theme.fg('muted', ` · ${status.toolCount} tools`) : '';
+
+      this.listContainer.addChild(new Text(`${cursor}${icon} ${name} ${transport} ${stateText}${toolInfo}`, 0, 0));
+
+      // Sub-menu for this server
+      if (i === this.selectedIndex && this.subMenuOpen) {
+        for (let j = 0; j < this.subMenuActions.length; j++) {
+          const action = this.subMenuActions[j]!;
+          const actionSelected = j === this.subMenuIndex;
+          const actionCursor = actionSelected ? theme.fg('accent', '  › ') : '    ';
+          const actionText = actionSelected
+            ? theme.bold(theme.fg('accent', action.label))
+            : theme.fg('muted', action.label);
+          this.listContainer.addChild(new Text(`${actionCursor}${actionText}`, 0, 0));
+        }
+      }
+    }
+
+    // Skipped servers
+    if (this.skipped.length > 0) {
+      this.listContainer.addChild(new Spacer(1));
+      this.listContainer.addChild(new Text(theme.fg('muted', 'Skipped:'), 0, 0));
+      for (let i = 0; i < this.skipped.length; i++) {
+        const s = this.skipped[i]!;
+        const idx = this.statuses.length + i;
+        const isSelected = idx === this.selectedIndex && !this.subMenuOpen;
+        const cursor = isSelected ? theme.fg('accent', '› ') : '  ';
+        const name = isSelected ? theme.bold(theme.fg('accent', s.name)) : s.name;
+        this.listContainer.addChild(
+          new Text(`${cursor}${theme.fg('warning', '⊘')} ${name} — ${theme.fg('muted', s.reason)}`, 0, 0),
+        );
+      }
+    }
+
+    // Empty state
+    if (totalItems === 0) {
+      this.listContainer.addChild(new Text(theme.fg('muted', 'No MCP servers configured'), 0, 0));
+    }
+
+    this.tui.requestRender();
+  }
+
+  /**
+   * Whether an OAuth flow is in flight for this server. True if either the local
+   * set (this selector instance started the flow) or the manager-owned status
+   * flag (survives close/reopen) says so.
+   */
+  private isAuthenticating(status: McpServerStatus): boolean {
+    return status.authenticating === true || this._authenticating.has(status.name);
+  }
+
+  private isBusy(): boolean {
+    return this.statuses.some(s => s.connecting || this.isAuthenticating(s)) || this._authenticating.size > 0;
+  }
+
+  private startPollingIfNeeded(): void {
+    if (this.pollTimer) return;
+    if (!this.isBusy()) return;
+
+    this.pollTimer = setInterval(() => {
+      // Don't refresh while in a detail view or mid-reload
+      if (this._detailView || this._reloading) return;
+
+      const fresh = this.getStatusesCallback();
+      this.statuses = fresh.statuses;
+      this.skipped = fresh.skipped;
+
+      // Clamp index
+      const total = this.getTotalItems();
+      if (this.selectedIndex >= total) {
+        this.selectedIndex = Math.max(0, total - 1);
+      }
+
+      this.updateList();
+
+      // Stop polling only when nothing is connecting and no auth flow is pending
+      if (!this.isBusy()) {
+        this.stopPolling();
+      }
+    }, 500);
+  }
+
+  private stopPolling(): void {
+    if (this.pollTimer) {
+      clearInterval(this.pollTimer);
+      this.pollTimer = null;
+    }
+  }
+
+  /** Clean up resources when component is removed. */
+  dispose(): void {
+    this.stopPolling();
+  }
+
+  handleInput(data: string): void {
+    const kb = getKeybindings();
+
+    // During reload, only allow closing the selector
+    if (this._reloading) {
+      if (kb.matches(data, 'tui.select.cancel')) {
+        this.onCloseCallback();
+      }
+      return;
+    }
+    const totalItems = this.getTotalItems();
+
+    // Detail view (tool list or error) — Esc goes back to server list
+    if (this._detailView) {
+      if (kb.matches(data, 'tui.select.cancel')) {
+        this._detailView = false;
+        this.updateList();
+      }
+      return;
+    }
+
+    if (this.subMenuOpen) {
+      this.handleSubMenuInput(data, kb);
+      return;
+    }
+
+    // Up arrow
+    if (kb.matches(data, 'tui.select.up')) {
+      if (totalItems === 0) return;
+      this.selectedIndex = this.selectedIndex === 0 ? totalItems - 1 : this.selectedIndex - 1;
+      this.updateList();
+    }
+    // Down arrow
+    else if (kb.matches(data, 'tui.select.down')) {
+      if (totalItems === 0) return;
+      this.selectedIndex = this.selectedIndex === totalItems - 1 ? 0 : this.selectedIndex + 1;
+      this.updateList();
+    }
+    // Enter — open sub-menu for the selected server
+    else if (kb.matches(data, 'tui.select.confirm')) {
+      if (this.selectedIndex < this.statuses.length) {
+        this.openSubMenu();
+      }
+      // Skipped servers have no sub-menu actions
+    }
+    // 'r' — reload all servers
+    else if (decodePrintableShortcut(data) === 'r') {
+      this.doReloadAll();
+    }
+    // Escape or Ctrl+C
+    else if (kb.matches(data, 'tui.select.cancel')) {
+      this.stopPolling();
+      this.onCloseCallback();
+    }
+  }
+
+  private openSubMenu(): void {
+    const status = this.statuses[this.selectedIndex];
+    if (!status) return;
+
+    if (status.disabled) {
+      this.subMenuActions = status.disabledScope === 'global' ? DISABLED_GLOBAL_ACTIONS : DISABLED_ACTIONS;
+    } else if (this.isAuthenticating(status)) {
+      // A server mid-OAuth shows a cancel path (the user may have closed the
+      // browser). Authoritative even if a polled refresh cleared `connecting`,
+      // and after a close/reopen via the manager-owned status flag.
+      this.subMenuActions = AUTHENTICATING_ACTIONS;
+    } else if (status.connecting) {
+      this.subMenuActions = CONNECTING_ACTIONS;
+    } else if (status.connected) {
+      this.subMenuActions = CONNECTED_ACTIONS;
+    } else if (status.needsAuth) {
+      this.subMenuActions = NEEDS_AUTH_ACTIONS;
+    } else {
+      this.subMenuActions = FAILED_ACTIONS;
+    }
+
+    this.subMenuOpen = true;
+    this.subMenuIndex = 0;
+    this.updateList();
+  }
+
+  private handleSubMenuInput(data: string, kb: ReturnType<typeof getKeybindings>): void {
+    // Up arrow
+    if (kb.matches(data, 'tui.select.up')) {
+      this.subMenuIndex = this.subMenuIndex === 0 ? this.subMenuActions.length - 1 : this.subMenuIndex - 1;
+      this.updateList();
+    }
+    // Down arrow
+    else if (kb.matches(data, 'tui.select.down')) {
+      this.subMenuIndex = this.subMenuIndex === this.subMenuActions.length - 1 ? 0 : this.subMenuIndex + 1;
+      this.updateList();
+    }
+    // Enter — execute action
+    else if (kb.matches(data, 'tui.select.confirm')) {
+      const action = this.subMenuActions[this.subMenuIndex];
+      if (!action || action.key === 'none') return;
+      this.executeAction(action.key);
+    }
+    // Escape — close sub-menu
+    else if (kb.matches(data, 'tui.select.cancel')) {
+      this.subMenuOpen = false;
+      this.updateList();
+    }
+  }
+
+  private executeAction(actionKey: string): void {
+    const status = this.statuses[this.selectedIndex];
+    if (!status) return;
+
+    switch (actionKey) {
+      case 'tools': {
+        this.subMenuOpen = false;
+        this.showToolList(status);
+        break;
+      }
+      case 'error': {
+        this.subMenuOpen = false;
+        this.showError(status);
+        break;
+      }
+      case 'logs': {
+        this.subMenuOpen = false;
+        this.showLogs(status);
+        break;
+      }
+      case 'reconnect': {
+        this.subMenuOpen = false;
+        this.doReconnectServer(status);
+        break;
+      }
+      case 'authenticate': {
+        this.subMenuOpen = false;
+        this.doAuthenticateServer(status);
+        break;
+      }
+      case 'cancel-authenticate': {
+        this.subMenuOpen = false;
+        this.doCancelAuthentication(status);
+        break;
+      }
+      case 'disable': {
+        this.subMenuOpen = false;
+        this.doSetServerDisabled(status, true, false);
+        break;
+      }
+      case 'disable-global': {
+        this.subMenuOpen = false;
+        this.doSetServerDisabled(status, true, true);
+        break;
+      }
+      case 'enable': {
+        this.subMenuOpen = false;
+        this.doSetServerDisabled(status, false, false);
+        break;
+      }
+      case 'enable-global': {
+        this.subMenuOpen = false;
+        this.doSetServerDisabled(status, false, true);
+        break;
+      }
+    }
+  }
+
+  private doSetServerDisabled(status: McpServerStatus, disabled: boolean, global: boolean): void {
+    const name = status.name;
+    // Disabling/enabling rebuilds every connection, so treat it like a reload:
+    // block input and show the reconnecting state until fresh statuses arrive.
+    this._reloading = true;
+    this.updateList();
+
+    this.onSetServerDisabledCallback(name, disabled, { global })
+      .then((result: { statuses: McpServerStatus[]; skipped: McpSkippedServer[] }) => {
+        this.statuses = result.statuses;
+        this.skipped = result.skipped;
+        // The rebuild disconnected everything, aborting any pending auth flows.
+        this._authenticating.clear();
+        this._cancelling.clear();
+        const total = this.getTotalItems();
+        if (this.selectedIndex >= total) {
+          this.selectedIndex = Math.max(0, total - 1);
+        }
+        const updated = result.statuses.find(s => s.name === name);
+        if (disabled) {
+          this.showInfoCallback(
+            global
+              ? `MCP: Disabled "${name}" globally (all projects). Re-enable it from /mcp.`
+              : `MCP: Disabled "${name}". Re-enable it from /mcp.`,
+          );
+        } else if (updated?.disabled) {
+          // Removed from one scope but the other still disables it.
+          this.showInfoCallback(
+            updated.disabledScope === 'global'
+              ? `MCP: "${name}" is still disabled globally — use "Enable globally" to re-enable it.`
+              : `MCP: "${name}" is still disabled in this project — use "Enable" to re-enable it.`,
+          );
+        } else if (updated?.connected) {
+          this.showInfoCallback(`MCP: Enabled "${name}" — ${updated.toolCount} tool(s)`);
+        } else if (updated?.needsAuth) {
+          this.showInfoCallback(`MCP: Enabled "${name}" — needs authentication \u2192 run /mcp to authenticate`);
+        } else {
+          this.showInfoCallback(
+            `MCP: Enabled "${name}" but it failed to connect: ${updated?.error ?? 'Unknown error'}`,
+          );
+        }
+      })
+      .catch((err: unknown) => {
+        const errMsg = err instanceof Error ? err.message : String(err);
+        this.showInfoCallback(`MCP: Failed to ${disabled ? 'disable' : 'enable'} "${name}": ${errMsg}`);
+      })
+      .finally(() => {
+        this._reloading = false;
+        this.updateList();
+      });
+  }
+
+  private doReloadAll(): void {
+    this._reloading = true;
+    this.updateList();
+
+    this.onReloadAllCallback()
+      .then((result: { statuses: McpServerStatus[]; skipped: McpSkippedServer[] }) => {
+        this.statuses = result.statuses;
+        this.skipped = result.skipped;
+        // Reload disconnects the client, which cancels any pending auth flow
+        // server-side. Drop authenticating markers for servers that no longer
+        // exist so isBusy() can settle and polling can stop.
+        const liveNames = new Set(result.statuses.map(s => s.name));
+        for (const name of this._authenticating) {
+          if (!liveNames.has(name)) this._authenticating.delete(name);
+        }
+        // Reload aborts every pending flow, so no cancel is still resolving.
+        this._cancelling.clear();
+        // Clamp selected index in case server count changed
+        const total = this.getTotalItems();
+        if (this.selectedIndex >= total) {
+          this.selectedIndex = Math.max(0, total - 1);
+        }
+        const connected = result.statuses.filter(s => s.connected);
+        const totalTools = connected.reduce((sum, s) => sum + s.toolCount, 0);
+        this.showInfoCallback(`MCP: Reloaded. ${connected.length} server(s) connected, ${totalTools} tool(s).`);
+        for (const s of result.statuses.filter(s => !s.connected && !s.disabled)) {
+          if (s.needsAuth) {
+            this.showInfoCallback(`MCP: \u26a0 "${s.name}" needs authentication \u2192 run /mcp to authenticate`);
+          } else {
+            this.showInfoCallback(`MCP: Failed to connect to "${s.name}": ${s.error ?? 'Unknown error'}`);
+          }
+        }
+      })
+      .catch(() => {
+        this.showInfoCallback('MCP: Reload failed. Retrying may help.');
+      })
+      .finally(() => {
+        this._reloading = false;
+        this.updateList();
+      });
+  }
+
+  private doReconnectServer(status: McpServerStatus): void {
+    if (status.connecting) return;
+    const name = status.name;
+
+    // Mark this server as connecting
+    const idx = this.statuses.findIndex(s => s.name === name);
+    if (idx >= 0) {
+      this.statuses[idx] = {
+        name,
+        connected: false,
+        connecting: true,
+        toolCount: 0,
+        toolNames: [],
+        transport: status.transport,
+      };
+    }
+    this.updateList();
+
+    this.onReconnectServerCallback(name)
+      .then((updated: McpServerStatus) => {
+        // If a reload-all started, ignore stale reconnect results
+        if (this._reloading) return;
+        const i = this.statuses.findIndex(s => s.name === name);
+        if (i >= 0) {
+          this.statuses[i] = updated;
+        }
+        if (updated.connected) {
+          this.showInfoCallback(`MCP: Reconnected "${name}" — ${updated.toolCount} tool(s)`);
+        } else {
+          this.showInfoCallback(`MCP: Failed to reconnect "${name}": ${updated.error ?? 'Unknown error'}`);
+        }
+      })
+      .catch((err: unknown) => {
+        if (this._reloading) return;
+        const errMsg = err instanceof Error ? err.message : String(err);
+        const i = this.statuses.findIndex(s => s.name === name);
+        if (i >= 0) {
+          this.statuses[i] = {
+            name,
+            connected: false,
+            connecting: false,
+            toolCount: 0,
+            toolNames: [],
+            transport: status.transport,
+            error: errMsg,
+          };
+        }
+        this.showInfoCallback(`MCP: Failed to reconnect "${name}": ${errMsg}`);
+      })
+      .finally(() => {
+        if (!this._reloading) {
+          this.updateList();
+        }
+      });
+  }
+
+  private doAuthenticateServer(status: McpServerStatus): void {
+    if (status.connecting) return;
+    const name = status.name;
+
+    // Mark this server as connecting while the OAuth flow runs
+    const idx = this.statuses.findIndex(s => s.name === name);
+    if (idx >= 0) {
+      this.statuses[idx] = {
+        name,
+        connected: false,
+        connecting: true,
+        toolCount: 0,
+        toolNames: [],
+        transport: status.transport,
+      };
+    }
+    this._authenticating.add(name);
+    // Surface the cancel path immediately: keep this server selected and open
+    // its sub-menu with "Cancel authentication" pre-selected, so a user who
+    // abandons the browser sign-in can just press Enter to back out.
+    if (idx >= 0) {
+      this.selectedIndex = idx;
+    }
+    this.openSubMenu();
+    this.startPollingIfNeeded();
+    this.showInfoCallback(`MCP: Authenticating "${name}" — complete the sign-in in your browser.`);
+
+    this.onAuthenticateServerCallback(name)
+      .then((updated: McpServerStatus) => {
+        // If a reload-all started, ignore stale authenticate results
+        if (this._reloading) return;
+        const i = this.statuses.findIndex(s => s.name === name);
+        if (i >= 0) {
+          this.statuses[i] = updated;
+        }
+        if (updated.connected) {
+          this.showInfoCallback(`MCP: Authenticated "${name}" — ${updated.toolCount} tool(s)`);
+        } else if (!updated.cancelled && !this._cancelling.has(name)) {
+          // A deliberate cancel also resolves with a failed status; the manager
+          // marks it `cancelled` (which survives a reopened selector) and the
+          // cancel path already messaged the user, so don't stack a "Failed" toast.
+          this.showInfoCallback(`MCP: Failed to authenticate "${name}": ${updated.error ?? 'Unknown error'}`);
+        }
+      })
+      .catch((err: unknown) => {
+        if (this._reloading) return;
+        const errMsg = err instanceof Error ? err.message : String(err);
+        const i = this.statuses.findIndex(s => s.name === name);
+        if (i >= 0) {
+          this.statuses[i] = {
+            name,
+            connected: false,
+            connecting: false,
+            toolCount: 0,
+            toolNames: [],
+            transport: status.transport,
+            error: errMsg,
+            needsAuth: true,
+          };
+        }
+        // A rejection carries no status object, so we can't read the durable
+        // `cancelled` flag here; fall back to the local set, which is populated
+        // for the same-instance cancel that produced this rejection.
+        if (!this._cancelling.has(name)) {
+          this.showInfoCallback(`MCP: Failed to authenticate "${name}": ${errMsg}`);
+        }
+      })
+      .finally(() => {
+        this._authenticating.delete(name);
+        this._cancelling.delete(name);
+        // The auth flow has ended (connected, failed, or cancelled). Close the
+        // auto-opened cancel sub-menu so the row shows its resolved state — but
+        // only if the user is still looking at *this* server's sub-menu, so we
+        // don't yank shut a different server's menu they navigated to meanwhile.
+        if (this.subMenuOpen && this.statuses[this.selectedIndex]?.name === name) {
+          this.subMenuOpen = false;
+        }
+        if (!this._reloading) {
+          this.updateList();
+        }
+      });
+  }
+
+  private doCancelAuthentication(status: McpServerStatus): void {
+    const name = status.name;
+    // Nothing to cancel unless a flow is actually in flight for this server.
+    // Accept the manager-owned flag too, so a reopened selector (whose local
+    // set was discarded with the previous instance) can still cancel.
+    if (!this.isAuthenticating(status)) return;
+
+    // Mark the cancel so the pending authenticate flow suppresses its "Failed"
+    // toast, then repaint immediately so the row reflects the cancelling state
+    // instead of waiting for the authenticate promise to settle.
+    this._cancelling.add(name);
+    this.showInfoCallback(`MCP: Cancelling authentication for "${name}"...`);
+    this.updateList();
+    this.onCancelAuthenticateServerCallback(name)
+      .then((cancelled: boolean) => {
+        if (cancelled) {
+          this.showInfoCallback(`MCP: Cancelled authentication for "${name}".`);
+        }
+      })
+      .catch(() => {
+        // The pending authenticate flow's own rejection handler restores the
+        // server's needs-auth status; a failed cancel needs no extra message.
+      });
+  }
+
+  private showToolList(status: McpServerStatus): void {
+    this.listContainer.clear();
+
+    this.listContainer.addChild(
+      new Text(theme.bold(`Tools for ${status.name}`) + theme.fg('muted', ` (${status.toolCount})`), 0, 0),
+    );
+    this.listContainer.addChild(new Spacer(1));
+
+    if (status.toolNames.length === 0) {
+      this.listContainer.addChild(new Text(theme.fg('muted', 'No tools available'), 0, 0));
+    } else {
+      for (const toolName of status.toolNames) {
+        this.listContainer.addChild(new Text(`  ${theme.fg('muted', '–')} ${toolName}`, 0, 0));
+      }
+    }
+
+    this.listContainer.addChild(new Spacer(1));
+    this.listContainer.addChild(new Text(theme.fg('muted', 'Press Esc to go back'), 0, 0));
+
+    this._detailView = true;
+    this.tui.requestRender();
+  }
+
+  private showError(status: McpServerStatus): void {
+    this.listContainer.clear();
+
+    this.listContainer.addChild(new Text(theme.bold(`Error for ${status.name}`), 0, 0));
+    this.listContainer.addChild(new Spacer(1));
+    this.listContainer.addChild(new Text(theme.fg('error', status.error ?? 'Unknown error'), 0, 0));
+    this.listContainer.addChild(new Spacer(1));
+    this.listContainer.addChild(new Text(theme.fg('muted', 'Press Esc to go back'), 0, 0));
+
+    this._detailView = true;
+    this.tui.requestRender();
+  }
+
+  private showLogs(status: McpServerStatus): void {
+    this.listContainer.clear();
+
+    const logs = this.getServerLogsCallback(status.name);
+
+    this.listContainer.addChild(
+      new Text(theme.bold(`Logs for ${status.name}`) + theme.fg('muted', ` (${logs.length} lines)`), 0, 0),
+    );
+    this.listContainer.addChild(new Spacer(1));
+
+    if (logs.length === 0) {
+      const hint =
+        status.transport === 'http'
+          ? 'No logs available (HTTP servers do not produce stderr output)'
+          : 'No logs captured yet';
+      this.listContainer.addChild(new Text(theme.fg('muted', hint), 0, 0));
+    } else {
+      // Show last 50 lines to avoid overwhelming the overlay
+      const tail = logs.slice(-50);
+      if (logs.length > 50) {
+        this.listContainer.addChild(
+          new Text(theme.fg('muted', `  ... ${logs.length - 50} earlier lines omitted`), 0, 0),
+        );
+      }
+      for (const line of tail) {
+        this.listContainer.addChild(new Text(theme.fg('muted', `  ${line}`), 0, 0));
+      }
+    }
+
+    this.listContainer.addChild(new Spacer(1));
+    this.listContainer.addChild(new Text(theme.fg('muted', 'Press Esc to go back'), 0, 0));
+
+    this._detailView = true;
+    this.tui.requestRender();
+  }
+}

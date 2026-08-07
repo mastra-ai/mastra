@@ -1,0 +1,34 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "userMessage": "Use the delayed headless MCP lookup tool and report its payload.",
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_headless_mcp_lookup_e2e",
+            "name": "e2e_headless_mcp_delayed_lookup",
+            "arguments": {
+              "query": "headless-e2e"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "match": {
+        "hasToolResult": true,
+        "toolCallId": "call_headless_mcp_lookup_e2e",
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat"
+      },
+      "response": {
+        "content": "Headless MCP lookup completed with payload MC_HEADLESS_MCP_RESULT:headless-e2e:ok."
+      }
+    }
+  ]
+}

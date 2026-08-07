@@ -24,6 +24,7 @@ import type {
   AnyExportedSpan,
   TraceState,
   TracingOptions,
+  CorrelationContext,
   LoggerContext,
   MetricsContext,
   ObservabilityEvent,
@@ -38,6 +39,7 @@ import { LoggerContextImpl } from '../context/logger';
 import { MetricsContextImpl } from '../context/metrics';
 import { emitAutoExtractedMetrics, emitTokenMetricsForUsage } from '../metrics/auto-extract';
 import { CardinalityFilter } from '../metrics/cardinality';
+import { resolveModelId } from '../model-id';
 import { NoOpSpan } from '../spans';
 import { addUsageStats } from '../usage';
 
@@ -68,6 +70,13 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
    * a span's `metadata.environment` isn't set.
    */
   #mastraEnvironment?: string;
+
+  /**
+   * For excluded MODEL_GENERATION spans whose constructor clears `attributes`,
+   * we stash the lightweight provider/model from creation options so
+   * `captureExcludedModelUsage` can still build cost context.
+   */
+  #excludedModelMeta = new WeakMap<AnySpan, { provider?: string; model?: string }>();
 
   constructor(config: ObservabilityInstanceConfig) {
     super({ component: RegisteredLogger.OBSERVABILITY, name: config.serviceName });
@@ -234,6 +243,17 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       requestContext,
     });
 
+    // For excluded MODEL_GENERATION spans the constructor clears attributes,
+    // losing provider/model needed for cost estimation. Stash them from the
+    // original creation options so captureExcludedModelUsage can use them.
+    if (rest.type === SpanType.MODEL_GENERATION && this.config.excludeSpanTypes?.includes(SpanType.MODEL_GENERATION)) {
+      const attrs = rest.attributes as ModelGenerationAttributes | undefined;
+      const model = resolveModelId(attrs?.responseModel, attrs?.model);
+      if (attrs?.provider || model) {
+        this.#excludedModelMeta.set(span, { provider: attrs?.provider, model });
+      }
+    }
+
     if (span.isEvent) {
       this.emitSpanEnded(span);
     } else {
@@ -391,6 +411,18 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
   // ============================================================================
 
   /**
+   * Minimal correlation context for span-less logger and metrics contexts,
+   * so their signals still carry the Mastra-level environment and serviceName
+   * instead of persisting null.
+   */
+  private buildFallbackCorrelationContext(): CorrelationContext {
+    return {
+      environment: this.#mastraEnvironment,
+      serviceName: this.config.serviceName,
+    };
+  }
+
+  /**
    * Get a LoggerContext correlated to a span.
    * Called by the context-factory in core (deriveLoggerContext) so that
    * `observabilityContext.loggerVNext` is a real logger instead of no-op.
@@ -400,7 +432,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       return noOpLoggerContext;
     }
 
-    const correlationContext = span?.getCorrelationContext?.();
+    const correlationContext = span?.getCorrelationContext?.() ?? this.buildFallbackCorrelationContext();
     const metadata: Record<string, unknown> | undefined = span?.metadata ? structuredClone(span.metadata) : undefined;
 
     return new LoggerContextImpl({
@@ -419,7 +451,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
    * `observabilityContext.metrics` is a real metrics context instead of no-op.
    */
   getMetricsContext(span?: AnySpan): MetricsContext {
-    const correlationContext = span?.getCorrelationContext?.();
+    const correlationContext = span?.getCorrelationContext?.() ?? this.buildFallbackCorrelationContext();
     const metadata: Record<string, unknown> | undefined = span?.metadata ? structuredClone(span.metadata) : undefined;
 
     return new MetricsContextImpl({
@@ -495,6 +527,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       // place to read MODEL_GENERATION usage for a filtered span is the
       // end() options being passed in right now.
       const rollupTarget = this.captureModelUsageRollup(span, options);
+      const excludedModelUsage = this.captureExcludedModelUsage(span, options);
 
       originalEnd(options);
 
@@ -502,7 +535,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
         this.applyUsageRollup(rollupTarget);
       }
 
-      this.emitSpanEnded(span);
+      this.emitSpanEnded(span, excludedModelUsage);
     };
 
     span.update = (options: UpdateSpanOptions<TType>) => {
@@ -677,6 +710,28 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
     return exportedSpan;
   }
 
+  /** Export an already-processed span, returning undefined if filtered out. */
+  private getProcessedSpanForExport(span: AnySpan): AnyExportedSpan | undefined {
+    if (!span.isValid) return undefined;
+    if (span.isInternal && !this.config.includeInternalSpans) return undefined;
+
+    if (this.config.excludeSpanTypes?.includes(span.type)) return undefined;
+
+    const exportedSpan = span.exportSpan(this.config.includeInternalSpans);
+    if (!exportedSpan) return undefined;
+
+    if (this.config.spanFilter) {
+      try {
+        if (!this.config.spanFilter(exportedSpan)) return undefined;
+      } catch (error) {
+        this.logger.error(`[Observability] spanFilter error`, error);
+        // On filter error, keep the span to avoid silent data loss
+      }
+    }
+
+    return exportedSpan;
+  }
+
   /**
    * Emit a span started event.
    * Routes through the ObservabilityBus so exporters receive it via onTracingEvent.
@@ -694,26 +749,66 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
    * Emits any auto-extracted metrics while the live span tree is still available,
    * then routes the exported tracing event through the ObservabilityBus.
    */
-  protected emitSpanEnded(span: AnySpan): void {
-    const exportedSpan = this.getSpanForExport(span);
+  protected emitSpanEnded(
+    span: AnySpan,
+    excludedModelUsage?: { usage: UsageStats; provider?: string; model?: string },
+  ): void {
+    let processedSpan: AnySpan | undefined;
+    let spanWasProcessed = false;
 
-    if (exportedSpan) {
+    // Emit metrics independently of export filtering: users who exclude span
+    // types (e.g. AGENT_RUN, TOOL_CALL) to cut per-span costs should still get
+    // duration, token, and cost metrics. Processors still run first so metric
+    // metadata gets the same redaction/transforms as exported spans.
+    if (span.isValid && !(span.isInternal && !this.config.includeInternalSpans)) {
+      processedSpan = this.processSpan(span);
+      spanWasProcessed = true;
+
       try {
-        // TODO: We intentionally export first so auto-extracted metrics are skipped
-        // when the span is filtered out by processors. Metrics still use the live
-        // span for correlation and parent traversal, but current span processors
-        // mutate spans in place during export, so those mutations can still affect
-        // the live span before metrics run. Future options to explore:
-        // 1. Make span processors pure/non-mutating.
-        // 2. Split trace processors from metric-specific processors/enrichers.
-        // 3. Revisit whether auto-extracted metrics should run before export.
-        emitAutoExtractedMetrics(span, this.getMetricsContext(span));
+        if (processedSpan) {
+          emitAutoExtractedMetrics(processedSpan, this.getMetricsContext(processedSpan));
+          const processedAttrs = processedSpan.attributes as ModelGenerationAttributes | undefined;
+          if (excludedModelUsage && !processedAttrs?.usage) {
+            emitTokenMetricsForUsage(
+              excludedModelUsage.usage,
+              excludedModelUsage.provider,
+              excludedModelUsage.model,
+              this.getMetricsContext(processedSpan),
+            );
+          }
+        }
       } catch (err) {
         this.logger.error('[Observability] Auto-extraction error:', err);
       }
+    }
 
+    const exportedSpan = spanWasProcessed
+      ? processedSpan
+        ? this.getProcessedSpanForExport(processedSpan)
+        : undefined
+      : this.getSpanForExport(span);
+    if (exportedSpan) {
       const event: TracingEvent = { type: TracingEventType.SPAN_ENDED, exportedSpan };
       this.emitTracingEvent(event);
+      return;
+    }
+
+    // The span ended but was filtered out, so no bridge will see its end event.
+    // Tell the bridge directly so it can drop the state it created for this span.
+    this.releaseBridgeSpan(span);
+  }
+
+  /**
+   * Release bridge state for a span that ended without being exported.
+   */
+  private releaseBridgeSpan(span: AnySpan): void {
+    const bridge = this.getBridge();
+    if (!bridge?.releaseSpan) return;
+
+    try {
+      bridge.releaseSpan(span.id, span.traceId);
+    } catch (error) {
+      this.logger.error(`[Observability] Bridge releaseSpan error [spanId=${span.id}]`, error);
     }
   }
 
@@ -758,9 +853,44 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
     if (!ancestor) return undefined;
 
     const provider = endAttrs?.provider ?? liveAttrs?.provider;
-    const model = endAttrs?.responseModel ?? endAttrs?.model ?? liveAttrs?.responseModel ?? liveAttrs?.model;
+    const model = resolveModelId(endAttrs?.responseModel, endAttrs?.model, liveAttrs?.responseModel, liveAttrs?.model);
 
     return { ancestor, usage, provider, model };
+  }
+
+  /**
+   * When a non-internal MODEL_GENERATION span is excluded by `excludeSpanTypes`,
+   * the BaseSpan constructor clears start-time attributes and DefaultSpan.end()
+   * drops end-time attributes before auto-extraction can read them. Capture
+   * usage from end options and provider/model from the creation-time stash so
+   * token and cost metrics still emit even though the trace span is filtered out.
+   */
+  private captureExcludedModelUsage<TType extends SpanType>(
+    span: Span<TType>,
+    endOptions: EndSpanOptions<TType> | undefined,
+  ): { usage: UsageStats; provider?: string; model?: string } | undefined {
+    if (span.type !== SpanType.MODEL_GENERATION) return undefined;
+    if (span.isInternal) return undefined;
+    if (!this.config.excludeSpanTypes?.includes(SpanType.MODEL_GENERATION)) return undefined;
+
+    const endAttrs = (endOptions?.attributes as ModelGenerationAttributes | undefined) ?? undefined;
+    const liveAttrs = span.attributes as ModelGenerationAttributes | undefined;
+    const usage = endAttrs?.usage ?? liveAttrs?.usage;
+    if (!usage) return undefined;
+
+    // For excluded spans, the constructor clears start-time attributes
+    // (provider, model). Fall back to the stash populated at creation time.
+    const stashed = this.#excludedModelMeta.get(span);
+    const provider = endAttrs?.provider ?? liveAttrs?.provider ?? stashed?.provider;
+    const model = resolveModelId(
+      endAttrs?.responseModel,
+      endAttrs?.model,
+      liveAttrs?.responseModel,
+      liveAttrs?.model,
+      stashed?.model,
+    );
+
+    return { usage, provider, model };
   }
 
   /**

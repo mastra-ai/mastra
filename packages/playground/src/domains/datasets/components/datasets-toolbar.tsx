@@ -1,4 +1,7 @@
-import { Button, ButtonsGroup, SelectFieldBlock, ListSearch } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
+import { SelectFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
+import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
 import { Plus, XIcon } from 'lucide-react';
 import { DATASET_EXPERIMENT_OPTIONS, DATASET_TARGET_OPTIONS } from './datasets-list/helpers';
 
@@ -40,7 +43,7 @@ export function DatasetsToolbar({
 }: DatasetsToolbarProps) {
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <div className="min-w-64 max-w-120 flex-1">
+      <div className="max-w-120 min-w-64 flex-1">
         <ListSearch
           label="Search datasets"
           placeholder="Filter by dataset name"

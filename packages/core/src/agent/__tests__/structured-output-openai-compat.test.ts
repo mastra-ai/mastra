@@ -27,17 +27,27 @@ const completionResponse = {
   finalResult: null,
 };
 
-function createMockOpenAIModel(opts: { provider?: string; modelId?: string } = {}) {
+function createMockOpenAIModel(
+  opts: {
+    provider?: string;
+    modelId?: string;
+    onGenerate?: (options: { responseFormat?: unknown }) => void;
+    response?: unknown;
+  } = {},
+) {
   return new MockLanguageModelV2({
     provider: opts.provider ?? 'openai.responses',
     modelId: opts.modelId,
-    doGenerate: async () => ({
-      rawCall: { rawPrompt: null, rawSettings: {} },
-      finishReason: 'stop' as const,
-      usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-      content: [{ type: 'text' as const, text: JSON.stringify(completionResponse) }],
-      warnings: [],
-    }),
+    doGenerate: async options => {
+      opts.onGenerate?.(options);
+      return {
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop' as const,
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        content: [{ type: 'text' as const, text: JSON.stringify(opts.response ?? completionResponse) }],
+        warnings: [],
+      };
+    },
     doStream: async () => ({
       rawCall: { rawPrompt: null, rawSettings: {} },
       warnings: [],
@@ -45,7 +55,7 @@ function createMockOpenAIModel(opts: { provider?: string; modelId?: string } = {
         { type: 'stream-start', warnings: [] },
         { type: 'response-metadata', id: 'id-0', modelId: 'mock', timestamp: new Date(0) },
         { type: 'text-start', id: 'text-1' },
-        { type: 'text-delta', id: 'text-1', delta: JSON.stringify(completionResponse) },
+        { type: 'text-delta', id: 'text-1', delta: JSON.stringify(opts.response ?? completionResponse) },
         { type: 'text-end', id: 'text-1' },
         {
           type: 'finish',
@@ -118,5 +128,45 @@ describe('OpenAI compat layer in agent.ts with structured output', () => {
     });
 
     expect(result.object.finalResult).toBeUndefined();
+  });
+
+  it('sends an OpenAI-strict structured output schema to the model', async () => {
+    let responseFormat: any;
+    const model = createMockOpenAIModel({
+      modelId: undefined,
+      response: { name: 'Ada', optionalNote: null, nested: { maybeCount: null } },
+      onGenerate: options => {
+        responseFormat = options.responseFormat;
+      },
+    });
+    const agent = new Agent({ id: 'test', name: 'test', instructions: 'test', model });
+
+    await agent.generate('test', {
+      structuredOutput: {
+        schema: z.object({
+          name: z.string(),
+          optionalNote: z.string().optional(),
+          nested: z
+            .object({
+              maybeCount: z.number().optional(),
+            })
+            .optional(),
+        }),
+      },
+    });
+
+    expect(responseFormat?.type).toBe('json');
+    expect(responseFormat?.schema).toMatchObject({
+      type: 'object',
+      required: ['name', 'optionalNote', 'nested'],
+      additionalProperties: false,
+      properties: {
+        nested: {
+          type: 'object',
+          required: ['maybeCount'],
+          additionalProperties: false,
+        },
+      },
+    });
   });
 });

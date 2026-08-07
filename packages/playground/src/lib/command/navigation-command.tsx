@@ -1,24 +1,37 @@
+import { CommandEmpty, CommandGroup } from '@mastra/playground-ui/components/Command';
 import {
-  useMaybeSidebar,
-  AgentIcon,
-  McpServerIcon,
-  SettingsIcon,
-  ToolsIcon,
-  WorkflowIcon,
-  CommandDialog,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-  CommandSeparator,
-  CommandShortcut,
-} from '@mastra/playground-ui';
-import { Cpu, EyeIcon, GaugeIcon, PackageIcon, PanelLeftIcon } from 'lucide-react';
+  CommandPaletteBody,
+  CommandPaletteDialog,
+  CommandPaletteFooter,
+  CommandPaletteInput,
+  CommandPaletteItem,
+  CommandPaletteRail,
+  CommandPaletteResults,
+  CommandPaletteScope,
+} from '@mastra/playground-ui/components/CommandPalette';
+import { useMaybeSidebarState } from '@mastra/playground-ui/components/MainSidebar';
+import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
+import { McpServerIcon } from '@mastra/playground-ui/icons/McpServerIcon';
+import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
+import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
+import {
+  Cpu,
+  EyeIcon,
+  GaugeIcon,
+  Layers3Icon,
+  PackageIcon,
+  PanelLeftIcon,
+  RouteIcon,
+  SearchIcon,
+  SlidersHorizontalIcon,
+} from 'lucide-react';
 import React from 'react';
 
 import { useNavigationCommand } from './use-navigation-command';
 import { useAgents } from '@/domains/agents/hooks/use-agents';
+import { usePermissions } from '@/domains/auth/hooks/use-permissions';
+import { getPermissionForRoute, hasRoutePermission } from '@/domains/auth/route-permissions';
+import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
 import { useMCPServers } from '@/domains/mcps/hooks/use-mcp-servers';
 import { useProcessors } from '@/domains/processors/hooks/use-processors';
 import { useScorers } from '@/domains/scores/hooks/use-scorers';
@@ -26,12 +39,435 @@ import { useTools } from '@/domains/tools/hooks/use-all-tools';
 import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
 import { useLinkComponent } from '@/lib/framework';
 import { useMastraPlatform } from '@/lib/mastra-platform';
+import { bottomNav, mainNav } from '@/lib/nav/nav-items';
+import type { NavItem } from '@/lib/nav/nav-items';
+
+type CommandScope = 'all' | 'paths' | 'agents' | 'workflows' | 'tooling' | 'evaluation' | 'observability' | 'settings';
+
+type ScopeOption = {
+  id: CommandScope;
+  label: string;
+  icon: React.ReactNode;
+  count: number;
+};
+
+function getRouteValue(item: NavItem, sectionTitle?: string) {
+  return [item.name, item.url, sectionTitle, item.docs?.label, 'path route navigate'].filter(Boolean).join(' ');
+}
+
+function getRouteBadge(sectionTitle?: string) {
+  if (!sectionTitle || sectionTitle === 'Studio') return 'Path';
+  return sectionTitle;
+}
+
+function getObservabilityEntityPath(entity: string) {
+  return `/observability?entity=${encodeURIComponent(entity)}`;
+}
+
+type NavigationSection = {
+  key: string;
+  title: string;
+  items: NavItem[];
+};
+
+type NavigationPaths = ReturnType<typeof useLinkComponent>['paths'];
+type SidebarContextValue = NonNullable<ReturnType<typeof useMaybeSidebarState>>;
+type HandleSelect = (path: string) => void;
+type AgentEntry = [string, { name: string }];
+type WorkflowEntry = [string, { name: string }];
+type ToolEntry = [string, { id: string }];
+type ProcessorEntry = {
+  id: string;
+  name?: string;
+  isWorkflow?: boolean;
+};
+type McpServerEntry = {
+  id: string;
+  name: string;
+};
+type ScorerEntry = [
+  string,
+  {
+    scorer?: {
+      config?: {
+        id?: string;
+        name?: string;
+      };
+    };
+  },
+];
+
+const CommandRail = ({
+  scopeOptions,
+  activeScope,
+  onScopeChange,
+}: {
+  scopeOptions: ScopeOption[];
+  activeScope: CommandScope;
+  onScopeChange: (scope: CommandScope) => void;
+}) => (
+  <CommandPaletteRail aria-label="Search categories">
+    {scopeOptions.map(option => (
+      <CommandPaletteScope
+        key={option.id}
+        icon={option.icon}
+        label={option.label}
+        count={option.count}
+        active={activeScope === option.id}
+        onSelect={() => onScopeChange(option.id)}
+      />
+    ))}
+  </CommandPaletteRail>
+);
+
+const CommandResults = ({
+  sidebar,
+  activeScope,
+  closeCommand,
+}: {
+  sidebar: SidebarContextValue | null;
+  activeScope: CommandScope;
+  closeCommand: () => void;
+}) => {
+  if (!sidebar || (activeScope !== 'all' && activeScope !== 'settings')) return null;
+
+  return (
+    <CommandGroup heading="Commands">
+      <CommandPaletteItem
+        value="toggle sidebar collapse expand layout panel"
+        onSelect={() => {
+          sidebar.toggleSidebar();
+          closeCommand();
+        }}
+        icon={<PanelLeftIcon />}
+        title="Toggle Sidebar"
+        subtitle="Studio layout"
+      />
+    </CommandGroup>
+  );
+};
+
+const PathSectionResults = ({
+  sections,
+  handleSelect,
+}: {
+  sections: NavigationSection[];
+  handleSelect: HandleSelect;
+}) => (
+  <>
+    {sections.map(section => (
+      <CommandGroup key={section.key} heading={section.title}>
+        {section.items.map(item => {
+          const Icon = item.Icon;
+          return (
+            <CommandPaletteItem
+              key={item.url}
+              value={getRouteValue(item, section.title)}
+              onSelect={() => handleSelect(item.url)}
+              icon={<Icon />}
+              title={item.name}
+              subtitle="Studio path"
+              path={item.url}
+              badge={getRouteBadge(section.title)}
+            />
+          );
+        })}
+      </CommandGroup>
+    ))}
+  </>
+);
+
+const AgentResults = ({
+  visible,
+  entries,
+  paths,
+  handleSelect,
+}: {
+  visible: boolean;
+  entries: AgentEntry[];
+  paths: NavigationPaths;
+  handleSelect: HandleSelect;
+}) => {
+  if (!visible || entries.length === 0) return null;
+
+  return (
+    <CommandGroup heading="Agents">
+      {entries.map(([id, agent]) => (
+        <CommandPaletteItem
+          key={id}
+          value={`${agent.name} ${id} chat agent conversation thread ${paths.agentLink(id)}`}
+          onSelect={() => handleSelect(paths.agentLink(id))}
+          icon={<AgentIcon />}
+          title={agent.name}
+          subtitle="Agent chat"
+          path={paths.agentLink(id)}
+          badge="Agent"
+        />
+      ))}
+    </CommandGroup>
+  );
+};
+
+const WorkflowResults = ({
+  visible,
+  entries,
+  paths,
+  handleSelect,
+}: {
+  visible: boolean;
+  entries: WorkflowEntry[];
+  paths: NavigationPaths;
+  handleSelect: HandleSelect;
+}) => {
+  if (!visible || entries.length === 0) return null;
+
+  return (
+    <CommandGroup heading="Workflows">
+      {entries.map(([id, workflow]) => (
+        <CommandPaletteItem
+          key={id}
+          value={`${workflow.name} ${id} graph workflow view ${paths.workflowLink(id)}`}
+          onSelect={() => handleSelect(paths.workflowLink(id))}
+          icon={<WorkflowIcon />}
+          title={workflow.name}
+          subtitle="Workflow graph"
+          path={paths.workflowLink(id)}
+          badge="Workflow"
+        />
+      ))}
+    </CommandGroup>
+  );
+};
+
+const ToolResults = ({
+  visible,
+  entries,
+  paths,
+  handleSelect,
+}: {
+  visible: boolean;
+  entries: ToolEntry[];
+  paths: NavigationPaths;
+  handleSelect: HandleSelect;
+}) => {
+  if (!visible || entries.length === 0) return null;
+
+  return (
+    <CommandGroup heading="Tools">
+      {entries.map(([id, tool]) => (
+        <CommandPaletteItem
+          key={id}
+          value={`tool ${tool.id} ${id} ${paths.toolLink(id)}`}
+          onSelect={() => handleSelect(paths.toolLink(id))}
+          icon={<ToolsIcon />}
+          title={tool.id}
+          subtitle="Tool definition"
+          path={paths.toolLink(id)}
+          badge="Tool"
+        />
+      ))}
+    </CommandGroup>
+  );
+};
+
+const ProcessorResults = ({
+  visible,
+  entries,
+  paths,
+  handleSelect,
+}: {
+  visible: boolean;
+  entries: ProcessorEntry[];
+  paths: NavigationPaths;
+  handleSelect: HandleSelect;
+}) => {
+  if (!visible || entries.length === 0) return null;
+
+  return (
+    <CommandGroup heading="Processors">
+      {entries.map(processor => {
+        const displayName = processor.name || processor.id;
+        const targetPath = processor.isWorkflow
+          ? paths.workflowLink(processor.id) + '/graph'
+          : paths.processorLink(processor.id);
+        return (
+          <CommandPaletteItem
+            key={processor.id}
+            value={`processor ${displayName} ${processor.id} ${targetPath}`}
+            onSelect={() => handleSelect(targetPath)}
+            icon={<Cpu />}
+            title={displayName}
+            subtitle={processor.isWorkflow ? 'Workflow processor' : 'Processor'}
+            path={targetPath}
+            badge="Processor"
+          />
+        );
+      })}
+    </CommandGroup>
+  );
+};
+
+const McpServerResults = ({
+  visible,
+  entries,
+  paths,
+  handleSelect,
+}: {
+  visible: boolean;
+  entries: McpServerEntry[];
+  paths: NavigationPaths;
+  handleSelect: HandleSelect;
+}) => {
+  if (!visible || entries.length === 0) return null;
+
+  return (
+    <CommandGroup heading="MCP Servers">
+      {entries.map(server => (
+        <CommandPaletteItem
+          key={server.id}
+          value={`mcp server ${server.name} ${server.id} ${paths.mcpServerLink(server.id)}`}
+          onSelect={() => handleSelect(paths.mcpServerLink(server.id))}
+          icon={<McpServerIcon />}
+          title={server.name}
+          subtitle="MCP server"
+          path={paths.mcpServerLink(server.id)}
+          badge="MCP"
+        />
+      ))}
+    </CommandGroup>
+  );
+};
+
+const ObservabilityResults = ({
+  visible,
+  agentEntries,
+  workflowEntries,
+  handleSelect,
+}: {
+  visible: boolean;
+  agentEntries: AgentEntry[];
+  workflowEntries: WorkflowEntry[];
+  handleSelect: HandleSelect;
+}) => {
+  if (!visible) return null;
+
+  return (
+    <>
+      <CommandGroup heading="Observability">
+        <CommandPaletteItem
+          value="observability traces telemetry signals /observability"
+          onSelect={() => handleSelect('/observability')}
+          icon={<EyeIcon />}
+          title="Traces"
+          subtitle="Runtime traces"
+          path="/observability"
+          badge="Signal"
+        />
+        <CommandPaletteItem
+          value="metrics usage latency performance tokens /metrics"
+          onSelect={() => handleSelect('/metrics')}
+          icon={<GaugeIcon />}
+          title="Metrics"
+          subtitle="Runtime metrics"
+          path="/metrics"
+          badge="Signal"
+        />
+        <CommandPaletteItem
+          value="logs events runtime /logs"
+          onSelect={() => handleSelect('/logs')}
+          icon={<EyeIcon />}
+          title="Logs"
+          subtitle="Runtime logs"
+          path="/logs"
+          badge="Signal"
+        />
+      </CommandGroup>
+
+      {agentEntries.length > 0 && (
+        <CommandGroup heading="Agent Traces">
+          {agentEntries.map(([id, agent]) => {
+            const path = getObservabilityEntityPath(id);
+
+            return (
+              <CommandPaletteItem
+                key={id}
+                value={`${agent.name} ${id} traces agent observability telemetry`}
+                onSelect={() => handleSelect(path)}
+                icon={<EyeIcon />}
+                title={agent.name}
+                subtitle="Agent traces"
+                path={path}
+                badge="Trace"
+              />
+            );
+          })}
+        </CommandGroup>
+      )}
+
+      {workflowEntries.length > 0 && (
+        <CommandGroup heading="Workflow Traces">
+          {workflowEntries.map(([id, workflow]) => {
+            const path = getObservabilityEntityPath(workflow.name);
+
+            return (
+              <CommandPaletteItem
+                key={id}
+                value={`${workflow.name} ${id} traces workflow observability telemetry`}
+                onSelect={() => handleSelect(path)}
+                icon={<EyeIcon />}
+                title={workflow.name}
+                subtitle="Workflow traces"
+                path={path}
+                badge="Trace"
+              />
+            );
+          })}
+        </CommandGroup>
+      )}
+    </>
+  );
+};
+
+const EvaluationResults = ({
+  visible,
+  entries,
+  paths,
+  handleSelect,
+}: {
+  visible: boolean;
+  entries: ScorerEntry[];
+  paths: NavigationPaths;
+  handleSelect: HandleSelect;
+}) => {
+  if (!visible || entries.length === 0) return null;
+
+  return (
+    <CommandGroup heading="Scorers">
+      {entries.map(([id, scorer]) => {
+        const name = scorer.scorer?.config?.name || scorer.scorer?.config?.id || id;
+        return (
+          <CommandPaletteItem
+            key={id}
+            value={`scorer score evaluation ${name} ${id} ${paths.scorerLink(id)}`}
+            onSelect={() => handleSelect(paths.scorerLink(id))}
+            icon={<GaugeIcon />}
+            title={name}
+            subtitle="Evaluation scorer"
+            path={paths.scorerLink(id)}
+            badge="Scorer"
+          />
+        );
+      })}
+    </CommandGroup>
+  );
+};
 
 export const NavigationCommand = () => {
   const { open, setOpen } = useNavigationCommand();
   const { navigate, paths } = useLinkComponent();
   const { isMastraPlatform } = useMastraPlatform();
-  const sidebar = useMaybeSidebar();
+  const sidebar = useMaybeSidebarState();
+  const [activeScope, setActiveScope] = React.useState<CommandScope>('all');
 
   const { data: agents = {} } = useAgents();
   const { data: workflows = {} } = useWorkflows();
@@ -39,11 +475,34 @@ export const NavigationCommand = () => {
   const { data: processors = {} } = useProcessors();
   const { data: mcpServers = [] } = useMCPServers();
   const { data: scorers = {} } = useScorers();
+  const { isCmsAvailable, isLoading: isCmsLoading } = useIsCmsAvailable();
+  const { hasPermission, hasAnyPermission, isLoading: isPermissionsLoading } = usePermissions();
+
+  const updateOpen = (nextOpen: boolean) => {
+    setOpen(nextOpen);
+    if (!nextOpen) setActiveScope('all');
+  };
+
+  const closeCommand = () => updateOpen(false);
 
   const handleSelect = (path: string) => {
     navigate(path);
-    setOpen(false);
+    closeCommand();
   };
+
+  const filterNavItem = React.useCallback(
+    (item: NavItem) => {
+      if (item.hidden) return false;
+      if (item.url === '/prompts' && !isCmsAvailable && !isCmsLoading) return false;
+      if (isMastraPlatform && !item.isOnMastraPlatform) return false;
+
+      const requiredPermission = getPermissionForRoute(item.url);
+      if (isPermissionsLoading && requiredPermission && requiredPermission !== 'public') return false;
+
+      return hasRoutePermission(requiredPermission, hasPermission, hasAnyPermission);
+    },
+    [hasAnyPermission, hasPermission, isCmsAvailable, isCmsLoading, isMastraPlatform, isPermissionsLoading],
+  );
 
   const agentEntries = Object.entries(agents);
   const workflowEntries = Object.entries(workflows);
@@ -51,195 +510,119 @@ export const NavigationCommand = () => {
   const processorEntries = Object.values(processors).filter(p => p.phases && p.phases.length > 0);
   const scorerEntries = Object.entries(scorers);
 
+  const navigationSections = React.useMemo(() => {
+    const sections: NavigationSection[] = [];
+    for (const section of mainNav) {
+      const items = section.items.filter(filterNavItem);
+      if (items.length > 0) sections.push({ key: section.key, title: section.title, items });
+    }
+
+    const studioItems: NavItem[] = [
+      ...bottomNav.filter(filterNavItem),
+      ...(!isMastraPlatform
+        ? [
+            {
+              name: 'Templates',
+              url: '/templates',
+              Icon: PackageIcon,
+              isOnMastraPlatform: false,
+            },
+          ]
+        : []),
+    ];
+
+    if (studioItems.length === 0) return sections;
+    return [...sections, { key: 'studio', title: 'Studio', items: studioItems }];
+  }, [filterNavItem, isMastraPlatform]);
+
+  const pathCount = navigationSections.reduce((count, section) => count + section.items.length, 0);
+  const toolingCount = toolEntries.length + processorEntries.length + mcpServers.length;
+  const evaluationCount = scorerEntries.length;
+  const observabilityCount = agentEntries.length + workflowEntries.length + 3;
+  const settingsCount = navigationSections.find(section => section.key === 'studio')?.items.length ?? 0;
+  const allCount =
+    pathCount + agentEntries.length + workflowEntries.length + toolingCount + evaluationCount + observabilityCount;
+
+  const scopeOptions: ScopeOption[] = [
+    { id: 'all', label: 'All', icon: <SearchIcon />, count: allCount },
+    { id: 'paths', label: 'Paths', icon: <RouteIcon />, count: pathCount },
+    { id: 'agents', label: 'Agents', icon: <AgentIcon />, count: agentEntries.length },
+    { id: 'workflows', label: 'Workflows', icon: <WorkflowIcon />, count: workflowEntries.length },
+    { id: 'tooling', label: 'Tooling', icon: <Layers3Icon />, count: toolingCount },
+    { id: 'evaluation', label: 'Evaluation', icon: <GaugeIcon />, count: evaluationCount },
+    { id: 'observability', label: 'Intelligence', icon: <EyeIcon />, count: observabilityCount },
+    { id: 'settings', label: 'Studio', icon: <SlidersHorizontalIcon />, count: settingsCount },
+  ];
+
+  const showPaths = activeScope === 'all' || activeScope === 'paths';
+  const showAgents = activeScope === 'all' || activeScope === 'agents';
+  const showWorkflows = activeScope === 'all' || activeScope === 'workflows';
+  const showTooling = activeScope === 'all' || activeScope === 'tooling';
+  const showEvaluation = activeScope === 'all' || activeScope === 'evaluation';
+  const showObservability = activeScope === 'all' || activeScope === 'observability';
+  const showSettings = activeScope === 'settings';
+
+  const visiblePathSections = React.useMemo(() => {
+    const sections: NavigationSection[] = [];
+    for (const section of navigationSections) {
+      if (showSettings) {
+        if (section.key === 'studio') sections.push(section);
+        continue;
+      }
+
+      const isVisible =
+        (activeScope === 'evaluation' && section.key === 'evaluation') ||
+        (activeScope === 'observability' && section.key === 'observability') ||
+        (showPaths && (activeScope === 'all' || section.key !== 'studio'));
+
+      if (isVisible) sections.push(section);
+    }
+    return sections;
+  }, [activeScope, navigationSections, showPaths, showSettings]);
+
   return (
-    <CommandDialog
+    <CommandPaletteDialog
       open={open}
-      onOpenChange={setOpen}
-      title="Navigation"
-      description="Search and navigate to any entity"
+      onOpenChange={updateOpen}
+      title="Mastra Studio Search"
+      description="Search Studio routes and runtime entities"
     >
-      <CommandInput placeholder="Search or navigate..." />
-      <CommandList>
-        <CommandEmpty>No results found.</CommandEmpty>
-
-        <CommandGroup heading="Navigation">
-          {sidebar && (
-            <CommandItem
-              value="toggle sidebar collapse expand"
-              onSelect={() => {
-                sidebar.toggleSidebar();
-                setOpen(false);
-              }}
-            >
-              <PanelLeftIcon className="text-neutral3" />
-              <span>Toggle Sidebar</span>
-              <CommandShortcut>Ctrl+B</CommandShortcut>
-            </CommandItem>
-          )}
-          <CommandItem value="all agents" onSelect={() => handleSelect('/agents')}>
-            <AgentIcon className="text-neutral3" />
-            <span>All Agents</span>
-          </CommandItem>
-          <CommandItem value="all workflows" onSelect={() => handleSelect('/workflows')}>
-            <WorkflowIcon className="text-neutral3" />
-            <span>All Workflows</span>
-          </CommandItem>
-          <CommandItem value="all tools" onSelect={() => handleSelect('/tools')}>
-            <ToolsIcon className="text-neutral3" />
-            <span>All Tools</span>
-          </CommandItem>
-          <CommandItem value="all scorers" onSelect={() => handleSelect('/scorers')}>
-            <GaugeIcon className="text-neutral3" />
-            <span>All Scorers</span>
-          </CommandItem>
-          <CommandItem value="all processors" onSelect={() => handleSelect('/processors')}>
-            <Cpu className="text-neutral3" />
-            <span>All Processors</span>
-          </CommandItem>
-          <CommandItem value="all mcp servers" onSelect={() => handleSelect('/mcps')}>
-            <McpServerIcon className="text-neutral3" />
-            <span>All MCP Servers</span>
-          </CommandItem>
-          <CommandItem value="observability traces" onSelect={() => handleSelect('/observability')}>
-            <EyeIcon className="text-neutral3" />
-            <span>Observability</span>
-          </CommandItem>
-          {!isMastraPlatform && (
-            <>
-              <CommandItem value="settings" onSelect={() => handleSelect('/settings')}>
-                <SettingsIcon className="text-neutral3" />
-                <span>Settings</span>
-              </CommandItem>
-              <CommandItem value="templates" onSelect={() => handleSelect('/templates')}>
-                <PackageIcon className="text-neutral3" />
-                <span>Templates</span>
-              </CommandItem>
-            </>
-          )}
-        </CommandGroup>
-
-        {agentEntries.length > 0 && (
-          <>
-            <CommandSeparator />
-            <CommandGroup heading="Agents">
-              {agentEntries.map(([id, agent]) => (
-                <React.Fragment key={id}>
-                  <CommandItem value={`${agent.name} chat agent`} onSelect={() => handleSelect(paths.agentLink(id))}>
-                    <AgentIcon className="text-neutral3" />
-                    <span>{agent.name}: Chat</span>
-                  </CommandItem>
-                  <CommandItem
-                    value={`${agent.name} traces agent observability`}
-                    onSelect={() => handleSelect(`/observability?entity=${id}`)}
-                  >
-                    <EyeIcon className="text-neutral3" />
-                    <span>{agent.name}: Traces</span>
-                  </CommandItem>
-                </React.Fragment>
-              ))}
-            </CommandGroup>
-          </>
-        )}
-
-        {workflowEntries.length > 0 && (
-          <>
-            <CommandSeparator />
-            <CommandGroup heading="Workflows">
-              {workflowEntries.map(([id, workflow]) => (
-                <React.Fragment key={id}>
-                  <CommandItem
-                    value={`${workflow.name} graph workflow view`}
-                    onSelect={() => handleSelect(paths.workflowLink(id))}
-                  >
-                    <WorkflowIcon className="text-neutral3" />
-                    <span>{workflow.name}: Graph</span>
-                  </CommandItem>
-                  <CommandItem
-                    value={`${workflow.name} traces workflow observability`}
-                    onSelect={() => handleSelect(`/observability?entity=${workflow.name}`)}
-                  >
-                    <EyeIcon className="text-neutral3" />
-                    <span>{workflow.name}: Traces</span>
-                  </CommandItem>
-                </React.Fragment>
-              ))}
-            </CommandGroup>
-          </>
-        )}
-
-        {toolEntries.length > 0 && (
-          <>
-            <CommandSeparator />
-            <CommandGroup heading="Tools">
-              {toolEntries.map(([id, tool]) => (
-                <CommandItem key={id} value={`tool ${tool.id}`} onSelect={() => handleSelect(paths.toolLink(id))}>
-                  <ToolsIcon className="text-neutral3" />
-                  <span>{tool.id}</span>
-                </CommandItem>
-              ))}
-            </CommandGroup>
-          </>
-        )}
-
-        {scorerEntries.length > 0 && (
-          <>
-            <CommandSeparator />
-            <CommandGroup heading="Scorers">
-              {scorerEntries.map(([id, scorer]) => {
-                const name = scorer.scorer?.config?.name || scorer.scorer?.config?.id || id;
-                return (
-                  <CommandItem key={id} value={`scorer ${name}`} onSelect={() => handleSelect(paths.scorerLink(id))}>
-                    <GaugeIcon className="text-neutral3" />
-                    <span>{name}</span>
-                  </CommandItem>
-                );
-              })}
-            </CommandGroup>
-          </>
-        )}
-
-        {processorEntries.length > 0 && (
-          <>
-            <CommandSeparator />
-            <CommandGroup heading="Processors">
-              {processorEntries.map(processor => {
-                const displayName = processor.name || processor.id;
-                const targetPath = processor.isWorkflow
-                  ? paths.workflowLink(processor.id) + '/graph'
-                  : paths.processorLink(processor.id);
-                return (
-                  <CommandItem
-                    key={processor.id}
-                    value={`processor ${displayName}`}
-                    onSelect={() => handleSelect(targetPath)}
-                  >
-                    <Cpu className="text-neutral3" />
-                    <span>{displayName}</span>
-                  </CommandItem>
-                );
-              })}
-            </CommandGroup>
-          </>
-        )}
-
-        {mcpServers.length > 0 && (
-          <>
-            <CommandSeparator />
-            <CommandGroup heading="MCP Servers">
-              {mcpServers.map(server => (
-                <CommandItem
-                  key={server.id}
-                  value={`mcp server ${server.name}`}
-                  onSelect={() => handleSelect(paths.mcpServerLink(server.id))}
-                >
-                  <McpServerIcon className="text-neutral3" />
-                  <span>{server.name}</span>
-                </CommandItem>
-              ))}
-            </CommandGroup>
-          </>
-        )}
-      </CommandList>
-    </CommandDialog>
+      <CommandPaletteInput placeholder="Search Studio, agents, workflows, tools, paths..." />
+      <CommandPaletteBody>
+        <CommandRail scopeOptions={scopeOptions} activeScope={activeScope} onScopeChange={setActiveScope} />
+        <CommandPaletteResults aria-label="Search results" footer={<CommandPaletteFooter label="Studio search" />}>
+          <CommandEmpty>No matching results.</CommandEmpty>
+          <CommandResults sidebar={sidebar} activeScope={activeScope} closeCommand={closeCommand} />
+          <PathSectionResults sections={visiblePathSections} handleSelect={handleSelect} />
+          <AgentResults visible={showAgents} entries={agentEntries} paths={paths} handleSelect={handleSelect} />
+          <WorkflowResults
+            visible={showWorkflows}
+            entries={workflowEntries}
+            paths={paths}
+            handleSelect={handleSelect}
+          />
+          <ToolResults visible={showTooling} entries={toolEntries} paths={paths} handleSelect={handleSelect} />
+          <ProcessorResults
+            visible={showTooling}
+            entries={processorEntries}
+            paths={paths}
+            handleSelect={handleSelect}
+          />
+          <McpServerResults visible={showTooling} entries={mcpServers} paths={paths} handleSelect={handleSelect} />
+          <ObservabilityResults
+            visible={showObservability}
+            agentEntries={agentEntries}
+            workflowEntries={workflowEntries}
+            handleSelect={handleSelect}
+          />
+          <EvaluationResults
+            visible={showEvaluation}
+            entries={scorerEntries}
+            paths={paths}
+            handleSelect={handleSelect}
+          />
+        </CommandPaletteResults>
+      </CommandPaletteBody>
+    </CommandPaletteDialog>
   );
 };

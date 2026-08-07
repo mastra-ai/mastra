@@ -1,6 +1,9 @@
 'use client';
 
-import { Button, ButtonsGroup, Chip, SelectFieldBlock } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
+import { Chip } from '@mastra/playground-ui/components/Chip';
+import { SelectFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
 import { GitCompare, MoveRightIcon, XIcon } from 'lucide-react';
 import type { DatasetExperimentsFilters } from '../../hooks/use-dataset-experiments';
 
@@ -47,9 +50,9 @@ export function DatasetExperimentsToolbar({
 
   if (isSelectionActive) {
     return (
-      <div className="flex items-center justify-end gap-4 w-full">
+      <div className="flex w-full items-center justify-end gap-4">
         <div className="flex gap-5">
-          <div className="text-sm text-neutral3 flex items-center gap-2 pl-6">
+          <div className="text-neutral3 flex items-center gap-2 pl-6 text-sm">
             <Chip size="large" color={selectedCount < 2 ? 'red' : 'green'}>
               {selectedCount}
             </Chip>
@@ -58,7 +61,7 @@ export function DatasetExperimentsToolbar({
           </div>
           <ButtonsGroup>
             <Button variant="primary" disabled={selectedCount !== 2} onClick={onExecuteCompare}>
-              <GitCompare className="w-4 h-4" />
+              <GitCompare className="h-4 w-4" />
               Compare Experiments
             </Button>
             <Button onClick={onCancelSelection}>Cancel</Button>
@@ -69,7 +72,7 @@ export function DatasetExperimentsToolbar({
   }
 
   return (
-    <div className="flex items-center justify-between gap-4 w-full">
+    <div className="flex w-full items-center justify-between gap-4">
       <ButtonsGroup>
         <SelectFieldBlock
           label="Status"

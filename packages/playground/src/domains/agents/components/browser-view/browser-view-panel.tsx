@@ -1,5 +1,7 @@
-import { Button, StatusBadge, cn } from '@mastra/playground-ui';
-import { X, Minimize2, ExternalLink, Globe, PanelRight } from 'lucide-react';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { StatusBadge } from '@mastra/playground-ui/components/StatusBadge';
+import { cn } from '@mastra/playground-ui/utils/cn';
+import { X, Minimize2, ExternalLink, Globe } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import { useBrowserSession } from '../../context/browser-session-context';
 import type { StreamStatus } from '../../hooks/use-browser-stream';
@@ -43,18 +45,16 @@ function getStatusBadgeConfig(status: StreamStatus): {
  * Shows the browser screencast in a large centered modal with:
  * - URL bar and status
  * - Browser actions below the screencast
- * - Controls to minimize, switch to sidebar, or close
+ * - Controls to minimize or close
  *
  * The panel is always mounted to preserve WebSocket connection.
  * Visibility is controlled via viewMode in browser session context.
  */
-export function BrowserViewPanel({ hideSidebar = false }: { hideSidebar?: boolean }) {
-  const { viewMode, status, currentUrl, hide, closeBrowser, setViewMode } = useBrowserSession();
+export function BrowserViewPanel() {
+  const { viewMode, status, currentUrl, hide, closeBrowser } = useBrowserSession();
   const isModal = viewMode === 'modal';
   const dialogRef = useRef<HTMLDivElement>(null);
   useRestoreFocus(isModal, dialogRef);
-
-  const handleOpenSidebar = () => setViewMode('sidebar');
 
   const handleOpenExternal = () => {
     if (!currentUrl) return;
@@ -119,9 +119,9 @@ export function BrowserViewPanel({ hideSidebar = false }: { hideSidebar?: boolea
         onClick={e => e.stopPropagation()}
       >
         {/* Header with URL bar and controls */}
-        <div className="flex items-center gap-3 px-4 py-3 border-b border-border1 shrink-0">
-          <Globe className="h-4 w-4 text-neutral4 shrink-0" />
-          <div className="flex-1 min-w-0 px-3 py-1.5 bg-surface3 rounded-md border border-border1">
+        <div className="border-border1 flex shrink-0 items-center gap-3 border-b px-4 py-3">
+          <Globe className="text-neutral4 h-4 w-4 shrink-0" />
+          <div className="bg-surface3 border-border1 min-w-0 flex-1 rounded-md border px-3 py-1.5">
             <span className={cn('text-sm truncate block', currentUrl ? 'text-neutral5' : 'text-neutral3 italic')}>
               {currentUrl || 'No URL'}
             </span>
@@ -129,12 +129,7 @@ export function BrowserViewPanel({ hideSidebar = false }: { hideSidebar?: boolea
           <StatusBadge variant={statusConfig.variant} size="sm" withDot pulse={statusConfig.pulse}>
             {statusConfig.label}
           </StatusBadge>
-          <div className="flex items-center gap-1 ml-2">
-            {!hideSidebar && (
-              <Button variant="ghost" size="icon-sm" tooltip="Open in sidebar" onClick={handleOpenSidebar}>
-                <PanelRight className="h-4 w-4" />
-              </Button>
-            )}
+          <div className="ml-2 flex items-center gap-1">
             <Button variant="ghost" size="icon-sm" tooltip="Minimize to chat" onClick={hide}>
               <Minimize2 className="h-4 w-4" />
             </Button>
@@ -153,7 +148,7 @@ export function BrowserViewPanel({ hideSidebar = false }: { hideSidebar?: boolea
         <div className="flex-1 overflow-y-auto">
           {/* Screencast */}
           <div className="p-4">
-            <BrowserViewFrame className="w-full max-h-[60vh]" />
+            <BrowserViewFrame className="max-h-[60vh] w-full" />
           </div>
 
           {/* Browser actions history */}

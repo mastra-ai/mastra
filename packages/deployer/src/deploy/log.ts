@@ -19,10 +19,23 @@ export const createPinoStream = (logger: IMastraLogger) => {
   });
 };
 
+/**
+ * Args are joined into a shell command (`shell: true` is required for package
+ * manager shims on Windows), so only allow characters that appear in package
+ * specifiers and CLI flags — never shell metacharacters (CodeQL
+ * js/shell-command-constructed-from-input).
+ */
+const SAFE_SHELL_ARG = /^[\w@%+=:,./^~-]*$/;
+
 export function createChildProcessLogger({ logger, root }: { logger: IMastraLogger; root: string }) {
   const pinoStream = createPinoStream(logger);
   return async ({ cmd, args, env }: { cmd: string; args: string[]; env: Record<string, string> }) => {
     try {
+      for (const arg of args) {
+        if (!SAFE_SHELL_ARG.test(arg)) {
+          throw new Error(`Refusing to pass unsafe argument to shell command: ${JSON.stringify(arg)}`);
+        }
+      }
       const subprocess = spawn(cmd, args, {
         cwd: root,
         shell: true,

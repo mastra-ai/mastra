@@ -188,6 +188,137 @@ function toolsTest(version: 'v1' | 'v2' | 'v3') {
       expect(message).toBe('Executed successfully');
     });
 
+    it('runs agent hooks through the public generate path', async () => {
+      const calls: Array<{ phase: 'before' | 'after'; toolName: string; input: unknown; output?: unknown }> = [];
+      const testAgent = new Agent({
+        id: 'test-agent',
+        name: 'Test agent',
+        instructions: 'You are an agent that calls testTool',
+        model: mockModel,
+        tools: integration.getStaticTools(),
+        hooks: {
+          beforeToolCall: ({ toolName, input }) => calls.push({ phase: 'before', toolName, input }),
+          afterToolCall: ({ toolName, input, output }) => calls.push({ phase: 'after', toolName, input, output }),
+        },
+      });
+
+      const mastra = new Mastra({
+        agents: {
+          testAgent,
+        },
+        logger: false,
+      });
+      const agentOne = mastra.getAgent('testAgent');
+
+      if (version === 'v1') {
+        await agentOne.generateLegacy('Call testTool', { toolChoice: 'required' });
+      } else {
+        await agentOne.generate('Call testTool');
+      }
+
+      expect(calls.slice(0, 2)).toEqual([
+        { phase: 'before', toolName: 'testTool', input: {} },
+        {
+          phase: 'after',
+          toolName: 'testTool',
+          input: {},
+          output: { message: 'Executed successfully' },
+        },
+      ]);
+    });
+
+    it('uses per-execution hooks through the public generate path', async () => {
+      const configBeforeToolCall = vi.fn();
+      const runBeforeToolCall = vi.fn(() => ({ proceed: false as const, output: { message: 'blocked' } }));
+      const execute = vi.fn(async () => ({ message: 'executed' }));
+      const testTool = createTool({
+        id: 'testTool',
+        description: 'Test tool',
+        inputSchema: z.object({}),
+        execute,
+      });
+      const testAgent = new Agent({
+        id: 'test-agent',
+        name: 'Test agent',
+        instructions: 'You are an agent that calls testTool',
+        model: mockModel,
+        tools: { testTool },
+        hooks: { beforeToolCall: configBeforeToolCall },
+      });
+      const mastra = new Mastra({
+        agents: {
+          testAgent,
+        },
+        logger: false,
+      });
+      const agentOne = mastra.getAgent('testAgent');
+
+      let toolResult;
+      if (version === 'v1') {
+        const response = await agentOne.generateLegacy('Call testTool', {
+          toolChoice: 'required',
+          hooks: {
+            beforeToolCall: runBeforeToolCall,
+          },
+        });
+        toolResult = response.toolResults.find((result: any) => result.toolName === 'testTool');
+      } else {
+        const response = await agentOne.generate('Call testTool', {
+          hooks: {
+            beforeToolCall: runBeforeToolCall,
+          },
+        });
+        toolResult = response.toolResults.find((result: any) => result.payload.toolName === 'testTool')?.payload;
+      }
+
+      expect(toolResult?.result?.message).toBe('blocked');
+      expect(configBeforeToolCall).not.toHaveBeenCalled();
+      expect(runBeforeToolCall).toHaveBeenCalledWith(expect.objectContaining({ toolName: 'testTool', input: {} }));
+      expect(execute).not.toHaveBeenCalled();
+    });
+
+    it('runs afterToolCall when a tool errors', async () => {
+      const afterToolCall = vi.fn();
+      const testTool = createTool({
+        id: 'testTool',
+        description: 'Test tool',
+        inputSchema: z.object({}),
+        execute: async () => {
+          throw new Error('tool failed');
+        },
+      });
+      const testAgent = new Agent({
+        id: 'test-agent',
+        name: 'Test agent',
+        instructions: 'You are an agent that calls testTool',
+        model: mockModel,
+        tools: { testTool },
+        hooks: { afterToolCall },
+      });
+      const mastra = new Mastra({
+        agents: {
+          testAgent,
+        },
+        logger: false,
+      });
+      const agentOne = mastra.getAgent('testAgent');
+
+      if (version === 'v1') {
+        await agentOne.generateLegacy('Call testTool', { toolChoice: 'required' }).catch(() => undefined);
+      } else {
+        await agentOne.generate('Call testTool').catch(() => undefined);
+      }
+
+      expect(afterToolCall).toHaveBeenCalledWith(
+        expect.objectContaining({
+          toolName: 'testTool',
+          input: {},
+          output: undefined,
+          error: expect.any(Error),
+        }),
+      );
+    });
+
     it('should call findUserTool with parameters', async () => {
       // Create a new mock model for this test that calls findUserTool
       let findUserToolModel: MockLanguageModelV1 | MockLanguageModelV2 | MockLanguageModelV3;
@@ -1435,6 +1566,85 @@ describe('requireApproval property preservation', () => {
     // can evaluate it per call instead of falling back to the boolean flag.
     expect((tools.transferFunds as any).needsApprovalFn).toBe(needsApprovalFn);
   });
+
+  it('runs configured hooks around agent tool execution', async () => {
+    const calls: Array<{ phase: string; toolName: string; input: unknown; output?: unknown }> = [];
+    const testTool = createTool({
+      id: 'test-tool',
+      description: 'Test tool',
+      inputSchema: z.object({ value: z.string() }),
+      execute: async ({ value }) => ({ value }),
+    });
+    const agent = new Agent({
+      id: 'test-agent',
+      name: 'Test Agent',
+      instructions: 'Test agent for hooks',
+      model: new MockLanguageModelV2({
+        doGenerate: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+          content: [{ type: 'text', text: 'ok' }],
+          warnings: [],
+        }),
+      }),
+      tools: { testTool },
+      hooks: {
+        beforeToolCall: ({ toolName, input }) => calls.push({ phase: 'before', toolName, input }),
+        afterToolCall: ({ toolName, input, output }) => calls.push({ phase: 'after', toolName, input, output }),
+      },
+    });
+
+    const tools = await agent['convertTools']({
+      requestContext: new RequestContext(),
+      methodType: 'generate',
+    });
+    const input = { value: 'ok' };
+    const output = await tools.testTool.execute?.(input, {} as any);
+
+    expect(output).toEqual({ value: 'ok' });
+    expect(calls).toEqual([
+      { phase: 'before', toolName: 'testTool', input },
+      { phase: 'after', toolName: 'testTool', input, output: { value: 'ok' } },
+    ]);
+  });
+
+  it('allows per-execution hooks to short-circuit agent tool execution', async () => {
+    const execute = vi.fn(async () => ({ value: 'executed' }));
+    const testTool = createTool({
+      id: 'test-tool',
+      description: 'Test tool',
+      inputSchema: z.object({ value: z.string() }),
+      execute,
+    });
+    const agent = new Agent({
+      id: 'test-agent',
+      name: 'Test Agent',
+      instructions: 'Test agent for hooks',
+      model: new MockLanguageModelV2({
+        doGenerate: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+          content: [{ type: 'text', text: 'ok' }],
+          warnings: [],
+        }),
+      }),
+      tools: { testTool },
+    });
+
+    const tools = await agent['convertTools']({
+      requestContext: new RequestContext(),
+      methodType: 'generate',
+      hooks: {
+        beforeToolCall: () => ({ proceed: false, output: { value: 'blocked' } }),
+      },
+    });
+    const output = await tools.testTool.execute?.({ value: 'ok' }, {} as any);
+
+    expect(output).toEqual({ value: 'blocked' });
+    expect(execute).not.toHaveBeenCalled();
+  });
 });
 
 describe('sub-agent prompt input normalization (GitHub #14154)', () => {
@@ -1505,5 +1715,63 @@ describe('sub-agent prompt input normalization (GitHub #14154)', () => {
     const subAgentTool = tools['agent-subAgent'];
     expect(subAgentTool).toBeDefined();
     expect(subAgentTool.description).toContain('subAgent');
+  });
+
+  it('reuses sub-agent tool schemas across conversions', async () => {
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+        text: 'ok',
+        content: [{ type: 'text', text: 'ok' }],
+        warnings: [],
+      }),
+    });
+
+    const subAgent = new Agent({
+      id: 'sub-agent',
+      name: 'Sub Agent',
+      instructions: 'You are a sub-agent',
+      model: mockModel,
+    });
+
+    const parentAgent = new Agent({
+      id: 'parent-agent',
+      name: 'Parent Agent',
+      instructions: 'You are a parent agent',
+      model: mockModel,
+      agents: { subAgent },
+    });
+
+    const getSubAgentToolSchemasSpy = vi.spyOn(parentAgent as any, 'getSubAgentToolSchemas');
+    let firstTools!: Record<string, any>;
+    let secondTools!: Record<string, any>;
+    let firstSchemas: any;
+    let secondSchemas: any;
+
+    try {
+      firstTools = await parentAgent['convertTools']({
+        requestContext: new RequestContext(),
+        methodType: 'generate',
+      });
+      secondTools = await parentAgent['convertTools']({
+        requestContext: new RequestContext(),
+        methodType: 'generate',
+      });
+
+      expect(getSubAgentToolSchemasSpy).toHaveBeenCalledTimes(2);
+      firstSchemas = getSubAgentToolSchemasSpy.mock.results[0]?.value;
+      secondSchemas = getSubAgentToolSchemasSpy.mock.results[1]?.value;
+    } finally {
+      getSubAgentToolSchemasSpy.mockRestore();
+    }
+
+    const firstSubAgentTool = firstTools['agent-subAgent'];
+    const secondSubAgentTool = secondTools['agent-subAgent'];
+
+    expect(secondSubAgentTool).not.toBe(firstSubAgentTool);
+    expect(secondSchemas.inputSchema).toBe(firstSchemas.inputSchema);
+    expect(secondSchemas.outputSchema).toBe(firstSchemas.outputSchema);
   });
 });

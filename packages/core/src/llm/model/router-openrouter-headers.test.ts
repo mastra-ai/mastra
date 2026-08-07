@@ -2,15 +2,15 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Agent } from '../../agent/index.js';
 import { createMockModel } from '../../test-utils/llm-mock.js';
 
-// Mock the @openrouter/ai-sdk-provider-v5 module BEFORE importing it
-vi.mock('@openrouter/ai-sdk-provider-v5', async () => {
+// Mock the @openrouter/ai-sdk-provider-v6 module BEFORE importing it
+vi.mock('@openrouter/ai-sdk-provider-v6', async () => {
   return {
     createOpenRouter: vi.fn(),
   };
 });
 
 // Now import the mocked module
-const { createOpenRouter } = await import('@openrouter/ai-sdk-provider-v5');
+const { createOpenRouter } = await import('@openrouter/ai-sdk-provider-v6');
 
 describe('ModelRouter - OpenRouter Headers Support', () => {
   beforeEach(() => {
@@ -53,6 +53,7 @@ describe('ModelRouter - OpenRouter Headers Support', () => {
       // Verify createOpenRouter was called with the headers
       expect(createOpenRouter).toHaveBeenCalledWith({
         apiKey: 'test-openrouter-key',
+        baseURL: 'https://openrouter.ai/api/v1',
         headers: {
           'User-Agent': expect.stringMatching(/^mastra/),
           'HTTP-Referer': 'http://my-service/',
@@ -85,6 +86,7 @@ describe('ModelRouter - OpenRouter Headers Support', () => {
       // Verify createOpenRouter was called with the headers
       expect(createOpenRouter).toHaveBeenCalledWith({
         apiKey: 'test-openrouter-key',
+        baseURL: 'https://openrouter.ai/api/v1',
         headers: {
           'User-Agent': expect.stringMatching(/^mastra/),
           'HTTP-Referer': 'https://myapp.com',
@@ -106,6 +108,7 @@ describe('ModelRouter - OpenRouter Headers Support', () => {
       // Verify createOpenRouter was called with only the User-Agent header
       expect(createOpenRouter).toHaveBeenCalledWith({
         apiKey: 'test-openrouter-key',
+        baseURL: 'https://openrouter.ai/api/v1',
         headers: {
           'User-Agent': expect.stringMatching(/^mastra/),
         },
@@ -133,6 +136,7 @@ describe('ModelRouter - OpenRouter Headers Support', () => {
       // Verify createOpenRouter was called with custom API key and headers
       expect(createOpenRouter).toHaveBeenCalledWith({
         apiKey: customApiKey,
+        baseURL: 'https://openrouter.ai/api/v1',
         headers: {
           'User-Agent': expect.stringMatching(/^mastra/),
           'HTTP-Referer': 'https://example.com',
@@ -162,6 +166,7 @@ describe('ModelRouter - OpenRouter Headers Support', () => {
       // Verify all headers were passed
       expect(createOpenRouter).toHaveBeenCalledWith({
         apiKey: 'test-openrouter-key',
+        baseURL: 'https://openrouter.ai/api/v1',
         headers: {
           'User-Agent': expect.stringMatching(/^mastra/),
           'HTTP-Referer': 'https://myapp.com',
@@ -191,6 +196,7 @@ describe('ModelRouter - OpenRouter Headers Support', () => {
       // Verify headers were passed from dynamic config
       expect(createOpenRouter).toHaveBeenCalledWith({
         apiKey: 'test-openrouter-key',
+        baseURL: 'https://openrouter.ai/api/v1',
         headers: {
           'User-Agent': expect.stringMatching(/^mastra/),
           'HTTP-Referer': 'https://dynamic.com',
@@ -233,6 +239,7 @@ describe('ModelRouter - OpenRouter Headers Support', () => {
       expect(createOpenRouter).toHaveBeenCalledTimes(2);
       expect(createOpenRouter).toHaveBeenNthCalledWith(1, {
         apiKey: 'test-openrouter-key',
+        baseURL: 'https://openrouter.ai/api/v1',
         headers: {
           'User-Agent': expect.stringMatching(/^mastra/),
           'X-Title': 'App1',
@@ -240,6 +247,7 @@ describe('ModelRouter - OpenRouter Headers Support', () => {
       });
       expect(createOpenRouter).toHaveBeenNthCalledWith(2, {
         apiKey: 'test-openrouter-key',
+        baseURL: 'https://openrouter.ai/api/v1',
         headers: {
           'User-Agent': expect.stringMatching(/^mastra/),
           'X-Title': 'App2',
@@ -308,6 +316,7 @@ describe('ModelRouter - OpenRouter Headers Support', () => {
       // Verify headers were passed even without env var
       expect(createOpenRouter).toHaveBeenCalledWith({
         apiKey: 'custom-key-no-env',
+        baseURL: 'https://openrouter.ai/api/v1',
         headers: {
           'User-Agent': expect.stringMatching(/^mastra/),
           'HTTP-Referer': 'http://my-service/',

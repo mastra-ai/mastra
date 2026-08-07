@@ -1,7 +1,7 @@
 import { BlobStore, TABLE_SKILL_BLOBS, TABLE_SCHEMAS } from '@mastra/core/storage';
 import type { StorageBlobEntry } from '@mastra/core/storage';
 
-import { PgDB, resolvePgConfig } from '../../db';
+import { PgDB, resolvePgConfig, generateTableSQL } from '../../db';
 import type { PgDomainConfig } from '../../db';
 import { getTableName, getSchemaName } from '../utils';
 
@@ -16,6 +16,17 @@ export class BlobsPG extends BlobStore {
     const { client, schemaName, skipDefaultIndexes } = resolvePgConfig(config);
     this.#db = new PgDB({ client, schemaName, skipDefaultIndexes });
     this.#schema = schemaName || 'public';
+  }
+
+  static getExportDDL(schemaName?: string): string[] {
+    return [
+      generateTableSQL({
+        tableName: TABLE_SKILL_BLOBS,
+        schema: TABLE_SCHEMAS[TABLE_SKILL_BLOBS],
+        schemaName,
+        includeAllConstraints: true,
+      }),
+    ];
   }
 
   async init(): Promise<void> {

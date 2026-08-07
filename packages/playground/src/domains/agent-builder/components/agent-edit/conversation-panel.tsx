@@ -3,7 +3,12 @@ import { createContext, useContext, useMemo } from 'react';
 import type { ReactNode } from 'react';
 import { useFormContext, useWatch } from 'react-hook-form';
 
-import { useStreamMessages, useStreamRunning, useStreamSend } from '../../contexts/stream-chat-context';
+import {
+  useStreamMessages,
+  useStreamRunning,
+  useStreamRunningDebounced,
+  useStreamSend,
+} from '../../contexts/stream-chat-context';
 import { StreamChatProvider } from '../../contexts/stream-chat-provider';
 import { useAgentBuilderTool } from '../../hooks/use-agent-builder-tool';
 import type { AvailableWorkspace } from '../../hooks/use-agent-builder-tool';
@@ -16,6 +21,7 @@ import { useAgentBuilderAllowedModels } from '@/domains/agent-builder/hooks/use-
 import type { AgentBuilderEditFormValues } from '@/domains/agent-builder/schemas';
 import { buildFormSnapshotInstructions } from '@/domains/agent-builder/services/build-form-snapshot';
 import type { AgentTool } from '@/domains/agent-builder/types/agent-tool';
+import { useAllProviderTools } from '@/domains/tool-providers/hooks/use-all-provider-tools';
 import { useAgentMessages } from '@/hooks/use-agent-messages';
 
 interface ConversationPanelProviderProps {
@@ -62,7 +68,12 @@ export const ConversationPanelProvider = ({
   const { models, isLoading: isLoadingModels } = useAgentBuilderAllowedModels();
 
   const availableModels = features.model ? models : [];
-  const initialMessageToolsReady = toolsReady && (!features.model || !isLoadingModels);
+  // `useAllProviderTools` fans out per (provider, toolkit). Until it settles
+  // the `availableAgentTools` list (and therefore the builder tool's
+  // description + enum) is missing integration ids — block the LLM from
+  // calling the tool until the catalog is ready.
+  const { isLoading: isLoadingIntegrationTools } = useAllProviderTools();
+  const initialMessageToolsReady = toolsReady && (!features.model || !isLoadingModels) && !isLoadingIntegrationTools;
 
   const agentBuilderTools = useAgentBuilderTool({
     features,
@@ -70,6 +81,7 @@ export const ConversationPanelProvider = ({
     availableWorkspaces,
     availableSkills,
     availableModels,
+    integrationToolsLoading: isLoadingIntegrationTools,
   });
 
   const { control } = useFormContext<AgentBuilderEditFormValues>();
@@ -165,7 +177,9 @@ const ConversationMessageList = () => {
 };
 
 const ConversationComposer = () => {
-  const isRunning = useStreamRunning();
+  // Debounced so the composer doesn't flicker enabled/disabled when the stream
+  // flag briefly drops between builder runs — same signal as the layout guard.
+  const isRunning = useStreamRunningDebounced();
   const send = useStreamSend();
   const { draft, setDraft, trimmed, handleFormSubmit, handleKeyDown } = useChatDraft({ onSubmit: send });
 
