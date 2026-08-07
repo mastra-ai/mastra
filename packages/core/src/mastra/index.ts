@@ -1850,14 +1850,23 @@ export class Mastra<
     return findFsAgentScheduleHandler<Mastra>(this.#agents as Record<string, Agent<any>>, scheduleId);
   }
 
+  /**
+   * True when the app opted out of the scheduler for the whole instance,
+   * either with `workers: false` or with `scheduler: { enabled: false }`.
+   *
+   * `workers: false` disables all event processing in this instance, so never
+   * auto-inject scheduler / agent-schedule workers (even when a schedule is
+   * created at runtime). Standalone workers run the scheduler separately.
+   *
+   * Nothing can start the scheduler while this is true, so callers must also
+   * skip the storage reads that only exist to request it (see #20550).
+   */
+  #schedulerDisabled(): boolean {
+    return this.#workersDisabled || this.#schedulerConfig?.enabled === false;
+  }
+
   #shouldEnableScheduler(): boolean {
-    // Honour an explicit `workers: false` opt-out — the user disabled all
-    // event processing in this instance, so never auto-inject scheduler /
-    // agent-schedule workers (even when scheduler.enabled is true or a
-    // schedule is created at runtime). Standalone workers are expected to
-    // run the scheduler separately.
-    if (this.#workersDisabled) return false;
-    if (this.#schedulerConfig?.enabled === false) return false;
+    if (this.#schedulerDisabled()) return false;
     if (this.#schedulerConfig?.enabled === true) return true;
     return (
       this.#hasScheduledWorkflow ||
@@ -5032,8 +5041,7 @@ export class Mastra<
   async __ensureNotificationDispatchReady(): Promise<void> {
     if (this.#notificationDispatchReady) return;
     if (this.#notificationDispatchConfig?.enabled === false) return;
-    if (this.#workersDisabled) return;
-    if (this.#schedulerConfig?.enabled === false) return;
+    if (this.#schedulerDisabled()) return;
     if (!this.#storage) return;
 
     try {
@@ -5128,49 +5136,38 @@ export class Mastra<
   }
 
   /**
-   * Detect agent-schedule rows in storage on boot. Used by
-   * `#shouldEnableScheduler` to flip the scheduler-requested flag when
-   * imperative agent schedules persisted from a previous process exist —
-   * without this, a fresh boot with only DB-side agent schedules would skip
-   * starting the scheduler and agent-schedule workers entirely.
+   * Detect schedule rows that a previous process persisted, and flip the
+   * scheduler-requested flag that `#shouldEnableScheduler` reads. Without
+   * this, a fresh boot with only DB-side work would skip injecting the
+   * scheduler and agent-schedule workers entirely. Two rows count:
+   *
+   * - agent-schedule rows created imperatively through `schedules.create()`;
+   * - the notification dispatcher row that `__ensureNotificationDispatchReady()`
+   *   upserts when a deferred notification is created, so pending deferred
+   *   notifications still get dispatched after a restart.
+   *
+   * Callers must skip this probe when the scheduler can never start; see
+   * `#schedulerDisabled()`.
    *
    * @internal
    */
-  async #detectExistingAgentSchedules(): Promise<void> {
-    if (this.#schedulerRequested) return;
+  async #detectPersistedSchedulerWork(): Promise<void> {
     if (!this.#storage) return;
     try {
       const schedulesStore = await this.#storage.getStore('schedules');
       if (!schedulesStore) return;
-      const existing = await schedulesStore.listSchedules({ ownerType: 'agent' });
-      if (existing.length === 0) return;
-      this.#schedulerRequested = true;
-    } catch (err) {
-      this.#logger?.warn?.('Failed to detect existing agent schedules on boot', err as any);
-    }
-  }
 
-  /**
-   * Detect the lazily-created notification dispatcher schedule row on boot.
-   * A previous process upserts the row via `__ensureNotificationDispatchReady()`
-   * when a deferred notification is created; a fresh boot must then start the
-   * scheduler so pending deferred notifications still get dispatched.
-   * Mirrors `#detectExistingAgentSchedules`.
-   *
-   * @internal
-   */
-  async #detectExistingNotificationDispatch(): Promise<void> {
-    if (this.#schedulerRequested) return;
-    if (this.#notificationDispatchConfig?.enabled === false) return;
-    if (!this.#storage) return;
-    try {
-      const schedulesStore = await this.#storage.getStore('schedules');
-      if (!schedulesStore) return;
-      const existing = await schedulesStore.getSchedule(NOTIFICATION_DISPATCH_SCHEDULE_ROW_ID);
-      if (!existing) return;
-      this.#schedulerRequested = true;
+      const agentSchedules = await schedulesStore.listSchedules({ ownerType: 'agent' });
+      if (agentSchedules.length > 0) {
+        this.#schedulerRequested = true;
+        return;
+      }
+
+      if (this.#notificationDispatchConfig?.enabled === false) return;
+      const dispatchRow = await schedulesStore.getSchedule(NOTIFICATION_DISPATCH_SCHEDULE_ROW_ID);
+      if (dispatchRow) this.#schedulerRequested = true;
     } catch (err) {
-      this.#logger?.warn?.('Failed to detect existing notification dispatch schedule on boot', err as any);
+      this.#logger?.warn?.('Failed to detect persisted scheduler work on boot', err as any);
     }
   }
 
@@ -5844,18 +5841,19 @@ export class Mastra<
       await this.#storage.init();
     }
 
-    // Flip the scheduler-requested flag if any agent-schedule rows
-    // exist in storage from a previous boot. Without this, a process
-    // that boots with only DB-side agent schedules (no in-code declarative
-    // schedules and no imperative `schedules.create()` calls yet) would
-    // skip injecting the scheduler + agent-schedule workers entirely. This
-    // reads the schedules store, so it must run after storage.init() above.
-    if (!name) {
-      await this.#detectExistingAgentSchedules();
-      // Same idea for the notification dispatcher: a previous process may
-      // have lazily created the dispatcher schedule row because deferred
-      // notifications were in play.
-      await this.#detectExistingNotificationDispatch();
+    // Flip the scheduler-requested flag if schedule rows exist in storage from
+    // a previous boot. Without this, a process that boots with only DB-side
+    // work (no in-code declarative schedules and no imperative
+    // `schedules.create()` calls yet) would skip injecting the scheduler +
+    // agent-schedule workers entirely. This reads the schedules store, so it
+    // must run after storage.init() above.
+    //
+    // Skip the read when the flag cannot change the outcome: it is already
+    // set, or the app opted out of the scheduler and nothing may start it.
+    // Reading the store anyway is a useless boot-time query, and storage
+    // adapters that need request/tenant context warn on it (see #20550).
+    if (!name && !this.#schedulerRequested && !this.#schedulerDisabled()) {
+      await this.#detectPersistedSchedulerWork();
     }
 
     // Lazily inject the SchedulerWorker + AgentScheduleWorker if the

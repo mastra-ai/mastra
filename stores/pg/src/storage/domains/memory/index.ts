@@ -997,6 +997,55 @@ export class MemoryPG extends MemoryStorage {
     }
   }
 
+  /**
+   * Reads one page of messages together with the total row count.
+   *
+   * `COUNT(*) OVER ()` reports the count over the whole WHERE result on the same
+   * statement as the page, so the page costs one database round-trip instead of
+   * two. The page and the count also come from one snapshot, so the count always
+   * describes the returned rows. A separate `COUNT(*)` runs only when the page is
+   * empty and the caller asked for a page after the last row, because a window
+   * function has no row to carry the count on.
+   */
+  async #fetchMessagePage({
+    selectStatement,
+    tableName,
+    whereClause,
+    orderByStatement,
+    queryParams,
+    perPageInput,
+    perPage,
+    offset,
+  }: {
+    selectStatement: string;
+    tableName: string;
+    whereClause: string;
+    orderByStatement: string;
+    queryParams: any[];
+    perPageInput: number | false | undefined;
+    perPage: number;
+    offset: number;
+  }): Promise<{ total: number; messages: MessageRowFromDB[] }> {
+    // `perPageInput === false` means "every row", so no LIMIT is applied.
+    const limitClause =
+      perPageInput === false ? '' : ` LIMIT $${queryParams.length + 1} OFFSET $${queryParams.length + 2}`;
+    const dataParams = perPageInput === false ? queryParams : [...queryParams, perPage, offset];
+    const rows =
+      (await this.#db.client.manyOrNone<MessageRowFromDB & { __total?: string | number }>(
+        `${selectStatement}, COUNT(*) OVER () AS "__total" FROM ${tableName} ${whereClause} ${orderByStatement}${limitClause}`,
+        dataParams,
+      )) || [];
+
+    if (rows.length > 0) {
+      return { total: Number(rows[0]!.__total), messages: rows };
+    }
+    if (offset === 0) {
+      return { total: 0, messages: [] };
+    }
+    const countResult = await this.#db.client.one(`SELECT COUNT(*) FROM ${tableName} ${whereClause}`, queryParams);
+    return { total: parseInt(countResult.count, 10), messages: [] };
+  }
+
   public async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
     const { threadId, resourceId, include, filter, perPage: perPageInput, page = 0, orderBy } = args;
 
@@ -1086,6 +1135,18 @@ export class MemoryPG extends MemoryStorage {
         };
       }
 
+      // The included messages do not depend on the page, so start that read now and
+      // let it overlap the page read. The rejection is captured here so a failure of
+      // the page read cannot leave this promise unhandled.
+      let includeFailure: unknown;
+      const includePromise =
+        include && include.length > 0
+          ? this._getIncludedMessages({ include }).catch((error: unknown) => {
+              includeFailure = error;
+              return null;
+            })
+          : null;
+
       let total: number;
       let messages: MessageRowFromDB[];
       if (metadataFilter) {
@@ -1099,12 +1160,16 @@ export class MemoryPG extends MemoryStorage {
         total = filteredRows.length;
         messages = perPageInput === false ? filteredRows : filteredRows.slice(offset, offset + perPage);
       } else {
-        const countResult = await this.#db.client.one(`SELECT COUNT(*) FROM ${tableName} ${whereClause}`, queryParams);
-        total = parseInt(countResult.count, 10);
-        const limitValue = perPageInput === false ? total : perPage;
-        const dataQuery = `${selectStatement} FROM ${tableName} ${whereClause} ${orderByStatement} LIMIT $${paramIndex++} OFFSET $${paramIndex++}`;
-        const rows = await this.#db.client.manyOrNone(dataQuery, [...queryParams, limitValue, offset]);
-        messages = [...(rows || [])];
+        ({ total, messages } = await this.#fetchMessagePage({
+          selectStatement,
+          tableName,
+          whereClause,
+          orderByStatement,
+          queryParams,
+          perPageInput,
+          perPage,
+          offset,
+        }));
       }
       const primaryPageCount = messages.length;
 
@@ -1120,7 +1185,8 @@ export class MemoryPG extends MemoryStorage {
 
       const messageIds = new Set(messages.map(m => m.id));
       if (include && include.length > 0) {
-        const includeMessages = await this._getIncludedMessages({ include });
+        const includeMessages = await includePromise;
+        if (includeFailure) throw includeFailure;
         if (includeMessages) {
           for (const includeMsg of includeMessages) {
             if (!messageIds.has(includeMsg.id)) {
@@ -1277,6 +1343,18 @@ export class MemoryPG extends MemoryStorage {
         };
       }
 
+      // The included messages do not depend on the page, so start that read now and
+      // let it overlap the page read. The rejection is captured here so a failure of
+      // the page read cannot leave this promise unhandled.
+      let includeFailure: unknown;
+      const includePromise =
+        include && include.length > 0
+          ? this._getIncludedMessages({ include }).catch((error: unknown) => {
+              includeFailure = error;
+              return null;
+            })
+          : null;
+
       let total: number;
       let messages: MessageRowFromDB[];
       if (metadataFilter) {
@@ -1290,12 +1368,16 @@ export class MemoryPG extends MemoryStorage {
         total = filteredRows.length;
         messages = perPageInput === false ? filteredRows : filteredRows.slice(offset, offset + perPage);
       } else {
-        const countResult = await this.#db.client.one(`SELECT COUNT(*) FROM ${tableName} ${whereClause}`, queryParams);
-        total = parseInt(countResult.count, 10);
-        const limitValue = perPageInput === false ? total : perPage;
-        const dataQuery = `${selectStatement} FROM ${tableName} ${whereClause} ${orderByStatement} LIMIT $${paramIndex++} OFFSET $${paramIndex++}`;
-        const rows = await this.#db.client.manyOrNone(dataQuery, [...queryParams, limitValue, offset]);
-        messages = [...(rows || [])];
+        ({ total, messages } = await this.#fetchMessagePage({
+          selectStatement,
+          tableName,
+          whereClause,
+          orderByStatement,
+          queryParams,
+          perPageInput,
+          perPage,
+          offset,
+        }));
       }
 
       if (total === 0 && messages.length === 0 && (!include || include.length === 0)) {
@@ -1310,7 +1392,8 @@ export class MemoryPG extends MemoryStorage {
 
       const messageIds = new Set(messages.map(m => m.id));
       if (include && include.length > 0) {
-        const includeMessages = await this._getIncludedMessages({ include });
+        const includeMessages = await includePromise;
+        if (includeFailure) throw includeFailure;
         if (includeMessages) {
           for (const includeMsg of includeMessages) {
             if (!messageIds.has(includeMsg.id)) {

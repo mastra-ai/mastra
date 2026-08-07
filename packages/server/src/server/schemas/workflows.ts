@@ -121,6 +121,13 @@ export const listWorkflowRunsQuerySchema = createCombinedPaginationSchema().exte
   status: workflowRunStatusSchema.optional(),
 });
 
+export const workflowRunCountsEntrySchema = z.object({
+  running: z.number(),
+  suspended: z.number(),
+});
+
+export const workflowRunCountsResponseSchema = z.record(z.string(), workflowRunCountsEntrySchema);
+
 /**
  * Base schema for workflow execution with input data and tracing
  */

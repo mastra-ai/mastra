@@ -364,6 +364,18 @@ export class PlatformSandbox extends MastraSandbox {
    * before the first one resolves. Cleared when the request settles.
    */
   private _captureInFlight: Promise<CaptureCheckpointResult> | null = null;
+  /**
+   * In-flight `start()` attempt. Concurrent callers on a fresh instance
+   * coalesce onto this single promise so a `POST /sandbox` is not fired
+   * N times when N fleet callers race to bring the same logical sandbox
+   * up. Published **synchronously** with `??=` before the first `await`
+   * so a later caller cannot slip through the null check while the
+   * originator is mid-round-trip. Cleared when the shared attempt
+   * settles (success or failure) so the next call sees a clean slot.
+   *
+   * Mirrors OSS `@mastra/railway` `RailwaySandbox._startInFlight`.
+   */
+  private _startInFlight: Promise<void> | null = null;
 
   constructor(options: PlatformSandboxOptions = {}) {
     super({ ...options, name: 'PlatformSandbox', processes: new PlatformProcessManager() });
@@ -430,6 +442,30 @@ export class PlatformSandbox extends MastraSandbox {
   }
 
   async start(): Promise<void> {
+    // Coalesce concurrent callers onto a single in-flight attempt. `??=`
+    // publishes the promise **synchronously** before the first `await`
+    // below, so a second caller entering `start()` while the first is
+    // mid-round-trip sees a populated `_startInFlight` and joins it
+    // instead of racing to `POST /sandbox` alongside the originator. On
+    // settle (success or failure) the slot is cleared so the next call
+    // starts fresh — a failed attempt is not a permanent latch.
+    // Mirrors OSS @mastra/railway RailwaySandbox._startInFlight.
+    this._startInFlight ??= this._doStart().finally(() => {
+      this._startInFlight = null;
+    });
+    return this._startInFlight;
+  }
+
+  /**
+   * The single `start` attempt behind {@link start}'s coalescing wrapper.
+   *
+   * Split out so the wrapper can install a shared in-flight promise
+   * synchronously (before the first `await`) without inlining the reattach
+   * / retry logic. Joined callers observe whatever outcome this method
+   * produces — success returns normally, failures propagate to every
+   * awaiter.
+   */
+  private async _doStart(): Promise<void> {
     if (this._sandboxId) {
       try {
         const response = await this._client.request(`/sandbox/${encodeURIComponent(this._sandboxId)}`);

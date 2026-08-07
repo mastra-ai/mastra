@@ -76,6 +76,13 @@ function addOptionalUsageField(usage: TokenUsage, key: OptionalUsageField, value
 const MODE_ID_KEY = 'currentModeId';
 
 /**
+ * Reason attached to tool prompts retracted because the user aborted the run.
+ * Shared by the parked-suspension retraction and the gated-approval decline so
+ * both render the same "the user interrupted this" explanation.
+ */
+export const ABORTED_BY_USER_REASON = 'Aborted by the user';
+
+/**
  * Session-state keys that are transparently persisted to thread metadata on
  * every state update and restored by `Session.loadMetadata()`. These are user
  * preferences that must survive a host restart (sessions themselves are
@@ -1089,9 +1096,14 @@ export class SessionSuspensions {
     return dropped;
   }
 
-  /** Drop all parked suspensions (e.g. on abort or thread switch). */
-  clear(): void {
+  /**
+   * Drop all parked suspensions (e.g. on abort or thread switch), returning the
+   * dropped entries so callers can retract the corresponding prompts.
+   */
+  clear(): Array<{ toolCallId: string; toolName: string }> {
+    const dropped = [...this.#pending].map(([toolCallId, { toolName }]) => ({ toolCallId, toolName }));
     this.#pending.clear();
+    return dropped;
   }
 
   /** Whether any tool calls are parked awaiting a resume. */
@@ -1437,9 +1449,19 @@ export class SessionRun {
    * Request an abort: mark the run as aborting and fire the AbortController (if
    * armed), then drop the controller. Leaves the requested flag set so the
    * run-end path can resolve its reason as 'aborted'; {@link reset} clears it.
+   *
+   * `deferSignal` marks the run as aborting without firing the controller. Used
+   * when the abort interrupts a parked tool-approval gate: the gated call still
+   * has to be declined through the (still live) agent run so the denial is
+   * persisted, and firing the signal first would tear that run down underneath
+   * the decline. The engine fires the signal itself once the decline lands.
    */
-  requestAbort(): void {
+  requestAbort({ deferSignal }: { deferSignal?: boolean } = {}): void {
     this.#abortRequested = true;
+    if (deferSignal) {
+      this.#notifyAbortRequested();
+      return;
+    }
     if (this.#abortController) {
       try {
         this.#abortController.abort();
@@ -2924,8 +2946,43 @@ export class Session<TState = unknown> {
    * the gated tool is rejected and the run can finalize rather than hang.
    */
   abortRun(): void {
-    this.suspensions.clear();
+    // Aborting twice while a gate is parked would tear the stream down before
+    // the deferred decline lands (the second call sees the gate already
+    // cancelled), which is the exact failure the deferral exists to avoid. Two
+    // `tool_approval_required` subscribers each calling abort() is enough.
+    if (this.run.isAbortRequested()) return;
+
+    // Retract the prompts for every parked suspension. Dropping them silently
+    // left the UI rendering `ask_user` / `request_access` prompts whose answers
+    // could never land, since the run they belong to is gone.
+    for (const { toolCallId, toolName } of this.suspensions.clear()) {
+      this.emit({ type: 'tool_suspension_cancelled', toolCallId, toolName, reason: ABORTED_BY_USER_REASON });
+    }
+
+    // A parked approval gate is special: the agent-side run is still alive and
+    // waiting for the decision, so the gated call must be declined through it
+    // (that is what persists the `output-denied` tool result). Tearing the
+    // stream down first would make that decline fail with "could not find an
+    // active or suspended run". Defer both the stream abort and the abort
+    // signal to the engine, which fires them once the decline has landed.
+    const wasGated = this.approval.isArmed();
     this.approval.cancel();
+    if (wasGated) {
+      this.run.requestAbort({ deferSignal: true });
+      return;
+    }
+
+    this.stream.abort();
+    this.run.requestAbort();
+  }
+
+  /**
+   * Fire the deferred abort teardown for a run that was aborted while parked on
+   * a tool-approval gate: abort the live subscription and the run's controller.
+   * Called by the run engine once the gated call's decline has been driven
+   * through the agent, so the denial is persisted before the run is torn down.
+   */
+  completeDeferredAbort(): void {
     this.stream.abort();
     this.run.requestAbort();
   }
@@ -3179,7 +3236,11 @@ export class Session<TState = unknown> {
       this.runEngine.setRequestContext(requestContextInput);
       await this.thread.ensureSubscription(threadId);
 
-      if (submittedRunId && submittedActiveRunId && submittedIsRunning) {
+      // A deferred abort (parked approval gate) leaves the AbortController
+      // armed until the decline lands, so `submittedIsRunning` stays true for a
+      // run that is already on its way out. Routing a signal to it would hand
+      // the message to a run that `completeDeferredAbort()` then terminates.
+      if (!submittedAbortRequested && submittedRunId && submittedActiveRunId && submittedIsRunning) {
         this.approval.respond({
           decision: 'decline',
           declineContext: {
