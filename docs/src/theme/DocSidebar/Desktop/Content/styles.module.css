@@ -29,7 +29,7 @@
       opacity var(--sidebar-pane-duration) var(--sidebar-pane-easing);
   }
 
-  .rootPaneInactive {
+  .root-pane-inactive {
     position: absolute;
     inset: 0 max(0px, calc(1rem - var(--sidebar-scrollbar-gutter, 0px))) 0 1rem;
     overflow: hidden;
@@ -38,11 +38,11 @@
     transform: translate3d(calc(-1 * var(--sidebar-pane-shift)), 0, 0);
   }
 
-  .contextualPaneEnter {
+  .contextual-pane-enter {
     animation: contextual-pane-enter var(--sidebar-pane-duration) var(--sidebar-pane-easing);
   }
 
-  .contextualPaneExit {
+  .contextual-pane-exit {
     position: absolute;
     inset: 0 max(0px, calc(1rem - var(--sidebar-scrollbar-gutter, 0px))) 0 1rem;
     overflow: hidden;
@@ -111,8 +111,8 @@
     transition: none;
   }
 
-  .contextualPaneEnter,
-  .contextualPaneExit {
+  .contextual-pane-enter,
+  .contextual-pane-exit {
     animation: none;
   }
 }

@@ -33,7 +33,8 @@ export default function DocSidebarDesktopContent({ path, sidebar, className }: P
   const { activateSidebar, clearSidebar, resolveSidebar } = useContextualSidebar()
   const contextualSidebar = resolveSidebar(sidebar)
   const [exitingContextualSidebar, setExitingContextualSidebar] = useState<typeof contextualSidebar>()
-  const renderedContextualSidebar = exitingContextualSidebar ?? contextualSidebar
+  const renderedContextualSidebar = contextualSidebar ?? exitingContextualSidebar
+  const isContextualSidebarExiting = !contextualSidebar && Boolean(exitingContextualSidebar)
   const paneKey = contextualSidebar?.state.categoryHref ?? 'root'
   const previousPaneKey = useRef(paneKey)
   const shouldAnimateContextualEntry = previousPaneKey.current === 'root' && paneKey !== 'root'
@@ -134,7 +135,7 @@ export default function DocSidebarDesktopContent({ path, sidebar, className }: P
             ThemeClassNames.docs.docSidebarMenu,
             'menu__list',
             styles.pane,
-            contextualSidebar && styles.rootPaneInactive,
+            contextualSidebar && styles['root-pane-inactive'],
           )}
           aria-hidden={contextualSidebar ? true : undefined}
           inert={contextualSidebar ? true : undefined}
@@ -143,16 +144,17 @@ export default function DocSidebarDesktopContent({ path, sidebar, className }: P
         </ul>
         {renderedContextualSidebar && (
           <ContextualContent
+            key={paneKey}
             activePath={path}
             items={renderedContextualSidebar.items}
             label={renderedContextualSidebar.state.categoryLabel}
             onBack={handleBack}
             onItemClick={() => activateSidebar(renderedContextualSidebar.state)}
             paneClassName={styles.pane}
-            entryAnimationClassName={styles.contextualPaneEnter}
-            exitAnimationClassName={styles.contextualPaneExit}
+            entryAnimationClassName={styles['contextual-pane-enter']}
+            exitAnimationClassName={styles['contextual-pane-exit']}
             animateEntry={shouldAnimateContextualEntry}
-            isExiting={Boolean(exitingContextualSidebar)}
+            isExiting={isContextualSidebarExiting}
             onExitAnimationEnd={handleContextualExitAnimationEnd}
           />
         )}

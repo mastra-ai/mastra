@@ -320,8 +320,13 @@ test.describe('Contextual sidebar', () => {
 
         requestAnimationFrame(() => {
           document.documentElement.dataset.sidebarTransitionSample = JSON.stringify({
-            visibility: getComputedStyle(rootPanel).visibility,
-            activeAnimations: rootPanel.getAnimations().length,
+            rootAriaHidden: rootPanel.getAttribute('aria-hidden'),
+            rootInert: rootPanel.hasAttribute('inert'),
+            rootActiveAnimations: rootPanel.getAnimations().filter(animation => animation.playState === 'running')
+              .length,
+            contextualActiveAnimations: (contextualPanel.parentElement?.getAnimations() ?? []).filter(
+              animation => animation.playState === 'running',
+            ).length,
           })
           observer.disconnect()
         })
@@ -340,7 +345,12 @@ test.describe('Contextual sidebar', () => {
           return sample ? JSON.parse(sample) : undefined
         }),
       )
-      .toEqual({ visibility: 'hidden', activeAnimations: 0 })
+      .toMatchObject({ rootAriaHidden: 'true', rootInert: true })
+    const transitionSample = await page.evaluate(() =>
+      JSON.parse(document.documentElement.dataset.sidebarTransitionSample ?? '{}'),
+    )
+    expect(transitionSample.rootActiveAnimations).toBeGreaterThan(0)
+    expect(transitionSample.contextualActiveAnimations).toBeGreaterThan(0)
     const backButton = contextualPane.getByRole('button', { name: 'Back to global sidebar' })
     await expect(backButton).toHaveText('Agents')
     await expect(contextualPane.getByRole('heading', { name: 'Agents' })).toHaveCount(0)
@@ -453,12 +463,14 @@ test.describe('Contextual sidebar', () => {
         listRight: listRect.right - buttonRect.right,
         outerLeft: buttonRect.left - navigationRect.left,
         outerRight: navigationRect.right - buttonRect.right,
+        scrollbarGutter: element.offsetWidth - element.clientWidth,
       }
     })
     expect(Math.abs(alignment.listLeft)).toBeLessThan(1)
     expect(Math.abs(alignment.listRight)).toBeLessThan(1)
     expect(alignment.outerLeft).toBeCloseTo(16, 0)
-    expect(alignment.outerRight).toBeCloseTo(16, 0)
+    expect(alignment.outerRight).toBeGreaterThanOrEqual(alignment.outerLeft - 1)
+    expect(alignment.outerRight).toBeLessThanOrEqual(alignment.outerLeft + alignment.scrollbarGutter + 1)
 
     const initialBottom = await versionControl.evaluate(element => element.getBoundingClientRect().bottom)
     await rootPane.evaluate(element => {
@@ -526,7 +538,7 @@ test.describe('Contextual sidebar', () => {
     await expect
       .poll(() =>
         directContextualPane
-          .locator('ul[data-sidebar-panel="contextual"]')
+          .locator('[data-sidebar-panel-container="contextual"]')
           .evaluate(element => getComputedStyle(element).animationName),
       )
       .toBe('none')
@@ -541,7 +553,7 @@ test.describe('Contextual sidebar', () => {
     await expect
       .poll(() =>
         reenteredContextualPane
-          .locator('ul[data-sidebar-panel="contextual"]')
+          .locator('[data-sidebar-panel-container="contextual"]')
           .evaluate(element => getComputedStyle(element).animationName),
       )
       .not.toBe('none')
