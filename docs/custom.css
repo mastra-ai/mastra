@@ -236,8 +236,8 @@
   /* Menu/Sidebar */
   --ifm-menu-color: var(--mastra-text-tertiary);
   --ifm-menu-color-active: var(--mastra-text-primary);
-  --ifm-menu-color-background-active: rgba(255, 255, 255, 0.05);
-  --ifm-menu-color-background-hover: rgba(255, 255, 255, 0.03);
+  --ifm-menu-color-background-active: rgba(255, 255, 255, 0.1);
+  --ifm-menu-color-background-hover: rgba(255, 255, 255, 0.05);
 }
 
 /* ==================================================================== */
