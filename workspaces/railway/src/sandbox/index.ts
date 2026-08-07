@@ -320,9 +320,39 @@ export class RailwaySandbox extends MastraSandbox {
     };
   }
 
-  private async _checkpointSandbox(sandbox: Sandbox): Promise<void> {
+  /**
+   * Capture the sandbox's checkpoint on demand, outside the idle-timer schedule.
+   *
+   * Intended for callers (e.g. a factory-side scheduler) that want to refresh
+   * the recovery checkpoint at semantic moments — turn end, session-idle,
+   * pre-teardown — rather than only just before Railway's idle destroy.
+   *
+   * Coalesces with any in-flight timer-driven refresh: concurrent callers join
+   * the same underlying `Sandbox.checkpoint` call and receive
+   * `{ status: 'coalesced', checkpointName }`. Both `captured` and `coalesced`
+   * carry the checkpoint name inline so callers can persist a session→
+   * checkpoint binding without a second, non-atomic read against the sandbox.
+   * Returns `{ status: 'skipped', reason }` when there's nothing to capture
+   * (no `checkpointName` configured, or the sandbox isn't running yet).
+   *
+   * On successful capture, restarts the idle-timer countdown so the next
+   * timer-driven refresh is scheduled from this capture.
+   *
+   * Never captures without a `checkpointName` and never mutates status — safe
+   * to invoke concurrently with `executeCommand`, `restart`, or `stop`.
+   */
+  async captureCheckpoint(): Promise<CaptureCheckpointResult> {
+    const sandbox = this._sandbox;
+    if (!sandbox) {
+      return { status: 'skipped', reason: 'sandbox-not-running' };
+    }
+
+    return this._captureCheckpoint(sandbox);
+  }
+
+  private async _captureCheckpoint(sandbox: Sandbox): Promise<CaptureCheckpointResult> {
     if (!this._checkpointName) {
-      return;
+      return { status: 'skipped', reason: 'no-checkpoint-name-configured' };
     }
 
     this.logger.debug(`${LOG_PREFIX} Capturing Railway sandbox checkpoint ${this._checkpointName} for: ${this.id}`);
@@ -336,6 +366,8 @@ export class RailwaySandbox extends MastraSandbox {
     }
 
     await sandbox.checkpoint(this._checkpointName);
+
+    return { status: 'captured', checkpointName: this._checkpointName };
   }
 
   private _scheduleCheckpointRefresh(): void {
