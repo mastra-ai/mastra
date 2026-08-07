@@ -7,6 +7,7 @@
 
 import { Box, SelectList, Spacer, Text } from '@earendil-works/pi-tui';
 import type { SelectItem, Focusable } from '@earendil-works/pi-tui';
+import { supportsMaxReasoningEffort } from '@mastra/code-sdk/providers/openai-codex';
 import { theme, getSelectListTheme } from '../theme.js';
 
 // =============================================================================
@@ -37,7 +38,7 @@ const BASE_THINKING_LEVELS: ThinkingLevelOption[] = [
   { id: 'medium', label: 'Medium', providerValue: 'medium', description: 'Balanced reasoning' },
   { id: 'high', label: 'High', providerValue: 'high', description: 'Deep reasoning' },
   { id: 'xhigh', label: 'Very High', providerValue: 'xhigh', description: 'Maximum reasoning depth' },
-  { id: 'max', label: 'Max', providerValue: 'max', description: 'Unbounded reasoning (Anthropic; xhigh on OpenAI)' },
+  { id: 'max', label: 'Max', providerValue: 'max', description: 'Unbounded reasoning (Anthropic, GPT-5.6+)' },
 ];
 
 function isOpenAIModel(modelId: string): boolean {
@@ -49,8 +50,12 @@ export function getThinkingLevelsForModel(modelId: string): ThinkingLevelOption[
     return [...BASE_THINKING_LEVELS];
   }
 
-  // OpenAI's effort scale tops out at xhigh — hide the Anthropic-only 'max' level.
-  return BASE_THINKING_LEVELS.filter(level => level.id !== 'max').map(level => ({
+  // Pre-GPT-5.6 OpenAI models top out at xhigh — hide 'max' for those.
+  const bareModelId = modelId.slice('openai/'.length);
+  const levels = supportsMaxReasoningEffort(bareModelId)
+    ? BASE_THINKING_LEVELS
+    : BASE_THINKING_LEVELS.filter(level => level.id !== 'max');
+  return levels.map(level => ({
     ...level,
     label: level.providerValue,
   }));

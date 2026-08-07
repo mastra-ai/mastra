@@ -2,7 +2,8 @@
 '@mastra/code-sdk': minor
 'mastracode': minor
 '@mastra/server': patch
-'@mastra/client-js': patch
+'@mastra/client-js': minor
+'@mastra/factory': minor
 ---
 
 Add a reasoning-effort configuration surface across mastracode and Factory (fixes #20766):
@@ -12,3 +13,18 @@ Add a reasoning-effort configuration surface across mastracode and Factory (fixe
 - New `models.modeThinkingDefaults` setting: per-mode (build/plan/fast) default thinking levels, resolved at request time with precedence session override → mode default → global `preferences.thinkingLevel`. Configuration changes now apply to the next request of every session, including automated Factory runs.
 - Factory: new `/web/config/thinking` routes and a Settings → Defaults UI section for editing global and per-mode thinking defaults.
 - TUI: `/think` now sets a session-only override, supports `/think default` to clear it, and `/think status` reports the effective level with provenance (session override / mode default / global default).
+
+Example `settings.json` configuration:
+
+```json
+{
+  "preferences": { "thinkingLevel": "medium" },
+  "models": {
+    "modeThinkingDefaults": {
+      "build": "high",
+      "plan": "max",
+      "fast": "off"
+    }
+  }
+}
+```

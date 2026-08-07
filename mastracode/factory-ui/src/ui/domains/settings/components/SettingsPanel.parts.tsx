@@ -21,7 +21,7 @@ import type { DoneSound } from '../services/doneSound';
 import { SettingsCard, SettingsRow } from './SettingsCard';
 import { SettingsSubsection } from './SettingsSubsection';
 
-type ThinkingLevel = AgentControllerSessionSettings['thinkingLevel'];
+type ThinkingLevel = NonNullable<AgentControllerSessionSettings['thinkingLevel']>;
 type NotificationMode = AgentControllerSessionSettings['notifications'];
 
 export const THINKING_LEVELS: { value: ThinkingLevel; label: string }[] = [

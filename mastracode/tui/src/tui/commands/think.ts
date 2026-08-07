@@ -93,7 +93,7 @@ export async function handleThinkCommand(ctx: SlashCommandContext, args: string[
     const selected = thinkingLevels.find(l => l.id === arg);
     if (!selected) {
       ctx.showInfo(
-        `Invalid thinking level: ${arg}. Use one of: ${THINKING_LEVELS.map(l => l.id).join(', ')}, 'default', or 'status'.`,
+        `Invalid thinking level: ${arg}. Use one of: ${thinkingLevels.map(l => l.id).join(', ')}, 'default', or 'status'.`,
       );
       return;
     }

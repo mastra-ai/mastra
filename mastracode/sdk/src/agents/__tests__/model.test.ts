@@ -45,6 +45,7 @@ vi.mock('../../providers/openai-codex.js', () => ({
     medium: 'medium',
     high: 'high',
     xhigh: 'xhigh',
+    max: 'max',
   },
 }));
 

@@ -7,6 +7,7 @@ import type { ModePack, ProviderAccess, ProviderAccessLevel } from '@mastra/code
 import { getAvailableModePacks } from '@mastra/code-sdk/onboarding/packs';
 import {
   loadSettings,
+  resolveDefaultThinkingLevel,
   resolveThreadActiveModelPackId,
   saveSettings,
   stripMastraCodeCustomProviderPrefix,
@@ -405,7 +406,8 @@ async function applyPack(ctx: SlashCommandContext, pack: ModePack, previousPackI
 
   const hasOpenAI = Object.values(pack.models).some(m => m.startsWith('openai/'));
   const sessionOverride = (ctx.state.session.state.get() as any)?.thinkingLevel as string | undefined;
-  const effectiveThinking = sessionOverride ?? s.preferences.thinkingLevel;
+  const effectiveThinking =
+    sessionOverride ?? resolveDefaultThinkingLevel(s, ctx.state.session.mode.get() ?? null).level;
   if (hasOpenAI && effectiveThinking === 'off') {
     // Bump the global default so OpenAI models don't silently run without
     // reasoning. Resolution is request-time, so no session override is needed.

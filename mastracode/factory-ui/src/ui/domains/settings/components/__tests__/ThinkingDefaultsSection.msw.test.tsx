@@ -4,7 +4,7 @@ import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
-import { TEST_BASE_URL, renderWithProviders } from '../../../../../../e2e/ui/render';
+import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import type { ThinkingConfigInfo } from '../../../../../api/types';
 import { ThinkingDefaultsSection } from '../ThinkingDefaultsSection';
 
@@ -44,13 +44,14 @@ describe('ThinkingDefaultsSection', () => {
     );
 
     const user = userEvent.setup();
-    renderWithProviders(<ThinkingDefaultsSection />);
+    const { client } = renderWithProviders(<ThinkingDefaultsSection />);
 
     await screen.findByRole('group', { name: 'plan mode thinking level' });
     const global = screen.getByRole('group', { name: 'Global default thinking level' });
     await user.click(within(global).getByRole('button', { name: 'High' }));
 
-    await waitFor(() => expect(requestBody).toEqual({ globalDefault: 'high' }));
+    await waitForMutationsIdle(client);
+    expect(requestBody).toEqual({ globalDefault: 'high' });
     await waitFor(() =>
       expect(within(global).getByRole('button', { name: 'High' })).toHaveAttribute('aria-pressed', 'true'),
     );
@@ -67,12 +68,13 @@ describe('ThinkingDefaultsSection', () => {
     );
 
     const user = userEvent.setup();
-    renderWithProviders(<ThinkingDefaultsSection />);
+    const { client } = renderWithProviders(<ThinkingDefaultsSection />);
 
     const plan = await screen.findByRole('group', { name: 'plan mode thinking level' });
     await user.click(within(plan).getByRole('button', { name: 'Global' }));
 
-    await waitFor(() => expect(requestBody).toEqual({ modeDefaults: { plan: null } }));
+    await waitForMutationsIdle(client);
+    expect(requestBody).toEqual({ modeDefaults: { plan: null } });
     await waitFor(() =>
       expect(within(plan).getByRole('button', { name: 'Global' })).toHaveAttribute('aria-pressed', 'true'),
     );
@@ -87,12 +89,13 @@ describe('ThinkingDefaultsSection', () => {
     );
 
     const user = userEvent.setup();
-    renderWithProviders(<ThinkingDefaultsSection />);
+    const { client } = renderWithProviders(<ThinkingDefaultsSection />);
 
     await screen.findByRole('group', { name: 'plan mode thinking level' });
     const global = screen.getByRole('group', { name: 'Global default thinking level' });
     await user.click(within(global).getByRole('button', { name: 'High' }));
 
+    await waitForMutationsIdle(client);
     expect(await screen.findByText(/Only organization admins/)).toBeInTheDocument();
     // The selection did not change.
     expect(within(global).getByRole('button', { name: 'Off' })).toHaveAttribute('aria-pressed', 'true');

@@ -49,6 +49,16 @@ IMPORTANT: You should be concise, direct, and helpful. Focus on solving the user
 export type ThinkingLevel = 'off' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
 const GPT5_MODEL_RE = /^gpt-5(?:\.|-|$)/;
+const GPT_VERSION_RE = /^gpt-(\d+)(?:\.(\d+))?/;
+
+/** GPT-5.6+ accepts `reasoning effort: max`; older GPT models top out at xhigh. */
+export function supportsMaxReasoningEffort(modelId: string): boolean {
+  const match = GPT_VERSION_RE.exec(modelId);
+  if (!match) return false;
+  const major = Number(match[1]);
+  const minor = Number(match[2] ?? 0);
+  return major > 5 || (major === 5 && minor >= 6);
+}
 
 export function getEffectiveThinkingLevel(modelId: string, level: ThinkingLevel): ThinkingLevel {
   // GPT-5.* models on Codex require at least low reasoning.
@@ -56,20 +66,25 @@ export function getEffectiveThinkingLevel(modelId: string, level: ThinkingLevel)
     return 'low';
   }
 
+  // Clamp `max` to `xhigh` only for models whose effort scale tops out there.
+  if (level === 'max' && !supportsMaxReasoningEffort(modelId)) {
+    return 'xhigh';
+  }
+
   return level;
 }
 
 // Map thinkingLevel state values to OpenAI reasoningEffort values.
-// undefined means omit the parameter (no reasoning).
+// undefined means omit the parameter (no reasoning). Model-dependent clamping
+// (e.g. `max` → `xhigh` for pre-GPT-5.6 models) happens in
+// getEffectiveThinkingLevel before this lookup.
 export const THINKING_LEVEL_TO_REASONING_EFFORT: Record<ThinkingLevel, string | undefined> = {
   off: undefined,
   low: 'low',
   medium: 'medium',
   high: 'high',
   xhigh: 'xhigh',
-  // OpenAI's reasoning effort tops out at xhigh; 'max' exists for providers
-  // (e.g. Anthropic) whose effort scale goes one step further.
-  max: 'xhigh',
+  max: 'max',
 };
 
 /**
