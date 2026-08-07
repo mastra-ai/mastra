@@ -22,12 +22,12 @@ export interface ThinkingSettingsCallbacks {
 // Thinking Levels
 // =============================================================================
 
-export type ThinkingLevelId = 'off' | 'low' | 'medium' | 'high' | 'xhigh';
+export type ThinkingLevelId = 'off' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
 export interface ThinkingLevelOption {
   id: ThinkingLevelId;
   label: string;
-  providerValue: 'none' | 'low' | 'medium' | 'high' | 'xhigh';
+  providerValue: 'none' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
   description: string;
 }
 
@@ -37,6 +37,7 @@ const BASE_THINKING_LEVELS: ThinkingLevelOption[] = [
   { id: 'medium', label: 'Medium', providerValue: 'medium', description: 'Balanced reasoning' },
   { id: 'high', label: 'High', providerValue: 'high', description: 'Deep reasoning' },
   { id: 'xhigh', label: 'Very High', providerValue: 'xhigh', description: 'Maximum reasoning depth' },
+  { id: 'max', label: 'Max', providerValue: 'max', description: 'Unbounded reasoning (Anthropic; xhigh on OpenAI)' },
 ];
 
 function isOpenAIModel(modelId: string): boolean {
@@ -48,7 +49,8 @@ export function getThinkingLevelsForModel(modelId: string): ThinkingLevelOption[
     return [...BASE_THINKING_LEVELS];
   }
 
-  return BASE_THINKING_LEVELS.map(level => ({
+  // OpenAI's effort scale tops out at xhigh — hide the Anthropic-only 'max' level.
+  return BASE_THINKING_LEVELS.filter(level => level.id !== 'max').map(level => ({
     ...level,
     label: level.providerValue,
   }));

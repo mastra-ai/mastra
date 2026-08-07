@@ -404,9 +404,11 @@ async function applyPack(ctx: SlashCommandContext, pack: ModePack, previousPackI
   s.models.subagentModels = {};
 
   const hasOpenAI = Object.values(pack.models).some(m => m.startsWith('openai/'));
-  const currentThinking = ((ctx.state.session.state.get() as any)?.thinkingLevel ?? 'off') as string;
-  if (hasOpenAI && currentThinking === 'off') {
-    await ctx.state.session.state.set({ thinkingLevel: 'low' } as any);
+  const sessionOverride = (ctx.state.session.state.get() as any)?.thinkingLevel as string | undefined;
+  const effectiveThinking = sessionOverride ?? s.preferences.thinkingLevel;
+  if (hasOpenAI && effectiveThinking === 'off') {
+    // Bump the global default so OpenAI models don't silently run without
+    // reasoning. Resolution is request-time, so no session override is needed.
     s.preferences.thinkingLevel = 'low';
   }
 

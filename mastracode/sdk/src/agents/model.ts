@@ -1,7 +1,11 @@
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
 import type { GatewayLanguageModel, MastraModelGatewayInterface } from '@mastra/core/llm';
 import type { RequestContext } from '@mastra/core/request-context';
-import { loadSettings, stripMastraCodeCustomProviderPrefix } from '../onboarding/settings.js';
+import {
+  loadSettings,
+  resolveDefaultThinkingLevel,
+  stripMastraCodeCustomProviderPrefix,
+} from '../onboarding/settings.js';
 import { AMAZON_BEDROCK_GATEWAY_ID, createAmazonBedrockGateway } from '../providers/amazon-bedrock-gateway.js';
 import type { ThinkingLevel } from '../providers/openai-codex.js';
 import { resolveCredentialStore } from './credential-resolver.js';
@@ -163,10 +167,36 @@ export function resolveModel(
 }
 
 /**
+ * Resolve the effective thinking level for the current request.
+ *
+ * Precedence:
+ *   1. Session override (`state.thinkingLevel`, set via /think or the session
+ *      settings panel).
+ *   2. Per-mode default from settings (`models.modeThinkingDefaults[mode]`).
+ *   3. Global default (`preferences.thinkingLevel`).
+ *
+ * Resolved per-request (not seeded at session start) so configuration changes
+ * apply to the next request of every session — including automated
+ * (rule-driven) Factory runs that nobody ever opens interactively.
+ */
+export function resolveRequestThinkingLevel(
+  agentControllerContext: AgentControllerRequestContext<any> | undefined,
+  settingsPath?: string,
+): ThinkingLevel {
+  const override = agentControllerContext?.state?.thinkingLevel as ThinkingLevel | undefined;
+  if (override !== undefined) return override;
+  const modeId = agentControllerContext?.session?.modeId;
+  return resolveDefaultThinkingLevel(loadSettings(settingsPath), modeId).level;
+}
+
+/**
  * Dynamic model function that reads the current model from controller state.
  * This allows runtime model switching via the /models picker.
  */
-export function getDynamicModel({ requestContext }: { requestContext: RequestContext }): ResolvedModel {
+export function getDynamicModel(
+  { requestContext }: { requestContext: RequestContext },
+  settingsPath?: string,
+): ResolvedModel {
   const agentControllerContext = requestContext.get('controller') as AgentControllerRequestContext<any> | undefined;
 
   const modelId = agentControllerContext?.session?.modelId;
@@ -174,7 +204,7 @@ export function getDynamicModel({ requestContext }: { requestContext: RequestCon
     throw new Error('No model selected. Use /models to select a model first.');
   }
 
-  const thinkingLevel = agentControllerContext?.state?.thinkingLevel as ThinkingLevel | undefined;
+  const thinkingLevel = resolveRequestThinkingLevel(agentControllerContext, settingsPath);
 
   return resolveModel(modelId, { thinkingLevel, remapForCodexOAuth: true, requestContext });
 }

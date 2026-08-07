@@ -46,7 +46,7 @@ const CODEX_INSTRUCTIONS = `You are an interactive CLI tool that helps users wit
 IMPORTANT: You should be concise, direct, and helpful. Focus on solving the user's problem efficiently.`;
 
 /** Valid thinking level values. */
-export type ThinkingLevel = 'off' | 'low' | 'medium' | 'high' | 'xhigh';
+export type ThinkingLevel = 'off' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
 const GPT5_MODEL_RE = /^gpt-5(?:\.|-|$)/;
 
@@ -67,6 +67,9 @@ export const THINKING_LEVEL_TO_REASONING_EFFORT: Record<ThinkingLevel, string | 
   medium: 'medium',
   high: 'high',
   xhigh: 'xhigh',
+  // OpenAI's reasoning effort tops out at xhigh; 'max' exists for providers
+  // (e.g. Anthropic) whose effort scale goes one step further.
+  max: 'xhigh',
 };
 
 /**
