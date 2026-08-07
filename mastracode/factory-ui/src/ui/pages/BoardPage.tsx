@@ -29,7 +29,7 @@ import { useBoardScroll } from '../domains/factory/hooks/useBoardScroll';
 import {
   boardLabels,
   boardLabelsFromQuery,
-  boardLabelsQueryValue,
+  boardLabelsQueryValues,
   boardParticipants,
   boardRelevanceFromQuery,
   boardRelevanceQueryValue,
@@ -109,7 +109,7 @@ function BoardContent({
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedParticipantId = searchParams.get('teammate') || undefined;
   const selectedRelevanceTypes = boardRelevanceFromQuery(searchParams.get('relevance'), kind);
-  const selectedLabels = boardLabelsFromQuery(searchParams.get('labels'));
+  const selectedLabels = boardLabelsFromQuery(searchParams.getAll('label'));
 
   const auth = useFactoryAuth();
   const items = useBoardItems({ factoryProjectId, kind });
@@ -164,16 +164,15 @@ function BoardContent({
     if (selected) nextLabels.add(label);
     else nextLabels.delete(label);
     const next = new URLSearchParams(searchParams);
-    const value = boardLabelsQueryValue(nextLabels);
-    if (value) next.set('labels', value);
-    else next.delete('labels');
+    next.delete('label');
+    for (const value of boardLabelsQueryValues(nextLabels)) next.append('label', value);
     setSearchParams(next, { replace: true });
   };
   const resetFilters = () => {
     const next = new URLSearchParams(searchParams);
     next.delete('teammate');
     next.delete('relevance');
-    next.delete('labels');
+    next.delete('label');
     setSearchParams(next, { replace: true });
   };
   const loadingStages = boardLoadingStages({

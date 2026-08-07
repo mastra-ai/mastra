@@ -200,16 +200,86 @@ describe('GithubReconcileWorker', () => {
     await worker.init(workerDeps({ renewLease, releaseLease }));
 
     await worker.start();
+    // The initial tick starts at t=0; #reconcile advances fake time by
+    // (leaseTtlMs + intervalMs) internally, so the sweep completes inside
+    // this single advance. Stop the worker before any further advance so
+    // the next scheduled sweep does not run and add a second releaseLease.
     await vi.advanceTimersByTimeAsync(0);
-    await vi.advanceTimersByTimeAsync(leaseTtlMs + intervalMs);
+    await worker.stop();
 
     expect(renewLease.mock.calls.length).toBeGreaterThanOrEqual(2);
     for (const call of renewLease.mock.calls) {
       expect(call).toEqual(['github:pull-request-reconcile', expect.any(String), leaseTtlMs]);
     }
     expect(releaseLease).toHaveBeenCalledTimes(1);
+  });
 
+  it('skips the folded issue reconcile and releaseLease when the lease is lost mid-sweep', async () => {
+    // Regression: renewLease returning `false` means another replica already
+    // holds the lease. The issue sweep must not run — it would race the new
+    // owner's writes. releaseLease is also skipped so we don't stomp the new
+    // owner's TTL.
+    const intervalMs = 60_000;
+    const leaseTtlMs = intervalMs * 3;
+    const releaseLease = vi.fn(async () => undefined);
+    // First renewal returns false: this owner has lost the lease.
+    const renewLease = vi.fn(async () => false);
+
+    const reconcile = vi.fn(async () => {
+      // Advance past one renewal cadence so the lease-loss result is
+      // observed while the PR sweep is still in flight.
+      await vi.advanceTimersByTimeAsync(leaseTtlMs + intervalMs);
+      return EMPTY_SUMMARY;
+    });
+    const reconcileIssues = vi.fn(async () => EMPTY_ISSUE_SUMMARY);
+
+    const worker = new GithubReconcileWorker({
+      reconcile,
+      reconcileIssues,
+      sourceControl: repositorySource(),
+      intervalMs,
+    });
+    await worker.init(workerDeps({ renewLease, releaseLease }));
+
+    await worker.start();
+    await vi.advanceTimersByTimeAsync(0);
     await worker.stop();
+
+    expect(renewLease).toHaveBeenCalled();
+    expect(reconcile).toHaveBeenCalledTimes(1);
+    expect(reconcileIssues).not.toHaveBeenCalled();
+    expect(releaseLease).not.toHaveBeenCalled();
+  });
+
+  it('skips the folded issue reconcile when renewal throws (treats it as lease loss)', async () => {
+    const intervalMs = 60_000;
+    const leaseTtlMs = intervalMs * 3;
+    const releaseLease = vi.fn(async () => undefined);
+    const renewLease = vi.fn(async () => {
+      throw new Error('lease provider offline');
+    });
+
+    const reconcile = vi.fn(async () => {
+      await vi.advanceTimersByTimeAsync(leaseTtlMs + intervalMs);
+      return EMPTY_SUMMARY;
+    });
+    const reconcileIssues = vi.fn(async () => EMPTY_ISSUE_SUMMARY);
+
+    const worker = new GithubReconcileWorker({
+      reconcile,
+      reconcileIssues,
+      sourceControl: repositorySource(),
+      intervalMs,
+    });
+    await worker.init(workerDeps({ renewLease, releaseLease }));
+
+    await worker.start();
+    await vi.advanceTimersByTimeAsync(0);
+    await worker.stop();
+
+    expect(renewLease).toHaveBeenCalled();
+    expect(reconcileIssues).not.toHaveBeenCalled();
+    expect(releaseLease).not.toHaveBeenCalled();
   });
 
   it('stops renewing the lease between sweeps', async () => {

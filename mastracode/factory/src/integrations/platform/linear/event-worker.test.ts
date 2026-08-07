@@ -426,6 +426,50 @@ describe('PlatformLinearEventWorker', () => {
     await worker.stop();
   });
 
+  it('does not call listWorkspaces in reconcile-only mode (workspace-listing outage cannot block reconcile)', async () => {
+    // Regression: previously #poll always fetched the workspace list even
+    // when event tailing was disabled, so a Platform workspace outage would
+    // throw out of #poll and prevent #maybeReconcile from ever running.
+    const settings = createSettingsStorage();
+    const reconcileFactoryState = vi.fn<IssueReconciler>(async () => ({
+      projects: 0,
+      checked: 0,
+      updated: 0,
+      missing: 0,
+      failed: 0,
+      errors: [],
+    }));
+    const listWorkspaces = vi.fn(async () => {
+      throw new Error('workspace listing must not be called in reconcile-only mode');
+    });
+
+    const worker = new PlatformLinearEventWorker({
+      client: new PlatformApiClient({
+        baseUrl,
+        accessToken,
+        fetchImpl: async () => {
+          throw new Error('fetch must not be called in reconcile-only mode');
+        },
+      }),
+      linear: { listWorkspaces } as never,
+      storage: settings.storage,
+      projects: { listAll: async () => [{ id: 'project-1', orgId: 'org-1' }] as never } as never,
+      workItems: stubWorkItems({}),
+      reconcileFactoryState,
+      pollEventsEnabled: false,
+      intervalMs: 1_000,
+    });
+    await worker.init(createDeps({ getLeaseProvider: () => acquireOnlyLeaseProvider() }));
+    await worker.start();
+    await vi.advanceTimersByTimeAsync(0);
+    await flushMicrotasks();
+
+    expect(listWorkspaces).not.toHaveBeenCalled();
+    expect(reconcileFactoryState).toHaveBeenCalledTimes(1);
+
+    await worker.stop();
+  });
+
   it('backs off polling when the lease cannot be acquired', async () => {
     const settings = createSettingsStorage();
     const ingestFactoryIssue = vi.fn(async () => ({ status: 'committed' }));

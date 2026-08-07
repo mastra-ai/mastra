@@ -267,12 +267,27 @@ export class PlatformLinearEventWorker extends MastraWorker {
   }
 
   async #poll(): Promise<number> {
-    const workspaces = await this.#linear.listWorkspaces();
     // Reconcile-only mode has no event tail to keep fresh, so tick on the
     // slower reconcile cadence instead of the polling interval.
     let retryInMs = this.#pollEventsEnabled ? this.#intervalMs : this.#reconcileIntervalMs;
 
     if (this.#pollEventsEnabled) {
+      // Only list workspaces when actually tailing events: reconciliation
+      // does not need the workspace list, and folding this call into
+      // reconcile-only mode would let one workspace-listing outage take
+      // down the reconcile sweep as well.
+      let workspaces: PlatformLinearWorkspace[] = [];
+      try {
+        workspaces = await this.#linear.listWorkspaces();
+      } catch (error) {
+        const delay = retryDelay(error, this.#intervalMs);
+        retryInMs = Math.max(retryInMs, delay);
+        this.deps?.logger.error('Platform Linear workspace listing failed', {
+          error: error instanceof Error ? error.message : String(error),
+          retryInMs: delay,
+        });
+      }
+
       for (const workspace of workspaces) {
         if (!this.#running || !this.#hasLease) break;
         try {

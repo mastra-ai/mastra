@@ -280,18 +280,26 @@ export function boardLabels({
   return [...labels].sort((left, right) => left.localeCompare(right));
 }
 
-export function boardLabelsFromQuery(value: string | null): ReadonlySet<string> {
-  if (!value) return new Set();
-  const parts = value
-    .split(',')
-    .map(part => part.trim())
-    .filter(part => part.length > 0);
-  return new Set(parts);
+/**
+ * Read selected labels from the `label` query parameter. Labels are stored as
+ * repeated values (`?label=a&label=b`) so that individual labels can contain
+ * commas without being split apart on reload.
+ */
+export function boardLabelsFromQuery(values: readonly string[]): ReadonlySet<string> {
+  const labels = new Set<string>();
+  for (const raw of values) {
+    const trimmed = raw.trim();
+    if (trimmed.length > 0) labels.add(trimmed);
+  }
+  return labels;
 }
 
-export function boardLabelsQueryValue(selectedLabels: ReadonlySet<string>): string | undefined {
-  if (selectedLabels.size === 0) return undefined;
-  return [...selectedLabels].sort((left, right) => left.localeCompare(right)).join(',');
+/**
+ * Serialize selected labels as an array of query values to be written with
+ * repeated `label` parameters via `URLSearchParams#append`.
+ */
+export function boardLabelsQueryValues(selectedLabels: ReadonlySet<string>): string[] {
+  return [...selectedLabels].sort((left, right) => left.localeCompare(right));
 }
 
 export function workItemMatchesLabels(

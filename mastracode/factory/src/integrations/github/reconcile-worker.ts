@@ -124,16 +124,32 @@ export class GithubReconcileWorker extends MastraWorker {
       .catch(() => ({ acquired: false }));
     if (!lease.acquired) return;
 
+    // Track whether this owner still holds the lease. A `renewLease` result
+    // of `false` (or a renewal error) means another replica has taken the
+    // lease. Once that happens the folded issue sweep must not run — it
+    // would race the new owner's writes.
+    let hasLease = true;
     // Folding the issue sweep into the same tick extends how long we hold the
     // lease. Renew periodically so a replica can't grab the expired lease and
     // start an overlapping sweep partway through this one.
     const renewalTimer = setInterval(
       () => {
-        void this.#leaseProvider.renewLease(LEASE_KEY, this.#leaseOwner, this.#leaseTtlMs).catch(error => {
-          this.deps?.logger.warn('GitHub reconcile lease renewal failed', {
-            error: error instanceof Error ? error.message : String(error),
+        void this.#leaseProvider
+          .renewLease(LEASE_KEY, this.#leaseOwner, this.#leaseTtlMs)
+          .then(renewed => {
+            if (!renewed) {
+              hasLease = false;
+              clearInterval(renewalTimer);
+              this.deps?.logger.warn('GitHub reconcile lease was lost mid-sweep; aborting further writes');
+            }
+          })
+          .catch(error => {
+            hasLease = false;
+            clearInterval(renewalTimer);
+            this.deps?.logger.warn('GitHub reconcile lease renewal failed; aborting further writes', {
+              error: error instanceof Error ? error.message : String(error),
+            });
           });
-        });
       },
       Math.max(1_000, Math.floor(this.#leaseTtlMs / 3)),
     );
@@ -153,8 +169,10 @@ export class GithubReconcileWorker extends MastraWorker {
         this.deps?.logger.debug('GitHub pull request reconcile sweep completed', context);
       }
       // Fold the issue-metadata sweep into the same tick so a single lease
-      // covers both writers of card state for these repositories.
-      if (this.#reconcileIssues) {
+      // covers both writers of card state for these repositories. Skip it
+      // if the lease was lost during the PR sweep — running would race a
+      // replica that already re-acquired the lease.
+      if (this.#reconcileIssues && hasLease) {
         const issueStartedAt = Date.now();
         try {
           const { errors: issueErrors, ...issueCounts } = await this.#reconcileIssues(
@@ -180,6 +198,8 @@ export class GithubReconcileWorker extends MastraWorker {
             error: issueError instanceof Error ? issueError.message : String(issueError),
           });
         }
+      } else if (this.#reconcileIssues && !hasLease) {
+        this.deps?.logger.debug('GitHub issue reconcile skipped: lease lost during pull-request sweep');
       }
     } catch (error) {
       this.deps?.logger.warn('GitHub pull request reconcile sweep failed', {
@@ -187,7 +207,9 @@ export class GithubReconcileWorker extends MastraWorker {
       });
     } finally {
       clearInterval(renewalTimer);
-      await this.#leaseProvider.releaseLease(LEASE_KEY, this.#leaseOwner).catch(() => undefined);
+      if (hasLease) {
+        await this.#leaseProvider.releaseLease(LEASE_KEY, this.#leaseOwner).catch(() => undefined);
+      }
     }
   }
 

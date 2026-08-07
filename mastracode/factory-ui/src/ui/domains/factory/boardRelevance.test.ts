@@ -4,7 +4,7 @@ import { issueCandidate, linearCandidate, pullRequestCandidate } from './boardCa
 import {
   boardLabels,
   boardLabelsFromQuery,
-  boardLabelsQueryValue,
+  boardLabelsQueryValues,
   boardParticipants,
   boardRelevanceFromQuery,
   boardRelevanceOptions,
@@ -185,10 +185,25 @@ describe('board relevance', () => {
     expect(workItemMatchesLabels(labelled, new Set(['bug', 'missing']))).toBe(false);
     expect(candidateMatchesLabels(candidate, new Set(['p1']))).toBe(true);
     expect(candidateMatchesLabels(candidate, new Set(['bug']))).toBe(false);
-    expect(boardLabelsFromQuery(null)).toEqual(new Set());
-    expect([...boardLabelsFromQuery('bug,p1')]).toEqual(['bug', 'p1']);
-    expect(boardLabelsQueryValue(new Set())).toBeUndefined();
-    expect(boardLabelsQueryValue(new Set(['p1', 'bug']))).toBe('bug,p1');
+    expect(boardLabelsFromQuery([])).toEqual(new Set());
+    expect([...boardLabelsFromQuery(['bug', 'p1'])]).toEqual(['bug', 'p1']);
+    expect(boardLabelsQueryValues(new Set())).toEqual([]);
+    expect(boardLabelsQueryValues(new Set(['p1', 'bug']))).toEqual(['bug', 'p1']);
+  });
+
+  it('round-trips labels containing commas through repeated query values', () => {
+    // Regression: a single-value comma-joined format would split `needs,review`
+    // into two labels on reload and never match the original.
+    const selected = new Set(['needs,review', 'priority:p0']);
+    const values = boardLabelsQueryValues(selected);
+    // Repeated params preserve each label as its own value.
+    const params = new URLSearchParams();
+    for (const value of values) params.append('label', value);
+    const restored = boardLabelsFromQuery(params.getAll('label'));
+    expect(restored).toEqual(selected);
+    // And a URL-encoded round trip.
+    const encoded = new URLSearchParams(params.toString());
+    expect(boardLabelsFromQuery(encoded.getAll('label'))).toEqual(selected);
   });
 
   it('offers review-requested only on review boards', () => {
