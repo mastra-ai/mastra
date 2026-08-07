@@ -292,12 +292,20 @@ describe('platform entry (src/mastra/index.ts)', () => {
       { timeout: 60_000 },
       async () => {
         stubWorkosPair();
-        const mod = await import('./index.js');
-        const location = await loginRedirect(mod);
-        // The redirect must target WorkOS, not the platform's shared login —
-        // self-hosted deploys have no allowed redirect_uri on platform.mastra.ai.
-        expect(location).not.toContain('platform.mastra.ai');
-        expect(location).toContain('client_id=client_fake');
+        const warn = vi.spyOn(console, 'warn');
+        try {
+          const mod = await import('./index.js');
+          const location = await loginRedirect(mod);
+          // The redirect must target WorkOS, not the platform's shared login —
+          // self-hosted deploys have no allowed redirect_uri on platform.mastra.ai.
+          expect(location).not.toContain('platform.mastra.ai');
+          expect(location).toContain('client_id=client_fake');
+          // The precedence warning belongs to the deferral branch only — a
+          // healthy WorkOS boot must not claim its own config is ignored.
+          expect(warn.mock.calls.some(call => String(call[0]).includes('ignored'))).toBe(false);
+        } finally {
+          warn.mockRestore();
+        }
       },
     );
 
@@ -312,6 +320,10 @@ describe('platform entry (src/mastra/index.ts)', () => {
         vi.stubEnv('WORKOS_API_KEY', 'sk_test_fake');
         const mod = await import('./index.js');
         expect(mod.mastra).toBeDefined();
+        // Half a pair falls through to the platform-backed default, so login
+        // still rides the studio provider's shared API.
+        const location = await loginRedirect(mod);
+        expect(location).toContain('platform.mastra.ai');
       },
     );
 
