@@ -14,7 +14,7 @@ import {
   postTripwire,
   renderBuiltInToolEvent,
 } from './stream-helpers';
-import type { PostableMessage, ToolDisplayEvent, ToolDisplayFn } from './types';
+import type { PostableMessage, ToolDisplayEvent, ToolDisplayFn, ToolDisplayResult } from './types';
 
 export interface StreamingDriverArgs {
   stream: AsyncIterable<AgentChunkType<any>>;
@@ -32,7 +32,7 @@ export interface StreamingDriverArgs {
    * renderers are bypassed and this is called once per tool lifecycle event.
    * A `{ kind: 'post' }` return triggers the close/post/reopen lifecycle
    * (same as `'cards'`/`'text'`); a `{ kind: 'stream' }` return pushes the
-   * chunk into the active streaming session.
+   * chunk into the streaming session, subject to its `openIfEmpty` policy.
    */
   toolDisplayFn?: ToolDisplayFn;
   streamingOptions?: { updateIntervalMs?: number };
@@ -262,6 +262,11 @@ export async function runStreamingDriver({
     sessionRef.current.push(piece);
   };
 
+  const pushToolDisplayResult = (result: Extract<ToolDisplayResult, { kind: 'stream' }>): void => {
+    if (result.openIfEmpty === false && !sessionRef.current) return;
+    pushToSession(result.chunk);
+  };
+
   // Cached task titles for resumed-approval runs: a `tool-result` may arrive
   // for a `toolCallId` we never saw a `tool-call` for (the approval click
   // resumed a run that suspended before this consumer attached). Falls back
@@ -291,7 +296,8 @@ export async function runStreamingDriver({
   /**
    * Dispatch a tool lifecycle event:
    *   - If `toolDisplayFn` is set, call it. `{ kind: 'post' }` → close /
-   *     post / reopen. `{ kind: 'stream' }` → push to active session.
+   *     post / reopen. `{ kind: 'stream' }` → push according to its session
+   *     policy.
    *     `undefined` → skip.
    *   - Else if `toolDisplay` renders inside the Plan widget
    *     (`'timeline'`/`'grouped'`/`'hidden'`), return null so the caller
@@ -306,7 +312,7 @@ export async function runStreamingDriver({
       const result = toolDisplayFn(event, { mode: 'streaming', platform });
       if (result == null) return { posted: true };
       if (result.kind === 'stream') {
-        pushToSession(result.chunk);
+        pushToolDisplayResult(result);
         return { posted: false };
       }
       // kind === 'post'
@@ -569,7 +575,7 @@ export async function runStreamingDriver({
           );
           if (result == null) continue;
           if (result.kind === 'stream') {
-            pushToSession(result.chunk);
+            pushToolDisplayResult(result);
             continue;
           }
           if (result.message != null) await editOrPost(messageId, result.message);
@@ -641,7 +647,7 @@ export async function runStreamingDriver({
           );
           if (result == null) continue;
           if (result.kind === 'stream') {
-            pushToSession(result.chunk);
+            pushToolDisplayResult(result);
             continue;
           }
           if (result.message != null) await editOrPost(messageId, result.message);

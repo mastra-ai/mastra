@@ -15,6 +15,7 @@ import type { FactoryIntegration, IntegrationContext } from './integrations/base
 import type * as surfaceModule from './routes/surface.js';
 import type * as tenantCredentialsModule from './routes/tenant-credentials.js';
 import { defaultFactoryRules, DEFAULT_FACTORY_RULE_VERSION } from './rules/defaults.js';
+import type * as dispatcherModule from './rules/dispatcher.js';
 import type { WorkItemsStorage } from './storage/domains/work-items/base.js';
 import { getFactoryWorkspace } from './workspace.js';
 /** A real in-memory FactoryStorage with init spied for boot-order assertions. */
@@ -41,6 +42,20 @@ const prepareMock = vi.fn(async (config: Record<string, unknown>) => ({
 vi.mock('@mastra/code-sdk', () => ({
   prepareAgentControllerMount: (config: Record<string, unknown>) => prepareMock(config),
 }));
+
+const dispatcherOptions = vi.hoisted(
+  () => [] as Array<ConstructorParameters<typeof dispatcherModule.FactoryDecisionDispatcher>[0]>,
+);
+vi.mock('./rules/dispatcher', async importOriginal => {
+  const actual = await importOriginal<typeof dispatcherModule>();
+  class TrackedFactoryDecisionDispatcher extends actual.FactoryDecisionDispatcher {
+    constructor(options: ConstructorParameters<typeof actual.FactoryDecisionDispatcher>[0]) {
+      super(options);
+      dispatcherOptions.push(options);
+    }
+  }
+  return { ...actual, FactoryDecisionDispatcher: TrackedFactoryDecisionDispatcher };
+});
 
 // The default-auth path constructs `MastraAuthStudio` internally (no service
 // locator to peek at), so capture every instance the factory creates and let
@@ -134,6 +149,7 @@ async function prepareIntegrationContext(config: ConstructorParameters<typeof Ma
 beforeEach(() => {
   vi.clearAllMocks();
   studioInstances.length = 0;
+  dispatcherOptions.length = 0;
 });
 
 describe('MastraFactory constructor', () => {
@@ -194,6 +210,18 @@ describe('MastraFactory.prepare', () => {
     const threaded = assembleFactoryApiRoutesSpy.mock.calls[0]![0].rules;
     expect(threaded).toBe(rules);
     expect(threaded.tools.submit_plan?.onResult).toBe(onResult);
+  });
+
+  it('forwards the configured dispatcher concurrency cap to the decision dispatcher', async () => {
+    const prepared = await prepareFactory({ storage: fakeStorage(), dispatcher: { maxInFlight: 7 } });
+    (prepared.buildApiRoutes as (deps: object) => unknown)({ controller: {}, authStorage: {} });
+
+    const onFactoryRuntime = assembleFactoryApiRoutesSpy.mock.calls[0]![0].onFactoryRuntime;
+    expect(onFactoryRuntime).toBeTypeOf('function');
+    onFactoryRuntime?.({ transitionService: {} as never });
+
+    expect(dispatcherOptions).toHaveLength(1);
+    expect(dispatcherOptions[0]?.maxInFlight).toBe(7);
   });
 
   it('registers and initializes factory domains through the storage lifecycle', async () => {
