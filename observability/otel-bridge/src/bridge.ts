@@ -189,6 +189,23 @@ export class OtelBridge extends BaseExporter implements ObservabilityBridge {
         if (parentEntry) {
           parentOtelContext = parentEntry.otelContext;
         }
+      } else if (options.traceId && options.parentSpanId) {
+        // Root spans restored from persisted state (e.g. workflow suspend/resume)
+        // carry the original trace ID and parent span ID, but the parent OTEL span
+        // is no longer alive — it ended when the run suspended, possibly in another
+        // process. Parent under a remote span context built from the persisted IDs
+        // so the span continues the original trace instead of joining whatever
+        // context happens to be active. Skip malformed IDs; injecting them would
+        // surface as garbage trace links downstream.
+        const candidate = {
+          traceId: options.traceId,
+          spanId: options.parentSpanId,
+          traceFlags: TraceFlags.SAMPLED,
+          isRemote: true,
+        };
+        if (isSpanContextValid(candidate)) {
+          parentOtelContext = otelTrace.setSpanContext(parentOtelContext, candidate);
+        }
       }
 
       // Create OTEL span with SpanKind (must be set at creation, immutable)
