@@ -5,12 +5,12 @@ import { MemoryRouter, Route, Routes } from 'react-router';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
-import { TEST_BASE_URL, renderWithProviders } from '../../../../../../e2e/ui/render';
+import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import { WorkspaceFilesProvider } from '../../context/WorkspaceFilesProvider';
 import { WorkspaceFilesSurface } from '../WorkspaceFilesSurface';
 import { WorkspaceFilesToggle } from '../WorkspaceFilesToggle';
 
-const LIST_URL = `${TEST_BASE_URL}/web/workspace/rendered/list`;
+const LIST_URL = `${TEST_BASE_URL}/web/workspace/files`;
 const WORKSPACE = 'session-1';
 
 const originalGetBoundingClientRect = HTMLElement.prototype.getBoundingClientRect;
@@ -35,18 +35,23 @@ afterEach(() => {
 });
 
 function renderPanel() {
+  const listRequests: Array<{ workspacePath: string | null; threadId: string | null }> = [];
   server.use(
-    http.get(LIST_URL, () =>
-      HttpResponse.json({
+    http.get(LIST_URL, ({ request }) => {
+      const url = new URL(request.url);
+      listRequests.push({
+        workspacePath: url.searchParams.get('workspacePath'),
+        threadId: url.searchParams.get('threadId'),
+      });
+      return HttpResponse.json({
         workspacePath: WORKSPACE,
-        root: '.artifacts',
-        rootPath: `${WORKSPACE}/.artifacts`,
-        entries: [],
-      }),
-    ),
+        threadId: 'thread-1',
+        files: [],
+      });
+    }),
   );
 
-  return renderWithProviders(
+  const { client } = renderWithProviders(
     <MemoryRouter initialEntries={[`/factories/factory-1/workspaces/${WORKSPACE}/threads/thread-1`]}>
       <Routes>
         <Route
@@ -61,24 +66,29 @@ function renderPanel() {
       </Routes>
     </MemoryRouter>,
   );
+
+  return { client, listRequests };
 }
 
 describe('WorkspaceFiles', () => {
   describe('given a chat wide enough for the card beside the transcript', () => {
-    it('docks the card without interaction, and the header toggle hides it', async () => {
+    it('leaves the card closed and off the network until the header toggle asks for it', async () => {
       stubContainerWidth(1200);
       const user = userEvent.setup();
-      renderPanel();
+      const { client, listRequests } = renderPanel();
 
-      expect(await screen.findByRole('button', { name: 'Artifacts' })).toBeInTheDocument();
-      const card = screen.getByTestId('workspace-files-card');
-      expect(card).not.toHaveAttribute('inert');
-
+      const card = await screen.findByTestId('workspace-files-card');
       const toggle = screen.getByRole('button', { name: 'Workspace files' });
-      await user.click(toggle);
-
       expect(card).toHaveAttribute('inert');
       expect(toggle).toHaveAttribute('aria-pressed', 'false');
+      expect(listRequests).toEqual([]);
+
+      await user.click(toggle);
+
+      expect(card).not.toHaveAttribute('inert');
+      expect(await screen.findByRole('tab', { name: 'Files' })).toBeInTheDocument();
+      await waitForMutationsIdle(client);
+      expect(listRequests).toEqual([{ workspacePath: WORKSPACE, threadId: 'thread-1' }]);
     });
   });
 
@@ -89,11 +99,11 @@ describe('WorkspaceFiles', () => {
       renderPanel();
 
       expect(screen.queryByTestId('workspace-files-card')).not.toBeInTheDocument();
-      expect(screen.queryByRole('button', { name: 'Artifacts' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('tab', { name: 'Files' })).not.toBeInTheDocument();
 
       await user.click(screen.getByRole('button', { name: 'Workspace files' }));
 
-      expect(await screen.findByRole('button', { name: 'Artifacts' })).toBeInTheDocument();
+      expect(await screen.findByRole('tab', { name: 'Files' })).toBeInTheDocument();
     });
   });
 });

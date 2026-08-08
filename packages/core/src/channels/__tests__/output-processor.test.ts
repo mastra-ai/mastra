@@ -1292,6 +1292,118 @@ describe('ChatChannelOutputProcessor', () => {
       expect(edits).toHaveLength(0);
     });
 
+    it('streaming + toolDisplay fn opens a session for a stream result by default', async () => {
+      const boundary = {
+        type: 'task_update' as const,
+        id: 'tool-weather',
+        title: 'Weather',
+        status: 'in_progress' as const,
+      };
+      const { channels, calls, chatThread } = makeChannels({
+        streaming: true,
+        toolDisplay: event => (event.kind === 'running' ? { kind: 'stream', chunk: boundary } : undefined),
+      });
+
+      await drive(
+        channels,
+        [
+          {
+            type: 'tool-call',
+            payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' } },
+          },
+          { type: 'finish', payload: {} },
+        ],
+        chatThread,
+      );
+
+      const posts = calls.filter(c => c.kind === 'post');
+      expect(posts).toHaveLength(1);
+      expect(await drainStreamingPlan((posts[0] as Extract<Call, { kind: 'post' }>).arg)).toEqual([boundary]);
+    });
+
+    it('streaming + openIfEmpty: false skips tool lifecycle chunks without an active session', async () => {
+      const { channels, calls, chatThread } = makeChannels({
+        streaming: true,
+        toolDisplay: event => ({
+          kind: 'stream',
+          chunk: {
+            type: 'task_update',
+            id: event.toolCallId,
+            title: event.displayName,
+            status: event.kind === 'running' ? 'in_progress' : 'complete',
+          },
+          openIfEmpty: false,
+        }),
+      });
+
+      await drive(
+        channels,
+        [
+          {
+            type: 'tool-call',
+            payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' } },
+          },
+          {
+            type: 'tool-result',
+            payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' }, result: 'sunny' },
+          },
+          {
+            type: 'tool-call',
+            payload: { toolCallId: 't2', toolName: 'calendar', args: {} },
+          },
+          {
+            type: 'tool-error',
+            payload: { toolCallId: 't2', toolName: 'calendar', args: {}, error: new Error('unavailable') },
+          },
+          { type: 'finish', payload: {} },
+        ],
+        chatThread,
+      );
+
+      expect(calls.filter(c => c.kind === 'post')).toHaveLength(0);
+    });
+
+    it('streaming + openIfEmpty: false appends to an active session without affecting later text', async () => {
+      const boundary = {
+        type: 'task_update' as const,
+        id: 'tool-weather',
+        title: 'Weather',
+        status: 'in_progress' as const,
+      };
+      const { channels, calls, chatThread } = makeChannels({
+        streaming: true,
+        toolDisplay: event =>
+          event.kind === 'running' ? { kind: 'stream', chunk: boundary, openIfEmpty: false } : undefined,
+      });
+
+      await drive(
+        channels,
+        [
+          { type: 'text-delta', payload: { text: 'Checking first.' } },
+          {
+            type: 'tool-call',
+            payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' } },
+          },
+          {
+            type: 'tool-result',
+            payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' }, result: 'sunny' },
+          },
+          { type: 'step-finish', payload: { stepResult: { isContinued: true } } },
+          { type: 'text-delta', payload: { text: 'It is sunny.' } },
+          { type: 'finish', payload: {} },
+        ],
+        chatThread,
+      );
+
+      const posts = calls.filter(c => c.kind === 'post');
+      expect(posts).toHaveLength(2);
+      expect(await drainStreamingPlan((posts[0] as Extract<Call, { kind: 'post' }>).arg)).toEqual([
+        'Checking first.',
+        boundary,
+      ]);
+      expect(await drainStreamingPlan((posts[1] as Extract<Call, { kind: 'post' }>).arg)).toEqual(['It is sunny.']);
+    });
+
     it("static + toolDisplay fn returning { kind: 'stream' } flattens a renderable chunk to text", async () => {
       const recording = createRecording();
       const channels = new AgentChannels({
@@ -1310,6 +1422,7 @@ describe('ChatChannelOutputProcessor', () => {
                   status: 'complete',
                   details: String(event.result),
                 },
+                openIfEmpty: false,
               };
             },
           },

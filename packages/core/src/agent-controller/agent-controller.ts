@@ -38,6 +38,7 @@ import type {
   AgentControllerMode,
   AgentControllerRequestContext,
   AgentControllerRequestStateUpdater,
+  AgentControllerSessionCreatedListener,
   AgentControllerThread,
   ModelAuthStatus,
   ToolCategory,
@@ -195,6 +196,7 @@ export class AgentController<TState = {}> {
    * that session's model/mode/state instead of an arbitrary one.
    */
   readonly #sessionsByResource = new Map<string, Promise<Session<TState>>>();
+  readonly #sessionCreatedListeners: AgentControllerSessionCreatedListener<TState>[] = [];
   /**
    * The scope each live session was created under, so re-keying operations
    * (e.g. {@link setResourceId}) preserve the session's registry scope.
@@ -246,6 +248,33 @@ export class AgentController<TState = {}> {
 
     this.workspace = config.workspace;
     this.browser = config.browser;
+  }
+
+  /**
+   * Subscribe to process-local notifications for newly materialized sessions.
+   * Cached `createSession()` calls do not notify listeners again.
+   */
+  onSessionCreated(listener: AgentControllerSessionCreatedListener<TState>): () => void {
+    this.#sessionCreatedListeners.push(listener);
+    return () => {
+      const index = this.#sessionCreatedListeners.indexOf(listener);
+      if (index !== -1) {
+        this.#sessionCreatedListeners.splice(index, 1);
+      }
+    };
+  }
+
+  #notifySessionCreated(session: Session<TState>): void {
+    for (const listener of [...this.#sessionCreatedListeners]) {
+      try {
+        const result = listener(session);
+        if (result && typeof result === 'object' && 'catch' in result) {
+          (result as Promise<void>).catch(error => console.error('Error in session-created listener:', error));
+        }
+      } catch (error) {
+        console.error('Error in session-created listener:', error);
+      }
+    }
   }
 
   /**
@@ -579,6 +608,7 @@ export class AgentController<TState = {}> {
       }
     }
 
+    this.#notifySessionCreated(session);
     return session;
   }
 

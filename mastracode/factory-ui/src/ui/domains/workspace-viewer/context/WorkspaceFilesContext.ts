@@ -4,6 +4,7 @@ export interface WorkspaceFilesApi {
   open: boolean;
   setOpen: (open: boolean) => void;
   workspacePath?: string;
+  threadId?: string;
   viewingFile: boolean;
   setViewingFile: (viewing: boolean) => void;
   canDock: boolean;
