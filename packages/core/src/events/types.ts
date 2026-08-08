@@ -73,6 +73,14 @@ export interface SubscribeBatchOptions {
   overflow?: 'drop-oldest' | 'drop-newest' | 'coalesce-or-drop-oldest';
 }
 
+/**
+ * Where a brand-new subscription begins on transports that retain messages.
+ *
+ * - `'earliest'`: deliver the retained backlog before live events.
+ * - `'latest'`: deliver only events published after the subscription is established.
+ */
+export type SubscribeStartPosition = 'earliest' | 'latest';
+
 export interface SubscribeOptions {
   /**
    * When set, subscribers with the same group compete for messages.
@@ -84,6 +92,24 @@ export interface SubscribeOptions {
    * Opt-in batching policy. When omitted, behavior is unchanged.
    */
   batch?: SubscribeBatchOptions;
+  /**
+   * Where a **new** subscription begins on transports that retain messages.
+   * Defaults to `'earliest'`, which preserves today's behavior.
+   *
+   * Use `'latest'` for a consumer that already owns the completed history
+   * through another store and only wants to observe what happens from the
+   * moment it attaches. Replaying the backlog into such a consumer is not
+   * merely wasteful — it re-applies side effects for events already accounted
+   * for.
+   *
+   * Only applies when the subscription's consumer group is created. An
+   * existing group keeps its own checkpoint, so this never rewinds or skips
+   * past a position an already-running cluster has committed.
+   *
+   * No-op on transports that do not retain messages, which is already the
+   * correct semantics there.
+   */
+  startFrom?: SubscribeStartPosition;
 }
 
 /**
