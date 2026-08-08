@@ -12,6 +12,23 @@ import type { RequestContext } from '../request-context';
 import { AgentChannels } from './agent-channels';
 import type { ChannelConfig } from './types';
 
+/** Context passed to {@link AgentControllerChannelsConfig.resolveSession}. */
+export interface ChannelSessionResolveContext {
+  /** The controller instance managing this channel interface. */
+  controller: AgentController<any>;
+  /** The mapped Mastra thread the session will be bound to. */
+  thread: Pick<StorageThreadType, 'id' | 'resourceId'>;
+  /** Request context of the inbound message or approval continuation. */
+  requestContext?: RequestContext;
+}
+
+/**
+ * Resolve or create a controller session before default session creation.
+ * Allows host applications to validate request context, select session identity,
+ * workspace, mode, and tags, or fail closed by throwing an error.
+ */
+export type ChannelSessionResolve = (ctx: ChannelSessionResolveContext) => Session<any> | Promise<Session<any>>;
+
 /** Context passed to {@link AgentControllerChannelsConfig.onSessionStart}. */
 export interface ChannelSessionStartContext {
   /**
@@ -41,8 +58,36 @@ export interface ChannelSessionStartContext {
  */
 export type ChannelSessionStart = (ctx: ChannelSessionStartContext) => void | Promise<void>;
 
+/** Context passed to {@link AgentControllerChannelsConfig.onStaleToolApproval}. */
+export interface ChannelStaleToolApprovalContext {
+  /** The user's approval decision. */
+  decision: 'approve' | 'decline';
+  /** The run ID associated with the approval action. */
+  runId: string;
+  /** The tool call ID being approved or declined. */
+  toolCallId: string;
+  /** Request context of the approval action. */
+  requestContext?: RequestContext;
+  /** Memory identifiers for the thread and resource. */
+  memory: { thread: string; resource: string };
+  /** The session instance, if resolved. */
+  session?: Session<any>;
+}
+
+/**
+ * Hook invoked when an approval action is received for a tool call without a matching live gate
+ * (e.g. after server restart). Errors propagate to allow durable hosts to reconcile state.
+ */
+export type ChannelStaleToolApproval = (ctx: ChannelStaleToolApprovalContext) => void | Promise<void>;
+
 /** Configuration for {@link AgentControllerChannels}. */
 export interface AgentControllerChannelsConfig extends ChannelConfig {
+  /**
+   * Called before creating a default session for a channel thread. Allows the
+   * host to inspect request context and return a custom session. Errors propagate
+   * so authorization and routing fail closed.
+   */
+  resolveSession?: ChannelSessionResolve;
   /**
    * Called once per session per process, after the session is bound to its
    * thread and before the first message dispatches. Concurrent messages on a
@@ -50,6 +95,11 @@ export interface AgentControllerChannelsConfig extends ChannelConfig {
    * unconfigured session. See {@link ChannelSessionStart}.
    */
   onSessionStart?: ChannelSessionStart;
+  /**
+   * Called when an approval action arrives but no live approval gate exists for
+   * the specified tool call. Allows durable host systems to reconcile state.
+   */
+  onStaleToolApproval?: ChannelStaleToolApproval;
 }
 
 /**
@@ -80,8 +130,14 @@ export class AgentControllerChannels extends AgentChannels {
    */
   private autoApproveResourceIds = new Set<string>();
 
+  /** See {@link AgentControllerChannelsConfig.resolveSession}. */
+  private readonly resolveSessionHook: ChannelSessionResolve | undefined;
+
   /** See {@link AgentControllerChannelsConfig.onSessionStart}. */
   private readonly onSessionStart: ChannelSessionStart | undefined;
+
+  /** See {@link AgentControllerChannelsConfig.onStaleToolApproval}. */
+  private readonly onStaleToolApprovalHook: ChannelStaleToolApproval | undefined;
 
   /**
    * One start-hook invocation per session resourceId. A map of promises rather
@@ -95,7 +151,9 @@ export class AgentControllerChannels extends AgentChannels {
 
   constructor(config: AgentControllerChannelsConfig) {
     super(config);
+    this.resolveSessionHook = config.resolveSession;
     this.onSessionStart = config.onSessionStart;
+    this.onStaleToolApprovalHook = config.onStaleToolApproval;
   }
 
   /** @internal Called by AgentController's constructor to bind itself. */
@@ -233,29 +291,38 @@ export class AgentControllerChannels extends AgentChannels {
   /**
    * Shared approve/decline path. Never calls the session's internal
    * `approveToolCall`/`declineToolCall` executors directly — the engine parked
-   * at the gate owns the resume. `respondToToolApproval` is a silent no-op
-   * when nothing is armed or the toolCallId mismatches, so staleness is
-   * pre-checked explicitly (an armed gate does not survive process restarts,
-   * so restart-recovered approvals are always stale — consistent with the
-   * v1 long-lived-server scope).
+   * at the gate owns the resume. When nothing is armed or the toolCallId
+   * mismatches, `onStaleToolApproval` is invoked if configured.
    */
   private async respondToSessionApproval({
     decision,
+    runId,
     toolCallId,
     requestContext,
     memory,
   }: {
     decision: 'approve' | 'decline';
+    runId: string;
     toolCallId: string;
     requestContext: RequestContext;
     memory: { thread: string; resource: string };
   }): Promise<void> {
-    const session = await this.getSessionForThread({ id: memory.thread, resourceId: memory.resource });
+    const session = await this.getSessionForThread({ id: memory.thread, resourceId: memory.resource }, requestContext);
     if (!session.approval.isArmed() || session.approval.getToolCallId() !== toolCallId) {
       this.log(
         'info',
         `Ignoring stale tool ${decision === 'approve' ? 'approval' : 'denial'} action (no matching parked approval for toolCallId=${toolCallId})`,
       );
+      if (this.onStaleToolApprovalHook) {
+        await this.onStaleToolApprovalHook({
+          decision,
+          runId,
+          toolCallId,
+          requestContext,
+          memory,
+          session,
+        });
+      }
       return;
     }
     // The requestContext carries the channel render context, so the resumed
@@ -275,17 +342,26 @@ export class AgentControllerChannels extends AgentChannels {
   ): Promise<Session<any>> {
     const controller = this.requireController();
     const channelResourceId = thread.resourceId;
-    // `createSession` is get-or-create keyed by resourceId, so follow-up messages
-    // on the same thread reuse the cached session bound to this thread. The
-    // dispatch requestContext must flow in: a dynamic workspace factory is
-    // resolved once at session creation with THIS context, and it may need the
-    // stamped tenant (`user`) to authorize a repo-backed session workspace.
-    const session = await controller.createSession({
-      resourceId: channelResourceId,
-      id: channelResourceId,
-      ownerId: controller.id,
-      requestContext,
-    });
+    let session: Session<any>;
+    if (this.resolveSessionHook) {
+      session = await this.resolveSessionHook({
+        controller,
+        thread,
+        requestContext,
+      });
+    } else {
+      // `createSession` is get-or-create keyed by resourceId, so follow-up messages
+      // on the same thread reuse the cached session bound to this thread. The
+      // dispatch requestContext must flow in: a dynamic workspace factory is
+      // resolved once at session creation with THIS context, and it may need the
+      // stamped tenant (`user`) to authorize a repo-backed session workspace.
+      session = await controller.createSession({
+        resourceId: channelResourceId,
+        id: channelResourceId,
+        ownerId: controller.id,
+        requestContext,
+      });
+    }
     // Bind the mapped thread. Guard is mandatory: `switch` aborts any active
     // run, so never re-switch when the session is already on this thread.
     if (session.thread.getId() !== thread.id) {

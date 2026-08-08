@@ -126,7 +126,9 @@ async function createSetup({
   toolDisplay,
   stateSchema,
   agentMemory,
+  resolveSession,
   onSessionStart,
+  onStaleToolApproval,
 }: {
   responseText?: string;
   model?: MockLanguageModelV2;
@@ -135,7 +137,9 @@ async function createSetup({
   stateSchema?: z.ZodTypeAny;
   /** Memory for the mode agent — required for signal persistence assertions. */
   agentMemory?: MockMemory;
+  resolveSession?: (ctx: any) => any;
   onSessionStart?: (ctx: any) => void | Promise<void>;
+  onStaleToolApproval?: (ctx: any) => void | Promise<void>;
 } = {}) {
   const adapter = createMockAdapter('discord');
   const agent = new Agent({
@@ -155,7 +159,9 @@ async function createSetup({
     defaultModeId: 'build',
     channels: {
       adapters: { discord: toolDisplay ? { adapter, toolDisplay } : adapter },
+      ...(resolveSession ? { resolveSession } : {}),
       ...(onSessionStart ? { onSessionStart } : {}),
+      ...(onStaleToolApproval ? { onStaleToolApproval } : {}),
     },
     ...(stateSchema ? { stateSchema } : {}),
   });
@@ -748,6 +754,147 @@ describe('AgentControllerChannels', () => {
 
       const renderContext = await channels.buildRenderContextForThread(mapped!.id);
       expect(renderContext).not.toBeNull();
+    }, 30_000);
+  });
+
+  describe('resolveSession and onStaleToolApproval hooks (issue #21025)', () => {
+    it('uses resolveSession to create/resolve a custom session before default session creation', async () => {
+      let resolveCalled = false;
+      const resolveSession = vi.fn(async ({ controller, thread, requestContext }) => {
+        resolveCalled = true;
+        // Verify controller, thread, and requestContext are passed in
+        expect(controller).toBeDefined();
+        expect(thread.resourceId).toBe('channel:chan-1:t-custom');
+        expect(requestContext).toBeDefined();
+        return controller.createSession({
+          resourceId: thread.resourceId,
+          id: thread.resourceId,
+          ownerId: controller.id,
+          requestContext,
+        });
+      });
+
+      const { adapter, mastra, channels, controller } = await createSetup({
+        resolveSession,
+      });
+      const chatThread = createChatThread(adapter, 'chan-1:t-custom');
+
+      const reqCtx = new RequestContext();
+      reqCtx.set('user', 'custom-user');
+
+      await (channels as any).processChatMessage(
+        chatThread,
+        createMessage('m-1', 'hello custom session'),
+        mastra,
+        reqCtx,
+      );
+
+      expect(resolveCalled).toBe(true);
+      expect(resolveSession).toHaveBeenCalledWith(
+        expect.objectContaining({
+          controller,
+          thread: expect.objectContaining({ resourceId: 'channel:chan-1:t-custom' }),
+          requestContext: reqCtx,
+        }),
+      );
+      const session = await controller.getSessionByResource('channel:chan-1:t-custom');
+      expect(session).toBeDefined();
+    }, 30_000);
+
+    it('fails closed when resolveSession throws an authorization error (no session created or run executed)', async () => {
+      const resolveSession = vi.fn(() => {
+        throw new Error('Unauthorized channel request context');
+      });
+
+      const { adapter, mastra, channels, controller } = await createSetup({
+        resolveSession,
+      });
+      const chatThread = createChatThread(adapter, 'chan-1:t-blocked');
+
+      await expect(
+        (channels as any).processChatMessage(
+          chatThread,
+          createMessage('m-1', 'hello blocked'),
+          mastra,
+          new RequestContext(),
+        ),
+      ).rejects.toThrow('Unauthorized channel request context');
+
+      // Fail-closed: No session created
+      const session = await controller.getSessionByResource('channel:chan-1:t-blocked');
+      expect(session).toBeUndefined();
+    }, 30_000);
+
+    it('passes requestContext to resolveSession during approval continuation', async () => {
+      const resolveSessionCalls: any[] = [];
+      const resolveSession = vi.fn(async ({ controller, thread, requestContext }) => {
+        resolveSessionCalls.push({ threadId: thread.id, resourceId: thread.resourceId, requestContext });
+        return controller.createSession({
+          resourceId: thread.resourceId,
+          id: thread.resourceId,
+          ownerId: controller.id,
+          requestContext,
+        });
+      });
+
+      const { tool } = createDeployTool();
+      const { adapter, controller, mastra, channels } = await createSetup({
+        model: createApprovalFlowModel(),
+        tools: { deployTool: tool },
+        resolveSession,
+      });
+      const chatThread = createChatThread(adapter, 'chan-1:t-approval-ctx');
+
+      const reqCtx = new RequestContext();
+      reqCtx.set('authToken', 'valid-approval-token');
+
+      await (channels as any).processChatMessage(chatThread, createMessage('m-1', 'deploy now'), mastra, reqCtx);
+
+      const session = (await controller.getSessionByResource('channel:chan-1:t-approval-ctx'))!;
+      await waitFor(() => session.approval.isArmed(), { what: 'approval gate armed' });
+
+      // First call (inbound message) passed reqCtx
+      expect(resolveSessionCalls[0].requestContext).toBe(reqCtx);
+
+      const toolCallId = session.approval.getToolCallId()!;
+      await simulateAction(channels, adapter, 'chan-1:t-approval-ctx', `tool_approve:${toolCallId}`);
+
+      // Continuation call for approval also passed requestContext into getSessionForThread & resolveSession!
+      expect(resolveSessionCalls.length).toBeGreaterThan(1);
+      const continuationCall = resolveSessionCalls[resolveSessionCalls.length - 1];
+      expect(continuationCall.requestContext).toBeDefined();
+    }, 30_000);
+
+    it('invokes onStaleToolApproval when an approval action targets an unarmed approval gate', async () => {
+      const onStaleToolApproval = vi.fn(async (ctx: any) => {
+        expect(ctx.decision).toBe('approve');
+        expect(ctx.toolCallId).toBe('call-stale-999');
+        expect(ctx.runId).toBe('run-stale-111');
+        expect(ctx.memory).toMatchObject({ thread: expect.any(String), resource: 'channel:stale-res' });
+        expect(ctx.session).toBeDefined();
+      });
+
+      const { channels, controller } = await createSetup({
+        onStaleToolApproval,
+      });
+
+      const session = await controller.createSession({
+        resourceId: 'channel:stale-res',
+        id: 'channel:stale-res',
+        ownerId: controller.id,
+      });
+      const threadId = session.thread.getId();
+
+      const reqCtx = new RequestContext();
+      await (channels as any).respondToSessionApproval({
+        decision: 'approve',
+        runId: 'run-stale-111',
+        toolCallId: 'call-stale-999',
+        requestContext: reqCtx,
+        memory: { thread: threadId, resource: 'channel:stale-res' },
+      });
+
+      expect(onStaleToolApproval).toHaveBeenCalledTimes(1);
     }, 30_000);
   });
 });

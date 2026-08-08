@@ -2,8 +2,12 @@ export { AgentChannels } from './agent-channels';
 export { AgentControllerChannels } from './agent-controller-channels';
 export type {
   AgentControllerChannelsConfig,
+  ChannelSessionResolve,
+  ChannelSessionResolveContext,
   ChannelSessionStart,
   ChannelSessionStartContext,
+  ChannelStaleToolApproval,
+  ChannelStaleToolApprovalContext,
 } from './agent-controller-channels';
 export { ChatChannelProcessor } from './processor';
 export { MastraStateAdapter } from './state-adapter';
