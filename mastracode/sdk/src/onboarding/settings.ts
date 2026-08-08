@@ -114,6 +114,13 @@ export interface StagehandSettings {
   env: StagehandEnv;
   apiKey?: string;
   projectId?: string;
+  /**
+   * Model Stagehand uses for its AI operations, as `provider/model`
+   * (for example `anthropic/claude-sonnet-4-5`). Stagehand resolves the
+   * provider's API key from the environment (`ANTHROPIC_API_KEY`,
+   * `OPENAI_API_KEY`, and so on). Defaults to Stagehand's own default.
+   */
+  model?: string;
   /** Whether to preserve the user data directory after the browser closes. */
   preserveUserDataDir?: boolean;
 }
@@ -534,6 +541,28 @@ const BROWSER_PROVIDERS = new Set<BrowserProvider>(['stagehand', 'agent-browser'
 const STAGEHAND_ENVS = new Set<StagehandEnv>(['LOCAL', 'BROWSERBASE']);
 
 /**
+ * Normalize a Stagehand model id, which must be provider-qualified.
+ *
+ * Stagehand reads the segment before the first slash as the provider, so a
+ * bare id like `gpt-4.1` is rejected as an unknown provider and a trailing
+ * slash leaves an empty model name that only fails once a request is made.
+ * Neither is usable, so both are dropped here rather than persisted.
+ *
+ * The provider name itself is checked where the command is issued, which can
+ * name the supported providers in an error; this module is on the startup path
+ * and only imports Stagehand lazily.
+ *
+ * @returns the trimmed model id, or undefined when it is unusable.
+ */
+function parseStagehandModel(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const model = value.trim();
+  const separator = model.indexOf('/');
+  if (separator <= 0) return undefined;
+  return model.slice(separator + 1).trim() ? model : undefined;
+}
+
+/**
  * Deep-merge and validate browser settings from JSON.
  * Explicitly validates types to handle malformed settings.json gracefully.
  */
@@ -542,6 +571,7 @@ function parseBrowserSettings(rawBrowser: unknown): BrowserSettings {
   const rawViewport = raw.viewport && typeof raw.viewport === 'object' ? (raw.viewport as Record<string, unknown>) : {};
   const rawStagehand =
     raw.stagehand && typeof raw.stagehand === 'object' ? (raw.stagehand as Record<string, unknown>) : {};
+  const stagehandModel = parseStagehandModel(rawStagehand.model);
   const rawAgentBrowser =
     raw.agentBrowser && typeof raw.agentBrowser === 'object' ? (raw.agentBrowser as Record<string, unknown>) : {};
 
@@ -572,6 +602,7 @@ function parseBrowserSettings(rawBrowser: unknown): BrowserSettings {
       ...(typeof rawStagehand.projectId === 'string' && rawStagehand.projectId.trim()
         ? { projectId: rawStagehand.projectId.trim() }
         : {}),
+      ...(stagehandModel ? { model: stagehandModel } : {}),
       ...(typeof rawStagehand.preserveUserDataDir === 'boolean'
         ? { preserveUserDataDir: rawStagehand.preserveUserDataDir }
         : {}),
@@ -1142,9 +1173,16 @@ export async function createBrowserFromSettings(settings: BrowserSettings): Prom
     //     requires on every request.
     // Model is `gpt-5.4-mini`, the current ChatGPT-sign-in Codex whitelist
     // pick suited to Stagehand's vision + structured-output workload.
+    //
+    // An explicitly configured model wins: Codex is a fallback for users who
+    // have no model of their own, not an override of one they chose. Stagehand
+    // resolves the provider's API key from the environment for plain
+    // `provider/model` strings, so no key plumbing is needed here.
     const authStorage = new AuthStorage();
     const cred = authStorage.get('openai-codex');
-    if (cred?.type === 'oauth') {
+    if (stagehand?.model) {
+      stagehandOpts.model = stagehand.model;
+    } else if (cred?.type === 'oauth') {
       const accountId = (cred as any).accountId as string | undefined;
       stagehandOpts.model = {
         modelName: 'openai/gpt-5.4-mini',
