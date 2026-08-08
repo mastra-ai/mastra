@@ -793,6 +793,16 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
 
               self.#bufferedSteps.push(stepResult);
 
+              // This attempt was rejected by a processor and will be retried, so every
+              // artifact derived from it is stale. `text` is already excluded via the
+              // empty `stepText` above; the structured object needs the same treatment,
+              // otherwise the retried attempt's `object-result` is dropped as
+              // "already resolved" and the final result reports the accepted text
+              // alongside the rejected attempt's object.
+              if (stepTripwire?.retry) {
+                self.#invalidateObjectFromRejectedAttempt();
+              }
+
               self.#bufferedByStep = {
                 text: '',
                 reasoning: [],
@@ -1877,6 +1887,35 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
    * (`#usageCount`), in-flight per-step state (`#bufferedByStep`), structured
    * output, and the MessageList are intentionally untouched.
    */
+  /**
+   * Discard the structured object produced by an attempt that a processor
+   * rejected with `retry: true`, so the retried attempt can supply its own.
+   *
+   * `object` is a derived view of the model's text. When an attempt is rejected,
+   * its object must not survive into the final result: the run reports success,
+   * so callers have no signal that `object` disagrees with `text`.
+   *
+   * Returning the delayed promise to `pending` lets the retried attempt's
+   * `object-result` chunk resolve it. If the promise was already materialized
+   * (something awaited `object` mid-run, before any attempt was accepted) it
+   * cannot be un-settled; warn rather than silently serve a stale value.
+   */
+  #invalidateObjectFromRejectedAttempt() {
+    this.#bufferedObject = undefined;
+
+    if (this.#delayedPromises.object.status.type === 'pending') {
+      return;
+    }
+
+    if (!this.#delayedPromises.object.reset()) {
+      this.logger?.warn?.(
+        'Structured output was awaited before an output processor rejected and retried the response. ' +
+          'The already-returned `object` promise reflects the rejected attempt. ' +
+          'Await `object` after the run finishes to get the accepted attempt.',
+      );
+    }
+  }
+
   #truncateRunBuffers() {
     this.#bufferedChunks.length = 0;
     this.#bufferedSteps.length = 0;

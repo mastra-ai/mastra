@@ -45,4 +45,23 @@ export class DelayedPromise<T> {
       this._reject?.(error);
     }
   }
+
+  /**
+   * Return an already-settled promise to `pending` so a superseding value can
+   * settle it instead. Used when the attempt that produced the current value is
+   * rejected and retried, making that value stale.
+   *
+   * Only safe while the promise has never been materialized: once `promise` has
+   * been accessed, the value may already have been observed and JS promises
+   * cannot be un-settled. Returns `false` in that case so callers can tell that
+   * the stale value is still reachable through the promise.
+   */
+  reset(): boolean {
+    if (this._promise) {
+      return false;
+    }
+
+    this.status = { type: 'pending' };
+    return true;
+  }
 }
