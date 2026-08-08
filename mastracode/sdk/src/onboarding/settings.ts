@@ -109,6 +109,51 @@ export interface VoiceSettings {
 /** Stagehand environment type. */
 export type StagehandEnv = 'LOCAL' | 'BROWSERBASE';
 
+/**
+ * Browser viewport: explicit dimensions, or `'window'` to follow the real
+ * browser window instead of emulating a fixed size.
+ */
+export type BrowserViewport = { width: number; height: number } | 'window';
+
+/** Named viewport sizes offered by `/browser set viewport`. */
+export const VIEWPORT_PRESETS = {
+  desktop: { width: 1280, height: 720 },
+  'desktop-hd': { width: 1920, height: 1080 },
+  laptop: { width: 1440, height: 900 },
+  tablet: { width: 768, height: 1024 },
+  mobile: { width: 390, height: 844 },
+} as const satisfies Record<string, { width: number; height: number }>;
+
+export type ViewportPreset = keyof typeof VIEWPORT_PRESETS;
+
+/**
+ * Largest viewport dimension accepted. Guards against typos that would launch a
+ * browser far larger than any display.
+ */
+const MAX_VIEWPORT_DIMENSION = 10000;
+
+function isValidDimension(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0 && value <= MAX_VIEWPORT_DIMENSION;
+}
+
+/**
+ * Parse a `WIDTHxHEIGHT` string (e.g. `1280x720`), a preset name, or `window`.
+ * Returns undefined when the input is not a usable viewport.
+ */
+export function parseViewportInput(input: string): BrowserViewport | undefined {
+  const value = input.trim().toLowerCase();
+  if (!value) return undefined;
+  if (value === 'window') return 'window';
+  if (value in VIEWPORT_PRESETS) return { ...VIEWPORT_PRESETS[value as ViewportPreset] };
+
+  const match = /^(\d+)\s*[x×]\s*(\d+)$/.exec(value);
+  if (!match) return undefined;
+  const width = Number(match[1]);
+  const height = Number(match[2]);
+  if (!isValidDimension(width) || !isValidDimension(height)) return undefined;
+  return { width, height };
+}
+
 /** Stagehand-specific browser settings. */
 export interface StagehandSettings {
   env: StagehandEnv;
@@ -139,8 +184,11 @@ export interface BrowserSettings {
   provider: BrowserProvider;
   /** Whether to run headless (no visible browser window). */
   headless: boolean;
-  /** Browser viewport dimensions. */
-  viewport?: { width: number; height: number };
+  /**
+   * Browser viewport dimensions, or `'window'` to disable viewport emulation so
+   * the page follows the real browser window.
+   */
+  viewport?: BrowserViewport;
   /** CDP URL for connecting to an existing browser. */
   cdpUrl?: string;
   /** Path to a Chrome/Chromium user data directory (profile). */
@@ -346,7 +394,7 @@ const DEFAULTS: GlobalSettings = {
     enabled: false,
     provider: 'stagehand',
     headless: false,
-    viewport: { width: 1280, height: 720 },
+    viewport: { ...VIEWPORT_PRESETS.desktop },
     stagehand: { env: 'LOCAL' },
   },
   shellPassthrough: { mode: 'default' },
@@ -563,12 +611,24 @@ function parseStagehandModel(value: unknown): string | undefined {
 }
 
 /**
+ * Validate a viewport read from settings.json, falling back to the default when
+ * it is missing or malformed.
+ */
+function parseStoredViewport(raw: unknown): BrowserViewport {
+  if (raw === 'window') return 'window';
+  if (raw && typeof raw === 'object') {
+    const { width, height } = raw as Record<string, unknown>;
+    if (isValidDimension(width) && isValidDimension(height)) return { width, height };
+  }
+  return { ...VIEWPORT_PRESETS.desktop };
+}
+
+/**
  * Deep-merge and validate browser settings from JSON.
  * Explicitly validates types to handle malformed settings.json gracefully.
  */
 function parseBrowserSettings(rawBrowser: unknown): BrowserSettings {
   const raw = rawBrowser && typeof rawBrowser === 'object' ? (rawBrowser as Record<string, unknown>) : {};
-  const rawViewport = raw.viewport && typeof raw.viewport === 'object' ? (raw.viewport as Record<string, unknown>) : {};
   const rawStagehand =
     raw.stagehand && typeof raw.stagehand === 'object' ? (raw.stagehand as Record<string, unknown>) : {};
   const stagehandModel = parseStagehandModel(rawStagehand.model);
@@ -586,10 +646,7 @@ function parseBrowserSettings(rawBrowser: unknown): BrowserSettings {
     profile: typeof raw.profile === 'string' && raw.profile.trim() ? raw.profile.trim() : undefined,
     executablePath:
       typeof raw.executablePath === 'string' && raw.executablePath.trim() ? raw.executablePath.trim() : undefined,
-    viewport: {
-      width: typeof rawViewport.width === 'number' ? rawViewport.width : DEFAULTS.browser.viewport!.width,
-      height: typeof rawViewport.height === 'number' ? rawViewport.height : DEFAULTS.browser.viewport!.height,
-    },
+    viewport: parseStoredViewport(raw.viewport),
     scope: typeof raw.scope === 'string' && (raw.scope === 'shared' || raw.scope === 'thread') ? raw.scope : undefined,
     stagehand: {
       env:

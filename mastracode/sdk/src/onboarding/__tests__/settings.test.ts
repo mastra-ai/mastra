@@ -11,6 +11,7 @@ import {
   migrateLegacyVariedPack,
   parseCustomProviders,
   parseThreadSettings,
+  parseViewportInput,
   resolveDefaultThinkingLevel,
   resolveOmRoleModel,
   resolveThreadActiveModelPackId,
@@ -909,6 +910,60 @@ describe('parseBrowserSettings — stagehand model', () => {
   it('keeps the rest of the stagehand settings when the model is dropped', () => {
     expect(parseBrowser({ stagehand: { env: 'BROWSERBASE', model: 'gpt-4.1' } }).stagehand?.env).toBe('BROWSERBASE');
   });
+});
+
+describe('parseViewportInput', () => {
+  it.each([
+    ['desktop', { width: 1280, height: 720 }],
+    ['desktop-hd', { width: 1920, height: 1080 }],
+    ['MOBILE', { width: 390, height: 844 }],
+    ['1600x1000', { width: 1600, height: 1000 }],
+    ['1600 x 1000', { width: 1600, height: 1000 }],
+    ['  1600X1000  ', { width: 1600, height: 1000 }],
+  ])('parses %p', (input, expected) => {
+    expect(parseViewportInput(input)).toEqual(expected);
+  });
+
+  it('parses window', () => {
+    expect(parseViewportInput('window')).toBe('window');
+  });
+
+  it.each([[''], ['   '], ['1280'], ['1280x'], ['0x720'], ['-10x720'], ['1280.5x720'], ['99999x720'], ['huge']])(
+    'rejects %p',
+    input => {
+      expect(parseViewportInput(input)).toBeUndefined();
+    },
+  );
+});
+
+describe('parseBrowserSettings — viewport', () => {
+  function parseBrowser(browser: unknown): BrowserSettings {
+    const dir = mkdtempSync(join(tmpdir(), 'mc-browser-viewport-'));
+    const file = join(dir, 'settings.json');
+    writeFileSync(file, JSON.stringify({ browser }));
+    try {
+      return loadSettings(file).browser;
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }
+
+  it('round-trips explicit dimensions', () => {
+    expect(parseBrowser({ viewport: { width: 1600, height: 1000 } }).viewport).toEqual({ width: 1600, height: 1000 });
+  });
+
+  it('round-trips window', () => {
+    expect(parseBrowser({ viewport: 'window' }).viewport).toBe('window');
+  });
+
+  // A hand-edited settings.json bypasses /browser set viewport validation, so
+  // unusable shapes fall back to the default rather than reaching the provider.
+  it.each([[undefined], ['maximized'], [{ width: 0, height: 720 }], [{ width: '1280', height: 720 }], [{}], [42]])(
+    'falls back to the default for %p',
+    value => {
+      expect(parseBrowser({ viewport: value }).viewport).toEqual({ width: 1280, height: 720 });
+    },
+  );
 });
 
 describe('createBrowserFromSettings — recording tools gating', () => {

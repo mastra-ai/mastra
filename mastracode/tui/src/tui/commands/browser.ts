@@ -1,6 +1,7 @@
 import type {
   BrowserProvider,
   BrowserSettings,
+  BrowserViewport,
   GlobalSettings,
   StagehandEnv,
 } from '@mastra/code-sdk/onboarding/settings';
@@ -8,8 +9,10 @@ import {
   checkProfileProviderMismatch,
   createBrowserFromSettings,
   loadSettings,
+  parseViewportInput,
   saveSettings,
   setProfileProvider,
+  VIEWPORT_PRESETS,
 } from '@mastra/code-sdk/onboarding/settings';
 import type { MastraBrowser } from '@mastra/core/browser';
 import { STAGEHAND_MODEL_PROVIDERS } from '@mastra/stagehand';
@@ -37,7 +40,7 @@ type StorageStateExportBrowser = MastraBrowser & { exportStorageState: (path: st
  *   /browser status       - Show current browser configuration
  *   /browser on           - Enable browser with current settings
  *   /browser off          - Disable browser
- *   /browser set <k> <v>  - Set a specific setting (profile, executablePath, storageState, cdpUrl, model)
+ *   /browser set <k> <v>  - Set a specific setting (profile, executablePath, storageState, cdpUrl, model, viewport)
  */
 
 /**
@@ -59,6 +62,83 @@ function stagehandModelError(modelId: string): string | undefined {
     return `Unsupported model provider: ${provider}. Supported providers: ${STAGEHAND_MODEL_PROVIDERS.join(', ')}.`;
   }
   return undefined;
+}
+
+/** Render a viewport for status output and confirmations. */
+function formatViewport(viewport: BrowserViewport | undefined): string {
+  if (!viewport) return 'default';
+  if (viewport === 'window') return 'window (match browser window)';
+  return `${viewport.width}x${viewport.height}`;
+}
+
+/**
+ * `'window'` skips viewport emulation, which only works where the provider can
+ * be told not to emulate. Stagehand overwrites an absent viewport with its own
+ * default when it launches the browser itself, so it can only honor `'window'`
+ * when connecting to an already-running browser over CDP.
+ */
+function windowViewportError(browser: BrowserSettings): string | undefined {
+  if (browser.provider !== 'stagehand' || browser.cdpUrl) return undefined;
+  return 'viewport window is not supported when stagehand launches its own browser. Use the agent-browser provider, set a cdpUrl, or pick explicit dimensions.';
+}
+
+/** Preset choices offered by the `/browser set viewport` picker. */
+function viewportChoices(browser: BrowserSettings): Array<{ label: string; description?: string }> {
+  const choices = Object.entries(VIEWPORT_PRESETS).map(([name, size]) => ({
+    label: name,
+    description: `${size.width}x${size.height}`,
+  }));
+  if (!windowViewportError(browser)) {
+    choices.push({ label: 'window', description: 'Follow the real browser window (no emulation)' });
+  }
+  choices.push({ label: 'custom', description: 'Enter WIDTHxHEIGHT, e.g. 1600x1000' });
+  return choices;
+}
+
+/**
+ * Persist a viewport choice. Kept separate so the picker and the
+ * `/browser set viewport <value>` path apply the same validation.
+ */
+function applyViewport(ctx: SlashCommandContext, settings: GlobalSettings, viewport: BrowserViewport): boolean {
+  if (viewport === 'window') {
+    const error = windowViewportError(settings.browser);
+    if (error) {
+      ctx.showError(error);
+      return false;
+    }
+  }
+  settings.browser.viewport = viewport;
+  saveSettings(settings);
+  ctx.showInfo(`Set viewport = ${formatViewport(viewport)}\nRun /browser on to apply.`);
+  return true;
+}
+
+/**
+ * Ask for a viewport from a preset list rather than making the user recall
+ * dimensions, falling back to a free-text prompt for a custom size.
+ */
+async function promptForViewport(ctx: SlashCommandContext, settings: GlobalSettings): Promise<void> {
+  const choice = await askInline(ctx, 'Viewport size?', viewportChoices(settings.browser));
+  if (!choice) return;
+
+  if (choice === 'custom') {
+    const custom = await askText(ctx, 'Viewport (WIDTHxHEIGHT):', formatViewport(settings.browser.viewport));
+    if (!custom) return;
+    const parsed = parseViewportInput(custom);
+    if (!parsed) {
+      ctx.showError(`Invalid viewport: ${custom}. Use WIDTHxHEIGHT, for example 1280x720.`);
+      return;
+    }
+    applyViewport(ctx, settings, parsed);
+    return;
+  }
+
+  const parsed = parseViewportInput(choice);
+  if (!parsed) {
+    ctx.showError(`Invalid viewport: ${choice}.`);
+    return;
+  }
+  applyViewport(ctx, settings, parsed);
 }
 
 /**
@@ -211,6 +291,7 @@ function getBrowserConfigKey(settings: BrowserSettings): string {
     parts.push(`model:${settings.stagehand.model}`);
   }
   parts.push(settings.headless ? 'headless' : 'headed');
+  if (settings.viewport) parts.push(`viewport:${formatViewport(settings.viewport)}`);
   if (settings.profile) parts.push(`profile:${settings.profile}`);
   if (settings.executablePath) parts.push(`exec:${settings.executablePath}`);
   if (settings.cdpUrl) parts.push(`cdp:${settings.cdpUrl}`);
@@ -247,20 +328,26 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
           '  storageState <path>  - Playwright storage state file (agent-browser only)\n' +
           '  cdpUrl <url>         - CDP WebSocket URL\n' +
           '  model [provider/id]  - Model Stagehand uses for AI operations (stagehand only).\n' +
+          '                         Omit the value to pick from a list.\n' +
+          '  viewport [size]      - Preset name, WIDTHxHEIGHT, or window.\n' +
           '                         Omit the value to pick from a list.\n\n' +
           'To remove a setting, use: /browser clear <key>\n\n' +
           'Examples:\n' +
           '  /browser set profile ~/.mastracode/browser-profile-stagehand\n' +
           '  /browser set model\n' +
+          '  /browser set viewport 1920x1080\n' +
+          '  /browser set viewport window\n' +
           '  /browser set model anthropic/claude-sonnet-4-5\n' +
           '  /browser set executablePath /Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
       );
       return;
     }
 
-    const validKeys = ['profile', 'executablepath', 'storagestate', 'cdpurl', 'model'];
+    const validKeys = ['profile', 'executablepath', 'storagestate', 'cdpurl', 'model', 'viewport'];
     if (!validKeys.includes(key)) {
-      ctx.showError(`Unknown key: ${args[1]}. Valid keys: profile, executablePath, storageState, cdpUrl, model`);
+      ctx.showError(
+        `Unknown key: ${args[1]}. Valid keys: profile, executablePath, storageState, cdpUrl, model, viewport`,
+      );
       return;
     }
 
@@ -269,6 +356,10 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
       // searchable picker used elsewhere instead of erroring out.
       if (key === 'model') {
         await promptForStagehandModel(ctx, settings, browser);
+        return;
+      }
+      if (key === 'viewport') {
+        await promptForViewport(ctx, settings);
         return;
       }
       ctx.showError(
@@ -332,6 +423,17 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
         ctx.showInfo(`Set model = ${modelId}\nRun /browser on to apply.`);
         return;
       }
+      case 'viewport': {
+        const parsed = parseViewportInput(value);
+        if (!parsed) {
+          ctx.showError(
+            `Invalid viewport: ${value.trim()}. Use WIDTHxHEIGHT, window, or a preset (${Object.keys(VIEWPORT_PRESETS).join(', ')}).`,
+          );
+          return;
+        }
+        applyViewport(ctx, settings, parsed);
+        return;
+      }
       case 'cdpurl':
         settings.browser.cdpUrl = expandedValue;
         // CDP connects to an existing browser — launch options are ignored
@@ -380,6 +482,7 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
       if (!activeIsBrowserbase) {
         lines.push(`  Headless: ${activeSettings.headless ? 'yes' : 'no'}`);
       }
+      lines.push(`  Viewport: ${formatViewport(activeSettings.viewport)}`);
       if (activeSettings.executablePath) lines.push(`  Executable: ${activeSettings.executablePath}`);
       if (activeSettings.profile) lines.push(`  Profile: ${activeSettings.profile}`);
       if (activeSettings.agentBrowser?.storageState)
@@ -400,6 +503,7 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
       if (!fileIsBrowserbase) {
         lines.push(`  Headless: ${browser.headless ? 'yes' : 'no'}`);
       }
+      lines.push(`  Viewport: ${formatViewport(browser.viewport)}`);
       if (browser.executablePath) lines.push(`  Executable: ${browser.executablePath}`);
       if (browser.profile) lines.push(`  Profile: ${browser.profile}`);
       if (browser.agentBrowser?.storageState) lines.push(`  Storage State: ${browser.agentBrowser.storageState}`);
@@ -424,6 +528,7 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
       if (!isBrowserbase) {
         lines.push(`  Headless: ${browser.headless ? 'yes' : 'no'}`);
       }
+      lines.push(`  Viewport: ${formatViewport(browser.viewport)}`);
       if (browser.executablePath) {
         lines.push(`  Executable: ${browser.executablePath}`);
       }
@@ -536,8 +641,13 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
           delete settings.browser.stagehand.model;
         }
         break;
+      case 'viewport':
+        settings.browser.viewport = { ...VIEWPORT_PRESETS.desktop };
+        break;
       default:
-        ctx.showError(`Unknown field: ${field}. Valid fields: profile, executablePath, storageState, cdpUrl, model`);
+        ctx.showError(
+          `Unknown field: ${field}. Valid fields: profile, executablePath, storageState, cdpUrl, model, viewport`,
+        );
         return;
     }
 
@@ -608,8 +718,8 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
       '  off, disable   Disable browser',
       '  status         Show current configuration',
       '  clear          Reset all settings to defaults',
-      '  clear <key>    Clear: profile, executablePath, storageState, cdpUrl, model',
-      '  set <key> <v>  Set: profile, executablePath, storageState, cdpUrl, model',
+      '  clear <key>    Clear: profile, executablePath, storageState, cdpUrl, model, viewport',
+      '  set <key> <v>  Set: profile, executablePath, storageState, cdpUrl, model, viewport',
       '  export storageState <path>  Export session cookies/localStorage (agent-browser)',
     ];
     ctx.showInfo(help.join('\n'));
