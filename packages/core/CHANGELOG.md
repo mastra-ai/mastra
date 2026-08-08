@@ -1,5 +1,27 @@
 # @mastra/core
 
+## 1.58.0-alpha.5
+
+### Minor Changes
+
+- Renamed the beta stored workflows feature to dynamic workflows. `mastra.addStoredWorkflow()` is now `mastra.addDynamicWorkflow()`, `addStoredWorkflows()` is now `addDynamicWorkflows()`, the `StoredWorkflow*` types are now `DynamicWorkflow*`, and `workflow.origin` reports `'dynamic'` instead of `'stored'`. ([#20938](https://github.com/mastra-ai/mastra/pull/20938))
+
+### Patch Changes
+
+- Fixed deferred notifications accumulating dead workflow records forever. The internal dispatcher runs on a schedule (every minute by default) and left a completed snapshot row behind on every run, so `mastra_workflow_snapshot` grew unboundedly — tens of thousands of rows that were never read again. These runs no longer persist snapshots. Fixes #20254 ([#20970](https://github.com/mastra-ai/mastra/pull/20970))
+
+- Fixed `include` in `listMessages` and `listMessagesByResourceId` so it can no longer return a message that belongs to a different resource. When you pass a `resourceId`, the target message and its surrounding context messages now stay inside that resource. Includes that cross threads inside the same resource keep working, so semantic recall with `scope: 'resource'` is unchanged. ([#20984](https://github.com/mastra-ai/mastra/pull/20984))
+
+  **Behaviour change in the in-memory store**
+
+  The in-memory store read the context window from the thread you queried. It now reads the window from the thread that owns the target message, which is what the SQL stores already did. This only changes the result when an `include` entry names a message from another thread.
+
+  The in-memory store also ignored `include` in `listMessagesByResourceId`. It now returns the included messages, like `@mastra/libsql` and `@mastra/pg` do.
+
+  Fixes #20604.
+
+- Fix schema-based working memory losing stored data on partial updates. When a model updated one section of working memory, unrelated sections could be wiped out. Tools can now set `strict: false` to opt out of strict structured-output schema rewriting, which previously forced every field to be required and left models no way to signal "leave this field alone". ([#20992](https://github.com/mastra-ai/mastra/pull/20992))
+
 ## 1.58.0-alpha.4
 
 ### Minor Changes

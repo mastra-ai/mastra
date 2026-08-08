@@ -10,8 +10,7 @@ import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
 import { LocalSandbox, LocalSkillSource, Workspace } from '@mastra/core/workspace';
 import type { SkillSource, SkillSourceEntry, SkillSourceStat } from '@mastra/core/workspace';
-import { getFactoryAuthUserId } from './auth.js';
-import type { FactoryAuthUser } from './auth.js';
+import { getFactoryAuthUserFromContext, getFactoryAuthUserId } from './auth.js';
 import type { MastraFactorySandboxConfig } from './factory.js';
 import type { GithubIntegration } from './integrations/github/integration.js';
 import { getGithubPat } from './integrations/github/pat.js';
@@ -152,7 +151,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       return getDynamicWorkspace({ requestContext, mastra, skillExtension: effectiveSkillExtension });
     }
 
-    const user = requestContext.get('user') as FactoryAuthUser | undefined;
+    const user = getFactoryAuthUserFromContext(requestContext);
     const userId = getFactoryAuthUserId(user);
     // No identity at all is a server-side caller that forgot to seed one
     // (webhook, cron), not someone reaching for another user's session.

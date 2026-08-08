@@ -1,8 +1,7 @@
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
 import type { RequestContext } from '@mastra/core/request-context';
 
-import type { FactoryAuthUser } from '../auth.js';
-import { getFactoryAuthOrgId } from '../auth.js';
+import { getFactoryAuthOrgId, getFactoryAuthUserFromContext } from '../auth.js';
 import type {
   FactoryRunBindingAddress,
   FactoryRunBindingRecord,
@@ -42,7 +41,7 @@ export function getFactorySessionCoordinates(
 export function getFactorySessionAddress(requestContext: RequestContext | undefined): FactoryRunBindingAddress | null {
   const coordinates = getFactorySessionCoordinates(requestContext);
   if (!coordinates || !requestContext || typeof requestContext.get !== 'function') return null;
-  const user = requestContext.get('user') as FactoryAuthUser | undefined;
+  const user = getFactoryAuthUserFromContext(requestContext);
   const orgId = getFactoryAuthOrgId(user);
   if (!orgId) return null;
   return { orgId, ...coordinates };
@@ -75,7 +74,7 @@ export async function resolveFactorySessionAddress(options: {
   if (!requestContext || typeof requestContext.get !== 'function') return null;
   const context = requestContext.get('controller') as FactorySessionControllerContext | undefined;
   if (!context?.threadId || !context.resourceId) return null;
-  const user = requestContext.get('user') as FactoryAuthUser | undefined;
+  const user = getFactoryAuthUserFromContext(requestContext);
   const orgId = getFactoryAuthOrgId(user);
   if (!orgId) return null;
 

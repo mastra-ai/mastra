@@ -560,6 +560,63 @@ describe('GitHub session workspace preparation', () => {
     expect(mocks.sessions.find(session => session.id === 'session-b')?.sandboxWorkdir).toBe(workdirB);
   });
 
+  it('opens the session for a session-shaped auth user, whose org lives on the session half', async () => {
+    const { root, workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+    // better-auth's `authenticateToken` answers with a wrapper rather than a
+    // flat user, and the server writes that answer onto the request context
+    // verbatim. Read as a flat user it has neither an id nor an org, so the
+    // owner of the session gets refused their own session.
+    const requestContext = createGithubRequestContext('project-1', 'session-a', {
+      session: { activeOrganizationId: 'org-1' },
+      user: { id: 'user-1', email: 'owner@example.com' },
+    });
+
+    const opened = await workspace({ requestContext });
+
+    expect(opened.id).toContain('project-1-session-a');
+    expect(mocks.materializeRepo).toHaveBeenCalledWith(
+      expect.objectContaining({
+        row: expect.objectContaining({
+          id: 'session-a',
+          sandboxWorkdir: path.join(root, 'github-sessions', 'octocat', 'hello', 'session-a'),
+        }),
+      }),
+    );
+  });
+
+  it('still refuses a session-shaped auth user from another organization', async () => {
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+    const requestContext = createGithubRequestContext('project-1', 'session-a', {
+      session: { activeOrganizationId: 'org-2' },
+      user: { id: 'user-1' },
+    });
+
+    await expect(workspace({ requestContext })).rejects.toThrow(
+      'Factory session session-a is not available to the current user',
+    );
+  });
+
+  it('refuses a session-shaped auth user whose session carries no active organization', async () => {
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+    // No active org on the session half means no org at all: the wrapper's inner
+    // user is never consulted for one. Refusing is the only safe answer, and it
+    // is the answer a signed-in user gets before they pick an organization.
+    const requestContext = createGithubRequestContext('project-1', 'session-a', {
+      session: {},
+      user: { id: 'user-1', organizationId: 'org-1' },
+    });
+
+    await expect(workspace({ requestContext })).rejects.toThrow(
+      'Factory session session-a was resolved without a caller identity',
+    );
+  });
+
   it('pins the session workdir into controller state so the agent prompt never points at the host checkout', async () => {
     const { root, workspace } = await createLocalFactory();
     addProject();

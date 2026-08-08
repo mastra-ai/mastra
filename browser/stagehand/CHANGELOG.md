@@ -1,5 +1,18 @@
 # @mastra/stagehand
 
+## 0.3.2-alpha.0
+
+### Patch Changes
+
+- Added a `STAGEHAND_MODEL_PROVIDERS` export listing the model providers Stagehand can resolve, so callers can validate a model before starting a browser: ([#20993](https://github.com/mastra-ai/mastra/pull/20993))
+
+  ```ts
+  import { STAGEHAND_MODEL_PROVIDERS } from '@mastra/stagehand';
+
+  const [provider] = 'anthropic/claude-sonnet-4-5'.split('/');
+  const supported = STAGEHAND_MODEL_PROVIDERS.includes(provider);
+  ```
+
 ## 0.3.1
 
 ### Patch Changes
