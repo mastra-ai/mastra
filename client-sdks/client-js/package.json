@@ -21,6 +21,24 @@
         "default": "./dist/index.cjs"
       }
     },
+    "./thread-signals": {
+      "react-native": {
+        "types": "./dist/thread-signals/index.d.ts",
+        "default": "./dist/thread-signals/index.js"
+      },
+      "browser": {
+        "types": "./dist/thread-signals/index.d.ts",
+        "default": "./dist/thread-signals/index.js"
+      },
+      "import": {
+        "types": "./dist/thread-signals/index.d.ts",
+        "default": "./dist/thread-signals/index.js"
+      },
+      "require": {
+        "types": "./dist/thread-signals/index.d.ts",
+        "default": "./dist/thread-signals/index.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "repository": {
