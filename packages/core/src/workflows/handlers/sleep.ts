@@ -124,7 +124,12 @@ export async function executeSleep(engine: DefaultExecutionEngine, params: Execu
   }
 
   try {
-    await engine.executeSleepDuration(!duration || duration < 0 ? 0 : duration, entry.id, workflowId);
+    await engine.executeSleepDuration(
+      !duration || duration < 0 ? 0 : duration,
+      entry.id,
+      workflowId,
+      abortController?.signal,
+    );
     await engine.endChildSpan({
       span: sleepSpan,
       operationId: `workflow.${workflowId}.run.${runId}.sleep.${entry.id}.span.end`,
@@ -261,7 +266,7 @@ export async function executeSleepUntil(
   }
 
   try {
-    await engine.executeSleepUntilDate(date, entry.id, workflowId);
+    await engine.executeSleepUntilDate(date, entry.id, workflowId, abortController?.signal);
     await engine.endChildSpan({
       span: sleepUntilSpan,
       operationId: `workflow.${workflowId}.run.${runId}.sleepUntil.${entry.id}.span.end`,

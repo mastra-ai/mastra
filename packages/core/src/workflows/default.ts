@@ -52,6 +52,8 @@ import type {
 // to build a runnable step from a declarative entry.
 import { getSingleStepEntryId } from './utils';
 
+import { abortableSleep } from './utils';
+
 // Re-export ExecutionContext for backwards compatibility
 export type { ExecutionContext } from './types';
 
@@ -153,9 +155,15 @@ export class DefaultExecutionEngine extends ExecutionEngine {
    * @param duration - The duration to sleep in milliseconds
    * @param _sleepId - Unique identifier for this sleep operation
    * @param _workflowId - The workflow ID (for constructing platform-specific IDs)
+   * @param signal - Optional abort signal; the sleep resolves early when the run is canceled
    */
-  async executeSleepDuration(duration: number, _sleepId: string, _workflowId: string): Promise<void> {
-    await new Promise(resolve => setTimeout(resolve, duration < 0 ? 0 : duration));
+  async executeSleepDuration(
+    duration: number,
+    _sleepId: string,
+    _workflowId: string,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    await abortableSleep(duration < 0 ? 0 : duration, signal);
   }
 
   /**
@@ -164,10 +172,16 @@ export class DefaultExecutionEngine extends ExecutionEngine {
    * @param date - The date to sleep until
    * @param _sleepUntilId - Unique identifier for this sleep operation
    * @param _workflowId - The workflow ID (for constructing platform-specific IDs)
+   * @param signal - Optional abort signal; the sleep resolves early when the run is canceled
    */
-  async executeSleepUntilDate(date: Date, _sleepUntilId: string, _workflowId: string): Promise<void> {
+  async executeSleepUntilDate(
+    date: Date,
+    _sleepUntilId: string,
+    _workflowId: string,
+    signal?: AbortSignal,
+  ): Promise<void> {
     const time = date.getTime() - Date.now();
-    await new Promise(resolve => setTimeout(resolve, time < 0 ? 0 : time));
+    await abortableSleep(time < 0 ? 0 : time, signal);
   }
 
   /**
