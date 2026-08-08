@@ -1,4 +1,4 @@
-import { existsSync, statSync } from 'node:fs';
+import { statSync } from 'node:fs';
 import { dirname, isAbsolute, resolve } from 'node:path';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { slash } from '../build/utils';
@@ -85,12 +85,16 @@ export function resolveExtraEntries(
     }
 
     const absolutePath = isAbsolute(entryPath) ? entryPath : resolve(mastraDir, entryPath);
-    const entryStats = existsSync(absolutePath) ? statSync(absolutePath) : undefined;
-
-    if (!entryStats) {
-      throw invalidEntries(
-        `bundler.entries entry "${name}" points at "${entryPath}", which does not exist (resolved to ${absolutePath}). Paths are resolved relative to your Mastra directory (${mastraDir}).`,
-      );
+    let entryStats;
+    try {
+      entryStats = statSync(absolutePath);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT' || (error as NodeJS.ErrnoException).code === 'ENOTDIR') {
+        throw invalidEntries(
+          `bundler.entries entry "${name}" points at "${entryPath}", which does not exist (resolved to ${absolutePath}). Paths are resolved relative to your Mastra directory (${mastraDir}).`,
+        );
+      }
+      throw error;
     }
 
     // Caught here so a directory surfaces as a config error rather than as an opaque

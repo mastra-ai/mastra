@@ -99,6 +99,12 @@ describe('resolveExtraEntries', () => {
     expect(error.message).toContain(join(mastraDir, 'nope.ts'));
   });
 
+  it('maps ENOTDIR entry validation failures to a USER-category error', () => {
+    expect(() => resolveExtraEntries({ 'voice-worker': './voice-worker.ts/child' }, mastraEntryFile)).toThrow(
+      /does not exist/,
+    );
+  });
+
   // Both keys collapse to the same output file, so silently keeping the last one would
   // drop a source the user asked for — and drop it from dependency analysis too.
   it('rejects two names that collapse to the same output name once normalized', () => {
