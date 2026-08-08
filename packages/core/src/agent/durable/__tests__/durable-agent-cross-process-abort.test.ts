@@ -94,6 +94,40 @@ describe('DurableAgent cross-process abort', () => {
     }
   });
 
+  it('stays retryable when the subscription fails', async () => {
+    const runId = 'failed-subscribe-run';
+    const pubsub = new EventEmitterPubSub();
+    let failNext = true;
+    const originalSubscribe = pubsub.subscribe.bind(pubsub);
+    pubsub.subscribe = (async (...args: Parameters<typeof originalSubscribe>) => {
+      if (failNext) {
+        failNext = false;
+        throw new Error('pubsub down');
+      }
+      return originalSubscribe(...args);
+    }) as typeof pubsub.subscribe;
+    globalRunRegistry.set(runId, { isPlaceholder: true } as RunRegistryEntry);
+
+    try {
+      // A transient transport failure must not leave the run permanently deaf:
+      // the next step gets to try again.
+      await expect(ensureRemoteAbortListener(pubsub, runId)).rejects.toThrow('pubsub down');
+      expect(globalRunRegistry.get(runId)!.remoteAbortListenerInstalled).toBe(false);
+
+      await ensureRemoteAbortListener(pubsub, runId);
+      const entry = globalRunRegistry.get(runId)!;
+      const aborted = new Promise<void>(resolve => {
+        entry.abortSignal!.addEventListener('abort', () => resolve(), { once: true });
+      });
+      await publishAbortRequest(pubsub, runId);
+      await aborted;
+      expect(entry.abortSignal!.aborted).toBe(true);
+    } finally {
+      globalRunRegistry.delete(runId);
+      await pubsub.close();
+    }
+  });
+
   it('stops an in-flight run from an abort request it did not raise locally, and still terminates the stream', async () => {
     const pubsub = new EventEmitterPubSub();
     const storage = new InMemoryStore();

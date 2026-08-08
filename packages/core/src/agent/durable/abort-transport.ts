@@ -86,12 +86,21 @@ export async function ensureRemoteAbortListener(pubsub: PubSub, runId: string): 
     entry.abortSignal = controller.signal;
   }
 
-  const unsubscribe = await subscribeToAbortRequests(pubsub, runId, () => {
-    const controller = globalRunRegistry.get(runId)?.abortController ?? entry.abortController;
-    if (controller && !controller.signal.aborted) {
-      controller.abort(new Error('Aborted'));
-    }
-  });
+  let unsubscribe: () => Promise<void>;
+  try {
+    unsubscribe = await subscribeToAbortRequests(pubsub, runId, () => {
+      const controller = globalRunRegistry.get(runId)?.abortController ?? entry.abortController;
+      if (controller && !controller.signal.aborted) {
+        controller.abort(new Error('Aborted'));
+      }
+    });
+  } catch (error) {
+    // Release the claim so the next step in this run can retry. Leaving it set
+    // would make the run permanently deaf to remote aborts after one transient
+    // pubsub failure.
+    entry.remoteAbortListenerInstalled = false;
+    throw error;
+  }
 
   // Chain onto the entry's existing cleanup rather than replacing it: the
   // registry's dispose hook only calls `cleanup()`, and other owners of the

@@ -193,8 +193,17 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
       // caller that owns `abort()` may live on a different pod entirely, so
       // without this the run has no way to hear it. Must happen before the
       // abort check below so a request that arrives mid-step is honoured.
+      // A transport failure here costs remote abortability, not the run itself,
+      // so it is logged rather than thrown.
       if (pubsub) {
-        await ensureRemoteAbortListener(pubsub, runId);
+        try {
+          await ensureRemoteAbortListener(pubsub, runId);
+        } catch (error) {
+          logger?.warn?.('Failed to subscribe to cross-process abort requests', {
+            runId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
       }
 
       // 1b. Check for abort signal before doing any work. If the signal is
