@@ -1,5 +1,13 @@
 # @mastra/factory
 
+## 0.6.0-alpha.8
+
+### Patch Changes
+
+- Fixed Factory intake saves when generated clients include disabled defaults for integrations that are not configured. ([#21019](https://github.com/mastra-ai/mastra/pull/21019))
+
+- Fixed reused Factory workspaces retaining GitHub credentials from an outdated work or review assignment. ([#21035](https://github.com/mastra-ai/mastra/pull/21035))
+
 ## 0.6.0-alpha.7
 
 ### Patch Changes
