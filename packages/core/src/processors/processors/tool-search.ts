@@ -500,10 +500,10 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
       const catalog = await this.getToolCatalog(args.requestContext);
       messageList.addSystem(
         `${catalog}\n` +
-          'The catalog above contains every tool available for this request. ' +
+          'The catalog above contains tools available for dynamic loading in this request. ' +
           'To add one or more tools to the conversation, call load_tool with an exact id as toolName ' +
           'or an array of exact ids as toolNames. Full tool schemas are provided only after loading. ' +
-          'Tools must be loaded before they can be used.',
+          'Catalog tools must be loaded before they can be used.',
       );
     } else {
       messageList.addSystem(
