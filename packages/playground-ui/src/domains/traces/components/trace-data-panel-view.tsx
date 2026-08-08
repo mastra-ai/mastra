@@ -103,8 +103,9 @@ export function TraceDataPanelView({
       return;
     }
     // Span requested: wait for trace data before deciding so an in-flight
-    // fetch doesn't wipe a URL-provided selection.
-    if (!spans) return;
+    // fetch doesn't wipe a URL-provided selection. Callers that default their
+    // spans to `[]` while loading only say so through `isLoading`.
+    if (isLoading || !spans) return;
 
     const found = spans.find(s => s.spanId === initialSpanId);
     if (found) {
@@ -115,14 +116,15 @@ export function TraceDataPanelView({
       onSpanSelect?.(undefined);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialSpanId, spans]);
+  }, [initialSpanId, spans, isLoading]);
 
-  // Scroll the selected span into view within the timeline
+  // Scroll the selected span into view within the timeline, which only exists
+  // once the trace has loaded.
   useEffect(() => {
-    if (!selectedSpanId || !contentRef.current) return;
+    if (isLoading || !selectedSpanId || !contentRef.current) return;
     const el = contentRef.current.querySelector(`[data-span-id="${selectedSpanId}"]`);
     el?.scrollIntoView({ block: 'nearest' });
-  }, [selectedSpanId]);
+  }, [selectedSpanId, isLoading]);
 
   const hierarchicalSpans = useMemo(() => formatHierarchicalSpans(spans ?? [], anchorSpanId), [spans, anchorSpanId]);
 

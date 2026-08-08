@@ -1,5 +1,64 @@
 # @mastra/playground-ui
 
+## 48.0.0-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [[`76e5132`](https://github.com/mastra-ai/mastra/commit/76e51328dbc0749c8304e6b3f21e4401f451b081), [`0282e16`](https://github.com/mastra-ai/mastra/commit/0282e16115538c8e9b248b90f0748eb01cb5dc98)]:
+  - @mastra/core@1.58.0-alpha.4
+  - @mastra/client-js@1.39.0-alpha.4
+  - @mastra/react@1.4.2-alpha.4
+
+## 48.0.0-alpha.3
+
+### Minor Changes
+
+- Added a `fit` prop to `DataList` to control horizontal sizing. The default `fit="content"` keeps the existing behavior: the grid grows with its widest content and the list scrolls horizontally. The new `fit="container"` makes the list fill its container so flexible columns truncate instead of overflowing — useful for tables that must stay within the viewport. `DataListSkeleton` accepts the same prop. ([#18925](https://github.com/mastra-ai/mastra/pull/18925))
+
+  ```tsx
+  // Before: wide content always forced horizontal scrolling
+  <DataList columns="auto 1fr auto">…</DataList>
+
+  // After: opt in to viewport-fitting behavior
+  <DataList columns="auto minmax(0, 1fr) auto" fit="container">…</DataList>
+  ```
+
+### Patch Changes
+
+- Pointed the metrics drilldown links and the Trace Intelligence empty state at `/traces` instead of `/observability`, matching Studio's traces route. Apps that pass their own `tracesBasePath` to the metrics provider are unaffected. ([#20958](https://github.com/mastra-ai/mastra/pull/20958))
+
+- Fixed span links such as `/traces/<traceId>?spanId=<spanId>`. Opening or reloading one used to drop the span: the span panel stayed closed and `spanId` disappeared from the URL. The span now opens and the timeline scrolls to it. ([#20958](https://github.com/mastra-ai/mastra/pull/20958))
+
+- Updated dependencies [[`cdd5c33`](https://github.com/mastra-ai/mastra/commit/cdd5c33ac6c7118a9f139e6dc0e14e6a8ae31658), [`d7cf7fa`](https://github.com/mastra-ai/mastra/commit/d7cf7fafc1ae1b50bd8462dd0e6c671a8606db93), [`0f9a448`](https://github.com/mastra-ai/mastra/commit/0f9a448502157e59f7b76f24360ad497168f5ef8), [`289f4ce`](https://github.com/mastra-ai/mastra/commit/289f4ce16e3293370440172132c52ee787cbc09f), [`4f16ff8`](https://github.com/mastra-ai/mastra/commit/4f16ff824bf2f9b0ddc93f210477c10c8a4fb1ab), [`1c67d85`](https://github.com/mastra-ai/mastra/commit/1c67d85e9da8285662f4dbbf47e0378c3fee0747), [`ba24be6`](https://github.com/mastra-ai/mastra/commit/ba24be662439c331ab23a600041f93803c89eca8), [`842b5fe`](https://github.com/mastra-ai/mastra/commit/842b5fe22b6a7fa811bd14e48eb9af523ac989f2), [`80bdf3a`](https://github.com/mastra-ai/mastra/commit/80bdf3ae16ade6ff63bde0cb16fa2df8ab7dd4dd), [`195e83c`](https://github.com/mastra-ai/mastra/commit/195e83c077687f6016fd8090324975c8d8cea50b), [`9ba1247`](https://github.com/mastra-ai/mastra/commit/9ba12470c77f1c03642d720ce67e517e878f666e), [`fd96298`](https://github.com/mastra-ai/mastra/commit/fd96298a8367622f4ebfcaa97b5b6c1fbbd14564), [`6a84954`](https://github.com/mastra-ai/mastra/commit/6a84954a2667f85b6d59da652dab1bbff007ccb0), [`52d8ef0`](https://github.com/mastra-ai/mastra/commit/52d8ef03801f1deb7ee48532fc4190dd4a33916c), [`cdd5c33`](https://github.com/mastra-ai/mastra/commit/cdd5c33ac6c7118a9f139e6dc0e14e6a8ae31658), [`87db0e4`](https://github.com/mastra-ai/mastra/commit/87db0e49a8c04030eb74fff7f051fac330678839), [`edfe906`](https://github.com/mastra-ai/mastra/commit/edfe906f7926faf8c63c21b3c87e797985557feb), [`7010c5d`](https://github.com/mastra-ai/mastra/commit/7010c5d15728bf9c5dfe4fb6b1bf80ce23bf143a), [`efd5c81`](https://github.com/mastra-ai/mastra/commit/efd5c81cc25fde3c2ddd86fc1178deb4ec176e19), [`0976933`](https://github.com/mastra-ai/mastra/commit/0976933142333ec78451feef265b68bcb45aa5e7), [`43ea2a1`](https://github.com/mastra-ai/mastra/commit/43ea2a1f5c5867d0f41254047a786e96cd00798b), [`0976933`](https://github.com/mastra-ai/mastra/commit/0976933142333ec78451feef265b68bcb45aa5e7), [`242b945`](https://github.com/mastra-ai/mastra/commit/242b94558777bfbdeb42cbfea84afff0b6ad0633), [`fea5cae`](https://github.com/mastra-ai/mastra/commit/fea5caedc7e2cfea51784a15e015952692027abf), [`4b59f78`](https://github.com/mastra-ai/mastra/commit/4b59f786cbc9a7d1ef07a07517dbd4b96865e99d), [`7010c5d`](https://github.com/mastra-ai/mastra/commit/7010c5d15728bf9c5dfe4fb6b1bf80ce23bf143a), [`6b5fe46`](https://github.com/mastra-ai/mastra/commit/6b5fe464a97ac4845ce26475f347811fc7fb9684), [`683c04c`](https://github.com/mastra-ai/mastra/commit/683c04c930f026c5a77259d05ae8d88c637a3162)]:
+  - @mastra/core@1.58.0-alpha.3
+  - @mastra/memory@1.26.1-alpha.2
+  - @mastra/client-js@1.39.0-alpha.3
+  - @mastra/react@1.4.2-alpha.3
+
+## 48.0.0-alpha.2
+
+### Minor Changes
+
+- Added `LinearIcon` and `SlackIcon` to the design system icon set, so apps can render the Linear and Slack brand marks without hand-rolling their own SVG. ([#20632](https://github.com/mastra-ai/mastra/pull/20632))
+
+  ```tsx
+  import { LinearIcon } from '@mastra/playground-ui/icons/LinearIcon';
+  import { SlackIcon } from '@mastra/playground-ui/icons/SlackIcon';
+
+  <LinearIcon className="text-icon3 size-4" />;
+  <SlackIcon className="size-4" />;
+  ```
+
+  Both take the same props as the other brand icons (`SVGProps<SVGSVGElement>`) and are sized with a class rather than a `size` prop. `GithubIcon` no longer emits a duplicate element id when the same page renders it many times.
+
+### Patch Changes
+
+- Updated dependencies [[`c4ec889`](https://github.com/mastra-ai/mastra/commit/c4ec889561c0264c43f66d04d587bee4ce35e792), [`b4c89b4`](https://github.com/mastra-ai/mastra/commit/b4c89b4371b0c86da57403ad1a3b3ef0681f3128), [`e44e8f3`](https://github.com/mastra-ai/mastra/commit/e44e8f370b66c339ddcaba946d33da6d3c3f06cd), [`c967a5e`](https://github.com/mastra-ai/mastra/commit/c967a5eec150c5dc5418c4a4388982d1fb7ad27c), [`f53d5bd`](https://github.com/mastra-ai/mastra/commit/f53d5bd4885b29e4ac29a428a6044088ea8d6aa3), [`bda2235`](https://github.com/mastra-ai/mastra/commit/bda22353ee28f2df0eaea555f7cae1549f979c0b), [`a7eb4a1`](https://github.com/mastra-ai/mastra/commit/a7eb4a11450f6170274ed5141bffe821d4fdd5a6), [`2f9ef3f`](https://github.com/mastra-ai/mastra/commit/2f9ef3f4ca06fc2dcdd5088c26b7f4da6a016791), [`e7eefcb`](https://github.com/mastra-ai/mastra/commit/e7eefcb162cda7c493e8c3bf43050ead0efbcb2c), [`4d7aca2`](https://github.com/mastra-ai/mastra/commit/4d7aca2fe75f225c83d1502d63079568e6ec163f), [`c4ec889`](https://github.com/mastra-ai/mastra/commit/c4ec889561c0264c43f66d04d587bee4ce35e792), [`9be8878`](https://github.com/mastra-ai/mastra/commit/9be8878dcf0388e84fc4873e0eec27bd49b881a4)]:
+  - @mastra/client-js@1.39.0-alpha.2
+  - @mastra/core@1.58.0-alpha.2
+  - @mastra/react@1.4.2-alpha.2
+  - @mastra/memory@1.26.1-alpha.1
+
 ## 48.0.0-alpha.1
 
 ### Minor Changes

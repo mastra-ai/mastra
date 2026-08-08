@@ -1,5 +1,42 @@
 # @mastra/memory
 
+## 1.26.1-alpha.2
+
+### Patch Changes
+
+- Fixed thread deletion so it also removes observational memory vectors. Deleting a thread now clears its vectors from both the message indexes and the observation indexes, so text from a deleted thread is no longer returned by resource-scoped search. Deleting a single message still touches only the message indexes. ([#20981](https://github.com/mastra-ai/mastra/pull/20981))
+
+  Improved the report of a failed cleanup. If a vector store cannot delete from one index, thread deletion still succeeds and now logs a warning that names the index and the thread.
+
+- Fixed Observational Memory saving ephemeral `context` messages to storage as durable user messages. ([#19735](https://github.com/mastra-ai/mastra/pull/19735))
+
+  Messages passed through the `context` option of `agent.stream()` / `agent.generate()` belong to a single run and are not meant to be saved. Observational Memory built its observation window from the full message list, so once a buffering cycle fired it sealed and persisted those context messages too. They then came back from `listMessages` and memory recall on every later run, and showed up as user messages in any UI that hydrates from stored history.
+
+  Observational Memory now ignores `context`-sourced messages everywhere: when building the observation window, when sealing and persisting buffered chunks, and when counting tokens toward its thresholds. Context messages are still sent to the model for the run they belong to — only Observational Memory stops treating them as conversation history.
+
+  ```ts
+  // Each turn sends per-request page state as context.
+  // This is no longer persisted once a buffering cycle runs.
+  await agent.stream(messages, {
+    context: [{ role: 'user', content: '<client-context>…page state…</client-context>' }],
+    memory: { thread, resource },
+  });
+  ```
+
+- The recall tool no longer advertises mode="search" unless observational-memory vector retrieval, a vector store, and an embedder are all configured. Previously the tool description and input schema invited the model to call search when the semantic retrieval pipeline could not run. The search mode and query parameter are now omitted from the tool surface when search cannot succeed, and a stale search call (e.g. on a resumed run that skips input validation) returns the existing "Search is not configured" guidance instead of throwing. ([#20941](https://github.com/mastra-ai/mastra/pull/20941))
+
+- Updated dependencies [[`cdd5c33`](https://github.com/mastra-ai/mastra/commit/cdd5c33ac6c7118a9f139e6dc0e14e6a8ae31658), [`6bff877`](https://github.com/mastra-ai/mastra/commit/6bff877e214695ff8d9c84b06c13a6e6bcf9f1ed), [`d7cf7fa`](https://github.com/mastra-ai/mastra/commit/d7cf7fafc1ae1b50bd8462dd0e6c671a8606db93), [`0f9a448`](https://github.com/mastra-ai/mastra/commit/0f9a448502157e59f7b76f24360ad497168f5ef8), [`289f4ce`](https://github.com/mastra-ai/mastra/commit/289f4ce16e3293370440172132c52ee787cbc09f), [`4f16ff8`](https://github.com/mastra-ai/mastra/commit/4f16ff824bf2f9b0ddc93f210477c10c8a4fb1ab), [`1c67d85`](https://github.com/mastra-ai/mastra/commit/1c67d85e9da8285662f4dbbf47e0378c3fee0747), [`ba24be6`](https://github.com/mastra-ai/mastra/commit/ba24be662439c331ab23a600041f93803c89eca8), [`842b5fe`](https://github.com/mastra-ai/mastra/commit/842b5fe22b6a7fa811bd14e48eb9af523ac989f2), [`80bdf3a`](https://github.com/mastra-ai/mastra/commit/80bdf3ae16ade6ff63bde0cb16fa2df8ab7dd4dd), [`9ba1247`](https://github.com/mastra-ai/mastra/commit/9ba12470c77f1c03642d720ce67e517e878f666e), [`fd96298`](https://github.com/mastra-ai/mastra/commit/fd96298a8367622f4ebfcaa97b5b6c1fbbd14564), [`6a84954`](https://github.com/mastra-ai/mastra/commit/6a84954a2667f85b6d59da652dab1bbff007ccb0), [`52d8ef0`](https://github.com/mastra-ai/mastra/commit/52d8ef03801f1deb7ee48532fc4190dd4a33916c), [`cdd5c33`](https://github.com/mastra-ai/mastra/commit/cdd5c33ac6c7118a9f139e6dc0e14e6a8ae31658), [`efd5c81`](https://github.com/mastra-ai/mastra/commit/efd5c81cc25fde3c2ddd86fc1178deb4ec176e19), [`0976933`](https://github.com/mastra-ai/mastra/commit/0976933142333ec78451feef265b68bcb45aa5e7), [`242b945`](https://github.com/mastra-ai/mastra/commit/242b94558777bfbdeb42cbfea84afff0b6ad0633), [`fea5cae`](https://github.com/mastra-ai/mastra/commit/fea5caedc7e2cfea51784a15e015952692027abf), [`4b59f78`](https://github.com/mastra-ai/mastra/commit/4b59f786cbc9a7d1ef07a07517dbd4b96865e99d), [`7010c5d`](https://github.com/mastra-ai/mastra/commit/7010c5d15728bf9c5dfe4fb6b1bf80ce23bf143a)]:
+  - @mastra/core@1.58.0-alpha.3
+  - @mastra/schema-compat@1.3.6-alpha.2
+
+## 1.26.1-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`b4c89b4`](https://github.com/mastra-ai/mastra/commit/b4c89b4371b0c86da57403ad1a3b3ef0681f3128), [`e44e8f3`](https://github.com/mastra-ai/mastra/commit/e44e8f370b66c339ddcaba946d33da6d3c3f06cd), [`c967a5e`](https://github.com/mastra-ai/mastra/commit/c967a5eec150c5dc5418c4a4388982d1fb7ad27c), [`f53d5bd`](https://github.com/mastra-ai/mastra/commit/f53d5bd4885b29e4ac29a428a6044088ea8d6aa3), [`bda2235`](https://github.com/mastra-ai/mastra/commit/bda22353ee28f2df0eaea555f7cae1549f979c0b), [`a7eb4a1`](https://github.com/mastra-ai/mastra/commit/a7eb4a11450f6170274ed5141bffe821d4fdd5a6), [`2f9ef3f`](https://github.com/mastra-ai/mastra/commit/2f9ef3f4ca06fc2dcdd5088c26b7f4da6a016791), [`e7eefcb`](https://github.com/mastra-ai/mastra/commit/e7eefcb162cda7c493e8c3bf43050ead0efbcb2c), [`4d7aca2`](https://github.com/mastra-ai/mastra/commit/4d7aca2fe75f225c83d1502d63079568e6ec163f), [`c4ec889`](https://github.com/mastra-ai/mastra/commit/c4ec889561c0264c43f66d04d587bee4ce35e792), [`9be8878`](https://github.com/mastra-ai/mastra/commit/9be8878dcf0388e84fc4873e0eec27bd49b881a4)]:
+  - @mastra/core@1.58.0-alpha.2
+  - @mastra/schema-compat@1.3.6-alpha.1
+
 ## 1.26.1-alpha.0
 
 ### Patch Changes

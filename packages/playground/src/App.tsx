@@ -387,11 +387,15 @@ export const routes: RouteObject[] = [
           { id: 'signals-agent', Component: SignalsEntityCrumb, heading: 'Agent' },
         ]),
       },
-      { path: '/observability', element: <Traces />, handle: navHandle('/observability') },
+      { path: '/traces', element: <Traces />, handle: navHandle('/traces') },
       {
         path: '/traces/:traceId',
         element: <TraceDetails />,
-        handle: navHandleWithChildren('/observability', [{ id: 'trace', Component: TraceCrumb, heading: 'Trace' }]),
+        handle: navHandleWithChildren('/traces', [{ id: 'trace', Component: TraceCrumb, heading: 'Trace' }]),
+      },
+      {
+        path: '/observability',
+        loader: ({ request }: LoaderFunctionArgs) => redirect(`/traces${new URL(request.url).search}`),
       },
       { path: '/resources', element: <Resources />, handle: navHandle('/resources') },
       { path: '/agents', element: <Agents />, handle: navHandle('/agents') },

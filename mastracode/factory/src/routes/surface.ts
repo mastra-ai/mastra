@@ -19,6 +19,7 @@ import type { AuditEmitter } from '../storage/domains/audit/domain.js';
 import type { ChannelIdentityStorage } from '../storage/domains/channel-identity/base.js';
 import type { ModelCredentialsStorage } from '../storage/domains/credentials/base.js';
 import type { CustomProvidersStorage } from '../storage/domains/custom-providers/base.js';
+import type { FilesystemStorage } from '../storage/domains/filesystem/base.js';
 import type { IntakeStorage } from '../storage/domains/intake/base.js';
 import type { IntegrationStorage } from '../storage/domains/integrations/base.js';
 import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
@@ -65,6 +66,7 @@ export interface FactoryApiRoutesDeps {
     modelCredentials: ModelCredentialsStorage;
     memorySettings: MemorySettingsStorage;
     customProviders: CustomProvidersStorage;
+    filesystem: FilesystemStorage;
     modelPacks: ModelPacksStorage;
     projects: FactoryProjectsStorage;
     queueHealth: QueueHealthStorage;
@@ -399,6 +401,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
         auth: deps.auth,
         fleet: deps.fleet,
         sessions: deps.sourceControlStorage.forIntegration('github').sessions,
+        filesystem: deps.domains.filesystem,
       },
     }),
     ...new ConfigRoutes({

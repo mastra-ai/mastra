@@ -1,5 +1,92 @@
 # @mastra/server
 
+## 1.58.0-alpha.4
+
+### Minor Changes
+
+- Added `MastraServer.getFrameworkPublicMatcher()`, which returns a `(path, method) => boolean` matcher built from route metadata (built-in `SERVER_ROUTES` entries with `requiresAuth === false`, plus user-registered custom routes with `requiresAuth: false`). ([#20989](https://github.com/mastra-ai/mastra/pull/20989))
+
+  Adapters can use it to short-circuit user middleware for routes the framework has declared public, without duplicating any allowlist.
+
+  ```ts
+  const isFrameworkPublic = mastraServer.getFrameworkPublicMatcher();
+
+  app.use('*', async (c, next) => {
+    if (isFrameworkPublic(c.req.path, c.req.method)) {
+      return next();
+    }
+    return userMiddleware(c, next);
+  });
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`76e5132`](https://github.com/mastra-ai/mastra/commit/76e51328dbc0749c8304e6b3f21e4401f451b081), [`0282e16`](https://github.com/mastra-ai/mastra/commit/0282e16115538c8e9b248b90f0748eb01cb5dc98)]:
+  - @mastra/core@1.58.0-alpha.4
+
+## 1.58.0-alpha.3
+
+### Minor Changes
+
+- Added `GET /api/workflows/run-counts` — per-workflow counts of running and suspended (awaiting resume) runs in one request, keyed by the workflow registry key. Counts respect the reserved request-context resource id the runs endpoints already enforce, are filtered per user when FGA is configured, and may be served from a short server-side cache otherwise. ([#18925](https://github.com/mastra-ai/mastra/pull/18925))
+
+  ```json
+  // GET /api/workflows/run-counts
+  {
+    "cityWorkflow": { "running": 2, "suspended": 1 },
+    "reportWorkflow": { "running": 0, "suspended": 0 }
+  }
+  ```
+
+- Added A2A Protocol v1.0 request handling through the standard A2A routes. Send `A2A-Version: 1.0` to use v1 methods, streaming responses, and task listing while existing requests continue to use v0.3. ([#20811](https://github.com/mastra-ai/mastra/pull/20811))
+
+  ```typescript
+  await fetch('/api/a2a/weather-agent', {
+    method: 'POST',
+    headers: { 'A2A-Version': '1.0' },
+    body: JSON.stringify({ jsonrpc: '2.0', id: '1', method: 'tasks/list', params: {} }),
+  });
+  ```
+
+### Patch Changes
+
+- Add a reasoning-effort configuration surface across mastracode and Factory (fixes #20766): ([#20884](https://github.com/mastra-ai/mastra/pull/20884))
+
+  - New `max` thinking level (mapped to `reasoning effort: max` for OpenAI Codex and Anthropic `effort`).
+  - Anthropic extended-thinking wiring: the session thinking level now applies to anthropic/claude-opus-4-7 and other Anthropic models via provider thinking/effort options (previously OpenAI-only).
+  - New `models.modeThinkingDefaults` setting: per-mode (build/plan/fast) default thinking levels, resolved at request time with precedence session override → mode default → global `preferences.thinkingLevel`. Configuration changes now apply to the next request of every session, including automated Factory runs.
+  - Factory: new Settings → Defaults controls for editing global and per-mode thinking defaults in local deployments.
+  - TUI: `/think` now sets a session-only override, supports `/think default` to clear it, and `/think status` reports the effective level with provenance (session override / mode default / global default).
+
+  Example `settings.json` configuration:
+
+  ```json
+  {
+    "preferences": { "thinkingLevel": "medium" },
+    "models": {
+      "modeThinkingDefaults": {
+        "build": "high",
+        "plan": "max",
+        "fast": "off"
+      }
+    }
+  }
+  ```
+
+- Updated dependencies [[`cdd5c33`](https://github.com/mastra-ai/mastra/commit/cdd5c33ac6c7118a9f139e6dc0e14e6a8ae31658), [`d7cf7fa`](https://github.com/mastra-ai/mastra/commit/d7cf7fafc1ae1b50bd8462dd0e6c671a8606db93), [`0f9a448`](https://github.com/mastra-ai/mastra/commit/0f9a448502157e59f7b76f24360ad497168f5ef8), [`289f4ce`](https://github.com/mastra-ai/mastra/commit/289f4ce16e3293370440172132c52ee787cbc09f), [`4f16ff8`](https://github.com/mastra-ai/mastra/commit/4f16ff824bf2f9b0ddc93f210477c10c8a4fb1ab), [`1c67d85`](https://github.com/mastra-ai/mastra/commit/1c67d85e9da8285662f4dbbf47e0378c3fee0747), [`ba24be6`](https://github.com/mastra-ai/mastra/commit/ba24be662439c331ab23a600041f93803c89eca8), [`842b5fe`](https://github.com/mastra-ai/mastra/commit/842b5fe22b6a7fa811bd14e48eb9af523ac989f2), [`80bdf3a`](https://github.com/mastra-ai/mastra/commit/80bdf3ae16ade6ff63bde0cb16fa2df8ab7dd4dd), [`9ba1247`](https://github.com/mastra-ai/mastra/commit/9ba12470c77f1c03642d720ce67e517e878f666e), [`fd96298`](https://github.com/mastra-ai/mastra/commit/fd96298a8367622f4ebfcaa97b5b6c1fbbd14564), [`6a84954`](https://github.com/mastra-ai/mastra/commit/6a84954a2667f85b6d59da652dab1bbff007ccb0), [`52d8ef0`](https://github.com/mastra-ai/mastra/commit/52d8ef03801f1deb7ee48532fc4190dd4a33916c), [`cdd5c33`](https://github.com/mastra-ai/mastra/commit/cdd5c33ac6c7118a9f139e6dc0e14e6a8ae31658), [`efd5c81`](https://github.com/mastra-ai/mastra/commit/efd5c81cc25fde3c2ddd86fc1178deb4ec176e19), [`0976933`](https://github.com/mastra-ai/mastra/commit/0976933142333ec78451feef265b68bcb45aa5e7), [`242b945`](https://github.com/mastra-ai/mastra/commit/242b94558777bfbdeb42cbfea84afff0b6ad0633), [`fea5cae`](https://github.com/mastra-ai/mastra/commit/fea5caedc7e2cfea51784a15e015952692027abf), [`4b59f78`](https://github.com/mastra-ai/mastra/commit/4b59f786cbc9a7d1ef07a07517dbd4b96865e99d), [`7010c5d`](https://github.com/mastra-ai/mastra/commit/7010c5d15728bf9c5dfe4fb6b1bf80ce23bf143a)]:
+  - @mastra/core@1.58.0-alpha.3
+
+## 1.58.0-alpha.2
+
+### Patch Changes
+
+- Fixed agent-controller display-state events losing their tool state over SSE. The display state's Maps (active tools, streaming tool inputs, pending suspensions, active subagents, modified files) serialized to empty objects on the wire; they now arrive as plain records keyed the same way. ([#20805](https://github.com/mastra-ai/mastra/pull/20805))
+
+- Catch rejected background Run.resume() and Run.timeTravel() in the workflow /resume and /time-travel routes so they cannot become unhandled rejections and terminate the server process ([#20916](https://github.com/mastra-ai/mastra/pull/20916))
+
+- Updated dependencies [[`b4c89b4`](https://github.com/mastra-ai/mastra/commit/b4c89b4371b0c86da57403ad1a3b3ef0681f3128), [`e44e8f3`](https://github.com/mastra-ai/mastra/commit/e44e8f370b66c339ddcaba946d33da6d3c3f06cd), [`c967a5e`](https://github.com/mastra-ai/mastra/commit/c967a5eec150c5dc5418c4a4388982d1fb7ad27c), [`f53d5bd`](https://github.com/mastra-ai/mastra/commit/f53d5bd4885b29e4ac29a428a6044088ea8d6aa3), [`bda2235`](https://github.com/mastra-ai/mastra/commit/bda22353ee28f2df0eaea555f7cae1549f979c0b), [`a7eb4a1`](https://github.com/mastra-ai/mastra/commit/a7eb4a11450f6170274ed5141bffe821d4fdd5a6), [`2f9ef3f`](https://github.com/mastra-ai/mastra/commit/2f9ef3f4ca06fc2dcdd5088c26b7f4da6a016791), [`e7eefcb`](https://github.com/mastra-ai/mastra/commit/e7eefcb162cda7c493e8c3bf43050ead0efbcb2c), [`4d7aca2`](https://github.com/mastra-ai/mastra/commit/4d7aca2fe75f225c83d1502d63079568e6ec163f), [`c4ec889`](https://github.com/mastra-ai/mastra/commit/c4ec889561c0264c43f66d04d587bee4ce35e792), [`9be8878`](https://github.com/mastra-ai/mastra/commit/9be8878dcf0388e84fc4873e0eec27bd49b881a4)]:
+  - @mastra/core@1.58.0-alpha.2
+
 ## 1.58.0-alpha.1
 
 ### Minor Changes

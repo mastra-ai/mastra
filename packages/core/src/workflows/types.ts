@@ -528,14 +528,14 @@ export type WorkflowInfo = {
   isProcessorWorkflow?: boolean;
   /**
    * How this workflow got into the live registry. `'code'` for statically
-   * authored / `addWorkflow()`-added workflows, `'stored'` for anything
-   * hydrated or added via `addStoredWorkflow()` (HTTP or SDK).
+   * authored / `addWorkflow()`-added workflows, `'dynamic'` for anything
+   * hydrated or added via `addDynamicWorkflow()` (HTTP or SDK).
    *
    * Optional so external consumers of `WorkflowInfo` don't break; the server
    * reads it from `workflow.origin`, which `rehydrateWorkflow` sets to
-   * `'stored'` at construction time (defaults to `'code'`).
+   * `'dynamic'` at construction time (defaults to `'code'`).
    */
-  origin?: 'code' | 'stored';
+  origin?: 'code' | 'dynamic';
 };
 
 export type DefaultEngineType = {};
@@ -698,7 +698,7 @@ export type SerializedSingleStepEntry =
   | { type: 'mapping'; id: string; mapConfig: string }
   /**
    * A nested workflow referenced by its registered id (code-defined or
-   * another stored workflow). The referenced workflow must resolve on the
+   * another dynamic workflow). The referenced workflow must resolve on the
    * live Mastra registry at rehydration time; missing refs fail loudly.
    *
    * `serializedStepFlow` is the nested workflow's full graph, inlined for

@@ -776,6 +776,7 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
 
               // Call runScorer (fire-and-forget via hooks)
               runScorer({
+                mastra: mastra as Mastra | undefined,
                 runId: initData.runId,
                 scorerId: scorerKey,
                 scorerObject,

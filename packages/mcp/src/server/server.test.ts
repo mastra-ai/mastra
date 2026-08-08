@@ -2862,6 +2862,18 @@ describe('MCPServer with Tool Output Schema', () => {
         timestamp: mockDateISO,
       }),
     },
+    authoredContentTool: {
+      description: 'A tool that returns authored MCP content alongside structured output',
+      parameters: z.object({ input: z.string() }),
+      outputSchema: z.object({
+        processedInput: z.string(),
+        timestamp: z.string(),
+      }),
+      execute: async ({ input }: { input: string }) => ({
+        processedInput: `processed: ${input}`,
+        timestamp: mockDateISO,
+      }),
+    },
   };
 
   beforeAll(async () => {
@@ -2924,10 +2936,53 @@ describe('MCPServer with Tool Output Schema', () => {
     const result = await tool.execute!({ input: 'hello' });
 
     expect(result).toBeDefined();
-    // When a tool has outputSchema, the MCP client returns structuredContent directly
-    // so output validation can work correctly
     expect(result.processedInput).toBe('processed: hello');
     expect(result.timestamp).toBe(mockDateISO);
+    expect(tool.toModelOutput?.(result)).toEqual({
+      type: 'text',
+      value: JSON.stringify({
+        processedInput: 'processed: hello',
+        timestamp: mockDateISO,
+      }),
+    });
+  });
+
+  it('should preserve authored content in CallTool response when structuredContent is also present', async () => {
+    const expectedStructuredContent = {
+      processedInput: 'processed: hello',
+      timestamp: mockDateISO,
+    };
+
+    // @ts-expect-error - accessing internal for testing
+    const authoredTool = serverWithOutputSchema.convertedTools.authoredContentTool;
+    vi.spyOn(authoredTool, 'execute').mockResolvedValue({
+      structuredContent: expectedStructuredContent,
+      content: [{ type: 'text', text: 'Summary: processed hello' }],
+    });
+
+    const serverInstance = serverWithOutputSchema.getServer();
+    // @ts-expect-error - accessing internal for testing
+    const callToolHandler = serverInstance._requestHandlers.get('tools/call');
+    expect(callToolHandler).toBeDefined();
+
+    const result = await callToolHandler!(
+      {
+        jsonrpc: '2.0' as const,
+        id: 'test-authored-content',
+        method: 'tools/call' as const,
+        params: {
+          name: 'authoredContentTool',
+          arguments: { input: 'hello' },
+        },
+      },
+      makeMockExtra(),
+    );
+
+    expect(result.structuredContent).toEqual(expectedStructuredContent);
+    expect(result.content).toEqual([{ type: 'text', text: 'Summary: processed hello' }]);
+    expect((result.content as Array<{ type: string; text: string }>)[0].text).not.toBe(
+      JSON.stringify(expectedStructuredContent),
+    );
   });
 });
 

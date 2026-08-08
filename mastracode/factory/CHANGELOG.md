@@ -1,5 +1,131 @@
 # @mastra/factory
 
+## 0.6.0-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [[`76e5132`](https://github.com/mastra-ai/mastra/commit/76e51328dbc0749c8304e6b3f21e4401f451b081), [`0282e16`](https://github.com/mastra-ai/mastra/commit/0282e16115538c8e9b248b90f0748eb01cb5dc98), [`0282e16`](https://github.com/mastra-ai/mastra/commit/0282e16115538c8e9b248b90f0748eb01cb5dc98)]:
+  - @mastra/core@1.58.0-alpha.4
+  - @mastra/slack@1.6.1-alpha.0
+  - @mastra/code-sdk@1.2.0-alpha.4
+
+## 0.6.0-alpha.3
+
+### Minor Changes
+
+- Add a reasoning-effort configuration surface across mastracode and Factory (fixes #20766): ([#20884](https://github.com/mastra-ai/mastra/pull/20884))
+
+  - New `max` thinking level (mapped to `reasoning effort: max` for OpenAI Codex and Anthropic `effort`).
+  - Anthropic extended-thinking wiring: the session thinking level now applies to anthropic/claude-opus-4-7 and other Anthropic models via provider thinking/effort options (previously OpenAI-only).
+  - New `models.modeThinkingDefaults` setting: per-mode (build/plan/fast) default thinking levels, resolved at request time with precedence session override → mode default → global `preferences.thinkingLevel`. Configuration changes now apply to the next request of every session, including automated Factory runs.
+  - Factory: new Settings → Defaults controls for editing global and per-mode thinking defaults in local deployments.
+  - TUI: `/think` now sets a session-only override, supports `/think default` to clear it, and `/think status` reports the effective level with provenance (session override / mode default / global default).
+
+  Example `settings.json` configuration:
+
+  ```json
+  {
+    "preferences": { "thinkingLevel": "medium" },
+    "models": {
+      "modeThinkingDefaults": {
+        "build": "high",
+        "plan": "max",
+        "fast": "off"
+      }
+    }
+  }
+  ```
+
+- Added persisted workspace file lists for Factory threads. The Files view now keeps a thread's captured file list available after an agent run while file contents continue to load from its live sandbox. ([#20937](https://github.com/mastra-ai/mastra/pull/20937))
+
+- Added label reconciliation and label filtering to Factory work and review boards. GitHub pull requests, GitHub issues, and Linear issues now keep their labels in sync with the provider, and boards expose a searchable multi-select label filter that shares state through the URL. ([#20845](https://github.com/mastra-ai/mastra/pull/20845))
+
+  Selected labels round-trip through the `label` query parameter (repeated per label to preserve values containing commas):
+
+  ```
+  /factory/project/<id>/work?label=bug&label=needs%20triage
+  /factory/project/<id>/review?teammate=<userId>&label=priority%3Ap0
+  ```
+
+- Added automatic GitHub and Linear issue reconciliation so Factory work items stay current when provider metadata changes outside Factory. Platform Linear now tails the Platform event stream and folds a periodic reconcile sweep in on its own cadence, so Issue updates flow into Factory through the normal rules pipeline without waiting for the next board poll. ([#20845](https://github.com/mastra-ai/mastra/pull/20845))
+
+  GitHub issue reconciliation runs inside the same worker as the pull-request reconciler (both self-hosted and Platform), sharing the same lease, cadence, and configured-repository target set. That means one sweep per repository per interval covers both writers of card state.
+
+  Reconciliation is on by default. Disable or tune it with environment variables on the Factory server:
+
+  ```bash
+  # Turn Linear reconciliation off entirely.
+  MASTRACODE_LINEAR_RECONCILE_ENABLED=false
+
+  # Slow the Linear reconcile sweep down (default: 5 minutes).
+  MASTRACODE_LINEAR_RECONCILE_INTERVAL_MS=600000
+
+  # Stop Platform Linear from tailing the event stream; the reconcile sweep still runs.
+  MASTRACODE_PLATFORM_LINEAR_POLLING_ENABLED=false
+
+  # GitHub reconciliation uses the same shape.
+  MASTRACODE_GITHUB_RECONCILE_ENABLED=false
+  MASTRACODE_GITHUB_RECONCILE_INTERVAL_MS=600000
+  ```
+
+### Patch Changes
+
+- Fixed workspace re-open hard-failing when a session branch was auto-deleted after merge. `git pull` messages like "no such ref was fetched" and "couldn't find remote ref" are now treated as benign, so materialization keeps the checkout as-is instead of leaving permanent rule-effect alerts on Done items. ([#20910](https://github.com/mastra-ai/mastra/pull/20910))
+
+- Added `dispatcher.maxInFlight` to `MastraFactoryConfig` and the `MASTRACODE_DISPATCH_MAX_IN_FLIGHT` deployment setting to configure the maximum number of concurrent Factory background dispatches per replica. ([#20903](https://github.com/mastra-ai/mastra/pull/20903))
+
+  ```sh
+  export MASTRACODE_DISPATCH_MAX_IN_FLIGHT=10
+  ```
+
+- Make factory review sessions survive server restarts, dropped connections, and strict git configs. ([#20899](https://github.com/mastra-ai/mastra/pull/20899))
+
+  - Crash-resumed sessions recover their run binding and untrusted-checkout posture from the binding table instead of silently losing the transition tool.
+  - Overly long transition rationales are clamped instead of failing the run.
+  - Clones and pulls retry when the transfer to github.com drops partway through.
+  - Checkouts with `pull.rebase` set no longer fail workspace materialization.
+
+- Improved Factory issue investigations with structured summaries and GitHub triage-label updates. ([#20988](https://github.com/mastra-ai/mastra/pull/20988))
+
+- Hardened the GitHub reconcile worker, the Platform Linear event worker, and the shared issue reconciler: ([#20845](https://github.com/mastra-ai/mastra/pull/20845))
+
+  - Platform Linear Issue events now only dispatch to `(orgId, factoryProjectId)` pairs that already have a persisted work item for the incoming Linear issue. Previously the worker fanned an event out to every Factory project regardless of tenant, which could materialize a triage card in an unrelated org via the default `linearIssueObserved` rule.
+  - Reconciler metadata patches no longer spread `undefined` values over stored fields, so a live issue that omits (for example) an author does not clobber the previously recorded value.
+  - Documented the event worker's at-most-once delivery contract explicitly: the cursor advances past a failing ingest and drift is caught by the folded reconciler sweep on its own cadence.
+  - `GithubReconcileWorker` now renews its lease while a sweep is in flight, so folding the issue sweep into the same tick can no longer let the lease expire and hand off to a replica mid-sweep. A `renewLease` result of `false` or a renewal error is treated as lease loss: the worker aborts before running the folded issue sweep and skips `releaseLease` so the new owner's TTL is not disturbed.
+  - The Platform Linear event worker no longer calls `listWorkspaces` in reconcile-only mode, so a workspace-listing outage cannot block the reconcile sweep.
+  - The Platform Linear event worker now resolves the project list once per event page rather than once per event, avoiding up to `EVENT_PAGE_SIZE` × N project scans per poll cycle.
+
+- Updated dependencies [[`cdd5c33`](https://github.com/mastra-ai/mastra/commit/cdd5c33ac6c7118a9f139e6dc0e14e6a8ae31658), [`d7cf7fa`](https://github.com/mastra-ai/mastra/commit/d7cf7fafc1ae1b50bd8462dd0e6c671a8606db93), [`0f9a448`](https://github.com/mastra-ai/mastra/commit/0f9a448502157e59f7b76f24360ad497168f5ef8), [`289f4ce`](https://github.com/mastra-ai/mastra/commit/289f4ce16e3293370440172132c52ee787cbc09f), [`4f16ff8`](https://github.com/mastra-ai/mastra/commit/4f16ff824bf2f9b0ddc93f210477c10c8a4fb1ab), [`1c67d85`](https://github.com/mastra-ai/mastra/commit/1c67d85e9da8285662f4dbbf47e0378c3fee0747), [`ba24be6`](https://github.com/mastra-ai/mastra/commit/ba24be662439c331ab23a600041f93803c89eca8), [`842b5fe`](https://github.com/mastra-ai/mastra/commit/842b5fe22b6a7fa811bd14e48eb9af523ac989f2), [`80bdf3a`](https://github.com/mastra-ai/mastra/commit/80bdf3ae16ade6ff63bde0cb16fa2df8ab7dd4dd), [`9ba1247`](https://github.com/mastra-ai/mastra/commit/9ba12470c77f1c03642d720ce67e517e878f666e), [`fd96298`](https://github.com/mastra-ai/mastra/commit/fd96298a8367622f4ebfcaa97b5b6c1fbbd14564), [`6a84954`](https://github.com/mastra-ai/mastra/commit/6a84954a2667f85b6d59da652dab1bbff007ccb0), [`52d8ef0`](https://github.com/mastra-ai/mastra/commit/52d8ef03801f1deb7ee48532fc4190dd4a33916c), [`cdd5c33`](https://github.com/mastra-ai/mastra/commit/cdd5c33ac6c7118a9f139e6dc0e14e6a8ae31658), [`87db0e4`](https://github.com/mastra-ai/mastra/commit/87db0e49a8c04030eb74fff7f051fac330678839), [`efd5c81`](https://github.com/mastra-ai/mastra/commit/efd5c81cc25fde3c2ddd86fc1178deb4ec176e19), [`0976933`](https://github.com/mastra-ai/mastra/commit/0976933142333ec78451feef265b68bcb45aa5e7), [`242b945`](https://github.com/mastra-ai/mastra/commit/242b94558777bfbdeb42cbfea84afff0b6ad0633), [`fea5cae`](https://github.com/mastra-ai/mastra/commit/fea5caedc7e2cfea51784a15e015952692027abf), [`4b59f78`](https://github.com/mastra-ai/mastra/commit/4b59f786cbc9a7d1ef07a07517dbd4b96865e99d), [`7010c5d`](https://github.com/mastra-ai/mastra/commit/7010c5d15728bf9c5dfe4fb6b1bf80ce23bf143a)]:
+  - @mastra/core@1.58.0-alpha.3
+  - @mastra/code-sdk@1.2.0-alpha.3
+
+## 0.6.0-alpha.2
+
+### Minor Changes
+
+- Added stable identities and display titles for Factory user sessions. ([#20781](https://github.com/mastra-ai/mastra/pull/20781))
+
+  `POST /web/github/projects/:id/sessions` now accepts optional `sessionId` and `title` fields. When `branch` is omitted, the session uses `user/session-<sessionId>`. Callers can create a client-side draft, safely retry the first server request with the same UUID, and show the first prompt as a human-readable title. If `sessionId` is omitted, the server generates one. Explicit branches still work unchanged.
+
+  ```ts
+  const sessionId = crypto.randomUUID();
+  const response = await fetch(`/web/github/projects/${projectRepositoryId}/sessions`, {
+    method: 'POST',
+    body: JSON.stringify({ sessionId, title: 'Fix the login flow' }),
+  });
+  ```
+
+  Titles collapse whitespace, trim surrounding space, and are limited to 80 characters. Blank titles are stored as `null`.
+
+### Patch Changes
+
+- Work board cards now follow their GitHub issue when it closes: closing an issue moves its card to Done (or to Canceled when the issue was closed as `not_planned` or `duplicate`), and a card whose issue closed while the deployment was unreachable is caught up automatically by the periodic reconcile sweep. Previously these cards stayed on the board until moved by hand. ([#20895](https://github.com/mastra-ai/mastra/pull/20895))
+
+- Updated dependencies [[`b4c89b4`](https://github.com/mastra-ai/mastra/commit/b4c89b4371b0c86da57403ad1a3b3ef0681f3128), [`e44e8f3`](https://github.com/mastra-ai/mastra/commit/e44e8f370b66c339ddcaba946d33da6d3c3f06cd), [`c967a5e`](https://github.com/mastra-ai/mastra/commit/c967a5eec150c5dc5418c4a4388982d1fb7ad27c), [`f53d5bd`](https://github.com/mastra-ai/mastra/commit/f53d5bd4885b29e4ac29a428a6044088ea8d6aa3), [`bda2235`](https://github.com/mastra-ai/mastra/commit/bda22353ee28f2df0eaea555f7cae1549f979c0b), [`a7eb4a1`](https://github.com/mastra-ai/mastra/commit/a7eb4a11450f6170274ed5141bffe821d4fdd5a6), [`2f9ef3f`](https://github.com/mastra-ai/mastra/commit/2f9ef3f4ca06fc2dcdd5088c26b7f4da6a016791), [`e7eefcb`](https://github.com/mastra-ai/mastra/commit/e7eefcb162cda7c493e8c3bf43050ead0efbcb2c), [`4d7aca2`](https://github.com/mastra-ai/mastra/commit/4d7aca2fe75f225c83d1502d63079568e6ec163f), [`c4ec889`](https://github.com/mastra-ai/mastra/commit/c4ec889561c0264c43f66d04d587bee4ce35e792), [`9be8878`](https://github.com/mastra-ai/mastra/commit/9be8878dcf0388e84fc4873e0eec27bd49b881a4)]:
+  - @mastra/core@1.58.0-alpha.2
+  - @mastra/code-sdk@1.2.0-alpha.2
+
 ## 0.6.0-alpha.1
 
 ### Minor Changes

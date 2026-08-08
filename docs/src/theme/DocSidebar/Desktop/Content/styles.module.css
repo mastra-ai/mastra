@@ -9,6 +9,10 @@
   }
 
   .menu {
+    --sidebar-pane-duration: 180ms;
+    --sidebar-pane-easing: cubic-bezier(0.65, 0, 0.35, 1);
+    --sidebar-pane-shift: 1.25rem;
+
     position: relative;
     display: flex;
     flex-direction: column;
@@ -20,24 +24,30 @@
 
   .pane {
     flex-shrink: 0;
+    transition:
+      transform var(--sidebar-pane-duration) var(--sidebar-pane-easing),
+      opacity var(--sidebar-pane-duration) var(--sidebar-pane-easing);
   }
 
-  .rootPaneEntry {
-    animation: root-pane-enter 150ms cubic-bezier(0.175, 0.885, 0.32, 1.1) both;
-  }
-
-  .rootPaneInactive {
+  .root-pane-inactive {
     position: absolute;
-    inset: 0;
+    inset: 0 max(0px, calc(1rem - var(--sidebar-scrollbar-gutter, 0px))) 0 1rem;
     overflow: hidden;
     opacity: 0;
-    visibility: hidden;
     pointer-events: none;
-    transform: translateX(-0.5rem);
+    transform: translate3d(calc(-1 * var(--sidebar-pane-shift)), 0, 0);
   }
 
-  .contextualPane {
-    animation: contextual-pane-enter 150ms cubic-bezier(0.175, 0.885, 0.32, 1.1) both;
+  .contextual-pane-enter {
+    animation: contextual-pane-enter var(--sidebar-pane-duration) var(--sidebar-pane-easing);
+  }
+
+  .contextual-pane-exit {
+    position: absolute;
+    inset: 0 max(0px, calc(1rem - var(--sidebar-scrollbar-gutter, 0px))) 0 1rem;
+    overflow: hidden;
+    pointer-events: none;
+    animation: contextual-pane-exit var(--sidebar-pane-duration) var(--sidebar-pane-easing) forwards;
   }
 
   .versionControl {
@@ -75,30 +85,34 @@
 @keyframes contextual-pane-enter {
   from {
     opacity: 0;
-    transform: translateX(0.5rem);
+    transform: translate3d(var(--sidebar-pane-shift), 0, 0);
   }
 
   to {
     opacity: 1;
-    transform: translateX(0);
+    transform: translate3d(0, 0, 0);
   }
 }
 
-@keyframes root-pane-enter {
+@keyframes contextual-pane-exit {
   from {
-    opacity: 0;
-    transform: translateX(-0.5rem);
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
   }
 
   to {
-    opacity: 1;
-    transform: translateX(0);
+    opacity: 0;
+    transform: translate3d(var(--sidebar-pane-shift), 0, 0);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .rootPaneEntry,
-  .contextualPane {
+  .pane {
+    transition: none;
+  }
+
+  .contextual-pane-enter,
+  .contextual-pane-exit {
     animation: none;
   }
 }

@@ -690,6 +690,10 @@ export class AgentThreadStreamRuntime {
     return activeRunId;
   }
 
+  hasThreadRun(runId: string, pubsub?: PubSub): boolean {
+    return this.#getState(pubsub).threadRunsById.has(runId);
+  }
+
   getResumableThreadRun(
     options: AgentSubscribeToThreadOptions & { runId: string; toolCallId?: string },
     pubsub?: PubSub,

@@ -1,5 +1,21 @@
 # @mastra/slack
 
+## 1.6.1-alpha.0
+
+### Patch Changes
+
+- `SlackProvider` now accepts the `textFormat` option and passes it through to the Slack adapter config, so provider users can set `textFormat: 'plain'` to post agent replies as literal plain text instead of the new markdown default. When unset, the option is omitted and the core markdown default applies. ([#20971](https://github.com/mastra-ai/mastra/pull/20971))
+
+  ```typescript
+  const slack = new SlackProvider({
+    refreshToken: process.env.SLACK_APP_CONFIG_REFRESH_TOKEN,
+    textFormat: 'plain',
+  });
+  ```
+
+- Updated dependencies [[`76e5132`](https://github.com/mastra-ai/mastra/commit/76e51328dbc0749c8304e6b3f21e4401f451b081), [`0282e16`](https://github.com/mastra-ai/mastra/commit/0282e16115538c8e9b248b90f0748eb01cb5dc98)]:
+  - @mastra/core@1.58.0-alpha.4
+
 ## 1.6.0
 
 ### Minor Changes

@@ -9,7 +9,7 @@ import { WorkspaceFilesContext } from './WorkspaceFilesContext';
 
 /** Owns the box the card measures itself against, and shares its state with the session header. */
 export function WorkspaceFilesProvider({ children }: { children: ReactNode }) {
-  const { workspacePath } = useThreadWorkspacePath();
+  const { workspacePath, threadId } = useThreadWorkspacePath();
   const chatRef = useRef<HTMLDivElement>(null);
   const canDock = useWiderThan(chatRef, DOCK_MIN_REM);
   const [toggled, setToggled] = useState<{ whileDocked: boolean; open: boolean }>();
@@ -25,7 +25,9 @@ export function WorkspaceFilesProvider({ children }: { children: ReactNode }) {
   const claimsSpace = open && canDock && Boolean(workspacePath);
 
   return (
-    <WorkspaceFilesContext.Provider value={{ open, setOpen, workspacePath, viewingFile, setViewingFile, canDock }}>
+    <WorkspaceFilesContext.Provider
+      value={{ open, setOpen, workspacePath, threadId, viewingFile, setViewingFile, canDock }}
+    >
       <div
         ref={chatRef}
         className={cn(

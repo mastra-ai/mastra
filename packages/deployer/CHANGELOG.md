@@ -1,5 +1,75 @@
 # @mastra/deployer
 
+## 1.58.0-alpha.4
+
+### Minor Changes
+
+- Added `bundler.entries` so `mastra build` can emit extra process entries next to the server bundle. ([#20850](https://github.com/mastra-ai/mastra/pull/20850))
+
+  A Mastra app that runs a second long-running process, such as a LiveKit voice worker, previously had to bundle that process with its own toolchain because `mastra build` only emitted `index.mjs`. Declare the extra entries in your Mastra config instead:
+
+  ```typescript title="src/mastra/index.ts"
+  export const mastra = new Mastra({
+    bundler: {
+      entries: { 'voice-worker': './voice-worker.ts' },
+      externals: true,
+    },
+  });
+  ```
+
+  `mastra build` now emits `.mastra/output/voice-worker.mjs` beside `.mastra/output/index.mjs`. Both share one output directory, one `package.json`, and one dependency install, so a single build produces one deployable artifact you start with different commands:
+
+  ```bash
+  node .mastra/output/index.mjs              # server
+  node .mastra/output/voice-worker.mjs start # worker
+  ```
+
+  Dependencies imported only by an extra entry are analyzed too, so they land in the generated `package.json` and resolve at runtime.
+
+  Entry names may contain `/` to nest the output, but cannot be `index` (the server bundle), `tools` (the tool aggregator), or start with `tools/` (tool bundles).
+
+### Patch Changes
+
+- Fixed user-registered middleware (`serverMiddleware` and `server.middleware`) being able to return a 401 for framework-public routes such as the Studio sign-in endpoints. ([#20989](https://github.com/mastra-ai/mastra/pull/20989))
+
+  The deployer now wraps every user middleware with `skipIfFrameworkPublic` from `@mastra/hono`, so requests to routes declared public via `createPublicRoute()` / `requiresAuth: false` always reach their handler.
+
+- Updated dependencies [[`c271cae`](https://github.com/mastra-ai/mastra/commit/c271caebd0add9f5d610db0fdb75915fb2b71c18), [`76e5132`](https://github.com/mastra-ai/mastra/commit/76e51328dbc0749c8304e6b3f21e4401f451b081), [`0282e16`](https://github.com/mastra-ai/mastra/commit/0282e16115538c8e9b248b90f0748eb01cb5dc98)]:
+  - @mastra/server@1.58.0-alpha.4
+  - @mastra/core@1.58.0-alpha.4
+
+## 1.58.0-alpha.3
+
+### Patch Changes
+
+- Fixed browser A2A v1 requests by allowing the `A2A-Version` header in the default CORS configuration. ([#20811](https://github.com/mastra-ai/mastra/pull/20811))
+
+- Updated dependencies [[`cdd5c33`](https://github.com/mastra-ai/mastra/commit/cdd5c33ac6c7118a9f139e6dc0e14e6a8ae31658), [`d7cf7fa`](https://github.com/mastra-ai/mastra/commit/d7cf7fafc1ae1b50bd8462dd0e6c671a8606db93), [`0f9a448`](https://github.com/mastra-ai/mastra/commit/0f9a448502157e59f7b76f24360ad497168f5ef8), [`289f4ce`](https://github.com/mastra-ai/mastra/commit/289f4ce16e3293370440172132c52ee787cbc09f), [`4f16ff8`](https://github.com/mastra-ai/mastra/commit/4f16ff824bf2f9b0ddc93f210477c10c8a4fb1ab), [`1c67d85`](https://github.com/mastra-ai/mastra/commit/1c67d85e9da8285662f4dbbf47e0378c3fee0747), [`ba24be6`](https://github.com/mastra-ai/mastra/commit/ba24be662439c331ab23a600041f93803c89eca8), [`842b5fe`](https://github.com/mastra-ai/mastra/commit/842b5fe22b6a7fa811bd14e48eb9af523ac989f2), [`80bdf3a`](https://github.com/mastra-ai/mastra/commit/80bdf3ae16ade6ff63bde0cb16fa2df8ab7dd4dd), [`9ba1247`](https://github.com/mastra-ai/mastra/commit/9ba12470c77f1c03642d720ce67e517e878f666e), [`fd96298`](https://github.com/mastra-ai/mastra/commit/fd96298a8367622f4ebfcaa97b5b6c1fbbd14564), [`6b5fe46`](https://github.com/mastra-ai/mastra/commit/6b5fe464a97ac4845ce26475f347811fc7fb9684), [`6a84954`](https://github.com/mastra-ai/mastra/commit/6a84954a2667f85b6d59da652dab1bbff007ccb0), [`52d8ef0`](https://github.com/mastra-ai/mastra/commit/52d8ef03801f1deb7ee48532fc4190dd4a33916c), [`cdd5c33`](https://github.com/mastra-ai/mastra/commit/cdd5c33ac6c7118a9f139e6dc0e14e6a8ae31658), [`87db0e4`](https://github.com/mastra-ai/mastra/commit/87db0e49a8c04030eb74fff7f051fac330678839), [`efd5c81`](https://github.com/mastra-ai/mastra/commit/efd5c81cc25fde3c2ddd86fc1178deb4ec176e19), [`0976933`](https://github.com/mastra-ai/mastra/commit/0976933142333ec78451feef265b68bcb45aa5e7), [`7010c5d`](https://github.com/mastra-ai/mastra/commit/7010c5d15728bf9c5dfe4fb6b1bf80ce23bf143a), [`242b945`](https://github.com/mastra-ai/mastra/commit/242b94558777bfbdeb42cbfea84afff0b6ad0633), [`fea5cae`](https://github.com/mastra-ai/mastra/commit/fea5caedc7e2cfea51784a15e015952692027abf), [`4b59f78`](https://github.com/mastra-ai/mastra/commit/4b59f786cbc9a7d1ef07a07517dbd4b96865e99d), [`7010c5d`](https://github.com/mastra-ai/mastra/commit/7010c5d15728bf9c5dfe4fb6b1bf80ce23bf143a)]:
+  - @mastra/core@1.58.0-alpha.3
+  - @mastra/server@1.58.0-alpha.3
+
+## 1.58.0-alpha.2
+
+### Minor Changes
+
+- Added discovery and bundling for `instructions.ts` in file-based agent directories, so an agent can define its prompt in TypeScript instead of `instructions.md`. ([#20847](https://github.com/mastra-ai/mastra/pull/20847))
+
+  ```typescript title="src/mastra/agents/weather/instructions.ts"
+  export default 'You are a helpful weather assistant.';
+  ```
+
+  Unlike `instructions.md`, whose text is inlined into the generated code, `instructions.ts` is imported. It can therefore import from the rest of your project, and `mastra dev` picks up edits through the normal module graph.
+
+  A directory holding only an `instructions.ts` now counts as an agent, and subagent directories follow the same rule. Symlinked `instructions.ts` files are skipped, matching how `config.ts` and `memory.ts` are handled.
+
+  If you already keep an unrelated `instructions.ts` inside an agent directory, for example a helper that `config.ts` imports, rename it. Mastra now reads that file as the agent's instructions and the build fails if it has no default export.
+
+### Patch Changes
+
+- Updated dependencies [[`c4ec889`](https://github.com/mastra-ai/mastra/commit/c4ec889561c0264c43f66d04d587bee4ce35e792), [`b4c89b4`](https://github.com/mastra-ai/mastra/commit/b4c89b4371b0c86da57403ad1a3b3ef0681f3128), [`e44e8f3`](https://github.com/mastra-ai/mastra/commit/e44e8f370b66c339ddcaba946d33da6d3c3f06cd), [`c967a5e`](https://github.com/mastra-ai/mastra/commit/c967a5eec150c5dc5418c4a4388982d1fb7ad27c), [`f53d5bd`](https://github.com/mastra-ai/mastra/commit/f53d5bd4885b29e4ac29a428a6044088ea8d6aa3), [`bda2235`](https://github.com/mastra-ai/mastra/commit/bda22353ee28f2df0eaea555f7cae1549f979c0b), [`a7eb4a1`](https://github.com/mastra-ai/mastra/commit/a7eb4a11450f6170274ed5141bffe821d4fdd5a6), [`2f9ef3f`](https://github.com/mastra-ai/mastra/commit/2f9ef3f4ca06fc2dcdd5088c26b7f4da6a016791), [`e7eefcb`](https://github.com/mastra-ai/mastra/commit/e7eefcb162cda7c493e8c3bf43050ead0efbcb2c), [`4d7aca2`](https://github.com/mastra-ai/mastra/commit/4d7aca2fe75f225c83d1502d63079568e6ec163f), [`c4ec889`](https://github.com/mastra-ai/mastra/commit/c4ec889561c0264c43f66d04d587bee4ce35e792), [`414d137`](https://github.com/mastra-ai/mastra/commit/414d1379b1911f8cf9e35b38504ec70bdacc2dfd), [`9be8878`](https://github.com/mastra-ai/mastra/commit/9be8878dcf0388e84fc4873e0eec27bd49b881a4)]:
+  - @mastra/server@1.58.0-alpha.2
+  - @mastra/core@1.58.0-alpha.2
+
 ## 1.58.0-alpha.1
 
 ### Patch Changes
