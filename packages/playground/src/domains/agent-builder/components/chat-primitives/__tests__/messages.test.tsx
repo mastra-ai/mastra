@@ -132,6 +132,7 @@ describe('MessageRow dynamic-tool rendering', () => {
 
   afterEach(() => {
     cleanup();
+    vi.restoreAllMocks();
   });
 
   it('renders persisted signal user text as a user message', () => {
@@ -228,6 +229,25 @@ describe('MessageRow dynamic-tool rendering', () => {
     const { container } = renderMessage(buildMessage([{ type: 'text', text: 'reply **bold**' } as ToolPart]));
 
     expect(container.querySelector('strong')?.textContent).toBe('bold');
+  });
+
+  describe('when assistant text contains an external authorization link', () => {
+    it('requests a separate browser window', () => {
+      const openSpy = vi.spyOn(window, 'open').mockReturnValue(window);
+      const part: MastraMessagePart = {
+        type: 'text',
+        text: '[Authorize Gmail](https://connect.composio.dev/link)',
+      };
+
+      const { getByRole } = renderMessage(buildMessage([part]));
+      fireEvent.click(getByRole('link', { name: 'Authorize Gmail' }));
+
+      expect(openSpy).toHaveBeenCalledWith(
+        'https://connect.composio.dev/link',
+        '_blank',
+        expect.stringContaining('popup=yes'),
+      );
+    });
   });
 
   it('routes assistant text through the shared MessageText error-prefix handling', () => {

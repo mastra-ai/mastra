@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { TooltipProvider } from '../Tooltip';
@@ -21,6 +21,7 @@ vi.mock('@/ds/components/CodeEditor/highlight', () => ({
 
 afterEach(() => {
   cleanup();
+  vi.restoreAllMocks();
 });
 
 describe('MarkdownRenderer', () => {
@@ -59,6 +60,40 @@ describe('MarkdownRenderer', () => {
 
     const link = screen.getByRole<HTMLAnchorElement>('link', { name: 'Authorize Gmail' });
 
+    expect(link.target).toBe('_blank');
+    expect(link.rel).toBe('noopener noreferrer');
+  });
+
+  it('requests a separate browser window for external links when configured', () => {
+    const openSpy = vi.spyOn(window, 'open').mockReturnValue(window);
+    render(
+      <MarkdownRenderer externalLinkTarget="window">
+        {'[Authorize Gmail](https://connect.composio.dev/link)'}
+      </MarkdownRenderer>,
+    );
+
+    fireEvent.click(screen.getByRole('link', { name: 'Authorize Gmail' }));
+
+    expect(openSpy).toHaveBeenCalledWith(
+      'https://connect.composio.dev/link',
+      '_blank',
+      expect.stringContaining('popup=yes'),
+    );
+  });
+
+  it('falls back to a new tab when the browser blocks the requested window', () => {
+    const openSpy = vi.spyOn(window, 'open').mockReturnValue(null);
+    render(
+      <MarkdownRenderer externalLinkTarget="window">
+        {'[Authorize Gmail](https://connect.composio.dev/link)'}
+      </MarkdownRenderer>,
+    );
+
+    const link = screen.getByRole<HTMLAnchorElement>('link', { name: 'Authorize Gmail' });
+    const defaultAllowed = fireEvent.click(link);
+
+    expect(openSpy).toHaveBeenCalledOnce();
+    expect(defaultAllowed).toBe(true);
     expect(link.target).toBe('_blank');
     expect(link.rel).toBe('noopener noreferrer');
   });
