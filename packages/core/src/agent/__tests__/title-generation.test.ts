@@ -814,6 +814,146 @@ function titleGenerationTests(version: 'v1' | 'v2') {
       expect(agentCallCount).toBe(1); // But main agent should still be called
     });
 
+    it('awaits title persistence before generate resolves (#20682)', async () => {
+      // Regression: detached void genTitle() never ran on serverless runtimes that
+      // freeze after the HTTP response. generate()/generateLegacy() must not
+      // resolve until the title has been persisted — no post-await setTimeout.
+      let titlePersisted = false;
+
+      const mockMemory = new MockMemory();
+      mockMemory.getMergedThreadConfig = () => ({
+        generateTitle: true,
+      });
+
+      const originalCreateThread = mockMemory.createThread.bind(mockMemory);
+      mockMemory.createThread = async args => {
+        // Intentionally slow so a detached fire-and-forget would lose the race.
+        await new Promise(resolve => setTimeout(resolve, 40));
+        const thread = await originalCreateThread(args);
+        if (args.title) {
+          titlePersisted = true;
+        }
+        return thread;
+      };
+
+      let testModel: MockLanguageModelV1 | MockLanguageModelV2;
+
+      if (version === 'v1') {
+        testModel = new MockLanguageModelV1({
+          doGenerate: async options => {
+            const messages = options.prompt;
+            const isForTitle = messages.some((msg: any) => msg.content?.includes?.('you will generate a short title'));
+
+            if (isForTitle) {
+              return {
+                rawCall: { rawPrompt: null, rawSettings: {} },
+                finishReason: 'stop',
+                usage: { promptTokens: 5, completionTokens: 10 },
+                text: 'Serverless Safe Title',
+              };
+            }
+
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'stop',
+              usage: { promptTokens: 10, completionTokens: 20 },
+              text: 'Agent Response',
+            };
+          },
+        });
+      } else {
+        testModel = new MockLanguageModelV2({
+          doGenerate: async options => {
+            const messages = options.prompt;
+            const isForTitle = messages.some((msg: any) => msg.content?.includes?.('you will generate a short title'));
+
+            if (isForTitle) {
+              return {
+                rawCall: { rawPrompt: null, rawSettings: {} },
+                finishReason: 'stop',
+                usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+                text: 'Serverless Safe Title',
+                content: [{ type: 'text', text: 'Serverless Safe Title' }],
+                warnings: [],
+              };
+            }
+
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'stop',
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              text: 'Agent Response',
+              content: [{ type: 'text', text: 'Agent Response' }],
+              warnings: [],
+            };
+          },
+          doStream: async options => {
+            const messages = options.prompt;
+            const isForTitle = messages.some((msg: any) => msg.content?.includes?.('you will generate a short title'));
+            const text = isForTitle ? 'Serverless Safe Title' : 'Agent Response';
+
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              warnings: [],
+              stream: convertArrayToReadableStream([
+                { type: 'stream-start', warnings: [] },
+                {
+                  type: 'response-metadata',
+                  id: 'id-0',
+                  modelId: 'mock-model-id',
+                  timestamp: new Date(0),
+                },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: text },
+                { type: 'text-end', id: 'text-1' },
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                },
+              ]),
+            };
+          },
+        });
+      }
+
+      const agent = new Agent({
+        id: 'await-title-agent',
+        name: 'Await Title Agent',
+        instructions: 'test agent',
+        model: testModel,
+        memory: mockMemory,
+      });
+
+      const threadId = `thread-await-title-${version}`;
+
+      if (version === 'v1') {
+        await agent.generateLegacy('Name this conversation', {
+          memory: {
+            resource: 'user-await',
+            thread: {
+              id: threadId,
+              title: '',
+            },
+          },
+        });
+      } else {
+        await agent.generate('Name this conversation', {
+          memory: {
+            resource: 'user-await',
+            thread: {
+              id: threadId,
+              title: '',
+            },
+          },
+        });
+      }
+
+      expect(titlePersisted).toBe(true);
+      const thread = await mockMemory.getThreadById({ threadId });
+      expect(thread?.title).toBe('Serverless Safe Title');
+    });
+
     it('should not generate title for pre-created threads (thread already exists)', async () => {
       // Pre-created threads already exist in the DB, so threadExists is true.
       // Title generation only fires when the thread is newly created by the agent.
