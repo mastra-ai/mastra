@@ -117,6 +117,10 @@ export function truncateStringByTokens(text: string, maxTokens: number): string 
   return best;
 }
 
+export function formatToolResultForTokenCounting(value: unknown): string {
+  return stringifyToolResult(value);
+}
+
 export function formatToolResultForObserver(
   value: unknown,
   options?: {

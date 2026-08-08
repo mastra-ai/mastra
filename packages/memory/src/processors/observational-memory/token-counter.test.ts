@@ -1,8 +1,14 @@
 import type { MastraToolInvocation } from '@mastra/core/agent/message-list';
 import probeImageSize from 'probe-image-size';
+import { estimateTokenCount } from 'tokenx';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 import { TokenCounter } from './token-counter';
+import {
+  DEFAULT_OBSERVER_TOOL_RESULT_MAX_TOKENS,
+  formatToolResultForObserver,
+  formatToolResultForTokenCounting,
+} from './tool-result-helpers';
 
 vi.mock('probe-image-size', () => ({
   default: vi.fn(),
@@ -1214,7 +1220,41 @@ describe('TokenCounter', () => {
       expect(secondEstimate.key).not.toBe(firstEstimate.key);
     });
 
-    it('sanitizes and truncates raw tool results while counting tokens', () => {
+    it('counts large tool results at full provider-visible size, not observer truncation', () => {
+      const counter = new TokenCounter();
+      const result = {
+        rows: Array.from({ length: 50_000 }, (_, i) => ({
+          id: i,
+          value: `large-result-${i}-${'x'.repeat(40)}`,
+        })),
+      };
+      const message = createMessage({
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'tool-1',
+              toolName: 'largeResultTool',
+              args: {},
+              result,
+            },
+          },
+        ],
+      });
+
+      const countedTokens = counter.countMessage(message);
+      const observerTokens = estimateTokenCount(formatToolResultForObserver(result));
+      const fullSerializedTokens = estimateTokenCount(formatToolResultForTokenCounting(result));
+
+      expect(fullSerializedTokens).toBeGreaterThan(100_000);
+      expect(countedTokens).toBeGreaterThan(100_000);
+      expect(observerTokens).toBeLessThanOrEqual(DEFAULT_OBSERVER_TOOL_RESULT_MAX_TOKENS + 32);
+      expect(countedTokens).toBeGreaterThan(observerTokens);
+    });
+
+    it('sanitizes raw tool results while counting tokens', () => {
       const counter = new TokenCounter();
       const message = createMessage({
         format: 2,
