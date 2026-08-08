@@ -1781,6 +1781,60 @@ describe('PlatformSandbox', () => {
         await vi.waitFor(() => expect(sets.length).toBeGreaterThan(0));
         expect(sets).toEqual([{ sandboxId: 'sbx_nonblock', instanceUrl: 'http://[fd12::1]:47000' }]);
       });
+
+      it('does not re-populate registry when teardown races the probe', async () => {
+        // Regression test: if destroy() runs while the probe is pending, the
+        // probe should NOT re-populate the registry when it eventually resolves.
+        // Otherwise we'd have a leaked registry entry pointing to a deleted VM.
+        vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+        const fetchMock = vi
+          .fn()
+          // create sandbox
+          .mockResolvedValueOnce(
+            json({
+              id: 'sbx_race',
+              createdAt: '2026-06-26T00:00:00.000Z',
+              instanceUrl: 'http://[fd12::1]:47000',
+            }),
+          )
+          // destroy sandbox
+          .mockResolvedValueOnce(new Response(null, { status: 204 }));
+
+        // Probe hangs until we resolve it manually.
+        let resolveProbe: (value: Response) => void;
+        const probePromise = new Promise<Response>(r => {
+          resolveProbe = r;
+        });
+        const privateNetFetch = vi.fn().mockReturnValue(probePromise);
+        const { registry, sets, deletes } = fakeAddressRegistry();
+
+        const sandbox = new PlatformSandbox({
+          accessToken: 'sk_test',
+          projectId: 'proj_123',
+          environmentId: 'env_123',
+          fetch: fetchMock,
+          privateNetFetch,
+          addressRegistry: registry,
+        });
+
+        // Start the sandbox — probe is now in-flight but hasn't resolved.
+        await sandbox._start();
+        expect(sets).toEqual([]);
+
+        // Destroy while probe is pending.
+        await sandbox.destroy();
+        expect(deletes).toEqual(['sbx_race']);
+
+        // Now resolve the probe with 200. The probe should detect the
+        // generation mismatch and NOT call set().
+        resolveProbe!(new Response('ok', { status: 200 }));
+
+        // Give any pending microtasks a chance to run.
+        await new Promise(r => setTimeout(r, 50));
+
+        // Registry should still be empty — no stale entry for the destroyed sandbox.
+        expect(sets).toEqual([]);
+      });
     });
   });
 

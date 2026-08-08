@@ -387,6 +387,13 @@ export class PlatformSandbox extends MastraSandbox {
    * Mirrors OSS `@mastra/railway` `RailwaySandbox._startInFlight`.
    */
   private _startInFlight: Promise<void> | null = null;
+  /**
+   * Generation token for the sidecar probe. Incremented on every `start()`
+   * and on teardown. The probe captures this value when it begins; if the
+   * generation has changed by the time the probe succeeds, the probe skips
+   * the `set()` to avoid re-populating a deleted or superseded sandbox entry.
+   */
+  private _probeGeneration = 0;
 
   constructor(options: PlatformSandboxOptions = {}) {
     super({ ...options, name: 'PlatformSandbox', processes: new PlatformProcessManager() });
@@ -556,7 +563,9 @@ export class PlatformSandbox extends MastraSandbox {
     if (!json.instanceUrl) return;
     // Fire-and-forget: probe the sidecar's /health endpoint before populating
     // the registry. Early execs fall back to lease until the probe succeeds.
-    void this._probeSidecarThenRegister(json.id, json.instanceUrl);
+    // Capture the current generation so the probe can detect teardown races.
+    const generation = ++this._probeGeneration;
+    void this._probeSidecarThenRegister(json.id, json.instanceUrl, generation);
   }
 
   /**
@@ -568,19 +577,31 @@ export class PlatformSandbox extends MastraSandbox {
    * If the sidecar never comes up within {@link SIDECAR_PROBE_TIMEOUT_MS},
    * the registry stays unpopulated and all execs go via lease for this
    * sandbox's lifetime (or until a future `start()` re-runs the probe).
+   *
+   * @param generation - The probe generation captured at call time. If this
+   *   no longer matches `_probeGeneration` when the probe succeeds, the probe
+   *   was superseded by a teardown or a new `start()`, so we skip the `set()`.
    */
-  private async _probeSidecarThenRegister(sandboxId: string, instanceUrl: string): Promise<void> {
+  private async _probeSidecarThenRegister(
+    sandboxId: string,
+    instanceUrl: string,
+    generation: number,
+  ): Promise<void> {
     const deadline = Date.now() + SIDECAR_PROBE_TIMEOUT_MS;
     const fetchFn = this._privateNetFetch ?? fetch;
     while (Date.now() < deadline) {
+      // Teardown or new start() superseded this probe — bail out early.
+      if (generation !== this._probeGeneration) return;
       try {
         const res = await fetchFn(`${instanceUrl}/health`, {
           method: 'GET',
           signal: AbortSignal.timeout(1_000),
         });
         if (res.ok) {
-          // Sidecar is listening. Only now is the address safe to publish.
-          this._addressRegistry?.set(sandboxId, instanceUrl);
+          // Sidecar is listening. Only populate if this probe is still current.
+          if (generation === this._probeGeneration && this._sandboxId === sandboxId) {
+            this._addressRegistry?.set(sandboxId, instanceUrl);
+          }
           return;
         }
       } catch {
@@ -681,6 +702,10 @@ export class PlatformSandbox extends MastraSandbox {
   private async _teardownSandbox(): Promise<void> {
     if (!this._sandboxId) return;
     const destroyedSandboxId = this._sandboxId;
+    // Invalidate any in-flight probe so it doesn't re-populate the registry
+    // after we've deleted the entry below. The probe checks this generation
+    // before calling set().
+    this._probeGeneration++;
     await this._client.request(`/sandbox/${encodeURIComponent(destroyedSandboxId)}`, { method: 'DELETE' });
     // Clear local state so a subsequent start() creates a fresh remote sandbox
     // instead of taking the reattach branch and pointing exec at a deleted resource.
