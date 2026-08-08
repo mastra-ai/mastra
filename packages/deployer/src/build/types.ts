@@ -27,6 +27,7 @@ export interface DependencyMetadata {
 
 export interface BundlerOptions {
   enableSourcemap: boolean;
+  enableMinify: boolean;
   enableEsmShim: boolean;
   externals: boolean | string[];
   dynamicPackages?: string[];

@@ -494,7 +494,7 @@ export abstract class Bundler extends MastraBundler {
     mastraEntryFile: string,
     analyzedBundleInfo: Awaited<ReturnType<typeof analyzeBundle>>,
     toolsPaths: (string | string[])[],
-    { enableSourcemap, enableEsmShim, externals, entries }: BundlerOptions,
+    { enableSourcemap, enableMinify, enableEsmShim, externals, entries }: BundlerOptions,
   ) {
     const { workspaceRoot } = await getWorkspaceInformation({ mastraEntryFile });
     const closestPkgJson = pkg.up({ cwd: dirname(mastraEntryFile) });
@@ -507,7 +507,14 @@ export abstract class Bundler extends MastraBundler {
       {
         'process.env.NODE_ENV': JSON.stringify('production'),
       },
-      { sourcemap: enableSourcemap, workspaceRoot, projectRoot, enableEsmShim, externalsPreset: externals === true },
+      {
+        sourcemap: enableSourcemap,
+        minify: enableMinify,
+        workspaceRoot,
+        projectRoot,
+        enableEsmShim,
+        externalsPreset: externals === true,
+      },
     );
     const isVirtual = serverFile.includes('\n') || !existsSync(serverFile);
     const toolsInputOptions = await this.listToolsInputOptions(toolsPaths);
@@ -615,6 +622,7 @@ export abstract class Bundler extends MastraBundler {
     const extraEntries = resolveExtraEntries(bundlerOptions.entries, mastraEntryFile);
     const internalBundlerOptions: BundlerOptions = {
       enableSourcemap: !!bundlerOptions.sourcemap,
+      enableMinify: !!bundlerOptions.minify,
       externals: bundlerOptions.externals ?? [],
       enableEsmShim,
       dynamicPackages: bundlerOptions.dynamicPackages,
