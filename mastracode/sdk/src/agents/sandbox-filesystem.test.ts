@@ -265,4 +265,23 @@ describe('SandboxFilesystem', () => {
     expect(fs.id).toBe(`sandbox-fs:fake-sandbox:${WORKDIR}`);
     expect(fs.getInfo().metadata).toMatchObject({ basePath: WORKDIR, sandboxId: 'fake-sandbox' });
   });
+
+  describe('warmup', () => {
+    it('executes a cheap true command to exercise the transport', async () => {
+      const { sandbox, fs } = makeFs();
+      await fs.warmup();
+      expect(sandbox.calls).toContain('true');
+    });
+
+    it('does not throw when the exec succeeds', async () => {
+      const { fs } = makeFs(() => ({ exitCode: 0, stdout: '', stderr: '' }));
+      await expect(fs.warmup()).resolves.toBeUndefined();
+    });
+
+    it('does not throw when the exec fails (errors swallowed by caller)', async () => {
+      const { fs } = makeFs(() => ({ exitCode: 1, stdout: '', stderr: 'error' }));
+      // warmup() itself doesn't throw - the caller (WorkspaceSkillsImpl) swallows errors
+      await expect(fs.warmup()).resolves.toBeUndefined();
+    });
+  });
 });
