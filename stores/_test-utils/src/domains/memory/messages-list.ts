@@ -379,6 +379,110 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
       expect(result.messages.some(m => m.threadId === thread2.id)).toBe(true);
     });
 
+    it('should still include a message from another thread in the same resource', async () => {
+      const siblingThread = createSampleThread();
+      siblingThread.resourceId = thread.resourceId;
+      await memoryStorage.saveThread({ thread: siblingThread });
+
+      const siblingMessage = createSampleMessageV2({
+        threadId: siblingThread.id,
+        resourceId: thread.resourceId,
+        content: { content: 'Sibling message' },
+        createdAt: new Date(new Date(messages[4]!.createdAt).getTime() + 1000),
+      });
+      await memoryStorage.saveMessages({ messages: [siblingMessage] });
+
+      const result = await memoryStorage.listMessages({
+        threadId: thread.id,
+        resourceId: thread.resourceId,
+        include: [{ id: siblingMessage.id }],
+      });
+
+      const contents = result.messages.map((m: any) => m.content.content);
+      expect(contents).toContain('Sibling message');
+      expect(result.messages).toHaveLength(6);
+    });
+
+    it('should keep include context inside the resource when the thread holds another resource', async () => {
+      const foreignMessage = createSampleMessageV2({
+        threadId: thread.id,
+        resourceId: 'different-resource',
+        content: { content: 'Foreign message' },
+        createdAt: new Date(new Date(messages[2]!.createdAt).getTime() + 500),
+      });
+      await memoryStorage.saveMessages({ messages: [foreignMessage] });
+
+      const result = await memoryStorage.listMessages({
+        threadId: thread.id,
+        resourceId: thread.resourceId,
+        perPage: 0,
+        include: [
+          {
+            id: messages[1]!.id,
+            withPreviousMessages: 1,
+            withNextMessages: 1,
+          },
+          {
+            id: messages[3]!.id,
+            withPreviousMessages: 1,
+            withNextMessages: 1,
+          },
+        ],
+      });
+
+      const contents = result.messages.map((m: any) => m.content.content);
+      expect(contents).toContain('Message 2');
+      expect(contents).toContain('Message 3');
+      expect(contents).toContain('Message 4');
+      expect(contents).not.toContain('Foreign message');
+      expect(result.messages.every(m => m.resourceId === thread.resourceId)).toBe(true);
+    });
+
+    it('should keep paginated results free of another resource when include is used', async () => {
+      const foreignMessage = createSampleMessageV2({
+        threadId: thread.id,
+        resourceId: 'different-resource',
+        content: { content: 'Foreign message' },
+        createdAt: new Date(new Date(messages[2]!.createdAt).getTime() + 500),
+      });
+      await memoryStorage.saveMessages({ messages: [foreignMessage] });
+
+      const result = await memoryStorage.listMessages({
+        threadId: thread.id,
+        resourceId: thread.resourceId,
+        include: [
+          {
+            id: messages[2]!.id,
+            withPreviousMessages: 2,
+            withNextMessages: 2,
+          },
+        ],
+      });
+
+      const contents = result.messages.map((m: any) => m.content.content);
+      expect(contents).not.toContain('Foreign message');
+      expect(result.messages.every(m => m.resourceId === thread.resourceId)).toBe(true);
+      expect(result.messages).toHaveLength(5);
+    });
+
+    it('should not include messages from another resource when resourceId is provided', async () => {
+      const result = await memoryStorage.listMessages({
+        threadId: thread2.id,
+        resourceId: thread2.resourceId,
+        include: [
+          {
+            id: messages[3]!.id,
+            withPreviousMessages: 2,
+            withNextMessages: 2,
+          },
+        ],
+      });
+
+      expect(result.messages.every(m => m.resourceId === thread2.resourceId)).toBe(true);
+      expect(result.messages.some(m => m.threadId === thread.id)).toBe(false);
+      expect(result.messages).toHaveLength(1);
+    });
+
     it('should deduplicate messages when include has overlapping context', async () => {
       const result = await memoryStorage.listMessages({
         threadId: thread.id,
@@ -1098,6 +1202,24 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
         expect(result.messages).toHaveLength(5);
         expect(result.messages.every(m => m.resourceId === thread.resourceId)).toBe(true);
         expect(result.messages.every(m => m.threadId === thread.id)).toBe(true);
+      });
+
+      it('should not include messages from another resource', async () => {
+        const result = await memoryStorage.listMessagesByResourceId({
+          resourceId: thread2.resourceId,
+          perPage: false,
+          include: [
+            {
+              id: messages[3]!.id,
+              withPreviousMessages: 2,
+              withNextMessages: 2,
+            },
+          ],
+        });
+
+        expect(result.messages.every(m => m.resourceId === thread2.resourceId)).toBe(true);
+        expect(result.messages.some(m => m.threadId === thread.id)).toBe(false);
+        expect(result.messages).toHaveLength(1);
       });
 
       it('should support pagination when querying by resourceId', async () => {

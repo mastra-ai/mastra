@@ -1,5 +1,18 @@
 # @mastra/memory
 
+## 1.26.1-alpha.3
+
+### Patch Changes
+
+- Fixed a crash in Observational Memory token counting for tool calls that wait for approval. Threads that hold a tool invocation in the `approval-requested` or `approval-responded` state no longer throw `Unhandled tool-invocation state`, so memory extraction keeps running on approval-gated conversations. ([#20985](https://github.com/mastra-ai/mastra/pull/20985))
+
+  The counter also no longer stops on a tool-invocation state it does not know. A message that a different `@mastra/core` version wrote now gets an estimate instead of an error.
+
+- Fix schema-based working memory losing stored data on partial updates. When a model updated one section of working memory, unrelated sections could be wiped out. Tools can now set `strict: false` to opt out of strict structured-output schema rewriting, which previously forced every field to be required and left models no way to signal "leave this field alone". ([#20992](https://github.com/mastra-ai/mastra/pull/20992))
+
+- Updated dependencies [[`6445eba`](https://github.com/mastra-ai/mastra/commit/6445eba6020abac681aba1cc9289f446cb400cbe), [`df31eb0`](https://github.com/mastra-ai/mastra/commit/df31eb0c7087d782a0d9346e467f9a4af4b0eef6), [`fcd0667`](https://github.com/mastra-ai/mastra/commit/fcd0667a4e378be35c9a1b1eb19cce78fbfd7282), [`bab06b1`](https://github.com/mastra-ai/mastra/commit/bab06b18923873a584bdfc71a6b4ec7fb4727fb7)]:
+  - @mastra/core@1.58.0-alpha.5
+
 ## 1.26.1-alpha.2
 
 ### Patch Changes

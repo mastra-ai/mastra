@@ -486,7 +486,20 @@ export class MemoryDSQL extends MemoryStorage {
     });
   }
 
-  private async _getIncludedMessages({ include }: { include: StorageListMessagesInput['include'] }) {
+  /**
+   * Fetches the messages named by `include` together with their surrounding context.
+   *
+   * @param include - Message ids to pin, each with an optional before/after window.
+   * @param resourceId - When set, restricts both the pinned messages and their context
+   * to that resource so an id from another resource returns nothing.
+   */
+  private async _getIncludedMessages({
+    include,
+    resourceId,
+  }: {
+    include: StorageListMessagesInput['include'];
+    resourceId?: string;
+  }) {
     if (!include || include.length === 0) return null;
 
     const unionQueries: string[] = [];
@@ -496,18 +509,19 @@ export class MemoryDSQL extends MemoryStorage {
 
     for (const inc of include) {
       const { id, withPreviousMessages = 0, withNextMessages = 0 } = inc;
+      const resourceCondition = resourceId ? ` AND "resourceId" = $${paramIdx + 3}` : '';
       unionQueries.push(
         `
             SELECT * FROM (
               WITH target_thread AS (
-                SELECT thread_id FROM ${tableName} WHERE id = $${paramIdx}
+                SELECT thread_id FROM ${tableName} WHERE id = $${paramIdx}${resourceCondition}
               ),
               ordered_messages AS (
                 SELECT
                   *,
                   ROW_NUMBER() OVER (ORDER BY "createdAt" ASC) as row_num
                 FROM ${tableName}
-                WHERE thread_id = (SELECT thread_id FROM target_thread)
+                WHERE thread_id = (SELECT thread_id FROM target_thread)${resourceCondition}
               )
               SELECT
                 m.id,
@@ -534,6 +548,10 @@ export class MemoryDSQL extends MemoryStorage {
       );
       params.push(id, withPreviousMessages, withNextMessages);
       paramIdx += 3;
+      if (resourceId) {
+        params.push(resourceId);
+        paramIdx += 1;
+      }
     }
     const finalQuery = unionQueries.join(' UNION ALL ') + ' ORDER BY "createdAt" ASC';
     const includedRows = await this.#db.client.manyOrNone<MessageRowFromDB>(finalQuery, params);
@@ -703,7 +721,7 @@ export class MemoryDSQL extends MemoryStorage {
 
       const messageIds = new Set(messages.map(m => m.id));
       if (include && include.length > 0) {
-        const includeMessages = await this._getIncludedMessages({ include });
+        const includeMessages = await this._getIncludedMessages({ include, resourceId });
         if (includeMessages) {
           for (const includeMsg of includeMessages) {
             if (!messageIds.has(includeMsg.id)) {

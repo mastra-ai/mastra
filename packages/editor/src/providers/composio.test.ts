@@ -12,6 +12,7 @@ const { composioInstances, makeFakeComposio } = vi.hoisted(() => {
     hasProvider: boolean;
     toolkits: { get: ReturnType<typeof vi.fn>; getConnectedAccountInitiationFields: ReturnType<typeof vi.fn> };
     tools: { get: ReturnType<typeof vi.fn>; getRawComposioTools: ReturnType<typeof vi.fn> };
+    sessions: { create: ReturnType<typeof vi.fn> };
     connectedAccounts: {
       initiate: ReturnType<typeof vi.fn>;
       link: ReturnType<typeof vi.fn>;
@@ -30,6 +31,7 @@ const { composioInstances, makeFakeComposio } = vi.hoisted(() => {
       hasProvider: Boolean(opts.provider),
       toolkits: { get: vi.fn(), getConnectedAccountInitiationFields: vi.fn() },
       tools: { get: vi.fn(), getRawComposioTools: vi.fn() },
+      sessions: { create: vi.fn() },
       connectedAccounts: { initiate: vi.fn(), link: vi.fn(), get: vi.fn(), list: vi.fn(), delete: vi.fn() },
       authConfigs: { list: vi.fn() },
     };
@@ -332,6 +334,163 @@ describe('ComposioToolProvider — resolveTools', () => {
     });
 
     expect(mastra.tools.get.mock.calls[0]![0]).toBe('author_owner');
+  });
+
+  it('resolves connection-management tools from a caller-scoped session and filters the session catalog', async () => {
+    const integration = new ComposioToolProvider({ apiKey: 'k' });
+
+    await integration.resolveToolsVNext({ toolSlugs: ['a'], toolMeta: {}, connectionId: 'ca_1' });
+    const mastra = getMastraInstance();
+    mastra.tools.get.mockClear();
+
+    const manageTool = { id: 'COMPOSIO_MANAGE_CONNECTIONS', outputSchema: { type: 'object' } };
+    const sessionTools = vi.fn().mockResolvedValue({
+      COMPOSIO_MANAGE_CONNECTIONS: manageTool,
+      COMPOSIO_WAIT_FOR_CONNECTIONS: { id: 'COMPOSIO_WAIT_FOR_CONNECTIONS' },
+      COMPOSIO_SEARCH_TOOLS: { id: 'COMPOSIO_SEARCH_TOOLS' },
+    });
+    mastra.sessions.create.mockResolvedValue({ tools: sessionTools });
+
+    const result = await integration.resolveToolsVNext({
+      toolSlugs: ['COMPOSIO_MANAGE_CONNECTIONS'],
+      toolMeta: {
+        COMPOSIO_MANAGE_CONNECTIONS: { toolkit: 'composio' },
+        GMAIL_FETCH_EMAILS: { toolkit: 'gmail' },
+        GITHUB_GET_REPOSITORY: { toolkit: 'github' },
+      },
+      connectionId: 'tenant_7',
+      authorId: 'agent_author_should_not_win',
+      scope: 'caller-supplied',
+      requestContext: { [MASTRA_RESOURCE_ID_KEY]: 'tenant_7' },
+    });
+
+    expect(mastra.tools.get).not.toHaveBeenCalled();
+    expect(mastra.sessions.create).toHaveBeenCalledWith('tenant_7', {
+      toolkits: ['gmail', 'github'],
+      manageConnections: { enable: true, waitForConnections: true },
+      sandbox: { enable: false },
+    });
+    expect(sessionTools).toHaveBeenCalledOnce();
+    expect(Object.keys(result)).toEqual(['COMPOSIO_MANAGE_CONNECTIONS']);
+    expect((result.COMPOSIO_MANAGE_CONNECTIONS as unknown as typeof manageTool).outputSchema).toBeUndefined();
+  });
+
+  it('creates distinct sessions for two callers using the same provider', async () => {
+    const integration = new ComposioToolProvider({ apiKey: 'k' });
+
+    await integration.resolveToolsVNext({ toolSlugs: ['a'], toolMeta: {}, connectionId: 'ca_1' });
+    const mastra = getMastraInstance();
+    mastra.tools.get.mockClear();
+
+    const sessionToolsByCaller: Array<ReturnType<typeof vi.fn>> = [];
+    mastra.sessions.create.mockImplementation(async (callerPrincipalId: string) => {
+      const tools = vi.fn().mockResolvedValue({
+        COMPOSIO_MANAGE_CONNECTIONS: { id: 'COMPOSIO_MANAGE_CONNECTIONS', callerPrincipalId },
+      });
+      sessionToolsByCaller.push(tools);
+      return { tools };
+    });
+
+    const resolveForCaller = (callerPrincipalId: string) =>
+      integration.resolveToolsVNext({
+        toolSlugs: ['COMPOSIO_MANAGE_CONNECTIONS'],
+        toolMeta: { COMPOSIO_MANAGE_CONNECTIONS: { toolkit: 'composio' } },
+        connectionId: callerPrincipalId,
+        authorId: callerPrincipalId,
+        scope: 'caller-supplied',
+        requestContext: { [MASTRA_RESOURCE_ID_KEY]: callerPrincipalId },
+      });
+
+    const [callerATools, callerBTools] = await Promise.all([
+      resolveForCaller('caller_a'),
+      resolveForCaller('caller_b'),
+    ]);
+
+    expect(mastra.sessions.create.mock.calls.map(call => call[0])).toEqual(['caller_a', 'caller_b']);
+    expect(sessionToolsByCaller).toHaveLength(2);
+    expect(sessionToolsByCaller[0]).not.toBe(sessionToolsByCaller[1]);
+    expect(callerATools.COMPOSIO_MANAGE_CONNECTIONS).not.toBe(callerBTools.COMPOSIO_MANAGE_CONNECTIONS);
+    expect(mastra.tools.get).not.toHaveBeenCalled();
+  });
+
+  it('merges direct and session tools and applies overrides to both paths', async () => {
+    const integration = new ComposioToolProvider({ apiKey: 'k' });
+
+    await integration.resolveToolsVNext({ toolSlugs: ['a'], toolMeta: {}, connectionId: 'ca_1' });
+    const mastra = getMastraInstance();
+    mastra.tools.get.mockClear();
+
+    const gmailTool = { id: 'GMAIL_FETCH_EMAILS', description: 'gmail original', outputSchema: {} };
+    const waitTool = {
+      id: 'COMPOSIO_WAIT_FOR_CONNECTIONS',
+      description: 'wait original',
+      outputSchema: {},
+    };
+    mastra.tools.get.mockResolvedValue({ GMAIL_FETCH_EMAILS: gmailTool });
+    mastra.sessions.create.mockResolvedValue({
+      tools: vi.fn().mockResolvedValue({ COMPOSIO_WAIT_FOR_CONNECTIONS: waitTool }),
+    });
+
+    const result = await integration.resolveToolsVNext({
+      toolSlugs: ['GMAIL_FETCH_EMAILS', 'COMPOSIO_WAIT_FOR_CONNECTIONS'],
+      toolMeta: {
+        GMAIL_FETCH_EMAILS: { toolkit: 'gmail', description: 'gmail override' },
+        COMPOSIO_WAIT_FOR_CONNECTIONS: { toolkit: 'composio', description: 'wait override' },
+      },
+      connectionId: 'ca_1',
+      authorId: 'author_1',
+      scope: 'per-author',
+    });
+
+    expect(mastra.tools.get).toHaveBeenCalledWith('author_1', { tools: ['GMAIL_FETCH_EMAILS'] }, expect.any(Object));
+    expect(mastra.sessions.create).toHaveBeenCalledWith('author_1', {
+      toolkits: ['gmail'],
+      manageConnections: { enable: true, waitForConnections: true },
+      sandbox: { enable: false },
+    });
+    expect(Object.keys(result)).toEqual(['GMAIL_FETCH_EMAILS', 'COMPOSIO_WAIT_FOR_CONNECTIONS']);
+    expect(gmailTool).toMatchObject({ description: 'gmail override', outputSchema: undefined });
+    expect(waitTool).toMatchObject({ description: 'wait override', outputSchema: undefined });
+
+    const modifiers = mastra.tools.get.mock.calls[0]![2] as {
+      beforeExecute: (a: { params: { connectedAccountId?: string } }) => unknown;
+    };
+    const params: { connectedAccountId?: string } = {};
+    modifiers.beforeExecute({ params });
+    expect(params.connectedAccountId).toBe('ca_1');
+  });
+
+  it.each([
+    {
+      name: 'session creation',
+      arrange: (mastra: FakeComposioInstance) =>
+        mastra.sessions.create.mockRejectedValue(new Error('session unavailable')),
+    },
+    {
+      name: 'session tool resolution',
+      arrange: (mastra: FakeComposioInstance) =>
+        mastra.sessions.create.mockResolvedValue({
+          tools: vi.fn().mockRejectedValue(new Error('session unavailable')),
+        }),
+    },
+  ])('surfaces $name errors without falling back to direct tools', async ({ arrange }) => {
+    const integration = new ComposioToolProvider({ apiKey: 'k' });
+
+    await integration.resolveToolsVNext({ toolSlugs: ['a'], toolMeta: {}, connectionId: 'ca_1' });
+    const mastra = getMastraInstance();
+    mastra.tools.get.mockClear();
+    arrange(mastra);
+
+    await expect(
+      integration.resolveToolsVNext({
+        toolSlugs: ['COMPOSIO_MANAGE_CONNECTIONS'],
+        toolMeta: { COMPOSIO_MANAGE_CONNECTIONS: { toolkit: 'composio' } },
+        connectionId: 'tenant_7',
+        authorId: 'tenant_7',
+        scope: 'caller-supplied',
+      }),
+    ).rejects.toThrow('session unavailable');
+    expect(mastra.tools.get).not.toHaveBeenCalled();
   });
 });
 

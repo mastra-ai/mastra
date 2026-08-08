@@ -37,6 +37,7 @@ import { SchedulesPG } from './domains/schedules';
 import { ScorerDefinitionsPG } from './domains/scorer-definitions';
 import { ScoresPG } from './domains/scores';
 import { SkillsPG } from './domains/skills';
+import { ThreadStatePG } from './domains/thread-state';
 import { ToolProviderConnectionsPG } from './domains/tool-provider-connections';
 import { WorkflowDefinitionsPG } from './domains/workflow-definitions';
 import { WorkflowsPG } from './domains/workflows';
@@ -113,6 +114,7 @@ const ALL_DOMAINS = [
   FavoritesPG,
   ChannelsPG,
   SchedulesPG,
+  ThreadStatePG,
 ] as const;
 
 /**
@@ -155,6 +157,7 @@ export {
   SchedulesPG,
   SkillsPG,
   FavoritesPG,
+  ThreadStatePG,
   ToolProviderConnectionsPG,
   WorkflowsPG,
   WorkflowDefinitionsPG,
@@ -252,6 +255,7 @@ export class PostgresStore extends MastraCompositeStore {
         backgroundTasks: new BackgroundTasksPG(domainConfig),
         channels: new ChannelsPG(domainConfig),
         schedules: new SchedulesPG(domainConfig),
+        threadState: new ThreadStatePG(domainConfig),
       };
     } catch (e) {
       throw new MastraError(
