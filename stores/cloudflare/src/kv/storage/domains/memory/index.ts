@@ -648,20 +648,38 @@ export class MemoryStorageCloudflare extends MemoryStorage {
   private async getIncludedMessagesWithContext(
     include: { id: string; threadId?: string; withPreviousMessages?: number; withNextMessages?: number }[],
     messageIds: Set<string>,
+    resourceId?: string,
   ): Promise<void> {
     await Promise.all(
       include.map(async item => {
-        // Look up the message to get its threadId (message IDs are globally unique)
-        // Note: When threadId is not provided, this triggers a full scan of all threads
-        let targetThreadId = item.threadId;
-        if (!targetThreadId) {
-          const foundMessage = await this.findMessageInAnyThread(item.id);
-          if (!foundMessage) return;
-          targetThreadId = foundMessage.threadId;
+        // Look up the message to validate its resource and get the thread it actually belongs to.
+        // When the hinted thread does not contain it, fall back to scanning all threads.
+        let foundMessage = item.threadId
+          ? await this.#db.getKV(TABLE_MESSAGES, this.getMessageKey(item.threadId, item.id))
+          : null;
+        if (foundMessage) {
+          foundMessage = { ...foundMessage, threadId: item.threadId! };
+        } else {
+          foundMessage = await this.findMessageInAnyThread(item.id);
         }
-        if (!targetThreadId) return;
+        if (!foundMessage || (resourceId !== undefined && foundMessage.resourceId !== resourceId)) return;
 
+        const targetThreadId = foundMessage.threadId;
         const threadMessagesKey = this.getThreadMessagesKey(targetThreadId);
+
+        if (resourceId !== undefined) {
+          const threadMessageIds = await this.getFullOrder(threadMessagesKey);
+          const threadMessages = (
+            await this.fetchAndParseMessagesFromMultipleThreads(threadMessageIds, undefined, targetThreadId)
+          ).filter(message => message.resourceId === resourceId);
+          const targetIndex = threadMessages.findIndex(message => message.id === item.id);
+          if (targetIndex === -1) return;
+
+          const start = Math.max(0, targetIndex - (item.withPreviousMessages ?? 0));
+          const end = Math.min(threadMessages.length, targetIndex + (item.withNextMessages ?? 0) + 1);
+          threadMessages.slice(start, end).forEach(message => messageIds.add(message.id));
+          return;
+        }
 
         messageIds.add(item.id);
         if (!item.withPreviousMessages && !item.withNextMessages) return;
@@ -858,7 +876,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
       // When perPage is 0, we only need included messages — skip full thread load
       if (perPage === 0 && include && include.length > 0) {
         const includedMessageIds = new Set<string>();
-        await this.getIncludedMessagesWithContext(include, includedMessageIds);
+        await this.getIncludedMessagesWithContext(include, includedMessageIds, resourceId);
         const fetchedIncludes = await this.fetchAndParseMessagesFromMultipleThreads(
           Array.from(includedMessageIds),
           include,
@@ -952,7 +970,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
       let includedMessages: (MastraMessageV1 & { _index?: number })[] = [];
       if (include && include.length > 0) {
         const includedMessageIds = new Set<string>();
-        await this.getIncludedMessagesWithContext(include, includedMessageIds);
+        await this.getIncludedMessagesWithContext(include, includedMessageIds, resourceId);
 
         // Remove IDs that are already in paginated messages to avoid duplicate fetches
         const paginatedIds = new Set(paginatedMessages.map(m => m.id));
