@@ -53,4 +53,22 @@ describe('MarkdownRenderer', () => {
     expect(inline.querySelector('.shiki-token')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Copy to clipboard' })).toBeNull();
   });
+
+  it('opens external links in a new tab without granting opener access', () => {
+    render(<MarkdownRenderer>{'[Authorize Gmail](https://connect.composio.dev/link)'}</MarkdownRenderer>);
+
+    const link = screen.getByRole<HTMLAnchorElement>('link', { name: 'Authorize Gmail' });
+
+    expect(link.target).toBe('_blank');
+    expect(link.rel).toBe('noopener noreferrer');
+  });
+
+  it('keeps internal links in the current tab', () => {
+    render(<MarkdownRenderer>{'[Agent settings](/agents/settings)'}</MarkdownRenderer>);
+
+    const link = screen.getByRole<HTMLAnchorElement>('link', { name: 'Agent settings' });
+
+    expect(link.target).toBe('');
+    expect(link.rel).toBe('');
+  });
 });
