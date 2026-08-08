@@ -162,6 +162,17 @@ describe('intake configuration', () => {
       expect(response.status).toBe(400);
     }
   });
+
+  it('rejects an active selection sent under a prototype key', async () => {
+    const response = await buildApp(orgUser, [{ id: 'github', intake: github }]).request('/web/intake/config', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: '{"github":{"enabled":true,"sourceIds":null},"__proto__":{"enabled":true,"sourceIds":["team-1"]}}',
+    });
+
+    expect(response.status).toBe(400);
+    expect(auditEvents).toEqual([]);
+  });
 });
 
 describe('aggregated intake', () => {
