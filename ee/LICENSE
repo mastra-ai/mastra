@@ -16,6 +16,14 @@ licensors (as applicable) retain all right, title, and interest in and to all su
 modifications. You are not granted any other rights beyond what is expressly
 stated herein. Subject to the foregoing, it is forbidden to copy, merge, publish,
 distribute, sublicense, and/or sell the Software.
+
+License Keys. Deployment of the Software (including Agent Builder) in a
+self-hosted environment or to the Mastra platform requires an Enterprise Edition
+license key provisioned by Kepler. Kepler may issue a license key that is
+limited to specific features of the Software, including a key that enables only
+the features required for Agent Builder. Use of features requiring an Enterprise
+Edition license key is subject to license validation by Kepler.
+
 Your rights under this License terminate automatically, without notice, if you fail
 to comply with any of its terms. If the violation is curable, your rights will be
 reinstated upon cure of the violation within thirty (30) days after you become
