@@ -1184,27 +1184,33 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                   // unchanged would leave the model reading the placeholder
                   // forever, so it re-dispatches the tool or answers from nothing.
                   // Mirrors the synchronous path in llm-mapping-step.
+                  // Every path below overwrites the dispatch's `mastra.modelOutput`, including
+                  // the ones that produce nothing: a tool with no `toModelOutput`, a mapping
+                  // that returns nullish, and a mapping that throws. Leaving the key untouched
+                  // in those cases would preserve the placeholder — the exact bug this fixes.
+                  // A null `modelOutput` is the established "no mapping, use the raw result"
+                  // signal that `MessageList` keys off by value.
                   const toModelOutput = (resolvedTool as { toModelOutput?: (output: unknown) => unknown } | undefined)
                     ?.toModelOutput;
+                  let modelOutput: unknown = null;
                   if (params.status !== 'failed' && toModelOutput && result != null) {
                     try {
-                      const modelOutput = normalizeModelOutput(await toModelOutput(result));
-                      if (modelOutput != null) {
-                        providerMetadata = {
-                          ...providerMetadata,
-                          mastra: { ...(providerMetadata as any)?.mastra, modelOutput },
-                        } as ProviderMetadata;
-                      }
+                      modelOutput = normalizeModelOutput(await toModelOutput(result)) ?? null;
                     } catch (mappingError) {
-                      // Non-fatal: the real result is still written to
-                      // `toolInvocation.result` below. Left unmapped, the stored
-                      // placeholder would win, so surface it loudly.
+                      // Non-fatal: the real result is still written to `toolInvocation.result`
+                      // below and the model reads that instead. Surface it loudly because the
+                      // tool asked for a mapping and did not get one.
                       logger?.warn?.(
-                        `toModelOutput failed for background tool "${params.toolName}" — the model may see a stale placeholder`,
+                        `toModelOutput failed for background tool "${params.toolName}" — falling back to the raw result`,
                         { toolCallId: params.toolCallId, error: mappingError },
                       );
+                      modelOutput = null;
                     }
                   }
+                  providerMetadata = {
+                    ...providerMetadata,
+                    mastra: { ...(providerMetadata as any)?.mastra, modelOutput },
+                  } as ProviderMetadata;
 
                   const updated = messageList.updateToolInvocation(
                     {

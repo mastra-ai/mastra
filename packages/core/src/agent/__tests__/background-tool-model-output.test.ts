@@ -41,7 +41,7 @@ describe('background tool completion updates the model-facing output', () => {
     await bgStore?.dangerouslyClearAll();
   });
 
-  function researchTool() {
+  function researchTool(toModelOutputOverride?: { toModelOutput?: (output: any) => unknown }) {
     return createTool({
       id: 'research',
       description: 'Research a topic.',
@@ -53,6 +53,7 @@ describe('background tool completion updates the model-facing output', () => {
       toModelOutput: (output: any) =>
         typeof output === 'string' ? { type: 'text', value: output } : { type: 'text', value: output.summary },
       background: { enabled: true },
+      ...toModelOutputOverride,
     });
   }
 
@@ -135,6 +136,52 @@ describe('background tool completion updates the model-facing output', () => {
     // fix every turn carried the placeholder instead.
     expect(outputs.some(o => o.includes(ANSWER))).toBe(true);
     // And the final turn must not still be showing the placeholder.
+    expect(outputs.at(-1)).not.toContain('Background task started');
+  });
+
+  // The stale placeholder is only reachable when the mapping *succeeded* at
+  // dispatch and then produced nothing at completion — a mapping that fails for
+  // every input stores no placeholder to begin with. The dispatch placeholder is
+  // a string and the real result is an object, so these map the string fine and
+  // give up on the object. Without clearing `modelOutput`, the dispatch value
+  // survives and the model keeps reading the placeholder.
+  const onlyMapsThePlaceholder = (onObject: () => unknown) => (output: any) =>
+    typeof output === 'string' ? { type: 'text', value: output } : onObject();
+
+  it.each([
+    [
+      'the mapping throws on the real result',
+      onlyMapsThePlaceholder(() => {
+        throw new Error('mapping blew up');
+      }),
+    ],
+    ['the mapping returns undefined for the real result', onlyMapsThePlaceholder(() => undefined)],
+    ['the mapping returns null for the real result', onlyMapsThePlaceholder(() => null)],
+  ])('falls back to the raw result when %s', async (_name, toModelOutput) => {
+    const capturedPrompts: any[] = [];
+    const agent = new Agent({
+      id: 'bg-agent',
+      name: 'bg-agent',
+      instructions: 'Use the research tool.',
+      model: capturingModel(capturedPrompts),
+      tools: { research: researchTool({ toModelOutput: toModelOutput as any }) },
+      memory: new MockMemory(),
+    });
+    mastra.addAgent(agent, 'bg-agent');
+
+    const result = await agent.streamUntilIdle('Research otters.', {
+      memory: { thread: `thread-bg-${_name.replace(/\s+/g, '-')}`, resource: 'user-1' },
+      maxSteps: 5,
+    });
+    const reader = (result.fullStream as ReadableStream<any>).getReader();
+    while (true) {
+      const { done } = await reader.read();
+      if (done) break;
+    }
+
+    const outputs = toolResultTextsFor(capturedPrompts, 'call-1');
+    expect(outputs.length).toBeGreaterThan(0);
+    expect(outputs.some(o => o.includes(ANSWER))).toBe(true);
     expect(outputs.at(-1)).not.toContain('Background task started');
   });
 });
