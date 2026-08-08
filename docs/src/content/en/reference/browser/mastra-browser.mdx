@@ -49,8 +49,9 @@ export const browserAgent = new Agent({
   },
   {
     name: 'viewport',
-    type: '{ width: number; height: number }',
-    description: 'Browser viewport dimensions. Controls the size of the browser window.',
+    type: "{ width: number; height: number } | 'window'",
+    description:
+      "Browser viewport dimensions. Controls the size of the browser window. Set to 'window' to match the real browser window instead of a fixed size, supported by the agent-browser provider and by Stagehand when connecting over CDP.",
     isOptional: true,
     defaultValue: '{ width: 1280, height: 720 }',
   },

@@ -7,6 +7,7 @@ import type { PubSub } from '../../events/pubsub';
 import type { Mastra } from '../../mastra';
 import { createObservabilityContext, getOrCreateSpan, SpanType, EntityType } from '../../observability';
 import { RequestContext } from '../../request-context';
+import type { DeclaredAgentSchedule } from '../../schedules/define';
 import type { FullOutput, MastraModelOutput } from '../../stream/base/output';
 import type { ChunkType, MastraOnFinishCallback, MastraStreamTransformOptions } from '../../stream/types';
 import { ChunkFrom } from '../../stream/types';
@@ -543,6 +544,25 @@ export class DurableAgent<
    */
   get agent(): Agent<TAgentId, TTools, TOutput> {
     return this.#wrappedAgent;
+  }
+
+  /**
+   * File-based schedules live on the wrapped agent: `assembleAgentFromFsEntry`
+   * attaches them to the inner `Agent` before it is wrapped for durable
+   * execution, and `#declaredSchedules` is private to each instance. Without
+   * this delegate the wrapper would report none of its own and Mastra would
+   * never sync a durable agent's `schedules/` directory.
+   */
+  public override getDeclaredSchedules(): DeclaredAgentSchedule[] {
+    return this.#wrappedAgent.getDeclaredSchedules();
+  }
+
+  /**
+   * Mirrors {@link getDeclaredSchedules} so attaching schedules to an
+   * already-wrapped agent lands on the instance the getter reads from.
+   */
+  public override __setDeclaredSchedules(schedules: DeclaredAgentSchedule[]): void {
+    this.#wrappedAgent.__setDeclaredSchedules(schedules);
   }
 
   /**
@@ -2667,9 +2687,14 @@ export class DurableAgent<
   }
 
   /**
-   * Clear retained pubsub state for a run's topic (cached history and, for
+   * Clear retained pubsub state for a run's topics (cached history and, for
    * persistent transports, the underlying stream). Fire-and-forget: the
    * `clearTopic` contract is best-effort and non-throwing.
+   *
+   * Clears both the agent stream topic and `workflow.events.v2.<runId>`. The
+   * durable agentic loop runs on the default workflow engine, so the evented
+   * engine's terminal topic cleanup never runs for these runs — without this,
+   * CachingPubSub permanently orphans a no-TTL counter key per completed run.
    *
    * Unlike the evented workflow engine's per-run topic cleanup, this needs no
    * restart guard: cleanup timers arm only on terminal outcomes
@@ -2680,6 +2705,7 @@ export class DurableAgent<
    */
   #clearPubsubTopic(runId: string): void {
     void this.pubsub.clearTopic(AGENT_STREAM_TOPIC(runId));
+    void this.pubsub.clearTopic(`workflow.events.v2.${runId}`);
   }
 
   /**

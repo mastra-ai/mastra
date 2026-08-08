@@ -14,7 +14,7 @@ import {
   postTripwire,
   renderBuiltInToolEvent,
 } from './stream-helpers';
-import type { PostableMessage, ToolDisplayEvent, ToolDisplayFn } from './types';
+import type { PostableMessage, ToolDisplayEvent, ToolDisplayFn, ToolDisplayResult } from './types';
 
 export interface StreamingDriverArgs {
   stream: AsyncIterable<AgentChunkType<any>>;
@@ -32,7 +32,7 @@ export interface StreamingDriverArgs {
    * renderers are bypassed and this is called once per tool lifecycle event.
    * A `{ kind: 'post' }` return triggers the close/post/reopen lifecycle
    * (same as `'cards'`/`'text'`); a `{ kind: 'stream' }` return pushes the
-   * chunk into the active streaming session.
+   * chunk into the streaming session, subject to its `openIfEmpty` policy.
    */
   toolDisplayFn?: ToolDisplayFn;
   streamingOptions?: { updateIntervalMs?: number };
@@ -65,6 +65,12 @@ export interface StreamingDriverArgs {
   typingGate: { active: boolean };
   /** Optional adapter-supplied formatter for `error` chunks; defaults to a plain prefix. */
   formatError?: (error: Error) => unknown;
+  /**
+   * Dialect for the final reply text on the buffered fallback path.
+   * `'markdown'` (the absent-value default) posts `{ markdown }`; `'plain'`
+   * posts the bare string. The native streaming path is always markdown.
+   */
+  textFormat?: 'markdown' | 'plain';
 }
 
 interface StreamingSession {
@@ -95,6 +101,7 @@ export async function runStreamingDriver({
   takePendingApproval,
   typingGate,
   formatError,
+  textFormat,
 }: StreamingDriverArgs): Promise<void> {
   const platform = adapter.name;
 
@@ -197,7 +204,7 @@ export async function runStreamingDriver({
         const cleaned = fallback.replace(/[\u200B-\u200D\uFEFF]/g, '').trim();
         if (cleaned) {
           try {
-            await chatThread.post(cleaned);
+            await chatThread.post(textFormat === 'plain' ? cleaned : { markdown: cleaned });
           } catch (postErr) {
             logger?.debug('[CHANNEL] buffered fallback also failed', { error: postErr });
           }
@@ -262,6 +269,11 @@ export async function runStreamingDriver({
     sessionRef.current.push(piece);
   };
 
+  const pushToolDisplayResult = (result: Extract<ToolDisplayResult, { kind: 'stream' }>): void => {
+    if (result.openIfEmpty === false && !sessionRef.current) return;
+    pushToSession(result.chunk);
+  };
+
   // Cached task titles for resumed-approval runs: a `tool-result` may arrive
   // for a `toolCallId` we never saw a `tool-call` for (the approval click
   // resumed a run that suspended before this consumer attached). Falls back
@@ -277,6 +289,16 @@ export async function runStreamingDriver({
    * chunk reopen a fresh session. Used for `'cards'`/`'text'` tool events
    * and `ToolDisplayFn` `{ kind: 'post' }` returns.
    */
+  /**
+   * Skip blank tool posts so a fn that intentionally returns "" or an empty
+   * `{ markdown }` doesn't post or edit in an empty platform message.
+   * Mirrors the static driver's guard in `renderToolEvent`.
+   */
+  const isBlankToolMessage = (message: PostableMessage): boolean => {
+    if (typeof message === 'string') return message.length === 0;
+    return 'markdown' in message && message.markdown.trim().length === 0;
+  };
+
   const postOutOfBand = async (message: PostableMessage): Promise<string | undefined> => {
     await closeSession();
     try {
@@ -291,7 +313,8 @@ export async function runStreamingDriver({
   /**
    * Dispatch a tool lifecycle event:
    *   - If `toolDisplayFn` is set, call it. `{ kind: 'post' }` → close /
-   *     post / reopen. `{ kind: 'stream' }` → push to active session.
+   *     post / reopen. `{ kind: 'stream' }` → push according to its session
+   *     policy.
    *     `undefined` → skip.
    *   - Else if `toolDisplay` renders inside the Plan widget
    *     (`'timeline'`/`'grouped'`/`'hidden'`), return null so the caller
@@ -306,11 +329,12 @@ export async function runStreamingDriver({
       const result = toolDisplayFn(event, { mode: 'streaming', platform });
       if (result == null) return { posted: true };
       if (result.kind === 'stream') {
-        pushToSession(result.chunk);
+        pushToolDisplayResult(result);
         return { posted: false };
       }
       // kind === 'post'
-      const id = result.message != null ? await postOutOfBand(result.message) : undefined;
+      const id =
+        result.message != null && !isBlankToolMessage(result.message) ? await postOutOfBand(result.message) : undefined;
       return { posted: true, messageId: id };
     }
     if (rendersToolsInPlan || toolDisplay === 'hidden') {
@@ -569,10 +593,11 @@ export async function runStreamingDriver({
           );
           if (result == null) continue;
           if (result.kind === 'stream') {
-            pushToSession(result.chunk);
+            pushToolDisplayResult(result);
             continue;
           }
-          if (result.message != null) await editOrPost(messageId, result.message);
+          if (result.message != null && !isBlankToolMessage(result.message))
+            await editOrPost(messageId, result.message);
           continue;
         }
         const message = renderBuiltInToolEvent(
@@ -641,10 +666,11 @@ export async function runStreamingDriver({
           );
           if (result == null) continue;
           if (result.kind === 'stream') {
-            pushToSession(result.chunk);
+            pushToolDisplayResult(result);
             continue;
           }
-          if (result.message != null) await editOrPost(messageId, result.message);
+          if (result.message != null && !isBlankToolMessage(result.message))
+            await editOrPost(messageId, result.message);
           continue;
         }
         const message = renderBuiltInToolEvent(

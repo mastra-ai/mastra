@@ -69,7 +69,9 @@ export enum SpanType {
    * Provider-executed (server-side) tool span. Reconstructed from
    * tool-call and tool-result stream chunks for tools the model
    * provider executes (e.g. Anthropic code execution, server-side
-   * web search). Opened on tool-call chunk, closed on tool-result.
+   * web search). Created on the tool-result chunk under the model
+   * step that delivered it, with the start time backdated to the
+   * tool-call chunk.
    */
   PROVIDER_TOOL_CALL = 'provider_tool_call',
   /** Workflow run - root span for workflow processes */
@@ -225,6 +227,23 @@ export interface UsageStats {
 }
 
 /**
+ * Serialized definition of one tool made available to the model, in the
+ * provider-agnostic form sent on the wire. Attached to MODEL_GENERATION
+ * spans so observability exporters can surface tool schemas (e.g. PostHog
+ * `$ai_tools`, OpenInference `llm.tools.*`).
+ */
+export interface ModelToolDefinition {
+  /** Tool type: 'function' for standard tools, or the provider tool type (e.g. 'provider-defined') */
+  type: string;
+  name: string;
+  description?: string;
+  /** JSON schema of the tool's input parameters (function tools) */
+  parameters?: Record<string, unknown>;
+  /** Provider tool id (e.g. 'anthropic.web_search_20250305') for provider-defined tools */
+  id?: string;
+}
+
+/**
  * Model Generation attributes
  */
 export interface ModelGenerationAttributes extends AIBaseAttributes {
@@ -232,6 +251,12 @@ export interface ModelGenerationAttributes extends AIBaseAttributes {
   model?: string;
   /** Model provider (e.g., 'openai', 'anthropic') */
   provider?: string;
+  /**
+   * Definitions of the tools made available to the model for this generation,
+   * captured once per generation. Per-step tool names (after `activeTools`
+   * filtering) live on MODEL_INFERENCE spans as `availableTools`.
+   */
+  tools?: ModelToolDefinition[];
   /** Type of result/output this LLM call produced */
   resultType?: 'tool_selection' | 'response_generation' | 'reasoning' | 'planning';
   /** Token usage statistics */
@@ -979,6 +1004,8 @@ export interface EndGenerationOptions extends EndSpanOptions<SpanType.MODEL_GENE
   usage?: LanguageModelUsage;
   /** Provider-specific metadata for extracting cache tokens */
   providerMetadata?: ProviderMetadata;
+  /** Provider metadata for every completed model step, when the caller has it available. */
+  stepProviderMetadata?: readonly (ProviderMetadata | undefined)[];
 }
 
 /**
@@ -1207,7 +1234,8 @@ export interface CreateSpanOptions<TType extends SpanType> extends CreateBaseOpt
   parentSpanId?: string;
   /**
    * Start time for this span.
-   * Only used when rebuilding a span from cached data.
+   * Used when rebuilding a span from cached data, or when a span is created
+   * after the work it represents began (e.g. backdated PROVIDER_TOOL_CALL spans).
    */
   startTime?: Date;
   /** Trace-level state shared across all spans in this trace */
@@ -1232,6 +1260,12 @@ export interface StartSpanOptions<TType extends SpanType> extends CreateSpanOpti
 export interface ChildSpanOptions<TType extends SpanType> extends CreateBaseOptions<TType> {
   /** Input data */
   input?: any;
+  /**
+   * Start time for this span.
+   * Used when a span is created after the work it represents began
+   * (e.g. PROVIDER_TOOL_CALL spans created when the tool result arrives).
+   */
+  startTime?: Date;
 }
 
 /**

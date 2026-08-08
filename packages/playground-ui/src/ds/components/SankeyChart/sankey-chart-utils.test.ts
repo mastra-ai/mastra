@@ -8,6 +8,7 @@ import {
   getSankeyChartValue,
   getSankeyLabelWidths,
   reorderSankeyChartColumns,
+  SANKEY_NODE_WIDTH,
   truncateSankeyLabel,
 } from './sankey-chart-utils';
 
@@ -241,6 +242,51 @@ describe('SankeyChart utilities', () => {
 
       expect(targetX?.height).toBeGreaterThan(sourceA?.height ?? 0);
       expect((sourceA?.height ?? 0) / (targetX?.height ?? 1)).toBeCloseTo(0.7);
+    });
+  });
+
+  describe('when the graph is disconnected across fixed columns', () => {
+    it('anchors each ribbon to its own nodes instead of the depth-based edges', () => {
+      const fourColumns = [
+        { id: 'goal', label: 'Goal' },
+        { id: 'outcome', label: 'Outcome' },
+        { id: 'behavior', label: 'Behavior' },
+        { id: 'sentiment', label: 'Sentiment' },
+      ];
+      // links exist only for goal->outcome and behavior->sentiment: outcome and
+      // sentiment have no outgoing links, so depth-based layouts push them to
+      // the last column while the fixed columns stay evenly spaced.
+      const graph = buildSankeyChartGraph(
+        [
+          { goal: 'A', outcome: 'B', count: 2, layoutCount: 2 },
+          { behavior: 'C', sentiment: 'D', count: 14, layoutCount: 14 },
+        ],
+        fourColumns,
+        record => Number(record.count),
+        undefined,
+        undefined,
+        undefined,
+        record => Number(record.layoutCount),
+      );
+
+      const geometry = buildFixedSankeyGeometry(graph, {
+        top: 0,
+        bottom: 200,
+        left: 100,
+        right: 400,
+        nodePadding: 20,
+      });
+      const aToB = geometry.links.get(
+        graph.links.find(link => link.sourceNode.value === 'A' && link.targetNode.value === 'B')?.id ?? '',
+      );
+      const cToD = geometry.links.get(
+        graph.links.find(link => link.sourceNode.value === 'C' && link.targetNode.value === 'D')?.id ?? '',
+      );
+
+      expect(aToB?.sourceX).toBe(100 + SANKEY_NODE_WIDTH);
+      expect(aToB?.targetX).toBe(200);
+      expect(cToD?.sourceX).toBe(300 + SANKEY_NODE_WIDTH);
+      expect(cToD?.targetX).toBe(400);
     });
   });
 

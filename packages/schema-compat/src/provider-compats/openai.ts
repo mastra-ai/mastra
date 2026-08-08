@@ -245,6 +245,9 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
     if (isObjectSchema(schema)) {
       schema.additionalProperties = false;
 
+      // OpenAI strict mode rejects `propertyNames`, which z.record() emits for its key type.
+      delete schema.propertyNames;
+
       if (schema.properties) {
         for (const key of Object.keys(schema.properties)) {
           const prop = schema.properties[key] as JSONSchema7;

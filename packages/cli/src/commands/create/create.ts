@@ -54,7 +54,7 @@ const DEFAULT_TEMPLATE: Template = {
   slug: 'template-agent-harness',
   agents: ['agent'],
   mcp: [],
-  tools: ['web-fetch'],
+  tools: [],
   networks: [],
   workflows: [],
 };
@@ -89,7 +89,7 @@ export interface CreateOptions {
   timeout?: number;
   analytics?: PosthogAnalytics;
   resolveVersionTag?: () => Promise<string | undefined>;
-  skipInstall?: boolean;
+  install?: boolean;
 }
 
 type PlatformSetupResult =
@@ -219,7 +219,7 @@ function normalizeDirectCreateOptions(args: CreateOptions): NormalizedCreateOpti
     git: args.git ?? true,
     template: args.template,
     timeout: args.timeout ?? 60_000,
-    skipInstall: args.skipInstall ?? false,
+    install: args.install ?? true,
   };
 }
 
@@ -333,6 +333,7 @@ export const create = async (args: CreateOptions): Promise<void> => {
   process.on('SIGTERM', handleSigterm);
 
   let selectedApiKeyEnv: string | undefined;
+  let selectedApiKeyWritten = false;
   let materializationError: unknown;
 
   try {
@@ -366,11 +367,15 @@ export const create = async (args: CreateOptions): Promise<void> => {
           versionTag: versionTag ?? 'latest',
         });
         selectedApiKeyEnv = providerConfig.apiKeyEnv;
+        selectedApiKeyWritten = providerConfig.apiKeyWritten;
+        if (providerConfig.adaptationFailed) {
+          p.log.warn('Some provider setup could not be applied. Review the generated project before running it.');
+        }
         materializationController.signal.throwIfAborted();
       }
     }
 
-    if (!options.skipInstall) {
+    if (options.install) {
       if (observabilityEnabled) {
         await installDependencies(
           staging.projectPath,
@@ -423,9 +428,9 @@ export const create = async (args: CreateOptions): Promise<void> => {
     p.log.info('Skipping Mastra platform setup.');
   } else if (observabilityEnabled) {
     p.log.success(
-      options.skipInstall
-        ? 'Default template cloned. Dependency installation was skipped.'
-        : 'Default template cloned and dependencies installed.',
+      options.install
+        ? 'Default template cloned and dependencies installed.'
+        : 'Default template cloned. Dependency installation was skipped.',
     );
   }
 
@@ -484,7 +489,9 @@ export const create = async (args: CreateOptions): Promise<void> => {
 
   if (mode === 'managed') {
     const apiKeySummary = llmApiKey
-      ? `Your ${selectedApiKeyEnv} value was written to ${color.cyan('.env')}.`
+      ? selectedApiKeyWritten
+        ? `Your ${selectedApiKeyEnv} value was written to ${color.cyan('.env')}.`
+        : `Set ${selectedApiKeyEnv} in ${color.cyan('.env')} before starting.`
       : platformEnvWritten
         ? `Set ${selectedApiKeyEnv} in ${color.cyan('.env')} before starting.`
         : `Copy ${color.cyan('.env.example')} to ${color.cyan('.env')} and set ${selectedApiKeyEnv} before starting.`;

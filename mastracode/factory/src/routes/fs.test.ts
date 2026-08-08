@@ -2,11 +2,13 @@ import { mkdtemp, mkdir, realpath, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import { Hono } from 'hono';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { SandboxFleet } from '../sandbox/fleet.js';
 import type { SourceControlSession } from '../storage/domains/source-control/base.js';
 import {
+  buildFsRoutes,
   listArtifacts,
   listSessionRenderedPath,
   listSessionWorkspaceChanges,
@@ -213,6 +215,7 @@ function makeSession(overrides: Partial<SourceControlSession> = {}): SourceContr
     orgId: 'org-1',
     userId: 'user-1',
     branch: 'main',
+    title: null,
     baseBranch: 'main',
     sandboxId: 'sbx-1',
     sandboxWorkdir: WORKDIR,
@@ -241,6 +244,103 @@ function makeFleet(
   } as unknown as SandboxFleet;
   return { fleet, executeCommand };
 }
+
+function makeSessionFs({
+  session = makeSession(),
+  files = [{ path: 'src/agent.ts' }],
+}: {
+  session?: SourceControlSession;
+  files?: Array<{ path: string }>;
+} = {}) {
+  const ensureUser = vi.fn(async () => undefined);
+  const listFiles = vi.fn(async () => files);
+  return {
+    ensureUser,
+    listFiles,
+    deps: {
+      auth: {
+        enabled: () => true,
+        ensureUser,
+        tenant: () => ({ orgId: session.orgId, userId: session.userId }),
+        isOrganizationAdmin: async () => false,
+      },
+      fleet: makeFleet(() => ({ exitCode: 0, stdout: '' })).fleet,
+      sessions: { getBySessionId: vi.fn(async () => session) },
+      filesystem: { listFiles },
+    },
+  };
+}
+
+async function requestSessionRoute(path: string, sessionFs: ReturnType<typeof makeSessionFs>['deps']) {
+  const route = buildFsRoutes({ sessionFs }).find(candidate => candidate.path === path);
+  if (!route || !('handler' in route)) throw new Error(`Missing route: ${path}`);
+
+  const app = new Hono<any>();
+  app.get('/', context => route.handler(context as never, async () => {}));
+  return (query: string) => app.request(`http://localhost/${query}`);
+}
+
+describe('persisted session workspace files routes', () => {
+  it('authorizes before reading the persisted list and scopes it to the requested thread', async () => {
+    const { deps, ensureUser, listFiles } = makeSessionFs();
+    const request = await requestSessionRoute('/web/workspace/files', deps);
+
+    const response = await request(`?workspacePath=${makeSession().sessionId}&threadId=thread-1`);
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      workspacePath: makeSession().sessionId,
+      threadId: 'thread-1',
+      files: [{ path: 'src/agent.ts' }],
+    });
+    expect(ensureUser).toHaveBeenCalledTimes(1);
+    expect(listFiles).toHaveBeenCalledWith({ resourceId: makeSession().sessionId, threadId: 'thread-1' });
+  });
+
+  it('rejects a missing thread id without querying the database', async () => {
+    const { deps, listFiles } = makeSessionFs();
+    const request = await requestSessionRoute('/web/workspace/files', deps);
+
+    const response = await request(`?workspacePath=${makeSession().sessionId}`);
+
+    expect(response.status).toBe(400);
+    expect(listFiles).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['/web/workspace/files', `?workspacePath=${makeSession().sessionId}&threadId=%20`],
+    ['/web/workspace/file', `?workspacePath=${makeSession().sessionId}&threadId=%20&path=src/agent.ts`],
+  ])('rejects a whitespace-only thread id on %s', async (route, query) => {
+    const { deps, ensureUser, listFiles } = makeSessionFs();
+    const request = await requestSessionRoute(route, deps);
+
+    const response = await request(query);
+
+    expect(response.status).toBe(400);
+    expect(ensureUser).not.toHaveBeenCalled();
+    expect(listFiles).not.toHaveBeenCalled();
+  });
+
+  it('isolates rows for a different thread', async () => {
+    const { deps, listFiles } = makeSessionFs({ files: [] });
+    const request = await requestSessionRoute('/web/workspace/files', deps);
+
+    const response = await request(`?workspacePath=${makeSession().sessionId}&threadId=thread-2`);
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ workspacePath: makeSession().sessionId, threadId: 'thread-2', files: [] });
+    expect(listFiles).toHaveBeenCalledWith({ resourceId: makeSession().sessionId, threadId: 'thread-2' });
+  });
+
+  it('rejects an unlisted path before accessing the sandbox', async () => {
+    const { deps } = makeSessionFs();
+    const request = await requestSessionRoute('/web/workspace/file', deps);
+
+    const response = await request(`?workspacePath=${makeSession().sessionId}&threadId=thread-1&path=secret.env`);
+
+    expect(response.status).toBe(404);
+  });
+});
 
 describe('listSessionRenderedPath', () => {
   it('lists rendered entries from the session sandbox in one command', async () => {

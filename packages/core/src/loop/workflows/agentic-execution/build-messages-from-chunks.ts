@@ -1,6 +1,7 @@
 import type { ToolSet } from '@internal/ai-sdk-v5';
 
 import type { MastraDBMessage, MastraMessagePart } from '../../../agent/message-list';
+import { getErrorFromUnknown } from '../../../error';
 import type {
   FilePayload,
   ReasoningDeltaPayload,
@@ -9,6 +10,7 @@ import type {
   TextDeltaPayload,
   TextStartPayload,
   ToolCallPayload,
+  ToolErrorPayload,
   ToolResultPayload,
 } from '../../../stream/types';
 import { withToolPayloadTransformProviderMetadata } from '../../../tools/payload-transform';
@@ -274,6 +276,23 @@ export function buildMessagesFromChunks({
         break;
       }
 
+      case 'tool-error': {
+        const p = chunk.payload as ToolErrorPayload;
+        const invocationPart = parts.find(
+          part => part.type === 'tool-invocation' && part.toolInvocation.toolCallId === p.toolCallId,
+        );
+
+        if (invocationPart?.type === 'tool-invocation') {
+          const errorMessage = getErrorFromUnknown(p.error, { fallbackMessage: 'Tool execution failed' }).message;
+          invocationPart.toolInvocation = {
+            ...invocationPart.toolInvocation,
+            state: 'output-error',
+            errorText: errorMessage.trim() ? errorMessage : 'Tool execution failed',
+          };
+        }
+        break;
+      }
+
       // tool-result is consumed above via the toolResults map — no direct handling needed here
       // All other chunk types (finish, error, response-metadata, etc.) don't produce message parts
       default:
@@ -303,9 +322,13 @@ export function buildMessagesFromChunks({
     }
   }
 
-  // Remove text parts that ended up empty (e.g. spans where every delta was '').
+  // Remove text parts that ended up empty (e.g. spans where every delta was ''),
+  // unless they carry providerMetadata (e.g. Gemini thought signatures, #20469) —
+  // that metadata must survive to the DB so it can be sent back to the provider.
   // Empty reasoning parts are kept intentionally (#9005) and are not filtered here.
-  const nonEmptyParts = parts.filter(p => !(p.type === 'text' && (p as any).text === ''));
+  const nonEmptyParts = parts.filter(
+    p => !(p.type === 'text' && (p as any).text === '' && (p as any).providerMetadata == null),
+  );
 
   // Insert step-start markers between tool-invocation and subsequent text parts.
   // This matches the convention used by MessageMerger.pushNewPart when merging messages,

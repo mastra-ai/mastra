@@ -1,5 +1,15 @@
 # @mastra/browser-firecrawl
 
+## 0.2.1-alpha.0
+
+### Patch Changes
+
+- Honor a `'window'` viewport where the provider can support it. Agent Browser and the browser viewer disable viewport emulation so the page tracks the real window; Stagehand does the same when connecting over CDP and falls back to the default size for a locally launched browser, which always applies its own viewport. ([#21010](https://github.com/mastra-ai/mastra/pull/21010))
+
+- Updated dependencies [[`f59032a`](https://github.com/mastra-ai/mastra/commit/f59032a73699443555a08a479e7ac578975784f2), [`f59032a`](https://github.com/mastra-ai/mastra/commit/f59032a73699443555a08a479e7ac578975784f2), [`bf936e2`](https://github.com/mastra-ai/mastra/commit/bf936e2c89b2ff0dad5695b873ddc009ba96d41e)]:
+  - @mastra/core@1.58.0-alpha.6
+  - @mastra/agent-browser@0.5.1-alpha.0
+
 ## 0.2.0
 
 ### Minor Changes

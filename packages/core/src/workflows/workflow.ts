@@ -13,7 +13,7 @@ import { MastraFGAPermissions } from '../auth/ee';
 import type { ActorSignal } from '../auth/ee';
 import { MastraBase } from '../base';
 import { RequestContext } from '../di';
-import { ErrorCategory, ErrorDomain, MastraError } from '../error';
+import { ErrorCategory, ErrorDomain, MastraError, getErrorFromUnknown } from '../error';
 import type { MastraScorers } from '../evals';
 import { EventEmitterPubSub } from '../events/event-emitter';
 import type { PubSub } from '../events/pubsub';
@@ -102,7 +102,12 @@ import type {
   WorkflowRunStartOptions,
   ForeachOptions,
 } from './types';
-import { cleanStepResult, createRestartExecutionParams, createTimeTravelExecutionParams } from './utils';
+import {
+  cleanStepResult,
+  createRestartExecutionParams,
+  createTimeTravelExecutionParams,
+  hydrateSerializedStepErrors,
+} from './utils';
 
 // Re-exported so the public `@mastra/core/workflows` surface (and existing
 // `./workflow` imports) are unchanged; the factories live in `step-factories.ts`
@@ -155,7 +160,7 @@ function isDeclarativePredicateArg(value: unknown): value is { predicate: Predic
  * existing execution engine (which only knows how to call `condition(params)`)
  * can execute stored / declarative predicates unchanged.
  *
- * Exported for the rehydration path (workflows/stored), which rebuilds
+ * Exported for the rehydration path (workflows/dynamic), which rebuilds
  * conditional/loop entries from stored predicates.
  */
 export function predicateToCondition(predicate: Predicate): (params: any) => Promise<boolean> {
@@ -358,6 +363,7 @@ export function createStep<TProcessorId extends string>(
     | (Processor<TProcessorId> & { processOutputStream: Function })
     | (Processor<TProcessorId> & { processOutputResult: Function })
     | (Processor<TProcessorId> & { processOutputStep: Function })
+    | (Processor<TProcessorId> & { processToolResult: Function })
     | (Processor<TProcessorId> & { computeStateSignal: Function }),
 ): Step<
   `processor:${TProcessorId}`,
@@ -618,6 +624,8 @@ function createStepFromProcessor<TProcessorId extends string>(
         return EntityType.OUTPUT_PROCESSOR;
       case 'outputStep':
         return EntityType.OUTPUT_STEP_PROCESSOR;
+      case 'toolResult':
+        return EntityType.TOOL_RESULT_PROCESSOR;
       default:
         return EntityType.OUTPUT_PROCESSOR;
     }
@@ -636,6 +644,8 @@ function createStepFromProcessor<TProcessorId extends string>(
         return 'output processor';
       case 'outputStep':
         return 'output step processor';
+      case 'toolResult':
+        return 'tool result processor';
       default:
         return 'processor';
     }
@@ -654,6 +664,8 @@ function createStepFromProcessor<TProcessorId extends string>(
         return !!processor.processOutputResult;
       case 'outputStep':
         return !!processor.processOutputStep;
+      case 'toolResult':
+        return !!processor.processToolResult;
       default:
         return false;
     }
@@ -703,6 +715,12 @@ function createStepFromProcessor<TProcessorId extends string>(
         usage,
         messageId,
         rotateResponseMessageId,
+        // toolResult phase fields
+        toolName,
+        toolCallId,
+        args: toolCallArgs,
+        toolResultValue,
+        providerExecuted,
         // Shared processor states map for accessing persisted state
         processorStates,
         // Abort signal for cancelling in-flight processor work (e.g. OM observations)
@@ -771,6 +789,14 @@ function createStepFromProcessor<TProcessorId extends string>(
               ...(finishReason !== undefined ? { finishReason } : {}),
               ...(text !== undefined ? { text } : {}),
               ...(toolCalls !== undefined ? { toolCalls } : {}),
+              ...(retryCount !== undefined ? { retryCount } : {}),
+            };
+          case 'toolResult':
+            return {
+              ...(stepNumber !== undefined ? { stepNumber } : {}),
+              ...(toolName !== undefined ? { toolName } : {}),
+              ...(toolCallId !== undefined ? { toolCallId } : {}),
+              ...(providerExecuted !== undefined ? { providerExecuted } : {}),
               ...(retryCount !== undefined ? { retryCount } : {}),
             };
           default:
@@ -853,6 +879,7 @@ function createStepFromProcessor<TProcessorId extends string>(
           }
           case 'outputResult':
           case 'outputStep':
+          case 'toolResult':
             return {
               ...(Array.isArray(payload.messages) &&
               !areProcessorMessageArraysEqual(messages as unknown[] | undefined, payload.messages)
@@ -880,10 +907,10 @@ function createStepFromProcessor<TProcessorId extends string>(
 
       // Find appropriate parent span:
       // - For input/outputResult: find AGENT_RUN (processor runs once at start/end)
-      // - For inputStep/outputStep: find MODEL_STEP (processor runs per LLM call)
+      // - For inputStep/outputStep/toolResult: find MODEL_STEP (processor runs per LLM call / tool round-trip)
       // When workflow is executed, currentSpan is WORKFLOW_STEP, so we walk up the parent chain
       const parentSpan =
-        phase === 'inputStep' || phase === 'outputStep'
+        phase === 'inputStep' || phase === 'outputStep' || phase === 'toolResult'
           ? currentSpan?.findParent(SpanType.MODEL_STEP) || currentSpan
           : currentSpan?.findParent(SpanType.AGENT_RUN) || currentSpan;
 
@@ -998,6 +1025,12 @@ function createStepFromProcessor<TProcessorId extends string>(
         usage,
         messageId: currentMessageId,
         rotateResponseMessageId: rotateCurrentResponseMessageId,
+        // toolResult phase fields — passed through so chained processor steps can read them
+        toolName,
+        toolCallId,
+        args: toolCallArgs,
+        toolResultValue,
+        providerExecuted,
       };
 
       // Helper to execute phase with proper span lifecycle management
@@ -1396,6 +1429,79 @@ function createStepFromProcessor<TProcessorId extends string>(
             return { ...passThrough, messages };
           }
 
+          case 'toolResult': {
+            if (processor.processToolResult) {
+              if (!passThrough.messageList) {
+                throw new MastraError({
+                  category: ErrorCategory.USER,
+                  domain: ErrorDomain.MASTRA_WORKFLOW,
+                  id: 'PROCESSOR_MISSING_MESSAGE_LIST',
+                  text: `Processor ${processor.id} requires messageList or messages for processToolResult phase`,
+                });
+              }
+
+              const checkedMessageList = passThrough.messageList;
+              const idsBeforeProcessing = (messages as MastraDBMessage[]).map(m => m.id);
+              const check = checkedMessageList.makeMessageSourceChecker();
+
+              const result = await processor.processToolResult({
+                ...baseContext,
+                messages: messages as MastraDBMessage[],
+                messageList: checkedMessageList,
+                stepNumber: stepNumber ?? 0,
+                toolName: toolName ?? '',
+                toolCallId: toolCallId ?? '',
+                args: toolCallArgs,
+                result: toolResultValue,
+                providerExecuted,
+                systemMessages: (systemMessages ?? []) as CoreMessage[],
+                steps: steps ?? [],
+              });
+
+              if (result instanceof MessageList) {
+                if (result !== checkedMessageList) {
+                  throw new MastraError({
+                    category: ErrorCategory.USER,
+                    domain: ErrorDomain.MASTRA_WORKFLOW,
+                    id: 'PROCESSOR_RETURNED_EXTERNAL_MESSAGE_LIST',
+                    text: `Processor ${processor.id} returned a MessageList instance other than the one passed in. Use the messageList argument instead.`,
+                  });
+                }
+                return {
+                  ...passThrough,
+                  messages: result.get.all.db(),
+                  systemMessages: result.getAllSystemMessages(),
+                };
+              } else if (Array.isArray(result)) {
+                ProcessorRunner.applyMessagesToMessageList(
+                  result as MastraDBMessage[],
+                  checkedMessageList,
+                  idsBeforeProcessing,
+                  check,
+                  'response',
+                );
+                return { ...passThrough, messages: result };
+              } else if (result && 'messages' in result && 'systemMessages' in result) {
+                const typedResult = result as { messages: MastraDBMessage[]; systemMessages: CoreMessage[] };
+                ProcessorRunner.applyMessagesToMessageList(
+                  typedResult.messages,
+                  checkedMessageList,
+                  idsBeforeProcessing,
+                  check,
+                  'response',
+                );
+                checkedMessageList.replaceAllSystemMessages(typedResult.systemMessages);
+                return {
+                  ...passThrough,
+                  messages: typedResult.messages,
+                  systemMessages: typedResult.systemMessages,
+                };
+              }
+              return { ...passThrough, messages };
+            }
+            return { ...passThrough, messages };
+          }
+
           default:
             return { ...passThrough, messages };
         }
@@ -1462,6 +1568,7 @@ export function isProcessor(obj: unknown): obj is Processor {
     typeof rec.processOutputStream === 'function' ||
     typeof rec.processOutputResult === 'function' ||
     typeof rec.processOutputStep === 'function' ||
+    typeof rec.processToolResult === 'function' ||
     typeof rec.processAPIError === 'function' ||
     typeof rec.computeStateSignal === 'function'
   );
@@ -1526,8 +1633,8 @@ export class Workflow<
   public engineType: WorkflowEngineType = 'default';
   /** Type of workflow - 'processor' for processor workflows, 'default' otherwise */
   public type: WorkflowType = 'default';
-  /** Where this workflow came from: 'code' for statically registered workflows, 'stored' for workflows rehydrated from storage. Set by rehydrateWorkflow; defaults to 'code'. */
-  public origin: 'code' | 'stored' = 'code';
+  /** Where this workflow came from: 'code' for statically registered workflows, 'dynamic' for workflows rehydrated from storage. Set by rehydrateWorkflow; defaults to 'code'. */
+  public origin: 'code' | 'dynamic' = 'code';
   #nestedWorkflowInput?: TInput;
   public committed: boolean = false;
   protected stepFlow: StepFlowEntry<TEngineType>[];
@@ -1634,7 +1741,7 @@ export class Workflow<
   }
 
   /**
-   * @internal Rehydration-only (workflows/stored). Appends a fully-built
+   * @internal Rehydration-only (workflows/dynamic). Appends a fully-built
    * graph entry without laundering it through the live-`Step` builder
    * overloads: rehydration already holds the declarative entry it parsed from
    * storage, so wrapping it in a fake `Step` just so the builder can sniff it
@@ -3256,9 +3363,14 @@ export class Run<
     const validatedInputData = await schema['~standard'].validate(data);
 
     if (validatedInputData.issues) {
-      throw new Error(
-        `Invalid ${type}: \n` + validatedInputData.issues.map(e => `- ${e.path?.join('.')}: ${e.message}`).join('\n'),
-      );
+      throw new MastraError({
+        category: ErrorCategory.USER,
+        domain: ErrorDomain.MASTRA_WORKFLOW,
+        id: 'WORKFLOW_SCHEMA_VALIDATION_FAILED',
+        text:
+          `Invalid ${type}: \n` + validatedInputData.issues.map(e => `- ${e.path?.join('.')}: ${e.message}`).join('\n'),
+        details: { type },
+      });
     }
 
     return validatedInputData.value;
@@ -3545,10 +3657,10 @@ export class Run<
         data: { type: 'workflow-finish', payload: { runId: this.runId } },
       });
       unwatch();
-      await Promise.all(this.#observerHandlers.map(handler => handler()));
-      this.#observerHandlers = [];
 
       try {
+        await Promise.allSettled(this.#observerHandlers.map(handler => handler()));
+        this.#observerHandlers = [];
         await writer.close();
       } catch (err) {
         this.mastra?.getLogger()?.error('Error closing stream:', err);
@@ -3605,15 +3717,12 @@ export class Run<
       } catch {}
     });
 
-    this.#observerHandlers.push(async () => {
+    this.#observerHandlers.push(() => {
       unwatch();
-      try {
-        await writer.close();
-      } catch (err) {
+      void writer.close().catch(err => {
         this.mastra?.getLogger()?.error('Error closing stream:', err);
-      } finally {
-        writer.releaseLock();
-      }
+      });
+      writer.releaseLock();
     });
 
     return {
@@ -4296,6 +4405,57 @@ export class Run<
 
     if (!snapshot) {
       throw new Error(`Snapshot not found for run ${this.runId}`);
+    }
+
+    // Parent parallel activeStepsPath can lag behind nested child completion after a crash:
+    // children may already be terminal while the parent still lists them as active and
+    // re-invokes restart(). Treat terminal snapshots as authoritative and reuse them.
+    // See https://github.com/mastra-ai/mastra/issues/20225
+    //
+    // Only statuses already represented on WorkflowResult are reconstructed here.
+    // Other terminal statuses (canceled/bailed) keep the existing createRestartExecutionParams
+    // "was not active" behavior — expanding WorkflowResult is out of scope for this fix.
+    if (snapshot.status === 'success' || snapshot.status === 'failed' || snapshot.status === 'tripwire') {
+      this.cleanup?.();
+      // Match fmtReturnValue: context keeps `input` alongside step results, and `input`
+      // is also surfaced as a top-level field on the returned WorkflowResult.
+      const hydratedSteps = hydrateSerializedStepErrors({ ...(snapshot.context ?? {}) }) ?? {};
+      // Strip internal bookkeeping (__state, metadata.nestedRunId) from step results so the
+      // reconstructed result matches what a live run would have returned via fmtReturnValue.
+      const steps = Object.fromEntries(
+        Object.entries(hydratedSteps).map(([stepId, stepResult]) => [stepId, cleanStepResult(stepResult)]),
+      ) as typeof hydratedSteps;
+      const input = (snapshot.context as { input?: TInput } | undefined)?.input as TInput;
+      const base = {
+        steps,
+        input,
+        runId: this.runId,
+        ...(snapshot.value && Object.keys(snapshot.value).length > 0 ? { state: snapshot.value as TState } : {}),
+        ...(snapshot.stepExecutionPath ? { stepExecutionPath: snapshot.stepExecutionPath } : {}),
+        ...(snapshot.resumeLabels ? { resumeLabels: snapshot.resumeLabels } : {}),
+      };
+
+      if (snapshot.status === 'success') {
+        return { ...base, status: 'success', result: snapshot.result as TOutput } as WorkflowResult<
+          TState,
+          TInput,
+          TOutput,
+          TSteps
+        >;
+      }
+      if (snapshot.status === 'failed') {
+        return {
+          ...base,
+          status: 'failed',
+          error: getErrorFromUnknown(snapshot.error, { serializeStack: false }),
+        } as WorkflowResult<TState, TInput, TOutput, TSteps>;
+      }
+      return { ...base, status: 'tripwire', tripwire: snapshot.tripwire } as WorkflowResult<
+        TState,
+        TInput,
+        TOutput,
+        TSteps
+      >;
     }
 
     const restartData = createRestartExecutionParams({ snapshot, graph: this.executionGraph });

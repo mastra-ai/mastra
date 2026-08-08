@@ -4,6 +4,7 @@ description: "Learn how Observational Memory keeps your agent's context window s
 packages:
   - '@mastra/core'
   - '@mastra/memory'
+  - '@mastra/oracledb'
 ---
 
 import OmContextOverTimeImage from '@site/src/components/OmContextOverTimeImage'
@@ -109,7 +110,7 @@ For an AI SDK example, see [Using Mastra Memory](/guides/build-your-ui/ai-sdk-ui
 
 :::note
 
-OM currently only supports `@mastra/pg`, `@mastra/libsql`, `@mastra/mysql`, `@mastra/mongodb`, and `@mastra/convex` storage adapters.
+OM currently only supports `@mastra/pg`, `@mastra/libsql`, `@mastra/mysql`, `@mastra/mongodb`, `@mastra/convex`, and `@mastra/oracledb` storage adapters.
 It uses background agents for managing memory. When no model is set, the default model is `google/gemini-2.5-flash`.
 
 :::
@@ -493,6 +494,29 @@ const memory = new Memory({
   },
 })
 ```
+
+#### Custom recall guidance
+
+Mastra injects scope-aware instructions that teach the agent when to search, list threads, or read a specific thread. Use `instructions` to append application-specific guidance after those built-in instructions. The built-in instructions are never replaced:
+
+```typescript
+const memory = new Memory({
+  options: {
+    observationalMemory: {
+      model: 'google/gemini-2.5-flash',
+      retrieval: {
+        vector: true,
+        instructions: `
+          Prefer the current conversation when it already contains the answer.
+          For an initial scan, use a small limit with detail="low".
+        `,
+      },
+    },
+  },
+})
+```
+
+This keeps recall-specific guidance attached to the recall tool instead of the agent's global instructions, so it doesn't affect unrelated tasks.
 
 #### What retrieval enables
 

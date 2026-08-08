@@ -38,6 +38,7 @@ import type { PublicSchema } from '../schema';
 import { toStandardSchema, standardSchemaToJSONSchema } from '../schema';
 import type { JSONValue, MastraOnFinishCallback } from '../stream';
 import type { MastraOnStepFinishCallback } from '../stream/types';
+import { selectFields } from '../utils';
 import { createWorkflow } from '../workflows/create';
 import { createStep } from '../workflows/workflow';
 import type {
@@ -188,6 +189,22 @@ interface ScorerRun<TInput = any, TOutput = any> {
   /** Optional request context forwarded to scorers and judge prompts. */
   requestContext?: Record<string, any> | RequestContext;
 
+  /**
+   * RequestContext keys to persist onto the scorer-run span input, so the run
+   * can be reproduced later (datasets, experiments). Supports dot notation for
+   * nested values (e.g. `'user.id'`).
+   *
+   * This is independent of the observability config's `requestContextKeys`,
+   * which controls live span metadata — recording a run for repeatability and
+   * surfacing keys on every span are different concerns.
+   *
+   * - Omitted or `[]`: nothing from the request context is persisted (default).
+   * - `['*']`: the entire request context is persisted (the framework-managed
+   *   auth token is still redacted).
+   * - Specific keys: only those keys are persisted.
+   */
+  requestContextKeys?: string[];
+
   /** What kind of scoring flow produced this score, such as live runs, trace scoring, or experiments. */
   scoreSource?: ScorerScoreSource;
 
@@ -212,6 +229,11 @@ interface ScorerRun<TInput = any, TOutput = any> {
 
   /** Live target metadata to merge into emitted score metadata when available. */
   targetMetadata?: Record<string, unknown>;
+
+  /** @internal Framework controls that must not affect scorer execution or returned results. */
+  _internal?: {
+    emitObservabilityScore?: boolean;
+  };
 }
 
 // Prompt object definition with conditional typing
@@ -901,7 +923,34 @@ class MastraScorer<
     return new RequestContext(Object.entries(requestContext));
   }
 
+  /**
+   * Projects the run's RequestContext down to the keys that should be persisted
+   * on the scorer-run span input for repeatability.
+   *
+   * `serializeForSpan()` provides the safe base projection — the framework auth
+   * token is redacted and values are shaped for the trace serializer to bound.
+   * `requestContextKeys` then selects from it:
+   * - omitted / empty → nothing is persisted (secure default)
+   * - `['*']`         → the full (safe) context
+   * - specific keys   → only those keys (dot notation for nested values)
+   */
+  private selectRecordedRequestContext(
+    requestContext: RequestContext | undefined,
+    keys: string[] | undefined,
+  ): Record<string, unknown> | undefined {
+    if (!requestContext || !keys || keys.length === 0) {
+      return undefined;
+    }
+
+    const safe = requestContext.serializeForSpan();
+    const selected = keys.includes('*') ? safe : selectFields(safe, keys);
+
+    return Object.keys(selected).length > 0 ? selected : undefined;
+  }
+
   async run(input: ScorerRun<TInput, TRunOutput>): Promise<ScorerRunResult<TAccumulatedResults, TInput, TRunOutput>> {
+    const { _internal, ...scorerInput } = input;
+
     // Runtime check: execute only allowed after generateScore
     if (!this.hasGenerateScore) {
       throw new MastraError({
@@ -918,7 +967,7 @@ class MastraScorer<
 
     // Apply prepareRun transformation before span creation to reduce data
     // flowing into both the observability span and the scorer pipeline.
-    const prepared = this.config.prepareRun ? await this.config.prepareRun(input) : input;
+    const prepared = this.config.prepareRun ? await this.config.prepareRun(scorerInput) : scorerInput;
 
     let runId = prepared.runId;
     if (!runId) {
@@ -926,6 +975,10 @@ class MastraScorer<
     }
 
     const normalizedRequestContext = this.normalizeRunRequestContext(prepared.requestContext);
+    const recordedRequestContext = this.selectRecordedRequestContext(
+      normalizedRequestContext,
+      prepared.requestContextKeys,
+    );
     const evalSpan = getOrCreateSpan({
       type: SpanType.SCORER_RUN,
       name: `scorer run: '${this.id}'`,
@@ -936,7 +989,7 @@ class MastraScorer<
         output: prepared.output,
         groundTruth: prepared.groundTruth,
         expectedTrajectory: prepared.expectedTrajectory,
-        requestContext: normalizedRequestContext?.serializeForSpan(),
+        ...(recordedRequestContext ? { requestContext: recordedRequestContext } : {}),
       },
       attributes: {
         scorerId: this.id,
@@ -1062,7 +1115,11 @@ class MastraScorer<
       },
     });
 
-    if (this.#mastra?.observability.addScore && typeof scorerResult.score === 'number') {
+    if (
+      _internal?.emitObservabilityScore !== false &&
+      this.#mastra?.observability.addScore &&
+      typeof scorerResult.score === 'number'
+    ) {
       try {
         const targetTraceId = input.targetTraceId ?? input.targetCorrelationContext?.traceId;
         const targetSpanId = input.targetSpanId ?? input.targetCorrelationContext?.spanId;

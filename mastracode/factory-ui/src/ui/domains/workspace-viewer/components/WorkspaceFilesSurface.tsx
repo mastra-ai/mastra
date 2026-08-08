@@ -3,7 +3,7 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import { useWorkspaceFiles } from '../context/useWorkspaceFiles';
 import { WorkspaceFilesContent } from './WorkspaceFilesContent';
 
-/** The docked card. Stays mounted while hidden so the tree keeps its expanded folders. */
+/** The docked card. Stays mounted but dormant while hidden so the tree keeps its expanded folders. */
 export function WorkspaceFilesSurface() {
   const { open, workspacePath, viewingFile, canDock } = useWorkspaceFiles();
 

@@ -91,6 +91,62 @@ describe('Span Filtering', () => {
       expect(spanTypes).toContain(SpanType.MODEL_GENERATION);
     });
 
+    it('should reparent descendants of excluded spans so exporters see no orphans', () => {
+      // Documented config: drop MODEL_STEP / MODEL_CHUNK. Tool calls are
+      // children of MODEL_STEP — without reparenting they export parentSpanId
+      // pointing at a span exporters never received (#20818).
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+        excludeSpanTypes: [SpanType.MODEL_CHUNK, SpanType.MODEL_STEP],
+      });
+
+      const agentSpan = tracing.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'test-agent',
+      });
+      const modelSpan = agentSpan.createChildSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'test-model',
+        attributes: { model: 'gpt-4', provider: 'openai' },
+      });
+      const stepSpan = modelSpan.createChildSpan({
+        type: SpanType.MODEL_STEP,
+        name: 'test-step',
+      });
+      const toolSpan = stepSpan.createChildSpan({
+        type: SpanType.TOOL_CALL,
+        name: "tool: 'my_tool'",
+        attributes: { toolId: 'my_tool', toolType: 'function' },
+      });
+
+      expect(stepSpan.isExcluded).toBe(true);
+      expect(toolSpan.getParentSpanId()).toBe(modelSpan.id);
+      expect(toolSpan.exportSpan().parentSpanId).toBe(modelSpan.id);
+      // includeInternalSpans must still skip excludeSpanTypes ancestors
+      expect(toolSpan.getParentSpanId(true)).toBe(modelSpan.id);
+      expect(toolSpan.exportSpan(true).parentSpanId).toBe(modelSpan.id);
+
+      toolSpan.end();
+      stepSpan.end();
+      modelSpan.end();
+      agentSpan.end();
+
+      const exported = testExporter.events
+        .filter(e => e.type === 'span_ended' || e.type === 'span_started')
+        .map(e => e.exportedSpan);
+      const byId = new Map(exported.map(s => [s.id, s]));
+      const toolExported = exported.find(s => s.type === SpanType.TOOL_CALL);
+      expect(toolExported).toBeDefined();
+      expect(toolExported!.parentSpanId).toBe(modelSpan.id);
+      expect(byId.has(toolExported!.parentSpanId!)).toBe(true);
+
+      const orphans = exported.filter(s => s.parentSpanId && !byId.has(s.parentSpanId));
+      expect(orphans).toEqual([]);
+    });
+
     it('should export all spans when excludeSpanTypes is empty', () => {
       const tracing = new DefaultObservabilityInstance({
         serviceName: 'test',
@@ -666,12 +722,13 @@ describe('Span Filtering', () => {
           attributes: {
             provider: 'mock-provider',
             model: 'mock-model-id',
+            responseModel: '   ',
           },
         });
         // end() only passes responseModel + usage (not provider/model)
         modelSpan.end({
           attributes: {
-            responseModel: 'mock-model-id',
+            responseModel: '',
             usage: { inputTokens: 20, outputTokens: 15 },
           },
         });
@@ -751,6 +808,7 @@ describe('Span Filtering', () => {
         attributes: {
           provider: 'mock-provider',
           model: 'mock-model-id',
+          responseModel: '   ',
           usage: { inputTokens: 50, outputTokens: 10 },
         },
       });
