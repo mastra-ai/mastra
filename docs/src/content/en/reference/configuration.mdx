@@ -668,11 +668,9 @@ Entry names can contain `/` to nest the output. They can't be `index`, which is 
 ### bundler.externals
 
 **Type:** `boolean | string[]`\
-**Default:** `true`
+**Default:** `true` if your config sets no bundler options at all, otherwise `[]`
 
 When `mastra build` is run, Mastra bundles your project into the `.mastra/output` directory. This option controls which packages are excluded from the bundle (marked as "external") and installed separately through a package manager. This is useful when the internal Mastra bundler ([Rollup](https://rollupjs.org/configuration-options/#external)) has trouble bundling packages.
-
-By default, `mastra build` sets this option to `true`.
 
 The values have these meanings:
 
@@ -689,6 +687,23 @@ export const mastra = new Mastra({
   },
 })
 ```
+
+:::caution
+
+The `true` default applies only to projects that set **no** bundler options. Setting any other bundler option, such as `sourcemap` or `entries`, drops the default back to `[]` and bundles your dependencies instead. `mastra build` warns when this happens.
+
+This matters most for packages that can't be bundled at all, such as native modules, which then fail at runtime rather than at build time. Set `externals` explicitly alongside any other bundler option:
+
+```typescript title="src/mastra/index.ts"
+export const mastra = new Mastra({
+  bundler: {
+    sourcemap: true,
+    externals: true,
+  },
+})
+```
+
+:::
 
 ### bundler.sourcemap
 

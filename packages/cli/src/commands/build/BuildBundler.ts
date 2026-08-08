@@ -23,6 +23,19 @@ export class BuildBundler extends Bundler {
     const bundlerOptions = await super.getUserBundlerOptions(mastraEntryFile, outputDirectory);
 
     if (!bundlerOptions?.[IS_DEFAULT]) {
+      // The `externals: true` build default only applies when no bundler config exists at
+      // all, so supplying any unrelated option silently opts you out of it and flips the
+      // build to bundling every dependency. Nothing else surfaces that, and the result
+      // only fails later at runtime — typically on a native module that cannot be bundled.
+      if (bundlerOptions?.externals === undefined) {
+        this.logger.warn(
+          'bundler.externals is not set, so dependencies will be bundled rather than installed. ' +
+            'The externals default only applies to projects with no bundler config at all. ' +
+            'Set bundler.externals explicitly to choose, e.g. `externals: true` to keep packages ' +
+            'that cannot be bundled, such as native modules, out of the bundle.',
+        );
+      }
+
       return bundlerOptions;
     }
 
