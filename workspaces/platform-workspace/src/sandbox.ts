@@ -582,11 +582,7 @@ export class PlatformSandbox extends MastraSandbox {
    *   no longer matches `_probeGeneration` when the probe succeeds, the probe
    *   was superseded by a teardown or a new `start()`, so we skip the `set()`.
    */
-  private async _probeSidecarThenRegister(
-    sandboxId: string,
-    instanceUrl: string,
-    generation: number,
-  ): Promise<void> {
+  private async _probeSidecarThenRegister(sandboxId: string, instanceUrl: string, generation: number): Promise<void> {
     const deadline = Date.now() + SIDECAR_PROBE_TIMEOUT_MS;
     const fetchFn = this._privateNetFetch ?? fetch;
     while (Date.now() < deadline) {
