@@ -32,6 +32,7 @@ import type {
 import {
   validateStepInput,
   createDeprecationProxy,
+  omitPriorCompletionFields,
   runCountDeprecationMessage,
   validateStepResumeData,
   validateStepSuspendData,
@@ -516,7 +517,10 @@ export async function executeStep(
       await emitStepResultEvents({
         stepId: step.id,
         stepCallId,
-        execResults: { ...stepInfo, ...execResults } as StepResult<any, any, any, any>,
+        // The persisted step result keeps the full prior-result spread (see
+        // `stepResult` below); the emitted event must not re-publish the
+        // previous completion's state blobs alongside the fresh execResults.
+        execResults: { ...omitPriorCompletionFields(stepInfo), ...execResults } as StepResult<any, any, any, any>,
         pubsub,
         runId,
       });
