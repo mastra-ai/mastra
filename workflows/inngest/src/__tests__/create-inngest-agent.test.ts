@@ -89,6 +89,12 @@ describe('createInngestAgent factory function', () => {
     expect(isInngestAgent(agent)).toBe(false);
     expect(isInngestAgent(null)).toBe(false);
     expect(isInngestAgent({})).toBe(false);
+    expect(
+      isInngestAgent({
+        inngest,
+        getDurableWorkflows: () => [],
+      }),
+    ).toBe(false);
   });
 
   it('should return durable workflows from getDurableWorkflows', () => {
@@ -658,10 +664,13 @@ describe('InngestAgent parity surface', () => {
       },
     });
     const mastra = {
+      getLogger: () => ({ debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }),
+      getServer: () => undefined,
       getStorage: () => ({
         getStore: async () => ({ loadWorkflowSnapshot }),
       }),
     };
+    await durableAgent.prepare([], { runId });
     (durableAgent as any).__setMastra(mastra);
 
     const result = await durableAgent.resume(runId, { answer: 'approved' });

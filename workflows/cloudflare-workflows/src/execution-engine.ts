@@ -11,18 +11,32 @@ import {
 import type { Workflow } from '@mastra/core/workflows';
 
 import { CLOUDFLARE_WORKFLOW_AGENT_RESUME_EVENT } from './constants';
-import type { CloudflareWorkflowBinding, CloudflareWorkflowStatus } from './types';
+import type {
+  CloudflareWorkflowBinding,
+  CloudflareWorkflowInstanceStatus,
+  CloudflareWorkflowStatus,
+} from './types';
 
 function mapStatus(status: CloudflareWorkflowStatus): DurableAgentEngineStatus {
   if (status === 'waitingForPause') return 'paused';
   return status;
 }
 
+function mapResult(status: CloudflareWorkflowInstanceStatus): DurableAgentEngineResult {
+  return {
+    status: mapStatus(status.status as CloudflareWorkflowStatus),
+    error: status.error ? new Error(status.error.message) : undefined,
+  };
+}
+
 export interface CloudflareWorkflowExecutionEngineOptions {
+  /** Cloudflare Workflows binding that owns durable instance lifecycle. */
   workflow: CloudflareWorkflowBinding;
+  /** Optional mapping from a Mastra run ID to a Cloudflare instance ID. */
   instanceId?: (runId: string) => string;
 }
 
+/** Maps Mastra's durable-agent execution contract to Cloudflare Workflows. */
 export class CloudflareWorkflowExecutionEngine implements DurableAgentExecutionEngine {
   readonly #binding: CloudflareWorkflowBinding;
   readonly #instanceId: (runId: string) => string;
@@ -45,6 +59,8 @@ export class CloudflareWorkflowExecutionEngine implements DurableAgentExecutionE
         params: {
           runId: context.runId,
           input: context.input,
+          requestContext: context.requestContext?.toJSON(),
+          actor: context.actor,
         },
       });
     } catch (createError) {
@@ -56,7 +72,7 @@ export class CloudflareWorkflowExecutionEngine implements DurableAgentExecutionE
         throw createError;
       }
     }
-    return { status: mapStatus((await instance.status()).status) };
+    return mapResult(await instance.status());
   }
 
   async resume(context: DurableAgentEngineResumeContext): Promise<DurableAgentEngineResult> {
@@ -66,13 +82,16 @@ export class CloudflareWorkflowExecutionEngine implements DurableAgentExecutionE
       payload: {
         resumeData: context.resumeData,
         label: context.label,
+        requestContext: context.requestContext?.toJSON(),
+        actor: context.actor,
       },
     });
-    return { status: mapStatus((await instance.status()).status) };
+    return mapResult(await instance.status());
   }
 
   async recover(context: DurableAgentEngineRecoverContext): Promise<DurableAgentEngineResult> {
-    return { status: await this.status(context) };
+    const instance = await this.#binding.get(this.#instanceId(context.runId));
+    return mapResult(await instance.status());
   }
 
   async abort(context: DurableAgentEngineContext & { reason?: unknown }): Promise<void> {

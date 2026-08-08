@@ -22,7 +22,9 @@ import { Agent } from '../../agent';
 import { DurableStepIds } from '../constants';
 import { createDurableAgent } from '../create-durable-agent';
 import type { DurableAgent } from '../durable-agent';
+import type { DurableAgentExecutionEngine } from '../execution-engine';
 import { globalRunRegistry } from '../run-registry';
+import { createDurableAgenticWorkflow } from '../workflows';
 
 function makeSnapshot(runId: string, status: WorkflowRunStatus, agentId: string): WorkflowRunState {
   return {
@@ -62,7 +64,7 @@ function makeMockModel(): LanguageModelV2 {
   }) as unknown as LanguageModelV2;
 }
 
-function createDurableWithStore(agentId: string) {
+function createDurableWithStore(agentId: string, executionEngine?: DurableAgentExecutionEngine) {
   const baseAgent = new Agent({
     id: agentId,
     name: agentId,
@@ -70,7 +72,7 @@ function createDurableWithStore(agentId: string) {
     model: makeMockModel(),
   });
   const store = new InMemoryStore();
-  const agent = createDurableAgent({ agent: baseAgent });
+  const agent = createDurableAgent({ agent: baseAgent, executionEngine });
   void new Mastra({
     agents: { [agentId]: agent as any },
     storage: store,
@@ -268,5 +270,36 @@ describe('DurableAgent.recover(runId)', () => {
     cleanup();
 
     expect(seenError?.message).toBe('workflow blew up');
+  });
+
+  it('forwards an external abort signal to the engine for a recovered segment', async () => {
+    const abort = vi.fn(async () => undefined);
+    const workflow = createDurableAgenticWorkflow();
+    const executionEngine: DurableAgentExecutionEngine = {
+      createWorkflow: vi.fn(() => workflow),
+      start: vi.fn(async () => ({ status: 'running' })),
+      resume: vi.fn(async () => ({ status: 'running' })),
+      recover: vi.fn(async () => ({ status: 'running' })),
+      abort,
+      status: vi.fn(async () => 'running'),
+    };
+    const recovered = createDurableWithStore('agent-recover-abort', executionEngine);
+    await seed(recovered.store, 'run-abort', 'running', 'agent-recover-abort');
+    const controller = new AbortController();
+
+    const result = await recovered.agent.recover('run-abort', { abortSignal: controller.signal });
+    await vi.waitFor(() => expect(executionEngine.recover).toHaveBeenCalledOnce());
+    const reason = new Error('cancel recovered segment');
+    controller.abort(reason);
+
+    await vi.waitFor(() => expect(abort).toHaveBeenCalledOnce());
+    expect(abort).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workflow,
+        runId: 'run-abort',
+        reason,
+      }),
+    );
+    result.cleanup();
   });
 });

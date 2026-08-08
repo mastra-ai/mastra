@@ -25,7 +25,12 @@ import type { ToolsInput } from '../types';
 
 import { AGENT_STREAM_TOPIC, DurableStepIds } from './constants';
 import { runDurableStreamUntilIdle, runResumeDurableStreamUntilIdle } from './durable-stream-until-idle';
-import type { DurableAgentEngineStatus, DurableAgentExecutionEngine } from './execution-engine';
+import type {
+  DurableAgentEngineContext,
+  DurableAgentEngineResult,
+  DurableAgentEngineStatus,
+  DurableAgentExecutionEngine,
+} from './execution-engine';
 import { prepareForDurableExecution } from './preparation';
 import { endRunSpansWithError, ExtendedRunRegistry, globalRunRegistry } from './run-registry';
 import { createDurableAgentStream, emitChunkEvent, emitErrorEvent } from './stream-adapter';
@@ -53,6 +58,18 @@ function isTerminalExecutionStatus(status: DurableAgentEngineStatus | WorkflowRu
     'skipped',
     'terminated',
   ].includes(status);
+}
+
+function getExecutionEngineError(
+  result: DurableAgentEngineResult | void,
+  fallbackMessage: string,
+): Error | undefined {
+  if (result?.status !== 'failed' && result?.status !== 'errored') return undefined;
+  if (result.error instanceof Error) return result.error;
+  if (result.error && typeof result.error === 'object' && 'message' in result.error) {
+    return new Error(String(result.error.message));
+  }
+  return new Error(fallbackMessage);
 }
 
 /**
@@ -984,6 +1001,42 @@ export class DurableAgent<
     return this.#runRegistry;
   }
 
+  #abortExecutionEngine(context: DurableAgentEngineContext & { reason?: unknown }): void {
+    if (!this.#executionEngine) return;
+    void this.#executionEngine.abort(context).catch(error => {
+      this.#mastra
+        ?.getLogger?.()
+        ?.warn?.(`[DurableAgent] Failed to abort external execution for run ${context.runId}: ${error}`);
+    });
+  }
+
+  async #runExecutionEngineSegment(
+    context: DurableAgentEngineContext,
+    abortSignal: AbortSignal | undefined,
+    execute: () => Promise<DurableAgentEngineResult | void>,
+  ): Promise<DurableAgentEngineResult | void> {
+    let engineReady = false;
+    let abortForwarded = false;
+    const forwardAbort = () => {
+      if (!engineReady || abortForwarded) return;
+      abortForwarded = true;
+      this.#abortExecutionEngine({
+        ...context,
+        reason: (abortSignal as (AbortSignal & { reason?: unknown }) | undefined)?.reason,
+      });
+    };
+    abortSignal?.addEventListener('abort', forwardAbort, { once: true });
+    try {
+      const execution = execute();
+      engineReady = true;
+      if (abortSignal?.aborted) forwardAbort();
+      return await execution;
+    } catch (error) {
+      abortSignal?.removeEventListener('abort', forwardAbort);
+      throw error;
+    }
+  }
+
   /**
    * Execute the durable workflow.
    *
@@ -1002,16 +1055,21 @@ export class DurableAgent<
     const requestContext = entry?.requestContext;
 
     const tracingContext = createObservabilityContext({ currentSpan: entry?.agentSpan });
+    const engineContext = {
+      workflow,
+      runId,
+      pubsub: this.pubsub,
+      requestContext,
+      actor: workflowInput.options?.actor,
+    };
     const result = this.#executionEngine
-      ? await this.#executionEngine.start({
-          workflow,
-          runId,
-          pubsub: this.pubsub,
-          requestContext,
-          actor: workflowInput.options?.actor,
-          input: workflowInput,
-          observabilityContext: tracingContext,
-        })
+      ? await this.#runExecutionEngineSegment(engineContext, entry?.abortSignal, () =>
+          this.#executionEngine!.start({
+            ...engineContext,
+            input: workflowInput,
+            observabilityContext: tracingContext,
+          }),
+        )
       : await (async () => {
           const run = await workflow.createRun({ runId, pubsub: this.pubsub });
           return run.start({
@@ -1021,8 +1079,9 @@ export class DurableAgent<
             ...tracingContext,
           });
         })();
-    if (result?.status === 'failed') {
-      const error = new Error((result as any).error?.message || 'Workflow execution failed');
+    const executionError = getExecutionEngineError(result, 'Workflow execution failed');
+    if (executionError) {
+      const error = executionError;
       await this.emitError(runId, error);
     }
     // Reaching any non-suspended terminal status means the run is done and its
@@ -1313,16 +1372,6 @@ export class DurableAgent<
     const abort = (reason?: unknown) => {
       if (!abortController.signal.aborted) {
         abortController.abort(reason);
-      }
-      if (this.#executionEngine) {
-        void this.#executionEngine.abort({
-          workflow: this.getWorkflow(),
-          runId,
-          pubsub: this.pubsub,
-          requestContext: globalRunRegistry.get(runId)?.requestContext,
-          actor: workflowInput.options?.actor,
-          reason,
-        });
       }
     };
 
@@ -1638,17 +1687,22 @@ export class DurableAgent<
           const tracingContext = createObservabilityContext({
             currentSpan: entry.resumeAgentSpan ?? entry.agentSpan,
           });
+          const engineContext = {
+            workflow,
+            runId,
+            pubsub: this.pubsub,
+            requestContext,
+            actor: resolvedOptions.actor,
+          };
           result = this.#executionEngine
-            ? await this.#executionEngine.resume({
-                workflow,
-                runId,
-                pubsub: this.pubsub,
-                requestContext,
-                actor: resolvedOptions.actor,
-                resumeData,
-                label: resolvedOptions.toolCallId,
-                observabilityContext: tracingContext,
-              })
+            ? await this.#runExecutionEngineSegment(engineContext, abortController.signal, () =>
+                this.#executionEngine!.resume({
+                  ...engineContext,
+                  resumeData,
+                  label: resolvedOptions.toolCallId,
+                  observabilityContext: tracingContext,
+                }),
+              )
             : await (async () => {
                 const run = await workflow.createRun({ runId, pubsub: this.pubsub });
                 return run.resume({
@@ -1662,8 +1716,9 @@ export class DurableAgent<
         } finally {
           await stopGoalActivity({ agentId: this.id, runId });
         }
-        if (result?.status === 'failed') {
-          const error = new Error((result as any).error?.message || 'Workflow resume failed');
+        const executionError = getExecutionEngineError(result, 'Workflow resume failed');
+        if (executionError) {
+          const error = executionError;
           void this.emitError(runId, error);
         }
         // Same snapshot cleanup as the initial `start()` path: once resume
@@ -2047,16 +2102,21 @@ export class DurableAgent<
     const workflowExecution = ready.then(async () => {
       try {
         const tracingContext = createObservabilityContext({ currentSpan: recoverAgentSpan });
+        const engineContext = {
+          workflow,
+          runId,
+          pubsub: this.pubsub,
+          requestContext,
+          actor: workflowInput.options?.actor,
+        };
         const result = this.#executionEngine
-          ? await this.#executionEngine.recover({
-              workflow,
-              runId,
-              pubsub: this.pubsub,
-              requestContext,
-              actor: workflowInput.options?.actor,
-              input: workflowInput,
-              observabilityContext: tracingContext,
-            })
+          ? await this.#runExecutionEngineSegment(engineContext, abortController.signal, () =>
+              this.#executionEngine!.recover({
+                ...engineContext,
+                input: workflowInput,
+                observabilityContext: tracingContext,
+              }),
+            )
           : await (async () => {
               const run = await workflow.createRun({ runId, pubsub: this.pubsub });
               return run.restart({
@@ -2070,11 +2130,8 @@ export class DurableAgent<
         if (result?.status && isTerminalExecutionStatus(result.status)) {
           await this.deleteRunSnapshots(runId);
         }
-        if (result?.status === 'failed') {
-          const error = new Error((result as any).error?.message || 'Workflow recover failed');
-          void this.emitError(runId, error);
-          throw error;
-        }
+        const executionError = getExecutionEngineError(result, 'Workflow recover failed');
+        if (executionError) throw executionError;
       } catch (error) {
         void this.emitError(runId, error as Error);
         throw error;

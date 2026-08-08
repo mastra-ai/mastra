@@ -7,7 +7,8 @@ import type {
   DurableAgentEngineStatus,
   DurableAgentExecutionEngine,
 } from '@mastra/core/agent/durable';
-import type { PubSub } from '@mastra/core/events';
+import type { MastraServerCache } from '@mastra/core/cache';
+import { CachingPubSub } from '@mastra/core/events';
 import type { Mastra } from '@mastra/core/mastra';
 import type { Workflow } from '@mastra/core/workflows';
 import type { Inngest } from 'inngest';
@@ -15,59 +16,89 @@ import type { Inngest } from 'inngest';
 import type { InngestWorkflow } from '../workflow';
 import { createInngestDurableAgenticWorkflow, InngestDurableStepIds } from './create-inngest-agentic-workflow';
 
-function asInngestWorkflow(workflow: Workflow<any, any, any, any, any, any, any>): InngestWorkflow {
-  return workflow as unknown as InngestWorkflow;
-}
-
 /**
  * Maps the shared Mastra durable-agent lifecycle to Inngest operations.
  * Agent-loop behavior remains in `@mastra/core`.
  */
 export class InngestDurableAgentExecutionEngine implements DurableAgentExecutionEngine {
   readonly #inngest: Inngest;
+  readonly #getCache?: () => MastraServerCache | null | undefined;
   #mastra?: Mastra;
-  #pubsub?: PubSub;
 
-  constructor(inngest: Inngest) {
+  constructor(inngest: Inngest, options: { getCache?: () => MastraServerCache | null | undefined } = {}) {
     this.#inngest = inngest;
+    this.#getCache = options.getCache;
   }
 
   registerMastra(mastra: Mastra): void {
     this.#mastra = mastra;
   }
 
-  createWorkflow(): Workflow<any, any, any, any, any, any, any> {
-    const workflow = createInngestDurableAgenticWorkflow({ inngest: this.#inngest });
-    (workflow as unknown as InngestWorkflow).__setPubsubFactory(defaultPubsub => this.#pubsub ?? defaultPubsub);
+  createWorkflow(options: { maxSteps?: number }): Workflow<any, any, any, any, any, any, any> {
+    const workflow = createInngestDurableAgenticWorkflow({
+      inngest: this.#inngest,
+      maxSteps: options.maxSteps,
+    });
+    (workflow as unknown as InngestWorkflow).__setPubsubFactory(defaultPubsub => {
+      const cache = this.#getCache?.();
+      return cache ? new CachingPubSub(defaultPubsub, cache) : defaultPubsub;
+    });
     return workflow;
   }
 
   async start(context: DurableAgentEngineStartContext): Promise<DurableAgentEngineResult> {
-    this.#pubsub = context.pubsub;
-    const run = await asInngestWorkflow(context.workflow).createRun({
-      runId: context.runId,
-      pubsub: context.pubsub,
-    });
-    await run.startAsync({
-      inputData: context.input,
-      requestContext: context.requestContext,
-      actor: context.actor,
-      ...context.observabilityContext,
+    await this.#inngest.send({
+      name: `workflow.${InngestDurableStepIds.AGENTIC_LOOP}`,
+      data: {
+        inputData: context.input,
+        runId: context.runId,
+        resourceId: context.input.state?.resourceId,
+        requestContext: context.requestContext
+          ? Object.fromEntries(context.requestContext.entries())
+          : (context.input.requestContextEntries ?? {}),
+        actor: context.actor,
+        tracingOptions: context.input.options?.tracingOptions,
+      },
     });
     return { status: 'running' };
   }
 
   async resume(context: DurableAgentEngineResumeContext): Promise<DurableAgentEngineResult> {
-    this.#pubsub = context.pubsub;
-    const run = await asInngestWorkflow(context.workflow).createRun({
+    const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
+    if (!workflowsStore) {
+      throw new Error(`Workflow storage is required to resume run ${context.runId}`);
+    }
+    const snapshot = await workflowsStore.loadWorkflowSnapshot({
+      workflowName: InngestDurableStepIds.AGENTIC_LOOP,
       runId: context.runId,
-      pubsub: context.pubsub,
     });
-    await run.resumeAsync({
-      resumeData: context.resumeData,
-      label: context.label,
-      requestContext: context.requestContext,
-      actor: context.actor,
+    if (!snapshot) {
+      throw new Error(`Cannot resume run ${context.runId}: snapshot not found`);
+    }
+
+    const labelledStep = context.label ? snapshot.resumeLabels?.[context.label]?.stepId : undefined;
+    const steps = labelledStep ? labelledStep.split('.') : Object.keys(snapshot.suspendedPaths ?? {});
+    const requestContext = {
+      ...((snapshot as { requestContext?: Record<string, unknown> }).requestContext ?? {}),
+      ...(context.requestContext ? Object.fromEntries(context.requestContext.entries()) : {}),
+    };
+
+    await this.#inngest.send({
+      name: `workflow.${InngestDurableStepIds.AGENTIC_LOOP}`,
+      data: {
+        inputData: context.resumeData,
+        initialState: snapshot.value ?? {},
+        runId: context.runId,
+        stepResults: snapshot.context,
+        resume: {
+          steps,
+          stepResults: snapshot.context,
+          resumePayload: context.resumeData,
+          resumePath: steps[0] ? snapshot.suspendedPaths?.[steps[0]] : undefined,
+        },
+        requestContext,
+        actor: context.actor,
+      },
     });
     return { status: 'running' };
   }
@@ -77,11 +108,12 @@ export class InngestDurableAgentExecutionEngine implements DurableAgentExecution
   }
 
   async abort(context: DurableAgentEngineContext): Promise<void> {
-    const run = await asInngestWorkflow(context.workflow).createRun({
-      runId: context.runId,
-      pubsub: context.pubsub,
+    await this.#inngest.send({
+      name: `cancel.workflow.${InngestDurableStepIds.AGENTIC_LOOP}`,
+      data: {
+        runId: context.runId,
+      },
     });
-    await run.cancel();
   }
 
   async status(context: DurableAgentEngineContext): Promise<DurableAgentEngineStatus> {

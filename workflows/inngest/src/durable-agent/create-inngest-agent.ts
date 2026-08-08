@@ -54,7 +54,11 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
     cleanupTimeoutMs,
   } = options;
 
-  const durableAgent = createDurableAgent({
+  let durableAgent!: InngestAgent<TOutput>;
+  const executionEngine = new InngestDurableAgentExecutionEngine(inngest, {
+    getCache: () => durableAgent.cache,
+  });
+  durableAgent = createDurableAgent({
     agent,
     id,
     name,
@@ -62,7 +66,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
     cache,
     maxSteps,
     cleanupTimeoutMs,
-    executionEngine: new InngestDurableAgentExecutionEngine(inngest),
+    executionEngine,
   }) as InngestAgent<TOutput>;
 
   Object.defineProperties(durableAgent, {
@@ -89,6 +93,7 @@ export function isInngestAgent(value: unknown): value is InngestAgent {
   return (
     typeof value === 'object' &&
     value !== null &&
+    'agent' in value &&
     'inngest' in value &&
     'getDurableWorkflows' in value &&
     typeof value.getDurableWorkflows === 'function'
