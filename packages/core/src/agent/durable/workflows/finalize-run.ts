@@ -86,17 +86,24 @@ export async function runDurableFinishSideEffects({
   // agent's runtime dependencies when the terminal step cannot see the
   // processor pipeline or the memory save queue prepared by stream().
   let registryEntry = globalRunRegistry.get(runId);
+  // resolveRuntimeDependencies only writes its rebuild back into the registry when it
+  // rehydrated from Mastra, so an already-hydrated entry that was seeded without a save
+  // queue would still be missing one afterwards. Keep what it returns and prefer that.
+  let rebuiltSaveQueueManager: RunRegistryEntry['saveQueueManager'] | undefined;
+  let rebuiltMemory: MastraMemory | undefined;
   const needsProcessorRebuild = registryEntry?.outputProcessors === undefined;
   const needsMemoryRebuild = !!durableState?.threadId && !registryEntry?.saveQueueManager;
   if ((needsProcessorRebuild || needsMemoryRebuild) && mastra) {
     try {
-      await resolveRuntimeDependencies({
+      const resolved = await resolveRuntimeDependencies({
         mastra,
         runId,
         agentId: initData.agentId,
         input: initData,
         logger: effectiveLogger,
       });
+      rebuiltSaveQueueManager = resolved.saveQueueManager;
+      rebuiltMemory = resolved.memory;
       registryEntry = globalRunRegistry.get(runId);
     } catch (error) {
       effectiveLogger.error('[DurableAgent] Failed to rebuild finish-time dependencies', {
@@ -108,10 +115,16 @@ export async function runDurableFinishSideEffects({
   }
 
   const effectiveRequestContext = restoreRequestContext(initData.requestContextEntries, requestContext);
-  const messageList = new MessageList({
-    threadId: durableState?.threadId,
-    resourceId: durableState?.resourceId,
-  }).deserialize(messageListState);
+  // Deserialize into the run's existing MessageList when there is one. MastraModelOutput
+  // holds that instance and reads it during final processing, so swapping in a new one
+  // would leave the stream reporting pre-processor messages.
+  const messageList = (
+    registryEntry?.messageList ??
+    new MessageList({
+      threadId: durableState?.threadId,
+      resourceId: durableState?.resourceId,
+    })
+  ).deserialize(messageListState);
   if (registryEntry) {
     registryEntry.messageList = messageList;
   }
@@ -155,9 +168,12 @@ export async function runDurableFinishSideEffects({
   // memory, so resolve the final response text before persistence runs.
   const outputText = resolveOutputText(messageList);
 
+  const saveQueueManager = registryEntry?.saveQueueManager ?? rebuiltSaveQueueManager;
+  const memory = registryEntry?.memory ?? rebuiltMemory;
+
   if (
-    registryEntry?.saveQueueManager &&
-    registryEntry.memory &&
+    saveQueueManager &&
+    memory &&
     durableState?.threadId &&
     durableState?.resourceId &&
     !durableState.observationalMemory &&
@@ -165,14 +181,14 @@ export async function runDurableFinishSideEffects({
   ) {
     try {
       if (!durableState.threadExists) {
-        await registryEntry.memory.createThread?.({
+        await memory.createThread?.({
           threadId: durableState.threadId,
           resourceId: durableState.resourceId,
           memoryConfig: durableState.memoryConfig,
         });
       }
 
-      await registryEntry.saveQueueManager.flushMessages(messageList, durableState.threadId, durableState.memoryConfig);
+      await saveQueueManager.flushMessages(messageList, durableState.threadId, durableState.memoryConfig);
     } catch (error) {
       effectiveLogger.error('[DurableAgent] Error persisting messages', {
         runId,
@@ -182,7 +198,14 @@ export async function runDurableFinishSideEffects({
     }
   }
 
-  if (durableState?.threadId && durableState?.resourceId && !durableState.memoryConfig?.readOnly) {
+  // Same exclusions as the persistence block above: an observational-memory run writes no
+  // messages here, and titling it would create a thread row holding a title and nothing else.
+  if (
+    durableState?.threadId &&
+    durableState?.resourceId &&
+    !durableState.observationalMemory &&
+    !durableState.memoryConfig?.readOnly
+  ) {
     const titleArgs: GenerateThreadTitleArgs = {
       threadId: durableState.threadId,
       resourceId: durableState.resourceId,
@@ -197,9 +220,9 @@ export async function runDurableFinishSideEffects({
         await registryEntry.generateThreadTitle(titleArgs);
       } else if (mastra) {
         const agent = mastra.getAgentById(initData.agentId);
-        const memory = registryEntry?.memory ?? (await agent.getMemory({ requestContext: effectiveRequestContext }));
-        if (memory) {
-          await generateDurableThreadTitle({ agent, memory, ...titleArgs });
+        const titleMemory = memory ?? (await agent.getMemory({ requestContext: effectiveRequestContext }));
+        if (titleMemory) {
+          await generateDurableThreadTitle({ agent, memory: titleMemory, ...titleArgs });
         }
       }
     } catch (error) {
@@ -252,11 +275,16 @@ export async function generateDurableThreadTitle({
   );
   if (!title) return;
 
-  if (thread) {
+  // genTitle is a model round trip, so another writer may have created the thread in the
+  // meantime. Re-read before falling back to createThread, which upserts the whole row and
+  // would drop metadata that writer stored.
+  const currentThread = thread ?? (await memory.getThreadById({ threadId }));
+
+  if (currentThread) {
     await memory.updateThread({
       id: threadId,
       title,
-      metadata: thread.metadata ?? {},
+      metadata: currentThread.metadata ?? {},
       memoryConfig,
     });
   } else {

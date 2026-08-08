@@ -183,7 +183,16 @@ describe('convertMessages', () => {
         state: 'result',
         toolCallId: 'call-2',
         result: 'TOOL_FAILED',
+        // v4 has no output-error state, so the downgrade to `result` has to stay
+        // distinguishable from a tool that actually succeeded.
+        isError: true,
       });
+    });
+
+    it('does not mark a denied approval as an error', () => {
+      const [uiMessage] = convertMessages(deniedMessage).to('AIV4.UI');
+      const toolPart = (uiMessage.parts ?? []).find((part: any) => part.type === 'tool-invocation') as any;
+      expect(toolPart?.toolInvocation.isError).toBeUndefined();
     });
   });
 

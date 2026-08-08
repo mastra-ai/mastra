@@ -228,7 +228,10 @@ export class AIV4Adapter {
             // v4 has no denied or output-error state and AI SDK v4's convertToCoreMessages
             // requires every completed tool invocation to carry a result. Downgrade both to
             // normal results so the error or denial is sent back to the model.
+            // A downgraded output-error still has to read as a failure, so keep the isError
+            // marker on it — otherwise a failed terminal tool looks like it succeeded.
             ...(isDeniedApproval || isOutputError ? { state: 'result' as const } : {}),
+            ...(isOutputError ? { isError: true } : {}),
             args: getDisplayTransform(
               part.providerMetadata,
               'input-available',

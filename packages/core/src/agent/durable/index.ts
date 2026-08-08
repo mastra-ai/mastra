@@ -172,6 +172,8 @@ export {
   createDurableAgenticWorkflow,
   runDurableFinishSideEffects,
   type DurableAgenticWorkflowOptions,
+  type DurableFinishSideEffectsOptions,
+  type DurableFinishSideEffectsResult,
 } from './workflows';
 
 // Workflow steps (for advanced customization)
