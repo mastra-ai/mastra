@@ -556,9 +556,29 @@ export class StoreMemoryUpstash extends MemoryStorage {
       const itemThreadId = await this._getThreadIdForMessage(item.id);
       if (!itemThreadId) continue;
 
+      const itemThreadMessagesKey = getThreadMessagesKey(itemThreadId);
+
+      if (resourceId !== undefined) {
+        const threadMessageIds = (await this.client.zrange(itemThreadMessagesKey, 0, -1)) as string[];
+        const threadPipeline = this.client.pipeline();
+        threadMessageIds.forEach(id => threadPipeline.get(getMessageKey(itemThreadId, id)));
+        const threadMessages = (await threadPipeline.exec())
+          .filter((message): message is MastraDBMessage => message !== null)
+          .filter(message => message.resourceId === resourceId);
+        const targetIndex = threadMessages.findIndex(message => message.id === item.id);
+        if (targetIndex === -1) continue;
+
+        const start = Math.max(0, targetIndex - (item.withPreviousMessages ?? 0));
+        const end = Math.min(threadMessages.length, targetIndex + (item.withNextMessages ?? 0) + 1);
+        for (const message of threadMessages.slice(start, end)) {
+          messageIds.add(message.id);
+          messageIdToThreadIds[message.id] = itemThreadId;
+        }
+        continue;
+      }
+
       messageIds.add(item.id);
       messageIdToThreadIds[item.id] = itemThreadId;
-      const itemThreadMessagesKey = getThreadMessagesKey(itemThreadId);
 
       // Get the rank of this message in the sorted set
       const rank = await this.client.zrank(itemThreadMessagesKey, item.id);

@@ -473,10 +473,30 @@ export class StoreMemoryRedis extends MemoryStorage {
         continue;
       }
 
-      messageIds.add(item.id);
-      messageIdToThreadIds[item.id] = itemThreadId;
       const itemThreadMessagesKey = getThreadMessagesKey(itemThreadId);
 
+      if (resourceId !== undefined) {
+        const threadMessageIds = await this.client.zRange(itemThreadMessagesKey, 0, -1);
+        const threadMessages = (await this.client.mGet(threadMessageIds.map(id => getMessageKey(itemThreadId, id))))
+          .filter((data): data is string => data !== null)
+          .map(data => JSON.parse(data) as MastraDBMessage)
+          .filter(message => message.resourceId === resourceId);
+        const targetIndex = threadMessages.findIndex(message => message.id === item.id);
+        if (targetIndex === -1) {
+          continue;
+        }
+
+        const start = Math.max(0, targetIndex - (item.withPreviousMessages ?? 0));
+        const end = Math.min(threadMessages.length, targetIndex + (item.withNextMessages ?? 0) + 1);
+        for (const message of threadMessages.slice(start, end)) {
+          messageIds.add(message.id);
+          messageIdToThreadIds[message.id] = itemThreadId;
+        }
+        continue;
+      }
+
+      messageIds.add(item.id);
+      messageIdToThreadIds[item.id] = itemThreadId;
       const rank = await this.client.zRank(itemThreadMessagesKey, item.id);
       if (rank === null) {
         continue;

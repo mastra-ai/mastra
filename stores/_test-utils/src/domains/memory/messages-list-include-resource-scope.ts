@@ -98,6 +98,25 @@ export function createMessagesListIncludeResourceScopeTest({
       expect(result.messages.map(message => message.id)).toEqual([a1.id, a2.id, a3.id, a4.id]);
     });
 
+    it('builds the context window after filtering messages by resource', async () => {
+      const foreignMessage = createSampleMessageV2({
+        threadId: threadA1.id,
+        resourceId: threadB1.resourceId,
+        content: { content: 'foreign message in resource-a thread' },
+        createdAt: new Date(Date.UTC(2024, 0, 1, 0, 0, 30)),
+      });
+      await getMemoryStorage().saveMessages({ messages: [foreignMessage] });
+
+      const result = await getMemoryStorage().listMessages({
+        threadId: threadA2.id,
+        resourceId: threadA2.resourceId,
+        perPage: 0,
+        include: [{ id: a2.id, withPreviousMessages: 1 }],
+      });
+
+      expect(result.messages.map(message => message.id)).toEqual([a1.id, a2.id]);
+    });
+
     it('does not return another resource on the semantic recall fast path', async () => {
       const result = await getMemoryStorage().listMessages({
         threadId: threadB1.id,
