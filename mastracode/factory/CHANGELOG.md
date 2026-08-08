@@ -1,5 +1,15 @@
 # @mastra/factory
 
+## 0.6.0-alpha.7
+
+### Patch Changes
+
+- Fixed Factory sessions rejecting signed-in users when session-based authentication providers store the user and active organization in a wrapped session shape. Workspace ownership checks and GitHub session tools now recognize both flat and session-wrapped authenticated users. ([#21008](https://github.com/mastra-ai/mastra/pull/21008))
+
+- Updated dependencies [[`f59032a`](https://github.com/mastra-ai/mastra/commit/f59032a73699443555a08a479e7ac578975784f2), [`f59032a`](https://github.com/mastra-ai/mastra/commit/f59032a73699443555a08a479e7ac578975784f2), [`3e50f63`](https://github.com/mastra-ai/mastra/commit/3e50f63db85e9fe365b4ce5daecb0ac0dc464d93), [`bf936e2`](https://github.com/mastra-ai/mastra/commit/bf936e2c89b2ff0dad5695b873ddc009ba96d41e)]:
+  - @mastra/code-sdk@1.2.0-alpha.7
+  - @mastra/core@1.58.0-alpha.6
+
 ## 0.6.0-alpha.6
 
 ### Patch Changes
