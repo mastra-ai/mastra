@@ -15,7 +15,7 @@
  * BFS to find all transitively-dependent test files.
  */
 
-import { execSync } from 'node:child_process';
+import { execSync, execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { resolve, relative, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -260,8 +260,15 @@ for (const rel of rawChangedRelative) {
     const absSrcDir = join(ROOT, pkgDir, 'src');
     if (existsSync(absSrcDir)) {
       try {
-        const gitSrc = execSync(
-          `git ls-files '${pkgDir}/src/*.ts' '${pkgDir}/src/*.tsx' '${pkgDir}/src/**/*.ts' '${pkgDir}/src/**/*.tsx'`,
+        const gitSrc = execFileSync(
+          'git',
+          [
+            'ls-files',
+            `${pkgDir}/src/*.ts`,
+            `${pkgDir}/src/*.tsx`,
+            `${pkgDir}/src/**/*.ts`,
+            `${pkgDir}/src/**/*.tsx`,
+          ],
           { cwd: ROOT, encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] }
         );
         for (const line of gitSrc.trim().split('\n')) {
@@ -274,8 +281,15 @@ for (const rel of rawChangedRelative) {
       }
     }
     try {
-      const gitTests = execSync(
-        `git ls-files '${pkgDir}/*.test.ts' '${pkgDir}/**/*.test.ts' '${pkgDir}/*.spec.ts' '${pkgDir}/**/*.spec.ts'`,
+      const gitTests = execFileSync(
+        'git',
+        [
+          'ls-files',
+          `${pkgDir}/*.test.ts`,
+          `${pkgDir}/**/*.test.ts`,
+          `${pkgDir}/*.spec.ts`,
+          `${pkgDir}/**/*.spec.ts`,
+        ],
         { cwd: ROOT, encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] }
       );
       for (const line of gitTests.trim().split('\n')) {
