@@ -247,6 +247,9 @@ const listRepoOpenIssues = vi.fn(
 const addIssueLabels = vi.fn(
   async (_installationId: number, _repoFullName: string, _issueNumber: number, _labels: string[]) => {},
 );
+const removeIssueLabel = vi.fn(
+  async (_installationId: number, _repoFullName: string, _issueNumber: number, _label: string) => {},
+);
 const listRepoOpenPullRequests = vi.fn(async (_installationId: number, _repoFullName: string, _page: number) => ({
   pullRequests: [
     {
@@ -303,6 +306,8 @@ const githubStub = {
   mintInstallationToken: vi.fn(async () => 'install-token'),
   addIssueLabels: (installationId: number, repoFullName: string, issueNumber: number, labels: string[]) =>
     addIssueLabels(installationId, repoFullName, issueNumber, labels),
+  removeIssueLabel: (installationId: number, repoFullName: string, issueNumber: number, label: string) =>
+    removeIssueLabel(installationId, repoFullName, issueNumber, label),
   listRepoOpenIssues: (installationId: number, repoFullName: string, page: number, options?: { label?: string }) =>
     listRepoOpenIssues(installationId, repoFullName, page, options),
   intake: {
@@ -675,6 +680,7 @@ beforeEach(() => {
   pushBranch.mockClear();
   createPullRequest.mockClear();
   addIssueLabels.mockClear();
+  removeIssueLabel.mockClear();
   githubStub.versionControl.getRepositoryAccess.mockClear();
   listRepoOpenIssues.mockClear();
   listRepoOpenPullRequests.mockClear();
@@ -1535,7 +1541,7 @@ describe('issues route', () => {
         body: JSON.stringify({
           title: 'Fix flaky test',
           url: 'https://github.com/octo/hello/issues/12',
-          labels: ['bug', 'auto-triaged', ''],
+          labels: ['bug', 'auto-triaged', 'status: needs triage', ''],
         }),
       },
     );
@@ -1548,6 +1554,8 @@ describe('issues route', () => {
     });
     expect(addIssueLabels).toHaveBeenCalledWith(7, 'octo/hello', 12, ['auto-triaged']);
     expect(addIssueLabels).toHaveBeenCalledOnce();
+    expect(removeIssueLabel).toHaveBeenCalledWith(7, 'octo/hello', 12, 'status: needs triage');
+    expect(removeIssueLabel).toHaveBeenCalledOnce();
     expect(runIssueTriage).toHaveBeenCalledWith({
       repository: 'octo/hello',
       issueNumber: 12,
@@ -1581,6 +1589,7 @@ describe('issues route', () => {
     // The wrapper calls addIssueLabels exactly once (no duplicate from the handler).
     expect(addIssueLabels).toHaveBeenCalledOnce();
     expect(addIssueLabels).toHaveBeenCalledWith(7, 'octo/hello', 5, ['auto-triaged']);
+    expect(removeIssueLabel).not.toHaveBeenCalled();
     // The runner receives labels with 'auto-triaged' appended by the wrapper.
     expect(runIssueTriage).toHaveBeenCalledWith(
       expect.objectContaining({

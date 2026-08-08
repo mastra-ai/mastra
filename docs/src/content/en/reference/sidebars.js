@@ -198,23 +198,19 @@ const sidebars = {
       items: [
         { type: 'doc', id: 'core/mastra-class', label: 'Mastra Class' },
         { type: 'doc', id: 'core/mastra-model-gateway', label: 'MastraModelGateway' },
+        {
+          type: 'doc',
+          id: 'core/addDynamicWorkflow',
+          label: '.addDynamicWorkflow()',
+          customProps: { tags: ['beta'] },
+        },
+        {
+          type: 'doc',
+          id: 'core/addDynamicWorkflows',
+          label: '.addDynamicWorkflows()',
+          customProps: { tags: ['beta'] },
+        },
         { type: 'doc', id: 'core/addGateway', label: '.addGateway()' },
-        {
-          type: 'doc',
-          id: 'core/addStoredWorkflow',
-          label: '.addStoredWorkflow()',
-          customProps: {
-            tags: ['beta'],
-          },
-        },
-        {
-          type: 'doc',
-          id: 'core/addStoredWorkflows',
-          label: '.addStoredWorkflows()',
-          customProps: {
-            tags: ['beta'],
-          },
-        },
         { type: 'doc', id: 'core/getAgent', label: '.getAgent()' },
         { type: 'doc', id: 'core/getAgentById', label: '.getAgentById()' },
         { type: 'doc', id: 'core/getDeployer', label: '.getDeployer()' },
@@ -819,16 +815,14 @@ const sidebars = {
       label: 'Workflows',
       collapsed: true,
       items: [
-        { type: 'doc', id: 'workflows/run', label: 'Run Class' },
-        { type: 'doc', id: 'workflows/step', label: 'Step Class' },
         {
           type: 'doc',
-          id: 'workflows/stored-workflow-definition',
-          label: 'Stored Workflow Definition',
-          customProps: {
-            tags: ['beta'],
-          },
+          id: 'workflows/dynamic-workflow-definition',
+          label: 'Dynamic Workflow Definition',
+          customProps: { tags: ['beta'] },
         },
+        { type: 'doc', id: 'workflows/run', label: 'Run Class' },
+        { type: 'doc', id: 'workflows/step', label: 'Step Class' },
         { type: 'doc', id: 'workflows/workflow', label: 'Workflow Class' },
         { type: 'doc', id: 'workflows/workflow-state-reader', label: 'Workflow State Reader' },
         {

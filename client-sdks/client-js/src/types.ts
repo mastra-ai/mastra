@@ -645,23 +645,23 @@ export type ListWorkflowRunCountsResponse = Record<string, WorkflowRunCounts>;
 
 export type GetWorkflowRunByIdResponse = WorkflowState;
 
-export type ListStoredWorkflowsParams = GeneratedRequest<QueryParams<'GET /stored/workflows'>>;
-export type ListStoredWorkflowsResponse = GeneratedResponse<'GET /stored/workflows'>;
-export type UpsertStoredWorkflowParams = GeneratedRequest<Body<'POST /stored/workflows'>>;
-export type UpsertStoredWorkflowResponse = GeneratedResponse<'POST /stored/workflows'>;
-type StoredWorkflowDefinitionField =
+export type ListDynamicWorkflowsParams = GeneratedRequest<QueryParams<'GET /stored/workflows'>>;
+export type ListDynamicWorkflowsResponse = GeneratedResponse<'GET /stored/workflows'>;
+export type UpsertDynamicWorkflowParams = GeneratedRequest<Body<'POST /stored/workflows'>>;
+export type UpsertDynamicWorkflowResponse = GeneratedResponse<'POST /stored/workflows'>;
+type DynamicWorkflowDefinitionField =
   | 'description'
   | 'inputSchema'
   | 'outputSchema'
   | 'stateSchema'
   | 'requestContextSchema'
   | 'graph';
-export type StoredWorkflowDefinition = Omit<
-  GeneratedResponse<'GET /stored/workflows/:storedWorkflowId'>,
-  StoredWorkflowDefinitionField
+export type DynamicWorkflowDefinition = Omit<
+  GeneratedResponse<'GET /stored/workflows/:dynamicWorkflowId'>,
+  DynamicWorkflowDefinitionField
 > &
-  Pick<UpsertStoredWorkflowParams, StoredWorkflowDefinitionField>;
-export type DeleteStoredWorkflowResponse = GeneratedResponse<'DELETE /stored/workflows/:storedWorkflowId'>;
+  Pick<UpsertDynamicWorkflowParams, DynamicWorkflowDefinitionField>;
+export type DeleteDynamicWorkflowResponse = GeneratedResponse<'DELETE /stored/workflows/:dynamicWorkflowId'>;
 
 export interface GetWorkflowResponse {
   name: string;
@@ -702,10 +702,10 @@ export interface GetWorkflowResponse {
   isProcessorWorkflow?: boolean;
   /**
    * How this workflow got into the live registry. `'code'` for statically
-   * authored or `addWorkflow()`-added workflows, `'stored'` for anything
-   * hydrated or added via `addStoredWorkflow()`. Absent on older servers.
+   * authored or `addWorkflow()`-added workflows, `'dynamic'` for anything
+   * hydrated or added via `addDynamicWorkflow()`. Absent on older servers.
    */
-  origin?: 'code' | 'stored';
+  origin?: 'code' | 'dynamic';
 }
 
 export type WorkflowRunResult = WorkflowResult<any, any, any, any>;

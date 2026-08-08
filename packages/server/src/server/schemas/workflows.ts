@@ -79,7 +79,7 @@ export const workflowInfoSchema = z.object({
   stateSchema: z.string().optional(),
   options: z.object({}).optional(),
   isProcessorWorkflow: z.boolean().optional(),
-  origin: z.enum(['code', 'stored']).optional(),
+  origin: z.enum(['code', 'dynamic']).optional(),
 });
 
 /**

@@ -54,6 +54,11 @@ export interface ThreadSettingsStore {
   set(key: string, value: unknown): Promise<void>;
 }
 
+/** Process-local listener awaited before a terminal agent event is emitted. */
+export type SessionBeforeAgentEndListener = (
+  event: Extract<AgentControllerEvent, { type: 'agent_end' }>,
+) => void | Promise<void>;
+
 /** Options for {@link Session.sendNotificationSignal}. */
 export type SessionSendNotificationSignalOptions = {
   ifActive?: SendAgentNotificationSignalOptions['ifActive'];
@@ -2692,6 +2697,8 @@ export class SessionBus {
 export class Session<TState = unknown> {
   /** This session's event bus. Constructed first so every subsystem can route its events here. */
   readonly #bus = new SessionBus();
+  /** Process-local hooks that must finish before the session exposes a terminal agent event. */
+  readonly #beforeAgentEndListeners = new Set<SessionBeforeAgentEndListener>();
   /** Tool categories the user has granted "allow" for the lifetime of this session. */
   readonly #grantedCategories = new Set<string>();
   /** Individual tool names the user has granted "allow" for the lifetime of this session. */
@@ -2832,6 +2839,27 @@ export class Session<TState = unknown> {
    */
   subscribe(listener: AgentControllerEventListener): () => void {
     return this.#bus.subscribe(listener);
+  }
+
+  /** Subscribe to work that must complete before the terminal agent event is exposed. */
+  onBeforeAgentEnd(listener: SessionBeforeAgentEndListener): () => void {
+    this.#beforeAgentEndListeners.add(listener);
+    return () => this.#beforeAgentEndListeners.delete(listener);
+  }
+
+  /** Await terminal hooks, then emit the terminal event to subscribers. */
+  async finishAgentRun(
+    reason: NonNullable<Extract<AgentControllerEvent, { type: 'agent_end' }>['reason']>,
+  ): Promise<void> {
+    const event = { type: 'agent_end', reason } as const;
+    for (const listener of this.#beforeAgentEndListeners) {
+      try {
+        await listener(event);
+      } catch (error) {
+        console.error('Error in before-agent-end listener:', error);
+      }
+    }
+    this.emit(event);
   }
 
   /**
@@ -3546,7 +3574,7 @@ export class Session<TState = unknown> {
     } catch (error) {
       const err = getErrorFromUnknown(error);
       this.emit({ type: 'error', error: err });
-      this.emit({ type: 'agent_end', reason: 'error' });
+      await this.finishAgentRun('error');
     }
   }
 

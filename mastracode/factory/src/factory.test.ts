@@ -33,8 +33,13 @@ function fakeStorage(): LibSQLFactoryStorage {
  * mocked — full-boot coverage lives in `../mastra/index.test.ts`.
  */
 
+const controllerMock = {
+  onSessionCreated: vi.fn(),
+  setChannels: vi.fn(),
+};
+
 const prepareMock = vi.fn(async (config: Record<string, unknown>) => ({
-  base: '/agents',
+  base: { controller: controllerMock },
   mastraArgs: { __capturedConfig: config },
   finalize: vi.fn(async () => {}),
 }));
@@ -239,6 +244,7 @@ describe('MastraFactory.prepare', () => {
       'queue-health',
       'integrations',
       'projects',
+      'filesystem',
       'source-control',
       'channel-identity',
     ]);
@@ -868,7 +874,7 @@ describe('MastraFactory.prepare integrations', () => {
     function withController() {
       const setChannels = vi.fn();
       prepareMock.mockResolvedValueOnce({
-        base: { controller: { setChannels } },
+        base: { controller: { onSessionCreated: vi.fn(), setChannels } },
         mastraArgs: {},
         finalize: vi.fn(async () => {}),
       } as never);

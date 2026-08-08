@@ -38,6 +38,8 @@ export interface ChatChannelRenderContext {
   wrapStream: (stream: AsyncIterable<AgentChunkType<any>>) => AsyncIterable<AgentChunkType<any>>;
   typingGate: { active: boolean };
   formatError?: (error: Error) => unknown;
+  /** Dialect for the final reply text. Absent means `'markdown'` (driver-level default). */
+  textFormat?: 'markdown' | 'plain';
   approvalContext?: { toolCallId: string; messageId: string };
 }
 
@@ -263,6 +265,7 @@ export class ChatChannelOutputProcessor {
             takePendingApproval: render.takePendingApproval,
             typingGate: render.typingGate,
             formatError: render.formatError,
+            textFormat: render.textFormat,
           })
         : runStaticDriver({
             stream: wrapped,
@@ -276,6 +279,7 @@ export class ChatChannelOutputProcessor {
             getPendingApproval: render.getPendingApproval,
             takePendingApproval: render.takePendingApproval,
             formatError: render.formatError,
+            textFormat: render.textFormat,
           })
     ).catch(err => {
       // Prevent unhandled rejection if the driver fails before a terminal chunk

@@ -7,6 +7,7 @@
  */
 export { AgentController } from './agent-controller';
 export { Session } from './session';
+export type { SessionBeforeAgentEndListener } from './session';
 export {
   askUserTool,
   assignTaskIds,
