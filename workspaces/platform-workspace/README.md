@@ -19,7 +19,7 @@ All options can be passed to the constructor or read from environment variables:
 | `environmentId` | `MASTRA_ENVIRONMENT_ID`        | Yes (sandbox)    |
 | `bucketName`    | `MASTRA_PLATFORM_BUCKET_NAME`  | Yes (filesystem) |
 
-The proxy URL defaults to `https://workspaces.mastra.ai` and can be overridden with the `MASTRA_WORKSPACE_PROXY_URL` env var (useful for staging).
+The proxy URL defaults to `https://workspaces.mastra.ai`. Set `MASTRA_PLATFORM_REGION` to `us` or `eu` (case-insensitive) to route to the regional replica at `https://workspaces.us.mastra.ai` or `https://workspaces.eu.mastra.ai`. An explicit `MASTRA_WORKSPACE_PROXY_URL` (useful for staging) overrides both.
 
 Requests to the proxy are authenticated with `Authorization: Bearer <accessToken>`.
 
