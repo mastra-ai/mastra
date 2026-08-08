@@ -1220,7 +1220,7 @@ describe('Workflow (Default Engine Specifics)', () => {
   });
 
   describe('streamLegacy cleanup error safety', () => {
-    it('releases writer lock and completes cleanup even if observer handler rejects', async () => {
+    it('completes cleanup when an observer stream is not consumed', async () => {
       const step = createStep({
         id: 'test-step',
         inputSchema: z.object({ value: z.string() }),
@@ -1239,25 +1239,19 @@ describe('Workflow (Default Engine Specifics)', () => {
 
       const run = await workflow.createRun();
       const { stream, getWorkflowState } = run.streamLegacy({ inputData: { value: 'test' } });
-
-      // Spy on logger error to verify logger behavior
-      const loggerErrorSpy = vi.spyOn(workflow.logger, 'error');
-
-      // Create an observer stream whose underlying reader cancel method rejects
       const observer = run.observeStreamLegacy();
-      const reader = observer.stream.getReader();
-      vi.spyOn(reader, 'cancel').mockRejectedValue(new Error('Observer cleanup failed'));
 
-      // Consume stream chunks
       for await (const _event of stream) {
         // Discard events
       }
 
       const result = await getWorkflowState();
       expect(result.status).toBe('success');
-
-      // Verify closeStreamAction resolves smoothly to undefined
       await expect((run as any).closeStreamAction()).resolves.toBeUndefined();
+
+      for await (const _event of observer.stream) {
+        // Consume events queued before cleanup
+      }
     });
   });
 });

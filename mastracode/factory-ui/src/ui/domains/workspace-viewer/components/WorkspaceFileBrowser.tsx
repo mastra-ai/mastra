@@ -18,15 +18,6 @@ import {
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 
-import type { WorkspaceRenderedEntry, WorkspaceRenderedListing } from '../../../../api/types';
-import type { RenderedWorkspacePath } from '../config';
-
-function formatBytes(size: number) {
-  if (size < 1024) return `${size} B`;
-  if (size < 1024 * 1024) return `${Math.round(size / 1024)} KB`;
-  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
-}
-
 function getFileIcon(path: string): ReactNode {
   const ext = path.split('.').pop()?.toLowerCase();
   switch (ext) {
@@ -59,77 +50,57 @@ function getFolderIcon(isOpen: boolean): ReactNode {
 interface WorkspaceTreeNode {
   path: string;
   name: string;
-  type: WorkspaceRenderedEntry['type'];
-  size: number;
+  type: 'file' | 'directory';
   children: WorkspaceTreeNode[];
+}
+
+interface WorkspaceFileEntry {
+  path: string;
 }
 
 function ensureDirectory(nodes: WorkspaceTreeNode[], path: string, name: string): WorkspaceTreeNode {
   const existing = nodes.find(node => node.path === path);
   if (existing) return existing;
 
-  const directory = { path, name, type: 'directory', size: 0, children: [] } satisfies WorkspaceTreeNode;
+  const directory = { path, name, type: 'directory', children: [] } satisfies WorkspaceTreeNode;
   nodes.push(directory);
   return directory;
 }
 
-function addEntry(nodes: WorkspaceTreeNode[], entry: WorkspaceRenderedEntry) {
-  const segments = entry.path.split('/').filter(Boolean);
+function addFile(nodes: WorkspaceTreeNode[], file: WorkspaceFileEntry) {
+  const segments = file.path.split('/').filter(Boolean);
   let siblings = nodes;
   let currentPath = '';
 
   segments.forEach((segment, index) => {
     currentPath = currentPath ? `${currentPath}/${segment}` : segment;
-    const isLeaf = index === segments.length - 1;
-
-    if (isLeaf) {
-      const existing = siblings.find(node => node.path === currentPath);
-      const node = {
-        path: entry.path,
-        name: segment,
-        type: entry.type,
-        size: entry.size,
-        children: existing?.children ?? [],
-      };
-      const existingIndex = siblings.findIndex(item => item.path === currentPath);
-      if (existingIndex === -1) siblings.push(node);
-      else siblings[existingIndex] = node;
+    if (index === segments.length - 1) {
+      siblings.push({ path: file.path, name: segment, type: 'file', children: [] });
       return;
     }
-
-    const directory = ensureDirectory(siblings, currentPath, segment);
-    siblings = directory.children;
+    siblings = ensureDirectory(siblings, currentPath, segment).children;
   });
 }
 
 function sortTree(nodes: WorkspaceTreeNode[]): WorkspaceTreeNode[] {
-  return nodes
-    .map(node => ({ ...node, children: sortTree(node.children) }))
-    .sort((a, b) => {
-      if (a.type !== b.type) return a.type === 'directory' ? -1 : 1;
-      return a.name.localeCompare(b.name);
-    });
+  return [...nodes.map(node => ({ ...node, children: sortTree(node.children) }))].sort((a, b) => {
+    if (a.type !== b.type) return a.type === 'directory' ? -1 : 1;
+    return a.name.localeCompare(b.name);
+  });
 }
 
-function buildTree(entries: WorkspaceRenderedEntry[]): WorkspaceTreeNode[] {
+function buildTree(files: WorkspaceFileEntry[]): WorkspaceTreeNode[] {
   const nodes: WorkspaceTreeNode[] = [];
-  entries.forEach(entry => addEntry(nodes, entry));
+  files.forEach(file => addFile(nodes, file));
   return sortTree(nodes);
-}
-
-function emptyStateCopy(path: RenderedWorkspacePath) {
-  if (path.root === '.artifacts') return 'No artifacts yet. Session files created will appear here.';
-  return `No files in ${path.label}.`;
 }
 
 function WorkspaceTreeItem({
   node,
-  root,
   openFolders,
   onFolderOpenChange,
 }: {
   node: WorkspaceTreeNode;
-  root: string;
   openFolders: Record<string, boolean>;
   onFolderOpenChange: (path: string, open: boolean) => void;
 }) {
@@ -146,7 +117,6 @@ function WorkspaceTreeItem({
             <WorkspaceTreeItem
               key={child.path}
               node={child}
-              root={root}
               openFolders={openFolders}
               onFolderOpenChange={onFolderOpenChange}
             />
@@ -157,43 +127,38 @@ function WorkspaceTreeItem({
   }
 
   return (
-    <Tree.File id={`${root}/${node.path}`}>
+    <Tree.File id={node.path}>
       <Tree.Icon>{getFileIcon(node.name)}</Tree.Icon>
       <Tree.Label>{node.name}</Tree.Label>
-      <span className="text-icon3 ml-auto shrink-0 text-xs">{formatBytes(node.size)}</span>
     </Tree.File>
   );
 }
 
 interface WorkspaceFileBrowserProps {
-  renderedPaths: RenderedWorkspacePath[];
-  selectedPath: RenderedWorkspacePath;
+  files?: WorkspaceFileEntry[];
   selectedFilePath?: string;
-  listing?: WorkspaceRenderedListing;
   isLoading: boolean;
   isRefreshing: boolean;
   error?: Error;
   onRefresh: () => void;
-  onRenderedPathChange: (path: RenderedWorkspacePath) => void;
   onFileSelect: (filePath: string) => void;
   onShowChanges: () => void;
 }
 
 export function WorkspaceFileBrowser({
-  renderedPaths,
-  selectedPath,
+  files,
   selectedFilePath,
-  listing,
   isLoading,
   isRefreshing,
   error,
   onRefresh,
-  onRenderedPathChange,
   onFileSelect,
   onShowChanges,
 }: WorkspaceFileBrowserProps) {
   const [openFolders, setOpenFolders] = useState<Record<string, boolean>>({});
-  const nodes = buildTree(listing?.entries ?? []);
+  const persistedFiles = files ?? [];
+  const filePaths = new Set(persistedFiles.map(file => file.path));
+  const nodes = buildTree(persistedFiles);
 
   const setFolderOpen = (path: string, open: boolean) => {
     setOpenFolders(previous => ({ ...previous, [path]: open }));
@@ -220,70 +185,41 @@ export function WorkspaceFileBrowser({
             </Tab>
           </TabList>
         </Tabs>
+        <Button
+          className="ml-auto"
+          size="icon-xs"
+          variant="ghost"
+          onClick={onRefresh}
+          disabled={isRefreshing}
+          aria-label={isRefreshing ? 'Refreshing workspace files' : 'Refresh workspace files'}
+        >
+          {isRefreshing ? <Spinner size="sm" /> : <RefreshCw />}
+        </Button>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto p-2">
         <Tree
-          selectedId={selectedFilePath ? `${selectedPath.root}/${selectedFilePath}` : undefined}
+          selectedId={selectedFilePath}
           onSelect={id => {
-            const selectedRootPrefix = `${selectedPath.root}/`;
-            if (id.startsWith(selectedRootPrefix)) onFileSelect(id.slice(selectedRootPrefix.length));
+            if (filePaths.has(id)) onFileSelect(id);
           }}
         >
-          {renderedPaths.map(path => {
-            const isSelectedRoot = path.id === selectedPath.id;
-            const isOpen = openFolders[path.root] ?? false;
-            return (
-              <Tree.Folder
-                key={path.id}
-                open={isOpen}
-                onOpenChange={(open: boolean) => {
-                  onRenderedPathChange(path);
-                  setFolderOpen(path.root, open);
-                }}
-              >
-                <Tree.FolderTrigger
-                  actions={
-                    isSelectedRoot ? (
-                      <Button
-                        size="icon-xs"
-                        variant="ghost"
-                        onClick={onRefresh}
-                        disabled={isRefreshing}
-                        aria-label={isRefreshing ? 'Refreshing workspace files' : 'Refresh workspace files'}
-                      >
-                        {isRefreshing ? <Spinner size="sm" /> : <RefreshCw />}
-                      </Button>
-                    ) : null
-                  }
-                >
-                  <Tree.Icon>{getFolderIcon(isOpen)}</Tree.Icon>
-                  <Tree.Label>{path.label}</Tree.Label>
-                </Tree.FolderTrigger>
-                {isSelectedRoot ? (
-                  <Tree.FolderContent>
-                    {isLoading ? <Txt className="text-icon3 px-2 py-3">Loading files…</Txt> : null}
-                    {error ? <Txt className="text-icon4 px-2 py-3">Unable to load files.</Txt> : null}
-                    {!isLoading && !error && nodes.length === 0 ? (
-                      <Txt className="text-icon3 px-2 py-3" variant="ui-sm">
-                        {emptyStateCopy(path)}
-                      </Txt>
-                    ) : null}
-                    {!isLoading && !error
-                      ? nodes.map(node => (
-                          <WorkspaceTreeItem
-                            key={node.path}
-                            node={node}
-                            root={selectedPath.root}
-                            openFolders={openFolders}
-                            onFolderOpenChange={setFolderOpen}
-                          />
-                        ))
-                      : null}
-                  </Tree.FolderContent>
-                ) : null}
-              </Tree.Folder>
-            );
-          })}
+          {isLoading ? <Txt className="text-icon3 px-2 py-3">Loading files…</Txt> : null}
+          {error ? <Txt className="text-icon4 px-2 py-3">Unable to load files.</Txt> : null}
+          {!isLoading && !error && nodes.length === 0 ? (
+            <Txt className="text-icon3 px-2 py-3" variant="ui-sm">
+              No files captured for this run yet.
+            </Txt>
+          ) : null}
+          {!isLoading && !error
+            ? nodes.map(node => (
+                <WorkspaceTreeItem
+                  key={node.path}
+                  node={node}
+                  openFolders={openFolders}
+                  onFolderOpenChange={setFolderOpen}
+                />
+              ))
+            : null}
         </Tree>
       </div>
     </aside>
