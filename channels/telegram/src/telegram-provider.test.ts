@@ -366,6 +366,12 @@ describe('TelegramProvider webhook route — happy path (update → agent → re
     return calls;
   }
 
+  /** Reply text from either send shape: `sendMessage` or `sendRichMessage`. */
+  function replyText(body: Record<string, unknown>): string {
+    const rich = body.rich_message as { markdown?: string; text?: string } | undefined;
+    return String(body.text ?? rich?.markdown ?? rich?.text ?? '');
+  }
+
   it('routes a message update through handleWebhookEvent to the agent and sends the reply', async () => {
     const modelCalls: unknown[] = [];
     const agent = new Agent({
@@ -383,8 +389,8 @@ describe('TelegramProvider webhook route — happy path (update → agent → re
     const pending: Promise<unknown>[] = [];
     const provider = new TelegramProvider({
       storage,
+      // Buffer instead of stream so the reply lands in a single deterministic send.
       baseUrl: BASE_URL,
-      // Buffer instead of stream so the reply lands in a single deterministic sendMessage.
       streaming: false,
       waitUntil: (p: Promise<unknown>) => {
         pending.push(Promise.resolve(p));
@@ -395,7 +401,10 @@ describe('TelegramProvider webhook route — happy path (update → agent → re
     // Control-plane (connect) + reply-path (typing + send) Bot API stubs.
     stubActiveConnect(BOT_TOKEN);
     stubSend(BOT_TOKEN, 'sendChatAction');
-    const sends = stubSend(BOT_TOKEN, 'sendMessage');
+    // The adapter posts replies as a rich message and only falls back to
+    // sendMessage when the Bot API rejects that, so stub both send paths.
+    const richSends = stubSend(BOT_TOKEN, 'sendRichMessage');
+    const plainSends = stubSend(BOT_TOKEN, 'sendMessage');
 
     await provider.connect('agent-1', { botToken: BOT_TOKEN });
     const record = await storage.getInstallationByAgent('telegram', 'agent-1');
@@ -426,8 +435,9 @@ describe('TelegramProvider webhook route — happy path (update → agent → re
     // The agent's model was actually invoked…
     expect(modelCalls.length).toBeGreaterThan(0);
     // …and a reply was posted back to the sender's chat with the agent's text.
+    const sends = [...richSends, ...plainSends];
     expect(sends.length).toBeGreaterThan(0);
-    const replied = sends.some(b => String(b.chat_id) === '4242' && String(b.text).includes('from the mock agent'));
+    const replied = sends.some(b => String(b.chat_id) === '4242' && replyText(b).includes('from the mock agent'));
     expect(replied).toBe(true);
   });
 });
