@@ -125,6 +125,17 @@ const CREATE_MAX_ATTEMPTS = 3;
 const CREATE_RETRY_BASE_DELAY_MS = 2_000;
 
 /**
+ * How long to wait for the in-sandbox sidecar's `/health` endpoint to respond
+ * before giving up and leaving the address registry unpopulated (execs fall
+ * back to the lease path). This bounds the fire-and-forget probe that runs
+ * after `start()` resolves; the sandbox is usable immediately — the probe
+ * only controls whether early execs go via private-net or lease.
+ */
+const SIDECAR_PROBE_TIMEOUT_MS = 30_000;
+/** Delay between sidecar probe attempts. */
+const SIDECAR_PROBE_INTERVAL_MS = 250;
+
+/**
  * Diagnostic error thrown when the direct-exec WebSocket transport fails
  * twice in a row (opening handshake refused or socket closed mid-stream
  * without an `exit` frame). Distinguishes "the sandbox transport is broken"
@@ -543,7 +554,42 @@ export class PlatformSandbox extends MastraSandbox {
   private _populateAddressFromResponse(json: CreateSandboxResponse): void {
     if (!this._addressRegistry) return;
     if (!json.instanceUrl) return;
-    this._addressRegistry.set(json.id, json.instanceUrl);
+    // Fire-and-forget: probe the sidecar's /health endpoint before populating
+    // the registry. Early execs fall back to lease until the probe succeeds.
+    void this._probeSidecarThenRegister(json.id, json.instanceUrl);
+  }
+
+  /**
+   * Fire-and-forget probe that polls the sidecar's `/health` endpoint until
+   * it responds, then populates the address registry. Runs detached from
+   * `start()` so sandbox provision latency is unchanged; early execs simply
+   * fall back to the lease path until the probe succeeds.
+   *
+   * If the sidecar never comes up within {@link SIDECAR_PROBE_TIMEOUT_MS},
+   * the registry stays unpopulated and all execs go via lease for this
+   * sandbox's lifetime (or until a future `start()` re-runs the probe).
+   */
+  private async _probeSidecarThenRegister(sandboxId: string, instanceUrl: string): Promise<void> {
+    const deadline = Date.now() + SIDECAR_PROBE_TIMEOUT_MS;
+    const fetchFn = this._privateNetFetch ?? fetch;
+    while (Date.now() < deadline) {
+      try {
+        const res = await fetchFn(`${instanceUrl}/health`, {
+          method: 'GET',
+          signal: AbortSignal.timeout(1_000),
+        });
+        if (res.ok) {
+          // Sidecar is listening. Only now is the address safe to publish.
+          this._addressRegistry?.set(sandboxId, instanceUrl);
+          return;
+        }
+      } catch {
+        // Connection refused / timeout — keep polling.
+      }
+      await new Promise(r => setTimeout(r, SIDECAR_PROBE_INTERVAL_MS));
+    }
+    // Sidecar never came up. Leave registry entry unset — every exec goes lease.
+    this.logger.warn('Sidecar never answered /health within probe window', { sandboxId });
   }
 
   /**
