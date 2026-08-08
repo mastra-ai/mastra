@@ -1,4 +1,9 @@
-import type { BrowserProvider, BrowserSettings, StagehandEnv } from '@mastra/code-sdk/onboarding/settings';
+import type {
+  BrowserProvider,
+  BrowserSettings,
+  GlobalSettings,
+  StagehandEnv,
+} from '@mastra/code-sdk/onboarding/settings';
 import {
   checkProfileProviderMismatch,
   createBrowserFromSettings,
@@ -7,7 +12,11 @@ import {
   setProfileProvider,
 } from '@mastra/code-sdk/onboarding/settings';
 import type { MastraBrowser } from '@mastra/core/browser';
+import { STAGEHAND_MODEL_PROVIDERS } from '@mastra/stagehand';
+import type { ModelItem } from '../components/model-selector.js';
+import { ModelSelectorComponent } from '../components/model-selector.js';
 import { askModalQuestion } from '../modal-question.js';
+import { promptForApiKeyIfNeeded } from '../prompt-api-key.js';
 import type { SlashCommandContext } from './types.js';
 
 /**
@@ -28,8 +37,90 @@ type StorageStateExportBrowser = MastraBrowser & { exportStorageState: (path: st
  *   /browser status       - Show current browser configuration
  *   /browser on           - Enable browser with current settings
  *   /browser off          - Disable browser
- *   /browser set <k> <v>  - Set a specific setting (profile, executablePath, storageState, cdpUrl)
+ *   /browser set <k> <v>  - Set a specific setting (profile, executablePath, storageState, cdpUrl, model)
  */
+
+/**
+ * Validate a `provider/model` id against the providers Stagehand can resolve.
+ *
+ * Stagehand splits the id on its first slash and throws during browser startup
+ * if the prefix is not a provider it knows, so both halves are checked here
+ * where the error can still be acted on.
+ *
+ * @returns an error message, or undefined when the id is usable.
+ */
+function stagehandModelError(modelId: string): string | undefined {
+  const slashIndex = modelId.indexOf('/');
+  if (slashIndex <= 0 || slashIndex === modelId.length - 1) {
+    return `Invalid model: ${modelId}. Use <provider>/<model>, for example anthropic/claude-sonnet-4-5.`;
+  }
+  const provider = modelId.slice(0, slashIndex);
+  if (!(STAGEHAND_MODEL_PROVIDERS as readonly string[]).includes(provider)) {
+    return `Unsupported model provider: ${provider}. Supported providers: ${STAGEHAND_MODEL_PROVIDERS.join(', ')}.`;
+  }
+  return undefined;
+}
+
+/**
+ * Open the shared model picker, restricted to providers Stagehand can resolve,
+ * and persist the choice as the browser model.
+ */
+async function promptForStagehandModel(
+  ctx: SlashCommandContext,
+  settings: GlobalSettings,
+  browser: BrowserSettings,
+): Promise<void> {
+  if (browser.provider !== 'stagehand') {
+    ctx.showError('model is only supported by the stagehand provider.');
+    return;
+  }
+
+  const supported = new Set<string>(STAGEHAND_MODEL_PROVIDERS);
+  const models = (await ctx.state.controller.listAvailableModels()).filter(m => supported.has(m.provider));
+
+  if (models.length === 0) {
+    ctx.showError(
+      `No models available for Stagehand. Supported providers: ${STAGEHAND_MODEL_PROVIDERS.join(', ')}.\n` +
+        `You can also set one directly: /browser set model anthropic/claude-sonnet-4-5`,
+    );
+    return;
+  }
+
+  await new Promise<void>(resolve => {
+    const selector = new ModelSelectorComponent({
+      tui: ctx.state.ui,
+      models,
+      currentModelId: browser.stagehand?.model,
+      title: 'Select Browser Model',
+      onSelect: async (model: ModelItem) => {
+        ctx.state.ui.hideOverlay();
+        // The picker also accepts a freely typed id, which bypasses the
+        // filtered list above.
+        const error = stagehandModelError(model.id);
+        if (error) {
+          ctx.showError(error);
+          resolve();
+          return;
+        }
+        await promptForApiKeyIfNeeded(ctx.state.ui, model, ctx.authStorage);
+        settings.browser.stagehand = {
+          ...settings.browser.stagehand,
+          env: settings.browser.stagehand?.env ?? 'LOCAL',
+          model: model.id,
+        };
+        saveSettings(settings);
+        ctx.showInfo(`Set model = ${model.id}\nRun /browser on to apply.`);
+        resolve();
+      },
+      onCancel: () => {
+        ctx.state.ui.hideOverlay();
+        ctx.showInfo('Model selection cancelled.');
+        resolve();
+      },
+    });
+    ctx.state.ui.showOverlay(selector, { width: '60%' });
+  });
+}
 
 /**
  * Helper to show an inline question and return the answer.
@@ -116,6 +207,9 @@ function getBrowserConfigKey(settings: BrowserSettings): string {
   if (settings.provider === 'stagehand' && settings.stagehand?.env) {
     parts.push(settings.stagehand.env);
   }
+  if (settings.provider === 'stagehand' && settings.stagehand?.model) {
+    parts.push(`model:${settings.stagehand.model}`);
+  }
   parts.push(settings.headless ? 'headless' : 'headed');
   if (settings.profile) parts.push(`profile:${settings.profile}`);
   if (settings.executablePath) parts.push(`exec:${settings.executablePath}`);
@@ -151,22 +245,32 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
           '  profile <path>       - Browser profile directory\n' +
           '  executablePath <path> - Browser executable path\n' +
           '  storageState <path>  - Playwright storage state file (agent-browser only)\n' +
-          '  cdpUrl <url>         - CDP WebSocket URL\n\n' +
+          '  cdpUrl <url>         - CDP WebSocket URL\n' +
+          '  model [provider/id]  - Model Stagehand uses for AI operations (stagehand only).\n' +
+          '                         Omit the value to pick from a list.\n\n' +
           'To remove a setting, use: /browser clear <key>\n\n' +
           'Examples:\n' +
           '  /browser set profile ~/.mastracode/browser-profile-stagehand\n' +
+          '  /browser set model\n' +
+          '  /browser set model anthropic/claude-sonnet-4-5\n' +
           '  /browser set executablePath /Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
       );
       return;
     }
 
-    const validKeys = ['profile', 'executablepath', 'storagestate', 'cdpurl'];
+    const validKeys = ['profile', 'executablepath', 'storagestate', 'cdpurl', 'model'];
     if (!validKeys.includes(key)) {
-      ctx.showError(`Unknown key: ${args[1]}. Valid keys: profile, executablePath, storageState, cdpUrl`);
+      ctx.showError(`Unknown key: ${args[1]}. Valid keys: profile, executablePath, storageState, cdpUrl, model`);
       return;
     }
 
     if (!value) {
+      // Model ids are hard to recall, so an omitted value opens the same
+      // searchable picker used elsewhere instead of erroring out.
+      if (key === 'model') {
+        await promptForStagehandModel(ctx, settings, browser);
+        return;
+      }
       ctx.showError(
         `Missing value. Use: /browser set ${args[1]} <value>\nTo remove a setting, use: /browser clear ${args[1]}`,
       );
@@ -208,6 +312,26 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
           storageState: expandedValue,
         };
         break;
+      case 'model': {
+        if (browser.provider !== 'stagehand') {
+          ctx.showError('model is only supported by the stagehand provider.');
+          return;
+        }
+        const modelId = value.trim();
+        const modelError = stagehandModelError(modelId);
+        if (modelError) {
+          ctx.showError(modelError);
+          return;
+        }
+        settings.browser.stagehand = {
+          ...settings.browser.stagehand,
+          env: settings.browser.stagehand?.env ?? 'LOCAL',
+          model: modelId,
+        };
+        saveSettings(settings);
+        ctx.showInfo(`Set model = ${modelId}\nRun /browser on to apply.`);
+        return;
+      }
       case 'cdpurl':
         settings.browser.cdpUrl = expandedValue;
         // CDP connects to an existing browser — launch options are ignored
@@ -251,6 +375,7 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
       lines.push(`  Provider: ${activeProvider}`);
       if (activeSettings.provider === 'stagehand' && activeSettings.stagehand) {
         lines.push(`  Environment: ${activeSettings.stagehand.env}`);
+        if (activeSettings.stagehand.model) lines.push(`  Model: ${activeSettings.stagehand.model}`);
       }
       if (!activeIsBrowserbase) {
         lines.push(`  Headless: ${activeSettings.headless ? 'yes' : 'no'}`);
@@ -270,6 +395,7 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
       lines.push(`  Provider: ${fileProvider}`);
       if (browser.provider === 'stagehand' && browser.stagehand) {
         lines.push(`  Environment: ${browser.stagehand.env}`);
+        if (browser.stagehand.model) lines.push(`  Model: ${browser.stagehand.model}`);
       }
       if (!fileIsBrowserbase) {
         lines.push(`  Headless: ${browser.headless ? 'yes' : 'no'}`);
@@ -293,6 +419,7 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
       const lines = [`Browser: enabled`, `  Provider: ${providerLabel}`];
       if (browser.provider === 'stagehand' && browser.stagehand) {
         lines.push(`  Environment: ${browser.stagehand.env}`);
+        if (browser.stagehand.model) lines.push(`  Model: ${browser.stagehand.model}`);
       }
       if (!isBrowserbase) {
         lines.push(`  Headless: ${browser.headless ? 'yes' : 'no'}`);
@@ -404,8 +531,13 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
       case 'cdpurl':
         delete settings.browser.cdpUrl;
         break;
+      case 'model':
+        if (settings.browser.stagehand) {
+          delete settings.browser.stagehand.model;
+        }
+        break;
       default:
-        ctx.showError(`Unknown field: ${field}. Valid fields: profile, executablePath, storageState, cdpUrl`);
+        ctx.showError(`Unknown field: ${field}. Valid fields: profile, executablePath, storageState, cdpUrl, model`);
         return;
     }
 
@@ -476,8 +608,8 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
       '  off, disable   Disable browser',
       '  status         Show current configuration',
       '  clear          Reset all settings to defaults',
-      '  clear <key>    Clear: profile, executablePath, storageState, cdpUrl',
-      '  set <key> <v>  Set: profile, executablePath, storageState, cdpUrl',
+      '  clear <key>    Clear: profile, executablePath, storageState, cdpUrl, model',
+      '  set <key> <v>  Set: profile, executablePath, storageState, cdpUrl, model',
       '  export storageState <path>  Export session cookies/localStorage (agent-browser)',
     ];
     ctx.showInfo(help.join('\n'));

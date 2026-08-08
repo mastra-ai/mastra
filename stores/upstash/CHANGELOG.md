@@ -1,5 +1,15 @@
 # @mastra/upstash
 
+## 1.4.0-alpha.1
+
+### Patch Changes
+
+- Fixed resource-scoped message includes across storage adapters so included context cannot cross resource boundaries. ([#20984](https://github.com/mastra-ai/mastra/pull/20984))
+
+- Updated dependencies [[`6445eba`](https://github.com/mastra-ai/mastra/commit/6445eba6020abac681aba1cc9289f446cb400cbe), [`df31eb0`](https://github.com/mastra-ai/mastra/commit/df31eb0c7087d782a0d9346e467f9a4af4b0eef6), [`df31eb0`](https://github.com/mastra-ai/mastra/commit/df31eb0c7087d782a0d9346e467f9a4af4b0eef6), [`fcd0667`](https://github.com/mastra-ai/mastra/commit/fcd0667a4e378be35c9a1b1eb19cce78fbfd7282), [`bab06b1`](https://github.com/mastra-ai/mastra/commit/bab06b18923873a584bdfc71a6b4ec7fb4727fb7)]:
+  - @mastra/core@1.58.0-alpha.5
+  - @mastra/redis@1.4.0-alpha.1
+
 ## 1.4.0-alpha.0
 
 ### Minor Changes
