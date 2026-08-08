@@ -112,6 +112,9 @@ export async function runDurableFinishSideEffects({
     threadId: durableState?.threadId,
     resourceId: durableState?.resourceId,
   }).deserialize(messageListState);
+  if (registryEntry) {
+    registryEntry.messageList = messageList;
+  }
 
   // Keep this MessageList for every later phase. ProcessorRunner applies
   // returned message arrays back onto it, including removals and replacements.

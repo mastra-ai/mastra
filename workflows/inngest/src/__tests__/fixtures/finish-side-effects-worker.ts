@@ -10,8 +10,13 @@ if (!dbUrl || !agentId || !inngestPort) {
 }
 
 const { mastra, inngest } = buildFinishSideEffectsAgent({ dbUrl, agentId, inngestPort });
-await connect({ mastra, inngest });
+const connection = await connect({ mastra, inngest });
 console.log('FINISH_SIDE_EFFECTS_WORKER_READY');
 
-process.on('SIGTERM', () => process.exit(0));
-process.on('SIGINT', () => process.exit(0));
+const shutdown = async () => {
+  await connection.close();
+  await connection.closed;
+};
+
+process.once('SIGTERM', () => void shutdown());
+process.once('SIGINT', () => void shutdown());

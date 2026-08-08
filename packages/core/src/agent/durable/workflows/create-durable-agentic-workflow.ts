@@ -641,7 +641,7 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
               steps: state.accumulatedSteps,
             },
           });
-          if (lastStep && finishResult.outputText !== (finalText ?? '')) {
+          if (lastStep && finishResult.outputText && finishResult.outputText !== (finalText ?? '')) {
             lastStep.text = finishResult.outputText;
             finalText = finishResult.outputText;
           }

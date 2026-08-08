@@ -96,7 +96,6 @@ describe('durable finish side effects on a connect worker', () => {
   beforeAll(async () => {
     devServer = await startConnectInngestDevServer();
     worker = await startWorker();
-    await new Promise(resolve => setTimeout(resolve, 3000));
   });
 
   afterAll(async () => {
@@ -117,7 +116,6 @@ describe('durable finish side effects on a connect worker', () => {
 
     await stopWorker();
     worker = await startWorker();
-    await new Promise(resolve => setTimeout(resolve, 1000));
 
     await runTurn('What is my name?', threadId, resourceId);
     messages = await readMessages(threadId);
