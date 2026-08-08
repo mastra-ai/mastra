@@ -782,7 +782,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
         }
       }
 
-      return isCustomRoutePublic(path, method, customAuthConfig);
+      return isCustomRoutePublic(path, upperMethod, customAuthConfig);
     };
   }
 

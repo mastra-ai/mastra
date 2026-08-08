@@ -122,6 +122,15 @@ describe('MastraServer.getFrameworkPublicMatcher', () => {
       expect(isPublic('/api/users/42/profile', 'GET')).toBe(true);
     });
 
+    it('matches a custom public route when the request method arrives lowercase', () => {
+      const customRouteAuthConfig = new Map<string, boolean>([['GET:/api/my-public', false]]);
+      const isPublic = createAdapter({ customRouteAuthConfig }).getFrameworkPublicMatcher();
+
+      // Adapters may pass the raw method — normalize before matching custom routes
+      // so a lowercase `get` still matches a `GET:` entry.
+      expect(isPublic('/api/my-public', 'get')).toBe(true);
+    });
+
     it('does not confuse ALL:key with a specific method', () => {
       const customRouteAuthConfig = new Map<string, boolean>([['ALL:/api/everything', false]]);
       const isPublic = createAdapter({ customRouteAuthConfig }).getFrameworkPublicMatcher();
