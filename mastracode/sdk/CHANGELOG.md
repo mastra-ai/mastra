@@ -1,5 +1,27 @@
 # @mastra/code-sdk
 
+## 1.2.0-alpha.6
+
+### Patch Changes
+
+- Added a `model` option to Stagehand browser settings, so browser automation can run on a chosen provider instead of a fixed default: ([#20993](https://github.com/mastra-ai/mastra/pull/20993))
+
+  ```ts
+  import { createBrowserFromSettings } from '@mastra/code-sdk/onboarding/settings';
+
+  const browser = await createBrowserFromSettings({
+    enabled: true,
+    provider: 'stagehand',
+    headless: true,
+    stagehand: { env: 'LOCAL', model: 'anthropic/claude-sonnet-4-5' },
+  });
+  ```
+
+  The model must be provider-qualified as `<provider>/<model>`. Values Stagehand cannot resolve, such as a bare `gpt-4.1`, are ignored so the browser still starts.
+
+- Updated dependencies [[`25956fc`](https://github.com/mastra-ai/mastra/commit/25956fc8841780d506acb22b618fdb4dcf6c4e21)]:
+  - @mastra/stagehand@0.3.2-alpha.0
+
 ## 1.2.0-alpha.5
 
 ### Patch Changes

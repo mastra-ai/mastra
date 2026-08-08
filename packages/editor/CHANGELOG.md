@@ -1,5 +1,11 @@
 # @mastra/editor
 
+## 0.13.12-alpha.4
+
+### Patch Changes
+
+- Fixed caller-scoped Composio connection management in stored agents. ([#21004](https://github.com/mastra-ai/mastra/pull/21004))
+
 ## 0.13.12-alpha.3
 
 ### Patch Changes

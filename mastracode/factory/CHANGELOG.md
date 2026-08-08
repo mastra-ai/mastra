@@ -1,5 +1,12 @@
 # @mastra/factory
 
+## 0.6.0-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [[`25956fc`](https://github.com/mastra-ai/mastra/commit/25956fc8841780d506acb22b618fdb4dcf6c4e21)]:
+  - @mastra/code-sdk@1.2.0-alpha.6
+
 ## 0.6.0-alpha.5
 
 ### Patch Changes
