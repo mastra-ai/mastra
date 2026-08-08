@@ -1,7 +1,8 @@
 import type { Mastra } from '@mastra/core';
+import type { MastraServerCache } from '@mastra/core/cache';
 import type { RequestContext } from '@mastra/core/di';
 import type { Event } from '@mastra/core/events';
-import { createCachingTransformStream, createReplayStream } from '@mastra/core/stream';
+import { createReplayStream } from '@mastra/core/stream';
 import type {
   WorkflowInfo,
   ChunkType,
@@ -48,6 +49,61 @@ import { getEffectiveResourceId, validateRunOwnership } from './utils';
  * in the workflow's run map, and a finished run has already been dropped from it.
  */
 const TERMINAL_RUN_STATUSES: WorkflowRunStatus[] = ['success', 'failed', 'canceled', 'tripwire'];
+
+/**
+ * Runs whose chunks are already being written to the cache in this process,
+ * keyed by runId. A run has exactly one writer: without this, two concurrent
+ * requests for the same runId each cache every chunk and the replayed history
+ * comes back duplicated.
+ */
+const activeRunStreamCachers = new Set<string>();
+
+/**
+ * Cache a run's chunks for later replay and return the stream to hand the client.
+ *
+ * The cached history belongs to the run, not to whoever happens to be watching,
+ * so the caching side is driven by its own reader rather than by the client's
+ * consumption. If the client disconnects mid-run its branch is cancelled while
+ * this reader keeps draining, so `/observe` still replays a complete history —
+ * the failure that makes reconnection necessary is exactly the one the cache has
+ * to survive. Chunks buffer in the tee while a client lags, bounded by the run's
+ * own length.
+ */
+function cacheRunStream({
+  cache,
+  runId,
+  source,
+}: {
+  cache: MastraServerCache;
+  runId: string;
+  source: ReadableStream<ChunkType>;
+}): ReadableStream<ChunkType> {
+  if (activeRunStreamCachers.has(runId)) {
+    return source;
+  }
+
+  const [toCache, toClient] = source.tee();
+  activeRunStreamCachers.add(runId);
+
+  void (async () => {
+    const reader = toCache.getReader();
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        // Cache failures must not take down the run being streamed.
+        await cache.listPush(runId, value).catch(() => {});
+      }
+    } catch {
+      // The source errored; the client's branch surfaces it.
+    } finally {
+      reader.releaseLock();
+      activeRunStreamCachers.delete(runId);
+    }
+  })();
+
+  return toClient;
+}
 
 export interface WorkflowContext extends Context {
   workflowId?: string;
@@ -538,11 +594,7 @@ export const STREAM_WORKFLOW_ROUTE = createRoute({
       const result = run.stream({ ...params, requestContext });
 
       if (serverCache) {
-        const { transform } = createCachingTransformStream<ChunkType>({
-          cache: serverCache,
-          cacheKey: runId,
-        });
-        return result.fullStream.pipeThrough(transform);
+        return cacheRunStream({ cache: serverCache, runId, source: result.fullStream });
       }
 
       return result.fullStream;
@@ -596,11 +648,7 @@ export const RESUME_STREAM_WORKFLOW_ROUTE = createRoute({
       const resumeResult = _run.resumeStream({ ...params, requestContext });
 
       if (serverCache) {
-        const { transform } = createCachingTransformStream<ChunkType>({
-          cache: serverCache,
-          cacheKey: runId,
-        });
-        return resumeResult.fullStream.pipeThrough(transform);
+        return cacheRunStream({ cache: serverCache, runId, source: resumeResult.fullStream });
       }
 
       return resumeResult.fullStream;
@@ -1228,11 +1276,7 @@ export const TIME_TRAVEL_STREAM_WORKFLOW_ROUTE = createRoute({
       const result = run.timeTravelStream({ ...params, requestContext });
 
       if (serverCache) {
-        const { transform } = createCachingTransformStream<ChunkType>({
-          cache: serverCache,
-          cacheKey: runId,
-        });
-        return result.fullStream.pipeThrough(transform);
+        return cacheRunStream({ cache: serverCache, runId, source: result.fullStream });
       }
 
       return result.fullStream;
