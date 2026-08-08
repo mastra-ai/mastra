@@ -20,6 +20,16 @@
         "default": "./dist/index.cjs"
       }
     },
+    "./worker": {
+      "import": {
+        "types": "./dist/worker.d.ts",
+        "default": "./dist/worker.js"
+      },
+      "require": {
+        "types": "./dist/worker.d.ts",
+        "default": "./dist/worker.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "scripts": {

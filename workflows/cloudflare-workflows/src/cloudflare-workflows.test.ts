@@ -1,7 +1,7 @@
 import { RequestContext } from '@mastra/core/request-context';
 import { describe, expect, it, vi } from 'vitest';
 
-import { executeCloudflareWorkflowAgentStep, runCloudflareWorkflowAgent } from './entrypoint';
+import { executeCloudflareWorkflowAgentStep } from './entrypoint';
 import { CloudflareWorkflowExecutionEngine } from './execution-engine';
 import type {
   CloudflareWorkflowBinding,
@@ -9,6 +9,7 @@ import type {
   CloudflareWorkflowStep,
   CloudflareWorkflowStepExecutor,
 } from './types';
+import { runCloudflareWorkflowAgent } from './worker';
 
 describe('runCloudflareWorkflowAgent', () => {
   it('runs settled segments with stable keys and waits for native resume events', async () => {

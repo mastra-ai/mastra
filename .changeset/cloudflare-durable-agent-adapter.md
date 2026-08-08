@@ -12,3 +12,12 @@ const durableAgent = createCloudflareWorkflowAgent({
   workflow: env.AGENT_WORKFLOW,
 })
 ```
+
+Cloudflare Worker entrypoints can import the Worker-safe orchestration surface without bundling the Node-side Mastra runtime:
+
+```ts
+import {
+  createCloudflareWorkflowStepExecutor,
+  runCloudflareWorkflowAgent,
+} from '@mastra/cloudflare-workflows/worker'
+```
