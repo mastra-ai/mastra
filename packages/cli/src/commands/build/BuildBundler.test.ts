@@ -107,6 +107,50 @@ describe('BuildBundler', () => {
       expect(options.externals).toBeUndefined();
     });
 
+    it('warns when a bundler config omits externals, since the default silently does not apply', async () => {
+      const { Bundler } = await import('@mastra/deployer/bundler');
+      vi.spyOn(Bundler.prototype as any, 'getUserBundlerOptions').mockResolvedValueOnce({ sourcemap: true });
+      const { BuildBundler } = await import('./BuildBundler');
+      const bundler = new BuildBundler();
+      const warn = vi.spyOn((bundler as any).logger, 'warn').mockImplementation(() => {});
+
+      await (bundler as any).getUserBundlerOptions('/entry.ts', '/output');
+
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn.mock.calls[0]![0]).toContain('bundler.externals');
+    });
+
+    it('does not warn when externals is set explicitly', async () => {
+      const { Bundler } = await import('@mastra/deployer/bundler');
+      vi.spyOn(Bundler.prototype as any, 'getUserBundlerOptions').mockResolvedValueOnce({
+        externals: [],
+        sourcemap: true,
+      });
+      const { BuildBundler } = await import('./BuildBundler');
+      const bundler = new BuildBundler();
+      const warn = vi.spyOn((bundler as any).logger, 'warn').mockImplementation(() => {});
+
+      await (bundler as any).getUserBundlerOptions('/entry.ts', '/output');
+
+      expect(warn).not.toHaveBeenCalled();
+    });
+
+    it('does not warn when there is no bundler config, since the default applies', async () => {
+      const { Bundler, IS_DEFAULT } = await import('@mastra/deployer/bundler');
+      vi.spyOn(Bundler.prototype as any, 'getUserBundlerOptions').mockResolvedValueOnce({
+        externals: [],
+        [IS_DEFAULT]: true,
+      });
+      const { BuildBundler } = await import('./BuildBundler');
+      const bundler = new BuildBundler();
+      const warn = vi.spyOn((bundler as any).logger, 'warn').mockImplementation(() => {});
+
+      const options = await (bundler as any).getUserBundlerOptions('/entry.ts', '/output');
+
+      expect(warn).not.toHaveBeenCalled();
+      expect(options.externals).toBe(true);
+    });
+
     it('preserves explicit externals true in a custom bundler config', async () => {
       const { Bundler } = await import('@mastra/deployer/bundler');
       vi.spyOn(Bundler.prototype as any, 'getUserBundlerOptions').mockResolvedValueOnce({
