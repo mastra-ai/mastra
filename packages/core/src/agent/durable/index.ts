@@ -115,7 +115,15 @@ export {
 } from './stream-adapter';
 
 // Constants
-export { AGENT_STREAM_TOPIC, AgentStreamEventTypes, DurableAgentDefaults, DurableStepIds } from './constants';
+export {
+  AGENT_STREAM_TOPIC,
+  AGENT_CONTROL_TOPIC,
+  AgentStreamEventTypes,
+  AgentControlEventTypes,
+  DurableAgentDefaults,
+  DurableStepIds,
+} from './constants';
+export { publishAbortRequest, subscribeToAbortRequests, ensureRemoteAbortListener } from './abort-transport';
 
 // Types
 export type {
