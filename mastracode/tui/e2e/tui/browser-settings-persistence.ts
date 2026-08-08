@@ -79,6 +79,26 @@ export const browserSettingsPersistenceScenario = {
     await runtime.waitForScreenText(/BROWSER_CLEAR_EXEC=missing/i, terminal, 8_000);
     await runtime.waitForScreenText(/BROWSER_CLEAR_AGENT=missing/i, terminal, 8_000);
 
+    // Provider is stagehand after the reset above, so the model key is accepted here.
+    terminal.submit('/browser set model not-provider-qualified');
+    await runtime.waitForScreenText(/<provider>\/<model>/i, terminal, 8_000);
+
+    terminal.submit('/browser set model anthropic/claude-sonnet-4-5');
+    await runtime.waitForScreenText(/Set model = anthropic\/claude-sonnet-4-5/i, terminal, 8_000);
+
+    terminal.submit(
+      `!node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/settings.json","utf8")); const b=s.browser||{}; console.log("BROWSER_MODEL="+(b.stagehand&&b.stagehand.model||"missing"));'`,
+    );
+    await runtime.waitForScreenText(/BROWSER_MODEL=anthropic\/claude-sonnet-4-5/i, terminal, 8_000);
+
+    terminal.submit('/browser clear model');
+    await runtime.waitForScreenText(/Cleared model\./i, terminal, 8_000);
+
+    terminal.submit(
+      `!node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/settings.json","utf8")); const b=s.browser||{}; console.log("BROWSER_MODEL_CLEARED="+(b.stagehand&&b.stagehand.model||"missing")); console.log("BROWSER_MODEL_ENV="+(b.stagehand&&b.stagehand.env||"missing"));'`,
+    );
+    await runtime.waitForScreenText(/BROWSER_MODEL_CLEARED=missing/i, terminal, 8_000);
+
     terminal.keyCtrlC();
   },
 } satisfies McE2eScenario;

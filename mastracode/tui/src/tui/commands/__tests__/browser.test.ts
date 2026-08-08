@@ -103,4 +103,70 @@ describe('handleBrowserCommand', () => {
     expect(settings.browser.enabled).toBe(true);
     expect(ctx.showInfo).toHaveBeenCalledWith('Browser enabled (Stagehand).');
   });
+
+  describe('set model', () => {
+    it('persists a provider-qualified model onto the stagehand settings', async () => {
+      const { ctx, settings } = createContext();
+      browserMocks.loadSettings.mockReturnValue(settings);
+
+      await handleBrowserCommand(ctx, ['set', 'model', 'anthropic/claude-sonnet-4-5']);
+
+      expect(settings.browser.stagehand).toEqual({ env: 'LOCAL', model: 'anthropic/claude-sonnet-4-5' });
+      expect(browserMocks.saveSettings).toHaveBeenCalledWith(settings);
+      expect(ctx.showError).not.toHaveBeenCalled();
+    });
+
+    it.each(['claude-sonnet-4-5', '/claude-sonnet-4-5', 'anthropic/'])(
+      'rejects %s because Stagehand cannot resolve a provider from it',
+      async invalid => {
+        const { ctx, settings } = createContext();
+        browserMocks.loadSettings.mockReturnValue(settings);
+
+        await handleBrowserCommand(ctx, ['set', 'model', invalid]);
+
+        expect(settings.browser.stagehand).toEqual({ env: 'LOCAL' });
+        expect(browserMocks.saveSettings).not.toHaveBeenCalled();
+        expect(ctx.showError).toHaveBeenCalledWith(expect.stringContaining('<provider>/<model>'));
+      },
+    );
+
+    it('rejects model on the agent-browser provider, which has no model to configure', async () => {
+      const { ctx, settings } = createContext();
+      settings.browser.provider = 'agent-browser' as never;
+      browserMocks.loadSettings.mockReturnValue(settings);
+
+      await handleBrowserCommand(ctx, ['set', 'model', 'anthropic/claude-sonnet-4-5']);
+
+      expect(browserMocks.saveSettings).not.toHaveBeenCalled();
+      expect(ctx.showError).toHaveBeenCalledWith('model is only supported by the stagehand provider.');
+    });
+
+    it('clears the model without disturbing the rest of the stagehand settings', async () => {
+      const { ctx, settings } = createContext();
+      settings.browser.stagehand = { env: 'LOCAL', model: 'anthropic/claude-sonnet-4-5' } as never;
+      browserMocks.loadSettings.mockReturnValue(settings);
+
+      await handleBrowserCommand(ctx, ['clear', 'model']);
+
+      expect(settings.browser.stagehand).toEqual({ env: 'LOCAL' });
+      expect(browserMocks.saveSettings).toHaveBeenCalledWith(settings);
+    });
+
+    it('reports a model change as pending so the running browser is not silently stale', async () => {
+      const { ctx, settings, controllerState } = createContext();
+      settings.browser.enabled = true;
+      (controllerState as Record<string, unknown>).activeBrowserSettings = {
+        ...settings.browser,
+        stagehand: { env: 'LOCAL' },
+      };
+      settings.browser.stagehand = { env: 'LOCAL', model: 'anthropic/claude-sonnet-4-5' } as never;
+      browserMocks.loadSettings.mockReturnValue(settings);
+
+      await handleBrowserCommand(ctx, ['status']);
+
+      const output = (ctx.showInfo as ReturnType<typeof vi.fn>).mock.calls[0]![0] as string;
+      expect(output).toContain('Pending changes (not yet applied):');
+      expect(output).toContain('Model: anthropic/claude-sonnet-4-5');
+    });
+  });
 });

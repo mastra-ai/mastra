@@ -114,6 +114,13 @@ export interface StagehandSettings {
   env: StagehandEnv;
   apiKey?: string;
   projectId?: string;
+  /**
+   * Model Stagehand uses for its AI operations, as `provider/model`
+   * (for example `anthropic/claude-sonnet-4-5`). Stagehand resolves the
+   * provider's API key from the environment (`ANTHROPIC_API_KEY`,
+   * `OPENAI_API_KEY`, and so on). Defaults to Stagehand's own default.
+   */
+  model?: string;
   /** Whether to preserve the user data directory after the browser closes. */
   preserveUserDataDir?: boolean;
 }
@@ -571,6 +578,9 @@ function parseBrowserSettings(rawBrowser: unknown): BrowserSettings {
         : {}),
       ...(typeof rawStagehand.projectId === 'string' && rawStagehand.projectId.trim()
         ? { projectId: rawStagehand.projectId.trim() }
+        : {}),
+      ...(typeof rawStagehand.model === 'string' && rawStagehand.model.trim()
+        ? { model: rawStagehand.model.trim() }
         : {}),
       ...(typeof rawStagehand.preserveUserDataDir === 'boolean'
         ? { preserveUserDataDir: rawStagehand.preserveUserDataDir }
@@ -1142,9 +1152,16 @@ export async function createBrowserFromSettings(settings: BrowserSettings): Prom
     //     requires on every request.
     // Model is `gpt-5.4-mini`, the current ChatGPT-sign-in Codex whitelist
     // pick suited to Stagehand's vision + structured-output workload.
+    //
+    // An explicitly configured model wins: Codex is a fallback for users who
+    // have no model of their own, not an override of one they chose. Stagehand
+    // resolves the provider's API key from the environment for plain
+    // `provider/model` strings, so no key plumbing is needed here.
     const authStorage = new AuthStorage();
     const cred = authStorage.get('openai-codex');
-    if (cred?.type === 'oauth') {
+    if (stagehand?.model) {
+      stagehandOpts.model = stagehand.model;
+    } else if (cred?.type === 'oauth') {
       const accountId = (cred as any).accountId as string | undefined;
       stagehandOpts.model = {
         modelName: 'openai/gpt-5.4-mini',

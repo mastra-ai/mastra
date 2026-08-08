@@ -839,6 +839,61 @@ describe('migrateLegacyVariedPack', () => {
   });
 });
 
+describe('createBrowserFromSettings — stagehand model', () => {
+  function stagehandSettings(stagehand: Record<string, unknown>): BrowserSettings {
+    return { enabled: true, provider: 'stagehand', headless: true, stagehand } as unknown as BrowserSettings;
+  }
+
+  // The model lands on a private field, so read it the way the browser does.
+  function configuredModel(browser: unknown): unknown {
+    return (browser as { stagehandConfig: { model?: unknown } }).stagehandConfig.model;
+  }
+
+  it('passes a configured model through to Stagehand', async () => {
+    const browser = await createBrowserFromSettings(
+      stagehandSettings({ env: 'LOCAL', model: 'anthropic/claude-sonnet-4-5' }),
+    );
+    expect(configuredModel(browser)).toBe('anthropic/claude-sonnet-4-5');
+  });
+
+  it('leaves the model unset when none is configured, so Stagehand keeps its own default', async () => {
+    const browser = await createBrowserFromSettings(stagehandSettings({ env: 'LOCAL' }));
+    const model = configuredModel(browser);
+    // A Codex OAuth credential in the ambient environment supplies its own
+    // model; either way the user has not configured one here.
+    expect(typeof model === 'undefined' || typeof model === 'object').toBe(true);
+  });
+
+  it('keeps the configured model when connecting over CDP', async () => {
+    const settings = stagehandSettings({ env: 'LOCAL', model: 'anthropic/claude-sonnet-4-5' });
+    const browser = await createBrowserFromSettings({ ...settings, cdpUrl: 'ws://localhost:9222/devtools/browser/x' });
+    expect(configuredModel(browser)).toBe('anthropic/claude-sonnet-4-5');
+  });
+});
+
+describe('parseBrowserSettings — stagehand model', () => {
+  function parseBrowser(browser: unknown): BrowserSettings {
+    const dir = mkdtempSync(join(tmpdir(), 'mc-browser-settings-'));
+    const file = join(dir, 'settings.json');
+    writeFileSync(file, JSON.stringify({ browser }));
+    try {
+      return loadSettings(file).browser;
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }
+
+  it('round-trips a configured model', () => {
+    expect(parseBrowser({ stagehand: { env: 'LOCAL', model: 'anthropic/claude-sonnet-4-5' } }).stagehand?.model).toBe(
+      'anthropic/claude-sonnet-4-5',
+    );
+  });
+
+  it.each([['   '], [42], [null], [{}]])('drops malformed model %p rather than passing it to Stagehand', value => {
+    expect(parseBrowser({ stagehand: { env: 'LOCAL', model: value } }).stagehand?.model).toBeUndefined();
+  });
+});
+
 describe('createBrowserFromSettings — recording tools gating', () => {
   const RECORDING_TOOL_NAMES = ['browser_record', 'browser_record_caption'] as const;
 
