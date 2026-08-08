@@ -1676,7 +1676,9 @@ export function optimizeObservationsForContext(observations: string): string {
   optimized = optimized.replace(/🟢\s*/g, '');
 
   // Remove semantic tags like [label, label] but keep collapsed markers like [72 items collapsed - ID: b1fa]
-  optimized = optimized.replace(/\[(?![\d\s]*items collapsed)[^\]]+\]/g, '');
+  // and markdown link text like [label](url) — the trailing `(?!\()` lookahead keeps the label so the
+  // link survives intact instead of collapsing to a bare, unlabelled URL.
+  optimized = optimized.replace(/\[(?![\d\s]*items collapsed)[^\]]+\](?!\()/g, '');
 
   // Remove arrow indicators
   optimized = optimized.replace(/\s*->\s*/g, ' ');
