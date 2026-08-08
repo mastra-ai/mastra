@@ -1,8 +1,8 @@
 import { globSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { loadConfigFromFile } from 'vite';
-import type { TestProjectConfiguration, UserWorkspaceConfig } from 'vitest/config';
-import { defineConfig } from 'vitest/config';
+import type { TestProjectConfiguration, UserWorkspaceConfig } from '@internal/lint/vitest';
+import { defineConfig } from '@internal/lint/vitest';
 
 // Directories to exclude from project discovery
 const EXCLUDED_DIRS = new Set([
