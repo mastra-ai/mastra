@@ -1330,3 +1330,81 @@ describe('createRun storage existence read (issue #19015)', () => {
     expect(readSpy).toHaveBeenCalled();
   });
 });
+
+describe('concurrent stream close', () => {
+  const buildSuspendingWorkflow = (id: string) => {
+    const suspendingStep = createStep({
+      id: 'suspending-step',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ result: z.string() }),
+      execute: async ({ suspend }) => {
+        await suspend({ waiting: true });
+        return { result: 'resumed' };
+      },
+    });
+    const finalStep = createStep({
+      id: 'final-step',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ result: z.string() }),
+      execute: async () => ({ result: 'done' }),
+    });
+
+    const workflow = createWorkflow({
+      id,
+      inputSchema: z.object({}),
+      outputSchema: z.object({ result: z.string() }),
+      steps: [suspendingStep, finalStep],
+    })
+      .then(suspendingStep)
+      .then(finalStep)
+      .commit();
+
+    new Mastra({ logger: false, storage: new MockStore(), workflows: { [id]: workflow } });
+
+    return workflow;
+  };
+
+  // An output left open never emits `workflow-finish` and never reaches EOF, so it can
+  // only be detected by bounding the read — a plain drain would hang the whole suite.
+  const drainWithin = async (stream: ReadableStream<StreamEvent>, ms: number) => {
+    const reader = stream.getReader();
+    const types: (string | undefined)[] = [];
+
+    for (;;) {
+      const result = await Promise.race([
+        reader.read(),
+        new Promise<'still-open'>(resolve => setTimeout(() => resolve('still-open'), ms)),
+      ]);
+
+      if (result === 'still-open') return { closed: false, types };
+      if (result.done) return { closed: true, types };
+      types.push((result.value as { type?: string })?.type);
+    }
+  };
+
+  it('closes both outputs when two resumeStream calls race for the same run', async () => {
+    const workflow = buildSuspendingWorkflow('concurrent-resume-close-wf');
+
+    const run = await workflow.createRun({ runId: 'concurrent-resume-close' });
+    await run.start({ inputData: {} });
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    // `createRun` returns the run cached under this runId, so both resumes go through
+    // the same instance — which is what makes them share per-stream state.
+    const first = run.resumeStream({ step: 'suspending-step', resumeData: {} });
+    const second = run.resumeStream({ step: 'suspending-step', resumeData: {} });
+    expect(first).not.toBe(second);
+
+    const [firstDrain, secondDrain] = await Promise.all([
+      drainWithin(first.fullStream, 2000),
+      drainWithin(second.fullStream, 2000),
+    ]);
+
+    // Before the fix, the second call overwrote the first's close action, so the run
+    // completed while the first output stayed open forever with no `workflow-finish`.
+    expect(firstDrain.closed).toBe(true);
+    expect(secondDrain.closed).toBe(true);
+    expect(firstDrain.types).toContain('workflow-finish');
+    expect(secondDrain.types).toContain('workflow-finish');
+  }, 20000);
+});

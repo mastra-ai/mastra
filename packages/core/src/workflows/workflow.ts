@@ -3824,7 +3824,10 @@ export class Run<
           }
         });
 
-        self.closeStreamAction = async () => {
+        // Closed through this local reference rather than `self.closeStreamAction`, for
+        // the same reason as in `resumeStream`: a later resume or time-travel call for
+        // the same run overwrites the field.
+        const closeThisStream = async () => {
           unwatch();
 
           try {
@@ -3836,6 +3839,7 @@ export class Run<
             self.mastra?.getLogger()?.error('Error closing stream:', err);
           }
         };
+        self.closeStreamAction = closeThisStream;
 
         const executionResultsPromise = self._start({
           inputData,
@@ -3867,13 +3871,13 @@ export class Run<
           if (closeOnSuspend) {
             // always close stream, even if the workflow is suspended
             // this will trigger a finish event with workflow status set to suspended
-            self.closeStreamAction?.().catch(() => {});
+            closeThisStream().catch(() => {});
           } else if (executionResults.status !== 'suspended') {
-            self.closeStreamAction?.().catch(() => {});
+            closeThisStream().catch(() => {});
           }
         } catch (err) {
           self.streamOutput?.rejectResults(err as unknown as Error);
-          self.closeStreamAction?.().catch(() => {});
+          closeThisStream().catch(() => {});
         }
       },
     });
@@ -3954,7 +3958,12 @@ export class Run<
           }
         });
 
-        self.closeStreamAction = async () => {
+        // Closing goes through this local reference, not through
+        // `self.closeStreamAction`: a concurrent resume or time-travel call for the same
+        // run overwrites that field, and closing through it would close the other call's
+        // stream while leaving this one open forever. The field is still assigned so
+        // external consumers keep seeing the most recent stream's close action.
+        const closeThisStream = async () => {
           unwatch();
 
           try {
@@ -3966,6 +3975,7 @@ export class Run<
             self.mastra?.getLogger()?.error('Error closing stream:', err);
           }
         };
+        self.closeStreamAction = closeThisStream;
         const executionResultsPromise = self._resume({
           resumeData,
           step,
@@ -3991,10 +4001,10 @@ export class Run<
             self.streamOutput.updateResults(executionResults);
           }
 
-          self.closeStreamAction?.().catch(() => {});
+          closeThisStream().catch(() => {});
         } catch (err) {
           self.streamOutput?.rejectResults(err as unknown as Error);
-          self.closeStreamAction?.().catch(() => {});
+          closeThisStream().catch(() => {});
         }
       },
     });
@@ -4736,7 +4746,10 @@ export class Run<
           } as WorkflowStreamEvent);
         });
 
-        self.closeStreamAction = async () => {
+        // Closed through this local reference rather than `self.closeStreamAction`, for
+        // the same reason as in `resumeStream`: a concurrent call for the same run
+        // overwrites the field.
+        const closeThisStream = async () => {
           unwatch();
 
           try {
@@ -4748,6 +4761,7 @@ export class Run<
             self.mastra?.getLogger()?.error('Error closing stream:', err);
           }
         };
+        self.closeStreamAction = closeThisStream;
         const executionResultsPromise = self._timeTravel({
           inputData,
           step,
@@ -4775,10 +4789,10 @@ export class Run<
             self.streamOutput.updateResults(executionResults);
           }
 
-          self.closeStreamAction?.().catch(() => {});
+          closeThisStream().catch(() => {});
         } catch (err) {
           self.streamOutput?.rejectResults(err as unknown as Error);
-          self.closeStreamAction?.().catch(() => {});
+          closeThisStream().catch(() => {});
         }
       },
     });
