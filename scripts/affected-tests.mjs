@@ -199,9 +199,10 @@ function getGitChangedFiles() {
     // No main branch or merge-base fails
   }
 
-  // Filter to source files only (under src/, with code extensions)
+  // Filter to source files only (under src/, with code extensions) or package.json files
   return [...files].filter(f => {
     if (f.includes('__fixtures__') || f.includes('/fixtures/') || f.includes('node_modules')) return false;
+    if (f.endsWith('package.json')) return true;
     if (!/\.(ts|tsx|js|jsx|mjs|cjs)$/.test(f)) return false;
     // Must be a source-like file (not a test file itself, not a config)
     if (f.includes('/src/') || f.match(/^[^/]+\/src\//)) return true;
@@ -239,14 +240,58 @@ if (flags.git) {
 }
 
 // Resolve to relative paths (relative to ROOT, matching madge's baseDir)
-const changedRelative = changedFiles.map(f => relative(ROOT, resolve(ROOT, f)));
+const rawChangedRelative = changedFiles.map(f => relative(ROOT, resolve(ROOT, f)));
 
 // Verify files exist
-for (const rel of changedRelative) {
+for (const rel of rawChangedRelative) {
   if (!existsSync(resolve(ROOT, rel))) {
     console.error(`Warning: file does not exist: ${rel}`);
   }
 }
+
+// Expand package.json files to their package source files and unit test files
+const forcedPackageTestFiles = new Set();
+const changedRelativeSet = new Set();
+
+for (const rel of rawChangedRelative) {
+  const normalized = rel.replaceAll('\\', '/');
+  if (normalized.endsWith('package.json') && !normalized.includes('node_modules') && !normalized.includes('fixtures')) {
+    const pkgDir = dirname(normalized);
+    const absSrcDir = join(ROOT, pkgDir, 'src');
+    if (existsSync(absSrcDir)) {
+      try {
+        const gitSrc = execSync(
+          `git ls-files '${pkgDir}/src/*.ts' '${pkgDir}/src/*.tsx' '${pkgDir}/src/**/*.ts' '${pkgDir}/src/**/*.tsx'`,
+          { cwd: ROOT, encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] }
+        );
+        for (const line of gitSrc.trim().split('\n')) {
+          if (line && !line.includes('__fixtures__') && !line.includes('/fixtures/')) {
+            changedRelativeSet.add(line);
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
+    try {
+      const gitTests = execSync(
+        `git ls-files '${pkgDir}/*.test.ts' '${pkgDir}/**/*.test.ts' '${pkgDir}/*.spec.ts' '${pkgDir}/**/*.spec.ts'`,
+        { cwd: ROOT, encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] }
+      );
+      for (const line of gitTests.trim().split('\n')) {
+        if (line && !line.includes('__fixtures__') && !line.includes('/fixtures/') && !line.includes('node_modules')) {
+          forcedPackageTestFiles.add(line);
+        }
+      }
+    } catch {
+      // ignore
+    }
+  } else {
+    changedRelativeSet.add(normalized);
+  }
+}
+
+const changedRelative = [...changedRelativeSet];
 
 if (!flags.json) {
   console.error('Discovering test files...');
@@ -812,6 +857,9 @@ if (flags.includeTypeOnlyTypeTests && flags.ignoreTypeOnlySymbols) {
 }
 
 const selectedResult = flags.fileLevel ? fileLevelResult : symbolAwareResult;
+for (const testFile of forcedPackageTestFiles) {
+  selectedResult.affected.add(testFile);
+}
 
 // ---------------------------------------------------------------------------
 // Output

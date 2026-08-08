@@ -113,15 +113,15 @@ jobs:
             "$BASE_SHA...$HEAD_SHA" \
             > /tmp/changed-files.txt
 
-          CHANGED=$(grep -E '/src/.*\.(ts|tsx)$' /tmp/changed-files.txt \
-            | grep -vE '__fixtures__|/fixtures/' \
+          CHANGED=$(grep -E '(/src/.*\.(ts|tsx)$|/package\.json$|^package\.json$)' /tmp/changed-files.txt \
+            | grep -vE '__fixtures__|/fixtures/|node_modules' \
             || true)
 
           if [ -z "$CHANGED" ]; then
-            echo "No source file changes found — skipping unit and E2E test selection."
+            echo "No source or package file changes found — skipping unit and E2E test selection."
             printf '{"affectedTests":[],"count":0,"testFiles":1}\n' > /tmp/affected.json
           else
-            echo "Changed source files:"
+            echo "Changed source and package files:"
             echo "$CHANGED"
 
             # Run affected-tests tool
@@ -138,7 +138,13 @@ jobs:
           const count = data.count || 0;
           const total = data.testFiles || 1;
           const ratio = count / total;
-          const hasChangedSource = changedFiles.some(file => /\/src\/.*\.(ts|tsx)$/.test(file) && !/__fixtures__|\/fixtures\//.test(file));
+          const hasChangedPackageJson = changedFiles.some(file =>
+            file.endsWith('package.json') &&
+            !file.includes('node_modules') &&
+            !file.includes('__fixtures__') &&
+            !file.includes('/fixtures/')
+          );
+          const hasChangedSource = changedFiles.some(file => /\/src\/.*\.(ts|tsx)$/.test(file) && !/__fixtures__|\/fixtures\//.test(file)) || hasChangedPackageJson;
           const runFull = hasChangedSource && ratio > 0.5;
 
           const output = (line) => fs.appendFileSync(process.env.GITHUB_OUTPUT, line);
