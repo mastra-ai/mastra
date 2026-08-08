@@ -2,4 +2,11 @@
 '@mastra/core': minor
 ---
 
-Added catalog discovery mode to ToolSearchProcessor so agents can see every tool id and description while loading schemas on demand.
+Added `mode: 'catalog'` to `ToolSearchProcessor`. Agents can see available tool IDs and short descriptions while full schemas load only for selected tools.
+
+```ts
+const toolSearch = new ToolSearchProcessor({
+  tools: allTools,
+  mode: 'catalog',
+})
+```

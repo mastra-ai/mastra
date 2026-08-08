@@ -184,7 +184,7 @@ Returns: `number`: the count of threads cleaned up.
 
 ## Request-aware filtering
 
-Use `filter` to apply request-specific policy to runtime-defined tools. The hook receives the resolved tool ID as `toolName`, the tool, request context, and phase. `toolName` is the ID returned by `search_tools`, which may differ from the key used in the `tools` object.
+Use `filter` to apply request-specific policy to runtime-defined tools. The hook receives the resolved tool ID as `toolName`, the tool, request context, and phase. `toolName` is the ID returned in search results or listed in the catalog, which may differ from the key used in the `tools` object.
 
 ```typescript
 import { ToolSearchProcessor } from '@mastra/core/processors'

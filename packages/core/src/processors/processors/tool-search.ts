@@ -222,6 +222,9 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
   private findToolForDynamicName(toolName: string): Tool<any, any> | undefined {
     const toolByKey = this.allTools[toolName];
     const toolById = this.findToolById(toolName);
+    if (this.mode === 'catalog') {
+      return toolById;
+    }
     return this.filter ? (toolById ?? toolByKey) : (toolByKey ?? toolById);
   }
 

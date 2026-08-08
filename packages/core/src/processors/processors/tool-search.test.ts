@@ -159,6 +159,26 @@ describe('ToolSearchProcessor', () => {
       expect(loadResult.message).toContain('Did you mean: weather_forecast?');
       expect(loadResult.message).not.toContain('Did you mean: weather?');
     });
+
+    it('should resolve catalog selections by tool id when a record key collides', async () => {
+      const catalogTool = createMockTool('catalog_tool', 'The tool selected from the catalog');
+      const collidingKeyTool = createMockTool('different_tool', 'A different tool stored under a colliding key');
+      const processor = new ToolSearchProcessor({
+        mode: 'catalog',
+        tools: {
+          catalog_tool: collidingKeyTool,
+          actual_catalog_tool: catalogTool,
+        },
+      });
+
+      const firstStep = await processor.processInputStep(createMockArgs('catalog-collision-thread'));
+      const loadResult = await firstStep.tools?.load_tool!.execute?.({ toolName: 'catalog_tool' }, undefined);
+      const secondStep = await processor.processInputStep(createMockArgs('catalog-collision-thread'));
+
+      expect(loadResult.success).toBe(true);
+      expect(secondStep.tools?.catalog_tool).toBe(catalogTool);
+      expect(secondStep.tools?.catalog_tool).not.toBe(collidingKeyTool);
+    });
   });
 
   describe('BM25 search functionality', () => {
