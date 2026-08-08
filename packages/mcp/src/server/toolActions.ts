@@ -1,6 +1,6 @@
 import type { ToolsInput } from '@mastra/core/agent';
 import type { IMastraLogger } from '@mastra/core/logger';
-import type { Server } from '@modelcontextprotocol/server';
+import type { Server, ServerNotifier } from '@modelcontextprotocol/server';
 import { broadcastNotification } from './notificationBroadcast';
 
 interface ServerToolActionsDependencies {
@@ -8,6 +8,12 @@ interface ServerToolActionsDependencies {
   getSdkServers: () => Server[];
   addTools: (tools: ToolsInput) => void;
   removeTools: (toolIds: string[]) => string[];
+  /**
+   * Publish-side facade of the 2026-07-28 handler's subscription bus, when the
+   * server is pinned to that revision and the handler exists. Modern clients
+   * receive change events via `subscriptions/listen` instead of server push.
+   */
+  getModernEraNotifier?: () => ServerNotifier | undefined;
 }
 
 /**
@@ -24,6 +30,7 @@ export class ServerToolActions {
   private readonly getSdkServers: () => Server[];
   private readonly addTools: (tools: ToolsInput) => void;
   private readonly removeTools: (toolIds: string[]) => string[];
+  private readonly getModernEraNotifier?: () => ServerNotifier | undefined;
 
   /**
    * @internal
@@ -33,6 +40,7 @@ export class ServerToolActions {
     this.getSdkServers = dependencies.getSdkServers;
     this.addTools = dependencies.addTools;
     this.removeTools = dependencies.removeTools;
+    this.getModernEraNotifier = dependencies.getModernEraNotifier;
   }
 
   /**
@@ -95,6 +103,8 @@ export class ServerToolActions {
    */
   public async notifyListChanged(): Promise<void> {
     this.getLogger().info('Tool list changed. Sending notification.');
+    // Modern (2026-07-28) clients subscribe via subscriptions/listen; no-op when unset.
+    this.getModernEraNotifier?.()?.toolsChanged();
     await broadcastNotification({
       servers: this.getSdkServers(),
       send: server => server.sendToolListChanged(),
