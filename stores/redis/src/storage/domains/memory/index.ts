@@ -449,7 +449,17 @@ export class StoreMemoryRedis extends MemoryStorage {
     return message.threadId || null;
   }
 
-  private async getIncludedMessages(include: StorageListMessagesInput['include']): Promise<MastraDBMessage[]> {
+  /**
+   * Fetches the messages named by `include` together with their surrounding context.
+   *
+   * @param include - Message ids to pin, each with an optional before/after window.
+   * @param resourceId - When set, drops any pinned or context message owned by another
+   * resource so an id from another resource returns nothing.
+   */
+  private async getIncludedMessages(
+    include: StorageListMessagesInput['include'],
+    resourceId?: string,
+  ): Promise<MastraDBMessage[]> {
     if (!include?.length) {
       return [];
     }
@@ -497,7 +507,10 @@ export class StoreMemoryRedis extends MemoryStorage {
     const keysToFetch = Array.from(messageIds).map(id => getMessageKey(messageIdToThreadIds[id]!, id));
     const results = await this.client.mGet(keysToFetch);
 
-    return results.filter((data): data is string => data !== null).map(data => JSON.parse(data) as MastraDBMessage);
+    const includedMessages = results
+      .filter((data): data is string => data !== null)
+      .map(data => JSON.parse(data) as MastraDBMessage);
+    return resourceId ? includedMessages.filter(message => message.resourceId === resourceId) : includedMessages;
   }
 
   private parseStoredMessage(storedMessage: MastraDBMessage & { _index?: number }): MastraDBMessage {
@@ -655,7 +668,7 @@ export class StoreMemoryRedis extends MemoryStorage {
 
       let includedMessages: MastraDBMessage[] = [];
       if (include && include.length > 0) {
-        const included = (await this.getIncludedMessages(include)) as MastraDBMessage[];
+        const included = (await this.getIncludedMessages(include, resourceId)) as MastraDBMessage[];
         includedMessages = included.map(this.parseStoredMessage);
       }
 

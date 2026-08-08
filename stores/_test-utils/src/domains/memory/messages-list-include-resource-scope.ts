@@ -10,8 +10,8 @@ import { createSampleMessageV2, createSampleThread } from './data';
  * from the target message itself. Without a resource predicate the store returns
  * the target message and its neighbours even when they belong to another resource.
  *
- * Call this suite from a store package once that store scopes its include lookup by
- * `resourceId`. Stores that still leak are tracked in issue #20604.
+ * Call this suite from a store package to verify that its include lookup is scoped by
+ * `resourceId`.
  */
 export function createMessagesListIncludeResourceScopeTest({
   getMemoryStorage,
