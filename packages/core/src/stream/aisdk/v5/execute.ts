@@ -11,8 +11,12 @@ import type { LoopOptions } from '../../../loop/types';
 import { DEFAULT_MAX_RETRY_AFTER_MS, getRetryAfterMs, waitDelay } from '../../../utils/retry-after';
 import { getResponseFormat } from '../../base/schema';
 import type { LanguageModelV2StreamResult, OnResult } from '../../types';
-import { prepareToolsAndToolChoice } from './compat';
-import type { ModelSpecVersion } from './compat';
+import {
+  injectAutoResumeToolSchemas,
+  prepareToolsAndToolChoice,
+  type ModelSpecVersion,
+  type SuspendedToolDescriptor,
+} from './compat';
 import { AISDKV5InputStream } from './input';
 
 type JsonPromptInjection = StructuredOutputOptions<unknown>['jsonPromptInjection'];
@@ -95,6 +99,7 @@ type ExecutionProps<OUTPUT = undefined> = {
   tools?: ToolSet;
   toolChoice?: ToolChoice<ToolSet>;
   activeTools?: string[];
+  suspendedTools?: ReadonlyArray<SuspendedToolDescriptor>;
   options?: {
     abortSignal?: AbortSignal;
   };
@@ -120,6 +125,7 @@ export function execute<OUTPUT = undefined>({
   tools,
   toolChoice,
   activeTools,
+  suspendedTools,
   options,
   onResult,
   includeRawChunks,
@@ -140,13 +146,27 @@ export function execute<OUTPUT = undefined>({
   // V3 (AI SDK v6) and V4 (AI SDK v7) models need 'provider' type, V2 models need 'provider-defined'
   const targetVersion: ModelSpecVersion =
     model.specificationVersion === 'v4' ? 'v4' : model.specificationVersion === 'v3' ? 'v3' : 'v2';
+  const supportsStructuredOutputs = (model as unknown as { supportsStructuredOutputs?: unknown })
+    .supportsStructuredOutputs;
 
-  const toolsAndToolChoice = prepareToolsAndToolChoice({
+  const preparedToolsAndToolChoice = prepareToolsAndToolChoice({
     tools,
     toolChoice,
     activeTools,
     targetVersion,
   });
+  const toolsAndToolChoice = {
+    ...preparedToolsAndToolChoice,
+    tools: injectAutoResumeToolSchemas({
+      tools: preparedToolsAndToolChoice.tools,
+      suspendedTools,
+      model: {
+        modelId: model.modelId,
+        provider: model.provider,
+        supportsStructuredOutputs: typeof supportsStructuredOutputs === 'boolean' ? supportsStructuredOutputs : false,
+      },
+    }),
+  };
 
   const structuredOutputMode = structuredOutput?.schema
     ? structuredOutput?.model
