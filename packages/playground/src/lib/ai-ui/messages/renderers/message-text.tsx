@@ -1,5 +1,5 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
-import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
+import { MarkdownRenderer, type MarkdownExternalLinkTarget } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { cn } from '@mastra/playground-ui/utils/cn';
@@ -12,6 +12,7 @@ import { TripwireNotice } from '../tripwire-notice';
 export interface MessageTextProps {
   text: string;
   metadata: MessageMetadata | undefined;
+  externalLinkTarget?: MarkdownExternalLinkTarget;
 }
 
 /**
@@ -19,7 +20,7 @@ export interface MessageTextProps {
  * error/completion handling previously in `ErrorAwareText` (which read part
  * metadata).
  */
-export const MessageText = ({ text, metadata }: MessageTextProps) => {
+export const MessageText = ({ text, metadata, externalLinkTarget }: MessageTextProps) => {
   const [collapsedCompletionCheck, setCollapsedCompletionCheck] = useState(false);
 
   if (metadata?.status === 'tripwire') {
@@ -54,7 +55,7 @@ export const MessageText = ({ text, metadata }: MessageTextProps) => {
         </button>
         {!collapsedCompletionCheck && (
           <Notice variant="info" title={taskCompleteResult?.passed ? 'Complete' : 'Not Complete'}>
-            <MarkdownRenderer>{text}</MarkdownRenderer>
+            <MarkdownRenderer externalLinkTarget={externalLinkTarget}>{text}</MarkdownRenderer>
           </Notice>
         )}
       </div>
@@ -77,5 +78,5 @@ export const MessageText = ({ text, metadata }: MessageTextProps) => {
     );
   }
 
-  return <MarkdownRenderer>{text}</MarkdownRenderer>;
+  return <MarkdownRenderer externalLinkTarget={externalLinkTarget}>{text}</MarkdownRenderer>;
 };
