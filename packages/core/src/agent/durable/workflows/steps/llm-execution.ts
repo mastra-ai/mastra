@@ -41,6 +41,7 @@ import { createStep } from '../../../../workflows/workflow';
 import { MessageList } from '../../../message-list';
 import { TripWire } from '../../../trip-wire';
 import { isSupportedLanguageModel } from '../../../utils';
+import { ensureRemoteAbortListener } from '../../abort-transport';
 import { DurableStepIds } from '../../constants';
 import { endRunSpansWithError, globalRunRegistry } from '../../run-registry';
 import { emitChunkEvent, emitStepStartEvent } from '../../stream-adapter';
@@ -187,6 +188,23 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
         llmRequestInputProcessors: resolvedLlmRequestInputProcessors,
         outputProcessors: resolvedOutputProcessors,
       } = resolved;
+
+      // 1a-bis. Become responsive to abort requests from other processes. The
+      // caller that owns `abort()` may live on a different pod entirely, so
+      // without this the run has no way to hear it. Must happen before the
+      // abort check below so a request that arrives mid-step is honoured.
+      // A transport failure here costs remote abortability, not the run itself,
+      // so it is logged rather than thrown.
+      if (pubsub) {
+        try {
+          await ensureRemoteAbortListener(pubsub, runId);
+        } catch (error) {
+          logger?.warn?.('Failed to subscribe to cross-process abort requests', {
+            runId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
 
       // 1b. Check for abort signal before doing any work. If the signal is
       // already aborted (e.g. pre-aborted before the loop starts), return a
