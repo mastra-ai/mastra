@@ -1879,15 +1879,6 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
   }
 
   /**
-   * Drops all run-lifetime accumulators. Called at goal-evaluation boundaries,
-   * where every completed step has already been persisted to the MessageList.
-   * After truncation, run-end results (`text`, `steps`, `toolCalls`, …,
-   * `getFullOutput()`) cover only the segment after the last evaluation —
-   * for goal runs that segment is the completion answer. Token usage
-   * (`#usageCount`), in-flight per-step state (`#bufferedByStep`), structured
-   * output, and the MessageList are intentionally untouched.
-   */
-  /**
    * Discard the structured object produced by an attempt that a processor
    * rejected with `retry: true`, so the retried attempt can supply its own.
    *
@@ -1916,6 +1907,15 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     }
   }
 
+  /**
+   * Drops all run-lifetime accumulators. Called at goal-evaluation boundaries,
+   * where every completed step has already been persisted to the MessageList.
+   * After truncation, run-end results (`text`, `steps`, `toolCalls`, …,
+   * `getFullOutput()`) cover only the segment after the last evaluation —
+   * for goal runs that segment is the completion answer. Token usage
+   * (`#usageCount`), in-flight per-step state (`#bufferedByStep`), structured
+   * output, and the MessageList are intentionally untouched.
+   */
   #truncateRunBuffers() {
     this.#bufferedChunks.length = 0;
     this.#bufferedSteps.length = 0;
