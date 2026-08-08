@@ -3661,11 +3661,11 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
-  "GET /stored/workflows/:storedWorkflowId": {
+  "GET /stored/workflows/:dynamicWorkflowId": {
     "method": "GET",
-    "path": "/stored/workflows/:storedWorkflowId",
+    "path": "/stored/workflows/:dynamicWorkflowId",
     "pathParams": [
-      "storedWorkflowId"
+      "dynamicWorkflowId"
     ],
     "queryParams": [],
     "bodyParams": [],
@@ -3675,11 +3675,11 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
-  "DELETE /stored/workflows/:storedWorkflowId": {
+  "DELETE /stored/workflows/:dynamicWorkflowId": {
     "method": "DELETE",
-    "path": "/stored/workflows/:storedWorkflowId",
+    "path": "/stored/workflows/:dynamicWorkflowId",
     "pathParams": [
-      "storedWorkflowId"
+      "dynamicWorkflowId"
     ],
     "queryParams": [],
     "bodyParams": [],
