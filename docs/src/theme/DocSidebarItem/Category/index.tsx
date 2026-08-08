@@ -223,6 +223,26 @@ function DocSidebarItemCategoryCollapsible({
     }
   }
 
+  const categoryLink = (
+    <Link
+      className={clsx(styles.categoryLink, 'menu__link', {
+        'menu__link--sublist': collapsible && !isContextualSidebarCategory,
+        'menu__link--sublist-caret': !href && collapsible,
+        'menu__link--active': isActive,
+      })}
+      onClick={handleItemClick}
+      aria-current={isCurrentPage ? 'page' : undefined}
+      role={collapsible && !href ? 'button' : undefined}
+      aria-expanded={collapsible && !href ? !collapsed : undefined}
+      href={isContextualSidebarCategory ? href : collapsible ? (hrefWithSSRFallback ?? '#') : hrefWithSSRFallback}
+      {...props}
+    >
+      <span title={label} className={styles.categoryLinkLabel}>
+        {label} {badgeType && <SidebarBadge type={badgeType} />}
+      </span>
+    </Link>
+  )
+
   return (
     <li
       className={clsx(
@@ -236,39 +256,27 @@ function DocSidebarItemCategoryCollapsible({
       )}
       data-contextual-sidebar={isContextualSidebarCategory ? 'true' : undefined}
     >
-      <div
-        className={clsx('menu__list-item-collapsible', {
-          'menu__list-item-collapsible--active': isCurrentPage,
-        })}
-      >
-        <Link
-          className={clsx(styles.categoryLink, 'menu__link', {
-            'menu__link--sublist': collapsible && !isContextualSidebarCategory,
-            'menu__link--sublist-caret': !href && collapsible,
-            'menu__link--active': isActive,
+      {isContextualSidebarCategory ? (
+        categoryLink
+      ) : (
+        <div
+          className={clsx('menu__list-item-collapsible', {
+            'menu__list-item-collapsible--active': isCurrentPage,
           })}
-          onClick={handleItemClick}
-          aria-current={isCurrentPage ? 'page' : undefined}
-          role={collapsible && !href ? 'button' : undefined}
-          aria-expanded={collapsible && !href ? !collapsed : undefined}
-          href={isContextualSidebarCategory ? href : collapsible ? (hrefWithSSRFallback ?? '#') : hrefWithSSRFallback}
-          {...props}
         >
-          <span title={label} className={styles.categoryLinkLabel}>
-            {label} {badgeType && <SidebarBadge type={badgeType} />}
-          </span>
-        </Link>
-        {href && collapsible && !isContextualSidebarCategory && (
-          <CollapseButton
-            collapsed={collapsed}
-            categoryLabel={label}
-            onClick={e => {
-              e.preventDefault()
-              updateCollapsed()
-            }}
-          />
-        )}
-      </div>
+          {categoryLink}
+          {href && collapsible && (
+            <CollapseButton
+              collapsed={collapsed}
+              categoryLabel={label}
+              onClick={e => {
+                e.preventDefault()
+                updateCollapsed()
+              }}
+            />
+          )}
+        </div>
+      )}
 
       {!isContextualSidebarCategory && (
         <Collapsible lazy as="ul" className="menu__list" collapsed={collapsed}>

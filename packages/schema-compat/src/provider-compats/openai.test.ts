@@ -27,6 +27,22 @@ describe('OpenAISchemaCompatLayer', () => {
   createSuite(compat);
   createOpenAISuite(compat);
 
+  // OpenAI strict mode rejects `propertyNames`, which z.record() emits for its key type.
+  // See https://github.com/mastra-ai/mastra/issues/19273
+  describe('z.record() under strict mode', () => {
+    it('drops propertyNames from a top-level record', () => {
+      const json = compat.processToJSONSchema(z.record(z.string(), z.string()));
+
+      expect(json).not.toHaveProperty('propertyNames');
+    });
+
+    it('drops propertyNames from a nested record', () => {
+      const json = compat.processToJSONSchema(z.object({ flags: z.record(z.string(), z.string()) }));
+
+      expect(json.properties!['flags']).not.toHaveProperty('propertyNames');
+    });
+  });
+
   describe('shouldApply', () => {
     it('should apply for OpenAI models without structured outputs', () => {
       const modelInfo: ModelInformation = {

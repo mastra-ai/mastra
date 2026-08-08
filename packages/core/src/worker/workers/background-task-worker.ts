@@ -56,6 +56,10 @@ export class BackgroundTaskWorker extends MastraWorker {
       return;
     }
 
+    this.#createOwnedManager(deps);
+  }
+
+  #createOwnedManager(deps: WorkerDeps): void {
     this.#manager = new BackgroundTaskManager({
       enabled: true,
       mode: 'worker',
@@ -100,15 +104,25 @@ export class BackgroundTaskWorker extends MastraWorker {
 
   async start(): Promise<void> {
     if (this.#running) return;
-    if (!this.#manager || !this.deps) {
+    if (!this.deps) {
       throw new Error('BackgroundTaskWorker: call init() before start()');
+    }
+    // An owned manager has a terminal shutdown lifecycle. Recreate it on a
+    // direct stop → start cycle instead of attempting to reinitialize a
+    // manager whose subscriptions and executor registry were released.
+    if (!this.#manager) {
+      this.#createOwnedManager(this.deps);
+    }
+    const manager = this.#manager;
+    if (!manager) {
+      throw new Error('BackgroundTaskWorker: failed to initialize background task manager');
     }
     // When sharing Mastra's manager, Mastra has already fired off init() in
     // its constructor as fire-and-forget. Don't re-await it here — that would
     // surface init errors twice (the constructor's `.catch` already reports
     // them) and serialize startWorkers() behind the manager's full bootstrap.
     if (this.#ownsManager) {
-      await this.#manager.init(this.deps.pubsub);
+      await manager.init(this.deps.pubsub);
     }
     this.#running = true;
   }
@@ -118,7 +132,12 @@ export class BackgroundTaskWorker extends MastraWorker {
     // Only tear down the manager if this worker owns it. When sharing Mastra's
     // manager, Mastra's stopWorkers() / shutdown is responsible.
     if (this.#manager && this.#ownsManager) {
-      await this.#manager.shutdown();
+      try {
+        await this.#manager.shutdown();
+      } finally {
+        this.#manager = undefined;
+        this.#ownsManager = false;
+      }
     }
     this.#running = false;
   }

@@ -355,6 +355,8 @@ export interface DurableToolCallInput {
 export interface DurableToolCallOutput extends DurableToolCallInput {
   /** Result from tool execution */
   result?: unknown;
+  /** Whether toModelOutput was evaluated before the result crossed the durable boundary */
+  modelOutputComputed?: boolean;
   /** Error if tool execution failed */
   error?: {
     name: string;

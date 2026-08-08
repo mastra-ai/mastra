@@ -285,9 +285,7 @@ export async function postFileAttachment(args: {
   const binary =
     typeof data === 'string' ? Buffer.from(data, 'base64') : data instanceof Uint8Array ? Buffer.from(data) : data;
   try {
-    await chatThread.post({ markdown: ' ', files: [{ data: binary, filename, mimeType }] } as Parameters<
-      Thread['post']
-    >[0]);
+    await chatThread.post({ markdown: ' ', files: [{ data: binary, filename, mimeType }] });
   } catch (e) {
     logger?.debug?.('[CHANNEL] Failed to post file attachment', { error: e, mimeType, filename });
   }

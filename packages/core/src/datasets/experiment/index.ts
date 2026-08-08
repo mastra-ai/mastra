@@ -746,7 +746,12 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
         experimentId,
         target: eventTarget,
         status,
-        outcome: status,
+        // Cancellation that lands while the final in-flight items are executing
+        // surfaces as per-item failures rather than a thrown AbortError, so the
+        // run resolves through this natural-completion path. The outcome must
+        // still report `cancelled` so callers can distinguish an externally
+        // requested stop from a genuine failure.
+        outcome: executionSignal?.aborted ? 'cancelled' : status,
         error: null,
         totalItems: items.length,
         succeededCount,

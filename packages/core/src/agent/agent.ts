@@ -61,13 +61,21 @@ import {
   summarizeNotifications,
 } from '../notifications/signals';
 import type { SendNotificationSignalInput } from '../notifications/types';
-import type { DefinitionSource, TracingProperties, ObservabilityContext, TracingPolicy } from '../observability';
+import type {
+  DefinitionSource,
+  TracingProperties,
+  ObservabilityContext,
+  TracingContext,
+  TracingPolicy,
+} from '../observability';
 import {
   EntityType,
   InternalSpans,
   SpanType,
+  executeWithContext,
   getOrCreateSpan,
   createObservabilityContext,
+  resolveCurrentSpan,
   resolveObservabilityContext,
 } from '../observability';
 import type {
@@ -88,7 +96,7 @@ import type { InferStandardSchemaOutput } from '../schema';
 import { toStandardSchema, standardSchemaToJSONSchema } from '../schema';
 import type { SignalProvider } from '../signals/signal-provider';
 import { resolveAgentSkills, mergeWorkspaceSkills } from '../skills/agent-skills-resolver';
-import type { AgentSkillsInput, SkillInput } from '../skills/types';
+import type { AgentSkillsInput, AgentSkillsResolver, SkillInput } from '../skills/types';
 
 import { InMemoryStore } from '../storage';
 import type { GoalObjectiveRecord } from '../storage/domains/thread-state/base';
@@ -110,6 +118,7 @@ import type {
 import type { DynamicArgument } from '../types';
 import { makeCoreTool, createMastraProxy, ensureToolProperties, deepMerge } from '../utils';
 import type { ToolOptions } from '../utils';
+import { slugify } from '../utils/slugify';
 import type { MastraVoice } from '../voice';
 import { DefaultVoice } from '../voice';
 import { createWorkflow } from '../workflows/create';
@@ -238,7 +247,12 @@ const createSubAgentInputSchema = () =>
       .describe(
         'Additional instructions to append to the agent instructions. Only provide if you have specific guidance beyond what the agent already knows. Leave empty in most cases.',
       ),
-    maxSteps: z.number().min(3).nullish().describe('Maximum number of execution steps for the sub-agent'),
+    maxSteps: z
+      .number()
+      .or(z.string().transform(Number))
+      .pipe(z.number().int().min(3))
+      .nullish()
+      .describe('Maximum number of execution steps for the sub-agent (integer, minimum 3)'),
     // using minimum of 3 to ensure if the agent has a tool call, the llm gets executed again after the tool call step, using the tool call result
     // to return a proper llm response
   });
@@ -267,7 +281,9 @@ type SubAgentToolSchemas = {
   outputSchema: StandardSchemaWithJSON<SubAgentToolOutput>;
 };
 
-type SubAgentToolInput = z.infer<ReturnType<typeof createSubAgentInputSchema>>;
+type SubAgentToolInput = Omit<z.infer<ReturnType<typeof createSubAgentInputSchema>>, 'maxSteps'> & {
+  maxSteps?: number | null;
+};
 type SubAgentToolOutput = z.infer<ReturnType<typeof createSubAgentOutputSchema>>;
 
 type ModelFallbacks = {
@@ -556,6 +572,8 @@ export class Agent<
   #memory?: DynamicArgument<MastraMemory, TRequestContext>;
   #skills?: AgentSkillsInput<TRequestContext>;
   #skillsFormat?: SkillFormat;
+  // Per-request memoization so one resolver call serves both context injection and tool creation.
+  #resolvedSkillsByRequest = new WeakMap<RequestContext<TRequestContext>, Promise<SkillInput[]>>();
   #workflows?: DynamicArgument<Record<string, AnyWorkflow>, TRequestContext>;
   #defaultGenerateOptionsLegacy: DynamicArgument<AgentGenerateOptions, TRequestContext>;
   #defaultStreamOptionsLegacy: DynamicArgument<AgentStreamOptions, TRequestContext>;
@@ -1282,6 +1300,7 @@ export class Agent<
   private async resolveSkills(
     requestContext?: RequestContext,
     workspaceOverride?: AnyWorkspace,
+    tracingContext?: TracingContext,
   ): Promise<WorkspaceSkills | undefined> {
     const rc = requestContext || new RequestContext();
 
@@ -1290,7 +1309,11 @@ export class Agent<
     if (this.#skills) {
       let resolvedInputs: SkillInput[];
       if (typeof this.#skills === 'function') {
-        resolvedInputs = await this.#skills({ requestContext: rc as RequestContext<TRequestContext> });
+        resolvedInputs = await this.#resolveDynamicSkills(
+          this.#skills,
+          rc as RequestContext<TRequestContext>,
+          tracingContext,
+        );
       } else {
         resolvedInputs = this.#skills;
       }
@@ -1310,6 +1333,44 @@ export class Agent<
     }
 
     return agentSkills || workspaceSkills;
+  }
+
+  /**
+   * Runs a dynamic skills resolver once per request, sharing the result with the
+   * other resolution sites. Rejections aren't cached so a later site can retry.
+   * @internal
+   */
+  #resolveDynamicSkills(
+    resolver: AgentSkillsResolver<TRequestContext>,
+    requestContext: RequestContext<TRequestContext>,
+    tracingContext?: TracingContext,
+  ): Promise<SkillInput[]> {
+    const pending = this.#resolvedSkillsByRequest.get(requestContext);
+    if (pending) return pending;
+
+    const parentSpan = tracingContext?.currentSpan ?? resolveCurrentSpan();
+    const skillsSpan = parentSpan?.createChildSpan({
+      type: SpanType.GENERIC,
+      name: 'resolve-skills',
+      metadata: { agentId: this.id },
+    });
+
+    const resolution = executeWithContext({
+      span: skillsSpan,
+      fn: async () => resolver({ requestContext, tracingContext: { currentSpan: skillsSpan } }),
+    })
+      .then(skills => {
+        skillsSpan?.end({ metadata: { skillCount: skills.length } });
+        return skills;
+      })
+      .catch(error => {
+        skillsSpan?.error({ error: error instanceof Error ? error : new Error(String(error)), endSpan: true });
+        this.#resolvedSkillsByRequest.delete(requestContext);
+        throw error;
+      });
+
+    this.#resolvedSkillsByRequest.set(requestContext, resolution);
+    return resolution;
   }
 
   /**
@@ -3821,7 +3882,11 @@ export class Agent<
     const workspace = await this.getWorkspace({ requestContext });
 
     // Resolve skills from agent-level config and/or workspace (pass workspace to avoid double resolution)
-    const skills = await this.resolveSkills(requestContext, workspace ?? undefined);
+    const skills = await this.resolveSkills(
+      requestContext,
+      workspace ?? undefined,
+      observabilityContext.tracingContext,
+    );
     if (!skills) {
       return convertedSkillTools;
     }
@@ -4639,7 +4704,7 @@ export class Agent<
       const outputSchema = createSubAgentOutputSchema();
 
       this.#subAgentToolSchemas = {
-        inputSchema: toStandardSchema(inputSchema),
+        inputSchema: toStandardSchema(inputSchema) as StandardSchemaWithJSON<SubAgentToolInput>,
         outputSchema: toStandardSchema(outputSchema),
       };
     }
@@ -4724,7 +4789,7 @@ export class Agent<
             const subAgentRequestContext: RequestContext = new RequestContext<unknown>(
               [...requestContext.entries()].filter(
                 ([key]) => key !== 'MastraMemory' && key !== MASTRA_THREAD_ID_KEY && key !== MASTRA_RESOURCE_ID_KEY,
-              ) as Iterable<readonly [string, unknown]>,
+              ),
             );
 
             // Build delegation start context
@@ -4751,7 +4816,6 @@ export class Agent<
 
             // Generate sub-agent thread and resource IDs early (before any rejection)
             // These are needed for both successful execution and rejection cases
-            const slugify = await import(`@sindresorhus/slugify`);
             const subAgentThreadId = inputData.threadId
               ? `${inputData.threadId}-${randomUUID()}`
               : context?.mastra?.generateId({
@@ -4767,7 +4831,7 @@ export class Agent<
                   idType: 'generic',
                   source: 'agent',
                   entityId: agentName,
-                }) || `${slugify.default(this.id)}-${agentName}`;
+                }) || `${slugify(this.id)}-${agentName}`;
 
             // Call onDelegationStart before resolving the sub-agent's runtime
             // config so mutations of the delegated run's context in the hook
@@ -5205,27 +5269,27 @@ export class Agent<
                     if (chunk.type.startsWith('data-')) {
                       // Write data chunks directly to original stream to bubble up
                       await context.writer.custom(chunk as any);
-                      if (chunk.type === 'data-tool-call-approval') {
-                        suspendedPayload = {};
-                        requireToolApproval = true;
-                      }
-
-                      if (chunk.type === 'data-tool-call-suspended') {
-                        suspendedPayload = chunk.data.suspendPayload;
-                        resumeSchema = chunk.data.resumeSchema;
-                      }
                     } else {
                       await context.writer.write(chunk);
-                      if (chunk.type === 'tool-call-approval') {
-                        suspendedPayload = {};
-                        requireToolApproval = true;
-                      }
-
-                      if (chunk.type === 'tool-call-suspended') {
-                        suspendedPayload = chunk.payload.suspendPayload;
-                        resumeSchema = chunk.payload.resumeSchema;
-                      }
                     }
+                  }
+
+                  if (chunk.type === 'data-tool-call-approval') {
+                    requireToolApproval = (chunk as any).data ?? true;
+                    suspendedPayload = {
+                      requireToolApproval: (chunk as any).data ?? {},
+                    };
+                  } else if (chunk.type === 'data-tool-call-suspended') {
+                    suspendedPayload = chunk.data.suspendPayload;
+                    resumeSchema = chunk.data.resumeSchema;
+                  } else if (chunk.type === 'tool-call-approval') {
+                    requireToolApproval = chunk.payload ?? true;
+                    suspendedPayload = {
+                      requireToolApproval: chunk.payload ?? {},
+                    };
+                  } else if (chunk.type === 'tool-call-suspended') {
+                    suspendedPayload = chunk.payload.suspendPayload;
+                    resumeSchema = chunk.payload.resumeSchema;
                   }
                 }
 
@@ -6173,6 +6237,7 @@ export class Agent<
     if (Object.keys(scorers || {}).length > 0) {
       for (const [_id, scorerObject] of Object.entries(scorers)) {
         runScorer({
+          mastra: this.#mastra ?? this.#ephemeralMastra,
           scorerId: scorerObject.scorer.id,
           scorerObject: scorerObject,
           runId,
@@ -6479,6 +6544,18 @@ export class Agent<
     );
   }
 
+  /**
+   * Ensures `toolCallId` is suspended in a snapshot for this run, and returns the
+   * snapshot that contains that suspension.
+   *
+   * Immediate auto-approvals (AgentController `allow` policy) can resume the next
+   * sequential tool call before the new suspended snapshot replaces the previous
+   * one. Polling only for `status === "suspended"` can therefore hand back a stale
+   * prior snapshot. Returning the matching snapshot keeps resume hydration aligned
+   * with the tool call being approved.
+   *
+   * @internal
+   */
   async #validateSuspendedToolCallTarget({
     snapshot,
     toolCallId,
@@ -6489,13 +6566,14 @@ export class Agent<
     toolCallId: string | undefined;
     runId: string;
     method: string;
-  }) {
-    if (toolCallId === undefined) return;
+  }): Promise<WorkflowRunState> {
+    if (toolCallId === undefined) return snapshot;
 
     const isTargetSuspended = (currentSnapshot: WorkflowRunState) =>
       this.#getSuspendedToolCalls(currentSnapshot).some(toolCall => toolCall.toolCallId === toolCallId);
 
-    let isSuspended = isTargetSuspended(snapshot);
+    let resumeSnapshot = snapshot;
+    let isSuspended = isTargetSuspended(resumeSnapshot);
     if (!isSuspended) {
       // A resume stream can expose the next suspension just before its snapshot is
       // persisted. Briefly poll after authorization so an immediate response to
@@ -6506,7 +6584,10 @@ export class Agent<
       while (!isSuspended && workflowsStore && Date.now() < deadline) {
         await new Promise(resolve => setTimeout(resolve, 25));
         const latestSnapshot = await workflowsStore.loadWorkflowSnapshot({ workflowName: 'agentic-loop', runId });
-        isSuspended = latestSnapshot ? isTargetSuspended(latestSnapshot) : false;
+        if (latestSnapshot && isTargetSuspended(latestSnapshot)) {
+          resumeSnapshot = latestSnapshot;
+          isSuspended = true;
+        }
       }
     }
 
@@ -6524,6 +6605,8 @@ export class Agent<
         },
       });
     }
+
+    return resumeSnapshot;
   }
 
   /**
@@ -8458,7 +8541,7 @@ export class Agent<
       snapshotMemoryInfo,
       actor,
     });
-    await this.#validateSuspendedToolCallTarget({
+    const resumeSnapshot = await this.#validateSuspendedToolCallTarget({
       snapshot: existingSnapshot,
       toolCallId: streamOptions?.toolCallId,
       runId,
@@ -8512,7 +8595,7 @@ export class Agent<
       messages: [],
       resumeContext: {
         resumeData,
-        snapshot: existingSnapshot,
+        snapshot: resumeSnapshot,
       },
       methodType: 'stream',
       // Use agent's maxProcessorRetries as default, allow options to override
@@ -8623,7 +8706,7 @@ export class Agent<
       snapshotMemoryInfo: this.#getSnapshotMemoryInfo(existingSnapshot),
       actor,
     });
-    await this.#validateSuspendedToolCallTarget({
+    const resumeSnapshot = await this.#validateSuspendedToolCallTarget({
       snapshot: existingSnapshot,
       toolCallId: options?.toolCallId,
       runId,
@@ -8670,7 +8753,7 @@ export class Agent<
       messages: [],
       resumeContext: {
         resumeData,
-        snapshot: existingSnapshot,
+        snapshot: resumeSnapshot,
       },
       methodType: 'generate',
       // Use agent's maxProcessorRetries as default, allow options to override
@@ -8765,10 +8848,35 @@ export class Agent<
       });
     }
 
-    const resumableRun = agentThreadStreamRuntime.getResumableThreadRun(
+    const pubsub = this.getPubSub();
+    const hasLocalRun = agentThreadStreamRuntime.hasThreadRun(runId, pubsub);
+    let resumableRun = agentThreadStreamRuntime.getResumableThreadRun(
       { threadId, resourceId, runId, toolCallId },
-      this.getPubSub(),
+      pubsub,
     );
+
+    if (!resumableRun && !hasLocalRun) {
+      // The thread runtime only tracks runs seen by this process. Recover the
+      // explicitly targeted run from snapshot storage after a restart or when
+      // the resume request reaches another server instance.
+      let suspendedRuns: AgentRun[] = [];
+      try {
+        ({ runs: suspendedRuns } = await this.listSuspendedRuns({ threadId, resourceId }));
+      } catch (error) {
+        if (!(error instanceof MastraError) || error.id !== 'AGENT_LIST_SUSPENDED_RUNS_NO_STORAGE') {
+          throw error;
+        }
+      }
+
+      const storedRun = suspendedRuns.find(
+        run =>
+          run.runId === runId && (!toolCallId || run.toolCalls.some(toolCall => toolCall.toolCallId === toolCallId)),
+      );
+      if (storedRun) {
+        resumableRun = { runId, toolCallId };
+      }
+    }
+
     if (!resumableRun) {
       throw new MastraError({
         id: 'AGENT_SEND_STREAM_RESUME_NO_SUSPENDED_THREAD_RUN',
@@ -8843,9 +8951,8 @@ export class Agent<
 
     let runId = this.getActiveThreadRunId({ threadId, resourceId });
     // Tracks whether runId was recovered from storage (not the in-memory active-run
-    // map). Storage-discovered runs are not present in the in-memory thread runtime,
-    // so they must resume directly via resumeStream() rather than through
-    // sendStreamResume(), whose getResumableThreadRun() guard is in-memory only.
+    // map). This path resumes directly because the snapshot has already been
+    // discovered here, avoiding a second storage lookup in sendStreamResume().
     let resolvedFromStorage = false;
 
     if (!runId) {
@@ -8928,10 +9035,8 @@ export class Agent<
     };
 
     if (resolvedFromStorage) {
-      // The run was recovered from storage and is not tracked by the in-memory
-      // thread runtime, so sendStreamResume()'s getResumableThreadRun() guard would
-      // reject it. Resume directly from the persisted snapshot, mirroring the
-      // explicit-runId approveToolCall()/declineToolCall() entry points.
+      // Resume directly from the persisted snapshot, mirroring the explicit-runId
+      // approveToolCall()/declineToolCall() entry points.
       // @ts-expect-error - resumeStream overloads don't narrow cleanly here; matches
       // the same pattern used by approveToolCall()/declineToolCall() above.
       await this.resumeStream(resumeData, {

@@ -286,6 +286,43 @@ describe('getFactoryWorkspace', () => {
       expect(prose).not.toContain('ask_user');
     }
 
+    const triage = await read('factory-triage');
+    const markerIndex = triage.indexOf('<!-- mastra-factory-triage -->');
+    const typeIndex = triage.indexOf('**Type:**');
+    const routeIndex = triage.indexOf('**Route:**');
+    const severityIndex = triage.indexOf('**Severity:**');
+    const confidenceIndex = triage.indexOf('**Confidence:**');
+    const nextStepIndex = triage.indexOf('**Next step:**');
+    const understandingIndex = triage.indexOf('### Understanding');
+    const assumptionsIndex = triage.indexOf('### Assumptions');
+    const questionsIndex = triage.indexOf('### Open questions');
+
+    expect(markerIndex).toBeGreaterThanOrEqual(0);
+    expect(typeIndex).toBeGreaterThan(markerIndex);
+    expect(routeIndex).toBeGreaterThan(typeIndex);
+    expect(severityIndex).toBeGreaterThan(routeIndex);
+    expect(confidenceIndex).toBeGreaterThan(severityIndex);
+    expect(nextStepIndex).toBeGreaterThan(confidenceIndex);
+    expect(understandingIndex).toBeGreaterThan(nextStepIndex);
+    expect(assumptionsIndex).toBeGreaterThan(understandingIndex);
+    expect(questionsIndex).toBeGreaterThan(assumptionsIndex);
+    expect(triage).toContain('Severity guide:');
+    expect(triage).toContain('Plan fix');
+    expect(triage).toContain('Await approval');
+    expect(triage).toContain('No transition / refresh');
+    expect(triage).toContain('Keep the issue in its current initial stage until manually moved to planning.');
+    const labelReconciliationIndex = triage.indexOf(
+      'After a GitHub comment is posted or updated, reconcile the triage labels',
+    );
+    expect(labelReconciliationIndex).toBeGreaterThan(questionsIndex);
+    expect(triage).toContain('gh issue edit "$ISSUE" --add-label "auto-triaged"');
+    expect(triage).toContain('gh issue edit "$ISSUE" --remove-label "status: needs triage"');
+    expect(triage).toContain('gh issue edit "$ISSUE" --add-label "needs-approval"');
+    expect(triage).toContain('Apply only these label mutations.');
+    expect(triage).toContain(
+      'For Linear issues, use the same structured handoff without attempting GitHub publication or label mutations.',
+    );
+
     const plan = await read('factory-plan');
     expect(plan).toContain('if this conversation already contains a triage/understanding pass');
     expect(plan).toContain('Do not call `submit_plan`');
@@ -521,6 +558,63 @@ describe('GitHub session workspace preparation', () => {
     expect(mocks.runWorktreeSetup).toHaveBeenCalledTimes(2);
     expect(mocks.sessions.find(session => session.id === 'session-a')?.sandboxWorkdir).toBe(workdirA);
     expect(mocks.sessions.find(session => session.id === 'session-b')?.sandboxWorkdir).toBe(workdirB);
+  });
+
+  it('opens the session for a session-shaped auth user, whose org lives on the session half', async () => {
+    const { root, workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+    // better-auth's `authenticateToken` answers with a wrapper rather than a
+    // flat user, and the server writes that answer onto the request context
+    // verbatim. Read as a flat user it has neither an id nor an org, so the
+    // owner of the session gets refused their own session.
+    const requestContext = createGithubRequestContext('project-1', 'session-a', {
+      session: { activeOrganizationId: 'org-1' },
+      user: { id: 'user-1', email: 'owner@example.com' },
+    });
+
+    const opened = await workspace({ requestContext });
+
+    expect(opened.id).toContain('project-1-session-a');
+    expect(mocks.materializeRepo).toHaveBeenCalledWith(
+      expect.objectContaining({
+        row: expect.objectContaining({
+          id: 'session-a',
+          sandboxWorkdir: path.join(root, 'github-sessions', 'octocat', 'hello', 'session-a'),
+        }),
+      }),
+    );
+  });
+
+  it('still refuses a session-shaped auth user from another organization', async () => {
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+    const requestContext = createGithubRequestContext('project-1', 'session-a', {
+      session: { activeOrganizationId: 'org-2' },
+      user: { id: 'user-1' },
+    });
+
+    await expect(workspace({ requestContext })).rejects.toThrow(
+      'Factory session session-a is not available to the current user',
+    );
+  });
+
+  it('refuses a session-shaped auth user whose session carries no active organization', async () => {
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+    // No active org on the session half means no org at all: the wrapper's inner
+    // user is never consulted for one. Refusing is the only safe answer, and it
+    // is the answer a signed-in user gets before they pick an organization.
+    const requestContext = createGithubRequestContext('project-1', 'session-a', {
+      session: {},
+      user: { id: 'user-1', organizationId: 'org-1' },
+    });
+
+    await expect(workspace({ requestContext })).rejects.toThrow(
+      'Factory session session-a was resolved without a caller identity',
+    );
   });
 
   it('pins the session workdir into controller state so the agent prompt never points at the host checkout', async () => {

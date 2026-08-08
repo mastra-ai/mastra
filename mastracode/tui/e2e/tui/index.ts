@@ -9,11 +9,13 @@ import { autocompleteWrappingNavigationScenario } from './autocomplete-wrapping-
 import { automatedChatScenario } from './automated-chat.js';
 import { branchContextLongNameScenario } from './branch-context-long-name.js';
 import { browserActivePendingStatusScenario } from './browser-active-pending-status.js';
+import { browserModelPickerScenario } from './browser-model-picker.js';
 import { browserProfileProviderMismatchScenario } from './browser-profile-provider-mismatch.js';
 import { browserSettingsPersistenceScenario } from './browser-settings-persistence.js';
 import { browserStartupRestoreScenario } from './browser-startup-restore.js';
 import { browserToggleAttachScenario } from './browser-toggle-attach.js';
 import { browserToolUnavailableScenario } from './browser-tool-unavailable.js';
+import { browserViewportScenario } from './browser-viewport.js';
 import { browserWizardBrowserbaseScenario } from './browser-wizard-browserbase.js';
 import { browserWizardExportScenario } from './browser-wizard-export.js';
 import { browserbaseStartupRestoreScenario } from './browserbase-startup-restore.js';
@@ -81,6 +83,7 @@ import { omStatusIndicatorScenario } from './om-status-indicator.js';
 import { omThresholdPersistenceScenario } from './om-threshold-persistence.js';
 import { onboardingOmFollowsLoginScenario } from './onboarding-om-follows-login.js';
 import { openaiStrictSchemaScenario } from './openai-strict-schema.js';
+import { permissionRequestHookScenario } from './permission-request-hook.js';
 import { persistentGoalCommandsScenario } from './persistent-goal-commands.js';
 import { persistentGoalJudgeDecisionScenario } from './persistent-goal-judge-decision.js';
 import { persistentGoalReloadScenario } from './persistent-goal-reload.js';
@@ -178,6 +181,8 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'automated-chat': automatedChatScenario,
   'browser-active-pending-status': browserActivePendingStatusScenario,
   'browser-profile-provider-mismatch': browserProfileProviderMismatchScenario,
+  'browser-model-picker': browserModelPickerScenario,
+  'browser-viewport': browserViewportScenario,
   'browser-settings-persistence': browserSettingsPersistenceScenario,
   'browser-startup-restore': browserStartupRestoreScenario,
   'browser-tool-unavailable': browserToolUnavailableScenario,
@@ -256,6 +261,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'plan-approval-goal-handoff': planApprovalGoalHandoffScenario,
   'plan-approval-handoff': planApprovalHandoffScenario,
   'plan-approval-request-changes': planApprovalRequestChangesScenario,
+  'permission-request-hook': permissionRequestHookScenario,
   'plugins-local-tool': pluginsLocalToolScenario,
   'plugins-local-hot-reload': pluginsLocalHotReloadScenario,
   'plugins-github-install-gh-cli-pnpm-10': pluginsGithubInstallPnpm10Scenario,
