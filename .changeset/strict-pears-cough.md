@@ -2,4 +2,4 @@
 '@mastra/playground-ui': patch
 ---
 
-Fixed external Markdown links to open in a new tab.
+Added configurable popup-window handling for external Markdown links.
