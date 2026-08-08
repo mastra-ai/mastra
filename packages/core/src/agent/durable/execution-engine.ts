@@ -3,7 +3,7 @@ import type { Mastra } from '../../mastra';
 import type { ObservabilityContext } from '../../observability';
 import type { RequestContext } from '../../request-context';
 import type { Workflow } from '../../workflows';
-import type { DurableAgenticWorkflowInput } from './types';
+import type { DurableAgenticWorkflowInput, DurableAgentStepLimit } from './types';
 
 export type DurableAgentEngineStatus =
   | 'queued'
@@ -60,7 +60,7 @@ export interface DurableAgentEngineRecoverContext extends DurableAgentEngineCont
  * durable runtime.
  */
 export interface DurableAgentExecutionEngine {
-  createWorkflow(options: { maxSteps?: number }): Workflow<any, any, any, any, any, any, any>;
+  createWorkflow(options: { maxSteps?: DurableAgentStepLimit }): Workflow<any, any, any, any, any, any, any>;
   start(context: DurableAgentEngineStartContext): Promise<DurableAgentEngineResult | void>;
   resume(context: DurableAgentEngineResumeContext): Promise<DurableAgentEngineResult | void>;
   recover(context: DurableAgentEngineRecoverContext): Promise<DurableAgentEngineResult | void>;

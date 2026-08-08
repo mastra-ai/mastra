@@ -34,7 +34,13 @@ import type {
 import { prepareForDurableExecution } from './preparation';
 import { endRunSpansWithError, ExtendedRunRegistry, globalRunRegistry } from './run-registry';
 import { createDurableAgentStream, emitChunkEvent, emitErrorEvent } from './stream-adapter';
-import type { AgentStepFinishEventData, AgentSuspendedEventData, DurableAgenticWorkflowInput } from './types';
+import type {
+  AgentStepFinishEventData,
+  AgentSuspendedEventData,
+  DurableAgentExecutionOptions,
+  DurableAgenticWorkflowInput,
+  DurableAgentStepLimit,
+} from './types';
 import { createDurableAgenticWorkflow } from './workflows';
 
 /**
@@ -86,8 +92,8 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   runId?: string;
   /** Request Context containing dynamic configuration and state */
   requestContext?: AgentExecutionOptions<OUTPUT>['requestContext'];
-  /** Maximum number of steps to run */
-  maxSteps?: number;
+  /** Maximum number of steps to run, or `false` for no step ceiling. */
+  maxSteps?: DurableAgentStepLimit;
   /**
    * Conditions for stopping execution (e.g., step count, token limit).
    *
@@ -281,7 +287,7 @@ export interface DurableAgentConfig<
    * Maximum steps for the agentic loop.
    * Defaults to the workflow default if not specified.
    */
-  maxSteps?: number;
+  maxSteps?: DurableAgentStepLimit;
 
   /**
    * Timeout in milliseconds before automatic cleanup of registry entries
@@ -468,7 +474,7 @@ export class DurableAgent<
   #workflow: Workflow<any, any, any, any, any, any, any> | null = null;
 
   /** Maximum steps for the agentic loop */
-  readonly #maxSteps?: number;
+  readonly #maxSteps?: DurableAgentStepLimit;
 
   /** Optional external durable execution provider */
   readonly #executionEngine?: DurableAgentExecutionEngine;
@@ -628,7 +634,7 @@ export class DurableAgent<
   /**
    * Get the max steps configured for this agent
    */
-  get maxSteps(): number | undefined {
+  get maxSteps(): DurableAgentStepLimit | undefined {
     return this.#maxSteps;
   }
 
@@ -2926,11 +2932,11 @@ export class DurableAgent<
   /**
    * Prepare for durable execution without starting it.
    */
-  async prepare(messages: MessageListInput, options?: AgentExecutionOptions<TOutput>) {
+  async prepare(messages: MessageListInput, options?: DurableAgentStreamOptions<TOutput>) {
     const preparation = await prepareForDurableExecution<TOutput>({
       agent: this.#wrappedAgent as Agent<string, any, TOutput>,
       messages,
-      options,
+      options: options as DurableAgentExecutionOptions<TOutput> | undefined,
       // Forward the caller-provided runId (mirrors stream()). Without this,
       // prepareForDurableExecution mints a fresh id, so prepare() registers a
       // different run than requested and a follow-up resume(runId) — e.g. when

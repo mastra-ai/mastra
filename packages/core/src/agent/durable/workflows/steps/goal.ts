@@ -26,6 +26,7 @@ import { MessageList } from '../../../message-list';
 import type { ToolsInput } from '../../../types';
 import { globalRunRegistry } from '../../run-registry';
 import { emitChunkEvent } from '../../stream-adapter';
+import type { DurableAgentStepLimit } from '../../types';
 
 function isWorkingMemoryTool(name: string): boolean {
   return name === 'updateWorkingMemory' || name === 'setWorkingMemory' || name === 'update-working-memory';
@@ -128,7 +129,7 @@ export function createDurableGoalStep() {
           toolResults?: Array<{ toolName?: string; result?: unknown }>;
         }>;
         lastStepResult?: { isContinued?: boolean; reason?: string };
-        options?: { maxSteps?: number };
+        options?: { maxSteps?: DurableAgentStepLimit };
         backgroundTaskPending?: boolean;
       };
       if (state.lastStepResult?.reason === 'error') return state;

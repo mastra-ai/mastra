@@ -31,6 +31,7 @@ import type { Agent } from '../agent';
 import { DurableAgent } from './durable-agent';
 import type { DurableAgentConfig } from './durable-agent';
 import type { DurableAgentExecutionEngine } from './execution-engine';
+import type { DurableAgentStepLimit } from './types';
 
 /**
  * Options for createDurableAgent factory function.
@@ -66,8 +67,8 @@ export interface CreateDurableAgentOptions<
    */
   pubsub?: PubSub;
 
-  /** Maximum steps for agentic loop */
-  maxSteps?: number;
+  /** Maximum steps for agentic loop, or `false` for no step ceiling. */
+  maxSteps?: DurableAgentStepLimit;
 
   /**
    * Auto-cleanup timer for durable stream state (ms).

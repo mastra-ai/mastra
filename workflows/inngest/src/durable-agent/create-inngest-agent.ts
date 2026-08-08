@@ -4,6 +4,7 @@ import {
   type DurableAgent,
   type DurableAgentStreamOptions,
   type DurableAgentStreamResult,
+  type DurableAgentStepLimit,
 } from '@mastra/core/agent/durable';
 import type { MastraServerCache } from '@mastra/core/cache';
 import type { PubSub } from '@mastra/core/events';
@@ -22,7 +23,7 @@ export interface CreateInngestAgentOptions {
   pubsub?: PubSub;
   cache?: MastraServerCache;
   mastra?: Mastra;
-  maxSteps?: number;
+  maxSteps?: DurableAgentStepLimit;
   cleanupTimeoutMs?: number;
 }
 

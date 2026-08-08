@@ -20,6 +20,7 @@ import type {
   DurableLLMStepOutput,
   DurableToolCallOutput,
   SerializableScorersConfig,
+  DurableAgentStepLimit,
 } from '../types';
 import {
   modelConfigSchema,
@@ -43,8 +44,8 @@ import {
  * Options for creating a durable agentic workflow
  */
 export interface DurableAgenticWorkflowOptions {
-  /** Maximum number of agentic loop iterations */
-  maxSteps?: number;
+  /** Maximum number of agentic loop iterations, or `false` for no step ceiling. */
+  maxSteps?: DurableAgentStepLimit;
 }
 
 /**
@@ -369,7 +370,8 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
         // Declared as `let` because signal drain may force isContinued later.
         let shouldContinue = state.lastStepResult?.isContinued === true;
         const runMaxSteps = state.options?.maxSteps ?? maxSteps;
-        const underMaxSteps = state.iterationCount < runMaxSteps;
+        const underMaxSteps = runMaxSteps === false || state.iterationCount < runMaxSteps;
+        const maxIterations = runMaxSteps === false ? undefined : runMaxSteps;
 
         // Evaluate user-supplied stopWhen predicate(s) parked on the registry
         // up-front so we can include them in the finality decision emitted on
@@ -467,7 +469,7 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
 
             const iterationContext = {
               iteration: state.accumulatedSteps.length,
-              maxIterations: runMaxSteps,
+              maxIterations,
               text: lastStep?.text ?? '',
               toolCalls: (lastStep?.toolCalls ?? []).map((tc: any) => ({
                 id: tc.toolCallId || tc.id || '',
@@ -543,7 +545,7 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
                 hasFinishedSteps = true;
                 isFinal = true;
               } else if (iterationResult.continue === true && !hardStop && (hasFinishedSteps || !shouldContinue)) {
-                if (underMaxSteps || !runMaxSteps) {
+                if (underMaxSteps) {
                   hasFinishedSteps = false;
                   isFinal = false;
                   if (state.lastStepResult) {
@@ -595,7 +597,7 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
           const lastStep = state.accumulatedSteps[state.accumulatedSteps.length - 1];
           await emitIterationCompleteEvent(pubsub, state.runId, {
             iteration: state.iterationCount,
-            maxIterations: runMaxSteps,
+            maxIterations,
             text: lastStep?.text,
             toolCalls: lastStep?.toolCalls,
             toolResults: lastStep?.toolResults,

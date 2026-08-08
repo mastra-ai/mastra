@@ -7,6 +7,7 @@ import {
   type DurableAgentEngineStartContext,
   type DurableAgentEngineStatus,
   type DurableAgentExecutionEngine,
+  type DurableAgentStepLimit,
 } from '@mastra/core/agent/durable';
 import type { Workflow } from '@mastra/core/workflows';
 
@@ -46,7 +47,7 @@ export class CloudflareWorkflowExecutionEngine implements DurableAgentExecutionE
     this.#instanceId = options.instanceId ?? (runId => runId);
   }
 
-  createWorkflow(options: { maxSteps?: number }): Workflow<any, any, any, any, any, any, any> {
+  createWorkflow(options: { maxSteps?: DurableAgentStepLimit }): Workflow<any, any, any, any, any, any, any> {
     return createDurableAgenticWorkflow(options);
   }
 

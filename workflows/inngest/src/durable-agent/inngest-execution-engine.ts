@@ -6,6 +6,7 @@ import type {
   DurableAgentEngineStartContext,
   DurableAgentEngineStatus,
   DurableAgentExecutionEngine,
+  DurableAgentStepLimit,
 } from '@mastra/core/agent/durable';
 import type { MastraServerCache } from '@mastra/core/cache';
 import { CachingPubSub } from '@mastra/core/events';
@@ -34,7 +35,7 @@ export class InngestDurableAgentExecutionEngine implements DurableAgentExecution
     this.#mastra = mastra;
   }
 
-  createWorkflow(options: { maxSteps?: number }): Workflow<any, any, any, any, any, any, any> {
+  createWorkflow(options: { maxSteps?: DurableAgentStepLimit }): Workflow<any, any, any, any, any, any, any> {
     const workflow = createInngestDurableAgenticWorkflow({
       inngest: this.#inngest,
       maxSteps: options.maxSteps,

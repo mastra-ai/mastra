@@ -4,6 +4,7 @@ import {
   type DurableAgent,
   type DurableAgentStreamOptions,
   type DurableAgentStreamResult,
+  type DurableAgentStepLimit,
 } from '@mastra/core/agent/durable';
 import type { MastraServerCache } from '@mastra/core/cache';
 import type { PubSub } from '@mastra/core/events';
@@ -27,8 +28,8 @@ export interface CreateCloudflareWorkflowAgentOptions {
   pubsub?: PubSub;
   /** Optional stream replay cache, or `false` to disable caching. */
   cache?: MastraServerCache | false;
-  /** Maximum agent-loop iterations. */
-  maxSteps?: number;
+  /** Maximum agent-loop iterations, or `false` for no step ceiling. */
+  maxSteps?: DurableAgentStepLimit;
   /** Delay before completed in-process run state is released. */
   cleanupTimeoutMs?: number;
   /** Optional mapping from Mastra run IDs to Cloudflare instance IDs. */

@@ -113,6 +113,19 @@ export interface SerializableScorerEntry {
 export type SerializableScorersConfig = Record<string, SerializableScorerEntry>;
 
 /**
+ * Step ceiling for a durable agentic loop.
+ *
+ * Set to `false` to let the loop run until a semantic stop condition, normal
+ * model completion, suspension, or abort ends the run.
+ */
+export type DurableAgentStepLimit = number | false;
+
+/** Agent execution options with the durable-only no-ceiling step mode. */
+export type DurableAgentExecutionOptions<OUTPUT = undefined> = Omit<AgentExecutionOptions<OUTPUT>, 'maxSteps'> & {
+  maxSteps?: DurableAgentStepLimit;
+};
+
+/**
  * Serializable subset of _internal (StreamInternal) that flows through workflow state
  */
 export interface SerializableDurableState {
@@ -169,8 +182,8 @@ export interface SerializableModelSettings {
  * Options for durable agent execution (serializable subset)
  */
 export interface SerializableDurableOptions {
-  /** Maximum number of agentic loop iterations */
-  maxSteps?: number;
+  /** Maximum number of agentic loop iterations, or `false` for no step ceiling. */
+  maxSteps?: DurableAgentStepLimit;
   /** Tool selection strategy */
   toolChoice?: 'auto' | 'none' | 'required' | { type: 'tool'; toolName: string };
   /** Tool names enabled for this execution */

@@ -278,6 +278,10 @@ describe('serializeDurableOptions', () => {
     expect(result.requireToolApproval).toBe(true);
   });
 
+  it('preserves the no-ceiling step mode', () => {
+    expect(serializeDurableOptions({ maxSteps: false }).maxSteps).toBe(false);
+  });
+
   it('serialises string toolChoice directly', () => {
     const result = serializeDurableOptions({ toolChoice: 'auto' });
     expect(result.toolChoice).toBe('auto');

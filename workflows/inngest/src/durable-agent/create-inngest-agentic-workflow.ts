@@ -18,6 +18,7 @@ import type {
   DurableLLMStepOutput,
   DurableToolCallOutput,
   DurableToolCallInput,
+  DurableAgentStepLimit,
 } from '@mastra/core/agent/durable';
 import type { PubSub } from '@mastra/core/events';
 import { SpanType, EntityType, InternalSpans } from '@mastra/core/observability';
@@ -56,8 +57,8 @@ const durableAgenticInputSchema = z.object({
 export interface InngestDurableAgenticWorkflowOptions {
   /** Inngest client instance */
   inngest: Inngest;
-  /** Maximum number of agentic loop iterations */
-  maxSteps?: number;
+  /** Maximum number of agentic loop iterations, or `false` for no step ceiling. */
+  maxSteps?: DurableAgentStepLimit;
 }
 
 /**
@@ -369,7 +370,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
         const shouldContinue = state.lastStepResult?.isContinued === true;
         // Use maxSteps from options (per-request), falling back to workflow-level default
         const effectiveMaxSteps = state.options?.maxSteps ?? maxSteps;
-        const underMaxSteps = state.iterationCount < effectiveMaxSteps;
+        const underMaxSteps = effectiveMaxSteps === false || state.iterationCount < effectiveMaxSteps;
 
         return shouldContinue && underMaxSteps;
       })

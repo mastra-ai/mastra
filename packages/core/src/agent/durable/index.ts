@@ -134,6 +134,8 @@ export type {
   SerializableModelConfig,
   SerializableDurableState,
   SerializableDurableOptions,
+  DurableAgentStepLimit,
+  DurableAgentExecutionOptions,
   SerializableModelSettings,
   DurableAgenticWorkflowInput,
   // Step I/O types

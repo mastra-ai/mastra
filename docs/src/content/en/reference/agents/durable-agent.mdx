@@ -117,9 +117,9 @@ Returns: `DurableAgent`
   },
   {
     name: 'maxSteps',
-    type: 'number',
+    type: 'number | false',
     isOptional: true,
-    description: 'Maximum number of steps for the agentic loop.',
+    description: 'Maximum number of steps for the agentic loop. Set to false to remove the step ceiling.',
   },
 ]}
 />
@@ -162,9 +162,9 @@ Returns: `EventedAgent` (a subclass of `DurableAgent`)
   },
   {
     name: 'maxSteps',
-    type: 'number',
+    type: 'number | false',
     isOptional: true,
-    description: 'Maximum number of steps for the agentic loop.',
+    description: 'Maximum number of steps for the agentic loop. Set to false to remove the step ceiling.',
   },
 ]}
 />
@@ -211,13 +211,13 @@ The `DurableAgent` class accepts the same options as `createDurableAgent`, plus 
   },
   {
     name: 'maxSteps',
-    type: 'number',
+    type: 'number | false',
     isOptional: true,
-    description: 'Maximum number of steps for the agentic loop.',
+    description: 'Maximum number of steps for the agentic loop. Set to false to remove the step ceiling.',
   },
   {
     name: 'cleanupTimeoutMs',
-    type: 'number',
+    type: 'number | false',
     isOptional: true,
     description:
       'Grace period in milliseconds before registry entries are cleaned up automatically after a stream finishes or errors. Set to 0 to disable auto-cleanup and require a manual `cleanup()` call. Auto-cleanup does not fire on suspended events.',
@@ -426,7 +426,7 @@ Returns: [`Promise<DurableAgentStreamResult>`](#durableagentstreamresult)
     name: 'maxSteps',
     type: 'number',
     isOptional: true,
-    description: 'Maximum number of steps to run for this stream.',
+    description: 'Maximum number of steps to run for this stream. Set to false to remove the step ceiling.',
   },
   {
     name: 'toolsets',

@@ -44,6 +44,33 @@ describe('DurableAgentExecutionEngine', () => {
     result.cleanup();
   });
 
+  it('forwards the no-ceiling step mode to an external execution engine', () => {
+    const workflow = createDurableAgenticWorkflow();
+    const engine: DurableAgentExecutionEngine = {
+      createWorkflow: vi.fn(() => workflow),
+      start: vi.fn(async () => ({ status: 'running' })),
+      resume: vi.fn(async () => ({ status: 'running' })),
+      recover: vi.fn(async () => ({ status: 'running' })),
+      abort: vi.fn(async () => undefined),
+      status: vi.fn(async () => 'running'),
+    };
+    const agent = new Agent({
+      id: 'unbounded-external-engine-agent',
+      name: 'Unbounded external engine agent',
+      instructions: 'Test completion-governed durable execution.',
+      model: {
+        specificationVersion: 'v2',
+        provider: 'test',
+        modelId: 'test-model',
+      } as LanguageModelV2,
+    });
+
+    const durableAgent = createDurableAgent({ agent, executionEngine: engine, maxSteps: false });
+
+    expect(durableAgent.getWorkflow()).toBe(workflow);
+    expect(engine.createWorkflow).toHaveBeenCalledWith({ maxSteps: false });
+  });
+
   it('forwards an external abort signal to the engine for an initial segment', async () => {
     const workflow = createDurableAgenticWorkflow();
     const engine: DurableAgentExecutionEngine = {
