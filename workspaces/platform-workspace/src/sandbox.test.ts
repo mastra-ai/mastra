@@ -1874,6 +1874,153 @@ describe('PlatformSandbox', () => {
         expect(sets).toEqual([]);
       });
     });
+
+    describe('transport warmup coalescing', () => {
+      it('execs wait for the probe before proceeding', async () => {
+        // When an exec arrives during the sidecar boot window, it should wait
+        // for the probe rather than immediately racing to the lease path.
+        vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+        const fetchMock = vi.fn().mockResolvedValueOnce(
+          json({
+            id: 'sbx_coalesce',
+            createdAt: '2026-06-26T00:00:00.000Z',
+            instanceUrl: 'http://[fd12::1]:47000',
+          }),
+        );
+
+        // Manual control over probe resolution.
+        let resolveProbe: (value: Response) => void;
+        const probePromise = new Promise<Response>(r => {
+          resolveProbe = r;
+        });
+        let probeCallCount = 0;
+
+        // Streaming mock for exec calls (NDJSON format expected by sidecar).
+        const priv = streamingPrivateNetFetch();
+
+        // Intercept both /health (probe) and /exec calls.
+        const privateNetFetch = vi.fn().mockImplementation((url: string) => {
+          if (url.includes('/health')) {
+            probeCallCount++;
+            return probePromise;
+          }
+          // For /exec, delegate to streaming mock.
+          return priv.fetch(url, undefined);
+        });
+
+        const { registry } = fakeAddressRegistry();
+
+        const sandbox = new PlatformSandbox({
+          accessToken: 'sk_test',
+          projectId: 'proj_123',
+          environmentId: 'env_123',
+          fetch: fetchMock,
+          privateNetFetch,
+          addressRegistry: registry,
+        });
+
+        await sandbox._start();
+
+        // Verify probe was started.
+        expect(probeCallCount).toBe(1);
+
+        // Fire an exec while probe is pending.
+        const execPromise = sandbox.executeCommand('echo 1');
+
+        // Give it a moment to start waiting.
+        await new Promise(r => setTimeout(r, 10));
+
+        // No /exec calls yet — exec is waiting on probe.
+        expect(priv.calls.length).toBe(0);
+
+        // Resolve the probe — sidecar is ready.
+        resolveProbe!(new Response('ok', { status: 200 }));
+
+        // Give exec a moment to proceed after probe resolves.
+        await new Promise(r => setTimeout(r, 10));
+
+        // Now the exec should have called /exec.
+        expect(priv.calls.length).toBe(1);
+        expect(priv.calls[0]!.url).toContain('/exec');
+
+        // Push NDJSON frames to complete the exec.
+        priv.push('{"type":"stdout","data":"hello\\n"}\n');
+        priv.push('{"type":"exit","code":0}\n');
+        priv.end();
+
+        // Exec should complete via private-net.
+        const result = await execPromise;
+        expect(result.success).toBe(true);
+        expect(result.stdout).toBe('hello\n');
+
+        // Verify no lease was minted (no /exec-lease calls to the workspace proxy).
+        const execLeaseCalls = fetchMock.mock.calls.filter((c: unknown[]) => String(c[0]).includes('/exec-lease'));
+        expect(execLeaseCalls).toHaveLength(0);
+      });
+
+      it('proceeds to lease after transport ready timeout', async () => {
+        // If the sidecar probe takes too long, execs should proceed to the
+        // lease path after TRANSPORT_READY_WAIT_MS rather than blocking forever.
+        vi.useFakeTimers();
+        vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+        const fetchMock = vi
+          .fn()
+          // create sandbox
+          .mockResolvedValueOnce(
+            json({
+              id: 'sbx_timeout',
+              createdAt: '2026-06-26T00:00:00.000Z',
+              instanceUrl: 'http://[fd12::1]:47000',
+            }),
+          )
+          // exec-lease
+          .mockResolvedValueOnce(
+            json({
+              provider: 'railway',
+              sandboxId: 'sbx_timeout',
+              providerResourceId: 'prov_1',
+              jwt: 'jwt_test',
+              wsEndpoint: 'wss://test.railway.app/exec',
+              subprotocol: 'railway-exec-v1',
+              expiresAt: null,
+            }),
+          );
+        // Probe never resolves (simulates slow/unresponsive sidecar).
+        const privateNetFetch = vi.fn().mockReturnValue(new Promise(() => {}));
+        const { registry } = fakeAddressRegistry();
+        const { factory: wsFactory, sockets } = fakeExecSocket({ exitCode: 0, stdout: 'ok' });
+
+        const sandbox = new PlatformSandbox({
+          accessToken: 'sk_test',
+          projectId: 'proj_123',
+          environmentId: 'env_123',
+          fetch: fetchMock,
+          privateNetFetch,
+          addressRegistry: registry,
+          webSocketFactory: wsFactory,
+        });
+
+        await sandbox._start();
+
+        // Fire an exec — it will wait for transport ready.
+        const execPromise = sandbox.executeCommand('echo test');
+
+        // Advance past the transport ready timeout (5s).
+        await vi.advanceTimersByTimeAsync(6_000);
+
+        // Exec should complete via lease.
+        const result = await execPromise;
+        expect(result.success).toBe(true);
+
+        // Verify a lease was minted (exec-lease call made).
+        const execLeaseCalls = fetchMock.mock.calls.filter((c: unknown[]) => String(c[0]).includes('/exec-lease'));
+        expect(execLeaseCalls.length).toBeGreaterThan(0);
+        // WebSocket was used.
+        expect(sockets.length).toBeGreaterThan(0);
+
+        vi.useRealTimers();
+      });
+    });
   });
 
   describe('clone', () => {

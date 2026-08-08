@@ -134,6 +134,14 @@ const CREATE_RETRY_BASE_DELAY_MS = 2_000;
 const SIDECAR_PROBE_TIMEOUT_MS = 30_000;
 /** Delay between sidecar probe attempts. */
 const SIDECAR_PROBE_INTERVAL_MS = 250;
+/**
+ * How long `executeCommand` waits for the transport to become ready before
+ * falling back to the lease path. This is much shorter than
+ * `SIDECAR_PROBE_TIMEOUT_MS` because we want execs to proceed quickly if
+ * the sidecar is slow to boot — the probe continues in the background and
+ * later execs will use private-net once it succeeds.
+ */
+const TRANSPORT_READY_WAIT_MS = 5_000;
 
 /**
  * Diagnostic error thrown when the direct-exec WebSocket transport fails
@@ -394,6 +402,15 @@ export class PlatformSandbox extends MastraSandbox {
    * the `set()` to avoid re-populating a deleted or superseded sandbox entry.
    */
   private _probeGeneration = 0;
+  /**
+   * In-flight sidecar probe promise. Concurrent `executeCommand` callers that
+   * arrive before the registry is populated all await this single promise so
+   * we don't fire N independent lease requests during the sidecar boot window.
+   * Once the probe resolves (success or timeout), callers check the registry
+   * and proceed — either via private-net (probe succeeded) or via lease (probe
+   * failed/timed out, but now coalesced via `_leaseInFlight`).
+   */
+  private _transportReadyPromise: Promise<void> | null = null;
 
   constructor(options: PlatformSandboxOptions = {}) {
     super({ ...options, name: 'PlatformSandbox', processes: new PlatformProcessManager() });
@@ -565,11 +582,11 @@ export class PlatformSandbox extends MastraSandbox {
     // the old sandbox's address; execs should fall back to lease until the new
     // probe succeeds rather than dialing the stale address.
     this._addressRegistry.delete(json.id);
-    // Fire-and-forget: probe the sidecar's /health endpoint before populating
-    // the registry. Early execs fall back to lease until the probe succeeds.
-    // Capture the current generation so the probe can detect teardown races.
+    // Start the sidecar probe and expose it so executeCommand can await it.
+    // Early execs wait for the probe (up to TRANSPORT_READY_WAIT_MS) rather
+    // than all racing to the lease path independently.
     const generation = ++this._probeGeneration;
-    void this._probeSidecarThenRegister(json.id, json.instanceUrl, generation);
+    this._transportReadyPromise = this._probeSidecarThenRegister(json.id, json.instanceUrl, generation);
   }
 
   /**
@@ -614,6 +631,32 @@ export class PlatformSandbox extends MastraSandbox {
     }
     // Sidecar never came up. Leave registry entry unset — every exec goes lease.
     this.logger.warn('Sidecar never answered /health within probe window', { sandboxId });
+  }
+
+  /**
+   * Wait for the transport to become ready (sidecar probe succeeds) or time
+   * out. Concurrent callers all await the same probe promise, coalescing the
+   * cold-start storm into a single warmup attempt.
+   *
+   * If no probe is in flight (no registry, or registry already populated),
+   * this returns immediately. After the wait (success or timeout), callers
+   * check the registry and proceed — either via private-net or lease. The
+   * lease path is still coalesced via `_leaseInFlight`, so even if the probe
+   * times out, we only mint one lease for all concurrent execs.
+   */
+  private async _awaitTransportReady(): Promise<void> {
+    // Fast path: registry already has an entry, transport is warm.
+    if (this._sandboxId && this._addressRegistry?.get(this._sandboxId)) {
+      return;
+    }
+    // No probe in flight — nothing to wait for, proceed to lease path.
+    if (!this._transportReadyPromise) {
+      return;
+    }
+    // Race the probe against a timeout. We don't want to block execs forever
+    // if the sidecar is slow to boot — they can proceed via lease after a
+    // short wait, and later execs will use private-net once the probe succeeds.
+    await Promise.race([this._transportReadyPromise, new Promise<void>(r => setTimeout(r, TRANSPORT_READY_WAIT_MS))]);
   }
 
   /**
@@ -880,6 +923,14 @@ export class PlatformSandbox extends MastraSandbox {
     // default. `_runDirectExec` omits `timeoutMs` from the exec payload when
     // the value is 0, which disables the client-side timer entirely.
     const effectiveTimeout = options?.timeout ?? this._timeout;
+
+    // Wait for the transport to become ready before proceeding. During the
+    // sidecar boot window (immediately after start()), concurrent execs all
+    // await the same probe promise rather than each independently racing to
+    // the lease path — this coalesces the cold-start storm into a single
+    // warmup attempt. Once the probe resolves (or times out after
+    // TRANSPORT_READY_WAIT_MS), we check the registry and proceed.
+    await this._awaitTransportReady();
 
     // Preferred path: dial the in-sandbox sidecar over Railway's private
     // network (~16 ms p50). No GraphQL, no lease mint, no public tcp-proxy.
