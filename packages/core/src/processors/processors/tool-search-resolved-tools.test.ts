@@ -68,6 +68,19 @@ describe('ToolSearchProcessor includeResolvedTools', () => {
     expect(results).toEqual([]);
   });
 
+  it('rebuilds a loaded resolved tool on the resume path', async () => {
+    const processor = new ToolSearchProcessor({ tools: {}, includeResolvedTools: true, storage: 'in-memory' });
+
+    const first = await processor.processInputStep(stepArgs(resolved));
+    expect((await load(first, 'fetch_invoice')).success).toBe(true);
+
+    // The approval-resume path re-enters without stepArgs, so the tools for the
+    // resumed request have to be handed in for the executor to be rebuilt.
+    const rebuilt = await processor.getLoadedToolsForRequestContext({ tools: resolved });
+
+    expect(rebuilt.fetch_invoice).toBe(resolved.fetch_invoice);
+  });
+
   it('uses the tool instance from the current request, not a cached one', async () => {
     const processor = new ToolSearchProcessor({ tools: {}, includeResolvedTools: true });
 

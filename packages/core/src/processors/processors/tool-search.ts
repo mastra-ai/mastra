@@ -180,10 +180,14 @@ function buildToolCatalog(tools: Record<string, Tool<any, any>>): ToolCatalog {
   const index = new BM25Index({}, TOOL_SEARCH_TOKENIZE_OPTIONS);
   const descriptions = new Map<string, string>();
 
-  for (const tool of Object.values(tools)) {
+  for (const [key, tool] of Object.entries(tools)) {
+    // Request-resolved tools arrive as converted tools, which only carry `id`
+    // when the original tool declared one. Fall back to the record key so an
+    // id-less tool is still searchable under the name the model calls.
+    const name = tool.id || key;
     const description = tool.description || '';
-    index.add(tool.id, `${tool.id} ${description}`);
-    descriptions.set(tool.id, description);
+    index.add(name, `${name} ${description}`);
+    descriptions.set(name, description);
   }
 
   return { tools, index, descriptions };
@@ -351,10 +355,15 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
    * - Otherwise (resume path) resolve from the store using the thread ID derived
    *   from the request context. The context store falls back to its same-process
    *   supplemental set.
+   *
+   * `tools` carries the resumed request's resolved tools. Without them a loaded
+   * request-scoped tool has no entry in the static catalog, so the approved call
+   * would resume with no executor.
    */
   public async getLoadedToolsForRequestContext(args?: {
     requestContext?: RequestContext;
     stepArgs?: ProcessInputStepArgs;
+    tools?: Record<string, unknown>;
   }): Promise<Record<string, Tool<any, any>>> {
     if (args?.stepArgs) {
       const loadedNames = await this.store.getLoadedNames(this.makeStoreContext(args.stepArgs));
@@ -369,7 +378,7 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
 
     const threadId = (args?.requestContext?.get(MASTRA_THREAD_ID_KEY) as string | undefined) || undefined;
     const loadedNames = await this.store.getLoadedNames({ threadId, args: undefined });
-    return this.getLoadedTools(this.staticCatalog, loadedNames, args?.requestContext);
+    return this.getLoadedTools(this.catalogForStep(args?.tools), loadedNames, args?.requestContext);
   }
 
   /**

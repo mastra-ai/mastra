@@ -213,7 +213,7 @@ If the hook throws or rejects, `ToolSearchProcessor` treats the tool as disallow
 
 ## Searching request-resolved tools
 
-The `tools` option is fixed at construction, so tools that only exist per request — MCP tools that need the caller's credentials, or anything returned by a dynamic `tools` function — cannot be listed there. By default those tools bypass search and occupy prompt space on every turn.
+The `tools` option is fixed at construction, so you can't list tools that only exist per request (MCP tools that need the caller's credentials, or anything returned by a dynamic `tools` function). By default those tools bypass search and occupy prompt space on every turn.
 
 Set `includeResolvedTools: true` to index them for the request and withhold them from the prompt until the agent loads them:
 
