@@ -613,7 +613,7 @@ describe('GitHub session workspace preparation', () => {
     });
 
     await expect(workspace({ requestContext })).rejects.toThrow(
-      'Factory session session-a is not available to the current user',
+      'Factory session session-a was resolved without a caller identity',
     );
   });
 
