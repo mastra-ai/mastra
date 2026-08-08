@@ -111,6 +111,7 @@ export async function summarizeConversation(opts: SummarizeConversationOptions):
     bufferOnIdle: false,
     observeAttachments: 'auto',
     instruction: opts.instructions,
+    instructionMode: 'append',
     threadTitle: false,
     extractors,
   };

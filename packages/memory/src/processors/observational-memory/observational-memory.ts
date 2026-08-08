@@ -538,11 +538,13 @@ export class ObservationalMemory {
           ),
       previousObserverTokens: config.observation?.previousObserverTokens ?? 2000,
       instruction: config.observation?.instruction,
+      instructionMode: config.observation?.instructionMode ?? 'append',
       threadTitle: config.observation?.threadTitle ?? false,
       observeAttachments: config.observation?.observeAttachments ?? true,
       extractors: composeObservationExtractors({
         threadTitle: config.observation?.threadTitle ?? false,
         extract: config.observation?.extract,
+        continuationHints: config.observation?.continuationHints,
       }),
     };
 
@@ -575,7 +577,11 @@ export class ObservationalMemory {
             config.reflection?.observationTokens ?? OBSERVATIONAL_MEMORY_DEFAULTS.reflection.observationTokens,
           ),
       instruction: config.reflection?.instruction,
-      extractors: composeReflectionExtractors({ extract: config.reflection?.extract }),
+      instructionMode: config.reflection?.instructionMode ?? 'append',
+      extractors: composeReflectionExtractors({
+        extract: config.reflection?.extract,
+        continuationHints: config.reflection?.continuationHints,
+      }),
     };
 
     this.tokenCounter = new TokenCounter({
