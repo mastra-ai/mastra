@@ -46,6 +46,13 @@ describe('resolveExtraEntries', () => {
     expect(Object.keys(resolved)).toEqual(['workers/voice']);
   });
 
+  it('preserves "__proto__" as an entry name', () => {
+    const resolved = resolveExtraEntries({ ['__proto__']: './voice-worker.ts' }, mastraEntryFile);
+
+    expect(Object.hasOwn(resolved, '__proto__')).toBe(true);
+    expect(resolved['__proto__']).toBe(join(mastraDir, 'voice-worker.ts').replaceAll('\\', '/'));
+  });
+
   it('rejects the reserved "index" name so it cannot clobber the server bundle', () => {
     expect(() => resolveExtraEntries({ index: './voice-worker.ts' }, mastraEntryFile)).toThrow(
       /reserved for the Mastra server/,

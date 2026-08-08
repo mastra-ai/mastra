@@ -42,7 +42,7 @@ export function resolveExtraEntries(
   }
 
   const mastraDir = dirname(mastraEntryFile);
-  const resolved: Record<string, string> = {};
+  const resolved = new Map<string, string>();
 
   for (const [name, entryPath] of Object.entries(entries)) {
     if (!name || name !== name.trim()) {
@@ -74,7 +74,7 @@ export function resolveExtraEntries(
 
     // Two names that differ only by separator collapse to one output file. Assigning both
     // would silently drop the first source, and dependency analysis would never see it.
-    if (Object.hasOwn(resolved, normalizedName)) {
+    if (resolved.has(normalizedName)) {
       throw invalidEntries(
         `bundler.entries has two entries that resolve to the output name "${normalizedName}" (the second is "${name}"). Entry names must be unique once path separators are normalized.`,
       );
@@ -105,8 +105,8 @@ export function resolveExtraEntries(
       );
     }
 
-    resolved[normalizedName] = slash(absolutePath);
+    resolved.set(normalizedName, slash(absolutePath));
   }
 
-  return resolved;
+  return Object.fromEntries(resolved);
 }
