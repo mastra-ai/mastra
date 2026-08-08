@@ -658,6 +658,19 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
     this.#globDirCache.clear();
     this.#globResolveTimes.clear();
 
+    // Run warmup probe if the source provides one. This coalesces the "is the
+    // sandbox network ready?" check into a single operation before fanning out
+    // parallel skill loads, avoiding N redundant transport failures on cold
+    // sandboxes. Failures are swallowed — if warmup fails, discovery proceeds
+    // anyway and individual skill loads will report their own errors.
+    if (this.#source.warmup) {
+      try {
+        await this.#source.warmup();
+      } catch {
+        // Warmup failed — proceed with discovery; individual loads will error if needed
+      }
+    }
+
     // Adapt SkillSource.readdir to the ReaddirEntry interface used by resolvePathPattern
     const readdir = async (dir: string): Promise<ReaddirEntry[]> => {
       const entries = await this.#source.readdir(dir);
