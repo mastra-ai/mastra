@@ -227,6 +227,28 @@ describe('handleBrowserCommand', () => {
       expect(browserMocks.saveSettings).toHaveBeenCalledWith(settings);
     });
 
+    it('rejects a freely typed id for an unsupported provider, which the picker also accepts', async () => {
+      const { ctx, settings } = createContext();
+      browserMocks.loadSettings.mockReturnValue(settings);
+
+      const command = handleBrowserCommand(ctx, ['set', 'model']);
+      await openedPicker();
+      // The selector lets the user type any id and select it as "Use: <id>",
+      // so the filtered list alone does not keep bad providers out.
+      await selectorMocks.lastOptions.onSelect({
+        id: '302ai/some-model',
+        provider: '302ai',
+        modelName: 'some-model',
+        hasApiKey: true,
+      });
+      await command;
+
+      expect(settings.browser.stagehand).toEqual({ env: 'LOCAL' });
+      expect(browserMocks.saveSettings).not.toHaveBeenCalled();
+      expect(selectorMocks.promptForApiKeyIfNeeded).not.toHaveBeenCalled();
+      expect(ctx.showError).toHaveBeenCalledWith(expect.stringContaining('Unsupported model provider: 302ai'));
+    });
+
     it('leaves the model untouched when the picker is cancelled', async () => {
       const { ctx, settings } = createContext();
       browserMocks.loadSettings.mockReturnValue(settings);

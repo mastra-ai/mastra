@@ -41,6 +41,27 @@ type StorageStateExportBrowser = MastraBrowser & { exportStorageState: (path: st
  */
 
 /**
+ * Validate a `provider/model` id against the providers Stagehand can resolve.
+ *
+ * Stagehand splits the id on its first slash and throws during browser startup
+ * if the prefix is not a provider it knows, so both halves are checked here
+ * where the error can still be acted on.
+ *
+ * @returns an error message, or undefined when the id is usable.
+ */
+function stagehandModelError(modelId: string): string | undefined {
+  const slashIndex = modelId.indexOf('/');
+  if (slashIndex <= 0 || slashIndex === modelId.length - 1) {
+    return `Invalid model: ${modelId}. Use <provider>/<model>, for example anthropic/claude-sonnet-4-5.`;
+  }
+  const provider = modelId.slice(0, slashIndex);
+  if (!(STAGEHAND_MODEL_PROVIDERS as readonly string[]).includes(provider)) {
+    return `Unsupported model provider: ${provider}. Supported providers: ${STAGEHAND_MODEL_PROVIDERS.join(', ')}.`;
+  }
+  return undefined;
+}
+
+/**
  * Open the shared model picker, restricted to providers Stagehand can resolve,
  * and persist the choice as the browser model.
  */
@@ -73,6 +94,14 @@ async function promptForStagehandModel(
       title: 'Select Browser Model',
       onSelect: async (model: ModelItem) => {
         ctx.state.ui.hideOverlay();
+        // The picker also accepts a freely typed id, which bypasses the
+        // filtered list above.
+        const error = stagehandModelError(model.id);
+        if (error) {
+          ctx.showError(error);
+          resolve();
+          return;
+        }
         await promptForApiKeyIfNeeded(ctx.state.ui, model, ctx.authStorage);
         settings.browser.stagehand = {
           ...settings.browser.stagehand,
@@ -288,20 +317,10 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
           ctx.showError('model is only supported by the stagehand provider.');
           return;
         }
-        // Stagehand splits on the first slash to pick the provider and throws
-        // during browser startup if the prefix is not one it knows, so validate
-        // both halves here where the error is actionable.
         const modelId = value.trim();
-        const slashIndex = modelId.indexOf('/');
-        if (slashIndex <= 0 || slashIndex === modelId.length - 1) {
-          ctx.showError(`Invalid model: ${modelId}. Use <provider>/<model>, for example anthropic/claude-sonnet-4-5.`);
-          return;
-        }
-        const modelProvider = modelId.slice(0, slashIndex);
-        if (!(STAGEHAND_MODEL_PROVIDERS as readonly string[]).includes(modelProvider)) {
-          ctx.showError(
-            `Unsupported model provider: ${modelProvider}. Supported providers: ${STAGEHAND_MODEL_PROVIDERS.join(', ')}.`,
-          );
+        const modelError = stagehandModelError(modelId);
+        if (modelError) {
+          ctx.showError(modelError);
           return;
         }
         settings.browser.stagehand = {
