@@ -169,6 +169,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
         runId,
         agentId,
         input: typedInput,
+        requestContext,
         logger,
       });
 
