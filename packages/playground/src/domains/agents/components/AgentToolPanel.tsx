@@ -1,6 +1,5 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { toast } from '@mastra/playground-ui/utils/toast';
-import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
 import { useEffect } from 'react';
 import { parse } from 'superjson';
 import { z } from 'zod';
@@ -8,7 +7,7 @@ import { useAgent } from '../hooks/use-agent';
 import { useExecuteAgentTool } from '../hooks/use-execute-agent-tool';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import ToolExecutor from '@/domains/tools/components/ToolExecutor';
-import { resolveSerializedZodOutput } from '@/lib/form/utils';
+import { jsonSchemaToZodRuntime } from '@/lib/form/json-schema-to-zod-runtime';
 import { usePlaygroundStore } from '@/store/playground-store';
 
 export interface AgentToolPanelProps {
@@ -53,9 +52,7 @@ export const AgentToolPanel = ({ toolId, agentId }: AgentToolPanelProps) => {
     });
   };
 
-  const zodInputSchema = tool?.inputSchema
-    ? resolveSerializedZodOutput(jsonSchemaToZod(parse(tool?.inputSchema)))
-    : z.object({});
+  const zodInputSchema = tool?.inputSchema ? jsonSchemaToZodRuntime(parse(tool?.inputSchema)) : z.object({});
 
   if (isAgentLoading || error) return null;
 
