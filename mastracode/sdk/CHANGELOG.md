@@ -1,5 +1,18 @@
 # @mastra/code-sdk
 
+## 1.2.0-alpha.7
+
+### Patch Changes
+
+- Persist the browser viewport as a preset name, a `{ width, height }` size, or `'window'` in settings, and drop unusable stored values back to the default rather than passing them to the browser. ([#21010](https://github.com/mastra-ai/mastra/pull/21010))
+
+- Fixed tenant credential resolution for session-based authentication providers. Background Factory runs now resolve the authenticated user and active organization from session-wrapped request context values instead of falling back to an empty credential store. ([#21008](https://github.com/mastra-ai/mastra/pull/21008))
+
+- Updated dependencies [[`f59032a`](https://github.com/mastra-ai/mastra/commit/f59032a73699443555a08a479e7ac578975784f2), [`f59032a`](https://github.com/mastra-ai/mastra/commit/f59032a73699443555a08a479e7ac578975784f2), [`bf936e2`](https://github.com/mastra-ai/mastra/commit/bf936e2c89b2ff0dad5695b873ddc009ba96d41e)]:
+  - @mastra/core@1.58.0-alpha.6
+  - @mastra/agent-browser@0.5.1-alpha.0
+  - @mastra/stagehand@0.3.2-alpha.1
+
 ## 1.2.0-alpha.6
 
 ### Patch Changes

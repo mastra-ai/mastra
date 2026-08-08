@@ -1,5 +1,17 @@
 # mastracode
 
+## 0.33.0-alpha.7
+
+### Patch Changes
+
+- Add `/browser set viewport` and `/browser clear viewport`. Pass a preset (`desktop`, `desktop-hd`, `laptop`, `tablet`, `mobile`), a custom `WIDTHxHEIGHT` size, or `window` to match the real browser window; omit the value to pick a preset from a list. `window` is rejected on providers that cannot honor it. ([#21010](https://github.com/mastra-ai/mastra/pull/21010))
+
+- Updated dependencies [[`f59032a`](https://github.com/mastra-ai/mastra/commit/f59032a73699443555a08a479e7ac578975784f2), [`f59032a`](https://github.com/mastra-ai/mastra/commit/f59032a73699443555a08a479e7ac578975784f2), [`f59032a`](https://github.com/mastra-ai/mastra/commit/f59032a73699443555a08a479e7ac578975784f2), [`3e50f63`](https://github.com/mastra-ai/mastra/commit/3e50f63db85e9fe365b4ce5daecb0ac0dc464d93), [`bf936e2`](https://github.com/mastra-ai/mastra/commit/bf936e2c89b2ff0dad5695b873ddc009ba96d41e)]:
+  - @mastra/code-sdk@1.2.0-alpha.7
+  - @mastra/core@1.58.0-alpha.6
+  - @mastra/agent-browser@0.5.1-alpha.0
+  - @mastra/stagehand@0.3.2-alpha.1
+
 ## 0.33.0-alpha.6
 
 ### Patch Changes

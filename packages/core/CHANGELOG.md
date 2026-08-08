@@ -1,5 +1,13 @@
 # @mastra/core
 
+## 1.58.0-alpha.6
+
+### Patch Changes
+
+- Allow the browser `viewport` to be set to `'window'` so the page matches the real browser window instead of a fixed size. Adds `resolveViewportSize` and `resolveLaunchViewport` helpers plus a `DEFAULT_BROWSER_VIEWPORT` constant for providers to resolve the setting consistently. ([#21010](https://github.com/mastra-ai/mastra/pull/21010))
+
+- Fixed output processors not being able to clear the final agent text. An output processor that redacts all assistant text to an empty string now correctly results in an empty `result.text` from `generate()` and `stream()`, instead of falling back to the original unprocessed model output. Fixes #19240 ([#20998](https://github.com/mastra-ai/mastra/pull/20998))
+
 ## 1.58.0-alpha.5
 
 ### Minor Changes
