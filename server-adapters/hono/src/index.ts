@@ -6,10 +6,14 @@ import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
 import type { MCPHttpTransportResult, MCPSseTransportResult } from '@mastra/server/handlers/mcp';
 import type { ParsedRequestParams, ServerRoute } from '@mastra/server/server-adapter';
 import {
+  DEFAULT_STREAM_KEEPALIVE_MS,
   MastraServer as MastraServerBase,
+  RECORD_SEPARATOR_KEEPALIVE_FRAME,
+  SSE_KEEPALIVE_FRAME,
   checkRouteFGA,
   isZodError,
   normalizeQueryParams,
+  readWithKeepalive,
   redactStreamChunk,
   serializeStreamChunk,
 } from '@mastra/server/server-adapter';
@@ -163,8 +167,12 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
       res.header('X-Accel-Buffering', 'no');
     } else {
       res.header('Content-Type', 'text/plain');
+      res.header('X-Accel-Buffering', 'no');
     }
     res.header('Transfer-Encoding', 'chunked');
+
+    const keepaliveMs = this.streamOptions?.keepaliveMs ?? DEFAULT_STREAM_KEEPALIVE_MS;
+    const keepaliveFrame = streamFormat === 'sse' ? SSE_KEEPALIVE_FRAME : RECORD_SEPARATOR_KEEPALIVE_FRAME;
 
     return stream(
       res,
@@ -181,10 +189,13 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
         });
 
         try {
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
+          for await (const read of readWithKeepalive(reader, keepaliveMs)) {
+            if (read.type === 'keepalive') {
+              await stream.write(keepaliveFrame);
+              continue;
+            }
 
+            const value = read.value;
             if (value) {
               if (streamFormat === 'sse' && typeof value === 'string' && value.startsWith(':')) {
                 await stream.write(value);
