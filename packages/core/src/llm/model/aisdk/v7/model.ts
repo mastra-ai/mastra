@@ -73,6 +73,26 @@ function normalizeFileDataForV4(data: FileData): {
 function remapFilePartsToV4(options: LanguageModelV4CallOptions): LanguageModelV4CallOptions {
   let promptModified = false;
   const prompt = options.prompt.map(message => {
+    if (message.role === 'tool') {
+      let toolContentModified = false;
+      const content = message.content.map(part => {
+        if (part.type !== 'tool-result' || part.output?.type !== 'content') {
+          return part;
+        }
+        const value = part.output.value.map((v: any) => {
+          if (v.type !== 'media') return v;
+          toolContentModified = true;
+          return { type: 'file', data: { type: 'data', data: v.data }, mediaType: v.mediaType };
+        });
+        return toolContentModified ? { ...part, output: { ...part.output, value } } : part;
+      });
+      if (toolContentModified) {
+        promptModified = true;
+        return { ...message, content };
+      }
+      return message;
+    }
+
     if (message.role !== 'user' && message.role !== 'assistant') {
       return message;
     }
@@ -104,8 +124,6 @@ function remapFilePartsToV4(options: LanguageModelV4CallOptions): LanguageModelV
     return { ...message, content };
   });
 
-  // The map only replaces file parts with file parts, but TS widens the
-  // mapped message union across roles, so restore the prompt type.
   return promptModified ? { ...options, prompt: prompt as typeof options.prompt } : options;
 }
 
