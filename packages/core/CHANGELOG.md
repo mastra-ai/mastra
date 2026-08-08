@@ -1,5 +1,103 @@
 # @mastra/core
 
+## 1.58.0-alpha.3
+
+### Minor Changes
+
+- Added an `openIfEmpty` option to streamed tool display results. Set it to ([#20909](https://github.com/mastra-ai/mastra/pull/20909))
+  `false` when a tool lifecycle chunk should update only an active streaming
+  session:
+
+  ```typescript
+  toolDisplay: event => ({
+    kind: 'stream',
+    chunk: createTaskUpdate(event),
+    openIfEmpty: false,
+  });
+  ```
+
+  By default, stream results continue to open a session when needed. Static
+  channels continue to use plain-text fallback rendering.
+
+- Added tracing to dynamic agent skills resolvers. The resolver now runs inside a `resolve-skills` span, so skills fetched from an external service show up in the agent's trace instead of disappearing, and it receives `tracingContext` for creating child spans of its own — the same pattern tools already use. ([#20949](https://github.com/mastra-ai/mastra/pull/20949))
+
+  ```typescript
+  const agent = new Agent({
+    skills: async ({ requestContext, tracingContext }) => {
+      const span = tracingContext?.currentSpan?.createChildSpan({
+        type: 'generic',
+        name: 'entitlements-lookup',
+      });
+      const skills = await fetchSkillsFor(requestContext.get('userId'));
+      span?.end();
+      return skills;
+    },
+  });
+  ```
+
+  On metadata reads such as `agent.listSkills()` no agent is running, so `tracingContext.currentSpan` is `undefined` — guard span usage with `?.` as shown above.
+
+- Added an explicit A2A Protocol v1.0 SDK export while preserving the existing v0.3 export. ([#20811](https://github.com/mastra-ai/mastra/pull/20811))
+
+  ```typescript
+  import { ListTasksRequest } from '@mastra/core/a2a/v1';
+
+  const request = ListTasksRequest.fromJSON({ pageSize: 20 });
+  ```
+
+### Patch Changes
+
+- Prevent `streamLegacy()` cleanup from hanging when an observer stream has queued events that have not been consumed. ([#19921](https://github.com/mastra-ai/mastra/pull/19921))
+
+- Fixed `Mastra.shutdown()` leaving database connections open when storage is a `MastraCompositeStore`. The composite had no `close()` of its own, so shutdown silently skipped storage cleanup and any composed adapter (Redis, LibSQL, Postgres, ...) kept its client connected — leaving processes that wait for a graceful drain, such as test runners and Kubernetes pods handling SIGTERM, hanging until they were killed. ([#20629](https://github.com/mastra-ai/mastra/pull/20629))
+
+  A composite now closes everything it was built from: the `default` and `editor` stores, plus any domain that owns its own connection. Each store is closed once even when it backs several domains, and a store that fails to close is logged and skipped so the remaining handles are still released. See [#20621](https://github.com/mastra-ai/mastra/issues/20621).
+
+- Fixed `Mastra.startWorkers()` so it no longer reads the schedules store on boot when the scheduler cannot start. Boot now skips that read if you set `scheduler: { enabled: false }` or `workers: false`. Storage adapters that need request or tenant context no longer warn on every boot. Automatic detection of persisted agent schedules and deferred notifications is unchanged when you do not opt out. ([#20982](https://github.com/mastra-ai/mastra/pull/20982))
+
+- Fixed sub-agent delegation failing when an LLM sends `maxSteps` as a numeric string (e.g. `"10"` instead of `10`). Delegation now accepts valid numeric strings and continues to reject invalid values such as non-integers or numbers below 3. ([#20793](https://github.com/mastra-ai/mastra/pull/20793))
+
+- Fixed agent schedules targeting stored agents being permanently deleted after a server restart. Both deletion paths are covered: the scheduler tick loop no longer counts an unhydrated stored agent as a missing target (it confirms absence against the editor before reclaiming the schedule row), and the fire path resolves stored agents through the editor before self-cleaning. Schedules are never deleted when the editor lookup fails transiently — only a confirmed miss from both the registry and the editor reclaims the row. ([#19791](https://github.com/mastra-ai/mastra/pull/19791))
+
+- Fixed DurableAgent terminal cleanup so it also clears `workflow.events.v2.<runId>`, preventing orphaned no-TTL counter keys on persistent caches (#20786). ([#20961](https://github.com/mastra-ai/mastra/pull/20961))
+
+- Fixed nested agent-as-tool approvals so users see the inner tool and arguments while resumes retain the parent delegation identity (#20934). ([#20948](https://github.com/mastra-ai/mastra/pull/20948))
+
+- Fixed an issue where observer cleanup failures no longer prevent legacy workflow streams from completing cleanly. ([#20652](https://github.com/mastra-ai/mastra/pull/20652))
+
+- Fixed durable agents losing custom model-facing tool output between workflow steps. ([#20176](https://github.com/mastra-ai/mastra/pull/20176))
+
+- Hardened `runEvals` threshold checks: non-finite scores (for example `NaN`) now fail `min`/`max` range thresholds instead of passing, and invalid threshold shapes passed from JavaScript (strings, `null`, arrays) are rejected with a clear `INVALID_SCORER_THRESHOLD` error instead of silently passing every score. ([#20145](https://github.com/mastra-ai/mastra/pull/20145))
+
+- Fixed sendStreamResume() to resume suspended agent runs from storage after a server restart or when requests reach another instance. ([#20602](https://github.com/mastra-ai/mastra/pull/20602))
+
+- Fixed `session.abort()` when a tool call is waiting on approval or parked in a suspension. ([#20972](https://github.com/mastra-ai/mastra/pull/20972))
+
+  Aborting from a `tool_approval_required` subscriber raised an error and ended the run with reason `error`. It now completes with reason `aborted`, and the gated call settles as `output-denied` instead of rendering as still in flight.
+
+  Aborting while tool suspensions were parked (`ask_user`, `request_access`) dropped them silently, leaving prompts on screen whose answers could never be delivered. Each dropped suspension now emits `tool_suspension_cancelled`. Fixes #20592
+
+- Multi-step model generations now retain provider metadata from every completed step. ([#19921](https://github.com/mastra-ai/mastra/pull/19921))
+
+- Fixed `convertFullStreamChunkToUIMessageStream` from `@mastra/core/stream` dropping the finish reason. The terminal `finish` chunk now carries `finishReason`, so a UI message stream built on this export can tell `stop`, `length`, `content-filter`, `tool-calls` and `other` apart. Fixes #20562. ([#20983](https://github.com/mastra-ai/mastra/pull/20983))
+
+- Fixed AgentController session preferences (thinking level, notifications) reverting to defaults after a server restart. These preferences now survive restarts and follow the conversation: reopening a thread restores the values that were active in it, including on self-hosted Factory deployments. ([#20901](https://github.com/mastra-ai/mastra/pull/20901))
+
+- Fixed live scorer execution across multiple Mastra instances so only the instance that emitted a scorer run handles it. ([#20840](https://github.com/mastra-ai/mastra/pull/20840))
+
+- Fixed `@mastra/core` crashing when a project loads Mastra as CommonJS. Several ESM-only dependencies were read as a module object instead of a function, so the calls threw. ([#20980](https://github.com/mastra-ai/mastra/pull/20980))
+
+  **What failed before**
+
+  - `new MCPServer(...)` threw `slugify is not a function`.
+  - `mastra.schedules.create()` threw the same error.
+  - Workspace search, workspace file indexing, and batch trace scoring threw `p_map.default is not a function`.
+
+  All of these paths now run under CommonJS and ESM. See [#20354](https://github.com/mastra-ai/mastra/issues/20354).
+
+- Updated dependencies [[`6bff877`](https://github.com/mastra-ai/mastra/commit/6bff877e214695ff8d9c84b06c13a6e6bcf9f1ed)]:
+  - @mastra/schema-compat@1.3.6-alpha.2
+
 ## 1.58.0-alpha.2
 
 ### Minor Changes
