@@ -1168,6 +1168,11 @@ export type AgentExecuteOnFinishOptions = {
   structuredOutput?: boolean;
   overrideScorers?: MastraScorers | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>;
   onTitleGenerated?: (title: string) => void | Promise<void>;
+  /**
+   * Optional platform `waitUntil` so detached title generation survives
+   * serverless freeze-after-response without blocking `generate()`/`stream()`.
+   */
+  waitUntil?: (promise: Promise<unknown>) => void;
 };
 
 export type AgentMethodType = 'generate' | 'stream' | 'generateLegacy' | 'streamLegacy';
