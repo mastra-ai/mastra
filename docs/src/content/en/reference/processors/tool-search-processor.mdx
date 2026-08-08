@@ -7,7 +7,7 @@ packages:
 
 # ToolSearchProcessor
 
-The `ToolSearchProcessor` is an **input processor** that enables runtime-defined tool discovery and loading. Instead of providing all tools to the agent upfront, it gives the agent two meta-tools (`search_tools` and `load_tool`) that let it find and load tools on demand. This reduces context token usage when working with large tool libraries.
+The `ToolSearchProcessor` is an **input processor** that enables runtime-defined tool discovery and loading. Instead of providing every tool schema to the agent upfront, it can expose keyword search or a thin catalog of tool IDs and descriptions. Full schemas are added only after tools are loaded. This reduces context token usage when working with large tool libraries.
 
 ## Usage example
 
@@ -47,6 +47,14 @@ const toolSearch = new ToolSearchProcessor({
             description:
               'All tools that can be searched and loaded dynamically. These tools are not immediately available to the agent — they must be discovered via search and loaded on demand.',
             isOptional: false,
+          },
+          {
+            name: 'mode',
+            type: "'search' | 'catalog'",
+            description:
+              "Controls tool discovery. 'search' exposes search_tools for keyword discovery. 'catalog' injects a deterministic list of every allowed tool ID and short description, omits search_tools, and keeps schemas deferred until load_tool receives an exact ID.",
+            isOptional: true,
+            default: "'search'",
           },
           {
             name: 'search',
@@ -96,7 +104,7 @@ const toolSearch = new ToolSearchProcessor({
             name: 'filter',
             type: '(args: ToolSearchFilterArgs) => boolean | Promise<boolean>',
             description:
-              'Optional request-aware hook for hiding tools from search results, blocking tool loading, or hiding already-loaded tools for the current request.',
+              'Optional request-aware hook for hiding tools from search results or the catalog, blocking tool loading, or hiding already-loaded tools for the current request.',
             isOptional: true,
           },
         ],
@@ -126,7 +134,7 @@ const toolSearch = new ToolSearchProcessor({
     name: 'processInputStep',
     type: '(args: ProcessInputStepArgs) => Promise<ProcessInputStepResult>',
     description:
-      "Processes each step to inject search/load meta-tools and any previously loaded tools into the agent's tool set.",
+      "Processes each step to inject discovery instructions, load/search meta-tools as configured, and any previously loaded tools into the agent's tool set.",
     isOptional: false,
   },
 ]}
@@ -197,11 +205,11 @@ const toolSearch = new ToolSearchProcessor({
 
 The `phase` value describes where the filter is being applied:
 
-- `search`: Filters results returned by `search_tools`.
+- `search`: Filters results returned by `search_tools` or entries included in the catalog.
 - `load`: Blocks `load_tool` from loading disallowed tools.
 - `active`: Hides already-loaded tools from the current request if they're no longer allowed.
 
-If the hook throws or rejects, `ToolSearchProcessor` treats the tool as disallowed for that request. The hook may run for every matching search candidate, so keep async policy checks cheap or cached. The `search_tools` meta-tool is always available. `load_tool` is available unless `search.autoLoad` is enabled. Tools passed directly through the agent or `processInputStep` remain available unless you filter them outside `ToolSearchProcessor`.
+If the hook throws or rejects, `ToolSearchProcessor` treats the tool as disallowed for that request. The hook may run for every matching search candidate or catalog entry, so keep async policy checks cheap or cached. The `search_tools` meta-tool is available in search mode. `load_tool` is available unless `search.autoLoad` is enabled. Tools passed directly through the agent or `processInputStep` remain available unless you filter them outside `ToolSearchProcessor`.
 
 ## Extended usage example
 
@@ -243,6 +251,28 @@ The agent workflow is:
 1. Agent reviews results and calls `load_tool` with the tool name
 1. The loaded tool becomes available on the next turn
 1. Agent uses the loaded tool normally
+
+## Catalog discovery
+
+Set `mode` to `'catalog'` when the model should immediately see every available tool instead of discovering tools with keyword queries. The processor injects a deterministic, ID-sorted catalog containing only exact tool IDs and short descriptions. It doesn't expose `search_tools`, and full tool schemas remain out of context until the model calls `load_tool`.
+
+```typescript
+const toolSearch = new ToolSearchProcessor({
+  tools: allTools,
+  mode: 'catalog',
+  storage: 'context',
+})
+```
+
+The catalog workflow is:
+
+1. Agent receives a user message together with the thin tool catalog
+1. Agent selects an exact tool ID from the catalog
+1. Agent calls `load_tool` with that ID
+1. The loaded tool and its full schema become available on the next turn
+1. Agent uses the loaded tool normally
+
+Catalog descriptions are limited to 150 characters and XML-escaped. The `filter` hook runs with `phase: 'search'` before each catalog entry is included, then runs again with `phase: 'load'` and `phase: 'active'` at those boundaries. Catalog mode can't be combined with `search.autoLoad` because the model must explicitly choose which listed schema to load.
 
 ## Single-step discovery with `autoLoad`
 

@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
+import { z } from 'zod/v4';
 
 import { MessageList } from '../../agent/message-list';
 import { RequestContext, MASTRA_THREAD_ID_KEY } from '../../request-context';
@@ -60,6 +61,103 @@ describe('ToolSearchProcessor', () => {
       });
 
       expect(processor).toBeDefined();
+    });
+
+    it('should reject autoLoad in catalog mode', () => {
+      expect(
+        () =>
+          new ToolSearchProcessor({
+            tools: {},
+            mode: 'catalog',
+            search: { autoLoad: true },
+          }),
+      ).toThrow('autoLoad');
+    });
+  });
+
+  describe('catalog discovery mode', () => {
+    it('should expose every tool id and description without exposing schemas', async () => {
+      const processor = new ToolSearchProcessor({
+        mode: 'catalog',
+        tools: {
+          zeta: createTool({
+            id: 'zeta_tool',
+            description: 'Use Zeta <carefully>',
+            inputSchema: z.object({ secretSchemaField: z.string() }),
+            execute: async () => ({ success: true }),
+          }),
+          alpha: createMockTool('alpha_tool', 'Use Alpha & friends'),
+        },
+      });
+
+      const args = createMockArgs('catalog-thread');
+      const result = await processor.processInputStep(args);
+      const systemText = args.messageList
+        .getAllSystemMessages()
+        .map(message => message.content)
+        .join('\n');
+
+      expect(result.tools?.search_tools).toBeUndefined();
+      expect(result.tools?.load_tool).toBeDefined();
+      expect(systemText).toContain('<tool_catalog>');
+      expect(systemText).toContain('<tool id="alpha_tool">Use Alpha &amp; friends</tool>');
+      expect(systemText).toContain('<tool id="zeta_tool">Use Zeta &lt;carefully&gt;</tool>');
+      expect(systemText.indexOf('alpha_tool')).toBeLessThan(systemText.indexOf('zeta_tool'));
+      expect(systemText).not.toContain('secretSchemaField');
+    });
+
+    it('should apply the search-phase filter before listing tools', async () => {
+      const processor = new ToolSearchProcessor({
+        mode: 'catalog',
+        tools: {
+          public_weather: createMockTool('public_weather', 'Public weather'),
+          premium_weather: createMockTool('premium_weather', 'Premium weather'),
+        },
+        filter: ({ toolName, phase }) => phase !== 'search' || toolName === 'public_weather',
+      });
+
+      const args = createMockArgs('catalog-filter-thread');
+      await processor.processInputStep(args);
+      const systemText = args.messageList
+        .getAllSystemMessages()
+        .map(message => message.content)
+        .join('\n');
+
+      expect(systemText).toContain('public_weather');
+      expect(systemText).not.toContain('premium_weather');
+    });
+
+    it('should load a catalog tool by exact id and expose it on the next step', async () => {
+      const processor = new ToolSearchProcessor({
+        mode: 'catalog',
+        tools: {
+          weather: createMockTool('weather_forecast', 'Get a weather forecast'),
+        },
+      });
+
+      const firstStep = await processor.processInputStep(createMockArgs('catalog-load-thread'));
+      const loadResult = await firstStep.tools?.load_tool!.execute?.({ toolName: 'weather_forecast' }, undefined);
+      const secondStep = await processor.processInputStep(createMockArgs('catalog-load-thread'));
+
+      expect(loadResult.success).toBe(true);
+      expect(secondStep.tools?.weather_forecast).toBeDefined();
+      expect(secondStep.tools?.search_tools).toBeUndefined();
+    });
+
+    it('should suggest catalog ids rather than tools object keys', async () => {
+      const processor = new ToolSearchProcessor({
+        mode: 'catalog',
+        tools: {
+          weather: createMockTool('weather_forecast', 'Get a weather forecast'),
+        },
+      });
+
+      const step = await processor.processInputStep(createMockArgs('catalog-suggestion-thread'));
+      const loadResult = await step.tools?.load_tool!.execute?.({ toolName: 'weather_fore' }, undefined);
+
+      expect(loadResult.success).toBe(false);
+      expect(loadResult.message).toContain('Did you mean: weather_forecast?');
+      expect(loadResult.message).not.toContain('Did you mean: weather?');
     });
   });
 

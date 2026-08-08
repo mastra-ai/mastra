@@ -10,6 +10,7 @@ import type { LoadedToolStore, LoadedToolStoreContext } from './tool-search-stor
 import { LegacyMapLoadedToolStore, ContextLoadedToolStore } from './tool-search-stores';
 
 export type ToolSearchFilterPhase = 'search' | 'load' | 'active';
+export type ToolDiscoveryMode = 'search' | 'catalog';
 
 export type ToolSearchFilterArgs = {
   /** The resolved tool id. */
@@ -28,6 +29,18 @@ export interface ToolSearchProcessorOptions {
    * These tools are not immediately available - they must be discovered via search and loaded on demand.
    */
   tools: Record<string, Tool<any, any>>;
+
+  /**
+   * How the model discovers tools before loading them.
+   *
+   * - `'search'` (default): expose `search_tools` for keyword discovery.
+   * - `'catalog'`: inject a deterministic catalog containing every allowed
+   *   tool's exact id and short description, while keeping full schemas deferred
+   *   until the model calls `load_tool` with an exact id.
+   *
+   * @default 'search'
+   */
+  mode?: ToolDiscoveryMode;
 
   /**
    * Configuration for the search behavior
@@ -121,11 +134,9 @@ const TOOL_SEARCH_TOKENIZE_OPTIONS: TokenizeOptions = {
 /**
  * Processor that enables dynamic tool discovery and loading.
  *
- * Instead of providing all tools to the agent upfront, this processor:
- * 1. Gives the agent two meta-tools: search_tools and load_tool
- * 2. Agent searches for relevant tools using keywords
- * 3. Agent loads specific tools into the conversation on demand
- * 4. Loaded tools become immediately available for use
+ * Instead of providing all tool schemas to the agent upfront, this processor
+ * supports keyword search or a thin catalog of exact ids and descriptions.
+ * The agent then loads specific tools into the conversation on demand.
  *
  * This pattern dramatically reduces context usage when working with many tools (100+).
  *
@@ -151,9 +162,10 @@ const TOOL_SEARCH_TOKENIZE_OPTIONS: TokenizeOptions = {
 export class ToolSearchProcessor implements Processor<'tool-search'> {
   readonly id = 'tool-search';
   readonly name = 'Tool Search Processor';
-  readonly description = 'Enables dynamic tool discovery and loading via search';
+  readonly description = 'Enables dynamic tool discovery and loading';
 
   private allTools: Record<string, Tool<any, any>>;
+  private mode: ToolDiscoveryMode;
   private searchConfig: Required<NonNullable<ToolSearchProcessorOptions['search']>>;
   private filter?: ToolSearchProcessorOptions['filter'];
 
@@ -167,12 +179,17 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
 
   constructor(options: ToolSearchProcessorOptions) {
     this.allTools = options.tools;
+    this.mode = options.mode ?? 'search';
     this.filter = options.filter;
     this.searchConfig = {
       topK: options.search?.topK ?? 5,
       minScore: options.search?.minScore ?? 0,
       autoLoad: options.search?.autoLoad ?? false,
     };
+
+    if (this.mode === 'catalog' && this.searchConfig.autoLoad) {
+      throw new Error('ToolSearchProcessor search.autoLoad cannot be used in catalog mode.');
+    }
 
     const storage = options.storage ?? 'in-memory';
 
@@ -224,17 +241,62 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
     }
   }
 
+  private escapeXml(value: string): string {
+    return value
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&apos;');
+  }
+
+  private formatDescription(description: string): string {
+    return description.length > 150 ? description.slice(0, 147) + '...' : description;
+  }
+
+  /**
+   * Build a deterministic, request-filtered catalog. Only ids and short
+   * descriptions are projected; tool schemas remain deferred until load_tool.
+   */
+  private async getToolCatalog(requestContext?: RequestContext): Promise<string> {
+    const visibleTools: Tool<any, any>[] = [];
+    const seenIds = new Set<string>();
+
+    for (const tool of Object.values(this.allTools)) {
+      if (seenIds.has(tool.id)) continue;
+      if (!(await this.isToolAllowed(tool, requestContext, 'search'))) continue;
+
+      seenIds.add(tool.id);
+      visibleTools.push(tool);
+    }
+
+    visibleTools.sort((left, right) => left.id.localeCompare(right.id));
+
+    const entries = visibleTools.map(tool => {
+      const id = this.escapeXml(tool.id);
+      const description = this.escapeXml(this.formatDescription(tool.description || ''));
+      return `  <tool id="${id}">${description}</tool>`;
+    });
+
+    return ['<tool_catalog>', ...entries, '</tool_catalog>'].join('\n');
+  }
+
   private async getSuggestedToolNames(toolName: string, requestContext?: RequestContext): Promise<string[]> {
     const matchesToolName = (name: string) =>
       name.toLowerCase().includes(toolName.toLowerCase()) || toolName.toLowerCase().includes(name.toLowerCase());
 
+    const availableNames =
+      this.mode === 'catalog'
+        ? Array.from(new Set(Object.values(this.allTools).map(tool => tool.id)))
+        : Object.keys(this.allTools);
+
     if (!this.filter) {
-      return Object.keys(this.allTools).filter(matchesToolName);
+      return availableNames.filter(matchesToolName);
     }
 
     const allowedNames: string[] = [];
 
-    for (const name of Object.keys(this.allTools)) {
+    for (const name of availableNames) {
       if (!matchesToolName(name)) continue;
 
       const tool = this.findToolForDynamicName(name);
@@ -414,7 +476,7 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
       const description = this.toolDescriptions.get(r.id) || '';
       return {
         name: r.id,
-        description: description.length > 150 ? description.slice(0, 147) + '...' : description,
+        description: this.formatDescription(description),
         score: Math.round(r.score * 100) / 100,
       };
     });
@@ -428,17 +490,29 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
     const loadedToolNames = await this.store.getLoadedNames(storeContext);
 
     const autoLoad = this.searchConfig.autoLoad;
+    const catalogMode = this.mode === 'catalog';
 
-    // Add system instruction about the meta-tools
-    messageList.addSystem(
-      autoLoad
-        ? 'To discover available tools, call search_tools with a keyword query. ' +
-            'Matching tools are loaded automatically and become available on your next turn — ' +
-            'there is no separate load step. After searching, use the tool directly.'
-        : 'To discover available tools, call search_tools with a keyword query. ' +
-            'To add one or more tools to the conversation, call load_tool with a toolName or toolNames array. ' +
-            'Tools must be loaded before they can be used.',
-    );
+    // Add system instruction about the selected discovery mode and meta-tools.
+    if (catalogMode) {
+      const catalog = await this.getToolCatalog(args.requestContext);
+      messageList.addSystem(
+        `${catalog}\n` +
+          'The catalog above contains every tool available for this request. ' +
+          'To add one or more tools to the conversation, call load_tool with an exact id as toolName ' +
+          'or an array of exact ids as toolNames. Full tool schemas are provided only after loading. ' +
+          'Tools must be loaded before they can be used.',
+      );
+    } else {
+      messageList.addSystem(
+        autoLoad
+          ? 'To discover available tools, call search_tools with a keyword query. ' +
+              'Matching tools are loaded automatically and become available on your next turn — ' +
+              'there is no separate load step. After searching, use the tool directly.'
+          : 'To discover available tools, call search_tools with a keyword query. ' +
+              'To add one or more tools to the conversation, call load_tool with a toolName or toolNames array. ' +
+              'Tools must be loaded before they can be used.',
+      );
+    }
 
     // Create the search tool with BM25 ranking
     const searchTool = createTool({
@@ -509,17 +583,31 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
     // In auto-load mode this meta-tool is not exposed (search_tools activates matches itself).
     const loadTool = createTool({
       id: 'load_tool',
-      description:
-        'Load one or more tools into your context. ' +
-        'Call this after finding tools with search_tools. ' +
-        'Once loaded, tools will be available for use. ' +
-        'Pass a single toolName or an array of toolNames to load multiple tools at once.',
+      description: catalogMode
+        ? 'Load one or more tools from the tool catalog into your context by exact id. ' +
+          'Once loaded, tools will be available for use. ' +
+          'Pass a single toolName or an array of toolNames to load multiple tools at once.'
+        : 'Load one or more tools into your context. ' +
+          'Call this after finding tools with search_tools. ' +
+          'Once loaded, tools will be available for use. ' +
+          'Pass a single toolName or an array of toolNames to load multiple tools at once.',
       inputSchema: z.object({
-        toolName: z.string().optional().describe('The exact name of a tool to load (from search results)'),
+        toolName: z
+          .string()
+          .optional()
+          .describe(
+            catalogMode
+              ? 'The exact id of a tool to load (from the tool catalog)'
+              : 'The exact name of a tool to load (from search results)',
+          ),
         toolNames: z
           .array(z.string())
           .optional()
-          .describe('Array of exact tool names to load in one call (from search results)'),
+          .describe(
+            catalogMode
+              ? 'Array of exact tool ids to load in one call (from the tool catalog)'
+              : 'Array of exact tool names to load in one call (from search results)',
+          ),
       }),
       outputSchema: z.object({
         success: z.boolean(),
@@ -598,7 +686,9 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
             if (suggestions.length > 0) {
               message += ` Did you mean: ${suggestions.slice(0, 3).join(', ')}?`;
             } else {
-              message += ' Use search_tools to find available tools.';
+              message += catalogMode
+                ? ' Use an exact id from the tool catalog.'
+                : ' Use search_tools to find available tools.';
             }
             return { success: false, message, toolName: name };
           }
@@ -643,7 +733,7 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
     // not invalidated when a tool is loaded mid-conversation.
     return {
       tools: {
-        search_tools: searchTool,
+        ...(catalogMode ? {} : { search_tools: searchTool }),
         // load_tool is omitted in auto-load mode — search_tools activates matches directly.
         ...(autoLoad ? {} : { load_tool: loadTool }),
         ...(tools ?? {}),
