@@ -2205,19 +2205,24 @@ export type ProviderModelsMap = {
     'cline-pass/qwen3.7-plus',
   ];
   readonly 'regolo-ai': readonly [
+    'apertus-70b',
+    'brick-complexity-pro',
+    'brick-v1-beta',
+    'deepseek-ocr-2',
+    'faster-whisper-large-v3',
+    'gemma4-31b',
+    'glm5.2',
     'gpt-oss-120b',
     'gpt-oss-20b',
-    'llama-3.1-8b-instruct',
     'llama-3.3-70b-instruct',
-    'minimax-m2.5',
     'mistral-small-4-119b',
-    'mistral-small3.2',
     'qwen-image',
     'qwen3-coder-next',
     'qwen3-embedding-8b',
     'qwen3-reranker-4b',
     'qwen3.5-122b',
     'qwen3.5-9b',
+    'qwen3.6-27b',
   ];
   readonly aiand: readonly [
     'deepseek-ai/deepseek-v4-flash',

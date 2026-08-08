@@ -90,10 +90,7 @@ export interface MastraCodeState {
     enabled: boolean;
     provider: 'stagehand' | 'agent-browser';
     headless?: boolean;
-    viewport?: {
-      width: number;
-      height: number;
-    };
+    viewport?: { width: number; height: number } | 'window';
     cdpUrl?: string;
     stagehand?: {
       env: 'LOCAL' | 'BROWSERBASE';
@@ -195,10 +192,13 @@ export const stateSchema = z.object({
       provider: z.enum(['stagehand', 'agent-browser']),
       headless: z.boolean().optional(),
       viewport: z
-        .object({
-          width: z.number(),
-          height: z.number(),
-        })
+        .union([
+          z.object({
+            width: z.number(),
+            height: z.number(),
+          }),
+          z.literal('window'),
+        ])
         .optional(),
       cdpUrl: z.string().optional(),
       stagehand: z

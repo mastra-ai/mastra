@@ -1,5 +1,44 @@
 # @mastra/server
 
+## 1.58.0-alpha.6
+
+### Patch Changes
+
+- Fixed invalid pagination query parameters returning a 500 instead of a 400. ([#21013](https://github.com/mastra-ai/mastra/pull/21013))
+
+  Requests such as `?page=-1`, `?page=1.5`, or `?perPage=-5` used to pass request validation and were only rejected deep in the storage layer, which surfaced them as `500 Internal Server Error`. Malformed client input is now rejected at the request boundary and returns `400 Bad Request` naming the offending field, matching what `GET /api/workflows/:workflowId/runs` already did.
+
+  **Before**
+
+  ```
+  GET /api/memory/threads?resourceId=user-1&page=-1
+  → 500 Internal Server Error   { "error": "page must be >= 0" }
+  ```
+
+  **After**
+
+  ```
+  GET /api/memory/threads?resourceId=user-1&page=-1
+  → 400 Bad Request
+    { "error": "Invalid query parameters", "issues": [{ "field": "page", "message": "..." }] }
+  ```
+
+  This affects every paginated endpoint built on the shared pagination schemas, including memory, logs, MCP, and the stored agent/skill/scorer routes. `perPage=0` stays valid, since storage uses it as the include-only fast path.
+
+- Updated dependencies [[`f59032a`](https://github.com/mastra-ai/mastra/commit/f59032a73699443555a08a479e7ac578975784f2), [`bf936e2`](https://github.com/mastra-ai/mastra/commit/bf936e2c89b2ff0dad5695b873ddc009ba96d41e)]:
+  - @mastra/core@1.58.0-alpha.6
+
+## 1.58.0-alpha.5
+
+### Minor Changes
+
+- Renamed the stored workflows handlers and schemas to dynamic workflows. HTTP route paths and permissions are unchanged. ([#20938](https://github.com/mastra-ai/mastra/pull/20938))
+
+### Patch Changes
+
+- Updated dependencies [[`6445eba`](https://github.com/mastra-ai/mastra/commit/6445eba6020abac681aba1cc9289f446cb400cbe), [`df31eb0`](https://github.com/mastra-ai/mastra/commit/df31eb0c7087d782a0d9346e467f9a4af4b0eef6), [`fcd0667`](https://github.com/mastra-ai/mastra/commit/fcd0667a4e378be35c9a1b1eb19cce78fbfd7282), [`bab06b1`](https://github.com/mastra-ai/mastra/commit/bab06b18923873a584bdfc71a6b4ec7fb4727fb7)]:
+  - @mastra/core@1.58.0-alpha.5
+
 ## 1.58.0-alpha.4
 
 ### Minor Changes

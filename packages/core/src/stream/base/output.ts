@@ -167,19 +167,24 @@ export type FullOutput<OUTPUT = undefined> = {
  * completion-check feedback so it can't become the final text.
  * The completionResult metadata only exists on DB-format messages, and the
  * message is converted alone so adjacent assistant messages aren't merged.
+ *
+ * Returns `undefined` only when there is no response message to read text from,
+ * so callers can distinguish "no processed output exists" from an output
+ * processor deliberately clearing the text to `''`. Never collapse the two with
+ * a truthiness check: a redacting processor must be able to produce empty text.
  */
-function resolveOutputTextSkippingCompletionChecks(messageList: MessageList): string {
+function resolveOutputTextSkippingCompletionChecks(messageList: MessageList): string | undefined {
   const responseDbMessages = messageList.get.response.db();
   const hasCompletionCheckMessages = responseDbMessages.some(m => m.content?.metadata?.completionResult);
   if (hasCompletionCheckMessages) {
     const lastRealMessage = responseDbMessages.findLast(m => !m.content?.metadata?.completionResult);
     const converted = lastRealMessage ? convertMessages([lastRealMessage]).to('AIV4.Core') : [];
     const lastConverted = converted[converted.length - 1];
-    return lastConverted ? coreContentToString(lastConverted.content) : '';
+    return lastConverted ? coreContentToString(lastConverted.content) : undefined;
   }
   const responseMessages = messageList.get.response.aiV4.core();
   const lastResponseMessage = responseMessages[responseMessages.length - 1];
-  return lastResponseMessage ? coreContentToString(lastResponseMessage.content) : '';
+  return lastResponseMessage ? coreContentToString(lastResponseMessage.content) : undefined;
 }
 
 export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
@@ -1005,14 +1010,18 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                   const outputText = resolveOutputTextSkippingCompletionChecks(self.messageList);
 
                   // Only update the last step's text if output processors actually modified it
-                  // This preserves text from retry scenarios where step.text is already correct
-                  if (lastStep && outputText && outputText !== originalText) {
+                  // This preserves text from retry scenarios where step.text is already correct.
+                  // Compare against undefined, not truthiness, so a processor clearing the text
+                  // to '' still overwrites the step text instead of leaking the original.
+                  if (lastStep && outputText !== undefined && outputText !== originalText) {
                     lastStep.text = outputText;
                   }
 
-                  // Use the processed text if available, otherwise keep original
+                  // Use the processed text when a response message exists, even if the
+                  // processor intentionally emptied it. Only fall back to the raw model
+                  // text when there is no processed message at all.
                   this.resolvePromises({
-                    text: outputText || originalText,
+                    text: outputText ?? originalText,
                     finishReason: self.#finishReason,
                   });
 

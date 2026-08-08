@@ -24,6 +24,71 @@ const createMessage = (text: string, role: 'user' | 'assistant' = 'user'): Mastr
   createdAt: new Date(),
 });
 
+// A unique token that only ever exists in the raw model output. Once a redacting
+// output processor removes it, it must not survive on any public result surface.
+const SENSITIVE_MARKER = 'SENSITIVE_MARKER_9d4f1c';
+
+/** Model that always emits the sensitive marker, for both generate and stream. */
+const makeRedactionModel = () =>
+  new MockLanguageModelV2({
+    doGenerate: async () => ({
+      content: [{ type: 'text' as const, text: SENSITIVE_MARKER }],
+      finishReason: 'stop' as const,
+      usage: { inputTokens: 2, outputTokens: 5, totalTokens: 7 },
+      rawCall: { rawPrompt: null, rawSettings: {} },
+      warnings: [],
+    }),
+    doStream: async () => ({
+      stream: convertArrayToReadableStream([
+        { type: 'stream-start', warnings: [] },
+        { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+        { type: 'text-start', id: '1' },
+        { type: 'text-delta', id: '1', delta: SENSITIVE_MARKER },
+        { type: 'text-end', id: '1' },
+        { type: 'finish', finishReason: 'stop', usage: { inputTokens: 2, outputTokens: 5, totalTokens: 7 } },
+      ]),
+    }),
+  });
+
+/** Output processor that redacts every assistant text part down to ''. */
+class RedactAllTextProcessor implements Processor {
+  readonly id = 'redact-all-text-processor';
+  readonly name = 'Redact All Text Processor';
+
+  async processOutputResult({ messages }) {
+    return messages.map(msg => ({
+      ...msg,
+      content: {
+        ...msg.content,
+        parts: msg.content.parts.map(part => (part.type === 'text' ? { ...part, text: '' } : part)),
+      },
+    }));
+  }
+}
+
+/**
+ * Recursively assert the redacted marker is absent from a result surface.
+ * Applied to the final-output projection (`text`, `object`, `response.messages`,
+ * `response.uiMessages`), not to `steps[].content`/`steps[].response`, which are
+ * the per-step execution record of what the model actually returned.
+ */
+function expectNoSensitiveMarker(value: unknown, path = 'result', seen = new WeakSet<object>()): void {
+  if (typeof value === 'string') {
+    expect(value, `${path} still contains redacted text`).not.toContain(SENSITIVE_MARKER);
+    return;
+  }
+  if (typeof value !== 'object' || value === null) return;
+  if (seen.has(value)) return;
+  seen.add(value);
+  if (Array.isArray(value)) {
+    value.forEach((entry, i) => expectNoSensitiveMarker(entry, `${path}[${i}]`, seen));
+    return;
+  }
+  for (const [key, entry] of Object.entries(value)) {
+    expectNoSensitiveMarker(entry, `${path}.${key}`, seen);
+  }
+}
+
 describe('Input and Output Processors', () => {
   let mockModel: MockLanguageModelV2;
 
@@ -663,6 +728,24 @@ describe('Input and Output Processors', () => {
       expect((result.response.messages[0].content[0] as any).text).toBe('HELLO WORLD');
     });
 
+    it('should let an output processor clear the final text to an empty string', async () => {
+      const agent = new Agent({
+        id: 'redacting-output-processor-generate-agent',
+        name: 'Redacting Output Processor Generate Agent',
+        instructions: 'You are a helpful assistant.',
+        model: makeRedactionModel(),
+        outputProcessors: [new RedactAllTextProcessor()],
+      });
+
+      const result = await agent.generate('Test');
+
+      expect(result.text).toBe('');
+      expect(result.steps.at(-1)?.text).toBe('');
+      expectNoSensitiveMarker(result.text, 'result.text');
+      expectNoSensitiveMarker(result.response.messages, 'result.response.messages');
+      expectNoSensitiveMarker(result.response.uiMessages, 'result.response.uiMessages');
+    });
+
     it('should process messages through multiple output processors in sequence', async () => {
       let finalProcessedText = '';
 
@@ -866,6 +949,29 @@ describe('Input and Output Processors', () => {
   });
 
   describe('Output Processors with stream', () => {
+    it('should let an output processor clear the final text to an empty string', async () => {
+      const agent = new Agent({
+        id: 'redacting-output-processor-stream-agent',
+        name: 'Redacting Output Processor Stream Agent',
+        instructions: 'You are a helpful assistant.',
+        model: makeRedactionModel(),
+        outputProcessors: [new RedactAllTextProcessor()],
+      });
+
+      const stream = await agent.stream('Test');
+      // Drain the stream so finalization runs before reading the resolved promises.
+      for await (const _ of stream.textStream) {
+      }
+
+      const fullOutput = await stream.getFullOutput();
+      expect(await stream.text).toBe('');
+      expect((await stream.steps).at(-1)?.text).toBe('');
+      expect(fullOutput.text).toBe('');
+      expectNoSensitiveMarker(fullOutput.text, 'fullOutput.text');
+      expectNoSensitiveMarker(fullOutput.response.messages, 'fullOutput.response.messages');
+      expectNoSensitiveMarker(fullOutput.response.uiMessages, 'fullOutput.response.uiMessages');
+    });
+
     it('should process text chunks through output processors in real-time', async () => {
       class TestOutputProcessor implements Processor {
         readonly id = 'test-output-processor';

@@ -1,5 +1,50 @@
 # @mastra/code-sdk
 
+## 1.2.0-alpha.7
+
+### Patch Changes
+
+- Persist the browser viewport as a preset name, a `{ width, height }` size, or `'window'` in settings, and drop unusable stored values back to the default rather than passing them to the browser. ([#21010](https://github.com/mastra-ai/mastra/pull/21010))
+
+- Fixed tenant credential resolution for session-based authentication providers. Background Factory runs now resolve the authenticated user and active organization from session-wrapped request context values instead of falling back to an empty credential store. ([#21008](https://github.com/mastra-ai/mastra/pull/21008))
+
+- Updated dependencies [[`f59032a`](https://github.com/mastra-ai/mastra/commit/f59032a73699443555a08a479e7ac578975784f2), [`f59032a`](https://github.com/mastra-ai/mastra/commit/f59032a73699443555a08a479e7ac578975784f2), [`bf936e2`](https://github.com/mastra-ai/mastra/commit/bf936e2c89b2ff0dad5695b873ddc009ba96d41e)]:
+  - @mastra/core@1.58.0-alpha.6
+  - @mastra/agent-browser@0.5.1-alpha.0
+  - @mastra/stagehand@0.3.2-alpha.1
+
+## 1.2.0-alpha.6
+
+### Patch Changes
+
+- Added a `model` option to Stagehand browser settings, so browser automation can run on a chosen provider instead of a fixed default: ([#20993](https://github.com/mastra-ai/mastra/pull/20993))
+
+  ```ts
+  import { createBrowserFromSettings } from '@mastra/code-sdk/onboarding/settings';
+
+  const browser = await createBrowserFromSettings({
+    enabled: true,
+    provider: 'stagehand',
+    headless: true,
+    stagehand: { env: 'LOCAL', model: 'anthropic/claude-sonnet-4-5' },
+  });
+  ```
+
+  The model must be provider-qualified as `<provider>/<model>`. Values Stagehand cannot resolve, such as a bare `gpt-4.1`, are ignored so the browser still starts.
+
+- Updated dependencies [[`25956fc`](https://github.com/mastra-ai/mastra/commit/25956fc8841780d506acb22b618fdb4dcf6c4e21)]:
+  - @mastra/stagehand@0.3.2-alpha.0
+
+## 1.2.0-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [[`6445eba`](https://github.com/mastra-ai/mastra/commit/6445eba6020abac681aba1cc9289f446cb400cbe), [`deaf0c4`](https://github.com/mastra-ai/mastra/commit/deaf0c4c38fe2e988a094c63bbd8899436f4e579), [`df31eb0`](https://github.com/mastra-ai/mastra/commit/df31eb0c7087d782a0d9346e467f9a4af4b0eef6), [`59866f2`](https://github.com/mastra-ai/mastra/commit/59866f2e0a7986bea3b418aaa2c2f79a77d33719), [`fcd0667`](https://github.com/mastra-ai/mastra/commit/fcd0667a4e378be35c9a1b1eb19cce78fbfd7282), [`bab06b1`](https://github.com/mastra-ai/mastra/commit/bab06b18923873a584bdfc71a6b4ec7fb4727fb7)]:
+  - @mastra/core@1.58.0-alpha.5
+  - @mastra/memory@1.26.1-alpha.3
+  - @mastra/libsql@1.20.0-alpha.1
+  - @mastra/pg@1.20.0-alpha.2
+
 ## 1.2.0-alpha.4
 
 ### Patch Changes

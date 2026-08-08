@@ -22,6 +22,10 @@ Authentication is optional. If no auth is configured, all routes and Studio are 
 
 See [Custom API Routes](/docs/server/custom-api-routes#authentication) for controlling authentication on custom endpoints. Visit the [Studio Auth docs](/docs/studio/auth) for more on securing your Studio deployment.
 
+:::warning
+The default auth configuration protects `/api/*` and treats `/api`, `/api/auth/*` as public. When you set a custom `server.apiPrefix`, those defaults no longer match and built-in routes fall outside the protected pattern. Update `server.auth.protected` and `server.auth.public` to reference your new prefix.
+:::
+
 :::note
 
 Authentication for Studio is currently supported by the following providers: Simple Auth, JWT, WorkOS, Better Auth, and Google.

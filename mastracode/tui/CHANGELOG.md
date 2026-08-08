@@ -1,5 +1,45 @@
 # mastracode
 
+## 0.33.0-alpha.7
+
+### Patch Changes
+
+- Add `/browser set viewport` and `/browser clear viewport`. Pass a preset (`desktop`, `desktop-hd`, `laptop`, `tablet`, `mobile`), a custom `WIDTHxHEIGHT` size, or `window` to match the real browser window; omit the value to pick a preset from a list. `window` is rejected on providers that cannot honor it. ([#21010](https://github.com/mastra-ai/mastra/pull/21010))
+
+- Updated dependencies [[`f59032a`](https://github.com/mastra-ai/mastra/commit/f59032a73699443555a08a479e7ac578975784f2), [`f59032a`](https://github.com/mastra-ai/mastra/commit/f59032a73699443555a08a479e7ac578975784f2), [`f59032a`](https://github.com/mastra-ai/mastra/commit/f59032a73699443555a08a479e7ac578975784f2), [`3e50f63`](https://github.com/mastra-ai/mastra/commit/3e50f63db85e9fe365b4ce5daecb0ac0dc464d93), [`bf936e2`](https://github.com/mastra-ai/mastra/commit/bf936e2c89b2ff0dad5695b873ddc009ba96d41e)]:
+  - @mastra/code-sdk@1.2.0-alpha.7
+  - @mastra/core@1.58.0-alpha.6
+  - @mastra/agent-browser@0.5.1-alpha.0
+  - @mastra/stagehand@0.3.2-alpha.1
+
+## 0.33.0-alpha.6
+
+### Patch Changes
+
+- Added a configurable model for Stagehand browser automation, which previously ran on a fixed default. Run `/browser set model` with no value to choose from a picker, or name one directly: ([#20993](https://github.com/mastra-ai/mastra/pull/20993))
+
+  ```bash
+  /browser set model anthropic/claude-sonnet-4-5
+  /browser clear model
+  ```
+
+  Only providers Stagehand supports are accepted, and you are prompted for the provider's API key when it is missing.
+
+- Updated dependencies [[`25956fc`](https://github.com/mastra-ai/mastra/commit/25956fc8841780d506acb22b618fdb4dcf6c4e21), [`25956fc`](https://github.com/mastra-ai/mastra/commit/25956fc8841780d506acb22b618fdb4dcf6c4e21)]:
+  - @mastra/code-sdk@1.2.0-alpha.6
+  - @mastra/stagehand@0.3.2-alpha.0
+
+## 0.33.0-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [[`6445eba`](https://github.com/mastra-ai/mastra/commit/6445eba6020abac681aba1cc9289f446cb400cbe), [`deaf0c4`](https://github.com/mastra-ai/mastra/commit/deaf0c4c38fe2e988a094c63bbd8899436f4e579), [`df31eb0`](https://github.com/mastra-ai/mastra/commit/df31eb0c7087d782a0d9346e467f9a4af4b0eef6), [`59866f2`](https://github.com/mastra-ai/mastra/commit/59866f2e0a7986bea3b418aaa2c2f79a77d33719), [`fcd0667`](https://github.com/mastra-ai/mastra/commit/fcd0667a4e378be35c9a1b1eb19cce78fbfd7282), [`bab06b1`](https://github.com/mastra-ai/mastra/commit/bab06b18923873a584bdfc71a6b4ec7fb4727fb7)]:
+  - @mastra/core@1.58.0-alpha.5
+  - @mastra/memory@1.26.1-alpha.3
+  - @mastra/libsql@1.20.0-alpha.1
+  - @mastra/pg@1.20.0-alpha.2
+  - @mastra/code-sdk@1.2.0-alpha.5
+
 ## 0.33.0-alpha.4
 
 ### Patch Changes
