@@ -8,7 +8,7 @@ import { swaggerUI } from '@hono/swagger-ui';
 import type { Mastra } from '@mastra/core/mastra';
 import type { ApiRoute, CorsOptions } from '@mastra/core/server';
 import { Tool } from '@mastra/core/tools';
-import { MastraServer, setupBrowserStream } from '@mastra/hono';
+import { MastraServer, setupBrowserStream, skipIfFrameworkPublic } from '@mastra/hono';
 import type { HonoBindings, HonoVariables } from '@mastra/hono';
 import { InMemoryTaskStore } from '@mastra/server/a2a/store';
 import { findMatchingCustomRoute } from '@mastra/server/auth';
@@ -207,7 +207,10 @@ export async function createHonoServer(
 
   if (serverMiddleware && serverMiddleware.length > 0) {
     for (const m of serverMiddleware) {
-      app.use(m.path, m.handler);
+      // Wrap with skipIfFrameworkPublic so user middleware cannot 401 routes
+      // the framework declared public via `requiresAuth: false`
+      // (e.g. Studio sign-in endpoints like /api/auth/capabilities).
+      app.use(m.path, skipIfFrameworkPublic(m.handler));
     }
   }
 
@@ -323,7 +326,10 @@ export async function createHonoServer(
     });
 
     for (const middleware of middlewares) {
-      app.use(middleware.path, middleware.handler as unknown as HonoMiddlewareHandler);
+      // Wrap with skipIfFrameworkPublic so user middleware cannot 401 routes
+      // the framework declared public via `requiresAuth: false`
+      // (e.g. Studio sign-in endpoints like /api/auth/capabilities).
+      app.use(middleware.path, skipIfFrameworkPublic(middleware.handler as unknown as HonoMiddlewareHandler));
     }
   }
 
