@@ -11,7 +11,7 @@ The `PrefillErrorHandler` is an **error processor** that handles assistant-respo
 
 When the error is detected, the processor sends a hidden `system-reminder` signal with `continue` as its contents and signals a retry. The reminder is persisted as signal metadata, which keeps it available for retry reconstruction and raw history while standard UI-facing message conversions hide it.
 
-Add this processor to `errorProcessors` when you want Mastra to recover from assistant prefill rejections (for example Anthropic's "assistant message prefill" and Qwen/llama.cpp's "assistant response prefill is incompatible with `enable_thinking`" errors).
+**This processor is included by default for all agents.** You do not need to add it manually — Mastra automatically recovers from assistant prefill rejections (for example Anthropic's "assistant message prefill" and Qwen/llama.cpp's "assistant response prefill is incompatible with `enable_thinking`" errors).
 
 ## How it works
 
@@ -24,18 +24,31 @@ The processor now reacts to the API rejection itself instead of re-checking whet
 
 ## Usage example
 
-Add `PrefillErrorHandler` to `errorProcessors` for any agent that should retry assistant-prefill failures:
+Since `PrefillErrorHandler` is enabled by default, no configuration is needed:
 
 ```typescript title="src/mastra/agents/my-agent.ts"
 import { Agent } from '@mastra/core/agent'
-import { PrefillErrorHandler } from '@mastra/core/processors'
+
+// PrefillErrorHandler is automatically included — no errorProcessors needed
+export const agent = new Agent({
+  name: 'my-agent',
+  instructions: 'You are a helpful assistant.',
+  model: '__GATEWAY_ANTHROPIC_MODEL_OPUS__',
+})
+```
+
+If you explicitly add it to `errorProcessors`, it will not be duplicated:
+
+```typescript title="src/mastra/agents/explicit-config.ts"
+import { Agent } from '@mastra/core/agent'
+import { PrefillErrorHandler, StreamErrorRetryProcessor } from '@mastra/core/processors'
 
 export const agent = new Agent({
   id: 'my-agent',
   name: 'my-agent',
   instructions: 'You are a helpful assistant.',
   model: '__GATEWAY_ANTHROPIC_MODEL_OPUS__',
-  errorProcessors: [new PrefillErrorHandler()],
+  errorProcessors: [new StreamErrorRetryProcessor(), new PrefillErrorHandler()],
 })
 ```
 
