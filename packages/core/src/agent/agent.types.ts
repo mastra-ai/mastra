@@ -1,5 +1,6 @@
 import type { ModelMessage, ToolChoice } from '@internal/ai-sdk-v5';
 import type { ActorSignal } from '../auth/ee';
+import type { WaitUntilFn } from '../channels/wait-until';
 import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../evals';
 import type { SystemMessage } from '../llm';
 import type { ProviderOptions } from '../llm/model/provider-options';
@@ -477,6 +478,15 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
 
   /** Memory configuration for conversation persistence and retrieval */
   memory?: AgentMemoryOption;
+
+  /**
+   * Keep detached finish-time work (e.g. thread title generation) alive on
+   * serverless runtimes that freeze after the HTTP response returns.
+   * Pass the platform `waitUntil` (Vercel `@vercel/functions`, Cloudflare
+   * `ExecutionContext.waitUntil`, etc.). Without it, title generation stays
+   * fire-and-forget and can be dropped when the isolate freezes.
+   */
+  waitUntil?: WaitUntilFn;
 
   /** Unique identifier for this execution run */
   runId?: string;

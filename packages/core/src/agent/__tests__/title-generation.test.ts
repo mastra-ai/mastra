@@ -814,10 +814,13 @@ function titleGenerationTests(version: 'v1' | 'v2') {
       expect(agentCallCount).toBe(1); // But main agent should still be called
     });
 
-    it('awaits title persistence before generate resolves (#20682)', async () => {
-      // Regression: detached void genTitle() never ran on serverless runtimes that
-      // freeze after the HTTP response. generate()/generateLegacy() must not
-      // resolve until the title has been persisted — no post-await setTimeout.
+    it('keeps title persistence alive via waitUntil without blocking generate (#20682)', async () => {
+      // Title gen stays fire-and-forget so generate() is not slowed for serverless.
+      // Callers pass platform waitUntil so the isolate stays alive until persistence finishes.
+      let releaseTitleWrite: (() => void) | undefined;
+      const titleWriteGate = new Promise<void>(resolve => {
+        releaseTitleWrite = resolve;
+      });
       let titlePersisted = false;
 
       const mockMemory = new MockMemory();
@@ -827,13 +830,11 @@ function titleGenerationTests(version: 'v1' | 'v2') {
 
       const originalCreateThread = mockMemory.createThread.bind(mockMemory);
       mockMemory.createThread = async args => {
-        // Intentionally slow so a detached fire-and-forget would lose the race.
-        await new Promise(resolve => setTimeout(resolve, 40));
-        const thread = await originalCreateThread(args);
         if (args.title) {
+          await titleWriteGate;
           titlePersisted = true;
         }
-        return thread;
+        return originalCreateThread(args);
       };
 
       let testModel: MockLanguageModelV1 | MockLanguageModelV2;
@@ -918,16 +919,22 @@ function titleGenerationTests(version: 'v1' | 'v2') {
       }
 
       const agent = new Agent({
-        id: 'await-title-agent',
-        name: 'Await Title Agent',
+        id: 'waituntil-title-agent',
+        name: 'WaitUntil Title Agent',
         instructions: 'test agent',
         model: testModel,
         memory: mockMemory,
       });
 
-      const threadId = `thread-await-title-${version}`;
+      const threadId = `thread-waituntil-title-${version}`;
+      const pending: Promise<unknown>[] = [];
+      const waitUntil = (promise: Promise<unknown>) => {
+        pending.push(promise);
+      };
 
       if (version === 'v1') {
+        // Legacy already awaits title generation inline — no waitUntil hook needed.
+        releaseTitleWrite?.();
         await agent.generateLegacy('Name this conversation', {
           memory: {
             resource: 'user-await',
@@ -937,8 +944,10 @@ function titleGenerationTests(version: 'v1' | 'v2') {
             },
           },
         });
+        expect(titlePersisted).toBe(true);
       } else {
         await agent.generate('Name this conversation', {
+          waitUntil,
           memory: {
             resource: 'user-await',
             thread: {
@@ -947,9 +956,16 @@ function titleGenerationTests(version: 'v1' | 'v2') {
             },
           },
         });
+
+        // generate() must resolve without waiting on title persistence.
+        expect(titlePersisted).toBe(false);
+        expect(pending.length).toBe(1);
+
+        releaseTitleWrite?.();
+        await Promise.all(pending);
+        expect(titlePersisted).toBe(true);
       }
 
-      expect(titlePersisted).toBe(true);
       const thread = await mockMemory.getThreadById({ threadId });
       expect(thread?.title).toBe('Serverless Safe Title');
     });
