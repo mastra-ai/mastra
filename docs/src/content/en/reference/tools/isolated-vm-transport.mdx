@@ -23,7 +23,7 @@ Compared to the default `StdioCodeModeTransport`, this transport spawns no proce
 npm install @mastra/isolated-vm
 ```
 
-`isolated-vm` is a native addon. It ships prebuilt binaries for common platforms, so installation usually needs no extra setup. A C++ toolchain is only needed on platforms without a matching prebuild, where it falls back to compiling from source.
+`isolated-vm` is a native addon. It provides prebuilt binaries for common platforms, so installation usually needs no extra setup. A C++ toolchain is only needed on platforms without a matching prebuild, where it falls back to compiling from source.
 
 On Node.js 20 and later, the host process must be started with the `--no-node-snapshot` flag, otherwise creating an isolate crashes the process. The constructor throws an error when the flag is missing. Pass the flag when starting your server, or set it through `NODE_OPTIONS`:
 

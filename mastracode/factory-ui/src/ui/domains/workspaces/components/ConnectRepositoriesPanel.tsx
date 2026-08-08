@@ -1,13 +1,14 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
 import { useState } from 'react';
 
 import { useApiConfig } from '../../../../api/config';
 import { useGithubReposQuery } from '../../../../hooks/useGithubRepos';
 import { useGithubStatusQuery } from '../../../../hooks/useGithubStatus';
 import { useLinkRepositoryMutation, useUnlinkRepositoryMutation } from '../../../../hooks/useFactories';
-import { FolderIcon, GithubIcon, SearchIcon } from '../../../ui/icons';
+import { FolderIcon, SearchIcon } from '../../../ui/icons';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
 import type { FactoryProject, GithubStatus } from '../services/github';
 import { connectGithub } from '../services/github';
@@ -63,7 +64,7 @@ export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject 
         status.reason !== 'organization_required' && (
           <div>
             <Button variant="primary" onClick={() => connectGithub(baseUrl)}>
-              <GithubIcon />
+              <GithubIcon className="size-4" />
               Connect GitHub
             </Button>
           </div>
@@ -95,7 +96,7 @@ export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject 
               >
                 <span className="min-w-0 flex-1">
                   <span className="text-ui-md text-icon6 flex items-center gap-1.5">
-                    <GithubIcon size={14} className="text-icon5 shrink-0" />
+                    <GithubIcon className="text-icon5 size-3.5 shrink-0" />
                     <span className="truncate">{repo.slug}</span>
                     <Badge size="sm" variant="success">
                       Linked

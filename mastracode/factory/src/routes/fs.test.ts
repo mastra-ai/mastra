@@ -2,14 +2,20 @@ import { mkdtemp, mkdir, realpath, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import { Hono } from 'hono';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { SandboxFleet } from '../sandbox/fleet.js';
 import type { SourceControlSession } from '../storage/domains/source-control/base.js';
 import {
+  buildFsRoutes,
   listArtifacts,
   listSessionRenderedPath,
+  listSessionWorkspaceChanges,
   listWorkspaceRenderedPath,
+  parseWorkspaceChanges,
+  parseWorkspaceChangeStats,
+  readSessionWorkspaceDiff,
   readSessionWorkspaceFile,
   readWorkspaceFile,
 } from './fs.js';
@@ -209,6 +215,7 @@ function makeSession(overrides: Partial<SourceControlSession> = {}): SourceContr
     orgId: 'org-1',
     userId: 'user-1',
     branch: 'main',
+    title: null,
     baseBranch: 'main',
     sandboxId: 'sbx-1',
     sandboxWorkdir: WORKDIR,
@@ -223,10 +230,12 @@ function makeSession(overrides: Partial<SourceControlSession> = {}): SourceContr
  * Fake fleet whose sandbox answers the exact shell scripts the session-backed
  * helpers issue (find listing, readlink/stat confinement checks, base64 read).
  */
-function makeFleet(respond: (script: string) => { exitCode: number; stdout: string; stderr?: string }) {
-  const executeCommand = vi.fn(async (_cmd: string, args?: string[]) => {
-    const script = args?.[1] ?? '';
-    const result = respond(script);
+function makeFleet(
+  respond: (script: string, command: string, args: string[]) => { exitCode: number; stdout: string; stderr?: string },
+) {
+  const executeCommand = vi.fn(async (command: string, args: string[] = []) => {
+    const script = args[1] ?? '';
+    const result = respond(script, command, args);
     return { exitCode: result.exitCode, stdout: result.stdout, stderr: result.stderr ?? '' };
   });
   const fleet = {
@@ -235,6 +244,103 @@ function makeFleet(respond: (script: string) => { exitCode: number; stdout: stri
   } as unknown as SandboxFleet;
   return { fleet, executeCommand };
 }
+
+function makeSessionFs({
+  session = makeSession(),
+  files = [{ path: 'src/agent.ts' }],
+}: {
+  session?: SourceControlSession;
+  files?: Array<{ path: string }>;
+} = {}) {
+  const ensureUser = vi.fn(async () => undefined);
+  const listFiles = vi.fn(async () => files);
+  return {
+    ensureUser,
+    listFiles,
+    deps: {
+      auth: {
+        enabled: () => true,
+        ensureUser,
+        tenant: () => ({ orgId: session.orgId, userId: session.userId }),
+        isOrganizationAdmin: async () => false,
+      },
+      fleet: makeFleet(() => ({ exitCode: 0, stdout: '' })).fleet,
+      sessions: { getBySessionId: vi.fn(async () => session) },
+      filesystem: { listFiles },
+    },
+  };
+}
+
+async function requestSessionRoute(path: string, sessionFs: ReturnType<typeof makeSessionFs>['deps']) {
+  const route = buildFsRoutes({ sessionFs }).find(candidate => candidate.path === path);
+  if (!route || !('handler' in route)) throw new Error(`Missing route: ${path}`);
+
+  const app = new Hono<any>();
+  app.get('/', context => route.handler(context as never, async () => {}));
+  return (query: string) => app.request(`http://localhost/${query}`);
+}
+
+describe('persisted session workspace files routes', () => {
+  it('authorizes before reading the persisted list and scopes it to the requested thread', async () => {
+    const { deps, ensureUser, listFiles } = makeSessionFs();
+    const request = await requestSessionRoute('/web/workspace/files', deps);
+
+    const response = await request(`?workspacePath=${makeSession().sessionId}&threadId=thread-1`);
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      workspacePath: makeSession().sessionId,
+      threadId: 'thread-1',
+      files: [{ path: 'src/agent.ts' }],
+    });
+    expect(ensureUser).toHaveBeenCalledTimes(1);
+    expect(listFiles).toHaveBeenCalledWith({ resourceId: makeSession().sessionId, threadId: 'thread-1' });
+  });
+
+  it('rejects a missing thread id without querying the database', async () => {
+    const { deps, listFiles } = makeSessionFs();
+    const request = await requestSessionRoute('/web/workspace/files', deps);
+
+    const response = await request(`?workspacePath=${makeSession().sessionId}`);
+
+    expect(response.status).toBe(400);
+    expect(listFiles).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['/web/workspace/files', `?workspacePath=${makeSession().sessionId}&threadId=%20`],
+    ['/web/workspace/file', `?workspacePath=${makeSession().sessionId}&threadId=%20&path=src/agent.ts`],
+  ])('rejects a whitespace-only thread id on %s', async (route, query) => {
+    const { deps, ensureUser, listFiles } = makeSessionFs();
+    const request = await requestSessionRoute(route, deps);
+
+    const response = await request(query);
+
+    expect(response.status).toBe(400);
+    expect(ensureUser).not.toHaveBeenCalled();
+    expect(listFiles).not.toHaveBeenCalled();
+  });
+
+  it('isolates rows for a different thread', async () => {
+    const { deps, listFiles } = makeSessionFs({ files: [] });
+    const request = await requestSessionRoute('/web/workspace/files', deps);
+
+    const response = await request(`?workspacePath=${makeSession().sessionId}&threadId=thread-2`);
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ workspacePath: makeSession().sessionId, threadId: 'thread-2', files: [] });
+    expect(listFiles).toHaveBeenCalledWith({ resourceId: makeSession().sessionId, threadId: 'thread-2' });
+  });
+
+  it('rejects an unlisted path before accessing the sandbox', async () => {
+    const { deps } = makeSessionFs();
+    const request = await requestSessionRoute('/web/workspace/file', deps);
+
+    const response = await request(`?workspacePath=${makeSession().sessionId}&threadId=thread-1&path=secret.env`);
+
+    expect(response.status).toBe(404);
+  });
+});
 
 describe('listSessionRenderedPath', () => {
   it('lists rendered entries from the session sandbox in one command', async () => {
@@ -315,11 +421,9 @@ describe('readSessionWorkspaceFile', () => {
   function respondForFile(content: string) {
     const abs = `${WORKDIR}/.artifacts/understand-pr/HISTORY.md`;
     return (script: string) => {
-      if (script.startsWith('readlink -f')) return { exitCode: 0, stdout: `${abs}\n` };
-      if (script.startsWith('stat -c'))
-        return { exitCode: 0, stdout: `regular file\t${content.length}\t1700000000\t0\n` };
-      if (script.startsWith('base64 <'))
-        return { exitCode: 0, stdout: Buffer.from(content, 'utf8').toString('base64') };
+      if (script.includes(`p='${abs}'`)) return { exitCode: 0, stdout: `${WORKDIR}\n${abs}` };
+      if (script.startsWith('stat -c')) return { exitCode: 0, stdout: `regular file|${content.length}|1700000000|0\n` };
+      if (script.includes('base64 <')) return { exitCode: 0, stdout: Buffer.from(content, 'utf8').toString('base64') };
       return { exitCode: 1, stdout: '', stderr: `unexpected script: ${script}` };
     };
   }
@@ -361,8 +465,10 @@ describe('readSessionWorkspaceFile', () => {
 
   it('rejects directories', async () => {
     const { fleet } = makeFleet(script => {
-      if (script.startsWith('readlink -f')) return { exitCode: 0, stdout: `${WORKDIR}/.artifacts\n` };
-      if (script.startsWith('stat -c')) return { exitCode: 0, stdout: `directory\t0\t1700000000\t0\n` };
+      if (script.includes(`p='${WORKDIR}/.artifacts'`)) {
+        return { exitCode: 0, stdout: `${WORKDIR}\n${WORKDIR}/.artifacts` };
+      }
+      if (script.startsWith('stat -c')) return { exitCode: 0, stdout: `directory|0|1700000000|0\n` };
       return { exitCode: 1, stdout: '' };
     });
 
@@ -384,5 +490,248 @@ describe('readSessionWorkspaceFile', () => {
     await expect(readSessionWorkspaceFile(fleet, makeSession(), '.artifacts/a.md')).rejects.toThrow(
       'Session workspace is not available',
     );
+  });
+});
+
+describe('workspace changes', () => {
+  it('parses modified, untracked, deleted, and renamed files from null-delimited status output', () => {
+    const output = [
+      ' M src/edited.ts',
+      '?? src/new.ts',
+      'D  src/removed.ts',
+      'R  src/renamed.ts',
+      'src/old.ts',
+      '',
+    ].join('\0');
+
+    expect(parseWorkspaceChanges(output)).toEqual([
+      { path: 'src/edited.ts', status: 'modified' },
+      { path: 'src/new.ts', status: 'untracked' },
+      { path: 'src/removed.ts', status: 'deleted' },
+      { path: 'src/renamed.ts', previousPath: 'src/old.ts', status: 'renamed' },
+    ]);
+  });
+
+  it('parses text, binary, and renamed file counts from null-delimited numstat output', () => {
+    const output = ['12\t3\tsrc/edited.ts', '-\t-\tpublic/image.png', '4\t2\t', 'src/old.ts', 'src/new.ts', ''].join(
+      '\0',
+    );
+
+    expect([...parseWorkspaceChangeStats(output)]).toEqual([
+      ['src/edited.ts', { additions: 12, deletions: 3 }],
+      ['public/image.png', { binary: true }],
+      ['src/new.ts', { additions: 4, deletions: 2 }],
+    ]);
+  });
+
+  it('lists pending changes with per-file and total line counts', async () => {
+    const { fleet, executeCommand } = makeFleet((script, command, args) => {
+      if (command === 'git') {
+        expect(args).toEqual(['-C', WORKDIR, 'status', '--porcelain=v1', '-z', '--untracked-files=all']);
+        return { exitCode: 0, stdout: ' M src/edited.ts\0?? src/new.ts\0' };
+      }
+
+      expect(command).toBe('sh');
+      expect(script).toContain('diff --numstat -z --find-renames');
+      expect(script).toContain('ls-files --others --exclude-standard -z');
+      expect(script).toContain('GIT_OBJECT_DIRECTORY="$object_dir"');
+      expect(args.slice(2)).toEqual(['mastracode-numstat', WORKDIR]);
+      return { exitCode: 0, stdout: '3\t1\tsrc/edited.ts\0' + '5\t0\t\0/dev/null\0src/new.ts\0' };
+    });
+
+    const session = makeSession();
+    await expect(listSessionWorkspaceChanges(fleet, session)).resolves.toEqual({
+      workspacePath: session.sessionId,
+      available: true,
+      additions: 8,
+      deletions: 1,
+      changes: [
+        { path: 'src/edited.ts', status: 'modified', additions: 3, deletions: 1 },
+        { path: 'src/new.ts', status: 'untracked', additions: 5, deletions: 0 },
+      ],
+    });
+    expect(executeCommand).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps file statuses available when line counting fails', async () => {
+    const { fleet } = makeFleet((_script, command) =>
+      command === 'git'
+        ? { exitCode: 0, stdout: ' M src/edited.ts\0' }
+        : { exitCode: 1, stdout: '', stderr: 'numstat failed' },
+    );
+
+    const session = makeSession();
+    await expect(listSessionWorkspaceChanges(fleet, session)).resolves.toEqual({
+      workspacePath: session.sessionId,
+      available: true,
+      changes: [{ path: 'src/edited.ts', status: 'modified' }],
+    });
+  });
+
+  it('returns a bounded unified diff for one selected file', async () => {
+    const patch = [
+      'diff --git a/src/edited.ts b/src/edited.ts',
+      '--- a/src/edited.ts',
+      '+++ b/src/edited.ts',
+      '@@ -1 +1 @@',
+      '-old',
+      '+new',
+      '',
+    ].join('\n');
+    const { fleet, executeCommand } = makeFleet((script, command, args) => {
+      expect(command).toBe('sh');
+      expect(script).toContain('head -c 524289');
+      expect(args.slice(3)).toEqual([
+        '0',
+        '--literal-pathspecs',
+        '-C',
+        WORKDIR,
+        'diff',
+        '--find-renames',
+        '--no-ext-diff',
+        '--no-color',
+        '--unified=3',
+        'HEAD',
+        '--',
+        'src/edited.ts',
+      ]);
+      return { exitCode: 0, stdout: patch };
+    });
+
+    const session = makeSession();
+    await expect(readSessionWorkspaceDiff(fleet, session, 'src/edited.ts')).resolves.toEqual({
+      workspacePath: session.sessionId,
+      path: 'src/edited.ts',
+      patch,
+      truncated: false,
+    });
+    expect(executeCommand).toHaveBeenCalledTimes(1);
+  });
+
+  it('marks and limits a diff that exceeds the output boundary', async () => {
+    const maxDiffBytes = 512 * 1024;
+    const { fleet } = makeFleet(() => ({ exitCode: 0, stdout: 'a'.repeat(maxDiffBytes + 1) }));
+
+    const result = await readSessionWorkspaceDiff(fleet, makeSession(), 'src/large.ts');
+
+    expect(result.truncated).toBe(true);
+    expect(Buffer.byteLength(result.patch)).toBe(maxDiffBytes);
+  });
+
+  it('does not emit a replacement character when truncation splits UTF-8', async () => {
+    const maxDiffBytes = 512 * 1024;
+    const prefix = 'a'.repeat(maxDiffBytes - 1);
+    const { fleet } = makeFleet(() => ({ exitCode: 0, stdout: `${prefix}€` }));
+
+    const result = await readSessionWorkspaceDiff(fleet, makeSession(), 'src/unicode.ts');
+
+    expect(result.truncated).toBe(true);
+    expect(result.patch).toBe(prefix);
+    expect(result.patch).not.toContain('\uFFFD');
+  });
+
+  it('includes both paths when reading a renamed file diff', async () => {
+    const { fleet } = makeFleet((_script, command, args) => {
+      expect(command).toBe('sh');
+      expect(args.slice(3)).toEqual([
+        '0',
+        '--literal-pathspecs',
+        '-C',
+        WORKDIR,
+        'diff',
+        '--find-renames',
+        '--no-ext-diff',
+        '--no-color',
+        '--unified=3',
+        'HEAD',
+        '--',
+        'src/old.ts',
+        'src/renamed.ts',
+      ]);
+      return { exitCode: 0, stdout: 'rename diff' };
+    });
+
+    await expect(readSessionWorkspaceDiff(fleet, makeSession(), 'src/renamed.ts', 'src/old.ts')).resolves.toEqual(
+      expect.objectContaining({ path: 'src/renamed.ts', patch: 'rename diff' }),
+    );
+  });
+
+  it('treats pathspec magic in file names literally', async () => {
+    const path = 'src/:(exclude)*.ts';
+    const { fleet } = makeFleet((_script, command, args) => {
+      expect(command).toBe('sh');
+      expect(args.slice(3)).toEqual([
+        '0',
+        '--literal-pathspecs',
+        '-C',
+        WORKDIR,
+        'diff',
+        '--find-renames',
+        '--no-ext-diff',
+        '--no-color',
+        '--unified=3',
+        'HEAD',
+        '--',
+        path,
+      ]);
+      return { exitCode: 0, stdout: 'literal path diff' };
+    });
+
+    await expect(readSessionWorkspaceDiff(fleet, makeSession(), path)).resolves.toEqual(
+      expect.objectContaining({ path, patch: 'literal path diff' }),
+    );
+  });
+
+  it('creates a bounded diff for an untracked file', async () => {
+    let commandIndex = 0;
+    const { fleet, executeCommand } = makeFleet((script, command, args) => {
+      commandIndex += 1;
+      if (commandIndex === 1) {
+        expect(command).toBe('sh');
+        return { exitCode: 0, stdout: '' };
+      }
+      if (commandIndex === 2) {
+        expect(command).toBe('git');
+        expect(args).toEqual([
+          '--literal-pathspecs',
+          '-C',
+          WORKDIR,
+          'ls-files',
+          '--others',
+          '--exclude-standard',
+          '--',
+          'src/new.ts',
+        ]);
+        return { exitCode: 0, stdout: 'src/new.ts\n' };
+      }
+      expect(command).toBe('sh');
+      expect(script).toContain('head -c 524289');
+      expect(args.slice(3)).toEqual([
+        '1',
+        '-C',
+        WORKDIR,
+        'diff',
+        '--no-index',
+        '--no-ext-diff',
+        '--no-color',
+        '--unified=3',
+        '--',
+        '/dev/null',
+        'src/new.ts',
+      ]);
+      return { exitCode: 0, stdout: 'new file diff' };
+    });
+
+    await expect(readSessionWorkspaceDiff(fleet, makeSession(), 'src/new.ts')).resolves.toEqual(
+      expect.objectContaining({ path: 'src/new.ts', patch: 'new file diff' }),
+    );
+    expect(executeCommand).toHaveBeenCalledTimes(3);
+  });
+
+  it('rejects diff paths that escape the workspace before running git', async () => {
+    const { fleet, executeCommand } = makeFleet(() => ({ exitCode: 0, stdout: '' }));
+
+    await expect(readSessionWorkspaceDiff(fleet, makeSession(), '../secret')).rejects.toThrow('path escapes workspace');
+    expect(executeCommand).not.toHaveBeenCalled();
   });
 });

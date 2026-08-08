@@ -143,9 +143,15 @@ export class AgentsPG extends AgentsStorage {
     const hasLegacyColumns = await this.#db.hasColumn(TABLE_AGENTS, 'name');
 
     if (hasLegacyColumns) {
-      // Current table has legacy schema — rename it and drop old versions table
+      // Current table has legacy schema — rename it and drop old versions table.
+      // Raw DDL bypasses the snapshot-maintaining createTable/alterTable paths,
+      // so each statement reports itself to the init snapshot: otherwise the
+      // createTable() calls below would skip rebuilding the tables this just
+      // renamed away or dropped.
       await this.#db.client.none(`ALTER TABLE ${fullTableName} RENAME TO "${TABLE_AGENTS}_legacy"`);
+      this.#db.noteTableRenamed(TABLE_AGENTS, `${TABLE_AGENTS}_legacy`);
       await this.#db.client.none(`DROP TABLE IF EXISTS ${fullVersionsTableName}`);
+      this.#db.noteTableDropped(TABLE_AGENT_VERSIONS);
     }
 
     // Check if legacy table exists (either just renamed, or left behind by a previous partial migration)
@@ -216,6 +222,7 @@ export class AgentsPG extends AgentsStorage {
 
     // Drop legacy table only after all inserts succeed
     await this.#db.client.none(`DROP TABLE IF EXISTS ${legacyTableName}`);
+    this.#db.noteTableDropped(`${TABLE_AGENTS}_legacy`);
   }
 
   /**
@@ -236,11 +243,14 @@ export class AgentsPG extends AgentsStorage {
       schemaName: getSchemaName(this.#schema),
     });
 
-    // Drop the old versions table - the new schema will be created by init()
+    // Drop the old versions table - the new schema will be created by init(),
+    // which only happens if the snapshot reflects the drop.
     await this.#db.client.none(`DROP TABLE IF EXISTS ${fullVersionsTableName}`);
+    this.#db.noteTableDropped(TABLE_AGENT_VERSIONS);
 
     // Also clean up any lingering legacy table from a partial migration
     await this.#db.client.none(`DROP TABLE IF EXISTS ${legacyTableName}`);
+    this.#db.noteTableDropped(`${TABLE_AGENTS}_legacy`);
   }
 
   /**

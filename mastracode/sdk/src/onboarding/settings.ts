@@ -73,7 +73,7 @@ export const MEMORY_GATEWAY_PROVIDER = MASTRA_GATEWAY_PROVIDER;
 export const MEMORY_GATEWAY_DEFAULT_URL = MASTRA_GATEWAY_DEFAULT_URL;
 
 /** Valid persisted thinking level values. */
-export type ThinkingLevelSetting = 'off' | 'low' | 'medium' | 'high' | 'xhigh';
+export type ThinkingLevelSetting = 'off' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
 /** Browser provider type. */
 export type BrowserProvider = 'stagehand' | 'agent-browser';
@@ -170,6 +170,13 @@ export interface GlobalSettings {
     activeModelPackId: string | null;
     /** Explicit per-mode overrides — used when no activeModelPackId is set. */
     modeDefaults: Record<string, string>;
+    /**
+     * Per-mode reasoning-effort defaults (e.g. { build: "high", plan: "xhigh" }).
+     * Resolved at request time; falls back to `preferences.thinkingLevel` for
+     * modes without an entry. Overridden per-session via /think or the session
+     * settings panel.
+     */
+    modeThinkingDefaults: Record<string, ThinkingLevelSetting>;
     /**
      * Active OM pack ID (e.g. "gemini", "anthropic", "custom").
      * When set, the OM model is resolved from the pack at startup so pack
@@ -301,6 +308,7 @@ const DEFAULTS: GlobalSettings = {
   models: {
     activeModelPackId: null,
     modeDefaults: {},
+    modeThinkingDefaults: {},
     activeOmPackId: null,
     omModelOverride: null,
     observerModelOverride: null,
@@ -340,7 +348,7 @@ const DEFAULTS: GlobalSettings = {
   observability: { resources: {}, localTracing: false },
 };
 
-const THINKING_LEVEL_VALUES: ThinkingLevelSetting[] = ['off', 'low', 'medium', 'high', 'xhigh'];
+export const THINKING_LEVEL_VALUES: ThinkingLevelSetting[] = ['off', 'low', 'medium', 'high', 'xhigh', 'max'];
 const QUIET_MODE_MAX_TOOL_PREVIEW_LINES_MAX = 8;
 const loadedSignalSettings = new WeakMap<GlobalSettings, SignalSettings>();
 
@@ -364,6 +372,21 @@ function parseThinkingLevel(value: unknown): ThinkingLevelSetting {
   return typeof value === 'string' && THINKING_LEVEL_VALUES.includes(value as ThinkingLevelSetting)
     ? (value as ThinkingLevelSetting)
     : DEFAULTS.preferences.thinkingLevel;
+}
+
+export function isThinkingLevelSetting(value: unknown): value is ThinkingLevelSetting {
+  return typeof value === 'string' && THINKING_LEVEL_VALUES.includes(value as ThinkingLevelSetting);
+}
+
+function parseModeThinkingDefaults(value: unknown): Record<string, ThinkingLevelSetting> {
+  if (!value || typeof value !== 'object') return {};
+  const result: Record<string, ThinkingLevelSetting> = {};
+  for (const [mode, level] of Object.entries(value as Record<string, unknown>)) {
+    if (isThinkingLevelSetting(level)) {
+      result[mode] = level;
+    }
+  }
+  return result;
 }
 
 function parseQuietModeMaxToolPreviewLines(value: unknown): number {
@@ -436,6 +459,31 @@ export function toCustomProviderModelId(providerName: string, modelName: string)
     return trimmedModelName;
   }
   return `${providerId}/${trimmedModelName}`;
+}
+
+/**
+ * The shared gateway catalog namespaces provider keys under their owning
+ * gateway id, so a custom provider's models surface in the `/models` catalog
+ * as `mastracode/<providerId>/<model>` instead of the canonical
+ * `<providerId>/<model>` that model resolution expects. Persisting the
+ * gateway-qualified id verbatim breaks lookup later (the provider is parsed
+ * as `mastracode`). Strip the prefix before saving — but only when the
+ * middle segment matches one of the user's configured custom providers, so
+ * legitimate `mastracode/...` gateway-routed ids are left untouched.
+ */
+export function stripMastraCodeCustomProviderPrefix(
+  modelId: string,
+  customProviders: Array<Pick<CustomProviderSetting, 'name'>>,
+): string {
+  const gatewayPrefix = 'mastracode/';
+  if (!modelId.startsWith(gatewayPrefix)) return modelId;
+
+  const rest = modelId.slice(gatewayPrefix.length);
+  const [providerId, ...modelParts] = rest.split('/');
+  if (!providerId || modelParts.length === 0 || modelParts.some(part => part.length === 0)) return modelId;
+
+  const isCustomProvider = customProviders.some(provider => getCustomProviderId(provider.name) === providerId);
+  return isCustomProvider ? rest : modelId;
 }
 
 export function parseCustomProviders(rawProviders: unknown): CustomProviderSetting[] {
@@ -743,7 +791,11 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
     const settings: GlobalSettings = {
       ...raw,
       onboarding: { ...DEFAULTS.onboarding, ...raw.onboarding },
-      models: { ...DEFAULTS.models, ...raw.models },
+      models: {
+        ...DEFAULTS.models,
+        ...raw.models,
+        modeThinkingDefaults: parseModeThinkingDefaults(raw.models?.modeThinkingDefaults),
+      },
       preferences: parsePreferences(raw.preferences),
       storage: {
         ...STORAGE_DEFAULTS,
@@ -894,6 +946,28 @@ export function resolveModelDefaults(
 
   // Unknown pack id — fall through
   return modeDefaults;
+}
+
+/** Where a resolved default thinking level came from. */
+export type ThinkingLevelSource = 'mode-default' | 'global';
+
+/**
+ * Resolve the default reasoning-effort level for a mode.
+ *
+ * Lookup order:
+ *   1. `models.modeThinkingDefaults[mode]` when set for the mode.
+ *   2. The global `preferences.thinkingLevel`.
+ *
+ * Session-level overrides (via /think or the session settings panel) take
+ * precedence over both and are handled by the caller.
+ */
+export function resolveDefaultThinkingLevel(
+  settings: GlobalSettings,
+  mode?: string | null,
+): { level: ThinkingLevelSetting; source: ThinkingLevelSource } {
+  const modeLevel = mode ? settings.models.modeThinkingDefaults[mode] : undefined;
+  if (modeLevel) return { level: modeLevel, source: 'mode-default' };
+  return { level: settings.preferences.thinkingLevel, source: 'global' };
 }
 
 /**

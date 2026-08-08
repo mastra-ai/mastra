@@ -76,7 +76,27 @@ export function extractSuspendedToolsFromMessages(
       );
   }
 
-  return suspendedToolObj ? (Object.values(suspendedToolObj) as Array<Record<string, unknown>>) : [];
+  if (!suspendedToolObj) return [];
+
+  // The auto-resume directive tells the model to pass the entry's `runId` back
+  // as `suspendedToolRunId`, which the resume leg uses to resume the suspended
+  // (inner) run. Persisted metadata stores the OUTER resumable runId with the
+  // inner run as `delegatedRunId`, so surface the inner run under `runId` here.
+  return Object.values(suspendedToolObj).map(entry => {
+    if (!entry || typeof entry !== 'object') return entry as Record<string, unknown>;
+    const { delegatedRunId, parentToolName, parentArgs, ...rest } = entry as Record<string, unknown>;
+    const resumableEntry =
+      typeof parentToolName === 'string'
+        ? {
+            ...rest,
+            approvalToolName: rest.toolName,
+            approvalArgs: rest.args,
+            toolName: parentToolName,
+            args: parentArgs,
+          }
+        : rest;
+    return typeof delegatedRunId === 'string' ? { ...resumableEntry, runId: delegatedRunId } : resumableEntry;
+  });
 }
 
 /**

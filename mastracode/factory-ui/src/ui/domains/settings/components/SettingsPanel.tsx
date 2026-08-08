@@ -15,6 +15,7 @@ import {
 } from '../../../../hooks/useUpdateAgentControllerSettingsMutation';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import { ConnectedAccountsSection } from './ConnectedAccountsSection';
+import { AccountSettingsSection } from './AccountSettingsSection';
 import { CustomProvidersSection } from './CustomProvidersSection';
 import { SettingsHeader } from './SettingsHeader';
 import { FactoryManagementSection } from './FactoryManagementSection';
@@ -25,6 +26,7 @@ import { RepositoriesSection } from './RepositoriesSection';
 import { SettingsCard } from './SettingsCard';
 import { SettingsSubsection } from './SettingsSubsection';
 import { OMSection } from './OMSection';
+import { ThinkingDefaultsSection } from './ThinkingDefaultsSection';
 import { ProviderAccessSection } from './ProviderAccessSection';
 import { BehaviorSettings, GeneralSettings, ModelSettings } from './SettingsPanel.parts';
 
@@ -69,6 +71,7 @@ export function SettingsPanel() {
     <section aria-label="Settings" className="flex flex-1 flex-col px-5 pb-5">
       <div className="mx-auto grid w-full max-w-4xl py-3">
         {!isMobile && <SettingsHeader autoFocus placement="desktop" />}
+        {section === 'account' && <AccountSettingsSection />}
         {section === 'preferences' && <GeneralSettings theme={theme} onThemeChange={setTheme} />}
         {section === 'factory' && <FactoryManagementSection />}
         {section === 'connections' && (
@@ -91,6 +94,14 @@ export function SettingsPanel() {
                   updating={updateSettingsMutation.isPending}
                   onBehaviorChange={onBehaviorChange}
                 />
+              </SettingsCard>
+            </SettingsSubsection>
+            <SettingsSubsection
+              title="Thinking defaults"
+              description="Reasoning-effort applied to runs without a session override — including automated Factory runs. The session thinking level above takes precedence."
+            >
+              <SettingsCard>
+                <ThinkingDefaultsSection />
               </SettingsCard>
             </SettingsSubsection>
             <SettingsSubsection title="Provider access">

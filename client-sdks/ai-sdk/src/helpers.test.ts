@@ -229,3 +229,125 @@ describe('durable step-start with missing payload', () => {
     expect((convertMastraChunkToAISDKv6({ chunk }) as any).type).toBe('start-step');
   });
 });
+
+describe('finish usage conversion', () => {
+  const usage = { inputTokens: 1, outputTokens: 2, totalTokens: 3 };
+
+  it('converts canonical output usage', () => {
+    const chunk = {
+      type: 'finish',
+      runId: 'run-1',
+      from: ChunkFrom.AGENT,
+      payload: { stepResult: { reason: 'stop' }, output: { usage } },
+    } as any;
+
+    expect(convertMastraChunkToAISDKv5({ chunk })).toMatchObject({
+      type: 'finish',
+      finishReason: 'stop',
+      totalUsage: usage,
+    });
+  });
+
+  it('converts legacy top-level usage retained by durable transports', () => {
+    const chunk = {
+      type: 'finish',
+      runId: 'run-1',
+      from: ChunkFrom.AGENT,
+      payload: { stepResult: { reason: 'stop' }, usage },
+    } as any;
+
+    expect(convertMastraChunkToAISDKv5({ chunk })).toMatchObject({
+      type: 'finish',
+      finishReason: 'stop',
+      totalUsage: usage,
+    });
+  });
+});
+
+describe('tool-output-denied chunk conversion (issue #20880)', () => {
+  const chunk = {
+    type: 'tool-output-denied' as const,
+    runId: 'run-123',
+    from: ChunkFrom.AGENT,
+    payload: {
+      toolCallId: 'tooluse_abc123',
+      toolName: 'myTool',
+      args: { param: 'value' },
+      approval: { id: 'approval-1', approved: false as const, reason: 'Not allowed' },
+    },
+  };
+
+  it('converts the Mastra denial to an AI SDK v6 stream part', () => {
+    expect(convertMastraChunkToAISDKv6({ chunk, mode: 'stream' })).toEqual({
+      type: 'tool-output-denied',
+      toolCallId: 'tooluse_abc123',
+      toolName: 'myTool',
+    });
+  });
+
+  it('converts the stream part to an AI SDK UI message chunk', () => {
+    expect(
+      convertFullStreamChunkToUIMessageStream({
+        part: {
+          type: 'tool-output-denied',
+          toolCallId: 'tooluse_abc123',
+          toolName: 'myTool',
+        },
+        onError: String,
+      }),
+    ).toEqual({
+      type: 'tool-output-denied',
+      toolCallId: 'tooluse_abc123',
+    });
+  });
+});
+
+describe('finish reason on UI message chunks (issue #20562)', () => {
+  const mastraFinishChunk = (reason: string) =>
+    ({
+      type: 'finish',
+      runId: 'run-1',
+      from: ChunkFrom.AGENT,
+      payload: {
+        stepResult: { reason },
+        output: { usage: { inputTokens: 1, outputTokens: 2, totalTokens: 3 } },
+      },
+    }) as any;
+
+  it('keeps the v6 finish reason on the terminal UI chunk', () => {
+    const part = convertMastraChunkToAISDKv6({ chunk: mastraFinishChunk('content-filter') });
+
+    expect(
+      convertFullStreamChunkToUIMessageStream({
+        part: part as any,
+        sendFinish: true,
+        onError: String,
+      }),
+    ).toEqual({ type: 'finish', finishReason: 'content-filter' });
+  });
+
+  it('reports the Mastra-only tripwire reason as other on the terminal UI chunk', () => {
+    const part = convertMastraChunkToAISDKv6({ chunk: mastraFinishChunk('tripwire') });
+
+    expect(
+      convertFullStreamChunkToUIMessageStream({
+        part: part as any,
+        sendFinish: true,
+        onError: String,
+      }),
+    ).toEqual({ type: 'finish', finishReason: 'other' });
+  });
+
+  it('keeps the v5 finish reason on the terminal UI chunk', () => {
+    const part = convertMastraChunkToAISDKv5({ chunk: mastraFinishChunk('length') });
+
+    expect(
+      convertFullStreamChunkToUIMessageStream({
+        part: part as any,
+        sendFinish: true,
+        messageMetadataValue: { custom: true },
+        onError: String,
+      }),
+    ).toEqual({ type: 'finish', finishReason: 'length', messageMetadata: { custom: true } });
+  });
+});

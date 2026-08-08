@@ -23,11 +23,22 @@ export function metadataLabels(metadata: Record<string, unknown>): string[] {
     : [];
 }
 
-export function githubNumberForItem(item: WorkItem): number | undefined {
+export function githubNumberForItem(item: Pick<WorkItem, 'source' | 'metadata'>): number | undefined {
   const metadataKey = item.source === 'github-issue' ? 'githubIssueNumber' : 'githubPullRequestNumber';
   const itemNumber = item.metadata[metadataKey] ?? item.metadata.number;
   if (typeof itemNumber !== 'number' || !Number.isInteger(itemNumber) || itemNumber <= 0) return;
   return itemNumber;
+}
+
+export type PullRequestStatus = 'draft' | 'open' | 'closed' | 'merged';
+
+export function pullRequestStatusForItem(item: Pick<WorkItem, 'metadata' | 'stages'>): PullRequestStatus {
+  if (item.metadata.merged === true) return 'merged';
+  if (item.metadata.state === 'closed') return 'closed';
+  if (item.metadata.state === 'open') return item.metadata.draft === true ? 'draft' : 'open';
+  if (item.stages.includes('done')) return 'merged';
+  if (item.stages.includes('canceled')) return 'closed';
+  return item.metadata.draft === true ? 'draft' : 'open';
 }
 
 export function candidateSourceKeyForItem(item: WorkItem): string | undefined {

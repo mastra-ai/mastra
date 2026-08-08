@@ -11,6 +11,7 @@ import { RoutePermissionsGate } from './domains/auth/components/route-permission
 import { DatasetCrumb } from './domains/datasets/dataset-crumb';
 import { WorkflowLayout } from './domains/workflows/workflow-layout';
 import SignalsOverviewPage from './ee/signals';
+import { SignalsEntityCrumb } from './ee/signals/signals-entity-crumb';
 import { PostHogProvider } from './lib/analytics';
 import { Link } from './lib/link';
 import { StudioIndexRedirect } from './lib/studio-index-redirect';
@@ -379,12 +380,22 @@ export const routes: RouteObject[] = [
         handle: navHandleWithChildren('/scorers', [{ id: 'scorer', Component: ScorerCrumb, heading: 'Scorer' }]),
       },
       { path: '/metrics', element: <Metrics />, handle: navHandle('/metrics') },
-      { path: '/intelligence', element: <SignalsOverviewPage />, handle: navHandle('/intelligence') },
-      { path: '/observability', element: <Traces />, handle: navHandle('/observability') },
+      {
+        path: '/intelligence',
+        element: <SignalsOverviewPage />,
+        handle: navHandleWithChildren('/intelligence', [
+          { id: 'signals-agent', Component: SignalsEntityCrumb, heading: 'Agent' },
+        ]),
+      },
+      { path: '/traces', element: <Traces />, handle: navHandle('/traces') },
       {
         path: '/traces/:traceId',
         element: <TraceDetails />,
-        handle: navHandleWithChildren('/observability', [{ id: 'trace', Component: TraceCrumb, heading: 'Trace' }]),
+        handle: navHandleWithChildren('/traces', [{ id: 'trace', Component: TraceCrumb, heading: 'Trace' }]),
+      },
+      {
+        path: '/observability',
+        loader: ({ request }: LoaderFunctionArgs) => redirect(`/traces${new URL(request.url).search}`),
       },
       { path: '/resources', element: <Resources />, handle: navHandle('/resources') },
       { path: '/agents', element: <Agents />, handle: navHandle('/agents') },

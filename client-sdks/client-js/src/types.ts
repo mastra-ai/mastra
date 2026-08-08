@@ -636,7 +636,32 @@ export interface ListWorkflowRunsParams {
 
 export type ListWorkflowRunsResponse = WorkflowRuns;
 
+export interface WorkflowRunCounts {
+  running: number;
+  suspended: number;
+}
+
+export type ListWorkflowRunCountsResponse = Record<string, WorkflowRunCounts>;
+
 export type GetWorkflowRunByIdResponse = WorkflowState;
+
+export type ListStoredWorkflowsParams = GeneratedRequest<QueryParams<'GET /stored/workflows'>>;
+export type ListStoredWorkflowsResponse = GeneratedResponse<'GET /stored/workflows'>;
+export type UpsertStoredWorkflowParams = GeneratedRequest<Body<'POST /stored/workflows'>>;
+export type UpsertStoredWorkflowResponse = GeneratedResponse<'POST /stored/workflows'>;
+type StoredWorkflowDefinitionField =
+  | 'description'
+  | 'inputSchema'
+  | 'outputSchema'
+  | 'stateSchema'
+  | 'requestContextSchema'
+  | 'graph';
+export type StoredWorkflowDefinition = Omit<
+  GeneratedResponse<'GET /stored/workflows/:storedWorkflowId'>,
+  StoredWorkflowDefinitionField
+> &
+  Pick<UpsertStoredWorkflowParams, StoredWorkflowDefinitionField>;
+export type DeleteStoredWorkflowResponse = GeneratedResponse<'DELETE /stored/workflows/:storedWorkflowId'>;
 
 export interface GetWorkflowResponse {
   name: string;
@@ -675,6 +700,12 @@ export interface GetWorkflowResponse {
   requestContextSchema?: string;
   /** Whether this workflow is a processor workflow (auto-generated from agent processors) */
   isProcessorWorkflow?: boolean;
+  /**
+   * How this workflow got into the live registry. `'code'` for statically
+   * authored or `addWorkflow()`-added workflows, `'stored'` for anything
+   * hydrated or added via `addStoredWorkflow()`. Absent on older servers.
+   */
+  origin?: 'code' | 'stored';
 }
 
 export type WorkflowRunResult = WorkflowResult<any, any, any, any>;
@@ -2647,6 +2678,7 @@ export interface DatasetItem {
   groundTruth?: unknown;
   expectedTrajectory?: unknown;
   toolMocks?: DatasetItemToolMock[];
+  scorerIds?: string[];
   requestContext?: Record<string, unknown>;
   metadata?: unknown;
   source?: DatasetItemSource;
@@ -2671,6 +2703,31 @@ export interface DatasetRecord {
   updatedAt: string | Date;
 }
 
+export interface ExperimentProvenance {
+  source?: string;
+  sourceId?: string;
+  sourceVersion?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface ExperimentRunnerAttestation {
+  runnerId: string;
+  invocationId: string;
+  runnerVersion?: string;
+}
+
+export interface ExperimentGrouping {
+  experimentSetId?: string;
+  comparisonId?: string;
+  variantId?: string;
+  trialIndex?: number;
+}
+
+export interface ListExperimentsParams extends ExperimentGrouping {
+  page?: number;
+  perPage?: number;
+}
+
 export interface DatasetExperiment {
   id: string;
   datasetId: string | null;
@@ -2682,6 +2739,12 @@ export interface DatasetExperiment {
   name?: string;
   /** Longer description shown as secondary detail (e.g. in a tooltip). */
   description?: string;
+  provenance: ExperimentProvenance | null;
+  runnerAttestation: ExperimentRunnerAttestation | null;
+  experimentSetId: string | null;
+  comparisonId: string | null;
+  variantId: string | null;
+  trialIndex: number | null;
   status: 'pending' | 'running' | 'completed' | 'failed';
   totalItems: number;
   succeededCount: number;
@@ -2707,6 +2770,7 @@ export interface DatasetExperimentResult {
   traceId: string | null;
   status: 'needs-review' | 'reviewed' | 'complete' | null;
   tags: string[] | null;
+  comment?: string | null;
   toolMockReport?: ToolMockReport | null;
   scores: Array<{
     scorerId: string;
@@ -2724,6 +2788,7 @@ export interface UpdateExperimentResultParams {
   resultId: string;
   status?: 'needs-review' | 'reviewed' | 'complete' | null;
   tags?: string[];
+  comment?: string | null;
 }
 
 export interface CreateDatasetParams {
@@ -2763,6 +2828,7 @@ export interface AddDatasetItemParams {
   groundTruth?: unknown;
   expectedTrajectory?: unknown;
   toolMocks?: DatasetItemToolMock[];
+  scorerIds?: string[];
   requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
   source?: DatasetItemSource;
@@ -2775,6 +2841,7 @@ export interface UpdateDatasetItemParams {
   groundTruth?: unknown;
   expectedTrajectory?: unknown;
   toolMocks?: DatasetItemToolMock[];
+  scorerIds?: string[] | null;
   requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
   source?: DatasetItemSource;
@@ -2788,6 +2855,7 @@ export interface BatchInsertDatasetItemsParams {
     groundTruth?: unknown;
     expectedTrajectory?: unknown;
     toolMocks?: DatasetItemToolMock[];
+    scorerIds?: string[];
     requestContext?: Record<string, unknown>;
     metadata?: Record<string, unknown>;
     source?: DatasetItemSource;
@@ -2820,10 +2888,15 @@ export interface TriggerDatasetExperimentParams {
   datasetId: string;
   targetType: 'agent' | 'workflow' | 'scorer';
   targetId: string;
+  name?: string;
+  description?: string;
+  metadata?: Record<string, unknown>;
   scorerIds?: string[];
   version?: number;
   agentVersion?: string;
   maxConcurrency?: number;
+  provenance?: ExperimentProvenance;
+  grouping?: ExperimentGrouping;
   requestContext?: Record<string, unknown>;
 }
 
@@ -2848,6 +2921,7 @@ export interface DatasetItemVersionResponse {
   groundTruth?: unknown;
   expectedTrajectory?: unknown;
   toolMocks?: DatasetItemToolMock[];
+  scorerIds?: string[];
   metadata?: Record<string, unknown>;
   validTo: number | null;
   isDeleted: boolean;

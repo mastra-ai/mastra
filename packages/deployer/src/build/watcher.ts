@@ -9,6 +9,7 @@ import { getInputOptions as getBundlerInputOptions } from './bundler';
 import { aliasHono } from './plugins/hono-alias';
 import { nodeModulesExtensionResolver } from './plugins/node-modules-extension-resolver';
 import { tsConfigPaths } from './plugins/tsconfig-paths';
+import { workspaceDepsWatcher } from './plugins/workspace-deps-watcher';
 import type { BundlerOptions } from './types';
 import { getPackageName, slash } from './utils';
 import type { BundlerPlatform } from './utils';
@@ -31,11 +32,13 @@ export async function getInputOptions(
   const projectRoot = closestPkgJson ? dirname(slash(closestPkgJson)) : slash(process.cwd());
   const { workspaceMap, workspaceRoot } = await getWorkspaceInformation({ mastraEntryFile: entryFile });
 
+  const outputDir = posix.join(process.cwd(), '.mastra', '.build');
+
   const analyzeEntryResult = await analyzeBundle(
     analysisEntries,
     entryFile,
     {
-      outputDir: posix.join(process.cwd(), '.mastra', '.build'),
+      outputDir,
       projectRoot: workspaceRoot || process.cwd(),
       platform,
       isDev: true,
@@ -89,6 +92,22 @@ export async function getInputOptions(
     inputOptions.plugins.push(aliasHono());
     // fixes imports like lodash/fp/get
     inputOptions.plugins.push(nodeModulesExtensionResolver());
+
+    const depsToOptimize = analyzeEntryResult.depsToOptimize;
+    const resolvedWorkspaceRoot = analyzeEntryResult.workspaceRoot || workspaceRoot;
+    if (depsToOptimize?.size && resolvedWorkspaceRoot) {
+      inputOptions.plugins.push(
+        workspaceDepsWatcher({
+          depsToOptimize,
+          optimizedDependencyFiles: deps,
+          workspaceMap,
+          workspaceRoot: resolvedWorkspaceRoot,
+          outputDir: analyzeEntryResult.outputDir || outputDir,
+          platform,
+          bundlerOptions,
+        }),
+      );
+    }
   }
 
   return inputOptions;

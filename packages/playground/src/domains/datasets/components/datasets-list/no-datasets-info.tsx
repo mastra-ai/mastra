@@ -28,7 +28,7 @@ export const NoDatasetsInfo = ({ onCreateClick }: NoDatasetsInfoProps = {}) => (
           <Button
             variant="ghost"
             as="a"
-            href="https://mastra.ai/en/docs/evals/datasets/overview"
+            href="https://mastra.ai/en/docs/datasets/overview"
             target="_blank"
             rel="noopener noreferrer"
           >

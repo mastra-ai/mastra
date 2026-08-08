@@ -8,7 +8,7 @@
     "check": "tsc --noEmit",
     "db:up": "docker compose up -d --wait",
     "db:down": "docker compose down",
-    "prebuild": "cd ../.. && pnpm turbo build --filter ./mastracode/sdk --filter ./mastracode/factory --filter ./client-sdks/client-js --filter ./stores/libsql --filter ./stores/pg --filter ./server-adapters/hono --filter ./workspaces/platform-workspace --filter ./pubsub/redis-streams --filter ./packages/cli --filter ./channels/slack",
+    "prebuild": "cd ../.. && pnpm turbo build --filter ./mastracode/sdk --filter ./mastracode/factory --filter ./auth/workos --filter ./client-sdks/client-js --filter ./stores/libsql --filter ./stores/pg --filter ./server-adapters/hono --filter ./workspaces/platform-workspace --filter ./pubsub/redis-streams --filter ./packages/cli",
     "api": "PORT=${PORT:-4111} MASTRACODE_PUBLIC_URL=${MASTRACODE_PUBLIC_URL:-http://localhost:5173} MASTRA_SKIP_PEERDEP_CHECK=1 varlock run -- mastra factory dev --dir src/mastra",
     "dev": "PORT=5873 MASTRACODE_PUBLIC_URL=${MASTRACODE_PUBLIC_URL:-http://localhost:5873} MASTRA_SKIP_PEERDEP_CHECK=1 varlock run -- mastra factory dev --dir src/mastra",
     "dev:github": "pnpm db:up && pnpm dev",
@@ -22,18 +22,17 @@
   "author": "",
   "license": "Apache-2.0",
   "dependencies": {
+    "@mastra/auth-workos": "link:../../auth/workos",
     "@mastra/code-sdk": "link:../sdk",
     "@mastra/core": "link:../../packages/core",
     "@mastra/factory": "link:../factory",
     "@mastra/libsql": "link:../../stores/libsql",
     "@mastra/pg": "link:../../stores/pg",
     "@mastra/platform-workspace": "link:../../workspaces/platform-workspace",
-    "@mastra/redis-streams": "link:../../pubsub/redis-streams",
-    "@mastra/slack": "link:../../channels/slack",
-    "chat": "^4.34.0"
+    "@mastra/redis-streams": "link:../../pubsub/redis-streams"
   },
   "devDependencies": {
-    "@ai-sdk/openai": "^3.0.86",
+    "@ai-sdk/openai": "^3.0.88",
     "@copilotkit/aimock": "^1.29.0",
     "@mastra/client-js": "link:../../client-sdks/client-js",
     "@mastra/hono": "link:../../server-adapters/hono",

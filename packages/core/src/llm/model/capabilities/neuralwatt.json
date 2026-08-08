@@ -1,10 +1,13 @@
 {
   "attachment": [
     "Qwen/Qwen3.6-35B-A3B",
+    "gemma-4-31b",
     "kimi-k2.5-fast",
     "kimi-k2.6-fast",
     "kimi-k2.6-flex",
     "kimi-k2.7-code-flex",
+    "kimi-k3",
+    "kimi-k3-fast",
     "moonshotai/Kimi-K2.5",
     "moonshotai/Kimi-K2.6",
     "moonshotai/Kimi-K2.7-Code",
@@ -13,6 +16,8 @@
   "temperature": [
     "Qwen/Qwen3.5-397B-A17B-FP8",
     "Qwen/Qwen3.6-35B-A3B",
+    "deepseek-v4-flash",
+    "gemma-4-31b",
     "glm-5.2",
     "glm-5.2-fast",
     "glm-5.2-flex",
@@ -28,5 +33,12 @@
     "qwen3.5-397b-fast",
     "qwen3.6-35b-fast"
   ],
-  "structuredOutput": ["kimi-k2.7-code-flex", "moonshotai/Kimi-K2.7-Code"]
+  "structuredOutput": [
+    "deepseek-v4-flash",
+    "gemma-4-31b",
+    "kimi-k2.7-code-flex",
+    "kimi-k3",
+    "kimi-k3-fast",
+    "moonshotai/Kimi-K2.7-Code"
+  ]
 }
