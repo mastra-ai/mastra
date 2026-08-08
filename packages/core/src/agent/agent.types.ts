@@ -194,6 +194,17 @@ export interface DelegationCompleteContext {
 export interface DelegationCompleteResult {
   /** Optional feedback to add to the conversation */
   feedback?: string;
+  /**
+   * Replaces the text the parent model sees as this delegation's tool result,
+   * within the current run.
+   *
+   * `feedback` is persisted to the parent's memory and therefore only reaches the
+   * model on the next turn. Use `resultText` when the sub-agent's own result would
+   * mislead the parent right now — for example when the sub-agent stopped on a
+   * tool-calls step and returned empty text, which reads to the model as a
+   * successful but empty delegation.
+   */
+  resultText?: string;
 }
 
 /**
