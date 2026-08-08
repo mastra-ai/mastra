@@ -11,6 +11,7 @@ import {
   Tooltip,
   XAxis,
   YAxis,
+  type ScatterShapeProps,
 } from 'recharts';
 
 import { Button } from '../../../ds/components/Button';
@@ -268,12 +269,12 @@ function EventRow({ label, data, color, height = 32, domain, zoomDomain }: Event
               data={data}
               fill={color}
               isAnimationActive={false}
-              shape={(props: Record<string, unknown>) => {
-                const cx = props.cx as number;
+              shape={(props: ScatterShapeProps) => {
+                if (props.cx === undefined) return null;
                 return (
                   <g>
-                    <rect x={cx - 6} y={0} width={12} height={height} fill="transparent" />
-                    <rect x={cx - 1.5} y={0} width={3} height={height} fill={color} />
+                    <rect x={props.cx - 6} y={0} width={12} height={height} fill="transparent" />
+                    <rect x={props.cx - 1.5} y={0} width={3} height={height} fill={color} />
                   </g>
                 );
               }}
