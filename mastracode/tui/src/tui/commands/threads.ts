@@ -3,6 +3,7 @@ import { ThreadSelectorComponent } from '../components/thread-selector.js';
 import { askModalQuestion } from '../modal-question.js';
 import { showModalOverlay } from '../overlay.js';
 import { askCloneName, confirmClone, resetUIAfterClone } from './clone.js';
+import { confirmDeleteThread, resetUIAfterCurrentThreadDelete } from './delete-thread.js';
 import type { SlashCommandContext } from './types.js';
 
 export function showThreadLockPrompt(
@@ -160,6 +161,34 @@ export async function handleThreadsCommand(ctx: SlashCommandContext): Promise<vo
           await resetUIAfterClone(ctx, clonedThread.title || clonedThread.id);
         } catch (error) {
           ctx.showError(`Failed to clone thread: ${error instanceof Error ? error.message : String(error)}`);
+        }
+        resolve();
+      },
+      onDelete: async thread => {
+        state.ui.hideOverlay();
+
+        if (thread.resourceId !== currentResourceId) {
+          ctx.showError('Cannot delete a thread that belongs to another resource. Switch to it first.');
+          resolve();
+          return;
+        }
+
+        if (!(await confirmDeleteThread(state, thread.title || thread.id))) {
+          resolve();
+          return;
+        }
+
+        try {
+          const deletingCurrent = thread.id === currentId;
+          await state.session.thread.delete({ threadId: thread.id });
+          state.threadPreviewCache.delete(thread.id);
+          state.attemptedThreadPreviewIds.delete(thread.id);
+          if (deletingCurrent) {
+            await resetUIAfterCurrentThreadDelete(ctx);
+          }
+          ctx.showInfo(`Deleted thread: ${thread.title || thread.id}`);
+        } catch (error) {
+          ctx.showError(`Failed to delete thread: ${error instanceof Error ? error.message : String(error)}`);
         }
         resolve();
       },

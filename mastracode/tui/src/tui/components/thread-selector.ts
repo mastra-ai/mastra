@@ -24,6 +24,8 @@ export interface ThreadSelectorOptions {
   onCancel: () => void;
   /** Called when user presses Tab to clone the selected thread */
   onClone?: (thread: AgentControllerThread) => void;
+  /** Called when user presses Ctrl+D to delete the selected thread */
+  onDelete?: (thread: AgentControllerThread) => void;
   /** Function to fetch message previews for currently visible threads */
   getMessagePreviews?: (threadIds: string[]) => Promise<Map<string, string>>;
   initialMessagePreviews?: Map<string, string>;
@@ -54,6 +56,7 @@ export class ThreadSelectorComponent extends Box implements Focusable {
   private onSelectCallback: (thread: AgentControllerThread) => void;
   private onCancelCallback: () => void;
   private onCloneCallback: ((thread: AgentControllerThread) => void) | undefined;
+  private onDeleteCallback: ((thread: AgentControllerThread) => void) | undefined;
   private tui: TUI;
   private getMessagePreviews: ((threadIds: string[]) => Promise<Map<string, string>>) | undefined;
   private onMessagePreviewsLoaded:
@@ -86,6 +89,7 @@ export class ThreadSelectorComponent extends Box implements Focusable {
     this.onSelectCallback = options.onSelect;
     this.onCancelCallback = options.onCancel;
     this.onCloneCallback = options.onClone;
+    this.onDeleteCallback = options.onDelete;
     this.getMessagePreviews = options.getMessagePreviews;
     this.onMessagePreviewsLoaded = options.onMessagePreviewsLoaded;
     this.messagePreviews = new Map(options.initialMessagePreviews ?? []);
@@ -196,8 +200,13 @@ export class ThreadSelectorComponent extends Box implements Focusable {
     this.addChild(new Text(theme.bold(theme.fg('accent', 'Select Thread')), 0, 0));
     this.addChild(new Spacer(1));
     const cloneHint = this.onCloneCallback ? ' • Tab clone active thread' : '';
+    const deleteHint = this.onDeleteCallback ? ' • Ctrl+D delete' : '';
     this.addChild(
-      new Text(theme.fg('muted', `Type to search • ↑↓ navigate • Enter select${cloneHint} • Esc cancel`), 0, 0),
+      new Text(
+        theme.fg('muted', `Type to search • ↑↓ navigate • Enter select${cloneHint}${deleteHint} • Esc cancel`),
+        0,
+        0,
+      ),
     );
     this.addChild(new Spacer(1));
 
@@ -354,6 +363,11 @@ export class ThreadSelectorComponent extends Box implements Focusable {
       const selected = this.filteredThreads[this.selectedIndex];
       if (selected) {
         this.onCloneCallback(selected);
+      }
+    } else if (matchesKey(keyData, 'ctrl+d') && this.onDeleteCallback) {
+      const selected = this.filteredThreads[this.selectedIndex];
+      if (selected) {
+        this.onDeleteCallback(selected);
       }
     } else {
       this.searchInput.handleInput(keyData);

@@ -80,6 +80,7 @@ vi.mock('@earendil-works/pi-tui', () => {
     }),
     matchesKey: (data: string, keyId: string) => {
       if (keyId === 'tab') return data === '\t' || data === 'TAB';
+      if (keyId === 'ctrl+d') return data === '\u0004' || data === 'CTRL+D';
       return false;
     },
   };
@@ -192,5 +193,63 @@ describe('ThreadSelectorComponent preview caching', () => {
     expect(getMessagePreviews).toHaveBeenCalledTimes(1);
 
     vi.useRealTimers();
+  });
+});
+
+describe('ThreadSelectorComponent delete action', () => {
+  function createSelector(options: {
+    onDelete?: (thread: AgentControllerThread) => void;
+    threads?: AgentControllerThread[];
+  }) {
+    return new ThreadSelectorComponent({
+      tui: { requestRender: vi.fn() } as any,
+      threads: options.threads ?? [createThread('thread-1', 0), createThread('thread-2', 1)],
+      currentThreadId: null,
+      currentResourceId: 'resource-1',
+      currentProjectPath: undefined,
+      onSelect: vi.fn(),
+      onCancel: vi.fn(),
+      onDelete: options.onDelete,
+    });
+  }
+
+  it('invokes onDelete with the selected thread when Ctrl+D is pressed', () => {
+    const onDelete = vi.fn();
+    const selector = createSelector({ onDelete });
+
+    selector.handleInput('DOWN');
+    selector.handleInput('CTRL+D');
+
+    expect(onDelete).toHaveBeenCalledTimes(1);
+    expect(onDelete.mock.calls[0]![0].id).toBe('thread-2');
+  });
+
+  it('does not invoke onDelete when the filtered list is empty', () => {
+    const onDelete = vi.fn();
+    const selector = createSelector({ onDelete, threads: [] });
+
+    selector.handleInput('CTRL+D');
+
+    expect(onDelete).not.toHaveBeenCalled();
+  });
+
+  it('does not throw on Ctrl+D when no onDelete callback is provided', () => {
+    const selector = createSelector({});
+
+    expect(() => selector.handleInput('CTRL+D')).not.toThrow();
+  });
+
+  it('shows the delete hint only when onDelete is provided', () => {
+    const withDelete = createSelector({ onDelete: vi.fn() });
+    const withoutDelete = createSelector({});
+
+    const hintText = (selector: ThreadSelectorComponent) =>
+      ((selector as any).children as Array<{ text?: string }>)
+        .map(child => child.text)
+        .filter(Boolean)
+        .join('\n');
+
+    expect(hintText(withDelete)).toContain('Ctrl+D delete');
+    expect(hintText(withoutDelete)).not.toContain('Ctrl+D delete');
   });
 });

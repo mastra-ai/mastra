@@ -1,6 +1,7 @@
 import type { AgentControllerThread, MastraDBMessage } from '@mastra/core/agent-controller';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { askModalQuestion } from '../../modal-question.js';
+import { confirmDeleteThread, resetUIAfterCurrentThreadDelete } from '../delete-thread.js';
 import { handleThreadsCommand, showThreadLockPrompt } from '../threads.js';
 import type { SlashCommandContext } from '../types.js';
 
@@ -16,6 +17,11 @@ vi.mock('../clone.js', () => ({
   askCloneName: vi.fn(),
   confirmClone: vi.fn(),
   resetUIAfterClone: vi.fn(),
+}));
+
+vi.mock('../delete-thread.js', () => ({
+  confirmDeleteThread: vi.fn(),
+  resetUIAfterCurrentThreadDelete: vi.fn(),
 }));
 
 vi.mock('../../modal-question.js', () => ({
@@ -74,9 +80,10 @@ function createContext(threads: AgentControllerThread[]) {
     session: {
       identity: { getResourceId: vi.fn(() => 'resource-1') },
       thread: {
-        getId: vi.fn(() => null),
+        getId: vi.fn((): string | null => null),
         list: vi.fn(async () => threads),
         firstUserMessages: vi.fn(async () => new Map()),
+        delete: vi.fn(async () => {}),
       },
       mode: { get: vi.fn(() => 'build') },
     },
@@ -192,5 +199,94 @@ describe('handleThreadsCommand thread listing', () => {
       resourceId: 'resource-1',
       mode: 'build',
     });
+  });
+});
+
+describe('handleThreadsCommand thread deletion', () => {
+  beforeEach(() => {
+    selectorInstances.length = 0;
+    vi.mocked(confirmDeleteThread).mockReset();
+    vi.mocked(resetUIAfterCurrentThreadDelete).mockReset();
+    vi.mocked(confirmDeleteThread).mockResolvedValue(true);
+  });
+
+  async function openSelector(ctx: SlashCommandContext) {
+    const commandPromise = handleThreadsCommand(ctx);
+    await Promise.resolve();
+    const selector = selectorInstances[0];
+    expect(selector).toBeDefined();
+    return { commandPromise, selector };
+  }
+
+  it('deletes a non-current thread after confirmation and clears its cached preview', async () => {
+    const threads = [createThread('thread-1', '2026-03-17T15:10:00.000Z')];
+    const { ctx, state } = createContext(threads);
+    state.threadPreviewCache.set('thread-1', { preview: 'Cached', updatedAt: threads[0]!.updatedAt.getTime() });
+    state.attemptedThreadPreviewIds.add('thread-1');
+
+    const { commandPromise, selector } = await openSelector(ctx);
+    await selector.options.onDelete(threads[0]);
+    await commandPromise;
+
+    expect(confirmDeleteThread).toHaveBeenCalledWith(state, 'New Thread');
+    expect(state.session.thread.delete).toHaveBeenCalledWith({ threadId: 'thread-1' });
+    expect(state.threadPreviewCache.has('thread-1')).toBe(false);
+    expect(state.attemptedThreadPreviewIds.has('thread-1')).toBe(false);
+    expect(resetUIAfterCurrentThreadDelete).not.toHaveBeenCalled();
+    expect(ctx.showInfo).toHaveBeenCalledWith('Deleted thread: New Thread');
+  });
+
+  it('does not delete when the confirmation is declined', async () => {
+    vi.mocked(confirmDeleteThread).mockResolvedValue(false);
+    const threads = [createThread('thread-1', '2026-03-17T15:10:00.000Z')];
+    const { ctx, state } = createContext(threads);
+
+    const { commandPromise, selector } = await openSelector(ctx);
+    await selector.options.onDelete(threads[0]);
+    await commandPromise;
+
+    expect(state.session.thread.delete).not.toHaveBeenCalled();
+    expect(ctx.showInfo).not.toHaveBeenCalled();
+  });
+
+  it('resets the UI when deleting the current thread', async () => {
+    const threads = [createThread('thread-1', '2026-03-17T15:10:00.000Z')];
+    const { ctx, state } = createContext(threads);
+    state.session.thread.getId.mockReturnValue('thread-1');
+
+    const { commandPromise, selector } = await openSelector(ctx);
+    await selector.options.onDelete(threads[0]);
+    await commandPromise;
+
+    expect(state.session.thread.delete).toHaveBeenCalledWith({ threadId: 'thread-1' });
+    expect(resetUIAfterCurrentThreadDelete).toHaveBeenCalledWith(ctx);
+  });
+
+  it('rejects deleting a thread that belongs to another resource', async () => {
+    const foreignThread = { ...createThread('thread-1', '2026-03-17T15:10:00.000Z'), resourceId: 'resource-2' };
+    const { ctx, state } = createContext([foreignThread]);
+
+    const { commandPromise, selector } = await openSelector(ctx);
+    await selector.options.onDelete(foreignThread);
+    await commandPromise;
+
+    expect(confirmDeleteThread).not.toHaveBeenCalled();
+    expect(state.session.thread.delete).not.toHaveBeenCalled();
+    expect(ctx.showError).toHaveBeenCalledWith(
+      'Cannot delete a thread that belongs to another resource. Switch to it first.',
+    );
+  });
+
+  it('shows an error when the deletion fails', async () => {
+    const threads = [createThread('thread-1', '2026-03-17T15:10:00.000Z')];
+    const { ctx, state } = createContext(threads);
+    state.session.thread.delete.mockRejectedValue(new Error('Thread not found: thread-1'));
+
+    const { commandPromise, selector } = await openSelector(ctx);
+    await selector.options.onDelete(threads[0]);
+    await commandPromise;
+
+    expect(ctx.showError).toHaveBeenCalledWith('Failed to delete thread: Thread not found: thread-1');
+    expect(resetUIAfterCurrentThreadDelete).not.toHaveBeenCalled();
   });
 });

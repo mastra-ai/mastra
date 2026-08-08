@@ -150,6 +150,7 @@ export type ScenarioName =
   | 'task-progress-events'
   | 'terminal-resize-reflow'
   | 'task-prompt-context-next-turn'
+  | 'thread-delete'
   | 'thread-history'
   | 'tool-history-reload'
   | 'plugins-streaming-tool-output'

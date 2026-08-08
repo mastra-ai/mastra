@@ -148,6 +148,7 @@ import { taskPatchToolsScenario } from './task-patch-tools.js';
 import { taskProgressEventsScenario } from './task-progress-events.js';
 import { taskPromptContextNextTurnScenario } from './task-prompt-context-next-turn.js';
 import { terminalResizeReflowScenario } from './terminal-resize-reflow.js';
+import { threadDeleteScenario } from './thread-delete.js';
 import { threadHistoryScenario } from './thread-history.js';
 import { toolHistoryReloadScenario } from './tool-history-reload.js';
 import { toolSchemaCompatScenario } from './tool-schema-compat.js';
@@ -315,6 +316,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'task-progress-events': taskProgressEventsScenario,
   'task-prompt-context-next-turn': taskPromptContextNextTurnScenario,
   'terminal-resize-reflow': terminalResizeReflowScenario,
+  'thread-delete': threadDeleteScenario,
   'thread-history': threadHistoryScenario,
   'tool-history-reload': toolHistoryReloadScenario,
   'tool-schema-compat': toolSchemaCompatScenario,
