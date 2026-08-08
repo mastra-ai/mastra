@@ -51,7 +51,16 @@ function DatasetItemPage() {
   // Derive form defaults from latest version (recomputes when version changes)
   const formDefaults = useMemo(() => {
     if (!latestVersion || isDeleted)
-      return { input: '', groundTruth: '', metadata: '', trajectory: '', toolMocks: '', requestContext: '' };
+      return {
+        input: '',
+        groundTruth: '',
+        metadata: '',
+        trajectory: '',
+        toolMocks: '',
+        scorerOverrideEnabled: false,
+        scorerIds: [],
+        requestContext: '',
+      };
     return {
       input: JSON.stringify(latestVersion.input, null, 2),
       groundTruth: latestVersion.groundTruth ? JSON.stringify(latestVersion.groundTruth, null, 2) : '',
@@ -59,6 +68,8 @@ function DatasetItemPage() {
       trajectory:
         latestVersion.expectedTrajectory != null ? JSON.stringify(latestVersion.expectedTrajectory, null, 2) : '',
       toolMocks: latestVersion.toolMocks?.length ? JSON.stringify(latestVersion.toolMocks, null, 2) : '',
+      scorerOverrideEnabled: latestVersion.scorerIds !== undefined,
+      scorerIds: latestVersion.scorerIds ?? [],
       requestContext: latestVersion.requestContext ? JSON.stringify(latestVersion.requestContext, null, 2) : '',
     };
   }, [latestVersion, isDeleted]);
@@ -73,6 +84,8 @@ function DatasetItemPage() {
   const [metadataValue, setMetadataValue] = useState(formDefaults.metadata);
   const [trajectoryValue, setTrajectoryValue] = useState(formDefaults.trajectory);
   const [toolMocksValue, setToolMocksValue] = useState(formDefaults.toolMocks);
+  const [scorerOverrideEnabled, setScorerOverrideEnabled] = useState(formDefaults.scorerOverrideEnabled);
+  const [selectedScorerIds, setSelectedScorerIds] = useState(formDefaults.scorerIds);
   const [requestContextValue, setRequestContextValue] = useState(formDefaults.requestContext);
 
   // Reset form values when version changes (key-based reset pattern)
@@ -84,6 +97,8 @@ function DatasetItemPage() {
     setMetadataValue(formDefaults.metadata);
     setTrajectoryValue(formDefaults.trajectory);
     setToolMocksValue(formDefaults.toolMocks);
+    setScorerOverrideEnabled(formDefaults.scorerOverrideEnabled);
+    setSelectedScorerIds(formDefaults.scorerIds);
     setRequestContextValue(formDefaults.requestContext);
   }
 
@@ -191,6 +206,13 @@ function DatasetItemPage() {
       }
     }
 
+    const scorerIdsChanged =
+      scorerOverrideEnabled !== formDefaults.scorerOverrideEnabled ||
+      (scorerOverrideEnabled &&
+        (selectedScorerIds.length !== formDefaults.scorerIds.length ||
+          selectedScorerIds.some((id, index) => id !== formDefaults.scorerIds[index])));
+    const scorerIds = scorerOverrideEnabled ? selectedScorerIds : null;
+
     try {
       await updateItem.mutateAsync({
         datasetId,
@@ -200,6 +222,7 @@ function DatasetItemPage() {
         metadata: parsedMetadata,
         ...(trajectoryChanged ? { expectedTrajectory: parsedTrajectory ?? null } : {}),
         ...(toolMocksChanged ? { toolMocks: parsedToolMocks ?? [] } : {}),
+        ...(scorerIdsChanged ? { scorerIds } : {}),
         ...(requestContextChanged ? { requestContext: parsedRequestContext } : {}),
       });
       toast.success('Item updated successfully');
@@ -219,6 +242,8 @@ function DatasetItemPage() {
         latestVersion.expectedTrajectory != null ? JSON.stringify(latestVersion.expectedTrajectory, null, 2) : '',
       );
       setToolMocksValue(latestVersion.toolMocks?.length ? JSON.stringify(latestVersion.toolMocks, null, 2) : '');
+      setScorerOverrideEnabled(latestVersion.scorerIds !== undefined);
+      setSelectedScorerIds(latestVersion.scorerIds ?? []);
       setRequestContextValue(latestVersion.requestContext ? JSON.stringify(latestVersion.requestContext, null, 2) : '');
     }
     setIsEditing(false);
@@ -248,6 +273,7 @@ function DatasetItemPage() {
         input: versionToDisplay.input,
         groundTruth: versionToDisplay.groundTruth,
         expectedTrajectory: versionToDisplay.expectedTrajectory,
+        scorerIds: versionToDisplay.scorerIds,
         metadata: versionToDisplay.metadata,
         createdAt: versionToDisplay.createdAt,
         updatedAt: versionToDisplay.updatedAt,
@@ -372,6 +398,10 @@ function DatasetItemPage() {
                     setTrajectoryValue={setTrajectoryValue}
                     toolMocksValue={toolMocksValue}
                     setToolMocksValue={setToolMocksValue}
+                    scorerOverrideEnabled={scorerOverrideEnabled}
+                    setScorerOverrideEnabled={setScorerOverrideEnabled}
+                    selectedScorerIds={selectedScorerIds}
+                    setSelectedScorerIds={setSelectedScorerIds}
                     requestContextValue={requestContextValue}
                     setRequestContextValue={setRequestContextValue}
                     validationErrors={null}
