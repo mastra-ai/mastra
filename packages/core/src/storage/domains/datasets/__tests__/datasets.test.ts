@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
+import { MAX_EXPERIMENT_ITEM_TIMEOUT_MS } from '../../../../datasets/validation';
 import { InMemoryDB } from '../../inmemory-db';
 import { DatasetsInMemory } from '../inmemory';
 
@@ -179,6 +180,63 @@ describe('DatasetsInMemory', () => {
 
       const listed = await storage.listItems({ datasetId: dataset.id, pagination: { page: 0, perPage: 10 } });
       expect(listed.items[0]?.scorerIds).toEqual(['quality', 'safety']);
+    });
+
+    it('persists timeout and includes it in item identity', async () => {
+      const dataset = await storage.createDataset({ name: 'test' });
+      const first = await storage.addItem({
+        datasetId: dataset.id,
+        externalId: 'timeout-item',
+        input: { prompt: 'hello' },
+        timeout: 1_000,
+      });
+      const retry = await storage.addItem({
+        datasetId: dataset.id,
+        externalId: 'timeout-item',
+        input: { prompt: 'hello' },
+        timeout: 1_000,
+      });
+
+      expect(first.timeout).toBe(1_000);
+      expect(retry.id).toBe(first.id);
+      await expect(
+        storage.addItem({
+          datasetId: dataset.id,
+          externalId: 'timeout-item',
+          input: { prompt: 'hello' },
+          timeout: 2_000,
+        }),
+      ).rejects.toMatchObject({ id: 'DATASET_ITEM_IDENTITY_CONFLICT' });
+    });
+
+    it.each([0, -1, 1.5, MAX_EXPERIMENT_ITEM_TIMEOUT_MS + 1])(
+      'rejects invalid timeout %s across item writes',
+      async timeout => {
+        const dataset = await storage.createDataset({ name: 'test' });
+
+        await expect(
+          storage.addItem({ datasetId: dataset.id, input: { prompt: 'add' }, timeout }),
+        ).rejects.toMatchObject({ id: 'EXPERIMENT_TIMEOUT_INVALID' });
+
+        const item = await storage.addItem({ datasetId: dataset.id, input: { prompt: 'valid' }, timeout: 1_000 });
+        await expect(storage.updateItem({ id: item.id, datasetId: dataset.id, timeout })).rejects.toMatchObject({
+          id: 'EXPERIMENT_TIMEOUT_INVALID',
+        });
+        await expect(
+          storage.batchInsertItems({ datasetId: dataset.id, items: [{ input: { prompt: 'batch' }, timeout }] }),
+        ).rejects.toMatchObject({ id: 'EXPERIMENT_TIMEOUT_INVALID' });
+      },
+    );
+
+    it('accepts the maximum item timeout', async () => {
+      const dataset = await storage.createDataset({ name: 'test' });
+      const item = await storage.addItem({
+        datasetId: dataset.id,
+        input: { prompt: 'hello' },
+        timeout: MAX_EXPERIMENT_ITEM_TIMEOUT_MS,
+      });
+
+      expect(item.timeout).toBe(MAX_EXPERIMENT_ITEM_TIMEOUT_MS);
     });
 
     it('addItem rejects circular payloads before idempotency comparison', async () => {
@@ -523,6 +581,23 @@ describe('DatasetsInMemory', () => {
       expect(history[1].datasetVersion).toBe(1);
       expect(history[1].validTo).toBe(2);
       expect(history[1].input).toEqual({ n: 1 });
+    });
+
+    it('preserves timeout across updates, versions, and tombstones', async () => {
+      const dataset = await storage.createDataset({ name: 'test' });
+      const item = await storage.addItem({ datasetId: dataset.id, input: { n: 1 }, timeout: 1_000 });
+
+      await storage.updateItem({ id: item.id, datasetId: dataset.id, input: { n: 2 } });
+      await storage.updateItem({ id: item.id, datasetId: dataset.id, timeout: 2_000 });
+
+      expect((await storage.getItemsByVersion({ datasetId: dataset.id, version: 1 }))[0]?.timeout).toBe(1_000);
+      expect((await storage.getItemsByVersion({ datasetId: dataset.id, version: 2 }))[0]?.timeout).toBe(1_000);
+      expect((await storage.getItemsByVersion({ datasetId: dataset.id, version: 3 }))[0]?.timeout).toBe(2_000);
+
+      await storage.deleteItem({ id: item.id, datasetId: dataset.id });
+      const history = await storage.getItemHistory(item.id);
+      expect(history.map(row => row.timeout)).toEqual([2_000, 2_000, 1_000, 1_000]);
+      expect(history[0]?.isDeleted).toBe(true);
     });
 
     it('deleteItem creates tombstone row with isDeleted=true (T3.9)', async () => {

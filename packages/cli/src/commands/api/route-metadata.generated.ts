@@ -4976,6 +4976,7 @@ export const API_ROUTE_METADATA = {
       "requestContext",
       "scorerIds",
       "source",
+      "timeout",
       "toolMocks",
       "unmockedToolPolicy"
     ],
@@ -5049,6 +5050,7 @@ export const API_ROUTE_METADATA = {
       "requestContext",
       "scorerIds",
       "source",
+      "timeout",
       "toolMocks",
       "unmockedToolPolicy"
     ],
@@ -5192,6 +5194,7 @@ export const API_ROUTE_METADATA = {
       "agentVersion",
       "description",
       "grouping",
+      "itemTimeout",
       "maxConcurrency",
       "metadata",
       "name",

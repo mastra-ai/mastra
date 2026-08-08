@@ -11,6 +11,7 @@ import { InMemoryDB } from '../../../storage/domains/inmemory-db';
 import { ObservabilityInMemory } from '../../../storage/domains/observability/inmemory';
 import { ScoresInMemory } from '../../../storage/domains/scores/inmemory';
 import { createStep, createWorkflow } from '../../../workflows';
+import { MAX_EXPERIMENT_ITEM_TIMEOUT_MS } from '../../validation';
 import type { ExperimentEvent } from '../index';
 import { EXPERIMENT_ITEM_SCORER_NOT_FOUND, runExperiment } from '../index';
 
@@ -846,6 +847,184 @@ describe('runExperiment', () => {
       expect(result.status).toBe('failed');
       expect(result.results).toHaveLength(0);
       expect(result.totalItems).toBe(2);
+    });
+  });
+
+  describe('item timeouts', () => {
+    it.each([0, -1, 1.5, MAX_EXPERIMENT_ITEM_TIMEOUT_MS + 1])(
+      'rejects invalid inline timeout %s before execution',
+      async timeout => {
+        const task = vi.fn().mockResolvedValue('done');
+
+        await expect(
+          runExperiment(mastra, {
+            data: [{ input: 'invalid-timeout', timeout }],
+            task,
+          }),
+        ).rejects.toMatchObject({ id: 'EXPERIMENT_TIMEOUT_INVALID' });
+        expect(task).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each([0, -1, 1.5, MAX_EXPERIMENT_ITEM_TIMEOUT_MS + 1])(
+      'rejects invalid run-level timeout %s before execution',
+      async itemTimeout => {
+        const task = vi.fn().mockResolvedValue('done');
+
+        await expect(
+          runExperiment(mastra, {
+            data: [{ input: 'invalid-timeout' }],
+            itemTimeout,
+            task,
+          }),
+        ).rejects.toMatchObject({ id: 'EXPERIMENT_TIMEOUT_INVALID' });
+        expect(task).not.toHaveBeenCalled();
+      },
+    );
+
+    it('rejects an invalid timeout returned by persisted storage', async () => {
+      const persistedItems = await datasetsStorage.getItemsByVersion({ datasetId, version: 2 });
+      vi.spyOn(datasetsStorage, 'getItemsByVersion').mockResolvedValue(
+        persistedItems.map(item => ({ ...item, timeout: 0 })),
+      );
+      const task = vi.fn().mockResolvedValue('done');
+
+      await expect(runExperiment(mastra, { datasetId, task })).rejects.toMatchObject({
+        id: 'EXPERIMENT_TIMEOUT_INVALID',
+      });
+      expect(task).not.toHaveBeenCalled();
+    });
+
+    it('accepts the maximum timeout for item overrides and the run-level fallback', async () => {
+      const result = await runExperiment(mastra, {
+        data: [{ input: 'override', timeout: MAX_EXPERIMENT_ITEM_TIMEOUT_MS }, { input: 'fallback' }],
+        itemTimeout: MAX_EXPERIMENT_ITEM_TIMEOUT_MS,
+        task: async ({ input }) => input,
+      });
+
+      expect(result.succeededCount).toBe(2);
+    });
+
+    it('applies different persisted timeout overrides within one run', async () => {
+      const timeoutDataset = await datasetsStorage.createDataset({ name: 'Stored timeout overrides' });
+      await datasetsStorage.addItem({
+        datasetId: timeoutDataset.id,
+        input: { name: 'short', delay: 80 },
+        timeout: 20,
+      });
+      await datasetsStorage.addItem({
+        datasetId: timeoutDataset.id,
+        input: { name: 'long', delay: 80 },
+        timeout: 200,
+      });
+
+      const result = await runExperiment(mastra, {
+        datasetId: timeoutDataset.id,
+        task: async ({ input }) => {
+          const { delay } = input as { delay: number };
+          await new Promise(resolve => setTimeout(resolve, delay));
+          return 'done';
+        },
+      });
+
+      expect(result.succeededCount).toBe(1);
+      expect(result.failedCount).toBe(1);
+      expect(result.results.find(item => (item.input as { name: string }).name === 'short')?.error?.message).toMatch(
+        /timeout/i,
+      );
+      expect(result.results.find(item => (item.input as { name: string }).name === 'long')?.error).toBeNull();
+    });
+
+    it('uses inline overrides before the run-level fallback', async () => {
+      const result = await runExperiment(mastra, {
+        data: [
+          { input: { name: 'short', delay: 80 }, timeout: 20 },
+          { input: { name: 'inherited', delay: 80 } },
+          { input: { name: 'long', delay: 80 }, timeout: 200 },
+        ],
+        itemTimeout: 30,
+        task: async ({ input }) => {
+          const { delay } = input as { delay: number };
+          await new Promise(resolve => setTimeout(resolve, delay));
+          return 'done';
+        },
+      });
+
+      const byName = (name: string) => result.results.find(item => (item.input as { name: string }).name === name);
+      expect(byName('short')?.error?.message).toMatch(/timeout/i);
+      expect(byName('inherited')?.error?.message).toMatch(/timeout/i);
+      expect(byName('long')?.error).toBeNull();
+    });
+
+    it('runs without a deadline when neither timeout is provided', async () => {
+      let receivedSignal: AbortSignal | undefined;
+      const result = await runExperiment(mastra, {
+        data: [{ input: 'no-timeout' }],
+        task: async ({ input, signal }) => {
+          receivedSignal = signal;
+          await new Promise(resolve => setTimeout(resolve, 20));
+          return input;
+        },
+      });
+
+      expect(result.succeededCount).toBe(1);
+      expect(receivedSignal).toBeUndefined();
+    });
+
+    it('hard-times out an agent that ignores its abort signal', async () => {
+      const hangingAgent = {
+        id: 'hanging-agent',
+        name: 'Hanging Agent',
+        getModel: vi.fn().mockResolvedValue({ specificationVersion: 'v2' }),
+        generate: vi.fn().mockImplementation(() => new Promise(() => {})),
+      };
+      (mastra.getAgent as ReturnType<typeof vi.fn>).mockReturnValue(hangingAgent);
+      (mastra.getAgentById as ReturnType<typeof vi.fn>).mockReturnValue(hangingAgent);
+
+      const result = await runExperiment(mastra, {
+        data: [{ input: 'hang', timeout: 20 }],
+        targetType: 'agent',
+        targetId: 'hanging-agent',
+      });
+
+      expect(result.failedCount).toBe(1);
+      expect(result.results[0]?.error?.message).toMatch(/timeout/i);
+    });
+
+    it('hard-times out a workflow that ignores cancellation', async () => {
+      const hangingWorkflow = {
+        id: 'hanging-workflow',
+        name: 'Hanging Workflow',
+        createRun: vi.fn().mockResolvedValue({
+          start: vi.fn().mockImplementation(() => new Promise(() => {})),
+        }),
+      };
+      (mastra.getWorkflow as ReturnType<typeof vi.fn>).mockReturnValue(hangingWorkflow);
+      (mastra.getWorkflowById as ReturnType<typeof vi.fn>).mockReturnValue(hangingWorkflow);
+
+      const result = await runExperiment(mastra, {
+        data: [{ input: 'hang', timeout: 20 }],
+        targetType: 'workflow',
+        targetId: 'hanging-workflow',
+      });
+
+      expect(result.failedCount).toBe(1);
+      expect(result.results[0]?.error?.message).toMatch(/timeout/i);
+    });
+
+    it('keeps external cancellation authoritative when an item override exists', async () => {
+      const controller = new AbortController();
+      setTimeout(() => controller.abort(new DOMException('Run cancelled', 'AbortError')), 20);
+
+      const result = await runExperiment(mastra, {
+        data: [{ input: 'hang', timeout: 500 }],
+        signal: controller.signal,
+        task: () => new Promise(() => {}),
+      });
+
+      expect(result.status).toBe('failed');
+      expect(result.results).toHaveLength(0);
+      expect(result.skippedCount).toBe(1);
     });
   });
 
