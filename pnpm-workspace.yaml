@@ -32,8 +32,9 @@ packages:
   - e2e-tests/client-js/zod-v4
   - e2e-tests/workspace-compat
 
-# Share pnpm's virtual store across git worktrees: https://pnpm.io/git-worktrees
-enableGlobalVirtualStore: true
+# Keep workspace dependency links isolated per worktree. The global virtual store
+# reuses peer dependency snapshots whose workspace links can point at another worktree.
+enableGlobalVirtualStore: false
 
 catalog:
   '@microsoft/api-extractor': ^7.57.7
