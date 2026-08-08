@@ -253,6 +253,25 @@ const workspace = new Workspace({
 })
 ```
 
+Use `domainAllowList` for services whose IP addresses change, such as package registries and hosted APIs:
+
+```typescript
+const workspace = new Workspace({
+  sandbox: new DaytonaSandbox({
+    networkBlockAll: true,
+    domainAllowList: 'registry.npmjs.org,*.githubusercontent.com',
+  }),
+})
+```
+
+Both allow lists are applied at sandbox creation and are preserved by `clone()`. To change the policy after the sandbox has started, use the underlying Daytona sandbox:
+
+```typescript
+await sandbox.instance.updateNetworkSettings({
+  domainAllowList: 'api.example.com',
+})
+```
+
 ## Constructor parameters
 
 <PropertiesTable
@@ -396,6 +415,13 @@ const workspace = new Workspace({
     name: 'networkAllowList',
     type: 'string',
     description: 'Comma-separated list of allowed CIDR addresses when network access is restricted.',
+    isOptional: true,
+  },
+  {
+    name: 'domainAllowList',
+    type: 'string',
+    description:
+      'Comma-separated list of allowed domains when network access is restricted. Supports wildcards, for example `*.githubusercontent.com`. Use this instead of `networkAllowList` for services whose IP addresses change.',
     isOptional: true,
   },
 ]}
