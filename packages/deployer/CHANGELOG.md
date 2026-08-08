@@ -1,5 +1,43 @@
 # @mastra/deployer
 
+## 1.58.0-alpha.4
+
+### Minor Changes
+
+- Added `bundler.entries` so `mastra build` can emit extra process entries next to the server bundle. ([#20850](https://github.com/mastra-ai/mastra/pull/20850))
+
+  A Mastra app that runs a second long-running process, such as a LiveKit voice worker, previously had to bundle that process with its own toolchain because `mastra build` only emitted `index.mjs`. Declare the extra entries in your Mastra config instead:
+
+  ```typescript title="src/mastra/index.ts"
+  export const mastra = new Mastra({
+    bundler: {
+      entries: { 'voice-worker': './voice-worker.ts' },
+      externals: true,
+    },
+  });
+  ```
+
+  `mastra build` now emits `.mastra/output/voice-worker.mjs` beside `.mastra/output/index.mjs`. Both share one output directory, one `package.json`, and one dependency install, so a single build produces one deployable artifact you start with different commands:
+
+  ```bash
+  node .mastra/output/index.mjs              # server
+  node .mastra/output/voice-worker.mjs start # worker
+  ```
+
+  Dependencies imported only by an extra entry are analyzed too, so they land in the generated `package.json` and resolve at runtime.
+
+  Entry names may contain `/` to nest the output, but cannot be `index` (the server bundle), `tools` (the tool aggregator), or start with `tools/` (tool bundles).
+
+### Patch Changes
+
+- Fixed user-registered middleware (`serverMiddleware` and `server.middleware`) being able to return a 401 for framework-public routes such as the Studio sign-in endpoints. ([#20989](https://github.com/mastra-ai/mastra/pull/20989))
+
+  The deployer now wraps every user middleware with `skipIfFrameworkPublic` from `@mastra/hono`, so requests to routes declared public via `createPublicRoute()` / `requiresAuth: false` always reach their handler.
+
+- Updated dependencies [[`c271cae`](https://github.com/mastra-ai/mastra/commit/c271caebd0add9f5d610db0fdb75915fb2b71c18), [`76e5132`](https://github.com/mastra-ai/mastra/commit/76e51328dbc0749c8304e6b3f21e4401f451b081), [`0282e16`](https://github.com/mastra-ai/mastra/commit/0282e16115538c8e9b248b90f0748eb01cb5dc98)]:
+  - @mastra/server@1.58.0-alpha.4
+  - @mastra/core@1.58.0-alpha.4
+
 ## 1.58.0-alpha.3
 
 ### Patch Changes
