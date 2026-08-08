@@ -8,6 +8,7 @@ import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ToolCard, ToolCardInner } from '../tool-card';
 import type { ToolCardProps } from '../tool-card';
+import { askUserToolResponse, genericToolResponse, toolsResponse } from './fixtures/tools';
 import { WorkflowRunContext, WorkflowRunProvider } from '@/domains/workflows';
 import { WORKSPACE_TOOLS } from '@/domains/workspace/constants';
 import { ToolCallProvider } from '@/services/tool-call-provider';
@@ -263,6 +264,75 @@ describe('ToolCard dispatch', () => {
     fireEvent.click(screen.getByText('billingAgent'));
     expect(screen.getByText('approve refund ord_2003?')).toBeTruthy();
     expect(screen.queryByText('approve refund ord_2001?')).toBeNull();
+  });
+
+  describe('ask_user resolution by tool id', () => {
+    const askQuestionMetadata = (key: string): ToolCardProps['metadata'] => ({
+      mode: 'stream',
+      suspendedTools: {
+        [key]: { suspendPayload: { question: 'What is your favorite color?' } },
+      },
+    });
+
+    describe('when the tool is registered under the ask_user key', () => {
+      it('renders the interactive ask-user badge without consulting the tools list', async () => {
+        renderToolCard(
+          baseProps({
+            toolName: 'ask_user',
+            toolCallId: 'call-ask',
+            output: undefined,
+            metadata: askQuestionMetadata('ask_user'),
+          }),
+        );
+
+        expect(await screen.findByTestId('ask-user-badge')).toBeTruthy();
+        expect(screen.getByText('What is your favorite color?')).toBeTruthy();
+      });
+    });
+
+    describe('when the ask_user tool is registered under a custom key', () => {
+      it('resolves the tool id from /api/tools and renders the interactive ask-user badge', async () => {
+        server.use(
+          http.get(`${BASE_URL}/api/tools`, () =>
+            HttpResponse.json(toolsResponse({ askUserTool: askUserToolResponse })),
+          ),
+        );
+
+        renderToolCard(
+          baseProps({
+            toolName: 'askUserTool',
+            toolCallId: 'call-ask',
+            output: undefined,
+            metadata: askQuestionMetadata('askUserTool'),
+          }),
+        );
+
+        expect(await screen.findByTestId('ask-user-badge')).toBeTruthy();
+        expect(screen.getByText('What is your favorite color?')).toBeTruthy();
+      });
+    });
+
+    describe('when a custom-keyed tool is not the ask_user tool', () => {
+      it('does not render the ask-user badge and falls back to the generic tool badge', async () => {
+        server.use(
+          http.get(`${BASE_URL}/api/tools`, () =>
+            HttpResponse.json(toolsResponse({ searchDocs: genericToolResponse })),
+          ),
+        );
+
+        renderToolCard(
+          baseProps({
+            toolName: 'searchDocs',
+            toolCallId: 'call-search',
+            output: { ok: true },
+            metadata: { mode: 'stream' },
+          }),
+        );
+
+        expect(await screen.findByText('searchDocs')).toBeTruthy();
+        expect(screen.queryByTestId('ask-user-badge')).toBeNull();
+      });
+    });
   });
 
   it('pushes a streaming workflow output into WorkflowRunContext for the live graph', async () => {
