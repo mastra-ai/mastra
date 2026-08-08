@@ -23,6 +23,7 @@ export class DefaultSpan<TType extends SpanType> extends BaseSpan<TType> {
       this.traceId = options.traceId;
       if (options.parentSpanId) {
         this.parentSpanId = options.parentSpanId;
+        this.isExternalParent = options.isExternalParent;
       }
       return;
     }
@@ -34,7 +35,10 @@ export class DefaultSpan<TType extends SpanType> extends BaseSpan<TType> {
       if (bridgeIds) {
         this.id = bridgeIds.spanId;
         this.traceId = bridgeIds.traceId;
-        this.parentSpanId = bridgeIds.parentSpanId;
+        this.parentSpanId = options.parentSpanId ?? bridgeIds.parentSpanId;
+        this.isExternalParent = options.parentSpanId
+          ? options.isExternalParent
+          : bridgeIds.parentSpanId !== undefined && !options.parent;
         return;
       }
     }
@@ -53,6 +57,7 @@ export class DefaultSpan<TType extends SpanType> extends BaseSpan<TType> {
     if (options.parentSpanId) {
       if (isValidSpanId(options.parentSpanId)) {
         this.parentSpanId = options.parentSpanId;
+        this.isExternalParent = options.isExternalParent;
       } else {
         console.error(
           `[Mastra Tracing] Invalid parentSpanId: must be 1-16 hexadecimal characters, got "${options.parentSpanId}". Ignoring.`,

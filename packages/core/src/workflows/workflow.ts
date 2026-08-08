@@ -4306,6 +4306,9 @@ export class Run<
       parentSpanId: shouldUsePersistedParentSpan
         ? persistedTracingContext?.spanId
         : params.tracingOptions?.parentSpanId,
+      isExternalParent: shouldUsePersistedParentSpan
+        ? false
+        : (params.tracingOptions?.isExternalParent ?? params.tracingOptions?.parentSpanId !== undefined),
     };
 
     // note: this span is ended inside this.executionEngine.execute()

@@ -15,7 +15,8 @@ import type {
   ScoreEvent,
   SpanType as SpanTypeGeneric,
 } from '@mastra/core/observability';
-import { SpanType, TracingEventType } from '@mastra/core/observability';
+import { SamplingStrategyType, SpanType, TracingEventType } from '@mastra/core/observability';
+import { DefaultObservabilityInstance } from '@mastra/observability';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
@@ -240,6 +241,34 @@ describe('DatadogBridge', () => {
         traceId: '00000000000000000000000000000001',
         parentSpanId: undefined,
       });
+    });
+
+    it('preserves a resumed Mastra parent instead of marking it as external', async () => {
+      const bridge = new DatadogBridge({ mlApp: 'test', agentless: false });
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'resume-parent',
+        name: 'resume-parent-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        bridge,
+      });
+
+      const span = tracing.startSpan({
+        type: SpanType.GENERIC,
+        name: 'resumed-agent',
+        tracingOptions: {
+          parentSpanId: '1234567890abcdef',
+          isExternalParent: false,
+        },
+      })!;
+
+      expect(span.exportSpan()).toMatchObject({
+        parentSpanId: '1234567890abcdef',
+        isExternalParent: false,
+      });
+
+      span.end();
+      await tracing.flush();
+      await bridge.shutdown();
     });
 
     it('registers the eager span with the LLMObs tagger', () => {

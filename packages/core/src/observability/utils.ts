@@ -138,6 +138,7 @@ export function getOrCreateSpan<T extends SpanType>(options: GetOrCreateSpanOpti
     tracingOptions,
     traceId: tracingOptions?.traceId,
     parentSpanId: tracingOptions?.parentSpanId,
+    isExternalParent: tracingOptions?.isExternalParent ?? tracingOptions?.parentSpanId !== undefined,
     customSamplerOptions: {
       requestContext,
       metadata,
