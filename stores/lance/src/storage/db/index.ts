@@ -372,21 +372,21 @@ export class LanceDB extends MastraBase {
     }
   }
 
-  async insert({ tableName, record }: { tableName: string; record: Record<string, any> }): Promise<void> {
+  async update({ tableName, record }: { tableName: string; record: Record<string, any> }): Promise<void> {
     try {
       if (!this.client) {
         throw new Error('LanceDB client not initialized. Call LanceStorage.create() first.');
       }
       if (!tableName) {
-        throw new Error('tableName is required for insert.');
+        throw new Error('tableName is required for update.');
       }
       if (!record || Object.keys(record).length === 0) {
-        throw new Error('record is required and cannot be empty for insert.');
+        throw new Error('record is required and cannot be empty for update.');
       }
     } catch (validationError: any) {
       throw new MastraError(
         {
-          id: createStorageErrorId('LANCE', 'INSERT', 'INVALID_ARGS'),
+          id: createStorageErrorId('LANCE', 'UPDATE', 'INVALID_ARGS'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           text: validationError.message,
@@ -416,13 +416,13 @@ export class LanceDB extends MastraBase {
 
       // Filter out columns that don't exist in the actual database table
       const filteredRecord = await this.filterRecordToKnownColumns(tableName, processedRecord);
-      if (Object.keys(filteredRecord).length === 0) return; // No known columns after filtering - skip insert
+      if (Object.keys(filteredRecord).length === 0) return; // No known columns after filtering - skip update
 
-      await table.mergeInsert(primaryId).whenMatchedUpdateAll().whenNotMatchedInsertAll().execute([filteredRecord]);
+      await table.mergeInsert(primaryId).whenMatchedUpdateAll().execute([filteredRecord]);
     } catch (error: any) {
       throw new MastraError(
         {
-          id: createStorageErrorId('LANCE', 'INSERT', 'FAILED'),
+          id: createStorageErrorId('LANCE', 'UPDATE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { tableName },

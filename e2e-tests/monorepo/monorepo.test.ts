@@ -3,6 +3,7 @@ import { join } from 'path';
 import { setupMonorepo } from './prepare';
 import { mkdtemp, mkdir, rm, readFile, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
+import { pathToFileURL } from 'url';
 import getPort from 'get-port';
 import { execa, execaNode } from 'execa';
 
@@ -116,7 +117,7 @@ describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
       const res = await fetch(`http://localhost:${port}/transitive-workspace`);
       const body = await res.json();
       expect(res.status).toBe(200);
-      expect(body).toEqual({ value: 'a -> b -> c' });
+      expect(body).toEqual({ value: 'a -> b -> c', app: 'App value is BEFORE.' });
     });
 
     it('should return tools from the api', async () => {
@@ -186,6 +187,73 @@ describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
     }, timeout);
 
     runApiTests(port);
+
+    it(
+      'hot-reloads workspace package changes without a full process restart',
+      async () => {
+        const packageSource = join(fixturePath, 'packages', 'transitive-c', 'src', 'index.js');
+        const appRoute = join(
+          fixturePath,
+          'apps',
+          'custom',
+          'src',
+          'mastra',
+          'api',
+          'route',
+          'transitive-workspace.ts',
+        );
+
+        const originalPackageSource = await readFile(packageSource, 'utf-8');
+        const originalAppRoute = await readFile(appRoute, 'utf-8');
+
+        const waitForReload = async (predicate: (body: { value: string; app: string }) => boolean) => {
+          const started = Date.now();
+          let lastBody: { value: string; app: string } | undefined;
+          while (Date.now() - started < 60_000) {
+            try {
+              const res = await fetch(`http://localhost:${port}/transitive-workspace`);
+              if (res.ok) {
+                lastBody = (await res.json()) as { value: string; app: string };
+                if (predicate(lastBody)) {
+                  return lastBody;
+                }
+              }
+            } catch {
+              // Server may be restarting.
+            }
+            await new Promise(resolve => setTimeout(resolve, 500));
+          }
+          throw new Error(`Timed out waiting for hot reload. Last body: ${JSON.stringify(lastBody)}`);
+        };
+
+        try {
+          // 1. Baseline
+          const baseline = await waitForReload(
+            body => body.value === 'a -> b -> c' && body.app === 'App value is BEFORE.',
+          );
+          expect(baseline).toEqual({ value: 'a -> b -> c', app: 'App value is BEFORE.' });
+
+          // 2. Edit workspace package only
+          await writeFile(packageSource, `export const valueC = 'c-AFTER';\n`);
+          const afterPackage = await waitForReload(
+            body => body.value === 'a -> b -> c-AFTER' && body.app === 'App value is BEFORE.',
+          );
+          expect(afterPackage).toEqual({ value: 'a -> b -> c-AFTER', app: 'App value is BEFORE.' });
+
+          // 3. Edit app only — package AFTER must still be present (no stale optimizer cache)
+          await writeFile(appRoute, originalAppRoute.replace('App value is BEFORE.', 'App value is AFTER.'));
+          const afterApp = await waitForReload(
+            body => body.value === 'a -> b -> c-AFTER' && body.app === 'App value is AFTER.',
+          );
+          expect(afterApp).toEqual({ value: 'a -> b -> c-AFTER', app: 'App value is AFTER.' });
+        } finally {
+          // Restore fixture so subsequent build/start suites see the original sources.
+          await writeFile(packageSource, originalPackageSource);
+          await writeFile(appRoute, originalAppRoute);
+        }
+      },
+      timeout,
+    );
   });
 
   describe.sequential('build', async () => {
@@ -426,6 +494,94 @@ describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
     });
   });
 
+  describe.sequential('extra bundler entries', async () => {
+    let originalConfig: string;
+    const mastraDir = () => join(fixturePath, 'apps', 'custom', 'src', 'mastra');
+    const mastraConfigPath = () => join(mastraDir(), 'index.ts');
+    const workerSourcePath = () => join(mastraDir(), 'voice-worker.ts');
+    const outputDir = () => join(fixturePath, 'apps', 'custom', '.mastra', 'output');
+
+    // `date-fns` is a dependency of apps/custom that no source file imports, so it can
+    // only reach the built output through the extra entry below. That makes it a probe
+    // for the dependency-analysis contract: extra entries are analyzed, so their
+    // externals land in the generated package.json and resolve at runtime.
+    beforeAll(async () => {
+      originalConfig = await readFile(mastraConfigPath(), 'utf-8');
+
+      await writeFile(
+        workerSourcePath(),
+        [
+          `import { format } from 'date-fns';`,
+          ``,
+          `export default { kind: 'voice-worker', entryUrl: import.meta.url };`,
+          ``,
+          // Build and format from local calendar fields on both sides, so the result is the
+          // same in every timezone. `formatISO(new Date(0))` would not be: date-fns formats
+          // in local time, so the epoch renders as 1969-12-31 anywhere west of UTC.
+          `console.log('VOICE_WORKER_OK ' + JSON.stringify({ entryUrl: import.meta.url, stamp: format(new Date(2020, 0, 2), 'yyyy-MM-dd') }));`,
+          ``,
+        ].join('\n'),
+      );
+
+      // Keep date-fns external so it has to be installed rather than inlined, which is
+      // what makes running the worker prove the manifest is correct.
+      const modifiedConfig = originalConfig.replace(
+        /bundler:\s*\{\s*externals:\s*\[[^\]]*\],?\s*\}/m,
+        `bundler: {\n    externals: ['bcrypt', 'date-fns'],\n    entries: { 'voice-worker': './voice-worker.ts' },\n  }`,
+      );
+      expect(modifiedConfig).not.toBe(originalConfig);
+      await writeFile(mastraConfigPath(), modifiedConfig);
+
+      await runBuild(fixturePath);
+    }, timeout);
+
+    afterAll(async () => {
+      await writeFile(mastraConfigPath(), originalConfig);
+      await rm(workerSourcePath(), { force: true });
+    });
+
+    it('emits the extra entry as its own bundle beside the server', async () => {
+      const serverBundle = await readFile(join(outputDir(), 'index.mjs'), 'utf-8');
+      const workerBundle = await readFile(join(outputDir(), 'voice-worker.mjs'), 'utf-8');
+
+      expect(workerBundle).toContain('VOICE_WORKER_OK');
+      // The server must be untouched by the extra entry.
+      expect(serverBundle).not.toContain('VOICE_WORKER_OK');
+    });
+
+    it('adds dependencies reachable only from the extra entry to the output package.json', async () => {
+      const packageJson = JSON.parse(await readFile(join(outputDir(), 'package.json'), 'utf-8'));
+      const serverBundle = await readFile(join(outputDir(), 'index.mjs'), 'utf-8');
+
+      // The server bundle never references date-fns, so its presence in the manifest is
+      // attributable to the extra entry alone.
+      expect(serverBundle).not.toMatch(/['"]date-fns['"]/);
+      expect(packageJson.dependencies).toHaveProperty('date-fns');
+    });
+
+    it(
+      'runs the built extra entry as its own process',
+      async () => {
+        // Only succeeds if date-fns was installed into the output, which in turn only
+        // happens if the extra entry was analyzed. LiveKit re-imports this path in
+        // forked child processes, so import.meta.url must resolve to the built file.
+        const { stdout } = await execaNode('voice-worker.mjs', { cwd: outputDir() });
+
+        expect(stdout).toContain('VOICE_WORKER_OK');
+        const payload = JSON.parse(stdout.slice(stdout.indexOf('{')));
+        expect(payload.entryUrl.endsWith('/.mastra/output/voice-worker.mjs')).toBe(true);
+        expect(payload.stamp).toBe('2020-01-02');
+
+        const workerModule = await import(pathToFileURL(join(outputDir(), 'voice-worker.mjs')).href);
+        expect(workerModule.default).toEqual({
+          kind: 'voice-worker',
+          entryUrl: pathToFileURL(join(outputDir(), 'voice-worker.mjs')).href,
+        });
+      },
+      timeout,
+    );
+  });
+
   describe.sequential('subpath-only externals', () => {
     it(
       'should build transitive workspace dependencies with subpath-only exports and externals true',
@@ -484,7 +640,7 @@ describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
           const res = await fetch(`http://localhost:${port}/transitive-workspace`);
           const body = await res.json();
           expect(res.status).toBe(200);
-          expect(body).toEqual({ value: 'a -> b -> c' });
+          expect(body).toEqual({ value: 'a -> b -> c', app: 'App value is BEFORE.' });
         } finally {
           if (proc) {
             try {

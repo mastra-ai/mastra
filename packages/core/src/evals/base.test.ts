@@ -5,9 +5,10 @@ import { z } from 'zod/v4';
 import { Agent } from '../agent';
 import { SpanType } from '../observability';
 import { StreamErrorRetryProcessor } from '../processors';
+import { MASTRA_AUTH_TOKEN_KEY, RequestContext } from '../request-context';
 import { createMockModel } from '../test-utils/llm-mock';
-import { createScorer } from './base';
-import type { ScorerJudgeExecutionSuccess } from './base';
+import { createScorer, ScorerRunError } from './base';
+import type { ScorerJudgeExecutionFailure, ScorerJudgeExecutionSuccess } from './base';
 import {
   AsyncFunctionBasedScorerBuilders,
   FunctionBasedScorerBuilders,
@@ -137,7 +138,9 @@ function createMockSpan(traceId: string, type: SpanType) {
 function createMockMastra(options?: { addScoreImpl?: ReturnType<typeof vi.fn>; startSpan?: () => unknown }) {
   const logger = {
     debug: vi.fn(),
+    error: vi.fn(),
     warn: vi.fn(),
+    trackException: vi.fn(),
   };
 
   return {
@@ -272,7 +275,12 @@ describe('createScorer', () => {
       expect(Object.keys(result.judge ?? {})).toEqual(['preprocess', 'analyze', 'generateReason']);
 
       const preprocessExecution = result.judge?.preprocess?.executions[0];
-      expectTypeOf(preprocessExecution).toEqualTypeOf<ScorerJudgeExecutionSuccess | undefined>();
+      expect(preprocessExecution?.status).toBe('success');
+      if (preprocessExecution?.status === 'success') {
+        expectTypeOf(preprocessExecution).toEqualTypeOf<ScorerJudgeExecutionSuccess>();
+        expectTypeOf(preprocessExecution.output).not.toBeUndefined();
+        expectTypeOf(preprocessExecution.usage).not.toBeUndefined();
+      }
       expect(preprocessExecution).toMatchObject({
         status: 'success',
         prompt: 'Test Preprocess prompt',
@@ -981,7 +989,7 @@ describe('createScorer', () => {
       }
     });
 
-    it('propagates caller onFinish callback errors from the judge invocation', async () => {
+    it('propagates caller onFinish callback errors while retaining completed judge telemetry', async () => {
       const model = createJudgeModel([JSON.stringify({ score: 1 })]).model;
       const callbackError = new Error('judge finish callback failed');
       const onFinish = vi.fn(async () => {
@@ -989,10 +997,28 @@ describe('createScorer', () => {
       });
       const streamSpy = vi.spyOn(Agent.prototype, 'stream').mockImplementation((async (...args: any[]) => {
         const options = args[1];
-        await options.onFinish({
+        const completedStep = {
           model: { modelId: 'mock-model-id', provider: 'mock-provider' },
-        });
-        throw new Error('unreachable');
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          finishReason: 'stop',
+          text: JSON.stringify({ score: 1 }),
+        };
+
+        return {
+          object: Promise.resolve({ score: 1 }),
+          text: Promise.resolve(completedStep.text),
+          totalUsage: Promise.resolve(completedStep.usage),
+          steps: Promise.resolve([completedStep]),
+          finishReason: Promise.resolve(completedStep.finishReason),
+          consumeStream: async () => {
+            await options.onStepFinish(completedStep);
+            await options.onFinish({
+              ...completedStep,
+              steps: [completedStep],
+              totalUsage: completedStep.usage,
+            });
+          },
+        };
       }) as any);
 
       try {
@@ -1002,7 +1028,23 @@ describe('createScorer', () => {
           judge: { model, instructions: 'Return a score.', onFinish },
         }).generateScore({ description: 'score', createPrompt: () => 'score this output' });
 
-        await expect(scorer.run(testData.scoringInput)).rejects.toThrow('judge finish callback failed');
+        const error = await scorer.run(testData.scoringInput).catch(error => error);
+
+        expect(error).toBeInstanceOf(ScorerRunError);
+        expect(error).toMatchObject({ failedStep: 'generateScore', completedSteps: [] });
+        expect(error.result).not.toHaveProperty('score');
+        expect(error.result?.judge?.generateScore?.executions).toHaveLength(1);
+        expect(error.result?.judge?.generateScore?.executions[0]).toMatchObject({
+          status: 'failed',
+          prompt: 'score this output',
+          output: 1,
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          attemptCount: 1,
+          modelCallCount: 1,
+          finishReason: 'stop',
+          rawOutput: JSON.stringify({ score: 1 }),
+          error: { message: 'judge finish callback failed' },
+        });
         expect(onFinish).toHaveBeenCalledTimes(1);
       } finally {
         streamSpy.mockRestore();
@@ -1035,6 +1077,236 @@ describe('createScorer', () => {
         });
       } finally {
         streamSpy.mockRestore();
+      }
+    });
+  });
+
+  describe('Scorer run failures', () => {
+    it('retains analyze output when score generation fails', async () => {
+      const scoreError = new Error('score generation failed');
+      const scorer = createScorer({
+        id: 'analyze-result-failure-scorer',
+        description: 'Retains analyze output on score failure',
+      })
+        .analyze(() => ({ status: false, note: '' }))
+        .generateScore(() => {
+          throw scoreError;
+        });
+
+      const error = await scorer.run({ ...testData.scoringInput, runId: 'failure-run-id' }).catch(error => error);
+
+      expect(error).toBeInstanceOf(ScorerRunError);
+      const scorerError = error as ScorerRunError<any>;
+      expect(scorerError).toMatchObject({
+        id: 'MASTR_SCORER_FAILED_TO_RUN_WORKFLOW_FAILED',
+        domain: 'SCORER',
+        category: 'USER',
+        details: {
+          failedStep: 'generateScore',
+          completedSteps: 'analyze',
+        },
+        failedStep: 'generateScore',
+        completedSteps: ['analyze'],
+      });
+      expect(scorerError.message).toBe('Scorer Run Failed: score generation failed');
+      expect(scorerError.cause).toBeDefined();
+      expect(scorerError.result).toMatchObject({
+        input: testData.scoringInput.input,
+        output: testData.scoringInput.output,
+        analyzeStepResult: { status: false, note: '' },
+        runId: 'failure-run-id',
+      });
+      expect(scorerError.result).not.toHaveProperty('score');
+      expect(scorerError.result).not.toHaveProperty('judge');
+      expect(scorerError).not.toHaveProperty('failedJudgeExecution');
+
+      const serialized = JSON.stringify(scorerError);
+      expect(serialized).not.toContain('analyzeStepResult');
+      expect(JSON.parse(serialized)).not.toHaveProperty('result');
+    });
+
+    it('retains score zero and successful judge entries when reason generation fails', async () => {
+      const { model } = createJudgeModel([
+        JSON.stringify({ score: 0 }),
+        createProviderError(400, false, 'reason provider failed'),
+      ]);
+      const scorer = createScorer({
+        id: 'reason-failure-scorer',
+        description: 'Retains a completed score on reason failure',
+        judge: { model, instructions: 'Evaluate the output.' },
+      })
+        .generateScore({ description: 'score', createPrompt: () => 'score this output' })
+        .generateReason({ description: 'reason', createPrompt: () => 'explain this score' });
+
+      const error = await scorer.run(testData.scoringInput).catch(error => error);
+
+      expect(error).toBeInstanceOf(ScorerRunError);
+      const scorerError = error as ScorerRunError;
+      expect(scorerError.failedStep).toBe('generateReason');
+      expect(scorerError.completedSteps).toEqual(['generateScore']);
+      expect(scorerError.result?.score).toBe(0);
+      expect(scorerError.result?.judge?.generateScore?.executions).toHaveLength(1);
+      expect(scorerError.result?.judge?.generateScore?.executions[0]?.status).toBe('success');
+      expect(scorerError.result?.judge?.generateReason?.executions).toHaveLength(1);
+      const failedExecution = scorerError.result?.judge?.generateReason?.executions[0];
+      expect(failedExecution).toMatchObject({
+        status: 'failed',
+        prompt: 'explain this score',
+        judgeModelId: 'mock-model-id',
+        judgeProvider: 'mock-provider',
+        attemptCount: 1,
+        modelCallCount: 0,
+        error: { message: 'reason provider failed' },
+      });
+      expect(failedExecution).not.toHaveProperty('usage');
+      expect(failedExecution).not.toHaveProperty('output');
+      if (failedExecution?.status === 'failed') {
+        expectTypeOf(failedExecution).toEqualTypeOf<ScorerJudgeExecutionFailure>();
+        expectTypeOf(failedExecution.error).not.toBeUndefined();
+      }
+      const allExecutions = Object.values(scorerError.result?.judge ?? {}).flatMap(step => step.executions);
+      expect(allExecutions.reduce((total, execution) => total + (execution.usage?.inputTokens ?? 0), 0)).toBe(10);
+      expect(scorerError).not.toHaveProperty('failedJudgeExecution');
+    });
+
+    it('does not emit a recovered score to observability', async () => {
+      const mockMastra = createMockMastra();
+      const scorer = createScorer({
+        id: 'recovered-score-observability-scorer',
+        description: 'Does not emit a score from a failed run',
+      })
+        .generateScore(() => 0)
+        .generateReason(() => {
+          throw new Error('reason failed');
+        });
+      scorer.__registerMastra(mockMastra as any);
+
+      const error = await scorer.run(testData.scoringInput).catch(error => error);
+
+      expect(error).toBeInstanceOf(ScorerRunError);
+      expect(error.result?.score).toBe(0);
+      expect(mockMastra.observability.addScore).not.toHaveBeenCalled();
+    });
+
+    it('does not create a result when the first scorer step fails without output', async () => {
+      const scorer = createScorer({
+        id: 'first-step-failure-scorer',
+        description: 'Fails before producing a scorer result',
+      }).generateScore(() => {
+        throw new Error('no score available');
+      });
+
+      const error = await scorer.run(testData.scoringInput).catch(error => error);
+
+      expect(error).toBeInstanceOf(ScorerRunError);
+      expect(error).toMatchObject({
+        failedStep: 'generateScore',
+        completedSteps: [],
+        result: undefined,
+      });
+      expect(error).not.toHaveProperty('failedJudgeExecution');
+    });
+
+    it('records a provider attempt without fabricating completed judge telemetry', async () => {
+      const { model, getCallCount } = createJudgeModel([createProviderError(503, false)]);
+      const scorer = createScorer({
+        id: 'provider-attempt-failure-scorer',
+        description: 'Records an attempted judge invocation',
+        judge: { model, instructions: 'Return a score.' },
+      }).generateScore({ description: 'score', createPrompt: () => 'score this output' });
+
+      const error = await scorer.run(testData.scoringInput).catch(error => error);
+
+      expect(getCallCount()).toBe(1);
+      expect(error).toBeInstanceOf(ScorerRunError);
+      expect(error.result).not.toHaveProperty('score');
+      expect(error.result?.judge?.generateScore?.executions).toHaveLength(1);
+      const failedExecution = error.result?.judge?.generateScore?.executions[0];
+      expect(failedExecution).toMatchObject({
+        status: 'failed',
+        prompt: 'score this output',
+        attemptCount: 1,
+        modelCallCount: 0,
+      });
+      expect(failedExecution).not.toHaveProperty('usage');
+      expect(failedExecution).not.toHaveProperty('output');
+      expect(failedExecution).not.toHaveProperty('rawOutput');
+      expect(failedExecution?.finishReason).toBe('error');
+      expect(failedExecution?.status === 'failed' ? failedExecution.error : undefined).not.toHaveProperty(
+        'responseHeaders',
+      );
+    });
+
+    it('records a rejected fallback attempt without fabricating another model call', async () => {
+      const { model, getCallCount } = createJudgeModel([
+        'not valid JSON',
+        createProviderError(503, false, 'fallback provider failed'),
+      ]);
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      try {
+        const scorer = createScorer({
+          id: 'fallback-provider-failure-scorer',
+          description: 'Separates attempted fallback invocations from completed model calls',
+          judge: { model, instructions: 'Return a score.' },
+        }).generateScore({ description: 'score', createPrompt: () => 'score this output' });
+
+        const error = await scorer.run(testData.scoringInput).catch(error => error);
+
+        expect(getCallCount()).toBe(2);
+        expect(error).toBeInstanceOf(ScorerRunError);
+        expect(error.result).not.toHaveProperty('score');
+        expect(error.result?.judge?.generateScore?.executions).toHaveLength(1);
+        const failedExecution = error.result?.judge?.generateScore?.executions[0];
+        expect(failedExecution).toMatchObject({
+          status: 'failed',
+          prompt: 'score this output',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          attemptCount: 2,
+          modelCallCount: 1,
+          rawOutput: 'not valid JSON',
+        });
+        expect(failedExecution).not.toHaveProperty('output');
+      } finally {
+        warnSpy.mockRestore();
+      }
+    });
+
+    it('records exhausted fallback attempts as one failed logical judge execution', async () => {
+      const { model, getCallCount } = createJudgeModel(['not valid JSON', 'still not valid JSON']);
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      try {
+        const scorer = createScorer({
+          id: 'fallback-failure-scorer',
+          description: 'Retains completed fallback telemetry on failure',
+          judge: { model, instructions: 'Return a score.' },
+        }).generateScore({ description: 'score', createPrompt: () => 'score this output' });
+
+        const error = await scorer.run(testData.scoringInput).catch(error => error);
+
+        expect(getCallCount()).toBe(2);
+        expect(error).toBeInstanceOf(ScorerRunError);
+        expect(error.result).not.toHaveProperty('score');
+        expect(error.result?.judge?.generateScore?.executions).toHaveLength(1);
+        const failedExecution = error.result?.judge?.generateScore?.executions[0];
+        expect(failedExecution).toMatchObject({
+          status: 'failed',
+          prompt: 'score this output',
+          usage: { inputTokens: 20, outputTokens: 40, totalTokens: 60 },
+          attemptCount: 2,
+          modelCallCount: 2,
+          durationMs: expect.any(Number),
+          finishReason: 'error',
+          rawOutput: 'still not valid JSON',
+        });
+        expect(Number.isInteger(failedExecution?.durationMs)).toBe(true);
+        const serialized = JSON.stringify(error);
+        expect(JSON.parse(serialized)).not.toHaveProperty('result');
+        expect(serialized).not.toContain('score this output');
+        expect(serialized).not.toContain('still not valid JSON');
+      } finally {
+        warnSpy.mockRestore();
       }
     });
   });
@@ -1176,6 +1448,27 @@ describe('createScorer', () => {
       });
     });
 
+    it('should suppress addScore without leaking internal controls into the result', async () => {
+      const mockMastra = createMockMastra();
+      const scorer = createScorer({
+        id: 'non-persisted-scorer',
+        description: 'Non-persisted scorer',
+      }).generateScore(() => 0.8);
+
+      scorer.__registerMastra(mockMastra as any);
+
+      const result = await scorer.run({
+        ...testData.scoringInput,
+        scoreSource: 'experiment',
+        targetTraceId: 'trace-123',
+        _internal: { emitObservabilityScore: false },
+      });
+
+      expect(result.score).toBe(0.8);
+      expect(result).not.toHaveProperty('_internal');
+      expect(mockMastra.observability.addScore).not.toHaveBeenCalled();
+    });
+
     it('should emit addScore without a target trace id when unanchored scoring is allowed', async () => {
       const mockMastra = createMockMastra();
 
@@ -1237,6 +1530,79 @@ describe('createScorer', () => {
             hasGroundTruth: false,
           },
         }),
+      });
+    });
+
+    describe('requestContext persistence on the scorer-run input', () => {
+      function captureScorerRun() {
+        const captured: { input?: any } = {};
+        const mockMastra = createMockMastra({
+          startSpan: (options: any) => {
+            captured.input = options?.input;
+            return createMockSpan('rc-trace', SpanType.SCORER_RUN);
+          },
+        });
+        const scorer = createScorer({ id: 'rc-scorer', description: 'rc scorer' }).generateScore(() => 1);
+        scorer.__registerMastra(mockMastra as any);
+        return { captured, scorer };
+      }
+
+      it('persists nothing when requestContextKeys is omitted', async () => {
+        const { captured, scorer } = captureScorerRun();
+
+        await scorer.run({
+          ...testData.scoringInput,
+          requestContext: { userId: 'u1', apiKey: 'sk-secret' },
+        });
+
+        expect(captured.input).toBeDefined();
+        expect(captured.input).not.toHaveProperty('requestContext');
+      });
+
+      it('persists only the listed keys, including nested paths, and drops the rest', async () => {
+        const { captured, scorer } = captureScorerRun();
+
+        await scorer.run({
+          ...testData.scoringInput,
+          requestContext: {
+            userId: 'u1',
+            tenant: { id: 't1', secret: 'do-not-store' },
+            apiKey: 'sk-secret',
+          },
+          requestContextKeys: ['userId', 'tenant.id'],
+        });
+
+        expect(captured.input?.requestContext).toEqual({ userId: 'u1', tenant: { id: 't1' } });
+      });
+
+      it('persists the whole safe context with the ["*"] wildcard', async () => {
+        const { captured, scorer } = captureScorerRun();
+
+        await scorer.run({
+          ...testData.scoringInput,
+          requestContext: { userId: 'u1', locale: 'en' },
+          requestContextKeys: ['*'],
+        });
+
+        expect(captured.input?.requestContext).toEqual({ userId: 'u1', locale: 'en' });
+      });
+
+      it('redacts the framework auth token even with the wildcard', async () => {
+        const { captured, scorer } = captureScorerRun();
+
+        const requestContext = new RequestContext([
+          ['userId', 'u1'],
+          [MASTRA_AUTH_TOKEN_KEY, 'super-secret-token'],
+        ]);
+
+        await scorer.run({
+          ...testData.scoringInput,
+          requestContext,
+          requestContextKeys: ['*'],
+        });
+
+        expect(captured.input?.requestContext?.userId).toBe('u1');
+        expect(captured.input?.requestContext?.[MASTRA_AUTH_TOKEN_KEY]).toBe('[REDACTED]');
       });
     });
 

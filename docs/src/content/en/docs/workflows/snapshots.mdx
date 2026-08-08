@@ -87,13 +87,14 @@ Each snapshot includes the `runId`, input, step status (`success`, `suspended`, 
 
 ## How snapshots are saved and retrieved
 
-Snapshots are saved to the configured storage system. By default, they use libSQL, but you can configure Upstash or PostgreSQL instead. Each snapshot is saved in the `workflow_snapshots` table and identified by the workflow's `runId`.
+Snapshots are saved to the configured storage system. By default, they use libSQL, but you can configure Upstash, PostgreSQL, or OracleDB instead. Each snapshot is saved in the `workflow_snapshots` table and identified by the workflow's `runId`.
 
 Read more about:
 
 - [libSQL Storage](/reference/storage/libsql)
 - [Upstash Storage](/reference/storage/upstash)
 - [PostgreSQL Storage](/reference/storage/postgresql)
+- [OracleDB Storage](/reference/storage/oracledb)
 
 ### Saving snapshots
 
@@ -147,6 +148,7 @@ export const mastra = new Mastra({
 
 - [libSQL Storage](/reference/storage/libsql)
 - [PostgreSQL Storage](/reference/storage/postgresql)
+- [OracleDB Storage](/reference/storage/oracledb)
 - [MongoDB Storage](/reference/storage/mongodb)
 - [Upstash Storage](/reference/storage/upstash)
 - [Cloudflare D1](/reference/storage/cloudflare-d1)

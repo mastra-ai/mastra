@@ -12,6 +12,7 @@ const pkgRoot = path.resolve(here, '..');
 const webRoot = path.resolve(pkgRoot, '../web');
 const script = path.join(pkgRoot, 'scripts', 'sync-template.mjs');
 const TEMPLATE_LINKED_DEPENDENCIES = [
+  '@mastra/auth-workos',
   '@mastra/code-sdk',
   '@mastra/core',
   '@mastra/factory',
@@ -59,6 +60,13 @@ beforeAll(() => {
     const baseVersion = linkedManifest.version.split('-')[0]!;
     registryVersions[name] = { latest: baseVersion, alpha: `${baseVersion}-alpha.0` };
   }
+
+  const memoryVersion = JSON.parse(
+    fs.readFileSync(path.resolve(pkgRoot, '../..', 'packages/memory/package.json'), 'utf8'),
+  ).version as string;
+  linkedLocalVersions['@mastra/memory'] = memoryVersion;
+  const memoryBaseVersion = memoryVersion.split('-')[0]!;
+  registryVersions['@mastra/memory'] = { latest: memoryBaseVersion, alpha: `${memoryBaseVersion}-alpha.0` };
 
   fakeBinDir = path.join(workDir, 'bin');
   fs.mkdirSync(fakeBinDir);
@@ -122,6 +130,9 @@ describe.skipIf(process.platform === 'win32')('sync-template.mjs', () => {
       'src/ui',
       'src/vite.config.ts',
       'src/mastra/public',
+      // Slack ships inside @mastra/factory; the scaffold imports it rather
+      // than carrying a vendored copy it would have to maintain.
+      'src/web',
     ]) {
       expect(fs.existsSync(path.join(outDir, absentPath)), `${absentPath} must not ship`).toBe(false);
     }
@@ -145,17 +156,18 @@ describe.skipIf(process.platform === 'win32')('sync-template.mjs', () => {
     }
 
     expect(Object.keys(pkg.dependencies).sort()).toEqual([
+      '@mastra/auth-workos',
       '@mastra/code-sdk',
       '@mastra/core',
       '@mastra/factory',
       '@mastra/libsql',
+      '@mastra/memory',
       '@mastra/pg',
       '@mastra/platform-workspace',
       '@mastra/redis-streams',
       'zod',
     ]);
     expect(pkg.devDependencies.typescript).toMatch(/^\^5\./);
-    expect(pkg.dependencies['@mastra/memory']).toBeUndefined();
     expect(pkg.dependencies['react-is']).toBeUndefined();
     for (const browserDependency of ['react', 'react-dom', '@tanstack/react-query', 'vite', 'tailwindcss']) {
       expect(allDeps[browserDependency]).toBeUndefined();

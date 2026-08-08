@@ -21,6 +21,7 @@ import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
+import { randomUUID } from 'node:crypto';
 import type { Processor, ProcessInputArgs, ProcessInputResult } from '@mastra/core/processors';
 import { getZodDef, getZodTypeName } from '@mastra/core/utils';
 vi.mock('@mastra/core/vector');
@@ -761,6 +762,25 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
       });
     }
 
+    // Add test dynamic workflow definition so GET /stored/workflows/:dynamicWorkflowId
+    // finds a row matching getDefaultValidPathParams' 'test-dynamic-workflow'
+    const workflowDefinitions = await storage.getStore('workflowDefinitions');
+    if (workflowDefinitions) {
+      await workflowDefinitions.upsert({
+        id: 'test-dynamic-workflow',
+        description: 'Test dynamic workflow',
+        inputSchema: { type: 'object', properties: { name: { type: 'string' } }, required: ['name'] },
+        outputSchema: { type: 'object', properties: { message: { type: 'string' } } },
+        graph: [
+          {
+            type: 'mapping',
+            id: 'greet',
+            mapConfig: JSON.stringify({ message: { template: 'Hello, ${initData.name}!' } }),
+          },
+        ],
+      });
+    }
+
     const backgroundTasks = await storage.getStore('backgroundTasks');
     if (backgroundTasks) {
       await backgroundTasks.createTask({
@@ -880,26 +900,32 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
 async function mockWorkflowRun(workflow: Workflow) {
   // Mock getWorkflowRunById to return a mock WorkflowState object
   // This is the unified format that includes both metadata and processed execution state
-  vi.spyOn(workflow, 'getWorkflowRunById').mockResolvedValue({
-    runId: 'test-run',
-    workflowName: 'test-workflow',
-    resourceId: 'test-resource',
-    createdAt: new Date(),
-    updatedAt: new Date(),
-    status: 'success',
-    result: { output: 'test-output' },
-    payload: {},
-    steps: {
-      step1: {
-        status: 'success',
-        output: { result: 'test-output' },
-        startedAt: Date.now() - 1000,
-        endedAt: Date.now(),
-      },
-    },
-    activeStepsPath: {},
-    serializedStepGraph: [{ type: 'step', step: { id: 'step1' } }],
-  } as any);
+  // Only 'test-run' exists; unknown runIds resolve to null so stream routes can
+  // start fresh runs without tripping the terminal-run 409 guard.
+  vi.spyOn(workflow, 'getWorkflowRunById').mockImplementation(async (runId: string) =>
+    runId !== 'test-run'
+      ? (null as any)
+      : ({
+          runId: 'test-run',
+          workflowName: 'test-workflow',
+          resourceId: 'test-resource',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          status: 'success',
+          result: { output: 'test-output' },
+          payload: {},
+          steps: {
+            step1: {
+              status: 'success',
+              output: { result: 'test-output' },
+              startedAt: Date.now() - 1000,
+              endedAt: Date.now(),
+            },
+          },
+          activeStepsPath: {},
+          serializedStepGraph: [{ type: 'step', step: { id: 'step1' } }],
+        } as any),
+  );
 
   // Mock createRun to return a mocked run object with all required methods
   const originalCreateRun = workflow.createRun.bind(workflow);
@@ -1319,6 +1345,12 @@ function getRouteSpecificPathDefaults(route: ServerRoute): {
   // Index/unindex operations
   if (routePath.includes('/workspace/index') || routePath.includes('/workspace/unindex')) {
     return { query: { path: 'test-file.txt' }, body: { path: 'test-file.txt' } };
+  }
+
+  // Workflow stream routes reject runIds whose run already finished (409),
+  // so each request needs a fresh runId instead of the shared 'test-run'.
+  if (routePath === '/workflows/:workflowId/stream' || routePath === '/agent-builder/:actionId/stream') {
+    return { query: { runId: `test-run-${randomUUID()}` } };
   }
 
   return {};

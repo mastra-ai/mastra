@@ -2,7 +2,13 @@ import type { Mastra } from '@mastra/core';
 import type { RequestContext } from '@mastra/core/di';
 import type { Event } from '@mastra/core/events';
 import { createCachingTransformStream, createReplayStream } from '@mastra/core/stream';
-import type { WorkflowInfo, ChunkType, StreamEvent, WorkflowStateField } from '@mastra/core/workflows';
+import type {
+  WorkflowInfo,
+  ChunkType,
+  StreamEvent,
+  WorkflowStateField,
+  WorkflowRunStatus,
+} from '@mastra/core/workflows';
 import { z } from 'zod/v4';
 import { MastraFGAPermissions } from '../fga-permissions';
 import { HTTPException } from '../http-exception';
@@ -13,6 +19,7 @@ import {
   createWorkflowRunResponseSchema,
   listWorkflowRunsQuerySchema,
   listWorkflowsResponseSchema,
+  workflowRunCountsResponseSchema,
   restartBodySchema,
   timeTravelBodySchema,
   resumeBodySchema,
@@ -33,6 +40,14 @@ import type { Context } from '../types';
 import { getWorkflowInfo, WorkflowRegistry } from '../utils';
 import { handleError } from './error';
 import { getEffectiveResourceId, validateRunOwnership } from './utils';
+
+/**
+ * Statuses a run cannot come back from. Streaming one of these runIds again would
+ * start a fresh execution under the same runId and overwrite its stored snapshot —
+ * the in-memory de-dupe that protects concurrent streams only covers runs still held
+ * in the workflow's run map, and a finished run has already been dropped from it.
+ */
+const TERMINAL_RUN_STATUSES: WorkflowRunStatus[] = ['success', 'failed', 'canceled', 'tripwire'];
 
 export interface WorkflowContext extends Context {
   workflowId?: string;
@@ -141,6 +156,109 @@ export const LIST_WORKFLOWS_ROUTE = createRoute({
   }) as any,
 });
 
+type WorkflowRunCounts = { running: number; suspended: number };
+
+const RUN_COUNTS_CACHE_TTL_MS = 5_000;
+// Keyed by Mastra instance so multiple apps in one process never share counts.
+const runCountsCache = new WeakMap<object, { at: number; value: Record<string, WorkflowRunCounts> }>();
+let runCountsNow: () => number = () => Date.now();
+
+/** Test seam — lets TTL expiry be tested without wall-clock waits. */
+export function __setWorkflowRunCountsNow(now?: () => number) {
+  runCountsNow = now ?? (() => Date.now());
+}
+
+export const LIST_WORKFLOW_RUN_COUNTS_ROUTE = createRoute({
+  method: 'GET',
+  path: '/workflows/run-counts',
+  responseType: 'json',
+  responseSchema: workflowRunCountsResponseSchema,
+  summary: 'List workflow run counts',
+  description:
+    'Returns per-workflow counts of currently running and suspended (awaiting resume) runs, keyed by the workflow registry key used in the Mastra config',
+  tags: ['Workflows'],
+  requiresAuth: true,
+  handler: (async ({ mastra, requestContext }: any) => {
+    try {
+      const fgaProvider = mastra.getServer?.()?.fga;
+      const user = requestContext?.get('user');
+      // FGA with no user can never see anything — answer before touching storage.
+      if (fgaProvider && !user) {
+        return {};
+      }
+
+      const workflows = mastra.listWorkflows({ serialized: false });
+
+      const counts: Record<string, WorkflowRunCounts> = {};
+      const workflowIdToRegistryKey = new Map<string, string>();
+      for (const [registryKey, workflow] of Object.entries(workflows)) {
+        counts[registryKey] = { running: 0, suspended: 0 };
+        workflowIdToRegistryKey.set((workflow as any).id, registryKey);
+      }
+
+      // Runs are scoped to the caller like the runs-listing endpoint: the
+      // reserved request-context resource id takes precedence for security.
+      const effectiveResourceId = getEffectiveResourceId(requestContext, undefined);
+
+      // The shared cache holds the unscoped, unfiltered map — usable only when
+      // neither per-user FGA filtering nor a resource scope applies.
+      const cacheable = !fgaProvider && !effectiveResourceId;
+      if (cacheable) {
+        const cached = runCountsCache.get(mastra);
+        if (cached && runCountsNow() - cached.at < RUN_COUNTS_CACHE_TTL_MS) {
+          return cached.value;
+        }
+      }
+
+      const storage = mastra.getStorage();
+      const workflowsStore = storage ? await storage.getStore('workflows') : undefined;
+      if (workflowsStore) {
+        // Cross-workflow, engine-agnostic: both execution engines persist run
+        // status into the same store. Deliberately not listActiveWorkflowRuns,
+        // which means running+waiting and covers the default engine only.
+        const [running, suspended] = await Promise.all([
+          workflowsStore.listWorkflowRuns({ status: 'running', resourceId: effectiveResourceId }),
+          workflowsStore.listWorkflowRuns({ status: 'suspended', resourceId: effectiveResourceId }),
+        ]);
+        for (const run of running.runs) {
+          const registryKey = workflowIdToRegistryKey.get(run.workflowName);
+          const entry = registryKey ? counts[registryKey] : undefined;
+          if (entry) entry.running++;
+        }
+        for (const run of suspended.runs) {
+          const registryKey = workflowIdToRegistryKey.get(run.workflowName);
+          const entry = registryKey ? counts[registryKey] : undefined;
+          if (entry) entry.suspended++;
+        }
+      }
+
+      if (fgaProvider) {
+        const workflowList = Object.keys(counts).map(id => ({ id }));
+        const accessible = await fgaProvider.filterAccessible(
+          user,
+          workflowList,
+          'workflow',
+          MastraFGAPermissions.WORKFLOWS_READ,
+        );
+        const accessibleSet = new Set(accessible.map((w: any) => w.id));
+        for (const id of Object.keys(counts)) {
+          if (!accessibleSet.has(id)) {
+            delete counts[id];
+          }
+        }
+        return counts;
+      }
+
+      if (cacheable) {
+        runCountsCache.set(mastra, { at: runCountsNow(), value: counts });
+      }
+      return counts;
+    } catch (error) {
+      return handleError(error, 'Error getting workflow run counts');
+    }
+  }) as any,
+});
+
 export const GET_WORKFLOW_BY_ID_ROUTE = createRoute({
   method: 'GET',
   path: '/workflows/:workflowId',
@@ -157,7 +275,7 @@ export const GET_WORKFLOW_BY_ID_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'Workflow ID is required' });
       }
       const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
-      return getWorkflowInfo(workflow);
+      return getWorkflowInfo(workflow, false);
     } catch (error) {
       return handleError(error, 'Error getting workflow');
     }
@@ -403,6 +521,17 @@ export const STREAM_WORKFLOW_ROUTE = createRoute({
       if (!workflow) {
         throw new HTTPException(404, { message: 'Workflow not found' });
       }
+
+      const existingRun = await workflow.getWorkflowRunById(runId, { withNestedWorkflows: false });
+
+      if (existingRun && TERMINAL_RUN_STATUSES.includes(existingRun.status)) {
+        throw new HTTPException(409, {
+          message:
+            `Workflow run ${runId} already finished with status "${existingRun.status}". ` +
+            `Use /observe to read its stream back, or stream a new runId.`,
+        });
+      }
+
       const serverCache = mastra.getServerCache();
 
       const run = await workflow.createRun({ runId, resourceId: effectiveResourceId });
@@ -556,10 +685,16 @@ export const START_WORKFLOW_RUN_ROUTE = createRoute({
       await validateRunOwnership(run, effectiveResourceId);
 
       const _run = await workflow.createRun({ runId, resourceId: run.resourceId });
-      void _run.start({
-        ...params,
-        requestContext,
-      });
+      // Fire-and-forget: attach .catch so a rejected start (e.g. invalid input
+      // schema) cannot become an unhandledRejection and tear down the process.
+      void _run
+        .start({
+          ...params,
+          requestContext,
+        })
+        .catch(error => {
+          mastra.getLogger().error('Failed to start workflow run', { error, workflowId, runId });
+        });
 
       return { message: 'Workflow run started' };
     } catch (e) {
@@ -774,7 +909,11 @@ export const RESUME_WORKFLOW_ROUTE = createRoute({
 
       const _run = await workflow.createRun({ runId, resourceId: run.resourceId });
 
-      void _run.resume({ ...params, requestContext });
+      // Fire-and-forget: attach .catch so a rejected resume cannot become an
+      // unhandledRejection and tear down the process.
+      void _run.resume({ ...params, requestContext }).catch(error => {
+        mastra.getLogger().error('Failed to resume workflow run', { error, workflowId, runId });
+      });
 
       return { message: 'Workflow run resumed' };
     } catch (error) {
@@ -871,7 +1010,9 @@ export const RESTART_WORKFLOW_ROUTE = createRoute({
 
       const _run = await workflow.createRun({ runId, resourceId: run.resourceId });
 
-      void _run.restart({ ...params, requestContext });
+      void _run.restart({ ...params, requestContext }).catch(error => {
+        mastra.getLogger().error('Failed to restart workflow run in background', { error, workflowId, runId });
+      });
 
       return { message: 'Workflow run restarted' };
     } catch (error) {
@@ -1032,7 +1173,11 @@ export const TIME_TRAVEL_WORKFLOW_ROUTE = createRoute({
 
       const _run = await workflow.createRun({ runId, resourceId: run.resourceId });
 
-      void _run.timeTravel({ ...params, requestContext });
+      // Fire-and-forget: attach .catch so a rejected time travel cannot become
+      // an unhandledRejection and tear down the process.
+      void _run.timeTravel({ ...params, requestContext }).catch(error => {
+        mastra.getLogger().error('Failed to time travel workflow run', { error, workflowId, runId });
+      });
 
       return { message: 'Workflow run time travel started' };
     } catch (error) {

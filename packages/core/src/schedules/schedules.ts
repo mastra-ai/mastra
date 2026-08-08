@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto';
-import slugify from '@sindresorhus/slugify';
 import type { AgentSignalAttributes, AgentSignalType } from '../agent/signals';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import type { Mastra } from '../mastra';
 import type { Schedule, SchedulesStorage } from '../storage/domains/schedules/base';
+import { slugify } from '../utils/slugify';
 import { computeNextFireAt, validateCron } from '../workflows/scheduler/cron';
 import type { ScheduleIfActive, ScheduleIfIdle } from './types';
 import { AGENT_SCHEDULE_PREFIX, WORKFLOW_SCHEDULE_PREFIX } from './types';

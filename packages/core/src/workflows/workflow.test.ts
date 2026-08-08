@@ -41,10 +41,15 @@ createWorkflowTestSuite({
 
   // Register workflows with Mastra for storage/resume support
   registerWorkflows: async registry => {
-    // Collect all workflows
+    // Collect all workflows + any Mastra-level agents/tools the entries declare
+    // (used by `.agent('id')` / `.tool('id')` by-id forms).
     const workflows: Record<string, any> = {};
+    const agents: Record<string, any> = {};
+    const tools: Record<string, any> = {};
     for (const [id, entry] of Object.entries(registry)) {
       workflows[id] = entry.workflow;
+      if (entry.mastraAgents) Object.assign(agents, entry.mastraAgents);
+      if (entry.mastraTools) Object.assign(tools, entry.mastraTools);
     }
 
     // Create Mastra with all workflows - this automatically binds mastra to each workflow
@@ -52,6 +57,8 @@ createWorkflowTestSuite({
       logger: false,
       storage: sharedStorage,
       workflows,
+      agents: Object.keys(agents).length ? agents : undefined,
+      tools: Object.keys(tools).length ? tools : undefined,
     });
   },
 
@@ -1209,6 +1216,42 @@ describe('Workflow (Default Engine Specifics)', () => {
       });
 
       expect(nestedWorkflowStoreResult?.status).toBe('success');
+    });
+  });
+
+  describe('streamLegacy cleanup error safety', () => {
+    it('completes cleanup when an observer stream is not consumed', async () => {
+      const step = createStep({
+        id: 'test-step',
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({ value: z.string() }),
+        execute: async ({ inputData }) => inputData,
+      });
+
+      const workflow = createWorkflow({
+        id: 'stream-legacy-cleanup-error-wf',
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({ value: z.string() }),
+        steps: [step],
+      })
+        .then(step)
+        .commit();
+
+      const run = await workflow.createRun();
+      const { stream, getWorkflowState } = run.streamLegacy({ inputData: { value: 'test' } });
+      const observer = run.observeStreamLegacy();
+
+      for await (const _event of stream) {
+        // Discard events
+      }
+
+      const result = await getWorkflowState();
+      expect(result.status).toBe('success');
+      await expect((run as any).closeStreamAction()).resolves.toBeUndefined();
+
+      for await (const _event of observer.stream) {
+        // Consume events queued before cleanup
+      }
     });
   });
 });
