@@ -2,7 +2,14 @@ import { MessageList } from '@mastra/core/agent';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, MastraError } from '@mastra/core/error';
 import type { MastraDBMessage, MastraMessageV1 } from '@mastra/core/memory';
-import { calculatePagination, normalizePerPage, TABLE_MESSAGES, TABLE_THREADS } from '@mastra/core/storage';
+import {
+  calculatePagination,
+  normalizePerPage,
+  storageMessageMatchesMetadataFilter,
+  TABLE_MESSAGES,
+  TABLE_THREADS,
+  validateStorageMetadataFilter,
+} from '@mastra/core/storage';
 import type {
   StorageListMessagesByResourceIdInput,
   StorageListMessagesInput,
@@ -409,6 +416,8 @@ async function listMessagesWithWhere(
     orderBy?: StorageListMessagesInput['orderBy'];
   },
 ): Promise<StorageListMessagesOutput> {
+  const metadataFilter = validateStorageMetadataFilter(filter?.metadata);
+
   try {
     ctx.validatePaginationInput(page, perPageInput ?? 40);
   } catch (error) {
@@ -428,7 +437,7 @@ async function listMessagesWithWhere(
       }
 
       if (perPage === 0 && include && include.length > 0) {
-        const includeMessages = await getIncludedMessages(ctx, connection, include);
+        const includeMessages = await getIncludedMessages(ctx, connection, include, baseFilter.resourceId);
         const list = new MessageList().add(includeMessages as (MastraMessageV1 | MastraDBMessage)[], 'memory');
         return {
           messages: sortMessages(list.get.all.db(), field, direction),
@@ -439,26 +448,47 @@ async function listMessagesWithWhere(
         };
       }
 
-      const countResult = await connection.execute<ObjectRow>(
-        `SELECT COUNT(*) AS "count" FROM ${table(ctx, TABLE_MESSAGES)} ${whereClause}`,
-        asBindParameters(binds),
-        executeOptions(),
-      );
-      const total = Number(rows(countResult)[0]?.count ?? 0);
+      let total: number;
+      let messages: MastraDBMessage[];
+      if (metadataFilter) {
+        // Match the shared storage contract: metadata filtering happens before
+        // pagination and uses strict scalar equality. Keeping the comparison in
+        // the canonical core helper also avoids Oracle coercing JSON strings to
+        // numbers when JSON_VALUE is asked to RETURN NUMBER.
+        const result = await connection.execute<ObjectRow>(
+          `${messageSelect()} FROM ${table(ctx, TABLE_MESSAGES)} ${whereClause} ORDER BY ${messageOrderColumn(field)} ${direction}, id ${direction}`,
+          asBindParameters(binds),
+          executeOptions(),
+        );
+        const filteredMessages = rows(result)
+          .map(row => parseMessage(row as MessageRow))
+          .filter(message => storageMessageMatchesMetadataFilter(message.content, metadataFilter));
+        total = filteredMessages.length;
+        messages =
+          perPageInput === false ? filteredMessages : filteredMessages.slice(offset, offset + Math.max(0, perPage));
+      } else {
+        const countResult = await connection.execute<ObjectRow>(
+          `SELECT COUNT(*) AS "count" FROM ${table(ctx, TABLE_MESSAGES)} ${whereClause}`,
+          asBindParameters(binds),
+          executeOptions(),
+        );
+        total = Number(rows(countResult)[0]?.count ?? 0);
 
-      const pagination = paginationClause(perPageInput, perPage, offset);
-      const result = await connection.execute<ObjectRow>(
-        `${messageSelect()} FROM ${table(ctx, TABLE_MESSAGES)} ${whereClause} ORDER BY ${messageOrderColumn(field)} ${direction}, id ${direction} ${pagination}`,
-        asBindParameters(binds),
-        executeOptions(),
-      );
-      const messages = rows(result).map(row => parseMessage(row as MessageRow));
+        const pagination = paginationClause(perPageInput, perPage, offset);
+        const result = await connection.execute<ObjectRow>(
+          `${messageSelect()} FROM ${table(ctx, TABLE_MESSAGES)} ${whereClause} ORDER BY ${messageOrderColumn(field)} ${direction}, id ${direction} ${pagination}`,
+          asBindParameters(binds),
+          executeOptions(),
+        );
+        messages = rows(result).map(row => parseMessage(row as MessageRow));
+      }
+      const primaryPageCount = messages.length;
 
       const messageIds = new Set(messages.map(message => message.id));
       if (include && include.length > 0) {
         // Included messages may fall outside the paged query. Merge by id,
         // then let MessageList normalize ordering and provider shape.
-        const includeMessages = await getIncludedMessages(ctx, connection, include);
+        const includeMessages = await getIncludedMessages(ctx, connection, include, baseFilter.resourceId);
         for (const message of includeMessages) {
           if (!messageIds.has(message.id)) {
             messages.push(message);
@@ -478,7 +508,9 @@ async function listMessagesWithWhere(
           )
           .map(message => message.id),
       );
-      const hasMore = perPageInput !== false && returnedThreadMessageIds.size < total && offset + perPage < total;
+      const hasMore = metadataFilter
+        ? perPageInput !== false && offset + primaryPageCount < total
+        : perPageInput !== false && returnedThreadMessageIds.size < total && offset + perPage < total;
 
       return {
         messages: finalMessages,
@@ -497,14 +529,16 @@ async function getIncludedMessages(
   ctx: MemoryContext,
   connection: Connection,
   include: NonNullable<StorageListMessagesInput['include']>,
+  resourceId?: string,
 ): Promise<MastraDBMessage[]> {
   const targetIds = include.map(item => item.id).filter(Boolean);
   if (targetIds.length === 0) return [];
 
   const { sql, binds } = inClause('targetId', targetIds);
+  const resourceCondition = resourceId ? ` AND ${MESSAGE_RESOURCE_ID} = :includeResourceId` : '';
   const targetResult = await connection.execute<ObjectRow>(
-    `SELECT id AS "id", thread_id AS "threadId", ${MESSAGE_CREATED_AT} AS "createdAt" FROM ${table(ctx, TABLE_MESSAGES)} WHERE id IN (${sql})`,
-    asBindParameters(binds),
+    `SELECT id AS "id", thread_id AS "threadId", ${MESSAGE_CREATED_AT} AS "createdAt" FROM ${table(ctx, TABLE_MESSAGES)} WHERE id IN (${sql})${resourceCondition}`,
+    asBindParameters({ ...binds, ...(resourceId ? { includeResourceId: resourceId } : {}) }),
     executeOptions(),
   );
   const targetMap = new Map(rows(targetResult).map(row => [String(row.id), row]));
@@ -524,6 +558,7 @@ async function getIncludedMessages(
       direction: 'DESC',
       limit: previousLimit,
       bindPrefix: `prev${index}`,
+      resourceId,
     });
 
     for (const message of previousRows.reverse()) {
@@ -542,6 +577,7 @@ async function getIncludedMessages(
         direction: 'ASC',
         limit: nextLimit,
         bindPrefix: `next${index}`,
+        resourceId,
       });
       for (const message of nextRows) {
         if (!seen.has(message.id)) {
@@ -565,13 +601,16 @@ async function queryMessageWindow(
     direction: 'ASC' | 'DESC';
     limit: number;
     bindPrefix: string;
+    resourceId?: string;
   },
 ): Promise<MastraDBMessage[]> {
+  const resourceCondition = params.resourceId ? ` AND ${MESSAGE_RESOURCE_ID} = :${params.bindPrefix}_resourceId` : '';
   const result = await connection.execute<ObjectRow>(
-    `${messageSelect()} FROM ${table(ctx, TABLE_MESSAGES)} WHERE thread_id = :${params.bindPrefix}_threadId AND ${MESSAGE_CREATED_AT} ${params.operator} :${params.bindPrefix}_createdAt ORDER BY ${MESSAGE_CREATED_AT} ${params.direction}, id ${params.direction} FETCH FIRST ${params.limit} ROWS ONLY`,
+    `${messageSelect()} FROM ${table(ctx, TABLE_MESSAGES)} WHERE thread_id = :${params.bindPrefix}_threadId${resourceCondition} AND ${MESSAGE_CREATED_AT} ${params.operator} :${params.bindPrefix}_createdAt ORDER BY ${MESSAGE_CREATED_AT} ${params.direction}, id ${params.direction} FETCH FIRST ${params.limit} ROWS ONLY`,
     asBindParameters({
       [`${params.bindPrefix}_threadId`]: params.threadId,
       [`${params.bindPrefix}_createdAt`]: params.createdAt,
+      ...(params.resourceId ? { [`${params.bindPrefix}_resourceId`]: params.resourceId } : {}),
     }),
     executeOptions(),
   );
