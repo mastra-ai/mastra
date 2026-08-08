@@ -125,6 +125,17 @@ const CREATE_MAX_ATTEMPTS = 3;
 const CREATE_RETRY_BASE_DELAY_MS = 2_000;
 
 /**
+ * How long to wait for the in-sandbox sidecar's `/health` endpoint to respond
+ * before giving up and leaving the address registry unpopulated (execs fall
+ * back to the lease path). This bounds the fire-and-forget probe that runs
+ * after `start()` resolves; the sandbox is usable immediately — the probe
+ * only controls whether early execs go via private-net or lease.
+ */
+const SIDECAR_PROBE_TIMEOUT_MS = 30_000;
+/** Delay between sidecar probe attempts. */
+const SIDECAR_PROBE_INTERVAL_MS = 250;
+
+/**
  * Diagnostic error thrown when the direct-exec WebSocket transport fails
  * twice in a row (opening handshake refused or socket closed mid-stream
  * without an `exit` frame). Distinguishes "the sandbox transport is broken"
@@ -376,6 +387,13 @@ export class PlatformSandbox extends MastraSandbox {
    * Mirrors OSS `@mastra/railway` `RailwaySandbox._startInFlight`.
    */
   private _startInFlight: Promise<void> | null = null;
+  /**
+   * Generation token for the sidecar probe. Incremented on every `start()`
+   * and on teardown. The probe captures this value when it begins; if the
+   * generation has changed by the time the probe succeeds, the probe skips
+   * the `set()` to avoid re-populating a deleted or superseded sandbox entry.
+   */
+  private _probeGeneration = 0;
 
   constructor(options: PlatformSandboxOptions = {}) {
     super({ ...options, name: 'PlatformSandbox', processes: new PlatformProcessManager() });
@@ -543,7 +561,59 @@ export class PlatformSandbox extends MastraSandbox {
   private _populateAddressFromResponse(json: CreateSandboxResponse): void {
     if (!this._addressRegistry) return;
     if (!json.instanceUrl) return;
-    this._addressRegistry.set(json.id, json.instanceUrl);
+    // Clear any stale entry before probing. On reattach, the registry may have
+    // the old sandbox's address; execs should fall back to lease until the new
+    // probe succeeds rather than dialing the stale address.
+    this._addressRegistry.delete(json.id);
+    // Fire-and-forget: probe the sidecar's /health endpoint before populating
+    // the registry. Early execs fall back to lease until the probe succeeds.
+    // Capture the current generation so the probe can detect teardown races.
+    const generation = ++this._probeGeneration;
+    void this._probeSidecarThenRegister(json.id, json.instanceUrl, generation);
+  }
+
+  /**
+   * Fire-and-forget probe that polls the sidecar's `/health` endpoint until
+   * it responds, then populates the address registry. Runs detached from
+   * `start()` so sandbox provision latency is unchanged; early execs simply
+   * fall back to the lease path until the probe succeeds.
+   *
+   * If the sidecar never comes up within {@link SIDECAR_PROBE_TIMEOUT_MS},
+   * the registry stays unpopulated and all execs go via lease for this
+   * sandbox's lifetime (or until a future `start()` re-runs the probe).
+   *
+   * @param generation - The probe generation captured at call time. If this
+   *   no longer matches `_probeGeneration` when the probe succeeds, the probe
+   *   was superseded by a teardown or a new `start()`, so we skip the `set()`.
+   */
+  private async _probeSidecarThenRegister(sandboxId: string, instanceUrl: string, generation: number): Promise<void> {
+    const deadline = Date.now() + SIDECAR_PROBE_TIMEOUT_MS;
+    const fetchFn = this._privateNetFetch ?? fetch;
+    while (Date.now() < deadline) {
+      // Teardown or new start() superseded this probe — bail out early.
+      if (generation !== this._probeGeneration) return;
+      try {
+        const res = await fetchFn(`${instanceUrl}/health`, {
+          method: 'GET',
+          signal: AbortSignal.timeout(1_000),
+        });
+        const ok = res.ok;
+        // Release the response body so the connection returns to the pool.
+        await res.body?.cancel().catch(() => {});
+        if (ok) {
+          // Sidecar is listening. Only populate if this probe is still current.
+          if (generation === this._probeGeneration && this._sandboxId === sandboxId) {
+            this._addressRegistry?.set(sandboxId, instanceUrl);
+          }
+          return;
+        }
+      } catch {
+        // Connection refused / timeout — keep polling.
+      }
+      await new Promise(r => setTimeout(r, SIDECAR_PROBE_INTERVAL_MS));
+    }
+    // Sidecar never came up. Leave registry entry unset — every exec goes lease.
+    this.logger.warn('Sidecar never answered /health within probe window', { sandboxId });
   }
 
   /**
@@ -635,6 +705,10 @@ export class PlatformSandbox extends MastraSandbox {
   private async _teardownSandbox(): Promise<void> {
     if (!this._sandboxId) return;
     const destroyedSandboxId = this._sandboxId;
+    // Invalidate any in-flight probe so it doesn't re-populate the registry
+    // after we've deleted the entry below. The probe checks this generation
+    // before calling set().
+    this._probeGeneration++;
     await this._client.request(`/sandbox/${encodeURIComponent(destroyedSandboxId)}`, { method: 'DELETE' });
     // Clear local state so a subsequent start() creates a fresh remote sandbox
     // instead of taking the reattach branch and pointing exec at a deleted resource.
