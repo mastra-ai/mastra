@@ -1,6 +1,5 @@
 ---
 '@mastra/deployer': minor
-'@mastra/core': patch
 ---
 
 Added `bundler.entries` so `mastra build` can emit extra process entries next to the server bundle.
