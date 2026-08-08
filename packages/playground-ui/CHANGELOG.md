@@ -1,5 +1,11 @@
 # @mastra/playground-ui
 
+## 48.0.0-alpha.6
+
+### Patch Changes
+
+- Fixed external Markdown links to open in a new tab. ([#21004](https://github.com/mastra-ai/mastra/pull/21004))
+
 ## 48.0.0-alpha.5
 
 ### Patch Changes
