@@ -177,6 +177,23 @@ describe('FactoryStartCoordinator', () => {
     expect(requestContext.get('user')).toEqual({ workosId: 'user-1', organizationId: 'org-1' });
   });
 
+  it('leaves an authenticated identity on the request context untouched', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { controller } = makeController();
+    const coordinator = new FactoryStartCoordinator(
+      controller as never,
+      storage,
+      undefined,
+      makeSourceControl() as never,
+    );
+    const requestContext = new RequestContext();
+    requestContext.set('user', { workosId: 'authenticated-user', organizationId: 'org-1' });
+
+    await coordinator.prepare({ ...startRequest(), requestContext });
+
+    expect(requestContext.get('user')).toEqual({ workosId: 'authenticated-user', organizationId: 'org-1' });
+  });
+
   it('applies the Factory default model before preparing a board run', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const { controller, session } = makeController();
