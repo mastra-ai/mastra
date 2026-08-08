@@ -787,10 +787,9 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
     };
 
     try {
-      // EventCallback is typed `=> void` but handlers commonly return a
-      // promise (TS allows Promise<void> to satisfy void). If we get one
-      // back, attach a catch handler so async rejections route to nack
-      // instead of silently dropping the message. We do NOT await here —
+      // EventCallback may return a promise. Attach a catch handler so async
+      // rejections route to nack instead of silently dropping the message.
+      // We do NOT await here —
       // serializing messages on a subscription would deadlock orchestration
       // callbacks that await their own future events.
       const result: unknown = sub.cb(event, ack, nack);
