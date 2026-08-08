@@ -180,6 +180,7 @@ export {
 
 // Shared workflow utilities
 export {
+  executeDurableAgentScorers,
   executeDurableToolCalls,
   modelConfigSchema,
   modelListEntrySchema,
@@ -193,6 +194,7 @@ export {
   resolveDurableToolCallConcurrency,
 } from './workflows/shared';
 export type {
+  ExecuteDurableAgentScorersParams,
   ToolExecutionContext,
   ToolExecutionError,
   BaseIterationState,

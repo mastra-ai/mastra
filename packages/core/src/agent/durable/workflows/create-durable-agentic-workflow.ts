@@ -28,6 +28,7 @@ import {
   baseIterationStateSchema,
   createBaseIterationStateUpdate,
   resolveDurableToolCallConcurrency,
+  executeDurableAgentScorers,
 } from './shared';
 import {
   createDurableBackgroundTaskCheckStep,
@@ -777,107 +778,16 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
       )
       // Execute scorers (fire-and-forget, doesn't affect main result)
       .map(
-        async params => {
-          const { inputData, getInitData, mastra, requestContext, tracingContext } = params;
-          const finalOutput = inputData;
-          const initData = getInitData() as DurableAgenticWorkflowInput;
+        async ({ inputData, getInitData, mastra, requestContext, tracingContext }) => {
+          executeDurableAgentScorers({
+            initData: getInitData() as DurableAgenticWorkflowInput,
+            finalOutput: inputData,
+            mastra: mastra as Mastra | undefined,
+            requestContext,
+            tracingContext,
+          });
 
-          // If no scorers configured, skip
-          const scorers = initData.scorers as SerializableScorersConfig | undefined;
-          if (!scorers || Object.keys(scorers).length === 0) {
-            return finalOutput;
-          }
-
-          const logger = mastra?.getLogger?.();
-
-          // Reconstruct input MessageList to extract scorer input
-          const inputMessageList = new MessageList();
-          inputMessageList.deserialize(initData.messageListState);
-
-          // Build scorer input (messages before generation)
-          const scorerInput = {
-            inputMessages: inputMessageList.getPersisted.input.db(),
-            rememberedMessages: inputMessageList.getPersisted.remembered.db(),
-            systemMessages: inputMessageList.getSystemMessages(),
-            taggedSystemMessages: inputMessageList.getPersisted.taggedSystemMessages,
-          };
-
-          // Reconstruct output MessageList to extract scorer output
-          const outputMessageList = new MessageList();
-          outputMessageList.deserialize(finalOutput.messageListState);
-          const scorerOutput = outputMessageList.getPersisted.response.db();
-
-          // Create request context for scorer resolution
-          const resolveContext = requestContext ?? new RequestContext();
-
-          // Execute each scorer (fire-and-forget)
-          for (const [scorerKey, scorerEntry] of Object.entries(scorers)) {
-            const { scorerName, sampling } = scorerEntry;
-
-            try {
-              // Resolve the scorer from Mastra. We serialize scorers by name,
-              // and `getScorerById` searches by id-or-name without throwing
-              // on the common path, so try it first. Fall back to the
-              // registration-key-keyed `getScorer` for older configs.
-              let scorer: MastraScorer | undefined;
-              try {
-                scorer = (mastra as Mastra)?.getScorerById?.(scorerName) as MastraScorer | undefined;
-              } catch {
-                scorer = undefined;
-              }
-              if (!scorer) {
-                try {
-                  scorer = (mastra as Mastra)?.getScorer?.(scorerName) as MastraScorer | undefined;
-                } catch {
-                  scorer = undefined;
-                }
-              }
-
-              if (!scorer) {
-                logger?.warn?.(`Scorer ${scorerName} not found in Mastra, skipping`, {
-                  runId: initData.runId,
-                  scorerKey,
-                });
-                continue;
-              }
-
-              // Create the scorer entry expected by runScorer
-              const scorerObject: MastraScorerEntry = {
-                scorer,
-                sampling,
-              };
-
-              // Call runScorer (fire-and-forget via hooks)
-              runScorer({
-                mastra: mastra as Mastra | undefined,
-                runId: initData.runId,
-                scorerId: scorerKey,
-                scorerObject,
-                input: scorerInput,
-                output: scorerOutput,
-                requestContext: resolveContext as any,
-                entity: {
-                  id: initData.agentId,
-                  name: initData.agentName ?? initData.agentId,
-                },
-                structuredOutput: false,
-                source: 'LIVE',
-                entityType: 'AGENT',
-                threadId: initData.state?.threadId,
-                resourceId: initData.state?.resourceId,
-                ...createObservabilityContext(tracingContext),
-              });
-            } catch (error) {
-              // Log but don't fail - scorer errors shouldn't affect main execution
-              logger?.warn?.(`Error executing scorer ${scorerName}`, {
-                error,
-                runId: initData.runId,
-                scorerKey,
-              });
-            }
-          }
-
-          return finalOutput;
+          return inputData;
         },
         { id: 'execute-scorers' },
       )
