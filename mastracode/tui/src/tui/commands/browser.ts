@@ -1,4 +1,9 @@
-import type { BrowserProvider, BrowserSettings, StagehandEnv } from '@mastra/code-sdk/onboarding/settings';
+import type {
+  BrowserProvider,
+  BrowserSettings,
+  GlobalSettings,
+  StagehandEnv,
+} from '@mastra/code-sdk/onboarding/settings';
 import {
   checkProfileProviderMismatch,
   createBrowserFromSettings,
@@ -7,7 +12,11 @@ import {
   setProfileProvider,
 } from '@mastra/code-sdk/onboarding/settings';
 import type { MastraBrowser } from '@mastra/core/browser';
+import { STAGEHAND_MODEL_PROVIDERS } from '@mastra/stagehand';
+import type { ModelItem } from '../components/model-selector.js';
+import { ModelSelectorComponent } from '../components/model-selector.js';
 import { askModalQuestion } from '../modal-question.js';
+import { promptForApiKeyIfNeeded } from '../prompt-api-key.js';
 import type { SlashCommandContext } from './types.js';
 
 /**
@@ -30,6 +39,59 @@ type StorageStateExportBrowser = MastraBrowser & { exportStorageState: (path: st
  *   /browser off          - Disable browser
  *   /browser set <k> <v>  - Set a specific setting (profile, executablePath, storageState, cdpUrl, model)
  */
+
+/**
+ * Open the shared model picker, restricted to providers Stagehand can resolve,
+ * and persist the choice as the browser model.
+ */
+async function promptForStagehandModel(
+  ctx: SlashCommandContext,
+  settings: GlobalSettings,
+  browser: BrowserSettings,
+): Promise<void> {
+  if (browser.provider !== 'stagehand') {
+    ctx.showError('model is only supported by the stagehand provider.');
+    return;
+  }
+
+  const supported = new Set<string>(STAGEHAND_MODEL_PROVIDERS);
+  const models = (await ctx.state.controller.listAvailableModels()).filter(m => supported.has(m.provider));
+
+  if (models.length === 0) {
+    ctx.showError(
+      `No models available for Stagehand. Supported providers: ${STAGEHAND_MODEL_PROVIDERS.join(', ')}.\n` +
+        `You can also set one directly: /browser set model anthropic/claude-sonnet-4-5`,
+    );
+    return;
+  }
+
+  await new Promise<void>(resolve => {
+    const selector = new ModelSelectorComponent({
+      tui: ctx.state.ui,
+      models,
+      currentModelId: browser.stagehand?.model,
+      title: 'Select Browser Model',
+      onSelect: async (model: ModelItem) => {
+        ctx.state.ui.hideOverlay();
+        await promptForApiKeyIfNeeded(ctx.state.ui, model, ctx.authStorage);
+        settings.browser.stagehand = {
+          ...settings.browser.stagehand,
+          env: settings.browser.stagehand?.env ?? 'LOCAL',
+          model: model.id,
+        };
+        saveSettings(settings);
+        ctx.showInfo(`Set model = ${model.id}\nRun /browser on to apply.`);
+        resolve();
+      },
+      onCancel: () => {
+        ctx.state.ui.hideOverlay();
+        ctx.showInfo('Model selection cancelled.');
+        resolve();
+      },
+    });
+    ctx.state.ui.showOverlay(selector, { width: '60%' });
+  });
+}
 
 /**
  * Helper to show an inline question and return the answer.
@@ -155,10 +217,12 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
           '  executablePath <path> - Browser executable path\n' +
           '  storageState <path>  - Playwright storage state file (agent-browser only)\n' +
           '  cdpUrl <url>         - CDP WebSocket URL\n' +
-          '  model <provider/id>  - Model Stagehand uses for AI operations (stagehand only)\n\n' +
+          '  model [provider/id]  - Model Stagehand uses for AI operations (stagehand only).\n' +
+          '                         Omit the value to pick from a list.\n\n' +
           'To remove a setting, use: /browser clear <key>\n\n' +
           'Examples:\n' +
           '  /browser set profile ~/.mastracode/browser-profile-stagehand\n' +
+          '  /browser set model\n' +
           '  /browser set model anthropic/claude-sonnet-4-5\n' +
           '  /browser set executablePath /Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
       );
@@ -172,6 +236,12 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
     }
 
     if (!value) {
+      // Model ids are hard to recall, so an omitted value opens the same
+      // searchable picker used elsewhere instead of erroring out.
+      if (key === 'model') {
+        await promptForStagehandModel(ctx, settings, browser);
+        return;
+      }
       ctx.showError(
         `Missing value. Use: /browser set ${args[1]} <value>\nTo remove a setting, use: /browser clear ${args[1]}`,
       );
@@ -218,12 +288,20 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
           ctx.showError('model is only supported by the stagehand provider.');
           return;
         }
-        // Stagehand splits on the first slash to pick the provider, so a bare
-        // model id resolves to an empty provider and fails deep inside init.
+        // Stagehand splits on the first slash to pick the provider and throws
+        // during browser startup if the prefix is not one it knows, so validate
+        // both halves here where the error is actionable.
         const modelId = value.trim();
         const slashIndex = modelId.indexOf('/');
         if (slashIndex <= 0 || slashIndex === modelId.length - 1) {
           ctx.showError(`Invalid model: ${modelId}. Use <provider>/<model>, for example anthropic/claude-sonnet-4-5.`);
+          return;
+        }
+        const modelProvider = modelId.slice(0, slashIndex);
+        if (!(STAGEHAND_MODEL_PROVIDERS as readonly string[]).includes(modelProvider)) {
+          ctx.showError(
+            `Unsupported model provider: ${modelProvider}. Supported providers: ${STAGEHAND_MODEL_PROVIDERS.join(', ')}.`,
+          );
           return;
         }
         settings.browser.stagehand = {

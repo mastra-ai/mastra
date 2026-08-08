@@ -24,6 +24,24 @@ vi.mock('../../modal-question.js', () => ({
   askModalQuestion: browserMocks.askModalQuestion,
 }));
 
+const selectorMocks = vi.hoisted(() => ({
+  promptForApiKeyIfNeeded: vi.fn(),
+  /** Captures the options the command hands to the model picker. */
+  lastOptions: undefined as any,
+}));
+
+vi.mock('../../components/model-selector.js', () => ({
+  ModelSelectorComponent: class {
+    constructor(options: any) {
+      selectorMocks.lastOptions = options;
+    }
+  },
+}));
+
+vi.mock('../../prompt-api-key.js', () => ({
+  promptForApiKeyIfNeeded: selectorMocks.promptForApiKeyIfNeeded,
+}));
+
 function createContext() {
   const browserInstance = { id: 'browser-instance' };
   const staticAgent = { setBrowser: vi.fn() };
@@ -48,6 +66,12 @@ function createContext() {
   };
   const controller = {
     session,
+    listAvailableModels: vi.fn(async () => [
+      { id: 'anthropic/claude-sonnet-4-5', provider: 'anthropic', modelName: 'claude-sonnet-4-5', hasApiKey: true },
+      { id: 'openai/gpt-4.1', provider: 'openai', modelName: 'gpt-4.1', hasApiKey: false },
+      // Not a provider Stagehand can resolve, so it must not be offered.
+      { id: 'mastra/some-model', provider: 'mastra', modelName: 'some-model', hasApiKey: true },
+    ]),
     listModes: vi.fn(() => [
       { id: 'build', agent: staticAgent },
       { id: 'review', agent: vi.fn(() => dynamicAgent) },
@@ -57,7 +81,7 @@ function createContext() {
     state: {
       session,
       controller,
-      ui: {},
+      ui: { showOverlay: vi.fn(), hideOverlay: vi.fn() },
     },
     session,
     controller,
@@ -68,6 +92,12 @@ function createContext() {
   return { ctx, settings, browserInstance, staticAgent, dynamicAgent, controllerState, setState };
 }
 
+/** The picker is built after an async model lookup, so wait for it to appear. */
+async function openedPicker() {
+  await vi.waitFor(() => expect(selectorMocks.lastOptions).toBeDefined());
+  return selectorMocks.lastOptions;
+}
+
 describe('handleBrowserCommand', () => {
   beforeEach(() => {
     browserMocks.checkProfileProviderMismatch.mockReset();
@@ -76,6 +106,8 @@ describe('handleBrowserCommand', () => {
     browserMocks.saveSettings.mockReset();
     browserMocks.setProfileProvider.mockReset();
     browserMocks.askModalQuestion.mockReset();
+    selectorMocks.promptForApiKeyIfNeeded.mockReset();
+    selectorMocks.lastOptions = undefined;
   });
 
   it('enables browser settings, attaches the browser to all mode agents, and records active settings', async () => {
@@ -130,6 +162,16 @@ describe('handleBrowserCommand', () => {
       },
     );
 
+    it('rejects a provider Stagehand cannot resolve, before the browser tries to start', async () => {
+      const { ctx, settings } = createContext();
+      browserMocks.loadSettings.mockReturnValue(settings);
+
+      await handleBrowserCommand(ctx, ['set', 'model', 'notaprovider/some-model']);
+
+      expect(browserMocks.saveSettings).not.toHaveBeenCalled();
+      expect(ctx.showError).toHaveBeenCalledWith(expect.stringContaining('Unsupported model provider: notaprovider'));
+    });
+
     it('rejects model on the agent-browser provider, which has no model to configure', async () => {
       const { ctx, settings } = createContext();
       settings.browser.provider = 'agent-browser' as never;
@@ -150,6 +192,79 @@ describe('handleBrowserCommand', () => {
 
       expect(settings.browser.stagehand).toEqual({ env: 'LOCAL' });
       expect(browserMocks.saveSettings).toHaveBeenCalledWith(settings);
+    });
+
+    it('opens a picker when no model is given, offering only Stagehand-resolvable providers', async () => {
+      const { ctx, settings } = createContext();
+      browserMocks.loadSettings.mockReturnValue(settings);
+
+      const command = handleBrowserCommand(ctx, ['set', 'model']);
+      await openedPicker();
+
+      expect(ctx.state.ui.showOverlay).toHaveBeenCalled();
+      expect(selectorMocks.lastOptions.models.map((m: { id: string }) => m.id)).toEqual([
+        'anthropic/claude-sonnet-4-5',
+        'openai/gpt-4.1',
+      ]);
+      expect(ctx.showError).not.toHaveBeenCalled();
+
+      selectorMocks.lastOptions.onCancel();
+      await command;
+    });
+
+    it('saves the picked model and prompts for a missing API key', async () => {
+      const { ctx, settings } = createContext();
+      browserMocks.loadSettings.mockReturnValue(settings);
+
+      const command = handleBrowserCommand(ctx, ['set', 'model']);
+      await openedPicker();
+      const picked = { id: 'openai/gpt-4.1', provider: 'openai', modelName: 'gpt-4.1', hasApiKey: false };
+      await selectorMocks.lastOptions.onSelect(picked);
+      await command;
+
+      expect(selectorMocks.promptForApiKeyIfNeeded).toHaveBeenCalledWith(ctx.state.ui, picked, ctx.authStorage);
+      expect(settings.browser.stagehand).toEqual({ env: 'LOCAL', model: 'openai/gpt-4.1' });
+      expect(browserMocks.saveSettings).toHaveBeenCalledWith(settings);
+    });
+
+    it('leaves the model untouched when the picker is cancelled', async () => {
+      const { ctx, settings } = createContext();
+      browserMocks.loadSettings.mockReturnValue(settings);
+
+      const command = handleBrowserCommand(ctx, ['set', 'model']);
+      await openedPicker();
+      selectorMocks.lastOptions.onCancel();
+      await command;
+
+      expect(settings.browser.stagehand).toEqual({ env: 'LOCAL' });
+      expect(browserMocks.saveSettings).not.toHaveBeenCalled();
+    });
+
+    it('preselects the current model so the picker opens on it', async () => {
+      const { ctx, settings } = createContext();
+      settings.browser.stagehand = { env: 'LOCAL', model: 'anthropic/claude-sonnet-4-5' } as never;
+      browserMocks.loadSettings.mockReturnValue(settings);
+
+      const command = handleBrowserCommand(ctx, ['set', 'model']);
+      await openedPicker();
+
+      expect(selectorMocks.lastOptions.currentModelId).toBe('anthropic/claude-sonnet-4-5');
+
+      selectorMocks.lastOptions.onCancel();
+      await command;
+    });
+
+    it('falls back to guidance when no supported model is available to pick', async () => {
+      const { ctx, settings } = createContext();
+      browserMocks.loadSettings.mockReturnValue(settings);
+      (ctx.state.controller.listAvailableModels as ReturnType<typeof vi.fn>).mockResolvedValue([
+        { id: 'mastra/some-model', provider: 'mastra', modelName: 'some-model', hasApiKey: true },
+      ]);
+
+      await handleBrowserCommand(ctx, ['set', 'model']);
+
+      expect(ctx.state.ui.showOverlay).not.toHaveBeenCalled();
+      expect(ctx.showError).toHaveBeenCalledWith(expect.stringContaining('No models available for Stagehand'));
     });
 
     it('reports a model change as pending so the running browser is not silently stale', async () => {
