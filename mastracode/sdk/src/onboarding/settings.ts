@@ -541,6 +541,28 @@ const BROWSER_PROVIDERS = new Set<BrowserProvider>(['stagehand', 'agent-browser'
 const STAGEHAND_ENVS = new Set<StagehandEnv>(['LOCAL', 'BROWSERBASE']);
 
 /**
+ * Normalize a Stagehand model id, which must be provider-qualified.
+ *
+ * Stagehand reads the segment before the first slash as the provider, so a
+ * bare id like `gpt-4.1` is rejected as an unknown provider and a trailing
+ * slash leaves an empty model name that only fails once a request is made.
+ * Neither is usable, so both are dropped here rather than persisted.
+ *
+ * The provider name itself is checked where the command is issued, which can
+ * name the supported providers in an error; this module is on the startup path
+ * and only imports Stagehand lazily.
+ *
+ * @returns the trimmed model id, or undefined when it is unusable.
+ */
+function parseStagehandModel(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const model = value.trim();
+  const separator = model.indexOf('/');
+  if (separator <= 0) return undefined;
+  return model.slice(separator + 1).trim() ? model : undefined;
+}
+
+/**
  * Deep-merge and validate browser settings from JSON.
  * Explicitly validates types to handle malformed settings.json gracefully.
  */
@@ -549,6 +571,7 @@ function parseBrowserSettings(rawBrowser: unknown): BrowserSettings {
   const rawViewport = raw.viewport && typeof raw.viewport === 'object' ? (raw.viewport as Record<string, unknown>) : {};
   const rawStagehand =
     raw.stagehand && typeof raw.stagehand === 'object' ? (raw.stagehand as Record<string, unknown>) : {};
+  const stagehandModel = parseStagehandModel(rawStagehand.model);
   const rawAgentBrowser =
     raw.agentBrowser && typeof raw.agentBrowser === 'object' ? (raw.agentBrowser as Record<string, unknown>) : {};
 
@@ -579,9 +602,7 @@ function parseBrowserSettings(rawBrowser: unknown): BrowserSettings {
       ...(typeof rawStagehand.projectId === 'string' && rawStagehand.projectId.trim()
         ? { projectId: rawStagehand.projectId.trim() }
         : {}),
-      ...(typeof rawStagehand.model === 'string' && rawStagehand.model.trim()
-        ? { model: rawStagehand.model.trim() }
-        : {}),
+      ...(stagehandModel ? { model: stagehandModel } : {}),
       ...(typeof rawStagehand.preserveUserDataDir === 'boolean'
         ? { preserveUserDataDir: rawStagehand.preserveUserDataDir }
         : {}),

@@ -98,6 +98,8 @@ export const browserSettingsPersistenceScenario = {
       `!node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/settings.json","utf8")); const b=s.browser||{}; console.log("BROWSER_MODEL_CLEARED="+(b.stagehand&&b.stagehand.model||"missing")); console.log("BROWSER_MODEL_ENV="+(b.stagehand&&b.stagehand.env||"missing"));'`,
     );
     await runtime.waitForScreenText(/BROWSER_MODEL_CLEARED=missing/i, terminal, 8_000);
+    // Clearing the model must not take the rest of the stagehand block with it.
+    await runtime.waitForScreenText(/BROWSER_MODEL_ENV=LOCAL/i, terminal, 8_000);
 
     terminal.keyCtrlC();
   },

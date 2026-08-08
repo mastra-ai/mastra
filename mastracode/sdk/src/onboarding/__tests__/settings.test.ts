@@ -889,8 +889,25 @@ describe('parseBrowserSettings — stagehand model', () => {
     );
   });
 
-  it.each([['   '], [42], [null], [{}]])('drops malformed model %p rather than passing it to Stagehand', value => {
-    expect(parseBrowser({ stagehand: { env: 'LOCAL', model: value } }).stagehand?.model).toBeUndefined();
+  it('trims surrounding whitespace', () => {
+    expect(
+      parseBrowser({ stagehand: { env: 'LOCAL', model: '  anthropic/claude-sonnet-4-5  ' } }).stagehand?.model,
+    ).toBe('anthropic/claude-sonnet-4-5');
+  });
+
+  // A hand-edited settings.json reaches Stagehand without passing through the
+  // /browser set model validation, so the unusable shapes are dropped here.
+  // 'gpt-4.1' is read by Stagehand as a provider named "gpt-4.1", and
+  // 'anthropic/' resolves a provider but leaves an empty model name.
+  it.each([['   '], [42], [null], [{}], ['gpt-4.1'], ['anthropic/'], ['anthropic/   '], ['/claude-sonnet-4-5']])(
+    'drops malformed model %p rather than passing it to Stagehand',
+    value => {
+      expect(parseBrowser({ stagehand: { env: 'LOCAL', model: value } }).stagehand?.model).toBeUndefined();
+    },
+  );
+
+  it('keeps the rest of the stagehand settings when the model is dropped', () => {
+    expect(parseBrowser({ stagehand: { env: 'BROWSERBASE', model: 'gpt-4.1' } }).stagehand?.env).toBe('BROWSERBASE');
   });
 });
 
