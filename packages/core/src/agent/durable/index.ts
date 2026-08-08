@@ -82,6 +82,16 @@ export {
   type DurableAgentStreamResult,
 } from './durable-agent';
 
+export type {
+  DurableAgentEngineContext,
+  DurableAgentEngineRecoverContext,
+  DurableAgentEngineResult,
+  DurableAgentEngineResumeContext,
+  DurableAgentEngineStartContext,
+  DurableAgentEngineStatus,
+  DurableAgentExecutionEngine,
+} from './execution-engine';
+
 // EventedAgent class (extends DurableAgent with fire-and-forget execution)
 export { EventedAgent, isEventedAgentClass, type EventedAgentConfig } from './evented-agent';
 
@@ -124,6 +134,8 @@ export type {
   SerializableModelConfig,
   SerializableDurableState,
   SerializableDurableOptions,
+  DurableAgentStepLimit,
+  DurableAgentExecutionOptions,
   SerializableModelSettings,
   DurableAgenticWorkflowInput,
   // Step I/O types

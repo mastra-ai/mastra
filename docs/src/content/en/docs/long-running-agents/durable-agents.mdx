@@ -82,6 +82,19 @@ A durable agent adds three layers on top of a regular agent:
 
 1. **Cache layer**: An optional cache (in-memory by default, Redis or another backend in production) stores published events so that a late subscriber can catch up.
 
+## Run until completion or abort
+
+Durable agents use a finite step ceiling by default. When the task itself must decide how long it runs, set `maxSteps: false` on the durable wrapper:
+
+```typescript title="src/mastra/agents/durable.ts"
+export const durableResearcher = createDurableAgent({
+  agent,
+  maxSteps: false,
+})
+```
+
+With no step ceiling, the loop continues until the model completes normally, a semantic stop condition completes the task, the run suspends, or the run is aborted. An unbounded run can consume resources indefinitely if none of those conditions occurs, so expose an abort path and monitor run cost and duration.
+
 ## Execution variants
 
 Mastra provides three factory functions that produce durable agents. They differ in how the workflow is executed:

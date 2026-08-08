@@ -30,7 +30,12 @@ import type {
   ToolsetsInput,
   ToolsInput,
 } from '../types';
-import type { DurableAgenticWorkflowInput, RunRegistryEntry, SerializableStructuredOutput } from './types';
+import type {
+  DurableAgentExecutionOptions,
+  DurableAgenticWorkflowInput,
+  RunRegistryEntry,
+  SerializableStructuredOutput,
+} from './types';
 import { createWorkflowInput } from './utils/serialize-state';
 
 /**
@@ -159,7 +164,7 @@ export interface PreparationOptions<OUTPUT = undefined> {
   /** User messages to process */
   messages: MessageListInput;
   /** Execution options */
-  options?: AgentExecutionOptions<OUTPUT>;
+  options?: DurableAgentExecutionOptions<OUTPUT>;
   /** Whether execution options already include the agent defaults. */
   optionsAreResolved?: boolean;
   /** Run ID (will be generated if not provided) */
@@ -243,12 +248,12 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   // mirroring the non-durable Agent.stream()/generate() paths. Without this the
   // agent's configured defaults (maxSteps, providerOptions, etc.) are silently
   // dropped and durable runs fall back to DurableAgentDefaults.MAX_STEPS.
-  const execOptions: AgentExecutionOptions<OUTPUT> = optionsAreResolved
-    ? (rawExecOptions ?? ({} as AgentExecutionOptions<OUTPUT>))
+  const execOptions: DurableAgentExecutionOptions<OUTPUT> = optionsAreResolved
+    ? (rawExecOptions ?? ({} as DurableAgentExecutionOptions<OUTPUT>))
     : (deepMerge(
         ((await typedAgent.getDefaultOptions({ requestContext })) ?? {}) as Record<string, unknown>,
         (rawExecOptions ?? {}) as Record<string, unknown>,
-      ) as AgentExecutionOptions<OUTPUT>);
+      ) as DurableAgentExecutionOptions<OUTPUT>);
 
   // 3. Merge version overrides (Mastra defaults < requestContext < call-site)
   const requestVersions = requestContext.get(MASTRA_VERSIONS_KEY) as VersionOverrides | undefined;

@@ -3933,7 +3933,7 @@ importers:
         version: 4.0.31(zod@3.25.76)
       '@ai-sdk/provider':
         specifier: ^4.0.4
-        version: 4.0.5
+        version: 4.0.4
       '@ai-sdk/provider-utils':
         specifier: ^5.0.13
         version: 5.0.16(zod@3.25.76)
@@ -8809,6 +8809,33 @@ importers:
       zod:
         specifier: ^3.25.76
         version: 3.25.76
+
+  workflows/cloudflare-workflows:
+    devDependencies:
+      '@internal/lint':
+        specifier: workspace:*
+        version: link:../../packages/_config
+      '@internal/types-builder':
+        specifier: workspace:*
+        version: link:../../packages/_types-builder
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      eslint:
+        specifier: ^10.7.0
+        version: 10.7.0(jiti@2.7.0)
+      tsdown:
+        specifier: 0.22.9
+        version: 0.22.9(@volar/typescript@2.4.23)(oxc-resolver@11.20.0)(tsx@4.23.1)(typescript@6.0.3)
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.10)(@vitest/ui@4.1.10)(jsdom@27.4.0(@noble/hashes@2.2.0)(bufferutil@4.1.0))(msw@2.14.6(@types/node@22.19.15)(typescript@6.0.3))(vite@7.3.6(@types/node@22.19.15)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.23.1)(yaml@2.9.0))
+      zod:
+        specifier: 'catalog:'
+        version: 4.4.3
 
   workflows/inngest:
     dependencies:
@@ -53269,7 +53296,7 @@ snapshots:
 
   minimatch@10.2.5:
     dependencies:
-      brace-expansion: 5.0.7
+      brace-expansion: 5.0.8
 
   minimatch@3.1.5:
     dependencies:

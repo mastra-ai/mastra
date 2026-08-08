@@ -319,5 +319,34 @@ describe('DurableAgent defaultOptions (#17790)', () => {
       expect(getCallCount()).toBe(7);
       result.cleanup();
     });
+
+    it('runs past the durable default when maxSteps is false and stops on normal model completion', async () => {
+      const { model: loopModel, getCallCount } = createRepeatedToolThenTextModel(
+        'loopTool',
+        { value: 'next' },
+        6,
+        'done',
+      );
+      const loopTool = createTool({
+        id: 'loopTool',
+        description: 'Continue the loop',
+        inputSchema: z.object({ value: z.string() }),
+        execute: async () => ({ ok: true }),
+      });
+      const baseAgent = new Agent({
+        id: 'e2e-no-step-ceiling-agent',
+        name: 'E2E No Step Ceiling Agent',
+        instructions: 'Use tools until done.',
+        model: loopModel as LanguageModelV2,
+        tools: { loopTool },
+      });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub, maxSteps: false });
+
+      const result = await durableAgent.stream('Loop until final answer');
+      await drain(result.fullStream as ReadableStream<any>);
+
+      expect(getCallCount()).toBe(7);
+      result.cleanup();
+    });
   });
 });

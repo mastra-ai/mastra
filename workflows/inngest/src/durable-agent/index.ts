@@ -51,8 +51,11 @@ export {
   type InngestAgent,
   type CreateInngestAgentOptions,
   type InngestAgentStreamOptions,
+  type InngestAgentResumeOptions,
   type InngestAgentStreamResult,
 } from './create-inngest-agent';
+
+export { InngestDurableAgentExecutionEngine } from './inngest-execution-engine';
 
 // Workflow factory (internal, used by createInngestAgent)
 export {

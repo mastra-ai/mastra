@@ -30,6 +30,7 @@ import type { Agent } from '../agent';
 
 import { EventedAgent } from './evented-agent';
 import type { EventedAgentConfig } from './evented-agent';
+import type { DurableAgentStepLimit } from './types';
 
 /**
  * Options for createEventedAgent factory function.
@@ -59,8 +60,8 @@ export interface CreateEventedAgentOptions<
    */
   cache?: MastraServerCache | false;
 
-  /** Maximum steps for agentic loop */
-  maxSteps?: number;
+  /** Maximum steps for agentic loop, or `false` for no step ceiling. */
+  maxSteps?: DurableAgentStepLimit;
 }
 
 /**

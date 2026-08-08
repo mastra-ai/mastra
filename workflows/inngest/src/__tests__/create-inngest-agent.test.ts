@@ -17,7 +17,7 @@ import { Inngest } from 'inngest';
 import { describe, it, expect, vi } from 'vitest';
 
 import { InngestDurableStepIds } from '../durable-agent/create-inngest-agentic-workflow';
-import { createInngestAgent, isInngestAgent } from '../index';
+import { createInngestAgent } from '../index';
 
 // Mock model for testing
 function createMockModel() {
@@ -73,22 +73,6 @@ describe('createInngestAgent factory function', () => {
     expect(typeof durableAgent.resume).toBe('function');
     expect(typeof durableAgent.prepare).toBe('function');
     expect(typeof durableAgent.getDurableWorkflows).toBe('function');
-  });
-
-  it('should be detected by isInngestAgent type guard', () => {
-    const agent = new Agent({
-      id: 'type-guard-test',
-      name: 'Type Guard Test',
-      instructions: 'Test',
-      model: createMockModel() as any,
-    });
-
-    const durableAgent = createInngestAgent({ agent, inngest });
-
-    expect(isInngestAgent(durableAgent)).toBe(true);
-    expect(isInngestAgent(agent)).toBe(false);
-    expect(isInngestAgent(null)).toBe(false);
-    expect(isInngestAgent({})).toBe(false);
   });
 
   it('should return durable workflows from getDurableWorkflows', () => {
@@ -658,10 +642,13 @@ describe('InngestAgent parity surface', () => {
       },
     });
     const mastra = {
+      getLogger: () => ({ debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }),
+      getServer: () => undefined,
       getStorage: () => ({
         getStore: async () => ({ loadWorkflowSnapshot }),
       }),
     };
+    await durableAgent.prepare([], { runId });
     (durableAgent as any).__setMastra(mastra);
 
     const result = await durableAgent.resume(runId, { answer: 'approved' });

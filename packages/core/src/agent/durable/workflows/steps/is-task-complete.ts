@@ -10,6 +10,7 @@ import { MessageList } from '../../../message-list';
 import { DurableAgentDefaults, DurableStepIds } from '../../constants';
 import { globalRunRegistry } from '../../run-registry';
 import { emitChunkEvent } from '../../stream-adapter';
+import type { DurableAgentStepLimit } from '../../types';
 
 /**
  * Create the durable isTaskComplete step.
@@ -32,7 +33,9 @@ import { emitChunkEvent } from '../../stream-adapter';
  *  - Emits an `is-task-complete` chunk via pubsub so external observers see
  *    the verdict and payload exactly like the non-durable path.
  */
-export function createDurableIsTaskCompleteStep(defaultMaxSteps: number = DurableAgentDefaults.MAX_STEPS) {
+export function createDurableIsTaskCompleteStep(
+  defaultMaxSteps: DurableAgentStepLimit = DurableAgentDefaults.MAX_STEPS,
+) {
   // The step is a pass-through over the IterationState — we mutate
   // `lastStepResult.isContinued` and `messageListState` in place when a
   // verdict requires it. We use `z.any()` instead of the iteration schema to
@@ -54,7 +57,7 @@ export function createDurableIsTaskCompleteStep(defaultMaxSteps: number = Durabl
           toolResults?: Array<{ toolName?: string; result?: unknown }>;
         }>;
         lastStepResult?: { isContinued?: boolean };
-        options?: { maxSteps?: number };
+        options?: { maxSteps?: DurableAgentStepLimit };
         backgroundTaskPending?: boolean;
       };
       const pubsub = (params as any)[PUBSUB_SYMBOL] as PubSub | undefined;
@@ -102,6 +105,7 @@ export function createDurableIsTaskCompleteStep(defaultMaxSteps: number = Durabl
       }
 
       const runMaxSteps = state.options?.maxSteps ?? defaultMaxSteps;
+      const maxIterations = runMaxSteps === false ? undefined : runMaxSteps;
 
       // Rehydrate the message list once so we can read the original task and
       // append feedback after scoring.
@@ -125,7 +129,7 @@ export function createDurableIsTaskCompleteStep(defaultMaxSteps: number = Durabl
 
       const ctx: StreamCompletionContext = {
         iteration: state.iterationCount,
-        maxIterations: runMaxSteps,
+        maxIterations,
         originalTask,
         currentText: lastStep?.text || '',
         toolCalls: iterationToolCalls.map(tc => ({
@@ -169,7 +173,7 @@ export function createDurableIsTaskCompleteStep(defaultMaxSteps: number = Durabl
         }
       }
 
-      const maxIterationReached = runMaxSteps ? state.iterationCount >= runMaxSteps : false;
+      const maxIterationReached = runMaxSteps === false ? false : state.iterationCount >= runMaxSteps;
 
       // Flip isContinued based on the verdict so the outer dowhile predicate
       // continues (not complete) or stops (complete). This is the contract

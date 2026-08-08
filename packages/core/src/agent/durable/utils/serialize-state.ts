@@ -204,7 +204,7 @@ export function serializeModelSettings(
  * Extract serializable options from agent execution options
  */
 export function serializeDurableOptions(options: {
-  maxSteps?: number;
+  maxSteps?: SerializableDurableOptions['maxSteps'];
   toolChoice?: any;
   activeTools?: string[];
   modelSettings?: SerializableModelSettings | Record<string, unknown>;
