@@ -217,7 +217,7 @@ You only need to include fields that have changed - existing data is automatical
         // @ts-expect-error - accessing client for cleanup
         await storage.client.close();
 
-        await rm(dirname(dbPath), { force: true, recursive: true });
+        await rm(dirname(dbPath), { force: true, recursive: true }).catch(() => {});
       });
 
       it('should preserve about info when adding work info', async () => {
@@ -388,7 +388,7 @@ Schema structure reminder:
         // @ts-expect-error - accessing client for cleanup
         await storage.client.close();
 
-        await rm(dirname(dbPath), { force: true, recursive: true });
+        await rm(dirname(dbPath), { force: true, recursive: true }).catch(() => {});
       });
 
       it('should build up a comprehensive user profile across many turns', async () => {

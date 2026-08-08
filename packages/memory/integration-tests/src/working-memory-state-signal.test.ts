@@ -65,7 +65,7 @@ describe('Working memory via state signals (opt-in)', () => {
   });
 
   afterAll(async () => {
-    await rm(dbPath, { recursive: true, force: true });
+    await rm(dbPath, { recursive: true, force: true }).catch(() => {});
   });
 
   describe('default path (useStateSignals: false)', () => {

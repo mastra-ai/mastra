@@ -3,7 +3,7 @@ import { $ } from 'execa';
 export default async function setup() {
   await $(
     {},
-  )`pnpm tsc ./src/worker/generic-memory-worker.ts ./src/worker/mock-embedder.ts --ignoreConfig --types node --esModuleInterop --resolveJsonModule --module commonjs --target es2020 --outDir ./ --rootDir ./ --skipLibCheck`;
+  )`pnpm tsc ./src/worker/generic-memory-worker.ts ./src/worker/mock-embedder.ts --ignoreConfig --types node --esModuleInterop --resolveJsonModule --module node16 --moduleResolution node16 --target es2020 --outDir ./ --rootDir ./ --skipLibCheck`;
 
   // Pre-download fastembed models to avoid race conditions when multiple
   // test files call FlagEmbedding.init() concurrently. warmup() only
