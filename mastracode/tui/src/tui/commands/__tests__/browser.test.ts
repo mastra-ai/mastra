@@ -183,6 +183,19 @@ describe('handleBrowserCommand', () => {
       expect(ctx.showError).toHaveBeenCalledWith('model is only supported by the stagehand provider.');
     });
 
+    it('rejects the model picker on the agent-browser provider without listing any models', async () => {
+      const { ctx, settings } = createContext();
+      settings.browser.provider = 'agent-browser' as never;
+      browserMocks.loadSettings.mockReturnValue(settings);
+
+      await handleBrowserCommand(ctx, ['set', 'model']);
+
+      expect(ctx.state.controller.listAvailableModels).not.toHaveBeenCalled();
+      expect(selectorMocks.lastOptions).toBeUndefined();
+      expect(browserMocks.saveSettings).not.toHaveBeenCalled();
+      expect(ctx.showError).toHaveBeenCalledWith('model is only supported by the stagehand provider.');
+    });
+
     it('clears the model without disturbing the rest of the stagehand settings', async () => {
       const { ctx, settings } = createContext();
       settings.browser.stagehand = { env: 'LOCAL', model: 'anthropic/claude-sonnet-4-5' } as never;
