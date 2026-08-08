@@ -8,7 +8,7 @@ import { TimelineTrack } from './snapshot-timeline';
 import type { TimelineMarkerKind } from './snapshot-timeline';
 import { timelineTickPositions } from './snapshot-timeline-data';
 import { computeThemeShareDeltas, themeShareSeries } from './theme-compare-data';
-import type { ThemeSelection } from './theme-drilldown-data';
+import type { SelectedTheme } from './theme-drilldown-data';
 import type { ThemeFlowResponse, ThemeSnapshot, TraceSignalName } from './types';
 
 const SPARKLINE_WIDTH = 100;
@@ -95,7 +95,7 @@ function SignalDeltaColumn({
   positions: number[];
   aIndex: number;
   bIndex: number;
-  onThemeSelect: (selection: ThemeSelection, snapshotIndex: number) => void;
+  onThemeSelect: (selection: SelectedTheme, snapshotIndex: number) => void;
 }) {
   const deltas = computeThemeShareDeltas(fromFlow, toFlow, signalName);
   // Details open at the compared snapshot where the theme still exists.
@@ -143,7 +143,9 @@ function SignalDeltaColumn({
                 <button
                   aria-label={`View theme details for ${delta.label}`}
                   className="hover:border-border2 block w-full cursor-pointer rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-white/[0.03]"
-                  onClick={() => onThemeSelect({ signalName, themeId, label: delta.label }, detailIndexFor(delta))}
+                  onClick={() =>
+                    onThemeSelect({ kind: 'theme', signalName, themeId, label: delta.label }, detailIndexFor(delta))
+                  }
                   type="button"
                 >
                   {card}
@@ -175,7 +177,7 @@ export function ThemeCompare({
   signalNames: TraceSignalName[];
   snapshots: ThemeSnapshot[];
   totalSnapshots: number;
-  onThemeSelect: (selection: ThemeSelection, snapshotIndex: number) => void;
+  onThemeSelect: (selection: SelectedTheme, snapshotIndex: number) => void;
 }) {
   const [compareIndexes, setCompareIndexes] = useState<{ a: number; b: number }>();
   const [armedMarker, setArmedMarker] = useState<'a' | 'b'>('b');

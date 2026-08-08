@@ -1,8 +1,9 @@
+import type { ThemeSelection } from './theme-drilldown-data';
 import type {
+  EntityLearningProgressResponse,
   NoiseExamplesResponse,
   NoiseResponse,
   ThemeDetailResponse,
-  EntityLearningProgressResponse,
   ThemeEntitiesResponse,
   ThemeExamplesResponse,
   ThemeFlowResponse,
@@ -12,6 +13,10 @@ import type {
   TraceInsightResponse,
   TraceSignalName,
 } from './types';
+
+export function serializeThemeFilters(filters: ThemeSelection[]) {
+  return filters.map(filter => `${filter.signalName}:${filter.kind === 'theme' ? filter.themeId : 'noise'}`).join(',');
+}
 
 export function fetchThemeEntities(entityType: string) {
   const query = new URLSearchParams({ entityType });
@@ -83,6 +88,7 @@ export function fetchThemeExamples(
   themeId: string,
   limit = 20,
   offset = 0,
+  filters: ThemeSelection[] = [],
 ) {
   const query = new URLSearchParams({
     entityType,
@@ -91,6 +97,8 @@ export function fetchThemeExamples(
     limit: String(limit),
     offset: String(offset),
   });
+  const filterThemes = serializeThemeFilters(filters);
+  if (filterThemes) query.set('filterThemes', filterThemes);
   return learningJson<ThemeExamplesResponse>(themePath(entityId, themeId, `/examples?${query}`));
 }
 
@@ -117,6 +125,7 @@ export function fetchNoiseExamples(
   snapshotId: string,
   limit = 20,
   offset = 0,
+  filters: ThemeSelection[] = [],
 ) {
   const query = new URLSearchParams({
     entityType,
@@ -125,6 +134,8 @@ export function fetchNoiseExamples(
     limit: String(limit),
     offset: String(offset),
   });
+  const filterThemes = serializeThemeFilters(filters);
+  if (filterThemes) query.set('filterThemes', filterThemes);
   return learningJson<NoiseExamplesResponse>(noisePath(entityId, `/examples?${query}`));
 }
 

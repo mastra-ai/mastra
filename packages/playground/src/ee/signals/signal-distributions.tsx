@@ -6,7 +6,7 @@ import { getSignalHue } from '@mastra/playground-ui/ee/signals';
 import { GripVertical } from 'lucide-react';
 
 import { formatSignalName, traceLabel } from './signal-formatting';
-import type { ThemeSelection } from './theme-drilldown-data';
+import type { SelectedTheme } from './theme-drilldown-data';
 import type { ThemeFlowResponse, ThemeNode, TraceSignalName } from './types';
 
 const DRAG_SENSORS = [useMouseSensor, useTouchSensor];
@@ -21,7 +21,7 @@ function SignalDistributionRow({
   color: string;
   index: number;
   node: ThemeNode;
-  onViewThemeDetails: (selection: ThemeSelection) => void;
+  onViewThemeDetails: (selection: SelectedTheme) => void;
   signalName: TraceSignalName;
 }) {
   const content = (
@@ -48,7 +48,7 @@ function SignalDistributionRow({
         <button
           aria-label={`View theme details for ${node.label}`}
           className="hover:bg-surface3 focus-visible:ring-border2 flex w-full min-w-0 items-center justify-between gap-3 rounded-xs text-left text-xs outline-hidden focus-visible:ring-1"
-          onClick={() => onViewThemeDetails({ signalName, themeId: node.themeId, label: node.label })}
+          onClick={() => onViewThemeDetails({ kind: 'theme', signalName, themeId: node.themeId, label: node.label })}
           type="button"
         >
           {content}
@@ -111,7 +111,7 @@ function SignalDistribution({
   signalName: TraceSignalName;
   traceCount: number;
   nodes: ThemeNode[];
-  onViewThemeDetails: (selection: ThemeSelection) => void;
+  onViewThemeDetails: (selection: SelectedTheme) => void;
   onViewNoiseDetails: (signalName: TraceSignalName) => void;
 }) {
   const label = formatSignalName(signalName);
@@ -197,7 +197,7 @@ export function SignalDistributions({
   disabled?: boolean;
   stages: ThemeFlowResponse['stages'];
   onOrderChange: (signalNames: TraceSignalName[]) => void;
-  onViewThemeDetails: (selection: ThemeSelection) => void;
+  onViewThemeDetails: (selection: SelectedTheme) => void;
   onViewNoiseDetails: (signalName: TraceSignalName) => void;
 }) {
   const handleDragEnd = (result: DropResult) => {

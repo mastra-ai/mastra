@@ -28,6 +28,10 @@ export const singleDrilldownThemeSnapshotsResponse = {
   snapshots: [{ ...snapshot, ordinal: 1, total: 1 }],
 } satisfies ThemeSnapshotsResponse;
 
+export const fourSignalThemeSnapshotsResponse = {
+  snapshots: [{ ...snapshot, availableSignals: ['goal', 'outcome', 'behavior', 'sentiment'] }],
+} satisfies ThemeSnapshotsResponse;
+
 export const twoDrilldownThemeSnapshotsResponse = {
   snapshots: [
     {
@@ -262,6 +266,19 @@ export const noiseExamplesResponse = {
   ],
 } satisfies NoiseExamplesResponse;
 
+export const sentimentNoiseResponse = {
+  ...noiseResponse,
+  noise: {
+    signalName: 'sentiment',
+    traceCount: 1,
+    coverage: 1 / 3,
+  },
+} satisfies NoiseResponse;
+
+export const emptyNoiseExamplesResponse = {
+  examples: [],
+} satisfies NoiseExamplesResponse;
+
 export const themeHistoryResponse = {
   theme: {
     themeId: '101',
@@ -344,7 +361,7 @@ export const secondThemePathsResponse = {
       assignments: {
         goal: 'opaque-goal-key',
         outcome: 'opaque-outcome-key',
-        behavior: 'noise-marker-from-api',
+        behavior: 'noise',
       },
     },
     {
@@ -352,7 +369,7 @@ export const secondThemePathsResponse = {
       assignments: {
         goal: 'opaque-goal-other-key',
         outcome: 'opaque-outcome-other-key',
-        behavior: 'another-noise-marker-from-api',
+        behavior: 'noise',
       },
     },
   ],
@@ -362,6 +379,113 @@ export const allThemePathsResponse = {
   ...firstThemePathsResponse,
   paths: [...firstThemePathsResponse.paths, ...secondThemePathsResponse.paths],
   nextOffset: undefined,
+} satisfies ThemePathsResponse;
+
+export const fourSignalThemeFlowResponse = {
+  ...drilldownThemeFlowResponse,
+  stages: [
+    ...drilldownThemeFlowResponse.stages,
+    {
+      signalName: 'sentiment',
+      traceCount: 3,
+      nodes: [
+        {
+          nodeId: 'flow-sentiment-401',
+          kind: 'theme',
+          themeId: '401',
+          label: 'Satisfied',
+          traceCount: 1,
+          stageShare: 1 / 3,
+        },
+        {
+          nodeId: 'flow-sentiment-402',
+          kind: 'theme',
+          themeId: '402',
+          label: 'Uncertain',
+          traceCount: 1,
+          stageShare: 1 / 3,
+        },
+        {
+          nodeId: 'flow-sentiment-noise',
+          kind: 'noise',
+          label: 'Noise',
+          traceCount: 1,
+          stageShare: 1 / 3,
+        },
+      ],
+    },
+  ],
+  links: [
+    ...drilldownThemeFlowResponse.links,
+    {
+      sourceNodeId: 'flow-behavior-301',
+      targetNodeId: 'flow-sentiment-401',
+      traceCount: 1,
+      sourceShare: 1,
+      targetShare: 1,
+    },
+    {
+      sourceNodeId: 'flow-behavior-noise',
+      targetNodeId: 'flow-sentiment-noise',
+      traceCount: 1,
+      sourceShare: 0.5,
+      targetShare: 1,
+    },
+    {
+      sourceNodeId: 'flow-behavior-noise',
+      targetNodeId: 'flow-sentiment-402',
+      traceCount: 1,
+      sourceShare: 0.5,
+      targetShare: 1,
+    },
+  ],
+} satisfies ThemeFlowResponse;
+
+export const fourSignalThemePathsResponse = {
+  ...allThemePathsResponse,
+  signals: ['goal', 'outcome', 'behavior', 'sentiment'],
+  themes: {
+    ...allThemePathsResponse.themes,
+    'opaque-sentiment-401-key': {
+      signalName: 'sentiment',
+      themeId: '401',
+      label: 'Satisfied',
+    },
+    'opaque-sentiment-402-key': {
+      signalName: 'sentiment',
+      themeId: '402',
+      label: 'Uncertain',
+    },
+  },
+  paths: [
+    {
+      traceId: 'trace-1',
+      assignments: {
+        goal: 'opaque-goal-key',
+        outcome: 'opaque-outcome-key',
+        behavior: 'opaque-behavior-key',
+        sentiment: 'opaque-sentiment-401-key',
+      },
+    },
+    {
+      traceId: 'trace-2',
+      assignments: {
+        goal: 'opaque-goal-key',
+        outcome: 'opaque-outcome-key',
+        behavior: 'noise',
+        sentiment: 'noise',
+      },
+    },
+    {
+      traceId: 'trace-3',
+      assignments: {
+        goal: 'opaque-goal-other-key',
+        outcome: 'opaque-outcome-other-key',
+        behavior: 'noise',
+        sentiment: 'opaque-sentiment-402-key',
+      },
+    },
+  ],
 } satisfies ThemePathsResponse;
 
 export const pathsWithCollapsedOutcomeResponse = {

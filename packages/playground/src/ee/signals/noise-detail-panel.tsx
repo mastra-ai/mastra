@@ -10,6 +10,7 @@ import {
 import { useState } from 'react';
 
 import { useNoise, useNoiseExamples } from './hooks';
+import type { ThemeSelection, ThemeSelectionStats } from './theme-drilldown-data';
 import { TraceInsightView } from './trace-insight-view';
 import type { TraceSignalName } from './types';
 
@@ -18,14 +19,25 @@ interface NoiseDetailPanelProps {
   entityType: string;
   snapshotId: string;
   signalName: TraceSignalName | undefined;
+  filters?: ThemeSelection[];
+  filteredStats?: ThemeSelectionStats;
   onClose: () => void;
 }
 
-export function NoiseDetailPanel({ entityId, entityType, snapshotId, signalName, onClose }: NoiseDetailPanelProps) {
+export function NoiseDetailPanel({
+  entityId,
+  entityType,
+  snapshotId,
+  signalName,
+  filters = [],
+  filteredStats,
+  onClose,
+}: NoiseDetailPanelProps) {
   const [examplesOffset, setExamplesOffset] = useState(0);
   const [insightTraceId, setInsightTraceId] = useState<string>();
   const noiseQuery = useNoise(entityId, entityType, signalName, snapshotId);
-  const examplesQuery = useNoiseExamples(entityId, entityType, signalName, snapshotId, 5, examplesOffset);
+  const examplesQuery = useNoiseExamples(entityId, entityType, signalName, snapshotId, 5, examplesOffset, filters);
+  const stats = filteredStats ?? noiseQuery.data?.noise;
 
   return (
     <Drawer
@@ -59,18 +71,23 @@ export function NoiseDetailPanel({ entityId, entityType, snapshotId, signalName,
                   Noise contains trace signal summaries that did not consistently match a recurring theme in this
                   snapshot.
                 </p>
+                {filteredStats && (
+                  <p className="text-neutral3 mt-2 text-xs">
+                    Filtered to traces matching the active drill-down filters.
+                  </p>
+                )}
                 {noiseQuery.isPending && <p className="text-neutral3 mt-4 text-sm">Loading noise details…</p>}
                 {noiseQuery.isError && <p className="mt-4 text-sm text-red-500">Unable to load noise details.</p>}
-                {noiseQuery.data && (
+                {stats && (
                   <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
                     <div>
                       <dt className="text-neutral3">Traces</dt>
-                      <dd className="text-neutral5 mt-1 font-mono">{noiseQuery.data.noise.traceCount}</dd>
+                      <dd className="text-neutral5 mt-1 font-mono">{stats.traceCount}</dd>
                     </div>
                     <div>
                       <dt className="text-neutral3">Stage share</dt>
                       <dd className="text-neutral5 mt-1 font-mono">
-                        {Math.round(noiseQuery.data.noise.coverage * 100)}%
+                        {Math.round(('stageShare' in stats ? stats.stageShare : stats.coverage) * 100)}%
                       </dd>
                     </div>
                   </dl>

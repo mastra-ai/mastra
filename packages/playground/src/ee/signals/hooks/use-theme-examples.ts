@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 
-import { fetchThemeExamples } from '../entity-learning-api';
+import { fetchThemeExamples, serializeThemeFilters } from '../entity-learning-api';
+import type { ThemeSelection } from '../theme-drilldown-data';
 import type { TraceSignalName } from '../types';
 import { isNumericThemeId, requireNumericThemeId, requireSnapshotId } from './theme-query-guards';
 
@@ -12,7 +13,9 @@ export function useThemeExamples(
   themeId: string | undefined,
   limit = 20,
   offset = 0,
+  filters: ThemeSelection[] = [],
 ) {
+  const filterThemes = serializeThemeFilters(filters);
   return useQuery({
     queryKey: [
       'entity-learning',
@@ -24,6 +27,7 @@ export function useThemeExamples(
       themeId,
       limit,
       offset,
+      filterThemes,
     ],
     queryFn: () =>
       fetchThemeExamples(
@@ -34,6 +38,7 @@ export function useThemeExamples(
         requireNumericThemeId(themeId),
         limit,
         offset,
+        filters,
       ),
     enabled: snapshotId !== undefined && isNumericThemeId(themeId),
   });

@@ -10,7 +10,7 @@ import {
 import { useState } from 'react';
 
 import { useThemeDetail, useThemeExamples, useThemeHistory } from './hooks';
-import type { ThemeSelection } from './theme-drilldown-data';
+import type { SelectedTheme, ThemeSelection, ThemeSelectionStats } from './theme-drilldown-data';
 import { TraceInsightView } from './trace-insight-view';
 
 interface ThemeDetailPanelProps {
@@ -18,7 +18,9 @@ interface ThemeDetailPanelProps {
   entityType: string;
   snapshotId: string;
   snapshotTotal: number;
-  selection: ThemeSelection | undefined;
+  selection: SelectedTheme | undefined;
+  filters?: ThemeSelection[];
+  filteredStats?: ThemeSelectionStats;
   onClose: () => void;
 }
 
@@ -28,6 +30,8 @@ export function ThemeDetailPanel({
   snapshotId,
   snapshotTotal,
   selection,
+  filters = [],
+  filteredStats,
   onClose,
 }: ThemeDetailPanelProps) {
   const [examplesOffset, setExamplesOffset] = useState(0);
@@ -47,6 +51,7 @@ export function ThemeDetailPanel({
     selection?.themeId,
     5,
     examplesOffset,
+    filters,
   );
   const historyQuery = useThemeHistory(
     entityId,
@@ -97,15 +102,22 @@ export function ThemeDetailPanel({
                     <p className="text-neutral5 mt-3 text-sm">
                       {detailQuery.data.theme.description ?? 'No description available.'}
                     </p>
+                    {filteredStats && (
+                      <p className="text-neutral3 mt-2 text-xs">
+                        Filtered to traces matching the active drill-down filters.
+                      </p>
+                    )}
                     <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
                       <div>
                         <dt className="text-neutral3">Traces</dt>
-                        <dd className="text-neutral5 mt-1 font-mono">{detailQuery.data.theme.traceCount}</dd>
+                        <dd className="text-neutral5 mt-1 font-mono">
+                          {filteredStats?.traceCount ?? detailQuery.data.theme.traceCount}
+                        </dd>
                       </div>
                       <div>
                         <dt className="text-neutral3">Stage share</dt>
                         <dd className="text-neutral5 mt-1 font-mono">
-                          {Math.round(detailQuery.data.theme.coverage * 100)}%
+                          {Math.round((filteredStats?.stageShare ?? detailQuery.data.theme.coverage) * 100)}%
                         </dd>
                       </div>
                     </dl>
