@@ -81,6 +81,65 @@ describe('step request dedupe', () => {
     expect(packed[0]!.request).toBe(cyclic);
   });
 
+  // JSON renders every one of these as `{}`, so keying on JSON text would fuse
+  // two different requests into one and resume a step against the other's.
+  // The persistence codec carries these types, so the collision is reachable.
+  it.each([
+    ['Map', () => new Map([['a', 1]]), () => new Map([['b', 2]])],
+    ['Set', () => new Set(['a']), () => new Set(['b'])],
+    ['Error', () => new Error('first'), () => new Error('second')],
+  ])('keeps requests with distinct %s bodies apart', (_name, first, second) => {
+    const steps = [
+      { stepType: 'a', request: { body: first() } },
+      { stepType: 'b', request: { body: second() } },
+    ];
+
+    const { steps: packed, requests } = dedupeStepRequests(steps);
+
+    expect(requests).toBeUndefined();
+    expect(packed).toBe(steps);
+    expect(rehydrateStepRequests(packed, requests)).toEqual(steps);
+  });
+
+  it('does not fuse a dropped key with an absent one', () => {
+    // `{ body: undefined }` and `{}` both render as `{}`.
+    const steps = [
+      { stepType: 'a', request: { body: undefined } },
+      { stepType: 'b', request: {} },
+    ];
+
+    const { steps: packed, requests } = dedupeStepRequests(steps);
+
+    expect(requests).toBeUndefined();
+    expect(packed[0]!.request).toEqual({ body: undefined });
+    expect(packed[1]!.request).toEqual({});
+  });
+
+  it('still dedupes a request holding a Date', () => {
+    // A Date renders lossily but injectively, so it is safe to key on.
+    const at = new Date('2020-01-01T00:00:00.000Z');
+    const steps = [
+      { stepType: 'a', request: { body: 'shared', at } },
+      { stepType: 'b', request: { body: 'shared', at } },
+    ];
+
+    const { steps: packed, requests } = dedupeStepRequests(steps);
+
+    expect(requests).toHaveLength(1);
+    expect(rehydrateStepRequests(packed, requests)).toEqual(steps);
+  });
+
+  it('keeps requests with distinct Dates apart', () => {
+    const steps = [
+      { stepType: 'a', request: { at: new Date('2020-01-01T00:00:00.000Z') } },
+      { stepType: 'b', request: { at: new Date('2021-01-01T00:00:00.000Z') } },
+    ];
+
+    const { steps: packed, requests } = dedupeStepRequests(steps);
+
+    expect(rehydrateStepRequests(packed, requests)).toEqual(steps);
+  });
+
   it('preserves steps that have no request at all', () => {
     const steps = [
       { stepType: 'a', request: { body: 'shared' } },
