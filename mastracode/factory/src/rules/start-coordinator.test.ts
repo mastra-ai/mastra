@@ -1,3 +1,4 @@
+import { RequestContext } from '@mastra/core/request-context';
 import { describe, expect, it, vi } from 'vitest';
 
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
@@ -158,6 +159,22 @@ describe('FactoryStartCoordinator', () => {
       branch: 'factory/issue-1',
       startedBy: 'user-1',
     });
+  });
+
+  it('seeds caller identity into an existing request context', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { controller } = makeController();
+    const coordinator = new FactoryStartCoordinator(
+      controller as never,
+      storage,
+      undefined,
+      makeSourceControl() as never,
+    );
+    const requestContext = new RequestContext();
+
+    await coordinator.prepare({ ...startRequest(), requestContext });
+
+    expect(requestContext.get('user')).toEqual({ workosId: 'user-1', organizationId: 'org-1' });
   });
 
   it('applies the Factory default model before preparing a board run', async () => {
