@@ -356,9 +356,19 @@ export class InngestWorkflow<
         const shouldCompactNestedWorkflowOutput = nestedWorkflowOutputMode === NESTED_WORKFLOW_OUTPUT_MODE.COMPACT;
 
         if (!runId) {
+          // Reached only when something sends the trigger event directly instead
+          // of going through `createRun()`, which always supplies a run id.
+          // The id generated here never reaches the trigger event that `cancelOn`
+          // matches against, so `cancel.workflow.${this.id}` cannot target this
+          // run. Warn rather than reject: an unnamed run is still a valid way to
+          // start a workflow, it just can't be cancelled by id afterwards.
           runId = await step.run(`workflow.${this.id}.runIdGen`, async () => {
             return randomUUID();
           });
+          this.logger.warn?.(
+            `Workflow "${this.id}" was triggered without a runId, so run "${runId}" cannot be cancelled by id. ` +
+              `Send \`data.runId\` on the trigger event (or start the run with createRun()) to make it cancellable.`,
+          );
         }
 
         // Create InngestPubSub instance. Publishes go through `inngest.realtime.publish()`
