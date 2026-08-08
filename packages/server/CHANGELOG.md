@@ -1,5 +1,29 @@
 # @mastra/server
 
+## 1.58.0-alpha.4
+
+### Minor Changes
+
+- Added `MastraServer.getFrameworkPublicMatcher()`, which returns a `(path, method) => boolean` matcher built from route metadata (built-in `SERVER_ROUTES` entries with `requiresAuth === false`, plus user-registered custom routes with `requiresAuth: false`). ([#20989](https://github.com/mastra-ai/mastra/pull/20989))
+
+  Adapters can use it to short-circuit user middleware for routes the framework has declared public, without duplicating any allowlist.
+
+  ```ts
+  const isFrameworkPublic = mastraServer.getFrameworkPublicMatcher();
+
+  app.use('*', async (c, next) => {
+    if (isFrameworkPublic(c.req.path, c.req.method)) {
+      return next();
+    }
+    return userMiddleware(c, next);
+  });
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`76e5132`](https://github.com/mastra-ai/mastra/commit/76e51328dbc0749c8304e6b3f21e4401f451b081), [`0282e16`](https://github.com/mastra-ai/mastra/commit/0282e16115538c8e9b248b90f0748eb01cb5dc98)]:
+  - @mastra/core@1.58.0-alpha.4
+
 ## 1.58.0-alpha.3
 
 ### Minor Changes

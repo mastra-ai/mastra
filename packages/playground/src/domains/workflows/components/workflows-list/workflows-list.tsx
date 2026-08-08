@@ -190,9 +190,9 @@ export function WorkflowsList({ workflows, isLoading, search = '' }: WorkflowsLi
                 <span className="flex items-center gap-1.5">
                   {row.depth > 0 ? <TreeConnector guides={row.guides} isLastChild={row.isLastChild} /> : null}
                   <span className="truncate">{name}</span>
-                  {wf.origin === 'stored' ? (
-                    <Badge size="xs" variant="info" title="Registered via the stored-workflows API">
-                      Stored
+                  {wf.origin === 'dynamic' ? (
+                    <Badge size="xs" variant="info" title="Registered via the dynamic-workflows API">
+                      Dynamic
                     </Badge>
                   ) : null}
                   {hasNested ? (

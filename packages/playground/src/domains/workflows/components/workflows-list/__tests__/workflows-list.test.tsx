@@ -253,18 +253,18 @@ describe('WorkflowsList', () => {
   });
 
   describe('when workflows carry an origin field', () => {
-    it("shows the Stored badge only for origin: 'stored'", async () => {
+    it("shows the Dynamic badge only for origin: 'dynamic'", async () => {
       useRunCountsHandler();
       const { queryClient } = renderList({ workflows: originWorkflowsFixture });
 
       expect(screen.getByText('code-wf')).not.toBeNull();
-      expect(screen.getByText('stored-wf')).not.toBeNull();
+      expect(screen.getByText('dynamic-wf')).not.toBeNull();
       expect(screen.getByText('legacy-wf')).not.toBeNull();
 
-      expect(screen.getAllByText('Stored')).toHaveLength(1);
-      expect(rowFor('stored-wf').getByText('Stored')).not.toBeNull();
-      expect(rowFor('code-wf').queryByText('Stored')).toBeNull();
-      expect(rowFor('legacy-wf').queryByText('Stored')).toBeNull();
+      expect(screen.getAllByText('Dynamic')).toHaveLength(1);
+      expect(rowFor('dynamic-wf').getByText('Dynamic')).not.toBeNull();
+      expect(rowFor('code-wf').queryByText('Dynamic')).toBeNull();
+      expect(rowFor('legacy-wf').queryByText('Dynamic')).toBeNull();
 
       await waitForMutationsIdle(queryClient);
     });

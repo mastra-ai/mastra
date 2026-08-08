@@ -1269,7 +1269,7 @@ type Shared_Type_58 = {
   stateSchema?: string | undefined;
   options?: {} | undefined;
   isProcessorWorkflow?: boolean | undefined;
-  origin?: ('code' | 'stored') | undefined;
+  origin?: ('code' | 'dynamic') | undefined;
 };
 
 type Shared_Type_59 = {
@@ -14106,9 +14106,9 @@ export interface DeleteStoredAgentsStoredAgentIdFavorite_RouteContract {
 // Route: GET /stored/workflows
 // ============================================================================
 export type GetStoredWorkflows_QueryParams = {
-  /** Filter stored workflows by status (defaults to active when omitted by the handler) */
+  /** Filter dynamic workflows by status (defaults to active when omitted by the handler) */
   status?: ('active' | 'archived') | undefined;
-  /** Filter stored workflows by author identifier */
+  /** Filter dynamic workflows by author identifier */
   authorId?: string | undefined;
 };
 
@@ -14168,7 +14168,7 @@ export type PostStoredWorkflows_Body = {
     | undefined;
   /** Static workflow graph — ordered array of serialized step entries with all refs as ids. */
   graph: Shared_Type_107[];
-  /** Helper workflow definitions this workflow nests. Saved with it as one unit — the whole set is validated together, hydrated in derived dependency order, and rejected together, so a failed save never leaves orphaned helpers behind. Each helper becomes an ordinary stored workflow in its own right. */
+  /** Helper workflow definitions this workflow nests. Saved with it as one unit — the whole set is validated together, hydrated in derived dependency order, and rejected together, so a failed save never leaves orphaned helpers behind. Each helper becomes an ordinary dynamic workflow in its own right. */
   dependencies?:
     | {
         /** Workflow id — kebab-case, descriptive */
@@ -14230,56 +14230,56 @@ export interface PostStoredWorkflows_RouteContract {
 }
 
 // ============================================================================
-// Route: GET /stored/workflows/:storedWorkflowId
+// Route: GET /stored/workflows/:dynamicWorkflowId
 // ============================================================================
-export type GetStoredWorkflowsStoredWorkflowId_PathParams = {
-  /** Unique identifier for the stored workflow definition */
-  storedWorkflowId: string;
+export type GetStoredWorkflowsDynamicWorkflowId_PathParams = {
+  /** Unique identifier for the dynamic workflow definition */
+  dynamicWorkflowId: string;
 };
 
-export type GetStoredWorkflowsStoredWorkflowId_Response = Shared_Type_102;
+export type GetStoredWorkflowsDynamicWorkflowId_Response = Shared_Type_102;
 
-export type GetStoredWorkflowsStoredWorkflowId_Request = Simplify<
-  (GetStoredWorkflowsStoredWorkflowId_PathParams extends never
+export type GetStoredWorkflowsDynamicWorkflowId_Request = Simplify<
+  (GetStoredWorkflowsDynamicWorkflowId_PathParams extends never
     ? {}
-    : { params: GetStoredWorkflowsStoredWorkflowId_PathParams }) &
+    : { params: GetStoredWorkflowsDynamicWorkflowId_PathParams }) &
     (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
-export interface GetStoredWorkflowsStoredWorkflowId_RouteContract {
-  pathParams: GetStoredWorkflowsStoredWorkflowId_PathParams;
+export interface GetStoredWorkflowsDynamicWorkflowId_RouteContract {
+  pathParams: GetStoredWorkflowsDynamicWorkflowId_PathParams;
   queryParams: never;
   body: never;
-  request: GetStoredWorkflowsStoredWorkflowId_Request;
-  response: GetStoredWorkflowsStoredWorkflowId_Response;
+  request: GetStoredWorkflowsDynamicWorkflowId_Request;
+  response: GetStoredWorkflowsDynamicWorkflowId_Response;
   responseType: 'json';
 }
 
 // ============================================================================
-// Route: DELETE /stored/workflows/:storedWorkflowId
+// Route: DELETE /stored/workflows/:dynamicWorkflowId
 // ============================================================================
-export type DeleteStoredWorkflowsStoredWorkflowId_PathParams = GetStoredWorkflowsStoredWorkflowId_PathParams;
+export type DeleteStoredWorkflowsDynamicWorkflowId_PathParams = GetStoredWorkflowsDynamicWorkflowId_PathParams;
 
-export type DeleteStoredWorkflowsStoredWorkflowId_Response = {
+export type DeleteStoredWorkflowsDynamicWorkflowId_Response = {
   success: true;
   message: string;
 };
 
-export type DeleteStoredWorkflowsStoredWorkflowId_Request = Simplify<
-  (DeleteStoredWorkflowsStoredWorkflowId_PathParams extends never
+export type DeleteStoredWorkflowsDynamicWorkflowId_Request = Simplify<
+  (DeleteStoredWorkflowsDynamicWorkflowId_PathParams extends never
     ? {}
-    : { params: DeleteStoredWorkflowsStoredWorkflowId_PathParams }) &
+    : { params: DeleteStoredWorkflowsDynamicWorkflowId_PathParams }) &
     (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
-export interface DeleteStoredWorkflowsStoredWorkflowId_RouteContract {
-  pathParams: DeleteStoredWorkflowsStoredWorkflowId_PathParams;
+export interface DeleteStoredWorkflowsDynamicWorkflowId_RouteContract {
+  pathParams: DeleteStoredWorkflowsDynamicWorkflowId_PathParams;
   queryParams: never;
   body: never;
-  request: DeleteStoredWorkflowsStoredWorkflowId_Request;
-  response: DeleteStoredWorkflowsStoredWorkflowId_Response;
+  request: DeleteStoredWorkflowsDynamicWorkflowId_Request;
+  response: DeleteStoredWorkflowsDynamicWorkflowId_Response;
   responseType: 'json';
 }
 
@@ -21490,8 +21490,8 @@ export interface RouteTypes {
   'DELETE /stored/agents/:storedAgentId/favorite': DeleteStoredAgentsStoredAgentIdFavorite_RouteContract;
   'GET /stored/workflows': GetStoredWorkflows_RouteContract;
   'POST /stored/workflows': PostStoredWorkflows_RouteContract;
-  'GET /stored/workflows/:storedWorkflowId': GetStoredWorkflowsStoredWorkflowId_RouteContract;
-  'DELETE /stored/workflows/:storedWorkflowId': DeleteStoredWorkflowsStoredWorkflowId_RouteContract;
+  'GET /stored/workflows/:dynamicWorkflowId': GetStoredWorkflowsDynamicWorkflowId_RouteContract;
+  'DELETE /stored/workflows/:dynamicWorkflowId': DeleteStoredWorkflowsDynamicWorkflowId_RouteContract;
   'GET /stored/mcp-clients': GetStoredMcpClients_RouteContract;
   'GET /stored/mcp-clients/:storedMCPClientId': GetStoredMcpClientsStoredMCPClientId_RouteContract;
   'POST /stored/mcp-clients': PostStoredMcpClients_RouteContract;
@@ -22496,9 +22496,9 @@ export interface Client {
     GET: GetStoredWorkflows_RouteContract;
     POST: PostStoredWorkflows_RouteContract;
   };
-  '/stored/workflows/:storedWorkflowId': {
-    DELETE: DeleteStoredWorkflowsStoredWorkflowId_RouteContract;
-    GET: GetStoredWorkflowsStoredWorkflowId_RouteContract;
+  '/stored/workflows/:dynamicWorkflowId': {
+    DELETE: DeleteStoredWorkflowsDynamicWorkflowId_RouteContract;
+    GET: GetStoredWorkflowsDynamicWorkflowId_RouteContract;
   };
   '/stored/workspaces': {
     GET: GetStoredWorkspaces_RouteContract;

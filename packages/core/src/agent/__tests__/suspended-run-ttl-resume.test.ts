@@ -204,29 +204,22 @@ describe('suspended agent runs are released from memory after a TTL', () => {
     // The transcript is gone and the thread is unblocked: a follow-up turn no
     // longer waits behind a suspend nobody is coming back for.
     expect(agent.getActiveThreadRunId({ threadId: SUSPENDED_THREAD_ID, resourceId: RESOURCE_ID })).toBeUndefined();
-    // Resume paths that only consult warm state now report the run as gone...
-    await expect(
-      agent.sendStreamResume({
-        threadId: SUSPENDED_THREAD_ID,
-        resourceId: RESOURCE_ID,
-        runId,
-        toolCallId,
-        resumeData: { approved: true },
-      }),
-    ).rejects.toMatchObject({ id: 'AGENT_SEND_STREAM_RESUME_NO_SUSPENDED_THREAD_RUN' });
-
-    // ...but the run itself is untouched: it is still durably suspended, and the
-    // approval paths that fall back to storage still resume it to completion.
+    // The run itself is untouched: dropping warm state only releases memory, so
+    // the run is still durably suspended and discoverable.
     const { runs } = await agent.listSuspendedRuns({ threadId: SUSPENDED_THREAD_ID });
     expect(runs.map(run => run.runId)).toEqual([runId]);
 
-    const approval = await agent.sendToolApproval({
+    // Resume recovers the run from its snapshot rather than requiring warm
+    // state, which is what also lets a resume land on a restarted process or a
+    // different server instance than the one that suspended the run.
+    const resumed = await agent.sendStreamResume({
       threadId: SUSPENDED_THREAD_ID,
       resourceId: RESOURCE_ID,
+      runId,
       toolCallId,
-      approved: true,
+      resumeData: { approved: true },
     });
-    expect(approval).toEqual({ accepted: true, runId, toolCallId });
+    expect(resumed).toEqual({ accepted: true, runId, toolCallId });
 
     const workflowsStore = (await storage.getStore('workflows'))!;
     await vi.waitFor(
