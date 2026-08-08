@@ -8,7 +8,7 @@ import type { MemorySettingsStorage } from '../storage/domains/memory-settings/b
 import type { SourceControlSession, SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { CreateWorkItemInput, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import type { FactoryTransitionService } from './transition-service.js';
-import type { FactoryRuleStage, FactoryTransitionResult } from './types.js';
+import type { FactoryRuleActor, FactoryRuleStage, FactoryTransitionResult } from './types.js';
 
 export interface FactoryStartRequest {
   orgId: string;
@@ -20,6 +20,8 @@ export interface FactoryStartRequest {
   kickoffKey: string;
   invocation?: { type: 'prompt'; prompt: string } | { type: 'skill'; skillName: string; arguments: string };
   destinationStage: FactoryRuleStage;
+  /** Override used by host-owned automation. Human starts retain the default caller actor. */
+  actor?: FactoryRuleActor;
   defaultModelId?: string;
   workItem: {
     id?: string;
@@ -201,8 +203,18 @@ export class FactoryStartCoordinator {
         board: prepared.item.externalSource?.type === 'pull-request' ? 'review' : 'work',
         stage: request.destinationStage,
         expectedRevision: prepared.item.revision,
-        actor: { type: 'human', id: request.userId },
-        ingress: { type: 'human', identity: `start:${request.kickoffKey}:transition` },
+        actor: request.actor ?? { type: 'human', id: request.userId },
+        ingress: {
+          type:
+            request.actor?.type === 'agent'
+              ? 'agent'
+              : request.actor?.type === 'github'
+                ? 'github'
+                : request.actor?.type === 'system'
+                  ? 'rule'
+                  : 'human',
+          identity: `start:${request.kickoffKey}:transition`,
+        },
         cause: 'run_start',
       });
       if (transition.status === 'rejected') {

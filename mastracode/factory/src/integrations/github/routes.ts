@@ -78,7 +78,12 @@ function withSessionOperationLock<T>(sessionId: string, fn: () => Promise<T>): P
 }
 import { listPullRequestSubscriptionsForThread, subscribeToPullRequest } from './subscriptions.js';
 import { handleGithubWebhook } from './webhook.js';
-import type { GithubIssueTriageRunInput, GithubIssueTriageRunResult, ParsedGithubWebhook } from './webhook.js';
+import type {
+  GithubIssueTriageRunInput,
+  GithubIssueTriageRunResult,
+  GithubVerifiedWebhookObserver,
+  ParsedGithubWebhook,
+} from './webhook.js';
 
 /**
  * Loose Hono context accepted by the shared GitHub route helpers. The
@@ -134,6 +139,8 @@ export interface MountGithubRoutesOptions {
   projects?: FactoryProjectsStorage;
   /** Authoritative Factory rule ingress for normalized, signature-verified GitHub deliveries. */
   ingestFactoryEvent?: (event: ParsedGithubWebhook) => Promise<unknown>;
+  /** Additional consumers of every signature-verified GitHub delivery. */
+  verifiedWebhookObservers?: readonly GithubVerifiedWebhookObserver[];
 }
 
 function pullRequestNumberFromUrl(value: string, expectedRepo: string): number | undefined {
@@ -517,6 +524,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
           github,
           runIssueTriage: runBoardIssueTriage,
           ingestFactoryEvent: options.ingestFactoryEvent,
+          verifiedWebhookObservers: options.verifiedWebhookObservers,
           ...(options.controller
             ? {
                 controller: options.controller,
