@@ -492,8 +492,8 @@ export class MemoryStorageD1 extends MemoryStorage {
     metadata,
   }: {
     id: string;
-    title: string;
-    metadata: Record<string, unknown>;
+    title?: string;
+    metadata?: Record<string, unknown>;
   }): Promise<StorageThreadType> {
     const thread = await this.getThreadById({ threadId: id });
     try {
@@ -509,7 +509,7 @@ export class MemoryStorageD1 extends MemoryStorage {
 
       const updatedAt = new Date();
       const columns = ['title', 'metadata', 'updatedAt'];
-      const values = [title, JSON.stringify(mergedMetadata), updatedAt.toISOString()];
+      const values = [title ?? thread.title, JSON.stringify(mergedMetadata), updatedAt.toISOString()];
 
       const query = createSqlBuilder().update(fullTableName, columns, values).where('id = ?', id);
 
@@ -519,7 +519,7 @@ export class MemoryStorageD1 extends MemoryStorage {
 
       return {
         ...thread,
-        title,
+        title: title ?? thread.title,
         metadata: {
           ...(typeof thread.metadata === 'string' ? JSON.parse(thread.metadata) : thread.metadata),
           ...(metadata as Record<string, any>),

@@ -168,8 +168,8 @@ export class ConvexDB extends MastraBase {
     updatedAt,
   }: {
     id: string;
-    title: string;
-    metadata: Record<string, any>;
+    title?: string;
+    metadata?: Record<string, any>;
     updatedAt: Date;
   }): Promise<(Omit<StorageThreadType, 'createdAt' | 'updatedAt'> & { createdAt: string; updatedAt: string }) | null> {
     return this.client.callStorage({
