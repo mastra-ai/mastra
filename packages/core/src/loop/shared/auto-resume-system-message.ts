@@ -84,8 +84,18 @@ export function extractSuspendedToolsFromMessages(
   // inner run as `delegatedRunId`, so surface the inner run under `runId` here.
   return Object.values(suspendedToolObj).map(entry => {
     if (!entry || typeof entry !== 'object') return entry as Record<string, unknown>;
-    const { delegatedRunId, ...rest } = entry as Record<string, unknown>;
-    return typeof delegatedRunId === 'string' ? { ...rest, runId: delegatedRunId } : rest;
+    const { delegatedRunId, parentToolName, parentArgs, ...rest } = entry as Record<string, unknown>;
+    const resumableEntry =
+      typeof parentToolName === 'string'
+        ? {
+            ...rest,
+            approvalToolName: rest.toolName,
+            approvalArgs: rest.args,
+            toolName: parentToolName,
+            args: parentArgs,
+          }
+        : rest;
+    return typeof delegatedRunId === 'string' ? { ...resumableEntry, runId: delegatedRunId } : resumableEntry;
   });
 }
 

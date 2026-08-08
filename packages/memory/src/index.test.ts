@@ -2588,10 +2588,10 @@ describe('Memory', () => {
   });
 
   describe('Vector Deletion', () => {
-    function createMemoryWithMockVector(indexSeparator = '_') {
+    function createMemoryWithMockVector(indexSeparator = '_', indexes = [`memory${indexSeparator}messages`]) {
       const mockVector = {
         deleteVectors: vi.fn(),
-        listIndexes: vi.fn().mockResolvedValue([`memory${indexSeparator}messages`]),
+        listIndexes: vi.fn().mockResolvedValue(indexes),
         query: vi.fn(),
         upsert: vi.fn(),
         createIndex: vi.fn(),
@@ -2606,10 +2606,23 @@ describe('Memory', () => {
       class MemoryWithMockVector extends Memory {
         public mockVector = mockVector;
 
+        /** Warnings that the background vector cleanup reported. */
+        public warnSpy = vi.spyOn(this.logger, 'warn').mockImplementation(() => {});
+
         constructor() {
           super({ storage: new InMemoryStore() });
           // @ts-expect-error - injecting mock vector
           this.vector = this.mockVector;
+        }
+
+        /** Waits for the background vector cleanup that deleteThread or deleteMessages started. */
+        public flushVectorCleanup(): Promise<void> {
+          return (this as unknown as { pendingVectorCleanup: Promise<void> }).pendingVectorCleanup;
+        }
+
+        /** Names of the indexes that received a delete, in call order. */
+        public deletedIndexNames(): string[] {
+          return this.mockVector.deleteVectors.mock.calls.map(([args]) => args.indexName);
         }
       }
 
@@ -2621,12 +2634,11 @@ describe('Memory', () => {
       const messageId = 'msg-123';
 
       await memory.deleteMessages([messageId]);
+      await memory.flushVectorCleanup();
 
-      await vi.waitFor(() => {
-        expect(memory.mockVector.deleteVectors).toHaveBeenCalledWith({
-          indexName: 'memory_messages',
-          filter: { message_id: { $in: [messageId] } },
-        });
+      expect(memory.mockVector.deleteVectors).toHaveBeenCalledWith({
+        indexName: 'memory_messages',
+        filter: { message_id: { $in: [messageId] } },
       });
     });
 
@@ -2635,12 +2647,11 @@ describe('Memory', () => {
       const threadId = 'thread-123';
 
       await memory.deleteThread(threadId);
+      await memory.flushVectorCleanup();
 
-      await vi.waitFor(() => {
-        expect(memory.mockVector.deleteVectors).toHaveBeenCalledWith({
-          indexName: 'memory_messages',
-          filter: { thread_id: threadId },
-        });
+      expect(memory.mockVector.deleteVectors).toHaveBeenCalledWith({
+        indexName: 'memory_messages',
+        filter: { thread_id: threadId },
       });
     });
 
@@ -2649,12 +2660,11 @@ describe('Memory', () => {
       const messageId = 'msg-456';
 
       await memory.deleteMessages([messageId]);
+      await memory.flushVectorCleanup();
 
-      await vi.waitFor(() => {
-        expect(memory.mockVector.deleteVectors).toHaveBeenCalledWith({
-          indexName: 'memory-messages',
-          filter: { message_id: { $in: [messageId] } },
-        });
+      expect(memory.mockVector.deleteVectors).toHaveBeenCalledWith({
+        indexName: 'memory-messages',
+        filter: { message_id: { $in: [messageId] } },
       });
     });
 
@@ -2663,13 +2673,115 @@ describe('Memory', () => {
       const threadId = 'thread-456';
 
       await memory.deleteThread(threadId);
+      await memory.flushVectorCleanup();
 
-      await vi.waitFor(() => {
-        expect(memory.mockVector.deleteVectors).toHaveBeenCalledWith({
-          indexName: 'memory-messages',
-          filter: { thread_id: threadId },
-        });
+      expect(memory.mockVector.deleteVectors).toHaveBeenCalledWith({
+        indexName: 'memory-messages',
+        filter: { thread_id: threadId },
       });
+    });
+
+    it('should delete observation vectors when deleting a thread', async () => {
+      const memory = createMemoryWithMockVector('_', ['memory_messages', 'memory_observations_384']);
+      const threadId = 'thread-with-observations';
+
+      await memory.deleteThread(threadId);
+      await memory.flushVectorCleanup();
+
+      expect(memory.mockVector.deleteVectors).toHaveBeenCalledWith({
+        indexName: 'memory_observations_384',
+        filter: { thread_id: threadId },
+      });
+      expect(memory.mockVector.deleteVectors).toHaveBeenCalledWith({
+        indexName: 'memory_messages',
+        filter: { thread_id: threadId },
+      });
+    });
+
+    it('should delete observation vectors with dash separator (Pinecone/Vectorize)', async () => {
+      const memory = createMemoryWithMockVector('-', ['memory-messages', 'memory-observations-1536']);
+      const threadId = 'thread-with-observations';
+
+      await memory.deleteThread(threadId);
+      await memory.flushVectorCleanup();
+
+      expect(memory.mockVector.deleteVectors).toHaveBeenCalledWith({
+        indexName: 'memory-observations-1536',
+        filter: { thread_id: threadId },
+      });
+    });
+
+    it('should not touch observation vectors when deleting a single message', async () => {
+      const memory = createMemoryWithMockVector('_', ['memory_messages', 'memory_observations_384']);
+      const messageId = 'msg-123';
+
+      await memory.deleteMessages([messageId]);
+      await memory.flushVectorCleanup();
+
+      expect(memory.mockVector.deleteVectors).toHaveBeenCalledWith({
+        indexName: 'memory_messages',
+        filter: { message_id: { $in: [messageId] } },
+      });
+      expect(memory.deletedIndexNames()).toEqual(['memory_messages']);
+    });
+
+    it('should not throw when the observation index does not exist', async () => {
+      const memory = createMemoryWithMockVector('_', ['memory_messages']);
+
+      await expect(memory.deleteThread('thread-without-observations')).resolves.not.toThrow();
+      await memory.flushVectorCleanup();
+
+      expect(memory.deletedIndexNames()).toEqual(['memory_messages']);
+    });
+
+    it('should keep deleting other indexes when one index delete fails', async () => {
+      const memory = createMemoryWithMockVector('_', ['memory_messages', 'memory_observations_384']);
+      const threadId = 'thread-with-failing-index';
+      memory.mockVector.deleteVectors.mockImplementation(({ indexName }: { indexName: string }) =>
+        indexName === 'memory_observations_384' ? Promise.reject(new Error('index unavailable')) : Promise.resolve(),
+      );
+
+      await expect(memory.deleteThread(threadId)).resolves.not.toThrow();
+      await expect(memory.flushVectorCleanup()).resolves.toBeUndefined();
+
+      expect(memory.mockVector.deleteVectors).toHaveBeenCalledWith({
+        indexName: 'memory_messages',
+        filter: { thread_id: threadId },
+      });
+      expect(memory.warnSpy).toHaveBeenCalledWith('Failed to delete vectors of the deleted thread from index', {
+        threadId,
+        indexName: 'memory_observations_384',
+      });
+    });
+
+    it('should wait for an earlier cleanup that a later delete overlaps', async () => {
+      const memory = createMemoryWithMockVector('_', ['memory_messages']);
+      let releaseFirstDelete: () => void = () => {};
+      const firstDeleteStarted = new Promise<void>(resolveStarted => {
+        memory.mockVector.deleteVectors.mockImplementationOnce(
+          () =>
+            new Promise<void>(resolveDelete => {
+              releaseFirstDelete = resolveDelete;
+              resolveStarted();
+            }),
+        );
+      });
+
+      await memory.deleteThread('thread-slow');
+      await firstDeleteStarted;
+      await memory.deleteMessages(['msg-fast']);
+
+      let flushed = false;
+      const flush = memory.flushVectorCleanup().then(() => {
+        flushed = true;
+      });
+      await new Promise(resolve => setTimeout(resolve, 0));
+      expect(flushed).toBe(false);
+
+      releaseFirstDelete();
+      await flush;
+
+      expect(memory.deletedIndexNames()).toEqual(['memory_messages', 'memory_messages']);
     });
 
     it('should not throw when no vector store is configured', async () => {

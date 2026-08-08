@@ -222,7 +222,8 @@ const omProgressSummarySchema = z.object({
 });
 const sessionSettingsSchema = z.object({
   yolo: z.boolean(),
-  thinkingLevel: z.enum(['off', 'low', 'medium', 'high', 'xhigh']),
+  /** Session override only — absent when the session inherits a configured default. */
+  thinkingLevel: z.enum(['off', 'low', 'medium', 'high', 'xhigh', 'max']).optional(),
   notifications: z.enum(['off', 'bell', 'system', 'both']),
   smartEditing: z.boolean(),
 });
@@ -380,16 +381,25 @@ export const CREATE_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
  * non-enumerable, so JSON serialization in the SSE adapter would send
  * `"error": {}` and clients could only render a generic "Error". Flatten the
  * Error into a plain object so the actual failure reaches the client.
+ *
+ * `display_state_changed` Maps JSON-serialize to `{}`; convert them to plain
+ * records so wire clients get the tool state the in-process TUI sees.
  */
 function toWireEvent(event: unknown): unknown {
-  if (
-    typeof event === 'object' &&
-    event !== null &&
-    (event as { type?: unknown }).type === 'error' &&
-    (event as { error?: unknown }).error instanceof Error
-  ) {
+  if (typeof event !== 'object' || event === null) return event;
+  const { type } = event as { type?: unknown };
+  if (type === 'error' && (event as { error?: unknown }).error instanceof Error) {
     const error = (event as { error: Error }).error;
     return { ...event, error: { name: error.name, message: error.message } };
+  }
+  if (type === 'display_state_changed') {
+    const { displayState } = event as { displayState?: unknown };
+    if (typeof displayState !== 'object' || displayState === null) return event;
+    const wireDisplayState: Record<string, unknown> = { ...displayState };
+    for (const [key, value] of Object.entries(wireDisplayState)) {
+      if (value instanceof Map) wireDisplayState[key] = Object.fromEntries(value);
+    }
+    return { ...event, displayState: wireDisplayState };
   }
   return event;
 }
@@ -714,6 +724,8 @@ export const GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE = createRoute({
       const st = session.state.get() as Record<string, unknown>;
       const oneOf = <T extends string>(value: unknown, allowed: readonly T[], fallback: T): T =>
         allowed.includes(value as T) ? (value as T) : fallback;
+      const oneOfOptional = <T extends string>(value: unknown, allowed: readonly T[]): T | undefined =>
+        allowed.includes(value as T) ? (value as T) : undefined;
       return {
         controllerId,
         resourceId,
@@ -735,7 +747,9 @@ export const GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE = createRoute({
         tokenUsage: ds.tokenUsage as unknown as Record<string, unknown>,
         settings: {
           yolo: st.yolo === true,
-          thinkingLevel: oneOf(st.thinkingLevel, ['off', 'low', 'medium', 'high', 'xhigh'] as const, 'off'),
+          // No session override → omit, so clients don't mistake an inherited
+          // configured default (resolved at request time) for an explicit 'off'.
+          thinkingLevel: oneOfOptional(st.thinkingLevel, ['off', 'low', 'medium', 'high', 'xhigh', 'max'] as const),
           notifications: oneOf(st.notifications, ['off', 'bell', 'system', 'both'] as const, 'off'),
           smartEditing: st.smartEditing !== false,
         },

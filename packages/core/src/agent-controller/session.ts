@@ -54,6 +54,11 @@ export interface ThreadSettingsStore {
   set(key: string, value: unknown): Promise<void>;
 }
 
+/** Process-local listener awaited before a terminal agent event is emitted. */
+export type SessionBeforeAgentEndListener = (
+  event: Extract<AgentControllerEvent, { type: 'agent_end' }>,
+) => void | Promise<void>;
+
 /** Options for {@link Session.sendNotificationSignal}. */
 export type SessionSendNotificationSignalOptions = {
   ifActive?: SendAgentNotificationSignalOptions['ifActive'];
@@ -74,6 +79,22 @@ function addOptionalUsageField(usage: TokenUsage, key: OptionalUsageField, value
 
 /** Persisted thread-setting key for the currently-selected mode. */
 const MODE_ID_KEY = 'currentModeId';
+
+/**
+ * Reason attached to tool prompts retracted because the user aborted the run.
+ * Shared by the parked-suspension retraction and the gated-approval decline so
+ * both render the same "the user interrupted this" explanation.
+ */
+export const ABORTED_BY_USER_REASON = 'Aborted by the user';
+
+/**
+ * Session-state keys that are transparently persisted to thread metadata on
+ * every state update and restored by `Session.loadMetadata()`. These are user
+ * preferences that must survive a host restart (sessions themselves are
+ * in-memory only). Keys listed here must also be reserved in
+ * {@link isReservedThreadMetadataKey}.
+ */
+const PERSISTED_STATE_KEYS = ['thinkingLevel', 'notifications'] as const;
 /** Persisted thread-setting key prefix for a mode's last-used model. */
 const modeModelKey = (modeId: string) => `modeModelId_${modeId}`;
 
@@ -94,6 +115,8 @@ function isReservedThreadMetadataKey(key: string): boolean {
     key === 'observationThreshold' ||
     key === 'reflectionThreshold' ||
     key === 'tokenUsage' ||
+    key === 'thinkingLevel' ||
+    key === 'notifications' ||
     key.startsWith('modeModelId_')
   );
 }
@@ -465,8 +488,14 @@ export class SessionThread {
 
   /** Persist a setting (metadata value) for the active thread. */
   async setSetting({ key, value }: { key: string; value: unknown }): Promise<void> {
-    if (!this.#store || this.#threadId === null) return;
-    await this.#store.setMetadata({ threadId: this.#threadId, key, value });
+    if (this.#threadId === null) return;
+    await this.setSettingOn({ threadId: this.#threadId, key, value });
+  }
+
+  /** Persist a setting to a specific thread, regardless of the current binding. */
+  async setSettingOn({ threadId, key, value }: { threadId: string; key: string; value: unknown }): Promise<void> {
+    if (!this.#store) return;
+    await this.#store.setMetadata({ threadId, key, value });
   }
 
   /** Delete a setting (metadata value) for the active thread. */
@@ -875,6 +904,20 @@ export class SessionThread {
         await session.state.set(updates as Record<string, unknown>);
       }
 
+      // Restore restart-surviving preferences (thinking level, notifications).
+      // Applied one key at a time so an invalid persisted value fails schema
+      // validation without discarding the mode/model/OM restoration above or
+      // the other, still-valid preference.
+      for (const key of PERSISTED_STATE_KEYS) {
+        const value = meta?.[key];
+        if (value === undefined) continue;
+        try {
+          await session.state.set({ [key]: value } as Record<string, unknown>);
+        } catch {
+          // Persisted preference no longer valid for the current state schema.
+        }
+      }
+
       if (!hasObservationThreshold) {
         const observationThreshold = session.om.observer.threshold();
         if (observationThreshold !== undefined) {
@@ -1058,9 +1101,14 @@ export class SessionSuspensions {
     return dropped;
   }
 
-  /** Drop all parked suspensions (e.g. on abort or thread switch). */
-  clear(): void {
+  /**
+   * Drop all parked suspensions (e.g. on abort or thread switch), returning the
+   * dropped entries so callers can retract the corresponding prompts.
+   */
+  clear(): Array<{ toolCallId: string; toolName: string }> {
+    const dropped = [...this.#pending].map(([toolCallId, { toolName }]) => ({ toolCallId, toolName }));
     this.#pending.clear();
+    return dropped;
   }
 
   /** Whether any tool calls are parked awaiting a resume. */
@@ -1272,6 +1320,7 @@ export class SessionRun {
   /** Whether an abort has been requested for the current run. */
   #abortRequested = false;
   readonly #teardownWaiters = new Set<() => void>();
+  readonly #abortRequestWaiters = new Set<() => void>();
 
   #notifyTeardown(): void {
     const waiters = [...this.#teardownWaiters];
@@ -1291,6 +1340,32 @@ export class SessionRun {
       };
       if (signal.aborted) return resolve();
       this.#teardownWaiters.add(done);
+      signal.addEventListener('abort', abort, { once: true });
+    });
+  }
+
+  #notifyAbortRequested(): void {
+    const waiters = [...this.#abortRequestWaiters];
+    this.#abortRequestWaiters.clear();
+    for (const waiter of waiters) waiter();
+  }
+
+  /**
+   * Resolves once an abort is requested for the current run (immediately if
+   * one already was), or when `signal` cancels the wait.
+   */
+  waitForAbortRequest(signal: AbortSignal): Promise<void> {
+    return new Promise(resolve => {
+      const done = () => {
+        signal.removeEventListener('abort', abort);
+        resolve();
+      };
+      const abort = () => {
+        this.#abortRequestWaiters.delete(done);
+        resolve();
+      };
+      if (this.#abortRequested || signal.aborted) return resolve();
+      this.#abortRequestWaiters.add(done);
       signal.addEventListener('abort', abort, { once: true });
     });
   }
@@ -1379,15 +1454,26 @@ export class SessionRun {
    * Request an abort: mark the run as aborting and fire the AbortController (if
    * armed), then drop the controller. Leaves the requested flag set so the
    * run-end path can resolve its reason as 'aborted'; {@link reset} clears it.
+   *
+   * `deferSignal` marks the run as aborting without firing the controller. Used
+   * when the abort interrupts a parked tool-approval gate: the gated call still
+   * has to be declined through the (still live) agent run so the denial is
+   * persisted, and firing the signal first would tear that run down underneath
+   * the decline. The engine fires the signal itself once the decline lands.
    */
-  requestAbort(): void {
+  requestAbort({ deferSignal }: { deferSignal?: boolean } = {}): void {
     this.#abortRequested = true;
+    if (deferSignal) {
+      this.#notifyAbortRequested();
+      return;
+    }
     if (this.#abortController) {
       try {
         this.#abortController.abort();
       } catch {}
       this.#abortController = null;
     }
+    this.#notifyAbortRequested();
   }
 }
 
@@ -1885,19 +1971,27 @@ interface SessionStateOptions<TState> {
  * and validated updates emit the same `state_changed` event the AgentController used to
  * emit when it owned state directly.
  */
+type PersistSettingFn = (args: { key: string; value: unknown }) => Promise<void>;
+
 class SessionState<TState = unknown> {
   #state: TState;
   #updateQueue: Promise<void> = Promise.resolve();
   readonly #schema: StandardSchemaWithJSON | undefined;
   readonly #bus: SessionBus;
+  readonly #capturePersistSetting: (() => PersistSettingFn | undefined) | undefined;
 
-  constructor({ initialState, stateSchema }: SessionStateOptions<TState>, bus: SessionBus) {
+  constructor(
+    { initialState, stateSchema }: SessionStateOptions<TState>,
+    bus: SessionBus,
+    capturePersistSetting?: () => PersistSettingFn | undefined,
+  ) {
     this.#schema = stateSchema ? toStandardSchema(stateSchema) : undefined;
     this.#state = {
       ...this.getSchemaDefaults(),
       ...(initialState as Record<string, unknown> | undefined),
     } as TState;
     this.#bus = bus;
+    this.#capturePersistSetting = capturePersistSetting;
   }
 
   get(): Readonly<TState> {
@@ -1928,7 +2022,7 @@ class SessionState<TState = unknown> {
     return defaults as Partial<TState>;
   }
 
-  private async apply(updates: Partial<TState>): Promise<void> {
+  private async apply(updates: Partial<TState>, persistSetting?: PersistSettingFn): Promise<void> {
     const changedKeys = Object.keys(updates as Record<string, unknown>);
     const newState = { ...(this.#state as Record<string, unknown>), ...(updates as Record<string, unknown>) };
 
@@ -1944,11 +2038,29 @@ class SessionState<TState = unknown> {
     }
 
     this.#bus.emit({ type: 'state_changed', state: this.get() as Record<string, unknown>, changedKeys });
+
+    // Mirror restart-surviving preferences into thread metadata so they can be
+    // restored by `Session.loadMetadata()` after the host process restarts.
+    // Persistence failures never fail the in-memory state update.
+    if (persistSetting) {
+      const state = this.#state as Record<string, unknown>;
+      for (const key of PERSISTED_STATE_KEYS) {
+        if (!changedKeys.includes(key)) continue;
+        try {
+          await persistSetting({ key, value: state[key] });
+        } catch {
+          // Storage unavailable or write failed — keep the in-memory update.
+        }
+      }
+    }
   }
 
   set(updates: Partial<TState>): Promise<void> {
     const updateSnapshot = { ...(updates as Record<string, unknown>) } as Partial<TState>;
-    const run = this.#updateQueue.then(() => this.apply(updateSnapshot));
+    // Captured now, not at apply time: an update queued behind a thread switch
+    // must persist to the thread that was active when the update was requested.
+    const persistSetting = this.#capturePersistSetting?.();
+    const run = this.#updateQueue.then(() => this.apply(updateSnapshot, persistSetting));
     this.#updateQueue = run.then(
       () => undefined,
       () => undefined,
@@ -1957,10 +2069,11 @@ class SessionState<TState = unknown> {
   }
 
   update<TResult>(updater: SessionStateUpdater<TState, TResult>): Promise<TResult> {
+    const persistSetting = this.#capturePersistSetting?.();
     const run = this.#updateQueue.then(async () => {
       const update = await updater(this.get());
       if (update.updates && Object.keys(update.updates as Record<string, unknown>).length > 0) {
-        await this.apply(update.updates);
+        await this.apply(update.updates, persistSetting);
       }
       for (const event of update.events ?? []) {
         this.#bus.emit(event);
@@ -2584,6 +2697,8 @@ export class SessionBus {
 export class Session<TState = unknown> {
   /** This session's event bus. Constructed first so every subsystem can route its events here. */
   readonly #bus = new SessionBus();
+  /** Process-local hooks that must finish before the session exposes a terminal agent event. */
+  readonly #beforeAgentEndListeners = new Set<SessionBeforeAgentEndListener>();
   /** Tool categories the user has granted "allow" for the lifetime of this session. */
   readonly #grantedCategories = new Set<string>();
   /** Individual tool names the user has granted "allow" for the lifetime of this session. */
@@ -2664,7 +2779,14 @@ export class Session<TState = unknown> {
       clearFollowUps: () => this.followUps.clear(),
     });
     this.#bus.setDisplayState(this.displayState);
-    this.state = new SessionState(state ?? { initialState: {} as TState }, this.#bus);
+    this.state = new SessionState(state ?? { initialState: {} as TState }, this.#bus, () => {
+      // Pin persistence to the thread active when the state update was
+      // requested — a queued preference update must not land in the metadata
+      // of a thread the session switched to in the meantime.
+      const threadId = this.thread.getId();
+      if (threadId === null) return undefined;
+      return args => this.thread.setSettingOn({ threadId, ...args });
+    });
 
     if (!workspace || !(workspace instanceof Workspace)) {
       throw new Error(`A session requires a valid workspace instance.`);
@@ -2717,6 +2839,27 @@ export class Session<TState = unknown> {
    */
   subscribe(listener: AgentControllerEventListener): () => void {
     return this.#bus.subscribe(listener);
+  }
+
+  /** Subscribe to work that must complete before the terminal agent event is exposed. */
+  onBeforeAgentEnd(listener: SessionBeforeAgentEndListener): () => void {
+    this.#beforeAgentEndListeners.add(listener);
+    return () => this.#beforeAgentEndListeners.delete(listener);
+  }
+
+  /** Await terminal hooks, then emit the terminal event to subscribers. */
+  async finishAgentRun(
+    reason: NonNullable<Extract<AgentControllerEvent, { type: 'agent_end' }>['reason']>,
+  ): Promise<void> {
+    const event = { type: 'agent_end', reason } as const;
+    for (const listener of this.#beforeAgentEndListeners) {
+      try {
+        await listener(event);
+      } catch (error) {
+        console.error('Error in before-agent-end listener:', error);
+      }
+    }
+    this.emit(event);
   }
 
   /**
@@ -2831,8 +2974,43 @@ export class Session<TState = unknown> {
    * the gated tool is rejected and the run can finalize rather than hang.
    */
   abortRun(): void {
-    this.suspensions.clear();
+    // Aborting twice while a gate is parked would tear the stream down before
+    // the deferred decline lands (the second call sees the gate already
+    // cancelled), which is the exact failure the deferral exists to avoid. Two
+    // `tool_approval_required` subscribers each calling abort() is enough.
+    if (this.run.isAbortRequested()) return;
+
+    // Retract the prompts for every parked suspension. Dropping them silently
+    // left the UI rendering `ask_user` / `request_access` prompts whose answers
+    // could never land, since the run they belong to is gone.
+    for (const { toolCallId, toolName } of this.suspensions.clear()) {
+      this.emit({ type: 'tool_suspension_cancelled', toolCallId, toolName, reason: ABORTED_BY_USER_REASON });
+    }
+
+    // A parked approval gate is special: the agent-side run is still alive and
+    // waiting for the decision, so the gated call must be declined through it
+    // (that is what persists the `output-denied` tool result). Tearing the
+    // stream down first would make that decline fail with "could not find an
+    // active or suspended run". Defer both the stream abort and the abort
+    // signal to the engine, which fires them once the decline has landed.
+    const wasGated = this.approval.isArmed();
     this.approval.cancel();
+    if (wasGated) {
+      this.run.requestAbort({ deferSignal: true });
+      return;
+    }
+
+    this.stream.abort();
+    this.run.requestAbort();
+  }
+
+  /**
+   * Fire the deferred abort teardown for a run that was aborted while parked on
+   * a tool-approval gate: abort the live subscription and the run's controller.
+   * Called by the run engine once the gated call's decline has been driven
+   * through the agent, so the denial is persisted before the run is torn down.
+   */
+  completeDeferredAbort(): void {
     this.stream.abort();
     this.run.requestAbort();
   }
@@ -3086,7 +3264,11 @@ export class Session<TState = unknown> {
       this.runEngine.setRequestContext(requestContextInput);
       await this.thread.ensureSubscription(threadId);
 
-      if (submittedRunId && submittedActiveRunId && submittedIsRunning) {
+      // A deferred abort (parked approval gate) leaves the AbortController
+      // armed until the decline lands, so `submittedIsRunning` stays true for a
+      // run that is already on its way out. Routing a signal to it would hand
+      // the message to a run that `completeDeferredAbort()` then terminates.
+      if (!submittedAbortRequested && submittedRunId && submittedActiveRunId && submittedIsRunning) {
         this.approval.respond({
           decision: 'decline',
           declineContext: {
@@ -3392,7 +3574,7 @@ export class Session<TState = unknown> {
     } catch (error) {
       const err = getErrorFromUnknown(error);
       this.emit({ type: 'error', error: err });
-      this.emit({ type: 'agent_end', reason: 'error' });
+      await this.finishAgentRun('error');
     }
   }
 

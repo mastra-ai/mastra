@@ -286,6 +286,15 @@ function isPruneCapable(value: unknown): value is PruneCapable {
   return typeof value === 'object' && value !== null && typeof (value as PruneCapable).prune === 'function';
 }
 
+/** A store or domain that owns a client/connection handle it can release. */
+interface Closable {
+  close(): Promise<void>;
+}
+
+function isClosable(value: unknown): value is Closable {
+  return typeof value === 'object' && value !== null && typeof (value as Closable).close === 'function';
+}
+
 export class MastraCompositeStore extends MastraBase {
   protected hasInitialized: null | Promise<boolean> = null;
   protected shouldCacheInit = true;
@@ -599,12 +608,55 @@ export class MastraCompositeStore extends MastraBase {
     return true;
   }
   /**
-   * Optional lifecycle hook: release underlying client/connection handles.
-   * Implementations (e.g. LibSQLStore) override this to checkpoint WAL files
-   * and close the database client so OS handles are freed synchronously.
+   * Lifecycle hook: release underlying client/connection handles.
+   * Adapters (e.g. LibSQLStore) override this to checkpoint WAL files and close
+   * the database client so OS handles are freed synchronously.
    * Called automatically by Mastra.shutdown().
+   *
+   * When used for composition this forwards to whatever it was built from: the
+   * `default` and `editor` parents, plus any domain that owns a handle of its
+   * own. Each target is closed once even when the same store backs several
+   * domains, and a failure in one is logged and skipped so the remaining
+   * handles are still released.
    */
-  close?(): Promise<void>;
+  async close(): Promise<void> {
+    const targets = new Map<Closable, string>();
+    const collect = (candidate: unknown, label: string) => {
+      if (!isClosable(candidate) || targets.has(candidate)) return;
+      targets.set(candidate, label);
+    };
+
+    collect(this.parentDefault, 'default');
+    collect(this.parentEditor, 'editor');
+
+    // Domains that came from a parent are the parent's to close — closing
+    // them here too could double-close a shared client. Mirrors the
+    // already-initialized bookkeeping in #runInit().
+    const parentOwned = new Set<unknown>();
+    const addParentDomains = (parent?: MastraCompositeStore) => {
+      if (!parent?.stores) return;
+      for (const domain of Object.values(parent.stores)) {
+        if (domain) parentOwned.add(domain);
+      }
+    };
+    addParentDomains(this.parentDefault);
+    addParentDomains(this.parentEditor);
+
+    for (const [domainKey, domain] of Object.entries(this.stores ?? {})) {
+      if (parentOwned.has(domain)) continue;
+      collect(domain, `domain "${domainKey}"`);
+    }
+
+    await Promise.all(
+      Array.from(targets, async ([target, label]) => {
+        try {
+          await target.close();
+        } catch (error) {
+          this.logger?.error(`close() failed for ${label} storage`, { error });
+        }
+      }),
+    );
+  }
 }
 
 /**
