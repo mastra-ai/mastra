@@ -10,6 +10,7 @@ import type {
   ProcessorViolation,
   Processor,
 } from '../index';
+import { REPROCESS_PART_KEY } from '../stream-reprocess';
 
 /**
  * A single regex rule for matching content
@@ -234,6 +235,17 @@ const PRESET_MAP: Record<RegexPreset, RegexRule[]> = {
 };
 
 /**
+ * Number of trailing characters the streaming redact path holds back between
+ * chunks, so a match split across a chunk boundary is redacted whole instead
+ * of leaking the part that arrived first. 128 is well above the shortest
+ * possible match of every built-in preset rule: any match starting further
+ * back than that is already complete, so its start is never emitted unredacted.
+ * A custom rule whose shortest possible match is longer than this window can
+ * still have the beginning of a match leak.
+ */
+const STREAM_CARRYOVER_SIZE = 128;
+
+/**
  * RegexFilterProcessor applies zero-cost regex pattern matching to filter, redact, or block
  * content in agent messages. No LLM calls are made — all detection is regex-based.
  *
@@ -387,7 +399,15 @@ export class RegexFilterProcessor implements Processor<'regex-filter', RegexFilt
    * describe each replacement so callers can report it.
    */
   private redactText(text: string): { text: string; redactions: RegexRedaction[] } {
-    const regions = this.buildRedactionRegions(this.collectMatches(text));
+    return this.redactRegions(text, this.buildRedactionRegions(this.collectMatches(text)));
+  }
+
+  /**
+   * Apply precomputed regions to the text. The regions must be disjoint, in
+   * document order, and contained in the text — exactly what
+   * {@link buildRedactionRegions} returns for it.
+   */
+  private redactRegions(text: string, regions: RedactionRegion[]): { text: string; redactions: RegexRedaction[] } {
     if (regions.length === 0) return { text, redactions: [] };
 
     const redactions: RegexRedaction[] = [];
@@ -574,16 +594,17 @@ export class RegexFilterProcessor implements Processor<'regex-filter', RegexFilt
   ): Promise<ChunkType | null | undefined> {
     if (this.phase === 'input') return args.part;
 
-    if (args.part.type === 'text-delta' && args.part.payload?.text) {
-      const matches = this.findMatches(args.part.payload.text);
+    const { part, state, writer } = args;
+
+    if (this.strategy === 'redact') {
+      return this.redactStreamPart(part, state, writer);
+    }
+
+    if (part.type === 'text-delta' && part.payload?.text) {
+      const matches = this.findMatches(part.payload.text);
       if (matches.length > 0) {
         if (this.strategy === 'block') {
           this.blockWithTripWire(matches, 'streaming content');
-        }
-        if (this.strategy === 'redact') {
-          const redacted = this.redactText(args.part.payload.text);
-          await this.reportRedaction('processOutputStream', redacted.redactions);
-          return { ...args.part, payload: { ...args.part.payload, text: redacted.text } };
         }
         if (this.strategy === 'warn') {
           const ruleNames = [...new Set(matches.map(m => m.rule))].join(', ');
@@ -591,7 +612,93 @@ export class RegexFilterProcessor implements Processor<'regex-filter', RegexFilt
         }
       }
     }
-    return args.part;
+    return part;
+  }
+
+  /**
+   * Streaming redact path with a carryover tail.
+   *
+   * Matching always runs over the held-back tail of the previous chunks plus
+   * the current chunk, and only text that cannot still grow into a match is
+   * emitted: the last {@link STREAM_CARRYOVER_SIZE} characters stay buffered,
+   * and a match crossing that emission boundary pulls it back to the match's
+   * start. A secret split across two chunks is therefore redacted whole
+   * instead of leaking the part that arrived first. The tail is flushed when a
+   * non-text part closes the text run, so concatenating the emitted text
+   * deltas yields exactly `redactText` of the full stream text.
+   */
+  private async redactStreamPart(
+    part: ChunkType,
+    state: Record<string, unknown>,
+    writer: ProcessOutputStreamArgs<RegexFilterTripwireMetadata>['writer'],
+  ): Promise<ChunkType | null> {
+    // A previous flush deferred a non-text part (direct invocation without a
+    // writer): hand it out now and keep the current part for a later call.
+    const pending = state._regexFilterPendingNonText as ChunkType | undefined;
+    if (pending) {
+      if (part.type === 'text-delta') {
+        state._regexFilterPendingNonText = undefined;
+        if (part.payload?.text) this.appendStreamCarryover(state, part);
+      } else {
+        state._regexFilterPendingNonText = part;
+      }
+      return pending;
+    }
+
+    if (part.type === 'text-delta') {
+      if (!part.payload?.text) return part;
+
+      const combined = this.appendStreamCarryover(state, part);
+      if (combined.length <= STREAM_CARRYOVER_SIZE) return null;
+
+      let emitEnd = combined.length - STREAM_CARRYOVER_SIZE;
+      const regions = this.buildRedactionRegions(this.collectMatches(combined));
+      for (const region of regions) {
+        if (region.start < emitEnd && region.end > emitEnd) emitEnd = region.start;
+      }
+
+      const emitted = this.redactRegions(
+        combined.slice(0, emitEnd),
+        regions.filter(region => region.end <= emitEnd),
+      );
+      state._regexFilterCarryover = combined.slice(emitEnd);
+      await this.reportRedaction('processOutputStream', emitted.redactions);
+      if (emitted.text.length === 0) return null;
+      return { ...part, payload: { ...part.payload, text: emitted.text } };
+    }
+
+    // Non-text part: the text run is over, so redact and flush the held-back
+    // tail. The triggering part still has to be emitted after the flushed
+    // text, but only one part can be returned: stash it for the runner to
+    // re-drive through the chain, or defer it to the next call when invoked
+    // directly without a writer.
+    const carryover = (state._regexFilterCarryover as string | undefined) ?? '';
+    if (!carryover) return part;
+
+    const flushed = this.redactText(carryover);
+    await this.reportRedaction('processOutputStream', flushed.redactions);
+    const carryoverPart = state._regexFilterCarryoverPart as (ChunkType & { type: 'text-delta' }) | undefined;
+    state._regexFilterCarryover = undefined;
+    state._regexFilterCarryoverPart = undefined;
+
+    if (writer) {
+      state[REPROCESS_PART_KEY] = part;
+    } else {
+      state._regexFilterPendingNonText = part;
+    }
+    return { ...carryoverPart!, payload: { ...carryoverPart!.payload, text: flushed.text } };
+  }
+
+  /**
+   * Append a text delta to the carryover tail, remembering the first part that
+   * contributed to it so a flush can reuse its id, runId, and origin.
+   */
+  private appendStreamCarryover(state: Record<string, unknown>, part: ChunkType & { type: 'text-delta' }): string {
+    const previous = (state._regexFilterCarryover as string | undefined) ?? '';
+    if (!previous) state._regexFilterCarryoverPart = part;
+    const combined = previous + part.payload.text;
+    state._regexFilterCarryover = combined;
+    return combined;
   }
 
   processOutputResult(args: ProcessOutputResultArgs<RegexFilterTripwireMetadata>): ProcessorMessageResult {

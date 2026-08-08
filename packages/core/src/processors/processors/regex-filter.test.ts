@@ -41,7 +41,7 @@ function createOutputResultArgs(messages: MastraDBMessage[]): ProcessOutputResul
   };
 }
 
-function createStreamArgs(part: ChunkType): ProcessOutputStreamArgs {
+function createStreamArgs(part: ChunkType, state: Record<string, unknown> = {}): ProcessOutputStreamArgs {
   return {
     part,
     streamParts: [],
@@ -50,8 +50,42 @@ function createStreamArgs(part: ChunkType): ProcessOutputStreamArgs {
     }) as any,
     retryCount: 0,
     model: { modelId: 'test', provider: 'test', specificationVersion: 'v2' } as any,
-    state: {},
+    state,
   };
+}
+
+function textDelta(text: string): ChunkType {
+  return {
+    type: 'text-delta',
+    runId: 'r',
+    from: 'AGENT',
+    payload: { id: 't1', text },
+  } as unknown as ChunkType;
+}
+
+function textEnd(): ChunkType {
+  return { type: 'text-end', runId: 'r', from: 'AGENT', payload: { id: 't1' } } as unknown as ChunkType;
+}
+
+/**
+ * Drives a sequence of stream parts through the processor with a shared state,
+ * the way the ProcessorRunner does, and returns every part it emitted.
+ */
+async function runStream(filter: RegexFilterProcessor, parts: ChunkType[]): Promise<ChunkType[]> {
+  const state: Record<string, unknown> = {};
+  const emitted: ChunkType[] = [];
+  for (const part of parts) {
+    const result = await filter.processOutputStream(createStreamArgs(part, state));
+    if (result) emitted.push(result);
+  }
+  return emitted;
+}
+
+function streamedText(emitted: ChunkType[]): string {
+  return emitted
+    .filter(part => part.type === 'text-delta')
+    .map(part => (part as any).payload.text)
+    .join('');
 }
 
 describe('RegexFilterProcessor', () => {
@@ -246,15 +280,9 @@ describe('RegexFilterProcessor', () => {
 
     it('redacts overlapping matches in streaming chunks', async () => {
       const filter = new RegexFilterProcessor({ presets: ['pii'], strategy: 'redact' });
-      const part = {
-        type: 'text-delta',
-        runId: 'r',
-        from: 'AGENT',
-        payload: { id: 't1', text: 'card 4111111111111111' },
-      } as unknown as ChunkType;
-      const result = await filter.processOutputStream(createStreamArgs(part));
+      const emitted = await runStream(filter, [textDelta('card 4111111111111111'), textEnd()]);
 
-      expect((result as any).payload.text).toBe('card [CREDIT_CARD]');
+      expect(streamedText(emitted)).toBe('card [CREDIT_CARD]');
     });
 
     it('keeps capture groups in custom replacements', () => {
@@ -513,13 +541,7 @@ describe('RegexFilterProcessor', () => {
     it('reports stream chunks without a message or part', async () => {
       const { filter, violations } = createFilter();
 
-      const part = {
-        type: 'text-delta',
-        runId: 'r',
-        from: 'AGENT',
-        payload: { id: 't1', text: 'mail a@b.com' },
-      } as unknown as ChunkType;
-      await filter.processOutputStream(createStreamArgs(part));
+      await runStream(filter, [textDelta('mail a@b.com'), textEnd()]);
 
       expect(violations[0].detail.phase).toBe('processOutputStream');
       expect(violations[0].detail).not.toHaveProperty('messageId');
@@ -690,17 +712,67 @@ describe('RegexFilterProcessor', () => {
         strategy: 'redact',
       });
 
-      const part = {
-        type: 'text-delta',
-        runId: 'r',
-        from: 'AGENT',
-        payload: { id: 't1', text: 'Email: test@test.com' },
-      } as unknown as ChunkType;
-      const args = createStreamArgs(part);
-      const result = await filter.processOutputStream(args);
+      const emitted = await runStream(filter, [textDelta('Email: test@test.com'), textEnd()]);
 
-      expect(result).toBeDefined();
-      expect((result as any).payload.text).toContain('[EMAIL]');
+      expect(streamedText(emitted)).toContain('[EMAIL]');
+    });
+
+    it('redacts a secret split across two streaming chunks', async () => {
+      const filter = new RegexFilterProcessor({
+        rules: [{ name: 'anthropic-key', pattern: /sk-ant-[a-zA-Z0-9-]{10,}/g, replacement: '[ANTHROPIC_KEY]' }],
+        strategy: 'redact',
+      });
+
+      const emitted = await runStream(filter, [
+        textDelta('Here is the key: sk-ant-'),
+        textDelta('api03-abcdef1234567890 done'),
+        textEnd(),
+      ]);
+
+      const streamed = streamedText(emitted);
+      expect(streamed).not.toContain('sk-ant-api03-abcdef1234567890');
+      expect(streamed).toBe('Here is the key: [ANTHROPIC_KEY] done');
+    });
+
+    it('redacts a secret contained in a single streaming chunk', async () => {
+      const filter = new RegexFilterProcessor({
+        rules: [{ name: 'anthropic-key', pattern: /sk-ant-[a-zA-Z0-9-]{10,}/g, replacement: '[ANTHROPIC_KEY]' }],
+        strategy: 'redact',
+      });
+
+      const emitted = await runStream(filter, [
+        textDelta('Here is the key: sk-ant-api03-abcdef1234567890 done'),
+        textEnd(),
+      ]);
+
+      expect(streamedText(emitted)).toBe('Here is the key: [ANTHROPIC_KEY] done');
+    });
+
+    it('passes clean chunks through unchanged once the held-back tail flushes', async () => {
+      const filter = new RegexFilterProcessor({
+        presets: ['pii'],
+        strategy: 'redact',
+      });
+
+      const emitted = await runStream(filter, [textDelta('Hello, '), textDelta('world!'), textEnd()]);
+
+      expect(streamedText(emitted)).toBe('Hello, world!');
+    });
+
+    it('redacts a match that crosses the emission boundary of a long stream', async () => {
+      const filter = new RegexFilterProcessor({
+        rules: [{ name: 'anthropic-key', pattern: /sk-ant-[a-zA-Z0-9-]{10,}/g, replacement: '[ANTHROPIC_KEY]' }],
+        strategy: 'redact',
+      });
+
+      const emitted = await runStream(filter, [
+        textDelta('x'.repeat(200) + 'sk-ant-'),
+        textDelta('api03-abcdef1234567890' + '!'.repeat(100)),
+        textDelta('!'.repeat(50)),
+        textEnd(),
+      ]);
+
+      expect(streamedText(emitted)).toBe('x'.repeat(200) + '[ANTHROPIC_KEY]' + '!'.repeat(150));
     });
 
     it('passes through non-text chunks', async () => {
