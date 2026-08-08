@@ -3,6 +3,7 @@ import { join } from 'path';
 import { setupMonorepo } from './prepare';
 import { mkdtemp, mkdir, rm, readFile, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
+import { pathToFileURL } from 'url';
 import getPort from 'get-port';
 import { execa, execaNode } from 'execa';
 
@@ -570,6 +571,12 @@ describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
         const payload = JSON.parse(stdout.slice(stdout.indexOf('{')));
         expect(payload.entryUrl.endsWith('/.mastra/output/voice-worker.mjs')).toBe(true);
         expect(payload.stamp).toBe('2020-01-02');
+
+        const workerModule = await import(pathToFileURL(join(outputDir(), 'voice-worker.mjs')).href);
+        expect(workerModule.default).toEqual({
+          kind: 'voice-worker',
+          entryUrl: pathToFileURL(join(outputDir(), 'voice-worker.mjs')).href,
+        });
       },
       timeout,
     );
