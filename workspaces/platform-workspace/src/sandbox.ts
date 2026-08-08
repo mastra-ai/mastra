@@ -561,6 +561,10 @@ export class PlatformSandbox extends MastraSandbox {
   private _populateAddressFromResponse(json: CreateSandboxResponse): void {
     if (!this._addressRegistry) return;
     if (!json.instanceUrl) return;
+    // Clear any stale entry before probing. On reattach, the registry may have
+    // the old sandbox's address; execs should fall back to lease until the new
+    // probe succeeds rather than dialing the stale address.
+    this._addressRegistry.delete(json.id);
     // Fire-and-forget: probe the sidecar's /health endpoint before populating
     // the registry. Early execs fall back to lease until the probe succeeds.
     // Capture the current generation so the probe can detect teardown races.

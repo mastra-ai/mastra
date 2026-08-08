@@ -1782,6 +1782,43 @@ describe('PlatformSandbox', () => {
         expect(sets).toEqual([{ sandboxId: 'sbx_nonblock', instanceUrl: 'http://[fd12::1]:47000' }]);
       });
 
+      it('clears a stale registry entry before starting the probe', async () => {
+        // On reattach, the registry may have the old sandbox's address. The
+        // entry should be deleted immediately so execs fall back to lease
+        // during the probe window rather than dialing the stale address.
+        vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+        const fetchMock = vi.fn().mockResolvedValueOnce(
+          json({
+            id: 'sbx_stale',
+            createdAt: '2026-06-26T00:00:00.000Z',
+            instanceUrl: 'http://[fd12::2]:47000', // new address
+          }),
+        );
+        // Probe hangs — we just want to verify the delete happens before it.
+        const privateNetFetch = vi.fn().mockReturnValue(new Promise(() => {}));
+        // Seed the registry with a stale entry for the same sandbox id.
+        const { registry, sets, deletes, entries } = fakeAddressRegistry({
+          sbx_stale: 'http://[fd12::1]:47000', // old address
+        });
+
+        const sandbox = new PlatformSandbox({
+          accessToken: 'sk_test',
+          projectId: 'proj_123',
+          environmentId: 'env_123',
+          fetch: fetchMock,
+          privateNetFetch,
+          addressRegistry: registry,
+        });
+
+        await sandbox._start();
+
+        // Stale entry was deleted before probe started.
+        expect(deletes).toEqual(['sbx_stale']);
+        // Registry is now empty (probe hasn't resolved yet).
+        expect(entries.size).toBe(0);
+        expect(sets).toEqual([]);
+      });
+
       it('does not re-populate registry when teardown races the probe', async () => {
         // Regression test: if destroy() runs while the probe is pending, the
         // probe should NOT re-populate the registry when it eventually resolves.
@@ -1821,9 +1858,10 @@ describe('PlatformSandbox', () => {
         await sandbox._start();
         expect(sets).toEqual([]);
 
-        // Destroy while probe is pending.
+        // Destroy while probe is pending. Two deletes: one from start()
+        // (clearing any stale entry before probe) and one from destroy().
         await sandbox.destroy();
-        expect(deletes).toEqual(['sbx_race']);
+        expect(deletes).toEqual(['sbx_race', 'sbx_race']);
 
         // Now resolve the probe with 200. The probe should detect the
         // generation mismatch and NOT call set().
