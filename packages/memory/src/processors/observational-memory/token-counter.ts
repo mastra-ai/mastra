@@ -5,7 +5,7 @@ import type { MastraToolInvocation } from '@mastra/core/agent/message-list';
 import imageSize from 'image-size';
 import { estimateTokenCount } from 'tokenx';
 
-import { formatToolResultForObserver, resolveToolResultValue } from './tool-result-helpers';
+import { resolveToolResultValue, serializeToolResultForTokenCounting } from './tool-result-helpers';
 
 type TokenEstimateCacheEntry = {
   v: number;
@@ -1324,7 +1324,7 @@ export class TokenCounter {
     let tokens = 0;
     const cacheParts: unknown[] = [];
     const countJsonContentPart = (contentPart: Record<string, unknown>) => {
-      const formatted = formatToolResultForObserver(contentPart);
+      const formatted = serializeToolResultForTokenCounting(contentPart);
       tokens += this.countString(formatted);
       cacheParts.push({ type: 'json', valueHash: createHash('sha256').update(formatted).digest('hex') });
     };
@@ -1781,7 +1781,7 @@ export class TokenCounter {
           if (contentTokens !== undefined) {
             tokens += contentTokens;
           } else {
-            const formattedResult = formatToolResultForObserver(resultForCounting);
+            const formattedResult = serializeToolResultForTokenCounting(resultForCounting);
             tokens += this.readOrPersistPartEstimate(
               part,
               usingStoredModelOutput ? 'tool-result-model-output-json' : 'tool-result-json',
