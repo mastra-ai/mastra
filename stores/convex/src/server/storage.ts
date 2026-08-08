@@ -547,7 +547,7 @@ export async function handleTypedOperation(
       }
 
       const patchRecord = {
-        title: request.title,
+        title: request.title ?? existing.title,
         metadata: mergeMetadata(existing.metadata, request.metadata),
         updatedAt: request.updatedAt,
       };

@@ -442,8 +442,8 @@ export class MemoryMSSQL extends MemoryStorage {
     metadata,
   }: {
     id: string;
-    title: string;
-    metadata: Record<string, unknown>;
+    title?: string;
+    metadata?: Record<string, unknown>;
   }): Promise<StorageThreadType> {
     const existingThread = await this.getThreadById({ threadId: id });
     if (!existingThread) {
@@ -454,7 +454,7 @@ export class MemoryMSSQL extends MemoryStorage {
         text: `Thread ${id} not found`,
         details: {
           threadId: id,
-          title,
+          title: title ?? null,
         },
       });
     }
@@ -474,7 +474,7 @@ export class MemoryMSSQL extends MemoryStorage {
         WHERE id = @id`;
       const req = this.pool.request();
       req.input('id', id);
-      req.input('title', title);
+      req.input('title', title ?? existingThread.title);
       req.input('metadata', JSON.stringify(mergedMetadata));
       req.input('updatedAt', new Date());
       const result = await req.query(sql);
@@ -491,7 +491,7 @@ export class MemoryMSSQL extends MemoryStorage {
           text: `Thread ${id} not found after update`,
           details: {
             threadId: id,
-            title,
+            title: title ?? null,
           },
         });
       }
@@ -509,7 +509,7 @@ export class MemoryMSSQL extends MemoryStorage {
           category: ErrorCategory.THIRD_PARTY,
           details: {
             threadId: id,
-            title,
+            title: title ?? null,
           },
         },
         error,

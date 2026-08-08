@@ -175,8 +175,8 @@ export class StoreMemoryLance extends MemoryStorage {
     metadata,
   }: {
     id: string;
-    title: string;
-    metadata: Record<string, unknown>;
+    title?: string;
+    metadata?: Record<string, unknown>;
   }): Promise<StorageThreadType> {
     const maxRetries = 5;
 
@@ -194,7 +194,7 @@ export class StoreMemoryLance extends MemoryStorage {
         // Update atomically
         const record = {
           id,
-          title,
+          title: title ?? current.title,
           metadata: JSON.stringify(mergedMetadata),
           updatedAt: new Date().getTime(),
         };
