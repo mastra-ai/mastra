@@ -593,7 +593,10 @@ export class PlatformSandbox extends MastraSandbox {
           method: 'GET',
           signal: AbortSignal.timeout(1_000),
         });
-        if (res.ok) {
+        const ok = res.ok;
+        // Release the response body so the connection returns to the pool.
+        await res.body?.cancel().catch(() => {});
+        if (ok) {
           // Sidecar is listening. Only populate if this probe is still current.
           if (generation === this._probeGeneration && this._sandboxId === sandboxId) {
             this._addressRegistry?.set(sandboxId, instanceUrl);
