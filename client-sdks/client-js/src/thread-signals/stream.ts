@@ -27,11 +27,13 @@ export async function processThreadSignalStream(options: {
   try {
     while (true) {
       const { done, value } = await reader.read();
+      if (options.signal?.aborted) return;
       buffer += decoder.decode(value, { stream: !done });
       const blocks = buffer.split(/\r?\n\r?\n/);
       buffer = blocks.pop() ?? '';
 
       for (const block of blocks) {
+        if (options.signal?.aborted) return;
         const event = parseEventBlock(block);
         if (event === 'done') return;
         if (event) await options.onChunk(event);
@@ -39,6 +41,7 @@ export async function processThreadSignalStream(options: {
       if (done) break;
     }
 
+    if (options.signal?.aborted) return;
     const finalEvent = parseEventBlock(buffer);
     if (finalEvent && finalEvent !== 'done') await options.onChunk(finalEvent);
   } finally {

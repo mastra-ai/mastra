@@ -2269,15 +2269,17 @@ export const SUBSCRIBE_AGENT_THREAD_ROUTE = createRoute({
           try {
             let activeRunId = subscription.activeRunId() ?? undefined;
             let status: 'idle' | 'running' | 'suspended' = activeRunId ? 'running' : 'idle';
-            const suspendedRuns = await agent
-              .listSuspendedRuns({
-                resourceId: effectiveResourceId,
-                threadId: effectiveThreadId,
-                perPage: 1,
-                page: 0,
-              })
-              .then(result => result.runs)
-              .catch(() => []);
+            const suspendedRuns = activeRunId
+              ? []
+              : await agent
+                  .listSuspendedRuns({
+                    resourceId: effectiveResourceId,
+                    threadId: effectiveThreadId,
+                    perPage: 1,
+                    page: 0,
+                  })
+                  .then(result => result.runs)
+                  .catch(() => []);
             const suspendedRun = suspendedRuns[0];
             if (suspendedRun) {
               activeRunId = suspendedRun.runId;

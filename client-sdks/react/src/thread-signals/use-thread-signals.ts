@@ -21,6 +21,9 @@ export interface UseThreadSignalsOptions<TMessage = unknown> {
   onChunk?: (chunk: ThreadSignalChunk) => void | Promise<void>;
 }
 
+type ThreadMessageHookInput = Omit<ThreadMessageInput, 'threadId' | 'resourceId'> &
+  Pick<ThreadMessageInput, 'message'>;
+
 export interface UseThreadSignalsResult<TMessage = unknown> {
   snapshot: ThreadSignalRunSnapshot;
   messages: TMessage[];
@@ -28,8 +31,8 @@ export interface UseThreadSignalsResult<TMessage = unknown> {
   isLoadingHistory: boolean;
   error: Error | undefined;
   reloadHistory(): Promise<void>;
-  sendMessage(params: Omit<ThreadMessageInput, 'threadId' | 'resourceId'>): Promise<ThreadMessageAccepted>;
-  queueMessage(params: Omit<ThreadMessageInput, 'threadId' | 'resourceId'>): Promise<ThreadMessageAccepted>;
+  sendMessage(params: ThreadMessageHookInput): Promise<ThreadMessageAccepted>;
+  queueMessage(params: ThreadMessageHookInput): Promise<ThreadMessageAccepted>;
   sendToolApproval(
     params: Omit<ThreadToolApprovalInput, 'threadId' | 'resourceId'>,
   ): Promise<ThreadToolApprovalAccepted>;
@@ -47,6 +50,7 @@ export function useThreadSignals<TMessage = unknown>(
 ): UseThreadSignalsResult<TMessage> {
   const { client, threadId, resourceId, history = EMPTY_HISTORY, reconnect = true, onChunk } = options;
   const subscriptionRef = useRef<ThreadSignalsSubscription | undefined>(undefined);
+  const historyRequestRef = useRef(0);
   const onChunkRef = useRef(onChunk);
   const historyRef = useRef(history);
   const reconnectRef = useRef(reconnect);
@@ -60,26 +64,35 @@ export function useThreadSignals<TMessage = unknown>(
   reconnectRef.current = reconnect;
 
   const reloadHistory = useCallback(async () => {
+    const requestId = ++historyRequestRef.current;
     const currentHistory = historyRef.current;
-    if (currentHistory === false) return;
+    if (currentHistory === false) {
+      setIsLoadingHistory(false);
+      return;
+    }
     setIsLoadingHistory(true);
     try {
       const result = await client.listMessages<TMessage>(threadId, {
         ...currentHistory,
         resourceId: currentHistory.resourceId ?? resourceId,
       });
-      setMessages(result.messages);
+      if (requestId === historyRequestRef.current) setMessages(result.messages);
     } catch (caught) {
-      setError(caught instanceof Error ? caught : new Error(String(caught)));
+      if (requestId === historyRequestRef.current) {
+        setError(caught instanceof Error ? caught : new Error(String(caught)));
+      }
     } finally {
-      setIsLoadingHistory(false);
+      if (requestId === historyRequestRef.current) setIsLoadingHistory(false);
     }
   }, [client, resourceId, threadId]);
 
   useEffect(() => {
     let mounted = true;
+    historyRequestRef.current += 1;
     setSnapshot(IDLE_SNAPSHOT);
+    setMessages([]);
     setChunks([]);
+    setIsLoadingHistory(historyRef.current !== false);
     setError(undefined);
 
     void (async () => {
@@ -113,6 +126,7 @@ export function useThreadSignals<TMessage = unknown>(
 
     return () => {
       mounted = false;
+      historyRequestRef.current += 1;
       subscriptionRef.current?.unsubscribe();
       subscriptionRef.current = undefined;
     };

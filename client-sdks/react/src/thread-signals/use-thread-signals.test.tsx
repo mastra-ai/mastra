@@ -63,4 +63,74 @@ describe('useThreadSignals', () => {
     unmount();
     expect(unsubscribe).toHaveBeenCalledOnce();
   });
+
+  it('clears old messages and ignores stale history after switching threads', async () => {
+    const historyResolvers = new Map<
+      string,
+      (value: {
+        messages: Array<{ id: string }>;
+        total: number;
+        page: number;
+        perPage: number;
+        hasMore: boolean;
+      }) => void
+    >();
+    const subscriptions: ThreadSignalsSubscription[] = [];
+    const client = {
+      subscribeToThread: vi.fn(async () => {
+        const subscription: ThreadSignalsSubscription = {
+          snapshot: { status: 'idle', updatedAt: '2026-08-07T00:00:00.000Z' },
+          processDataStream: vi.fn(async () => {}),
+          abort: vi.fn(async () => true),
+          unsubscribe: vi.fn(),
+        };
+        subscriptions.push(subscription);
+        return subscription;
+      }),
+      listMessages: vi.fn(
+        (threadId: string) =>
+          new Promise(resolve => {
+            historyResolvers.set(threadId, resolve);
+          }),
+      ),
+      sendMessage: vi.fn(),
+      queueMessage: vi.fn(),
+      sendToolApproval: vi.fn(),
+    } as unknown as ThreadSignalsClient;
+
+    const { result, rerender } = renderHook(
+      ({ threadId }) => useThreadSignals<{ id: string }>({ client, threadId }),
+      { initialProps: { threadId: 'thread-1' } },
+    );
+
+    await waitFor(() => expect(historyResolvers.has('thread-1')).toBe(true));
+    rerender({ threadId: 'thread-2' });
+
+    expect(result.current.messages).toEqual([]);
+    await waitFor(() => expect(historyResolvers.has('thread-2')).toBe(true));
+
+    await act(async () => {
+      historyResolvers.get('thread-2')?.({
+        messages: [{ id: 'message-2' }],
+        total: 1,
+        page: 0,
+        perPage: 100,
+        hasMore: false,
+      });
+    });
+    await waitFor(() => expect(result.current.messages).toEqual([{ id: 'message-2' }]));
+
+    await act(async () => {
+      historyResolvers.get('thread-1')?.({
+        messages: [{ id: 'message-1' }],
+        total: 1,
+        page: 0,
+        perPage: 100,
+        hasMore: false,
+      });
+    });
+
+    expect(result.current.messages).toEqual([{ id: 'message-2' }]);
+    expect(subscriptions[0]?.unsubscribe).toHaveBeenCalledOnce();
+  });
 });

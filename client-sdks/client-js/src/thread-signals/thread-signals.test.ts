@@ -34,6 +34,24 @@ describe('thread signals client', () => {
     ]);
   });
 
+  it('stops dispatching buffered events after the stream is aborted', async () => {
+    const controller = new AbortController();
+    const chunks: unknown[] = [];
+
+    await processThreadSignalStream({
+      stream: sseResponse([
+        'data: {"type":"start","runId":"run-1"}\n\ndata: {"type":"text-delta","payload":{"text":"late"}}\n\n',
+      ]).body!,
+      signal: controller.signal,
+      onChunk: chunk => {
+        chunks.push(chunk);
+        controller.abort();
+      },
+    });
+
+    expect(chunks).toEqual([{ type: 'start', runId: 'run-1' }]);
+  });
+
   it('exposes the initial active-run snapshot on subscription', async () => {
     const fetch = vi
       .fn<typeof globalThis.fetch>()
@@ -100,5 +118,13 @@ describe('thread signals client', () => {
     const subscription = await client.subscribeToThread({ threadId: 'thread-1' });
     await expect(subscription.abort()).resolves.toBe(true);
     subscription.unsubscribe();
+
+    expect(fetch.mock.calls.map(([input]) => String(input))).toEqual([
+      'https://example.com/api/agents/agent-1/send-message',
+      'https://example.com/api/agents/agent-1/queue-message',
+      'https://example.com/api/agents/agent-1/send-tool-approval',
+      'https://example.com/api/agents/agent-1/threads/subscribe',
+      'https://example.com/api/agents/agent-1/threads/abort',
+    ]);
   });
 });
