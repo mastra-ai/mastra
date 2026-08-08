@@ -251,12 +251,21 @@ export function createDurableLLMMappingStep() {
       }
 
       // 3. Determine if we should continue
-      // When tool errors occur, always continue the agentic loop so the model
-      // can see the error messages (already added to messageList above) and
-      // self-correct. This matches the regular agent's behaviour where both
-      // ToolNotFoundError and generic tool execution errors are recoverable.
+      // When tool errors occur, continue the agentic loop so the model can see
+      // the error messages (already added to messageList above) and self-correct.
+      // This matches the regular agent's behaviour where both ToolNotFoundError
+      // and generic tool execution errors are recoverable.
+      //
+      // Mirror the non-durable llm-mapping-step's pending-HITL guard: a call with
+      // no result and no error (e.g. a client-side tool awaiting its result) is
+      // still pending, and continuing past it would send the next model request
+      // with a tool call that has no tool result. Denied approvals are resolved,
+      // not pending, so they don't block continuation.
       const hasToolErrors = toolResults.some(r => r.error !== undefined);
-      const isContinued = hasToolErrors ? true : llmOutput.stepResult.isContinued;
+      const hasPendingHITL = toolResults.some(
+        r => r.result === undefined && r.error === undefined && !r.providerExecuted && !isDeniedApproval(r),
+      );
+      const isContinued = hasToolErrors && !hasPendingHITL ? true : llmOutput.stepResult.isContinued;
 
       // Check if any delegation hook called ctx.bail(). The bail flag is
       // communicated via requestContext because Zod output validation strips
