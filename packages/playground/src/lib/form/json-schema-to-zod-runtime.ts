@@ -12,7 +12,7 @@ import { z } from 'zod';
  * string is ever compiled. The supported surface is deliberately matched to
  * what the generator emitted for the schemas Studio receives — tool inputs,
  * workflow trigger/resume/state schemas, and request context schemas — and
- * `json-schema-to-zod-parity.test.ts` pins that equivalence.
+ * `__tests__/json-schema-to-zod-runtime.test.ts` pins that equivalence.
  *
  * Anything unrecognized degrades to `z.any()`, which is what the generator did
  * too: an unusual schema renders a permissive field rather than breaking Studio.
