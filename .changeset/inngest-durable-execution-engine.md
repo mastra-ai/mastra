@@ -2,4 +2,4 @@
 '@mastra/inngest': minor
 ---
 
-Migrated Inngest durable agents to Mastra's shared durable execution-engine contract while preserving workflow-local event transports, replay caching, and configured maximum steps.
+Durable Inngest agents now preserve event delivery and replay history across resumes and honor configured `maxSteps` limits.

@@ -124,4 +124,39 @@ describe('DurableAgentExecutionEngine', () => {
     resumed.cleanup();
     initial.cleanup();
   });
+
+  it('preserves primitive errors returned by an external execution engine', async () => {
+    const workflow = createDurableAgenticWorkflow();
+    const engine: DurableAgentExecutionEngine = {
+      createWorkflow: vi.fn(() => workflow),
+      start: vi.fn(async () => ({ status: 'errored', error: 'provider execution unavailable' })),
+      resume: vi.fn(async () => ({ status: 'running' })),
+      recover: vi.fn(async () => ({ status: 'running' })),
+      abort: vi.fn(async () => undefined),
+      status: vi.fn(async () => 'errored'),
+    };
+    const agent = new Agent({
+      id: 'external-engine-primitive-error-agent',
+      name: 'External engine primitive error agent',
+      instructions: 'Test external durable execution errors.',
+      model: {
+        specificationVersion: 'v2',
+        provider: 'test',
+        modelId: 'test-model',
+      } as LanguageModelV2,
+    });
+    const durableAgent = createDurableAgent({ agent, executionEngine: engine });
+    let receivedError: unknown;
+
+    const result = await durableAgent.stream('Run durably', {
+      onError: ({ error }) => {
+        receivedError = error;
+      },
+    });
+    await result.output.consumeStream({ onError: () => {} });
+
+    expect(receivedError).toBeInstanceOf(Error);
+    expect((receivedError as Error).message).toBe('provider execution unavailable');
+    result.cleanup();
+  });
 });

@@ -60,14 +60,14 @@ function isTerminalExecutionStatus(status: DurableAgentEngineStatus | WorkflowRu
   ].includes(status);
 }
 
-function getExecutionEngineError(
-  result: DurableAgentEngineResult | void,
-  fallbackMessage: string,
-): Error | undefined {
+function getExecutionEngineError(result: DurableAgentEngineResult | void, fallbackMessage: string): Error | undefined {
   if (result?.status !== 'failed' && result?.status !== 'errored') return undefined;
   if (result.error instanceof Error) return result.error;
   if (result.error && typeof result.error === 'object' && 'message' in result.error) {
     return new Error(String(result.error.message));
+  }
+  if (result.error !== undefined && result.error !== null) {
+    return new Error(String(result.error));
   }
   return new Error(fallbackMessage);
 }
