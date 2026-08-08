@@ -74,6 +74,14 @@ export class CachingPubSub extends PubSub {
   }
 
   /**
+   * Offsets are indices into this class's own cached history, so they are
+   * honored regardless of what the inner transport supports.
+   */
+  get supportsOffsets(): boolean {
+    return true;
+  }
+
+  /**
    * Log an error message using the configured logger or console.error.
    */
   private logError(message: string, error: unknown): void {

@@ -83,6 +83,32 @@ export abstract class PubSub {
   }
 
   /**
+   * Whether this implementation honors the `offset` argument to
+   * {@link subscribeFromOffset}. Defaults to `false`.
+   *
+   * The base `subscribeFromOffset` falls back to `subscribeWithReplay`, which
+   * discards the offset and delivers the full retained backlog. That is safe
+   * but not what the caller asked for, and callers guarding against
+   * re-processing need to be able to tell the difference — a resumed run that
+   * silently re-receives every prior event is a correctness problem, not a
+   * performance one.
+   *
+   * Implementations backed by an indexed cache (e.g. `CachingPubSub`) override
+   * this and return `true`. Check it before relying on offset semantics:
+   *
+   * ```ts
+   * if (pubsub.supportsOffsets) {
+   *   await pubsub.subscribeFromOffset(topic, offset, cb);
+   * } else {
+   *   await pubsub.subscribe(topic, cb, { startFrom: 'latest' });
+   * }
+   * ```
+   */
+  get supportsOffsets(): boolean {
+    return false;
+  }
+
+  /**
    * Get historical events for a topic.
    * Default implementation returns empty array (no history support).
    * Override in implementations that support event caching.
@@ -114,13 +140,33 @@ export abstract class PubSub {
    * Default implementation falls back to subscribeWithReplay (full replay).
    * Override in implementations that support indexed event caching.
    *
+   * Implementations that do not override this leave {@link supportsOffsets}
+   * `false`, and the offset is discarded — the subscriber receives the whole
+   * retained backlog. Callers that must not re-process should branch on
+   * `supportsOffsets` rather than assume the offset was honored.
+   *
    * @param topic - The topic to subscribe to
    * @param offset - Start replaying from this index (0-based)
    * @param cb - Callback invoked for each event
    */
-  subscribeFromOffset(topic: string, _offset: number, cb: EventCallback): Promise<void> {
+  subscribeFromOffset(topic: string, offset: number, cb: EventCallback): Promise<void> {
+    if (offset > 0 && !this.supportsOffsets) {
+      // Not an error: full replay is a safe superset of what was asked for.
+      // Surfaced because the caller passed a non-zero offset specifically to
+      // avoid re-processing, and silence makes that failure invisible.
+      this.onUnsupportedOffset(topic, offset);
+    }
     return this.subscribeWithReplay(topic, cb);
   }
+
+  /**
+   * Called when {@link subscribeFromOffset} discards a non-zero offset because
+   * the implementation does not support offsets.
+   *
+   * A no-op by default so this stays a diagnostic rather than a behavior
+   * change. Implementations with a configured logger override it to warn.
+   */
+  protected onUnsupportedOffset(_topic: string, _offset: number): void {}
 }
 
 /**

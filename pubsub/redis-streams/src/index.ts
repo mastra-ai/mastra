@@ -92,6 +92,25 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
     return ['pull'];
   }
 
+  /**
+   * Redis Streams positions a consumer group by stream ID, not by an index into
+   * a cached array, so it cannot honor `subscribeFromOffset`'s numeric offset.
+   * Declaring that here lets callers branch on it instead of discovering the
+   * full replay at runtime. Use `subscribe(topic, cb, { startFrom: 'latest' })`
+   * to skip the backlog.
+   */
+  override get supportsOffsets(): boolean {
+    return false;
+  }
+
+  protected override onUnsupportedOffset(topic: string, offset: number): void {
+    this.#logger?.warn?.(
+      'redis-streams: subscribeFromOffset ignored a non-zero offset and fell back to full replay; ' +
+        'use subscribe(topic, cb, { startFrom: "latest" }) to skip the backlog',
+      { topic, offset },
+    );
+  }
+
   #writeClient: RedisClientType;
   #connectOptions: RedisClientOptions;
   #keyPrefix: string;
@@ -301,8 +320,16 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
     // Existing groups (BUSYGROUP path) keep their own checkpoint, so this
     // doesn't change semantics for already-running clusters. Stream growth is
     // bounded by the MAXLEN ~ trim applied on every publish.
+    //
+    // `startFrom: 'latest'` opts out of that late-join replay by anchoring at
+    // '$' instead, for a consumer that already has the history elsewhere and
+    // would otherwise re-apply side effects for events it has accounted for.
+    // It only affects group *creation* — an existing group keeps its own
+    // checkpoint either way, so this can never rewind or skip past a position
+    // a running cluster has already committed.
+    const groupAnchor: '0' | '$' = options?.startFrom === 'latest' ? '$' : '0';
     try {
-      await this.#writeClient.xGroupCreate(streamKey, group, '0', { MKSTREAM: true });
+      await this.#writeClient.xGroupCreate(streamKey, group, groupAnchor, { MKSTREAM: true });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       if (!msg.includes('BUSYGROUP')) throw err;
@@ -322,6 +349,7 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
       group,
       consumer,
       isGrouped,
+      groupAnchor,
       readClient,
       stopped: false,
       loop: undefined,
@@ -620,8 +648,9 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
           // returns NOGROUP immediately, ignoring BLOCK, so without recovery
           // this loop busy-retries forever and the subscriber goes permanently
           // deaf — a later publish recreates the stream but not the group.
-          // Recreate the group (anchored at '0', matching subscribe()) so
-          // delivery resumes.
+          // Recreate the group at the anchor this subscription was created
+          // with, matching subscribe(), so delivery resumes without rewinding
+          // a `startFrom: 'latest'` subscriber into the backlog it opted out of.
           try {
             if (this.#streamIdleTtlMs > 0) {
               // MKSTREAM recreates an (empty) stream key, so the TTL must be
@@ -635,11 +664,11 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
               // even on that path.
               await this.#writeClient
                 .multi()
-                .xGroupCreate(sub.streamKey, sub.group, '0', { MKSTREAM: true })
+                .xGroupCreate(sub.streamKey, sub.group, sub.groupAnchor, { MKSTREAM: true })
                 .pExpire(sub.streamKey, this.#streamIdleTtlMs)
                 .exec();
             } else {
-              await this.#writeClient.xGroupCreate(sub.streamKey, sub.group, '0', { MKSTREAM: true });
+              await this.#writeClient.xGroupCreate(sub.streamKey, sub.group, sub.groupAnchor, { MKSTREAM: true });
             }
             this.#logger?.debug?.('redis-streams: recreated consumer group after NOGROUP', {
               topic: sub.topic,
@@ -849,6 +878,13 @@ interface Subscription {
   group: string;
   consumer: string;
   isGrouped: boolean;
+  /**
+   * Stream ID this subscription's consumer group was anchored at: '0' for
+   * `startFrom: 'earliest'`, '$' for `'latest'`. Retained so the NOGROUP
+   * recovery path recreates the group at the same position — re-anchoring a
+   * 'latest' subscriber at '0' would replay the very backlog it opted out of.
+   */
+  groupAnchor: '0' | '$';
   readClient: RedisClientType;
   stopped: boolean;
   loop: Promise<void> | undefined;
