@@ -1391,6 +1391,15 @@ describe('TokenCounter', () => {
       expect(keysAfterRequest.length).toBeGreaterThan(0);
       expect(keysAfterResponse).toEqual(keysAfterRequest);
     });
+
+    it('falls back to generic serialization for invocation states written by a newer core version', async () => {
+      const counter = new TokenCounter();
+      const message = createToolInvocationMessage('future-state' as MastraToolInvocation['state']);
+
+      expect(counter.countMessage(message)).toBeGreaterThan(0);
+      await expect(counter.countMessagesAsync([message])).resolves.toBeGreaterThan(0);
+      expect(message.content.parts[0].providerMetadata?.mastra?.tokenEstimate).toBeTruthy();
+    });
   });
 
   describe('countObservations', () => {
