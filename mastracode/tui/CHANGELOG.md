@@ -1,5 +1,22 @@
 # mastracode
 
+## 0.33.0-alpha.6
+
+### Patch Changes
+
+- Added a configurable model for Stagehand browser automation, which previously ran on a fixed default. Run `/browser set model` with no value to choose from a picker, or name one directly: ([#20993](https://github.com/mastra-ai/mastra/pull/20993))
+
+  ```bash
+  /browser set model anthropic/claude-sonnet-4-5
+  /browser clear model
+  ```
+
+  Only providers Stagehand supports are accepted, and you are prompted for the provider's API key when it is missing.
+
+- Updated dependencies [[`25956fc`](https://github.com/mastra-ai/mastra/commit/25956fc8841780d506acb22b618fdb4dcf6c4e21), [`25956fc`](https://github.com/mastra-ai/mastra/commit/25956fc8841780d506acb22b618fdb4dcf6c4e21)]:
+  - @mastra/code-sdk@1.2.0-alpha.6
+  - @mastra/stagehand@0.3.2-alpha.0
+
 ## 0.33.0-alpha.5
 
 ### Patch Changes
