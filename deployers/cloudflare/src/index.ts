@@ -238,18 +238,35 @@ export default { createRequire };
     import '#polyfills';
     import { scoreTracesWorkflow } from '@mastra/core/evals/scoreTraces';
 
+    // Construction has to happen inside a fetch context (env bindings are not
+    // populated at global scope), but it only needs to happen once: bindings and
+    // secrets are stable for the lifetime of an isolate, so warm requests reuse
+    // the app and keep per-instance caches (storage init guards, editor caches)
+    // effective.
+    let _appPromise;
+
+    async function createApp() {
+      const { mastra } = await import('#mastra');
+      const { tools } = await import('#tools');
+      const {createHonoServer, getToolExports} = await import('#server');
+      const _mastra = mastra();
+
+      if (_mastra.getStorage()) {
+        _mastra.__registerInternalWorkflow(scoreTracesWorkflow);
+      }
+
+      return createHonoServer(_mastra, { tools: getToolExports(tools), browserStream: false });
+    }
+
     export default {
       fetch: async (request, env, context) => {
-        const { mastra } = await import('#mastra');
-        const { tools } = await import('#tools');
-        const {createHonoServer, getToolExports} = await import('#server');
-        const _mastra = mastra();
+        _appPromise ??= createApp().catch(error => {
+          // Don't cache a failed construction, the next request should retry.
+          _appPromise = undefined;
+          throw error;
+        });
 
-        if (_mastra.getStorage()) {
-          _mastra.__registerInternalWorkflow(scoreTracesWorkflow);
-        }
-
-        const app = await createHonoServer(_mastra, { tools: getToolExports(tools), browserStream: false });
+        const app = await _appPromise;
         return app.fetch(request, env, context);
       }
     }
