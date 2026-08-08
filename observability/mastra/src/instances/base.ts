@@ -232,11 +232,15 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
     const parentSpanId = !options.parent
       ? (options.parentSpanId ?? tracingOptions?.parentSpanId)
       : options.parentSpanId;
+    const isExternalParent = !options.parent
+      ? (options.isExternalParent ?? tracingOptions?.isExternalParent)
+      : options.isExternalParent;
 
     const span = this.createSpan<TType>({
       ...rest,
       traceId,
       parentSpanId,
+      isExternalParent,
       metadata: finalMetadata,
       traceState,
       tags,

@@ -35,8 +35,10 @@ export class DefaultSpan<TType extends SpanType> extends BaseSpan<TType> {
       if (bridgeIds) {
         this.id = bridgeIds.spanId;
         this.traceId = bridgeIds.traceId;
-        this.parentSpanId = bridgeIds.parentSpanId;
-        this.isExternalParent = bridgeIds.parentSpanId !== undefined && !options.parent;
+        this.parentSpanId = options.parentSpanId ?? bridgeIds.parentSpanId;
+        this.isExternalParent = options.parentSpanId
+          ? options.isExternalParent
+          : bridgeIds.parentSpanId !== undefined && !options.parent;
         return;
       }
     }

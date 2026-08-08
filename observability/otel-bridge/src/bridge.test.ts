@@ -74,6 +74,34 @@ describe('OtelBridge', () => {
       bridge.shutdown();
     });
 
+    it('preserves a resumed Mastra parent instead of marking it as external', async () => {
+      const bridge = new OtelBridge();
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'resume-parent',
+        name: 'resume-parent-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        bridge,
+      });
+
+      const span = tracing.startSpan({
+        type: SpanType.GENERIC,
+        name: 'resumed-agent',
+        tracingOptions: {
+          parentSpanId: '1234567890abcdef',
+          isExternalParent: false,
+        },
+      })!;
+
+      expect(span.exportSpan()).toMatchObject({
+        parentSpanId: '1234567890abcdef',
+        isExternalParent: false,
+      });
+
+      span.end();
+      await tracing.flush();
+      await bridge.shutdown();
+    });
+
     it('should handle errors gracefully and return undefined on failure', () => {
       const bridge = new OtelBridge();
 
