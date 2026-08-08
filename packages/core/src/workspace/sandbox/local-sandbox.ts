@@ -286,8 +286,11 @@ export class LocalSandbox extends MastraSandbox {
           this._customSeatbeltProfile = existingProfile;
         } else {
           // The file is missing, or it carries our marker from an earlier run. Either way the
-          // profile is ours, so generate it again and leave `_customSeatbeltProfile` undefined:
-          // it must keep tracking the allowlist that mounts change.
+          // profile is ours, so generate it again and clear `_customSeatbeltProfile`: it must
+          // keep tracking the allowlist that mounts change. Clearing matters when this instance
+          // was started before with a user-authored profile that has since been removed or taken
+          // over by us, because `stop()` leaves the cached profile in place for a later `start()`.
+          this._customSeatbeltProfile = undefined;
           const generatedProfile = generateSeatbeltProfile(this.workingDirectory, this._nativeSandboxConfig);
           // Ensure parent directory exists
           await fs.mkdir(path.dirname(userProvidedPath), { recursive: true });

@@ -1146,6 +1146,49 @@ describe('LocalSandbox', () => {
       }
     });
 
+    it('should stop caching a user profile once the same instance restarts without one', async () => {
+      if (os.platform() !== 'darwin') {
+        return;
+      }
+
+      // `stop()` keeps the instance alive, so a profile cached on the first `start()` outlives it.
+      // If the user's file is gone by the next `start()`, the profile is ours again and has to go
+      // back to tracking mounts instead of replaying the stale copy held in memory.
+      const profilePath = path.join(tempDir, 'user-then-removed.sb');
+      const userProfile = '(version 1)\n(allow default)\n(allow file-read* (literal "/user-authored"))\n';
+      await fs.writeFile(profilePath, userProfile, 'utf-8');
+
+      const mountTarget = await fs.mkdtemp(path.join(os.tmpdir(), 'mastra-restart-cache-mount-'));
+      const realMountTarget = await fs.realpath(mountTarget);
+
+      const sandbox = new LocalSandbox({
+        workingDirectory: tempDir,
+        isolation: 'seatbelt',
+        nativeSandbox: { seatbeltProfilePath: profilePath },
+      });
+
+      try {
+        await sandbox._start();
+        expect(activeSeatbeltProfile(sandbox)).toBe(userProfile);
+
+        await sandbox._stop();
+        await fs.rm(profilePath, { force: true });
+        await sandbox._start();
+
+        // The user's SBPL must not survive as the active profile.
+        expect(activeSeatbeltProfile(sandbox)).not.toContain('/user-authored');
+        expect(activeSeatbeltProfile(sandbox)).toContain(GENERATED_PROFILE_MARKER);
+
+        // And the regenerated profile has to track mounts again.
+        expect(activeSeatbeltProfile(sandbox)).not.toContain(realMountTarget);
+        await sandbox.mount(makeMockLocalFs(mountTarget), '/data');
+        expect(activeSeatbeltProfile(sandbox)).toContain(realMountTarget);
+      } finally {
+        await sandbox._destroy();
+        await fs.rm(mountTarget, { recursive: true, force: true });
+      }
+    });
+
     it('should respect readOnly working directory restriction', async () => {
       if (os.platform() !== 'darwin') {
         return;
