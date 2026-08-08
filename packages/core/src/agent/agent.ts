@@ -7156,31 +7156,32 @@ export class Agent<
             const userMessage = this.getMostRecentUserMessage(threadUiMessages);
 
             if (userMessage) {
-              void this.genTitle(
-                userMessage,
-                requestContext,
-                observabilityContext,
-                titleModel,
-                titleInstructions,
-                threadUiMessages,
-              )
-                .then(async title => {
-                  if (title) {
-                    await memory.createThread({
-                      threadId: thread.id,
-                      resourceId,
-                      memoryConfig,
-                      title,
-                      metadata: thread.metadata,
-                    });
-                    if (typeof onTitleGenerated === 'function') {
-                      await onTitleGenerated(title);
-                    }
+              // Await title generation so serverless runtimes that freeze after
+              // the HTTP response cannot drop the detached work (#20682).
+              try {
+                const title = await this.genTitle(
+                  userMessage,
+                  requestContext,
+                  observabilityContext,
+                  titleModel,
+                  titleInstructions,
+                  threadUiMessages,
+                );
+                if (title) {
+                  await memory.createThread({
+                    threadId: thread.id,
+                    resourceId,
+                    memoryConfig,
+                    title,
+                    metadata: thread.metadata,
+                  });
+                  if (typeof onTitleGenerated === 'function') {
+                    await onTitleGenerated(title);
                   }
-                })
-                .catch(error => {
-                  this.logger.error('Error persisting generated title:', error);
-                });
+                }
+              } catch (error) {
+                this.logger.error('Error persisting generated title:', error);
+              }
             }
           }
         }
