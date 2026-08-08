@@ -67,6 +67,9 @@ interface AstGrepModule {
 let astGrepModule: AstGrepModule | null | undefined;
 let loadingPromise: Promise<AstGrepModule | null> | undefined;
 
+// Keep the specifier as a parameter so tsdown cannot fold it into a literal dynamic import.
+const importModule = (moduleName: string) => import(/* @vite-ignore */ /* webpackIgnore: true */ moduleName);
+
 /**
  * Try to load @ast-grep/napi. Returns null if not available.
  * Uses dynamic import to avoid compile-time dependency.
@@ -79,9 +82,7 @@ export async function loadAstGrep(): Promise<AstGrepModule | null> {
   if (!loadingPromise) {
     loadingPromise = (async () => {
       try {
-        // Dynamic import with string concatenation to prevent bundlers from resolving at build time
-        const moduleName = '@ast-grep' + '/napi';
-        const mod = await import(/* @vite-ignore */ /* webpackIgnore: true */ moduleName);
+        const mod = await importModule('@ast-grep/napi');
         astGrepModule = { parse: mod.parse, Lang: mod.Lang };
         return astGrepModule;
       } catch {
