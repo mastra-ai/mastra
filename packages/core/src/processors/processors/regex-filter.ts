@@ -177,6 +177,18 @@ export interface RegexFilterOptions {
    * when the destination is as protected as the original.
    */
   includeRedactedValues?: boolean;
+
+  /**
+   * Trailing characters the streaming redact path holds back between chunks,
+   * so a match split across a chunk boundary is redacted whole. Defaults to
+   * 128, which covers every built-in preset rule with a wide margin. Raise it
+   * for custom rules whose matches stay invisible to the rule until they
+   * complete — a fixed-length secret, or a value that only matches once a
+   * closing delimiter arrives (e.g. an armored key) — when such a match can
+   * be longer than the window. The window must be at least the longest span
+   * any such rule can match.
+   */
+  streamCarryoverSize?: number;
 }
 
 const PII_RULES: RegexRule[] = [
@@ -235,13 +247,17 @@ const PRESET_MAP: Record<RegexPreset, RegexRule[]> = {
 };
 
 /**
- * Number of trailing characters the streaming redact path holds back between
- * chunks, so a match split across a chunk boundary is redacted whole instead
- * of leaking the part that arrived first. 128 is well above the shortest
- * possible match of every built-in preset rule: any match starting further
- * back than that is already complete, so its start is never emitted unredacted.
- * A custom rule whose shortest possible match is longer than this window can
- * still have the beginning of a match leak.
+ * Default number of trailing characters the streaming redact path holds back
+ * between chunks, so a match split across a chunk boundary is redacted whole
+ * instead of leaking the part that arrived first. A match is held back while
+ * the buffered text still matches its rule, so rules whose partial matches
+ * match on their own — every built-in preset with an unbounded length, like
+ * bearer tokens, API keys, and URLs — are redacted whole at any match length.
+ * A match that stays invisible to its rule until it completes (a fixed-length
+ * secret, or a value that only matches once a closing delimiter arrives) is
+ * held only while it fits in the window; 128 covers every bounded built-in
+ * preset with a wide margin, and `streamCarryoverSize` raises it for longer
+ * custom rules.
  */
 const STREAM_CARRYOVER_SIZE = 128;
 
@@ -288,6 +304,7 @@ export class RegexFilterProcessor implements Processor<'regex-filter', RegexFilt
   private strategy: 'block' | 'redact' | 'warn';
   private phase: 'input' | 'output' | 'all';
   private includeRedactedValues: boolean;
+  private streamCarryoverSize: number;
 
   /**
    * Invoked when the `redact` strategy rewrites a piece of text, once per
@@ -309,6 +326,7 @@ export class RegexFilterProcessor implements Processor<'regex-filter', RegexFilt
     this.strategy = options.strategy ?? 'block';
     this.phase = options.phase ?? 'all';
     this.includeRedactedValues = options.includeRedactedValues ?? false;
+    this.streamCarryoverSize = options.streamCarryoverSize ?? STREAM_CARRYOVER_SIZE;
   }
 
   /**
@@ -620,12 +638,12 @@ export class RegexFilterProcessor implements Processor<'regex-filter', RegexFilt
    *
    * Matching always runs over the held-back tail of the previous chunks plus
    * the current chunk, and only text that cannot still grow into a match is
-   * emitted: the last {@link STREAM_CARRYOVER_SIZE} characters stay buffered,
-   * and a match crossing that emission boundary pulls it back to the match's
-   * start. A secret split across two chunks is therefore redacted whole
-   * instead of leaking the part that arrived first. The tail is flushed when a
-   * non-text part closes the text run, so concatenating the emitted text
-   * deltas yields exactly `redactText` of the full stream text.
+   * emitted: the last `streamCarryoverSize` characters stay buffered, and a
+   * match crossing that emission boundary pulls it back to the match's start.
+   * A secret split across two chunks is therefore redacted whole instead of
+   * leaking the part that arrived first. The tail is flushed when a non-text
+   * part closes the text run, so concatenating the emitted text deltas yields
+   * exactly `redactText` of the full stream text.
    */
   private async redactStreamPart(
     part: ChunkType,
@@ -649,9 +667,9 @@ export class RegexFilterProcessor implements Processor<'regex-filter', RegexFilt
       if (!part.payload?.text) return part;
 
       const combined = this.appendStreamCarryover(state, part);
-      if (combined.length <= STREAM_CARRYOVER_SIZE) return null;
+      if (combined.length <= this.streamCarryoverSize) return null;
 
-      let emitEnd = combined.length - STREAM_CARRYOVER_SIZE;
+      let emitEnd = combined.length - this.streamCarryoverSize;
       const regions = this.buildRedactionRegions(this.collectMatches(combined));
       for (const region of regions) {
         if (region.start < emitEnd && region.end > emitEnd) emitEnd = region.start;
@@ -671,7 +689,9 @@ export class RegexFilterProcessor implements Processor<'regex-filter', RegexFilt
     // tail. The triggering part still has to be emitted after the flushed
     // text, but only one part can be returned: stash it for the runner to
     // re-drive through the chain, or defer it to the next call when invoked
-    // directly without a writer.
+    // directly without a writer. A direct caller whose stream ends on that
+    // part drains it from `state._regexFilterPendingNonText` — the same
+    // fallback BatchPartsProcessor and PIIDetector document.
     const carryover = (state._regexFilterCarryover as string | undefined) ?? '';
     if (!carryover) return part;
 

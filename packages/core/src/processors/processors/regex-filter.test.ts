@@ -3,6 +3,7 @@ import type { MastraDBMessage, MessageList } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
 import type { ChunkType } from '../../stream';
 import type { ProcessInputArgs, ProcessOutputResultArgs, ProcessOutputStreamArgs } from '../index';
+import { REPROCESS_PART_KEY } from '../stream-reprocess';
 import { RegexFilterProcessor } from './regex-filter';
 
 function createMessage(text: string, role: 'user' | 'assistant' = 'user'): MastraDBMessage {
@@ -67,9 +68,25 @@ function textEnd(): ChunkType {
   return { type: 'text-end', runId: 'r', from: 'AGENT', payload: { id: 't1' } } as unknown as ChunkType;
 }
 
+function finishPart(): ChunkType {
+  return { type: 'finish', runId: 'r', from: 'AGENT', payload: {} } as unknown as ChunkType;
+}
+
+function textChunks(text: string, size: number): ChunkType[] {
+  const parts: ChunkType[] = [];
+  for (let i = 0; i < text.length; i += size) parts.push(textDelta(text.slice(i, i + size)));
+  return parts;
+}
+
 /**
  * Drives a sequence of stream parts through the processor with a shared state,
  * the way the ProcessorRunner does, and returns every part it emitted.
+ *
+ * The helper invokes the processor directly without a writer, so a flush can
+ * defer the non-text part that triggered it to the next call. Once the stream
+ * has ended there is no next call, so the helper drains the deferred part from
+ * the state — what a direct caller must do, and what the runner does via
+ * REPROCESS_PART_KEY when a writer is present.
  */
 async function runStream(filter: RegexFilterProcessor, parts: ChunkType[]): Promise<ChunkType[]> {
   const state: Record<string, unknown> = {};
@@ -78,6 +95,8 @@ async function runStream(filter: RegexFilterProcessor, parts: ChunkType[]): Prom
     const result = await filter.processOutputStream(createStreamArgs(part, state));
     if (result) emitted.push(result);
   }
+  const deferred = state._regexFilterPendingNonText as ChunkType | undefined;
+  if (deferred) emitted.push(deferred);
   return emitted;
 }
 
@@ -773,6 +792,83 @@ describe('RegexFilterProcessor', () => {
       ]);
 
       expect(streamedText(emitted)).toBe('x'.repeat(200) + '[ANTHROPIC_KEY]' + '!'.repeat(150));
+    });
+
+    it('redacts an unbounded match longer than the carryover window whole', async () => {
+      const filter = new RegexFilterProcessor({
+        rules: [{ name: 'bearer', pattern: /Bearer\s+[a-zA-Z0-9]+/g, replacement: '[TOKEN]' }],
+        strategy: 'redact',
+      });
+
+      const text = `Authorization: Bearer ${'T'.repeat(300)} end`;
+      const emitted = await runStream(filter, [...textChunks(text, 20), textEnd()]);
+
+      expect(streamedText(emitted)).toBe('Authorization: [TOKEN] end');
+    });
+
+    it('redacts a terminator-delimited match longer than the window when the carryover is raised', async () => {
+      const filter = new RegexFilterProcessor({
+        rules: [{ name: 'armored-key', pattern: /-----BEGIN KEY-----[A-Z]+-----END KEY-----/g, replacement: '[KEY]' }],
+        strategy: 'redact',
+        streamCarryoverSize: 256,
+      });
+
+      const text = `${'x'.repeat(200)} -----BEGIN KEY-----${'A'.repeat(200)}-----END KEY----- done`;
+      const emitted = await runStream(filter, [...textChunks(text, 25), textEnd()]);
+
+      expect(streamedText(emitted)).toBe(`${'x'.repeat(200)} [KEY] done`);
+    });
+
+    it('redacts a fixed-length match longer than the default window when the carryover is raised', async () => {
+      const filter = new RegexFilterProcessor({
+        rules: [{ name: 'blob', pattern: /BLOB-[0-9]{200}/g, replacement: '[BLOB]' }],
+        strategy: 'redact',
+        streamCarryoverSize: 256,
+      });
+
+      const text = `${'x'.repeat(200)} BLOB-${'7'.repeat(200)} ok`;
+      const emitted = await runStream(filter, [...textChunks(text, 25), textEnd()]);
+
+      expect(streamedText(emitted)).toBe(`${'x'.repeat(200)} [BLOB] ok`);
+    });
+
+    it('delivers the flush-triggering text-end to direct callers once drained', async () => {
+      const filter = new RegexFilterProcessor({ presets: ['pii'], strategy: 'redact' });
+
+      const emitted = await runStream(filter, [textDelta('mail a@b.com'), textEnd()]);
+
+      expect(emitted.map(part => part.type)).toEqual(['text-delta', 'text-end']);
+      expect(streamedText(emitted)).toBe('mail [EMAIL]');
+    });
+
+    it('hands a flush-deferred non-text part to the next call when invoked without a writer', async () => {
+      const filter = new RegexFilterProcessor({ presets: ['pii'], strategy: 'redact' });
+      const state: Record<string, unknown> = {};
+      const drive = (part: ChunkType) => filter.processOutputStream(createStreamArgs(part, state));
+
+      expect(await drive(textDelta('mail a@b.com'))).toBeNull();
+      expect((await drive(textEnd()))?.type).toBe('text-delta');
+
+      const finish = finishPart();
+      const deferred = await drive(finish);
+      expect(deferred?.type).toBe('text-end');
+      expect(state._regexFilterPendingNonText).toBe(finish);
+    });
+
+    it('stashes the flush-triggering part for the runner to re-drive when a writer is present', async () => {
+      const filter = new RegexFilterProcessor({ presets: ['pii'], strategy: 'redact' });
+      const state: Record<string, unknown> = {};
+      const writer = { custom: vi.fn(async () => {}) };
+      const drive = (part: ChunkType) => filter.processOutputStream({ ...createStreamArgs(part, state), writer });
+
+      await drive(textDelta('mail a@b.com'));
+      const end = textEnd();
+      const flushed = await drive(end);
+
+      expect(flushed?.type).toBe('text-delta');
+      expect((flushed as any).payload.text).toBe('mail [EMAIL]');
+      expect(state[REPROCESS_PART_KEY]).toBe(end);
+      expect(state._regexFilterPendingNonText).toBeUndefined();
     });
 
     it('passes through non-text chunks', async () => {

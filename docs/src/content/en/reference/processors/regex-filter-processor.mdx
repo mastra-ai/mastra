@@ -134,6 +134,14 @@ const agent = new Agent({
     isOptional: true,
     defaultValue: 'false',
   },
+  {
+    name: 'streamCarryoverSize',
+    type: 'number',
+    description:
+      'Trailing characters the streaming redact path holds back between chunks, so a match split across a chunk boundary is redacted whole. The default covers every built-in preset with a wide margin. Raise it for custom rules whose matches stay invisible to the rule until they complete, such as a fixed-length secret or a value with a closing delimiter, when such a match can be longer than the window.',
+    isOptional: true,
+    defaultValue: '128',
+  },
 ]}
 />
 
