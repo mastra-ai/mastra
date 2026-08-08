@@ -48,23 +48,37 @@ export const paginationInfoSchema = z.object({
 });
 
 /**
+ * A pagination count from a query string.
+ *
+ * `z.coerce.number()` alone only rejects what coerces to `NaN`, so `page=-1`,
+ * `page=1.5` and `page=1e20` all reach storage, which throws a plain `Error`
+ * with no HTTP status — reporting a malformed client request as a `500`.
+ * Constraining it here turns those into a `400` with field-level issues,
+ * because the route framework already maps a query-schema `ZodError` that way.
+ *
+ * The bound is `min(0)`, not `min(1)`: `perPage: 0` is a real storage contract
+ * (the include-only fast path) and is covered by the shared store tests.
+ */
+const paginationCount = () => z.coerce.number().int().min(0);
+
+/**
  * Factory function for page/perPage pagination query params
  * @param defaultPerPage - Default value for perPage (omit for no default)
  */
 export const createPagePaginationSchema = (defaultPerPage?: number) => {
   const baseSchema = {
-    page: z.coerce.number().optional().default(0),
+    page: paginationCount().optional().default(0),
   };
 
   if (defaultPerPage !== undefined) {
     return z.object({
       ...baseSchema,
-      perPage: z.coerce.number().optional().default(defaultPerPage),
+      perPage: paginationCount().optional().default(defaultPerPage),
     });
   } else {
     return z.object({
       ...baseSchema,
-      perPage: z.coerce.number().optional(),
+      perPage: paginationCount().optional(),
     });
   }
 };
@@ -74,17 +88,19 @@ export const createPagePaginationSchema = (defaultPerPage?: number) => {
  * Use this when you need backwards compatibility with older clients using limit/offset
  */
 export const createCombinedPaginationSchema = () => {
+  // Left `.optional()` with no default on purpose: these feed a back-compat
+  // path that distinguishes "absent" from "0".
   return z.object({
-    page: z.coerce.number().optional(),
-    perPage: z.coerce.number().optional(),
+    page: paginationCount().optional(),
+    perPage: paginationCount().optional(),
     /**
      * @deprecated Use page and perPage instead
      */
-    offset: z.coerce.number().optional(),
+    offset: paginationCount().optional(),
     /**
      * @deprecated Use page and perPage instead
      */
-    limit: z.coerce.number().optional(),
+    limit: paginationCount().optional(),
   });
 };
 
