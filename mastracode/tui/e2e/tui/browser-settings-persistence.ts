@@ -65,7 +65,9 @@ export const browserSettingsPersistenceScenario = {
     await terminal.flushInput?.();
     await runtime.waitForScreenText(/│ ›/i, terminal, 8_000);
     terminal.submit('/browser clear');
-    await runtime.waitForScreenText(/Browser settings reset to defaults\./i, terminal, 15_000);
+    // Match the scrollback, not the viewport: the confirmation can scroll out of
+    // the fixed-size screen before this assertion runs when CI is under load.
+    await runtime.waitForOutputText(/Browser settings reset to defaults\./i, terminal, 15_000);
 
     terminal.submit(
       `!node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/settings.json","utf8")); const b=s.browser||{}; console.log("BROWSER_CLEAR_ENABLED="+b.enabled); console.log("BROWSER_CLEAR_PROVIDER="+b.provider); console.log("BROWSER_CLEAR_HEADLESS="+b.headless); console.log("BROWSER_CLEAR_VIEWPORT="+(b.viewport&&b.viewport.width)+"x"+(b.viewport&&b.viewport.height)); console.log("BROWSER_CLEAR_CDP="+(b.cdpUrl||"missing")); console.log("BROWSER_CLEAR_PROFILE="+(b.profile||"missing")); console.log("BROWSER_CLEAR_EXEC="+(b.executablePath||"missing")); console.log("BROWSER_CLEAR_AGENT="+(b.agentBrowser?"kept":"missing"));'`,
@@ -78,6 +80,28 @@ export const browserSettingsPersistenceScenario = {
     await runtime.waitForScreenText(/BROWSER_CLEAR_PROFILE=missing/i, terminal, 8_000);
     await runtime.waitForScreenText(/BROWSER_CLEAR_EXEC=missing/i, terminal, 8_000);
     await runtime.waitForScreenText(/BROWSER_CLEAR_AGENT=missing/i, terminal, 8_000);
+
+    // Provider is stagehand after the reset above, so the model key is accepted here.
+    terminal.submit('/browser set model not-provider-qualified');
+    await runtime.waitForOutputText(/<provider>\/<model>/i, terminal, 8_000);
+
+    terminal.submit('/browser set model anthropic/claude-sonnet-4-5');
+    await runtime.waitForOutputText(/Set model = anthropic\/claude-sonnet-4-5/i, terminal, 8_000);
+
+    terminal.submit(
+      `!node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/settings.json","utf8")); const b=s.browser||{}; console.log("BROWSER_MODEL="+(b.stagehand&&b.stagehand.model||"missing"));'`,
+    );
+    await runtime.waitForOutputText(/BROWSER_MODEL=anthropic\/claude-sonnet-4-5/i, terminal, 8_000);
+
+    terminal.submit('/browser clear model');
+    await runtime.waitForOutputText(/Cleared model\./i, terminal, 8_000);
+
+    terminal.submit(
+      `!node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/settings.json","utf8")); const b=s.browser||{}; console.log("BROWSER_MODEL_CLEARED="+(b.stagehand&&b.stagehand.model||"missing")); console.log("BROWSER_MODEL_ENV="+(b.stagehand&&b.stagehand.env||"missing"));'`,
+    );
+    await runtime.waitForOutputText(/BROWSER_MODEL_CLEARED=missing/i, terminal, 8_000);
+    // Clearing the model must not take the rest of the stagehand block with it.
+    await runtime.waitForOutputText(/BROWSER_MODEL_ENV=LOCAL/i, terminal, 8_000);
 
     terminal.keyCtrlC();
   },

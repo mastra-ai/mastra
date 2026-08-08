@@ -1,5 +1,34 @@
 # @mastra/pg
 
+## 1.20.0-alpha.2
+
+### Patch Changes
+
+- Fixed `include` in `listMessages` and `listMessagesByResourceId` so it can no longer return a message that belongs to a different resource. When you pass a `resourceId`, the target message and its surrounding context messages now stay inside that resource. Includes that cross threads inside the same resource keep working, so semantic recall with `scope: 'resource'` is unchanged. ([#20984](https://github.com/mastra-ai/mastra/pull/20984))
+
+  **Behaviour change in the in-memory store**
+
+  The in-memory store read the context window from the thread you queried. It now reads the window from the thread that owns the target message, which is what the SQL stores already did. This only changes the result when an `include` entry names a message from another thread.
+
+  The in-memory store also ignored `include` in `listMessagesByResourceId`. It now returns the included messages, like `@mastra/libsql` and `@mastra/pg` do.
+
+  Fixes #20604.
+
+- Add a persistent `threadState` domain to `PostgresStore` ([#20994](https://github.com/mastra-ai/mastra/pull/20994))
+
+  `PostgresStore` did not register a `threadState` domain, so durable task and goal
+  state fell back to in-memory storage and was lost on restart. Anything relying on
+  thread state (task tools, long-running agent goals) could not be backed by Postgres
+  alone, and required composing a second adapter through `MastraCompositeStore`.
+
+  `ThreadStatePG` now stores state as JSONB keyed by `(threadId, type)` with an atomic
+  upsert that preserves `createdAt`, participates in `exportSchemas()` and `init()`, and
+  supports retention pruning anchored on `updatedAtZ` so state for still-active threads
+  survives age-based pruning.
+
+- Updated dependencies [[`6445eba`](https://github.com/mastra-ai/mastra/commit/6445eba6020abac681aba1cc9289f446cb400cbe), [`df31eb0`](https://github.com/mastra-ai/mastra/commit/df31eb0c7087d782a0d9346e467f9a4af4b0eef6), [`fcd0667`](https://github.com/mastra-ai/mastra/commit/fcd0667a4e378be35c9a1b1eb19cce78fbfd7282), [`bab06b1`](https://github.com/mastra-ai/mastra/commit/bab06b18923873a584bdfc71a6b4ec7fb4727fb7)]:
+  - @mastra/core@1.58.0-alpha.5
+
 ## 1.20.0-alpha.1
 
 ### Patch Changes
