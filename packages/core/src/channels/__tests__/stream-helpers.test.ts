@@ -1,6 +1,6 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 
-import { ToolTracker, extractErrorMessage } from '../stream-helpers';
+import { ToolTracker, editOrPostMessage, extractErrorMessage, postFileAttachment } from '../stream-helpers';
 
 describe('ToolTracker', () => {
   it('tracks a tool start and returns enrichment', () => {
@@ -113,6 +113,60 @@ describe('ToolTracker', () => {
     tracker.trackStart({ toolCallId: 't2', toolName: 'weather', args: {} });
     tracker.reset();
     expect(tracker.inFlightCount).toBe(0);
+  });
+});
+
+describe('editOrPostMessage', () => {
+  it('passes a { markdown } message through to editMessage unchanged', async () => {
+    const editMessage = vi.fn().mockResolvedValue({});
+    const post = vi.fn().mockResolvedValue({ id: 'new' });
+    const message = { markdown: '**bold** update' };
+
+    const id = await editOrPostMessage({
+      adapter: { editMessage },
+      chatThread: { id: 'thread-1', post },
+      messageId: 'm1',
+      message,
+    });
+
+    expect(id).toBe('m1');
+    expect(editMessage).toHaveBeenCalledWith('thread-1', 'm1', message);
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it('passes a { markdown } message through to post unchanged when there is no messageId', async () => {
+    const editMessage = vi.fn();
+    const post = vi.fn().mockResolvedValue({ id: 'new' });
+    const message = { markdown: '**bold** post' };
+
+    const id = await editOrPostMessage({
+      adapter: { editMessage },
+      chatThread: { id: 'thread-1', post },
+      messageId: undefined,
+      message,
+    });
+
+    expect(id).toBe('new');
+    expect(editMessage).not.toHaveBeenCalled();
+    expect(post).toHaveBeenCalledWith(message);
+  });
+});
+
+describe('postFileAttachment', () => {
+  it('posts the file as a markdown-shaped payload without a cast', async () => {
+    const post = vi.fn().mockResolvedValue({});
+
+    await postFileAttachment({
+      chunk: { type: 'file', payload: { data: Buffer.from('abc').toString('base64'), mimeType: 'image/png' } } as any,
+      chatThread: { post },
+    });
+
+    expect(post).toHaveBeenCalledTimes(1);
+    const arg = post.mock.calls[0]![0];
+    expect(arg.markdown).toBe(' ');
+    expect(arg.files).toHaveLength(1);
+    expect(arg.files[0].filename).toBe('generated.png');
+    expect(arg.files[0].mimeType).toBe('image/png');
   });
 });
 

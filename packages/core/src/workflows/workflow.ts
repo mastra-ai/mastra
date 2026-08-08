@@ -160,7 +160,7 @@ function isDeclarativePredicateArg(value: unknown): value is { predicate: Predic
  * existing execution engine (which only knows how to call `condition(params)`)
  * can execute stored / declarative predicates unchanged.
  *
- * Exported for the rehydration path (workflows/stored), which rebuilds
+ * Exported for the rehydration path (workflows/dynamic), which rebuilds
  * conditional/loop entries from stored predicates.
  */
 export function predicateToCondition(predicate: Predicate): (params: any) => Promise<boolean> {
@@ -1633,8 +1633,8 @@ export class Workflow<
   public engineType: WorkflowEngineType = 'default';
   /** Type of workflow - 'processor' for processor workflows, 'default' otherwise */
   public type: WorkflowType = 'default';
-  /** Where this workflow came from: 'code' for statically registered workflows, 'stored' for workflows rehydrated from storage. Set by rehydrateWorkflow; defaults to 'code'. */
-  public origin: 'code' | 'stored' = 'code';
+  /** Where this workflow came from: 'code' for statically registered workflows, 'dynamic' for workflows rehydrated from storage. Set by rehydrateWorkflow; defaults to 'code'. */
+  public origin: 'code' | 'dynamic' = 'code';
   #nestedWorkflowInput?: TInput;
   public committed: boolean = false;
   protected stepFlow: StepFlowEntry<TEngineType>[];
@@ -1741,7 +1741,7 @@ export class Workflow<
   }
 
   /**
-   * @internal Rehydration-only (workflows/stored). Appends a fully-built
+   * @internal Rehydration-only (workflows/dynamic). Appends a fully-built
    * graph entry without laundering it through the live-`Step` builder
    * overloads: rehydration already holds the declarative entry it parsed from
    * storage, so wrapping it in a fake `Step` just so the builder can sniff it
@@ -3717,15 +3717,12 @@ export class Run<
       } catch {}
     });
 
-    this.#observerHandlers.push(async () => {
+    this.#observerHandlers.push(() => {
       unwatch();
-      try {
-        await writer.close();
-      } catch (err) {
+      void writer.close().catch(err => {
         this.mastra?.getLogger()?.error('Error closing stream:', err);
-      } finally {
-        writer.releaseLock();
-      }
+      });
+      writer.releaseLock();
     });
 
     return {

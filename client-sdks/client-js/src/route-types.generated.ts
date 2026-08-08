@@ -17,7 +17,7 @@ type Shared_Auxiliary_290 =
       [key: string]: Shared_Auxiliary_290;
     };
 
-type Shared_Auxiliary_1076 =
+type Shared_Auxiliary_1077 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -62,19 +62,19 @@ type Shared_Auxiliary_1076 =
     }
   | {
       op: 'and' | 'or';
-      args: Shared_Auxiliary_1076[];
+      args: Shared_Auxiliary_1077[];
     }
   | {
       op: 'not';
-      arg: Shared_Auxiliary_1076;
+      arg: Shared_Auxiliary_1077;
     };
 
-type Shared_Auxiliary_1217 = {
+type Shared_Auxiliary_1218 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: Shared_Auxiliary_1217[] | undefined;
+  children?: Shared_Auxiliary_1218[] | undefined;
 };
 
 type Shared_Type_0 = {
@@ -1269,7 +1269,7 @@ type Shared_Type_58 = {
   stateSchema?: string | undefined;
   options?: {} | undefined;
   isProcessorWorkflow?: boolean | undefined;
-  origin?: ('code' | 'stored') | undefined;
+  origin?: ('code' | 'dynamic') | undefined;
 };
 
 type Shared_Type_59 = {
@@ -2457,13 +2457,13 @@ type Shared_Type_107 =
   | {
       type: 'conditional';
       steps: Shared_Type_105[];
-      predicates: Shared_Auxiliary_1076[];
+      predicates: Shared_Auxiliary_1077[];
     }
   | {
       type: 'loop';
       step: Shared_Type_105;
       loopType: 'dowhile' | 'dountil';
-      predicate: Shared_Auxiliary_1076;
+      predicate: Shared_Auxiliary_1077;
     };
 
 type Shared_Type_108 = {
@@ -2800,7 +2800,7 @@ type Shared_Type_120 = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_1217[] | undefined;
+  files?: Shared_Auxiliary_1218[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -5526,6 +5526,31 @@ export interface GetWorkflows_RouteContract {
   body: never;
   request: GetWorkflows_Request;
   response: GetWorkflows_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /workflows/run-counts
+// ============================================================================
+export type GetWorkflowsRunCounts_Response = {
+  [key: string]: {
+    running: number;
+    suspended: number;
+  };
+};
+
+export type GetWorkflowsRunCounts_Request = Simplify<
+  (never extends never ? {} : { params: never }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetWorkflowsRunCounts_RouteContract {
+  pathParams: never;
+  queryParams: never;
+  body: never;
+  request: GetWorkflowsRunCounts_Request;
+  response: GetWorkflowsRunCounts_Response;
   responseType: 'json';
 }
 
@@ -14081,9 +14106,9 @@ export interface DeleteStoredAgentsStoredAgentIdFavorite_RouteContract {
 // Route: GET /stored/workflows
 // ============================================================================
 export type GetStoredWorkflows_QueryParams = {
-  /** Filter stored workflows by status (defaults to active when omitted by the handler) */
+  /** Filter dynamic workflows by status (defaults to active when omitted by the handler) */
   status?: ('active' | 'archived') | undefined;
-  /** Filter stored workflows by author identifier */
+  /** Filter dynamic workflows by author identifier */
   authorId?: string | undefined;
 };
 
@@ -14143,7 +14168,7 @@ export type PostStoredWorkflows_Body = {
     | undefined;
   /** Static workflow graph — ordered array of serialized step entries with all refs as ids. */
   graph: Shared_Type_107[];
-  /** Helper workflow definitions this workflow nests. Saved with it as one unit — the whole set is validated together, hydrated in derived dependency order, and rejected together, so a failed save never leaves orphaned helpers behind. Each helper becomes an ordinary stored workflow in its own right. */
+  /** Helper workflow definitions this workflow nests. Saved with it as one unit — the whole set is validated together, hydrated in derived dependency order, and rejected together, so a failed save never leaves orphaned helpers behind. Each helper becomes an ordinary dynamic workflow in its own right. */
   dependencies?:
     | {
         /** Workflow id — kebab-case, descriptive */
@@ -14205,56 +14230,56 @@ export interface PostStoredWorkflows_RouteContract {
 }
 
 // ============================================================================
-// Route: GET /stored/workflows/:storedWorkflowId
+// Route: GET /stored/workflows/:dynamicWorkflowId
 // ============================================================================
-export type GetStoredWorkflowsStoredWorkflowId_PathParams = {
-  /** Unique identifier for the stored workflow definition */
-  storedWorkflowId: string;
+export type GetStoredWorkflowsDynamicWorkflowId_PathParams = {
+  /** Unique identifier for the dynamic workflow definition */
+  dynamicWorkflowId: string;
 };
 
-export type GetStoredWorkflowsStoredWorkflowId_Response = Shared_Type_102;
+export type GetStoredWorkflowsDynamicWorkflowId_Response = Shared_Type_102;
 
-export type GetStoredWorkflowsStoredWorkflowId_Request = Simplify<
-  (GetStoredWorkflowsStoredWorkflowId_PathParams extends never
+export type GetStoredWorkflowsDynamicWorkflowId_Request = Simplify<
+  (GetStoredWorkflowsDynamicWorkflowId_PathParams extends never
     ? {}
-    : { params: GetStoredWorkflowsStoredWorkflowId_PathParams }) &
+    : { params: GetStoredWorkflowsDynamicWorkflowId_PathParams }) &
     (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
-export interface GetStoredWorkflowsStoredWorkflowId_RouteContract {
-  pathParams: GetStoredWorkflowsStoredWorkflowId_PathParams;
+export interface GetStoredWorkflowsDynamicWorkflowId_RouteContract {
+  pathParams: GetStoredWorkflowsDynamicWorkflowId_PathParams;
   queryParams: never;
   body: never;
-  request: GetStoredWorkflowsStoredWorkflowId_Request;
-  response: GetStoredWorkflowsStoredWorkflowId_Response;
+  request: GetStoredWorkflowsDynamicWorkflowId_Request;
+  response: GetStoredWorkflowsDynamicWorkflowId_Response;
   responseType: 'json';
 }
 
 // ============================================================================
-// Route: DELETE /stored/workflows/:storedWorkflowId
+// Route: DELETE /stored/workflows/:dynamicWorkflowId
 // ============================================================================
-export type DeleteStoredWorkflowsStoredWorkflowId_PathParams = GetStoredWorkflowsStoredWorkflowId_PathParams;
+export type DeleteStoredWorkflowsDynamicWorkflowId_PathParams = GetStoredWorkflowsDynamicWorkflowId_PathParams;
 
-export type DeleteStoredWorkflowsStoredWorkflowId_Response = {
+export type DeleteStoredWorkflowsDynamicWorkflowId_Response = {
   success: true;
   message: string;
 };
 
-export type DeleteStoredWorkflowsStoredWorkflowId_Request = Simplify<
-  (DeleteStoredWorkflowsStoredWorkflowId_PathParams extends never
+export type DeleteStoredWorkflowsDynamicWorkflowId_Request = Simplify<
+  (DeleteStoredWorkflowsDynamicWorkflowId_PathParams extends never
     ? {}
-    : { params: DeleteStoredWorkflowsStoredWorkflowId_PathParams }) &
+    : { params: DeleteStoredWorkflowsDynamicWorkflowId_PathParams }) &
     (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
-export interface DeleteStoredWorkflowsStoredWorkflowId_RouteContract {
-  pathParams: DeleteStoredWorkflowsStoredWorkflowId_PathParams;
+export interface DeleteStoredWorkflowsDynamicWorkflowId_RouteContract {
+  pathParams: DeleteStoredWorkflowsDynamicWorkflowId_PathParams;
   queryParams: never;
   body: never;
-  request: DeleteStoredWorkflowsStoredWorkflowId_Request;
-  response: DeleteStoredWorkflowsStoredWorkflowId_Response;
+  request: DeleteStoredWorkflowsDynamicWorkflowId_Request;
+  response: DeleteStoredWorkflowsDynamicWorkflowId_Response;
   responseType: 'json';
 }
 
@@ -16254,7 +16279,7 @@ export type PostStoredSkills_Body = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_1217[] | undefined;
+  files?: Shared_Auxiliary_1218[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -16312,7 +16337,7 @@ export type PatchStoredSkillsStoredSkillId_Body = {
   /** List of asset file paths */
   assets?: (string[] | undefined) | undefined;
   /** Full file tree structure for the skill */
-  files?: (Shared_Auxiliary_1217[] | undefined) | undefined;
+  files?: (Shared_Auxiliary_1218[] | undefined) | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | (
@@ -21292,6 +21317,7 @@ export interface RouteTypes {
   'GET /auth/roles/:roleId/permissions': GetAuthRolesRoleIdPermissions_RouteContract;
   'GET /auth/permission-patterns': GetAuthPermissionPatterns_RouteContract;
   'GET /workflows': GetWorkflows_RouteContract;
+  'GET /workflows/run-counts': GetWorkflowsRunCounts_RouteContract;
   'GET /workflows/:workflowId': GetWorkflowsWorkflowId_RouteContract;
   'GET /workflows/:workflowId/runs': GetWorkflowsWorkflowIdRuns_RouteContract;
   'GET /workflows/:workflowId/runs/:runId': GetWorkflowsWorkflowIdRunsRunId_RouteContract;
@@ -21464,8 +21490,8 @@ export interface RouteTypes {
   'DELETE /stored/agents/:storedAgentId/favorite': DeleteStoredAgentsStoredAgentIdFavorite_RouteContract;
   'GET /stored/workflows': GetStoredWorkflows_RouteContract;
   'POST /stored/workflows': PostStoredWorkflows_RouteContract;
-  'GET /stored/workflows/:storedWorkflowId': GetStoredWorkflowsStoredWorkflowId_RouteContract;
-  'DELETE /stored/workflows/:storedWorkflowId': DeleteStoredWorkflowsStoredWorkflowId_RouteContract;
+  'GET /stored/workflows/:dynamicWorkflowId': GetStoredWorkflowsDynamicWorkflowId_RouteContract;
+  'DELETE /stored/workflows/:dynamicWorkflowId': DeleteStoredWorkflowsDynamicWorkflowId_RouteContract;
   'GET /stored/mcp-clients': GetStoredMcpClients_RouteContract;
   'GET /stored/mcp-clients/:storedMCPClientId': GetStoredMcpClientsStoredMCPClientId_RouteContract;
   'POST /stored/mcp-clients': PostStoredMcpClients_RouteContract;
@@ -22470,9 +22496,9 @@ export interface Client {
     GET: GetStoredWorkflows_RouteContract;
     POST: PostStoredWorkflows_RouteContract;
   };
-  '/stored/workflows/:storedWorkflowId': {
-    DELETE: DeleteStoredWorkflowsStoredWorkflowId_RouteContract;
-    GET: GetStoredWorkflowsStoredWorkflowId_RouteContract;
+  '/stored/workflows/:dynamicWorkflowId': {
+    DELETE: DeleteStoredWorkflowsDynamicWorkflowId_RouteContract;
+    GET: GetStoredWorkflowsDynamicWorkflowId_RouteContract;
   };
   '/stored/workspaces': {
     GET: GetStoredWorkspaces_RouteContract;
@@ -22646,6 +22672,9 @@ export interface Client {
   };
   '/workflows/events': {
     POST: PostWorkflowsEvents_RouteContract;
+  };
+  '/workflows/run-counts': {
+    GET: GetWorkflowsRunCounts_RouteContract;
   };
   '/workspaces': {
     GET: GetWorkspaces_RouteContract;
