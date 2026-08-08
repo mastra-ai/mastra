@@ -2348,21 +2348,12 @@ importers:
 
   mastracode/mastra-factory:
     dependencies:
-      '@clack/prompts':
-        specifier: ^1.7.0
-        version: 1.7.0
       commander:
         specifier: ^14.0.3
         version: 14.0.3
       mastra:
         specifier: workspace:*
         version: link:../../packages/cli
-      picocolors:
-        specifier: ^1.1.1
-        version: 1.1.1
-      tinyexec:
-        specifier: ^1.2.4
-        version: 1.2.4
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -4185,6 +4176,9 @@ importers:
       strip-json-comments:
         specifier: ^5.0.3
         version: 5.0.3
+      tinyexec:
+        specifier: ^1.2.4
+        version: 1.2.4
       tinyglobby:
         specifier: ^0.2.17
         version: 0.2.17

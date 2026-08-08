@@ -11,6 +11,7 @@
   },
   "exports": {
     ".": "./dist/index.js",
+    "./commands/factory": "./dist/commands/factory/index.js",
     "./internal/auth": "./dist/internal/auth.js",
     "./package.json": "./package.json",
     "./dist/*": [
@@ -73,6 +74,7 @@
     "serve-handler": "^6.1.7",
     "shell-quote": "^1.8.3",
     "strip-json-comments": "^5.0.3",
+    "tinyexec": "^1.2.4",
     "tinyglobby": "^0.2.17",
     "yocto-spinner": "^1.1.0"
   },

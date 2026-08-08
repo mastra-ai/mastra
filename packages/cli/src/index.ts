@@ -27,6 +27,7 @@ import { registerEnvDbCommands } from './commands/db/index.js';
 import { unifiedDeployAction } from './commands/deploy/index.js';
 import { registerEnvCommands } from './commands/env/index.js';
 import { buildExperimentWorker } from './commands/experiment/build';
+import { configureFactoryInitCommand, runFactoryInitCommand } from './commands/factory/index.js';
 import { COMPONENTS, LLMProvider } from './commands/init/utils';
 import { serverDeployAction } from './commands/server/deploy';
 import { serverSuggestionsAction } from './commands/server/deploy-suggestions';
@@ -141,6 +142,10 @@ program
   .action(startDevServer);
 
 const factoryCommand = program.command('factory').description('Manage Mastra Factory');
+
+configureFactoryInitCommand(factoryCommand.command('init')).action(
+  wrapAction((projectName, options) => runFactoryInitCommand(projectName, options, analytics)),
+);
 
 factoryCommand
   .command('dev')

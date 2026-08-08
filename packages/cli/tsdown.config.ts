@@ -11,6 +11,7 @@ export default defineConfig({
     'src/analytics/index.ts',
     'src/commands/create/create.ts',
     'src/commands/experiment/runtime.ts',
+    'src/commands/factory/index.ts',
     'src/internal/auth.ts',
   ],
   treeshake: true,
