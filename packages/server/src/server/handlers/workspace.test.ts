@@ -457,6 +457,87 @@ describe('Workspace Handlers', () => {
         },
       });
     });
+
+    it('should materialize the workspace via resolveWorkspaceById on a registry miss', async () => {
+      // Simulates the shipyard prod scenario: the process restarted, the in-memory
+      // registry is empty, but the underlying (durable) sandbox is still reachable
+      // and the host can rebuild the workspace shim from its own state.
+      const lazyWorkspace = createWorkspace('mfw-abc-xyz-web-factory', { name: 'Lazy Factory Workspace' });
+      const resolver = vi.fn(async (id: string) => (id === 'mfw-abc-xyz-web-factory' ? lazyWorkspace : undefined));
+
+      const mastra = new Mastra({ logger: false, resolveWorkspaceById: resolver });
+
+      const result = await GET_WORKSPACE_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        workspaceId: 'mfw-abc-xyz-web-factory',
+      });
+
+      expect(result).toMatchObject({
+        isWorkspaceConfigured: true,
+        id: 'mfw-abc-xyz-web-factory',
+        name: 'Lazy Factory Workspace',
+      });
+      expect(resolver).toHaveBeenCalledTimes(1);
+      expect(mastra.listWorkspaces()['mfw-abc-xyz-web-factory']?.source).toBe('resolver');
+    });
+
+    it('should propagate non-404 resolver errors (e.g. DB/network failures) instead of masking them as "not configured"', async () => {
+      // A resolver blowup is an operational problem, not a "workspace doesn't
+      // exist" signal. If we swallowed it as `undefined`, prod outages would
+      // silently surface as 404s and be near-impossible to diagnose.
+      const resolver = vi.fn(async () => {
+        throw new Error('database unreachable');
+      });
+
+      const mastra = new Mastra({ logger: false, resolveWorkspaceById: resolver });
+
+      await expect(
+        GET_WORKSPACE_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          workspaceId: 'mfw-abc-xyz-web-factory',
+        }),
+      ).rejects.toThrow('database unreachable');
+      expect(resolver).toHaveBeenCalledTimes(1);
+    });
+
+    it('should not invoke agent function-based workspaces when a resolver is configured and reports not-found', async () => {
+      // When a resolver is configured on `@mastra/core`, the resolver + registry
+      // are authoritative: a resolver miss must return a clean not-configured
+      // response without side-effect-invoking every agent's function-based
+      // workspace. Function-based agent workspaces are request-scoped; invoking
+      // them here with a default RequestContext would either register a wrong
+      // workspace under `source: 'agent'` (first-writer-wins in the registry)
+      // or throw and escape the handler as a 500. The legacy agent-iteration
+      // fallback is intentionally confined to the older-core code path.
+      const agentWorkspaceFactory = vi.fn(() => createWorkspace('agent-owned-ws', { name: 'Agent Owned' }));
+      const agent = new Agent({
+        name: 'lonely-agent',
+        instructions: 'test',
+        model: { provider: 'openai', name: 'gpt-4o' } as any,
+        workspace: agentWorkspaceFactory as any,
+      });
+
+      const resolver = vi.fn(async () => undefined);
+      const mastra = new Mastra({
+        logger: false,
+        resolveWorkspaceById: resolver,
+        agents: { lonelyAgent: agent },
+      });
+
+      // Reset call count so we only measure invocations triggered by the
+      // handler itself, not any construction-time bookkeeping.
+      agentWorkspaceFactory.mockClear();
+
+      const result = await GET_WORKSPACE_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        workspaceId: 'agent-owned-ws',
+      });
+
+      expect(result).toMatchObject({ isWorkspaceConfigured: false });
+      expect(resolver).toHaveBeenCalledWith('agent-owned-ws', expect.objectContaining({ mastra }));
+      expect(resolver).toHaveBeenCalledTimes(1);
+      expect(agentWorkspaceFactory).not.toHaveBeenCalled();
+    });
   });
 
   // ===========================================================================

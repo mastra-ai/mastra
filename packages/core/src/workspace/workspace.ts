@@ -461,7 +461,15 @@ export type AnyWorkspace = Workspace<WorkspaceFilesystem | undefined, WorkspaceS
 /** A workspace entry in the Mastra registry, enriched with source metadata. */
 export interface RegisteredWorkspace {
   workspace: Workspace;
-  source: 'mastra' | 'agent';
+  /**
+   * How the workspace ended up in the registry:
+   * - `'mastra'`: registered via `Mastra` config or an explicit `addWorkspace()` call
+   * - `'agent'`: auto-registered when an agent's workspace factory resolved
+   * - `'resolver'`: materialized on demand by the `resolveWorkspaceById` hook
+   *   (e.g. after container restart, on a fresh replica) — see
+   *   `Mastra#resolveWorkspaceById`.
+   */
+  source: 'mastra' | 'agent' | 'resolver';
   agentId?: string;
   agentName?: string;
 }

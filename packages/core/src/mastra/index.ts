@@ -435,6 +435,45 @@ export interface Config<
   workspace?: AnyWorkspace;
 
   /**
+   * Lazy resolver for workspaces that are not (yet) present in the in-memory
+   * registry. Invoked by {@link Mastra.resolveWorkspaceById} when a lookup misses
+   * the {@link Mastra.listWorkspaces} map.
+   *
+   * This exists so dynamic, per-session workspaces (e.g. factory sandboxes with
+   * IDs like `mfw-<repoId>-<sessionId>-web-factory`) can survive container
+   * restarts and cross-replica lookups: the durable state lives outside the
+   * process (Neon session row, Railway sandbox), and this hook rebuilds the
+   * in-memory shim on demand.
+   *
+   * Contract:
+   * - Return the workspace to materialize, or `undefined` if the id is genuinely
+   *   unknown (callers get the standard `MASTRA_GET_WORKSPACE_BY_ID_NOT_FOUND`).
+   * - Successful resolutions are cached in the registry via `addWorkspace()`
+   *   with `source: 'resolver'`; a second call for the same id is a map hit.
+   * - Concurrent calls for the same id share a single in-flight promise, so the
+   *   resolver runs at most once per outstanding lookup.
+   * - Failed resolutions (thrown or `undefined`) are **not** cached.
+   *
+   * Sync callers of `getWorkspaceById` are unaffected — they continue to throw
+   * on a registry miss. Only `resolveWorkspaceById` consults this hook.
+   *
+   * @example
+   * ```typescript
+   * new Mastra({
+   *   resolveWorkspaceById: async (id, { mastra }) => {
+   *     const session = await sessions.findByWorkspaceId(id);
+   *     if (!session) return undefined;
+   *     return createFactoryWorkspace(session, { mastra });
+   *   },
+   * });
+   * ```
+   */
+  resolveWorkspaceById?: (
+    id: string,
+    context: { mastra: Mastra },
+  ) => Promise<AnyWorkspace | undefined> | AnyWorkspace | undefined;
+
+  /**
    * Custom model router gateways for accessing LLM providers.
    * Gateways handle provider-specific authentication, URL construction, and model resolution.
    */
@@ -695,6 +734,18 @@ export class Mastra<
   #memory?: TMemory;
   #workspace?: Workspace;
   #workspaces: Record<string, RegisteredWorkspace> = {};
+  #workspaceResolver?: (
+    id: string,
+    context: { mastra: Mastra },
+  ) => Promise<AnyWorkspace | undefined> | AnyWorkspace | undefined;
+  /**
+   * In-flight lazy resolutions, keyed by workspace id. Ensures concurrent
+   * `resolveWorkspaceById` callers for the same id share one resolver
+   * invocation (avoids double-provisioning sandbox/LSP/filesystem clients).
+   * Entries are deleted as soon as the underlying promise settles, so a
+   * failed resolution does not poison future lookups.
+   */
+  #inFlightWorkspaceResolutions: Map<string, Promise<AnyWorkspace | undefined>> = new Map();
   #server?: ServerConfig;
   #serverExplicit = false;
   #studio?: StudioConfig;
@@ -1567,6 +1618,10 @@ export class Mastra<
       this.#workspace = config.workspace;
       // Also register in the workspaces registry for direct lookup by ID
       this.addWorkspace(config.workspace, undefined, { source: 'mastra' });
+    }
+
+    if (config?.resolveWorkspaceById) {
+      this.#workspaceResolver = config.resolveWorkspaceById;
     }
 
     if (config?.scorers) {
@@ -3191,21 +3246,99 @@ export class Mastra<
   public getWorkspaceById(id: string): Workspace {
     const entry = this.#workspaces[id];
     if (!entry) {
-      const error = new MastraError({
-        id: 'MASTRA_GET_WORKSPACE_BY_ID_NOT_FOUND',
-        domain: ErrorDomain.MASTRA,
-        category: ErrorCategory.USER,
-        text: `Workspace with id ${id} not found`,
-        details: {
-          status: 404,
-          workspaceId: id,
-          availableIds: Object.keys(this.#workspaces).join(', '),
-        },
-      });
-      this.#logger?.trackException(error);
-      throw error;
+      throw this.#workspaceNotFoundError(id);
     }
     return entry.workspace;
+  }
+
+  /**
+   * Asynchronously retrieve a registered workspace by id, falling back to the
+   * configured {@link Config.resolveWorkspaceById} hook when the registry does
+   * not (yet) contain the id.
+   *
+   * The in-memory registry is authoritative for known workspaces; this method
+   * only diverges from {@link getWorkspaceById} when a lookup misses. On a
+   * miss:
+   *
+   * 1. If no resolver is configured, the standard 404 is thrown.
+   * 2. Otherwise the resolver is invoked (with dedup across concurrent callers).
+   * 3. A returned workspace is registered via {@link addWorkspace} with
+   *    `source: 'resolver'` and returned. Subsequent calls hit the registry.
+   * 4. If the resolver returns `undefined` (or throws), the standard 404 (or
+   *    original error) is surfaced and nothing is cached.
+   *
+   * This exists so hosts of dynamic per-session workspaces (e.g. `@mastra/factory`)
+   * can transparently re-materialize workspace shims after a container restart
+   * or on a fresh replica, without touching sync callers of `getWorkspaceById`.
+   *
+   * @throws {MastraError} `MASTRA_GET_WORKSPACE_BY_ID_NOT_FOUND` when the id
+   *   is not registered and the resolver does not produce a workspace.
+   *
+   * @example
+   * ```typescript
+   * const workspace = await mastra.resolveWorkspaceById('mfw-abc-xyz-web-factory');
+   * const files = await workspace.filesystem.readdir('/');
+   * ```
+   */
+  public async resolveWorkspaceById(id: string): Promise<Workspace> {
+    const cached = this.#workspaces[id];
+    if (cached) {
+      return cached.workspace;
+    }
+
+    if (!this.#workspaceResolver) {
+      throw this.#workspaceNotFoundError(id);
+    }
+
+    const existing = this.#inFlightWorkspaceResolutions.get(id);
+    let pending = existing;
+
+    if (!pending) {
+      // Defer resolver invocation by one microtask so the in-flight promise is
+      // registered in `#inFlightWorkspaceResolutions` *before* the resolver
+      // runs. Without this deferral, a synchronously-throwing resolver would
+      // trigger `finally` (deleting a not-yet-set entry) *before* the outer
+      // `.set()` writes the rejected promise into the map — poisoning every
+      // subsequent call for the same id with a stale rejection.
+      pending = Promise.resolve().then(async () => {
+        try {
+          return await this.#workspaceResolver!(id, { mastra: this });
+        } finally {
+          this.#inFlightWorkspaceResolutions.delete(id);
+        }
+      });
+      this.#inFlightWorkspaceResolutions.set(id, pending);
+    }
+
+    const resolved = await pending;
+
+    if (!resolved) {
+      throw this.#workspaceNotFoundError(id);
+    }
+
+    // Cache for subsequent lookups. `addWorkspace` is a no-op if the id was
+    // registered by a concurrent path (e.g. an agent factory) between when we
+    // started resolving and now — that's the correct behavior (first writer
+    // wins, and callers still get a consistent workspace instance).
+    this.addWorkspace(resolved, id, { source: 'resolver' });
+    const entry = this.#workspaces[id];
+    return entry ? entry.workspace : resolved;
+  }
+
+  #workspaceNotFoundError(id: string): MastraError {
+    const error = new MastraError({
+      id: 'MASTRA_GET_WORKSPACE_BY_ID_NOT_FOUND',
+      domain: ErrorDomain.MASTRA,
+      category: ErrorCategory.USER,
+      text: `Workspace with id ${id} not found`,
+      details: {
+        status: 404,
+        workspaceId: id,
+        availableIds: Object.keys(this.#workspaces).join(', '),
+      },
+    });
+    this.#logger?.trackException(error);
+    return error;
   }
 
   /**
@@ -3242,7 +3375,7 @@ export class Mastra<
   public addWorkspace(
     workspace: AnyWorkspace,
     key?: string,
-    metadata?: { source?: 'mastra' | 'agent'; agentId?: string; agentName?: string },
+    metadata?: { source?: 'mastra' | 'agent' | 'resolver'; agentId?: string; agentName?: string },
   ): void {
     if (!workspace) {
       throw createUndefinedPrimitiveError('workspace', workspace, key);
