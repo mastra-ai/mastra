@@ -30,6 +30,7 @@ import type {
 import { safeClose, safeEnqueue } from './input';
 import { createJsonTextStreamTransformer, createObjectStreamTransformer } from './output-format-handlers';
 import { getTransformedSchema } from './schema';
+import { dedupeStepRequests, rehydrateStepRequests } from './step-request-dedupe';
 
 /**
  * Helper function to create a destructurable version of MastraModelOutput.
@@ -548,8 +549,14 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               break;
             case 'object-result':
               self.#bufferedObject = chunk.object;
+              // An output processor can still reject this attempt and ask for a retry,
+              // which would make this object stale. A settled promise cannot be
+              // un-settled, so when processors are in play the object is only buffered
+              // here and settled once the attempt survives `step-finish` (or at
+              // stream end, whichever comes first). Without processors no retry is
+              // possible, so resolve immediately and keep the existing timing.
               // Only resolve if not already rejected by validation error
-              if (self.#delayedPromises.object.status.type === 'pending') {
+              if (!self.processorRunner && self.#delayedPromises.object.status.type === 'pending') {
                 self.#delayedPromises.object.resolve(chunk.object);
               }
               break;
@@ -797,6 +804,16 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               });
 
               self.#bufferedSteps.push(stepResult);
+
+              // `text` is excluded from a rejected attempt via the empty `stepText`
+              // above; the structured object needs the same treatment. Drop the
+              // buffered object when this attempt is being retried, otherwise settle
+              // the object promise now that the attempt has been accepted.
+              if (stepTripwire?.retry) {
+                self.#bufferedObject = undefined;
+              } else if (self.#bufferedObject !== undefined && self.#delayedPromises.object.status.type === 'pending') {
+                self.#delayedPromises.object.resolve(self.#bufferedObject);
+              }
 
               self.#bufferedByStep = {
                 text: '',
@@ -1077,7 +1094,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                   });
                 }
                 if (self.#delayedPromises.object.status.type !== 'resolved') {
-                  self.#delayedPromises.object.resolve(undefined as OUTPUT);
+                  self.#delayedPromises.object.resolve(self.#bufferedObject as OUTPUT);
                 }
               }
 
@@ -1155,15 +1172,17 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                       ? undefined
                       : self.#delayedPromises.object.status.type === 'resolved'
                         ? self.#delayedPromises.object.status.value
-                        : self.#structuredOutputMode === 'direct' && baseFinishStep.text
-                          ? (() => {
-                              try {
-                                return JSON.parse(baseFinishStep.text);
-                              } catch {
-                                return undefined;
-                              }
-                            })()
-                          : undefined,
+                        : self.#bufferedObject !== undefined
+                          ? self.#bufferedObject
+                          : self.#structuredOutputMode === 'direct' && baseFinishStep.text
+                            ? (() => {
+                                try {
+                                  return JSON.parse(baseFinishStep.text);
+                                } catch {
+                                  return undefined;
+                                }
+                              })()
+                            : undefined,
                 };
 
                 if (!self.#finishCallbackSent) {
@@ -1228,8 +1247,10 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
         },
         flush: () => {
           if (self.#delayedPromises.object.status.type === 'pending') {
-            // always resolve pending object promise as undefined if still hanging in flush and hasn't been rejected by validation error
-            self.#delayedPromises.object.resolve(undefined as OUTPUT);
+            // always resolve a pending object promise in flush (with the buffered object
+            // if the stream produced one, otherwise undefined) if it hasn't been rejected
+            // by a validation error
+            self.#delayedPromises.object.resolve(self.#bufferedObject as OUTPUT);
           }
 
           // If stream ends in suspended state (e.g., tool-call-approval), resolve promises with partial results
@@ -1963,9 +1984,11 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
   }
 
   serializeState() {
+    const { steps, requests } = dedupeStepRequests(this.#bufferedSteps);
     return {
       status: this.#status,
-      bufferedSteps: this.#bufferedSteps,
+      bufferedSteps: steps,
+      bufferedStepRequests: requests,
       bufferedReasoningDetails: this.#bufferedReasoningDetails,
       bufferedByStep: this.#bufferedByStep,
       bufferedText: this.#bufferedText,
@@ -1990,7 +2013,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
 
   deserializeState(state: any) {
     this.#status = state.status;
-    this.#bufferedSteps = state.bufferedSteps;
+    this.#bufferedSteps = rehydrateStepRequests(state.bufferedSteps, state.bufferedStepRequests);
     this.#bufferedReasoningDetails = state.bufferedReasoningDetails;
     this.#bufferedByStep = state.bufferedByStep;
     this.#bufferedText = state.bufferedText;

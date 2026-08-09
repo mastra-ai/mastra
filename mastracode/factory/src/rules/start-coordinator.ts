@@ -130,7 +130,7 @@ export class FactoryStartCoordinator {
     if (!this.#sourceControl) throw new Error('Factory source control storage is unavailable');
     const sourceSession = await resolveSourceSession(this.#sourceControl, request);
     const requestContext = request.requestContext ?? new RequestContext();
-    if (!request.requestContext) {
+    if (!requestContext.get('user')) {
       requestContext.set('user', { workosId: request.userId, organizationId: request.orgId });
     }
     // Sessions kicked off against third-party content (a PR under review, or

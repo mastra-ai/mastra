@@ -177,8 +177,8 @@ export async function updateThread(
     metadata,
   }: {
     id: string;
-    title: string;
-    metadata: Record<string, unknown>;
+    title?: string;
+    metadata?: Record<string, unknown>;
   },
 ): Promise<StorageThreadType> {
   const existingThread = await ctx.getThreadById({ threadId: id });
@@ -199,7 +199,7 @@ export async function updateThread(
     await ctx.db.none(
       `
           UPDATE ${table(ctx, TABLE_THREADS)}
-          SET title = :title,
+          SET title = COALESCE(:title, title),
               metadata = :metadata,
               ${THREAD_UPDATED_AT} = :updatedAt
           WHERE id = :id`,

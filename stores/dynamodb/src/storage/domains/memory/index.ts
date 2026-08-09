@@ -214,8 +214,8 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     metadata,
   }: {
     id: string;
-    title: string;
-    metadata: Record<string, unknown>;
+    title?: string;
+    metadata?: Record<string, unknown>;
   }): Promise<StorageThreadType> {
     this.logger.debug('Updating thread', { threadId: id });
 

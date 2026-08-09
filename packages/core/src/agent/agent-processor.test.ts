@@ -1740,6 +1740,138 @@ describe('New Processor Features', () => {
   });
 
   describe('retry mechanism', () => {
+    /**
+     * Model that returns a rejected structured payload first, then an accepted one.
+     * Used to prove `result.object` names the same attempt as `result.text`.
+     */
+    const makeStructuredRetryModel = () => {
+      const rejected = '{"answer":"REJECTED","score":1}';
+      const accepted = '{"answer":"ACCEPTED","score":9}';
+      let calls = 0;
+      const nextText = () => (++calls === 1 ? rejected : accepted);
+      return {
+        get callCount() {
+          return calls;
+        },
+        model: new MockLanguageModelV2({
+          doGenerate: async () => ({
+            content: [{ type: 'text' as const, text: nextText() }],
+            finishReason: 'stop' as const,
+            usage: { inputTokens: 5, outputTokens: 5, totalTokens: 10 },
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+          }),
+          doStream: async () => ({
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: nextText() },
+              { type: 'text-end', id: 'text-1' },
+              { type: 'finish', finishReason: 'stop', usage: { inputTokens: 5, outputTokens: 5, totalTokens: 10 } },
+            ]),
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+          }),
+        }),
+      };
+    };
+
+    /** Rejects the first structured attempt, accepts the retried one. */
+    const rejectFirstAttemptProcessor = {
+      id: 'reject-first-structured-attempt',
+      processOutputStep: async ({ text, abort, retryCount }: any) => {
+        if (retryCount === 0 && text?.includes('REJECTED')) {
+          abort('Structured output was rejected, please retry', { retry: true });
+        }
+        return [];
+      },
+    } satisfies Processor;
+
+    const retrySchema = z.object({ answer: z.string(), score: z.number() });
+
+    it('should expose the retried object, not the rejected attempt, from generate', async () => {
+      const harness = makeStructuredRetryModel();
+      const agent = new Agent({
+        id: 'structured-retry-generate-agent',
+        name: 'Structured Retry Generate Agent',
+        instructions: 'You are a helpful assistant.',
+        model: harness.model,
+        outputProcessors: [rejectFirstAttemptProcessor],
+        maxProcessorRetries: 3,
+      });
+
+      const result = await agent.generate('Hello', { structuredOutput: { schema: retrySchema } });
+
+      expect(harness.callCount).toBe(2);
+      expect(result.tripwire).toBeFalsy();
+      // text already reflected the accepted attempt before this fix
+      expect(result.text).toContain('ACCEPTED');
+      // object must name the same accepted attempt as text
+      expect(result.object).toEqual({ answer: 'ACCEPTED', score: 9 });
+    });
+
+    it('should expose the retried object, not the rejected attempt, from stream', async () => {
+      const harness = makeStructuredRetryModel();
+      const agent = new Agent({
+        id: 'structured-retry-stream-agent',
+        name: 'Structured Retry Stream Agent',
+        instructions: 'You are a helpful assistant.',
+        model: harness.model,
+        outputProcessors: [rejectFirstAttemptProcessor],
+        maxProcessorRetries: 3,
+      });
+
+      const stream = await agent.stream('Hello', { structuredOutput: { schema: retrySchema } });
+      for await (const _ of stream.fullStream) {
+      }
+      const fullOutput = await stream.getFullOutput();
+
+      expect(harness.callCount).toBe(2);
+      expect(fullOutput.tripwire).toBeFalsy();
+      expect(fullOutput.text).toContain('ACCEPTED');
+      expect(fullOutput.object).toEqual({ answer: 'ACCEPTED', score: 9 });
+      expect(await stream.object).toEqual({ answer: 'ACCEPTED', score: 9 });
+    });
+
+    it('should expose the retried object when `object` is awaited without draining the stream', async () => {
+      const harness = makeStructuredRetryModel();
+      const agent = new Agent({
+        id: 'structured-retry-await-object-agent',
+        name: 'Structured Retry Await Object Agent',
+        instructions: 'You are a helpful assistant.',
+        model: harness.model,
+        outputProcessors: [rejectFirstAttemptProcessor],
+        maxProcessorRetries: 3,
+      });
+
+      const stream = await agent.stream('Hello', { structuredOutput: { schema: retrySchema } });
+      // documented usage: await `object` directly, never touching `fullStream`
+      expect(await stream.object).toEqual({ answer: 'ACCEPTED', score: 9 });
+      expect(harness.callCount).toBe(2);
+    });
+
+    it('should expose the retried object when the `object` promise is captured before the retry settles', async () => {
+      const harness = makeStructuredRetryModel();
+      const agent = new Agent({
+        id: 'structured-retry-early-object-agent',
+        name: 'Structured Retry Early Object Agent',
+        instructions: 'You are a helpful assistant.',
+        model: harness.model,
+        outputProcessors: [rejectFirstAttemptProcessor],
+        maxProcessorRetries: 3,
+      });
+
+      const stream = await agent.stream('Hello', { structuredOutput: { schema: retrySchema } });
+      // materializes the promise before the first attempt is even rejected
+      const objectPromise = stream.object;
+      for await (const _ of stream.fullStream) {
+      }
+
+      expect(await objectPromise).toEqual({ answer: 'ACCEPTED', score: 9 });
+      expect(harness.callCount).toBe(2);
+    });
+
     it('should retry with feedback when processor calls abort with retry: true', async () => {
       let callCount = 0;
       const receivedMessages: any[][] = [];
