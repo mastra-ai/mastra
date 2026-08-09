@@ -171,7 +171,9 @@ export async function getInputOptions(
       }),
       // Runs at renderChunk, so the emitted chunks are minified as a whole rather
       // than module by module. Last in the list so nothing transforms after it.
-      minify ? esbuildMinify({ target: 'node20' }) : null,
+      // `sourceMap` follows the build's own setting: the plugin defaults it to true,
+      // which would build a map Rollup then discards on a non-sourcemap build.
+      minify ? esbuildMinify({ target: 'node20', sourceMap: sourcemap }) : null,
     ].filter(Boolean),
   } satisfies InputOptions;
 }

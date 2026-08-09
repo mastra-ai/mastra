@@ -8,13 +8,13 @@ const analyzedBundleInfo = {
   workspaceMap: new Map(),
 };
 
-async function getPlugins(minify: boolean) {
+async function getPlugins(minify: boolean, sourcemap = false) {
   const inputOptions = await getInputOptions(
     'test-entry.js',
     analyzedBundleInfo as any,
     'node',
     { 'process.env.NODE_ENV': JSON.stringify('production') },
-    { minify, projectRoot: process.cwd() },
+    { minify, sourcemap, projectRoot: process.cwd() },
   );
 
   return (inputOptions.plugins ?? []) as Plugin[];
@@ -63,5 +63,28 @@ describe('getInputOptions minify', () => {
     expect(code).not.toContain('someLongLocalName');
     // The public export has to keep its name or importers break.
     expect(code).toContain('hello');
+  });
+
+  /**
+   * Minified output only maps back to source if the minifier emits a map of its own for
+   * Rollup to chain. The plugin defaults that on, which costs work on the far more common
+   * non-sourcemap build, so the setting is wired to the build's — both directions asserted.
+   */
+  it('emits a sourcemap only when the build asked for one', async () => {
+    const source =
+      'export const hello = () => {\n  const someLongLocalName = 1 + 1;\n  return someLongLocalName;\n};\n';
+
+    const renderWith = async (sourcemap: boolean) => {
+      const plugins = await getPlugins(true, sourcemap);
+      const outputs = await Promise.all(plugins.filter(Boolean).map(plugin => renderChunk(plugin, source)));
+
+      return outputs.find(output => output != null);
+    };
+
+    const withMap = await renderWith(true);
+    const withoutMap = await renderWith(false);
+
+    expect(typeof withMap === 'string' ? null : withMap!.map).toBeTruthy();
+    expect(typeof withoutMap === 'string' ? null : withoutMap!.map).toBeFalsy();
   });
 });
