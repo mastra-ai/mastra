@@ -2,4 +2,4 @@
 '@mastra/playground-ui': patch
 ---
 
-Fixed memory timeline event markers failing to build with current Recharts types.
+Fixed memory timeline event markers not rendering correctly in the Playground UI.
