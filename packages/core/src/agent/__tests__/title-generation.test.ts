@@ -947,7 +947,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
         expect(titlePersisted).toBe(true);
       } else {
         await agent.generate('Name this conversation', {
-          waitUntil,
+          serverless: { waitUntil },
           memory: {
             resource: 'user-await',
             thread: {

@@ -10,6 +10,7 @@ import type { MastraBrowser } from '../browser';
 import type { MastraServerCache } from '../cache/base';
 import type { AgentChannels } from '../channels/agent-channels';
 import type { ChannelConfig } from '../channels/types';
+import type { WaitUntilFn } from '../channels/wait-until';
 import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../evals';
 import type { PubSub } from '../events/pubsub';
 import type {
@@ -1172,7 +1173,7 @@ export type AgentExecuteOnFinishOptions = {
    * Optional platform `waitUntil` so detached title generation survives
    * serverless freeze-after-response without blocking `generate()`/`stream()`.
    */
-  waitUntil?: (promise: Promise<unknown>) => void;
+  waitUntil?: WaitUntilFn;
 };
 
 export type AgentMethodType = 'generate' | 'stream' | 'generateLegacy' | 'streamLegacy';

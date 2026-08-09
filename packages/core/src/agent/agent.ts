@@ -7241,8 +7241,8 @@ export class Agent<
 
             if (userMessage) {
               // Fire-and-forget so generate()/stream() stay fast. On serverless
-              // runtimes that freeze after the response, pass `waitUntil` so the
-              // platform keeps this promise alive (#20682).
+              // runtimes that freeze after the response, pass
+              // `serverless.waitUntil` so the platform keeps this promise alive (#20682).
               const titlePromise = this.genTitle(
                 userMessage,
                 requestContext,

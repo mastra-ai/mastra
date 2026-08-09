@@ -480,13 +480,18 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
   memory?: AgentMemoryOption;
 
   /**
-   * Keep detached finish-time work (e.g. thread title generation) alive on
-   * serverless runtimes that freeze after the HTTP response returns.
-   * Pass the platform `waitUntil` (Vercel `@vercel/functions`, Cloudflare
-   * `ExecutionContext.waitUntil`, etc.). Without it, title generation stays
-   * fire-and-forget and can be dropped when the isolate freezes.
+   * Serverless runtime helpers. Use these when the platform freezes the
+   * isolate after the HTTP response so detached finish-time work (e.g. thread
+   * title generation) would otherwise be dropped.
    */
-  waitUntil?: WaitUntilFn;
+  serverless?: {
+    /**
+     * Platform `waitUntil` (Vercel `@vercel/functions`, Cloudflare
+     * `ExecutionContext.waitUntil`, etc.). Registers fire-and-forget finish
+     * work so the isolate stays alive until it settles.
+     */
+    waitUntil?: WaitUntilFn;
+  };
 
   /** Unique identifier for this execution run */
   runId?: string;
