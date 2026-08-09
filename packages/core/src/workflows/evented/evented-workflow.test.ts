@@ -328,6 +328,71 @@ describe('Workflow (Evented Engine Specific)', () => {
     await workflowsStore?.dangerouslyClearAll();
   });
 
+  it('should run onStart before execution and abort the run when it throws', async () => {
+    const stepAction = vi.fn().mockResolvedValue({ value: 'done' });
+    const step1 = createStep({
+      id: 'step1',
+      execute: stepAction,
+      inputSchema: z.object({}),
+      outputSchema: z.object({ value: z.string() }),
+    });
+
+    const onStart = vi.fn();
+    const okWorkflow = createWorkflow({
+      id: 'on-start-ok-workflow',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ value: z.string() }),
+      steps: [step1],
+      options: { validateInputs: false, onStart },
+    });
+    okWorkflow.then(step1).commit();
+
+    const gatedAction = vi.fn().mockResolvedValue({ value: 'done' });
+    const gatedStep = createStep({
+      id: 'gated-step',
+      execute: gatedAction,
+      inputSchema: z.object({}),
+      outputSchema: z.object({ value: z.string() }),
+    });
+    const gatedWorkflow = createWorkflow({
+      id: 'on-start-gated-workflow',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ value: z.string() }),
+      steps: [gatedStep],
+      options: {
+        validateInputs: false,
+        onStart: async () => {
+          throw new Error('quota exceeded');
+        },
+      },
+    });
+    gatedWorkflow.then(gatedStep).commit();
+
+    const mastra = new Mastra({
+      workflows: {
+        'on-start-ok-workflow': okWorkflow,
+        'on-start-gated-workflow': gatedWorkflow,
+      },
+      storage: testStorage,
+      pubsub: new EventEmitterPubSub(),
+    });
+    await mastra.startWorkers();
+
+    try {
+      const okRun = await okWorkflow.createRun();
+      const okResult = await okRun.start({ inputData: {} });
+      expect(okResult.status).toBe('success');
+      expect(onStart).toHaveBeenCalledTimes(1);
+      expect(onStart.mock.calls[0]![0]!.runId).toBe(okRun.runId);
+
+      const gatedRun = await gatedWorkflow.createRun();
+      await expect(gatedRun.start({ inputData: {} })).rejects.toThrow('quota exceeded');
+      expect(gatedAction).not.toHaveBeenCalled();
+    } finally {
+      await mastra.stopWorkers();
+    }
+  });
+
   it('should create a processor step for state signal only processors', () => {
     const processor: Processor = {
       id: 'state-only-processor',

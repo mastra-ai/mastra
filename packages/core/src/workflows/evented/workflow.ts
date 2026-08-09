@@ -1651,6 +1651,7 @@ export function createWorkflow<
       shouldPersistSnapshot: params.options?.shouldPersistSnapshot ?? (() => true),
       pruneSnapshot: params.options?.pruneSnapshot,
       tracingPolicy: params.options?.tracingPolicy,
+      onStart: params.options?.onStart,
       onFinish: params.options?.onFinish,
       onError: params.options?.onError,
     },
@@ -1898,6 +1899,16 @@ export class EventedRun<
     const inputDataToUse = await this._validateInput(inputData ?? ({} as TInput));
     const initialStateToUse = await this._validateInitialState(initialState ?? ({} as TState));
 
+    // Pre-flight gate: runs before the run record is persisted, and rejects the caller if it throws.
+    await this.executionEngine.invokeStartCallback({
+      runId: this.runId,
+      workflowId: this.workflowId,
+      resourceId: this.resourceId,
+      getInitData: () => inputDataToUse,
+      requestContext,
+      state: initialStateToUse as Record<string, any>,
+    });
+
     const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
     // Always persist the initial run record regardless of shouldPersistSnapshot.
     // The evented engine relies on this record for parallel branch result
@@ -2019,6 +2030,16 @@ export class EventedRun<
 
     const inputDataToUse = await this._validateInput(inputData ?? ({} as TInput));
     const initialStateToUse = await this._validateInitialState(initialState ?? ({} as TState));
+
+    // Pre-flight gate: runs before the run record is persisted, and rejects the caller if it throws.
+    await this.executionEngine.invokeStartCallback({
+      runId: this.runId,
+      workflowId: this.workflowId,
+      resourceId: this.resourceId,
+      getInitData: () => inputDataToUse,
+      requestContext,
+      state: initialStateToUse as Record<string, any>,
+    });
 
     const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
     // Always persist the initial run record regardless of shouldPersistSnapshot.

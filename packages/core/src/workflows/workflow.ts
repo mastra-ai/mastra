@@ -1688,6 +1688,7 @@ export class Workflow<
       shouldPersistSnapshot: options.shouldPersistSnapshot ?? (() => true),
       pruneSnapshot: options.pruneSnapshot,
       tracingPolicy: options.tracingPolicy,
+      onStart: options.onStart,
       onFinish: options.onFinish,
       onError: options.onError,
       sharePubsub: options.sharePubsub,
@@ -3496,6 +3497,16 @@ export class Run<
     const inputDataToUse = await this._validateInput(inputData);
     const initialStateToUse = await this._validateInitialState(initialState ?? ({} as TState));
     await this._validateRequestContext(requestContext as RequestContext);
+
+    // Pre-flight gate: runs before the run executes, and rejects the caller if it throws.
+    await this.executionEngine.invokeStartCallback({
+      runId: this.runId,
+      workflowId: this.workflowId,
+      resourceId: this.resourceId,
+      getInitData: () => inputDataToUse,
+      requestContext: (requestContext ?? new RequestContext()) as RequestContext,
+      state: initialStateToUse as Record<string, any>,
+    });
 
     const result = await this.executionEngine.execute<TState, TInput, WorkflowResult<TState, TInput, TOutput, TSteps>>({
       workflowId: this.workflowId,
