@@ -195,7 +195,13 @@ The following environment variables are automatically used when constructor opti
 `MastraAuthOkta` authenticates requests in the following order:
 
 1. **Session cookie**: Reads the encrypted session cookie and decrypts it. If the session is valid and not expired, the user is authenticated.
-1. **JWT fallback**: If no session cookie is present, verifies the `Authorization` header token against Okta's JWKS endpoint.
+1. **JWT fallback**: If no session cookie is present, verifies the `Authorization` header token against Okta's JWKS endpoint. The token's `iss` claim must equal `issuer` and its `aud` claim must equal `clientId`.
+
+:::note
+
+Okta sets `aud` to the client ID on ID tokens, not access tokens. Visit [Okta](/docs/server/auth/okta#bearer-token) for which token to send.
+
+:::
 
 After authentication, `authorizeUser` checks that the user has a valid `oktaId`. Provide a custom `authorizeUser` function to implement additional logic.
 
