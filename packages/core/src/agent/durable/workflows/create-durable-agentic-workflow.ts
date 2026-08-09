@@ -1,6 +1,4 @@
 import { z } from 'zod';
-import type { MastraScorer, MastraScorerEntry } from '../../../evals/base';
-import { runScorer } from '../../../evals/hooks';
 import type { PubSub } from '../../../events/pubsub';
 import { pruneAgentLoopSnapshot } from '../../../loop/workflows/prune-snapshot';
 import type { Mastra } from '../../../mastra';
@@ -19,7 +17,6 @@ import type {
   DurableAgenticExecutionOutput,
   DurableLLMStepOutput,
   DurableToolCallOutput,
-  SerializableScorersConfig,
 } from '../types';
 import {
   modelConfigSchema,
