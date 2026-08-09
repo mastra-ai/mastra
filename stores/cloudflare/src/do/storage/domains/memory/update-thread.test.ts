@@ -33,7 +33,10 @@ describe('MemoryStorageDO updateThread', () => {
     expect(updated.metadata).toEqual({ a: 1, b: 2 });
 
     const update = queries.find(query => query.sql.includes('UPDATE'));
-    expect(update?.params).toContain('Generated title');
+    // The title column must not be written at all, so a title generated between
+    // the read above and this write survives.
+    expect(update?.sql).not.toContain('title');
+    expect(update?.params).not.toContain('Generated title');
     expect(update?.params).not.toContain(undefined);
   });
 
@@ -47,5 +50,20 @@ describe('MemoryStorageDO updateThread', () => {
 
     const update = queries.find(query => query.sql.includes('UPDATE'));
     expect(update?.params).toContain('New title');
+    // Inverse of the metadata-only case: no metadata write on a title-only update.
+    expect(update?.sql).not.toContain('metadata');
+  });
+
+  it('writes an explicit empty title', async () => {
+    const { sql, queries } = makeSql(threadRow);
+    const memory = new MemoryStorageDO({ sql: sql as never });
+
+    const updated = await memory.updateThread({ id: 'thread-1', title: '' });
+
+    expect(updated.title).toBe('');
+
+    const update = queries.find(query => query.sql.includes('UPDATE'));
+    expect(update?.sql).toContain('title');
+    expect(update?.params).toContain('');
   });
 });

@@ -513,10 +513,25 @@ export class MemoryStorageDO extends MemoryStorage {
         ...metadata,
       };
 
-      const updatedTitle = title ?? thread.title;
+      const updatedTitle = title !== undefined ? title : thread.title;
       const updatedAt = new Date();
-      const columns = ['title', 'metadata', 'updatedAt'];
-      const values = [updatedTitle, JSON.stringify(mergedMetadata), updatedAt.toISOString()];
+
+      // Only write the columns the caller supplied. Writing a title read moments
+      // ago would clobber one generated in between, and the same applies to
+      // metadata on a title-only update.
+      const columns: string[] = [];
+      const values: (string | null)[] = [];
+
+      if (title !== undefined) {
+        columns.push('title');
+        values.push(title);
+      }
+      if (metadata !== undefined) {
+        columns.push('metadata');
+        values.push(JSON.stringify(mergedMetadata));
+      }
+      columns.push('updatedAt');
+      values.push(updatedAt.toISOString());
 
       const query = createSqlBuilder().update(fullTableName, columns, values).where('id = ?', id);
 
