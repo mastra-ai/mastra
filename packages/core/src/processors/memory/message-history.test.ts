@@ -1063,4 +1063,197 @@ describe('MessageHistory', () => {
       expect(savedParts.map((p: any) => p.text)).toEqual(['Saved.', ' untouched ']);
     });
   });
+
+  describe('client echo reconciliation', () => {
+    const baseTime = Date.now();
+
+    function assistantMessage(overrides: Partial<MastraDBMessage> = {}): MastraDBMessage {
+      return {
+        id: 'msg-1',
+        role: 'assistant',
+        content: {
+          format: 2,
+          content: 'Transformed answer',
+          parts: [{ type: 'text', text: 'Transformed answer' }],
+        },
+        threadId: 'thread-1',
+        createdAt: new Date(baseTime - 1000),
+        ...overrides,
+      };
+    }
+
+    it('should not re-persist an unchanged echo of a stored message', async () => {
+      const stored = assistantMessage();
+      mockStorage.setMessages([stored]);
+
+      processor = new MessageHistory({ storage: mockStorage });
+      const saveSpy = vi.spyOn(mockStorage, 'saveMessages');
+
+      const echo = assistantMessage();
+      const newUserMessage = assistantMessage({
+        id: 'msg-2',
+        role: 'user',
+        content: { format: 2, parts: [{ type: 'text', text: 'Next turn' }] },
+        createdAt: new Date(baseTime),
+      });
+
+      const messageList = new MessageList().add([echo, newUserMessage], 'input');
+
+      await processor.processOutputResult({
+        messageList,
+        messages: [],
+        abort: mockAbort,
+        requestContext: createRuntimeContextWithMemory('thread-1'),
+      });
+
+      // Only the genuinely new message is persisted — the echo of msg-1 is skipped
+      // so the upsert cannot overwrite the stored canonical record.
+      expect(saveSpy).toHaveBeenCalledWith({
+        messages: [expect.objectContaining({ id: 'msg-2' })],
+      });
+
+      saveSpy.mockRestore();
+    });
+
+    it('should preserve stored server-authored content when a lossy echo is submitted', async () => {
+      const stored = assistantMessage({
+        content: {
+          format: 2,
+          content: 'Transformed answer',
+          parts: [
+            { type: 'text', text: 'Transformed answer' },
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'call-1',
+                toolName: 'search',
+                args: { q: 'x' },
+                result: 'found',
+              },
+            },
+          ],
+        },
+      });
+      mockStorage.setMessages([stored]);
+
+      processor = new MessageHistory({ storage: mockStorage });
+      const saveSpy = vi.spyOn(mockStorage, 'saveMessages');
+
+      // Client echoes the raw (un-transformed) text and drops the tool history.
+      const lossyEcho = assistantMessage({
+        content: { format: 2, content: 'Raw answer', parts: [{ type: 'text', text: 'Raw answer' }] },
+      });
+      const newUserMessage = assistantMessage({
+        id: 'msg-2',
+        role: 'user',
+        content: { format: 2, parts: [{ type: 'text', text: 'Next turn' }] },
+        createdAt: new Date(baseTime),
+      });
+
+      const messageList = new MessageList().add([lossyEcho, newUserMessage], 'input');
+
+      await processor.processOutputResult({
+        messageList,
+        messages: [],
+        abort: mockAbort,
+        requestContext: createRuntimeContextWithMemory('thread-1'),
+      });
+
+      // The stored (transformed) text and the completed tool history survive the echo.
+      expect(saveSpy).toHaveBeenCalledWith({
+        messages: expect.arrayContaining([
+          expect.objectContaining({
+            id: 'msg-1',
+            content: expect.objectContaining({
+              content: 'Transformed answer',
+              parts: expect.arrayContaining([
+                expect.objectContaining({ type: 'text', text: 'Transformed answer' }),
+                expect.objectContaining({
+                  type: 'tool-invocation',
+                  toolInvocation: expect.objectContaining({ toolCallId: 'call-1', state: 'result', result: 'found' }),
+                }),
+              ]),
+            }),
+          }),
+          expect.objectContaining({ id: 'msg-2' }),
+        ]),
+      });
+
+      saveSpy.mockRestore();
+    });
+
+    it('should merge a client-side tool result into the stored call message', async () => {
+      const stored = assistantMessage({
+        content: {
+          format: 2,
+          content: 'Let me look that up',
+          parts: [
+            { type: 'text', text: 'Let me look that up' },
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'call',
+                toolCallId: 'call-1',
+                toolName: 'search',
+                args: { query: 'mastra' },
+              },
+            },
+          ],
+        },
+      });
+      mockStorage.setMessages([stored]);
+
+      processor = new MessageHistory({ storage: mockStorage });
+      const saveSpy = vi.spyOn(mockStorage, 'saveMessages');
+
+      // Client executed the tool and returns the same assistant message ID with the
+      // invocation advanced to `result`, carrying client-side args that differ
+      // from the stored call's args (the client copy must not replace them).
+      const echoWithResult = assistantMessage({
+        content: {
+          format: 2,
+          content: 'Let me look that up',
+          parts: [
+            { type: 'text', text: 'Let me look that up' },
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'call-1',
+                toolName: 'search',
+                args: { query: 'client-modified' },
+                result: 'result-from-client',
+              },
+            },
+          ],
+        },
+      });
+
+      const messageList = new MessageList().add([echoWithResult], 'input');
+
+      await processor.processOutputResult({
+        messageList,
+        messages: [],
+        abort: mockAbort,
+        requestContext: createRuntimeContextWithMemory('thread-1'),
+      });
+
+      const savedMessages = (saveSpy.mock.calls[0]![0] as any).messages as MastraDBMessage[];
+      const savedMsg1 = savedMessages.find(m => m.id === 'msg-1');
+      const toolPart = savedMsg1!.content.parts.find((p: any) => p.type === 'tool-invocation')!;
+
+      // The client-authored result is stored, but the server-authored args, name,
+      // and text are not discarded.
+      expect(toolPart.toolInvocation).toMatchObject({
+        state: 'result',
+        toolCallId: 'call-1',
+        toolName: 'search',
+        result: 'result-from-client',
+        args: { query: 'mastra' },
+      });
+
+      saveSpy.mockRestore();
+    });
+  });
 });
