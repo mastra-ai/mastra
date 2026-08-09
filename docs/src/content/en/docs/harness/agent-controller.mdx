@@ -356,7 +356,7 @@ Channel sessions are created by the controller rather than by your code, so `onS
 
 ### Authorize and route channel sessions
 
-`onSessionStart` runs after the session exists and swallows errors, so it can't refuse a request. Use `resolveSession` when your host decides whether a session may exist. It replaces the built-in session creation and runs before any session exists. Throwing refuses the request: no session is created, no model runs, and nothing is posted back. The refusal is logged and the chat thread stays silent, so your authorization message never reaches the channel.
+`onSessionStart` runs after the session exists and swallows errors, so it can't refuse a request. Use `resolveSession` when your host decides whether a session may exist. It replaces the built-in session creation and runs before any session exists. Throwing refuses the request before the controller creates a session or calls the model. Mastra logs the refusal and leaves the chat thread silent, so your authorization message never reaches the channel.
 
 ```typescript
 channels: {
