@@ -1,5 +1,5 @@
 import { existsSync, readFileSync, statSync } from 'node:fs';
-import { basename, dirname, isAbsolute, join, normalize, resolve } from 'node:path';
+import { isAbsolute, normalize, posix, resolve } from 'node:path';
 import { estimateTokenCount } from 'tokenx';
 import type { MessageList, MastraDBMessage } from '../agent/message-list';
 import { signalToXmlMarkup } from '../agent/signals';
@@ -73,8 +73,22 @@ function isInstructionFileName(name: string): boolean {
   return INSTRUCTION_FILE_NAMES.some(instructionFileName => instructionFileName.toLowerCase() === name.toLowerCase());
 }
 
+/**
+ * Normalize path separators to forward slashes.
+ *
+ * Instruction paths are embedded in prompt reminders and used as the dedup
+ * identity in metadata, so they must be stable across platforms. `node:path`
+ * produces `\` separators on Windows; converting to `/` keeps the reminder
+ * path (and the metadata used to avoid re-injection) identical on every OS.
+ * Windows filesystem APIs accept forward slashes, so real reads still work.
+ */
+function toPosixPath(candidatePath: string): string {
+  return candidatePath.replaceAll('\\', '/');
+}
+
 function toAbsolutePath(candidatePath: string): string {
-  return normalize(isAbsolute(candidatePath) ? candidatePath : resolve(process.cwd(), candidatePath));
+  const absolutePath = normalize(isAbsolute(candidatePath) ? candidatePath : resolve(process.cwd(), candidatePath));
+  return toPosixPath(absolutePath);
 }
 
 function findInstructionFileForPath(
@@ -83,28 +97,31 @@ function findInstructionFileForPath(
   isDirectory: (path: string) => boolean,
 ): string | undefined {
   const absoluteCandidatePath = toAbsolutePath(candidatePath);
-  const candidateName = basename(absoluteCandidatePath);
+  const candidateName = posix.basename(absoluteCandidatePath);
 
   if (isInstructionFileName(candidateName)) {
     return absoluteCandidatePath;
   }
 
+  // Walk the directory ancestry with POSIX operations. `toAbsolutePath` already
+  // returned a forward-slash path, and `path.posix` keeps it that way on every
+  // platform, so the walk (and the reminder path it produces) is deterministic.
   let currentDir = absoluteCandidatePath;
   if (!pathExists(currentDir) || !isDirectory(currentDir)) {
-    currentDir = dirname(currentDir);
+    currentDir = posix.dirname(currentDir);
   }
 
   let previousDir: string | undefined;
   while (currentDir && currentDir !== previousDir) {
     for (const instructionFileName of INSTRUCTION_FILE_NAMES) {
-      const instructionFilePath = join(currentDir, instructionFileName);
+      const instructionFilePath = posix.join(currentDir, instructionFileName);
       if (pathExists(instructionFilePath)) {
         return instructionFilePath;
       }
     }
 
     previousDir = currentDir;
-    currentDir = dirname(currentDir);
+    currentDir = posix.dirname(currentDir);
   }
 
   return undefined;

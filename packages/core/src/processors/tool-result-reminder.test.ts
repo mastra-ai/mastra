@@ -748,4 +748,83 @@ describe('AgentsMDInjector', () => {
     expect(reminder).toContain('[truncated — showing first ~');
     expect(reminder.endsWith('</system-reminder>')).toBe(true);
   });
+
+  describe('cross-platform path normalization', () => {
+    it('normalizes backslash separators in direct instruction-file references', async () => {
+      const messageList = new TestMessageList();
+      const toolCallId = 'call-win-sep';
+      messageList.push(createUserMessage('Open the instructions'));
+      messageList.pushResponse(
+        createAssistantMessage({
+          format: 2,
+          parts: [
+            createToolInvocationPart(toolCallId, { path: '\\repo\\src\\agents\\nested\\AGENTS.md' }, 'result', {
+              ok: true,
+            }),
+          ],
+        }),
+      );
+
+      const testProcessor = new AgentsMDInjector({
+        reminderText: REMINDER_TEXT,
+        // The backslash input resolves against cwd on POSIX, so match by suffix
+        // rather than the full resolved path.
+        pathExists: path => String(path).endsWith('/agents/nested/AGENTS.md'),
+        isDirectory: () => false,
+        readFile: path => (String(path).endsWith('/agents/nested/AGENTS.md') ? FILE_CONTENT : ''),
+      });
+
+      await testProcessor.processInputStep(
+        createProcessInputStepArgs(messageList, [
+          createToolCall({ path: '\\repo\\src\\agents\\nested\\AGENTS.md' }, 'view', toolCallId),
+        ]),
+      );
+
+      const injectedReminder = messageList.get.all.db().at(-1);
+      expect(injectedReminder?.role).toBe('signal');
+      const reminderPath = (injectedReminder!.content.metadata?.signal as any)?.metadata?.path as string;
+      expect(reminderPath).toBeDefined();
+      // The reminder path must use forward slashes on every platform and still
+      // point at the instruction file.
+      expect(reminderPath).not.toContain('\\');
+      expect(reminderPath.endsWith('/agents/nested/AGENTS.md')).toBe(true);
+      expect(extractReminderMarkup(messageList)[0]).toContain(`path="${reminderPath}"`);
+    });
+
+    it('walks parent directories with forward-slash paths on every platform', async () => {
+      const messageList = new TestMessageList();
+      const toolCallId = 'call-win-walk';
+      messageList.push(createUserMessage('Read the source file'));
+      messageList.pushResponse(
+        createAssistantMessage({
+          format: 2,
+          parts: [
+            createToolInvocationPart(toolCallId, { path: '\\repo\\src\\components\\Button.tsx' }, 'result', {
+              ok: true,
+            }),
+          ],
+        }),
+      );
+
+      const testProcessor = new AgentsMDInjector({
+        reminderText: REMINDER_TEXT,
+        pathExists: path =>
+          String(path).endsWith('/components/AGENTS.md') || String(path).endsWith('/components/Button.tsx'),
+        isDirectory: path => String(path).endsWith('/components') || String(path).endsWith('/src'),
+        readFile: path => (String(path).endsWith('/components/AGENTS.md') ? FILE_CONTENT : ''),
+      });
+
+      await testProcessor.processInputStep(
+        createProcessInputStepArgs(messageList, [
+          createToolCall({ path: '\\repo\\src\\components\\Button.tsx' }, 'view', toolCallId),
+        ]),
+      );
+
+      const injectedReminder = messageList.get.all.db().at(-1);
+      expect(injectedReminder?.role).toBe('signal');
+      const reminderPath = (injectedReminder!.content.metadata?.signal as any)?.metadata?.path as string;
+      expect(reminderPath.endsWith('/components/AGENTS.md')).toBe(true);
+      expect(reminderPath).not.toContain('\\');
+    });
+  });
 });
