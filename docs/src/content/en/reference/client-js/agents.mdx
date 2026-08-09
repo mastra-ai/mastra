@@ -486,7 +486,7 @@ Returns `{ accepted: true, runId: string, toolCallId?: string }`.
 
 ### `declineToolCall()`
 
-Decline a pending tool call and return a continuation stream. Use this when you are rendering the resumed chunks from the decline response. Pass an optional `reason` to tell the model why the call was rejected; it defaults to `Tool call was not approved by the user`.
+Decline a pending tool call and return a continuation stream. Use this when you are rendering the resumed chunks from the decline response. Pass an optional `reason` to tell the model why the call was rejected. The default is `Tool call was not approved by the user`.
 
 ```typescript
 const response = await agent.declineToolCall({
