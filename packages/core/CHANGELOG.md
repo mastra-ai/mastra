@@ -1,5 +1,79 @@
 # @mastra/core
 
+## 1.58.0-alpha.9
+
+### Minor Changes
+
+- Add `beforeAll`, `afterAll`, `beforeEach`, and `afterEach` lifecycle hooks to `runExperiment` for setting up and tearing down test data around an experiment run. `beforeAll` failures fail the experiment, `beforeEach` failures mark the item failed and skip execution (with `afterEach` still running), and `afterEach` failures are logged as warnings. ([#21082](https://github.com/mastra-ai/mastra/pull/21082))
+
+- Made the workspace optional when creating an agent controller session. Previously `createSession()` threw `A session requires a valid workspace instance` unless a workspace was configured, which blocked chat-style sessions that only need threads, state, and agent runs. ([#21084](https://github.com/mastra-ai/mastra/pull/21084))
+
+  ```ts
+  // Now works — no workspace configured anywhere
+  const controller = new AgentController({ id: 'chat', storage, modes });
+  const session = await controller.createSession({ resourceId: 'user-1' });
+
+  session.getWorkspace(); // undefined
+  ```
+
+  `Session.getWorkspace()` now returns `Workspace | undefined`, so check the result before using it. Passing a value that is not a `Workspace` instance is still rejected. Sessions that do configure a workspace are unchanged, including workspace initialization and the `workspace_ready` / `workspace_error` events.
+
+  Closes #20594
+
+- Added an optional `reason` when declining a tool call, so the model and your UI can see _why_ a tool call was rejected instead of always showing "Tool call was not approved by the user". ([#21085](https://github.com/mastra-ai/mastra/pull/21085))
+
+  ```ts
+  // Before: the model only learned the call was declined
+  await agent.declineToolCall({ runId, toolCallId });
+
+  // After: give the model context it can act on
+  await agent.declineToolCall({
+    runId,
+    toolCallId,
+    reason: 'Reading other users personal data is not allowed, ask the user for their own email instead',
+  });
+  ```
+
+  The reason is retained with the tool call, so it is still there when the conversation is recalled later. It is supported by `declineToolCall`, `declineToolCallGenerate` and `declineNetworkToolCall`, on both regular and durable agents. Omitting `reason` keeps the previous default message.
+
+  Closes #20495
+
+### Patch Changes
+
+- Add a workflow `onStart` lifecycle hook. It is awaited before a run executes, receives the run context, and fires only on initial start — not on resume, restart, or time travel. Unlike `onFinish`/`onError`, errors thrown in `onStart` reject the `start()`/`stream()` call so it can act as a pre-flight gate, for example a quota check. ([#21063](https://github.com/mastra-ai/mastra/pull/21063))
+
+- Fixed Workspace search indexing sending one embedding request per document. ([#21067](https://github.com/mastra-ai/mastra/pull/21067))
+
+  A batch-capable embedder (one branded with `batch: true`) was only used when the search engine ran in lazy mode, which `Workspace` never enables. Indexing a directory therefore cost one embedding round trip per file no matter what the embedder supported — indexing 500 files made 500 requests.
+
+  `indexMany` now groups documents into batched embedder calls whenever the configured embedder is batch-capable, so those 500 files take 2 requests with `maxBatchSize: 256`.
+
+  Vector writes are bounded as well: a single `upsert` now carries at most `min(maxBatchSize, 100)` vectors instead of the whole batch, since each document's metadata carries its full text and several vector stores reject oversized write requests. Lazy-mode rebuilds that previously issued one large `upsert` per flush now issue several bounded ones.
+
+  An embedder declaring an unusable `maxBatchSize` (`0`, negative, or `NaN`) now falls back to the default batch size instead of hanging or silently indexing nothing.
+
+- Let `onDelegationComplete` correct a delegation result within the current run ([#21042](https://github.com/mastra-ai/mastra/pull/21042))
+
+  A subagent that stops on a tool-calls step returns empty text, which the parent model
+  reads as a successful but empty delegation and narrates around ("I'll report back once
+  it returns"). The `feedback` returned from `onDelegationComplete` is persisted to the
+  parent's memory, so it only reaches the model on the next turn — after the parent has
+  already answered.
+
+  The hook can now return `resultText`, which replaces the tool result text the parent
+  model sees for that delegation in the run that is still executing.
+
+- Acknowledge pubsub deliveries so persistent backends stop accumulating pending entries. Every fan-out subscribe creates a private consumer group, and Redis keeps each delivered entry pending until it is acked, so subscribers that never acknowledged grew an unbounded pending list for as long as they stayed attached. ([#21081](https://github.com/mastra-ai/mastra/pull/21081))
+
+  The following subscribers now ack every event they inspect (including ones they filter out) and nack when processing throws:
+
+  - the agent thread-stream subscriber and the cross-agent remote-run waiter, which also waits for the terminal event's ack before unsubscribing
+  - workflow run watchers, including the shared `nested-watch` topic
+  - durable agent abort-request listeners
+  - user-defined topic listeners registered through `events` or `addTopicListener`
+
+  `events` listeners are typed as receiving only the event; acknowledgement is handled for them.
+
 ## 1.58.0-alpha.8
 
 ### Minor Changes

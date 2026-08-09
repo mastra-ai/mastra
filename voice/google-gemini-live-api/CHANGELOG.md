@@ -1,5 +1,11 @@
 # @mastra/voice-google-gemini-live
 
+## 0.14.6-alpha.3
+
+### Patch Changes
+
+- Fixed Gemini Live session readiness waits to release timeout resources after settling. ([#21083](https://github.com/mastra-ai/mastra/pull/21083))
+
 ## 0.14.6-alpha.2
 
 ### Patch Changes
