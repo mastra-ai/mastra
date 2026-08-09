@@ -54,13 +54,17 @@ import type { VersionOverrides } from '../mastra/types';
 import { mergeVersionOverrides } from '../mastra/types';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig, MemoryConfigInternal } from '../memory/types';
-import { resolveDeliveryFailureUpdate, resolveNotificationDeliveryDecision } from '../notifications/delivery-policy';
+import {
+  resolveDeliveryFailureUpdate,
+  resolveNotificationDeliveryDecision,
+  type NotificationDeliveryPolicyInput,
+} from '../notifications/delivery-policy';
 import {
   createNotificationSignal,
   createNotificationSummarySignal,
   summarizeNotifications,
 } from '../notifications/signals';
-import type { SendNotificationSignalInput } from '../notifications/types';
+import type { NotificationDeliveryDecision, SendNotificationSignalInput } from '../notifications/types';
 import type {
   DefinitionSource,
   TracingProperties,
@@ -7886,6 +7890,22 @@ export class Agent<
   }
 
   /**
+   * Run this agent's notification delivery policy for a record. Called at
+   * receipt time by `sendNotificationSignal` and again at delivery time by the
+   * notification dispatch workflow, so a deferred delivery can carry
+   * freshly-resolved decision fields (e.g. `streamOptions` with the request
+   * context a woken idle thread needs to resolve a model).
+   *
+   * @experimental Agent notification signal APIs are experimental and may change in a future release.
+   */
+  resolveNotificationDeliveryDecision(input: NotificationDeliveryPolicyInput): Promise<NotificationDeliveryDecision> {
+    return resolveNotificationDeliveryDecision({
+      config: this.#notifications?.deliveryPolicy,
+      ...input,
+    });
+  }
+
+  /**
    * @experimental Agent notification signal APIs are experimental and may change in a future release.
    */
   async sendNotificationSignal<OUTPUT = TOutput>(
@@ -7936,12 +7956,7 @@ export class Agent<
     for (const record of records) {
       planned.push({
         record,
-        decision: await resolveNotificationDeliveryDecision({
-          config: this.#notifications?.deliveryPolicy,
-          now,
-          record,
-          threadState,
-        }),
+        decision: await this.resolveNotificationDeliveryDecision({ now, record, threadState }),
       });
     }
 
@@ -8000,7 +8015,19 @@ export class Agent<
           const result = agentThreadStreamRuntime.sendSignal<OUTPUT>(
             this as Agent<any, any, any, any>,
             signal,
-            { ...target, ifIdle: { ...target.ifIdle, behavior: record.priority === 'high' ? 'persist' : 'wake' } },
+            {
+              ...target,
+              ifIdle: {
+                // Caller-supplied stream options win over the policy's. The
+                // policy's options are typed on the default OUTPUT, matching
+                // how deliveries run.
+                ...(decision.streamOptions
+                  ? { streamOptions: decision.streamOptions as AgentExecutionOptions<OUTPUT> }
+                  : {}),
+                ...target.ifIdle,
+                behavior: record.priority === 'high' ? 'persist' : 'wake',
+              },
+            },
             this.getPubSub(),
           );
           let summaryAccepted: SendAgentSignalAccepted<OUTPUT>;
@@ -8054,10 +8081,20 @@ export class Agent<
       }
 
       const signal = createNotificationSignal({ ...record, status: 'delivered' });
+      // An immediate `deliver` to an idle thread is a wake, so it needs the
+      // policy's stream options as much as a deferred dispatch does.
+      // Caller-supplied stream options win over the policy's.
+      const deliverTarget =
+        decision.streamOptions && !target.ifIdle?.streamOptions
+          ? {
+              ...target,
+              ifIdle: { ...target.ifIdle, streamOptions: decision.streamOptions as AgentExecutionOptions<OUTPUT> },
+            }
+          : target;
       const result = agentThreadStreamRuntime.sendSignal<OUTPUT>(
         this as Agent<any, any, any, any>,
         signal,
-        target,
+        deliverTarget,
         this.getPubSub(),
       );
       let delivered: SendAgentSignalAccepted<OUTPUT>;

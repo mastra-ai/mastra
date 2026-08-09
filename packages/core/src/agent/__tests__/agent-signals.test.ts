@@ -1762,6 +1762,106 @@ describe('Agent signals', () => {
     subscription.unsubscribe();
   });
 
+  it('attaches delivery-policy stream options to immediate idle deliveries', async () => {
+    const notifications = new InMemoryNotificationsStorage();
+    const storage = new MastraCompositeStore({ id: 'notification-storage', domains: { notifications } });
+    const streamOptions = { memory: { resource: 'notification-user', thread: 'notification-thread' } };
+    const agent = new Agent({
+      id: 'notification-agent',
+      name: 'Notification Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('notification response'),
+      notifications: { deliveryPolicy: { decide: () => ({ action: 'deliver', streamOptions }) } },
+    });
+    new Mastra({ agents: { notificationAgent: agent }, storage, logger: false });
+    const sendSignalSpy = vi.spyOn(agentThreadStreamRuntime, 'sendSignal');
+
+    const result = await agent.sendNotificationSignal(
+      { source: 'github', kind: 'ci-status', priority: 'medium', summary: 'CI failed on main' },
+      { resourceId: 'notification-user', threadId: 'notification-thread' },
+    );
+
+    await result.accepted;
+    expect(sendSignalSpy).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({ ifIdle: expect.objectContaining({ streamOptions }) }),
+      expect.anything(),
+    );
+    sendSignalSpy.mockRestore();
+  });
+
+  it('keeps caller-supplied stream options over the delivery policy on immediate deliveries', async () => {
+    const notifications = new InMemoryNotificationsStorage();
+    const storage = new MastraCompositeStore({ id: 'notification-storage', domains: { notifications } });
+    const policyOptions = { memory: { resource: 'policy-user', thread: 'policy-thread' } };
+    const callerOptions = { memory: { resource: 'notification-user', thread: 'notification-thread' } };
+    const agent = new Agent({
+      id: 'notification-agent',
+      name: 'Notification Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('notification response'),
+      notifications: { deliveryPolicy: { decide: () => ({ action: 'deliver', streamOptions: policyOptions }) } },
+    });
+    new Mastra({ agents: { notificationAgent: agent }, storage, logger: false });
+    const sendSignalSpy = vi.spyOn(agentThreadStreamRuntime, 'sendSignal');
+
+    const result = await agent.sendNotificationSignal(
+      { source: 'github', kind: 'ci-status', priority: 'medium', summary: 'CI failed on main' },
+      {
+        resourceId: 'notification-user',
+        threadId: 'notification-thread',
+        ifIdle: { streamOptions: callerOptions },
+      },
+    );
+
+    await result.accepted;
+    expect(sendSignalSpy).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({ ifIdle: expect.objectContaining({ streamOptions: callerOptions }) }),
+      expect.anything(),
+    );
+    sendSignalSpy.mockRestore();
+  });
+
+  it('resolves delivery-policy stream options through a real agent when dispatching deferred notifications', async () => {
+    const notifications = new InMemoryNotificationsStorage();
+    const storage = new MastraCompositeStore({ id: 'notification-storage', domains: { notifications } });
+    const streamOptions = { memory: { resource: 'notification-user', thread: 'notification-thread' } };
+    const agent = new Agent({
+      id: 'notification-agent',
+      name: 'Notification Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('notification response'),
+      notifications: { deliveryPolicy: { decide: () => ({ action: 'deliver', streamOptions }) } },
+    });
+    const mastra = new Mastra({ agents: { notificationAgent: agent }, storage, logger: false });
+    const now = new Date();
+    await notifications.createNotification({
+      id: 'deferred-1',
+      agentId: 'notification-agent',
+      resourceId: 'notification-user',
+      threadId: 'notification-thread',
+      source: 'github',
+      kind: 'ci-status',
+      priority: 'high',
+      summary: 'CI failed on main',
+      deliverAt: now,
+    });
+    const sendSignalSpy = vi.spyOn(agent, 'sendSignal');
+
+    const result = await dispatchDueNotifications({ mastra, storage: notifications, now });
+
+    expect(result.failed).toEqual([]);
+    expect(result.delivered).toHaveLength(1);
+    expect(sendSignalSpy).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ ifIdle: { streamOptions } }),
+    );
+    sendSignalSpy.mockRestore();
+  });
+
   it('delivers batched idle notifications using one initial thread-state decision', async () => {
     const notifications = new InMemoryNotificationsStorage();
     const storage = new MastraCompositeStore({ id: 'notification-batch-storage', domains: { notifications } });

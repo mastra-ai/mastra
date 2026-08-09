@@ -231,7 +231,7 @@ type GithubSignalAgentOptions = {
   getNotificationStreamOptions?: (target: {
     resourceId: string;
     threadId: string;
-  }) => GithubNotificationStreamOptions | Promise<GithubNotificationStreamOptions>;
+  }) => GithubNotificationStreamOptions | undefined | Promise<GithubNotificationStreamOptions | undefined>;
 };
 
 type GithubSignalsMastra = {
