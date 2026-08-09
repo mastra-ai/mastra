@@ -139,7 +139,7 @@ describe('RegexFilterProcessor', () => {
     });
 
     it('throws for a non-positive or non-integer streamCarryoverSize', () => {
-      for (const bad of [0, -1, 1.5, NaN, Infinity]) {
+      for (const bad of [0, -1, 1.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1]) {
         expect(() => new RegexFilterProcessor({ presets: ['pii'], streamCarryoverSize: bad })).toThrow(
           'streamCarryoverSize must be a positive safe integer',
         );
