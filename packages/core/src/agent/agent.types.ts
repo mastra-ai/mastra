@@ -5,7 +5,7 @@ import type { SystemMessage } from '../llm';
 import type { ProviderOptions } from '../llm/model/provider-options';
 import type { MastraLanguageModel, MastraModelConfig } from '../llm/model/shared.types';
 import type { CompletionConfig, CompletionRunResult } from '../loop/network/validation';
-import type { LoopConfig, LoopOptions, PrepareStepFunction } from '../loop/types';
+import type { LoopConfig, LoopOptions, PrepareStepFunction, ToolCallConcurrency } from '../loop/types';
 import type { VersionOverrides } from '../mastra/types';
 import type { ObservabilityContext, TracingOptions } from '../observability';
 import type { ErrorProcessorOrWorkflow, InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../processors';
@@ -608,8 +608,24 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
   /** Automatically resume suspended tools */
   autoResumeSuspendedTools?: boolean;
 
-  /** Maximum number of tool calls to execute concurrently (default: 1 when approval may be required, otherwise 10) */
-  toolCallConcurrency?: number;
+  /**
+   * Controls how many tool calls execute concurrently.
+   *
+   * Pass a number to set the limit (default: 10). By default ("available"
+   * strategy) any registered approval/suspend-capable tool forces sequential
+   * execution (limit 1) for every step, even when the model did not call it.
+   *
+   * Pass an object to opt into the "called" strategy, which resolves
+   * concurrency from the tools the model actually called each step — a batch of
+   * only safe tools runs concurrently even while an approval/suspend tool stays
+   * registered, while a batch that calls an approval/suspend tool still runs
+   * sequentially:
+   *
+   * ```ts
+   * toolCallConcurrency: { limit: 8, strategy: 'called' }
+   * ```
+   */
+  toolCallConcurrency?: ToolCallConcurrency;
 
   /** Whether to include raw chunks in the stream output (not available on all model providers) */
   includeRawChunks?: boolean;

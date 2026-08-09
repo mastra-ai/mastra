@@ -14,6 +14,7 @@ import type { AgentBackgroundConfig } from '../../background-tasks/types';
 import type { SystemMessage } from '../../llm';
 import type { ProviderOptions } from '../../llm/model/provider-options';
 import type { MastraLanguageModel } from '../../llm/model/shared.types';
+import type { ToolCallConcurrency } from '../../loop/types';
 import type { MastraMemory } from '../../memory/memory';
 import type { MemoryConfig } from '../../memory/types';
 import type { AIModelGenerationSpan, Span, SpanType, TracingContext, TracingOptions } from '../../observability';
@@ -179,8 +180,8 @@ export interface SerializableDurableOptions {
   modelSettings?: SerializableModelSettings;
   /** Whether to require tool approval globally */
   requireToolApproval?: boolean;
-  /** Concurrency limit for parallel tool calls */
-  toolCallConcurrency?: number;
+  /** Concurrency limit / strategy for parallel tool calls (JSON-safe union) */
+  toolCallConcurrency?: ToolCallConcurrency;
   /** Whether to auto-resume suspended tools */
   autoResumeSuspendedTools?: boolean;
   /** Maximum processor retries per generation */
