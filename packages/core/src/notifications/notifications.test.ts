@@ -428,6 +428,116 @@ describe('notification inbox', () => {
     });
   });
 
+  it('resolves stream options for deferred deliveries so a woken idle thread has a request context', async () => {
+    const storage = new InMemoryNotificationsStorage();
+    const now = new Date('2026-05-30T12:00:00Z');
+    const sent: any[] = [];
+    const sendSignal = vi.fn((signal, target) => {
+      sent.push({ signal, target });
+      return { accepted: Promise.resolve({ action: 'deliver', runId: 'run-1' }), signal };
+    });
+    const streamOptions = { memory: { thread: 'thread-1', resource: 'resource-1' }, maxSteps: 1000 };
+    const resolveNotificationDeliveryDecision = vi.fn(async () => ({ action: 'deliver' as const, streamOptions }));
+    const mastra = {
+      getAgentById: vi.fn(async () => ({ sendSignal, resolveNotificationDeliveryDecision })),
+    } as any;
+    await storage.createNotification({
+      id: 'n1',
+      agentId: 'agent-1',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      source: 'github',
+      kind: 'ci-status',
+      priority: 'high',
+      summary: 'CI failed',
+      deliverAt: now,
+    });
+
+    const result = await dispatchDueNotifications({ mastra, storage, now });
+
+    expect(result.failed).toEqual([]);
+    expect(resolveNotificationDeliveryDecision).toHaveBeenCalledWith({
+      record: expect.objectContaining({ id: 'n1', resourceId: 'resource-1', threadId: 'thread-1' }),
+      threadState: 'idle',
+      now,
+    });
+    expect(sent[0]?.target).toEqual({
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      ifIdle: { streamOptions },
+    });
+  });
+
+  it('resolves stream options for deferred summary deliveries with non-low priorities', async () => {
+    const storage = new InMemoryNotificationsStorage();
+    const now = new Date('2026-05-30T12:00:00Z');
+    const sent: any[] = [];
+    const sendSignal = vi.fn((signal, target) => {
+      sent.push({ signal, target });
+      return { accepted: Promise.resolve({ action: 'deliver', runId: 'run-1' }), signal };
+    });
+    const streamOptions = { maxSteps: 1000 };
+    const resolveNotificationDeliveryDecision = vi.fn(async () => ({ action: 'summarize' as const, streamOptions }));
+    const mastra = {
+      getAgentById: vi.fn(async () => ({ sendSignal, resolveNotificationDeliveryDecision })),
+    } as any;
+    await storage.createNotification({
+      id: 'n1',
+      agentId: 'agent-1',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      source: 'github',
+      kind: 'mention',
+      priority: 'high',
+      summary: 'mention summary',
+      summaryAt: now,
+    });
+
+    const result = await dispatchDueNotifications({ mastra, storage, now });
+
+    expect(result.failed).toEqual([]);
+    expect(sent[0]?.target).toEqual({
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      ifIdle: { streamOptions },
+    });
+  });
+
+  it('delivers with a bare wake when the delivery policy throws at dispatch time', async () => {
+    const storage = new InMemoryNotificationsStorage();
+    const now = new Date('2026-05-30T12:00:00Z');
+    const sent: any[] = [];
+    const sendSignal = vi.fn((signal, target) => {
+      sent.push({ signal, target });
+      return { accepted: Promise.resolve({ action: 'deliver', runId: 'run-1' }), signal };
+    });
+    const resolveNotificationDeliveryDecision = vi.fn(async () => {
+      throw new Error('resolver exploded');
+    });
+    const warn = vi.fn();
+    const mastra = {
+      getAgentById: vi.fn(async () => ({ sendSignal, resolveNotificationDeliveryDecision })),
+      getLogger: () => ({ warn }),
+    } as any;
+    await storage.createNotification({
+      id: 'n1',
+      agentId: 'agent-1',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      source: 'github',
+      kind: 'ci-status',
+      priority: 'high',
+      summary: 'CI failed',
+      deliverAt: now,
+    });
+
+    const result = await dispatchDueNotifications({ mastra, storage, now });
+
+    expect(result.failed).toEqual([]);
+    expect(sent[0]?.target).toEqual({ resourceId: 'resource-1', threadId: 'thread-1' });
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('resolver exploded'));
+  });
+
   it('records delivery failure when a notification signal is rejected', async () => {
     const storage = new InMemoryNotificationsStorage();
     const now = new Date('2026-05-30T12:00:00Z');
@@ -586,6 +696,42 @@ describe('notification inbox', () => {
       status: 'pending',
       summaryAt: undefined,
       summarySignalId: result.signals[0]?.id,
+    });
+  });
+
+  it('keeps the persist behavior and skips the policy for all-low-priority summaries', async () => {
+    const storage = new InMemoryNotificationsStorage();
+    const now = new Date('2026-05-30T12:00:00Z');
+    const resolveNotificationDeliveryDecision = vi.fn(async () => ({
+      action: 'summarize' as const,
+      streamOptions: { requestContext: { model: 'model-from-policy' } },
+    }));
+    const sendSignal = vi.fn((signal, _target) => ({
+      accepted: Promise.resolve({ action: 'persist' }),
+      signal,
+    }));
+    const mastra = {
+      getAgentById: vi.fn(async () => ({ sendSignal, resolveNotificationDeliveryDecision })),
+    } as any;
+    await storage.createNotification({
+      id: 'n1',
+      agentId: 'agent-1',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      source: 'github',
+      kind: 'mention',
+      priority: 'low',
+      summary: 'low summary',
+      summaryAt: now,
+    });
+
+    await dispatchDueNotifications({ mastra, storage, now });
+
+    expect(resolveNotificationDeliveryDecision).not.toHaveBeenCalled();
+    expect(sendSignal).toHaveBeenCalledWith(expect.objectContaining({ tagName: 'notification-summary' }), {
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      ifIdle: { behavior: 'persist' },
     });
   });
 

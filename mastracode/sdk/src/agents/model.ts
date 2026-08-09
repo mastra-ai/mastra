@@ -201,6 +201,15 @@ export function getDynamicModel(
 
   const modelId = agentControllerContext?.session?.modelId;
   if (!modelId) {
+    // A missing controller context means the run was started without session
+    // request context at all (e.g. a signal delivered to an idle thread) —
+    // "use /models" would mislead there, the user's selection was never the
+    // problem.
+    if (!agentControllerContext) {
+      throw new Error(
+        'No model available: this run started without a controller session context, so no model selection could be resolved.',
+      );
+    }
     throw new Error('No model selected. Use /models to select a model first.');
   }
 

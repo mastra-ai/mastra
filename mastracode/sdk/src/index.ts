@@ -18,6 +18,7 @@ import type { PubSub } from '@mastra/core/events';
 import { PROVIDER_REGISTRY } from '@mastra/core/llm';
 import type { ProviderConfig } from '@mastra/core/llm';
 import { Mastra } from '@mastra/core/mastra';
+import { defaultNotificationDeliveryDecision } from '@mastra/core/notifications';
 import {
   AgentsMDInjector,
   isBadRequestError,
@@ -654,6 +655,61 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   // well after controller is constructed (line ~692). Explicit type annotations
   // on githubSignals, codeAgent, modes, and controller break the circular
   // inference chain this forward reference would otherwise create.
+  // Shared by GithubSignals (immediate sends) and the code agent's
+  // notification config (deferred sends re-dispatched by the core notification
+  // dispatch workflow) — both need the target session's request context, or a
+  // woken idle thread has no model to run with ("No model selected").
+  const getNotificationStreamOptions = async ({ resourceId, threadId }: { resourceId: string; threadId: string }) => {
+    // Run the woken notification as the session that owns the target
+    // resource so it uses that session's model/mode/state. Fall back to
+    // the current session only when no session owns the resource yet.
+    const session = (await controller.getSessionByResource(resourceId)) ?? activeSession;
+    // No session owns the resource and none is active yet (e.g. a deferred
+    // notification comes due before any session boots). Nothing to resolve a
+    // model from; return undefined so the dispatcher sends a bare wake
+    // instead of throwing mid-delivery.
+    if (!session) return undefined;
+    // A long-running system must be able to drive work unattended, so a
+    // target session without an explicit model selection falls back to a
+    // real model rather than failing the run: the current session's live
+    // selection (what the user actually picked), then the mode's default.
+    const modeId = session.mode.get();
+    const defaultModeModelId = controller.listModes().find(mode => mode.id === modeId)?.defaultModelId;
+    const modelId = session.model.get() || activeSession?.model.get() || defaultModeModelId || '';
+    const requestContext = new RequestContext();
+    const agentControllerContext: AgentControllerRequestContext = {
+      controllerId: controller.id,
+      state: session.state.get(),
+      getState: () => session.state.get(),
+      setState: updates => session.state.set(updates),
+      threadId,
+      resourceId,
+      session: {
+        id: session.identity.getId(),
+        ownerId: session.identity.getOwnerId(),
+        modeId,
+        modelId,
+        state: {
+          get: () => session.state.get(),
+          set: updates => session.state.set(updates),
+          update: updater => session.state.update(updater),
+        },
+      },
+      workspace: controller.getWorkspace(),
+      getSubagentModelId: params => session.subagents.model.get(params ?? {}),
+    };
+    requestContext.set('controller', agentControllerContext);
+
+    return {
+      memory: { thread: threadId, resource: resourceId },
+      requestContext,
+      maxSteps: 1000,
+      savePerStep: false,
+      requireToolApproval: (session.state.get() as Record<string, unknown>).yolo !== true,
+      modelSettings: { temperature: 1 },
+    };
+  };
+
   const githubSignals: GithubSignals | undefined =
     globalSettings.signals?.experimentalGithubSignals && !config?.disableGithubSignals
       ? new GithubSignals({
@@ -663,51 +719,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
             process.env.GITCRAWL_BIN ??
             process.env.MASTRACODE_GITCRAWL_COMMAND ??
             process.env.GITCRAWL_COMMAND,
-          getNotificationStreamOptions: async ({ resourceId, threadId }) => {
-            // Run the woken notification as the session that owns the target
-            // resource so it uses that session's model/mode/state. Fall back to
-            // the current session only when no session owns the resource yet.
-            const session = (await controller.getSessionByResource(resourceId)) ?? activeSession!;
-            // A long-running system must be able to drive work unattended, so a
-            // target session without an explicit model selection falls back to a
-            // real model rather than failing the run: the current session's live
-            // selection (what the user actually picked), then the mode's default.
-            const modeId = session.mode.get();
-            const defaultModeModelId = controller.listModes().find(mode => mode.id === modeId)?.defaultModelId;
-            const modelId = session.model.get() || activeSession?.model.get() || defaultModeModelId || '';
-            const requestContext = new RequestContext();
-            const agentControllerContext: AgentControllerRequestContext = {
-              controllerId: controller.id,
-              state: session.state.get(),
-              getState: () => session.state.get(),
-              setState: updates => session.state.set(updates),
-              threadId,
-              resourceId,
-              session: {
-                id: session.identity.getId(),
-                ownerId: session.identity.getOwnerId(),
-                modeId,
-                modelId,
-                state: {
-                  get: () => session.state.get(),
-                  set: updates => session.state.set(updates),
-                  update: updater => session.state.update(updater),
-                },
-              },
-              workspace: controller.getWorkspace(),
-              getSubagentModelId: params => session.subagents.model.get(params ?? {}),
-            };
-            requestContext.set('controller', agentControllerContext);
-
-            return {
-              memory: { thread: threadId, resource: resourceId },
-              requestContext,
-              maxSteps: 1000,
-              savePerStep: false,
-              requireToolApproval: (session.state.get() as Record<string, unknown>).yolo !== true,
-              modelSettings: { temperature: 1 },
-            };
-          },
+          getNotificationStreamOptions,
         })
       : undefined;
   const codeAgent: Agent = createCodingAgent({
@@ -722,6 +734,28 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     // `settingsPath` matches the source `createMastraCode()` reads from so the
     // per-mode thinking defaults resolve against the same config file.
     model: ctx => getDynamicModel(ctx, config?.settingsPath),
+    // Deferred notifications are re-dispatched by the core notification
+    // dispatch workflow long after the originating send; the delivery policy
+    // rebuilds the request context (model selection included) at delivery time
+    // so waking an idle thread does not fail with "No model selected". The
+    // default decision logic is kept as-is — the policy only attaches
+    // streamOptions on top of it.
+    notifications: {
+      deliveryPolicy: {
+        decide: async input => {
+          const decision = defaultNotificationDeliveryDecision(input);
+          // Without a resourceId there is no session to resolve options from —
+          // don't fall through to the active session and wake it under an
+          // empty resource binding.
+          if (!input.record.resourceId) return decision;
+          const streamOptions = await getNotificationStreamOptions({
+            resourceId: input.record.resourceId,
+            threadId: input.record.threadId,
+          });
+          return streamOptions ? { ...decision, streamOptions } : decision;
+        },
+      },
+    },
     tools: createDynamicTools(mcpManager, config?.extraTools, config?.disabledTools, storage, pluginTools),
     hooks: createToolHooks(hookManager, config?.postToolObserver),
     scorers: {

@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 1.58.0-alpha.10
+
+### Patch Changes
+
+- Fixed concurrent workflow tool approvals so each suspended call resumes the correct workflow run. ([#20347](https://github.com/mastra-ai/mastra/pull/20347))
+
 ## 1.58.0-alpha.9
 
 ### Minor Changes
