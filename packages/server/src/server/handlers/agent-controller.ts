@@ -78,6 +78,49 @@ async function getSession(
   return controller.createSession({ resourceId, id, ownerId: controller.id, tags, scope, threadId, requestContext });
 }
 
+/**
+ * Acknowledges a session operation that keeps running after the response is
+ * sent.
+ *
+ * The messages/steer/follow-up routes answer `{ ok: true }` as soon as the
+ * message is handed to the session: the reply itself arrives on the session's
+ * SSE stream, so the request must not block for the whole turn. Those session
+ * methods can still reject — `sendMessage` deliberately rejects when signal
+ * submission fails before a stream starts — and a bare `void promise` turns
+ * that into an unhandled rejection, which terminates the process on Node's
+ * default `--unhandled-rejections=throw`.
+ *
+ * Observing the promise keeps the immediate acknowledgement while logging the
+ * failure and emitting an `error` event on the session, so a client streaming
+ * the session is told the turn died instead of waiting for an `agent_end` that
+ * will never come.
+ */
+function ackBackgroundSessionWork({
+  work,
+  session,
+  mastra,
+  operation,
+}: {
+  work: Promise<unknown>;
+  session: Session<any>;
+  mastra: { getLogger?: () => { error?: (message: string, context?: Record<string, unknown>) => void } | undefined };
+  operation: string;
+}): void {
+  void work.catch((error: unknown) => {
+    const failure = error instanceof Error ? error : new Error(String(error));
+    mastra.getLogger?.()?.error?.(`AgentController ${operation} failed after the request was acknowledged`, {
+      operation,
+      error: failure,
+    });
+    try {
+      session.emit({ type: 'error', error: failure });
+    } catch {
+      // A session that can no longer accept events (e.g. torn down mid-flight)
+      // must not turn a logged failure into a second unhandled rejection.
+    }
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Schemas
 // ---------------------------------------------------------------------------
@@ -511,7 +554,12 @@ export const SEND_AGENT_CONTROLLER_MESSAGE_ROUTE = createRoute({
       // Forward the server middleware's requestContext so identity injected in
       // `server.middleware` reaches dynamic instructions and tools (same as the
       // plain agent message route).
-      void session.sendMessage({ content: message, files, requestContext });
+      ackBackgroundSessionWork({
+        work: session.sendMessage({ content: message, files, requestContext }),
+        session,
+        mastra,
+        operation: 'sendMessage',
+      });
       return { ok: true };
     } catch (error) {
       return handleError(error, 'error sending controller message');
@@ -616,7 +664,12 @@ export const STEER_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const session = await getSession(controller, resourceId, { scope: sessionScope }, requestContext);
-      void session.steer({ content: message, requestContext });
+      ackBackgroundSessionWork({
+        work: session.steer({ content: message, requestContext }),
+        session,
+        mastra,
+        operation: 'steer',
+      });
       return { ok: true };
     } catch (error) {
       return handleError(error, 'error steering controller session');
@@ -1095,7 +1148,12 @@ export const FOLLOW_UP_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const session = await getSession(controller, resourceId, { scope: sessionScope }, requestContext);
-      void session.followUp({ content: message, requestContext });
+      ackBackgroundSessionWork({
+        work: session.followUp({ content: message, requestContext }),
+        session,
+        mastra,
+        operation: 'followUp',
+      });
       return { ok: true };
     } catch (error) {
       return handleError(error, 'error queuing controller follow-up');
