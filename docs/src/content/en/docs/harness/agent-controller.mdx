@@ -354,6 +354,43 @@ Each external chat thread maps to one controller Session and Mastra thread. By d
 
 Channel sessions are created by the controller rather than by your code, so `onSessionStart` is where you configure them. It runs once per session, after the session is bound to its mapped thread and before the first message is handled. Use it to apply a model, memory settings, or session state that a channel session would otherwise miss. Later messages in the same thread reuse the session and don't call it again. Errors are logged and swallowed so a session that can't be configured still answers the message.
 
+### Authorize and route channel sessions
+
+`onSessionStart` runs after the session exists and swallows errors, so it can't refuse a request. Use `resolveSession` when your host decides whether a session may exist. It replaces the built-in session creation and runs before any session exists. Errors propagate, so a rejected request stops there: the message is dropped and the chat thread stays silent.
+
+```typescript
+channels: {
+  adapters: { slack: createSlackAdapter() },
+  resolveSession: async ({ controller, thread, requestContext }) => {
+    const install = await installs.authorize(requestContext.get('teamId'))
+
+    return controller.createSession({
+      resourceId: thread.resourceId,
+      id: `${install.id}:${thread.resourceId}`,
+      ownerId: controller.id,
+      requestContext,
+    })
+  },
+}
+```
+
+Create the session under `thread.resourceId`. A session can only bind threads it owns, so use `resolveResourceId` if you want a different owner for the mapped thread.
+
+`resolveSession` also runs when a user answers an approval card, with that action's request context, so a shared install revalidates the person approving rather than trusting the person who sent the original message.
+
+### Handle stale approvals
+
+An approval gate lives in memory, so every approval answered after a restart is stale. Mastra never runs the tool for a stale action. Use `onStaleToolApproval` to settle the attempt the user answered, instead of dropping it:
+
+```typescript
+channels: {
+  adapters: { slack: createSlackAdapter() },
+  onStaleToolApproval: async ({ decision, toolCallId, runId, memory }) => {
+    await runs.markInterrupted({ runId, toolCallId, decision, threadId: memory.thread })
+  },
+}
+```
+
 Controller channel sessions and auto-approval state are held in memory, so use a long-lived server. Pending approvals and live Session state don't survive process restarts. Adapters that can't render approval controls automatically run tools without an approval prompt so the run doesn't remain suspended.
 
 See [Channels](/docs/capabilities/channels/overview) for adapter setup and platform-specific webhook configuration.
