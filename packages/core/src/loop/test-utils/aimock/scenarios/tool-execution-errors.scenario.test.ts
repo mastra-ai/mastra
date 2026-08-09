@@ -11,8 +11,6 @@ import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '.
  * tool result (rather than crashing the run) so the model can recover on the
  * next turn. These scenarios pin that recovery contract.
  */
-// DurableAgent terminates the loop on non-ToolNotFoundError tool errors
-// instead of feeding them back to the model for recovery.
 describeForAllEngines('AIMock loop scenario: tool execution errors', engine => {
   const getMock = useLoopScenarioAimock();
 
