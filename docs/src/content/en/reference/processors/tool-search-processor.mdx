@@ -218,6 +218,9 @@ The `tools` option is fixed at construction, so you can't list tools that only e
 Set `includeResolvedTools: true` to index them for the request and withhold them from the prompt until the agent loads them:
 
 ```typescript title="src/mastra/agents/mcp-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { ToolSearchProcessor } from '@mastra/core/processors'
+
 const toolSearch = new ToolSearchProcessor({
   tools: staticTools,
   includeResolvedTools: true,
@@ -227,7 +230,7 @@ const agent = new Agent({
   id: 'mcp-agent',
   name: 'mcp-agent',
   instructions: 'Search for a tool when you need a capability you do not have.',
-  model: 'openai/gpt-4.1',
+  model: '__GATEWAY_OPENAI_MODEL__',
   // Resolved per request, then searchable alongside staticTools
   tools: async ({ requestContext }) => mcpClient.getTools(requestContext.get('userToken')),
   inputProcessors: [toolSearch],
@@ -235,6 +238,8 @@ const agent = new Agent({
 ```
 
 Each request is indexed on its own, so a tool loaded by one caller never resolves to another caller's instance of the same tool name.
+
+This option applies to every tool resolved for the request, including memory, workspace, skill, and browser tools. Only the `search_tools` and `load_tool` meta-tools stay in the prompt, so any tool the agent relies on implicitly must be found through search before it can be called.
 
 ## Extended usage example
 
