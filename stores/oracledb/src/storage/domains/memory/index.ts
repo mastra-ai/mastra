@@ -155,8 +155,8 @@ export class MemoryOracle extends MemoryStorage {
 
   async updateThread(args: {
     id: string;
-    title: string;
-    metadata: Record<string, unknown>;
+    title?: string;
+    metadata?: Record<string, unknown>;
   }): Promise<StorageThreadType> {
     return updateThread(this.ctx, args);
   }

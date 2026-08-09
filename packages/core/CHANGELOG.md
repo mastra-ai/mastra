@@ -1,5 +1,98 @@
 # @mastra/core
 
+## 1.58.0-alpha.8
+
+### Minor Changes
+
+- Add `includeResolvedTools` to `ToolSearchProcessor`, making per-request tools (MCP tools that need the caller's credentials, or anything returned by a dynamic `tools` function) searchable and withholding them from the prompt until the agent loads them. Previously only tools listed at construction could be searched, so dynamically resolved tools were always sent in full. ([#21016](https://github.com/mastra-ai/mastra/pull/21016))
+
+  ```ts
+  const toolSearch = new ToolSearchProcessor({
+    tools: staticTools,
+    includeResolvedTools: true,
+  });
+
+  const agent = new Agent({
+    id: 'mcp-agent',
+    name: 'mcp-agent',
+    instructions: 'Search for a tool when you need a capability you do not have.',
+    model: 'openai/gpt-5.6-sol',
+    // Resolved per request, then searchable alongside staticTools
+    tools: async ({ requestContext }) => mcpClient.getTools(requestContext.get('userToken')),
+    inputProcessors: [toolSearch],
+  });
+  ```
+
+### Patch Changes
+
+- Add `bundler.minify` to minify `mastra build` output ([#21032](https://github.com/mastra-ai/mastra/pull/21032))
+
+  `mastra build` always emitted unminified code, which is larger than necessary when packaging for production — a container image or an on-prem deployment.
+
+  Set `bundler.minify: true` to minify the emitted bundle. Minification runs over whole chunks, so comments and whitespace are dropped and local identifiers are shortened while exported names are preserved.
+
+  ```typescript
+  export const mastra = new Mastra({
+    bundler: {
+      minify: true,
+    },
+  });
+  ```
+
+  Defaults to `false`, so existing builds are unchanged. `mastra dev` is never minified.
+
+- Fixed durable agent completion on remote workers so processed messages persist, thread titles generate, and prior turns can be recalled. ([#20926](https://github.com/mastra-ai/mastra/pull/20926))
+
+- Agent scorers now run on the Inngest durable engine. ([#21038](https://github.com/mastra-ai/mastra/pull/21038))
+
+  An agent configured with `scorers` never had them executed when running via `createInngestAgent()` — no scorer ran, no spans, no persisted scores, and no error. Core's durable workflow gained an `execute-scorers` step that the Inngest workflow builder, a copy of it, never picked up.
+
+  Scorer execution now lives in the durable workflow's shared module and is used by both engines, so scorers behave identically on either one.
+
+- Make `abort()` stop durable agent runs that are executing in another process ([#21009](https://github.com/mastra-ai/mastra/pull/21009))
+
+  A durable agent's steps often run somewhere other than the process that started them — another replica behind a load balancer, or an Inngest step worker. `abort()` only flipped an in-memory `AbortController`, which those processes never see, so aborting a durable or Inngest agent run silently did nothing in exactly the deployments durable agents exist for.
+
+  Abort intent now travels over pubsub. The executing process picks the request up and flips its own controller, so the run unwinds the same way an in-process abort does and still emits its terminal stream event — consumers waiting on the stream are released instead of hanging. `abort()` now returns a promise so callers can await dispatch; ignoring it preserves the previous fire-and-forget behavior.
+
+- Fixed suspended runs that could fail to save after repeated tool calls. ([#21002](https://github.com/mastra-ai/mastra/pull/21002))
+
+  A run's snapshot no longer grows with every step it took before suspending, which keeps agents that make many tool calls before their first approval prompt under MongoDB's 16 MB per-document limit — past it, the snapshot was never written and the resume reported the run as missing. Runs suspended by earlier versions still load.
+
+- Fixed `result.object` being stale after an output processor rejected a structured-output attempt with `abort(reason, { retry: true })`. The retried attempt object is now returned, matching `result.text`, instead of the rejected attempt object. Fixes #20570 ([#20999](https://github.com/mastra-ai/mastra/pull/20999))
+
+- Fixed RegexFilterProcessor redact strategy to redact matches split across stream chunks, and added a `streamCarryoverSize` option for custom rules whose matches can be longer than the default 128-char window. Fixes #21049 ([#21050](https://github.com/mastra-ai/mastra/pull/21050))
+
+- Fixed generated thread titles being clobbered during a turn ([#21041](https://github.com/mastra-ai/mastra/pull/21041))
+
+  `updateThread` required both `title` and `metadata`, so callers that only needed to
+  change metadata (message persistence, working memory, observational memory, channel
+  subscriptions) had to read the thread and pass its title back. When title generation
+  finished between that read and the write, the freshly generated title was overwritten
+  with the stale one.
+
+  `title` and `metadata` are now independently optional: omitting one leaves that column
+  untouched. Callers that only change metadata no longer send a title, and message
+  persistence no longer rewrites a thread row it just read.
+
+- Make `ProviderModelsMap` augmentable so custom gateways can register their providers and models. It is now declared as an exported interface on `@mastra/core/llm`, so `declare module '@mastra/core/llm'` augmentation flows through to `Provider`, `ModelForProvider` and `ModelRouterModelId`. ([#21043](https://github.com/mastra-ai/mastra/pull/21043))
+
+## 1.58.0-alpha.7
+
+### Patch Changes
+
+- Fix durable agents dropping `requestContext` when a step is rehydrated on another process (for example an Inngest worker delegating to a subagent). Tool, memory, and workspace resolution now fall back to the run-level request context when the step input carries no request-context snapshot, so request-scoped configuration reaches subagents instead of resolving with an empty context. ([#21015](https://github.com/mastra-ai/mastra/pull/21015))
+
+- Fixed background tool calls so the model sees the completed result instead of the dispatch placeholder. ([#21001](https://github.com/mastra-ai/mastra/pull/21001))
+
+  An agent that dispatched a tool to the background kept reading "Background task started..." on every later turn, so it would re-run the tool or answer without the result. Unrelated provider metadata on the tool call is now preserved when the completed result arrives.
+
+- Stop the browser-safe `@mastra/core/a2a/client` entry from pulling in the Node `module` builtin, which broke `@mastra/client-js` in browser bundles (`Module not found: Can't resolve 'module'` in Next.js). ([#21053](https://github.com/mastra-ai/mastra/pull/21053))
+
+- Fixed `LocalSandbox` replacing your custom seatbelt profile. When you point `nativeSandbox.seatbeltProfilePath` at a profile file you wrote, that profile now stays active after a mount or an unmount. ([#20978](https://github.com/mastra-ai/mastra/pull/20978))
+
+  Mastra uses your profile exactly as written and does not add mount paths to it, so the profile must already allow every path you mount. If no file exists at that path, Mastra still generates a default profile, and that generated profile keeps allowing the paths you mount. Generated profiles now carry a marker comment, so a later run regenerates them and keeps allowing mount paths instead of reading them back as your own profile. To edit a generated profile and keep your edits, delete that marker comment: the file then counts as yours.
+
 ## 1.58.0-alpha.6
 
 ### Patch Changes

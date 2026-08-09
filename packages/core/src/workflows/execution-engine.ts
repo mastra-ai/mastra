@@ -14,6 +14,7 @@ import type {
   WorkflowRunState,
   WorkflowFinishCallbackResult,
   WorkflowErrorCallbackInfo,
+  WorkflowStartCallbackInfo,
 } from './types';
 import type { RestartExecutionParams, StepFlowEntry, TimeTravelExecutionParams } from '.';
 
@@ -39,6 +40,12 @@ export interface ExecutionEngineOptions {
    * Must be pure and return JSON-safe data. Defaults to identity.
    */
   pruneSnapshot?: (params: { snapshot: WorkflowRunState; workflowStatus: WorkflowRunStatus }) => WorkflowRunState;
+
+  /**
+   * Called and awaited before a run starts executing. Errors are propagated, which
+   * aborts the run before any step executes.
+   */
+  onStart?: (info: WorkflowStartCallbackInfo) => Promise<void> | void;
 
   /**
    * Called when workflow execution completes (success, failed, suspended, or tripwire).
@@ -75,6 +82,20 @@ export abstract class ExecutionEngine extends MastraBase {
 
   public getLogger(): IMastraLogger {
     return this.logger;
+  }
+
+  /**
+   * Invokes the onStart lifecycle callback if it is defined, before any step runs.
+   * Errors are intentionally propagated so the hook can gate the run (for example a
+   * quota check): the caller rejects and the run never executes.
+   */
+  public async invokeStartCallback(info: Omit<WorkflowStartCallbackInfo, 'mastra' | 'logger'>): Promise<void> {
+    const { onStart } = this.options;
+    if (!onStart) {
+      return;
+    }
+
+    await onStart({ ...info, mastra: this.mastra, logger: this.logger });
   }
 
   /**

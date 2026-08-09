@@ -609,6 +609,7 @@ export type ProviderModelsMap = {
     'Qwen/Qwen3.5-397B-A17B-fast',
     'deepseek-ai/DeepSeek-V3.2',
     'deepseek-ai/DeepSeek-V3.2-fast',
+    'deepseek-ai/DeepSeek-V4-Flash',
     'deepseek-ai/DeepSeek-V4-Pro',
     'google/gemma-3-27b-it',
     'meta-llama/Llama-3.3-70B-Instruct',
@@ -2948,7 +2949,7 @@ export type ProviderModelsMap = {
     'qwen3guard-gen-0.6b',
     'qwen3guard-gen-8b',
   ];
-  readonly zeldoc: readonly ['z-code'];
+  readonly zeldoc: readonly ['zdev'];
   readonly auriko: readonly [
     'claude-opus-4-6',
     'claude-opus-4-7',
@@ -3874,6 +3875,8 @@ export type ProviderModelsMap = {
     'qwen3.8-max',
   ];
   readonly alibaba: readonly [
+    'deepseek-v4-flash-0731',
+    'glm-5.2',
     'qvq-max',
     'qwen-flash',
     'qwen-max',
@@ -4139,7 +4142,6 @@ export type ProviderModelsMap = {
     'openai/gpt-5.1-codex',
     'openai/gpt-5.1-codex-max',
     'openai/gpt-5.1-codex-mini',
-    'openai/gpt-5.1-instant',
     'openai/gpt-5.1-thinking',
     'openai/gpt-5.2',
     'openai/gpt-5.2-codex',
@@ -4226,6 +4228,7 @@ export type ProviderModelsMap = {
     'xai/grok-4.5',
     'xai/grok-build-0.1',
     'xai/grok-imagine-image',
+    'xai/grok-imagine-image-2.0-preview',
     'xai/grok-imagine-video',
     'xai/grok-imagine-video-1.5',
     'xai/grok-imagine-video-1.5-preview',
@@ -4915,6 +4918,7 @@ export type ProviderModelsMap = {
     'gpt-oss-120b',
     'gpt-oss-safeguard-120b',
     'kimi-k2-6',
+    'kimi-k3',
     'llama3-3-70b',
     'nomic-embed-text',
   ];
@@ -5407,7 +5411,6 @@ export type ProviderModelsMap = {
     'cosmos3-super-reasoner',
     'deepseek-r1-0528',
     'deepseek-v3.2',
-    'deepseek-v4-flash',
     'deepseek-v4-flash-0731',
     'deepseek-v4-pro',
     'devstral-2512',

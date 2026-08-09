@@ -707,6 +707,25 @@ export const mastra = new Mastra({
 })
 ```
 
+### bundler.minify
+
+**Type:** `boolean`\
+**Default:** `false`
+
+Minifies the bundled output, stripping comments and whitespace and shortening local identifiers. Exported names are preserved.
+
+Off by default so build output stays readable and stack traces stay meaningful. Enable it when bundle size matters, such as packaging a container image for an on-prem deployment. `mastra dev` is never minified.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+
+export const mastra = new Mastra({
+  bundler: {
+    minify: true,
+  },
+})
+```
+
 ### bundler.transpilePackages
 
 **Type:** `string[]`\

@@ -726,6 +726,13 @@ export interface RunRegistryEntry {
    */
   abortController?: AbortController;
   /**
+   * Whether this process has already subscribed to cross-process abort
+   * requests for the run. Set by `ensureRemoteAbortListener`, which every
+   * durable step calls on entry — the flag is what keeps a run's many steps
+   * from installing duplicate subscriptions.
+   */
+  remoteAbortListenerInstalled?: boolean;
+  /**
    * Promise tracking the in-flight workflow execution (or resume) for this
    * run. Resolves once the workflow has fully settled (finished, errored,
    * suspended-and-persisted, or aborted). Used by `generate()` /

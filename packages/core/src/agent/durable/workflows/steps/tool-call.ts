@@ -386,6 +386,7 @@ export function createDurableToolCallStep() {
           state: state as any,
           options: agentOptions,
           requestContextEntries: initData.requestContextEntries,
+          requestContext,
           logger,
         });
         if (rebuilt) {

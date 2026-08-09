@@ -740,8 +740,8 @@ export class MemoryMySQL extends MemoryStorage {
     metadata,
   }: {
     id: string;
-    title: string;
-    metadata: Record<string, unknown>;
+    title?: string;
+    metadata?: Record<string, unknown>;
   }): Promise<StorageThreadType> {
     try {
       const existing = await this.getThreadById({ threadId: id });
@@ -765,7 +765,7 @@ export class MemoryMySQL extends MemoryStorage {
         tableName: TABLE_THREADS,
         keys: { id },
         data: {
-          title,
+          title: title ?? existing.title,
           metadata: JSON.stringify(mergedMetadata),
           updatedAt,
         },
@@ -773,7 +773,7 @@ export class MemoryMySQL extends MemoryStorage {
 
       return {
         ...existing,
-        title,
+        title: title ?? existing.title,
         metadata: mergedMetadata,
         updatedAt,
       } satisfies StorageThreadType;

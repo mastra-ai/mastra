@@ -249,8 +249,8 @@ export class MemoryConvex extends MemoryStorage {
     metadata,
   }: {
     id: string;
-    title: string;
-    metadata: Record<string, unknown>;
+    title?: string;
+    metadata?: Record<string, unknown>;
   }): Promise<StorageThreadType> {
     const updated = await this.#db.updateThread({
       id,
