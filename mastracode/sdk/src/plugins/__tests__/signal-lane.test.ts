@@ -69,7 +69,7 @@ function laneWithMastra(options?: ConstructorParameters<typeof PluginSignalLane>
   return lane;
 }
 
-function processorIds(processors: Array<InputProcessorOrWorkflow | OutputProcessorOrWorkflow>): string[] {
+function processorIds(processors: ReadonlyArray<InputProcessorOrWorkflow | OutputProcessorOrWorkflow>): string[] {
   return processors.map(processor => processor.id);
 }
 
@@ -184,6 +184,24 @@ describe('PluginSignalLane', () => {
     expect(processorIds(lane.getInputProcessors())).toEqual(['healthy-signals-input']);
     expect(broken.stopped).toBe(1);
     expect(onError).toHaveBeenCalledWith(expect.stringContaining('failed to start'), expect.any(Error));
+  });
+
+  it('drops the processors of a provider whose getter throws, leaving its siblings contributing', async () => {
+    const onError = vi.fn();
+    const broken = new TestProvider('broken-signals');
+    broken.getInputProcessors = () => {
+      throw new Error('getter exploded');
+    };
+    const healthy = new TestProvider('healthy-signals');
+    const lane = laneWithMastra({ onError });
+
+    lane.sync(contributions('acme.demo', 'v1', [broken, healthy]));
+
+    // Neither lane carries anything from the broken provider: both getters are
+    // read before either lane is touched, so a throw cannot leave it half-contributed.
+    expect(processorIds(lane.getInputProcessors())).toEqual(['healthy-signals-input']);
+    expect(processorIds(lane.getOutputProcessors())).toEqual(['healthy-signals-output']);
+    expect(onError).toHaveBeenCalledWith(expect.stringContaining('failed to provide processors'), expect.any(Error));
   });
 
   it('does not hold up the caller while a provider warms up, and retires it if the warm-up rejects', async () => {

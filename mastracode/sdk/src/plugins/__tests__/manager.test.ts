@@ -11,25 +11,11 @@ vi.mock('execa', () => ({ execa: execaMock }));
 import { PluginManager } from '../manager.js';
 import { findMastraCodePackageRoot } from '../package-link.js';
 import { loadPluginRegistry } from '../registry.js';
+import { cleanupResolvableDirs, makeResolvableDir } from './resolvable-dir.js';
 
 const mastracodePackageRoot = findMastraCodePackageRoot(path.dirname(fileURLToPath(import.meta.url)));
-const SDK_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 
 let tempDir: string | undefined;
-let tempResolvableDir: string | undefined;
-
-/**
- * Fixtures that import from `@mastra/core` have to sit somewhere Node can
- * resolve it from, which `os.tmpdir()` is not. Inside the package's own
- * `node_modules` keeps them out of both `tsc` and vitest's globs.
- */
-function makeResolvableDir(): string {
-  const parent = path.join(SDK_ROOT, 'node_modules', '.mc-test-plugins');
-  fs.mkdirSync(parent, { recursive: true });
-  const dir = fs.mkdtempSync(path.join(parent, 'manager-'));
-  tempResolvableDir = dir;
-  return dir;
-}
 
 afterEach(() => {
   vi.clearAllMocks();
@@ -37,10 +23,7 @@ afterEach(() => {
     fs.rmSync(tempDir, { recursive: true, force: true });
     tempDir = undefined;
   }
-  if (tempResolvableDir) {
-    fs.rmSync(tempResolvableDir, { recursive: true, force: true });
-    tempResolvableDir = undefined;
-  }
+  cleanupResolvableDirs();
 });
 
 function writePlugin(pluginDir: string, id: string, toolName: string, description = 'tool'): void {
@@ -253,7 +236,7 @@ describe('PluginManager', () => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-manager-'));
     const projectRoot = path.join(tempDir, 'project');
     const homeDir = path.join(tempDir, 'home');
-    const contributorDir = makeResolvableDir();
+    const contributorDir = makeResolvableDir('manager');
     const disabledDir = path.join(tempDir, 'disabled');
     const writeContributor = (dir: string, id: string, marker: string, withProvider: boolean) => {
       fs.mkdirSync(path.join(dir, 'src'), { recursive: true });

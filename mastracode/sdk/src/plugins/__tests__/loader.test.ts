@@ -1,12 +1,12 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { defineMastraCodePlugin, SignalProvider } from '../../plugin.js';
 import { collectActivePluginTools, loadPluginFromEntry, loadPlugins } from '../loader.js';
 import type { PluginRegistry } from '../types.js';
+import { cleanupResolvableDirs, makeResolvableDir } from './resolvable-dir.js';
 
 /** Minimal concrete provider — `SignalProvider` only requires an `id`. */
 class FixtureSignalProvider extends SignalProvider<'fixture-signals'> {
@@ -16,24 +16,6 @@ class FixtureSignalProvider extends SignalProvider<'fixture-signals'> {
   }
 }
 
-const SDK_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
-
-/**
- * Fixtures that import from `@mastra/core` have to live somewhere Node can
- * resolve it from, which `os.tmpdir()` is not. Installed plugins get a
- * `node_modules` link for exactly this reason (see `package-link.ts`); inside
- * the package's own `node_modules` is the cheap equivalent, and stays out of
- * both `tsc` and vitest's globs.
- */
-let tempResolvableDir: string | undefined;
-function makeResolvableDir(): string {
-  const parent = path.join(SDK_ROOT, 'node_modules', '.mc-test-plugins');
-  fs.mkdirSync(parent, { recursive: true });
-  const dir = fs.mkdtempSync(path.join(parent, 'loader-'));
-  tempResolvableDir = dir;
-  return dir;
-}
-
 let tempDir: string | undefined;
 
 afterEach(() => {
@@ -41,10 +23,7 @@ afterEach(() => {
     fs.rmSync(tempDir, { recursive: true, force: true });
     tempDir = undefined;
   }
-  if (tempResolvableDir) {
-    fs.rmSync(tempResolvableDir, { recursive: true, force: true });
-    tempResolvableDir = undefined;
-  }
+  cleanupResolvableDirs();
 });
 
 function writePlugin(filePath: string, source: string): void {
@@ -366,7 +345,7 @@ describe('plugin loader', () => {
     const projectRoot = path.join(tempDir, 'project');
     const objectDir = path.join(tempDir, 'object-plugin');
     const functionDir = path.join(tempDir, 'function-plugin');
-    const asyncDir = makeResolvableDir();
+    const asyncDir = makeResolvableDir('loader');
     writePlugin(
       path.join(objectDir, 'index.ts'),
       `export default {

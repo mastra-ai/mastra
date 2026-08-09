@@ -54,11 +54,11 @@ export class PluginSignalLane {
       });
   }
 
-  getInputProcessors(): InputProcessorOrWorkflow[] {
+  getInputProcessors(): readonly InputProcessorOrWorkflow[] {
     return this.#inputProcessors;
   }
 
-  getOutputProcessors(): OutputProcessorOrWorkflow[] {
+  getOutputProcessors(): readonly OutputProcessorOrWorkflow[] {
     return this.#outputProcessors;
   }
 
@@ -209,8 +209,21 @@ export class PluginSignalLane {
       // yet has no storage, so running its processors would fail on the first
       // request rather than wait for the lifecycle to complete.
       if (!live.started) continue;
-      input.push(...(live.provider.getInputProcessors?.() ?? []));
-      output.push(...(live.provider.getOutputProcessors?.() ?? []));
+      // Guarded like every other provider call: a throwing getter drops that
+      // provider's processors from this rebuild instead of unwinding the whole
+      // lane mid-sync. Both getters are read before either lane is touched so a
+      // provider never contributes input processors without its output ones.
+      try {
+        const providerInput = live.provider.getInputProcessors?.() ?? [];
+        const providerOutput = live.provider.getOutputProcessors?.() ?? [];
+        input.push(...providerInput);
+        output.push(...providerOutput);
+      } catch (error) {
+        this.#onError(
+          `Plugin "${live.pluginId}" signal provider "${live.provider.id}" failed to provide processors:`,
+          error,
+        );
+      }
     }
     this.#inputProcessors = input;
     this.#outputProcessors = output;

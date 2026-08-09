@@ -476,7 +476,9 @@ export class PluginManager {
 
   private resolvePluginSourcePath(plugin: LoadedPlugin): string {
     const paths = getPluginScopePaths(plugin.scope, this.options);
-    return path.isAbsolute(plugin.path) ? plugin.path : path.join(paths.root, plugin.path);
+    // Normalized so cache keys derived here match the `path.resolve`-normalized
+    // key that `uninstall` deletes with.
+    return path.resolve(path.isAbsolute(plugin.path) ? plugin.path : path.join(paths.root, plugin.path));
   }
 
   private async readGitHead(cwd: string): Promise<string> {
