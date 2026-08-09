@@ -150,3 +150,24 @@ describe('InMemoryMemory listMessages include resource scope', () => {
     expect(result.messages.map(message => message.id)).toEqual(['a1', 'a2', 'a3', 'b1']);
   });
 });
+
+describe('InMemoryMemory updateThread partial updates', () => {
+  it('leaves the stored title alone when only metadata is provided', async () => {
+    const memory = new InMemoryMemory({ db: new InMemoryDB() });
+    await memory.saveThread({
+      thread: {
+        id: 'thread-1',
+        resourceId: 'resource-1',
+        title: 'Generated title',
+        metadata: { a: 1 },
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+
+    const updated = await memory.updateThread({ id: 'thread-1', metadata: { b: 2 } });
+
+    expect(updated.title).toBe('Generated title');
+    expect(updated.metadata).toEqual({ a: 1, b: 2 });
+  });
+});

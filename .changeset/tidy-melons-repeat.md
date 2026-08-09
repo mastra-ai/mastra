@@ -19,7 +19,7 @@
 '@mastra/pg': patch
 ---
 
-Stop generated thread titles from being clobbered during a turn
+Fixed generated thread titles being clobbered during a turn
 
 `updateThread` required both `title` and `metadata`, so callers that only needed to
 change metadata (message persistence, working memory, observational memory, channel
