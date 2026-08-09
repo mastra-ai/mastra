@@ -12,7 +12,10 @@ const browserMocks = vi.hoisted(() => ({
   askModalQuestion: vi.fn(),
 }));
 
-vi.mock('@mastra/code-sdk/onboarding/settings', () => ({
+vi.mock('@mastra/code-sdk/onboarding/settings', async importActual => ({
+  // Viewport parsing and presets are pure, so the real implementations run here
+  // and keep the command tests honest about what the SDK actually accepts.
+  ...(await importActual<typeof import('@mastra/code-sdk/onboarding/settings')>()),
   checkProfileProviderMismatch: browserMocks.checkProfileProviderMismatch,
   createBrowserFromSettings: browserMocks.createBrowserFromSettings,
   loadSettings: browserMocks.loadSettings,
@@ -317,6 +320,162 @@ describe('handleBrowserCommand', () => {
       const output = (ctx.showInfo as ReturnType<typeof vi.fn>).mock.calls[0]![0] as string;
       expect(output).toContain('Pending changes (not yet applied):');
       expect(output).toContain('Model: anthropic/claude-sonnet-4-5');
+    });
+  });
+
+  describe('viewport', () => {
+    it('sets explicit dimensions', async () => {
+      const { ctx, settings } = createContext();
+      browserMocks.loadSettings.mockReturnValue(settings);
+
+      await handleBrowserCommand(ctx, ['set', 'viewport', '1600x1000']);
+
+      expect(settings.browser.viewport).toEqual({ width: 1600, height: 1000 });
+      expect(browserMocks.saveSettings).toHaveBeenCalledWith(settings);
+      expect(ctx.showInfo).toHaveBeenCalledWith(expect.stringContaining('Set viewport = 1600x1000'));
+    });
+
+    it('sets a named preset', async () => {
+      const { ctx, settings } = createContext();
+      browserMocks.loadSettings.mockReturnValue(settings);
+
+      await handleBrowserCommand(ctx, ['set', 'viewport', 'desktop-hd']);
+
+      expect(settings.browser.viewport).toEqual({ width: 1920, height: 1080 });
+    });
+
+    it('rejects an unparseable size without writing settings', async () => {
+      const { ctx, settings } = createContext();
+      browserMocks.loadSettings.mockReturnValue(settings);
+
+      await handleBrowserCommand(ctx, ['set', 'viewport', '1280']);
+
+      expect(browserMocks.saveSettings).not.toHaveBeenCalled();
+      expect(settings.browser.viewport).toEqual({ width: 1280, height: 720 });
+      expect(ctx.showError).toHaveBeenCalledWith(expect.stringContaining('Invalid viewport: 1280'));
+    });
+
+    // Stagehand overwrites an absent viewport with its own default when it
+    // launches the browser, so 'window' would silently do nothing there.
+    it('rejects window when stagehand launches its own browser', async () => {
+      const { ctx, settings } = createContext();
+      browserMocks.loadSettings.mockReturnValue(settings);
+
+      await handleBrowserCommand(ctx, ['set', 'viewport', 'window']);
+
+      expect(browserMocks.saveSettings).not.toHaveBeenCalled();
+      expect(ctx.showError).toHaveBeenCalledWith(expect.stringContaining('viewport window is not supported'));
+    });
+
+    it('accepts window when stagehand connects over cdpUrl', async () => {
+      const { ctx, settings } = createContext();
+      (settings.browser as Record<string, unknown>).cdpUrl = 'http://localhost:9222';
+      browserMocks.loadSettings.mockReturnValue(settings);
+
+      await handleBrowserCommand(ctx, ['set', 'viewport', 'window']);
+
+      expect(settings.browser.viewport).toBe('window');
+    });
+
+    it('accepts window on the agent-browser provider', async () => {
+      const { ctx, settings } = createContext();
+      (settings.browser as Record<string, unknown>).provider = 'agent-browser';
+      browserMocks.loadSettings.mockReturnValue(settings);
+
+      await handleBrowserCommand(ctx, ['set', 'viewport', 'window']);
+
+      expect(settings.browser.viewport).toBe('window');
+    });
+
+    it('opens a preset picker when the value is omitted', async () => {
+      const { ctx, settings } = createContext();
+      browserMocks.loadSettings.mockReturnValue(settings);
+      browserMocks.askModalQuestion.mockResolvedValue('tablet');
+
+      await handleBrowserCommand(ctx, ['set', 'viewport']);
+
+      const options = browserMocks.askModalQuestion.mock.calls[0]![1].options as Array<{ label: string }>;
+      // 'window' cannot be honored by a locally launched Stagehand, so it is
+      // withheld rather than offered and then rejected.
+      expect(options.map(option => option.label)).toEqual([
+        'desktop',
+        'desktop-hd',
+        'laptop',
+        'tablet',
+        'mobile',
+        'custom',
+      ]);
+      expect(settings.browser.viewport).toEqual({ width: 768, height: 1024 });
+    });
+
+    it('offers window in the picker when the provider can honor it', async () => {
+      const { ctx, settings } = createContext();
+      (settings.browser as Record<string, unknown>).provider = 'agent-browser';
+      browserMocks.loadSettings.mockReturnValue(settings);
+      browserMocks.askModalQuestion.mockResolvedValue('window');
+
+      await handleBrowserCommand(ctx, ['set', 'viewport']);
+
+      const options = browserMocks.askModalQuestion.mock.calls[0]![1].options as Array<{ label: string }>;
+      expect(options.map(option => option.label)).toContain('window');
+      expect(settings.browser.viewport).toBe('window');
+    });
+
+    it('prompts for a custom size when custom is picked', async () => {
+      const { ctx, settings } = createContext();
+      browserMocks.loadSettings.mockReturnValue(settings);
+      browserMocks.askModalQuestion.mockResolvedValueOnce('custom').mockResolvedValueOnce('1440x900');
+
+      await handleBrowserCommand(ctx, ['set', 'viewport']);
+
+      expect(settings.browser.viewport).toEqual({ width: 1440, height: 900 });
+    });
+
+    it('leaves the viewport untouched when the picker is cancelled', async () => {
+      const { ctx, settings } = createContext();
+      browserMocks.loadSettings.mockReturnValue(settings);
+      browserMocks.askModalQuestion.mockResolvedValue(null);
+
+      await handleBrowserCommand(ctx, ['set', 'viewport']);
+
+      expect(browserMocks.saveSettings).not.toHaveBeenCalled();
+      expect(settings.browser.viewport).toEqual({ width: 1280, height: 720 });
+    });
+
+    it('restores the default on clear', async () => {
+      const { ctx, settings } = createContext();
+      settings.browser.viewport = 'window' as never;
+      browserMocks.loadSettings.mockReturnValue(settings);
+
+      await handleBrowserCommand(ctx, ['clear', 'viewport']);
+
+      expect(settings.browser.viewport).toEqual({ width: 1280, height: 720 });
+      expect(browserMocks.saveSettings).toHaveBeenCalledWith(settings);
+    });
+
+    it('shows the viewport in status', async () => {
+      const { ctx, settings } = createContext();
+      settings.browser.enabled = true;
+      settings.browser.viewport = { width: 1600, height: 1000 };
+      browserMocks.loadSettings.mockReturnValue(settings);
+
+      await handleBrowserCommand(ctx, ['status']);
+
+      expect((ctx.showInfo as ReturnType<typeof vi.fn>).mock.calls[0]![0]).toContain('Viewport: 1600x1000');
+    });
+
+    it('reports a viewport change as pending so the running browser is not silently stale', async () => {
+      const { ctx, settings, controllerState } = createContext();
+      settings.browser.enabled = true;
+      (controllerState as Record<string, unknown>).activeBrowserSettings = { ...settings.browser };
+      settings.browser.viewport = { width: 1600, height: 1000 };
+      browserMocks.loadSettings.mockReturnValue(settings);
+
+      await handleBrowserCommand(ctx, ['status']);
+
+      const output = (ctx.showInfo as ReturnType<typeof vi.fn>).mock.calls[0]![0] as string;
+      expect(output).toContain('Pending changes (not yet applied):');
+      expect(output).toContain('Viewport: 1600x1000');
     });
   });
 });

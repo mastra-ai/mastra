@@ -3,9 +3,8 @@
  * Validates mapped data before import, including schema validation
  */
 
-import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
 import type { ZodSchema, ZodError, ZodIssue } from 'zod';
-import { resolveSerializedZodOutput } from '@/lib/form/utils';
+import { jsonSchemaToZodRuntime } from '@/lib/form/json-schema-to-zod-runtime';
 
 /** Column mapping configuration */
 export type ColumnMapping = Record<string, 'input' | 'groundTruth' | 'metadata' | 'ignore'>;
@@ -49,11 +48,9 @@ export interface CsvValidationResult {
 
 /**
  * Convert JSON Schema to runtime Zod schema.
- * Uses existing resolveSerializedZodOutput from lib/form/utils.
  */
 function compileSchema(jsonSchema: Record<string, unknown>): ZodSchema {
-  const zodString = jsonSchemaToZod(jsonSchema);
-  return resolveSerializedZodOutput(zodString);
+  return jsonSchemaToZodRuntime(jsonSchema);
 }
 
 /**

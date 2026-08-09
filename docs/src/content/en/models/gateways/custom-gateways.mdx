@@ -286,6 +286,10 @@ const agent = new Agent({
 **Option 3: Extend ModelRouterModelId globally (advanced)**
 ```typescript
 // In a types.d.ts file in your project
+// The import is required: it makes this file a module, so the block below
+// merges into the existing types instead of replacing the module.
+import '@mastra/core/llm';
+
 declare module '@mastra/core/llm' {
   interface ProviderModelsMap {
     'my-provider': readonly ['model-1', 'model-2', 'model-3'];

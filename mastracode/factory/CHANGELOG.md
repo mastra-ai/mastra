@@ -1,5 +1,33 @@
 # @mastra/factory
 
+## 0.6.0-alpha.9
+
+### Patch Changes
+
+- Fixed Factory review sessions losing caller identity when an existing request context is empty. ([#21055](https://github.com/mastra-ai/mastra/pull/21055))
+
+- Updated dependencies [[`7fb580a`](https://github.com/mastra-ai/mastra/commit/7fb580ac73fbcacf2ff00872a3395f73ae1b9fa5), [`333785c`](https://github.com/mastra-ai/mastra/commit/333785c93cbb01e42c60167e995457c28897ddbf), [`2eabc09`](https://github.com/mastra-ai/mastra/commit/2eabc097d86d52fbd0123da36a7c874154cc384f), [`83fa004`](https://github.com/mastra-ai/mastra/commit/83fa0044bfda8b703a83883dbd8bef204844d13f)]:
+  - @mastra/core@1.58.0-alpha.7
+  - @mastra/code-sdk@1.2.0-alpha.8
+
+## 0.6.0-alpha.8
+
+### Patch Changes
+
+- Fixed Factory intake saves when generated clients include disabled defaults for integrations that are not configured. ([#21019](https://github.com/mastra-ai/mastra/pull/21019))
+
+- Fixed reused Factory workspaces retaining GitHub credentials from an outdated work or review assignment. ([#21035](https://github.com/mastra-ai/mastra/pull/21035))
+
+## 0.6.0-alpha.7
+
+### Patch Changes
+
+- Fixed Factory sessions rejecting signed-in users when session-based authentication providers store the user and active organization in a wrapped session shape. Workspace ownership checks and GitHub session tools now recognize both flat and session-wrapped authenticated users. ([#21008](https://github.com/mastra-ai/mastra/pull/21008))
+
+- Updated dependencies [[`f59032a`](https://github.com/mastra-ai/mastra/commit/f59032a73699443555a08a479e7ac578975784f2), [`f59032a`](https://github.com/mastra-ai/mastra/commit/f59032a73699443555a08a479e7ac578975784f2), [`3e50f63`](https://github.com/mastra-ai/mastra/commit/3e50f63db85e9fe365b4ce5daecb0ac0dc464d93), [`bf936e2`](https://github.com/mastra-ai/mastra/commit/bf936e2c89b2ff0dad5695b873ddc009ba96d41e)]:
+  - @mastra/code-sdk@1.2.0-alpha.7
+  - @mastra/core@1.58.0-alpha.6
+
 ## 0.6.0-alpha.6
 
 ### Patch Changes

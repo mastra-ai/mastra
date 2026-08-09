@@ -498,8 +498,8 @@ export class MemoryStorageDO extends MemoryStorage {
     metadata,
   }: {
     id: string;
-    title: string;
-    metadata: Record<string, unknown>;
+    title?: string;
+    metadata?: Record<string, unknown>;
   }): Promise<StorageThreadType> {
     const thread = await this.getThreadById({ threadId: id });
     try {
@@ -513,9 +513,25 @@ export class MemoryStorageDO extends MemoryStorage {
         ...metadata,
       };
 
+      const updatedTitle = title !== undefined ? title : thread.title;
       const updatedAt = new Date();
-      const columns = ['title', 'metadata', 'updatedAt'];
-      const values = [title, JSON.stringify(mergedMetadata), updatedAt.toISOString()];
+
+      // Only write the columns the caller supplied. Writing a title read moments
+      // ago would clobber one generated in between, and the same applies to
+      // metadata on a title-only update.
+      const columns: string[] = [];
+      const values: (string | null)[] = [];
+
+      if (title !== undefined) {
+        columns.push('title');
+        values.push(title);
+      }
+      if (metadata !== undefined) {
+        columns.push('metadata');
+        values.push(JSON.stringify(mergedMetadata));
+      }
+      columns.push('updatedAt');
+      values.push(updatedAt.toISOString());
 
       const query = createSqlBuilder().update(fullTableName, columns, values).where('id = ?', id);
 
@@ -525,7 +541,7 @@ export class MemoryStorageDO extends MemoryStorage {
 
       return {
         ...thread,
-        title,
+        title: updatedTitle,
         metadata: mergedMetadata,
         updatedAt,
       };

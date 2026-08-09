@@ -48,6 +48,25 @@ const filter = new RegexFilterProcessor({
 })
 ```
 
+Raise the streaming carryover window for long custom matches (e.g. a fixed-length secret or a
+value that only matches once its closing delimiter arrives):
+
+```typescript
+import { RegexFilterProcessor } from '@mastra/core/processors'
+
+const filter = new RegexFilterProcessor({
+  rules: [
+    {
+      name: 'armored-key',
+      pattern: /-----BEGIN KEY-----[A-Z]+-----END KEY-----/g,
+      replacement: '[KEY]',
+    },
+  ],
+  strategy: 'redact',
+  streamCarryoverSize: 256,
+})
+```
+
 Attach to an agent:
 
 ```typescript
@@ -133,6 +152,14 @@ const agent = new Agent({
       'Include the text that was redacted in each report entry. Off by default, because the values are the data the processor removes.',
     isOptional: true,
     defaultValue: 'false',
+  },
+  {
+    name: 'streamCarryoverSize',
+    type: 'number',
+    description:
+      'Trailing characters the streaming redact path holds back between chunks, so a match split across a chunk boundary is redacted whole. The default covers every built-in preset with a wide margin. Raise it for custom rules whose matches stay invisible to the rule until they complete, such as a fixed-length secret or a value with a closing delimiter, when such a match can be longer than the window.',
+    isOptional: true,
+    defaultValue: '128',
   },
 ]}
 />

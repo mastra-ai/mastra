@@ -7,7 +7,6 @@ import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clip
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { formatJSON, isValidJson } from '@mastra/playground-ui/utils/formatting';
-import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
 import CodeMirror from '@uiw/react-codemirror';
 import { Braces, ChevronDown, CopyIcon, EyeIcon, EyeOffIcon } from 'lucide-react';
 import { useContext, useMemo, useState } from 'react';
@@ -16,7 +15,7 @@ import { z } from 'zod';
 import { WorkflowRunContext } from '../context/workflow-run-context';
 import { WorkflowInputData } from './workflow-input-data';
 import { useMergedRequestContext } from '@/domains/request-context/context/schema-request-context';
-import { resolveSerializedZodOutput } from '@/lib/form/utils';
+import { jsonSchemaToZodRuntime } from '@/lib/form/json-schema-to-zod-runtime';
 
 const buttonClass = 'text-neutral3 hover:text-neutral6';
 
@@ -227,11 +226,9 @@ export const WorkflowTimeTravelForm = ({
 
     try {
       const parsed = parse(stepDefinition.inputSchema);
-      const zodStateSchema = workflow?.stateSchema
-        ? resolveSerializedZodOutput(jsonSchemaToZod(parse(workflow.stateSchema)))
-        : null;
+      const zodStateSchema = workflow?.stateSchema ? jsonSchemaToZodRuntime(parse(workflow.stateSchema)) : null;
 
-      const zodStepSchema = resolveSerializedZodOutput(jsonSchemaToZod(parsed as any));
+      const zodStepSchema = jsonSchemaToZodRuntime(parsed as any);
 
       const schemaToUse = zodStateSchema
         ? z.object({

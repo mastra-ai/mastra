@@ -22,6 +22,7 @@ import { SaveQueueManager } from '../save-queue';
 import { agentThreadStreamRuntime } from '../thread-stream-runtime';
 import type { ToolsInput } from '../types';
 
+import { publishAbortRequest } from './abort-transport';
 import { AGENT_STREAM_TOPIC, DurableStepIds } from './constants';
 import { runDurableStreamUntilIdle, runResumeDurableStreamUntilIdle } from './durable-stream-until-idle';
 import { prepareForDurableExecution } from './preparation';
@@ -199,8 +200,16 @@ export interface DurableAgentStreamResult<OUTPUT = undefined> {
    *
    * Safe to call after the run has already finished — it's a no-op in that
    * case.
+   *
+   * Also publishes an abort request over pubsub so the abort reaches the
+   * process executing the run, which in a load-balanced deployment is usually
+   * not this one. That process flips its own controller and unwinds normally;
+   * the workflow run is never hard-cancelled, so the terminal `finish` event
+   * still reaches stream consumers. Await the returned promise to know the
+   * request has been dispatched; ignoring it keeps the previous
+   * fire-and-forget behaviour.
    */
-  abort: (reason?: unknown) => void;
+  abort: (reason?: unknown) => Promise<void>;
 }
 
 /**
@@ -1014,6 +1023,41 @@ export class DurableAgent<
   }
 
   /**
+   * Abort a durable run, in this process and in whichever process is executing it.
+   *
+   * A durable run's work happens inside a workflow run that may be executing on
+   * a different pod (load-balanced deployment) or a different machine entirely
+   * (Inngest step worker). The local `AbortController` only reaches steps that
+   * happen to run in *this* process, so on its own `abort()` silently does
+   * nothing for exactly the deployments durable agents exist to serve.
+   *
+   * Publishing an abort *request* over pubsub closes that gap: the executing
+   * process flips its own controller and unwinds the run the same way an
+   * in-process abort does, emitting the usual terminal `finish` event with
+   * reason `abort`. Hard-cancelling the workflow run would also stop the work,
+   * but it tears execution down before that terminal event is published — and
+   * a stream consumer that never receives a terminal event waits forever.
+   *
+   * Best-effort by design. The local abort has already happened by the time
+   * this is called, and a caller asking to stop a run should not be handed a
+   * rejection because a pubsub publish failed. A request nobody hears is a
+   * no-op, exactly like aborting a run that already finished.
+   *
+   * @internal
+   */
+  protected async requestRemoteAbort(runId: string): Promise<void> {
+    try {
+      await publishAbortRequest(this.pubsub, runId);
+    } catch (error) {
+      this.#mastra?.getLogger?.()?.warn?.('Failed to publish durable agent abort request', {
+        agentId: this.id,
+        runId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  /**
    * Delete the persisted workflow snapshot rows for a completed durable run.
    *
    * A durable agent write two rows per run: one for the outer `AGENTIC_LOOP`
@@ -1256,10 +1300,14 @@ export class DurableAgent<
       }
     };
 
-    const abort = (reason?: unknown) => {
+    const abort = async (reason?: unknown) => {
       if (!abortController.signal.aborted) {
         abortController.abort(reason);
       }
+      // Also stop the run wherever it is actually executing — see
+      // `requestRemoteAbort`. The local controller above only reaches steps
+      // running in this process.
+      await this.requestRemoteAbort(runId);
     };
 
     return {
@@ -1629,10 +1677,14 @@ export class DurableAgent<
       }
     };
 
-    const abort = (reason?: unknown) => {
+    const abort = async (reason?: unknown) => {
       if (!abortController.signal.aborted) {
         abortController.abort(reason);
       }
+      // Also stop the run wherever it is actually executing — see
+      // `requestRemoteAbort`. The local controller above only reaches steps
+      // running in this process.
+      await this.requestRemoteAbort(runId);
     };
 
     return {
@@ -2011,10 +2063,14 @@ export class DurableAgent<
       }
     };
 
-    const abort = (reason?: unknown) => {
+    const abort = async (reason?: unknown) => {
       if (!abortController.signal.aborted) {
         abortController.abort(reason);
       }
+      // Also stop the run wherever it is actually executing — see
+      // `requestRemoteAbort`. The local controller above only reaches steps
+      // running in this process.
+      await this.requestRemoteAbort(runId);
     };
 
     return {
@@ -2662,15 +2718,17 @@ export class DurableAgent<
       }
     };
 
-    // observe() doesn't own the run's lifecycle, but for API symmetry the
-    // returned `abort` flips the in-process controller currently installed
-    // on the registry. If the run already ended (or is running in a
-    // different process), this is a best-effort no-op.
-    const abort = (reason?: unknown) => {
+    // observe() doesn't own the run's lifecycle, but the returned `abort` can
+    // still stop it. Flip the in-process controller if one happens to be
+    // installed here, then cancel the workflow run so the abort also reaches
+    // the process actually executing it — the common case for observe(), which
+    // exists precisely to watch runs this process did not start.
+    const abort = async (reason?: unknown) => {
       const controller = (globalRunRegistry.get(runId) ?? this.#runRegistry.get(runId))?.abortController;
       if (controller && !controller.signal.aborted) {
         controller.abort(reason);
       }
+      await this.requestRemoteAbort(runId);
     };
 
     return {

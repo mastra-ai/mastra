@@ -1311,8 +1311,8 @@ export class MemoryLibSQL extends MemoryStorage {
     metadata,
   }: {
     id: string;
-    title: string;
-    metadata: Record<string, unknown>;
+    title?: string;
+    metadata?: Record<string, unknown>;
   }): Promise<StorageThreadType> {
     const thread = await this.getThreadById({ threadId: id });
     if (!thread) {
@@ -1331,7 +1331,7 @@ export class MemoryLibSQL extends MemoryStorage {
     const now = new Date();
     const updatedThread = {
       ...thread,
-      title,
+      title: title ?? thread.title,
       metadata: {
         ...thread.metadata,
         ...metadata,
@@ -1341,8 +1341,9 @@ export class MemoryLibSQL extends MemoryStorage {
 
     try {
       await this.#client.execute({
-        sql: `UPDATE ${TABLE_THREADS} SET title = ?, metadata = jsonb(?), updatedAt = ? WHERE id = ?`,
-        args: [title, JSON.stringify(updatedThread.metadata), now.toISOString(), id],
+        // COALESCE so an omitted title leaves the stored one alone.
+        sql: `UPDATE ${TABLE_THREADS} SET title = COALESCE(?, title), metadata = jsonb(?), updatedAt = ? WHERE id = ?`,
+        args: [title ?? null, JSON.stringify(updatedThread.metadata), now.toISOString(), id],
       });
 
       return updatedThread;

@@ -202,8 +202,8 @@ export class MemoryStorageCloudflare extends MemoryStorage {
     metadata,
   }: {
     id: string;
-    title: string;
-    metadata: Record<string, unknown>;
+    title?: string;
+    metadata?: Record<string, unknown>;
   }): Promise<StorageThreadType> {
     try {
       const thread = await this.getThreadById({ threadId: id });
@@ -213,7 +213,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
 
       const updatedThread = {
         ...thread,
-        title,
+        title: title ?? thread.title,
         metadata: this.ensureMetadata({
           ...(thread.metadata ?? {}),
           ...metadata,
@@ -232,7 +232,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
           category: ErrorCategory.THIRD_PARTY,
           details: {
             threadId: id,
-            title,
+            title: title ?? null,
           },
         },
         error,

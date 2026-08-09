@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { ToolSet } from '@internal/ai-sdk-v5';
 import { z } from 'zod/v4';
+import { normalizeModelOutput } from '../../../agent/durable/workflows/steps/normalize-model-output';
 import { stopGoalActivity } from '../../../agent/goal';
 import { createBackgroundTask } from '../../../background-tasks/create';
 import { resolveBackgroundConfig } from '../../../background-tasks/resolve-config';
@@ -1169,10 +1170,47 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                   const transcriptResult = hasTransformedToolPayload(transcriptResultTransform)
                     ? transcriptResultTransform.transformed
                     : result;
-                  const providerMetadata = withToolPayloadTransformProviderMetadata(
+                  let providerMetadata = withToolPayloadTransformProviderMetadata(
                     inputData.providerMetadata as ProviderMetadata | undefined,
                     transformCarrier.metadata,
                   ) as ProviderMetadata | undefined;
+
+                  // Recompute the model-facing output from the *real* result.
+                  //
+                  // The dispatch turn stored `mastra.modelOutput` derived from the
+                  // "Background task started..." placeholder, and `llmPrompt()`
+                  // prefers that field over `toolInvocation.result` when building
+                  // the tool message. Carrying the dispatch metadata through
+                  // unchanged would leave the model reading the placeholder
+                  // forever, so it re-dispatches the tool or answers from nothing.
+                  // Mirrors the synchronous path in llm-mapping-step.
+                  // Every path below overwrites the dispatch's `mastra.modelOutput`, including
+                  // the ones that produce nothing: a tool with no `toModelOutput`, a mapping
+                  // that returns nullish, and a mapping that throws. Leaving the key untouched
+                  // in those cases would preserve the placeholder — the exact bug this fixes.
+                  // A null `modelOutput` is the established "no mapping, use the raw result"
+                  // signal that `MessageList` keys off by value.
+                  const toModelOutput = (resolvedTool as { toModelOutput?: (output: unknown) => unknown } | undefined)
+                    ?.toModelOutput;
+                  let modelOutput: unknown = null;
+                  if (params.status !== 'failed' && toModelOutput && result != null) {
+                    try {
+                      modelOutput = normalizeModelOutput(await toModelOutput(result)) ?? null;
+                    } catch (mappingError) {
+                      // Non-fatal: the real result is still written to `toolInvocation.result`
+                      // below and the model reads that instead. Surface it loudly because the
+                      // tool asked for a mapping and did not get one.
+                      logger?.warn?.(
+                        `toModelOutput failed for background tool "${params.toolName}" — falling back to the raw result`,
+                        { toolCallId: params.toolCallId, error: mappingError },
+                      );
+                      modelOutput = null;
+                    }
+                  }
+                  providerMetadata = {
+                    ...providerMetadata,
+                    mastra: { ...(providerMetadata as any)?.mastra, modelOutput },
+                  } as ProviderMetadata;
 
                   const updated = messageList.updateToolInvocation(
                     {

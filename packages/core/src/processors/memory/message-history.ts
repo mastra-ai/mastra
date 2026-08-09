@@ -297,15 +297,11 @@ export class MessageHistory implements Processor {
       return;
     }
 
-    // Ensure thread exists (create if needed) before saving messages
+    // Ensure thread exists (create if needed) before saving messages.
+    // Nothing to write when it already exists: re-writing the row we just read
+    // would clobber a title generated concurrently with this save.
     const thread = await this.storage.getThreadById({ threadId });
-    if (thread) {
-      await this.storage.updateThread({
-        id: threadId,
-        title: thread.title || '',
-        metadata: thread.metadata || {},
-      });
-    } else {
+    if (!thread) {
       // Auto-create thread if it doesn't exist
       await this.storage.saveThread({
         thread: {
