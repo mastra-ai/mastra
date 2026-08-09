@@ -236,6 +236,10 @@ describe('QuickJsCodeModeTransport', () => {
       { transport: new QuickJsCodeModeTransport({ memoryLimitMb: 16 }), timeout: 30_000 },
     );
     expect(result.success).toBe(false);
+    // A 30s timeout would also fail this program, so assert the limit is what
+    // stopped it. Otherwise the test would still pass if memoryLimitMb were ignored.
+    expect(result.error?.name).not.toBe('TimeoutError');
+    expect(result.error?.message).toMatch(/out of memory/i);
   });
 
   it('preserves logs captured before a failure', async () => {

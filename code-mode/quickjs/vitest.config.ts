@@ -2,6 +2,7 @@ import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   test: {
+    name: 'unit:code-mode/quickjs',
     environment: 'node',
     include: ['src/**/*.test.ts'],
     // Deliberately no `execArgv`: this transport must work under a plain Node

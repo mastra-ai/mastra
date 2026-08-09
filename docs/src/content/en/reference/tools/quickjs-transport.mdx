@@ -61,6 +61,14 @@ const { tool, instructions } = createCodeMode(
             defaultValue: '128',
           },
           {
+            name: 'maxStackSizeBytes',
+            type: 'number',
+            description:
+              'Runtime stack limit in bytes. A program that exceeds the limit, usually through runaway recursion, is terminated and the tool returns an error result.',
+            isOptional: true,
+            defaultValue: '1048576',
+          },
+          {
             name: 'module',
             type: 'QuickJSWASMModule',
             description:
