@@ -7,6 +7,7 @@ import { SpanType, EntityType } from '../../observability';
 import type { ObservabilityContext, MemoryOperationAttributes } from '../../observability';
 import type { RequestContext } from '../../request-context';
 import type { MemoryStorage } from '../../storage';
+import { reconcileClientEchoes } from './reconcile-client-echoes';
 
 /**
  * Options for the MessageHistory processor
@@ -258,7 +259,7 @@ export class MessageHistory implements Processor {
 
     const newInput = messageList.get.input.db();
     const newOutput = messageList.get.response.db();
-    const messagesToSave = [...newInput, ...newOutput];
+    let messagesToSave = [...newInput, ...newOutput];
 
     if (messagesToSave.length === 0) {
       return messageList;
@@ -268,6 +269,24 @@ export class MessageHistory implements Processor {
     // producing any output, saving the user message would orphan it in history.
     if (result?.finishReason === 'error' && newOutput.length === 0) {
       return messageList;
+    }
+
+    // Client-submitted transcripts can echo already-persisted messages back with
+    // the same IDs. Persisting them as-is is a whole-record upsert, so a stale or
+    // lossy echo would silently replace the canonical stored message (dropping
+    // output-processor transformations, tool history, and server-authored
+    // metadata). Reconcile input echoes against the stored records by ID (not the
+    // `lastMessages` recall window): identical echoes are skipped, and only
+    // supported client-authored transitions (e.g. a client-side tool result
+    // advancing a stored `call` to `result`) are merged into the stored version.
+    if (newInput.length > 0 && typeof this.storage.listMessagesById === 'function') {
+      const inputIds = newInput.map(m => m.id).filter((id): id is string => Boolean(id));
+      if (inputIds.length > 0) {
+        const { messages: storedInput } = await this.storage.listMessagesById({ messageIds: inputIds });
+        const storedById = new Map(storedInput.map(m => [m.id, m]));
+        const reconciledInput = reconcileClientEchoes(newInput, storedById);
+        messagesToSave = [...reconciledInput, ...newOutput];
+      }
     }
 
     const span = this.createMemorySpan('save', observabilityContext, undefined, {
