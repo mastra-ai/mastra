@@ -176,7 +176,24 @@ export class TelegramProvider implements ChannelProvider {
    */
   async configure(credentials: { apiBaseUrl?: string; baseUrl?: string } | null): Promise<void> {
     if (credentials === null) return;
+    const apiBaseUrlChanged =
+      credentials.apiBaseUrl !== undefined && credentials.apiBaseUrl !== this.#config.apiBaseUrl;
     this.#config = { ...this.#config, ...credentials };
+    if (!apiBaseUrlChanged) return;
+
+    // Live adapters captured the previous apiBaseUrl — tear them down and, if
+    // installations were already restored, rebuild them against the new host.
+    const wasInitialized = this.#initPromise !== null;
+    for (const adapter of this.#adapters.values()) {
+      try {
+        await adapter.stopPolling();
+      } catch (err) {
+        console.warn('[Telegram] Failed to stop polling while reconfiguring:', err);
+      }
+    }
+    this.#adapters.clear();
+    this.#initPromise = null;
+    if (wasInitialized) await this.initialize();
   }
 
   /**

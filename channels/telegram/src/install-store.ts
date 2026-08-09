@@ -1,7 +1,7 @@
 import type { ChannelInstallationInfo } from '@mastra/core/channels';
 import type { ChannelInstallation, ChannelsStorage } from '@mastra/core/storage';
 import type { BotCommand, TelegramInstallation } from './types';
-import { decrypt, encrypt } from './crypto';
+import { decrypt, encrypt, isEncrypted } from './crypto';
 
 /** Platform identifier used for every stored record and route. */
 export const PLATFORM = 'telegram';
@@ -62,7 +62,16 @@ export class TelegramInstallStore {
   }
 
   #dec(value: string | undefined): string | undefined {
-    return value && this.encryptionKey ? decrypt(value, this.encryptionKey) : value;
+    if (!value) return value;
+    if (!this.encryptionKey) {
+      if (isEncrypted(value)) {
+        throw new Error(
+          'Telegram installation secrets are encrypted at rest, but no encryption key is configured. Set `encryptionKey` on TelegramProvider or MASTRA_ENCRYPTION_KEY.',
+        );
+      }
+      return value;
+    }
+    return decrypt(value, this.encryptionKey);
   }
 
   #toRecord(install: TelegramInstallation): ChannelInstallation {

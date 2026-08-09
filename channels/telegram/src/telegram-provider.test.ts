@@ -616,16 +616,25 @@ describe('TelegramProvider — polling mode (getUpdates loop)', () => {
     await provider.connect('poll-agent', { botToken: BOT_TOKEN });
 
     // The adapter's initialize() auto-starts polling → getUpdates fires.
-    await Promise.race([
-      polled,
-      new Promise((_, reject) => setTimeout(() => reject(new Error('getUpdates was never called')), 4000)),
-    ]);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([
+        polled,
+        new Promise((_, reject) => {
+          timer = setTimeout(() => reject(new Error('getUpdates was never called')), 4000);
+        }),
+      ]);
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
     expect(getUpdatesCalls).toBeGreaterThan(0);
 
     // disconnect() must stop the loop (stopPolling), or it keeps hitting getUpdates.
     await provider.disconnect('poll-agent');
-    const afterStop = getUpdatesCalls;
+    // Let any in-flight long poll settle before sampling the baseline.
     await new Promise(r => setTimeout(r, 50));
+    const afterStop = getUpdatesCalls;
+    await new Promise(r => setTimeout(r, 100));
     expect(getUpdatesCalls).toBe(afterStop);
   });
 });

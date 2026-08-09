@@ -77,21 +77,21 @@ Telegram has no native token streaming. With `streaming: true` (default) the rep
 
 `new TelegramProvider(config)`:
 
-| Option           | Default                                                                 | Notes                                                                                                    |
-| ---------------- | ----------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| `baseUrl`        | Mastra server config                                                    | Public HTTPS base for `setWebhook`.                                                                      |
-| `storage`        | Mastra channels storage, else in-memory                                 | Installation persistence (`ChannelsStorage`).                                                            |
-| `encryptionKey`  | `MASTRA_ENCRYPTION_KEY` env                                             | Encrypt `botToken`/`secretToken` at rest (AES-256-GCM).                                                  |
-| `apiBaseUrl`     | `https://api.telegram.org`                                              | Override for a self-hosted Bot API server.                                                               |
-| `mode`           | `auto`                                                                  | `auto` \| `webhook` \| `polling`.                                                                        |
-| `allowedUpdates` | message, edited_message, channel_post, callback_query, message_reaction | Passed to `setWebhook`.                                                                                  |
-| `longPolling`    | adapter defaults                                                        | Poll-loop tuning (`timeout`, `limit`, `retryDelayMs`…) for polling mode.                                 |
-| `commands`       | `/start /help /settings`                                                | Default command seed.                                                                                    |
-| `commandScope`   | Telegram default                                                        | `BotCommandScope` for `setMyCommands`.                                                                   |
-| `streaming`      | `true`                                                                  | Post-and-edit reply streaming.                                                                           |
-| `typingStatus`   | `true`                                                                  | Typing keepalive.                                                                                        |
-| `toolDisplay`    | `'text'`                                                                | How tool calls render. Telegram has no Block Kit, so `'cards'`/`'grouped'`/`'timeline'` degrade to text. |
-| `waitUntil`      | —                                                                       | Keep serverless invocations alive (Vercel/Lambda).                                                       |
+| Option           | Default                                                                 | Notes                                                                                                        |
+| ---------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `baseUrl`        | Mastra server config                                                    | Public HTTPS base for `setWebhook`.                                                                          |
+| `storage`        | Mastra channels storage, else in-memory                                 | Installation persistence (`ChannelsStorage`).                                                                |
+| `encryptionKey`  | `MASTRA_ENCRYPTION_KEY` env                                             | Encrypts `botToken`/`secretToken` at rest with AES-256-GCM when set; otherwise they are stored in plaintext. |
+| `apiBaseUrl`     | `https://api.telegram.org`                                              | Override for a self-hosted Bot API server.                                                                   |
+| `mode`           | `auto`                                                                  | `auto` \| `webhook` \| `polling`.                                                                            |
+| `allowedUpdates` | message, edited_message, channel_post, callback_query, message_reaction | Passed to `setWebhook`.                                                                                      |
+| `longPolling`    | adapter defaults                                                        | Poll-loop tuning (`timeout`, `limit`, `retryDelayMs`…) for polling mode.                                     |
+| `commands`       | `/start /help /settings`                                                | Default command seed.                                                                                        |
+| `commandScope`   | Telegram default                                                        | `BotCommandScope` for `setMyCommands`.                                                                       |
+| `streaming`      | `true`                                                                  | Post-and-edit reply streaming.                                                                               |
+| `typingStatus`   | `true`                                                                  | Typing keepalive.                                                                                            |
+| `toolDisplay`    | `'text'`                                                                | How tool calls render. Telegram has no Block Kit, so `'cards'`/`'grouped'`/`'timeline'` degrade to text.     |
+| `waitUntil`      | —                                                                       | Keep serverless invocations alive (Vercel/Lambda).                                                           |
 
 ### AgentChannels passthrough
 

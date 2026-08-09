@@ -40,6 +40,14 @@ describe('TelegramInstallStore', () => {
     expect(byWebhook?.id).toBe('inst-1');
   });
 
+  it('throws a configuration error when stored secrets are encrypted but no key is configured', async () => {
+    const storage = new InMemoryChannelsStorage();
+    await new TelegramInstallStore(storage, 'passphrase').save(active);
+
+    const withoutKey = new TelegramInstallStore(storage);
+    await expect(withoutKey.getByAgent('agent-1')).rejects.toThrow(/no encryption key is configured/);
+  });
+
   it('returns null for unknown lookups', async () => {
     const store = makeStore();
     expect(await store.getByAgent('nope')).toBeNull();
