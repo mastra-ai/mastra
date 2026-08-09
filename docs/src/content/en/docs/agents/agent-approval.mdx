@@ -101,6 +101,20 @@ for await (const chunk of stream.fullStream) {
 }
 ```
 
+#### Explaining a decline
+
+`declineToolCall()`, `declineToolCallGenerate()`, and `declineNetworkToolCall()` accept an optional `reason`. The reason is returned to the model in place of the tool result, so the model can adjust instead of retrying blindly. It's also stored on the tool call's `approval` metadata, so it's still there when the conversation is recalled.
+
+```typescript
+const declined = await agent.declineToolCall({
+  runId: stream.runId,
+  toolCallId,
+  reason: 'Reading other users PII is not allowed, ask the user for their own email instead',
+})
+```
+
+Without a `reason`, the model receives the default message `Tool call was not approved by the user`.
+
 #### Conditional approval with a function
 
 Instead of a boolean, `requireToolApproval` accepts a function that decides per tool call. It receives the `toolName`, the `args` the model passed, the `requestContext`, and the `workspace`. Return `true` to require approval for that call, or `false` to allow it. This lets you gate approval at runtime, for example, only for tools whose name matches a pattern:

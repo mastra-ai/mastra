@@ -1462,12 +1462,21 @@ export class AgentThreadStreamRuntime {
       }
       timer = setTimeout(() => void checkLease(), AGENT_THREAD_LEASE_TTL_MS);
     };
-    const onEvent: EventCallback = event => {
+    const onEvent: EventCallback = async (event, ack) => {
       const data = event.data as AgentThreadStreamRuntimeEvent | undefined;
-      if (
+      const isTerminal =
         (data?.type === 'run-completed' || data?.type === 'run-aborted' || data?.type === 'run-failed') &&
-        data.runId === runId
-      ) {
+        data.runId === runId;
+      // Acknowledge every delivered event, not just the terminal one — this is a
+      // private fan-out subscription, so anything left unacked stays pending on
+      // the backend. The terminal ack completes before the waiter resolves so
+      // the subsequent unsubscribe cannot race it.
+      // A failing ack must never strand the waiter: the backend's ack deadline
+      // will redeliver or expire the entry, but this run is still finished.
+      try {
+        await ack?.();
+      } catch {}
+      if (isTerminal) {
         clearRemoteActive(data.streamId);
         finish();
       }
@@ -1735,8 +1744,20 @@ export class AgentThreadStreamRuntime {
     };
 
     let eventTail = Promise.resolve();
-    const onEvent: EventCallback = event => {
-      eventTail = eventTail.then(() => handleEvent(event)).catch(() => {});
+    const onEvent: EventCallback = (event, ack) => {
+      // Events are processed strictly in publish order, but each delivery is
+      // acknowledged on its own outcome. Every delivered event is acked once it
+      // has been inspected — including events this subscriber filters out —
+      // because a persistent backend (Redis consumer groups) keeps unacked
+      // deliveries pending for the lifetime of the subscription.
+      const processed = eventTail.then(() => handleEvent(event));
+      // The tail must survive a failed event so later events still run.
+      eventTail = processed.then(
+        () => {},
+        () => {},
+      );
+      // Returned rejection lets the backend nack and redeliver.
+      return processed.then(() => ack?.());
     };
 
     await resolvedPubSub.subscribe(topic, onEvent);
