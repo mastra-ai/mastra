@@ -118,27 +118,42 @@ export interface RunCommandToolOptions {
 }
 
 /**
+ * Normalizes a path to POSIX forward-slash separators.
+ * This ensures cross-platform consistency: on Windows, `node:path` produces
+ * `\` separators, which break `startsWith` comparisons and command extraction.
+ * Windows APIs accept forward slashes, so real filesystem operations still work.
+ */
+function toPosixPath(candidatePath: string): string {
+  return candidatePath.replaceAll('\\', '/');
+}
+
+/**
  * Validates that a path is under one of the allowed base paths.
  */
 function isPathAllowed(targetPath: string, allowedBasePaths: string[]): boolean {
   if (allowedBasePaths.length === 0) return true;
 
-  const normalizedTarget = normalize(resolve(targetPath));
+  // Normalize to POSIX separators so comparisons work on all platforms.
+  // On Windows, `normalize(resolve(...))` produces backslash paths, and
+  // `startsWith(base + '/')` would never match `base\sub`.
+  const normalizedTarget = toPosixPath(normalize(resolve(targetPath)));
   return allowedBasePaths.some(basePath => {
-    const normalizedBase = normalize(resolve(basePath));
+    const normalizedBase = toPosixPath(normalize(resolve(basePath)));
     return normalizedTarget === normalizedBase || normalizedTarget.startsWith(normalizedBase + '/');
   });
 }
 
 /**
  * Extracts the base command from a command string.
+ * Splits on both `/` and `\` to handle Windows paths correctly.
  */
 function extractBaseCommand(command: string): string {
   const trimmed = command.trim();
   const firstSpace = trimmed.indexOf(' ');
   const baseCmd = firstSpace === -1 ? trimmed : trimmed.substring(0, firstSpace);
-  // Handle paths like /usr/bin/git -> git
-  const lastSlash = baseCmd.lastIndexOf('/');
+  // Handle paths like /usr/bin/git → git or C:\tools\git.exe → git.exe
+  // Split on both forward and backward slashes for cross-platform support.
+  const lastSlash = Math.max(baseCmd.lastIndexOf('/'), baseCmd.lastIndexOf('\\'));
   return lastSlash === -1 ? baseCmd : baseCmd.substring(lastSlash + 1);
 }
 
@@ -229,6 +244,17 @@ export function createRunCommandTool(options: RunCommandToolOptions = {}) {
             message: `Command rejected: '${baseCommand}' is not in the allowed commands list`,
           };
         }
+      }
+
+      // Validate: reject path traversal patterns
+      if (cwd && (cwd.includes('..') && cwd.split(/[/\\]/).some(seg => seg === '..'))) {
+        return {
+          success: false,
+          exitCode: 1,
+          stdout: '',
+          stderr: '',
+          message: `Command rejected: working directory '${cwd}' contains path traversal`,
+        };
       }
 
       // Validate: check cwd against allowed base paths
