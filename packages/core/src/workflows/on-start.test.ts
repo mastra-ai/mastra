@@ -5,6 +5,17 @@ import { MockStore } from '../storage/mock';
 import { createWorkflow } from './create';
 import { createStep } from './workflow';
 
+// The span is created in _start and only ended inside executionEngine.execute(), so the
+// assertion has to be on the span object itself — there is no exporter on this path to observe.
+const getOrCreateSpanMock = vi.fn();
+vi.mock('../observability', async importOriginal => {
+  const actual = await importOriginal<typeof import('../observability')>();
+  return {
+    ...actual,
+    getOrCreateSpan: (...args: any[]) => getOrCreateSpanMock(...args) ?? (actual.getOrCreateSpan as any)(...args),
+  };
+});
+
 const step = createStep({
   id: 'step-1',
   inputSchema: z.object({ value: z.string() }),
@@ -97,12 +108,17 @@ describe('workflow onStart', () => {
     await expect(run.start({ inputData: { value: 'hello' } })).rejects.toThrow('quota exceeded');
 
     expect(stepSpy).not.toHaveBeenCalled();
+
+    // On this engine `createRun()` already wrote a pending record before `start()` was
+    // ever called, so the gate cannot leave nothing behind — it leaves the run parked at
+    // 'pending'. Asserting the exact status rather than `not.toBe('success')`, which would
+    // also pass if the run had failed halfway through a step.
     const workflowsStore = await storage.getStore('workflows');
     const persisted = await workflowsStore?.getWorkflowRunById({
       runId: run.runId,
       workflowName: 'on-start-gate-workflow',
     });
-    expect(persisted?.snapshot ? (persisted.snapshot as any).status : undefined).not.toBe('success');
+    expect((persisted?.snapshot as any)?.status).toBe('pending');
   });
 
   it('does not fire again when a suspended run is resumed', async () => {
@@ -150,5 +166,33 @@ describe('workflow onStart', () => {
 
     expect(result.status).toBe('success');
     expect(onStart).toHaveBeenCalledTimes(1);
+  });
+
+  /**
+   * `_start` creates the workflow-run span and hands ownership to `executionEngine.execute()`,
+   * which is never reached when the hook rejects. Without an explicit end the span stays open
+   * for the life of the trace, so exporters see a start with no matching end.
+   */
+  it('ends the workflow span when onStart rejects', async () => {
+    const spanError = vi.fn();
+    const spanEnd = vi.fn();
+    getOrCreateSpanMock.mockReturnValueOnce({
+      id: 'span-1',
+      externalTraceId: 'trace-1',
+      error: spanError,
+      end: spanEnd,
+    });
+
+    const { workflow } = buildWorkflow({
+      onStart: async () => {
+        throw new Error('quota exceeded');
+      },
+    });
+
+    const run = await workflow.createRun();
+    await expect(run.start({ inputData: { value: 'hello' } })).rejects.toThrow('quota exceeded');
+
+    expect(spanError).toHaveBeenCalledTimes(1);
+    expect(spanError.mock.calls[0]![0]!.error.message).toBe('quota exceeded');
   });
 });

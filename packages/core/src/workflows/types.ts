@@ -525,7 +525,8 @@ export interface WorkflowOptions {
    * Unlike `onFinish`/`onError`, errors thrown here are NOT swallowed: they reject
    * the `start()`/`stream()` call and the run never executes, so the hook can act as
    * a pre-flight gate (quota checks, entitlement checks). This mirrors how input
-   * schema validation failures behave — no run is executed or persisted.
+   * schema validation failures behave: no step executes. The pending run record that
+   * `createRun()` already wrote is left as-is, so a gated run stays at `pending`.
    *
    * Fires only when a run first starts, not on resume, restart, or time travel.
    */

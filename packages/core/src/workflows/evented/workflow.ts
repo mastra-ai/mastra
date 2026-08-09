@@ -1899,7 +1899,8 @@ export class EventedRun<
     const inputDataToUse = await this._validateInput(inputData ?? ({} as TInput));
     const initialStateToUse = await this._validateInitialState(initialState ?? ({} as TState));
 
-    // Pre-flight gate: runs before the run record is persisted, and rejects the caller if it throws.
+    // Pre-flight gate: runs ahead of the initial run-record write below, and rejects the caller
+    // if it throws. createRun() has already persisted a pending record, which stays pending.
     await this.executionEngine.invokeStartCallback({
       runId: this.runId,
       workflowId: this.workflowId,
@@ -2031,7 +2032,8 @@ export class EventedRun<
     const inputDataToUse = await this._validateInput(inputData ?? ({} as TInput));
     const initialStateToUse = await this._validateInitialState(initialState ?? ({} as TState));
 
-    // Pre-flight gate: runs before the run record is persisted, and rejects the caller if it throws.
+    // Pre-flight gate: runs ahead of the initial run-record write below, and rejects the caller
+    // if it throws. createRun() has already persisted a pending record, which stays pending.
     await this.executionEngine.invokeStartCallback({
       runId: this.runId,
       workflowId: this.workflowId,

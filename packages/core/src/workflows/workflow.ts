@@ -3494,18 +3494,29 @@ export class Run<
 
     const traceId = workflowSpan?.externalTraceId;
     const spanId = workflowSpan?.id;
-    const inputDataToUse = await this._validateInput(inputData);
-    const initialStateToUse = await this._validateInitialState(initialState ?? ({} as TState));
-    await this._validateRequestContext(requestContext as RequestContext);
 
-    // Pre-flight gate: runs before the run executes, and rejects the caller if it throws.
-    await this.executionEngine.invokeStartCallback({
-      runId: this.runId,
-      workflowId: this.workflowId,
-      resourceId: this.resourceId,
-      getInitData: () => inputDataToUse,
-      requestContext: (requestContext ?? new RequestContext()) as RequestContext,
-      state: initialStateToUse as Record<string, any>,
+    // execute() ends the span, so anything that rejects before we reach it has to end the
+    // span itself or it stays open for the life of the trace. onStart makes that reachable
+    // from user code, not just from a malformed input.
+    const { inputDataToUse, initialStateToUse } = await (async () => {
+      const validatedInput = await this._validateInput(inputData);
+      const validatedState = await this._validateInitialState(initialState ?? ({} as TState));
+      await this._validateRequestContext(requestContext as RequestContext);
+
+      // Pre-flight gate: runs before the run executes, and rejects the caller if it throws.
+      await this.executionEngine.invokeStartCallback({
+        runId: this.runId,
+        workflowId: this.workflowId,
+        resourceId: this.resourceId,
+        getInitData: () => validatedInput,
+        requestContext: (requestContext ?? new RequestContext()) as RequestContext,
+        state: validatedState as Record<string, any>,
+      });
+
+      return { inputDataToUse: validatedInput, initialStateToUse: validatedState };
+    })().catch(error => {
+      workflowSpan?.error({ error: error as Error });
+      throw error;
     });
 
     const result = await this.executionEngine.execute<TState, TInput, WorkflowResult<TState, TInput, TOutput, TSteps>>({

@@ -388,6 +388,24 @@ describe('Workflow (Evented Engine Specific)', () => {
       const gatedRun = await gatedWorkflow.createRun();
       await expect(gatedRun.start({ inputData: {} })).rejects.toThrow('quota exceeded');
       expect(gatedAction).not.toHaveBeenCalled();
+
+      // The hook runs ahead of the initial run-record write in start(), but createRun()
+      // has already persisted a pending record by then, so the gated run is parked at
+      // 'pending' rather than absent. Pinning that so the guarantee cannot drift.
+      const workflowsStore = await testStorage.getStore('workflows');
+      const gatedRecord = await workflowsStore?.getWorkflowRunById({
+        runId: gatedRun.runId,
+        workflowName: 'on-start-gated-workflow',
+      });
+      expect((gatedRecord?.snapshot as any)?.status).toBe('pending');
+
+      // Control: the allowed run advanced past pending, so the assertion above reflects the
+      // gate holding rather than this engine never updating the record.
+      const okRecord = await workflowsStore?.getWorkflowRunById({
+        runId: okRun.runId,
+        workflowName: 'on-start-ok-workflow',
+      });
+      expect((okRecord?.snapshot as any)?.status).toBe('success');
     } finally {
       await mastra.stopWorkers();
     }

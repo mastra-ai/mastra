@@ -230,7 +230,7 @@ You can define the workflow's `inputSchema` and `outputSchema` with any library 
             name: 'onStart',
             type: '(info: WorkflowStartCallbackInfo) => void | Promise<void>',
             description:
-              'Callback awaited before a run starts executing, and before the run is persisted. Fires only on initial start, not on resume, restart, or time travel. Unlike onFinish and onError, errors thrown here are propagated: they reject the start() or stream() call and the run never executes, so this can be used as a pre-flight gate such as a quota check.',
+              'Callback awaited before a run starts executing, and before any step runs. Fires only on initial start, not on resume, restart, or time travel. Unlike onFinish and onError, errors thrown here are propagated: they reject the start() or stream() call and the run never executes, so this can be used as a pre-flight gate such as a quota check. The run record created by createRun() stays at status pending.',
             isOptional: true,
             properties: [
               {
