@@ -687,6 +687,7 @@ function createStepFromProcessor<TProcessorId extends string>(
       const input = inputData as ProcessorStepOutput & {
         processorStates?: Map<string, ProcessorState>;
         abortSignal?: AbortSignal;
+        agent?: Agent;
       };
       const {
         phase,
@@ -725,6 +726,8 @@ function createStepFromProcessor<TProcessorId extends string>(
         processorStates,
         // Abort signal for cancelling in-flight processor work (e.g. OM observations)
         abortSignal,
+        // Agent reference so processors can access the running agent (e.g. on signal/schedule wake)
+        agent,
       } = input;
 
       // Create a minimal abort function that throws TripWire
@@ -976,6 +979,7 @@ function createStepFromProcessor<TProcessorId extends string>(
 
       const baseContext = {
         abort,
+        agent,
         retryCount: retryCount ?? 0,
         requestContext,
         ...processorObservabilityContext,

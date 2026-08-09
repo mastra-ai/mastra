@@ -442,6 +442,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
         errorProcessors,
         logger: logger as any,
         agentName: publicAgentName,
+        agent: agent as unknown as Agent<any, any, any, any>,
         processorStates,
       });
       await runner.runInputProcessors(
