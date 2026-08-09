@@ -196,6 +196,8 @@ describe('registerRun thread lease', () => {
 
     // Completion by the former holder cannot release the resumed holder's token.
     firstRun.finish();
+    await firstRun.output._waitUntilFinished();
+    await pubsub.flush();
     await nextTick();
     expect(pubsub.owners.get(key)).toBe(resumedOwner);
     resumedRun.finish();

@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Fixed stale suspended-run sweeps releasing leases held by cross-instance resumes.
+Fixed stale cleanup from releasing leases or clearing suspended-run state for runs resumed on another runtime.
