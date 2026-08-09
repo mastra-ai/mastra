@@ -44,12 +44,12 @@ function createApprovalTool() {
 
 // Calls the no-op tool STEPS_BEFORE_SUSPEND times, then the approval tool,
 // which suspends the run. Every response carries the same `request.body`.
-function createSteppingModel() {
+function createSteppingModel(stepsBeforeSuspend: number = STEPS_BEFORE_SUSPEND) {
   let call = 0;
   return new MockLanguageModelV2({
     doStream: async () => {
       call++;
-      const isLast = call > STEPS_BEFORE_SUSPEND;
+      const isLast = call > stepsBeforeSuspend;
       return {
         rawCall: { rawPrompt: null, rawSettings: {} },
         request: { body: INVARIANT_BODY },
@@ -85,40 +85,58 @@ function countOccurrences(haystack: string, needle: string): number {
   return count;
 }
 
+// Runs the HITL agent to its suspend and counts the copies of the invariant
+// request body in the snapshot that was persisted for it.
+async function countPersistedRequestCopies(stepsBeforeSuspend: number): Promise<number> {
+  const storage = new InMemoryStore();
+  const persisted: string[] = [];
+  const workflowsStore: any = await storage.getStore('workflows');
+  const originalPersist = workflowsStore.persistWorkflowSnapshot.bind(workflowsStore);
+  vi.spyOn(workflowsStore, 'persistWorkflowSnapshot').mockImplementation(async (args: any) => {
+    persisted.push(JSON.stringify(args.snapshot));
+    return originalPersist(args);
+  });
+
+  const agent = new Agent({
+    id: 'hitl',
+    name: 'hitl',
+    instructions: 'Call the noop tool repeatedly, then the approve tool.',
+    model: createSteppingModel(stepsBeforeSuspend),
+    tools: { noop: createNoopTool(), approve: createApprovalTool() },
+  });
+  new Mastra({ logger: false, storage, agents: { hitl: agent } });
+
+  const stream = await agent.stream('go', { maxSteps: stepsBeforeSuspend + 2 });
+  for await (const _ of stream.fullStream) {
+    // drain until the approval suspends the run
+  }
+
+  const suspendedSnapshot = persisted.find(s => s.includes(INVARIANT_BODY));
+  expect(suspendedSnapshot).toBeDefined();
+
+  return countOccurrences(suspendedSnapshot!, INVARIANT_BODY);
+}
+
 describe('suspended snapshot request dedupe', () => {
   it('persists the invariant request once, not once per step', async () => {
-    const storage = new InMemoryStore();
-    const persisted: string[] = [];
-    const workflowsStore: any = await storage.getStore('workflows');
-    const originalPersist = workflowsStore.persistWorkflowSnapshot.bind(workflowsStore);
-    vi.spyOn(workflowsStore, 'persistWorkflowSnapshot').mockImplementation(async (args: any) => {
-      persisted.push(JSON.stringify(args.snapshot));
-      return originalPersist(args);
-    });
-
-    const agent = new Agent({
-      id: 'hitl',
-      name: 'hitl',
-      instructions: 'Call the noop tool repeatedly, then the approve tool.',
-      model: createSteppingModel(),
-      tools: { noop: createNoopTool(), approve: createApprovalTool() },
-    });
-    new Mastra({ logger: false, storage, agents: { hitl: agent } });
-
-    const stream = await agent.stream('go', { maxSteps: STEPS_BEFORE_SUSPEND + 2 });
-    for await (const _ of stream.fullStream) {
-      // drain until the approval suspends the run
-    }
-
-    const suspendedSnapshot = persisted.find(s => s.includes(INVARIANT_BODY));
-    expect(suspendedSnapshot).toBeDefined();
-
     // Before the fix this run wrote 27 copies: one per step in the buffered
     // step state and again in the step-history output, doubled by the
     // propagated foreach metadata. What survives is one shared copy per
     // __streamState (the request table and the run-level request), which does
     // not grow with step count.
-    const copies = countOccurrences(suspendedSnapshot!, INVARIANT_BODY);
+    const copies = await countPersistedRequestCopies(STEPS_BEFORE_SUSPEND);
     expect(copies).toBeLessThanOrEqual(4);
+  });
+
+  // The bound above proves the snapshot is small at one step count. This proves
+  // the property the fix is actually about: doubling the steps taken before the
+  // suspend does not add a single copy.
+  it('does not persist more copies as the step count grows', async () => {
+    const [fewer, more] = await Promise.all([
+      countPersistedRequestCopies(STEPS_BEFORE_SUSPEND),
+      countPersistedRequestCopies(STEPS_BEFORE_SUSPEND * 2),
+    ]);
+
+    expect(more).toBe(fewer);
   });
 });
