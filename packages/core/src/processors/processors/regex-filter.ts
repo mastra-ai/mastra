@@ -327,6 +327,9 @@ export class RegexFilterProcessor implements Processor<'regex-filter', RegexFilt
     this.phase = options.phase ?? 'all';
     this.includeRedactedValues = options.includeRedactedValues ?? false;
     this.streamCarryoverSize = options.streamCarryoverSize ?? STREAM_CARRYOVER_SIZE;
+    if (!Number.isSafeInteger(this.streamCarryoverSize) || this.streamCarryoverSize < 1) {
+      throw new Error('RegexFilterProcessor streamCarryoverSize must be a positive safe integer');
+    }
   }
 
   /**

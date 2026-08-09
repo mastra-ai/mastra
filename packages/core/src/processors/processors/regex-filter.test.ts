@@ -137,6 +137,19 @@ describe('RegexFilterProcessor', () => {
       });
       expect(filter.id).toBe('regex-filter');
     });
+
+    it('throws for a non-positive or non-integer streamCarryoverSize', () => {
+      for (const bad of [0, -1, 1.5, NaN, Infinity]) {
+        expect(() => new RegexFilterProcessor({ presets: ['pii'], streamCarryoverSize: bad })).toThrow(
+          'streamCarryoverSize must be a positive safe integer',
+        );
+      }
+    });
+
+    it('accepts a custom streamCarryoverSize', () => {
+      const filter = new RegexFilterProcessor({ presets: ['pii'], streamCarryoverSize: 256 });
+      expect(filter.id).toBe('regex-filter');
+    });
   });
 
   describe('processInput - block strategy', () => {
