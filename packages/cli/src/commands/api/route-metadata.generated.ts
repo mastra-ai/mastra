@@ -311,6 +311,7 @@ export const API_ROUTE_METADATA = {
     "bodyParams": [
       "format",
       "model",
+      "reason",
       "requestContext",
       "runId",
       "toolCallId"
