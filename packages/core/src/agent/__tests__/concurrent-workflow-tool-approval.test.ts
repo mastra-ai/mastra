@@ -172,6 +172,15 @@ describe('concurrent workflow tool approvals', () => {
             );
             expect(successfulToolCallIds).toEqual(new Set(['call-workflow-a', 'call-workflow-b']));
             expect(chunks.filter(chunk => chunk.type === 'tool-error' || chunk.type === 'error')).toEqual([]);
+            expect(
+              chunks
+                .filter(chunk => chunk.type === 'text-delta')
+                .map(chunk => chunk.payload.text)
+                .join(''),
+            ).toContain('Both workflows completed.');
+            expect(chunks.some(chunk => chunk.type === 'finish' && chunk.payload.stepResult?.reason === 'stop')).toBe(
+              true,
+            );
           },
           { timeout: 10_000 },
         );

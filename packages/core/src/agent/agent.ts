@@ -8897,10 +8897,12 @@ export class Agent<
     await agentThreadStreamRuntime.queueStreamResume(
       runId,
       async () => {
-        const queuedResumableRun = agentThreadStreamRuntime.getResumableThreadRun(
-          { threadId, resourceId, runId, toolCallId: resumableRun.toolCallId },
-          this.getPubSub(),
-        );
+        const queuedResumableRun = hasLocalRun
+          ? agentThreadStreamRuntime.getResumableThreadRun(
+              { threadId, resourceId, runId, toolCallId: resumableRun.toolCallId },
+              this.getPubSub(),
+            )
+          : resumableRun;
         if (!queuedResumableRun) {
           throw new MastraError({
             id: 'AGENT_SEND_STREAM_RESUME_NO_SUSPENDED_THREAD_RUN',
