@@ -629,7 +629,15 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   // Hooks
   const hookManager = config?.disableHooks
     ? undefined
-    : new HookManager(project.rootPath, 'session-init', configDir, homeDir);
+    : new HookManager(
+        project.rootPath,
+        'session-init',
+        configDir,
+        homeDir,
+        project.isWorktree
+          ? { path: project.rootPath, branch: project.gitBranch, mainRepoPath: project.mainRepoPath }
+          : undefined,
+      );
 
   const pluginManager = config?.disablePlugins
     ? undefined

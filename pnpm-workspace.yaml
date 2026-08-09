@@ -13,6 +13,7 @@ packages:
   - deployers/*
   - stores/*
   - browser/*
+  - code-mode/*
   - voice/*
   - examples/voice/aws-nova-sonic-test
   - workflows/*

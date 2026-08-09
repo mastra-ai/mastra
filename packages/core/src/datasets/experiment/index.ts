@@ -17,6 +17,11 @@ import { TOOL_MOCK_MISMATCH, TOOL_MOCK_EXHAUSTED, TOOL_MOCK_NOT_DECLARED } from 
 import type { ItemToolMock, UnmockedToolPolicy } from './tool-mocks';
 import type { ExperimentConfig, ExperimentSummary, ItemWithScores, ItemResult } from './types';
 
+/** Error code recorded on an item whose `beforeEach` hook threw. */
+export const EXPERIMENT_ITEM_BEFORE_EACH_FAILED = 'EXPERIMENT_ITEM_BEFORE_EACH_FAILED';
+
+const errorMessage = (err: unknown): string => (err instanceof Error ? err.message : String(err));
+
 /** Unified item shape used within experiment execution (bridges inline + versioned data) */
 type ExperimentItem = {
   id: string; // item id (or generated for inline)
@@ -41,6 +46,11 @@ type ExperimentItem = {
 export type {
   DataItem,
   ExperimentConfig,
+  ExperimentHookArgs,
+  ExperimentHookItem,
+  ExperimentItemHookArgs,
+  ExperimentItemResultHookArgs,
+  ExperimentRunResultHookArgs,
   ExperimentSummary,
   ItemWithScores,
   ItemResult,
@@ -118,6 +128,10 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
     agentVersion,
     versions,
     persistence,
+    beforeAll,
+    afterAll,
+    beforeEach,
+    afterEach,
   } = config;
 
   const persistExperiments = persistence?.experiments !== 'none';
@@ -134,6 +148,26 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
   const eventTarget = {
     type: targetType ?? ('task' as const),
     id: targetId ?? 'inline',
+  };
+
+  const hookArgs = { experimentId, mastra, signal: executionSignal };
+  let afterAllRan = false;
+  /**
+   * Teardown counterpart to `beforeAll`. Idempotent so it can be invoked from
+   * every exit path (normal return, failed return, observer-error rethrow)
+   * without double-running. Errors are logged, never propagated — teardown must
+   * not mask the run's real outcome.
+   */
+  const runAfterAll = async (summary: ExperimentSummary) => {
+    if (!afterAll || afterAllRan) return;
+    afterAllRan = true;
+    try {
+      await afterAll({ ...hookArgs, summary });
+    } catch (hookError) {
+      mastra.getLogger()?.error(`Experiment ${experimentId} afterAll hook failed: ${errorMessage(hookError)}`, {
+        error: hookError,
+      });
+    }
   };
 
   // 1. Get storage and resolve components
@@ -429,6 +463,13 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
   let lastProgressUpdate = 0;
 
   try {
+    if (beforeAll) {
+      // Runs inside the execution try/catch so a failing setup produces the
+      // same `failed` summary shape as any other run-level failure, with every
+      // item counted as skipped.
+      await beforeAll(hookArgs);
+    }
+
     const pMap = (await import('p-map')).default;
 
     await pMap(
@@ -470,14 +511,39 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
             itemSignal = executionSignal ? AbortSignal.any([executionSignal, timeoutSignal]) : timeoutSignal;
           }
 
+          // Per-item setup runs once (not per retry attempt) inside this
+          // concurrency slot. A failing setup is deterministic from the
+          // runner's perspective, so it skips the target and retries entirely.
+          let beforeEachError: ExecutionResult['error'] = null;
+          if (beforeEach && !scorerConfigError) {
+            try {
+              await beforeEach({
+                ...hookArgs,
+                item: {
+                  id: item.id,
+                  input: item.input,
+                  groundTruth: item.groundTruth,
+                  metadata: item.metadata,
+                },
+              });
+            } catch (hookError) {
+              beforeEachError = {
+                code: EXPERIMENT_ITEM_BEFORE_EACH_FAILED,
+                message: `beforeEach hook failed: ${errorMessage(hookError)}`,
+                stack: hookError instanceof Error ? hookError.stack : undefined,
+              };
+            }
+          }
+
           // Resolve item scorer configuration before executing the target. Invalid item
           // references are deterministic and therefore skip both target execution and retries.
           let retryCount = 0;
-          let execResult: ExecutionResult = scorerConfigError
-            ? { output: null, error: scorerConfigError, traceId: null }
+          const preflightError = scorerConfigError ?? beforeEachError;
+          let execResult: ExecutionResult = preflightError
+            ? { output: null, error: preflightError, traceId: null }
             : await execFn(item, itemSignal);
 
-          while (execResult.error && !scorerConfigError && retryCount < maxRetries) {
+          while (execResult.error && !preflightError && retryCount < maxRetries) {
             // Don't retry abort errors
             if (execResult.error.message.toLowerCase().includes('abort')) break;
 
@@ -523,10 +589,11 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
             ...(execResult.toolMockReport ? { toolMockReport: execResult.toolMockReport } : {}),
           };
 
-          // Run scorers (inline, after target completes). A scorer-configuration
-          // failure skips scoring because the selected source could not be resolved fully.
+          // Run scorers (inline, after target completes). A preflight failure
+          // (unresolvable scorer configuration, or a failed `beforeEach`) skips
+          // scoring because the target never ran under valid conditions.
           let itemScores: Awaited<ReturnType<typeof runScorersForItem>> = [];
-          if (!scorerConfigError) {
+          if (!preflightError) {
             const workflowData =
               execResult.stepResults || execResult.stepExecutionPath
                 ? {
@@ -621,6 +688,31 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
             succeededCount++;
           }
 
+          // Per-item teardown. Skipped when `beforeEach` failed — a failed setup
+          // owns its own cleanup. Errors are logged, never propagated, so
+          // teardown cannot change the item's already-recorded outcome.
+          if (afterEach && !beforeEachError) {
+            try {
+              await afterEach({
+                ...hookArgs,
+                item: {
+                  id: item.id,
+                  input: item.input,
+                  groundTruth: item.groundTruth,
+                  metadata: item.metadata,
+                },
+                result: results[idx]!,
+              });
+            } catch (hookError) {
+              mastra
+                .getLogger()
+                ?.error(
+                  `Experiment ${experimentId} afterEach hook failed for item ${item.id}: ${errorMessage(hookError)}`,
+                  { error: hookError },
+                );
+            }
+          }
+
           if (experimentsStore) {
             // Throttled progress update
             const now = Date.now();
@@ -662,12 +754,6 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
     const skippedCount = items.length - succeededCount - failedCount;
     const observerError = eventDispatcher?.failure;
 
-    if (observerError) {
-      await markFailedForObserverError({ succeededCount, failedCount, skippedCount, completedAt });
-      throw observerError;
-    }
-
-    const terminalError = error instanceof AggregateError ? (error.errors[0] ?? error) : error;
     const summary: ExperimentSummary = {
       experimentId,
       status: 'failed' as const,
@@ -681,6 +767,14 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
       completedAt,
       results: results.filter(Boolean),
     };
+
+    if (observerError) {
+      await runAfterAll(summary);
+      await markFailedForObserverError({ succeededCount, failedCount, skippedCount, completedAt });
+      throw observerError;
+    }
+
+    const terminalError = error instanceof AggregateError ? (error.errors[0] ?? error) : error;
 
     if (eventDispatcher) {
       try {
@@ -701,6 +795,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
           completedAt: completedAt.toISOString(),
         });
       } catch (observerError) {
+        await runAfterAll(summary);
         await markFailedForObserverError({ succeededCount, failedCount, skippedCount, completedAt });
         throw observerError;
       }
@@ -717,6 +812,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
       });
     }
 
+    await runAfterAll(summary);
     return summary;
   }
 
@@ -763,6 +859,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
         completedAt: completedAt.toISOString(),
       });
     } catch (observerError) {
+      await runAfterAll(summary);
       await markFailedForObserverError({ succeededCount, failedCount, skippedCount, completedAt });
       throw observerError;
     }
@@ -779,6 +876,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
     });
   }
 
+  await runAfterAll(summary);
   return summary;
 }
 
