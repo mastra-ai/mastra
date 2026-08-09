@@ -87,20 +87,30 @@ export class LSPManager {
    * Different files can run in parallel.
    */
   private async acquireFileLock(filePath: string): Promise<() => void> {
-    // Wait for any existing lock on this file
-    while (this.fileLocks.has(filePath)) {
-      await this.fileLocks.get(filePath);
-    }
+    // Chain onto the tail of any existing lock for this file to form a FIFO
+    // queue. Each caller awaits its own distinct predecessor, so two waiters
+    // can never resume together and interleave their open/change/close.
+    const previous = this.fileLocks.get(filePath) ?? Promise.resolve();
 
     let release!: () => void;
-    const lockPromise = new Promise<void>(resolve => {
+    const current = new Promise<void>(resolve => {
       release = resolve;
     });
-    this.fileLocks.set(filePath, lockPromise);
+
+    // The new tail resolves only after the whole chain up to and including this
+    // holder has released.
+    const tail = previous.then(() => current);
+    this.fileLocks.set(filePath, tail);
+
+    // Wait for all predecessors to finish before this caller holds the lock.
+    await previous;
 
     return () => {
-      this.fileLocks.delete(filePath);
       release();
+      // Drop the map entry only if nobody chained after us, to avoid leaks.
+      if (this.fileLocks.get(filePath) === tail) {
+        this.fileLocks.delete(filePath);
+      }
     };
   }
 
