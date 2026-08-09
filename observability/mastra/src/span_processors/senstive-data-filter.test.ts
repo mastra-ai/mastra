@@ -328,6 +328,34 @@ describe('Tracing', () => {
         expect(input.messages[0].content).toBe('{ email": "test@test.com" }');
       });
 
+      it('redacts common credentials embedded in free-form prompts and outputs', () => {
+        const processor = new SensitiveDataFilter();
+        const mockSpan = {
+          id: 'free-form-secret-span',
+          name: 'model generation',
+          type: SpanType.MODEL_GENERATION,
+          startTime: new Date(),
+          traceId: 'trace-free-form-secret',
+          trace: { traceId: 'trace-free-form-secret' } as any,
+          attributes: {},
+          input: 'Use my API key sk-test-1234567890abcdef and Authorization: Bearer bearer-token-1234567890.',
+          output: 'The GitHub token is ghp_1234567890abcdefghijklmnopqrstuvwxyz.',
+          observabilityInstance: {} as any,
+          end: () => {},
+          error: () => {},
+          update: () => {},
+          createChildSpan: () => ({}) as any,
+        } as any;
+
+        const filtered = processor.process(mockSpan);
+
+        expect(filtered.input).toContain('[REDACTED]');
+        expect(filtered.input).not.toContain('sk-test-1234567890abcdef');
+        expect(filtered.input).not.toContain('bearer-token-1234567890');
+        expect(filtered.output).toContain('[REDACTED]');
+        expect(filtered.output).not.toContain('ghp_1234567890abcdefghijklmnopqrstuvwxyz');
+      });
+
       it('should preserve Date objects in attributes', () => {
         const processor = new SensitiveDataFilter();
         const testDate = new Date('2024-01-15T10:00:00.000Z');

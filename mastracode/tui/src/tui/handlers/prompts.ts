@@ -304,32 +304,50 @@ async function approvePlan(
   submittedPath: string,
 ): Promise<void> {
   const { state } = ctx;
-  await state.session.state.set({
-    activePlan: {
-      title,
-      plan,
-      approvedAt: new Date().toISOString(),
-    },
-  });
+  const remotePlanResponder = (
+    state.session as unknown as {
+      respondToPlanApproval?: (input: {
+        toolCallId: string;
+        submittedPath: string;
+        action: 'approved' | 'rejected';
+        feedback?: string;
+      }) => Promise<{ title: string; plan: string }>;
+    }
+  ).respondToPlanApproval;
+  if (remotePlanResponder) {
+    await remotePlanResponder({
+      toolCallId,
+      submittedPath,
+      action: 'approved',
+    });
+  } else {
+    await state.session.state.set({
+      activePlan: {
+        title,
+        plan,
+        approvedAt: new Date().toISOString(),
+      },
+    });
 
-  // Archive the approved plan to the global plans dir so it's findable later. The
-  // local plan file is left in place so the user can review every plan made.
-  if (planPath) {
-    await approvePlanFile({
-      planPath,
-      title,
-      resourceId: state.session.identity.getResourceId(),
-    }).catch(() => {});
+    // Embedded mode owns the filesystem locally. Remote mode delegates both
+    // the archive and suspension response to the Studio server above.
+    if (planPath) {
+      await approvePlanFile({
+        planPath,
+        title,
+        resourceId: state.session.identity.getResourceId(),
+      }).catch(() => {});
+    }
+
+    await state.session.respondToToolSuspension({
+      toolCallId,
+      resumeData: { action: 'approved', path: submittedPath, title, plan },
+    });
   }
 
   // Reset in-memory diff state so the next plan doesn't diff against this one.
   state.previousPlanSnapshot = undefined;
   state.lastSubmitPlanComponent = undefined;
-
-  await state.session.respondToToolSuspension({
-    toolCallId,
-    resumeData: { action: 'approved', path: submittedPath, title, plan },
-  });
 }
 
 function formatPlanGoalObjective(title: string, plan: string): string {
@@ -391,16 +409,13 @@ export async function handlePlanApproval(
       planFilename,
       previousPlan,
       onApprove: async () => {
+        await approvePlan(ctx, toolCallId, resolvedTitle, plan, planPath, snapshotKey);
         state.activeInlinePlanApproval = undefined;
         state.ui.setFocus(state.editor);
         firePermissionResult('approved');
-        await approvePlan(ctx, toolCallId, resolvedTitle, plan, planPath, snapshotKey);
         resolve();
       },
       onGoal: async () => {
-        state.activeInlinePlanApproval = undefined;
-        state.ui.setFocus(state.editor);
-        firePermissionResult('approved');
         await approvePlan(ctx, toolCallId, resolvedTitle, plan, planPath, snapshotKey);
 
         // `approvePlan` waits for plan mode to idle before `startGoal` sends
@@ -413,12 +428,12 @@ export async function handlePlanApproval(
           state.planStartedGoalId = goal.id;
         }
 
-        resolve();
-      },
-      onReject: () => {
         state.activeInlinePlanApproval = undefined;
         state.ui.setFocus(state.editor);
-        firePermissionResult('declined');
+        firePermissionResult('approved');
+        resolve();
+      },
+      onReject: async () => {
         // Resume the tool with a rejection so the rejection result is persisted
         // in thread history (the next run sees it for context). For submit_plan,
         // respondToToolSuspension resolves at the resumed tool's `tool_end`
@@ -429,17 +444,33 @@ export async function handlePlanApproval(
         // in-loop PlanRejectionAbortProcessor (which remains as a backstop). The
         // planRejectionAbort flag suppresses the "Interrupted" abort UI so the
         // transcript stays clean for the user's revision feedback.
-        void (async () => {
-          try {
-            await state.session.respondToToolSuspension({
-              toolCallId,
-              resumeData: { action: 'rejected', path: snapshotKey, title: resolvedTitle, plan },
-            });
-          } finally {
-            state.planRejectionAbort = true;
-            state.session.abort();
+        const remotePlanResponder = (
+          state.session as unknown as {
+            respondToPlanApproval?: (input: {
+              toolCallId: string;
+              submittedPath: string;
+              action: 'approved' | 'rejected';
+              feedback?: string;
+            }) => Promise<{ title: string; plan: string }>;
           }
-        })();
+        ).respondToPlanApproval;
+        if (remotePlanResponder) {
+          await remotePlanResponder({
+            toolCallId,
+            submittedPath: snapshotKey,
+            action: 'rejected',
+          });
+        } else {
+          await state.session.respondToToolSuspension({
+            toolCallId,
+            resumeData: { action: 'rejected', path: snapshotKey, title: resolvedTitle, plan },
+          });
+        }
+        state.planRejectionAbort = true;
+        state.session.abort();
+        state.activeInlinePlanApproval = undefined;
+        state.ui.setFocus(state.editor);
+        firePermissionResult('declined');
         resolve();
       },
     };

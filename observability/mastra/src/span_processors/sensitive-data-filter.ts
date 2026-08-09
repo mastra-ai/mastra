@@ -40,6 +40,7 @@ export interface SensitiveDataFilterOptions {
  * - Sensitive values are redacted using either full or partial redaction.
  * - Partial redaction always keeps 3 chars at the start and end.
  * - JSON strings containing sensitive fields are parsed and redacted.
+ * - Common credential formats embedded in free-form text are redacted.
  * - If filtering a field fails, the field is replaced with:
  *   `{ error: { processor: "sensitive-data-filter" } }`
  */
@@ -102,8 +103,9 @@ export class SensitiveDataFilter implements SpanOutputProcessor {
         // Quick check - JSON objects/arrays start with { or [
         const trimmed = obj.trim();
         if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
-          return this.redactJsonString(obj);
+          return this.redactSensitiveText(this.redactJsonString(obj));
         }
+        return this.redactSensitiveText(obj);
       }
       return obj;
     }
@@ -194,6 +196,28 @@ export class SensitiveDataFilter implements SpanOutputProcessor {
       // Not valid JSON, return original string
       return str;
     }
+  }
+
+  /**
+   * Redact high-confidence credential formats that can occur in unstructured
+   * model prompts and outputs, where there is no field name for deepFilter to
+   * inspect. Patterns intentionally require a recognizable prefix or an
+   * Authorization bearer label to avoid treating arbitrary prose as secret.
+   */
+  private redactSensitiveText(str: string): string {
+    let filtered = str;
+    const prefixedCredentials = [
+      /\bsk-[a-z0-9_-]{16,}\b/gi,
+      /\bgh[pousr]_[a-z0-9]{20,}\b/gi,
+      /\b(?:AKIA|ASIA)[A-Z0-9]{16}\b/g,
+    ];
+    for (const pattern of prefixedCredentials) {
+      filtered = filtered.replace(pattern, value => this.redactValue(value));
+    }
+    return filtered.replace(
+      /\b(Bearer\s+)([a-z0-9._~+\/-]{12,}={0,2})/gi,
+      (_match, prefix: string, value: string) => `${prefix}${this.redactValue(value)}`,
+    );
   }
 
   /**

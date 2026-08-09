@@ -40,7 +40,7 @@ describe('web scenario: settings-behavior', () => {
         };
         expect(before.settings).toBeDefined();
         expect(before.settings!.yolo).toBe(true);
-        expect(['off', 'low', 'medium', 'high', 'xhigh']).toContain(before.settings!.thinkingLevel);
+        expect(['off', 'low', 'medium', 'high', 'xhigh', 'max']).toContain(before.settings!.thinkingLevel);
         expect(['off', 'bell', 'system', 'both']).toContain(before.settings!.notifications);
 
         // Write new values via the setState route (what the modal calls).

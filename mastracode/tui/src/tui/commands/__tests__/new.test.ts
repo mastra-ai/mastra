@@ -38,6 +38,7 @@ function createCtx(state: ReturnType<typeof createMockState>): SlashCommandConte
     state,
     updateStatusLine: vi.fn(),
     showInfo: vi.fn(),
+    showError: vi.fn(),
   } as unknown as SlashCommandContext;
 }
 
@@ -66,6 +67,19 @@ describe('handleNewCommand', () => {
 
     expect(state.session.thread.detachFromCurrent).toHaveBeenCalledOnce();
     expect(callOrder).toEqual(['detach', 'pendingNewThread']);
+  });
+
+  it('keeps the current conversation intact when remote detach is rejected', async () => {
+    const state = createMockState();
+    const ctx = createCtx(state);
+    state.session.thread.detachFromCurrent.mockRejectedValueOnce(new Error('detach unavailable'));
+
+    await handleNewCommand(ctx);
+
+    expect(state.pendingNewThread).toBe(false);
+    expect(state.chatContainer.clear).not.toHaveBeenCalled();
+    expect(ctx.showError).toHaveBeenCalledWith('Failed to start a new conversation: detach unavailable');
+    expect(ctx.showInfo).not.toHaveBeenCalledWith('Ready for new conversation');
   });
 
   it('clears UI state and ephemeral thread state', async () => {

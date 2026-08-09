@@ -64,6 +64,21 @@ On Ubuntu/Debian the binary is called `fdfind` — mastracode detects both `fd` 
 
 ## Usage
 
+### Remote backend
+
+Hosts that keep the `AgentController` inside a Mastra server can use
+`createRemoteMastraTUIBackend()` and pass the result to the existing rich
+`MastraTUI` as `{ backend }`. `createLocalMastraTUIBackend()` adapts the
+historical in-process `{ controller, session }` pair to the same contract.
+The backend creates or resumes controller sessions over `@mastra/client-js`,
+subscribes before snapshot hydration to avoid reconnect gaps, and exposes
+capability metadata for commands that require the embedded process. Local
+shell, provider login, MCP, plugins, hooks, diff, and sandbox management stay
+available only in the embedded Mastra Code TUI.
+
+`RemoteMastraTUI` remains a line-oriented diagnostic client for terminals that
+cannot run the full-screen renderer; it is not the primary remote experience.
+
 ### Starting a conversation
 
 Type your message and press Enter. If the agent is already working, Enter queues your next message and sends it after the current run finishes.

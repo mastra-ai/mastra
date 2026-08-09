@@ -4,6 +4,8 @@ description: Get started with Mastra by scaffolding an agent harness project in 
 ---
 
 import QuickstartPrompt from "@site/src/content/en/docs/getting-started/_partial-quickstart-prompt.mdx";
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
 
 # Mastra Quickstart
 
@@ -31,9 +33,31 @@ You'll need an API key from OpenAI, Anthropic, Google Gemini, or xAI. You can sk
 
 Run the interactive setup:
 
-```bash npm2yarn
-npm create mastra@latest
-```
+<Tabs groupId="npm2yarn">
+  <TabItem value="npm" label="npm">
+    ```bash
+    npm create mastra@latest
+    ```
+  </TabItem>
+
+  <TabItem value="pnpm" label="pnpm">
+    ```bash
+    pnpm create mastra@latest
+    ```
+  </TabItem>
+
+  <TabItem value="yarn" label="Yarn">
+    ```bash
+    yarn create mastra
+    ```
+  </TabItem>
+
+  <TabItem value="bun" label="Bun">
+    ```bash
+    bunx create-mastra
+    ```
+  </TabItem>
+</Tabs>
 
 The command asks for a project name, model provider, and optional API key. It then installs dependencies, installs Mastra skills for your coding assistants, and creates an initial Git commit when you aren't already inside a repository.
 

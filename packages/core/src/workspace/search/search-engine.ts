@@ -5,8 +5,7 @@
  * semantic (vector), and combined hybrid search across indexed content.
  */
 
-import pMap from 'p-map';
-
+import { pMap } from '../../utils/p-map';
 import type { MastraVector, VectorFilter } from '../../vector';
 import type { LineRange } from '../line-utils';
 

@@ -160,7 +160,7 @@ function isDeclarativePredicateArg(value: unknown): value is { predicate: Predic
  * existing execution engine (which only knows how to call `condition(params)`)
  * can execute stored / declarative predicates unchanged.
  *
- * Exported for the rehydration path (workflows/stored), which rebuilds
+ * Exported for the rehydration path (workflows/dynamic), which rebuilds
  * conditional/loop entries from stored predicates.
  */
 export function predicateToCondition(predicate: Predicate): (params: any) => Promise<boolean> {
@@ -1633,8 +1633,8 @@ export class Workflow<
   public engineType: WorkflowEngineType = 'default';
   /** Type of workflow - 'processor' for processor workflows, 'default' otherwise */
   public type: WorkflowType = 'default';
-  /** Where this workflow came from: 'code' for statically registered workflows, 'stored' for workflows rehydrated from storage. Set by rehydrateWorkflow; defaults to 'code'. */
-  public origin: 'code' | 'stored' = 'code';
+  /** Where this workflow came from: 'code' for statically registered workflows, 'dynamic' for workflows rehydrated from storage. Set by rehydrateWorkflow; defaults to 'code'. */
+  public origin: 'code' | 'dynamic' = 'code';
   #nestedWorkflowInput?: TInput;
   public committed: boolean = false;
   protected stepFlow: StepFlowEntry<TEngineType>[];
@@ -1688,6 +1688,7 @@ export class Workflow<
       shouldPersistSnapshot: options.shouldPersistSnapshot ?? (() => true),
       pruneSnapshot: options.pruneSnapshot,
       tracingPolicy: options.tracingPolicy,
+      onStart: options.onStart,
       onFinish: options.onFinish,
       onError: options.onError,
       sharePubsub: options.sharePubsub,
@@ -1741,7 +1742,7 @@ export class Workflow<
   }
 
   /**
-   * @internal Rehydration-only (workflows/stored). Appends a fully-built
+   * @internal Rehydration-only (workflows/dynamic). Appends a fully-built
    * graph entry without laundering it through the live-`Step` builder
    * overloads: rehydration already holds the declarative entry it parsed from
    * storage, so wrapping it in a fake `Step` just so the builder can sniff it
@@ -3493,9 +3494,30 @@ export class Run<
 
     const traceId = workflowSpan?.externalTraceId;
     const spanId = workflowSpan?.id;
-    const inputDataToUse = await this._validateInput(inputData);
-    const initialStateToUse = await this._validateInitialState(initialState ?? ({} as TState));
-    await this._validateRequestContext(requestContext as RequestContext);
+
+    // execute() ends the span, so anything that rejects before we reach it has to end the
+    // span itself or it stays open for the life of the trace. onStart makes that reachable
+    // from user code, not just from a malformed input.
+    const { inputDataToUse, initialStateToUse } = await (async () => {
+      const validatedInput = await this._validateInput(inputData);
+      const validatedState = await this._validateInitialState(initialState ?? ({} as TState));
+      await this._validateRequestContext(requestContext as RequestContext);
+
+      // Pre-flight gate: runs before the run executes, and rejects the caller if it throws.
+      await this.executionEngine.invokeStartCallback({
+        runId: this.runId,
+        workflowId: this.workflowId,
+        resourceId: this.resourceId,
+        getInitData: () => validatedInput,
+        requestContext: (requestContext ?? new RequestContext()) as RequestContext,
+        state: validatedState as Record<string, any>,
+      });
+
+      return { inputDataToUse: validatedInput, initialStateToUse: validatedState };
+    })().catch(error => {
+      workflowSpan?.error({ error: error as Error });
+      throw error;
+    });
 
     const result = await this.executionEngine.execute<TState, TInput, WorkflowResult<TState, TInput, TOutput, TSteps>>({
       workflowId: this.workflowId,
@@ -3657,10 +3679,10 @@ export class Run<
         data: { type: 'workflow-finish', payload: { runId: this.runId } },
       });
       unwatch();
-      await Promise.all(this.#observerHandlers.map(handler => handler()));
-      this.#observerHandlers = [];
 
       try {
+        await Promise.allSettled(this.#observerHandlers.map(handler => handler()));
+        this.#observerHandlers = [];
         await writer.close();
       } catch (err) {
         this.mastra?.getLogger()?.error('Error closing stream:', err);
@@ -3717,15 +3739,12 @@ export class Run<
       } catch {}
     });
 
-    this.#observerHandlers.push(async () => {
+    this.#observerHandlers.push(() => {
       unwatch();
-      try {
-        await writer.close();
-      } catch (err) {
+      void writer.close().catch(err => {
         this.mastra?.getLogger()?.error('Error closing stream:', err);
-      } finally {
-        writer.releaseLock();
-      }
+      });
+      writer.releaseLock();
     });
 
     return {

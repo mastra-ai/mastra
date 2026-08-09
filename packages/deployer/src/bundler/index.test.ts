@@ -2,8 +2,16 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
+import type { BundlerOptions } from '../build/types';
 import type { SourceDependencyConstraints } from './index';
-import { Bundler, applySourceDependencyRange, getSourceDependencyConstraints, isRegistryVersionSpec } from './index';
+import {
+  Bundler,
+  applySourceDependencyRange,
+  getSourceDependencyConstraints,
+  isRegistryVersionSpec,
+  materializeDeclaredLocalTarballDependencies,
+  materializeLocalTarballDependency,
+} from './index';
 
 const tempDirs: string[] = [];
 
@@ -12,6 +20,17 @@ class TestBundler extends Bundler {
 
   getEnvFiles(): Promise<string[]> {
     return Promise.resolve([]);
+  }
+
+  // Surfaces the protected input-map builder for assertions.
+  publicGetBundlerOptions(serverFile: string, mastraEntryFile: string, options: BundlerOptions) {
+    return this.getBundlerOptions(
+      serverFile,
+      mastraEntryFile,
+      { dependencies: new Map(), externalDependencies: new Map(), workspaceMap: new Map() },
+      [],
+      options,
+    );
   }
 }
 
@@ -137,6 +156,87 @@ describe('Bundler.writePackageJson', () => {
     const pkg = JSON.parse(await readFile(join(outputDir, 'package.json'), 'utf-8'));
     expect(pkg.dependencies.zod).toBe('^4.3.6');
     expect(pkg.dependencies.zod).not.toBe('3.25.76');
+  });
+});
+
+describe('materializeLocalTarballDependency', () => {
+  it('copies a declared file tarball into the isolated output and returns a portable package spec', async () => {
+    const { projectRoot } = await createSourceApp({
+      appManifest: {
+        name: 'source-app',
+        dependencies: { '@mastra/core': 'file:vendor/mastra-core.tgz' },
+      },
+    });
+    const vendorDir = join(projectRoot, 'vendor');
+    const outputDir = join(projectRoot, '.mastra', 'output');
+    await mkdir(vendorDir, { recursive: true });
+    await writeFile(join(vendorDir, 'mastra-core.tgz'), 'fork artifact', 'utf-8');
+
+    const result = await materializeLocalTarballDependency({
+      dependencyName: '@mastra/core',
+      dependencyInfo: { version: '1.58.0' },
+      constraints: constraints({ dependencies: { '@mastra/core': 'file:vendor/mastra-core.tgz' } }),
+      projectRoot,
+      outputDir,
+    });
+
+    expect(result).toEqual({
+      version: '1.58.0',
+      packageSpec: 'file:./vendor-dependencies/mastra-core-mastra-core.tgz',
+    });
+    await expect(
+      readFile(join(outputDir, 'vendor-dependencies', 'mastra-core-mastra-core.tgz'), 'utf-8'),
+    ).resolves.toBe('fork artifact');
+  });
+
+  it('keeps registry and local-directory dependencies unchanged', async () => {
+    const { projectRoot } = await createSourceApp({ appManifest: { name: 'source-app' } });
+    const outputDir = join(projectRoot, '.mastra', 'output');
+
+    await expect(
+      materializeLocalTarballDependency({
+        dependencyName: 'zod',
+        dependencyInfo: { version: '4.4.3' },
+        constraints: constraints({ dependencies: { zod: '^4.4.0' } }),
+        projectRoot,
+        outputDir,
+      }),
+    ).resolves.toEqual({ version: '4.4.3' });
+    await expect(
+      materializeLocalTarballDependency({
+        dependencyName: 'local-package',
+        dependencyInfo: { version: '1.0.0' },
+        constraints: constraints({ dependencies: { 'local-package': 'file:../local-package' } }),
+        projectRoot,
+        outputDir,
+      }),
+    ).resolves.toEqual({ version: '1.0.0' });
+  });
+
+  it('adds transitively used local artifacts that are declared at the app root', async () => {
+    const { projectRoot } = await createSourceApp({ appManifest: { name: 'source-app' } });
+    const vendorDir = join(projectRoot, 'vendor');
+    const outputDir = join(projectRoot, '.mastra', 'output');
+    await mkdir(vendorDir, { recursive: true });
+    await writeFile(join(vendorDir, 'observability.tgz'), 'observability fork', 'utf-8');
+    const dependencies = new Map<string, { version?: string; packageSpec?: string }>([['zod', { version: '4.4.3' }]]);
+
+    await materializeDeclaredLocalTarballDependencies({
+      dependencies,
+      constraints: constraints({
+        dependencies: {
+          zod: '^4.4.0',
+          '@mastra/observability': 'file:vendor/observability.tgz',
+        },
+      }),
+      projectRoot,
+      outputDir,
+    });
+
+    expect(dependencies.get('zod')).toEqual({ version: '4.4.3' });
+    expect(dependencies.get('@mastra/observability')).toEqual({
+      packageSpec: 'file:./vendor-dependencies/mastra-observability-observability.tgz',
+    });
   });
 });
 
@@ -440,5 +540,60 @@ describe('getSourceDependencyConstraints', () => {
       dependencies: {},
       pinnedByResolutionField: new Set(),
     });
+  });
+});
+
+describe('Bundler.getBundlerOptions extra entries', () => {
+  const baseOptions: BundlerOptions = {
+    enableSourcemap: false,
+    enableEsmShim: true,
+    externals: [],
+  };
+
+  async function setupProject() {
+    const tempDir = await mkdtemp(join(tmpdir(), 'mastra-bundler-entries-'));
+    tempDirs.push(tempDir);
+    const mastraEntryFile = join(tempDir, 'index.ts');
+    await writeFile(mastraEntryFile, 'export const mastra = {}');
+    await writeFile(join(tempDir, 'package.json'), JSON.stringify({ name: 'fixture', version: '1.0.0' }));
+    return { tempDir, mastraEntryFile };
+  }
+
+  it('keeps only index when no extra entries are configured', async () => {
+    const { mastraEntryFile } = await setupProject();
+    const bundler = new TestBundler('Test');
+
+    const inputOptions = await bundler.publicGetBundlerOptions('const virtual = 1\n', mastraEntryFile, baseOptions);
+
+    expect(inputOptions.input).toEqual({ index: '#entry' });
+  });
+
+  it('emits extra entries alongside the virtual server entry', async () => {
+    const { tempDir, mastraEntryFile } = await setupProject();
+    const workerPath = join(tempDir, 'voice-worker.ts').replaceAll('\\', '/');
+    const bundler = new TestBundler('Test');
+
+    const inputOptions = await bundler.publicGetBundlerOptions('const virtual = 1\n', mastraEntryFile, {
+      ...baseOptions,
+      entries: { 'voice-worker': workerPath },
+    });
+
+    // `index` must survive — an extra entry adds an output, it never replaces the server.
+    expect(inputOptions.input).toEqual({ index: '#entry', 'voice-worker': workerPath });
+  });
+
+  it('emits extra entries alongside a file-based server entry', async () => {
+    const { tempDir, mastraEntryFile } = await setupProject();
+    const serverFile = join(tempDir, 'server.ts');
+    await writeFile(serverFile, 'export const server = 1');
+    const workerPath = join(tempDir, 'voice-worker.ts').replaceAll('\\', '/');
+    const bundler = new TestBundler('Test');
+
+    const inputOptions = await bundler.publicGetBundlerOptions(serverFile, mastraEntryFile, {
+      ...baseOptions,
+      entries: { 'voice-worker': workerPath },
+    });
+
+    expect(inputOptions.input).toEqual({ index: serverFile, 'voice-worker': workerPath });
   });
 });

@@ -1,4 +1,9 @@
-import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent-controller';
+import type {
+  ActiveSubagentState,
+  ActiveToolState,
+  MastraDBMessage,
+  MastraMessagePart,
+} from '@mastra/core/agent-controller';
 export type { MastraDBMessage, MastraMessageContentV2, MastraMessagePart } from '@mastra/core/agent-controller';
 import type { RequestContext } from '@mastra/core/request-context';
 
@@ -44,13 +49,29 @@ export interface AgentControllerOMProgress {
   projectedReflectionSavings: number;
 }
 
+/** JSON-safe canonical display state returned during hydration and reconnect. */
+export interface AgentControllerDisplayState {
+  isRunning?: boolean;
+  omProgress?: AgentControllerOMProgress;
+  tokenUsage?: Record<string, unknown>;
+  activeTools?: Record<string, ActiveToolState>;
+  toolInputBuffers?: Record<string, { text: string; toolName: string }>;
+  pendingSuspensions?: Record<
+    string,
+    { toolCallId: string; toolName: string; args: unknown; suspendPayload: unknown; resumeSchema?: string }
+  >;
+  activeSubagents?: Record<string, ActiveSubagentState>;
+  modifiedFiles?: Record<string, { operations: string[]; firstModified: string }>;
+  [key: string]: unknown;
+}
+
 /**
  * AgentController events the SDK types explicitly. This is a discriminated union, so
  * narrowing on `event.type` gives you the right payload fields. This mirrors the
  * subset of the agent controller event stream a web client typically renders.
  */
 export type KnownAgentControllerEvent =
-  | { type: 'agent_start' }
+  | { type: 'agent_start'; runId?: string; traceId?: string }
   | { type: 'agent_end'; reason?: 'complete' | 'aborted' | 'error' | 'suspended' }
   // Assistant message streaming.
   | { type: 'message_start'; message: MastraDBMessage }
@@ -67,6 +88,7 @@ export type KnownAgentControllerEvent =
   // Interactive prompts.
   | { type: 'tool_approval_required'; toolCallId: string; toolName: string; args: unknown }
   | { type: 'tool_suspended'; toolCallId: string; toolName: string; args: unknown; suspendPayload: unknown }
+  | { type: 'tool_suspension_cancelled'; toolCallId: string; toolName: string; reason: string }
   // Session state changes.
   | { type: 'mode_changed'; modeId: string; previousModeId: string }
   | { type: 'model_changed'; modelId: string; scope?: 'global' | 'thread' | 'mode'; modeId?: string }
@@ -100,17 +122,12 @@ export type KnownAgentControllerEvent =
     }
   // Usage tracking.
   | { type: 'usage_update'; usage: unknown }
-  // Canonical display-state snapshot, emitted after every other event. Carries
-  // the status-line figures (OM progress + cumulative token usage). Maps/Dates
-  // in the full display state don't survive JSON, so only plain fields are typed.
+  // Canonical display-state snapshot, emitted after every other event. The
+  // server converts the display state's Maps to plain records for the wire;
+  // servers predating that conversion send `{}` for those fields.
   | {
       type: 'display_state_changed';
-      displayState: {
-        isRunning?: boolean;
-        omProgress?: AgentControllerOMProgress;
-        tokenUsage?: Record<string, unknown>;
-        [key: string]: unknown;
-      };
+      displayState: AgentControllerDisplayState;
     }
   // Goals.
   | {
@@ -180,6 +197,7 @@ const KNOWN_AGENT_CONTROLLER_EVENT_TYPES = new Set<string>(
     tool_end: true,
     tool_approval_required: true,
     tool_suspended: true,
+    tool_suspension_cancelled: true,
     mode_changed: true,
     model_changed: true,
     thread_changed: true,
@@ -249,12 +267,26 @@ export interface CreateAgentControllerSessionResponse {
 export interface AgentControllerSessionSettings {
   /** Auto-approve all tool calls (no per-tool prompt). */
   yolo: boolean;
-  /** Extended-thinking budget. */
-  thinkingLevel: 'off' | 'low' | 'medium' | 'high' | 'xhigh';
+  /** Extended-thinking budget (session override). Absent when the session inherits a configured default. */
+  thinkingLevel?: 'off' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
   /** How completion/notification alerts are delivered. */
   notifications: 'off' | 'bell' | 'system' | 'both';
   /** Use AST-aware smart editing when available. */
   smartEditing: boolean;
+  observerModelId?: string;
+  reflectorModelId?: string;
+  observationThreshold?: number;
+  reflectionThreshold?: number;
+  cavemanObservations?: boolean;
+  observeAttachments?: 'auto' | boolean;
+  subagentModelId?: string;
+  subagentModels?: Record<string, string>;
+  projectPath?: string;
+  configDir?: string;
+  pluginCommandPaths?: string[];
+  escapeAsCancel?: boolean;
+  tasks?: unknown[];
+  activePlan?: unknown;
 }
 
 /** State snapshot for an agent controller session. */
@@ -264,6 +296,9 @@ export interface AgentControllerSessionState {
   threadId?: string;
   modeId: string;
   modelId: string;
+  runId?: string;
+  traceId?: string;
+  grants?: { categories: ToolCategory[]; tools: string[] };
   /** Whether the agent is currently executing a run (for initial UI hydration). */
   running?: boolean;
   /** OM progress snapshot for the status line (initial hydration). */
@@ -272,11 +307,17 @@ export interface AgentControllerSessionState {
   tokenUsage?: Record<string, unknown>;
   /** Agent behavior settings (yolo, thinking, notifications, smart editing). */
   settings?: AgentControllerSessionSettings;
+  /** Authoritative JSON-safe display state used to hydrate remote clients after reconnect. */
+  displayState?: AgentControllerDisplayState;
+  /** Messages captured with the authoritative session snapshot. */
+  messages?: MastraDBMessage[];
 }
 
 export interface AgentControllerModeInfo {
   id: string;
   name?: string;
+  description?: string;
+  metadata?: { color?: string };
 }
 
 export interface AgentControllerThreadInfo {
@@ -291,6 +332,8 @@ export interface AgentControllerThreadInfo {
    * worktree/scope a thread belongs to when a resourceId is shared.
    */
   tags?: Record<string, string>;
+  /** Server-owned thread metadata, including rich-client settings and clone provenance. */
+  metadata?: Record<string, unknown>;
   /**
    * Whether a run is currently executing on this thread (`'active'`) or not
    * (`'idle'`). Present on `listThreads()` results; lets one listing report
@@ -313,6 +356,21 @@ export interface AgentControllerWorkspaceStatus {
   isReady: boolean;
 }
 
+export interface AgentControllerSkillInfo {
+  name: string;
+  path: string;
+  description: string;
+  instructions: string;
+  source: unknown;
+  references: string[];
+  scripts: string[];
+  assets: string[];
+  license?: string;
+  compatibility?: unknown;
+  'user-invocable'?: boolean;
+  metadata?: Record<string, unknown>;
+}
+
 export interface AgentControllerGoalRecord {
   id?: string;
   objective: string;
@@ -323,6 +381,7 @@ export interface AgentControllerGoalRecord {
   startedAt: number;
   updatedAt: number;
   pausedReason?: string;
+  activeDurationMs?: number;
 }
 
 /** Permission policy for a tool or category. */
@@ -382,6 +441,20 @@ export interface PlanResume {
  */
 export interface AgentControllerRequestOptions {
   requestContext?: RequestContext | Record<string, any>;
+}
+
+export type AgentControllerSignalContent =
+  | string
+  | Array<
+      | { type: 'text'; text: string; [key: string]: unknown }
+      | { type: 'file'; data: string; mediaType: string; filename?: string; [key: string]: unknown }
+    >;
+
+export interface AgentControllerSendSignalInput {
+  id?: string;
+  content: AgentControllerSignalContent;
+  ifActive?: { attributes?: Record<string, string | number | boolean | null | undefined> };
+  ifIdle?: { attributes?: Record<string, string | number | boolean | null | undefined> };
 }
 
 /** Options for subscribing to an agent controller session's event stream. */
@@ -714,6 +787,18 @@ export class AgentControllerSession extends BaseResource {
     });
   }
 
+  /** Send a structured user signal without changing active-run delivery semantics. */
+  async sendSignal(
+    input: AgentControllerSendSignalInput,
+    options?: AgentControllerRequestOptions,
+  ): Promise<{ id: string; accepted: true; runId?: string; action?: string }> {
+    const requestContext = parseClientRequestContext(options?.requestContext);
+    return this.request(this.url(`${this.base()}/signals`), {
+      method: 'POST',
+      body: { ...input, ...(requestContext ? { requestContext } : {}) },
+    });
+  }
+
   /** Abort the in-flight run for this session. */
   async abort(): Promise<void> {
     await this.request(this.url(`${this.base()}/abort`), { method: 'POST' });
@@ -725,6 +810,24 @@ export class AgentControllerSession extends BaseResource {
     await this.request(this.url(`${this.base()}/tool-approval`), {
       method: 'POST',
       body: { toolCallId, approved, ...(requestContext ? { requestContext } : {}) },
+    });
+  }
+
+  /** Respond using the full in-process approval decision contract. */
+  async respondToToolApproval(
+    toolCallId: string,
+    decision: 'approve' | 'decline' | 'always_allow_category',
+    options?: AgentControllerRequestOptions & { declineContext?: { reason?: string; message?: string } },
+  ): Promise<void> {
+    const requestContext = parseClientRequestContext(options?.requestContext);
+    await this.request(this.url(`${this.base()}/tool-approval`), {
+      method: 'POST',
+      body: {
+        toolCallId,
+        decision,
+        ...(options?.declineContext ? { declineContext: options.declineContext } : {}),
+        ...(requestContext ? { requestContext } : {}),
+      },
     });
   }
 
@@ -764,6 +867,19 @@ export class AgentControllerSession extends BaseResource {
     await this.request(this.url(`${this.base()}/state`), { method: 'PUT', body: { state: updates } });
   }
 
+  /** Apply and persist the observer or reflector model on the server-owned session. */
+  async setOMModel(role: 'observer' | 'reflector', modelId: string): Promise<void> {
+    await this.request(this.url(`${this.base()}/om/model`), { method: 'PUT', body: { role, modelId } });
+  }
+
+  /** Apply and persist the global or agent-type-specific subagent model. */
+  async setSubagentModel(modelId: string, agentType?: string): Promise<void> {
+    await this.request(this.url(`${this.base()}/subagents/model`), {
+      method: 'PUT',
+      body: { modelId, ...(agentType ? { agentType } : {}) },
+    });
+  }
+
   /** Switch the active mode (e.g. `build`, `plan`). */
   async switchMode(modeId: string): Promise<void> {
     await this.request(this.url(`${this.base()}/mode`), { method: 'POST', body: { modeId } });
@@ -785,11 +901,12 @@ export class AgentControllerSession extends BaseResource {
    * threads). Passing a bare number is shorthand for `{ limit }`.
    */
   async listThreads(
-    options?: number | { limit?: number; tags?: Record<string, string> },
+    options?: number | { limit?: number; tags?: Record<string, string>; allResources?: boolean },
   ): Promise<AgentControllerThreadInfo[]> {
     const opts = typeof options === 'number' ? { limit: options } : (options ?? {});
     const params = new URLSearchParams();
     if (opts.limit != null) params.set('limit', String(opts.limit));
+    if (opts.allResources) params.set('allResources', 'true');
     if (opts.tags && Object.keys(opts.tags).length > 0) params.set('tags', JSON.stringify(opts.tags));
     const query = params.toString() ? `?${params.toString()}` : '';
     const body = await this.request<{ threads: AgentControllerThreadInfo[] }>(
@@ -801,6 +918,29 @@ export class AgentControllerSession extends BaseResource {
   /** Switch the session to an existing thread (rebinds stream + state). */
   async switchThread(threadId: string): Promise<void> {
     await this.request(this.url(`${this.base()}/thread`), { method: 'POST', body: { threadId } });
+  }
+
+  /** Clear the active thread binding without deleting the thread. */
+  async detachThread(): Promise<void> {
+    await this.request(this.url(`${this.base()}/thread/detach`), { method: 'POST' });
+  }
+
+  /** Persist one rich-client setting in the active thread metadata. */
+  async setThreadSetting(key: string, value: unknown): Promise<void> {
+    await this.request(this.url(`${this.base()}/thread/setting`), {
+      method: 'PUT',
+      body: { key, value },
+    });
+  }
+
+  /** Read/archive and respond to submit_plan on the server host. */
+  respondToPlanApproval(input: {
+    toolCallId: string;
+    submittedPath: string;
+    action: 'approved' | 'rejected';
+    feedback?: string;
+  }): Promise<{ title: string; plan: string }> {
+    return this.request(this.url(`${this.base()}/plan-approval`), { method: 'POST', body: input });
   }
 
   /** Create a new thread (unbinds previous, binds the new one). */
@@ -831,6 +971,18 @@ export class AgentControllerSession extends BaseResource {
     return this.request(this.url(`${this.base()}/threads/clone`), {
       method: 'POST',
       body: options ?? {},
+    });
+  }
+
+  /** Clone a project-tagged thread owned by another resource into the current resource. */
+  async cloneThreadToCurrentResource(options: {
+    threadId: string;
+    expectedResourceId: string;
+    expectedProjectPath: string;
+  }): Promise<AgentControllerThreadInfo> {
+    return this.request(this.url(`${this.base()}/threads/clone-to-current-resource`), {
+      method: 'POST',
+      body: options,
     });
   }
 
@@ -875,6 +1027,12 @@ export class AgentControllerSession extends BaseResource {
     return body.resourceIds;
   }
 
+  /** List skills resolved by the server-owned workspace for this session. */
+  async listSkills(): Promise<AgentControllerSkillInfo[]> {
+    const body = await this.request<{ skills: AgentControllerSkillInfo[] }>(this.url(`${this.base()}/skills`));
+    return body.skills;
+  }
+
   /** Get the current goal for this session's thread. */
   async getGoal(): Promise<AgentControllerGoalRecord | undefined> {
     const body = await this.request<{ goal?: AgentControllerGoalRecord }>(this.url(`${this.base()}/goal`));
@@ -898,6 +1056,7 @@ export class AgentControllerSession extends BaseResource {
     judgeModelId?: string;
     maxRuns?: number;
     status?: 'active' | 'paused' | 'done';
+    pausedReason?: string;
   }): Promise<AgentControllerGoalRecord | undefined> {
     const body = await this.request<{ goal?: AgentControllerGoalRecord }>(this.url(`${this.base()}/goal`), {
       method: 'PUT',

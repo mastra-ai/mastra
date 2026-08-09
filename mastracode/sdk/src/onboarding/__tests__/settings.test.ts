@@ -11,6 +11,8 @@ import {
   migrateLegacyVariedPack,
   parseCustomProviders,
   parseThreadSettings,
+  parseViewportInput,
+  resolveDefaultThinkingLevel,
   resolveOmRoleModel,
   resolveThreadActiveModelPackId,
   saveSettings,
@@ -32,6 +34,7 @@ function createSettings(overrides?: Partial<GlobalSettings>): GlobalSettings {
     models: {
       activeModelPackId: 'anthropic',
       modeDefaults: {},
+      modeThinkingDefaults: {},
       activeOmPackId: null,
       omModelOverride: null,
       observerModelOverride: null,
@@ -696,6 +699,58 @@ describe('resolveThreadActiveModelPackId', () => {
   });
 });
 
+describe('resolveDefaultThinkingLevel', () => {
+  it('returns the mode default when set for the mode', () => {
+    const settings = createSettings({
+      models: { ...createSettings().models, modeThinkingDefaults: { build: 'high' } },
+      preferences: { ...createSettings().preferences, thinkingLevel: 'low' },
+    });
+
+    expect(resolveDefaultThinkingLevel(settings, 'build')).toEqual({ level: 'high', source: 'mode-default' });
+  });
+
+  it('falls back to the global default when the mode has no entry', () => {
+    const settings = createSettings({
+      models: { ...createSettings().models, modeThinkingDefaults: { build: 'high' } },
+      preferences: { ...createSettings().preferences, thinkingLevel: 'low' },
+    });
+
+    expect(resolveDefaultThinkingLevel(settings, 'plan')).toEqual({ level: 'low', source: 'global' });
+  });
+
+  it('falls back to the global default when no mode is provided', () => {
+    const settings = createSettings({
+      models: { ...createSettings().models, modeThinkingDefaults: { build: 'max' } },
+      preferences: { ...createSettings().preferences, thinkingLevel: 'medium' },
+    });
+
+    expect(resolveDefaultThinkingLevel(settings, null)).toEqual({ level: 'medium', source: 'global' });
+    expect(resolveDefaultThinkingLevel(settings)).toEqual({ level: 'medium', source: 'global' });
+  });
+
+  it('round-trips modeThinkingDefaults through save/load and drops invalid levels', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mc-settings-'));
+    const path = join(dir, 'settings.json');
+    try {
+      writeFileSync(
+        path,
+        JSON.stringify({
+          models: { modeThinkingDefaults: { build: 'high', plan: 'nonsense', fast: 'max' } },
+        }),
+      );
+
+      const loaded = loadSettings(path);
+      expect(loaded.models.modeThinkingDefaults).toEqual({ build: 'high', fast: 'max' });
+
+      loaded.models.modeThinkingDefaults = { plan: 'xhigh' };
+      saveSettings(loaded, path);
+      expect(loadSettings(path).models.modeThinkingDefaults).toEqual({ plan: 'xhigh' });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
 describe('resolveOmRoleModel', () => {
   const omPacks = [
     { id: 'anthropic', modelId: 'anthropic/claude-haiku-4-5' },
@@ -783,6 +838,132 @@ describe('migrateLegacyVariedPack', () => {
       fast: 'anthropic/claude-haiku-4-5',
     });
   });
+});
+
+describe('createBrowserFromSettings — stagehand model', () => {
+  function stagehandSettings(stagehand: Record<string, unknown>): BrowserSettings {
+    return { enabled: true, provider: 'stagehand', headless: true, stagehand } as unknown as BrowserSettings;
+  }
+
+  // The model lands on a private field, so read it the way the browser does.
+  function configuredModel(browser: unknown): unknown {
+    return (browser as { stagehandConfig: { model?: unknown } }).stagehandConfig.model;
+  }
+
+  it('passes a configured model through to Stagehand', async () => {
+    const browser = await createBrowserFromSettings(
+      stagehandSettings({ env: 'LOCAL', model: 'anthropic/claude-sonnet-4-5' }),
+    );
+    expect(configuredModel(browser)).toBe('anthropic/claude-sonnet-4-5');
+  });
+
+  it('leaves the model unset when none is configured, so Stagehand keeps its own default', async () => {
+    const browser = await createBrowserFromSettings(stagehandSettings({ env: 'LOCAL' }));
+    const model = configuredModel(browser);
+    // A Codex OAuth credential in the ambient environment supplies its own
+    // model; either way the user has not configured one here.
+    expect(typeof model === 'undefined' || typeof model === 'object').toBe(true);
+  });
+
+  it('keeps the configured model when connecting over CDP', async () => {
+    const settings = stagehandSettings({ env: 'LOCAL', model: 'anthropic/claude-sonnet-4-5' });
+    const browser = await createBrowserFromSettings({ ...settings, cdpUrl: 'ws://localhost:9222/devtools/browser/x' });
+    expect(configuredModel(browser)).toBe('anthropic/claude-sonnet-4-5');
+  });
+});
+
+describe('parseBrowserSettings — stagehand model', () => {
+  function parseBrowser(browser: unknown): BrowserSettings {
+    const dir = mkdtempSync(join(tmpdir(), 'mc-browser-settings-'));
+    const file = join(dir, 'settings.json');
+    writeFileSync(file, JSON.stringify({ browser }));
+    try {
+      return loadSettings(file).browser;
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }
+
+  it('round-trips a configured model', () => {
+    expect(parseBrowser({ stagehand: { env: 'LOCAL', model: 'anthropic/claude-sonnet-4-5' } }).stagehand?.model).toBe(
+      'anthropic/claude-sonnet-4-5',
+    );
+  });
+
+  it('trims surrounding whitespace', () => {
+    expect(
+      parseBrowser({ stagehand: { env: 'LOCAL', model: '  anthropic/claude-sonnet-4-5  ' } }).stagehand?.model,
+    ).toBe('anthropic/claude-sonnet-4-5');
+  });
+
+  // A hand-edited settings.json reaches Stagehand without passing through the
+  // /browser set model validation, so the unusable shapes are dropped here.
+  // 'gpt-4.1' is read by Stagehand as a provider named "gpt-4.1", and
+  // 'anthropic/' resolves a provider but leaves an empty model name.
+  it.each([['   '], [42], [null], [{}], ['gpt-4.1'], ['anthropic/'], ['anthropic/   '], ['/claude-sonnet-4-5']])(
+    'drops malformed model %p rather than passing it to Stagehand',
+    value => {
+      expect(parseBrowser({ stagehand: { env: 'LOCAL', model: value } }).stagehand?.model).toBeUndefined();
+    },
+  );
+
+  it('keeps the rest of the stagehand settings when the model is dropped', () => {
+    expect(parseBrowser({ stagehand: { env: 'BROWSERBASE', model: 'gpt-4.1' } }).stagehand?.env).toBe('BROWSERBASE');
+  });
+});
+
+describe('parseViewportInput', () => {
+  it.each([
+    ['desktop', { width: 1280, height: 720 }],
+    ['desktop-hd', { width: 1920, height: 1080 }],
+    ['MOBILE', { width: 390, height: 844 }],
+    ['1600x1000', { width: 1600, height: 1000 }],
+    ['1600 x 1000', { width: 1600, height: 1000 }],
+    ['  1600X1000  ', { width: 1600, height: 1000 }],
+  ])('parses %p', (input, expected) => {
+    expect(parseViewportInput(input)).toEqual(expected);
+  });
+
+  it('parses window', () => {
+    expect(parseViewportInput('window')).toBe('window');
+  });
+
+  it.each([[''], ['   '], ['1280'], ['1280x'], ['0x720'], ['-10x720'], ['1280.5x720'], ['99999x720'], ['huge']])(
+    'rejects %p',
+    input => {
+      expect(parseViewportInput(input)).toBeUndefined();
+    },
+  );
+});
+
+describe('parseBrowserSettings — viewport', () => {
+  function parseBrowser(browser: unknown): BrowserSettings {
+    const dir = mkdtempSync(join(tmpdir(), 'mc-browser-viewport-'));
+    const file = join(dir, 'settings.json');
+    writeFileSync(file, JSON.stringify({ browser }));
+    try {
+      return loadSettings(file).browser;
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }
+
+  it('round-trips explicit dimensions', () => {
+    expect(parseBrowser({ viewport: { width: 1600, height: 1000 } }).viewport).toEqual({ width: 1600, height: 1000 });
+  });
+
+  it('round-trips window', () => {
+    expect(parseBrowser({ viewport: 'window' }).viewport).toBe('window');
+  });
+
+  // A hand-edited settings.json bypasses /browser set viewport validation, so
+  // unusable shapes fall back to the default rather than reaching the provider.
+  it.each([[undefined], ['maximized'], [{ width: 0, height: 720 }], [{ width: '1280', height: 720 }], [{}], [42]])(
+    'falls back to the default for %p',
+    value => {
+      expect(parseBrowser({ viewport: value }).viewport).toEqual({ width: 1280, height: 720 });
+    },
+  );
 });
 
 describe('createBrowserFromSettings — recording tools gating', () => {

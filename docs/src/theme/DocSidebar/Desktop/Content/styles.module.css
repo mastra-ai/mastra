@@ -4,68 +4,77 @@
     display: flex;
     flex-grow: 1;
     min-height: 0;
-    padding-top: 0.5rem;
-    padding-bottom: 0.5rem;
-    padding-left: 0.5rem;
-    margin-top: 0.5rem;
+    padding-top: 1rem;
+    padding-bottom: 1rem;
   }
 
   .menu {
+    --sidebar-pane-duration: 180ms;
+    --sidebar-pane-easing: cubic-bezier(0.65, 0, 0.35, 1);
+    --sidebar-pane-shift: 1.25rem;
+
     position: relative;
+    display: flex;
+    flex-direction: column;
     flex-grow: 1;
     min-height: 0;
-    padding-right: 0.5rem;
-  }
-
-  .menu[data-sidebar-pane='contextual'] {
-    padding: 0 0.5rem !important;
+    padding: 0 max(0px, calc(1rem - var(--sidebar-scrollbar-gutter, 0px))) 0 1rem !important;
+    scrollbar-gutter: stable;
   }
 
   .pane {
+    flex-shrink: 0;
     transition:
-      transform 150ms cubic-bezier(0.175, 0.885, 0.32, 1.1),
-      opacity 150ms cubic-bezier(0.175, 0.885, 0.32, 1.1);
+      transform var(--sidebar-pane-duration) var(--sidebar-pane-easing),
+      opacity var(--sidebar-pane-duration) var(--sidebar-pane-easing);
   }
 
-  .rootPaneInactive {
+  .root-pane-inactive {
     position: absolute;
-    inset: 0;
+    inset: 0 max(0px, calc(1rem - var(--sidebar-scrollbar-gutter, 0px))) 0 1rem;
     overflow: hidden;
     opacity: 0;
-    visibility: hidden;
     pointer-events: none;
-    transform: translateX(-0.5rem);
+    transform: translate3d(calc(-1 * var(--sidebar-pane-shift)), 0, 0);
   }
 
-  .contextualPane {
-    animation: contextual-pane-enter 150ms cubic-bezier(0.175, 0.885, 0.32, 1.1);
+  .contextual-pane-enter {
+    animation: contextual-pane-enter var(--sidebar-pane-duration) var(--sidebar-pane-easing);
   }
 
-  .bottomFade {
+  .contextual-pane-exit {
     position: absolute;
-    right: 0.75rem;
+    inset: 0 max(0px, calc(1rem - var(--sidebar-scrollbar-gutter, 0px))) 0 1rem;
+    overflow: hidden;
+    pointer-events: none;
+    animation: contextual-pane-exit var(--sidebar-pane-duration) var(--sidebar-pane-easing) forwards;
+  }
+
+  .versionControl {
+    position: sticky;
+    z-index: 1;
     bottom: 0;
+    flex-shrink: 0;
+    margin-top: auto;
+    padding-top: 1rem;
+    background: var(--ifm-navbar-background-color);
+  }
+
+  .versionControl::before {
+    position: absolute;
+    right: 0;
+    bottom: 100%;
     left: 0;
     height: 3rem;
     pointer-events: none;
+    content: '';
     background: linear-gradient(to bottom, transparent, var(--ifm-navbar-background-color));
     opacity: 0;
     transition: opacity 150ms ease-in-out;
   }
 
-  .bottomFade[data-visible='true'] {
+  .versionControl[data-fade-visible='true']::before {
     opacity: 1;
-  }
-
-  .bottomFadeWithAnnouncementBar {
-    bottom: var(--docusaurus-announcement-bar-height);
-  }
-
-  @supports (scrollbar-gutter: stable) {
-    .menu {
-      padding: 0.5rem 0 0.5rem 0.5rem;
-      scrollbar-gutter: stable;
-    }
   }
 
   .menuWithAnnouncementBar {
@@ -76,12 +85,24 @@
 @keyframes contextual-pane-enter {
   from {
     opacity: 0;
-    transform: translateX(0.5rem);
+    transform: translate3d(var(--sidebar-pane-shift), 0, 0);
   }
 
   to {
     opacity: 1;
-    transform: translateX(0);
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes contextual-pane-exit {
+  from {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+
+  to {
+    opacity: 0;
+    transform: translate3d(var(--sidebar-pane-shift), 0, 0);
   }
 }
 
@@ -90,7 +111,8 @@
     transition: none;
   }
 
-  .contextualPane {
+  .contextual-pane-enter,
+  .contextual-pane-exit {
     animation: none;
   }
 }

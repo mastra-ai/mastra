@@ -1,11 +1,15 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { Agent } from '../agent';
 import { InMemoryStore } from '../storage/mock';
 import { AgentController } from './agent-controller';
 import type { Session } from './session';
 import { createMockWorkspace } from './test-utils';
 
-type AgentControllerTestState = { currentModelId?: string };
+type AgentControllerTestState = {
+  currentModelId?: string;
+  projectPath?: string;
+  activePlan?: { title: string; plan: string; approvedAt: string };
+};
 
 const agent = () =>
   new Agent({
@@ -16,12 +20,19 @@ const agent = () =>
 
 async function buildController(
   storage: InMemoryStore,
+  planApproval?: (input: {
+    projectPath: string;
+    submittedPath: string;
+    resourceId: string;
+    archive: boolean;
+  }) => Promise<{ title: string; plan: string }>,
 ): Promise<{ controller: AgentController<AgentControllerTestState>; session: Session<AgentControllerTestState> }> {
   const controller = new AgentController<AgentControllerTestState>({
     workspace: createMockWorkspace(),
     id: 'test-controller',
     storage,
     stateSchema: undefined,
+    planApproval,
     modes: [
       {
         id: 'build',
@@ -149,5 +160,53 @@ describe('AgentController mode-model persistence across restarts', () => {
     // tool result is persisted.
     expect(session.suspensions.has({ toolCallId: 'plan-call-1' })).toBe(false);
     expect(session.mode.get()).toBe('build');
+  });
+
+  it('resolves, archives, persists, and resumes plan approval on the controller host', async () => {
+    const planApproval = vi.fn(async () => ({ title: 'Server Plan', plan: 'Do the work.' }));
+    const { controller, session } = await buildController(storage, planApproval);
+    await session.state.set({ projectPath: '/repo' });
+    session.suspensions.register({ toolCallId: 'plan-1', runId: 'run-1', toolName: 'submit_plan' });
+    const respond = vi.spyOn(session, 'respondToToolSuspension').mockResolvedValue(true);
+
+    const result = await controller.respondToPlanApproval(session, {
+      toolCallId: 'plan-1',
+      submittedPath: '.mastracode/plans/work.md',
+      action: 'approved',
+    });
+
+    expect(result).toEqual({ title: 'Server Plan', plan: 'Do the work.' });
+    expect(planApproval).toHaveBeenCalledWith({
+      projectPath: '/repo',
+      submittedPath: '.mastracode/plans/work.md',
+      resourceId: 'test-controller',
+      archive: true,
+    });
+    expect(session.state.get().activePlan).toMatchObject({ title: 'Server Plan', plan: 'Do the work.' });
+    expect(respond).toHaveBeenCalledWith({
+      toolCallId: 'plan-1',
+      resumeData: {
+        action: 'approved',
+        path: '.mastracode/plans/work.md',
+        title: 'Server Plan',
+        plan: 'Do the work.',
+      },
+    });
+  });
+
+  it('does not resolve or archive a stale plan approval', async () => {
+    const planApproval = vi.fn(async () => ({ title: 'Server Plan', plan: 'Do the work.' }));
+    const { controller, session } = await buildController(storage, planApproval);
+    await session.state.set({ projectPath: '/repo' });
+
+    await expect(
+      controller.respondToPlanApproval(session, {
+        toolCallId: 'plan-stale',
+        submittedPath: '.mastracode/plans/work.md',
+        action: 'approved',
+      }),
+    ).rejects.toThrow('no longer pending');
+    expect(planApproval).not.toHaveBeenCalled();
+    expect(session.state.get().activePlan).toBeUndefined();
   });
 });

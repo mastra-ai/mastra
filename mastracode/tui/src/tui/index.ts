@@ -19,3 +19,16 @@ export { LoginSelectorComponent } from './components/login-selector.js';
 export { LoginDialogComponent } from './components/login-dialog.js';
 export { theme, applyThemeMode, getThemeMode, getMarkdownTheme, getEditorTheme, mastra, mastraBrand } from './theme.js';
 export type { ThemeColor, ThemeBg, ThemeColors, ThemeMode } from './theme.js';
+export { createRemoteMastraTUIBackend } from './remote-backend.js';
+export { createRemoteMastraTUIRuntime } from './remote-runtime.js';
+export { createLocalMastraTUIBackend } from './local-backend.js';
+export type {
+  MastraTUIBackend,
+  MastraTUIBackendCapabilities,
+  MastraTUIBackendConnection,
+  MastraTUISessionBackend,
+  MastraTUIRemoteSnapshot,
+  RemoteMastraTUIBackendOptions,
+} from './remote-backend.js';
+export { RemoteMastraTUI } from './remote-tui.js';
+export type { RemoteMastraTUIOptions } from './remote-tui.js';

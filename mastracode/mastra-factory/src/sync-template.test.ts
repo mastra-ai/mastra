@@ -12,6 +12,7 @@ const pkgRoot = path.resolve(here, '..');
 const webRoot = path.resolve(pkgRoot, '../web');
 const script = path.join(pkgRoot, 'scripts', 'sync-template.mjs');
 const TEMPLATE_LINKED_DEPENDENCIES = [
+  '@mastra/auth-workos',
   '@mastra/code-sdk',
   '@mastra/core',
   '@mastra/factory',
@@ -155,6 +156,7 @@ describe.skipIf(process.platform === 'win32')('sync-template.mjs', () => {
     }
 
     expect(Object.keys(pkg.dependencies).sort()).toEqual([
+      '@mastra/auth-workos',
       '@mastra/code-sdk',
       '@mastra/core',
       '@mastra/factory',

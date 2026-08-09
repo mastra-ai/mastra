@@ -32,9 +32,9 @@ export interface PlanApprovalInlineOptions {
   planFilename?: string;
   /** Previous plan content for diff display on resubmission. */
   previousPlan?: string;
-  onApprove: () => void;
-  onGoal: () => void;
-  onReject: () => void;
+  onApprove: () => void | Promise<void>;
+  onGoal: () => void | Promise<void>;
+  onReject: () => void | Promise<void>;
 }
 
 /** Exported for tests. */
@@ -154,9 +154,9 @@ export class PlanDiffBox implements Component {
 export class PlanApprovalInlineComponent extends Container implements Focusable {
   private contentBox: Box;
   private selectList?: SelectList;
-  private onApprove?: () => void;
-  private onGoal?: () => void;
-  private onReject?: () => void;
+  private onApprove?: () => void | Promise<void>;
+  private onGoal?: () => void | Promise<void>;
+  private onReject?: () => void | Promise<void>;
   private resolved = false;
   private mode: 'streaming' | 'select' = 'select';
   private planTitle: string;
@@ -233,7 +233,7 @@ export class PlanApprovalInlineComponent extends Container implements Focusable 
     }
   }
 
-  private renderSelectable(): void {
+  private renderSelectable(errorMessage?: string): void {
     this.contentBox.clear();
     this.selectList = undefined;
     this.renderPlanHeader();
@@ -247,6 +247,11 @@ export class PlanApprovalInlineComponent extends Container implements Focusable 
       this.renderPlanContent();
     }
     this.contentBox.addChild(new Spacer(1));
+
+    if (errorMessage) {
+      this.contentBox.addChild(new Text(theme.fg('error', `Could not apply selection: ${errorMessage}`), 0, 0));
+      this.contentBox.addChild(new Spacer(1));
+    }
 
     const items: SelectItem[] = [
       {
@@ -302,36 +307,66 @@ export class PlanApprovalInlineComponent extends Container implements Focusable 
 
     switch (value) {
       case 'approve':
-        this.handleApprove();
+        void this.handleApprove();
         break;
       case 'goal':
-        this.handleGoal();
+        void this.handleGoal();
         break;
       case 'changes':
-        this.handleReject();
+        void this.handleReject();
         break;
     }
   }
 
-  private handleApprove(): void {
+  private async handleApprove(): Promise<void> {
     if (this.resolved) return;
     this.resolved = true;
-    this.showResult('Approved', true);
-    this.onApprove?.();
+    this.renderPending('Approving…');
+    try {
+      await this.onApprove?.();
+      this.showResult('Approved', true);
+    } catch (error) {
+      this.restoreAfterFailure(error);
+    }
   }
 
-  private handleGoal(): void {
+  private async handleGoal(): Promise<void> {
     if (this.resolved) return;
     this.resolved = true;
-    this.showResult('Set as goal', true);
-    this.onGoal?.();
+    this.renderPending('Starting goal…');
+    try {
+      await this.onGoal?.();
+      this.showResult('Set as goal', true);
+    } catch (error) {
+      this.restoreAfterFailure(error);
+    }
   }
 
-  private handleReject(): void {
+  private async handleReject(): Promise<void> {
     if (this.resolved) return;
     this.resolved = true;
-    this.showResult('Changes requested', false);
-    this.onReject?.();
+    this.renderPending('Requesting changes…');
+    try {
+      await this.onReject?.();
+      this.showResult('Changes requested', false);
+    } catch (error) {
+      this.restoreAfterFailure(error);
+    }
+  }
+
+  private renderPending(status: string): void {
+    this.contentBox.clear();
+    this.renderPlanHeader();
+    this.renderPlanContent();
+    this.contentBox.addChild(new Spacer(1));
+    this.contentBox.addChild(new Text(theme.fg('dim', status), 0, 0));
+    (this.ui as { requestRender?: () => void }).requestRender?.();
+  }
+
+  private restoreAfterFailure(error: unknown): void {
+    this.resolved = false;
+    this.renderSelectable(error instanceof Error ? error.message : String(error));
+    (this.ui as { requestRender?: () => void }).requestRender?.();
   }
 
   private showResult(status: string, isApproved: boolean): void {
@@ -347,6 +382,7 @@ export class PlanApprovalInlineComponent extends Container implements Focusable 
       this.contentBox.addChild(new Text(theme.fg('dim', 'Send a message with your revision feedback'), 0, 0));
       this.contentBox.addChild(new Spacer(1));
     }
+    (this.ui as { requestRender?: () => void }).requestRender?.();
   }
 
   handleInput(data: string): void {

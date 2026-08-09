@@ -1,5 +1,20 @@
 # @mastra/daytona
 
+## 0.7.0-alpha.0
+
+### Minor Changes
+
+- Added `domainAllowList` to `DaytonaSandboxOptions`, for allowing outbound access to services whose IP addresses change, such as package registries and hosted APIs. CIDR-based `networkAllowList` cannot express these reliably. ([#21000](https://github.com/mastra-ai/mastra/pull/21000))
+
+  ```typescript
+  const sandbox = new DaytonaSandbox({
+    networkBlockAll: true,
+    domainAllowList: 'registry.npmjs.org,*.githubusercontent.com',
+  });
+  ```
+
+  The option is applied at sandbox creation and preserved by `clone()`. Requires `@daytonaio/sdk` 0.201.0 or later, which the package now depends on.
+
 ## 0.6.0
 
 ### Minor Changes

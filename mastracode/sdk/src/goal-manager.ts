@@ -64,9 +64,15 @@ function normalizeActiveDurationMs(value: number | undefined): number {
 export class GoalManager {
   /** Synchronous in-memory view of the active objective record (source of truth is ThreadState). */
   private record: (GoalObjectiveRecord & { id: string }) | null = null;
+  private persistedRecord: (GoalObjectiveRecord & { id: string }) | null = null;
   private threadId: string | undefined;
   private agentId: string | undefined;
   private persistGoalOnNextThreadCreate = false;
+  private readonly strictPersistence: boolean;
+
+  constructor(options: { strictPersistence?: boolean } = {}) {
+    this.strictPersistence = options.strictPersistence === true;
+  }
 
   // ---------------------------------------------------------------------------
   // Synchronous TUI surface
@@ -145,6 +151,7 @@ export class GoalManager {
     } else {
       this.record = this.localRecord(objective, judgeModelId, maxTurns, now, id);
     }
+    this.persistedRecord = this.record ? { ...this.record } : null;
 
     return this.getGoal();
   }
@@ -176,6 +183,7 @@ export class GoalManager {
         updatedAt: Date.now(),
       };
     }
+    this.persistedRecord = this.record ? { ...this.record } : null;
     return this.getGoal();
   }
 
@@ -213,6 +221,7 @@ export class GoalManager {
   applyEvaluation(update: { runsUsed: number; status: GoalStatus }): GoalState | null {
     if (!this.record) return null;
     this.record = { ...this.record, runsUsed: update.runsUsed, status: update.status, updatedAt: Date.now() };
+    this.persistedRecord = { ...this.record };
     return this.getGoal();
   }
 
@@ -268,8 +277,15 @@ export class GoalManager {
       }
       // Clear any legacy thread-metadata goal so it can't shadow the record.
       await state.session.thread.setSetting({ key: THREAD_GOAL_KEY, value: undefined });
-    } catch {
-      // Persistence is not critical.
+      this.persistedRecord = this.record ? { ...this.record } : null;
+    } catch (error) {
+      if (this.strictPersistence) {
+        this.record = this.persistedRecord ? { ...this.persistedRecord } : null;
+        this.threadId = threadId ?? undefined;
+        this.agentId = agent?.id;
+        throw error;
+      }
+      // Embedded persistence remains best-effort for compatibility.
     }
   }
 
@@ -293,6 +309,7 @@ export class GoalManager {
             id: record.id ?? randomUUID(),
             activeDurationMs: normalizeActiveDurationMs(record.activeDurationMs),
           };
+          this.persistedRecord = { ...this.record };
           return;
         }
       } catch {
@@ -300,6 +317,7 @@ export class GoalManager {
       }
     }
     this.record = null;
+    this.persistedRecord = null;
   }
 
   /**
@@ -323,8 +341,10 @@ export class GoalManager {
         updatedAt: Date.now(),
         id: saved.id ?? randomUUID(),
       };
+      this.persistedRecord = { ...this.record };
     } else {
       this.record = null;
+      this.persistedRecord = null;
     }
   }
 

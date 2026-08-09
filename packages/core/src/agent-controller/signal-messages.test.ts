@@ -340,9 +340,10 @@ describe('AgentController signal messages', () => {
       signal: createSignal({ type: 'user-message', contents: 'active hello' }),
     });
 
-    const signal = session.sendSignal({ content: 'active hello' });
+    const signal = session.sendSignal({ id: 'tui-signal-1', content: 'active hello' });
     await expect(signal.accepted).resolves.toEqual({ accepted: true, runId: 'active-run-id' });
 
+    expect(signal.id).toBe('tui-signal-1');
     expect(buildToolsets).not.toHaveBeenCalled();
     expect(sendSignal).toHaveBeenCalledWith(
       expect.objectContaining({ id: signal.id, type: 'user', tagName: 'user', contents: 'active hello' }),

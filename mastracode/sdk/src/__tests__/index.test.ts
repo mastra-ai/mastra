@@ -28,6 +28,13 @@ vi.mock('@mastra/core/agent', () => ({
   SignalProvider: class {},
 }));
 
+vi.mock('@mastra/duckdb', () => ({
+  DuckDBStore: class {
+    readonly observability = {};
+    readonly db = { getConnection: vi.fn(async () => ({})) };
+  },
+}));
+
 // The code agent is built via the core `createCodingAgent` factory. Forward the
 // config mastracode passes to the same constructor spy the tests assert against,
 // returning a mocked Agent instance.
@@ -966,5 +973,27 @@ describe('createMastraCode', () => {
       { threadId: 'thread-1', resourceId: 'thread-resource' },
       { pollImmediately: true },
     );
+  });
+
+  it('projects controller observability onto a server-owned Mastra mount', async () => {
+    const { prepareAgentControllerMount } = await import('../index.js');
+
+    const prepared = await prepareAgentControllerMount();
+
+    expect(prepared.mastraArgs.observability).toBe(prepared.base.observability);
+  });
+
+  it('can persist traces locally without configuring a cloud exporter', async () => {
+    const settings = createMockSettings();
+    settings.observability.localTracing = true;
+    loadSettingsMock.mockReturnValue(settings);
+    const { MastraPlatformExporter, MastraStorageExporter } = await import('@mastra/observability');
+    const { prepareAgentControllerMount } = await import('../index.js');
+
+    const prepared = await prepareAgentControllerMount({ disableCloudObservability: true });
+    const exporters = prepared.base.observability.getDefaultInstance()?.getExporters() ?? [];
+
+    expect(exporters.some(exporter => exporter instanceof MastraStorageExporter)).toBe(true);
+    expect(exporters.some(exporter => exporter instanceof MastraPlatformExporter)).toBe(false);
   });
 });

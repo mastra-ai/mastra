@@ -20,6 +20,7 @@ import { ToolApprovalDialogComponent } from '../components/tool-approval-dialog.
 import type { ApprovalAction } from '../components/tool-approval-dialog.js';
 import { ToolExecutionComponentEnhanced } from '../components/tool-execution-enhanced.js';
 import type { ToolResult } from '../components/tool-execution-enhanced.js';
+import { showError } from '../display.js';
 import { showModalOverlay } from '../overlay.js';
 import { DEFAULT_RENDER_COALESCE_MS, requestRender, flushRender } from '../render-scheduler.js';
 import { sanitizeAnsiForRendering } from '../sanitize-ansi.js';
@@ -370,8 +371,14 @@ export function handleToolApprovalRequired(
         state.session.respondToToolApproval({ decision: 'always_allow_category' });
       } else if (action.type === 'yolo') {
         firePermissionResult('auto_approved');
-        void state.session.state.set({ yolo: true } as any);
-        state.session.respondToToolApproval({ decision: 'approve' });
+        void state.session.state
+          .set({ yolo: true } as any)
+          .then(() => {
+            state.session.respondToToolApproval({ decision: 'approve' });
+          })
+          .catch(error => {
+            showError(state, `Failed to enable YOLO mode: ${error instanceof Error ? error.message : String(error)}`);
+          });
       } else {
         firePermissionResult('declined');
         state.session.respondToToolApproval({ decision: 'decline' });

@@ -27,9 +27,20 @@ export interface DependencyMetadata {
 
 export interface BundlerOptions {
   enableSourcemap: boolean;
+  /**
+   * Optional so that a `Bundler` subclass outside this repo, which builds this
+   * object itself, keeps compiling. Absent means off, same as `false`.
+   */
+  enableMinify?: boolean;
   enableEsmShim: boolean;
   externals: boolean | string[];
   dynamicPackages?: string[];
+  /**
+   * Extra process entries to emit beside the server bundle, as output name ->
+   * absolute source path. Already resolved and validated against the user's
+   * `bundler.entries` config; see `resolveExtraEntries`.
+   */
+  entries?: Record<string, string>;
 }
 
 /**

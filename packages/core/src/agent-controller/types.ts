@@ -13,6 +13,7 @@ import type { MastraCompositeStore } from '../storage/base';
 import type { GoalEvaluationPayload } from '../stream/types';
 import type { DynamicArgument } from '../types';
 import type { Workspace, WorkspaceStatus } from '../workspace';
+import type { Session } from './session';
 import type { TaskItemSnapshot } from './tools';
 
 // =============================================================================
@@ -221,6 +222,9 @@ export type BuiltinToolId =
   | 'task_check'
   | 'subagent';
 
+/** Process-local listener notified after AgentController materializes a live session. */
+export type AgentControllerSessionCreatedListener<TState = {}> = (session: Session<TState>) => void | Promise<void>;
+
 export interface AgentControllerConfig<TState = {}> {
   /** Unique identifier for this controller instance */
   id: string;
@@ -239,6 +243,18 @@ export interface AgentControllerConfig<TState = {}> {
 
   /** Initial state values (must conform to schema) */
   initialState?: Partial<TState>;
+
+  /**
+   * Server-owned plan reader/archiver used by remote rich clients. The host
+   * resolves the submitted path inside its own project mount and archives only
+   * after an explicit approval.
+   */
+  planApproval?: (input: {
+    projectPath: string;
+    submittedPath: string;
+    resourceId: string;
+    archive: boolean;
+  }) => Promise<{ title: string; plan: string }>;
 
   /** Memory configuration (shared across all modes) */
   memory?: DynamicArgument<MastraMemory>;

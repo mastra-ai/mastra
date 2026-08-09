@@ -14,7 +14,7 @@ import { renderBanner } from './components/banner.js';
 import { IdleCounterComponent } from './components/idle-counter.js';
 import { SimpleProgressComponent } from './components/simple-progress.js';
 import { TaskProgressComponent } from './components/task-progress.js';
-import { notifyForInputRequest, showError, showInfo } from './display.js';
+import { notifyForInputRequest, runPermissionHooksForEvent, showError, showInfo } from './display.js';
 import { isGoalJudgeInputLocked, showGoalJudgeInputLockInfo } from './goal-input-lock.js';
 import { askModalQuestion } from './modal-question.js';
 import { showModalOverlay } from './overlay.js';
@@ -162,10 +162,17 @@ export function setupKeyboardShortcuts(
   });
 
   // Ctrl+Y - toggle YOLO mode
-  state.editor.onAction('toggleYolo', () => {
+  state.editor.onAction('toggleYolo', async () => {
     const current = (state.session.state.get() as any)?.yolo === true;
-    void state.session.state.set({ yolo: !current } as any);
-    showInfo(state, current ? 'YOLO mode off' : 'YOLO mode on');
+    try {
+      await state.session.state.set({ yolo: !current } as any);
+      showInfo(state, current ? 'YOLO mode off' : 'YOLO mode on');
+    } catch (error) {
+      showError(
+        state,
+        `Failed to ${current ? 'disable' : 'enable'} YOLO mode: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
   });
 
   // Enter - submit immediately. The submit handler decides whether active input
@@ -327,7 +334,7 @@ export function setupAutocomplete(state: TUIState): void {
     { name: 'subagents', description: 'Configure subagent model defaults' },
     { name: 'memory', description: 'Configure Observational Memory' },
     { name: 'om', description: 'Alias for /memory' },
-    { name: 'think', description: 'Set thinking (off|low|medium|high|xhigh|status)' },
+    { name: 'think', description: 'Session thinking override (off|low|medium|high|xhigh|max|default|status)' },
     { name: 'login', description: 'Login with OAuth provider' },
     { name: 'skills', description: 'List available skills' },
     { name: 'skill/', description: 'Activate a skill by name' },
@@ -587,6 +594,9 @@ export function subscribeToAgentController(state: TUIState, handleEvent: (event:
     // queue until answered, which would starve any notification queued behind
     // it — exactly when the user has walked away and needs the ping.
     notifyForInputRequest(state, event);
+    // PermissionRequest hooks starve the same way (#20861) — dispatch them at
+    // receipt too, before the event is chained onto the serial queue.
+    runPermissionHooksForEvent(state, event);
     eventQueue = eventQueue.then(async () => {
       try {
         await handleEvent(event);

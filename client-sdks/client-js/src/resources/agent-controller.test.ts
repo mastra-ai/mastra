@@ -97,6 +97,59 @@ describe('AgentController Resource', () => {
     expect(JSON.parse(init.body as string)).toEqual({ message: 'see attached', files });
   });
 
+  it('persists an active-thread setting through the dedicated metadata route', async () => {
+    mockJson({ ok: true });
+
+    await client.getAgentController('code').session('user-1').setThreadSetting('activeModelPack', 'quality');
+
+    const [url, init] = lastCall();
+    expect(url).toBe('http://localhost:4111/api/agent-controller/code/sessions/user-1/thread/setting');
+    expect(init.method).toBe('PUT');
+    expect(JSON.parse(init.body as string)).toEqual({ key: 'activeModelPack', value: 'quality' });
+  });
+
+  it('delegates plan approval to the server-owned session', async () => {
+    mockJson({ title: 'Plan', plan: 'Do it' });
+    const input = {
+      toolCallId: 'plan-1',
+      submittedPath: '.mastracode/plans/change.md',
+      action: 'approved' as const,
+    };
+
+    await client.getAgentController('code').session('user-1').respondToPlanApproval(input);
+
+    const [url, init] = lastCall();
+    expect(url).toBe('http://localhost:4111/api/agent-controller/code/sessions/user-1/plan-approval');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual(input);
+  });
+
+  it('preserves structured signal content, delivery policy, and caller correlation id', async () => {
+    mockJson({ id: 'signal-1', accepted: true, action: 'interjected' });
+    const result = await client
+      .getAgentController('code')
+      .session('user-1')
+      .sendSignal({
+        id: 'signal-1',
+        content: [
+          { type: 'text', text: 'inspect' },
+          { type: 'file', data: 'aW1hZ2U=', mediaType: 'image/png', filename: 'screen.png' },
+        ],
+        ifActive: { attributes: { source: 'tui' } },
+      });
+    const [url, init] = lastCall();
+    expect(url).toBe('http://localhost:4111/api/agent-controller/code/sessions/user-1/signals');
+    expect(JSON.parse(init.body as string)).toEqual({
+      id: 'signal-1',
+      content: [
+        { type: 'text', text: 'inspect' },
+        { type: 'file', data: 'aW1hZ2U=', mediaType: 'image/png', filename: 'screen.png' },
+      ],
+      ifActive: { attributes: { source: 'tui' } },
+    });
+    expect(result.id).toBe('signal-1');
+  });
+
   it('sends requestContext in the body for run-triggering methods', async () => {
     const session = client.getAgentController('code').session('user-1');
     const requestContext = { userId: 'u-42', tier: 'pro' };
@@ -177,17 +230,26 @@ describe('AgentController Resource', () => {
   });
 
   it('reads session state', async () => {
-    mockJson({ controllerId: 'code', resourceId: 'user-1', threadId: 't-1', modeId: 'build', modelId: 'm' });
-    const state = await client.getAgentController('code').session('user-1').state();
-    expect(state).toEqual({
+    mockJson({
       controllerId: 'code',
       resourceId: 'user-1',
       threadId: 't-1',
       modeId: 'build',
       modelId: 'm',
+      displayState: { isRunning: true, activeTools: { 'call-1': { name: 'read', status: 'running' } } },
     });
+    const state = await client.getAgentController('code').session('user-1').state();
+    expect(state.displayState?.isRunning).toBe(true);
+    expect(state.displayState?.activeTools?.['call-1']).toMatchObject({ name: 'read', status: 'running' });
     const [url] = lastCall();
     expect(url).toBe('http://localhost:4111/api/agent-controller/code/sessions/user-1');
+  });
+
+  it('lists skills from the server-owned workspace', async () => {
+    mockJson({ skills: [{ name: 'verify', instructions: 'Run checks.' }] });
+    const skills = await client.getAgentController('code').session('user-1').listSkills();
+    expect(skills).toEqual([{ name: 'verify', instructions: 'Run checks.' }]);
+    expect(lastCall()[0]).toBe('http://localhost:4111/api/agent-controller/code/sessions/user-1/skills');
   });
 
   it('switches mode and model', async () => {
@@ -202,6 +264,19 @@ describe('AgentController Resource', () => {
     [url, init] = lastCall();
     expect(url).toBe('http://localhost:4111/api/agent-controller/code/sessions/user-1/model');
     expect(JSON.parse(init.body as string)).toMatchObject({ modelId: 'openai/gpt-4o', scope: 'thread' });
+  });
+
+  it('sets server-owned OM and subagent models', async () => {
+    const session = client.getAgentController('code').session('user-1');
+    mockJson({ ok: true });
+    await session.setOMModel('observer', 'openai/observer');
+    expect(lastCall()[0]).toBe('http://localhost:4111/api/agent-controller/code/sessions/user-1/om/model');
+    expect(JSON.parse(lastCall()[1].body as string)).toEqual({ role: 'observer', modelId: 'openai/observer' });
+
+    mockJson({ ok: true });
+    await session.setSubagentModel('openai/subagent', 'cortex');
+    expect(lastCall()[0]).toBe('http://localhost:4111/api/agent-controller/code/sessions/user-1/subagents/model');
+    expect(JSON.parse(lastCall()[1].body as string)).toEqual({ modelId: 'openai/subagent', agentType: 'cortex' });
   });
 
   it('lists modes and threads, and switches thread', async () => {

@@ -200,6 +200,8 @@ describe('TokenLimiterProcessor', () => {
       expect(custom.mock.calls[0]![0]).toMatchObject({
         type: 'data-token-limit-reached',
         data: { processorId: 'token-limiter', limit: 5 },
+        // transient keeps the notification off the persisted message history
+        transient: true,
       });
     });
 

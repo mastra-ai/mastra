@@ -6,11 +6,13 @@ import {
   DurableAgentDefaults,
   DurableStepIds,
   emitFinishEvent,
+  runDurableFinishSideEffects,
   modelConfigSchema,
   durableAgenticOutputSchema,
   baseIterationStateSchema,
   createBaseIterationStateUpdate,
   resolveDurableToolCallConcurrency,
+  executeDurableAgentScorers,
 } from '@mastra/core/agent/durable';
 import type {
   DurableAgenticExecutionOutput,
@@ -376,18 +378,41 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
       // Map final state to output format, close agent span, and emit finish event
       .map(
         async params => {
-          const { inputData, mastra } = params;
+          const { inputData, mastra, requestContext, tracingContext } = params;
           const state = inputData as IterationState;
+          const initData = params.getInitData() as DurableAgenticWorkflowInput;
 
           // Access pubsub via symbol to emit finish event
           const pubsub = (params as any)[PUBSUB_SYMBOL] as PubSub | undefined;
 
           // Extract final text from last step
           const lastStep = state.accumulatedSteps[state.accumulatedSteps.length - 1];
-          const finalText = lastStep?.text;
+          let finalText = lastStep?.text;
+
+          const finishResult = await params.engine.step.run(`agent.${state.runId}.finish-side-effects`, () =>
+            runDurableFinishSideEffects({
+              runId: state.runId,
+              initData,
+              messageListState: state.messageListState,
+              mastra,
+              requestContext,
+              tracingContext,
+              logger: mastra?.getLogger?.(),
+              outputResult: {
+                text: finalText ?? '',
+                usage: state.accumulatedUsage,
+                finishReason: state.lastStepResult?.reason ?? 'unknown',
+                steps: state.accumulatedSteps,
+              },
+            }),
+          );
+          if (lastStep && finishResult.outputText && finishResult.outputText !== (finalText ?? '')) {
+            lastStep.text = finishResult.outputText;
+            finalText = finishResult.outputText;
+          }
 
           const finalOutput = {
-            messageListState: state.messageListState,
+            messageListState: finishResult.messageListState,
             messageId: state.messageId,
             stepResult: state.lastStepResult || {
               reason: 'stop',
@@ -437,6 +462,21 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
           return finalOutput;
         },
         { id: 'map-final-output' },
+      )
+      // Execute scorers (fire-and-forget, doesn't affect main result)
+      .map(
+        async ({ inputData, getInitData, mastra, requestContext, tracingContext }) => {
+          executeDurableAgentScorers({
+            initData: getInitData() as DurableAgenticWorkflowInput,
+            finalOutput: inputData,
+            mastra,
+            requestContext,
+            tracingContext,
+          });
+
+          return inputData;
+        },
+        { id: 'execute-scorers' },
       )
       .commit()
   );

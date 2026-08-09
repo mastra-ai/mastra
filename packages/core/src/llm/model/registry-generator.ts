@@ -223,6 +223,11 @@ export function generateTypesContent(models: Record<string, string[]>): string {
     })
     .join('\n');
 
+  // The Provider / ModelForProvider / ModelRouterModelId types emitted below cover
+  // the built-in providers only. The public, augmentable versions live in
+  // `src/llm/index.ts`, which re-derives them from the `ProviderModelsMap`
+  // interface so custom gateways can extend them. Keep the two in sync, and
+  // import from `@mastra/core/llm` rather than from the generated file.
   return `/**
  * THIS FILE IS AUTO-GENERATED - DO NOT EDIT
  * Generated from model gateway providers

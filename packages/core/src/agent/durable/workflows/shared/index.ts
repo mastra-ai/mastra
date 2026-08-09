@@ -7,6 +7,9 @@
  * - Evented durable agent workflow
  */
 
+export { executeDurableAgentScorers } from './execute-scorers';
+export type { ExecuteDurableAgentScorersParams } from './execute-scorers';
+
 export { executeDurableToolCalls } from './execute-tool-calls';
 export type { ToolExecutionContext, ToolExecutionError } from './execute-tool-calls';
 

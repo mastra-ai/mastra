@@ -1,7 +1,7 @@
 import { execSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { readFile, rm, stat, writeFile } from 'node:fs/promises';
-import { dirname, join, posix } from 'node:path';
+import { basename, dirname, join, posix, resolve } from 'node:path';
 import { MastraBundler } from '@mastra/core/bundler';
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
 import type { Config } from '@mastra/core/mastra';
@@ -18,6 +18,7 @@ import type { BundlerPlatform } from '../build/utils';
 import { getPackageName, isBareModuleSpecifier, slash } from '../build/utils';
 import { DepsService } from '../services/deps';
 import { FileService } from '../services/fs';
+import { resolveExtraEntries } from './entries';
 import {
   collectTransitiveWorkspaceDependencies,
   getWorkspaceInformation,
@@ -282,6 +283,86 @@ export const applySourceDependencyRange = (
   return { ...dependencyInfo, version: declared };
 };
 
+/**
+ * Copy an app-declared local tarball into the isolated deploy output.
+ *
+ * A generated `.mastra/output/package.json` cannot reuse a `file:` specifier
+ * relative to the source project: its install runs from a different directory,
+ * and the source tree is not present in a deployment image. Tarballs are
+ * immutable package artifacts, so they can be copied beside the generated
+ * manifest and referenced with a new output-relative specifier.
+ */
+export const materializeLocalTarballDependency = async ({
+  dependencyName,
+  dependencyInfo,
+  constraints,
+  projectRoot,
+  outputDir,
+}: {
+  dependencyName: string;
+  dependencyInfo: ExternalDependencyInfo;
+  constraints: SourceDependencyConstraints;
+  projectRoot: string;
+  outputDir: string;
+}): Promise<ExternalDependencyInfo> => {
+  const packageName = getPackageName(dependencyName) ?? dependencyName;
+  const declared = constraints.dependencies[packageName]?.trim();
+  if (!declared?.startsWith('file:')) {
+    return dependencyInfo;
+  }
+
+  const declaredPath = declared.slice('file:'.length);
+  if (!TARBALL_SUFFIX_PATTERN.test(declaredPath)) {
+    return dependencyInfo;
+  }
+
+  const sourcePath = resolve(projectRoot, declaredPath);
+  const sourceStat = await stat(sourcePath);
+  if (!sourceStat.isFile()) {
+    throw new Error(`Local package artifact for "${packageName}" is not a file: ${sourcePath}`);
+  }
+
+  const artifactDir = join(outputDir, 'vendor-dependencies');
+  const safePackageName = packageName.replace(/^@/, '').replace(/[^A-Za-z0-9._-]+/g, '-');
+  const artifactName = `${safePackageName}-${basename(sourcePath)}`;
+  await ensureDir(artifactDir);
+  await copy(sourcePath, join(artifactDir, artifactName));
+
+  return {
+    ...dependencyInfo,
+    packageSpec: `file:./vendor-dependencies/${artifactName}`,
+  };
+};
+
+export const materializeDeclaredLocalTarballDependencies = async ({
+  dependencies,
+  constraints,
+  projectRoot,
+  outputDir,
+}: {
+  dependencies: Map<string, ExternalDependencyInfo>;
+  constraints: SourceDependencyConstraints;
+  projectRoot: string;
+  outputDir: string;
+}): Promise<void> => {
+  for (const [dependencyName, declared] of Object.entries(constraints.dependencies)) {
+    if (dependencies.has(dependencyName) || !declared.trim().startsWith('file:')) {
+      continue;
+    }
+
+    const portableDependency = await materializeLocalTarballDependency({
+      dependencyName,
+      dependencyInfo: {},
+      constraints,
+      projectRoot,
+      outputDir,
+    });
+    if (portableDependency.packageSpec) {
+      dependencies.set(dependencyName, portableDependency);
+    }
+  }
+};
+
 export abstract class Bundler extends MastraBundler {
   protected analyzeOutputDir = '.build';
   protected outputDir = 'output';
@@ -383,6 +464,8 @@ export abstract class Bundler extends MastraBundler {
     );
   }
 
+  protected pnpmNodeLinker?: 'hoisted';
+
   protected async installDependencies(
     outputDirectory: string,
     rootDir = process.cwd(),
@@ -391,7 +474,11 @@ export abstract class Bundler extends MastraBundler {
     const deps = new DepsService(rootDir);
     deps.__setLogger(this.logger);
 
-    await deps.install({ dir: join(outputDirectory, this.outputDir), pnpmOverrides });
+    await deps.install({
+      dir: join(outputDirectory, this.outputDir),
+      pnpmOverrides,
+      pnpmNodeLinker: this.pnpmNodeLinker,
+    });
   }
 
   /**
@@ -487,7 +574,7 @@ export abstract class Bundler extends MastraBundler {
     mastraEntryFile: string,
     analyzedBundleInfo: Awaited<ReturnType<typeof analyzeBundle>>,
     toolsPaths: (string | string[])[],
-    { enableSourcemap, enableEsmShim, externals }: BundlerOptions,
+    { enableSourcemap, enableMinify, enableEsmShim, externals, entries }: BundlerOptions,
   ) {
     const { workspaceRoot } = await getWorkspaceInformation({ mastraEntryFile });
     const closestPkgJson = pkg.up({ cwd: dirname(mastraEntryFile) });
@@ -500,13 +587,25 @@ export abstract class Bundler extends MastraBundler {
       {
         'process.env.NODE_ENV': JSON.stringify('production'),
       },
-      { sourcemap: enableSourcemap, workspaceRoot, projectRoot, enableEsmShim, externalsPreset: externals === true },
+      {
+        sourcemap: enableSourcemap,
+        minify: enableMinify,
+        workspaceRoot,
+        projectRoot,
+        enableEsmShim,
+        externalsPreset: externals === true,
+      },
     );
     const isVirtual = serverFile.includes('\n') || !existsSync(serverFile);
     const toolsInputOptions = await this.listToolsInputOptions(toolsPaths);
 
+    // User-declared extra entries (`bundler.entries`) are emitted beside the server
+    // bundle as their own `<name>.mjs`. They share this input map so they also share
+    // the `#mastra` chunk and the analyzed dependency graph.
+    const extraEntries = entries ?? {};
+
     if (isVirtual) {
-      inputOptions.input = { index: '#entry', ...toolsInputOptions };
+      inputOptions.input = { index: '#entry', ...extraEntries, ...toolsInputOptions };
 
       if (Array.isArray(inputOptions.plugins)) {
         inputOptions.plugins.unshift(virtual({ '#entry': serverFile }));
@@ -514,7 +613,7 @@ export abstract class Bundler extends MastraBundler {
         inputOptions.plugins = [virtual({ '#entry': serverFile })];
       }
     } else {
-      inputOptions.input = { index: serverFile, ...toolsInputOptions };
+      inputOptions.input = { index: serverFile, ...extraEntries, ...toolsInputOptions };
     }
 
     return inputOptions;
@@ -598,18 +697,29 @@ export abstract class Bundler extends MastraBundler {
     const analyzeDir = join(outputDirectory, this.analyzeOutputDir);
 
     const bundlerOptions = await this.getUserBundlerOptions(mastraEntryFile, outputDirectory);
+    // Throws a USER-category MastraError on bad config, deliberately outside the try
+    // blocks below so it surfaces as-is instead of as an analyze/bundle stage failure.
+    const extraEntries = resolveExtraEntries(bundlerOptions.entries, mastraEntryFile);
     const internalBundlerOptions: BundlerOptions = {
       enableSourcemap: !!bundlerOptions.sourcemap,
+      enableMinify: !!bundlerOptions.minify,
       externals: bundlerOptions.externals ?? [],
       enableEsmShim,
       dynamicPackages: bundlerOptions.dynamicPackages,
+      entries: extraEntries,
     };
+
+    if (Object.keys(extraEntries).length > 0) {
+      this.logger.info('Found additional entries', { entries: Object.keys(extraEntries) });
+    }
 
     let analyzedBundleInfo;
     try {
       const resolvedToolsPaths = await this.listToolsInputOptions(toolsPaths);
       analyzedBundleInfo = await analyzeBundle(
-        [serverFile, ...Object.values(resolvedToolsPaths)],
+        // Extra entries are analyzed too — otherwise their externals never reach the
+        // generated package.json and the emitted bundle cannot resolve them at runtime.
+        [serverFile, ...Object.values(extraEntries), ...Object.values(resolvedToolsPaths)],
         mastraEntryFile,
         {
           outputDir: analyzeDir,
@@ -649,8 +759,26 @@ export abstract class Bundler extends MastraBundler {
         continue;
       }
 
-      dependenciesToInstall.set(dep, applySourceDependencyRange(dep, depInfo, sourceDependencyConstraints));
+      const portableDependency = await materializeLocalTarballDependency({
+        dependencyName: dep,
+        dependencyInfo: depInfo,
+        constraints: sourceDependencyConstraints,
+        projectRoot,
+        outputDir: join(outputDirectory, this.outputDir),
+      });
+      dependenciesToInstall.set(dep, applySourceDependencyRange(dep, portableDependency, sourceDependencyConstraints));
     }
+
+    // Local package artifacts are deliberate deployment inputs even when an
+    // individual package is only reached transitively. Keeping every declared
+    // tarball at the output root also lets npm satisfy exact peer/transitive
+    // requirements from the same fork graph instead of consulting a registry.
+    await materializeDeclaredLocalTarballDependencies({
+      dependencies: dependenciesToInstall,
+      constraints: sourceDependencyConstraints,
+      projectRoot,
+      outputDir: join(outputDirectory, this.outputDir),
+    });
 
     const initialWorkspaceDependencies = new Set<string>();
     for (const dep of analyzedBundleInfo.dependencies.keys()) {

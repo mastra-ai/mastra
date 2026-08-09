@@ -126,6 +126,50 @@ describe('dispatchSlashCommand models routing', () => {
     });
   });
 
+  it('gates commands using capabilities advertised by the remote runtime', async () => {
+    const state = {
+      customSlashCommands: [],
+      options: {
+        backend: {
+          capabilities: {
+            localControlPlane: false,
+            chat: true,
+            threads: true,
+            modes: true,
+            models: false,
+            goals: true,
+            permissions: true,
+            approvals: true,
+          },
+        },
+      },
+      session: {
+        identity: { getResourceId: vi.fn(() => 'resource-1') },
+        thread: { getId: vi.fn(() => 'thread-1') },
+        mode: { get: vi.fn(() => 'build') },
+      },
+    } as any;
+
+    expect(await dispatchSlashCommand('/models', state, () => ({}) as any)).toBe(true);
+    expect(mocks.handleModelsPackCommand).not.toHaveBeenCalled();
+    expect(mocks.showInfo).toHaveBeenCalledWith(state, '/models is not supported by this remote Mastra runtime.');
+  });
+
+  it.each(['settings', 'setup', 'update', 'github'])('keeps /%s on the embedded control plane', async command => {
+    const state = {
+      customSlashCommands: [],
+      options: { backend: { capabilities: { localControlPlane: false } } },
+      session: {
+        identity: { getResourceId: vi.fn(() => 'resource-1') },
+        thread: { getId: vi.fn(() => 'thread-1') },
+        mode: { get: vi.fn(() => 'build') },
+      },
+    } as any;
+
+    expect(await dispatchSlashCommand(`/${command}`, state, () => ({}) as any)).toBe(true);
+    expect(mocks.showInfo).toHaveBeenCalledWith(state, `/${command} requires embedded mcode.`);
+  });
+
   it('routes /custom-providers to handleCustomProvidersCommand', async () => {
     const state = {
       customSlashCommands: [],

@@ -308,4 +308,30 @@ describe('GoalManager adapter', () => {
       }),
     );
   });
+
+  it('rolls back and surfaces canonical persistence failures in strict mode', async () => {
+    const agent = createAgent();
+    const state = createState(agent);
+    const manager = new GoalManager({ strictPersistence: true });
+    await manager.setGoal(state, 'finish the task', '__GATEWAY_OPENAI_MODEL__');
+    manager.pause('user requested');
+    agent.updateObjectiveOptions.mockRejectedValueOnce(new Error('server unavailable'));
+
+    await expect(manager.saveToThread(state)).rejects.toThrow('server unavailable');
+
+    expect(manager.getGoal()).toMatchObject({ status: 'active' });
+  });
+
+  it('restores a cleared canonical goal when strict persistence fails', async () => {
+    const agent = createAgent();
+    const state = createState(agent);
+    const manager = new GoalManager({ strictPersistence: true });
+    await manager.setGoal(state, 'finish the task', '__GATEWAY_OPENAI_MODEL__');
+    manager.clear();
+    agent.clearObjective.mockRejectedValueOnce(new Error('server unavailable'));
+
+    await expect(manager.saveToThread(state)).rejects.toThrow('server unavailable');
+
+    expect(manager.getGoal()).toMatchObject({ objective: 'finish the task', status: 'active' });
+  });
 });

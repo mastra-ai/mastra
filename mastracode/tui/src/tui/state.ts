@@ -40,6 +40,7 @@ import { showError, showInfo } from './display.js';
 
 import { GoalManager } from './goal-manager.js';
 import type { OnboardingInlineComponent } from './onboarding-inline.js';
+import type { MastraTUIBackend } from './remote-backend.js';
 import { RenderScheduler } from './render-scheduler.js';
 import { getEditorTheme, mastra, TERM_WIDTH_BUFFER } from './theme.js';
 import { VoiceController } from './voice/voice-controller.js';
@@ -96,10 +97,13 @@ export function getGithubPrSubscriptionsFromMetadata(
 
 export interface MastraTUIOptions {
   /** The controller instance */
-  controller: AgentController<any>;
+  controller?: AgentController<any>;
 
   /** The session created from the controller that all work runs through */
-  session: Session<any>;
+  session?: Session<any>;
+
+  /** Remote server backend. When supplied, the rich TUI creates controller/session compatibility facades. */
+  backend?: MastraTUIBackend;
 
   /** Hook manager for session lifecycle hooks */
   hookManager?: HookManager;
@@ -336,6 +340,9 @@ export interface TUIState {
  * and sets all mutable fields to their defaults.
  */
 export function createTUIState(options: MastraTUIOptions): TUIState {
+  if (!options.controller || !options.session) {
+    throw new Error('MastraTUI requires either controller/session or a resolved remote backend runtime');
+  }
   const terminal = options.terminal ?? new ProcessTerminal();
   // Override columns getter to prevent line wrapping in nested terminal emulators
   if (!options.terminal) {
@@ -423,7 +430,9 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     tokensPerSec: 0,
 
     // Goal loop
-    goalManager: new GoalManager(),
+    goalManager: new GoalManager({
+      strictPersistence: options.backend !== undefined && !options.backend.capabilities.localControlPlane,
+    }),
     planStartedGoalId: undefined,
 
     // Input

@@ -29,4 +29,20 @@ describe('agent-controller routes', () => {
       expect(path.startsWith('/harness')).toBe(false);
     }
   });
+
+  it('registers every remote rich-TUI session operation', () => {
+    const routes = new Set(AGENT_CONTROLLER_ROUTES.map(route => `${route.method} ${route.path}`));
+    expect([...routes]).toEqual(
+      expect.arrayContaining([
+        'POST /agent-controller/:controllerId/sessions/:resourceId/signals',
+        'POST /agent-controller/:controllerId/sessions/:resourceId/thread/detach',
+        'PUT /agent-controller/:controllerId/sessions/:resourceId/thread/setting',
+        'POST /agent-controller/:controllerId/sessions/:resourceId/plan-approval',
+        'POST /agent-controller/:controllerId/sessions/:resourceId/threads/clone-to-current-resource',
+        'GET /agent-controller/:controllerId/sessions/:resourceId/skills',
+        'PUT /agent-controller/:controllerId/sessions/:resourceId/om/model',
+        'PUT /agent-controller/:controllerId/sessions/:resourceId/subagents/model',
+      ]),
+    );
+  });
 });

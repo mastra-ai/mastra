@@ -1,6 +1,6 @@
 {
   "name": "mastracode",
-  "version": "0.32.7-alpha.0",
+  "version": "0.33.0-alpha.9",
   "description": "",
   "type": "module",
   "files": [
@@ -103,6 +103,7 @@
     "@earendil-works/pi-tui": "0.80.6",
     "@mastra/agent-browser": "workspace:*",
     "@mastra/code-sdk": "workspace:^",
+    "@mastra/client-js": "workspace:^",
     "@mastra/core": "workspace:*",
     "@mastra/duckdb": "workspace:*",
     "@mastra/fastembed": "workspace:*",

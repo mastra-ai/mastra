@@ -72,6 +72,25 @@ describe('convertFullStreamChunkToUIMessageStream', () => {
       url: 'https://example.com/generated.jpeg',
     });
   });
+
+  it('keeps the finish reason on the terminal UI chunk', () => {
+    const result = convertFullStreamChunkToUIMessageStream({
+      part: {
+        type: 'finish',
+        finishReason: 'content-filter',
+        totalUsage: { inputTokens: 1, outputTokens: 2, totalTokens: 3 },
+      } as any,
+      sendFinish: true,
+      messageMetadataValue: { custom: true },
+      onError: error => `Error: ${error}`,
+    });
+
+    expect(result).toEqual({
+      type: 'finish',
+      finishReason: 'content-filter',
+      messageMetadata: { custom: true },
+    });
+  });
 });
 
 describe('isUrlString', () => {

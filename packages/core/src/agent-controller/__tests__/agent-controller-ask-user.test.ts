@@ -207,13 +207,13 @@ describe('AgentController: ask_user native suspension', () => {
     const pending = session.suspensions;
     pending.register({ toolCallId: 'call-only', runId: 'run-only', toolName: 'ask_user' });
 
-    await session.respondToToolSuspension({ resumeData: 'ok' });
+    await expect(session.respondToToolSuspension({ resumeData: 'ok' })).resolves.toBe(true);
     expect(resumed).toEqual(['call-only']);
 
     // With more than one pending and no toolCallId, the call is a no-op.
     pending.register({ toolCallId: 'call-x', runId: 'run-x', toolName: 'ask_user' });
     pending.register({ toolCallId: 'call-y', runId: 'run-y', toolName: 'ask_user' });
-    await session.respondToToolSuspension({ resumeData: 'ambiguous' });
+    await expect(session.respondToToolSuspension({ resumeData: 'ambiguous' })).resolves.toBe(false);
     expect(resumed).toEqual(['call-only']);
     expect(pending.has({ toolCallId: 'call-x' })).toBe(true);
     expect(pending.has({ toolCallId: 'call-y' })).toBe(true);
@@ -273,11 +273,11 @@ describe('AgentController: ask_user native suspension', () => {
     expect(approval.getToolCallId()).toBe('call-current');
 
     // Wrong id: ignored, gate remains armed.
-    approval.respond({ decision: 'approve', toolCallId: 'call-stale' });
+    expect(approval.respond({ decision: 'approve', toolCallId: 'call-stale' })).toBe(false);
     expect(approval.isArmed()).toBe(true);
 
     // Correct id resolves it. Omitting toolCallId is also accepted (backwards compatible).
-    approval.respond({ decision: 'approve', toolCallId: 'call-current' });
+    expect(approval.respond({ decision: 'approve', toolCallId: 'call-current' })).toBe(true);
     const decision = await parked;
     expect(decision.decision).toBe('approve');
     expect(approval.isArmed()).toBe(false);

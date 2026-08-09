@@ -69,6 +69,47 @@ const TRACKED_COMMANDS = new Set([
   'new',
 ]);
 
+const EMBEDDED_ONLY_COMMANDS = new Set([
+  'api-keys',
+  'browser',
+  'custom-providers',
+  'diff',
+  'gateway',
+  'github',
+  'hooks',
+  'login',
+  'logout',
+  'mcp',
+  'memory-gateway',
+  'observability',
+  'plugins',
+  'prune',
+  'sandbox',
+  'settings',
+  'setup',
+  'update',
+]);
+
+const REMOTE_COMMAND_CAPABILITIES: Record<string, 'threads' | 'modes' | 'models' | 'goals' | 'permissions' | 'skills'> =
+  {
+    new: 'threads',
+    clone: 'threads',
+    threads: 'threads',
+    thread: 'threads',
+    'thread:tag-dir': 'threads',
+    resource: 'threads',
+    mode: 'modes',
+    models: 'models',
+    'models:pack': 'models',
+    subagents: 'models',
+    memory: 'models',
+    om: 'models',
+    goal: 'goals',
+    permissions: 'permissions',
+    yolo: 'permissions',
+    skills: 'skills',
+  };
+
 /**
  * Dispatch a slash command input to the appropriate handler.
  * Returns true if the command was handled (or was unknown), false if not a command.
@@ -139,6 +180,27 @@ export async function dispatchSlashCommand(
   const ctx = buildCtx();
   trackCommand(ctx, command);
 
+  if (
+    state.options?.backend &&
+    !state.options.backend.capabilities.localControlPlane &&
+    EMBEDDED_ONLY_COMMANDS.has(command)
+  ) {
+    showInfo(state, `/${command} requires embedded mcode.`);
+    return true;
+  }
+
+  if (state.options?.backend && !state.options.backend.capabilities.localControlPlane) {
+    const capability = command.startsWith('skill/')
+      ? 'skills'
+      : command.startsWith('goal/')
+        ? 'goals'
+        : REMOTE_COMMAND_CAPABILITIES[command];
+    if (capability && !state.options.backend.capabilities[capability]) {
+      showInfo(state, `/${command} is not supported by this remote Mastra runtime.`);
+      return true;
+    }
+  }
+
   if (command.startsWith('goal/')) {
     await handleGoalSourceCommand(state, command.slice('goal/'.length), args, ctx);
     return true;
@@ -194,7 +256,7 @@ export async function dispatchSlashCommand(
       await handlePermissionsCommand(ctx, args);
       return true;
     case 'yolo':
-      handleYoloCommand(ctx);
+      await handleYoloCommand(ctx);
       return true;
     case 'voice':
       await handleVoiceCommand(ctx, args);
