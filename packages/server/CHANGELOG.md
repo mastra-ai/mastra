@@ -1,5 +1,14 @@
 # @mastra/server
 
+## 1.58.0-alpha.10
+
+### Patch Changes
+
+- Report background failures on the agent controller message, steer, and follow-up routes instead of crashing the server. These routes acknowledge the request immediately and let the session finish the turn in the background, so a session that failed to start (for example when a signal cannot be submitted) previously produced an unhandled rejection that terminated the process. The failure is now logged and delivered to the session's subscribers as an `error` event, so clients streaming the session are told the turn did not start. ([#21093](https://github.com/mastra-ai/mastra/pull/21093))
+
+- Updated dependencies [[`66bbfb5`](https://github.com/mastra-ai/mastra/commit/66bbfb5f05b473d39f88c0e4a481ccac41634f3a)]:
+  - @mastra/core@1.58.0-alpha.10
+
 ## 1.58.0-alpha.9
 
 ### Patch Changes
