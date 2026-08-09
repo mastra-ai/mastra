@@ -1302,7 +1302,7 @@ export class InternalMastraMCPClient extends MastraBase {
    * No connection is opened here. The client connects lazily, the first time the returned tool
    * is actually executed, which is what makes a cached catalog useful for cold starts.
    */
-  toolFromDefinition(definition: SerializableMCPToolDefinition): Tool<any, any, any, any> {
+  toolFromDefinition({ definition }: { definition: SerializableMCPToolDefinition }): Tool<any, any, any, any> {
     const tool = {
       name: definition.name,
       description: definition.description,

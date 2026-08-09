@@ -392,7 +392,10 @@ The returned tool behaves exactly like one from `listTools()`, with the same str
 ```typescript
 const definitions = JSON.parse(await cache.get('mcp-tools'))
 
-const tool = await mcp.toolFromDefinition('weather', definitions.weather.getForecast)
+const tool = await mcp.toolFromDefinition({
+  serverName: 'weather',
+  definition: definitions.weather.getForecast,
+})
 ```
 
 ### `toolsFromDefinitions()`
@@ -404,7 +407,7 @@ Servers present in the catalog but no longer configured on the client are skippe
 ```typescript
 const definitions = JSON.parse(await cache.get('mcp-tools'))
 
-new Agent({ id: 'agent', tools: await mcp.toolsFromDefinitions(definitions) })
+new Agent({ id: 'agent', tools: await mcp.toolsFromDefinitions({ definitions }) })
 ```
 
 ### `getServerInstructions()`

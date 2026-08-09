@@ -1236,15 +1236,18 @@ To fix this you have three different options:
    * @param serverName Name of the server the definition came from, as configured on this client.
    * @param definition A definition previously obtained from {@link listToolDefinitions}.
    */
-  public async toolFromDefinition(
-    serverName: string,
-    definition: SerializableMCPToolDefinition,
-  ): Promise<Tool<any, any, any, any>> {
+  public async toolFromDefinition({
+    serverName,
+    definition,
+  }: {
+    serverName: string;
+    definition: SerializableMCPToolDefinition;
+  }): Promise<Tool<any, any, any, any>> {
     this.addToInstanceCache();
     // getOrCreateClient constructs the client without connecting; connection is deferred to
     // the tool's first execution.
     const client = await this.getOrCreateClient(serverName, this.getServerConfig(serverName));
-    return client.toolFromDefinition(definition);
+    return client.toolFromDefinition({ definition });
   }
 
   /**
@@ -1260,12 +1263,14 @@ To fix this you have three different options:
    * @example
    * ```typescript
    * const definitions = JSON.parse(await cache.get('mcp-tools'));
-   * const agent = new Agent({ tools: await mcp.toolsFromDefinitions(definitions), ... });
+   * const agent = new Agent({ tools: await mcp.toolsFromDefinitions({ definitions }), ... });
    * ```
    */
-  public async toolsFromDefinitions(
-    catalog: SerializableMCPToolCatalog,
-  ): Promise<Record<string, Tool<any, any, any, any>>> {
+  public async toolsFromDefinitions({
+    definitions: catalog,
+  }: {
+    definitions: SerializableMCPToolCatalog;
+  }): Promise<Record<string, Tool<any, any, any, any>>> {
     const configuredServers = new Set(Object.keys(this.serverConfigs));
     const tools: Record<string, Tool<any, any, any, any>> = {};
 
@@ -1278,7 +1283,7 @@ To fix this you have three different options:
       }
 
       for (const [toolName, definition] of Object.entries(definitions)) {
-        tools[`${serverName}_${toolName}`] = await this.toolFromDefinition(serverName, definition);
+        tools[`${serverName}_${toolName}`] = await this.toolFromDefinition({ serverName, definition });
       }
     }
 

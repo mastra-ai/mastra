@@ -130,7 +130,7 @@ describe('serializable MCP tool definitions (issue #20527)', () => {
       const cached = JSON.parse(JSON.stringify(definitions));
 
       const discovered = (await client.tools()).greet;
-      const hydrated = client.toolFromDefinition(cached.greet);
+      const hydrated = client.toolFromDefinition({ definition: cached.greet });
 
       expect(hydrated.id).toBe(discovered.id);
       expect(hydrated.description).toBe(discovered.description);
@@ -146,7 +146,7 @@ describe('serializable MCP tool definitions (issue #20527)', () => {
 
     it('preserves structured content behavior for tools with an output schema', async () => {
       const definitions = await client.toolDefinitions();
-      const hydrated = client.toolFromDefinition(JSON.parse(JSON.stringify(definitions.measure)));
+      const hydrated = client.toolFromDefinition({ definition: JSON.parse(JSON.stringify(definitions.measure)) });
 
       expect(hydrated.outputSchema).toBeDefined();
       // `toModelOutput` is only attached for output-schema tools; losing it would silently
@@ -202,7 +202,7 @@ describe('serializable MCP tool definitions (issue #20527)', () => {
 
       // A fresh client stands in for a cold worker process that has never talked to the server.
       const worker = createClient();
-      const tools = await worker.toolsFromDefinitions(cached);
+      const tools = await worker.toolsFromDefinitions({ definitions: cached });
 
       expect(Object.keys(tools).sort()).toEqual(['weather_greet', 'weather_measure']);
       // The whole tool map was rebuilt without opening a single connection.
@@ -219,7 +219,7 @@ describe('serializable MCP tool definitions (issue #20527)', () => {
       const cached = JSON.parse(JSON.stringify(definitions));
       cached.retired = { ghost: { ...cached.weather.greet, name: 'ghost' } };
 
-      const tools = await mcp.toolsFromDefinitions(cached);
+      const tools = await mcp.toolsFromDefinitions({ definitions: cached });
 
       expect(Object.keys(tools).sort()).toEqual(['weather_greet', 'weather_measure']);
     });
