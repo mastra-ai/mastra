@@ -125,10 +125,13 @@ describe('ModelRouterLanguageModel with V4 gateway and tool-result media (#20378
     const toolMsg = passedOptions.prompt.find((m: any) => m.role === 'tool');
     const value = toolMsg.content[0].output.value;
 
-    expect(value[1]).toEqual({
-      type: 'file',
-      data: { type: 'data', data: 'iVBORw0KGgo=' },
-      mediaType: 'image/png',
-    });
+    expect(value).toEqual([
+      { type: 'text', text: 'image result' },
+      {
+        type: 'file',
+        data: { type: 'data', data: 'iVBORw0KGgo=' },
+        mediaType: 'image/png',
+      },
+    ]);
   });
 });
