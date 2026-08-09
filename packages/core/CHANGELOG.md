@@ -1,5 +1,21 @@
 # @mastra/core
 
+## 1.58.0-alpha.7
+
+### Patch Changes
+
+- Fix durable agents dropping `requestContext` when a step is rehydrated on another process (for example an Inngest worker delegating to a subagent). Tool, memory, and workspace resolution now fall back to the run-level request context when the step input carries no request-context snapshot, so request-scoped configuration reaches subagents instead of resolving with an empty context. ([#21015](https://github.com/mastra-ai/mastra/pull/21015))
+
+- Fixed background tool calls so the model sees the completed result instead of the dispatch placeholder. ([#21001](https://github.com/mastra-ai/mastra/pull/21001))
+
+  An agent that dispatched a tool to the background kept reading "Background task started..." on every later turn, so it would re-run the tool or answer without the result. Unrelated provider metadata on the tool call is now preserved when the completed result arrives.
+
+- Stop the browser-safe `@mastra/core/a2a/client` entry from pulling in the Node `module` builtin, which broke `@mastra/client-js` in browser bundles (`Module not found: Can't resolve 'module'` in Next.js). ([#21053](https://github.com/mastra-ai/mastra/pull/21053))
+
+- Fixed `LocalSandbox` replacing your custom seatbelt profile. When you point `nativeSandbox.seatbeltProfilePath` at a profile file you wrote, that profile now stays active after a mount or an unmount. ([#20978](https://github.com/mastra-ai/mastra/pull/20978))
+
+  Mastra uses your profile exactly as written and does not add mount paths to it, so the profile must already allow every path you mount. If no file exists at that path, Mastra still generates a default profile, and that generated profile keeps allowing the paths you mount. Generated profiles now carry a marker comment, so a later run regenerates them and keeps allowing mount paths instead of reading them back as your own profile. To edit a generated profile and keep your edits, delete that marker comment: the file then counts as yours.
+
 ## 1.58.0-alpha.6
 
 ### Patch Changes
