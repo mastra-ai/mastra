@@ -4033,15 +4033,17 @@ export class Run<
   /**
    * @internal
    */
-  watch(cb: (event: WorkflowStreamEvent) => void): () => void {
+  watch(cb: (event: WorkflowStreamEvent) => void | Promise<void>): () => void {
     // Both callbacks acknowledge every delivery, including events for other
     // runs. `nested-watch` is a shared topic, so a watcher sees every nested
     // workflow's events; leaving the ones it filters out unacknowledged grows
     // the subscription's pending list on a durable transport for as long as
-    // the watcher is attached.
+    // the watcher is attached. The ack is the last thing each callback does so
+    // a failure in the consumer or in the nested republish leaves the delivery
+    // unacknowledged and redeliverable.
     const wrappedCb = async (event: Event, ack?: () => Promise<void>) => {
       if (event.runId === this.runId) {
-        cb(event.data as WorkflowStreamEvent);
+        await cb(event.data as WorkflowStreamEvent);
       }
       await ack?.();
     };
@@ -4057,14 +4059,14 @@ export class Run<
         // These are events with type starting with 'data-' and have a 'data' property
         if (nestedEvent.type.startsWith('data-') && nestedEvent.data !== undefined) {
           // Bubble up custom data events directly to preserve their structure
-          void this.pubsub.publish(`workflow.events.v2.${this.runId}`, {
+          await this.pubsub.publish(`workflow.events.v2.${this.runId}`, {
             type: 'watch',
             runId: this.runId,
             data: nestedEvent,
           });
         } else {
           // Regular workflow events get prefixed with nested workflow ID
-          void this.pubsub.publish(`workflow.events.v2.${this.runId}`, {
+          await this.pubsub.publish(`workflow.events.v2.${this.runId}`, {
             type: 'watch',
             runId: this.runId,
             data: {
@@ -4091,7 +4093,7 @@ export class Run<
   /**
    * @internal
    */
-  async watchAsync(cb: (event: WorkflowStreamEvent) => void): Promise<() => void> {
+  async watchAsync(cb: (event: WorkflowStreamEvent) => void | Promise<void>): Promise<() => void> {
     return this.watch(cb);
   }
 

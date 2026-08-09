@@ -445,10 +445,9 @@ export interface Config<
    * Maps event topics to handler functions for event-driven architectures.
    */
   events?: {
-    [topic: string]: (
-      event: Event,
-      cb?: () => Promise<void>,
-    ) => Promise<void> | ((event: Event, cb?: () => Promise<void>) => Promise<void>)[];
+    // Listeners receive only the event. Acknowledgement is handled for them:
+    // the delivery is acked once the listener resolves and nacked if it throws.
+    [topic: string]: ((event: Event) => Promise<void> | void) | ((event: Event) => Promise<void> | void)[];
   };
 
   /**
@@ -798,7 +797,7 @@ export class Mastra<
   }> = [];
 
   #events: {
-    [topic: string]: ((event: Event, cb?: () => Promise<void>) => Promise<void>)[];
+    [topic: string]: ((event: Event) => Promise<void> | void)[];
   } = {};
   #internalMastraWorkflows: Record<string, AnyWorkflow> = {};
   // Tracks registration timestamps for run-scoped internal workflows so a lazy
@@ -5822,7 +5821,7 @@ export class Mastra<
         await listener(event);
       } catch (err) {
         this.#logger?.error?.('Error in topic listener; nacking event', {
-          topic: event.type,
+          eventType: event.type,
           err: err instanceof Error ? err.message : err,
         });
         await nack?.();

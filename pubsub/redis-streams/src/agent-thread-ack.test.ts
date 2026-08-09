@@ -13,6 +13,8 @@ import { createClient } from 'redis';
 import type { RedisClientType } from 'redis';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 
+// AgentThreadStreamRuntime is internal to @mastra/core with no public export,
+// and these tests have to drive its real subscribers to observe the PEL.
 import { AgentThreadStreamRuntime } from '../../../packages/core/src/agent/thread-stream-runtime';
 import { flushRedis, REDIS_URL, waitFor } from '../test-fixtures/harness';
 import { RedisStreamsPubSub } from './index';
@@ -36,6 +38,14 @@ async function pendingCount(streamKey: string): Promise<number> {
   if (!exists) return 0;
   const groups = (await inspector.xInfoGroups(streamKey)) as Array<{ name: string; pending: number }>;
   return groups.reduce((total, group) => total + Number(group.pending ?? 0), 0);
+}
+
+/** Names of every consumer group currently attached to the stream. */
+async function groupNames(streamKey: string): Promise<string[]> {
+  const exists = await inspector.exists(streamKey);
+  if (!exists) return [];
+  const groups = (await inspector.xInfoGroups(streamKey)) as Array<{ name: string }>;
+  return groups.map(group => group.name);
 }
 
 async function entryCount(streamKey: string): Promise<number> {
@@ -162,6 +172,7 @@ describe('agent thread-stream Redis acknowledgements', () => {
       data: { type: 'run-registered', runId, streamId, streamSeq: 1 },
     } as any);
     await waitFor(async () => (await pendingCount(streamKey)) === 0);
+    const seedingGroups = await groupNames(streamKey);
     seeding.unsubscribe();
 
     const waiting = waiterRuntime.waitForCrossAgentThreadRun(
@@ -169,6 +180,16 @@ describe('agent thread-stream Redis acknowledgements', () => {
       { memory: { thread: threadId, resource: resourceId } } as any,
       waiterPubSub,
     );
+
+    // Both sides are asynchronous: the seeder unsubscribes fire-and-forget and
+    // the waiter subscribes inside the promise above. Publishing before the
+    // waiter's group exists would read from the tail and hang the waiter;
+    // publishing while the seeder's group still exists would leave entries
+    // pending behind a group nobody drains.
+    await waitFor(async () => {
+      const groups = await groupNames(streamKey);
+      return groups.length === 1 && !seedingGroups.includes(groups[0]!);
+    });
 
     await producer.publish(topic, {
       type: 'agent.thread-stream',
@@ -192,6 +213,7 @@ describe('agent thread-stream Redis acknowledgements', () => {
 
     // The waiter unsubscribes as it resolves; nothing it consumed may be left
     // pending behind the removed consumer group.
+    await waitFor(async () => (await pendingCount(streamKey)) === 0);
     expect(await pendingCount(streamKey)).toBe(0);
   });
 });

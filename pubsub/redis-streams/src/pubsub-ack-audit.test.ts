@@ -7,14 +7,13 @@
  * long as it stays attached. These tests drive the production subscription
  * helpers directly and assert the PEL drains.
  */
+import { AGENT_CONTROL_TOPIC, AgentControlEventTypes, subscribeToAbortRequests } from '@mastra/core/agent/durable';
+import { Mastra } from '@mastra/core/mastra';
+import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { createClient } from 'redis';
 import type { RedisClientType } from 'redis';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 
-import { subscribeToAbortRequests } from '../../../packages/core/src/agent/durable/abort-transport';
-import { AGENT_CONTROL_TOPIC, AgentControlEventTypes } from '../../../packages/core/src/agent/durable/constants';
-import { Mastra } from '../../../packages/core/src/mastra';
-import { createStep, createWorkflow } from '../../../packages/core/src/workflows';
 import { flushRedis, REDIS_URL, waitFor } from '../test-fixtures/harness';
 import { RedisStreamsPubSub } from './index';
 
