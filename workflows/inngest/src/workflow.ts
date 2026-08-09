@@ -356,8 +356,8 @@ export class InngestWorkflow<
         const shouldCompactNestedWorkflowOutput = nestedWorkflowOutputMode === NESTED_WORKFLOW_OUTPUT_MODE.COMPACT;
 
         if (!runId) {
-          // Reached only when something sends the trigger event directly instead
-          // of going through `createRun()`, which always supplies a run id.
+          // Reached when a trigger event arrives without a run id — an event sent
+          // directly rather than through `createRun()`, which always supplies one.
           // The id generated here never reaches the trigger event that `cancelOn`
           // matches against, so `cancel.workflow.${this.id}` cannot target this
           // run. Warn rather than reject: an unnamed run is still a valid way to

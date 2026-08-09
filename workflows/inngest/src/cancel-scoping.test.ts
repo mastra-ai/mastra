@@ -12,6 +12,7 @@ import { MockStore } from '@mastra/core/storage';
 import { Inngest } from 'inngest';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
+import { InngestExecutionEngine } from './execution-engine';
 import { init } from './index';
 
 function createFunctionConfigs(workflowId: string, opts: Record<string, unknown> = {}) {
@@ -137,4 +138,68 @@ describe('inngest cancel event scoping', () => {
 
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('cannot be cancelled by id'));
   });
+
+  // A nested workflow is invoked by the parent's execution engine, not by a user
+  // sending an event. If that invoke omits `data.runId`, the child lands in the
+  // unnamed-run branch: it warns advice nobody can act on, and `match` can never
+  // pair a cancel event with it, so nested runs stop being cancellable at all.
+  it('names the run when a parent invokes a nested workflow', async () => {
+    const { workflow } = createFunctionConfigs('nested-child-workflow');
+    const warn = vi.fn();
+    (workflow as any).__setLogger({ warn, debug: vi.fn(), info: vi.fn(), error: vi.fn() });
+
+    const registered = workflow.getFunction() as any;
+    const fn = registered.rest[0];
+    const step: any = {
+      run: async (id: string, cb: () => Promise<any>) => {
+        if (id.endsWith('.runIdGen')) return cb();
+        throw new Error(`stop-after-runIdGen:${id}`);
+      },
+    };
+
+    // Captured from the real engine rather than hand-copied, so this test still
+    // reflects the payload if the invoke block changes.
+    const nestedInvokeData = await captureNestedInvokeData(workflow);
+
+    await expect(fn({ event: { data: nestedInvokeData }, step, attempt: 0 })).rejects.toThrow(/stop-after/);
+
+    expect(nestedInvokeData.runId).toBeTruthy();
+    expect(warn).not.toHaveBeenCalled();
+  });
 });
+
+/**
+ * Runs the parent-side nested-workflow invoke and returns the `data` block it
+ * hands to Inngest, driving the plain (non-resume, non-time-travel) branch.
+ */
+async function captureNestedInvokeData(childWorkflow: any): Promise<Record<string, any>> {
+  let captured: Record<string, any> | undefined;
+  const inngestStep: any = {
+    invoke: async (_id: string, opts: any) => {
+      captured = opts.data;
+      return { result: { status: 'success', result: {}, state: {} }, runId: 'child-run' };
+    },
+    run: async (_id: string, cb: () => Promise<any>) => cb(),
+  };
+
+  const mastra = new Mastra({
+    logger: false,
+    storage: new MockStore(),
+    workflows: { [childWorkflow.id]: childWorkflow },
+  });
+  childWorkflow.__registerMastra(mastra);
+
+  const engine = new InngestExecutionEngine(mastra, inngestStep, 0, {} as any);
+  await engine.executeWorkflowStep({
+    step: childWorkflow,
+    stepResults: {},
+    executionContext: { workflowId: 'parent-workflow', runId: 'parent-run', state: {} } as any,
+    prevOutput: {},
+    inputData: { value: 'x' },
+    pubsub: { publish: async () => {}, subscribe: async () => {}, flush: async () => {} } as any,
+    startedAt: Date.now(),
+  });
+
+  if (!captured) throw new Error('nested invoke was never issued');
+  return captured;
+}
