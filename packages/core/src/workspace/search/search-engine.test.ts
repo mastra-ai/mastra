@@ -963,6 +963,41 @@ Third line has learning too`;
       expect(ids.sort()).toEqual(['a', 'b']);
     });
 
+    it('creates the index once before running groups in parallel', async () => {
+      const store = makeStore();
+      let indexUnderConstruction = false;
+      let upsertedDuringCreate = 0;
+      store.createIndex = vi.fn(async () => {
+        indexUnderConstruction = true;
+        await new Promise(resolve => setTimeout(resolve, 10));
+        indexUnderConstruction = false;
+      });
+      store.upsert = vi.fn(async () => {
+        if (indexUnderConstruction) upsertedDuringCreate++;
+      });
+      const { embedder } = makeBatchEmbedder(10);
+      const engine = new SearchEngine({
+        vector: { vectorStore: store, embedder, indexName: 'idx' },
+      });
+
+      await engine.indexMany(Array.from({ length: 100 }, (_, i) => ({ id: `d-${i}`, content: `c ${i}` })));
+
+      expect(store.createIndex).toHaveBeenCalledTimes(1);
+      expect(upsertedDuringCreate).toBe(0);
+    });
+
+    it('handles an empty document list', async () => {
+      const store = makeStore();
+      const { embedder, fn } = makeBatchEmbedder(256);
+      const engine = new SearchEngine({
+        vector: { vectorStore: store, embedder, indexName: 'idx' },
+      });
+
+      await expect(engine.indexMany([])).resolves.toBeUndefined();
+      expect(fn).not.toHaveBeenCalled();
+      expect(store.upsert).not.toHaveBeenCalled();
+    });
+
     it('rejects with a flat AggregateError of the individual failures when stopOnError is false', async () => {
       const store = makeStore();
       const fn = vi.fn(async (texts: string[]) => {

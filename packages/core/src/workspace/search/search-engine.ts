@@ -429,41 +429,43 @@ export class SearchEngine {
     const unique = this.#dedupeDocsLastWins(docs);
 
     const groups = chunkItems(unique, resolveEmbedGroupSize(embedder));
+    if (groups.length === 0) return;
 
-    if (stopOnError === false) {
-      // Contract: every document is processed and the call rejects with a flat `AggregateError`
-      // of the individual failures. Collect them here rather than letting a failed group reject,
-      // so the caller never sees an `AggregateError` nested inside another one.
-      const failures: unknown[] = [];
-      await pMap(
-        groups,
-        async group => {
-          const merged = this.#indexNonVectorPartsOf(group);
-          try {
-            await this.#embedAndUpsertGroup(merged);
-          } catch {
-            // One unusable document must not drop the rest of its group.
-            for (const doc of merged) {
-              try {
-                await this.#indexVector(doc);
-              } catch (error) {
-                failures.push(error);
-              }
-            }
-          }
-        },
-        { stopOnError: false, concurrency },
-      );
-      if (failures.length > 0) {
-        throw new AggregateError(failures);
+    // Contract for `stopOnError: false`: every document is processed and the call rejects with a
+    // flat `AggregateError` of the individual failures. Collect them here rather than letting a
+    // failed group reject, so the caller never sees an `AggregateError` nested inside another one.
+    const failures: unknown[] = [];
+    const runGroup = async (group: IndexDocument[]) => {
+      const merged = this.#indexNonVectorPartsOf(group);
+      if (stopOnError !== false) {
+        await this.#embedAndUpsertGroup(merged);
+        return;
       }
-      return;
+      try {
+        await this.#embedAndUpsertGroup(merged);
+      } catch {
+        // One unusable document must not drop the rest of its group.
+        for (const doc of merged) {
+          try {
+            await this.#indexVector(doc);
+          } catch (error) {
+            failures.push(error);
+          }
+        }
+      }
+    };
+
+    // The first group runs alone so `createIndex` completes before any parallel writes, matching
+    // what the lazy flush does. Otherwise every concurrent group sees `#vectorIndexReady === false`
+    // and upserts against an index that may still be under construction.
+    await runGroup(groups[0]!);
+    if (groups.length > 1) {
+      await pMap(groups.slice(1), runGroup, { stopOnError, concurrency });
     }
 
-    await pMap(groups, group => this.#embedAndUpsertGroup(this.#indexNonVectorPartsOf(group)), {
-      stopOnError,
-      concurrency,
-    });
+    if (failures.length > 0) {
+      throw new AggregateError(failures);
+    }
   }
 
   /**
