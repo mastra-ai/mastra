@@ -10,6 +10,7 @@ import { RequestContext } from '../../request-context';
 import { InMemoryStore } from '../../storage/mock';
 import { createTool } from '../../tools';
 import type { AgentControllerChannels } from '../agent-controller-channels';
+import { ChannelSessionRejectedError } from '../errors';
 
 // Minimal mock adapter satisfying the Chat SDK Adapter interface
 function createMockAdapter(name: string) {
@@ -462,13 +463,64 @@ describe('AgentControllerChannels', () => {
       });
       const chatThread = createChatThread(adapter, 'chan-1:t-denied');
 
-      await expect(
-        (channels as any).processChatMessage(chatThread, createMessage('m-1', 'hello'), mastra, new RequestContext()),
-      ).rejects.toThrow('not authorized for this install');
+      // `handleChatMessage`, not `processChatMessage`: the error boundary that
+      // decides whether anything reaches the channel lives in the caller, so
+      // testing one frame lower cannot show what the sender sees.
+      await (channels as any).handleChatMessage(
+        chatThread,
+        createMessage('m-1', 'hello'),
+        mastra,
+        new RequestContext(),
+      );
 
       expect(await controller.getSessionByResource('channel:chan-1:t-denied')).toBeUndefined();
       expect(doStream).not.toHaveBeenCalled();
+      // Silence includes the error card: posting it would echo the host's
+      // authorization message into a shared channel.
       expect(chatThread.post).not.toHaveBeenCalled();
+    }, 30_000);
+
+    it('surfaces the refusal to the host as a tagged error rather than swallowing it', async () => {
+      const { adapter, mastra, channels } = await createSetup({
+        resolveSession: async () => {
+          throw new Error('not authorized for this install');
+        },
+      });
+      const chatThread = createChatThread(adapter, 'chan-1:t-denied-cause');
+
+      const rejection = await (channels as any)
+        .processChatMessage(chatThread, createMessage('m-1', 'hello'), mastra, new RequestContext())
+        .catch((err: unknown) => err);
+
+      expect(rejection).toBeInstanceOf(ChannelSessionRejectedError);
+      expect((rejection as Error).message).toBe('not authorized for this install');
+      expect((rejection as Error).cause).toBeInstanceOf(Error);
+    }, 30_000);
+
+    it('still reports genuine failures to the channel, so a broken host is not silently silent', async () => {
+      const { adapter, mastra, channels } = await createSetup({
+        resolveSession: ({ controller, thread, requestContext }: any) =>
+          controller.createSession({
+            resourceId: thread.resourceId,
+            id: thread.resourceId,
+            ownerId: controller.id,
+            requestContext,
+          }),
+      });
+      const chatThread = createChatThread(adapter, 'chan-1:t-broken');
+      // A failure from anywhere other than the resolver keeps the old
+      // behavior: the sender is told, instead of waiting on a bot that quietly
+      // gave up.
+      vi.spyOn(channels as any, 'dispatchInboundMessage').mockRejectedValue(new Error('engine exploded'));
+
+      await (channels as any).handleChatMessage(
+        chatThread,
+        createMessage('m-1', 'hello'),
+        mastra,
+        new RequestContext(),
+      );
+
+      expect(chatThread.post).toHaveBeenCalledWith('❌ Error: engine exploded');
     }, 30_000);
 
     it('runs on approval continuations with the action requestContext, so routing can be revalidated', async () => {
@@ -547,7 +599,10 @@ describe('AgentControllerChannels', () => {
       });
 
       expect(stale.map(ctx => ctx.decision)).toEqual(['approve', 'decline']);
-      expect(stale[0]).toMatchObject({ toolCallId: 'tool-call-gone', memory });
+      // The action's own runId, which is what a durable host settles against.
+      // The session's current run is reported separately and is not it.
+      expect(stale[0]).toMatchObject({ toolCallId: 'tool-call-gone', runId: 'run-gone', memory });
+      expect(stale[0].currentRunId).not.toBe('run-gone');
       expect(stale[0].session).toBe(session);
       // Core still never resumes the engine for a stale action.
       expect(respondSpy).not.toHaveBeenCalled();

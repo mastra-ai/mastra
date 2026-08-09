@@ -10,6 +10,7 @@ import type { StorageThreadType } from '../memory/types';
 import type { RequestContext } from '../request-context';
 
 import { AgentChannels } from './agent-channels';
+import { ChannelSessionRejectedError } from './errors';
 import type { ChannelConfig } from './types';
 
 /** Context passed to {@link AgentControllerChannelsConfig.onSessionStart}. */
@@ -83,8 +84,18 @@ export interface ChannelStaleToolApprovalContext {
   decision: 'approve' | 'decline';
   /** The tool call the action referred to. */
   toolCallId: string;
-  /** The run currently on the session, when there is one. */
-  runId: string | null;
+  /**
+   * The run the approval card was rendered for — the run the user actually
+   * answered. This is the id to settle against: after a restart it is the only
+   * one that still identifies that attempt.
+   */
+  runId: string;
+  /**
+   * The run currently on the session, when there is one. Usually `null` for a
+   * restart-recovered action, and a *different* run when the session has since
+   * moved on — never assume it matches {@link runId}.
+   */
+  currentRunId: string | null;
   /** Request context of the approval action. */
   requestContext: RequestContext;
   /** The mapped thread/resource the approval card belongs to. */
@@ -326,11 +337,13 @@ export class AgentControllerChannels extends AgentChannels {
    */
   private async respondToSessionApproval({
     decision,
+    runId,
     toolCallId,
     requestContext,
     memory,
   }: {
     decision: 'approve' | 'decline';
+    runId: string;
     toolCallId: string;
     requestContext: RequestContext;
     memory: { thread: string; resource: string };
@@ -350,7 +363,11 @@ export class AgentControllerChannels extends AgentChannels {
       await this.onStaleToolApproval?.({
         decision,
         toolCallId,
-        runId: session.getCurrentRunId(),
+        // The action's own runId, not the session's: the point of the hook is
+        // settling an attempt from before a restart, and by then the session's
+        // current run is null or something else entirely.
+        runId,
+        currentRunId: session.getCurrentRunId(),
         requestContext,
         memory,
         session,
@@ -382,9 +399,11 @@ export class AgentControllerChannels extends AgentChannels {
     // The resolver replaces this call entirely and its errors propagate, so a
     // host can refuse the request before a session, a model call, or any output
     // exists. It gets the same controller so this channels instance stays the
-    // owner of outbound delivery for whatever session it returns.
+    // owner of outbound delivery for whatever session it returns. A throw is
+    // tagged as a refusal so the channel error boundary keeps it out of the
+    // chat thread instead of posting the host's authorization message there.
     const session = this.resolveSession
-      ? await this.resolveSession({ controller, thread, requestContext })
+      ? await this.resolveChannelSession({ controller, thread, requestContext })
       : await controller.createSession({
           resourceId: channelResourceId,
           id: channelResourceId,
@@ -408,6 +427,19 @@ export class AgentControllerChannels extends AgentChannels {
     }
     await this.runSessionStartHook(session, thread, requestContext);
     return session;
+  }
+
+  /**
+   * Call the host's resolver and tag anything it throws as a refusal. Covers
+   * synchronous throws too — the hook may return a `Session` directly, so a
+   * plain `.catch()` on the return value would miss them.
+   */
+  private async resolveChannelSession(ctx: ChannelSessionResolveContext): Promise<Session<any>> {
+    try {
+      return await this.resolveSession!(ctx);
+    } catch (cause) {
+      throw new ChannelSessionRejectedError(cause);
+    }
   }
 
   /**

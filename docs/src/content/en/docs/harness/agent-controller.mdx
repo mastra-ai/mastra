@@ -356,7 +356,7 @@ Channel sessions are created by the controller rather than by your code, so `onS
 
 ### Authorize and route channel sessions
 
-`onSessionStart` runs after the session exists and swallows errors, so it can't refuse a request. Use `resolveSession` when your host decides whether a session may exist. It replaces the built-in session creation and runs before any session exists. Errors propagate, so a rejected request stops there: the message is dropped and the chat thread stays silent.
+`onSessionStart` runs after the session exists and swallows errors, so it can't refuse a request. Use `resolveSession` when your host decides whether a session may exist. It replaces the built-in session creation and runs before any session exists. Throwing refuses the request: no session is created, no model runs, and nothing is posted back — the refusal is logged and the chat thread stays silent, so your authorization message never reaches the channel.
 
 ```typescript
 channels: {
@@ -366,7 +366,7 @@ channels: {
 
     return controller.createSession({
       resourceId: thread.resourceId,
-      id: `${install.id}:${thread.resourceId}`,
+      scope: install.id,
       ownerId: controller.id,
       requestContext,
     })
@@ -374,7 +374,9 @@ channels: {
 }
 ```
 
-Create the session under `thread.resourceId`. A session can only bind threads it owns, so use `resolveResourceId` if you want a different owner for the mapped thread.
+Create the session under `thread.resourceId`. A session can only bind threads it owns, so use `resolveResourceId` if you want a different owner for the mapped thread. Sessions are get-or-create per `resourceId` and `scope`, so pass `scope` when one thread needs separate sessions per install or principal.
+
+Failures that aren't refusals — a storage outage, a bug in your resolver's dependencies — still post an error to the thread, so a broken bot doesn't look like a silent one. If you need to tell them apart in your own code, a refusal is a `ChannelSessionRejectedError` with the original error as its `cause`.
 
 `resolveSession` also runs when a user answers an approval card, with that action's request context, so a shared install revalidates the person approving rather than trusting the person who sent the original message.
 
@@ -390,6 +392,8 @@ channels: {
   },
 }
 ```
+
+`runId` is the run the approval card was rendered for — the attempt the user answered — which is what you settle against after a restart. The session's own run is passed separately as `currentRunId`, and is usually `null` or a different run by then.
 
 Controller channel sessions and auto-approval state are held in memory, so use a long-lived server. Pending approvals and live Session state don't survive process restarts. Adapters that can't render approval controls automatically run tools without an approval prompt so the run doesn't remain suspended.
 
