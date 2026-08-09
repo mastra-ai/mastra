@@ -1028,6 +1028,8 @@ export type ProviderModelsMap = {
     'inclusionai/ling-2.6-flash',
     'inclusionai/ling-3.0-flash',
     'inclusionai/ling-3.0-flash:thinking',
+    'inclusionai/ling-3.0-tiny',
+    'inclusionai/ling-3.0-tiny:thinking',
     'inclusionai/ring-2.6-1t',
     'inflatebot/MN-12B-Mag-Mell-R1',
     'inflection/inflection-3-pi',
@@ -3197,6 +3199,7 @@ export type ProviderModelsMap = {
     'z-ai/glm-5-turbo',
     'z-ai/glm-5.1',
     'z-ai/glm-5.2',
+    'z-ai/glm-5v-turbo',
   ];
   readonly orcarouter: readonly [
     'anthropic/claude-haiku-4.5',
@@ -3983,6 +3986,7 @@ export type ProviderModelsMap = {
     'anthropic/claude-opus-4.8',
     'anthropic/claude-opus-4.8-fast',
     'anthropic/claude-opus-5',
+    'anthropic/claude-opus-5-fast',
     'anthropic/claude-sonnet-4',
     'anthropic/claude-sonnet-4.5',
     'anthropic/claude-sonnet-4.6',

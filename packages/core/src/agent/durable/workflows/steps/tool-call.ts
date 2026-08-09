@@ -19,6 +19,7 @@ import { createStep } from '../../../../workflows/workflow';
 import { stopGoalActivity } from '../../../goal';
 import type { MessageList } from '../../../message-list';
 import type { SaveQueueManager } from '../../../save-queue';
+import { resolveDeclineReason } from '../../../tool-approval';
 import { DurableStepIds } from '../../constants';
 import { globalRunRegistry } from '../../run-registry';
 import { emitSuspendedEvent, emitChunkEvent } from '../../stream-adapter';
@@ -631,6 +632,7 @@ export function createDurableToolCallStep() {
           type: 'object',
           properties: {
             approved: { type: 'boolean' },
+            reason: { type: 'string' },
           },
           required: ['approved'],
         });
@@ -705,7 +707,7 @@ export function createDurableToolCallStep() {
           const approval = {
             id: toolCallId,
             approved: false as const,
-            reason: 'Tool call was not approved by the user',
+            reason: resolveDeclineReason(resumeData),
           };
           if (pubsub) {
             try {
@@ -896,6 +898,7 @@ export function createDurableToolCallStep() {
               type: 'object',
               properties: {
                 approved: { type: 'boolean' },
+                reason: { type: 'string' },
               },
               required: ['approved'],
             });

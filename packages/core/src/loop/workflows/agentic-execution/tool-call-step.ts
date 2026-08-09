@@ -3,6 +3,7 @@ import type { ToolSet } from '@internal/ai-sdk-v5';
 import { z } from 'zod/v4';
 import { normalizeModelOutput } from '../../../agent/durable/workflows/steps/normalize-model-output';
 import { stopGoalActivity } from '../../../agent/goal';
+import { resolveDeclineReason } from '../../../agent/tool-approval';
 import { createBackgroundTask } from '../../../background-tasks/create';
 import { resolveBackgroundConfig } from '../../../background-tasks/resolve-config';
 import type { BackgroundTaskProgressChunk, ToolBackgroundConfig } from '../../../background-tasks/types';
@@ -567,6 +568,10 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               .describe(
                 'Controls if the tool call is approved or not, should be true when approved and false when declined',
               ),
+            reason: z
+              .string()
+              .optional()
+              .describe('Optional explanation for the decision, surfaced to the model when the tool call is declined'),
           }),
         );
 
@@ -631,12 +636,13 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             if (!resumeData.approved) {
               // Return the approval decision (not a `result` string) so it persists as
               // `state: 'output-denied'` with `approval`. The denial reason carries the
-              // existing string so downstream consumers/UI keep the same message.
+              // caller-supplied reason when one was provided, otherwise the default string
+              // so downstream consumers/UI keep the same message.
               return {
                 approval: {
                   id: inputData.toolCallId,
                   approved: false,
-                  reason: 'Tool call was not approved by the user',
+                  reason: resolveDeclineReason(resumeData),
                 },
                 ...inputData,
               };
@@ -717,19 +723,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                     toolCallId: inputData.toolCallId,
                     toolName: approvalToolName,
                     args: approvalArgs,
-                    resumeSchema: JSON.stringify(
-                      standardSchemaToJSONSchema(
-                        toStandardSchema(
-                          z.object({
-                            approved: z
-                              .boolean()
-                              .describe(
-                                'Controls if the tool call is approved or not, should be true when approved and false when declined',
-                              ),
-                          }),
-                        ),
-                      ),
-                    ),
+                    resumeSchema: JSON.stringify(standardSchemaToJSONSchema(approvalSchema)),
                   },
                 },
                 'approval',
@@ -830,6 +824,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                   toolCallId: inputData.toolCallId,
                   toolName: inputData.toolName,
                   resumeLabel: options?.resumeLabel,
+                  suspendedToolRunId: options?.runId,
                 },
                 {
                   resumeLabel: inputData.toolCallId,
