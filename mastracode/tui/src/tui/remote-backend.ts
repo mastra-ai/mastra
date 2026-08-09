@@ -176,7 +176,7 @@ export function createRemoteMastraTUIBackend(options: RemoteMastraTUIBackendOpti
   const client = options.client ?? new MastraClient({ baseUrl: options.baseUrl ?? 'http://127.0.0.1:4111' });
   const controller = client.getAgentController(options.controllerId);
   let session = controller.session(options.resourceId, options.scope);
-  let rebindActiveSession: ((nextSession: typeof session) => Promise<void>) | undefined;
+  let rebindActiveSession: ((nextSession: typeof session, preserveThread?: boolean) => Promise<void>) | undefined;
 
   const hydrate = async (): Promise<MastraTUIRemoteSnapshot> => {
     const state = await session.state();
@@ -294,11 +294,14 @@ export function createRemoteMastraTUIBackend(options: RemoteMastraTUIBackendOpti
           reconnect: true,
         });
       let subscription = await subscribeCurrentSession();
-      rebindActiveSession = async nextSession => {
+      rebindActiveSession = async (nextSession, preserveThread = true) => {
         buffering = true;
         subscription.unsubscribe();
         session = nextSession;
-        await session.create({ tags: options.tags, threadId: latestSnapshot?.threadId });
+        await session.create({
+          tags: options.tags,
+          threadId: preserveThread ? latestSnapshot?.threadId : undefined,
+        });
         subscription = await subscribeCurrentSession();
         await requestHydration();
       };
@@ -355,7 +358,7 @@ export function createRemoteMastraTUIBackend(options: RemoteMastraTUIBackendOpti
     setResourceId: async resourceId => {
       await session.setResourceId(resourceId);
       const nextSession = controller.session(resourceId, options.scope);
-      if (rebindActiveSession) await rebindActiveSession(nextSession);
+      if (rebindActiveSession) await rebindActiveSession(nextSession, false);
       else session = nextSession;
     },
     getResourceIds: () => session.getResourceIds(),

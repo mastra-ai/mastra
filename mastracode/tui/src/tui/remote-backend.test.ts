@@ -320,7 +320,12 @@ describe('createRemoteMastraTUIBackend', () => {
 
   it('rebinds every operation and the event stream after the server changes resource identity', async () => {
     const makeSession = (resourceId: string) => ({
-      create: vi.fn(async () => ({ resourceId })),
+      create: vi.fn(async (input?: { threadId?: string }) => {
+        if (resourceId === 'resource-b' && input?.threadId === 'thread-resource-a') {
+          throw new Error('Thread not found');
+        }
+        return { resourceId };
+      }),
       subscribe: vi.fn(async () => ({ unsubscribe: vi.fn() })),
       state: vi.fn(async () => ({ resourceId, threadId: `thread-${resourceId}`, messages: [] })),
       listMessages: vi.fn(async () => []),
@@ -347,7 +352,7 @@ describe('createRemoteMastraTUIBackend', () => {
 
     expect(sessionA.setResourceId).toHaveBeenCalledWith('resource-b');
     expect(sessionFor).toHaveBeenCalledWith('resource-b', undefined);
-    expect(sessionB.create).toHaveBeenCalled();
+    expect(sessionB.create).toHaveBeenCalledWith({ tags: undefined, threadId: undefined });
     expect(sessionB.subscribe).toHaveBeenCalled();
     expect(sessionB.listThreads).toHaveBeenCalled();
     expect(sessionB.sendSignal).toHaveBeenCalledWith({ id: 'signal-b', content: 'continue' });
