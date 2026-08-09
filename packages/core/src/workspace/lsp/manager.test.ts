@@ -707,6 +707,62 @@ describe('LSPManager', () => {
       expect(callOrder).toEqual(['open', 'wait', 'close', 'open', 'wait', 'close']);
     });
 
+    it('hands the lock to waiters in arrival order when a late caller races the release', async () => {
+      // The lock is a FIFO queue, so a caller that shows up while others are
+      // already queued goes to the back of that queue.
+      //
+      // The interesting moment is the instant the holder releases. A caller
+      // that asks for the lock in that same synchronous turn sees a free lock
+      // and can take it before the already-queued waiters get to resume. Under
+      // a FIFO queue it waits its turn instead.
+      const filePath = '/project/src/app.ts';
+      const acquire = (): Promise<() => void> =>
+        (manager as unknown as { acquireFileLock(p: string): Promise<() => void> }).acquireFileLock(filePath);
+
+      const order: string[] = [];
+      let held = 0;
+      let maxHeld = 0;
+      const enter = (name: string) => {
+        order.push(name);
+        held++;
+        maxHeld = Math.max(maxHeld, held);
+      };
+
+      const releaseFirst = await acquire();
+      enter('first');
+
+      const second = (async () => {
+        const release = await acquire();
+        enter('second');
+        held--;
+        release();
+      })();
+      await Promise.resolve();
+
+      const third = (async () => {
+        const release = await acquire();
+        enter('third');
+        held--;
+        release();
+      })();
+      await Promise.resolve();
+
+      // `late` asks for the lock in the same turn that the first holder frees it.
+      const late = (async () => {
+        held--;
+        releaseFirst();
+        const release = await acquire();
+        enter('late');
+        held--;
+        release();
+      })();
+
+      await Promise.all([second, third, late]);
+
+      expect(order).toEqual(['first', 'second', 'third', 'late']);
+      expect(maxHeld).toBe(1);
+    });
+
     it('serializes three or more concurrent getDiagnostics for same file', async () => {
       const callOrder: string[] = [];
       let concurrentWaits = 0;

@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Fixed a race condition in the workspace LSP manager where three or more concurrent diagnostics requests for the same file could acquire the per-file lock at the same time. Requests for a file are now strictly serialized in FIFO order, preventing interleaved open/change/close notifications that produced wrong or missing diagnostics.
+Made the workspace LSP manager's per-file lock hand out access in arrival order. Diagnostics requests for the same file were already serialized; a request that arrived at the moment the previous one finished could jump ahead of requests that had been waiting longer. Requests for different files still run in parallel.
