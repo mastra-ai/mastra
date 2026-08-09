@@ -2,6 +2,7 @@ import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   test: {
+    name: 'unit:code-mode/isolated-vm',
     environment: 'node',
     include: ['src/**/*.test.ts'],
     // isolated-vm requires --no-node-snapshot on Node 20+ to create isolates.
