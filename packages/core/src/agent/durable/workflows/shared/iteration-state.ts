@@ -90,6 +90,7 @@ export function createBaseIterationStateUpdate(input: IterationStateUpdateInput)
     options: currentState.options,
     state: executionOutput.state,
     messageId: executionOutput.messageId,
+    requestContextEntries: currentState.requestContextEntries,
     iterationCount: currentState.iterationCount + 1,
     accumulatedSteps: [...currentState.accumulatedSteps, stepRecord],
     accumulatedUsage: newUsage,

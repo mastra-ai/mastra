@@ -48,6 +48,7 @@ const durableAgenticInputSchema = z.object({
   agentSpanData: z.any().optional(),
   modelSpanData: z.any().optional(),
   stepIndex: z.number().optional(),
+  requestContextEntries: z.record(z.string(), z.any()).optional(),
 });
 
 // Output schema imported from shared (durableAgenticOutputSchema)
@@ -151,6 +152,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
           options: state.options,
           state: state.state,
           messageId: state.messageId,
+          requestContextEntries: state.requestContextEntries,
           // Pass agent span data so model spans can use it as parent
           agentSpanData: state.agentSpanData,
           // Pass model span data (ONE span for entire agent run)

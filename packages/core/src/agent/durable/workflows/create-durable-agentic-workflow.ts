@@ -184,6 +184,7 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
           options: state.options,
           state: state.state,
           messageId: state.messageId,
+          requestContextEntries: state.requestContextEntries,
           stepIndex: state.iterationCount,
           agentSpanData: state.agentSpanData,
           modelSpanData: state.modelSpanData,
