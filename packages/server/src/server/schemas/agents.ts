@@ -523,7 +523,10 @@ export const approveToolCallBodySchema = toolCallActionBodySchema;
 /**
  * Body schema for declining tool call
  */
-export const declineToolCallBodySchema = toolCallActionBodySchema;
+export const declineToolCallBodySchema = toolCallActionBodySchema.extend({
+  /** Optional explanation surfaced to the model in place of the default decline message. */
+  reason: z.string().optional(),
+});
 
 /**
  * Body schema for approving network tool call
@@ -533,7 +536,10 @@ export const approveNetworkToolCallBodySchema = networkToolCallActionBodySchema;
 /**
  * Body schema for declining network tool call
  */
-export const declineNetworkToolCallBodySchema = networkToolCallActionBodySchema;
+export const declineNetworkToolCallBodySchema = networkToolCallActionBodySchema.extend({
+  /** Optional explanation surfaced in place of the default decline message. */
+  reason: z.string().optional(),
+});
 
 /**
  * Response schema for tool approval/decline

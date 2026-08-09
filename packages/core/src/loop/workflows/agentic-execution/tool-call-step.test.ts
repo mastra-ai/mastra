@@ -555,6 +555,47 @@ describe('createToolCallStep tool approval workflow', () => {
     expectNoToolExecution();
   });
 
+  it('carries a caller-supplied decline reason onto the approval decision (#20495)', async () => {
+    const inputData = makeInputData();
+    const resumeData = { approved: false, reason: 'The user is not authorized to read this file' };
+
+    const result = await toolCallStep.execute(makeExecuteParams({ inputData, resumeData }));
+
+    expect(result).toEqual({
+      approval: {
+        id: inputData.toolCallId,
+        approved: false,
+        reason: 'The user is not authorized to read this file',
+      },
+      ...inputData,
+    });
+    expectNoToolExecution();
+  });
+
+  it('falls back to the default decline reason when the supplied reason is blank (#20495)', async () => {
+    const inputData = makeInputData();
+
+    const result = await toolCallStep.execute(
+      makeExecuteParams({ inputData, resumeData: { approved: false, reason: '   ' } }),
+    );
+
+    expect((result as any).approval.reason).toBe('Tool call was not approved by the user');
+    expectNoToolExecution();
+  });
+
+  it('advertises an optional reason on the approval resume schema (#20495)', async () => {
+    suspend.mockResolvedValueOnce('suspended');
+    await toolCallStep.execute(makeExecuteParams());
+
+    const approvalChunk = controller.enqueue.mock.calls
+      .map(([chunk]: [any]) => chunk)
+      .find((chunk: any) => chunk?.type === 'tool-call-approval');
+    expect(approvalChunk).toBeDefined();
+    const resumeSchema = JSON.parse(approvalChunk.payload.resumeSchema);
+    expect(resumeSchema.properties.reason).toBeDefined();
+    expect(resumeSchema.required).toEqual(['approved']);
+  });
+
   it('declines without a live requireToolApproval policy when suspendData marks approval (#20470)', async () => {
     // Mirrors declineToolCall after agent-level requireToolApproval (boolean/function) gated
     // the original suspend: resume helpers do not re-pass the policy, and function policies

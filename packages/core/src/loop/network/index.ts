@@ -5,6 +5,7 @@ import type { MultiPrimitiveExecutionOptions, NetworkOptions } from '../../agent
 import { Agent, tryGenerateWithJsonFallback } from '../../agent/index';
 import { MessageList } from '../../agent/message-list';
 import type { MastraDBMessage, MessageListInput } from '../../agent/message-list';
+import { DEFAULT_TOOL_DECLINE_REASON, resolveDeclineReason } from '../../agent/tool-approval';
 import type { StructuredOutputOptions } from '../../agent/types';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import type { MastraLLMVNext } from '../../llm/model/model.loop';
@@ -961,6 +962,7 @@ export async function createNetworkLoop({
       let suspendedTools: Record<string, any> | undefined;
 
       let toolCallDeclined = false;
+      let declineReason = DEFAULT_TOOL_DECLINE_REASON;
 
       let agentCallAborted = false;
 
@@ -1006,8 +1008,20 @@ export async function createNetworkLoop({
           };
         }
 
+        // Detect a declined tool call structurally via the approval decision. The legacy
+        // string comparison is kept as a fallback for older persisted results, but it can
+        // no longer be the only signal now that the decline reason is caller-configurable.
+        if (chunk.type === 'tool-output-denied') {
+          toolCallDeclined = true;
+          declineReason = chunk.payload.approval?.reason ?? declineReason;
+        }
+
         if (chunk.type === 'tool-result') {
-          if (chunk.payload.result === 'Tool call was not approved by the user') {
+          const approval = (chunk.payload as { approval?: { approved?: boolean; reason?: string } }).approval;
+          if (approval?.approved === false) {
+            toolCallDeclined = true;
+            declineReason = approval.reason ?? declineReason;
+          } else if (chunk.payload.result === DEFAULT_TOOL_DECLINE_REASON) {
             toolCallDeclined = true;
           }
         }
@@ -1023,7 +1037,7 @@ export async function createNetworkLoop({
 
       let finalText = await result.text;
       if (toolCallDeclined) {
-        finalText = finalText + '\n\nTool call was not approved by the user';
+        finalText = finalText + `\n\n${declineReason}`;
       }
 
       // When the sub-agent was aborted, skip saving partial results to memory
@@ -1618,6 +1632,10 @@ export async function createNetworkLoop({
               .describe(
                 'Controls if the tool call is approved or not, should be true when approved and false when declined',
               ),
+            reason: z
+              .string()
+              .optional()
+              .describe('Optional explanation for the decision, surfaced when the tool call is declined'),
           });
           const requireApprovalResumeSchema = JSON.stringify(
             standardSchemaToJSONSchema(toStandardSchema(approvalSchema)),
@@ -1689,7 +1707,7 @@ export async function createNetworkLoop({
           });
         } else {
           if (!resumeData.approved) {
-            const rejectionResult = 'Tool call was not approved by the user';
+            const rejectionResult = resolveDeclineReason(resumeData);
             await saveMessagesWithProcessors(
               memory,
               [
