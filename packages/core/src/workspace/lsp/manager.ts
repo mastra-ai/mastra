@@ -87,10 +87,7 @@ export class LSPManager {
    * Different files can run in parallel.
    */
   private async acquireFileLock(filePath: string): Promise<() => void> {
-    // Wait for any existing lock on this file
-    while (this.fileLocks.has(filePath)) {
-      await this.fileLocks.get(filePath);
-    }
+    const previousLock = this.fileLocks.get(filePath);
 
     let release!: () => void;
     const lockPromise = new Promise<void>(resolve => {
@@ -98,8 +95,12 @@ export class LSPManager {
     });
     this.fileLocks.set(filePath, lockPromise);
 
+    await previousLock;
+
     return () => {
-      this.fileLocks.delete(filePath);
+      if (this.fileLocks.get(filePath) === lockPromise) {
+        this.fileLocks.delete(filePath);
+      }
       release();
     };
   }

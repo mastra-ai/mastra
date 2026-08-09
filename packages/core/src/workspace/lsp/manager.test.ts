@@ -681,6 +681,57 @@ describe('LSPManager', () => {
   // ==========================================================================
 
   describe('per-file mutex serialization', () => {
+    it('serializes three concurrent getDiagnostics calls for the same file', async () => {
+      const callOrder: string[] = [];
+      let releaseFirst!: () => void;
+      const firstDiagnostics = new Promise<void>(resolve => {
+        releaseFirst = resolve;
+      });
+
+      mockNotifyOpen.mockImplementation((_file: string, content: string) => {
+        callOrder.push(`open-${content}`);
+      });
+      mockNotifyClose.mockImplementation(() => {
+        callOrder.push('close');
+      });
+      mockWaitForDiagnostics
+        .mockImplementationOnce(async () => {
+          callOrder.push('wait-1');
+          await firstDiagnostics;
+          return [];
+        })
+        .mockImplementationOnce(async () => {
+          callOrder.push('wait-2');
+          return [];
+        })
+        .mockImplementationOnce(async () => {
+          callOrder.push('wait-3');
+          return [];
+        });
+
+      const diagnostics = [
+        manager.getDiagnostics('/project/src/app.ts', '1'),
+        manager.getDiagnostics('/project/src/app.ts', '2'),
+        manager.getDiagnostics('/project/src/app.ts', '3'),
+      ];
+
+      await vi.waitFor(() => expect(callOrder).toEqual(['open-1', 'wait-1']));
+      releaseFirst();
+      await Promise.all(diagnostics);
+
+      expect(callOrder).toEqual([
+        'open-1',
+        'wait-1',
+        'close',
+        'open-2',
+        'wait-2',
+        'close',
+        'open-3',
+        'wait-3',
+        'close',
+      ]);
+    });
+
     it('serializes concurrent getDiagnostics for same file', async () => {
       const callOrder: string[] = [];
 
