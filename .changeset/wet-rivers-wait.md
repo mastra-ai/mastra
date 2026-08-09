@@ -14,10 +14,10 @@ await agent.declineToolCall({ runId, toolCallId });
 await agent.declineToolCall({
   runId,
   toolCallId,
-  reason: 'Reading other users PII is not allowed, ask the user for their own email instead',
+  reason: 'Reading other users personal data is not allowed, ask the user for their own email instead',
 });
 ```
 
-The reason is stored on the tool call's `approval` metadata, so it survives recall and shows up on the persisted `output-denied` message part. It is supported by `declineToolCall`, `declineToolCallGenerate` and `declineNetworkToolCall`, on both regular and durable agents. Omitting `reason` keeps the previous default message.
+The reason is retained with the tool call, so it is still there when the conversation is recalled later. It is supported by `declineToolCall`, `declineToolCallGenerate` and `declineNetworkToolCall`, on both regular and durable agents. Omitting `reason` keeps the previous default message.
 
 Closes #20495

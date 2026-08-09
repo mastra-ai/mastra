@@ -723,19 +723,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                     toolCallId: inputData.toolCallId,
                     toolName: approvalToolName,
                     args: approvalArgs,
-                    resumeSchema: JSON.stringify(
-                      standardSchemaToJSONSchema(
-                        toStandardSchema(
-                          z.object({
-                            approved: z
-                              .boolean()
-                              .describe(
-                                'Controls if the tool call is approved or not, should be true when approved and false when declined',
-                              ),
-                          }),
-                        ),
-                      ),
-                    ),
+                    resumeSchema: JSON.stringify(standardSchemaToJSONSchema(approvalSchema)),
                   },
                 },
                 'approval',

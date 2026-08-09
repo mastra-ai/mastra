@@ -898,6 +898,7 @@ export function createDurableToolCallStep() {
               type: 'object',
               properties: {
                 approved: { type: 'boolean' },
+                reason: { type: 'string' },
               },
               required: ['approved'],
             });

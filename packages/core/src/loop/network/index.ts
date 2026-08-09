@@ -1473,6 +1473,16 @@ export async function createNetworkLoop({
     },
   });
 
+  const toolApprovalSchema = z.object({
+    approved: z
+      .boolean()
+      .describe('Controls if the tool call is approved or not, should be true when approved and false when declined'),
+    reason: z
+      .string()
+      .optional()
+      .describe('Optional explanation for the decision, surfaced when the tool call is declined'),
+  });
+
   const toolStep = createStep({
     id: 'tool-execution-step',
     inputSchema: z.object({
@@ -1494,11 +1504,7 @@ export async function createNetworkLoop({
       isComplete: z.boolean().optional(),
       iteration: z.number(),
     }),
-    resumeSchema: z.object({
-      approved: z
-        .boolean()
-        .describe('Controls if the tool call is approved or not, should be true when approved and false when declined'),
-    }),
+    resumeSchema: toolApprovalSchema,
     execute: async ({ inputData, getInitData, writer, resumeData, mastra, suspend }) => {
       const initData = await getInitData<{ threadId: string; threadResourceId: string }>();
       const logger = mastra?.getLogger();
@@ -1626,19 +1632,8 @@ export async function createNetworkLoop({
           });
         }
         if (!resumeData) {
-          const approvalSchema = z.object({
-            approved: z
-              .boolean()
-              .describe(
-                'Controls if the tool call is approved or not, should be true when approved and false when declined',
-              ),
-            reason: z
-              .string()
-              .optional()
-              .describe('Optional explanation for the decision, surfaced when the tool call is declined'),
-          });
           const requireApprovalResumeSchema = JSON.stringify(
-            standardSchemaToJSONSchema(toStandardSchema(approvalSchema)),
+            standardSchemaToJSONSchema(toStandardSchema(toolApprovalSchema)),
           );
           await saveMessagesWithProcessors(
             memory,
