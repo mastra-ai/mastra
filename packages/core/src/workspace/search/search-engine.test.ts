@@ -995,6 +995,7 @@ Third line has learning too`;
 
       await expect(engine.indexMany([])).resolves.toBeUndefined();
       expect(fn).not.toHaveBeenCalled();
+      expect(store.createIndex).not.toHaveBeenCalled();
       expect(store.upsert).not.toHaveBeenCalled();
     });
 
