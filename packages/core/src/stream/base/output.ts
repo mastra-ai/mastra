@@ -543,8 +543,14 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               break;
             case 'object-result':
               self.#bufferedObject = chunk.object;
+              // An output processor can still reject this attempt and ask for a retry,
+              // which would make this object stale. A settled promise cannot be
+              // un-settled, so when processors are in play the object is only buffered
+              // here and settled once the attempt survives `step-finish` (or at
+              // stream end, whichever comes first). Without processors no retry is
+              // possible, so resolve immediately and keep the existing timing.
               // Only resolve if not already rejected by validation error
-              if (self.#delayedPromises.object.status.type === 'pending') {
+              if (!self.processorRunner && self.#delayedPromises.object.status.type === 'pending') {
                 self.#delayedPromises.object.resolve(chunk.object);
               }
               break;
@@ -793,14 +799,14 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
 
               self.#bufferedSteps.push(stepResult);
 
-              // This attempt was rejected by a processor and will be retried, so every
-              // artifact derived from it is stale. `text` is already excluded via the
-              // empty `stepText` above; the structured object needs the same treatment,
-              // otherwise the retried attempt's `object-result` is dropped as
-              // "already resolved" and the final result reports the accepted text
-              // alongside the rejected attempt's object.
+              // `text` is excluded from a rejected attempt via the empty `stepText`
+              // above; the structured object needs the same treatment. Drop the
+              // buffered object when this attempt is being retried, otherwise settle
+              // the object promise now that the attempt has been accepted.
               if (stepTripwire?.retry) {
-                self.#invalidateObjectFromRejectedAttempt();
+                self.#bufferedObject = undefined;
+              } else if (self.#bufferedObject !== undefined && self.#delayedPromises.object.status.type === 'pending') {
+                self.#delayedPromises.object.resolve(self.#bufferedObject);
               }
 
               self.#bufferedByStep = {
@@ -1078,7 +1084,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                   });
                 }
                 if (self.#delayedPromises.object.status.type !== 'resolved') {
-                  self.#delayedPromises.object.resolve(undefined as OUTPUT);
+                  self.#delayedPromises.object.resolve(self.#bufferedObject as OUTPUT);
                 }
               }
 
@@ -1156,15 +1162,17 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                       ? undefined
                       : self.#delayedPromises.object.status.type === 'resolved'
                         ? self.#delayedPromises.object.status.value
-                        : self.#structuredOutputMode === 'direct' && baseFinishStep.text
-                          ? (() => {
-                              try {
-                                return JSON.parse(baseFinishStep.text);
-                              } catch {
-                                return undefined;
-                              }
-                            })()
-                          : undefined,
+                        : self.#bufferedObject !== undefined
+                          ? self.#bufferedObject
+                          : self.#structuredOutputMode === 'direct' && baseFinishStep.text
+                            ? (() => {
+                                try {
+                                  return JSON.parse(baseFinishStep.text);
+                                } catch {
+                                  return undefined;
+                                }
+                              })()
+                            : undefined,
                 };
 
                 if (!self.#finishCallbackSent) {
@@ -1229,8 +1237,10 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
         },
         flush: () => {
           if (self.#delayedPromises.object.status.type === 'pending') {
-            // always resolve pending object promise as undefined if still hanging in flush and hasn't been rejected by validation error
-            self.#delayedPromises.object.resolve(undefined as OUTPUT);
+            // always resolve a pending object promise in flush (with the buffered object
+            // if the stream produced one, otherwise undefined) if it hasn't been rejected
+            // by a validation error
+            self.#delayedPromises.object.resolve(self.#bufferedObject as OUTPUT);
           }
 
           // If stream ends in suspended state (e.g., tool-call-approval), resolve promises with partial results
@@ -1876,35 +1886,6 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
   #emitChunk(chunk: ChunkType<OUTPUT>) {
     this.#bufferedChunks.push(chunk); // add to bufferedChunks for replay in new streams
     this.#emitter.emit('chunk', chunk); // emit chunk for existing listener streams
-  }
-
-  /**
-   * Discard the structured object produced by an attempt that a processor
-   * rejected with `retry: true`, so the retried attempt can supply its own.
-   *
-   * `object` is a derived view of the model's text. When an attempt is rejected,
-   * its object must not survive into the final result: the run reports success,
-   * so callers have no signal that `object` disagrees with `text`.
-   *
-   * Returning the delayed promise to `pending` lets the retried attempt's
-   * `object-result` chunk resolve it. If the promise was already materialized
-   * (something awaited `object` mid-run, before any attempt was accepted) it
-   * cannot be un-settled; warn rather than silently serve a stale value.
-   */
-  #invalidateObjectFromRejectedAttempt() {
-    this.#bufferedObject = undefined;
-
-    if (this.#delayedPromises.object.status.type === 'pending') {
-      return;
-    }
-
-    if (!this.#delayedPromises.object.reset()) {
-      this.logger?.warn?.(
-        'Structured output was awaited before an output processor rejected and retried the response. ' +
-          'The already-returned `object` promise reflects the rejected attempt. ' +
-          'Await `object` after the run finishes to get the accepted attempt.',
-      );
-    }
   }
 
   /**

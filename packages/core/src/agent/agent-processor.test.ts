@@ -1728,6 +1728,44 @@ describe('New Processor Features', () => {
       expect(await stream.object).toEqual({ answer: 'ACCEPTED', score: 9 });
     });
 
+    it('should expose the retried object when `object` is awaited without draining the stream', async () => {
+      const harness = makeStructuredRetryModel();
+      const agent = new Agent({
+        id: 'structured-retry-await-object-agent',
+        name: 'Structured Retry Await Object Agent',
+        instructions: 'You are a helpful assistant.',
+        model: harness.model,
+        outputProcessors: [rejectFirstAttemptProcessor],
+        maxProcessorRetries: 3,
+      });
+
+      const stream = await agent.stream('Hello', { structuredOutput: { schema: retrySchema } });
+      // documented usage: await `object` directly, never touching `fullStream`
+      expect(await stream.object).toEqual({ answer: 'ACCEPTED', score: 9 });
+      expect(harness.callCount).toBe(2);
+    });
+
+    it('should expose the retried object when the `object` promise is captured before the retry settles', async () => {
+      const harness = makeStructuredRetryModel();
+      const agent = new Agent({
+        id: 'structured-retry-early-object-agent',
+        name: 'Structured Retry Early Object Agent',
+        instructions: 'You are a helpful assistant.',
+        model: harness.model,
+        outputProcessors: [rejectFirstAttemptProcessor],
+        maxProcessorRetries: 3,
+      });
+
+      const stream = await agent.stream('Hello', { structuredOutput: { schema: retrySchema } });
+      // materializes the promise before the first attempt is even rejected
+      const objectPromise = stream.object;
+      for await (const _ of stream.fullStream) {
+      }
+
+      expect(await objectPromise).toEqual({ answer: 'ACCEPTED', score: 9 });
+      expect(harness.callCount).toBe(2);
+    });
+
     it('should retry with feedback when processor calls abort with retry: true', async () => {
       let callCount = 0;
       const receivedMessages: any[][] = [];
