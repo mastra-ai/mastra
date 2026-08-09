@@ -2,9 +2,9 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { createHash } from 'node:crypto';
 import type { MastraDBMessage } from '@mastra/core/agent';
 import type { MastraToolInvocation } from '@mastra/core/agent/message-list';
-import imageSize from 'image-size';
 import { estimateTokenCount } from 'tokenx';
 
+import { measureImageBuffer } from './measure-image-buffer';
 import { resolveToolResultValue, serializeToolResultForTokenCounting } from './tool-result-helpers';
 
 type TokenEstimateCacheEntry = {
@@ -562,25 +562,25 @@ function resolveImageDimensions(part: CacheablePart): { width?: number; height?:
     return { width, height };
   }
 
-  try {
-    const measured = imageSize(buffer);
-    const measuredWidth = getFiniteNumber(measured.width);
-    const measuredHeight = getFiniteNumber(measured.height);
-
-    if (!measuredWidth || !measuredHeight) {
-      return { width, height };
-    }
-
-    const resolved = {
-      width: width ?? measuredWidth,
-      height: height ?? measuredHeight,
-    };
-
-    persistImageDimensions(part, resolved as { width: number; height: number });
-    return resolved;
-  } catch {
+  const measured = measureImageBuffer(buffer);
+  if (!measured) {
     return { width, height };
   }
+
+  const measuredWidth = getFiniteNumber(measured.width);
+  const measuredHeight = getFiniteNumber(measured.height);
+
+  if (!measuredWidth || !measuredHeight) {
+    return { width, height };
+  }
+
+  const resolved = {
+    width: width ?? measuredWidth,
+    height: height ?? measuredHeight,
+  };
+
+  persistImageDimensions(part, resolved as { width: number; height: number });
+  return resolved;
 }
 
 function getBase64Size(base64: string): number {
