@@ -794,7 +794,7 @@ export class Mastra<
   // must not double-subscribe the same listener.
   #userEventSubscriptions: Array<{
     topic: string;
-    cb: (event: Event, ack?: () => Promise<void>) => Promise<void>;
+    cb: EventCallback;
   }> = [];
 
   #events: {
@@ -5801,12 +5801,45 @@ export class Mastra<
     }
   }
 
+  /**
+   * Wrap a user-provided topic listener so the delivery is acknowledged once
+   * the listener resolves. User listeners take only the event, so nothing
+   * would ever call `ack` for them — and on a durable transport (Redis
+   * consumer groups) an unacknowledged delivery stays pending for the life of
+   * the subscription. A throwing listener nacks instead so the transport can
+   * redeliver rather than assume success.
+   *
+   * The wrapper is memoized per listener so `removeTopicListener` can
+   * unsubscribe the exact callback `addTopicListener` registered.
+   */
+  #ackingTopicListeners = new WeakMap<(event: any) => Promise<void> | void, EventCallback>();
+
+  #ackingTopicListener(listener: (event: any) => Promise<void> | void): EventCallback {
+    const existing = this.#ackingTopicListeners.get(listener);
+    if (existing) return existing;
+    const wrapped: EventCallback = async (event, ack, nack) => {
+      try {
+        await listener(event);
+      } catch (err) {
+        this.#logger?.error?.('Error in topic listener; nacking event', {
+          topic: event.type,
+          err: err instanceof Error ? err.message : err,
+        });
+        await nack?.();
+        return;
+      }
+      await ack?.();
+    };
+    this.#ackingTopicListeners.set(listener, wrapped);
+    return wrapped;
+  }
+
   public async addTopicListener(topic: string, listener: (event: any) => Promise<void>) {
-    await this.#pubsub.subscribe(topic, listener);
+    await this.#pubsub.subscribe(topic, this.#ackingTopicListener(listener));
   }
 
   public async removeTopicListener(topic: string, listener: (event: any) => Promise<void>) {
-    await this.#pubsub.unsubscribe(topic, listener);
+    await this.#pubsub.unsubscribe(topic, this.#ackingTopicListener(listener));
   }
 
   /**
@@ -5943,12 +5976,11 @@ export class Mastra<
 
         const listeners = Array.isArray(this.#events[topic]) ? this.#events[topic] : [this.#events[topic]];
         for (const listener of listeners) {
-          const alreadySubscribed = this.#userEventSubscriptions.some(
-            sub => sub.topic === topic && sub.cb === listener,
-          );
+          const cb = this.#ackingTopicListener(listener);
+          const alreadySubscribed = this.#userEventSubscriptions.some(sub => sub.topic === topic && sub.cb === cb);
           if (alreadySubscribed) continue;
-          await this.#pubsub.subscribe(topic, listener);
-          this.#userEventSubscriptions.push({ topic, cb: listener });
+          await this.#pubsub.subscribe(topic, cb);
+          this.#userEventSubscriptions.push({ topic, cb });
         }
       }
     }

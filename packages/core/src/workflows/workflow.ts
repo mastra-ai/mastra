@@ -4034,13 +4034,19 @@ export class Run<
    * @internal
    */
   watch(cb: (event: WorkflowStreamEvent) => void): () => void {
-    const wrappedCb = (event: Event) => {
+    // Both callbacks acknowledge every delivery, including events for other
+    // runs. `nested-watch` is a shared topic, so a watcher sees every nested
+    // workflow's events; leaving the ones it filters out unacknowledged grows
+    // the subscription's pending list on a durable transport for as long as
+    // the watcher is attached.
+    const wrappedCb = async (event: Event, ack?: () => Promise<void>) => {
       if (event.runId === this.runId) {
         cb(event.data as WorkflowStreamEvent);
       }
+      await ack?.();
     };
 
-    const nestedWatchCb = (event: Event) => {
+    const nestedWatchCb = async (event: Event, ack?: () => Promise<void>) => {
       if (event.runId === this.runId) {
         const { event: nestedEvent, workflowId } = event.data as {
           event: { type: string; payload?: { id: string } & Record<string, unknown>; data?: any };
@@ -4070,6 +4076,7 @@ export class Run<
           });
         }
       }
+      await ack?.();
     };
 
     void this.pubsub.subscribe(`workflow.events.v2.${this.runId}`, wrappedCb);
