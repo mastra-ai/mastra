@@ -127,7 +127,7 @@ The `context` object includes:
 
 ### Request context at the delegation boundary
 
-Each delegation receives a request context whose entries are shallowly copied from the parent run, excluding run-scoped identity keys. Setting or deleting entries during the subagent run does not affect the parent's context. Set entries on `context.requestContext` in `onDelegationStart` to pass values to the delegated run:
+Each delegation receives a request context whose entries are shallowly copied from the parent run, excluding run-scoped identity keys. Setting or deleting entries during the subagent run doesn't affect the parent's context. Set entries on `context.requestContext` in `onDelegationStart` to pass values to the delegated run:
 
 ```typescript title="src/mastra/agents/parent-agent.ts"
 const stream = await parentAgent.stream('Research AI trends', {
