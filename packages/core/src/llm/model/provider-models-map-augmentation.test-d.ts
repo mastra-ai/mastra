@@ -10,6 +10,11 @@ declare module '../index.js' {
   }
 }
 
+// `ModelRouterModelId` ends in a `(string & {})` arm so arbitrary strings stay
+// assignable, which makes a plain `toExtend<ModelRouterModelId>` check vacuous.
+// Drop that arm so the assertions below test the generated/augmented paths.
+type KnownModelRouterModelId<T = ModelRouterModelId> = T extends string ? (string extends T ? never : T) : never;
+
 describe('ProviderModelsMap augmentation', () => {
   it('adds the augmented provider to Provider', () => {
     expectTypeOf<'augmentation-test-provider'>().toExtend<Provider>();
@@ -20,11 +25,14 @@ describe('ProviderModelsMap augmentation', () => {
   });
 
   it('includes augmented provider/model paths in ModelRouterModelId', () => {
-    expectTypeOf<'augmentation-test-provider/model-1'>().toExtend<ModelRouterModelId>();
+    expectTypeOf<'augmentation-test-provider/model-1'>().toExtend<KnownModelRouterModelId>();
+    expectTypeOf<'augmentation-test-provider/model-2'>().toExtend<KnownModelRouterModelId>();
+    expectTypeOf<'augmentation-test-provider/not-a-model'>().not.toExtend<KnownModelRouterModelId>();
   });
 
   it('keeps generated providers intact', () => {
     expectTypeOf<'openai'>().toExtend<Provider>();
-    expectTypeOf<ModelForProvider<'openai'>>().toExtend<string>();
+    expectTypeOf<ModelForProvider<'openai'>>().not.toBeNever();
+    expectTypeOf<'not-a-real-provider'>().not.toExtend<Provider>();
   });
 });
