@@ -2749,7 +2749,7 @@ export class Session<TState = unknown> {
    * filtered back to the session's scope. Empty when the session is unscoped.
    */
   readonly #tags: Record<string, string>;
-  readonly #workspace: Workspace;
+  readonly #workspace: Workspace | undefined;
   browser?: MastraBrowser;
 
   constructor({
@@ -2766,7 +2766,7 @@ export class Session<TState = unknown> {
     id: string;
     ownerId: string;
     tags?: Record<string, string>;
-    workspace: Workspace;
+    workspace?: Workspace;
     browser?: MastraBrowser;
   }) {
     this.#tags = tags && Object.keys(tags).length > 0 ? { ...tags } : {};
@@ -2788,8 +2788,8 @@ export class Session<TState = unknown> {
       return args => this.thread.setSettingOn({ threadId, ...args });
     });
 
-    if (!workspace || !(workspace instanceof Workspace)) {
-      throw new Error(`A session requires a valid workspace instance.`);
+    if (workspace !== undefined && !(workspace instanceof Workspace)) {
+      throw new Error(`A session workspace must be a valid Workspace instance.`);
     }
 
     this.#workspace = workspace;
@@ -2818,13 +2818,16 @@ export class Session<TState = unknown> {
   }
 
   /**
-   * The workspace resolved for this session.
+   * The workspace resolved for this session, or `undefined` when the session
+   * runs without one. A workspace is optional: sessions that only need threads,
+   * state, and agent runs (chat-style usage) do not have to configure
+   * filesystem or sandbox access.
    *
    * Dynamic workspace factories are evaluated independently when each session
    * is created. Use this accessor for operations that must stay bound to the
    * session's workspace rather than resolving through controller-global state.
    */
-  getWorkspace(): Workspace {
+  getWorkspace(): Workspace | undefined {
     return this.#workspace;
   }
 
