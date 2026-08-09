@@ -15,6 +15,7 @@
 import type { PubSub } from '../../events';
 import { AGENT_CONTROL_TOPIC, AgentControlEventTypes } from './constants';
 import { globalRunRegistry } from './run-registry';
+import type { RunRegistryEntry } from './types';
 
 /**
  * Ask whichever process is executing `runId` to abort it.
@@ -70,8 +71,19 @@ export async function subscribeToAbortRequests(
  * that happens on explicit cleanup or TTL eviction.
  */
 export async function ensureRemoteAbortListener(pubsub: PubSub, runId: string): Promise<void> {
-  const entry = globalRunRegistry.get(runId);
-  if (!entry || entry.remoteAbortListenerInstalled) return;
+  let entry = globalRunRegistry.get(runId);
+
+  if (!entry) {
+    // A worker can reach its first step before anything has populated the
+    // registry for this run. Returning early here would leave that run
+    // permanently deaf to remote aborts, so seed a minimal entry instead. It is
+    // marked as a placeholder (and carries no model) so `resolveRuntimeDependencies`
+    // still rebuilds the real runtime state into it rather than trusting it.
+    entry = { isPlaceholder: true } as RunRegistryEntry;
+    globalRunRegistry.set(runId, entry);
+  }
+
+  if (entry.remoteAbortListenerInstalled) return;
 
   // Claim before awaiting: two steps starting concurrently in this process
   // would otherwise both pass the check and install duplicate subscriptions.

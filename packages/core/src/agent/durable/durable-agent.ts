@@ -201,10 +201,13 @@ export interface DurableAgentStreamResult<OUTPUT = undefined> {
    * Safe to call after the run has already finished — it's a no-op in that
    * case.
    *
-   * Also cancels the underlying workflow run so the abort reaches the process
-   * executing it, which in a load-balanced deployment is usually not this one.
-   * Await the returned promise to know the cancellation has been dispatched;
-   * ignoring it keeps the previous fire-and-forget behaviour.
+   * Also publishes an abort request over pubsub so the abort reaches the
+   * process executing the run, which in a load-balanced deployment is usually
+   * not this one. That process flips its own controller and unwinds normally;
+   * the workflow run is never hard-cancelled, so the terminal `finish` event
+   * still reaches stream consumers. Await the returned promise to know the
+   * request has been dispatched; ignoring it keeps the previous
+   * fire-and-forget behaviour.
    */
   abort: (reason?: unknown) => Promise<void>;
 }

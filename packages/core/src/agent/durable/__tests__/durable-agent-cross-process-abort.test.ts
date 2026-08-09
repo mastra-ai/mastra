@@ -72,6 +72,36 @@ describe('DurableAgent cross-process abort', () => {
     }
   });
 
+  it('stays abortable when the step starts before anything registered the run', async () => {
+    // A worker's first step can run before `resolveRuntimeDependencies` has
+    // seeded the registry. Skipping the listener there would leave the run
+    // permanently deaf to remote aborts.
+    const runId = 'unregistered-run';
+    const pubsub = new EventEmitterPubSub();
+
+    try {
+      await ensureRemoteAbortListener(pubsub, runId);
+
+      const entry = globalRunRegistry.get(runId);
+      expect(entry).toBeDefined();
+      // Still a placeholder, so the real runtime rebuild is not skipped.
+      expect(entry!.isPlaceholder).toBe(true);
+      expect(entry!.abortSignal!.aborted).toBe(false);
+
+      const aborted = new Promise<void>(resolve => {
+        entry!.abortSignal!.addEventListener('abort', () => resolve(), { once: true });
+      });
+
+      await publishAbortRequest(pubsub, runId);
+      await aborted;
+
+      expect(entry!.abortSignal!.aborted).toBe(true);
+    } finally {
+      globalRunRegistry.delete(runId);
+      await pubsub.close();
+    }
+  });
+
   it('only installs one listener per run no matter how many steps start', async () => {
     const runId = 'idempotent-listener-run';
     const pubsub = new EventEmitterPubSub();
