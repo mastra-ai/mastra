@@ -2616,13 +2616,6 @@ export class SessionDisplayState {
 }
 
 /**
- * A session's event bus. Owns the listener list and the full emit pipeline:
- * fold the event into the canonical display state, dispatch to this session's
- * listeners, then fan out a synthetic `display_state_changed`. Each session
- * has its own bus, so events never cross between sessions. Subsystems hold a
- * reference to their session's bus and call {@link emit} directly.
- */
-/**
  * Event types emitted once per streamed chunk. Their display-state snapshots are
  * coalesced, since a snapshot always carries the full state and intermediate
  * ones are immediately superseded.
@@ -2632,6 +2625,14 @@ const COALESCIBLE_DISPLAY_STATE_EVENTS = new Set<AgentControllerEvent['type']>([
 /** Upper bound on coalesced display-state snapshots: one per this many ms, plus a leading one. */
 const DISPLAY_STATE_COALESCE_MS = 16;
 
+/**
+ * A session's event bus. Owns the listener list and the full emit pipeline:
+ * fold the event into the canonical display state, dispatch to this session's
+ * listeners, then fan out a synthetic `display_state_changed` — immediately for
+ * ordinary events, coalesced for the high-frequency ones above. Each session
+ * has its own bus, so events never cross between sessions. Subsystems hold a
+ * reference to their session's bus and call {@link emit} directly.
+ */
 export class SessionBus {
   readonly #listeners: AgentControllerEventListener[] = [];
   #displayState: SessionDisplayState | undefined;
