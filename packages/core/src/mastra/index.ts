@@ -5822,7 +5822,9 @@ export class Mastra<
         await listener(event);
       } catch (err) {
         this.#logger?.error?.('Error in topic listener; nacking event', {
-          topic: event.type,
+          // Not the topic: the wrapper is memoized per listener and shared
+          // across every topic that listener is registered on.
+          eventType: event.type,
           err: err instanceof Error ? err.message : err,
         });
         await nack?.();
