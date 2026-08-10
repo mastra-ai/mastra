@@ -13,16 +13,18 @@ import type { MastraDBMessage } from '../types';
  * every reader, not just the prompt path.
  */
 describe('MessageList - backfill empty tool-call args at store time', () => {
-  const argsFor = (stored: MastraDBMessage[], toolCallId: string): Array<unknown> => {
-    const out: Array<unknown> = [];
+  type StoredInvocation = { state?: string; args?: unknown; result?: unknown };
+
+  const invocationsFor = (stored: MastraDBMessage[], toolCallId: string): StoredInvocation[] => {
+    const out: StoredInvocation[] = [];
     for (const message of stored) {
       for (const part of message.content.parts ?? []) {
         if (part.type === 'tool-invocation' && part.toolInvocation.toolCallId === toolCallId) {
-          out.push(part.toolInvocation.args);
+          out.push(part.toolInvocation as StoredInvocation);
         }
       }
       for (const invocation of message.content.toolInvocations ?? []) {
-        if (invocation.toolCallId === toolCallId) out.push(invocation.args);
+        if (invocation.toolCallId === toolCallId) out.push(invocation as StoredInvocation);
       }
     }
     return out;
@@ -50,13 +52,17 @@ describe('MessageList - backfill empty tool-call args at store time', () => {
       'response',
     );
 
-    // The stored message — not just the prompt output — must carry the args.
-    const stored = messageList.get.all.db();
-    const seen = argsFor(stored, 'call-1');
+    const invocations = invocationsFor(messageList.get.all.db(), 'call-1');
 
-    expect(seen.length).toBeGreaterThan(0);
-    for (const args of seen) {
-      expect(args).toEqual({ city: 'San Francisco' });
+    // The result must actually be stored (not dropped) with its payload...
+    const resultInvocation = invocations.find(inv => inv.state === 'result');
+    expect(resultInvocation).toBeDefined();
+    expect(resultInvocation?.result).toEqual({ temperature: 18 });
+
+    // ...and every stored copy of the call must carry the original args.
+    expect(invocations.length).toBeGreaterThan(0);
+    for (const inv of invocations) {
+      expect(inv.args).toEqual({ city: 'San Francisco' });
     }
   });
 
@@ -79,9 +85,14 @@ describe('MessageList - backfill empty tool-call args at store time', () => {
       'response',
     );
 
-    const stored = messageList.get.all.db();
-    for (const args of argsFor(stored, 'call-2')) {
-      expect(args).toEqual({});
+    const invocations = invocationsFor(messageList.get.all.db(), 'call-2');
+
+    // A matching stored result must exist, and args stay empty (nothing to recover).
+    const resultInvocation = invocations.find(inv => inv.state === 'result');
+    expect(resultInvocation).toBeDefined();
+    expect(invocations.length).toBeGreaterThan(0);
+    for (const inv of invocations) {
+      expect(inv.args).toEqual({});
     }
   });
 });
