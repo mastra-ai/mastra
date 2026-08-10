@@ -503,6 +503,7 @@ export class ModelSpanTracker {
 
     const { usage: rawUsage, ...otherOutput } = payload.output;
     const usage = extractUsageMetrics(rawUsage, payload.metadata?.providerMetadata);
+    const responseModel = typeof payload.metadata?.modelId === 'string' ? payload.metadata.modelId : undefined;
 
     this.#currentInferenceSpan.end({
       output: otherOutput,
@@ -511,6 +512,7 @@ export class ModelSpanTracker {
         finishReason: payload.stepResult.reason,
         warnings: payload.stepResult.warnings,
         completionStartTime: this.#completionStartTime,
+        ...(responseModel?.trim() ? { responseModel } : {}),
       },
     });
     this.#currentInferenceSpan = undefined;
