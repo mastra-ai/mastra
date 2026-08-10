@@ -1,9 +1,9 @@
 import DefaultAdmonitionTypes from '@theme-original/Admonition/Types'
-import AdmonitionTypeExperimental from '@theme/Admonition/Type/Experimental'
+import AdmonitionTypeBeta from '@theme/Admonition/Type/Beta'
 
 const admonitionTypes = {
   ...DefaultAdmonitionTypes,
-  experimental: AdmonitionTypeExperimental,
+  beta: AdmonitionTypeBeta,
 }
 
 export default admonitionTypes

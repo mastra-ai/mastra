@@ -219,6 +219,12 @@ Some **content** with _Markdown_ `syntax`. Check [this `api`](#).
 Some **content** with _Markdown_ `syntax`. Check [this `api`](#).
 
 :::
+
+:::beta
+
+Some **content** with _Markdown_ `syntax`. Check [this `api`](#).
+
+:::
 ```
 
 ### `<Tabs>`

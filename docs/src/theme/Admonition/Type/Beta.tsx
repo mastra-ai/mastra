@@ -6,7 +6,7 @@ const defaultProps = {
   title: 'beta',
 }
 
-export default function AdmonitionTypeExperimental(props: React.ComponentProps<typeof AdmonitionLayout>) {
+export default function AdmonitionTypeBeta(props: React.ComponentProps<typeof AdmonitionLayout>) {
   return (
     <AdmonitionLayout {...defaultProps} {...props}>
       {props.children}
