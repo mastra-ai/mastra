@@ -37,6 +37,7 @@ function mapSeverity(severity: number | undefined): DiagnosticSeverity {
 export class LSPManager {
   private clients: Map<string, LSPClient> = new Map();
   private initPromises: Map<string, Promise<void>> = new Map();
+  private clientInitQueue: Promise<void> = Promise.resolve();
   private fileLocks: Map<string, Promise<void>> = new Map();
   private processManager: SandboxProcessManager;
   private _root: string;
@@ -55,6 +56,13 @@ export class LSPManager {
       exists(path: string): Promise<boolean>;
     },
   ) {
+    if (
+      config.maxOpenClients !== undefined &&
+      (!Number.isInteger(config.maxOpenClients) || config.maxOpenClients < 1)
+    ) {
+      throw new RangeError('maxOpenClients must be a positive integer');
+    }
+
     this.processManager = processManager;
     this._root = root;
     this.config = config;
@@ -79,6 +87,26 @@ export class LSPManager {
       return (await walkUpAsync(fileDir, markers, this.filesystem)) ?? this._root;
     }
     return walkUp(fileDir, markers) ?? this._root;
+  }
+
+  /** Mark a client as most recently used. */
+  private touchClient(key: string, client: LSPClient): void {
+    this.clients.delete(key);
+    this.clients.set(key, client);
+  }
+
+  /** Shut down least recently used clients until another one can be opened. */
+  private async ensureClientCapacity(): Promise<void> {
+    const maxOpenClients = this.config.maxOpenClients;
+    if (maxOpenClients === undefined) return;
+
+    while (this.clients.size >= maxOpenClients) {
+      const oldest = this.clients.entries().next().value as [string, LSPClient] | undefined;
+      if (!oldest) return;
+      const [key, client] = oldest;
+      this.clients.delete(key);
+      await client.shutdown().catch(() => {});
+    }
   }
 
   /**
@@ -127,41 +155,52 @@ export class LSPManager {
       return this.clients.get(key) || null;
     }
 
-    // Create and initialize
-    const initTimeout = this.config.initTimeout ?? 15000;
-    let timedOut = false;
-    const initPromise = (async () => {
-      const client = new LSPClient(serverDef, projectRoot, this.processManager);
-      await client.initialize(initTimeout);
-      if (timedOut) {
-        await client.shutdown().catch(() => {});
-        return;
-      }
-      this.clients.set(key, client);
-    })();
+    const initialize = async (): Promise<void> => {
+      await this.ensureClientCapacity();
+      const initTimeout = this.config.initTimeout ?? 15000;
+      let timedOut = false;
+      const startPromise = (async () => {
+        const client = new LSPClient(serverDef, projectRoot, this.processManager);
+        await client.initialize(initTimeout);
+        if (timedOut) {
+          await client.shutdown().catch(() => {});
+          return;
+        }
+        this.clients.set(key, client);
+      })();
+      startPromise.catch(() => {}); // prevent unhandled rejection if timeout wins
 
+      try {
+        await Promise.race([
+          startPromise,
+          new Promise<void>((_, reject) =>
+            setTimeout(() => reject(new Error('LSP client initialization timed out')), initTimeout + 1000),
+          ),
+        ]);
+      } catch (err) {
+        timedOut = true;
+        this.clients.delete(key);
+        const command = serverDef.command(projectRoot);
+        const hint = this.config.binaryOverrides?.[serverDef.id]
+          ? ` (using binaryOverrides: "${this.config.binaryOverrides[serverDef.id]}")`
+          : command
+            ? ` (command: "${command}")`
+            : '';
+        console.warn(`[LSP] Failed to start ${serverDef.name}${hint}: ${err instanceof Error ? err.message : err}`);
+      }
+    };
+
+    // A configured cap requires serialized initialization so concurrent calls
+    // cannot all observe spare capacity and exceed the process limit.
+    const initPromise = this.config.maxOpenClients === undefined ? initialize() : this.clientInitQueue.then(initialize);
+    if (this.config.maxOpenClients !== undefined) {
+      this.clientInitQueue = initPromise.catch(() => {});
+    }
     this.initPromises.set(key, initPromise);
-    initPromise.catch(() => {}); // prevent unhandled rejection if timeout wins
 
     try {
-      await Promise.race([
-        initPromise,
-        new Promise<void>((_, reject) =>
-          setTimeout(() => reject(new Error('LSP client initialization timed out')), initTimeout + 1000),
-        ),
-      ]);
+      await initPromise;
       return this.clients.get(key) || null;
-    } catch (err) {
-      timedOut = true;
-      this.clients.delete(key);
-      const command = serverDef.command(projectRoot);
-      const hint = this.config.binaryOverrides?.[serverDef.id]
-        ? ` (using binaryOverrides: "${this.config.binaryOverrides[serverDef.id]}")`
-        : command
-          ? ` (command: "${command}")`
-          : '';
-      console.warn(`[LSP] Failed to start ${serverDef.name}${hint}: ${err instanceof Error ? err.message : err}`);
-      return null;
     } finally {
       this.initPromises.delete(key);
     }
@@ -200,6 +239,7 @@ export class LSPManager {
         this.clients.delete(key);
         existing.shutdown().catch(() => {});
       } else {
+        this.touchClient(key, existing);
         return existing;
       }
     }
@@ -312,6 +352,7 @@ export class LSPManager {
               this.clients.delete(key);
               existing.shutdown().catch(() => {});
             } else {
+              this.touchClient(key, existing);
               return this.collectDiagnostics(existing, filePath, content, languageId);
             }
           }
@@ -375,6 +416,9 @@ export class LSPManager {
    * Shutdown all managed LSP clients.
    */
   async shutdownAll(): Promise<void> {
+    // Let queued initializations settle before taking the client snapshot so a
+    // client cannot be added after teardown and leave its process running.
+    await Promise.allSettled(Array.from(this.initPromises.values()));
     await Promise.allSettled(Array.from(this.clients.values()).map(client => client.shutdown()));
     this.clients.clear();
     this.initPromises.clear();

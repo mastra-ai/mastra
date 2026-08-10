@@ -248,6 +248,25 @@ describe('LSPManager', () => {
       const client = await manager.getClient('/project/src/app.ts');
       expect(client).not.toBeNull();
     });
+
+    it('waits for queued initialization before shutting clients down', async () => {
+      let finishInitialization!: () => void;
+      mockInitialize.mockImplementationOnce(
+        () =>
+          new Promise<void>(resolve => {
+            finishInitialization = resolve;
+          }),
+      );
+      const getClientPromise = manager.getClient('/project/src/app.ts');
+      await vi.waitFor(() => expect(mockInitialize).toHaveBeenCalledTimes(1));
+
+      const shutdownPromise = manager.shutdownAll();
+      finishInitialization();
+      await getClientPromise;
+      await shutdownPromise;
+
+      expect(mockShutdown).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('config', () => {
@@ -264,6 +283,27 @@ describe('LSPManager', () => {
         expect.any(Object),
       );
       await restrictedManager.shutdownAll();
+    });
+
+    it('shuts down the least recently used client when maxOpenClients is reached', async () => {
+      const restrictedManager = new LSPManager(mockProcessManager, '/project', { maxOpenClients: 1 });
+      const first = await restrictedManager.getClient('/project/src/app.ts');
+
+      const second = await restrictedManager.getClient('/other-project/src/app.ts');
+
+      expect(second).not.toBe(first);
+      expect(mockShutdown).toHaveBeenCalledTimes(1);
+
+      const reopened = await restrictedManager.getClient('/project/src/app.ts');
+      expect(reopened).not.toBe(first);
+      expect(mockShutdown).toHaveBeenCalledTimes(2);
+      await restrictedManager.shutdownAll();
+    });
+
+    it('rejects invalid maxOpenClients values', () => {
+      expect(() => new LSPManager(mockProcessManager, '/project', { maxOpenClients: 0 })).toThrow(
+        'maxOpenClients must be a positive integer',
+      );
     });
   });
 
