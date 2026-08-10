@@ -227,6 +227,8 @@ Some **content** with _Markdown_ `syntax`. Check [this `api`](#).
 :::
 ```
 
+`info` is an alias for `note` and renders identically, so prefer `note`.
+
 ### `<Tabs>`
 
 Docusaurus provides the `<Tabs>` component that you can use in Markdown thanks to MDX:
