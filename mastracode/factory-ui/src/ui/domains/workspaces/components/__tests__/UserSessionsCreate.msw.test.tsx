@@ -229,7 +229,7 @@ describe('User sessions creation', () => {
     await user.click(await screen.findByRole('button', { name: 'Delete' }));
     await waitForMutationsIdle(client);
 
-    expect(await screen.findByText(/Delete failed/)).toBeInTheDocument();
+    expect(await screen.findByText(/Failed to delete session \(500\)/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'session-1' })).toBeInTheDocument();
   });
 });
