@@ -24,7 +24,7 @@
  */
 import { SUPPORT_QA } from '@workshop/shared/data';
 import { answerAccuracyScorer } from '@workshop/shared/scorers';
-import { mastra, supportAgent } from './mastra/index.ts';
+import { mastra, observability, supportAgent } from './mastra/index.ts';
 
 /** Answers the way the shipped agent does. */
 async function baselineTask({ input }: { input: unknown }) {
@@ -64,13 +64,17 @@ async function main() {
   console.log(`  dataset "nimbus-support-qa" — ${SUPPORT_QA.length} items`);
 
   const runs = [
-    { label: 'baseline', task: baselineTask },
-    { label: 'regression', task: regressedTask },
-    { label: 'fix', task: baselineTask },
+    { label: 'baseline', description: 'The agent as shipped', task: baselineTask },
+    { label: 'regression', description: 'A hedging "improvement" that swallowed the facts', task: regressedTask },
+    { label: 'fix', description: 'Hedging reverted — back to baseline', task: baselineTask },
   ];
 
   for (const run of runs) {
     const summary = await dataset.startExperiment({
+      // Name them. Without this the Studio experiments list shows three
+      // opaque uuids and the whole baseline→regression→fix story is invisible.
+      name: run.label,
+      description: run.description,
       scorers: [answerAccuracyScorer],
       task: run.task,
     });
@@ -80,6 +84,12 @@ async function main() {
       `  experiment "${run.label.padEnd(10)}" → mean ${mean.toFixed(3)}  (${summary.succeededCount}/${summary.totalItems} ok)`,
     );
   }
+
+  // Flush the trace spans this seed just produced. Spans export in batches and
+  // this script is about to exit, so without the flush the Observability →
+  // Traces view is empty on a fresh clone — silently, with no error. Doing it
+  // here means the trace panel has something to show before anyone has chatted.
+  await observability.shutdown();
 
   console.log(`
 Done. Now:

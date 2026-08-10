@@ -139,30 +139,36 @@ ${Object.values(NIMBUS_KNOWLEDGE)
       {},
 });
 
+/**
+ * Required for live scoring to be visible — not optional decoration.
+ *
+ * Scores from agent-attached scorers hang off trace spans. With no
+ * `Observability` config there are no spans, so nothing is written and
+ * Evaluation → Overview stays empty even though the scorers really ran.
+ * The symptom is silent: no error anywhere, just zeros.
+ *
+ * Dataset and experiment scores are unaffected — those persist through the
+ * dataset tables regardless. This only governs the live/sampled feed.
+ *
+ * Exported because spans are flushed in batches: a short-lived script (the
+ * seed) exits before the flush and silently leaves no traces at all unless it
+ * awaits `observability.shutdown()` first.
+ */
+export const observability = new Observability({
+  configs: {
+    default: {
+      serviceName: 'evals-workshop',
+      exporters: [new MastraStorageExporter()],
+      spanOutputProcessors: [new SensitiveDataFilter()],
+    },
+  },
+});
+
 export const mastra = new Mastra({
   storage,
   agents: { 'support-agent': supportAgent },
   workflows: { 'support-workflow': supportWorkflow },
-  /**
-   * Required for live scoring to be visible — not optional decoration.
-   *
-   * Scores from agent-attached scorers hang off trace spans. With no
-   * `Observability` config there are no spans, so nothing is written and
-   * Evaluation → Overview stays empty even though the scorers really ran.
-   * The symptom is silent: no error anywhere, just zeros.
-   *
-   * Dataset and experiment scores are unaffected — those persist through the
-   * dataset tables regardless. This only governs the live/sampled feed.
-   */
-  observability: new Observability({
-    configs: {
-      default: {
-        serviceName: 'evals-workshop',
-        exporters: [new MastraStorageExporter()],
-        spanOutputProcessors: [new SensitiveDataFilter()],
-      },
-    },
-  }),
+  observability,
   // Registered here so their scores persist and Studio can resolve them by id.
   scorers: {
     'answer-accuracy': answerAccuracyScorer as any,
