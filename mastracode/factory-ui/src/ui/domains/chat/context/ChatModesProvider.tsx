@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 
 import { useAgentControllerModes } from '../../../../hooks/useAgentControllerModes';
 import { useSwitchAgentControllerModeMutation } from '../../../../hooks/useAgentControllerStateMutations';
@@ -60,7 +60,7 @@ function LiveChatModesProvider({ children }: ChatModesProviderProps) {
     baseUrl,
     enabled: sessionEnabled,
   });
-  const { mutateAsync: switchMode } = useSwitchAgentControllerModeMutation({
+  const switchModeMutation = useSwitchAgentControllerModeMutation({
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
     scope: projectPath,
@@ -68,28 +68,15 @@ function LiveChatModesProvider({ children }: ChatModesProviderProps) {
     enabled: sessionEnabled,
   });
   const modes = modesQuery.data ?? EMPTY_MODES;
-  const [activeModeId, setActiveModeId] = useState(state?.modeId);
-
-  useEffect(() => {
-    setActiveModeId(state?.modeId);
-  }, [state?.modeId]);
-
+  // the mutation stays pending until the connection state is refetched, so this never snaps back
+  const activeModeId = switchModeMutation.isPending ? switchModeMutation.variables : state?.modeId;
   const value: ChatModesApi = {
     modes,
     activeModeId,
     activeMode: modes.find(mode => mode.id === activeModeId),
     isLoading: modesQuery.isPending,
     error: modesQuery.error ?? undefined,
-    setMode: async modeId => {
-      const previousModeId = activeModeId;
-      setActiveModeId(modeId);
-      try {
-        await switchMode(modeId);
-      } catch (error) {
-        setActiveModeId(currentModeId => (currentModeId === modeId ? previousModeId : currentModeId));
-        throw error;
-      }
-    },
+    setMode: modeId => switchModeMutation.mutateAsync(modeId),
   };
 
   return <ChatModesContext.Provider value={value}>{children}</ChatModesContext.Provider>;
