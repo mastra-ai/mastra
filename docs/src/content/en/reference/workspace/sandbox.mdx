@@ -1,6 +1,6 @@
 ---
 title: "Reference: WorkspaceSandbox | Workspace"
-description: "Documentation for the WorkspaceSandbox interface that defines command execution operations."
+description: "Documentation for the WorkspaceSandbox interface that defines command execution, processes, networking, file upload, and mounts."
 packages:
   - "@mastra/core"
 ---
@@ -9,17 +9,46 @@ packages:
 
 **Added in:** `@mastra/core@1.1.0`
 
-The `WorkspaceSandbox` interface defines how workspaces execute commands and manage background processes.
+The `WorkspaceSandbox` interface defines how workspaces execute commands. Optional provider capabilities cover process and file management. Providers may also support public port URLs, mounts, or cloning.
 
 ## Properties
 
 <PropertiesTable
   content={[
   {
+    name: 'id',
+    type: 'string',
+    description:
+      'Logical identifier for the sandbox instance. Reconnection and persistence semantics are provider-specific.',
+  },
+  {
+    name: 'name',
+    type: 'string',
+    description: 'Human-readable sandbox name.',
+  },
+  {
+    name: 'provider',
+    type: 'string',
+    description: 'Provider type identifier.',
+  },
+  {
     name: 'processes',
     type: 'SandboxProcessManager',
     description:
       "Background process manager. If not implemented, process management tools won't be available. See SandboxProcessManager reference.",
+    isOptional: true,
+  },
+  {
+    name: 'networking',
+    type: 'SandboxNetworking',
+    description:
+      "Public port exposure API. This doesn't configure network or egress policy. Available only when the provider supports public URLs.",
+    isOptional: true,
+  },
+  {
+    name: 'mounts',
+    type: 'MountManager',
+    description: 'Tracks configured filesystem mounts when the provider supports mounting.',
     isOptional: true,
   },
 ]}
@@ -39,11 +68,13 @@ This method prepares the sandbox for command execution.
 
 ### `stop()`
 
-Stop the sandbox.
+Stop the sandbox. Persistence and reconnection behavior are provider-specific.
 
 ```typescript
 await sandbox.stop?.()
 ```
+
+Don't assume that files or processes survive this operation. Check the selected provider's reference before using `stop()` as a pause or persistence boundary.
 
 ### `destroy()`
 
@@ -52,6 +83,61 @@ Clean up sandbox resources. Called by `workspace.destroy()`.
 ```typescript
 await sandbox.destroy()
 ```
+
+### `clone(options?)`
+
+Create an independent sandbox that inherits the provider configuration. The clone doesn't start or perform network operations until its own `start()` or command call.
+
+```typescript
+const projectSandbox = sandbox.clone?.({
+  id: 'project-123',
+  env: { NODE_ENV: 'development' },
+  workingDirectory: '/workspace',
+})
+```
+
+<PropertiesTable
+  content={[
+  {
+    name: 'options.id',
+    type: 'string',
+    description: 'Logical identifier for the clone.',
+    isOptional: true,
+  },
+  {
+    name: 'options.sandboxId',
+    type: 'string',
+    description: 'Provider identifier to reattach to instead of creating a new sandbox.',
+    isOptional: true,
+  },
+  {
+    name: 'options.env',
+    type: 'Record<string, string>',
+    description: 'Environment variables for the clone.',
+    isOptional: true,
+  },
+  {
+    name: 'options.workingDirectory',
+    type: 'string',
+    description: 'Provider working directory for the clone.',
+    isOptional: true,
+  },
+  {
+    name: 'options.idleTimeoutMinutes',
+    type: 'number',
+    description: 'Idle teardown window for providers that support it.',
+    isOptional: true,
+  },
+  {
+    name: 'options.checkpointName',
+    type: 'string',
+    description: 'Checkpoint used to seed or preserve the clone when supported.',
+    isOptional: true,
+  },
+]}
+/>
+
+**Returns:** `WorkspaceSandbox | undefined`
 
 ### `executeCommand(command, args?, options?)`
 
@@ -123,6 +209,59 @@ const result = await sandbox.executeCommand('npm', ['install', 'lodash'])
 ]}
 />
 
+### `writeFiles(files)`
+
+Write multiple files through a provider's native upload API. This is optional and writes to the sandbox's own filesystem, not the configured `WorkspaceFilesystem`.
+
+```typescript
+await sandbox.writeFiles?.([
+  { path: '/workspace/package.json', content: '{"type":"module"}' },
+  { path: '/workspace/index.mjs', content: sourceCode },
+])
+```
+
+<PropertiesTable
+  content={[
+  {
+    name: 'files',
+    type: 'SandboxFileInput[]',
+    description: 'Files to upload. Each entry contains a destination `path` and `string | Buffer` content.',
+  },
+]}
+/>
+
+**Returns:** `Promise<void>`
+
+### `mount(filesystem, mountPath)`
+
+Mount a compatible workspace filesystem into the sandbox. This method is available only when the provider supports mounts.
+
+```typescript
+const result = await sandbox.mount?.(filesystem, '/data')
+```
+
+**Returns:** `Promise<MountResult> | undefined`
+
+### `unmount(mountPath)`
+
+Unmount a workspace filesystem from the sandbox.
+
+```typescript
+await sandbox.unmount?.('/data')
+```
+
+**Returns:** `Promise<void> | undefined`
+
+### `isReady()`
+
+Check whether the sandbox is ready for operations.
+
+```typescript
+const ready = await sandbox.isReady?.()
+```
+
+**Returns:** `Promise<boolean> | undefined`
+
 ### `getInfo()`
 
 Get sandbox status and resource information.
@@ -131,6 +270,16 @@ Get sandbox status and resource information.
 const info = await sandbox.getInfo()
 // { status: 'running', resources: { memoryMB: 512, cpuPercent: 5 } }
 ```
+
+### `networking.getPortUrl(port)`
+
+Get the public URL for an exposed port. This capability is optional and doesn't change the sandbox's network policy.
+
+```typescript
+const url = await sandbox.networking?.getPortUrl(8000)
+```
+
+**Returns:** `Promise<string | null> | undefined`
 
 ### `getInstructions(opts?)`
 

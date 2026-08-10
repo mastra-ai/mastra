@@ -20,6 +20,31 @@ A sandbox provider executes commands in a controlled environment:
 - **Timeouts**: Prevent long-running commands from hanging
 - **Isolation**: Optional OS-level sandboxing for security
 
+:::warning
+
+A sandbox doesn't guarantee isolation by itself. `LocalSandbox` runs commands directly on the host unless you enable native isolation. Container and remote providers have their own security boundaries and configuration.
+
+Choose the provider and controls that meet your requirements for network access, credentials, retention, and deletion.
+
+:::
+
+## Runtime boundary
+
+The sandbox controls where shell commands run. Application code, including agent tools, workflow steps, and model callbacks, still runs in your application process unless it explicitly calls workspace or sandbox APIs.
+
+Giving an agent a sandbox doesn't move its authored tools or your application runtime into that sandbox. It adds sandbox-backed command tools to the agent.
+
+## Sandbox and filesystem
+
+The workspace `sandbox` and `filesystem` options are separate capabilities:
+
+- The sandbox provides command execution and may have its own filesystem.
+- The workspace filesystem provides file tools such as read, write, list, and grep.
+
+They share files only when you configure them to use the same storage. For local development, point `LocalFilesystem.basePath` and `LocalSandbox.workingDirectory` at the same directory. For supported remote sandboxes, use [`mounts`](/docs/workspace/filesystem#mounts-and-compositefilesystem) to make workspace storage available to commands.
+
+Mastra doesn't define one working directory that applies to every sandbox provider. Relative paths, absolute paths, persistence, and the default command directory depend on the provider. Pass `cwd` when a command must run from a specific directory.
+
 :::tip[📹 Watch]
 
 Watch [Mastra remote sandboxes overview](https://www.youtube.com/watch?v=Ix2X-sjVXjw) to see how remote sandboxes give agents an isolated computer to work in.
@@ -65,13 +90,19 @@ const agent = new Agent({
   workspace,
 })
 
-// The agent now has the execute_command tool available
+// The agent now has the mastra_workspace_execute_command tool available
 const response = await agent.generate('Run `ls -la` in the workspace directory')
 ```
 
 See [`LocalSandbox` reference](/reference/workspace/local-sandbox) for configuration options including environment isolation and native OS sandboxing.
 
-### Sandbox without a filesystem
+## File-based agent defaults
+
+File-based agents discovered through `mastra dev` or `mastra build` receive a local workspace automatically when the build provides a per-agent workspace path. You don't need to define a workspace for this default case.
+
+Add a `workspace/` directory to the agent to seed its runtime workspace with files at build time. See [file-based agent workspaces](/reference/file-based-agents/workspace) for the directory convention, customization, and precedence rules.
+
+## Sandbox without a filesystem
 
 Configure only `sandbox` when an agent needs command execution without filesystem tools:
 
@@ -82,6 +113,42 @@ const workspace = new Workspace({
   sandbox: new LocalSandbox({ workingDirectory: './workspace' }),
 })
 ```
+
+## Use a sandbox from application code
+
+Keep a reference to a static sandbox when application code needs to execute commands directly. Commands start the sandbox automatically and block until they finish:
+
+```typescript
+import { LocalSandbox, Workspace } from '@mastra/core/workspace'
+
+const sandbox = new LocalSandbox({ workingDirectory: './workspace' })
+const workspace = new Workspace({ sandbox })
+
+const result = await sandbox.executeCommand('node', ['--version'])
+console.log(result.stdout)
+```
+
+For resolver-backed workspaces, call `workspace.resolveSandbox()` with the request context that selects the sandbox:
+
+```typescript
+const sandbox = await workspace.resolveSandbox({ requestContext })
+
+if (sandbox) {
+  const result = await sandbox.executeCommand?.('node', ['--version'])
+}
+```
+
+Use the process manager when a command must continue running while your application does other work:
+
+```typescript
+const server = await sandbox.processes.spawn('python -m http.server 8000')
+
+// Do other work while the server runs.
+
+await server.kill()
+```
+
+Process handles support output streams, `wait()`, `kill()`, and, when the provider supports it, `sendStdin()`. See the [`SandboxProcessManager` reference](/reference/workspace/process-manager) for the full API.
 
 ## Dynamic sandbox
 
@@ -152,11 +219,11 @@ Cleanup can happen per request, tenant, or user. It can also be part of a long-l
 
 ### Tool registration
 
-With a static sandbox, the workspace inspects the instance to decide which tools to register. With a resolver, the workspace assumes full capabilities and registers `execute_command` (with `background` support), `get_process_output`, and `kill_process`. If the resolved sandbox doesn't implement a capability, the runtime throws a clear `SandboxFeatureNotSupportedError`.
+With a static sandbox, the workspace inspects the instance to decide which tools to register. With a resolver, the workspace assumes full capabilities and registers `mastra_workspace_execute_command` (with `background` support), `mastra_workspace_get_process_output`, and `mastra_workspace_kill_process`. If the resolved sandbox doesn't implement a capability, the runtime throws a clear `SandboxFeatureNotSupportedError`.
 
 ### Background process continuity
 
-Background processes can outlive a single tool call, so `get_process_output` and `kill_process` must reach the same sandbox that started the process. By default, a resolved sandbox is cached per request. For continuity across follow-up requests, such as a later conversation turn, set `sandboxCacheKey` to a stable identifier. The resolved sandbox is then cached by that key instead of by request:
+Background processes can outlive a single tool call, so `mastra_workspace_get_process_output` and `mastra_workspace_kill_process` must reach the same sandbox that started the process. By default, a resolved sandbox is cached per request. For continuity across follow-up requests, such as a later conversation turn, set `sandboxCacheKey` to a stable identifier. The resolved sandbox is then cached by that key instead of by request:
 
 ```typescript
 const workspace = new Workspace({
@@ -194,17 +261,41 @@ const workspace = new Workspace({
 })
 ```
 
+## Lifecycle and persistence
+
+Static sandboxes are owned by their workspace. `workspace.init()` starts them, and `workspace.destroy()` destroys them. Calling `mastra.shutdown()` destroys registered workspaces and their owned sandboxes.
+
+The meaning of `stop()` is provider-specific. It may pause existing compute or tear it down, and some providers preserve a snapshot as part of that operation. Files and processes aren't guaranteed to survive a stop. Application restarts and idle timeouts also have provider-specific persistence.
+
+Every sandbox has an `id`, but the ID isn't a cross-provider persistence guarantee. Some providers use it to reconnect to existing compute, while others require a separate provider ID or create a new sandbox after a stop. Read the selected provider's reference before relying on reconnection or persisted state.
+
+Resolver-returned sandboxes remain application-owned. A workspace cache key keeps later requests pointed at the same resolved object, but doesn't change the provider's persistence or cleanup behavior.
+
+## Network and credential safety
+
+Mastra doesn't define one network policy that applies to every sandbox provider. Network isolation, allowlists, private networking, and public port exposure are provider capabilities.
+
+The optional `sandbox.networking.getPortUrl()` API returns a public URL when the provider supports exposing ports:
+
+```typescript
+const url = await sandbox.networking?.getPortUrl(8000)
+```
+
+This API exposes a port. It doesn't configure egress policy. Configure network access through the selected provider. `LocalSandbox` with native isolation blocks network access by default unless `allowNetwork` is enabled. Without native isolation, local commands use the host network.
+
+Environment variables passed to a sandbox or command are available to code running there. Mastra doesn't provide a provider-neutral credential broker that keeps a secret outside the sandbox while injecting it into outbound requests. Pass only the credentials the command needs and follow the selected provider's secret-management guidance.
+
 ## Agent tools
 
-When you configure a sandbox on a workspace, agents receive the `execute_command` tool for running shell commands.
+When you configure a sandbox on a workspace, agents receive the `mastra_workspace_execute_command` tool for running shell commands.
 
-If your sandbox provider supports running processes in the background, the `execute_command` tool also accepts `background: true` for starting long-running processes, and two additional tools are registered:
+If your sandbox provider supports running processes in the background, `mastra_workspace_execute_command` also accepts `background: true` for starting long-running processes, and two additional tools are registered:
 
 | Tool | Description |
 | - | - |
-| `execute_command` | Run a shell command. Returns stdout, stderr, and exit code. Supports `background: true` to spawn a long-running process and return a PID. |
-| `get_process_output` | Get stdout, stderr, and status of a background process by PID. Supports `tail` to limit output lines and `wait: true` to block until exit. |
-| `kill_process` | Stop a background process by PID. Returns recent output. |
+| `mastra_workspace_execute_command` | Run a shell command. Returns stdout, stderr, and exit code. Supports `background: true` to spawn a long-running process and return a PID. |
+| `mastra_workspace_get_process_output` | Get stdout, stderr, and status of a background process by PID. Supports `tail` to limit output lines and `wait: true` to block until exit. |
+| `mastra_workspace_kill_process` | Stop a background process by PID. Returns recent output. |
 
 These tools are registered automatically. See [Workspace class reference](/reference/workspace/workspace-class#sandbox-tools) for the full tool name list.
 
@@ -232,13 +323,13 @@ Set `enabled: false` on a tool to remove it from the agent's toolset. See [`Work
 
 Command output is limited to the last 200 lines by default. Set the command's `tail` argument to change the line limit, or set it to `0` to disable line-based truncation.
 
-After applying the line limit, Mastra limits the output to 2,000 tokens by default. Set `maxOutputTokens` on `execute_command`, `get_process_output`, or `kill_process` to change the token limit for that tool.
+After applying the line limit, Mastra limits the output to 2,000 tokens by default. Set `maxOutputTokens` on the corresponding `WORKSPACE_TOOLS.SANDBOX` entry to change the token limit for that tool.
 
 ANSI escape codes are removed before output reaches the model. Raw output keeps its formatting in streams and terminal interfaces.
 
 ## Background process callbacks
 
-When agents start background processes through the `execute_command` tool, you can receive lifecycle callbacks for stdout, stderr, and process exit. Configure these through the `backgroundProcesses` option on the `execute_command` tool:
+When agents start background processes through `mastra_workspace_execute_command`, you can receive lifecycle callbacks for stdout, stderr, and process exit. Configure these through the `backgroundProcesses` option on its `WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND` entry:
 
 ```typescript title="src/mastra/workspaces.ts"
 import { Workspace, LocalSandbox, WORKSPACE_TOOLS } from '@mastra/core/workspace'
@@ -288,9 +379,16 @@ Use `null` or `false` for cloud sandboxes (for example, E2B, Daytona, or Modal) 
 For the full `SandboxProcessManager` API (spawning processes programmatically and reading output, plus sending stdin), see the [`SandboxProcessManager` reference](/reference/workspace/process-manager).
 :::
 
+## Custom sandbox providers
+
+Implement [`WorkspaceSandbox`](/reference/workspace/sandbox) to connect another execution backend. The interface defines identity and lifecycle, while command execution, background processes, public port URLs, native file upload, cloning, and mounts are separate capabilities.
+
+Extend `MastraSandbox` when you want the base lifecycle state management, mount handling, and command execution built on a `SandboxProcessManager`. A provider that doesn't support a capability can omit it, and Mastra won't register the corresponding tools for a static sandbox.
+
 ## Related
 
 - [`SandboxProcessManager` reference](/reference/workspace/process-manager)
+- [`WorkspaceSandbox` reference](/reference/workspace/sandbox)
 - [`AgentCoreRuntimeSandbox` reference](/reference/workspace/agentcore-runtime-sandbox)
 - [`AppleContainerSandbox` reference](/reference/workspace/apple-container-sandbox)
 - [`DaytonaSandbox` reference](/reference/workspace/daytona-sandbox)
