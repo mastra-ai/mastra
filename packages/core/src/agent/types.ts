@@ -352,6 +352,8 @@ export interface AgentSubscribeToThreadOptions {
 export interface AgentThreadSubscription<OUTPUT = unknown> {
   stream: AsyncIterable<AgentChunkType<OUTPUT>>;
   activeRunId: () => string | null;
+  /** @internal */
+  __getCurrentRunRequestContext: () => RequestContext | undefined;
   abort: () => boolean;
   unsubscribe: () => void;
 }
