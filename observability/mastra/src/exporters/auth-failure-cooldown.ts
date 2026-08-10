@@ -29,7 +29,7 @@ export async function fetchWithAuthFailureHandling(
   url: string,
   options: RequestInit,
   maxRetries: number,
-  shouldRetryResponse?: (response: Response) => boolean,
+  callerShouldRetry?: (response: Response) => boolean,
 ): Promise<Response> {
   let authFailureStatus: number | undefined;
 
@@ -41,7 +41,7 @@ export async function fetchWithAuthFailureHandling(
           return false;
         }
 
-        return shouldRetryResponse?.(response) ?? true;
+        return callerShouldRetry?.(response) ?? true;
       },
     });
   } catch (error) {
