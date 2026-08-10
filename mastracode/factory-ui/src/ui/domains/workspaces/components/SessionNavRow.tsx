@@ -3,6 +3,7 @@ import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { HoverCard, HoverCardTrigger } from '@mastra/playground-ui/components/HoverCard';
 import { MainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { GitBranch, MoreHorizontal, Pin, PinOff, Trash2 } from 'lucide-react';
 
 import { PullRequestStatusIcon } from '../../factory/components/PullRequestStatusIcon';
@@ -12,8 +13,9 @@ import type { SessionPreviewDetails } from './SessionPreviewCard';
 /**
  * Shared sidebar row for workspace/user sessions. Built on `MainSidebar.NavLink`
  * so every session list (work, review, user) renders with identical density,
- * hover, and active states. The optional status dot (agent running/finished)
- * hides on hover so the actions menu can take its place.
+ * hover, and active states. Spinner, status dot and actions menu share one
+ * trailing slot beside the label: they swap in place, and the slot collapses
+ * when there is nothing to show so the label gets the full row.
  */
 export function SessionNavRow({
   name,
@@ -61,61 +63,49 @@ export function SessionNavRow({
       {pinned && !loading ? (
         <Pin aria-label={`${name} pinned`} className="text-icon3/70 size-2 shrink-0 rotate-45" />
       ) : null}
-      {loading ? (
-        <Spinner size="sm" aria-label={`Opening ${name}`} className="text-icon3 ml-auto shrink-0" />
-      ) : status === 'running' ? (
-        <span
-          role="status"
-          aria-label={`Agent working in ${name}`}
-          title="Agent working"
-          className="bg-accent1 ml-auto size-2 shrink-0 animate-pulse rounded-full group-hover/session:opacity-0"
-        />
-      ) : status === 'attention' ? (
-        <span
-          role="status"
-          aria-label={`Agent finished in ${name}`}
-          title="Agent finished — open to dismiss"
-          className="bg-accent1 ml-auto size-2 shrink-0 rounded-full group-hover/session:opacity-0"
-        />
-      ) : merged ? (
-        <span
-          role="img"
-          aria-label={`Pull request merged for ${name}`}
-          title="Pull request merged"
-          className="ml-auto flex shrink-0 group-hover/session:opacity-0"
-        >
-          <PullRequestStatusIcon status="merged" className="size-3!" decorative />
-        </span>
-      ) : null}
     </button>
   );
-  const action = loading ? undefined : (
-    <DropdownMenu>
-      <DropdownMenu.Trigger
-        render={
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            aria-label={`Session actions for ${name}`}
-            disabled={disabled}
-            className="opacity-0 group-focus-within/session:opacity-100 group-hover/session:opacity-100 data-[popup-open]:opacity-100"
-          >
-            <MoreHorizontal />
-          </Button>
-        }
-      />
-      <DropdownMenu.Content align="end" className="min-w-28">
-        <DropdownMenu.Item onClick={() => onPinChange(!pinned)}>
-          {pinned ? <PinOff /> : <Pin />}
-          {pinned ? 'Unpin' : 'Pin session'}
-        </DropdownMenu.Item>
-        <DropdownMenu.Item variant="destructive" onClick={onDelete}>
-          <Trash2 />
-          Delete
-        </DropdownMenu.Item>
-      </DropdownMenu.Content>
-    </DropdownMenu>
+  const indicator = indicatorKind({ loading, status, merged });
+  const action = (
+    <span
+      className={cn(
+        'size-form-sm shrink-0 place-items-center *:col-start-1 *:row-start-1',
+        // Empty slot claims no width, so the label runs full width until there is something to show.
+        indicator
+          ? 'grid'
+          : 'hidden group-focus-within/session:grid group-hover/session:grid group-has-[[data-popup-open]]/session:grid',
+      )}
+    >
+      {indicator ? <SessionRowIndicator kind={indicator} name={name} /> : null}
+      {loading ? null : (
+        <DropdownMenu>
+          <DropdownMenu.Trigger
+            render={
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                aria-label={`Session actions for ${name}`}
+                disabled={disabled}
+                className="hidden group-focus-within/session:flex group-hover/session:flex data-[popup-open]:flex"
+              >
+                <MoreHorizontal />
+              </Button>
+            }
+          />
+          <DropdownMenu.Content align="end" className="min-w-28">
+            <DropdownMenu.Item onClick={() => onPinChange(!pinned)}>
+              {pinned ? <PinOff /> : <Pin />}
+              {pinned ? 'Unpin' : 'Pin session'}
+            </DropdownMenu.Item>
+            <DropdownMenu.Item variant="destructive" onClick={onDelete}>
+              <Trash2 />
+              Delete
+            </DropdownMenu.Item>
+          </DropdownMenu.Content>
+        </DropdownMenu>
+      )}
+    </span>
   );
   const row = (
     <MainSidebar.NavLink
@@ -135,5 +125,60 @@ export function SessionNavRow({
       {row}
       <SessionPreviewCard name={name} status={status} merged={merged} details={preview} />
     </HoverCard>
+  );
+}
+
+type IndicatorKind = 'loading' | 'running' | 'attention' | 'merged';
+
+function indicatorKind({
+  loading,
+  status,
+  merged,
+}: {
+  loading?: boolean;
+  status?: 'running' | 'attention';
+  merged?: boolean;
+}): IndicatorKind | undefined {
+  if (loading) return 'loading';
+  if (status) return status;
+  return merged ? 'merged' : undefined;
+}
+
+// The actions menu owns the slot as soon as the row is hovered, focused, or its menu is open.
+const yieldsToActions =
+  'group-hover/session:hidden group-focus-within/session:hidden group-has-[[data-popup-open]]/session:hidden';
+
+function SessionRowIndicator({ kind, name }: { kind: IndicatorKind; name: string }) {
+  if (kind === 'loading') return <Spinner size="sm" aria-label={`Opening ${name}`} className="text-icon3" />;
+
+  if (kind === 'running')
+    return (
+      <span
+        role="status"
+        aria-label={`Agent working in ${name}`}
+        title="Agent working"
+        className={cn('bg-accent1 size-2 animate-pulse rounded-full', yieldsToActions)}
+      />
+    );
+
+  if (kind === 'attention')
+    return (
+      <span
+        role="status"
+        aria-label={`Agent finished in ${name}`}
+        title="Agent finished — open to dismiss"
+        className={cn('bg-accent1 size-2 rounded-full', yieldsToActions)}
+      />
+    );
+
+  return (
+    <span
+      role="img"
+      aria-label={`Pull request merged for ${name}`}
+      title="Pull request merged"
+      className={cn('flex', yieldsToActions)}
+    >
+      <PullRequestStatusIcon status="merged" className="size-3!" decorative />
+    </span>
   );
 }

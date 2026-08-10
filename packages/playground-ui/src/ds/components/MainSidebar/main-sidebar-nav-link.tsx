@@ -2,7 +2,7 @@ import React from 'react';
 import type { ComponentPropsWithoutRef } from 'react';
 import type { SidebarState } from './main-sidebar-context';
 import { useMaybeSidebarState } from './main-sidebar-context';
-import { navItemClasses } from './main-sidebar-nav-item-classes';
+import { navItemClasses, navRowSurfaceClasses } from './main-sidebar-nav-item-classes';
 import type { MainSidebarNavItemSize } from './main-sidebar-nav-item-classes';
 import { MainSidebarNavLabel } from './main-sidebar-nav-label';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
@@ -80,6 +80,10 @@ export function MainSidebarNavLink({
   const linkParams = isExternal ? { target: '_blank', rel: 'noreferrer' } : {};
   const needsTooltip = link ? isCollapsed || Boolean(link.tooltipMsg) : false;
 
+  // With a trailing action the row becomes a flex pair: the wrapper owns the row
+  // surface so hover/active paint the whole box, the action sits after the label.
+  const hasRowAction = Boolean(action) && !isCollapsed;
+
   const itemClassName = cn(
     navItemClasses({
       isActive,
@@ -87,8 +91,9 @@ export function MainSidebarNavLink({
       isFeatured,
       level,
       size,
+      withSurface: !hasRowAction,
     }),
-    action && !isCollapsed && 'pr-10',
+    hasRowAction && 'flex-1 pr-1',
   );
 
   let interactiveEl: React.ReactNode = null;
@@ -121,19 +126,28 @@ export function MainSidebarNavLink({
     );
   }
 
+  const rowEl =
+    link && needsTooltip && React.isValidElement(interactiveEl) ? (
+      <Tooltip>
+        <TooltipTrigger render={interactiveEl} />
+        <TooltipContent side="right" align="center" sideOffset={16}>
+          {link.tooltipMsg ? (isCollapsed ? `${link.name} | ${link.tooltipMsg}` : link.tooltipMsg) : link.name}
+        </TooltipContent>
+      </Tooltip>
+    ) : (
+      (interactiveEl ?? children)
+    );
+
   return (
     <li {...props} className={cn('relative flex min-w-0 flex-col', className)}>
-      {link && needsTooltip && React.isValidElement(interactiveEl) ? (
-        <Tooltip>
-          <TooltipTrigger render={interactiveEl} />
-          <TooltipContent side="right" align="center" sideOffset={16}>
-            {link.tooltipMsg ? (isCollapsed ? `${link.name} | ${link.tooltipMsg}` : link.tooltipMsg) : link.name}
-          </TooltipContent>
-        </Tooltip>
+      {hasRowAction ? (
+        <div className={cn('flex min-w-0 items-center pr-1', navRowSurfaceClasses({ isActive, isFeatured }))}>
+          {rowEl}
+          {action}
+        </div>
       ) : (
-        (interactiveEl ?? children)
+        rowEl
       )}
-      {!isCollapsed && action && <div className="absolute top-1/2 right-1 -translate-y-1/2">{action}</div>}
       {!isCollapsed && subItems}
     </li>
   );
