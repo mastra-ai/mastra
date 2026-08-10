@@ -33,6 +33,25 @@ async function flushAsyncInit(): Promise<void> {
 
 const withoutNotificationDispatch = { notifications: { dispatch: { enabled: false } } } as const;
 
+/**
+ * Wrap every method of a store and record its name on each call. Lets a test
+ * assert that boot touched the store not at all, instead of naming the one
+ * method it happens to know about today.
+ */
+function recordStoreCalls(store: object): string[] {
+  const calls: string[] = [];
+  for (const method of Object.getOwnPropertyNames(Object.getPrototypeOf(store))) {
+    if (method === 'constructor') continue;
+    const original = (store as Record<string, unknown>)[method];
+    if (typeof original !== 'function') continue;
+    vi.spyOn(store as never, method as never).mockImplementation(((...args: unknown[]) => {
+      calls.push(method);
+      return (original as (...a: unknown[]) => unknown).apply(store, args);
+    }) as never);
+  }
+  return calls;
+}
+
 describe('Mastra — workflow scheduler integration', () => {
   it('auto-instantiates the scheduler when a workflow declares a schedule', async () => {
     const wf = createEventedWorkflow({
@@ -554,6 +573,112 @@ describe('Mastra — workflow scheduler integration', () => {
     });
   });
 
+  describe('stored-agent readiness (end-to-end)', () => {
+    function makeEditor(getById: (id: string) => Promise<unknown>) {
+      return {
+        registerWithMastra: () => {},
+        agent: { getById },
+      } as unknown as NonNullable<ConstructorParameters<typeof Mastra>[0]>['editor'];
+    }
+
+    async function bootWithEditor(
+      storage: InstanceType<typeof MockStore>,
+      getById: (id: string) => Promise<unknown>,
+      missesBeforeDelete: number,
+    ): Promise<Mastra> {
+      const mastra = new Mastra({
+        logger: false,
+        ...withoutNotificationDispatch,
+        storage,
+        scheduler: { enabled: true, tickIntervalMs: 600_000, missesBeforeDelete },
+        editor: makeEditor(getById),
+      });
+      await mastra.startWorkers();
+      await waitForScheduler(mastra);
+      return mastra;
+    }
+
+    async function insertDueAgentSchedule(
+      storage: InstanceType<typeof MockStore>,
+      id: string,
+      agentId: string,
+    ): Promise<number> {
+      const schedulesStore = (await storage.getStore('schedules'))!;
+      const past = Date.now() - 5_000;
+      await schedulesStore.createSchedule({
+        id,
+        target: { type: 'agent', agentId, prompt: 'check in' },
+        cron: '0 0 1 1 *',
+        status: 'active',
+        nextFireAt: past,
+        createdAt: past,
+        updatedAt: past,
+      });
+      return past;
+    }
+
+    it('does not delete a schedule for a stored agent that only the editor can resolve', async () => {
+      const storage = new MockStore();
+      // Simulates a cold start: the agent is NOT in the Mastra registry, only
+      // resolvable through the editor (stored agents hydrate lazily).
+      const editorGetById = vi.fn(async (id: string) =>
+        id === 'stored-a1' ? { generate: vi.fn().mockResolvedValue({ runId: 'run-1' }) } : null,
+      );
+      const mastra = await bootWithEditor(storage, editorGetById, 2);
+      const past = await insertDueAgentSchedule(storage, 'stored-agent-sched', 'stored-a1');
+      const schedulesStore = (await storage.getStore('schedules'))!;
+
+      // More ticks than missesBeforeDelete — before the fix the registry-only
+      // predicate deleted the row here without ever publishing a fire.
+      await mastra.scheduler!.tick();
+      await mastra.scheduler!.tick();
+      await mastra.scheduler!.tick();
+      await flushAsyncInit();
+
+      const row = await schedulesStore.getSchedule('stored-agent-sched');
+      expect(row).not.toBeNull();
+      expect(row!.nextFireAt).toBeGreaterThan(past); // the fire was claimed & published
+      expect(editorGetById).toHaveBeenCalledWith('stored-a1');
+
+      await mastra.shutdown();
+    });
+
+    it('does not burn grace misses when the editor lookup fails transiently', async () => {
+      const storage = new MockStore();
+      const editorGetById = vi.fn(async () => {
+        throw new Error('storage down');
+      });
+      const mastra = await bootWithEditor(storage, editorGetById, 1);
+      await insertDueAgentSchedule(storage, 'flaky-editor-sched', 'stored-a1');
+      const schedulesStore = (await storage.getStore('schedules'))!;
+
+      // missesBeforeDelete is 1, so a single counted miss would delete the
+      // row. A throwing editor must not count as a miss.
+      await mastra.scheduler!.tick();
+      await mastra.scheduler!.tick();
+      await flushAsyncInit();
+
+      expect(await schedulesStore.getSchedule('flaky-editor-sched')).not.toBeNull();
+
+      await mastra.shutdown();
+    });
+
+    it('still deletes a schedule when the editor confirms the agent is gone', async () => {
+      const storage = new MockStore();
+      const editorGetById = vi.fn(async () => null);
+      const mastra = await bootWithEditor(storage, editorGetById, 2);
+      await insertDueAgentSchedule(storage, 'gone-agent-sched', 'deleted-a1');
+      const schedulesStore = (await storage.getStore('schedules'))!;
+
+      await mastra.scheduler!.tick();
+      expect(await schedulesStore.getSchedule('gone-agent-sched')).not.toBeNull();
+      await mastra.scheduler!.tick();
+      expect(await schedulesStore.getSchedule('gone-agent-sched')).toBeNull();
+
+      await mastra.shutdown();
+    });
+  });
+
   describe('storage init ordering (#17905)', () => {
     /**
      * Models a SQL store whose tables only exist after init(): writing a
@@ -616,6 +741,84 @@ describe('Mastra — workflow scheduler integration', () => {
       // still in flight → "no such table". After the fix, init() is awaited
       // first, so no write ever lands on an uninitialized store.
       expect(storage.sawWriteBeforeInit).toBe(false);
+
+      await mastra.shutdown();
+    });
+  });
+
+  describe('explicit scheduler opt-out (#20550)', () => {
+    // Default notification dispatch on purpose: it is the configuration most
+    // apps run, and it drove a second boot-time read of the same store.
+    it('does not touch the schedules store on boot when scheduler.enabled is false', async () => {
+      const storage = new MockStore();
+      const schedulesStore = (await storage.getStore('schedules'))!;
+      const calls = recordStoreCalls(schedulesStore);
+
+      const mastra = new Mastra({
+        logger: false,
+        storage,
+        scheduler: { enabled: false },
+      });
+
+      await mastra.startWorkers();
+      await flushAsyncInit();
+
+      expect(calls).toEqual([]);
+      expect(mastra.scheduler).toBeUndefined();
+
+      await mastra.shutdown();
+    });
+
+    it('does not touch the schedules store on boot when workers are disabled', async () => {
+      const storage = new MockStore();
+      const schedulesStore = (await storage.getStore('schedules'))!;
+      const calls = recordStoreCalls(schedulesStore);
+
+      const mastra = new Mastra({
+        logger: false,
+        storage,
+        workers: false,
+      });
+
+      await mastra.startWorkers();
+      await flushAsyncInit();
+
+      expect(calls).toEqual([]);
+      expect(mastra.scheduler).toBeUndefined();
+
+      await mastra.shutdown();
+    });
+
+    it('still detects existing agent schedules when the scheduler is not explicitly disabled', async () => {
+      const storage = new MockStore();
+      const schedulesStore = (await storage.getStore('schedules'))!;
+      const listSchedules = vi.spyOn(schedulesStore, 'listSchedules');
+      // Row persisted by a previous process — the whole point of the boot probe.
+      const future = Date.now() + 3_600_000;
+      await schedulesStore.createSchedule({
+        id: 'cold-boot-agent-sched',
+        target: { type: 'agent', agentId: 'a1', prompt: 'check in' },
+        cron: '0 0 1 1 *',
+        status: 'active',
+        nextFireAt: future,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        ownerType: 'agent',
+        ownerId: 'a1',
+      });
+
+      const mastra = new Mastra({
+        logger: false,
+        ...withoutNotificationDispatch,
+        storage,
+        scheduler: { tickIntervalMs: 600_000 },
+      });
+
+      await mastra.startWorkers();
+      await waitForScheduler(mastra);
+
+      expect(listSchedules).toHaveBeenCalledWith({ ownerType: 'agent' });
+      expect(mastra.scheduler).toBeDefined();
 
       await mastra.shutdown();
     });

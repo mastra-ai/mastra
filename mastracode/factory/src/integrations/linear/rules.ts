@@ -30,6 +30,8 @@ export interface LinearIssueIngress {
   stateType: string;
   priorityLabel: string;
   assignee: string | null;
+  /** Display name of the Linear user who created the issue, when available. */
+  creator: string | null;
   team: string | null;
   labels: string[];
   createdAt: string;
@@ -76,11 +78,19 @@ export class LinearRules {
   ): Promise<IngressStatus> {
     const ingressId = `linear:${issue.id}:${issue.updatedAt}`;
     const actor = { type: 'human' as const, id: input.userId };
+
+    // Closed issues without existing work items should not create new ones.
+    const isClosed = issue.stateType === 'completed' || issue.stateType === 'canceled';
+    if (isClosed && !relatedItem) {
+      return 'missing';
+    }
+
+    const event = isClosed ? 'issueClosed' : 'issueObserved';
     const context: FactoryLinearRuleContext = {
       tenant: { orgId: input.orgId, projectId: input.factoryProjectId },
       actor,
       ingress: { type: 'linear', id: ingressId },
-      cause: 'linear.issueObserved',
+      cause: `linear.${event}`,
       causalChain: [],
       ruleSetVersion: this.options.rules.version,
       ...(relatedItem
@@ -98,7 +108,7 @@ export class LinearRules {
             itemRevision: relatedItem.revision,
           }
         : {}),
-      event: 'issueObserved',
+      event,
       issue,
     };
 

@@ -43,8 +43,8 @@ export const queryKeys = {
     ['factory', 'health-thresholds', githubProjectId ?? null] as const,
   factoryDecisions: (githubProjectId: string | undefined, statusKey: string) =>
     ['factory', 'decisions', githubProjectId ?? null, statusKey] as const,
-  factoryAudit: (githubProjectId: string | undefined, group: string) =>
-    ['factory', 'audit', githubProjectId ?? null, group] as const,
+  factoryAudit: (githubProjectId: string | undefined, group: string, actorKey?: string) =>
+    ['factory', 'audit', githubProjectId ?? null, group, actorKey ?? null] as const,
   factoryAuditPortal: () => ['factory', 'audit-portal'] as const,
   sessions: (projectRepositoryId: string | undefined) => ['sessions', projectRepositoryId ?? null] as const,
   workspaces: (projectRepositoryId: string | undefined) => ['sessions', projectRepositoryId ?? null] as const,
@@ -59,12 +59,15 @@ export const queryKeys = {
   /** Prefix that matches every `modelPacks(*)` entry — pack CRUD is global, so it invalidates all of them. */
   modelPacksAll: () => ['model-packs'] as const,
   om: (resourceId: string | undefined) => ['om', resourceId ?? null] as const,
+  thinkingConfig: () => ['thinking-config'] as const,
   fsList: (path: string | undefined) => ['fs-list', path ?? null] as const,
   artifactsList: (path: string | undefined) => ['artifacts-list', path ?? null] as const,
   workspaceRenderedList: (workspacePath: string | undefined, renderedRoot: string | undefined) =>
     ['workspace-rendered-list', workspacePath ?? null, renderedRoot ?? null] as const,
-  workspaceFile: (workspacePath: string | undefined, filePath: string | undefined) =>
-    ['workspace-file', workspacePath ?? null, filePath ?? null] as const,
+  workspaceFiles: (workspacePath: string | undefined, threadId: string | undefined) =>
+    ['workspace-files', workspacePath ?? null, threadId ?? null] as const,
+  workspaceFile: (workspacePath: string | undefined, filePath: string | undefined, threadId?: string) =>
+    ['workspace-file', workspacePath ?? null, filePath ?? null, threadId ?? null] as const,
   workspaceChanges: (workspacePath: string | undefined) => ['workspace-changes', workspacePath ?? null] as const,
   workspaceDiff: (
     workspacePath: string | undefined,
@@ -118,6 +121,10 @@ export const queryKeys = {
     resourceId: string | undefined,
     projectPath: string | undefined,
   ) => [...queryKeys.agentControllerSession(agentControllerId, resourceId, projectPath), 'threads'] as const,
+  // Prefix over every thread's messages for a resource — invalidation target
+  // when an SSE gap may have dropped events for any thread of the session.
+  agentControllerResourceThreadMessages: (agentControllerId: string | undefined, resourceId: string | undefined) =>
+    ['agent-controller', agentControllerId ?? null, 'sessions', resourceId ?? null, 'threads'] as const,
   // Thread ids are unique across the resource, so messages are keyed by threadId
   // alone (no projectPath) — caches survive worktree switches and seeding does
   // not need to know the thread's scope.
@@ -133,11 +140,7 @@ export const queryKeys = {
     limit?: number,
   ) =>
     [
-      'agent-controller',
-      agentControllerId ?? null,
-      'sessions',
-      resourceId ?? null,
-      'threads',
+      ...queryKeys.agentControllerResourceThreadMessages(agentControllerId, resourceId),
       threadId ?? null,
       'messages',
       ...(limit === undefined ? [] : [limit]),

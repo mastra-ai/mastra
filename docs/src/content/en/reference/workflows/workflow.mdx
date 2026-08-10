@@ -227,6 +227,62 @@ You can define the workflow's `inputSchema` and `outputSchema` with any library 
             isOptional: true,
           },
           {
+            name: 'onStart',
+            type: '(info: WorkflowStartCallbackInfo) => void | Promise<void>',
+            description:
+              'Callback awaited before a run starts executing, and before any step runs. Fires only on initial start, not on resume, restart, or time travel. Unlike onFinish and onError, errors thrown here are propagated: they reject the start() or stream() call and the run never executes, so this can be used as a pre-flight gate such as a quota check. The run record created by createRun() stays at status pending.',
+            isOptional: true,
+            properties: [
+              {
+                type: 'WorkflowStartCallbackInfo',
+                parameters: [
+                  {
+                    name: 'runId',
+                    type: 'string',
+                    description: 'The workflow run ID',
+                  },
+                  {
+                    name: 'workflowId',
+                    type: 'string',
+                    description: 'The workflow identifier',
+                  },
+                  {
+                    name: 'resourceId',
+                    type: 'string',
+                    description: 'Resource or user identifier for multi-tenant scenarios',
+                    isOptional: true,
+                  },
+                  {
+                    name: 'getInitData',
+                    type: '() => any',
+                    description: 'Returns the initial workflow input data',
+                  },
+                  {
+                    name: 'state',
+                    type: 'Record<string, any>',
+                    description: 'The initial workflow state',
+                  },
+                  {
+                    name: 'requestContext',
+                    type: 'RequestContext',
+                    description: 'The request context for the run',
+                  },
+                  {
+                    name: 'mastra',
+                    type: 'Mastra',
+                    description: 'The Mastra instance, when the workflow is registered',
+                    isOptional: true,
+                  },
+                  {
+                    name: 'logger',
+                    type: 'IMastraLogger',
+                    description: 'The Mastra logger',
+                  },
+                ],
+              },
+            ],
+          },
+          {
             name: 'onFinish',
             type: '(result: WorkflowFinishCallbackResult) => void | Promise<void>',
             description:

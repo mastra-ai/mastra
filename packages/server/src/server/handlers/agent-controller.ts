@@ -78,6 +78,49 @@ async function getSession(
   return controller.createSession({ resourceId, id, ownerId: controller.id, tags, scope, threadId, requestContext });
 }
 
+/**
+ * Acknowledges a session operation that keeps running after the response is
+ * sent.
+ *
+ * The messages/steer/follow-up routes answer `{ ok: true }` as soon as the
+ * message is handed to the session: the reply itself arrives on the session's
+ * SSE stream, so the request must not block for the whole turn. Those session
+ * methods can still reject — `sendMessage` deliberately rejects when signal
+ * submission fails before a stream starts — and a bare `void promise` turns
+ * that into an unhandled rejection, which terminates the process on Node's
+ * default `--unhandled-rejections=throw`.
+ *
+ * Observing the promise keeps the immediate acknowledgement while logging the
+ * failure and emitting an `error` event on the session, so a client streaming
+ * the session is told the turn died instead of waiting for an `agent_end` that
+ * will never come.
+ */
+function ackBackgroundSessionWork({
+  work,
+  session,
+  mastra,
+  operation,
+}: {
+  work: Promise<unknown>;
+  session: Session<any>;
+  mastra: { getLogger?: () => { error?: (message: string, context?: Record<string, unknown>) => void } | undefined };
+  operation: string;
+}): void {
+  void work.catch((error: unknown) => {
+    const failure = error instanceof Error ? error : new Error(String(error));
+    mastra.getLogger?.()?.error?.(`AgentController ${operation} failed after the request was acknowledged`, {
+      operation,
+      error: failure,
+    });
+    try {
+      session.emit({ type: 'error', error: failure });
+    } catch {
+      // A session that can no longer accept events (e.g. torn down mid-flight)
+      // must not turn a logged failure into a second unhandled rejection.
+    }
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Schemas
 // ---------------------------------------------------------------------------
@@ -222,7 +265,8 @@ const omProgressSummarySchema = z.object({
 });
 const sessionSettingsSchema = z.object({
   yolo: z.boolean(),
-  thinkingLevel: z.enum(['off', 'low', 'medium', 'high', 'xhigh']),
+  /** Session override only — absent when the session inherits a configured default. */
+  thinkingLevel: z.enum(['off', 'low', 'medium', 'high', 'xhigh', 'max']).optional(),
   notifications: z.enum(['off', 'bell', 'system', 'both']),
   smartEditing: z.boolean(),
 });
@@ -380,16 +424,25 @@ export const CREATE_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
  * non-enumerable, so JSON serialization in the SSE adapter would send
  * `"error": {}` and clients could only render a generic "Error". Flatten the
  * Error into a plain object so the actual failure reaches the client.
+ *
+ * `display_state_changed` Maps JSON-serialize to `{}`; convert them to plain
+ * records so wire clients get the tool state the in-process TUI sees.
  */
 function toWireEvent(event: unknown): unknown {
-  if (
-    typeof event === 'object' &&
-    event !== null &&
-    (event as { type?: unknown }).type === 'error' &&
-    (event as { error?: unknown }).error instanceof Error
-  ) {
+  if (typeof event !== 'object' || event === null) return event;
+  const { type } = event as { type?: unknown };
+  if (type === 'error' && (event as { error?: unknown }).error instanceof Error) {
     const error = (event as { error: Error }).error;
     return { ...event, error: { name: error.name, message: error.message } };
+  }
+  if (type === 'display_state_changed') {
+    const { displayState } = event as { displayState?: unknown };
+    if (typeof displayState !== 'object' || displayState === null) return event;
+    const wireDisplayState: Record<string, unknown> = { ...displayState };
+    for (const [key, value] of Object.entries(wireDisplayState)) {
+      if (value instanceof Map) wireDisplayState[key] = Object.fromEntries(value);
+    }
+    return { ...event, displayState: wireDisplayState };
   }
   return event;
 }
@@ -501,7 +554,12 @@ export const SEND_AGENT_CONTROLLER_MESSAGE_ROUTE = createRoute({
       // Forward the server middleware's requestContext so identity injected in
       // `server.middleware` reaches dynamic instructions and tools (same as the
       // plain agent message route).
-      void session.sendMessage({ content: message, files, requestContext });
+      ackBackgroundSessionWork({
+        work: session.sendMessage({ content: message, files, requestContext }),
+        session,
+        mastra,
+        operation: 'sendMessage',
+      });
       return { ok: true };
     } catch (error) {
       return handleError(error, 'error sending controller message');
@@ -606,7 +664,12 @@ export const STEER_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const session = await getSession(controller, resourceId, { scope: sessionScope }, requestContext);
-      void session.steer({ content: message, requestContext });
+      ackBackgroundSessionWork({
+        work: session.steer({ content: message, requestContext }),
+        session,
+        mastra,
+        operation: 'steer',
+      });
       return { ok: true };
     } catch (error) {
       return handleError(error, 'error steering controller session');
@@ -714,6 +777,8 @@ export const GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE = createRoute({
       const st = session.state.get() as Record<string, unknown>;
       const oneOf = <T extends string>(value: unknown, allowed: readonly T[], fallback: T): T =>
         allowed.includes(value as T) ? (value as T) : fallback;
+      const oneOfOptional = <T extends string>(value: unknown, allowed: readonly T[]): T | undefined =>
+        allowed.includes(value as T) ? (value as T) : undefined;
       return {
         controllerId,
         resourceId,
@@ -735,7 +800,9 @@ export const GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE = createRoute({
         tokenUsage: ds.tokenUsage as unknown as Record<string, unknown>,
         settings: {
           yolo: st.yolo === true,
-          thinkingLevel: oneOf(st.thinkingLevel, ['off', 'low', 'medium', 'high', 'xhigh'] as const, 'off'),
+          // No session override → omit, so clients don't mistake an inherited
+          // configured default (resolved at request time) for an explicit 'off'.
+          thinkingLevel: oneOfOptional(st.thinkingLevel, ['off', 'low', 'medium', 'high', 'xhigh', 'max'] as const),
           notifications: oneOf(st.notifications, ['off', 'bell', 'system', 'both'] as const, 'off'),
           smartEditing: st.smartEditing !== false,
         },
@@ -1081,7 +1148,12 @@ export const FOLLOW_UP_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const session = await getSession(controller, resourceId, { scope: sessionScope }, requestContext);
-      void session.followUp({ content: message, requestContext });
+      ackBackgroundSessionWork({
+        work: session.followUp({ content: message, requestContext }),
+        session,
+        mastra,
+        operation: 'followUp',
+      });
       return { ok: true };
     } catch (error) {
       return handleError(error, 'error queuing controller follow-up');

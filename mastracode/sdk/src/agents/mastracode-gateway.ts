@@ -23,6 +23,7 @@ import { getCustomProviderId, loadSettings, MASTRA_GATEWAY_PROVIDER } from '../o
 import {
   buildAnthropicOAuthFetch,
   claudeCodeMiddleware,
+  createAnthropicThinkingMiddleware,
   opencodeClaudeMaxProvider,
   promptCacheMiddleware,
 } from '../providers/claude-max.js';
@@ -135,11 +136,17 @@ export function getOpenAIApiKey(credentials: CredentialStore = authStorage): str
   return credentials.allowEnvironmentFallback === false ? undefined : process.env.OPENAI_API_KEY?.trim() || undefined;
 }
 
-function anthropicApiKeyProvider(modelId: string, apiKey: string, headers?: ModelRequestHeaders) {
+function anthropicApiKeyProvider(
+  modelId: string,
+  apiKey: string,
+  headers?: ModelRequestHeaders,
+  thinkingLevel?: ThinkingLevel,
+) {
   const anthropic = createAnthropic({ apiKey, headers });
+  const thinkingMiddleware = createAnthropicThinkingMiddleware(modelId, thinkingLevel);
   return wrapLanguageModel({
     model: anthropic(modelId),
-    middleware: [promptCacheMiddleware],
+    middleware: [promptCacheMiddleware, ...(thinkingMiddleware ? [thinkingMiddleware] : [])],
   });
 }
 
@@ -514,6 +521,7 @@ export class MastraCodeGateway extends MastraModelGateway {
   }): GatewayLanguageModel {
     const bareModelId = normalizeAnthropicModelId(args.modelId);
     const storedCred = this.#credentials.get('anthropic');
+    const thinkingMiddleware = createAnthropicThinkingMiddleware(bareModelId, this.#thinkingLevel);
 
     if (this.#routeThroughMastraGateway) {
       if (storedCred?.type === 'oauth') {
@@ -529,17 +537,30 @@ export class MastraCodeGateway extends MastraModelGateway {
 
         return wrapLanguageModel({
           model: anthropic(bareModelId),
-          middleware: [claudeCodeMiddleware, promptCacheMiddleware],
+          middleware: [
+            claudeCodeMiddleware,
+            promptCacheMiddleware,
+            ...(thinkingMiddleware ? [thinkingMiddleware] : []),
+          ],
         }) as unknown as GatewayLanguageModel;
       }
 
-      return this.#mastraGateway.resolveLanguageModel({ ...args, modelId: bareModelId }) as GatewayLanguageModel;
+      const gatewayModel = this.#mastraGateway.resolveLanguageModel({
+        ...args,
+        modelId: bareModelId,
+      }) as GatewayLanguageModel;
+      if (!thinkingMiddleware) return gatewayModel;
+      return wrapLanguageModel({
+        model: gatewayModel as any,
+        middleware: [thinkingMiddleware],
+      }) as unknown as GatewayLanguageModel;
     }
 
     if (storedCred?.type === 'oauth') {
       return opencodeClaudeMaxProvider(bareModelId, {
         headers: args.headers,
         authStorage: this.#credentials,
+        thinkingLevel: this.#thinkingLevel,
       }) as unknown as GatewayLanguageModel;
     }
 
@@ -548,18 +569,25 @@ export class MastraCodeGateway extends MastraModelGateway {
         bareModelId,
         storedCred.key.trim(),
         args.headers,
+        this.#thinkingLevel,
       ) as unknown as GatewayLanguageModel;
     }
 
     const apiKey = getAnthropicApiKey(this.#credentials);
     if (apiKey) {
-      return anthropicApiKeyProvider(bareModelId, apiKey, args.headers) as unknown as GatewayLanguageModel;
+      return anthropicApiKeyProvider(
+        bareModelId,
+        apiKey,
+        args.headers,
+        this.#thinkingLevel,
+      ) as unknown as GatewayLanguageModel;
     }
 
     // No stored credentials: use the OAuth-backed provider so the first request can trigger login.
     return opencodeClaudeMaxProvider(bareModelId, {
       headers: args.headers,
       authStorage: this.#credentials,
+      thinkingLevel: this.#thinkingLevel,
     }) as unknown as GatewayLanguageModel;
   }
 

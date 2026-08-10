@@ -83,24 +83,36 @@ export class LSPManager {
 
   /**
    * Acquire a per-file lock so that concurrent getDiagnostics calls for the
-   * same file are serialized (preventing interleaved open/change/close).
-   * Different files can run in parallel.
+   * same file are serialized (preventing interleaved open/change/close) and
+   * are served in the order they arrived. Different files run in parallel.
    */
   private async acquireFileLock(filePath: string): Promise<() => void> {
-    // Wait for any existing lock on this file
-    while (this.fileLocks.has(filePath)) {
-      await this.fileLocks.get(filePath);
-    }
+    // Chain onto the tail of any existing lock for this file to form a FIFO
+    // queue. Waiting on a single shared promise instead would still serialize
+    // callers, but a caller arriving in the same turn as a release could take
+    // the lock ahead of longer-waiting ones, and every release would wake all
+    // waiters rather than just the next.
+    const previous = this.fileLocks.get(filePath) ?? Promise.resolve();
 
     let release!: () => void;
-    const lockPromise = new Promise<void>(resolve => {
+    const current = new Promise<void>(resolve => {
       release = resolve;
     });
-    this.fileLocks.set(filePath, lockPromise);
+
+    // The new tail resolves only after the whole chain up to and including this
+    // holder has released.
+    const tail = previous.then(() => current);
+    this.fileLocks.set(filePath, tail);
+
+    // Wait for all predecessors to finish before this caller holds the lock.
+    await previous;
 
     return () => {
-      this.fileLocks.delete(filePath);
       release();
+      // Drop the map entry only if nobody chained after us, to avoid leaks.
+      if (this.fileLocks.get(filePath) === tail) {
+        this.fileLocks.delete(filePath);
+      }
     };
   }
 

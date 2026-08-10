@@ -1,7 +1,9 @@
 {
   "attachment": [
     "gemma-4-31b-it",
+    "greg-1-mini",
     "kimi-k2.5",
+    "kimi-k2.5-lightning",
     "kimi-k2.6",
     "kimi-k2.7-code",
     "kimi-k3",

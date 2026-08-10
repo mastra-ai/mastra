@@ -603,12 +603,18 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         runId = invokeResp.runId;
         executionContext.state = invokeResp.result.state;
       } else {
+        // Name the child run on its trigger event. `cancelOn` matches a cancel
+        // event against `data.runId` on the trigger, so a nested run invoked
+        // without one cannot be cancelled by id — and it would take the
+        // unnamed-run branch, warning about advice the caller cannot act on.
+        const nestedRunId = randomUUID();
         const invokeResp = (await this.inngestStep.invoke(`workflow.${executionContext.workflowId}.step.${step.id}`, {
           function: step.getFunction(),
           data: {
             inputData,
             initialState: executionContext.state ?? {},
             requestContext: forwardedRequestContext,
+            runId: nestedRunId,
             outputOptions: { includeState: true },
             nestedWorkflowOutputMode: NESTED_WORKFLOW_OUTPUT_MODE.COMPACT,
             perStep,

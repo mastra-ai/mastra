@@ -14,12 +14,13 @@ export function parseModelRouterId(routerId: string, gatewayPrefix?: string): { 
 
   // Azure OpenAI uses 2-part format (azure-openai/deployment), others use 3-part (gateway/provider/model)
   if (gatewayPrefix === 'azure-openai') {
-    if (idParts.length < 2) {
+    const modelId = idParts.slice(1).join('/');
+    if (!modelId) {
       throw new Error(`Expected format azure-openai/deployment-name, but got ${routerId}`);
     }
     return {
       providerId: 'azure-openai',
-      modelId: idParts.slice(1).join('/'), // Deployment name
+      modelId, // Deployment name
     };
   }
 

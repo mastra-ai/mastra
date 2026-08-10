@@ -81,6 +81,7 @@ const mastra = new Mastra({
 | `OKTA_CLIENT_SECRET`   | OAuth client secret                       | For auth only                                      |
 | `OKTA_REDIRECT_URI`    | OAuth redirect URI for SSO callback       | For auth only                                      |
 | `OKTA_ISSUER`          | Token issuer URL                          | No (defaults to `https://{domain}/oauth2/default`) |
+| `OKTA_AUDIENCE`        | Expected `aud` claim on bearer tokens     | No (defaults to `OKTA_CLIENT_ID`)                  |
 | `OKTA_COOKIE_PASSWORD` | Session encryption key (min 32 chars)     | No (auto-generated if omitted; set for production) |
 | `OKTA_API_TOKEN`       | API token for management SDK              | For RBAC only                                      |
 
@@ -93,6 +94,7 @@ interface MastraAuthOktaOptions {
   clientSecret?: string; // OAuth client secret (or OKTA_CLIENT_SECRET)
   redirectUri?: string; // SSO callback URI (or OKTA_REDIRECT_URI)
   issuer?: string; // Token issuer URL (or OKTA_ISSUER)
+  audience?: string | string[]; // Expected bearer-token `aud` (or OKTA_AUDIENCE; defaults to clientId)
   scopes?: string[]; // OAuth scopes (default: ['openid', 'profile', 'email', 'groups'])
   name?: string; // Provider name (default: 'okta')
   session?: {

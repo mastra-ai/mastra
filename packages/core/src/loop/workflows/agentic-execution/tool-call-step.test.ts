@@ -2,7 +2,7 @@ import type { ToolSet } from '@internal/ai-sdk-v5';
 import { describe, it, beforeEach, afterEach, expect, vi } from 'vitest';
 import type { Mock } from 'vitest';
 import { z } from 'zod/v4';
-import type { MessageList } from '../../../agent/message-list';
+import { MessageList } from '../../../agent/message-list';
 import { RequestContext } from '../../../request-context';
 import { ChunkFrom } from '../../../stream/types';
 import { createTool } from '../../../tools';
@@ -246,6 +246,92 @@ describe('createToolCallStep tool execution error handling', () => {
       message: expect.stringContaining('External API error: 503 Service Unavailable'),
     });
   });
+
+  it('should return aborted (not error/result) when the request was aborted while the tool threw', async () => {
+    // A throw caused by request cancellation must NOT become a tool result, or the call is
+    // persisted as completed (result = abort message) and reads as success on resume. The
+    // step flags it `aborted` instead. CoreToolBuilder wraps the throw in a MastraError, so
+    // the abort signal — not the error type — is the evidence.
+    const abortedTool = createTool({
+      id: 'failing-tool',
+      description: 'A tool that throws when the request is cancelled',
+      inputSchema: z.object({ param: z.string() }),
+      execute: async () => {
+        const err = new Error('The operation was aborted.');
+        err.name = 'AbortError';
+        throw err;
+      },
+    });
+
+    const builtTool = new CoreToolBuilder({
+      originalTool: abortedTool,
+      options: {
+        name: 'failing-tool',
+        logger: { debug: vi.fn(), warn: vi.fn(), error: vi.fn(), trackException: vi.fn() } as any,
+        description: 'A tool that throws when the request is cancelled',
+        requestContext: new RequestContext(),
+      },
+    }).build();
+
+    const abortController = new AbortController();
+    abortController.abort();
+
+    const toolCallStep = createToolCallStep({
+      tools: { 'failing-tool': builtTool },
+      messageList,
+      controller,
+      runId: 'test-run',
+      streamState,
+      // The agent-run abort signal (req.signal in production) is wired in via `options`.
+      options: { abortSignal: abortController.signal },
+    } as any);
+
+    const result = await toolCallStep.execute(makeExecuteParams({ inputData: makeInputData() }));
+
+    expect(result).toHaveProperty('aborted', true);
+    expect(result).not.toHaveProperty('error');
+    expect(result).not.toHaveProperty('result');
+  });
+
+  it('should still return error (not aborted) when a tool throws and the request was NOT aborted', async () => {
+    // Guard against over-reach: a genuine tool failure on a live request must keep surfacing
+    // as an error result so the model can see it and self-correct.
+    const failingTool = createTool({
+      id: 'failing-tool',
+      description: 'A tool that throws',
+      inputSchema: z.object({ param: z.string() }),
+      execute: async () => {
+        throw new Error('External API error: 503 Service Unavailable');
+      },
+    });
+
+    const builtTool = new CoreToolBuilder({
+      originalTool: failingTool,
+      options: {
+        name: 'failing-tool',
+        logger: { debug: vi.fn(), warn: vi.fn(), error: vi.fn(), trackException: vi.fn() } as any,
+        description: 'A tool that throws',
+        requestContext: new RequestContext(),
+      },
+    }).build();
+
+    const toolCallStep = createToolCallStep({
+      tools: { 'failing-tool': builtTool },
+      messageList,
+      controller,
+      runId: 'test-run',
+      streamState,
+    } as any);
+
+    // Fresh (non-aborted) signal
+    const result = await toolCallStep.execute(
+      makeExecuteParams({ inputData: makeInputData(), abortSignal: new AbortController().signal }),
+    );
+
+    expect(result).toHaveProperty('error');
+    expect(result).not.toHaveProperty('aborted');
+    expect(result).not.toHaveProperty('result');
+  });
 });
 
 describe('createToolCallStep tool-level FGA delegation', () => {
@@ -467,6 +553,47 @@ describe('createToolCallStep tool approval workflow', () => {
       ...inputData,
     });
     expectNoToolExecution();
+  });
+
+  it('carries a caller-supplied decline reason onto the approval decision (#20495)', async () => {
+    const inputData = makeInputData();
+    const resumeData = { approved: false, reason: 'The user is not authorized to read this file' };
+
+    const result = await toolCallStep.execute(makeExecuteParams({ inputData, resumeData }));
+
+    expect(result).toEqual({
+      approval: {
+        id: inputData.toolCallId,
+        approved: false,
+        reason: 'The user is not authorized to read this file',
+      },
+      ...inputData,
+    });
+    expectNoToolExecution();
+  });
+
+  it('falls back to the default decline reason when the supplied reason is blank (#20495)', async () => {
+    const inputData = makeInputData();
+
+    const result = await toolCallStep.execute(
+      makeExecuteParams({ inputData, resumeData: { approved: false, reason: '   ' } }),
+    );
+
+    expect((result as any).approval.reason).toBe('Tool call was not approved by the user');
+    expectNoToolExecution();
+  });
+
+  it('advertises an optional reason on the approval resume schema (#20495)', async () => {
+    suspend.mockResolvedValueOnce('suspended');
+    await toolCallStep.execute(makeExecuteParams());
+
+    const approvalChunk = controller.enqueue.mock.calls
+      .map(([chunk]: [any]) => chunk)
+      .find((chunk: any) => chunk?.type === 'tool-call-approval');
+    expect(approvalChunk).toBeDefined();
+    const resumeSchema = JSON.parse(approvalChunk.payload.resumeSchema);
+    expect(resumeSchema.properties.reason).toBeDefined();
+    expect(resumeSchema.required).toEqual(['approved']);
   });
 
   it('declines without a live requireToolApproval policy when suspendData marks approval (#20470)', async () => {
@@ -693,12 +820,98 @@ describe('createToolCallStep tool approval workflow', () => {
   });
 });
 
-describe('createToolCallStep delegated agent tool approvals', () => {
+describe('createToolCallStep delegated agent tool metadata', () => {
   let controller: { enqueue: Mock };
   let suspend: Mock;
   let streamState: { serialize: Mock };
-  let messageList: MessageList;
   let neverResolve: Promise<never>;
+
+  const createAssistantMessage = (
+    id: string,
+    toolCallId: string,
+    toolName: string,
+    args: Record<string, unknown> = {},
+  ) => ({
+    id,
+    role: 'assistant' as const,
+    createdAt: new Date(0),
+    content: {
+      format: 2 as const,
+      metadata: {} as Record<string, unknown>,
+      parts: [
+        {
+          type: 'tool-invocation' as const,
+          toolInvocation: {
+            state: 'call' as const,
+            toolCallId,
+            toolName,
+            args,
+          },
+        },
+      ],
+    },
+  });
+
+  const startDelegatedTool = ({
+    messageList,
+    requireApproval,
+    suspendPayload = {},
+    logger,
+    toolCallId = 'parent-tool-call-id',
+    delegatedRunId = 'sub-agent-run-id',
+    toolPayloadTransform,
+  }: {
+    messageList: MessageList;
+    requireApproval: boolean;
+    suspendPayload?: unknown;
+    logger?: { warn: Mock; debug?: Mock };
+    toolCallId?: string;
+    delegatedRunId?: string;
+    toolPayloadTransform?: unknown;
+  }) => {
+    const tools = {
+      'agent-subAgent': {
+        execute: vi.fn(async (_args: unknown, opts: MastraToolInvocationOptions) => {
+          await opts.suspend?.(suspendPayload, {
+            ...(requireApproval ? { requireToolApproval: true } : {}),
+            runId: delegatedRunId,
+          });
+          return { text: 'done' };
+        }),
+      },
+    } as ToolSet;
+    const inputData = {
+      toolCallId,
+      toolName: 'agent-subAgent',
+      args: { prompt: 'do thing' },
+    };
+    const toolCallStep = createToolCallStep({
+      tools,
+      messageList,
+      controller,
+      runId: 'parent-run-id',
+      streamState,
+      logger: logger as any,
+      _internal: toolPayloadTransform ? ({ toolPayloadTransform } as any) : undefined,
+    });
+
+    return toolCallStep.execute({
+      ...makeBaseExecuteParams(suspend),
+      writer: new ToolStream({
+        prefix: 'tool',
+        callId: inputData.toolCallId,
+        name: inputData.toolName,
+        runId: 'parent-run-id',
+      }),
+      inputData,
+    });
+  };
+
+  const settleToolSuspension = async () => {
+    for (let i = 0; i < 5; i++) {
+      await new Promise(resolve => setImmediate(resolve));
+    }
+  };
 
   beforeEach(() => {
     controller = { enqueue: vi.fn() };
@@ -713,11 +926,10 @@ describe('createToolCallStep delegated agent tool approvals', () => {
   });
 
   it('stores the outer resumable runId with delegatedRunId when a nested agent run requests tool approval', async () => {
-    const assistantMessage = {
-      role: 'assistant',
-      content: { metadata: {} as Record<string, unknown> },
-    };
-    messageList = {
+    const assistantMessage = createAssistantMessage('assistant-target', 'parent-tool-call-id', 'agent-subAgent', {
+      prompt: 'do thing',
+    });
+    const messageList = {
       get: {
         input: { aiV5: { model: () => [] } },
         response: { db: () => [assistantMessage] },
@@ -725,45 +937,8 @@ describe('createToolCallStep delegated agent tool approvals', () => {
       },
     } as unknown as MessageList;
 
-    const tools = {
-      'agent-subAgent': {
-        execute: vi.fn(async (_args: unknown, opts: MastraToolInvocationOptions) => {
-          await opts.suspend?.({}, { requireToolApproval: true, runId: 'sub-agent-run-id' });
-          return { text: 'done' };
-        }),
-      },
-    } as ToolSet;
-
-    const toolCallStep = createToolCallStep({
-      tools,
-      messageList,
-      controller,
-      runId: 'parent-run-id',
-      streamState,
-    });
-
-    const inputData = {
-      toolCallId: 'parent-tool-call-id',
-      toolName: 'agent-subAgent',
-      args: { prompt: 'do thing' },
-    };
-
-    const executePromise = toolCallStep.execute({
-      ...makeBaseExecuteParams(suspend),
-      writer: new ToolStream({
-        prefix: 'tool',
-        callId: inputData.toolCallId,
-        name: inputData.toolName,
-        runId: 'parent-run-id',
-      }),
-      inputData,
-    });
-
-    // Allow the microtask / setImmediate chain through tool execution → inner
-    // suspend → addToolMetadata to settle before inspecting the metadata.
-    for (let i = 0; i < 5; i++) {
-      await new Promise(resolve => setImmediate(resolve));
-    }
+    const executePromise = startDelegatedTool({ messageList, requireApproval: true });
+    await settleToolSuspension();
 
     const pending = (assistantMessage.content.metadata as Record<string, any>).pendingToolApprovals?.[
       'parent-tool-call-id'
@@ -777,6 +952,214 @@ describe('createToolCallStep delegated agent tool approvals', () => {
       delegatedRunId: 'sub-agent-run-id',
     });
     expect(pending.parentRunId).toBeUndefined();
+
+    await expect(Promise.race([executePromise, Promise.resolve('completed')])).resolves.toBe('completed');
+  });
+
+  it('advertises an optional reason on the delegated approval resume schema (#20495)', async () => {
+    const assistantMessage = createAssistantMessage('assistant-target', 'parent-tool-call-id', 'agent-subAgent', {
+      prompt: 'do thing',
+    });
+    const messageList = {
+      get: {
+        input: { aiV5: { model: () => [] } },
+        response: { db: () => [assistantMessage] },
+        all: { db: () => [assistantMessage], aiV5: { model: () => [] } },
+      },
+    } as unknown as MessageList;
+
+    const executePromise = startDelegatedTool({ messageList, requireApproval: true });
+    await settleToolSuspension();
+
+    const approvalChunk = controller.enqueue.mock.calls
+      .map(([chunk]: [any]) => chunk)
+      .find((chunk: any) => chunk?.type === 'tool-call-approval');
+    expect(approvalChunk).toBeDefined();
+    const resumeSchema = JSON.parse(approvalChunk.payload.resumeSchema);
+    expect(resumeSchema.properties.reason).toBeDefined();
+    expect(resumeSchema.required).toEqual(['approved']);
+
+    await expect(Promise.race([executePromise, Promise.resolve('completed')])).resolves.toBe('completed');
+  });
+
+  it('preserves explicitly transformed null payloads in approval and suspension metadata', async () => {
+    const toolPayloadTransform = {
+      targets: ['transcript'],
+      transformToolPayload: vi.fn(() => null),
+    };
+    const approvalMessage = createAssistantMessage('assistant-approval', 'parent-tool-call-id', 'agent-subAgent', {
+      secret: 'approval-secret',
+    });
+    const approvalMessageList = {
+      get: {
+        input: { aiV5: { model: () => [] } },
+        response: { db: () => [approvalMessage] },
+        all: { db: () => [approvalMessage], aiV5: { model: () => [] } },
+      },
+    } as unknown as MessageList;
+
+    const approvalExecution = startDelegatedTool({
+      messageList: approvalMessageList,
+      requireApproval: true,
+      toolPayloadTransform,
+    });
+    await settleToolSuspension();
+    expect(
+      (approvalMessage.content.metadata as Record<string, any>).pendingToolApprovals['parent-tool-call-id'].args,
+    ).toBeNull();
+
+    const suspensionMessage = createAssistantMessage('assistant-suspension', 'parent-tool-call-id', 'agent-subAgent', {
+      secret: 'suspension-secret',
+    });
+    const suspensionMessageList = {
+      get: {
+        input: { aiV5: { model: () => [] } },
+        response: { db: () => [suspensionMessage] },
+        all: { db: () => [suspensionMessage], aiV5: { model: () => [] } },
+      },
+    } as unknown as MessageList;
+
+    const suspensionExecution = startDelegatedTool({
+      messageList: suspensionMessageList,
+      requireApproval: false,
+      suspendPayload: { secret: 'suspend-payload-secret' },
+      toolPayloadTransform,
+    });
+    await settleToolSuspension();
+    const suspendedEntry = (suspensionMessage.content.metadata as Record<string, any>).suspendedTools[
+      'parent-tool-call-id'
+    ];
+    expect(suspendedEntry.args).toBeNull();
+    expect(suspendedEntry.suspendPayload).toBeNull();
+
+    await expect(Promise.race([approvalExecution, Promise.resolve('completed')])).resolves.toBe('completed');
+    await expect(Promise.race([suspensionExecution, Promise.resolve('completed')])).resolves.toBe('completed');
+  });
+
+  it('recovers a drained response message when persisting a delegated tool suspension', async () => {
+    const targetMessage = createAssistantMessage('assistant-target', 'parent-tool-call-id', 'agent-subAgent', {
+      prompt: 'do thing',
+    });
+    const unrelatedMessage = createAssistantMessage('assistant-unrelated', 'unrelated-tool-call-id', 'unrelatedTool');
+    const messageList = new MessageList();
+    messageList.add(targetMessage, 'response');
+    messageList.drainUnsavedMessages();
+    messageList.add({ role: 'user', content: 'next turn' }, 'input');
+    messageList.add(unrelatedMessage, 'response');
+    const updateMessageMetadataByToolCallId = vi.spyOn(messageList, 'updateMessageMetadataByToolCallId');
+
+    const executePromise = startDelegatedTool({
+      messageList,
+      requireApproval: false,
+      suspendPayload: { reason: 'review' },
+    });
+    await settleToolSuspension();
+
+    expect(updateMessageMetadataByToolCallId).toHaveBeenCalledWith(
+      'parent-tool-call-id',
+      expect.objectContaining({
+        suspendedTools: expect.objectContaining({
+          'parent-tool-call-id': expect.objectContaining({
+            runId: 'parent-run-id',
+            delegatedRunId: 'sub-agent-run-id',
+            suspendPayload: { reason: 'review' },
+          }),
+        }),
+      }),
+    );
+    expect(unrelatedMessage.content.metadata).toEqual({});
+    expect((targetMessage.content.metadata as Record<string, any>).suspendedTools).toHaveProperty(
+      'parent-tool-call-id',
+    );
+
+    await expect(Promise.race([executePromise, Promise.resolve('completed')])).resolves.toBe('completed');
+  });
+
+  it('persists BOTH siblings when the shared response is drained before each metadata write', async () => {
+    // Two parallel delegations to the same sub-agent share one assistant message. Flush the
+    // response before EACH sibling's metadata write so both take the drained-message fallback;
+    // the second fallback merge must preserve the first sibling's already-persisted entry.
+    const targetMessage = createAssistantMessage('assistant-target', 'tool-call-A', 'agent-subAgent', {
+      prompt: 'do thing',
+    });
+    targetMessage.content.parts.push({
+      type: 'tool-invocation' as const,
+      toolInvocation: {
+        state: 'call' as const,
+        toolCallId: 'tool-call-B',
+        toolName: 'agent-subAgent',
+        args: { prompt: 'do other thing' },
+      },
+    });
+    const messageList = new MessageList();
+    messageList.add(targetMessage, 'response');
+    messageList.drainUnsavedMessages();
+
+    const executeA = startDelegatedTool({
+      messageList,
+      requireApproval: false,
+      suspendPayload: { reason: 'review-A' },
+      toolCallId: 'tool-call-A',
+      delegatedRunId: 'sub-agent-run-A',
+    });
+    await settleToolSuspension();
+    // A's fallback re-queued the message; flush again so B also finds a drained response view.
+    messageList.drainUnsavedMessages();
+
+    const executeB = startDelegatedTool({
+      messageList,
+      requireApproval: false,
+      suspendPayload: { reason: 'review-B' },
+      toolCallId: 'tool-call-B',
+      delegatedRunId: 'sub-agent-run-B',
+    });
+    await settleToolSuspension();
+
+    const suspendedTools = (targetMessage.content.metadata as Record<string, any>).suspendedTools ?? {};
+    expect(Object.keys(suspendedTools).sort()).toEqual(['tool-call-A', 'tool-call-B']);
+    expect(suspendedTools['tool-call-A']).toMatchObject({
+      runId: 'parent-run-id',
+      delegatedRunId: 'sub-agent-run-A',
+      suspendPayload: { reason: 'review-A' },
+    });
+    expect(suspendedTools['tool-call-B']).toMatchObject({
+      runId: 'parent-run-id',
+      delegatedRunId: 'sub-agent-run-B',
+      suspendPayload: { reason: 'review-B' },
+    });
+    // The recovered message must be queued for persistence again.
+    expect(messageList.get.response.db()).toContain(targetMessage);
+
+    await expect(Promise.race([executeA, Promise.resolve('completed')])).resolves.toBe('completed');
+    await expect(Promise.race([executeB, Promise.resolve('completed')])).resolves.toBe('completed');
+  });
+
+  it('logs at debug when a drained response message cannot be marked unsaved', async () => {
+    const targetMessage = createAssistantMessage('assistant-target', 'parent-tool-call-id', 'agent-subAgent', {
+      prompt: 'do thing',
+    });
+    const unrelatedMessage = createAssistantMessage('assistant-unrelated', 'unrelated-tool-call-id', 'unrelatedTool');
+    const logger = { warn: vi.fn(), debug: vi.fn() };
+    const messageList = {
+      get: {
+        input: { aiV5: { model: () => [] } },
+        response: { db: () => [unrelatedMessage] },
+        all: { db: () => [targetMessage, unrelatedMessage], aiV5: { model: () => [] } },
+      },
+      updateMessageMetadataByToolCallId: vi.fn().mockReturnValue(false),
+    } as unknown as MessageList;
+
+    const executePromise = startDelegatedTool({
+      messageList,
+      requireApproval: false,
+      suspendPayload: { reason: 'review' },
+      logger,
+    });
+    await settleToolSuspension();
+
+    expect(logger.debug).toHaveBeenCalledWith(
+      expect.stringContaining('could not update the assistant message for tool call parent-tool-call-id'),
+    );
 
     await expect(Promise.race([executePromise, Promise.resolve('completed')])).resolves.toBe('completed');
   });

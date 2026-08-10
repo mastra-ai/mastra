@@ -1,6 +1,6 @@
 {
   "name": "@mastra/otel-bridge",
-  "version": "1.4.6",
+  "version": "1.4.5-alpha.5",
   "description": "OpenTelemetry observability bridge for Mastra",
   "type": "module",
   "main": "dist/index.js",
@@ -35,13 +35,13 @@
     "@mastra/observability": "workspace:*",
     "@mastra/otel-exporter": "workspace:*",
     "@opentelemetry/api": "^1.9.1",
-    "@opentelemetry/api-logs": "^0.219.0"
+    "@opentelemetry/api-logs": "^0.221.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@opentelemetry/sdk-logs": "^0.219.0",
+    "@opentelemetry/sdk-logs": "^0.221.0",
     "@types/node": "22.20.1",
     "eslint": "^10.7.0",
     "tsdown": "0.22.9",

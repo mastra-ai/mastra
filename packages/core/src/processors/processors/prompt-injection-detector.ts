@@ -32,6 +32,20 @@ export interface PromptInjectionResult {
 }
 
 /**
+ * Event passed to the `onDetection` callback
+ */
+export interface PromptInjectionDetectionEvent {
+  /** The raw detection result produced for this piece of content */
+  detectionResult: PromptInjectionResult;
+  /** The content that was analyzed */
+  input: string;
+  /** Whether the result crossed the configured threshold */
+  flagged: boolean;
+  /** The configured strategy when flagged, otherwise 'none' */
+  strategyApplied: 'block' | 'warn' | 'filter' | 'rewrite' | 'none';
+}
+
+/**
  * Configuration options for PromptInjectionDetector
  */
 export interface PromptInjectionOptions extends LastMessageOnlyOption {
@@ -93,6 +107,14 @@ export interface PromptInjectionOptions extends LastMessageOnlyOption {
    * ```
    */
   providerOptions?: ProviderOptions;
+
+  /**
+   * Called for every analyzed message with the detection result, so consumers
+   * can emit metrics or attach metadata to their own tracing.
+   *
+   * Errors thrown by the callback are logged and ignored.
+   */
+  onDetection?: (event: PromptInjectionDetectionEvent) => void | Promise<void>;
 }
 
 /**
@@ -114,6 +136,7 @@ export class PromptInjectionDetector implements Processor<'prompt-injection-dete
   private lastMessageOnly: boolean;
   private structuredOutputOptions?: PromptInjectionOptions['structuredOutputOptions'];
   private providerOptions?: ProviderOptions;
+  private onDetection?: (event: PromptInjectionDetectionEvent) => void | Promise<void>;
 
   // Default detection categories based on OWASP LLM01 and common attack patterns
   private static readonly DEFAULT_DETECTION_TYPES = [
@@ -133,6 +156,7 @@ export class PromptInjectionDetector implements Processor<'prompt-injection-dete
     this.lastMessageOnly = options.lastMessageOnly ?? false;
     this.structuredOutputOptions = options.structuredOutputOptions;
     this.providerOptions = options.providerOptions;
+    this.onDetection = options.onDetection;
 
     this.detectionAgent = new Agent({
       id: 'prompt-injection-detector',
@@ -179,8 +203,10 @@ export class PromptInjectionDetector implements Processor<'prompt-injection-dete
 
         const detectionResult = await this.detectPromptInjection(textContent, observabilityContext);
         results.push(detectionResult);
+        const flagged = this.isInjectionFlagged(detectionResult);
+        await this.emitDetection(textContent, detectionResult, flagged);
 
-        if (this.isInjectionFlagged(detectionResult)) {
+        if (flagged) {
           const processedMessage = this.handleDetectedInjection(message, detectionResult, this.strategy, abort);
 
           // If we reach here, strategy is 'warn', 'filter', or 'rewrite'
@@ -204,6 +230,23 @@ export class PromptInjectionDetector implements Processor<'prompt-injection-dete
         throw error; // Re-throw tripwire errors
       }
       throw new Error(`Prompt injection detection failed: ${error instanceof Error ? error.stack : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Notify the consumer-supplied `onDetection` callback. Never throws.
+   */
+  private async emitDetection(input: string, detectionResult: PromptInjectionResult, flagged: boolean): Promise<void> {
+    if (!this.onDetection) return;
+    try {
+      await this.onDetection({
+        detectionResult,
+        input,
+        flagged,
+        strategyApplied: flagged ? this.strategy : 'none',
+      });
+    } catch (error) {
+      console.warn('[PromptInjectionDetector] onDetection callback failed:', error);
     }
   }
 

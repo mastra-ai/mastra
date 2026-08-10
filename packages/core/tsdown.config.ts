@@ -40,6 +40,26 @@ const treeshakeDecorators = {
   },
 };
 
+/**
+ * Rolldown can attribute a side-effect-only import of a Node builtin to a chunk that never
+ * uses it, including the shared runtime chunk that every entry imports. That drags `module`
+ * into browser-safe entries such as `a2a/client`, and bundlers targeting the browser fail to
+ * resolve it. A bare import of a builtin has no side effects worth keeping, so drop it.
+ */
+const dropBareBuiltinImports = {
+  name: 'drop-bare-builtin-imports',
+  generateBundle(_options: unknown, bundle: Record<string, { type: string; code?: string }>) {
+    const bareBuiltinImport =
+      /^import "(?:node:)?(?:assert|async_hooks|buffer|child_process|cluster|console|constants|crypto|dgram|diagnostics_channel|dns|domain|events|fs|http|http2|https|inspector|module|net|os|path|perf_hooks|process|punycode|querystring|readline|repl|stream|string_decoder|timers|tls|trace_events|tty|url|util|v8|vm|wasi|worker_threads|zlib)(?:\/[\w/]+)?";?$/gm;
+
+    for (const chunk of Object.values(bundle)) {
+      if (chunk.type === 'chunk' && chunk.code) {
+        chunk.code = chunk.code.replace(bareBuiltinImport, '');
+      }
+    }
+  },
+};
+
 export default defineConfig({
   entry: [
     'src/index.ts',
@@ -58,6 +78,7 @@ export default defineConfig({
     'src/vector/filter/index.ts',
     'src/test-utils/llm-mock.ts',
     'src/a2a/client.ts',
+    'src/a2a/v1.ts',
     'src/processors/index.ts',
     'src/zod-to-json.ts',
     'src/utils/collect-tool-mocks.ts',
@@ -84,7 +105,7 @@ export default defineConfig({
   dts: false,
   treeshake: true,
   inputOptions: {
-    plugins: [treeshakeDecorators],
+    plugins: [treeshakeDecorators, dropBareBuiltinImports],
   },
   define: {
     __MASTRA_VERSION__: JSON.stringify(pkg.version),

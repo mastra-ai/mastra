@@ -77,9 +77,36 @@ describe('credential store provider registry', () => {
     expect(resolveTenantFromRequestContext(ctx)).toEqual({ orgId: undefined, userId: 'prov_2' });
   });
 
+  it('reads a session-shaped user, whose org lives on the session half', () => {
+    const ctx = new RequestContext();
+    ctx.set('user', { session: { activeOrganizationId: 'org_1' }, user: { id: 'prov_3' } });
+    expect(resolveTenantFromRequestContext(ctx)).toEqual({ orgId: 'org_1', userId: 'prov_3' });
+  });
+
+  it('takes a session-shaped user org from the session half only, never the inner user', () => {
+    const ctx = new RequestContext();
+    ctx.set('user', { session: {}, user: { id: 'prov_4', organizationId: 'org_9' } });
+    // `toFactoryAuthUser` in `@mastra/factory` reads the session half and nothing
+    // else. Falling back to the inner user here would resolve a tenant the
+    // Factory refuses, and the two would disagree about who the caller is.
+    expect(resolveTenantFromRequestContext(ctx)).toEqual({ orgId: undefined, userId: 'prov_4' });
+  });
+
   it('ignores malformed user values', () => {
     const ctx = new RequestContext();
     ctx.set('user', 'not-a-user');
+    expect(resolveTenantFromRequestContext(ctx)).toBeUndefined();
+  });
+
+  it('refuses a tenant whose resolved user id is not a string', () => {
+    const ctx = new RequestContext();
+    ctx.set('user', { session: { activeOrganizationId: 'org_1' }, user: { id: 7 } });
+    expect(resolveTenantFromRequestContext(ctx)).toBeUndefined();
+  });
+
+  it('refuses a tenant whose resolved org id is not a string', () => {
+    const ctx = new RequestContext();
+    ctx.set('user', { session: { activeOrganizationId: 7 }, user: { id: 'prov_5' } });
     expect(resolveTenantFromRequestContext(ctx)).toBeUndefined();
   });
 });

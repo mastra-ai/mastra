@@ -114,21 +114,6 @@ describe('AgentController workspace — dynamic factory', () => {
     expect(factory).toHaveBeenCalledTimes(2);
   });
 
-  it('createSession throws when factory returns undefined', async () => {
-    const nullFactory = vi.fn().mockResolvedValue(undefined);
-    const controller = new AgentController({
-      id: 'test',
-      storage: new InMemoryStore(),
-      modes: [{ id: 'default', name: 'Default', default: true, agent: createAgent() }],
-      workspace: nullFactory,
-    });
-    await controller.init();
-
-    await expect(controller.createSession({ id: 'test-session', ownerId: 'test-owner' })).rejects.toThrow(
-      'A session requires a valid workspace instance.',
-    );
-  });
-
   it('resolveWorkspace provides session state to the factory', async () => {
     const ws = createMockWorkspace('dynamic-ws');
     // Simulates a dynamic workspace factory that reads session state via
@@ -157,25 +142,6 @@ describe('AgentController workspace — dynamic factory', () => {
     // this.workspace, so this re-invokes the factory with a fresh context.
     const resolved = await controller.resolveWorkspace({ session });
     expect(resolved).toBe(ws);
-  });
-});
-
-// ===========================================================================
-// No workspace configured
-// ===========================================================================
-
-describe('AgentController workspace — none configured', () => {
-  it('createSession throws when no workspace is configured', async () => {
-    const controller = new AgentController({
-      id: 'test',
-      storage: new InMemoryStore(),
-      modes: [{ id: 'default', name: 'Default', default: true, agent: createAgent() }],
-    });
-    await controller.init();
-
-    await expect(controller.createSession({ id: 'test-session', ownerId: 'test-owner' })).rejects.toThrow(
-      'A session requires a valid workspace instance.',
-    );
   });
 });
 
@@ -309,17 +275,19 @@ describe('AgentController createSession — workspace isolation', () => {
       workspace: wsA,
     });
 
-    // Session B has no workspace override — should throw because no workspace is available
-    await expect(
-      controller.createSession({
-        id: 'session-b',
-        ownerId: 'test-owner',
-        resourceId: 'resource-b',
-      }),
-    ).rejects.toThrow('A session requires a valid workspace instance.');
+    // Session B has no workspace override and the controller has none either —
+    // it runs without a workspace rather than inheriting session A's.
+    const sessionB = await controller.createSession({
+      id: 'session-b',
+      ownerId: 'test-owner',
+      resourceId: 'resource-b',
+    });
+
+    expect(sessionB.getWorkspace()).toBeUndefined();
+    expect(sessionB.getWorkspace()).not.toBe(wsA);
 
     // Session A still has its own workspace (init was called)
-    expect(sessionA).toBeDefined();
+    expect(sessionA.getWorkspace()).toBe(wsA);
     expect(initSpyA).toHaveBeenCalled();
   });
 });
@@ -423,5 +391,87 @@ describe('AgentController createSession — browser overrides', () => {
 
     // Session A still has its own browser
     expect(sessionA.browser).toBe(browserA);
+  });
+});
+
+// ===========================================================================
+// Sessions without a workspace (#20594)
+// ===========================================================================
+
+describe('AgentController createSession — no workspace', () => {
+  it('creates a usable session when no workspace is configured anywhere', async () => {
+    const controller = new AgentController({
+      id: 'test',
+      storage: new InMemoryStore(),
+      modes: [{ id: 'default', name: 'Default', default: true, agent: createAgent() }],
+    });
+    await controller.init();
+
+    const session = await controller.createSession({
+      id: 'test-session',
+      ownerId: 'test-owner',
+      resourceId: 'resource-1',
+    });
+
+    expect(session.getWorkspace()).toBeUndefined();
+    expect(controller.hasWorkspace()).toBe(false);
+    // The rest of the session is fully wired: it still has an identity and a thread.
+    expect(session.identity.getResourceId()).toBe('resource-1');
+    expect(session.thread.requireId()).toBeDefined();
+  });
+
+  it('emits no workspace lifecycle events for a workspace-less session', async () => {
+    const controller = new AgentController({
+      id: 'test',
+      storage: new InMemoryStore(),
+      modes: [{ id: 'default', name: 'Default', default: true, agent: createAgent() }],
+    });
+    await controller.init();
+
+    const events: string[] = [];
+    controller.onSessionCreated(session => {
+      session.subscribe(event => {
+        if (event.type.startsWith('workspace')) events.push(event.type);
+      });
+    });
+
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    // Late subscribers get replayed workspace events; there must be none to replay.
+    session.subscribe(event => {
+      if (event.type.startsWith('workspace')) events.push(event.type);
+    });
+
+    expect(events).toEqual([]);
+  });
+
+  it('a dynamic workspace factory resolving to undefined yields a workspace-less session', async () => {
+    const controller = new AgentController({
+      id: 'test',
+      storage: new InMemoryStore(),
+      modes: [{ id: 'default', name: 'Default', default: true, agent: createAgent() }],
+      workspace: async () => undefined,
+    });
+    await controller.init();
+
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
+
+    expect(session.getWorkspace()).toBeUndefined();
+  });
+
+  it('still rejects a workspace that is not a Workspace instance', async () => {
+    const controller = new AgentController({
+      id: 'test',
+      storage: new InMemoryStore(),
+      modes: [{ id: 'default', name: 'Default', default: true, agent: createAgent() }],
+    });
+    await controller.init();
+
+    await expect(
+      controller.createSession({
+        id: 'test-session',
+        ownerId: 'test-owner',
+        workspace: { name: 'not-a-workspace' } as unknown as Workspace,
+      }),
+    ).rejects.toThrow(/must be a valid Workspace instance/);
   });
 });

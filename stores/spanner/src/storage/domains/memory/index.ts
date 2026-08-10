@@ -348,8 +348,8 @@ export class MemorySpanner extends MemoryStorage {
     metadata,
   }: {
     id: string;
-    title: string;
-    metadata: Record<string, unknown>;
+    title?: string;
+    metadata?: Record<string, unknown>;
   }): Promise<StorageThreadType> {
     const tableThreads = quoteIdent(TABLE_THREADS, 'table name');
     const now = new Date();
@@ -374,7 +374,7 @@ export class MemorySpanner extends MemoryStorage {
                 domain: ErrorDomain.STORAGE,
                 category: ErrorCategory.USER,
                 text: `Thread ${id} not found`,
-                details: { threadId: id, title },
+                details: { threadId: id, title: title ?? null },
               });
             }
             existingThread = this.formatThreadRow(row);
@@ -383,7 +383,7 @@ export class MemorySpanner extends MemoryStorage {
               tableName: TABLE_THREADS,
               keys: { id },
               data: {
-                title,
+                title: title ?? existingThread.title,
                 metadata: merged,
                 updatedAt: now,
               },
@@ -411,7 +411,7 @@ export class MemorySpanner extends MemoryStorage {
           id: createStorageErrorId('SPANNER', 'UPDATE_THREAD', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { threadId: id, title },
+          details: { threadId: id, title: title ?? null },
         },
         error,
       );
@@ -511,17 +511,32 @@ export class MemorySpanner extends MemoryStorage {
       );
       this.logger?.error?.(mastraError.toString());
       this.logger?.trackException?.(mastraError);
-      return { messages: [] };
+      throw mastraError;
     }
   }
 
-  /** Resolves the `include` clause: pinned messages plus their before/after windows. */
-  private async getIncludedMessages({ include }: { include: StorageListMessagesInput['include'] }) {
+  /**
+   * Resolves the `include` clause: pinned messages plus their before/after windows.
+   *
+   * @param include - Message ids to pin, each with an optional before/after window.
+   * @param resourceId - When set, restricts both the pinned messages and their context
+   * to that resource so an id from another resource returns nothing.
+   */
+  private async getIncludedMessages({
+    include,
+    resourceId,
+  }: {
+    include: StorageListMessagesInput['include'];
+    resourceId?: string;
+  }) {
     if (!include || include.length === 0) return null;
+
+    const resourceCondition = resourceId ? ` AND ${quoteIdent('resourceId', 'column name')} = @scopedResourceId` : '';
+    const resourceParams = resourceId ? { scopedResourceId: resourceId } : {};
 
     const ids = include.map(i => i.id);
     const placeholders: string[] = [];
-    const idParams: Record<string, any> = {};
+    const idParams: Record<string, any> = { ...resourceParams };
     ids.forEach((id, i) => {
       const name = `tid${i}`;
       placeholders.push(`@${name}`);
@@ -529,7 +544,7 @@ export class MemorySpanner extends MemoryStorage {
     });
     const targetsSql = `SELECT id, content, role, type, ${quoteIdent('createdAt', 'column name')}, ${quoteIdent('thread_id', 'column name')} AS threadId, ${quoteIdent('resourceId', 'column name')}
                         FROM ${quoteIdent(TABLE_MESSAGES, 'table name')}
-                        WHERE id IN (${placeholders.join(', ')})`;
+                        WHERE id IN (${placeholders.join(', ')})${resourceCondition}`;
     const [targetRows] = await this.database.run({ sql: targetsSql, params: idParams, json: true });
     const targetsById = new Map<string, Record<string, any>>();
     for (const t of targetRows as Array<Record<string, any>>) targetsById.set(t.id as string, t);
@@ -555,10 +570,10 @@ export class MemorySpanner extends MemoryStorage {
           sql: `SELECT id, content, role, type, ${quoteIdent('createdAt', 'column name')}, ${quoteIdent('thread_id', 'column name')} AS threadId, ${quoteIdent('resourceId', 'column name')}
                 FROM ${quoteIdent(TABLE_MESSAGES, 'table name')}
                 WHERE ${quoteIdent('thread_id', 'column name')} = @threadId
-                  AND (${quoteIdent('createdAt', 'column name')} < @ts OR (${quoteIdent('createdAt', 'column name')} = @ts AND id < @id))
+                  AND (${quoteIdent('createdAt', 'column name')} < @ts OR (${quoteIdent('createdAt', 'column name')} = @ts AND id < @id))${resourceCondition}
                 ORDER BY ${quoteIdent('createdAt', 'column name')} DESC, id DESC
                 LIMIT @lim`,
-          params: { threadId, ts: targetCreatedAt, id: target.id, lim: withPreviousMessages },
+          params: { threadId, ts: targetCreatedAt, id: target.id, lim: withPreviousMessages, ...resourceParams },
           json: true,
         });
         for (const row of (prev as Array<Record<string, any>>).reverse()) {
@@ -574,10 +589,10 @@ export class MemorySpanner extends MemoryStorage {
           sql: `SELECT id, content, role, type, ${quoteIdent('createdAt', 'column name')}, ${quoteIdent('thread_id', 'column name')} AS threadId, ${quoteIdent('resourceId', 'column name')}
                 FROM ${quoteIdent(TABLE_MESSAGES, 'table name')}
                 WHERE ${quoteIdent('thread_id', 'column name')} = @threadId
-                  AND (${quoteIdent('createdAt', 'column name')} > @ts OR (${quoteIdent('createdAt', 'column name')} = @ts AND id > @id))
+                  AND (${quoteIdent('createdAt', 'column name')} > @ts OR (${quoteIdent('createdAt', 'column name')} = @ts AND id > @id))${resourceCondition}
                 ORDER BY ${quoteIdent('createdAt', 'column name')} ASC, id ASC
                 LIMIT @lim`,
-          params: { threadId, ts: targetCreatedAt, id: target.id, lim: withNextMessages },
+          params: { threadId, ts: targetCreatedAt, id: target.id, lim: withNextMessages, ...resourceParams },
           json: true,
         });
         for (const row of next as Array<Record<string, any>>) {
@@ -645,7 +660,7 @@ export class MemorySpanner extends MemoryStorage {
       // perPage=0 with includes: skip COUNT and base queries; only fetch the
       // included messages.
       if (perPage === 0 && include && include.length > 0) {
-        const includeMessages = (await this.getIncludedMessages({ include })) ?? [];
+        const includeMessages = (await this.getIncludedMessages({ include, resourceId })) ?? [];
         const parsedIncludes = this.parseAndFormatMessages(includeMessages, 'v2') as MastraDBMessage[];
         const dirMul = direction === 'ASC' ? 1 : -1;
         const sortedIncludes = parsedIncludes.sort((a, b) => {
@@ -712,7 +727,7 @@ export class MemorySpanner extends MemoryStorage {
       // Includes
       if (include?.length) {
         const seen = new Set(messages.map(m => m.id));
-        const includeMessages = await this.getIncludedMessages({ include });
+        const includeMessages = await this.getIncludedMessages({ include, resourceId });
         includeMessages?.forEach(msg => {
           if (!seen.has(msg.id)) {
             messages.push(msg);

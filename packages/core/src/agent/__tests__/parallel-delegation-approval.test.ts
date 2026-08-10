@@ -11,24 +11,16 @@ import { Agent } from '../agent';
  * Deterministic reproduction of the parallel sub-agent delegation
  * suspend/resume collision.
  *
- * Root cause: the agentic loop tracks suspended/pending tool state in a map
- * keyed by toolName (metadata.pendingToolApprovals[toolName]), NOT by
- * toolCallId — see tool-call-step.ts. When a supervisor emits TWO parallel
- * delegations to the SAME sub-agent in one assistant step, both suspend their
- * own inner sub-agent run, but they share ONE outer supervisor run. The second
- * suspension overwrites the first's entry in the toolName-keyed map, so only
- * one inner runId survives.
- *
- * On resume, approveToolCall() reconstructs the inner run by looking the entry
- * up by toolName, so both approvals resolve to the same surviving entry.
- * Approving the first advances/clears the shared state; the second
- * approveToolCall() then finds no snapshot and fails with
- * AGENT_RESUME_NO_SNAPSHOT_FOUND — so only one of the two delegated actions
- * executes.
+ * Root cause: both delegated calls share one assistant response. The first
+ * suspension flushes that response, removing it from the unsaved response view.
+ * The second suspension previously found no response message and silently skipped
+ * its pendingToolApprovals write. Both approval chunks and workflow snapshots
+ * existed, but only one approval target survived in persisted message metadata,
+ * so a cold reload could not reconstruct and resume both calls.
  *
  * Two parallel delegations to the same sub-agent are required to reproduce
- * faithfully: the two distinct approval chunks emit correctly (proving emission
- * is fine), and the bug is isolated to the resume path.
+ * faithfully: each call has its own toolCallId and inner suspended run, while
+ * both metadata writes target the same outer assistant message.
  *
  * Originally observed live with real OpenRouter models in a support-copilot
  * demo (two parallel refunds → only one refund landed).
@@ -163,6 +155,7 @@ function buildSupervisor(subAgent: Agent) {
 
 interface ApprovalSeen {
   toolCallId: string;
+  toolName: string;
   argsText: string;
 }
 
@@ -173,6 +166,7 @@ async function collectApprovals(stream: any): Promise<ApprovalSeen[]> {
       const p: any = (chunk as any).payload ?? {};
       approvals.push({
         toolCallId: String(p.toolCallId ?? ''),
+        toolName: String(p.toolName ?? ''),
         argsText: JSON.stringify(p.args ?? p.input ?? {}),
       });
     }
@@ -198,11 +192,13 @@ describe('parallel sub-agent delegation (suspend/resume)', () => {
 
     const approvals = await collectApprovals(stream);
 
-    // Emission is correct: two approvals, one per order, with distinct ids.
-    expect(approvals.length).toBe(2);
+    // Keep the outer delegation ids for targeted resume, but disclose the inner
+    // approval target so the user sees the actual action and arguments.
+    expect(approvals).toHaveLength(2);
+    expect(approvals.every(a => a.toolName === 'process-order')).toBe(true);
     expect(approvals.some(a => a.argsText.includes(ORDER_A))).toBe(true);
     expect(approvals.some(a => a.argsText.includes(ORDER_B))).toBe(true);
-    expect(new Set(approvals.map(a => a.toolCallId)).size).toBe(2);
+    expect(new Set(approvals.map(a => a.toolCallId))).toEqual(new Set(['sup-tc-A', 'sup-tc-B']));
   });
 
   it('rejects a targeted approval when that tool call is not actually suspended', async () => {
@@ -255,10 +251,10 @@ describe('parallel sub-agent delegation (suspend/resume)', () => {
     const [{ toolCalls }] = (await supervisor.listSuspendedRuns()).runs;
     const suspendedToolCallIds = toolCalls.map(toolCall => toolCall.toolCallId).sort();
     expect(suspendedToolCallIds).toEqual(['sup-tc-A', 'sup-tc-B']);
-    for (const toolCall of toolCalls) {
-      expect(toolCall.toolName).toBe('agent-subAgent');
-      expect(toolCall.requiresApproval).toBe(true);
-    }
+    expect(toolCalls.every(toolCall => toolCall.toolName === 'process-order')).toBe(true);
+    expect(toolCalls.some(toolCall => JSON.stringify(toolCall.args).includes(ORDER_A))).toBe(true);
+    expect(toolCalls.some(toolCall => JSON.stringify(toolCall.args).includes(ORDER_B))).toBe(true);
+    expect(toolCalls.every(toolCall => toolCall.requiresApproval)).toBe(true);
   });
 
   it('approving the delegations OUT OF ORDER (B first) processes both orders correctly', async () => {
@@ -320,16 +316,25 @@ describe('parallel sub-agent delegation (suspend/resume)', () => {
   it('resuming from a cold reload (no live workflow run) still processes BOTH orders', async () => {
     // Page-refresh scenario: the run that emitted the approvals is gone. Resume happens on a
     // *fresh* agent/Mastra instance backed by the same storage, so the suspended run ids must be
-    // recovered purely from the persisted assistant message. If pendingToolApprovals were keyed
-    // by toolName, the two delegations to the same sub-agent would collapse to one persisted
-    // entry and the second resume would fail (AGENT_RESUME_NO_SNAPSHOT_FOUND) — exactly the
-    // collision the live-resume snapshot path cannot help with after a reload.
+    // recovered purely from the persisted assistant message. If the second suspension loses its
+    // metadata write after the first suspension flushes their shared response, the second resume
+    // fails because its exact persisted target is unavailable after the reload.
     processedOrders.length = 0;
     const storage = new InMemoryStore();
 
     // First instance: emit the two approvals, then discard the instance entirely.
-    let runId: string;
     let approvals: ApprovalSeen[];
+    const persistedTargets = new Map<
+      string,
+      {
+        runId: string;
+        delegatedRunId?: string;
+        toolName?: string;
+        args?: unknown;
+        parentToolName?: string;
+        parentArgs?: unknown;
+      }
+    >();
     {
       const supervisor = buildSupervisorAgent(storage);
       const stream = await supervisor.stream('Process both orders in parallel.', {
@@ -337,16 +342,66 @@ describe('parallel sub-agent delegation (suspend/resume)', () => {
         memory: { resource: 'rep_approval', thread: 'thread-reload' },
       });
       approvals = await collectApprovals(stream);
-      runId = stream.runId;
       expect(approvals.length).toBe(2);
+
+      const memory = await supervisor.getMemory();
+      const recalled = await memory?.recall({
+        threadId: 'thread-reload',
+        resourceId: 'rep_approval',
+        perPage: false,
+      });
+      for (const message of recalled?.messages ?? []) {
+        const metadata = message.content?.metadata as Record<string, unknown> | undefined;
+        const pending = (metadata?.pendingToolApprovals ?? {}) as Record<string, unknown>;
+        for (const entry of Object.values(pending) as Array<{
+          toolCallId?: string;
+          toolName?: string;
+          args?: unknown;
+          parentToolName?: string;
+          parentArgs?: unknown;
+          runId?: string;
+          delegatedRunId?: string;
+        }>) {
+          if (entry.toolCallId && entry.runId) {
+            persistedTargets.set(entry.toolCallId, {
+              runId: entry.runId,
+              delegatedRunId: entry.delegatedRunId,
+              toolName: entry.toolName,
+              args: entry.args,
+              parentToolName: entry.parentToolName,
+              parentArgs: entry.parentArgs,
+            });
+          }
+        }
+      }
+
+      expect([...persistedTargets.keys()].sort()).toEqual(approvals.map(approval => approval.toolCallId).sort());
+      expect([...persistedTargets.values()].every(target => target.runId === stream.runId)).toBe(true);
+      expect([...persistedTargets.values()].every(target => target.toolName === 'process-order')).toBe(true);
+      expect([...persistedTargets.values()].every(target => target.parentToolName === 'agent-subAgent')).toBe(true);
+      expect([...persistedTargets.values()].some(target => JSON.stringify(target.args).includes(ORDER_A))).toBe(true);
+      expect([...persistedTargets.values()].some(target => JSON.stringify(target.args).includes(ORDER_B))).toBe(true);
+      expect([...persistedTargets.values()].some(target => JSON.stringify(target.parentArgs).includes(ORDER_A))).toBe(
+        true,
+      );
+      expect([...persistedTargets.values()].some(target => JSON.stringify(target.parentArgs).includes(ORDER_B))).toBe(
+        true,
+      );
+      const delegatedRunIds = [...persistedTargets.values()].map(target => target.delegatedRunId);
+      expect(delegatedRunIds.every(Boolean)).toBe(true);
+      expect(new Set(delegatedRunIds).size).toBe(2);
     }
 
     // Second instance: brand-new agent + Mastra over the SAME storage. No in-memory run state
-    // survives, so resume relies solely on the persisted pendingToolApprovals entries.
+    // survives, so resume uses only the exact targets reconstructed from pendingToolApprovals.
     const reloadedSupervisor = buildSupervisorAgent(storage);
     const resumeErrors: string[] = [];
-    for (const a of approvals) {
-      const resumed = await reloadedSupervisor.approveToolCall({ runId, toolCallId: a.toolCallId });
+    for (const approval of [...approvals].reverse()) {
+      const target = persistedTargets.get(approval.toolCallId)!;
+      const resumed = await reloadedSupervisor.approveToolCall({
+        runId: target.runId,
+        toolCallId: approval.toolCallId,
+      });
       for await (const chunk of resumed.fullStream) {
         if (chunk.type === 'tool-error') resumeErrors.push(JSON.stringify((chunk as any).payload ?? chunk));
       }

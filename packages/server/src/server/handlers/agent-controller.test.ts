@@ -232,6 +232,68 @@ describe('agent-controller routes', () => {
     });
   });
 
+  // The messages/steer/follow-up routes ack immediately and let the session
+  // finish the turn in the background. Session methods can still reject (e.g.
+  // `sendMessage` rejects when signal submission fails before a stream starts),
+  // and an unobserved rejection crashes the process on Node's default
+  // `--unhandled-rejections=throw` (see mastra-ai/mastra#19734). The routes must
+  // observe the failure: log it and tell the session's subscribers.
+  describe('background session failures', () => {
+    async function getRouteSession(resourceId: string) {
+      const controller = mastra.getAgentController('code')!;
+      await controller.init();
+      return controller.createSession({ resourceId, id: resourceId, ownerId: controller.id });
+    }
+
+    const cases = [
+      { name: 'sendMessage', method: 'sendMessage', route: SEND_AGENT_CONTROLLER_MESSAGE_ROUTE },
+      { name: 'steer', method: 'steer', route: STEER_AGENT_CONTROLLER_SESSION_ROUTE },
+      { name: 'followUp', method: 'followUp', route: FOLLOW_UP_AGENT_CONTROLLER_SESSION_ROUTE },
+    ] as const;
+
+    for (const { name, method, route } of cases) {
+      it(`still acks, logs, and emits an error event when session.${name} rejects`, async () => {
+        const session = await getRouteSession(`user-bg-${name}`);
+        const failure = new Error('signal failed before stream started');
+        vi.spyOn(session, method as any).mockRejectedValue(failure);
+        const errorLog = vi.spyOn(mastra.getLogger(), 'error').mockImplementation(() => {});
+
+        const events: any[] = [];
+        const unsubscribe = session.subscribe(event => {
+          if (event.type === 'error') events.push(event);
+        });
+
+        const unhandled: unknown[] = [];
+        const onUnhandled = (reason: unknown) => unhandled.push(reason);
+        process.on('unhandledRejection', onUnhandled);
+
+        try {
+          const res = await route.handler({
+            mastra,
+            controllerId: 'code',
+            resourceId: `user-bg-${name}`,
+            message: 'hello',
+          } as any);
+          expect(res).toEqual({ ok: true });
+
+          // Let the rejection settle and any unhandled-rejection fire.
+          await new Promise(resolve => setTimeout(resolve, 0));
+          await new Promise(resolve => setTimeout(resolve, 0));
+
+          expect(unhandled).toEqual([]);
+          expect(errorLog).toHaveBeenCalledWith(
+            expect.stringContaining(name),
+            expect.objectContaining({ operation: name, error: failure }),
+          );
+          expect(events).toEqual([expect.objectContaining({ type: 'error', error: failure })]);
+        } finally {
+          process.off('unhandledRejection', onUnhandled);
+          unsubscribe();
+        }
+      });
+    }
+  });
+
   describe('requestContext forwarding', () => {
     // Identity injected by `server.middleware` arrives on the handler as
     // `requestContext`; the session-write routes must thread it through to the
@@ -425,6 +487,35 @@ describe('agent-controller routes', () => {
       expect(received.error).toEqual({ name: 'Error', message: 'model quota exhausted' });
       expect(JSON.parse(JSON.stringify(received)).error.message).toBe('model quota exhausted');
       expect(received.errorType).toBe('provider');
+    });
+
+    it('converts display-state Maps to plain objects so tool state survives JSON serialization', async () => {
+      const stream = (await STREAM_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-ds',
+        abortSignal: new AbortController().signal,
+      } as any)) as ReadableStream<unknown>;
+
+      const reader = stream.getReader();
+
+      const controller = mastra.getAgentController('code')!;
+      await controller.init();
+      const session = await controller.createSession({ resourceId: 'user-ds', id: 'user-ds', ownerId: 'code' });
+      session.emit({ type: 'tool_start', toolCallId: 'call-1', toolName: 'read', args: { path: 'a.ts' } });
+
+      let received: unknown;
+      for (let i = 0; i < 10 && received === undefined; i++) {
+        const { value } = await reader.read();
+        if (value && typeof value === 'object' && 'type' in value && value.type === 'display_state_changed') {
+          received = value;
+        }
+      }
+      await reader.cancel();
+
+      expect(received).toBeDefined();
+      const wire = JSON.parse(JSON.stringify(received));
+      expect(wire.displayState.activeTools['call-1']).toMatchObject({ name: 'read', status: 'running' });
     });
   });
 

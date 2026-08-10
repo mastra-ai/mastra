@@ -75,6 +75,14 @@ if (!Element.prototype.getAnimations) {
   Object.defineProperty(Element.prototype, 'getAnimations', { configurable: true, value: () => [] });
 }
 
+// jsdom implements no pointer capture; sonner's swipe-to-dismiss claims it on
+// every pointerdown, so clicking a toast action throws without these.
+if (!Element.prototype.setPointerCapture) {
+  Element.prototype.setPointerCapture = () => {};
+  Element.prototype.releasePointerCapture = () => {};
+  Element.prototype.hasPointerCapture = () => false;
+}
+
 // jsdom has no PointerEvent constructor; Base UI's Switch builds one on click.
 if (!window.PointerEvent) {
   window.PointerEvent = class PointerEvent extends MouseEvent {

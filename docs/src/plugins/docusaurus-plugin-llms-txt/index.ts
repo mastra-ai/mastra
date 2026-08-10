@@ -11,6 +11,7 @@ import { glob } from 'tinyglobby'
 
 import { type LlmsTxtPluginOptions, resolveOptions, validateOptions } from './options'
 import { CacheManager, computeHash } from './cache-manager'
+import { injectMarkdownAlternateLink, markdownUrlForRoute } from './head-link'
 import { processHtml } from './html-processor'
 import { generateRootLlmsTxt, writeLlmsTxt, type RouteEntry } from './output-generator'
 import { generateManifest, writeManifest } from './manifest-generator'
@@ -73,6 +74,14 @@ export default function pluginLlmsTxt(_context: LoadContext, userOptions: LlmsTx
           const contentHash = computeHash(html)
 
           const llmsTxtPath = path.join(path.dirname(htmlPath), 'llms.txt')
+
+          // Point the HTML at its markdown twin. The cache key stays on the original HTML, and the
+          // injection is idempotent, so a repeated build cannot add the tag twice.
+          const htmlWithLink = injectMarkdownAlternateLink(html, markdownUrlForRoute(route, options.siteUrl))
+
+          if (htmlWithLink !== html) {
+            await fs.writeFile(htmlPath, htmlWithLink, 'utf-8')
+          }
 
           // Check cache
           if (cache.isValid(route, contentHash)) {
