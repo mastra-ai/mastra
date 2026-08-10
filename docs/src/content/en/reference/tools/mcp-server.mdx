@@ -212,7 +212,7 @@ By default, `MCPServer` speaks the legacy (2025-era) MCP protocol: sessionful st
 - Tool list, prompt list, resource list, and resource update notifications also reach `2026-07-28` clients through `subscriptions/listen`.
 - Tool log messages honor the caller's per-request `logLevel` opt-in instead of the session-level `logging/setLevel`.
 - Configured `cacheHints` are advertised on cacheable results such as `tools/list`.
-- Tool elicitation (`options.mcp.elicitation.sendRequest()`) works on both eras. On `2026-07-28` requests it uses the protocol's multi round-trip mechanism: the tool call returns an `input_required` result, the client answers it, and the call retries with the answer attached. The `sendRequest()` promise API is unchanged, but the tool function re-executes from the top on each retry, so keep side effects idempotent (or place them after the last elicitation) and keep the order of `sendRequest()` calls deterministic for a given input.
+- Tool elicitation (`options.mcp.elicitation.sendRequest()`) works on both eras. On `2026-07-28` requests, it uses the protocol's multi round-trip mechanism. The tool call first returns an `input_required` result. After the client answers, the call retries with the answer attached. The `sendRequest()` promise API is unchanged, but the tool function re-executes from the top on each retry, so keep side effects idempotent (or place them after the last elicitation) and keep the order of `sendRequest()` calls deterministic for a given input.
 
 ```typescript
 const server = new MCPServer({
