@@ -55,6 +55,66 @@ const authInfo: AuthInfo = {
   scopes: ['tools:call'],
 };
 
+type StartHTTPTransportOptions = NonNullable<Parameters<MCPServer['startHTTP']>[0]['options']>;
+
+const requestModernServerWithOptions = async ({
+  options,
+  headers,
+}: {
+  options: StartHTTPTransportOptions;
+  headers?: Record<string, string>;
+}): Promise<{ statusCode: number; body: string; startError?: unknown }> => {
+  const server = new MCPServer({
+    name: 'Modern Option Test Server',
+    version: '1.0.0',
+    protocolVersion: '2026-07-28',
+    tools: makeTools(),
+  });
+  let startError: unknown;
+  const httpServer = http.createServer(async (req, res) => {
+    try {
+      await server.startHTTP({
+        url: new URL(req.url || '', 'http://localhost'),
+        httpPath: '/mcp',
+        req,
+        res,
+        options,
+      });
+    } catch (error) {
+      startError = error;
+      res.writeHead(500, { 'Content-Type': 'text/plain' });
+      res.end(error instanceof Error ? error.message : String(error));
+    }
+  });
+  const port = await listenOnFreePort(httpServer);
+
+  try {
+    const response = await new Promise<{ statusCode: number; body: string }>((resolve, reject) => {
+      const request = http.request(
+        {
+          hostname: 'localhost',
+          port,
+          path: '/mcp',
+          headers,
+        },
+        response => {
+          const chunks: Buffer[] = [];
+          response.on('data', chunk => chunks.push(Buffer.from(chunk)));
+          response.on('end', () => {
+            resolve({ statusCode: response.statusCode ?? 0, body: Buffer.concat(chunks).toString('utf8') });
+          });
+        },
+      );
+      request.on('error', reject);
+      request.end();
+    });
+    return { ...response, startError };
+  } finally {
+    await server.close();
+    await new Promise<void>(resolve => httpServer.close(() => resolve()));
+  }
+};
+
 describe('MCPServer with protocolVersion 2026-07-28 (dual-era HTTP)', () => {
   let server: MCPServer;
   let httpServer: http.Server;
@@ -79,6 +139,11 @@ describe('MCPServer with protocolVersion 2026-07-28 (dual-era HTTP)', () => {
         httpPath: '/mcp',
         req,
         res,
+        options: {
+          serverless: true,
+          serverlessStreaming: true,
+          sessionIdGenerator: undefined,
+        },
       });
     });
     const port = await listenOnFreePort(httpServer);
@@ -90,7 +155,7 @@ describe('MCPServer with protocolVersion 2026-07-28 (dual-era HTTP)', () => {
     await new Promise<void>(resolve => httpServer.close(() => resolve()));
   });
 
-  it('serves a client pinned to 2026-07-28: lists and calls tools', async () => {
+  it('accepts stateless transport declarations and serves a client pinned to 2026-07-28', async () => {
     const client = new Client(
       { name: 'pinned-client', version: '1.0.0' },
       { versionNegotiation: { mode: { pin: '2026-07-28' } } },
@@ -242,6 +307,58 @@ describe('MCPServer with protocolVersion 2026-07-28 (dual-era HTTP)', () => {
     } finally {
       await client.close();
     }
+  });
+
+  it('rejects session and handler-lifetime options instead of ignoring them', async () => {
+    const cases: Array<[string, StartHTTPTransportOptions]> = [
+      ['sessionIdGenerator', { sessionIdGenerator: () => 'session-id' }],
+      ['onsessioninitialized', { onsessioninitialized: () => {} }],
+      ['onsessionclosed', { onsessionclosed: () => {} }],
+      [
+        'eventStore',
+        {
+          eventStore: {
+            storeEvent: async () => 'event-id',
+            replayEventsAfter: async () => 'stream-id',
+          },
+        },
+      ],
+      ['enableJsonResponse', { enableJsonResponse: true }],
+      ['retryInterval', { retryInterval: 1_000 }],
+      ['keepAliveMs', { keepAliveMs: 1_000 }],
+      ['supportedProtocolVersions', { supportedProtocolVersions: ['2026-07-28'] }],
+      ['serverless', { serverless: false }],
+      ['serverlessStreaming', { serverlessStreaming: false }],
+    ];
+
+    for (const [name, options] of cases) {
+      const result = await requestModernServerWithOptions({ options });
+      expect(result.statusCode).toBe(500);
+      expect(result.startError).toBeInstanceOf(Error);
+      expect(result.body).toContain(`startHTTP options \"${name}\" are incompatible`);
+    }
+  });
+
+  it('preserves DNS rebinding protection on the modern HTTP path', async () => {
+    const blockedHost = await requestModernServerWithOptions({
+      options: {
+        enableDnsRebindingProtection: true,
+        allowedHosts: ['allowed.example'],
+      },
+      headers: { Host: 'blocked.example' },
+    });
+    expect(blockedHost.statusCode).toBe(403);
+    expect(blockedHost.body).toContain('Invalid Host header: blocked.example');
+
+    const blockedOrigin = await requestModernServerWithOptions({
+      options: {
+        enableDnsRebindingProtection: true,
+        allowedOrigins: ['https://allowed.example'],
+      },
+      headers: { Origin: 'https://blocked.example' },
+    });
+    expect(blockedOrigin.statusCode).toBe(403);
+    expect(blockedOrigin.body).toContain('Invalid Origin header: https://blocked.example');
   });
 });
 

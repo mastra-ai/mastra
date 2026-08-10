@@ -25,6 +25,7 @@ With the flag set:
 - Tool, prompt, and resource change notifications also reach `2026-07-28` clients through `subscriptions/listen`.
 - Tool log messages honor the caller's per-request `logLevel` opt-in.
 - Optional `cacheHints` advertise `ttlMs` / `cacheScope` on cacheable results such as `tools/list`.
+- `startHTTP()` continues to enforce configured host and origin guards. Session and handler-lifetime transport options fail with a clear error instead of being ignored.
 
 **Client**
 

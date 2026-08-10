@@ -94,6 +94,33 @@ const LOG_LEVEL_SEVERITY: Record<LoggingLevel, number> = {
   emergency: 7,
 };
 
+type MCPServerStreamableHTTPOptions = Partial<StreamableHTTPServerTransportOptions> & {
+  serverless?: boolean;
+  /**
+   * Opt into request-scoped SSE streaming for legacy serverless requests.
+   *
+   * The `2026-07-28` handler accepts `true` as a compatibility declaration because
+   * its automatic response mode already streams request-scoped messages when needed.
+   */
+  serverlessStreaming?: boolean;
+};
+
+const MODERN_ERA_HTTP_OPTION_KEYS = new Set([
+  'allowedHosts',
+  'allowedOrigins',
+  'enableDnsRebindingProtection',
+  'enableJsonResponse',
+  'eventStore',
+  'keepAliveMs',
+  'onsessionclosed',
+  'onsessioninitialized',
+  'retryInterval',
+  'serverless',
+  'serverlessStreaming',
+  'sessionIdGenerator',
+  'supportedProtocolVersions',
+]);
+
 /**
  * MCPServer exposes Mastra tools, agents, and workflows as a Model Context Protocol (MCP) server.
  *
@@ -161,7 +188,6 @@ export class MCPServer extends MCPServerBase {
   // The instance is retained so runtime notifications can reach stdio subscriptions.
   private stdioHandle?: { close(): Promise<void> };
   private stdioServerInstance?: Server;
-  private warnedAboutModernEraHttpOptions = false;
 
   /**
    * Provides methods to notify clients about resource changes.
@@ -537,6 +563,72 @@ export class MCPServer extends MCPServerBase {
    */
   private servesModernEra(): boolean {
     return this.protocolVersion === '2026-07-28';
+  }
+
+  private assertModernEraHTTPOptions(options?: MCPServerStreamableHTTPOptions): void {
+    if (!options) return;
+
+    const incompatibleOptions = new Set(
+      Object.keys(options).filter(option => !MODERN_ERA_HTTP_OPTION_KEYS.has(option)),
+    );
+
+    if (options.sessionIdGenerator !== undefined) incompatibleOptions.add('sessionIdGenerator');
+    if (options.onsessioninitialized !== undefined) incompatibleOptions.add('onsessioninitialized');
+    if (options.onsessionclosed !== undefined) incompatibleOptions.add('onsessionclosed');
+    if (options.eventStore !== undefined) incompatibleOptions.add('eventStore');
+    if (options.enableJsonResponse !== undefined) incompatibleOptions.add('enableJsonResponse');
+    if (options.retryInterval !== undefined) incompatibleOptions.add('retryInterval');
+    if (options.keepAliveMs !== undefined) incompatibleOptions.add('keepAliveMs');
+    if (options.supportedProtocolVersions !== undefined) incompatibleOptions.add('supportedProtocolVersions');
+    if (options.serverless === false) incompatibleOptions.add('serverless');
+    if (options.serverlessStreaming === false) incompatibleOptions.add('serverlessStreaming');
+
+    if (incompatibleOptions.size === 0) return;
+
+    const names = [...incompatibleOptions].sort();
+    throw new MastraError({
+      id: 'MCP_SERVER_MODERN_HTTP_OPTIONS_INCOMPATIBLE',
+      domain: ErrorDomain.MCP,
+      category: ErrorCategory.USER,
+      text: `startHTTP options ${names.map(name => `"${name}"`).join(', ')} are incompatible with protocolVersion "2026-07-28"`,
+      details: { incompatibleOptions: names.join(', ') },
+    });
+  }
+
+  private validateModernEraRequestHeaders(
+    req: http.IncomingMessage,
+    res: http.ServerResponse<http.IncomingMessage>,
+    options?: MCPServerStreamableHTTPOptions,
+  ): boolean {
+    if (!options?.enableDnsRebindingProtection) return true;
+
+    const host = req.headers.host;
+    if (options.allowedHosts?.length && (!host || !options.allowedHosts.includes(host))) {
+      res.writeHead(403, { 'Content-Type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          jsonrpc: '2.0',
+          error: { code: -32000, message: `Invalid Host header: ${host}` },
+          id: null,
+        }),
+      );
+      return false;
+    }
+
+    const origin = req.headers.origin;
+    if (options.allowedOrigins?.length && origin && !options.allowedOrigins.includes(origin)) {
+      res.writeHead(403, { 'Content-Type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          jsonrpc: '2.0',
+          error: { code: -32000, message: `Invalid Origin header: ${origin}` },
+          id: null,
+        }),
+      );
+      return false;
+    }
+
+    return true;
   }
 
   /**
@@ -1953,22 +2045,14 @@ export class MCPServer extends MCPServerBase {
     httpPath: string;
     req: http.IncomingMessage;
     res: http.ServerResponse<http.IncomingMessage>;
-    options?: Partial<StreamableHTTPServerTransportOptions> & {
-      serverless?: boolean;
-      /**
-       * Opt into request-scoped SSE streaming for serverless requests.
-       *
-       * When `true`, the transient serverless transport is created with
-       * `enableJsonResponse: false`, which allows in-request `notifications/progress`
-       * to stream back to the client before the final result. Defaults to `false`,
-       * preserving the JSON-response behavior that buffers only the final result.
-       *
-       * This only enables notifications scoped to the current request (e.g. progress).
-       * Elicitation, subscriptions, and out-of-request resource/list-change
-       * notifications still require a stateful session or another protocol model.
-       */
-      serverlessStreaming?: boolean;
-    };
+    /**
+     * Streamable HTTP transport options for the legacy protocol path.
+     *
+     * With `protocolVersion: '2026-07-28'`, stateless declarations and DNS rebinding
+     * protection remain supported. Session and response-mode options are rejected
+     * because they cannot configure the shared modern-era handler per request.
+     */
+    options?: MCPServerStreamableHTTPOptions;
   }) {
     this.logger.debug('Received HTTP request', { method: req.method, path: url.pathname });
 
@@ -1982,14 +2066,12 @@ export class MCPServer extends MCPServerBase {
     // 2026-07-28 revision: serve every request through the SDK's dual-era handler.
     // Modern clients are served natively (stateless, per-request envelope); legacy
     // clients are served by the handler's built-in stateless fallback on the same
-    // endpoint. Session/serverless options do not apply on this path.
+    // endpoint. Stateless declarations and request security guards remain valid;
+    // session and handler-lifetime options fail explicitly instead of being ignored.
     if (this.servesModernEra()) {
-      if (options && !this.warnedAboutModernEraHttpOptions) {
-        this.warnedAboutModernEraHttpOptions = true;
-        this.logger.warn(
-          'startHTTP transport options are ignored when protocolVersion is 2026-07-28 because the dual-era handler is stateless',
-        );
-      }
+      this.assertModernEraHTTPOptions(options);
+      if (!this.validateModernEraRequestHeaders(req, res, options)) return;
+
       try {
         await this.getModernEraNodeHandler()(req, res);
       } catch (error) {

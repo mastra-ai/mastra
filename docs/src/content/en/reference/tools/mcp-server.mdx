@@ -499,6 +499,21 @@ async startHTTP({
 }): Promise<void>
 ```
 
+#### Options with `protocolVersion: '2026-07-28'`
+
+The `2026-07-28` protocol uses one shared stateless handler instead of a transport configured for each request. `startHTTP()` handles legacy transport options as follows:
+
+| Options | Behavior |
+| - | - |
+| `serverless: true`, `serverlessStreaming: true`, `sessionIdGenerator: undefined` | Accepted because the modern handler already provides stateless requests and automatic request-scoped streaming. |
+| `allowedHosts`, `allowedOrigins`, `enableDnsRebindingProtection` | Enforced before the request reaches the modern handler. Host and origin lists are active when `enableDnsRebindingProtection` is `true`. |
+| `sessionIdGenerator` with a function, session callbacks, or `eventStore` | Rejected because the modern protocol doesn't create HTTP sessions. |
+| `enableJsonResponse`, `retryInterval`, `keepAliveMs`, or `supportedProtocolVersions` | Rejected because these values configure a shared handler and can't vary between requests. |
+| `serverless: false` or `serverlessStreaming: false` | Rejected because these values request behavior that differs from the modern handler. |
+| Unknown options | Rejected instead of being ignored. |
+
+Omit `options` when you don't need request guards or compatibility declarations.
+
 Here's an example of how you might use `startHTTP` within an HTTP server request handler. In this example an MCP client could connect to your MCP server at `http://localhost:1234/http`:
 
 ```typescript
@@ -521,7 +536,7 @@ httpServer.listen(PORT, () => {
 })
 ```
 
-For **serverless environments** (Supabase Edge Functions, Cloudflare Workers, Vercel Edge, etc.), use `serverless: true` to enable stateless operation:
+For **serverless environments** (Supabase Edge Functions, Cloudflare Workers, Vercel Edge, etc.), use `serverless: true` to enable stateless operation on the legacy protocol path. Servers configured with `protocolVersion: '2026-07-28'` are already stateless and may omit this option.
 
 ```typescript
 // Supabase Edge Function example
@@ -597,7 +612,7 @@ await server.startHTTP({
 
 This is still stateless: no `mcp-session-id` is required or persisted. It only enables notifications scoped to the current request (such as progress). The session-dependent features below remain unavailable.
 
-The following MCP features require session state or persistent connections and **won't work** in serverless mode (including with `serverlessStreaming: true`):
+On the legacy protocol path, the following MCP features require session state or persistent connections and **won't work** in serverless mode (including with `serverlessStreaming: true`):
 
 - **Elicitation** - Interactive user input requests during tool execution require session management to route responses back to the correct client
 - **Resource subscriptions** - `resources/subscribe` and `resources/unsubscribe` need persistent connections to maintain subscription state
