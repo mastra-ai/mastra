@@ -96,12 +96,6 @@ const response = await agent.generate('Run `ls -la` in the workspace directory')
 
 See [`LocalSandbox` reference](/reference/workspace/local-sandbox) for configuration options including environment isolation and native OS sandboxing.
 
-## File-based agent defaults
-
-File-based agents discovered through `mastra dev` or `mastra build` receive a local workspace automatically when the build provides a per-agent workspace path. You don't need to define a workspace for this default case.
-
-Add a `workspace/` directory to the agent to seed its runtime workspace with files at build time. See [file-based agent workspaces](/reference/file-based-agents/workspace) for the directory convention, customization, and precedence rules.
-
 ## Sandbox without a filesystem
 
 Configure only `sandbox` when an agent needs command execution without filesystem tools:

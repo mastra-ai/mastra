@@ -47,8 +47,6 @@ export const mastra = new Mastra({
 
 All agents registered with this `Mastra` instance inherit the workspace. Set `workspace` on an individual agent when it needs different providers or capabilities.
 
-[File-based agents](/reference/file-based-agents/workspace) receive a default local workspace when discovered through `mastra dev` or `mastra build`. Their `workspace/` directory can also seed the runtime workspace with files.
-
 ## Configuration patterns
 
 Choose providers based on what the agent needs to do:
@@ -87,6 +85,5 @@ Use [`mastra.removeWorkspace()`](/reference/core/removeWorkspace) to remove a wo
 - [Add LSP inspection](/docs/workspace/lsp)
 - [Add skills](/docs/workspace/skills)
 - [Add search and indexing](/docs/workspace/search)
-- [Configure a file-based agent workspace](/reference/file-based-agents/workspace)
 - [Workspace class reference](/reference/workspace/workspace-class)
 - 📹 [Introduction to Mastra Workspaces workshop](https://www.youtube.com/watch?v=QcQLiYlJuNQ)
