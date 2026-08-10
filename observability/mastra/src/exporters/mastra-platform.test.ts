@@ -2277,8 +2277,8 @@ describe('MastraPlatformExporter', () => {
       expect((quotaExporter as any).quotaPaused).toBe(true);
 
       // Next probe hangs on a deferred response so it is in flight when shutdown runs
-      let resolveProbe!: (response: Response) => void;
-      mockFetchWithRetry.mockImplementation(() => new Promise<Response>(resolve => (resolveProbe = resolve)));
+      const deferredProbe = createDeferred<Response>();
+      mockFetchWithRetry.mockImplementation(() => deferredProbe.promise);
       await vi.advanceTimersByTimeAsync(60_000);
       expect(mockFetchWithRetry).toHaveBeenCalledTimes(2); // probe fired, still pending
 
@@ -2286,7 +2286,34 @@ describe('MastraPlatformExporter', () => {
       expect((quotaExporter as any).quotaProbeTimer).toBeNull();
 
       // Probe completes after shutdown while the org is still exhausted
-      resolveProbe(quota402Response('60'));
+      deferredProbe.resolve(quota402Response('60'));
+      await vi.advanceTimersByTimeAsync(0);
+
+      // No new timer was scheduled and no further probes fire
+      expect((quotaExporter as any).quotaProbeTimer).toBeNull();
+      await vi.advanceTimersByTimeAsync(600_000);
+      expect(mockFetchWithRetry).toHaveBeenCalledTimes(2);
+    });
+
+    it('should not rearm the probe timer when an in-flight probe rejects after shutdown', async () => {
+      const quotaExporter = createQuotaExporter();
+      mockQuota402('60');
+
+      await quotaExporter.exportTracingEvent({ type: TracingEventType.SPAN_ENDED, exportedSpan: mockSpan });
+      await quotaExporter.flush();
+      expect((quotaExporter as any).quotaPaused).toBe(true);
+
+      // Next probe hangs on a deferred response so it is in flight when shutdown runs
+      const deferredProbe = createDeferred<Response>();
+      mockFetchWithRetry.mockImplementation(() => deferredProbe.promise);
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(mockFetchWithRetry).toHaveBeenCalledTimes(2); // probe fired, still pending
+
+      await quotaExporter.shutdown();
+      expect((quotaExporter as any).quotaProbeTimer).toBeNull();
+
+      // Probe fails after shutdown; the rejection path reaches scheduleQuotaProbe()
+      deferredProbe.reject(new Error('network error'));
       await vi.advanceTimersByTimeAsync(0);
 
       // No new timer was scheduled and no further probes fire

@@ -616,12 +616,18 @@ export class MastraPlatformExporter extends BaseExporter {
   /**
    * Uploads a signal batch to the configured Mastra Observability API using fetchWithRetry.
    */
-  private async batchUpload<T>(signal: PlatformSignal, records: T[]): Promise<void> {
-    const headers = {
+  private buildPublishHeaders(): Record<string, string> {
+    return {
       Authorization: `Bearer ${this.platformConfig.accessToken}`,
       'Content-Type': 'application/json',
     };
+  }
 
+  private buildPublishBody<T>(signal: PlatformSignal, records: T[]): string {
+    return JSON.stringify({ [SIGNAL_PUBLISH_SEGMENTS[signal]]: records });
+  }
+
+  private async batchUpload<T>(signal: PlatformSignal, records: T[]): Promise<void> {
     const endpointMap: Record<PlatformSignal, string> = {
       traces: this.platformConfig.tracesEndpoint,
       logs: this.platformConfig.logsEndpoint,
@@ -632,8 +638,8 @@ export class MastraPlatformExporter extends BaseExporter {
 
     const options: RequestInit = {
       method: 'POST',
-      headers,
-      body: JSON.stringify({ [SIGNAL_PUBLISH_SEGMENTS[signal]]: records }),
+      headers: this.buildPublishHeaders(),
+      body: this.buildPublishBody(signal, records),
     };
 
     // Capture a quota-exceeded response in the retry predicate: returning
@@ -737,11 +743,8 @@ export class MastraPlatformExporter extends BaseExporter {
         this.platformConfig.tracesEndpoint,
         {
           method: 'POST',
-          headers: {
-            Authorization: `Bearer ${this.platformConfig.accessToken}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ spans: [] }),
+          headers: this.buildPublishHeaders(),
+          body: this.buildPublishBody('traces', []),
         },
         1,
         {
