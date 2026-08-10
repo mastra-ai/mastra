@@ -2102,6 +2102,46 @@ describe('MastraPlatformExporter', () => {
         await vi.advanceTimersByTimeAsync(300_000);
         expect(mockFetchWithRetry).toHaveBeenCalledTimes(2);
         expect((quotaExporter as any).quotaProbeIntervalSeconds).toBe(300);
+
+        // Trailing characters are rejected, not silently truncated to 60
+        mockFetchWithRetry.mockResolvedValue(disabledResponse('60seconds'));
+        await vi.advanceTimersByTimeAsync(300_000);
+        expect(mockFetchWithRetry).toHaveBeenCalledTimes(3);
+        expect((quotaExporter as any).quotaProbeIntervalSeconds).toBe(300);
+
+        // Negative and zero values fall back to the default
+        mockFetchWithRetry.mockResolvedValue(disabledResponse('-60'));
+        await vi.advanceTimersByTimeAsync(300_000);
+        expect(mockFetchWithRetry).toHaveBeenCalledTimes(4);
+        expect((quotaExporter as any).quotaProbeIntervalSeconds).toBe(300);
+
+        mockFetchWithRetry.mockResolvedValue(disabledResponse('0'));
+        await vi.advanceTimersByTimeAsync(300_000);
+        expect(mockFetchWithRetry).toHaveBeenCalledTimes(5);
+        expect((quotaExporter as any).quotaProbeIntervalSeconds).toBe(300);
+      } finally {
+        await quotaExporter.shutdown();
+      }
+    });
+
+    it('should clamp oversized retry-after values to the Node timer limit', async () => {
+      const quotaExporter = createQuotaExporter();
+      // 10_000_000s * 1000 exceeds 2^31 - 1 ms; unclamped it would wrap to ~1ms
+      mockFetchWithRetry.mockResolvedValue(disabledResponse('10000000'));
+
+      try {
+        await quotaExporter.exportTracingEvent({ type: TracingEventType.SPAN_ENDED, exportedSpan: mockSpan });
+        await quotaExporter.flush();
+        expect((quotaExporter as any).quotaPaused).toBe(true);
+        expect((quotaExporter as any).quotaProbeIntervalSeconds).toBe(Math.floor(0x7fffffff / 1000));
+
+        // No rapid probe loop: nothing fires shortly after pausing
+        await vi.advanceTimersByTimeAsync(60_000);
+        expect(mockFetchWithRetry).toHaveBeenCalledTimes(1);
+
+        // Probe fires once the clamped interval elapses
+        await vi.advanceTimersByTimeAsync(Math.floor(0x7fffffff / 1000) * 1000);
+        expect(mockFetchWithRetry).toHaveBeenCalledTimes(2);
       } finally {
         await quotaExporter.shutdown();
       }

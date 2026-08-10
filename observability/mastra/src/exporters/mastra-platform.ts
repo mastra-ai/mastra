@@ -48,6 +48,8 @@ const OBSERVABILITY_STATUS_HEADER = 'x-mastra-observability';
 const OBSERVABILITY_DISABLED_VALUE = 'disabled';
 const OBSERVABILITY_RETRY_AFTER_HEADER = 'x-mastra-observability-retry-after';
 const DEFAULT_QUOTA_PROBE_INTERVAL_SECONDS = 300;
+// Node.js timers overflow above 2^31 - 1 ms and fire after ~1ms instead.
+const MAX_QUOTA_PROBE_INTERVAL_SECONDS = Math.floor(0x7fffffff / 1000);
 
 function isObservabilityDisabled(response: Response): boolean {
   return response.headers.get(OBSERVABILITY_STATUS_HEADER) === OBSERVABILITY_DISABLED_VALUE;
@@ -55,12 +57,16 @@ function isObservabilityDisabled(response: Response): boolean {
 
 function parseQuotaRetryAfterSeconds(response: Response): number {
   const raw = response.headers.get(OBSERVABILITY_RETRY_AFTER_HEADER);
-  if (!raw) {
+  if (!raw || !/^\d+$/.test(raw.trim())) {
     return DEFAULT_QUOTA_PROBE_INTERVAL_SECONDS;
   }
 
   const parsed = Number.parseInt(raw, 10);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_QUOTA_PROBE_INTERVAL_SECONDS;
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return DEFAULT_QUOTA_PROBE_INTERVAL_SECONDS;
+  }
+
+  return Math.min(parsed, MAX_QUOTA_PROBE_INTERVAL_SECONDS);
 }
 
 const SIGNAL_PUBLISH_SEGMENTS: Record<PlatformSignal, string> = {
