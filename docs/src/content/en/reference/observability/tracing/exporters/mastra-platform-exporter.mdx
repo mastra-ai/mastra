@@ -254,6 +254,17 @@ The exporter batches tracing spans, logs, metrics, scores, and feedback for effi
 
 Errors raised by `MastraPlatformExporter` use the `MASTRA_PLATFORM_EXPORTER_*` `id` prefix. The deprecated `CloudExporter` continues to emit `CLOUD_EXPORTER_*` `id`s.
 
+### Quota pause
+
+When an organization has exhausted its observability quota, the Mastra platform responds to publish requests with `200 OK` plus the `x-mastra-observability: disabled` header. When the exporter sees this header on any publish route, it:
+
+- Pauses all five signal types (traces, logs, metrics, scores, feedback) and drops buffered and new events instead of sending them
+- Logs a warning that telemetry is paused
+- Probes the platform periodically with an empty batch, using the interval from the `x-mastra-observability-retry-after` header (seconds), or every 5 minutes if the header is absent
+- Resumes exporting automatically and logs a warning once the platform stops sending the disabled header
+
+The probe timer doesn't keep the Node.js process alive, so short-lived and serverless processes exit normally while paused.
+
 ### Endpoint routing
 
 - Base origins derive signal endpoints automatically

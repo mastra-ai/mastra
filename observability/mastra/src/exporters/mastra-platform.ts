@@ -9,6 +9,7 @@ import type {
   ScoreEvent,
   FeedbackEvent,
 } from '@mastra/core/observability';
+import { fetchWithRetry } from '@mastra/core/utils';
 import { AuthFailureCooldown, fetchWithAuthFailureHandling, isAuthFailureError } from './auth-failure-cooldown';
 import { BaseExporter } from './base';
 import type { BaseExporterConfig } from './base';
@@ -39,6 +40,28 @@ const SIGNAL_PUBLISH_SUFFIXES: Record<PlatformSignal, string> = {
 };
 
 const DEFAULT_PLATFORM_SPAN_FILTER = (span: AnyExportedSpan): boolean => span.type !== SpanType.MODEL_CHUNK;
+
+// Stop-signal contract: when the org's observability quota is exhausted, the
+// collector returns 200 with this header on every publish route. The exporter
+// must pause (dropping events) and probe until the header disappears.
+const OBSERVABILITY_STATUS_HEADER = 'x-mastra-observability';
+const OBSERVABILITY_DISABLED_VALUE = 'disabled';
+const OBSERVABILITY_RETRY_AFTER_HEADER = 'x-mastra-observability-retry-after';
+const DEFAULT_QUOTA_PROBE_INTERVAL_SECONDS = 300;
+
+function isObservabilityDisabled(response: Response): boolean {
+  return response.headers.get(OBSERVABILITY_STATUS_HEADER) === OBSERVABILITY_DISABLED_VALUE;
+}
+
+function parseQuotaRetryAfterSeconds(response: Response): number {
+  const raw = response.headers.get(OBSERVABILITY_RETRY_AFTER_HEADER);
+  if (!raw) {
+    return DEFAULT_QUOTA_PROBE_INTERVAL_SECONDS;
+  }
+
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_QUOTA_PROBE_INTERVAL_SECONDS;
+}
 
 const SIGNAL_PUBLISH_SEGMENTS: Record<PlatformSignal, string> = {
   traces: 'spans',
@@ -225,6 +248,9 @@ export class MastraPlatformExporter extends BaseExporter {
   private buffer: MastraPlatformBuffer;
   private flushTimer: NodeJS.Timeout | null = null;
   private inFlightFlushes = new Set<Promise<void>>();
+  private quotaPaused = false;
+  private quotaProbeTimer: NodeJS.Timeout | null = null;
+  private quotaProbeIntervalSeconds = DEFAULT_QUOTA_PROBE_INTERVAL_SECONDS;
 
   constructor(config: MastraPlatformExporterConfig = {}) {
     super(config);
@@ -308,7 +334,7 @@ export class MastraPlatformExporter extends BaseExporter {
       return;
     }
 
-    if (this.authFailureCooldown.dropEventIfCoolingDown()) {
+    if (this.quotaPaused || this.authFailureCooldown.dropEventIfCoolingDown()) {
       return;
     }
 
@@ -322,7 +348,7 @@ export class MastraPlatformExporter extends BaseExporter {
       return;
     }
 
-    if (this.authFailureCooldown.dropEventIfCoolingDown()) {
+    if (this.quotaPaused || this.authFailureCooldown.dropEventIfCoolingDown()) {
       return;
     }
 
@@ -335,7 +361,7 @@ export class MastraPlatformExporter extends BaseExporter {
       return;
     }
 
-    if (this.authFailureCooldown.dropEventIfCoolingDown()) {
+    if (this.quotaPaused || this.authFailureCooldown.dropEventIfCoolingDown()) {
       return;
     }
 
@@ -348,7 +374,7 @@ export class MastraPlatformExporter extends BaseExporter {
       return;
     }
 
-    if (this.authFailureCooldown.dropEventIfCoolingDown()) {
+    if (this.quotaPaused || this.authFailureCooldown.dropEventIfCoolingDown()) {
       return;
     }
 
@@ -361,7 +387,7 @@ export class MastraPlatformExporter extends BaseExporter {
       return;
     }
 
-    if (this.authFailureCooldown.dropEventIfCoolingDown()) {
+    if (this.quotaPaused || this.authFailureCooldown.dropEventIfCoolingDown()) {
       return;
     }
 
@@ -507,6 +533,11 @@ export class MastraPlatformExporter extends BaseExporter {
       return;
     }
 
+    if (this.quotaPaused) {
+      this.resetBuffer();
+      return;
+    }
+
     if (this.authFailureCooldown.dropEventsIfCoolingDown(this.buffer.totalSize)) {
       this.resetBuffer();
       return;
@@ -591,7 +622,91 @@ export class MastraPlatformExporter extends BaseExporter {
       body: JSON.stringify({ [SIGNAL_PUBLISH_SEGMENTS[signal]]: records }),
     };
 
-    await fetchWithAuthFailureHandling(endpointMap[signal], options, this.platformConfig.maxRetries);
+    const response = await fetchWithAuthFailureHandling(endpointMap[signal], options, this.platformConfig.maxRetries);
+
+    if (isObservabilityDisabled(response)) {
+      this.enterQuotaPause(parseQuotaRetryAfterSeconds(response));
+    }
+  }
+
+  /**
+   * Enter the quota-exhausted paused state: drop buffered events, stop the
+   * flush timer, and start probing until the collector stops sending the
+   * disabled header. The gate is per-org, so a signal on any publish route
+   * pauses all five signal types.
+   */
+  private enterQuotaPause(retryAfterSeconds: number): void {
+    this.quotaProbeIntervalSeconds = retryAfterSeconds;
+
+    if (this.quotaPaused) {
+      return;
+    }
+
+    this.quotaPaused = true;
+
+    if (this.flushTimer) {
+      clearTimeout(this.flushTimer);
+      this.flushTimer = null;
+    }
+    this.resetBuffer();
+
+    this.logger.warn(
+      `Mastra observability paused: quota exhausted, dropping telemetry and probing every ${retryAfterSeconds}s`,
+    );
+
+    this.scheduleQuotaProbe();
+  }
+
+  private scheduleQuotaProbe(): void {
+    if (this.quotaProbeTimer) {
+      clearTimeout(this.quotaProbeTimer);
+    }
+
+    this.quotaProbeTimer = setTimeout(() => {
+      this.quotaProbeTimer = null;
+      void this.probeQuotaStatus();
+    }, this.quotaProbeIntervalSeconds * 1000);
+
+    // Don't keep the process alive just to probe; no activity means no egress burn either.
+    this.quotaProbeTimer.unref?.();
+  }
+
+  /**
+   * Send an empty spans batch as a free probe. The collector treats an empty
+   * batch as a no-op, and an exhausted org still gets the disabled header on it.
+   */
+  private async probeQuotaStatus(): Promise<void> {
+    if (!this.quotaPaused) {
+      return;
+    }
+
+    try {
+      const response = await fetchWithRetry(
+        this.platformConfig.tracesEndpoint,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${this.platformConfig.accessToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ spans: [] }),
+        },
+        1,
+      );
+
+      if (!isObservabilityDisabled(response)) {
+        this.quotaPaused = false;
+        this.quotaProbeIntervalSeconds = DEFAULT_QUOTA_PROBE_INTERVAL_SECONDS;
+        this.logger.warn('Mastra observability resumed: quota restored, exports re-enabled');
+        return;
+      }
+
+      this.quotaProbeIntervalSeconds = parseQuotaRetryAfterSeconds(response);
+    } catch {
+      // Probe failed (network error or non-2xx); stay paused and try again later.
+    }
+
+    this.scheduleQuotaProbe();
   }
 
   private async flushSignalBatch<T>(
@@ -679,6 +794,11 @@ export class MastraPlatformExporter extends BaseExporter {
     if (this.flushTimer) {
       clearTimeout(this.flushTimer);
       this.flushTimer = null;
+    }
+
+    if (this.quotaProbeTimer) {
+      clearTimeout(this.quotaProbeTimer);
+      this.quotaProbeTimer = null;
     }
 
     try {
