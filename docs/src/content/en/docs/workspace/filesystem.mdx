@@ -67,6 +67,27 @@ const agent = new Agent({
 const response = await agent.generate('List all files in the workspace')
 ```
 
+## Seed a filesystem
+
+Write files through the provider before the agent uses the workspace. This is useful for project briefs, source files, datasets, and other starting context:
+
+```typescript title="scripts/seed-workspace.ts"
+import { LocalFilesystem } from '@mastra/core/workspace'
+
+const filesystem = new LocalFilesystem({ basePath: './workspace' })
+
+await filesystem.writeFile('project-brief.md', '# Project brief\n\nBuild the reporting dashboard.')
+await filesystem.writeFile(
+  'data/customer.json',
+  JSON.stringify({ name: 'Acme', plan: 'enterprise' }, null, 2),
+  { recursive: true },
+)
+```
+
+Filesystem operations initialize the provider on first use, so an explicit `init()` call isn't required. Run the seed script during setup or deployment, then configure the workspace with the same provider type and storage location. Writes overwrite existing files by default. Pass `{ overwrite: false }` when existing files must be preserved.
+
+For `LocalFilesystem`, you can also place files directly under `basePath`. For remote storage, use that provider's `writeFile()` method in the same way.
+
 ## Containment
 
 By default, `LocalFilesystem` runs in **contained mode**, all file operations are restricted to stay within `basePath`. This prevents path traversal attacks and symlink escapes.

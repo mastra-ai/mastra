@@ -9,7 +9,9 @@ packages:
 
 **Added in:** `@mastra/core@1.1.0`
 
-A workspace gives agents an environment for working with files and running commands. Add code inspection, search, or reusable skills based on what the agent needs.
+A workspace gives agents a scoped environment for working with files and running commands. Add code inspection, search, or reusable skills based on what the agent needs.
+
+A workspace groups these resources behind agent tools, but the workspace itself isn't a security boundary. Filesystem providers can restrict accessible paths, while sandbox providers can isolate command execution. For example, `LocalFilesystem` uses contained mode by default, but `LocalSandbox` runs commands on the host unless native isolation is enabled. Remote and container sandbox providers supply their own isolation boundaries.
 
 Workspaces support:
 
@@ -23,13 +25,11 @@ Workspaces support:
 
 Use a workspace when an agent needs files or code execution. A workspace can also make resources outside the conversation context available to the agent. Configure only the capabilities it needs.
 
-## How it works
+## Quickstart
 
 Create a `Workspace` with one or more providers, then assign it globally through `Mastra` or directly to an agent. Mastra adds tools for each configured capability to the agent's toolset.
 
-## Get started
-
-For local development, point `LocalFilesystem` and `LocalSandbox` at the same directory. Files written through filesystem tools are immediately available to commands in the sandbox:
+For local development, point `LocalFilesystem` and `LocalSandbox` at the same directory. This gives the agent a contained filesystem and a shared working directory where files written through filesystem tools are immediately available to commands:
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
@@ -74,7 +74,7 @@ Most providers initialize on first use, so calling `workspace.init()` is optiona
 
 Mastra registers global and agent-level workspaces. Calling `mastra.shutdown()` destroys registered workspaces that Mastra owns and closes resources such as filesystem handles, language servers, browsers, and sandbox processes.
 
-Static providers are owned by their workspace. Your application owns providers returned by resolver functions and decides when to destroy them. See [sandbox resolver ownership](/docs/workspace/sandbox#resolver-ownership) for cleanup patterns.
+Providers passed directly to a workspace are owned by that workspace. Your application owns providers returned by resolver functions and decides when to destroy them. See [sandbox resolver ownership](/docs/workspace/sandbox#resolver-ownership) for cleanup patterns.
 
 Use [`mastra.removeWorkspace()`](/reference/core/removeWorkspace) to remove a workspace from the registry. Pass `{ destroy: true }` to destroy it before removal.
 
