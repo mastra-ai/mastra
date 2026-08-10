@@ -509,7 +509,7 @@ export function SankeySignals({
       });
       const sortedNextSnapshots = [...nextSnapshots.snapshots].sort((left, right) => left.ordinal - right.ordinal);
       const matchedNextIndex = sortedNextSnapshots.findIndex(candidate => candidate.ordinal === snapshot?.ordinal);
-      const nextSelectedIndex = matchedNextIndex >= 0 ? matchedNextIndex : sortedNextSnapshots.length - 1;
+      const nextSelectedIndex = matchedNextIndex >= 0 ? matchedNextIndex : 0;
       const nextSnapshot = sortedNextSnapshots[nextSelectedIndex];
       await Promise.all(
         selectFlowSnapshotIds(sortedNextSnapshots, nextSelectedIndex).map(snapshotId =>

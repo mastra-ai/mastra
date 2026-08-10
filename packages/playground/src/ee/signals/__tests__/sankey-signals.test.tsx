@@ -788,6 +788,59 @@ describe('SankeySignals', () => {
       expect(screen.getByTestId('sankey-order-transition')).toBe(chartBeforeDrop);
     });
 
+    it('prefetches the first landmark when the selected ordinal is absent from the new perspective', async () => {
+      const reorderedFlowSnapshots: Array<string> = [];
+      const unmatchedReorderedSnapshots = {
+        ...landmarkThemeSnapshotsResponse,
+        snapshots: landmarkThemeSnapshotsResponse.snapshots.map(snapshot => ({
+          ...snapshot,
+          snapshotId: `reordered-${snapshot.snapshotId}`,
+          ordinal: snapshot.ordinal + 1_000,
+          availableSignals: ['goal', 'behavior', 'outcome', 'sentiment'],
+        })),
+      };
+      const sortedSnapshots = [...unmatchedReorderedSnapshots.snapshots].sort(
+        (left, right) => left.ordinal - right.ordinal,
+      );
+      const firstSnapshot = sortedSnapshots[0];
+      const secondSnapshot = sortedSnapshots[1];
+      const lastSnapshot = sortedSnapshots[sortedSnapshots.length - 1];
+      if (!firstSnapshot || !secondSnapshot || !lastSnapshot) {
+        throw new Error('Expected at least four reordered snapshots');
+      }
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, ({ request }) => {
+          const signalNames = new URL(request.url).searchParams.get('signalNames');
+          return HttpResponse.json(
+            signalNames === 'goal,behavior,outcome,sentiment' ? unmatchedReorderedSnapshots : themeSnapshotsResponse,
+          );
+        }),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-flow`, ({ request }) => {
+          const url = new URL(request.url);
+          const signalNames = url.searchParams.get('signalNames')?.split(',') ?? [];
+          const snapshotId = url.searchParams.get('snapshotId');
+          if (!snapshotId) return HttpResponse.json({ error: 'Missing snapshot' }, { status: 400 });
+          const reordered = signalNames.join(',') === 'goal,behavior,outcome,sentiment';
+          const snapshots = reordered ? unmatchedReorderedSnapshots.snapshots : themeSnapshotsResponse.snapshots;
+          const snapshot = snapshots.find(candidate => candidate.snapshotId === snapshotId);
+          if (!snapshot) return HttpResponse.json({ error: 'Unknown snapshot' }, { status: 400 });
+          if (reordered) reorderedFlowSnapshots.push(snapshotId);
+          return HttpResponse.json({ ...fourStageThemeFlowResponse, snapshot });
+        }),
+      );
+      renderSankeySignals();
+      await screen.findByLabelText('Reorder Outcome');
+
+      await reorderOutcomeAfterBehavior();
+
+      await waitFor(() => expect(reorderedFlowSnapshots.length).toBeGreaterThanOrEqual(3));
+      expect(reorderedFlowSnapshots.slice(0, 3)).toEqual([
+        firstSnapshot.snapshotId,
+        secondSnapshot.snapshotId,
+        lastSnapshot.snapshotId,
+      ]);
+    });
+
     it('keeps the selected snapshot ordinal when the new perspective returns opaque cursors', async () => {
       const reorderedFlowSnapshots: Array<string> = [];
       server.use(
