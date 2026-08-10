@@ -1240,7 +1240,17 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               });
 
               self.#closeTransportIfNeeded();
-              break;
+              // Deliver the error chunk downstream first, then settle waiters.
+              // An errored stream never reaches flush(), so without this,
+              // _waitUntilFinished() callers that subscribed before the error
+              // hang forever while later callers resolve immediately via the
+              // #streamFinished flag. Deliberately NOT 'finish': observer
+              // streams close on 'finish', and durable fallback/error-processor
+              // recovery keeps consuming chunks after an error chunk.
+              self.#emitChunk(chunk);
+              controller.enqueue(chunk);
+              self.#emitter.emit('settled');
+              return;
           }
           self.#emitChunk(chunk);
           controller.enqueue(chunk);
@@ -1798,7 +1808,17 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     }
 
     return new Promise<void>(resolve => {
-      this.#emitter.once('finish', resolve);
+      const done = () => {
+        this.#emitter.off('finish', done);
+        this.#emitter.off('settled', done);
+        resolve();
+      };
+      // 'finish' fires when the stream flushes cleanly; 'settled' fires when an
+      // error chunk marks the stream finished without closing it (observer
+      // streams must survive an error chunk for fallback recovery, so the
+      // error path cannot emit 'finish').
+      this.#emitter.once('finish', done);
+      this.#emitter.once('settled', done);
     });
   }
 
