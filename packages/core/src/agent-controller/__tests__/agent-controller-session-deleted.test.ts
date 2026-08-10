@@ -116,4 +116,24 @@ describe('AgentController.deleteSession', () => {
     expect(error).toHaveBeenCalledTimes(4);
     error.mockRestore();
   });
+
+  it('does not return a torn-down session when create and delete race', async () => {
+    const controller = createController(new InMemoryStore());
+    await controller.init();
+    const original = await controller.createSession({ resourceId: 'resource-1' });
+    const threadId = original.thread.requireId();
+
+    // Fire create and delete concurrently for the same resource. Without the
+    // race guard, createSession would await the same cached promise as
+    // deleteSession and could return the session being torn down.
+    const [reused] = await Promise.all([
+      controller.createSession({ resourceId: 'resource-1' }),
+      controller.deleteSession({ resourceId: 'resource-1' }),
+    ]);
+
+    // createSession must not return the original (now torn-down) session.
+    expect(reused).not.toBe(original);
+    // The returned session should have an active thread (not cleared by abort).
+    expect(reused.thread.getId()).toBe(threadId);
+  });
 });

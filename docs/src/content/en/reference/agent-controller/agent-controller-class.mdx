@@ -433,7 +433,7 @@ const deleted = await controller.deleteSession({
 })
 ```
 
-Returns: `Promise<boolean>`. The result is `true` when a live session was removed and `false` when no matching live session exists.
+Returns: `Promise<boolean>`. The result is `true` when a live session was removed and `false` when no matching live session exists or when another deletion is already in progress for the same resource and scope.
 
 #### `setResourceId(session, { resourceId })`
 
