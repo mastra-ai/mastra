@@ -1244,7 +1244,7 @@ export class SessionRunEngine {
           this.#session.run.ensureAbortController();
           this.#session.run.setRunId({ runId });
           this.#session.run.setTraceId({ traceId: null });
-          requestContext = await this.#machinery.buildRequestContext(subscription.__getCurrentRunRequestContext());
+          requestContext = await this.#machinery.buildRequestContext(subscription.__getCurrentRunRequestContext?.());
           this.#session.emit({ type: 'agent_start' });
         }
 
