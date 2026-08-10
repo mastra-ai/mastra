@@ -2907,6 +2907,133 @@ describe('Agent signals', () => {
     }
   });
 
+  it('restores a queued signal when the drain follow-up stream fails', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const streamMock = vi.fn().mockRejectedValue(new Error('connection error: ECONNRESET'));
+    const agent = {
+      id: 'drain-failure-agent',
+      stream: streamMock,
+    } as unknown as Agent<any, any, any, any>;
+    const runId = 'drain-failure-run';
+    const threadId = 'drain-failure-thread';
+    const resourceId = 'drain-failure-user';
+    let finishRun!: () => void;
+    const finished = new Promise<void>(resolve => {
+      finishRun = resolve;
+    });
+    const subscription = await runtime.subscribeToThread(agent, { threadId, resourceId });
+    const iterator = subscription.stream[Symbol.asyncIterator]();
+
+    try {
+      runtime.registerRun(
+        agent,
+        {
+          runId,
+          status: 'running',
+          fullStream: new ReadableStream({
+            start(controller) {
+              controller.enqueue({ type: 'start', runId });
+              controller.enqueue({ type: 'finish', runId, payload: {} });
+              controller.close();
+            },
+          }),
+          _waitUntilFinished: () => finished,
+        } as any,
+        { memory: { thread: threadId, resource: resourceId } } as any,
+      );
+
+      await withTimeout(readNextRunWithParts(iterator), 'Timed out waiting for the first run to stream');
+      const result = runtime.sendMessage(agent, 'steer follow-up', { resourceId, threadId });
+      await expect(result.accepted).resolves.toMatchObject({ action: 'deliver', runId });
+      expect(streamMock).not.toHaveBeenCalled();
+
+      finishRun();
+      await waitForCondition(() => streamMock.mock.calls.length === 1);
+      await nextTick();
+      await nextTick();
+
+      // Probe: register a fresh run on the same thread so the public
+      // drainPendingSignals can resolve the thread key, then inspect the queue.
+      // The failed signal must have been restored to the queue head.
+      runtime.registerRun(
+        agent,
+        {
+          runId: 'drain-failure-probe',
+          status: 'running',
+          fullStream: new ReadableStream({
+            start(controller) {
+              controller.enqueue({ type: 'start', runId: 'drain-failure-probe' });
+            },
+          }),
+          _waitUntilFinished: () => new Promise<void>(() => {}),
+        } as any,
+        { memory: { thread: threadId, resource: resourceId } } as any,
+      );
+      const restored = runtime.drainPendingSignals('drain-failure-probe');
+      expect(restored).toHaveLength(1);
+      expect(restored[0]).toMatchObject({ type: 'user', contents: 'steer follow-up' });
+    } finally {
+      subscription.unsubscribe();
+    }
+  });
+
+  it('publishes run-failed when the drain follow-up stream fails', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const streamMock = vi.fn().mockRejectedValue(new Error('connection error: ECONNRESET'));
+    const agent = {
+      id: 'drain-failure-event-agent',
+      stream: streamMock,
+    } as unknown as Agent<any, any, any, any>;
+    const runId = 'drain-failure-event-run';
+    const threadId = 'drain-failure-event-thread';
+    const resourceId = 'drain-failure-event-user';
+    let finishRun!: () => void;
+    const finished = new Promise<void>(resolve => {
+      finishRun = resolve;
+    });
+    const subscription = await runtime.subscribeToThread(agent, { threadId, resourceId });
+    const iterator = subscription.stream[Symbol.asyncIterator]();
+
+    try {
+      runtime.registerRun(
+        agent,
+        {
+          runId,
+          status: 'running',
+          fullStream: new ReadableStream({
+            start(controller) {
+              controller.enqueue({ type: 'start', runId });
+              controller.enqueue({ type: 'finish', runId, payload: {} });
+              controller.close();
+            },
+          }),
+          _waitUntilFinished: () => finished,
+        } as any,
+        { memory: { thread: threadId, resource: resourceId } } as any,
+      );
+
+      await withTimeout(readNextRunWithParts(iterator), 'Timed out waiting for the first run to stream');
+      const result = runtime.sendMessage(agent, 'steer follow-up', { resourceId, threadId });
+      await expect(result.accepted).resolves.toMatchObject({ action: 'deliver', runId });
+
+      finishRun();
+      await waitForCondition(() => streamMock.mock.calls.length === 1);
+
+      const errorRun = await withTimeout(
+        readNextRunWithParts(iterator),
+        'Timed out waiting for the run-failed error run',
+        1000,
+      );
+      expect(errorRun.done).toBe(false);
+      expect(errorRun.value?.part?.type).toBe('error');
+      const errorPayload = errorRun.value?.part?.payload?.error;
+      const errorMessage = errorPayload instanceof Error ? errorPayload.message : String(errorPayload);
+      expect(errorMessage).toContain('failed to start follow-up run for queued message');
+    } finally {
+      subscription.unsubscribe();
+    }
+  });
+
   it.each(['request_access', 'ask_user'])('keeps %s suspensions discoverable and blocks idle wake', async toolName => {
     const runtime = new AgentThreadStreamRuntime();
     const pubsub = new EventEmitterPubSub();
