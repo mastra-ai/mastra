@@ -1,5 +1,68 @@
 # @mastra/code-sdk
 
+## 1.2.0-alpha.14
+
+### Patch Changes
+
+- Fixed Factory interactive plans so they are stored as browsable artifacts. ([#21173](https://github.com/mastra-ai/mastra/pull/21173))
+
+## 1.2.0-alpha.13
+
+### Patch Changes
+
+- Fixed woken notifications running against the controller-level workspace, which is `undefined` for dynamic workspace factories. They now use the workspace of the session that owns the target thread. ([#21144](https://github.com/mastra-ai/mastra/pull/21144))
+
+- Updated dependencies [[`2e4624e`](https://github.com/mastra-ai/mastra/commit/2e4624edb6917e61249cb60ee377735e7af7e4a9), [`e6534fa`](https://github.com/mastra-ai/mastra/commit/e6534fab031216f6cb48c4c9907cbfdce9d60bc6), [`7fdcaa6`](https://github.com/mastra-ai/mastra/commit/7fdcaa66105d64290f9b14432a12ec99f39c4d3a), [`65b1183`](https://github.com/mastra-ai/mastra/commit/65b11832834f87a9bc8719391deb27559de5138a), [`5dba2a4`](https://github.com/mastra-ai/mastra/commit/5dba2a41600385751f5aace79878904e1972609d), [`cfd0d9e`](https://github.com/mastra-ai/mastra/commit/cfd0d9ec77ec3c69dd96f79cdb579e03d79f22ce), [`d9d93b2`](https://github.com/mastra-ai/mastra/commit/d9d93b25e4a65ad5fa153fa35be7ed149c8d587f)]:
+  - @mastra/core@1.58.0-alpha.12
+  - @mastra/observability@1.16.6-alpha.3
+  - @mastra/schema-compat@1.3.6-alpha.3
+  - @mastra/mcp@1.16.0-alpha.2
+  - @mastra/memory@1.26.1-alpha.6
+
+## 1.2.0-alpha.12
+
+### Minor Changes
+
+- Added `processors` and `signalProviders` to the Mastra Code plugin contract, so a plugin can contribute more than tools. ([#20848](https://github.com/mastra-ai/mastra/pull/20848))
+
+  **Processors**
+
+  A plugin can now extend the agent pipeline directly, passing a bare array for input processors or an object for both lanes. Plugin processors run after the processors Mastra Code configures and before the channel and memory layers the Agent appends. The slot isn't configurable, and the processors are resolved before every LLM call. Enabling, disabling, or updating a plugin applies on the next request instead of requiring a restart.
+
+  **Signal providers**
+
+  A plugin can also ship a signal provider, which monitors an external source and pushes notifications into a thread. Providers are long-lived, so the SDK owns their lifecycle instead of handing them to the agent: it registers Mastra on them, connects them to the coding agent, starts them polling, and stops them when the plugin is updated, disabled, or uninstalled. That makes a provider installed from a GitHub repository survive a mid-session update of that repository. Only one provider with a given id runs at a time, and a provider that fails to start is isolated from the rest of its plugin.
+
+  Field resolvers also receive `getController()` and `getActiveSession()` on the plugin context, so a plugin can read the running session lazily at the moment it needs it.
+
+  For embedders that inject their own `pluginManager` into `createMastraCode`: the `PluginManager` contract now also requires `onReload`, `getPluginSignalProviders`, and `setRuntime`, so hand-built manager implementations must add these methods.
+
+### Patch Changes
+
+- Fixed deferred notification deliveries failing with "No model selected" when the woken thread had no request context. The notification dispatch workflow re-sends deferred and summarized notifications long after the originating send, so any stream options attached to the original signal are gone; waking an idle thread then had no way to resolve a model. The notification delivery policy now drives the fix: `NotificationDeliveryDecision` accepts `streamOptions`, and the dispatcher re-runs the agent's delivery policy at delivery time (via the new `agent.resolveNotificationDeliveryDecision()`) to attach freshly resolved stream options to both individual and summary deliveries. Only `streamOptions` is honored at dispatch time; the record's persisted schedule still governs when and how it is delivered. Receipt-time sends also honor the policy's `streamOptions` now: an immediate deliver or summarize-now wake attaches them too, with caller-supplied stream options taking precedence. Mastra Code wires its session-based stream options resolver through the Code Agent's `deliveryPolicy.decide`, layered on the default decision logic. This fix applies to threads whose session is live in the current process; deliveries with no resolvable session fall back to a bare wake, and the "No model selected" error now distinguishes the case where a run started without any controller session context. This re-lands the capability removed by the #18637 revert in the policy-driven shape that revert called for, and the `@mastra/github-signals` bump only widens its `getNotificationStreamOptions` callback return type to allow `undefined`. ([#21113](https://github.com/mastra-ai/mastra/pull/21113))
+
+- Updated dependencies [[`b8ce7ec`](https://github.com/mastra-ai/mastra/commit/b8ce7ec96e39343c6c2f36d12d68a9ad816c09f7), [`a3a3624`](https://github.com/mastra-ai/mastra/commit/a3a3624f646b98e409424d8defccbd334da9e8b8), [`6246914`](https://github.com/mastra-ai/mastra/commit/62469146636911f3cbbe0880bd011c6a897a59a7), [`1315d8f`](https://github.com/mastra-ai/mastra/commit/1315d8f17e8e7acb61cca46b72a1d42f6d00d289), [`3f73c07`](https://github.com/mastra-ai/mastra/commit/3f73c076727e8c36b4fff7a1b40290fb68957fa8), [`7c1ebb1`](https://github.com/mastra-ai/mastra/commit/7c1ebb15690c4b3f0eabb19077cf8af573311e57), [`32980a3`](https://github.com/mastra-ai/mastra/commit/32980a3e2413d0274ac244d32c37d910edc13f00), [`261edb9`](https://github.com/mastra-ai/mastra/commit/261edb9bc0cfbed2b77090b87562307a360f1a04), [`4bcdfaf`](https://github.com/mastra-ai/mastra/commit/4bcdfaf0eac3199d7cb171b0a19a92c9c341eea4), [`1b1dd7b`](https://github.com/mastra-ai/mastra/commit/1b1dd7bc0e59b7a8bfabd09a3eec1ccd95b4c2f3), [`af4636a`](https://github.com/mastra-ai/mastra/commit/af4636a74463275d71c1d13a38f7d2b738f128bf), [`a463cdf`](https://github.com/mastra-ai/mastra/commit/a463cdf1c95c3059e70f0bff27959e8558bb899d), [`0ea6b80`](https://github.com/mastra-ai/mastra/commit/0ea6b8001408ce02b56e8be0536b0fd8cbaf8ad2)]:
+  - @mastra/core@1.58.0-alpha.11
+  - @mastra/github-signals@0.2.5-alpha.1
+  - @mastra/memory@1.26.1-alpha.5
+  - @mastra/mcp@1.16.0-alpha.2
+
+## 1.2.0-alpha.11
+
+### Patch Changes
+
+- Updated dependencies [[`66bbfb5`](https://github.com/mastra-ai/mastra/commit/66bbfb5f05b473d39f88c0e4a481ccac41634f3a)]:
+  - @mastra/core@1.58.0-alpha.10
+
+## 1.2.0-alpha.10
+
+### Patch Changes
+
+- Include worktree identity (`worktree_path`, `branch`, `main_repo_path`) in `SessionStart` and `SessionEnd` hook payloads when a session runs in a git worktree, so hooks can provision and tear down per-worktree resources. ([#21034](https://github.com/mastra-ai/mastra/pull/21034))
+
+- Updated dependencies [[`86b7b77`](https://github.com/mastra-ai/mastra/commit/86b7b777980d30f66e1fd134a37d2af4c22e54cc), [`80a3324`](https://github.com/mastra-ai/mastra/commit/80a33245d3110204de6f56d61211523ffe338692), [`d9d2881`](https://github.com/mastra-ai/mastra/commit/d9d2881ede6dd6c023d144215fc812062aed0890), [`82e3365`](https://github.com/mastra-ai/mastra/commit/82e3365ef7c9bf7bee2e7a7029035ea262d68895), [`1b482c2`](https://github.com/mastra-ai/mastra/commit/1b482c2d89244dd758c41e5f927a2b44041388d2), [`e6a2860`](https://github.com/mastra-ai/mastra/commit/e6a2860649cc51f87d32d78b766ae2126446ba07), [`7bd85ea`](https://github.com/mastra-ai/mastra/commit/7bd85ea7588b71c25ce9f4019c88f8539be5dcbc)]:
+  - @mastra/core@1.58.0-alpha.9
+
 ## 1.2.0-alpha.9
 
 ### Patch Changes

@@ -18,6 +18,7 @@ import { toReqRes, toFetchResponse } from 'fetch-to-node';
 import type { Context, ExecutionContext, HonoRequest, MiddlewareHandler } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { stream } from 'hono/streaming';
+import { propagateClientDisconnect } from './mcp-disconnect';
 export { createAuthMiddleware } from './auth-middleware';
 export type { HonoAuthMiddlewareOptions } from './auth-middleware';
 // Browser stream setup (Hono-specific WebSocket implementation)
@@ -401,7 +402,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
           }
         });
 
-      return await toFetchResponse(res);
+      return propagateClientDisconnect(await toFetchResponse(res), res);
     } else if (route.responseType === 'mcp-sse') {
       // MCP SSE transport
       const { server, ssePath, messagePath } = result as MCPSseTransportResult;

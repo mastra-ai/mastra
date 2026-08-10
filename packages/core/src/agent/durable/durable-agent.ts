@@ -79,8 +79,8 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   requireToolApproval?: AgentExecutionOptions<OUTPUT>['requireToolApproval'];
   /** Automatically resume suspended tools */
   autoResumeSuspendedTools?: boolean;
-  /** Maximum number of tool calls to execute concurrently */
-  toolCallConcurrency?: number;
+  /** Maximum number of tool calls to execute concurrently, or an object with `limit`/`strategy` */
+  toolCallConcurrency?: AgentExecutionOptions<OUTPUT>['toolCallConcurrency'];
   /** Whether to include raw chunks in the stream output */
   includeRawChunks?: boolean;
   /** Experimental transforms applied whenever `fullStream` is consumed. */
@@ -2126,9 +2126,10 @@ export class DurableAgent<
    * `resume()` path.
    */
   override async declineToolCall(
-    options: { runId: string; toolCallId?: string } & Record<string, any>,
+    options: { runId: string; toolCallId?: string; reason?: string } & Record<string, any>,
   ): Promise<MastraModelOutput<any>> {
-    return this.resumeStream({ approved: false }, options);
+    const { reason, ...resumeOptions } = options;
+    return this.resumeStream({ approved: false, ...(reason !== undefined ? { reason } : {}) }, resumeOptions);
   }
 
   override async approveToolCallGenerate<OUTPUT = undefined>(
@@ -2139,10 +2140,14 @@ export class DurableAgent<
   }
 
   override async declineToolCallGenerate<OUTPUT = undefined>(
-    options: AgentExecutionOptions<OUTPUT> & { runId: string; toolCallId?: string },
+    options: AgentExecutionOptions<OUTPUT> & { runId: string; toolCallId?: string; reason?: string },
   ): Promise<Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>> {
-    const { runId, ...resumeOptions } = options;
-    return this.resumeGenerate(runId, { approved: false }, resumeOptions as any) as any;
+    const { runId, reason, ...resumeOptions } = options;
+    return this.resumeGenerate(
+      runId,
+      { approved: false, ...(reason !== undefined ? { reason } : {}) },
+      resumeOptions as any,
+    ) as any;
   }
 
   /**

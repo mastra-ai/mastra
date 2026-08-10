@@ -7,6 +7,12 @@ packages:
 
 # Workers
 
+:::beta
+
+Breaking changes may occur without a major version bump until the API is stable.
+
+:::
+
 When workers run in separate processes from the API, they communicate over HTTP. The orchestration worker calls the API's step execution endpoint to run workflow steps on the API server. Push-mode PubSub brokers (like Google Cloud Pub/Sub in push mode) can also deliver events directly to the API's event endpoint. This is a distinct integration path from pull-mode workers, which pull events from the broker themselves. Both HTTP endpoints require authentication when an auth provider is configured.
 
 ## How it works

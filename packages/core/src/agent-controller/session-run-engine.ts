@@ -303,8 +303,14 @@ export class SessionRunEngine {
    * (text/reasoning deltas, tool-invocation upgrades) and `setStopReason` /
    * `setErrorMessage` mutate `content.metadata`, so emitted snapshots must
    * deep-clone the content or later mutations rewrite earlier snapshots.
+   *
+   * With no subscribers there is no earlier snapshot to protect, and the only
+   * remaining consumer is the display state, which already aliases the live
+   * message on `message_end`. Skipping the clone there drops a full
+   * `structuredClone` of the message per streamed delta.
    */
   private cloneMessage(message: MastraDBMessage): MastraDBMessage {
+    if (!this.#session.hasListeners()) return message;
     return { ...message, content: structuredClone(message.content) };
   }
 

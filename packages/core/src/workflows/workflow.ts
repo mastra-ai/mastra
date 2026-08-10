@@ -687,6 +687,7 @@ function createStepFromProcessor<TProcessorId extends string>(
       const input = inputData as ProcessorStepOutput & {
         processorStates?: Map<string, ProcessorState>;
         abortSignal?: AbortSignal;
+        agent?: Agent;
       };
       const {
         phase,
@@ -725,6 +726,8 @@ function createStepFromProcessor<TProcessorId extends string>(
         processorStates,
         // Abort signal for cancelling in-flight processor work (e.g. OM observations)
         abortSignal,
+        // Agent reference so processors can access the running agent (e.g. on signal/schedule wake)
+        agent,
       } = input;
 
       // Create a minimal abort function that throws TripWire
@@ -976,6 +979,7 @@ function createStepFromProcessor<TProcessorId extends string>(
 
       const baseContext = {
         abort,
+        agent,
         retryCount: retryCount ?? 0,
         requestContext,
         ...processorObservabilityContext,
@@ -3672,7 +3676,7 @@ export class Run<
       } catch {}
     });
 
-    this.closeStreamAction = async () => {
+    const closeStreamAction = async () => {
       await this.pubsub.publish(`workflow.events.v2.${this.runId}`, {
         type: 'watch',
         runId: this.runId,
@@ -3690,6 +3694,7 @@ export class Run<
         writer.releaseLock();
       }
     };
+    this.closeStreamAction = closeStreamAction;
 
     void this.pubsub.publish(`workflow.events.v2.${this.runId}`, {
       type: 'watch',
@@ -3706,7 +3711,7 @@ export class Run<
       tracingOptions,
     } as any).then(result => {
       if (result.status !== 'suspended') {
-        this.closeStreamAction?.().catch(() => {});
+        closeStreamAction().catch(() => {});
       }
 
       return result;
@@ -3846,7 +3851,11 @@ export class Run<
           }
         });
 
-        self.closeStreamAction = async () => {
+        // Captured per invocation: `closeStreamAction` is a field on the run, and
+        // `createRun({ runId })` returns the cached run, so concurrent calls would
+        // otherwise each close the most recently created stream and strand the rest.
+        // The field is still assigned for external consumers (observeStreamLegacy).
+        const closeStreamAction = async () => {
           unwatch();
 
           try {
@@ -3858,6 +3867,7 @@ export class Run<
             self.mastra?.getLogger()?.error('Error closing stream:', err);
           }
         };
+        self.closeStreamAction = closeStreamAction;
 
         const executionResultsPromise = self._start({
           inputData,
@@ -3889,13 +3899,13 @@ export class Run<
           if (closeOnSuspend) {
             // always close stream, even if the workflow is suspended
             // this will trigger a finish event with workflow status set to suspended
-            self.closeStreamAction?.().catch(() => {});
+            closeStreamAction().catch(() => {});
           } else if (executionResults.status !== 'suspended') {
-            self.closeStreamAction?.().catch(() => {});
+            closeStreamAction().catch(() => {});
           }
         } catch (err) {
           self.streamOutput?.rejectResults(err as unknown as Error);
-          self.closeStreamAction?.().catch(() => {});
+          closeStreamAction().catch(() => {});
         }
       },
     });
@@ -3976,7 +3986,10 @@ export class Run<
           }
         });
 
-        self.closeStreamAction = async () => {
+        // Captured per invocation — see the note in the stream() path. Two concurrent
+        // resumes of one suspended run are reachable in normal use (double-clicked
+        // approval, client retry, two tabs) and each returned stream must terminate.
+        const closeStreamAction = async () => {
           unwatch();
 
           try {
@@ -3988,6 +4001,8 @@ export class Run<
             self.mastra?.getLogger()?.error('Error closing stream:', err);
           }
         };
+        self.closeStreamAction = closeStreamAction;
+
         const executionResultsPromise = self._resume({
           resumeData,
           step,
@@ -4013,10 +4028,10 @@ export class Run<
             self.streamOutput.updateResults(executionResults);
           }
 
-          self.closeStreamAction?.().catch(() => {});
+          closeStreamAction().catch(() => {});
         } catch (err) {
           self.streamOutput?.rejectResults(err as unknown as Error);
-          self.closeStreamAction?.().catch(() => {});
+          closeStreamAction().catch(() => {});
         }
       },
     });
@@ -4033,14 +4048,22 @@ export class Run<
   /**
    * @internal
    */
-  watch(cb: (event: WorkflowStreamEvent) => void): () => void {
-    const wrappedCb = (event: Event) => {
+  watch(cb: (event: WorkflowStreamEvent) => void | Promise<void>): () => void {
+    // Both callbacks acknowledge every delivery, including events for other
+    // runs. `nested-watch` is a shared topic, so a watcher sees every nested
+    // workflow's events; leaving the ones it filters out unacknowledged grows
+    // the subscription's pending list on a durable transport for as long as
+    // the watcher is attached. The ack is the last thing each callback does so
+    // a failure in the consumer or in the nested republish leaves the delivery
+    // unacknowledged and redeliverable.
+    const wrappedCb = async (event: Event, ack?: () => Promise<void>) => {
       if (event.runId === this.runId) {
-        cb(event.data as WorkflowStreamEvent);
+        await cb(event.data as WorkflowStreamEvent);
       }
+      await ack?.();
     };
 
-    const nestedWatchCb = (event: Event) => {
+    const nestedWatchCb = async (event: Event, ack?: () => Promise<void>) => {
       if (event.runId === this.runId) {
         const { event: nestedEvent, workflowId } = event.data as {
           event: { type: string; payload?: { id: string } & Record<string, unknown>; data?: any };
@@ -4051,14 +4074,14 @@ export class Run<
         // These are events with type starting with 'data-' and have a 'data' property
         if (nestedEvent.type.startsWith('data-') && nestedEvent.data !== undefined) {
           // Bubble up custom data events directly to preserve their structure
-          void this.pubsub.publish(`workflow.events.v2.${this.runId}`, {
+          await this.pubsub.publish(`workflow.events.v2.${this.runId}`, {
             type: 'watch',
             runId: this.runId,
             data: nestedEvent,
           });
         } else {
           // Regular workflow events get prefixed with nested workflow ID
-          void this.pubsub.publish(`workflow.events.v2.${this.runId}`, {
+          await this.pubsub.publish(`workflow.events.v2.${this.runId}`, {
             type: 'watch',
             runId: this.runId,
             data: {
@@ -4070,6 +4093,7 @@ export class Run<
           });
         }
       }
+      await ack?.();
     };
 
     void this.pubsub.subscribe(`workflow.events.v2.${this.runId}`, wrappedCb);
@@ -4084,7 +4108,7 @@ export class Run<
   /**
    * @internal
    */
-  async watchAsync(cb: (event: WorkflowStreamEvent) => void): Promise<() => void> {
+  async watchAsync(cb: (event: WorkflowStreamEvent) => void | Promise<void>): Promise<() => void> {
     return this.watch(cb);
   }
 
@@ -4758,7 +4782,8 @@ export class Run<
           } as WorkflowStreamEvent);
         });
 
-        self.closeStreamAction = async () => {
+        // Captured per invocation — see the note in the stream() path.
+        const closeStreamAction = async () => {
           unwatch();
 
           try {
@@ -4770,6 +4795,8 @@ export class Run<
             self.mastra?.getLogger()?.error('Error closing stream:', err);
           }
         };
+        self.closeStreamAction = closeStreamAction;
+
         const executionResultsPromise = self._timeTravel({
           inputData,
           step,
@@ -4797,10 +4824,10 @@ export class Run<
             self.streamOutput.updateResults(executionResults);
           }
 
-          self.closeStreamAction?.().catch(() => {});
+          closeStreamAction().catch(() => {});
         } catch (err) {
           self.streamOutput?.rejectResults(err as unknown as Error);
-          self.closeStreamAction?.().catch(() => {});
+          closeStreamAction().catch(() => {});
         }
       },
     });

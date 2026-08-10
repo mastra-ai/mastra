@@ -1,7 +1,7 @@
 {
-  "name": "@mastra/isolated-vm",
-  "version": "0.1.0",
-  "description": "In-process V8 isolate Code Mode transport for Mastra, backed by isolated-vm",
+  "name": "@mastra/quickjs",
+  "version": "0.1.0-alpha.0",
+  "description": "In-process WebAssembly Code Mode transport for Mastra, backed by QuickJS — no native binaries and no Node flags required",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -30,8 +30,8 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "esbuild": "^0.28.0",
-    "isolated-vm": "^6.1.2"
+    "quickjs-emscripten": "^0.31.0",
+    "ts-blank-space": "^0.6.1"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
@@ -42,7 +42,8 @@
     "eslint": "^10.7.0",
     "tsdown": "0.22.9",
     "typescript": "catalog:",
-    "vitest": "catalog:"
+    "vitest": "catalog:",
+    "zod": "catalog:"
   },
   "peerDependencies": {
     "@mastra/core": ">=1.55.0-0 <2.0.0-0"
@@ -55,12 +56,12 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/mastra-ai/mastra.git",
-    "directory": "packages/isolated-vm"
+    "directory": "code-mode/quickjs"
   },
   "bugs": {
     "url": "https://github.com/mastra-ai/mastra/issues"
   },
   "engines": {
-    "node": ">=22.13.0"
+    "node": ">=20.19.0"
   }
 }

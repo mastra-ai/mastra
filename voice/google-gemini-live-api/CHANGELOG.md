@@ -1,5 +1,18 @@
 # @mastra/voice-google-gemini-live
 
+## 0.14.6-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [[`5dba2a4`](https://github.com/mastra-ai/mastra/commit/5dba2a41600385751f5aace79878904e1972609d)]:
+  - @mastra/schema-compat@1.3.6-alpha.3
+
+## 0.14.6-alpha.3
+
+### Patch Changes
+
+- Fixed Gemini Live session readiness waits to release timeout resources after settling. ([#21083](https://github.com/mastra-ai/mastra/pull/21083))
+
 ## 0.14.6-alpha.2
 
 ### Patch Changes

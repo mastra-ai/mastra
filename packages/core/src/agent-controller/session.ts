@@ -2622,9 +2622,23 @@ export class SessionDisplayState {
  * has its own bus, so events never cross between sessions. Subsystems hold a
  * reference to their session's bus and call {@link emit} directly.
  */
+/**
+ * Event types emitted once per streamed chunk. Their display-state snapshots are
+ * coalesced, since a snapshot always carries the full state and intermediate
+ * ones are immediately superseded.
+ */
+const COALESCIBLE_DISPLAY_STATE_EVENTS = new Set<AgentControllerEvent['type']>(['message_update', 'tool_input_delta']);
+
+/** Upper bound on coalesced display-state snapshots: one per this many ms, plus a leading one. */
+const DISPLAY_STATE_COALESCE_MS = 16;
+
 export class SessionBus {
   readonly #listeners: AgentControllerEventListener[] = [];
   #displayState: SessionDisplayState | undefined;
+  /** Timer for the trailing snapshot of the current coalescing window. */
+  #displayStateTimer: ReturnType<typeof setTimeout> | undefined;
+  /** Whether a snapshot was withheld during the current window and still owes a dispatch. */
+  #displayStatePending = false;
   /**
    * The last workspace lifecycle event group emitted on this bus, replayed to
    * subscribers that attach after the workspace finished initializing. Without
@@ -2661,6 +2675,11 @@ export class SessionBus {
     };
   }
 
+  /** Whether anything is currently listening. Lets emitters skip snapshot work nobody reads. */
+  hasListeners(): boolean {
+    return this.#listeners.length > 0;
+  }
+
   emit(event: AgentControllerEvent): void {
     if (
       event.type === 'workspace_status_changed' ||
@@ -2674,8 +2693,59 @@ export class SessionBus {
       }
     }
     this.#displayState?.apply(event);
+
+    // A pending snapshot describes state that predates this event, so it must
+    // reach listeners before the event itself does. Flushing here also means a
+    // coalesced snapshot can never arrive after the event that superseded it.
+    if (!COALESCIBLE_DISPLAY_STATE_EVENTS.has(event.type)) {
+      this.#flushDisplayState();
+    }
+
     this.#dispatch(event);
-    if (event.type !== 'display_state_changed' && this.#displayState) {
+
+    if (event.type === 'display_state_changed' || !this.#displayState) return;
+
+    if (COALESCIBLE_DISPLAY_STATE_EVENTS.has(event.type)) {
+      this.#scheduleDisplayState();
+      return;
+    }
+    this.#dispatch({ type: 'display_state_changed', displayState: this.#displayState.get() });
+  }
+
+  /**
+   * Queue a display-state snapshot for a high-frequency event. Streaming a
+   * single message emits thousands of deltas, and dispatching a full snapshot
+   * per delta re-serializes the whole message (plus every completed tool's args
+   * and result) on each one. Snapshots are state-of-the-world rather than
+   * incremental, so dropping intermediate ones loses nothing: the trailing
+   * flush carries the latest state.
+   *
+   * The first delta of a burst dispatches immediately so UIs stay responsive;
+   * the rest collapse into one trailing snapshot per interval.
+   */
+  #scheduleDisplayState(): void {
+    if (this.#displayStateTimer) {
+      this.#displayStatePending = true;
+      return;
+    }
+    this.#dispatch({ type: 'display_state_changed', displayState: this.#displayState!.get() });
+    this.#displayStateTimer = setTimeout(() => {
+      this.#displayStateTimer = undefined;
+      this.#flushDisplayState();
+    }, DISPLAY_STATE_COALESCE_MS);
+    // Never hold the process open for a snapshot that only mirrors state.
+    (this.#displayStateTimer as { unref?: () => void }).unref?.();
+  }
+
+  /** Dispatch any snapshot withheld by coalescing and clear the pending timer. */
+  #flushDisplayState(): void {
+    if (this.#displayStateTimer) {
+      clearTimeout(this.#displayStateTimer);
+      this.#displayStateTimer = undefined;
+    }
+    if (!this.#displayStatePending) return;
+    this.#displayStatePending = false;
+    if (this.#displayState) {
       this.#dispatch({ type: 'display_state_changed', displayState: this.#displayState.get() });
     }
   }
@@ -2749,7 +2819,7 @@ export class Session<TState = unknown> {
    * filtered back to the session's scope. Empty when the session is unscoped.
    */
   readonly #tags: Record<string, string>;
-  readonly #workspace: Workspace;
+  readonly #workspace: Workspace | undefined;
   browser?: MastraBrowser;
 
   constructor({
@@ -2766,7 +2836,7 @@ export class Session<TState = unknown> {
     id: string;
     ownerId: string;
     tags?: Record<string, string>;
-    workspace: Workspace;
+    workspace?: Workspace;
     browser?: MastraBrowser;
   }) {
     this.#tags = tags && Object.keys(tags).length > 0 ? { ...tags } : {};
@@ -2788,8 +2858,8 @@ export class Session<TState = unknown> {
       return args => this.thread.setSettingOn({ threadId, ...args });
     });
 
-    if (!workspace || !(workspace instanceof Workspace)) {
-      throw new Error(`A session requires a valid workspace instance.`);
+    if (workspace !== undefined && !(workspace instanceof Workspace)) {
+      throw new Error(`A session workspace must be a valid Workspace instance.`);
     }
 
     this.#workspace = workspace;
@@ -2818,13 +2888,16 @@ export class Session<TState = unknown> {
   }
 
   /**
-   * The workspace resolved for this session.
+   * The workspace resolved for this session, or `undefined` when the session
+   * runs without one. A workspace is optional: sessions that only need threads,
+   * state, and agent runs (chat-style usage) do not have to configure
+   * filesystem or sandbox access.
    *
    * Dynamic workspace factories are evaluated independently when each session
    * is created. Use this accessor for operations that must stay bound to the
    * session's workspace rather than resolving through controller-global state.
    */
-  getWorkspace(): Workspace {
+  getWorkspace(): Workspace | undefined {
     return this.#workspace;
   }
 
@@ -2869,6 +2942,14 @@ export class Session<TState = unknown> {
    */
   emit(event: AgentControllerEvent): void {
     this.#bus.emit(event);
+  }
+
+  /**
+   * Whether this session has any event subscribers. Emitters use this to skip
+   * building per-event snapshots that nothing would read.
+   */
+  hasListeners(): boolean {
+    return this.#bus.hasListeners();
   }
 
   /**

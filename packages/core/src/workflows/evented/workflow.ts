@@ -2441,13 +2441,13 @@ export class EventedRun<
     return executionResultPromise;
   }
 
-  watch(cb: (event: WorkflowStreamEvent) => void): () => void {
+  watch(cb: (event: WorkflowStreamEvent) => void | Promise<void>): () => void {
     const watchCb = async (event: Event, ack?: () => Promise<void>) => {
       if (event.runId !== this.runId) {
         return;
       }
 
-      cb(event.data);
+      await cb(event.data);
       await ack?.();
     };
 
@@ -2458,13 +2458,13 @@ export class EventedRun<
     };
   }
 
-  async watchAsync(cb: (event: WorkflowStreamEvent) => void): Promise<() => void> {
+  async watchAsync(cb: (event: WorkflowStreamEvent) => void | Promise<void>): Promise<() => void> {
     const watchCb = async (event: Event, ack?: () => Promise<void>) => {
       if (event.runId !== this.runId) {
         return;
       }
 
-      cb(event.data);
+      await cb(event.data);
       await ack?.();
     };
 

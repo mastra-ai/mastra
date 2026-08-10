@@ -707,6 +707,93 @@ describe('LSPManager', () => {
       expect(callOrder).toEqual(['open', 'wait', 'close', 'open', 'wait', 'close']);
     });
 
+    it('hands the lock to waiters in arrival order when a late caller races the release', async () => {
+      // The lock is a FIFO queue, so a caller that shows up while others are
+      // already queued goes to the back of that queue.
+      //
+      // The interesting moment is the instant the holder releases. A caller
+      // that asks for the lock in that same synchronous turn sees a free lock
+      // and can take it before the already-queued waiters get to resume. Under
+      // a FIFO queue it waits its turn instead.
+      const filePath = '/project/src/app.ts';
+      const acquire = (): Promise<() => void> =>
+        (manager as unknown as { acquireFileLock(p: string): Promise<() => void> }).acquireFileLock(filePath);
+
+      const order: string[] = [];
+      let held = 0;
+      let maxHeld = 0;
+      const enter = (name: string) => {
+        order.push(name);
+        held++;
+        maxHeld = Math.max(maxHeld, held);
+      };
+
+      const releaseFirst = await acquire();
+      enter('first');
+
+      const second = (async () => {
+        const release = await acquire();
+        enter('second');
+        held--;
+        release();
+      })();
+      await Promise.resolve();
+
+      const third = (async () => {
+        const release = await acquire();
+        enter('third');
+        held--;
+        release();
+      })();
+      await Promise.resolve();
+
+      // `late` asks for the lock in the same turn that the first holder frees it.
+      const late = (async () => {
+        held--;
+        releaseFirst();
+        const release = await acquire();
+        enter('late');
+        held--;
+        release();
+      })();
+
+      await Promise.all([second, third, late]);
+
+      expect(order).toEqual(['first', 'second', 'third', 'late']);
+      expect(maxHeld).toBe(1);
+    });
+
+    it('serializes three or more concurrent getDiagnostics for same file', async () => {
+      const callOrder: string[] = [];
+      let concurrentWaits = 0;
+      let maxConcurrentWaits = 0;
+
+      mockNotifyOpen.mockImplementation((_file: string) => {
+        callOrder.push('open');
+      });
+      mockNotifyClose.mockImplementation((_file: string) => {
+        callOrder.push('close');
+      });
+      mockWaitForDiagnostics.mockImplementation(async () => {
+        concurrentWaits++;
+        maxConcurrentWaits = Math.max(maxConcurrentWaits, concurrentWaits);
+        callOrder.push('wait');
+        await new Promise(resolve => setTimeout(resolve, 10));
+        concurrentWaits--;
+        return [{ severity: 1, message: 'err', range: { start: { line: 0, character: 0 } } }];
+      });
+
+      await Promise.all([
+        manager.getDiagnostics('/project/src/app.ts', 'content1'),
+        manager.getDiagnostics('/project/src/app.ts', 'content2'),
+        manager.getDiagnostics('/project/src/app.ts', 'content3'),
+      ]);
+
+      // Never more than one caller inside the critical section at a time.
+      expect(maxConcurrentWaits).toBe(1);
+      expect(callOrder).toEqual(['open', 'wait', 'close', 'open', 'wait', 'close', 'open', 'wait', 'close']);
+    });
+
     it('allows parallel getDiagnostics for different files', async () => {
       let concurrentCount = 0;
       let maxConcurrent = 0;
