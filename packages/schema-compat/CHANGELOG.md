@@ -1,5 +1,11 @@
 # @mastra/schema-compat
 
+## 1.3.6-alpha.3
+
+### Patch Changes
+
+- Fixed Zod v3 schema conversion for CommonJS consumers. ([#21147](https://github.com/mastra-ai/mastra/pull/21147))
+
 ## 1.3.6-alpha.2
 
 ### Patch Changes
