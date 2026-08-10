@@ -9,9 +9,9 @@ packages:
 
 **Added in:** `@mastra/core@1.1.0`
 
-A workspace gives agents a scoped environment for working with files and running commands. Add code inspection, search, or reusable skills based on what the agent needs.
+A workspace gives an agent an isolated environment for working with files and running commands. Add code inspection, search, or reusable skills as needed.
 
-A workspace groups these resources behind agent tools, but the workspace itself isn't a security boundary. Filesystem providers can restrict accessible paths, while sandbox providers can isolate command execution. For example, `LocalFilesystem` uses contained mode by default, but `LocalSandbox` runs commands on the host unless native isolation is enabled. Remote and container sandbox providers supply their own isolation boundaries.
+The level of isolation depends on the providers you configure. `LocalFilesystem` restricts file access to its base directory by default. `LocalSandbox` runs commands on the host unless native isolation is enabled, while remote and container sandbox providers run commands in isolated environments.
 
 Workspaces support:
 
