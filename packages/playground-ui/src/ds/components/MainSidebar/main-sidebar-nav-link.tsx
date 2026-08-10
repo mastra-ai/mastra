@@ -2,7 +2,7 @@ import React from 'react';
 import type { ComponentPropsWithoutRef } from 'react';
 import type { SidebarState } from './main-sidebar-context';
 import { useMaybeSidebarState } from './main-sidebar-context';
-import { navItemClasses, navRowSurfaceClasses } from './main-sidebar-nav-item-classes';
+import { navItemClasses, navItemLayoutClasses, navRowSurfaceClasses } from './main-sidebar-nav-item-classes';
 import type { MainSidebarNavItemSize } from './main-sidebar-nav-item-classes';
 import { MainSidebarNavLabel } from './main-sidebar-nav-label';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
@@ -80,21 +80,12 @@ export function MainSidebarNavLink({
   const linkParams = isExternal ? { target: '_blank', rel: 'noreferrer' } : {};
   const needsTooltip = link ? isCollapsed || Boolean(link.tooltipMsg) : false;
 
-  // With a trailing action the row becomes a flex pair: the wrapper owns the row
-  // surface so hover/active paint the whole box, the action sits after the label.
-  const hasRowAction = Boolean(action) && !isCollapsed;
+  // A collapsed rail has no room for a trailing control, so the action is dropped there.
+  const rowAction = isCollapsed ? undefined : action;
 
-  const itemClassName = cn(
-    navItemClasses({
-      isActive,
-      isCollapsed,
-      isFeatured,
-      level,
-      size,
-      withSurface: !hasRowAction,
-    }),
-    hasRowAction && 'flex-1 pr-1',
-  );
+  const itemClassName = rowAction
+    ? cn(navItemLayoutClasses({ level, size }), 'flex-1 pr-1')
+    : navItemClasses({ isActive, isCollapsed, isFeatured, level, size });
 
   let interactiveEl: React.ReactNode = null;
 
@@ -140,15 +131,34 @@ export function MainSidebarNavLink({
 
   return (
     <li {...props} className={cn('relative flex min-w-0 flex-col', className)}>
-      {hasRowAction ? (
-        <div className={cn('flex min-w-0 items-center pr-1', navRowSurfaceClasses({ isActive, isFeatured }))}>
-          {rowEl}
-          {action}
-        </div>
-      ) : (
-        rowEl
-      )}
+      <NavRowBody action={rowAction} surfaceClassName={navRowSurfaceClasses({ isActive, isFeatured })}>
+        {rowEl}
+      </NavRowBody>
       {!isCollapsed && subItems}
     </li>
+  );
+}
+
+/**
+ * Pairs the interactive row with its trailing action. The pair carries the row
+ * surface so hover and active paint the whole box, action included, and the
+ * action stays in flow instead of floating over the label.
+ */
+function NavRowBody({
+  action,
+  surfaceClassName,
+  children,
+}: {
+  action?: React.ReactNode;
+  surfaceClassName: string;
+  children: React.ReactNode;
+}) {
+  if (!action) return children;
+
+  return (
+    <div className={cn('flex min-w-0 items-center pr-1', surfaceClassName)}>
+      {children}
+      {action}
+    </div>
   );
 }

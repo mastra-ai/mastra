@@ -67,43 +67,16 @@ export function SessionNavRow({
   );
   const indicator = indicatorKind({ loading, status, merged });
   const action = (
-    <span
-      className={cn(
-        'size-form-sm shrink-0 place-items-center *:col-start-1 *:row-start-1',
-        // Empty slot claims no width, so the label runs full width until there is something to show.
-        indicator
-          ? 'grid'
-          : 'hidden group-focus-within/session:grid group-hover/session:grid group-has-[[data-popup-open]]/session:grid',
-      )}
-    >
+    <span className={cn(trailingSlot, indicator ? 'grid' : revealedSlot)}>
       {indicator ? <SessionRowIndicator kind={indicator} name={name} /> : null}
-      {loading ? null : (
-        <DropdownMenu>
-          <DropdownMenu.Trigger
-            render={
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                aria-label={`Session actions for ${name}`}
-                disabled={disabled}
-                className="hidden group-focus-within/session:flex group-hover/session:flex data-[popup-open]:flex"
-              >
-                <MoreHorizontal />
-              </Button>
-            }
-          />
-          <DropdownMenu.Content align="end" className="min-w-28">
-            <DropdownMenu.Item onClick={() => onPinChange(!pinned)}>
-              {pinned ? <PinOff /> : <Pin />}
-              {pinned ? 'Unpin' : 'Pin session'}
-            </DropdownMenu.Item>
-            <DropdownMenu.Item variant="destructive" onClick={onDelete}>
-              <Trash2 />
-              Delete
-            </DropdownMenu.Item>
-          </DropdownMenu.Content>
-        </DropdownMenu>
+      {indicator === 'loading' ? null : (
+        <SessionActionsMenu
+          name={name}
+          disabled={disabled}
+          pinned={pinned}
+          onPinChange={onPinChange}
+          onDelete={onDelete}
+        />
       )}
     </span>
   );
@@ -128,6 +101,12 @@ export function SessionNavRow({
   );
 }
 
+const trailingSlot = 'size-form-sm shrink-0 place-items-center *:col-start-1 *:row-start-1';
+
+// An empty slot claims no width, so the label runs the full row until there is something to show.
+const revealedSlot =
+  'hidden group-focus-within/session:grid group-hover/session:grid group-has-[[data-popup-open]]/session:grid';
+
 type IndicatorKind = 'loading' | 'running' | 'attention' | 'merged';
 
 function indicatorKind({
@@ -142,6 +121,49 @@ function indicatorKind({
   if (loading) return 'loading';
   if (status) return status;
   return merged ? 'merged' : undefined;
+}
+
+function SessionActionsMenu({
+  name,
+  disabled,
+  pinned,
+  onPinChange,
+  onDelete,
+}: {
+  name: string;
+  disabled: boolean;
+  pinned: boolean;
+  onPinChange: (pinned: boolean) => void;
+  onDelete: () => void;
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenu.Trigger
+        render={
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            aria-label={`Session actions for ${name}`}
+            disabled={disabled}
+            className="hidden group-focus-within/session:flex group-hover/session:flex data-[popup-open]:flex"
+          >
+            <MoreHorizontal />
+          </Button>
+        }
+      />
+      <DropdownMenu.Content align="end" className="min-w-28">
+        <DropdownMenu.Item onClick={() => onPinChange(!pinned)}>
+          {pinned ? <PinOff /> : <Pin />}
+          {pinned ? 'Unpin' : 'Pin session'}
+        </DropdownMenu.Item>
+        <DropdownMenu.Item variant="destructive" onClick={onDelete}>
+          <Trash2 />
+          Delete
+        </DropdownMenu.Item>
+      </DropdownMenu.Content>
+    </DropdownMenu>
+  );
 }
 
 // The actions menu owns the slot as soon as the row is hovered, focused, or its menu is open.
