@@ -65,7 +65,7 @@ export default function IntegrationsPage() {
 
   return (
     <div>
-      <label className="relative mb-12 block" htmlFor="integration-search">
+      <label className="relative mb-18 block" htmlFor="integration-search">
         <span className="sr-only">Search integrations</span>
         <SearchIcon
           aria-hidden="true"
