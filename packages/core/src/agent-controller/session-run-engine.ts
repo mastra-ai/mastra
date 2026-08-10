@@ -225,6 +225,8 @@ type StreamState = {
   textContentById: Map<string, { index: number; text: string }>;
   thinkingContentById: Map<string, { index: number; text: string }>;
   toolPartById: Map<string, number>;
+  /** Response ids offered by `step-start` — an id binds to at most one display message. */
+  offeredResponseIds: Set<string>;
   /**
    * Set when a stream ends on a non-success finish reason (e.g. `content-filter`,
    * `error`, `length`). Carries the user-facing message so the run finalizes
@@ -347,6 +349,7 @@ export class SessionRunEngine {
       textContentById: new Map<string, { index: number; text: string }>(),
       thinkingContentById: new Map<string, { index: number; text: string }>(),
       toolPartById: new Map<string, number>(),
+      offeredResponseIds: new Set<string>(),
     };
   }
 
@@ -499,6 +502,21 @@ export class SessionRunEngine {
     }
 
     switch (chunk.type) {
+      case 'step-start': {
+        // Adopt the loop's response message id so the streamed turn and its
+        // persisted copy share one identity (clients dedupe by id). An id is
+        // consumed on first offer and binds only while the message is still
+        // empty — an emitted id must never change, and a re-offered id must
+        // never attach to a later message.
+        const messageId = getString(getPayload(chunk).messageId);
+        if (!messageId || state.offeredResponseIds.has(messageId)) break;
+        state.offeredResponseIds.add(messageId);
+        if (!this.hasCurrentMessageContent(state)) {
+          state.currentMessage.id = messageId;
+        }
+        break;
+      }
+
       case 'text-start': {
         const textIndex = state.currentMessage.content.parts.length;
         state.currentMessage.content.parts.push({ type: 'text', text: '' });
