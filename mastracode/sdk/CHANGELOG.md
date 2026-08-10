@@ -1,5 +1,11 @@
 # @mastra/code-sdk
 
+## 1.2.0-alpha.14
+
+### Patch Changes
+
+- Fixed Factory interactive plans so they are stored as browsable artifacts. ([#21173](https://github.com/mastra-ai/mastra/pull/21173))
+
 ## 1.2.0-alpha.13
 
 ### Patch Changes
