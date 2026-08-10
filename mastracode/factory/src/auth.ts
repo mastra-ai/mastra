@@ -552,6 +552,16 @@ function providerAuthRoutes(provider: IMastraAuthProvider, publicUrl?: string): 
           const cookieReturnTo = sanitizeReturnTo(readReturnToCookie(c));
           const returnTo = cookieReturnTo !== '/' ? cookieReturnTo : stateReturnTo;
           c.header('Set-Cookie', clearReturnToCookieHeader(), { append: true });
+          const idpError = c.req.query('error');
+          if (idpError) {
+            // IdP denial (e.g. access_denied for a non-org-member): bouncing to
+            // /auth/login would re-enter the IdP in a redirect loop.
+            const query = new URLSearchParams({ error: idpError.slice(0, 64) });
+            const description = c.req.query('error_description');
+            if (description) query.set('error_description', description.slice(0, 256));
+            if (returnTo !== '/') query.set('returnTo', returnTo);
+            return c.redirect(`/signin?${query.toString()}`);
+          }
           if (!code) {
             return c.redirect('/auth/login');
           }
@@ -742,6 +752,12 @@ export function createFactoryAuthGate(provider: IMastraAuthProvider) {
     // connect-route.ts.
     if (c.req.method === 'GET' && (path === '/connect/slack' || path.startsWith('/connect/slack/'))) {
       return next();
+    }
+    // The platform's deploy-auth flow lands IdP denials on `/login`
+    // (`error=access_denied&error_description=...`); the SPA serves sign-in at
+    // `/signin`, so forward the query there instead of burying it in returnTo.
+    if (c.req.method === 'GET' && path === '/login') {
+      return c.redirect(`/signin${new URL(c.req.url).search}`);
     }
     // The SPA sign-in page, its static bundle, and browser-fetched metadata
     // must be reachable while signed out; no user is stashed, so `/api/*`
