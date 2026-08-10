@@ -16,7 +16,7 @@ The OpenTelemetry Bridge is currently **experimental**. APIs and configuration o
 
 The OpenTelemetry (OTEL) Bridge enables bidirectional integration between Mastra's tracing system and existing OpenTelemetry infrastructure. Unlike exporters that send trace data to external platforms, the bridge creates native OTEL spans that participate in your distributed tracing context.
 
-:::info Looking to send traces without existing OTEL infrastructure?
+:::note Looking to send traces without existing OTEL infrastructure?
 
 If you don't have existing OpenTelemetry instrumentation, the [OpenTelemetry Exporter](/docs/observability/integrations/exporters/otel) may be simpler, it sends traces directly without requiring an OTEL SDK setup.
 

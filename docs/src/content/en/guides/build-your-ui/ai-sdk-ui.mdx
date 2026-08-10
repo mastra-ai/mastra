@@ -47,7 +47,7 @@ Once you have your API routes set up, you can use them in the [`useChat()`](#use
 
 Run Mastra as a standalone server and connect your frontend (e.g. using Vite + React) to its API endpoints. You'll be using Mastra's [custom API routes](/docs/server/custom-api-routes) feature for this.
 
-:::info
+:::note
 
 Mastra's [**UI Dojo**](https://ui-dojo.mastra.ai/) is an example of this setup.
 
@@ -1049,7 +1049,7 @@ Implement the backend with either of these examples.
     })
     ```
 
-    :::info
+    :::note
 
     You can access this data in your tools via the `requestContext` parameter. See the [Request Context documentation](/docs/server/request-context) for more details.
 
@@ -1419,7 +1419,7 @@ The pattern uses:
 Key points:
 
 - Piping `fullStream` to `context.writer` creates `data-tool-agent` parts
-- Read `data-tool-agent-step` when you need the full payload for the nested step that just finished
+- Read `data-tool-agent-step` when you need the full payload for the nested step that finished
 - The `AgentDataPart` has `id` (on the part) and `data.text` (the current nested-agent text snapshot)
 - The tool still returns its own output after the stream completes
 

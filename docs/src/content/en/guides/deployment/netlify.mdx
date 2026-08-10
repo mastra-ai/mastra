@@ -10,7 +10,7 @@ import StepItem from '@site/src/components/StepItem';
 
 Use `@mastra/deployer-netlify` to deploy your Mastra server on Netlify. The deployer bundles your code and generates a `.netlify` directory conforming to Netlify's [Frameworks API](https://docs.netlify.com/build/frameworks/frameworks-api/), ready to deploy. You can deploy as serverless functions (default) or as [edge functions](https://docs.netlify.com/build/edge-functions/overview/) for lower latency and longer execution times.
 
-:::info
+:::note
 This guide covers deploying the [Mastra server](/docs/server/mastra-server). If you're using a [server adapter](/docs/server/server-adapters) or [web framework](/docs/deployment/web-framework), deploy the way you normally would for that framework.
 :::
 
@@ -90,7 +90,7 @@ After setting up your project, push it to your remote Git provider of choice (e.
 
     Since the [Mastra server](/docs/server/mastra-server) prefixes every API endpoint with `/api`, you have to add it to your URLs when making requests.
 
-    :::info
+    :::note
 
     Netlify functions are typically deployed at `https://<random-slug>.netlify.app/.netlify/functions/api`. The `NetlifyDeployer` redirects any request from `/*` to `/.netlify/functions/api/:splat`, so you don't need to include the `.netlify/functions` prefix in your URLs.
 

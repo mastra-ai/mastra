@@ -10,7 +10,7 @@ packages:
 
 The OpenTelemetry (OTEL) exporter sends your traces and logs to any OTEL-compatible observability platform using standardized [OpenTelemetry Semantic Conventions for GenAI](https://opentelemetry.io/docs/specs/semconv/gen-ai/). This ensures broad compatibility with platforms like Datadog, New Relic, SigNoz, MLflow, Latitude, Dash0, Traceloop, Laminar, telemetry.dev, and more.
 
-:::info Looking for bidirectional OTEL integration?
+:::note Looking for bidirectional OTEL integration?
 
 If you have existing OpenTelemetry instrumentation and want Mastra traces to inherit context from active OTEL spans, see the [OpenTelemetry Bridge](/docs/observability/integrations/bridges/otel) instead.
 
@@ -180,7 +180,7 @@ export const mastra = new Mastra({
 })
 ```
 
-:::info
+:::note
 
 Get your Dash0 endpoint from your dashboard. It should be in the format `ingress.{region}.aws.dash0.com:4317`.
 
@@ -358,7 +358,7 @@ export const mastra = new Mastra({
 })
 ```
 
-:::info
+:::note
 
 The Datadog Agent must be configured with OTLP ingestion enabled. Add the following to your `datadog.yaml`:
 

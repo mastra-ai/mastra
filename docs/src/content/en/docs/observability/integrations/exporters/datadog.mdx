@@ -9,7 +9,7 @@ packages:
 
 [Datadog](https://datadoghq.com/) is a complete monitoring platform with dedicated LLM Observability features. The Datadog exporter sends your traces to Datadog's LLM Observability product, providing insights into model performance and token usage, plus conversation flows.
 
-:::info Also using `dd-trace` APM?
+:::note Also using `dd-trace` APM?
 
 If you also use `dd-trace` APM auto-instrumentation, consider the [Datadog Bridge](/docs/observability/integrations/bridges/datadog) instead. The bridge creates `dd-trace` spans in real time so HTTP and database calls inside tools and processors are correctly nested under their parent Mastra span. The exporter on its own sends LLM Observability data after execution completes, which means auto-instrumented APM spans fall back to the request handler.
 
