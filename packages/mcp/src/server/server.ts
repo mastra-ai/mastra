@@ -105,20 +105,13 @@ type MCPServerStreamableHTTPOptions = Partial<StreamableHTTPServerTransportOptio
   serverlessStreaming?: boolean;
 };
 
-const MODERN_ERA_HTTP_OPTION_KEYS = new Set([
+const ACCEPTED_MODERN_ERA_HTTP_OPTION_KEYS = new Set([
   'allowedHosts',
   'allowedOrigins',
   'enableDnsRebindingProtection',
-  'enableJsonResponse',
-  'eventStore',
-  'keepAliveMs',
-  'onsessionclosed',
-  'onsessioninitialized',
-  'retryInterval',
   'serverless',
   'serverlessStreaming',
   'sessionIdGenerator',
-  'supportedProtocolVersions',
 ]);
 
 /**
@@ -569,17 +562,10 @@ export class MCPServer extends MCPServerBase {
     if (!options) return;
 
     const incompatibleOptions = new Set(
-      Object.keys(options).filter(option => !MODERN_ERA_HTTP_OPTION_KEYS.has(option)),
+      Object.keys(options).filter(option => !ACCEPTED_MODERN_ERA_HTTP_OPTION_KEYS.has(option)),
     );
 
     if (options.sessionIdGenerator !== undefined) incompatibleOptions.add('sessionIdGenerator');
-    if (options.onsessioninitialized !== undefined) incompatibleOptions.add('onsessioninitialized');
-    if (options.onsessionclosed !== undefined) incompatibleOptions.add('onsessionclosed');
-    if (options.eventStore !== undefined) incompatibleOptions.add('eventStore');
-    if (options.enableJsonResponse !== undefined) incompatibleOptions.add('enableJsonResponse');
-    if (options.retryInterval !== undefined) incompatibleOptions.add('retryInterval');
-    if (options.keepAliveMs !== undefined) incompatibleOptions.add('keepAliveMs');
-    if (options.supportedProtocolVersions !== undefined) incompatibleOptions.add('supportedProtocolVersions');
     if (options.serverless === false) incompatibleOptions.add('serverless');
     if (options.serverlessStreaming === false) incompatibleOptions.add('serverlessStreaming');
 
