@@ -38,6 +38,10 @@ export class LSPManager {
   private clients: Map<string, LSPClient> = new Map();
   private initPromises: Map<string, Promise<void>> = new Map();
   private clientInitQueue: Promise<void> = Promise.resolve();
+  private activeClientLeases: Map<LSPClient, number> = new Map();
+  private clientLeaseWaiters: Set<() => void> = new Set();
+  private shutdownPromise?: Promise<void>;
+  private shuttingDown = false;
   private fileLocks: Map<string, Promise<void>> = new Map();
   private processManager: SandboxProcessManager;
   private _root: string;
@@ -95,18 +99,50 @@ export class LSPManager {
     this.clients.set(key, client);
   }
 
-  /** Shut down least recently used clients until another one can be opened. */
-  private async ensureClientCapacity(): Promise<void> {
+  /** Shut down idle least recently used clients until another one can be opened. */
+  private async ensureClientCapacity(): Promise<boolean> {
     const maxOpenClients = this.config.maxOpenClients;
-    if (maxOpenClients === undefined) return;
+    if (maxOpenClients === undefined) return !this.shuttingDown;
 
     while (this.clients.size >= maxOpenClients) {
-      const oldest = this.clients.entries().next().value as [string, LSPClient] | undefined;
-      if (!oldest) return;
-      const [key, client] = oldest;
+      if (this.shuttingDown) return false;
+
+      const oldestIdle = Array.from(this.clients.entries()).find(([, client]) => !this.activeClientLeases.has(client));
+      if (!oldestIdle) {
+        await new Promise<void>(resolve => this.clientLeaseWaiters.add(resolve));
+        continue;
+      }
+
+      const [key, client] = oldestIdle;
       this.clients.delete(key);
       await client.shutdown().catch(() => {});
     }
+
+    return !this.shuttingDown;
+  }
+
+  /** Keep a client alive while an operation is using it. */
+  private async withClientLease<T>(client: LSPClient, operation: () => Promise<T>): Promise<T> {
+    this.activeClientLeases.set(client, (this.activeClientLeases.get(client) ?? 0) + 1);
+    try {
+      return await operation();
+    } finally {
+      const remaining = (this.activeClientLeases.get(client) ?? 1) - 1;
+      if (remaining > 0) {
+        this.activeClientLeases.set(client, remaining);
+      } else {
+        this.activeClientLeases.delete(client);
+        const waiters = Array.from(this.clientLeaseWaiters);
+        this.clientLeaseWaiters.clear();
+        waiters.forEach(resolve => resolve());
+      }
+    }
+  }
+
+  private wakeClientLeaseWaiters(): void {
+    const waiters = Array.from(this.clientLeaseWaiters);
+    this.clientLeaseWaiters.clear();
+    waiters.forEach(resolve => resolve());
   }
 
   /**
@@ -149,20 +185,22 @@ export class LSPManager {
    * Handles timeout, deduplication of concurrent init calls, and caching.
    */
   private async initClient(serverDef: LSPServerDef, projectRoot: string, key: string): Promise<LSPClient | null> {
+    if (this.shuttingDown) return null;
+
     // In-progress initialization — wait for it
     if (this.initPromises.has(key)) {
       await this.initPromises.get(key);
-      return this.clients.get(key) || null;
+      return this.shuttingDown ? null : (this.clients.get(key) ?? null);
     }
 
     const initialize = async (): Promise<void> => {
-      await this.ensureClientCapacity();
+      if (!(await this.ensureClientCapacity())) return;
       const initTimeout = this.config.initTimeout ?? 15000;
       let timedOut = false;
       const startPromise = (async () => {
         const client = new LSPClient(serverDef, projectRoot, this.processManager);
         await client.initialize(initTimeout);
-        if (timedOut) {
+        if (timedOut || this.shuttingDown) {
           await client.shutdown().catch(() => {});
           return;
         }
@@ -212,6 +250,8 @@ export class LSPManager {
    * Returns null if no server is available.
    */
   async getClient(filePath: string): Promise<LSPClient | null> {
+    if (this.shuttingDown) return null;
+
     const servers = getServersForFile(filePath, this.config.disableServers, this.serverDefs, this.customExtensions);
     if (servers.length === 0) return null;
 
@@ -226,6 +266,7 @@ export class LSPManager {
       ) ?? servers[0]!;
 
     const projectRoot = await this.resolveRoot(filePath, serverDef.markers);
+    if (this.shuttingDown) return null;
 
     // Check if the server's command is available at this root
     if (serverDef.command(projectRoot) === undefined) return null;
@@ -293,28 +334,30 @@ export class LSPManager {
       const client = await this.getClient(filePath);
       if (!client) return null;
 
-      const languageId = getLanguageId(filePath, this.customExtensions);
-      if (!languageId) return [];
+      return await this.withClientLease(client, async () => {
+        const languageId = getLanguageId(filePath, this.customExtensions);
+        if (!languageId) return [];
 
-      // Open + change → triggers diagnostics
-      client.notifyOpen(filePath, content, languageId);
-      client.notifyChange(filePath, content, 1);
+        // Open + change → triggers diagnostics
+        client.notifyOpen(filePath, content, languageId);
+        client.notifyChange(filePath, content, 1);
 
-      const diagnosticTimeout = this.config.diagnosticTimeout ?? 5000;
-      let rawDiagnostics: any[];
-      try {
-        rawDiagnostics = await client.waitForDiagnostics(filePath, diagnosticTimeout);
-      } finally {
-        client.notifyClose(filePath);
-      }
+        const diagnosticTimeout = this.config.diagnosticTimeout ?? 5000;
+        let rawDiagnostics: any[];
+        try {
+          rawDiagnostics = await client.waitForDiagnostics(filePath, diagnosticTimeout);
+        } finally {
+          client.notifyClose(filePath);
+        }
 
-      return rawDiagnostics.map((d: any) => ({
-        severity: mapSeverity(d.severity),
-        message: d.message,
-        line: (d.range?.start?.line ?? 0) + 1, // LSP is 0-indexed, we report 1-indexed
-        character: (d.range?.start?.character ?? 0) + 1,
-        source: d.source,
-      }));
+        return rawDiagnostics.map((d: any) => ({
+          severity: mapSeverity(d.severity),
+          message: d.message,
+          line: (d.range?.start?.line ?? 0) + 1, // LSP is 0-indexed, we report 1-indexed
+          character: (d.range?.start?.character ?? 0) + 1,
+          source: d.source,
+        }));
+      });
     } catch {
       return [];
     } finally {
@@ -328,6 +371,8 @@ export class LSPManager {
    * Individual server failures don't block other servers.
    */
   async getDiagnosticsMulti(filePath: string, content: string): Promise<LSPDiagnostic[]> {
+    if (this.shuttingDown) return [];
+
     const servers = getServersForFile(filePath, this.config.disableServers, this.serverDefs, this.customExtensions);
     if (servers.length === 0) return [];
 
@@ -353,14 +398,16 @@ export class LSPManager {
               existing.shutdown().catch(() => {});
             } else {
               this.touchClient(key, existing);
-              return this.collectDiagnostics(existing, filePath, content, languageId);
+              return this.withClientLease(existing, () =>
+                this.collectDiagnostics(existing, filePath, content, languageId),
+              );
             }
           }
 
           const client = await this.initClient(serverDef, projectRoot, key);
           if (!client) return [];
 
-          return this.collectDiagnostics(client, filePath, content, languageId);
+          return this.withClientLease(client, () => this.collectDiagnostics(client, filePath, content, languageId));
         }),
       );
 
@@ -415,13 +462,22 @@ export class LSPManager {
   /**
    * Shutdown all managed LSP clients.
    */
-  async shutdownAll(): Promise<void> {
-    // Let queued initializations settle before taking the client snapshot so a
-    // client cannot be added after teardown and leave its process running.
-    await Promise.allSettled(Array.from(this.initPromises.values()));
-    await Promise.allSettled(Array.from(this.clients.values()).map(client => client.shutdown()));
-    this.clients.clear();
-    this.initPromises.clear();
-    this.fileLocks.clear();
+  shutdownAll(): Promise<void> {
+    if (this.shutdownPromise) return this.shutdownPromise;
+
+    this.shuttingDown = true;
+    this.wakeClientLeaseWaiters();
+    this.shutdownPromise = (async () => {
+      // Drain initialization before taking the final client snapshot. New
+      // acquisitions are rejected once shuttingDown is set.
+      await Promise.allSettled([...this.initPromises.values(), this.clientInitQueue]);
+      await Promise.allSettled(Array.from(this.clients.values()).map(client => client.shutdown()));
+      this.clients.clear();
+      this.initPromises.clear();
+      this.activeClientLeases.clear();
+      this.fileLocks.clear();
+    })();
+
+    return this.shutdownPromise;
   }
 }

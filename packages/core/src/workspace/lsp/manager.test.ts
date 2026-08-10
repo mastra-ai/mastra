@@ -57,11 +57,13 @@ vi.mock('./servers', () => ({
     // Simulate finding project roots at specific directories
     if (startDir.startsWith('/project') || startDir === '/project') return '/project';
     if (startDir.startsWith('/other-project') || startDir === '/other-project') return '/other-project';
+    if (startDir.startsWith('/third-project') || startDir === '/third-project') return '/third-project';
     return null;
   }),
   walkUpAsync: vi.fn().mockImplementation(async (startDir: string, _markers: string[]) => {
     if (startDir.startsWith('/project') || startDir === '/project') return '/project';
     if (startDir.startsWith('/other-project') || startDir === '/other-project') return '/other-project';
+    if (startDir.startsWith('/third-project') || startDir === '/third-project') return '/third-project';
     if (startDir.startsWith('/s3') || startDir === '/s3') return '/s3';
     return null;
   }),
@@ -134,12 +136,14 @@ describe('LSPManager', () => {
     (servers.walkUp as ReturnType<typeof vi.fn>).mockImplementation((startDir: string, _markers: string[]) => {
       if (startDir.startsWith('/project') || startDir === '/project') return '/project';
       if (startDir.startsWith('/other-project') || startDir === '/other-project') return '/other-project';
+      if (startDir.startsWith('/third-project') || startDir === '/third-project') return '/third-project';
       return null;
     });
     (servers.walkUpAsync as ReturnType<typeof vi.fn>).mockImplementation(
       async (startDir: string, _markers: string[]) => {
         if (startDir.startsWith('/project') || startDir === '/project') return '/project';
         if (startDir.startsWith('/other-project') || startDir === '/other-project') return '/other-project';
+        if (startDir.startsWith('/third-project') || startDir === '/third-project') return '/third-project';
         if (startDir.startsWith('/s3') || startDir === '/s3') return '/s3';
         return null;
       },
@@ -239,14 +243,13 @@ describe('LSPManager', () => {
   });
 
   describe('shutdownAll', () => {
-    it('cleans up all clients', async () => {
+    it('cleans up all clients and rejects later acquisitions', async () => {
       await manager.getClient('/project/src/app.ts');
 
       await manager.shutdownAll();
 
-      // After shutdown, getting a new client should create a fresh one
       const client = await manager.getClient('/project/src/app.ts');
-      expect(client).not.toBeNull();
+      expect(client).toBeNull();
     });
 
     it('waits for queued initialization before shutting clients down', async () => {
@@ -267,6 +270,17 @@ describe('LSPManager', () => {
 
       expect(mockShutdown).toHaveBeenCalledTimes(1);
     });
+
+    it('rejects acquisition started after shutdown begins', async () => {
+      const shutdownPromise = manager.shutdownAll();
+      const clientPromise = manager.getClient('/project/src/app.ts');
+
+      await expect(clientPromise).resolves.toBeNull();
+      await shutdownPromise;
+
+      expect(mockInitialize).not.toHaveBeenCalled();
+      expect(mockShutdown).not.toHaveBeenCalled();
+    });
   });
 
   describe('config', () => {
@@ -286,17 +300,45 @@ describe('LSPManager', () => {
     });
 
     it('shuts down the least recently used client when maxOpenClients is reached', async () => {
-      const restrictedManager = new LSPManager(mockProcessManager, '/project', { maxOpenClients: 1 });
+      const restrictedManager = new LSPManager(mockProcessManager, '/project', { maxOpenClients: 2 });
       const first = await restrictedManager.getClient('/project/src/app.ts');
-
       const second = await restrictedManager.getClient('/other-project/src/app.ts');
 
-      expect(second).not.toBe(first);
-      expect(mockShutdown).toHaveBeenCalledTimes(1);
+      expect(await restrictedManager.getClient('/project/src/other.ts')).toBe(first);
 
-      const reopened = await restrictedManager.getClient('/project/src/app.ts');
-      expect(reopened).not.toBe(first);
+      const third = await restrictedManager.getClient('/third-project/src/app.ts');
+      expect(third).not.toBe(first);
+      expect(third).not.toBe(second);
+      expect(mockShutdown).toHaveBeenCalledTimes(1);
+      expect(await restrictedManager.getClient('/project/src/app.ts')).toBe(first);
+
+      const reopenedSecond = await restrictedManager.getClient('/other-project/src/app.ts');
+      expect(reopenedSecond).not.toBe(second);
       expect(mockShutdown).toHaveBeenCalledTimes(2);
+      await restrictedManager.shutdownAll();
+    });
+
+    it('does not evict a client while diagnostics are in flight', async () => {
+      const restrictedManager = new LSPManager(mockProcessManager, '/project', { maxOpenClients: 1 });
+      let finishDiagnostics!: (diagnostics: any[]) => void;
+      mockWaitForDiagnostics.mockImplementationOnce(
+        () =>
+          new Promise<any[]>(resolve => {
+            finishDiagnostics = resolve;
+          }),
+      );
+
+      const diagnosticsPromise = restrictedManager.getDiagnostics('/project/src/app.ts', 'const x = 1');
+      await vi.waitFor(() => expect(mockWaitForDiagnostics).toHaveBeenCalledTimes(1));
+
+      const otherClientPromise = restrictedManager.getClient('/other-project/src/app.ts');
+      await Promise.resolve();
+      expect(mockShutdown).not.toHaveBeenCalled();
+
+      finishDiagnostics([]);
+      await expect(diagnosticsPromise).resolves.toEqual([]);
+      await expect(otherClientPromise).resolves.not.toBeNull();
+      expect(mockShutdown).toHaveBeenCalledTimes(1);
       await restrictedManager.shutdownAll();
     });
 

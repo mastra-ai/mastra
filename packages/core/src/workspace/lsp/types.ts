@@ -56,7 +56,7 @@ export interface LSPConfig {
   initTimeout?: number;
 
   /**
-   * Maximum number of language server processes retained by this workspace.
+   * Maximum number of language server clients retained by this workspace.
    * When the limit is reached, the least recently used client is shut down
    * before a client for another project root is started. Unlimited by default.
    */
