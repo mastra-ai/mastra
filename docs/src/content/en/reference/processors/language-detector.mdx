@@ -108,9 +108,8 @@ const processor = new LanguageDetector({
             name: 'translationQuality',
             type: "'speed' | 'quality' | 'balanced'",
             description:
-              "Translation quality preference: 'speed' prioritizes fast translation, 'quality' prioritizes accuracy, 'balanced' balances between speed and quality",
+              'Deprecated and has no effect. The value is accepted but never reaches the detection agent, so it changes neither the prompt nor any request setting. Use `providerOptions` to trade speed for accuracy.',
             isOptional: true,
-            default: "'quality'",
           },
           {
             name: 'providerOptions',
@@ -174,7 +173,6 @@ export const agent = new Agent({
         'Detect language and translate non-English content to English while preserving original intent',
       minTextLength: 10,
       includeDetectionDetails: true,
-      translationQuality: 'quality',
     }),
   ],
 })
