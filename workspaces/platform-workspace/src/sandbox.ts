@@ -579,7 +579,12 @@ export class PlatformSandbox extends MastraSandbox {
    * probe is fire-and-forget and outlives `start()` by design, so its
    * duration lands on the `platform-workspace probe ok` line instead.
    */
-  private _logStartComplete(sandboxId: string, startedAt: number, requestMs: number, mode: string): void {
+  private _logStartComplete(
+    sandboxId: string,
+    startedAt: number,
+    requestMs: number,
+    mode: 'provision' | 'reattach',
+  ): void {
     this.logger.info('platform-workspace start complete', {
       sandboxId,
       sessionId: this._client.sessionId,
