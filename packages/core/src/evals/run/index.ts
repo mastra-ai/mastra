@@ -138,7 +138,7 @@ type ScoredTurn = {
 };
 type ItemTurnResults = ScoredTurn[];
 
-type RunEvalsResult = {
+export type RunEvalsResult = {
   scores: Record<string, any>;
   summary: {
     totalItems: number;
