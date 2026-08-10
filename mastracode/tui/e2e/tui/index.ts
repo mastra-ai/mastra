@@ -136,6 +136,7 @@ import { stateCommandsScenario } from './state-commands.js';
 import { stateSignalBrowserProcessorScenario } from './state-signal-browser-processor.js';
 import { stateSignalReloadScenario } from './state-signal-reload.js';
 import { stateSignalRenderingScenario } from './state-signal-rendering.js';
+import { steerDrainFailureRecoveryScenario } from './steer-drain-failure-recovery.js';
 import { storageFallbackHistoryReloadScenario } from './storage-fallback-history-reload.js';
 import { storageSettingsScenario } from './storage-settings.js';
 import { storageStartupPgFallbackScenario } from './storage-startup-pg-fallback.js';
@@ -291,6 +292,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'state-signal-browser-processor': stateSignalBrowserProcessorScenario,
   'state-signal-reload': stateSignalReloadScenario,
   'state-signal-rendering': stateSignalRenderingScenario,
+  'steer-drain-failure-recovery': steerDrainFailureRecoveryScenario,
   'setup-completion-persistence': setupCompletionPersistenceScenario,
   'setup-custom-pack-completion': setupCustomPackCompletionScenario,
   'setup-login-refresh': setupLoginRefreshScenario,
