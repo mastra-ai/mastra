@@ -309,6 +309,26 @@ describe('MCPServer with protocolVersion 2026-07-28 (dual-era HTTP)', () => {
     }
   });
 
+  it('delivers opted-in tool logs to a legacy client through the stateless fallback', async () => {
+    const client = new Client({ name: 'legacy-log-client', version: '1.0.0' });
+    await client.connect(new StreamableHTTPClientTransport(baseUrl));
+    const logged = new Promise<unknown>(resolve => {
+      client.setNotificationHandler('notifications/message', async notification => {
+        resolve(notification.params.data);
+      });
+    });
+    try {
+      await client.setLoggingLevel('info');
+      const result = await client.callTool({ name: 'loggingTool', arguments: {} });
+      const toolResult = result as { isError?: boolean; content: Array<{ text?: string }> };
+      expect(toolResult.isError).toBeFalsy();
+      expect(toolResult.content[0]?.text).toBe('logged');
+      await expect(logged).resolves.toEqual({ message: 'log from loggingTool' });
+    } finally {
+      await client.close();
+    }
+  });
+
   it('rejects session and handler-lifetime options instead of ignoring them', async () => {
     const cases: Array<[string, StartHTTPTransportOptions]> = [
       ['sessionIdGenerator', { sessionIdGenerator: () => 'session-id' }],
