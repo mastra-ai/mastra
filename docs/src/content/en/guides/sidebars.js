@@ -265,7 +265,7 @@ const sidebars = {
           id: 'deployment/mastra-workers',
           label: 'Mastra Workers',
           customProps: {
-            tags: ['beta'],
+            tags: ['new'],
           },
         },
         {

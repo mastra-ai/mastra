@@ -7,6 +7,12 @@ packages:
 
 # TaskSignalProvider
 
+:::beta
+
+Breaking changes may occur without a major version bump until the API is stable.
+
+:::
+
 Bundles the built-in task tools (`task_write`, `task_update`, `task_complete`, `task_check`) and the `TaskStateProcessor` behind a single agent registration. Use it to add a structured, durable task list to an agent without wiring the tools and processor separately.
 
 Extends [`SignalProvider`](/reference/signals/signal-provider). The task list is stored in the thread-scoped `tasks` storage domain (the source of truth) and projected onto the agent state-signal lane by the processor, so it survives observational-memory truncation without invalidating the prompt cache.
