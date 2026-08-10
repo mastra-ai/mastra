@@ -43,16 +43,16 @@ export const WorkflowEntityHeader = ({ workflowId }: WorkflowEntityHeaderProps) 
             </Badge>
           )}
 
-          {workflow?.origin === 'stored' && (
+          {workflow?.origin === 'dynamic' && (
             <Tooltip>
               <TooltipTrigger asChild>
                 <div>
                   <Badge icon={<Database className="h-3 w-3" />} variant="info">
-                    Stored
+                    Dynamic
                   </Badge>
                 </div>
               </TooltipTrigger>
-              <TooltipContent>Registered via the stored-workflows API — lives in storage</TooltipContent>
+              <TooltipContent>Registered via the dynamic-workflows API — lives in storage</TooltipContent>
             </Tooltip>
           )}
         </div>

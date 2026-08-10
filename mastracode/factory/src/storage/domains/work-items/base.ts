@@ -1322,6 +1322,29 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     return row ? toBinding(row) : null;
   }
 
+  /**
+   * Recover the active binding for a thread when session state lost
+   * `factoryProjectId` (e.g. crash-resume recreated the session empty).
+   * Ambiguous matches across factory projects never authorize.
+   */
+  async findActiveRunBindingByThread(input: {
+    orgId: string;
+    threadId: string;
+    resourceId: string;
+    sessionId: string;
+  }): Promise<FactoryRunBindingRecord | null> {
+    const rows = await this.#db.findMany<GovernanceDbRow>('factory_run_bindings', {
+      org_id: input.orgId,
+      thread_id: input.threadId,
+      resource_id: input.resourceId,
+      session_id: input.sessionId,
+      status: 'active',
+    });
+    if (new Set(rows.map(row => row.factory_project_id)).size !== 1) return null;
+    const row = rows.sort((left, right) => right.created_at.getTime() - left.created_at.getTime())[0];
+    return row ? toBinding(row) : null;
+  }
+
   /** Resolve exact bound-session state for processor awareness; ambiguous cross-tenant matches return null. */
   async findRunBindingBySession(address: FactoryRunBindingSessionAddress): Promise<FactoryRunBindingRecord | null> {
     const rows = await this.#db.findMany<GovernanceDbRow>('factory_run_bindings', {

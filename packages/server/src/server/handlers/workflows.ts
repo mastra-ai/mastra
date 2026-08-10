@@ -1,7 +1,8 @@
 import type { Mastra } from '@mastra/core';
+import type { MastraServerCache } from '@mastra/core/cache';
 import type { RequestContext } from '@mastra/core/di';
 import type { Event } from '@mastra/core/events';
-import { createCachingTransformStream, createReplayStream } from '@mastra/core/stream';
+import { createReplayStream } from '@mastra/core/stream';
 import type {
   WorkflowInfo,
   ChunkType,
@@ -19,6 +20,7 @@ import {
   createWorkflowRunResponseSchema,
   listWorkflowRunsQuerySchema,
   listWorkflowsResponseSchema,
+  workflowRunCountsResponseSchema,
   restartBodySchema,
   timeTravelBodySchema,
   resumeBodySchema,
@@ -47,6 +49,61 @@ import { getEffectiveResourceId, validateRunOwnership } from './utils';
  * in the workflow's run map, and a finished run has already been dropped from it.
  */
 const TERMINAL_RUN_STATUSES: WorkflowRunStatus[] = ['success', 'failed', 'canceled', 'tripwire'];
+
+/**
+ * Runs whose chunks are already being written to the cache in this process,
+ * keyed by runId. A run has exactly one writer: without this, two concurrent
+ * requests for the same runId each cache every chunk and the replayed history
+ * comes back duplicated.
+ */
+const activeRunStreamCachers = new Set<string>();
+
+/**
+ * Cache a run's chunks for later replay and return the stream to hand the client.
+ *
+ * The cached history belongs to the run, not to whoever happens to be watching,
+ * so the caching side is driven by its own reader rather than by the client's
+ * consumption. If the client disconnects mid-run its branch is cancelled while
+ * this reader keeps draining, so `/observe` still replays a complete history —
+ * the failure that makes reconnection necessary is exactly the one the cache has
+ * to survive. Chunks buffer in the tee while a client lags, bounded by the run's
+ * own length.
+ */
+function cacheRunStream({
+  cache,
+  runId,
+  source,
+}: {
+  cache: MastraServerCache;
+  runId: string;
+  source: ReadableStream<ChunkType>;
+}): ReadableStream<ChunkType> {
+  if (activeRunStreamCachers.has(runId)) {
+    return source;
+  }
+
+  const [toCache, toClient] = source.tee();
+  activeRunStreamCachers.add(runId);
+
+  void (async () => {
+    const reader = toCache.getReader();
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        // Cache failures must not take down the run being streamed.
+        await cache.listPush(runId, value).catch(() => {});
+      }
+    } catch {
+      // The source errored; the client's branch surfaces it.
+    } finally {
+      reader.releaseLock();
+      activeRunStreamCachers.delete(runId);
+    }
+  })();
+
+  return toClient;
+}
 
 export interface WorkflowContext extends Context {
   workflowId?: string;
@@ -151,6 +208,109 @@ export const LIST_WORKFLOWS_ROUTE = createRoute({
       return _workflows;
     } catch (error) {
       return handleError(error, 'Error getting workflows');
+    }
+  }) as any,
+});
+
+type WorkflowRunCounts = { running: number; suspended: number };
+
+const RUN_COUNTS_CACHE_TTL_MS = 5_000;
+// Keyed by Mastra instance so multiple apps in one process never share counts.
+const runCountsCache = new WeakMap<object, { at: number; value: Record<string, WorkflowRunCounts> }>();
+let runCountsNow: () => number = () => Date.now();
+
+/** Test seam — lets TTL expiry be tested without wall-clock waits. */
+export function __setWorkflowRunCountsNow(now?: () => number) {
+  runCountsNow = now ?? (() => Date.now());
+}
+
+export const LIST_WORKFLOW_RUN_COUNTS_ROUTE = createRoute({
+  method: 'GET',
+  path: '/workflows/run-counts',
+  responseType: 'json',
+  responseSchema: workflowRunCountsResponseSchema,
+  summary: 'List workflow run counts',
+  description:
+    'Returns per-workflow counts of currently running and suspended (awaiting resume) runs, keyed by the workflow registry key used in the Mastra config',
+  tags: ['Workflows'],
+  requiresAuth: true,
+  handler: (async ({ mastra, requestContext }: any) => {
+    try {
+      const fgaProvider = mastra.getServer?.()?.fga;
+      const user = requestContext?.get('user');
+      // FGA with no user can never see anything — answer before touching storage.
+      if (fgaProvider && !user) {
+        return {};
+      }
+
+      const workflows = mastra.listWorkflows({ serialized: false });
+
+      const counts: Record<string, WorkflowRunCounts> = {};
+      const workflowIdToRegistryKey = new Map<string, string>();
+      for (const [registryKey, workflow] of Object.entries(workflows)) {
+        counts[registryKey] = { running: 0, suspended: 0 };
+        workflowIdToRegistryKey.set((workflow as any).id, registryKey);
+      }
+
+      // Runs are scoped to the caller like the runs-listing endpoint: the
+      // reserved request-context resource id takes precedence for security.
+      const effectiveResourceId = getEffectiveResourceId(requestContext, undefined);
+
+      // The shared cache holds the unscoped, unfiltered map — usable only when
+      // neither per-user FGA filtering nor a resource scope applies.
+      const cacheable = !fgaProvider && !effectiveResourceId;
+      if (cacheable) {
+        const cached = runCountsCache.get(mastra);
+        if (cached && runCountsNow() - cached.at < RUN_COUNTS_CACHE_TTL_MS) {
+          return cached.value;
+        }
+      }
+
+      const storage = mastra.getStorage();
+      const workflowsStore = storage ? await storage.getStore('workflows') : undefined;
+      if (workflowsStore) {
+        // Cross-workflow, engine-agnostic: both execution engines persist run
+        // status into the same store. Deliberately not listActiveWorkflowRuns,
+        // which means running+waiting and covers the default engine only.
+        const [running, suspended] = await Promise.all([
+          workflowsStore.listWorkflowRuns({ status: 'running', resourceId: effectiveResourceId }),
+          workflowsStore.listWorkflowRuns({ status: 'suspended', resourceId: effectiveResourceId }),
+        ]);
+        for (const run of running.runs) {
+          const registryKey = workflowIdToRegistryKey.get(run.workflowName);
+          const entry = registryKey ? counts[registryKey] : undefined;
+          if (entry) entry.running++;
+        }
+        for (const run of suspended.runs) {
+          const registryKey = workflowIdToRegistryKey.get(run.workflowName);
+          const entry = registryKey ? counts[registryKey] : undefined;
+          if (entry) entry.suspended++;
+        }
+      }
+
+      if (fgaProvider) {
+        const workflowList = Object.keys(counts).map(id => ({ id }));
+        const accessible = await fgaProvider.filterAccessible(
+          user,
+          workflowList,
+          'workflow',
+          MastraFGAPermissions.WORKFLOWS_READ,
+        );
+        const accessibleSet = new Set(accessible.map((w: any) => w.id));
+        for (const id of Object.keys(counts)) {
+          if (!accessibleSet.has(id)) {
+            delete counts[id];
+          }
+        }
+        return counts;
+      }
+
+      if (cacheable) {
+        runCountsCache.set(mastra, { at: runCountsNow(), value: counts });
+      }
+      return counts;
+    } catch (error) {
+      return handleError(error, 'Error getting workflow run counts');
     }
   }) as any,
 });
@@ -434,11 +594,7 @@ export const STREAM_WORKFLOW_ROUTE = createRoute({
       const result = run.stream({ ...params, requestContext });
 
       if (serverCache) {
-        const { transform } = createCachingTransformStream<ChunkType>({
-          cache: serverCache,
-          cacheKey: runId,
-        });
-        return result.fullStream.pipeThrough(transform);
+        return cacheRunStream({ cache: serverCache, runId, source: result.fullStream });
       }
 
       return result.fullStream;
@@ -492,11 +648,7 @@ export const RESUME_STREAM_WORKFLOW_ROUTE = createRoute({
       const resumeResult = _run.resumeStream({ ...params, requestContext });
 
       if (serverCache) {
-        const { transform } = createCachingTransformStream<ChunkType>({
-          cache: serverCache,
-          cacheKey: runId,
-        });
-        return resumeResult.fullStream.pipeThrough(transform);
+        return cacheRunStream({ cache: serverCache, runId, source: resumeResult.fullStream });
       }
 
       return resumeResult.fullStream;
@@ -1124,11 +1276,7 @@ export const TIME_TRAVEL_STREAM_WORKFLOW_ROUTE = createRoute({
       const result = run.timeTravelStream({ ...params, requestContext });
 
       if (serverCache) {
-        const { transform } = createCachingTransformStream<ChunkType>({
-          cache: serverCache,
-          cacheKey: runId,
-        });
-        return result.fullStream.pipeThrough(transform);
+        return cacheRunStream({ cache: serverCache, runId, source: result.fullStream });
       }
 
       return result.fullStream;

@@ -179,6 +179,7 @@ The route returns:
 | Method | Path | Description |
 | - | - | - |
 | `GET` | `/api/workflows` | List all workflows |
+| `GET` | `/api/workflows/run-counts` | Get per-workflow counts of running and suspended runs |
 | `GET` | `/api/workflows/:workflowId` | Get workflow by ID |
 | `POST` | `/api/workflows/:workflowId/create-run` | Create a new workflow run |
 | `POST` | `/api/workflows/:workflowId/start-async` | Start workflow and await result |
@@ -188,18 +189,31 @@ The route returns:
 | `GET` | `/api/workflows/:workflowId/runs` | List workflow runs |
 | `GET` | `/api/workflows/:workflowId/runs/:runId` | Get specific run |
 
-### Stored workflows
+### Run counts response
 
-Stored workflow definitions (beta) are workflows expressed as JSON, persisted through the `workflowDefinitions` storage domain, and live-registered on the running instance. See [Stored workflows](/docs/workflows/stored-workflows).
+The `/api/workflows/run-counts` endpoint returns counts of `running` and [`suspended`](/docs/workflows/suspend-and-resume) runs for every registered workflow. The record is keyed by the workflow's registry key from the Mastra config, and the server may cache the response for a few seconds:
+
+```typescript prettier:false
+{
+  [workflowRegistryKey: string]: {
+    running: number;
+    suspended: number;
+  };
+}
+```
+
+### Dynamic workflows
+
+Dynamic workflow definitions (beta) are workflows expressed as JSON, persisted through the `workflowDefinitions` storage domain, and live-registered on the running instance. See [Dynamic workflows](/docs/workflows/dynamic-workflows).
 
 | Method | Path | Description |
 | - | - | - |
-| `GET` | `/api/stored/workflows` | List stored workflow definitions, filterable by `status` and `authorId` |
-| `GET` | `/api/stored/workflows/:storedWorkflowId` | Get a stored workflow definition by ID |
+| `GET` | `/api/stored/workflows` | List dynamic workflow definitions, filterable by `status` and `authorId` |
+| `GET` | `/api/stored/workflows/:dynamicWorkflowId` | Get a dynamic workflow definition by ID |
 | `POST` | `/api/stored/workflows` | Upsert a definition (plus optional helper `dependencies`) and live-register it |
-| `DELETE` | `/api/stored/workflows/:storedWorkflowId` | Delete a stored definition and unregister the live workflow |
+| `DELETE` | `/api/stored/workflows/:dynamicWorkflowId` | Delete a dynamic workflow definition and unregister the live workflow |
 
-On authenticated servers, the read routes require the `stored-workflows:read` permission and the write routes require `stored-workflows:write`. Registered stored workflows are executed through the ordinary `/api/workflows/:workflowId` routes above.
+On authenticated servers, the read routes require the `stored-workflows:read` permission and the write routes require `stored-workflows:write`. Registered dynamic workflows are executed through the ordinary `/api/workflows/:workflowId` routes above.
 
 ### Create run request body
 

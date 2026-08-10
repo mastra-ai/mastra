@@ -107,8 +107,8 @@ const sidebars = {
             },
             {
               type: 'doc',
-              id: 'workflows/stored-workflows',
-              label: 'Stored Workflows',
+              id: 'workflows/dynamic-workflows',
+              label: 'Dynamic Workflows',
               customProps: {
                 tags: ['beta'],
               },

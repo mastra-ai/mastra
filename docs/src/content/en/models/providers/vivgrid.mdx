@@ -58,16 +58,28 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     outputCost: 0.42,
   },
   {
-    model: 'vivgrid/deepseek-v4-flash',
-    imageInput: false,
-    audioInput: false,
-    videoInput: false,
-    toolUsage: true,
-    reasoning: true,
-    contextWindow: 1000000,
-    maxOutput: 384000,
-    inputCost: 0.15,
-    outputCost: 0.3,
+    "model": "vivgrid/deepseek-v4-flash",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 384000,
+    "inputCost": 0.15,
+    "outputCost": 0.3
+  },
+  {
+    "model": "vivgrid/deepseek-v4-pro",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 384000,
+    "inputCost": 0.435,
+    "outputCost": 0.87
   },
   {
     model: 'vivgrid/deepseek-v4-pro',
@@ -238,41 +250,29 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     outputCost: 6,
   },
   {
-    model: 'vivgrid/gpt-5.6-sol',
-    imageInput: true,
-    audioInput: false,
-    videoInput: false,
-    toolUsage: true,
-    reasoning: true,
-    contextWindow: 1050000,
-    maxOutput: 128000,
-    inputCost: 5,
-    outputCost: 30,
+    "model": "vivgrid/gpt-5.6-terra",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1050000,
+    "maxOutput": 128000,
+    "inputCost": 2.5,
+    "outputCost": 15
   },
   {
-    model: 'vivgrid/gpt-5.6-terra',
-    imageInput: true,
-    audioInput: false,
-    videoInput: false,
-    toolUsage: true,
-    reasoning: true,
-    contextWindow: 1050000,
-    maxOutput: 128000,
-    inputCost: 2.5,
-    outputCost: 15,
-  },
-  {
-    model: 'vivgrid/kimi-k3',
-    imageInput: true,
-    audioInput: false,
-    videoInput: false,
-    toolUsage: true,
-    reasoning: true,
-    contextWindow: 1000000,
-    maxOutput: 131072,
-    inputCost: 3,
-    outputCost: 15,
-  },
+    "model": "vivgrid/kimi-k3",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 131072,
+    "inputCost": 3,
+    "outputCost": 15
+  }
 ]}
 />
 
@@ -302,10 +302,12 @@ const agent = new Agent({
   id: 'dynamic-agent',
   name: 'Dynamic Agent',
   model: ({ requestContext }) => {
-    const useAdvanced = requestContext.task === 'complex'
-    return useAdvanced ? 'vivgrid/kimi-k3' : 'vivgrid/deepseek-v3.2'
-  },
-})
+    const useAdvanced = requestContext.task === "complex";
+    return useAdvanced
+      ? "vivgrid/kimi-k3"
+      : "vivgrid/deepseek-v3.2";
+  }
+});
 ```
 
 ## Direct provider installation

@@ -19,11 +19,11 @@ ZELDOC_API_KEY=your-api-key
 import { Agent } from '@mastra/core/agent'
 
 const agent = new Agent({
-  id: 'my-agent',
-  name: 'My Agent',
-  instructions: 'You are a helpful assistant',
-  model: 'zeldoc/zdev',
-})
+  id: "my-agent",
+  name: "My Agent",
+  instructions: "You are a helpful assistant",
+  model: "zeldoc/zdev"
+});
 
 // Generate a response
 const response = await agent.generate('Hello!')
@@ -46,17 +46,17 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 <ProviderModelsTable
   models={[
   {
-    model: 'zeldoc/zdev',
-    imageInput: true,
-    audioInput: false,
-    videoInput: false,
-    toolUsage: true,
-    reasoning: true,
-    contextWindow: 1000000,
-    maxOutput: 131072,
-    inputCost: null,
-    outputCost: null,
-  },
+    "model": "zeldoc/zdev",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 131072,
+    "inputCost": null,
+    "outputCost": null
+  }
 ]}
 />
 
@@ -69,8 +69,8 @@ const agent = new Agent({
   id: 'custom-agent',
   name: 'custom-agent',
   model: {
-    url: 'https://api.zeldoc.ai/v1',
-    id: 'zeldoc/zdev',
+    url: "https://api.zeldoc.ai/v1",
+    id: "zeldoc/zdev",
     apiKey: process.env.ZELDOC_API_KEY,
     headers: {
       'X-Custom-Header': 'value',
@@ -86,8 +86,10 @@ const agent = new Agent({
   id: 'dynamic-agent',
   name: 'Dynamic Agent',
   model: ({ requestContext }) => {
-    const useAdvanced = requestContext.task === 'complex'
-    return useAdvanced ? 'zeldoc/zdev' : 'zeldoc/zdev'
-  },
-})
+    const useAdvanced = requestContext.task === "complex";
+    return useAdvanced
+      ? "zeldoc/zdev"
+      : "zeldoc/zdev";
+  }
+});
 ```

@@ -1,9 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+import type { SignalProvider } from '@mastra/core/signals';
 import { execa } from 'execa';
 
-import type { MastraCodePluginConfigValue } from '../plugin.js';
+import type { MastraCodePluginConfigValue, MastraCodePluginRuntime } from '../plugin.js';
 import { getEntryPackageRoot, installPluginDependenciesForEntry } from './dependencies.js';
 import { discoverLocalPlugins, installGithubPlugin, installLocalPlugin, NON_INTERACTIVE_GIT_ENV } from './install.js';
 import type { InstallPluginOptions } from './install.js';
@@ -12,7 +13,7 @@ import { ensureMastraCodePackageLink } from './package-link.js';
 import { getPluginScopePaths } from './paths.js';
 import type { PluginPathOptions } from './paths.js';
 import { loadPluginRegistry, removePluginRecord, savePluginRegistry, setPluginRecord } from './registry.js';
-import type { LoadedPlugin, PluginScope } from './types.js';
+import type { LoadedPlugin, PluginContribution, PluginProcessorEntries, PluginScope } from './types.js';
 
 const GITHUB_PLUGIN_POLL_INTERVAL_MS = 60_000;
 
@@ -27,6 +28,11 @@ function getEntryVersion(entryPath: string): string {
 
 type PluginManagerOptions = PluginPathOptions & {
   githubCliPath?: string;
+  /**
+   * Lazy accessors for Mastra Code's runtime, handed to plugin field resolvers on
+   * every load and reload.
+   */
+  runtime?: MastraCodePluginRuntime;
 };
 
 export class PluginManager {
@@ -36,13 +42,29 @@ export class PluginManager {
   private readonly toolRenderConfigs = new Map<string, NonNullable<LoadedPlugin['renderConfigs']>[string]>();
   private readonly watchedLocalEntries = new Set<string>();
   private readonly localEntryVersions = new Map<string, string>();
+  /** Last known git HEAD per GitHub checkout, kept current by the poller. */
+  private readonly githubCheckoutHeads = new Map<string, string>();
   private githubPollTimer: ReturnType<typeof setInterval> | undefined;
   private githubPollInFlight: Promise<boolean> | undefined;
   private reloadInFlight: Promise<LoadedPlugin[]> | undefined;
   private readonly reloadListeners = new Set<(plugins: LoadedPlugin[]) => void | Promise<void>>();
   private readonly githubUpdateListeners = new Set<(pluginNames: string[]) => void | Promise<void>>();
+  private runtime: MastraCodePluginRuntime | undefined;
 
-  constructor(private readonly options: PluginManagerOptions) {}
+  constructor(private readonly options: PluginManagerOptions) {
+    this.runtime = options.runtime;
+  }
+
+  /**
+   * Publish (or replace) the runtime accessors handed to plugin field resolvers.
+   * Takes effect on the next load or reload. `createMastraCode` calls this for
+   * every manager it uses — including an injected one — so a manager constructed
+   * without a runtime still exposes `getController`/`getActiveSession` to plugins.
+   * A manager shared across controllers sees the most recent controller's accessors.
+   */
+  setRuntime(runtime: MastraCodePluginRuntime): void {
+    this.runtime = runtime;
+  }
 
   onReload(listener: (plugins: LoadedPlugin[]) => void | Promise<void>): () => void {
     this.reloadListeners.add(listener);
@@ -59,7 +81,8 @@ export class PluginManager {
     if (this.reloadInFlight) return this.reloadInFlight;
 
     this.reloadInFlight = (async () => {
-      this.loadedPlugins = await loadPlugins(this.options);
+      this.loadedPlugins = await loadPlugins({ ...this.options, runtime: this.runtime });
+      await this.stampLoadedPlugins(this.loadedPlugins);
       this.updateLocalEntryWatchers(this.loadedPlugins);
       this.updateGithubPoller(this.loadedPlugins);
       this.updatePluginRenderConfigs(this.loadedPlugins);
@@ -106,8 +129,68 @@ export class PluginManager {
     );
   }
 
+  /**
+   * Processors contributed by active plugins, tagged with the plugin that owns
+   * each one. Reads already-resolved state — no filesystem access — because the
+   * agent's processor lanes call this before every request.
+   */
+  getPluginProcessors(): PluginProcessorEntries {
+    return {
+      input: this.collectActive(plugin => plugin.processors?.input ?? []),
+      output: this.collectActive(plugin => plugin.processors?.output ?? []),
+    };
+  }
+
+  /** Signal providers contributed by active plugins, tagged with their owning plugin. */
+  getPluginSignalProviders(): PluginContribution<SignalProvider<string>>[] {
+    return this.collectActive(plugin => plugin.signalProviders ?? []);
+  }
+
+  private collectActive<TValue>(select: (plugin: LoadedPlugin) => TValue[]): PluginContribution<TValue>[] {
+    return this.loadedPlugins.flatMap(plugin =>
+      plugin.status === 'active'
+        ? select(plugin).map(value => ({ pluginId: plugin.id, versionStamp: plugin.versionStamp ?? '', value }))
+        : [],
+    );
+  }
+
   private async notifyReloadListeners(plugins: LoadedPlugin[]): Promise<void> {
     await Promise.all([...this.reloadListeners].map(listener => Promise.resolve(listener(plugins))));
+  }
+
+  /**
+   * Stamps each plugin with a value that changes when its contributions should
+   * be rebuilt. Runs on every reload, so it stays off the network: GitHub heads
+   * come from the cache the poller keeps current and cost one `git rev-parse`
+   * per checkout the first time it is seen.
+   */
+  private async stampLoadedPlugins(plugins: LoadedPlugin[]): Promise<void> {
+    for (const plugin of plugins) {
+      plugin.versionStamp = [
+        plugin.status,
+        await this.readSourceStamp(plugin),
+        JSON.stringify(plugin.configValues ?? {}),
+      ].join('|');
+    }
+  }
+
+  private async readSourceStamp(plugin: LoadedPlugin): Promise<string> {
+    try {
+      if (plugin.source === 'github') {
+        const checkoutPath = this.resolvePluginSourcePath(plugin);
+        let head = this.githubCheckoutHeads.get(checkoutPath);
+        if (head === undefined) {
+          head = await this.readGitHead(checkoutPath);
+          this.githubCheckoutHeads.set(checkoutPath, head);
+        }
+        return head;
+      }
+      return getEntryVersion(resolvePluginEntryPath(plugin, this.options));
+    } catch {
+      // A plugin that failed to load has no readable source. Its stamp is then
+      // status + config, which is enough to notice when it starts working.
+      return '';
+    }
   }
 
   private updatePluginRenderConfigs(plugins: LoadedPlugin[]): void {
@@ -243,6 +326,9 @@ export class PluginManager {
       const before = await this.readGitHead(checkoutPath);
       const checkoutChanged = await this.refreshGithubCheckout(plugin, checkoutPath, before);
       const after = await this.readGitHead(checkoutPath);
+      // Feed the cache before reloading: the stamp is computed during reload and
+      // has to see the new head, or a real update would look unchanged.
+      this.githubCheckoutHeads.set(checkoutPath, after);
       if (checkoutChanged || before !== after) changedCheckouts.add(checkoutPath);
     }
 
@@ -390,7 +476,9 @@ export class PluginManager {
 
   private resolvePluginSourcePath(plugin: LoadedPlugin): string {
     const paths = getPluginScopePaths(plugin.scope, this.options);
-    return path.isAbsolute(plugin.path) ? plugin.path : path.join(paths.root, plugin.path);
+    // Normalized so cache keys derived here match the `path.resolve`-normalized
+    // key that `uninstall` deletes with.
+    return path.resolve(path.isAbsolute(plugin.path) ? plugin.path : path.join(paths.root, plugin.path));
   }
 
   private async readGitHead(cwd: string): Promise<string> {
@@ -418,6 +506,10 @@ export class PluginManager {
     options: Pick<InstallPluginOptions, 'entry' | 'ref' | 'onOutput' | 'signal'> = {},
   ): Promise<string> {
     const id = await installGithubPlugin(url, scope, { ...this.options, ...options });
+    // Installing over an existing checkout replaces it at the same path, so the
+    // cached head would make a genuinely different commit stamp as unchanged and
+    // leave the previous signal providers running.
+    this.githubCheckoutHeads.clear();
     await this.reload();
     return id;
   }
@@ -473,6 +565,7 @@ export class PluginManager {
       if (isInsideDirectory(checkoutPath, githubSourcesPath)) {
         fs.rmSync(checkoutPath, { recursive: true, force: true });
       }
+      this.githubCheckoutHeads.delete(checkoutPath);
     }
     await this.reload();
   }

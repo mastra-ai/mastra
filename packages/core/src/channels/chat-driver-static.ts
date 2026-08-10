@@ -33,6 +33,11 @@ export interface StaticDriverArgs {
   takePendingApproval: (toolCallId: string) => PendingApprovalRecord | undefined;
   /** Optional adapter-supplied formatter for `error` chunks; defaults to a plain prefix. */
   formatError?: (error: Error) => unknown;
+  /**
+   * Dialect for the final reply text. `'markdown'` (the absent-value default)
+   * posts the buffered reply as `{ markdown }`; `'plain'` posts the bare string.
+   */
+  textFormat?: 'markdown' | 'plain';
 }
 
 /**
@@ -57,6 +62,7 @@ export async function runStaticDriver({
   getPendingApproval,
   takePendingApproval,
   formatError,
+  textFormat,
 }: StaticDriverArgs): Promise<void> {
   const platform = adapter.name;
 
@@ -76,6 +82,13 @@ export async function runStaticDriver({
         // post an empty message into the chat.
         if (result.message == null) return null;
         if (typeof result.message === 'string' && result.message.length === 0) return null;
+        if (
+          typeof result.message === 'object' &&
+          'markdown' in result.message &&
+          result.message.markdown.trim().length === 0
+        ) {
+          return null;
+        }
         return result.message;
       }
       if (result.kind === 'stream') return chunkToFallbackMessage(result.chunk);
@@ -100,7 +113,7 @@ export async function runStaticDriver({
     const cleaned = textBuffer.replace(/[\u200B-\u200D\uFEFF]/g, '').trim();
     if (cleaned) {
       try {
-        await chatThread.post(cleaned);
+        await chatThread.post(textFormat === 'plain' ? cleaned : { markdown: cleaned });
       } catch (e) {
         logger?.debug('[CHANNEL] Failed to post buffered text', { error: e });
       }

@@ -9,11 +9,13 @@ import { autocompleteWrappingNavigationScenario } from './autocomplete-wrapping-
 import { automatedChatScenario } from './automated-chat.js';
 import { branchContextLongNameScenario } from './branch-context-long-name.js';
 import { browserActivePendingStatusScenario } from './browser-active-pending-status.js';
+import { browserModelPickerScenario } from './browser-model-picker.js';
 import { browserProfileProviderMismatchScenario } from './browser-profile-provider-mismatch.js';
 import { browserSettingsPersistenceScenario } from './browser-settings-persistence.js';
 import { browserStartupRestoreScenario } from './browser-startup-restore.js';
 import { browserToggleAttachScenario } from './browser-toggle-attach.js';
 import { browserToolUnavailableScenario } from './browser-tool-unavailable.js';
+import { browserViewportScenario } from './browser-viewport.js';
 import { browserWizardBrowserbaseScenario } from './browser-wizard-browserbase.js';
 import { browserWizardExportScenario } from './browser-wizard-export.js';
 import { browserbaseStartupRestoreScenario } from './browserbase-startup-restore.js';
@@ -97,6 +99,7 @@ import {
   pluginsGithubInstallPnpm10Scenario,
   pluginsGithubInstallPnpm11Scenario,
   pluginsGithubPollUpdateScenario,
+  pluginsGithubProviderSwapScenario,
   pluginsLocalHotReloadScenario,
   pluginsLocalToolScenario,
   pluginsScaffoldInstallToolScenario,
@@ -133,6 +136,7 @@ import { stateCommandsScenario } from './state-commands.js';
 import { stateSignalBrowserProcessorScenario } from './state-signal-browser-processor.js';
 import { stateSignalReloadScenario } from './state-signal-reload.js';
 import { stateSignalRenderingScenario } from './state-signal-rendering.js';
+import { steerDrainFailureRecoveryScenario } from './steer-drain-failure-recovery.js';
 import { storageFallbackHistoryReloadScenario } from './storage-fallback-history-reload.js';
 import { storageSettingsScenario } from './storage-settings.js';
 import { storageStartupPgFallbackScenario } from './storage-startup-pg-fallback.js';
@@ -179,6 +183,8 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'automated-chat': automatedChatScenario,
   'browser-active-pending-status': browserActivePendingStatusScenario,
   'browser-profile-provider-mismatch': browserProfileProviderMismatchScenario,
+  'browser-model-picker': browserModelPickerScenario,
+  'browser-viewport': browserViewportScenario,
   'browser-settings-persistence': browserSettingsPersistenceScenario,
   'browser-startup-restore': browserStartupRestoreScenario,
   'browser-tool-unavailable': browserToolUnavailableScenario,
@@ -265,6 +271,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'plugins-github-install-missing-corepack': pluginsGithubInstallMissingCorepackScenario,
   'plugins-github-install-invalid-package-manager': pluginsGithubInstallInvalidPackageManagerScenario,
   'plugins-github-poll-update': pluginsGithubPollUpdateScenario,
+  'plugins-github-provider-swap': pluginsGithubProviderSwapScenario,
   'plugins-blocked-config': pluginsBlockedConfigScenario,
   'plugins-scaffold-install-tool': pluginsScaffoldInstallToolScenario,
   'plugins-streaming-tool-output': pluginsStreamingToolOutputScenario,
@@ -285,6 +292,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'state-signal-browser-processor': stateSignalBrowserProcessorScenario,
   'state-signal-reload': stateSignalReloadScenario,
   'state-signal-rendering': stateSignalRenderingScenario,
+  'steer-drain-failure-recovery': steerDrainFailureRecoveryScenario,
   'setup-completion-persistence': setupCompletionPersistenceScenario,
   'setup-custom-pack-completion': setupCustomPackCompletionScenario,
   'setup-login-refresh': setupLoginRefreshScenario,

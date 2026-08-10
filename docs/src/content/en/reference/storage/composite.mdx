@@ -287,6 +287,64 @@ const memoryStore = await storage.getStore('memory')
 const thread = await memoryStore?.getThreadById({ threadId: '...' })
 ```
 
+## Closing connections
+
+`close()` releases the connections of the stores a composite was built from: the `default` and `editor` stores, plus any domain that owns its own client. Each store is closed once, even when it backs several domains. When passed to the Mastra class, `close()` is called by `shutdown()`:
+
+```typescript title="src/mastra/index.ts"
+import { MastraCompositeStore } from '@mastra/core/storage'
+import { PostgresStore } from '@mastra/pg'
+import { Mastra } from '@mastra/core'
+
+const pgStore = new PostgresStore({
+  id: 'pg-storage',
+  connectionString: process.env.DATABASE_URL,
+})
+
+export const mastra = new Mastra({
+  storage: new MastraCompositeStore({ id: 'composite', default: pgStore }),
+})
+
+process.on('SIGTERM', async () => {
+  // Releases the Postgres pool, so the process can exit
+  await mastra.shutdown()
+})
+```
+
+A store you construct only to supply a domain isn't reachable through the composite. Keep a reference to it and close it yourself:
+
+```typescript title="src/mastra/index.ts"
+import { MastraCompositeStore } from '@mastra/core/storage'
+import { ClickhouseStore } from '@mastra/clickhouse'
+import { PostgresStore } from '@mastra/pg'
+import { Mastra } from '@mastra/core'
+
+const pgStore = new PostgresStore({
+  id: 'pg-storage',
+  connectionString: process.env.DATABASE_URL,
+})
+
+const clickhouseStore = new ClickhouseStore({
+  id: 'clickhouse-storage',
+  url: process.env.CLICKHOUSE_URL,
+  username: process.env.CLICKHOUSE_USERNAME,
+  password: process.env.CLICKHOUSE_PASSWORD,
+})
+
+export const mastra = new Mastra({
+  storage: new MastraCompositeStore({
+    id: 'composite',
+    default: pgStore,
+    domains: { observability: clickhouseStore.stores?.observability },
+  }),
+})
+
+process.on('SIGTERM', async () => {
+  await mastra.shutdown()
+  await clickhouseStore.close()
+})
+```
+
 ## Use cases
 
 ### Separate databases for different workloads

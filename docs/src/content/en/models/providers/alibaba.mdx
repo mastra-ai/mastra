@@ -19,11 +19,11 @@ DASHSCOPE_API_KEY=your-api-key
 import { Agent } from '@mastra/core/agent'
 
 const agent = new Agent({
-  id: 'my-agent',
-  name: 'My Agent',
-  instructions: 'You are a helpful assistant',
-  model: 'alibaba/deepseek-v4-flash-0731',
-})
+  id: "my-agent",
+  name: "My Agent",
+  instructions: "You are a helpful assistant",
+  model: "alibaba/deepseek-v4-flash-0731"
+});
 
 // Generate a response
 const response = await agent.generate('Hello!')
@@ -46,16 +46,40 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 <ProviderModelsTable
   models={[
   {
-    model: 'alibaba/deepseek-v4-flash-0731',
-    imageInput: false,
-    audioInput: false,
-    videoInput: false,
-    toolUsage: true,
-    reasoning: true,
-    contextWindow: 1000000,
-    maxOutput: 384000,
-    inputCost: 0.2,
-    outputCost: 0.4,
+    "model": "alibaba/deepseek-v4-flash-0731",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 384000,
+    "inputCost": 0.2,
+    "outputCost": 0.4
+  },
+  {
+    "model": "alibaba/glm-5.2",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 131072,
+    "inputCost": 1.4,
+    "outputCost": 4.4
+  },
+  {
+    "model": "alibaba/qvq-max",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 8192,
+    "inputCost": 1.2,
+    "outputCost": 4.8
   },
   {
     model: 'alibaba/glm-5.2',
@@ -705,8 +729,8 @@ const agent = new Agent({
   id: 'custom-agent',
   name: 'custom-agent',
   model: {
-    url: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1',
-    id: 'alibaba/deepseek-v4-flash-0731',
+    url: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
+    id: "alibaba/deepseek-v4-flash-0731",
     apiKey: process.env.DASHSCOPE_API_KEY,
     headers: {
       'X-Custom-Header': 'value',
@@ -722,8 +746,10 @@ const agent = new Agent({
   id: 'dynamic-agent',
   name: 'Dynamic Agent',
   model: ({ requestContext }) => {
-    const useAdvanced = requestContext.task === 'complex'
-    return useAdvanced ? 'alibaba/qwq-plus' : 'alibaba/deepseek-v4-flash-0731'
-  },
-})
+    const useAdvanced = requestContext.task === "complex";
+    return useAdvanced
+      ? "alibaba/qwq-plus"
+      : "alibaba/deepseek-v4-flash-0731";
+  }
+});
 ```

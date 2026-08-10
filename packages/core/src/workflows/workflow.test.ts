@@ -1218,6 +1218,42 @@ describe('Workflow (Default Engine Specifics)', () => {
       expect(nestedWorkflowStoreResult?.status).toBe('success');
     });
   });
+
+  describe('streamLegacy cleanup error safety', () => {
+    it('completes cleanup when an observer stream is not consumed', async () => {
+      const step = createStep({
+        id: 'test-step',
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({ value: z.string() }),
+        execute: async ({ inputData }) => inputData,
+      });
+
+      const workflow = createWorkflow({
+        id: 'stream-legacy-cleanup-error-wf',
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({ value: z.string() }),
+        steps: [step],
+      })
+        .then(step)
+        .commit();
+
+      const run = await workflow.createRun();
+      const { stream, getWorkflowState } = run.streamLegacy({ inputData: { value: 'test' } });
+      const observer = run.observeStreamLegacy();
+
+      for await (const _event of stream) {
+        // Discard events
+      }
+
+      const result = await getWorkflowState();
+      expect(result.status).toBe('success');
+      await expect((run as any).closeStreamAction()).resolves.toBeUndefined();
+
+      for await (const _event of observer.stream) {
+        // Consume events queued before cleanup
+      }
+    });
+  });
 });
 
 describe('createRun storage existence read (issue #19015)', () => {

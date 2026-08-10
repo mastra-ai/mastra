@@ -212,7 +212,7 @@ const studioSections: NavSection[] = [
     title: 'Observability',
     links: [
       { name: 'Metrics', url: '/metrics', icon: <MetricsIcon /> },
-      { name: 'Traces', url: '/observability', icon: <TraceIcon /> },
+      { name: 'Traces', url: '/traces', icon: <TraceIcon /> },
       { name: 'Logs', url: '/logs', icon: <LogsIcon /> },
     ],
   },
@@ -220,7 +220,7 @@ const studioSections: NavSection[] = [
 
 const StudioSidebarBody = () => {
   const { state, isMobile } = useMainSidebar();
-  const activePath = '/observability/traces/live';
+  const activePath = '/traces/live';
 
   return (
     <MainSidebar>

@@ -1,4 +1,4 @@
-import type { AgentCard, JSONRPCMessage, Message, Task } from '@a2a-js/sdk';
+import type { AgentCard, JSONRPCMessage, Message, Task } from '@a2a-js/sdk-v0_3';
 import type { FullOutput, MastraModelOutput } from '../stream/base/output';
 
 /**

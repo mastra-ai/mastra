@@ -281,6 +281,9 @@ export class InngestWorkflow<
       {
         id: `workflow.${this.id}.cron`,
         retries: 0,
+        // Not scoped by `match` like the event-triggered function above: a cron
+        // trigger carries no event data to match a runId against, and the run
+        // is created inside the function, so the canceller has no id to name.
         cancelOn: [{ event: `cancel.workflow.${this.id}` }],
         triggers: { cron: this.cronConfig?.cron ?? '' },
         ...this.flowControlConfig,
@@ -316,7 +319,14 @@ export class InngestWorkflow<
       {
         id: `workflow.${this.id}`,
         retries: 0,
-        cancelOn: [{ event: `cancel.workflow.${this.id}` }],
+        // `match` scopes the cancellation to the run the cancel event names.
+        // Without it Inngest cancels every in-flight run of this function, and
+        // since all durable agents share one function, cancelling a single run
+        // tore down every other run in the deployment — only the targeted run's
+        // snapshot was marked canceled, so the rest simply vanished.
+        // Every event that triggers this function carries `data.runId`, and
+        // `Run.cancel()` sends the same field.
+        cancelOn: [{ event: `cancel.workflow.${this.id}`, match: 'data.runId' }],
         triggers: { event: `workflow.${this.id}` },
         // Spread flow control configuration
         ...this.flowControlConfig,
@@ -346,9 +356,19 @@ export class InngestWorkflow<
         const shouldCompactNestedWorkflowOutput = nestedWorkflowOutputMode === NESTED_WORKFLOW_OUTPUT_MODE.COMPACT;
 
         if (!runId) {
+          // Reached when a trigger event arrives without a run id — an event sent
+          // directly rather than through `createRun()`, which always supplies one.
+          // The id generated here never reaches the trigger event that `cancelOn`
+          // matches against, so `cancel.workflow.${this.id}` cannot target this
+          // run. Warn rather than reject: an unnamed run is still a valid way to
+          // start a workflow, it just can't be cancelled by id afterwards.
           runId = await step.run(`workflow.${this.id}.runIdGen`, async () => {
             return randomUUID();
           });
+          this.logger.warn?.(
+            `Workflow "${this.id}" was triggered without a runId, so run "${runId}" cannot be cancelled by id. ` +
+              `Send \`data.runId\` on the trigger event (or start the run with createRun()) to make it cancellable.`,
+          );
         }
 
         // Create InngestPubSub instance. Publishes go through `inngest.realtime.publish()`

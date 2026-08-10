@@ -94,5 +94,17 @@ export interface SubscribeOptions {
  * @param nack - Negative acknowledge. Message is requeued for redelivery after a delay.
  *               Not calling either ack or nack leaves the message in-flight until the
  *               backend's ack deadline expires (typically 10s for GCP).
+ *
+ * Subscribers on persistent backends must call `ack` for every delivered event —
+ * including events they filter out — otherwise the message stays in the backend's
+ * pending set for the lifetime of the subscription and the topic grows unbounded.
+ *
+ * A returned promise is honored by backends that support redelivery: a rejection
+ * is treated as a `nack`. The promise is not awaited before the next delivery, so
+ * subscribers that need ordering must serialize internally.
  */
-export type EventCallback = (event: Event, ack?: () => Promise<void>, nack?: () => Promise<void>) => void;
+export type EventCallback = (
+  event: Event,
+  ack?: () => Promise<void>,
+  nack?: () => Promise<void>,
+) => void | Promise<void>;

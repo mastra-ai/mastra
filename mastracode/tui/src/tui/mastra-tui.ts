@@ -164,6 +164,14 @@ export class MastraTUI {
   private cleanupPluginReloadListener?: () => void;
   private cleanupPluginUpdateListener?: () => void;
   private lastStreamError: string | null = null;
+  /**
+   * Text submitted while the main loop was busy (running a slash command or a
+   * shell passthrough) and so was not waiting on `getUserInput`. The editor's
+   * submit handler stays installed across loop iterations, so without this the
+   * submission would resolve an already-settled promise and be silently lost.
+   */
+  private queuedUserInput: string[] = [];
+  private pendingUserInputResolve: ((text: string) => void) | undefined;
 
   private static readonly DOUBLE_CTRL_C_MS = 500;
 
@@ -1122,7 +1130,12 @@ export class MastraTUI {
   // ===========================================================================
 
   private getUserInput(): Promise<string> {
+    const queued = this.queuedUserInput.shift();
+    if (queued !== undefined) {
+      return Promise.resolve(queued);
+    }
     return new Promise(resolve => {
+      this.pendingUserInputResolve = resolve;
       this.state.editor.onSubmit = (text: string) => {
         if (isGoalJudgeInputLocked(this.state)) {
           this.state.editor.setText(text);
@@ -1168,7 +1181,14 @@ export class MastraTUI {
           return;
         }
 
-        resolve(text);
+        const pending = this.pendingUserInputResolve;
+        if (!pending) {
+          // The loop is busy elsewhere; hand the text over on its next turn.
+          this.queuedUserInput.push(text);
+          return;
+        }
+        this.pendingUserInputResolve = undefined;
+        pending(text);
       };
     });
   }

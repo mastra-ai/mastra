@@ -328,6 +328,18 @@ export interface ToolErrorPayload {
   providerExecuted?: boolean;
 }
 
+/** Terminal stream payload when a requireApproval tool call is declined. */
+export interface ToolOutputDeniedPayload {
+  toolCallId: string;
+  toolName: string;
+  args?: Record<string, unknown>;
+  approval: {
+    id: string;
+    approved: false;
+    reason?: string;
+  };
+}
+
 interface AbortPayload {
   [key: string]: unknown;
 }
@@ -851,6 +863,7 @@ export type AgentChunkType<OUTPUT = undefined> =
   | (BaseChunkType & { type: 'step-start'; payload: StepStartPayload })
   | (BaseChunkType & { type: 'step-finish'; payload: StepFinishPayload<ToolSet, OUTPUT> })
   | (BaseChunkType & { type: 'tool-error'; payload: ToolErrorPayload })
+  | (BaseChunkType & { type: 'tool-output-denied'; payload: ToolOutputDeniedPayload })
   | (BaseChunkType & { type: 'abort'; payload: AbortPayload })
   | (BaseChunkType & {
       type: 'object';
@@ -1034,6 +1047,7 @@ export type SourceChunk = BaseChunkType & { type: 'source'; payload: SourcePaylo
 export type FileChunk = BaseChunkType & { type: 'file'; payload: FilePayload };
 export type ToolCallChunk = BaseChunkType & { type: 'tool-call'; payload: ToolCallPayload };
 export type ToolResultChunk = BaseChunkType & { type: 'tool-result'; payload: ToolResultPayload };
+export type ToolOutputDeniedChunk = BaseChunkType & { type: 'tool-output-denied'; payload: ToolOutputDeniedPayload };
 export type ReasoningChunk = BaseChunkType & { type: 'reasoning'; payload: ReasoningDeltaPayload };
 
 export type PendingToolCall = {

@@ -29,6 +29,10 @@ registerApiRoute("/items/:itemId", { ... })
 
 Custom route paths can't start with the server's configured `apiPrefix` (default: `/api`), as that prefix is reserved for built-in Mastra routes. If you set a custom `apiPrefix`, only that prefix is reserved. For example, with `apiPrefix: '/mastra/api'`, paths like `/api/my-endpoint` are allowed.
 
+:::warning
+The default auth configuration protects `/api/*` and treats `/api`, `/api/auth/*` as public. When you change `apiPrefix`, those defaults no longer match and built-in routes fall outside the protected pattern. Update `server.auth.protected` and `server.auth.public` to reference the new prefix, and update any client code (including `MastraClient` `apiPrefix`) that hits `/api/*`.
+:::
+
 ### options
 
 <PropertiesTable
