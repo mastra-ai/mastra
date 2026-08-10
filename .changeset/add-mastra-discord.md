@@ -2,7 +2,7 @@
 '@mastra/discord': minor
 ---
 
-Added `@mastra/discord` for connecting Mastra agents to Discord. One Discord app serves many guilds, with Ed25519 verification of interaction requests, guild and global slash-command registration, and Gateway support for DMs and @mentions, and it ships a dual ESM + CJS build. Set `encryptionKey` or `MASTRA_ENCRYPTION_KEY` to encrypt the stored bot token at rest.
+Added `@mastra/discord` for connecting Mastra agents to Discord. One Discord app serves many servers, and agents respond to slash commands, DMs, and @mentions. Set `encryptionKey` or `MASTRA_ENCRYPTION_KEY` to encrypt the stored bot token at rest.
 
 ```ts
 import { Mastra } from '@mastra/core';

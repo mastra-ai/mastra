@@ -45,5 +45,15 @@ export function decrypt(value: string, passphrase: string): string {
     Buffer.from(ivB64, 'base64'),
   );
   decipher.setAuthTag(Buffer.from(tagB64, 'base64'));
-  return Buffer.concat([decipher.update(Buffer.from(ctB64, 'base64')), decipher.final()]).toString('utf8');
+  try {
+    return Buffer.concat([decipher.update(Buffer.from(ctB64, 'base64')), decipher.final()]).toString('utf8');
+  } catch (cause) {
+    // GCM authentication failed. Node's own message ("Unsupported state or unable
+    // to authenticate data") gives an operator nothing to act on, and this runs on
+    // the credential-load path — name the likely cause.
+    throw new Error(
+      'Failed to decrypt a stored Discord secret — the configured encryption key does not match the one it was encrypted with. Check `encryptionKey` on DiscordProvider or MASTRA_ENCRYPTION_KEY.',
+      { cause },
+    );
+  }
 }

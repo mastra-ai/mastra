@@ -89,11 +89,36 @@ export class DiscordInstallStore {
   /**
    * Find the installation that owns a guild (tenancy lookup by `guildId`). Used
    * when the routing key is a guild rather than a webhook id.
+   *
+   * `guildIds` is per-agent and nothing enforces exclusivity, so two agents can
+   * legitimately be installed into the same guild. Returning the first match
+   * would make routing depend on storage row order — the same interaction could
+   * reach a different agent on the next lookup. Instead the **oldest** install
+   * wins (ties broken by id), which is stable across restarts and storage
+   * backends, and the ambiguity is logged once so an operator can see it.
+   *
+   * `ChannelsStorage` has no query-by-data-field, so this necessarily lists the
+   * platform's installations; it is not on the interactions hot path, which
+   * routes by `webhookId`.
    */
   async getByGuildId(guildId: string): Promise<DiscordInstallation | null> {
     const records = await this.storage.listInstallations(PLATFORM);
-    const record = records.find(r => ((r.data as DiscordInstallationData)?.guildIds ?? []).includes(guildId));
-    return record ? this.#fromRecord(record) : null;
+    const matches = records.filter(r => ((r.data as DiscordInstallationData)?.guildIds ?? []).includes(guildId));
+    if (matches.length === 0) return null;
+    if (matches.length > 1) {
+      console.warn(
+        `[Discord] Guild "${guildId}" is claimed by ${matches.length} installations (${matches
+          .map(r => r.agentId)
+          .join(', ')}). Routing to the oldest; disconnect the others to remove the ambiguity.`,
+      );
+    }
+    const winner = matches.reduce((oldest, r) => {
+      const a = r.createdAt?.getTime() ?? 0;
+      const b = oldest.createdAt?.getTime() ?? 0;
+      if (a !== b) return a < b ? r : oldest;
+      return r.id < oldest.id ? r : oldest;
+    });
+    return this.#fromRecord(winner);
   }
 
   /** Insert or replace an installation. */

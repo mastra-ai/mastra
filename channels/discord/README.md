@@ -1,6 +1,6 @@
 # @mastra/discord
 
-Discord channel wrapper for Mastra — a `ChannelProvider` (`@mastra/core/channels`) over **[`@chat-adapter/discord`](https://www.npmjs.com/package/@chat-adapter/discord)** (`^4.32`), to parity with `@mastra/slack`.
+Discord channel wrapper for Mastra — a `ChannelProvider` (`@mastra/core/channels`) over **[`@chat-adapter/discord`](https://www.npmjs.com/package/@chat-adapter/discord)** (pinned to `4.34.0`), to parity with `@mastra/slack`.
 
 The adapter already handles the Discord protocol (Ed25519 request verification, PING/PONG, deferrals, embeds + action-row buttons, the Gateway bridge, post-and-edit streaming). This package adds the install/lifecycle layer: the app-config + guild-keyed install store, an OAuth2 bot-invite `connect()`, guild/global slash-command registration, and Mastra route/stream wiring.
 
@@ -80,7 +80,7 @@ Because core owns the loop (there is no `stopGatewayListener`), `disconnect()` r
 
 ### Known caveat: reactions on a thread's starter message
 
-An @mention in a channel opens a **new thread**, and Discord gives that thread an id equal to the starter message's id. `@chat-adapter/discord` (through `4.37.0`, the current release) resolves a reaction's target channel as `threadId || channelId`, so it `PUT`s to `/channels/{threadId}/messages/{messageId}/reactions/…` and Discord answers **404 `Unknown Message` (code 10008)** — the starter message is not a message *inside* the thread, it is the message the thread hangs off.
+An @mention in a channel opens a **new thread**, and Discord gives that thread an id equal to the starter message's id. The pinned `@chat-adapter/discord@4.34.0` resolves a reaction's target channel as `threadId || channelId`, so it `PUT`s to `/channels/{threadId}/messages/{messageId}/reactions/…` and Discord answers **404 `Unknown Message` (code 10008)** — the starter message is not a message *inside* the thread, it is the message the thread hangs off. Upgrading does not help: the code is unchanged through `4.37.0`, the current release.
 
 Effect: an `add_reaction` on that message does not appear, and the 404 is logged. **Replies are unaffected** — `AgentChannels` suppresses `tool-error` chunks for its own channel tools, so the agent's response still posts. Pass `tools: false` to stop offering the reaction tools if the logged errors are noise for you.
 

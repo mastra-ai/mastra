@@ -8,7 +8,12 @@ import type {
 import type { ChannelsStorage } from '@mastra/core/storage';
 import type { DiscordAdapterConfig } from '@chat-adapter/discord';
 
-/** Default Discord REST API origin (versioned base is appended by the client). */
+/**
+ * Default Discord REST base — **including** the `/api/v10` version segment. The
+ * client concatenates this with the request path verbatim, so an override must
+ * carry its own version segment (`https://example.test/api/v10`); passing a bare
+ * origin produces unversioned request URLs.
+ */
 export const DISCORD_API_BASE_URL = 'https://discord.com/api/v10';
 
 /** Base for the OAuth2 authorize (bot-invite) URL. */

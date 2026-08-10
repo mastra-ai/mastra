@@ -12,6 +12,7 @@ import {
   buildInviteUrl,
   decrypt,
   encrypt,
+  guildHealthCheck,
   hashCommands,
   isEncrypted,
   normalizeCommands,
@@ -47,7 +48,13 @@ beforeEach(() => {
 
 afterEach(async () => {
   await mockAgent.close();
-  Object.assign(process.env, savedEnv);
+  // Node coerces env assignments to strings, so Object.assign would restore an
+  // absent var as the literal 'undefined' — truthy, and #suppliedAppConfig()
+  // would then read it as a real credential in any test sharing this worker.
+  for (const [key, value] of Object.entries(savedEnv)) {
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
 });
 
 /** Fresh provider + its own in-memory storage (returned so tests can inspect it). */
@@ -282,8 +289,7 @@ describe('DiscordProvider.activateGuild — lazy activation (first interaction)'
     const pending = await provider.getInstallation('agent-1');
     await provider.activateGuild(pending!.webhookId, GUILD);
 
-    // Reach the store the same way the route (mastra-discord-13x.3) will.
-    const { DiscordInstallStore } = await import('../src/install-store');
+    // Reach the store the same way the route will.
     const store = new DiscordInstallStore(storage, 'k');
     const byGuild = await store.getByGuildId(GUILD);
     expect(byGuild?.agentId).toBe('agent-1');
@@ -513,6 +519,23 @@ describe('DiscordProvider.configure — cache invalidation', () => {
     expect(provider.getAdapter(install!.id)).toBe(before);
   });
 
+  it('persists rotated credentials so rebuilt adapters do not use the old ones', async () => {
+    const { provider, storage } = makeProvider();
+    stubValidateApp();
+    stubGuild(GUILD, true);
+    stubGuildCommands(GUILD);
+    await provider.connect('agent-1', { guildId: GUILD });
+
+    // connect() persisted the app config. Every credential consumer reads the
+    // STORED config, so a rotation that only updated #config.app would leave
+    // Ed25519 verifying against the superseded public key.
+    await provider.configure({ publicKey: 'fedcba9876543210' });
+
+    const stored = await new DiscordInstallStore(storage, undefined).getAppConfig();
+    expect(stored?.publicKey).toBe('fedcba9876543210');
+    expect(stored?.botToken).toBe(APP.botToken); // untouched fields survive
+  });
+
   it('drops adapters when the app config is cleared', async () => {
     const { provider } = makeProvider();
     stubValidateApp();
@@ -526,6 +549,81 @@ describe('DiscordProvider.configure — cache invalidation', () => {
     await provider.configure(null);
     expect(provider.getAdapter(install!.id)).toBeUndefined();
     expect(provider.isConfigured()).toBe(false);
+  });
+});
+
+describe('DiscordProvider — storage resolution', () => {
+  it('re-resolves off the in-memory fallback once Mastra attaches', async () => {
+    // No storage configured and no Mastra yet → connect() falls back to memory.
+    const provider = new DiscordProvider({ app: APP });
+    stubValidateApp();
+    await provider.connect('agent-1');
+
+    // Registration arrives afterwards, carrying real channels storage.
+    const shared = new InMemoryChannelsStorage();
+    const mastra = {
+      getAgentById: () => undefined,
+      getServer: () => undefined,
+      getStorage: () => ({ init: async () => {}, getStore: async () => shared }),
+    };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (provider as any).__attach(mastra);
+
+    // The next store access must use the real storage, not the pinned fallback,
+    // otherwise installs are written to memory and lost on restart.
+    stubValidateApp();
+    await provider.connect('agent-2');
+    const records = await shared.listInstallations('discord');
+    expect(records.map(r => r.agentId)).toContain('agent-2');
+  });
+});
+
+describe('DiscordInstallStore.getByGuildId — deterministic routing', () => {
+  it('returns the oldest claimant when two agents share a guild', async () => {
+    const storage = new InMemoryChannelsStorage();
+    const store = new DiscordInstallStore(storage, undefined);
+    const older = new Date('2026-01-01T00:00:00Z');
+    const newer = new Date('2026-06-01T00:00:00Z');
+
+    // Saved newest-first so a naive .find() would return the wrong one.
+    await store.save({
+      id: 'i-new',
+      agentId: 'agent-new',
+      webhookId: 'w-new',
+      status: 'active',
+      guildIds: [GUILD],
+      installedAt: newer,
+    });
+    await store.save({
+      id: 'i-old',
+      agentId: 'agent-old',
+      webhookId: 'w-old',
+      status: 'active',
+      guildIds: [GUILD],
+      installedAt: older,
+    });
+
+    expect((await store.getByGuildId(GUILD))?.agentId).toBe('agent-old');
+    // Stable across repeated lookups, not dependent on row order.
+    expect((await store.getByGuildId(GUILD))?.agentId).toBe('agent-old');
+  });
+});
+
+describe('guildHealthCheck — absence vs transient failure', () => {
+  it('reports absence on 404 and throws on a rate limit', async () => {
+    mockAgent
+      .get(API_ORIGIN)
+      .intercept({ path: `/api/v10/guilds/${GUILD}`, method: 'GET' })
+      .reply(404, { message: 'Unknown Guild', code: 10004 });
+    await expect(guildHealthCheck(APP.botToken, GUILD)).resolves.toBe(false);
+
+    // A 429 is not evidence the bot is absent — collapsing it to `false` would
+    // send a caller whose bot IS in the guild down the invite path.
+    mockAgent
+      .get(API_ORIGIN)
+      .intercept({ path: `/api/v10/guilds/${OTHER_GUILD}`, method: 'GET' })
+      .reply(429, { message: 'You are being rate limited.', retry_after: 1.5 });
+    await expect(guildHealthCheck(APP.botToken, OTHER_GUILD)).rejects.toThrow(/guild lookup failed/i);
   });
 });
 
@@ -642,7 +740,7 @@ describe('DiscordProvider — interactions route (raw-body → adapter.handleWeb
     // guild_id off a CLONE and schedules activation via waitUntil.
     const body = JSON.stringify({ type: 2, guild_id: GUILD, data: { name: 'help' } });
     const timestamp = '1700000001';
-    await handler(
+    const response = await handler(
       makeCtx(
         inst!.webhookId,
         {
@@ -652,6 +750,9 @@ describe('DiscordProvider — interactions route (raw-body → adapter.handleWeb
         body,
       ),
     );
+    // Assert the route succeeded — the activation assertions below run off the
+    // waitUntil path and would still pass if the handler had 500'd.
+    expect(response.status).toBe(200);
     await Promise.all(drained); // drain the scheduled activation
 
     const after = await provider.getInstallation('agent-1');

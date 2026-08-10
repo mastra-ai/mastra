@@ -31,10 +31,10 @@ interface DiscordErrorBody {
 }
 
 /**
- * Call the Discord REST API with Bot-token auth. Sends a `GET` when `body` is
- * omitted and a JSON request (default `POST`) otherwise. Returns the raw
- * {@link Response} so callers can distinguish membership (2xx) from
- * "not a member" (403/404) without treating the latter as an error.
+ * Call the Discord REST API with Bot-token auth. `method` is required; supplying
+ * `body` adds the JSON `content-type` header and serializes the payload. Returns
+ * the raw {@link Response} so callers can classify the status themselves rather
+ * than having every non-2xx collapse into a thrown error.
  *
  * This is the **control plane only** — validating the app and reading guild
  * membership. Sending replies uses the interaction token inside the adapter,
@@ -94,8 +94,14 @@ export async function validateApp(
 
 /**
  * Whether the bot is already a member of a guild. `GET /guilds/{id}` (Bot auth)
- * returns `200` only when the bot is in the guild; `403`/`404` mean it is not.
- * Lets `connect()` bind immediately (bot present) vs. issue an invite (absent).
+ * returns `200` only when the bot is in the guild. Absence is `404` (`10004
+ * Unknown Guild`) — Discord standardized on 404 rather than 403 so the response
+ * can't confirm a guild exists to a caller that lacks access — with legacy
+ * deployments still answering `403` (`50001 Missing Access`).
+ *
+ * Any **other** failure (`401`, `429`, `5xx`) is a transient or auth problem,
+ * not evidence of absence, and throws. Collapsing those into `false` would send
+ * a caller whose bot *is* in the guild down the invite path on a rate limit.
  *
  * @see https://discord.com/developers/docs/resources/guild#get-guild
  */
@@ -105,9 +111,16 @@ export async function guildHealthCheck(
   apiBaseUrl: string = DISCORD_API_BASE_URL,
 ): Promise<boolean> {
   const response = await discordRequest(botToken, 'GET', `/guilds/${guildId}`, apiBaseUrl);
-  // Drain the body so the connection can be reused (undici keep-alive).
-  await response.body?.cancel().catch(() => {});
-  return response.ok;
+  if (response.ok) {
+    // Drain the body so the connection can be reused (undici keep-alive).
+    await response.body?.cancel().catch(() => {});
+    return true;
+  }
+  if (response.status === 404 || response.status === 403) {
+    await response.body?.cancel().catch(() => {});
+    return false;
+  }
+  throw new Error(`Discord guild lookup failed for "${guildId}": ${await describeError(response)}`);
 }
 
 /** Map normalized commands to the Discord bulk-overwrite `CHAT_INPUT` payload. */
@@ -117,6 +130,53 @@ function toCommandPayload(commands: readonly DiscordCommand[]) {
     description: c.description,
     type: APPLICATION_COMMAND_TYPE_CHAT_INPUT,
   }));
+}
+
+/**
+ * Longest `Retry-After` we will wait out inline before giving up. Registration
+ * is best-effort at the call site, so a long bucket is better surfaced as an
+ * error than held open.
+ */
+const MAX_RETRY_AFTER_MS = 5_000;
+
+/**
+ * `PUT` a bulk command overwrite, retrying **once** if Discord rate-limits it.
+ *
+ * Discord returns the wait in the `retry_after` body field (seconds, may be
+ * fractional) and the `Retry-After` header. The value is dynamic, so it is read
+ * from the response rather than assumed.
+ *
+ * @see https://discord.com/developers/docs/topics/rate-limits
+ */
+async function bulkOverwriteCommands(
+  botToken: string,
+  path: string,
+  commands: readonly DiscordCommand[],
+  apiBaseUrl: string,
+  scopeLabel: string,
+): Promise<void> {
+  const payload = toCommandPayload(commands);
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const response = await discordRequest(botToken, 'PUT', path, apiBaseUrl, payload);
+    if (response.ok) {
+      await response.body?.cancel().catch(() => {});
+      return;
+    }
+    if (response.status === 429 && attempt === 0) {
+      const body = (await response.json().catch(() => null)) as { retry_after?: number; message?: string } | null;
+      const headerSeconds = Number(response.headers.get('retry-after'));
+      const seconds = body?.retry_after ?? (Number.isFinite(headerSeconds) ? headerSeconds : 0);
+      const waitMs = Math.ceil(seconds * 1000);
+      if (waitMs > 0 && waitMs <= MAX_RETRY_AFTER_MS) {
+        await new Promise(resolve => setTimeout(resolve, waitMs));
+        continue;
+      }
+      throw new Error(
+        `Discord ${scopeLabel} command registration was rate-limited; retry after ${seconds}s: ${body?.message ?? `HTTP ${response.status}`}`,
+      );
+    }
+    throw new Error(`Discord ${scopeLabel} command registration failed: ${await describeError(response)}`);
+  }
 }
 
 /**
@@ -134,11 +194,7 @@ export async function registerGuildCommands(
   apiBaseUrl: string = DISCORD_API_BASE_URL,
 ): Promise<void> {
   const path = `/applications/${applicationId}/guilds/${guildId}/commands`;
-  const response = await discordRequest(botToken, 'PUT', path, apiBaseUrl, toCommandPayload(commands));
-  if (!response.ok) {
-    throw new Error(`Discord guild command registration failed: ${await describeError(response)}`);
-  }
-  await response.body?.cancel().catch(() => {});
+  await bulkOverwriteCommands(botToken, path, commands, apiBaseUrl, 'guild');
 }
 
 /**
@@ -155,11 +211,7 @@ export async function registerGlobalCommands(
   apiBaseUrl: string = DISCORD_API_BASE_URL,
 ): Promise<void> {
   const path = `/applications/${applicationId}/commands`;
-  const response = await discordRequest(botToken, 'PUT', path, apiBaseUrl, toCommandPayload(commands));
-  if (!response.ok) {
-    throw new Error(`Discord global command registration failed: ${await describeError(response)}`);
-  }
-  await response.body?.cancel().catch(() => {});
+  await bulkOverwriteCommands(botToken, path, commands, apiBaseUrl, 'global');
 }
 
 /** Inputs for {@link buildInviteUrl}. */
@@ -170,6 +222,11 @@ export interface BuildInviteUrlOptions {
   permissions?: bigint | string;
   /** OAuth2 scopes. Defaults to {@link DEFAULT_INVITE_SCOPES} (`bot applications.commands`). */
   scopes?: readonly string[];
+  /**
+   * Preselect this guild in the authorize screen and lock the picker, so the
+   * operator can't authorize a different guild than the one `connect()` recorded.
+   */
+  guildId?: string;
 }
 
 /**
@@ -186,5 +243,11 @@ export function buildInviteUrl(options: BuildInviteUrlOptions): string {
   url.searchParams.set('client_id', options.applicationId);
   url.searchParams.set('scope', scopes.join(' '));
   url.searchParams.set('permissions', permissions);
+  if (options.guildId) {
+    // Preselect and lock the picker so the authorized guild matches the one the
+    // install was recorded against.
+    url.searchParams.set('guild_id', options.guildId);
+    url.searchParams.set('disable_guild_select', 'true');
+  }
   return url.toString();
 }

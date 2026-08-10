@@ -86,6 +86,11 @@ export class DiscordProvider implements ChannelProvider {
   /** Cached sync view of whether the app is configured (for {@link getInfo}). */
   #configured = false;
   #initPromise: Promise<void> | null = null;
+  /**
+   * Whether {@link #store} was built on the in-memory fallback rather than real
+   * storage — i.e. it was resolved before a `Mastra` instance was available.
+   */
+  #storeIsFallback = false;
 
   constructor(config: DiscordProviderConfig = {}) {
     this.#config = config;
@@ -102,11 +107,21 @@ export class DiscordProvider implements ChannelProvider {
     if (this.#mastra && this.#mastra !== mastra) {
       this.#initPromise = null;
       this.#store = undefined;
+      this.#storeIsFallback = false;
       this.#adapters.clear();
       // The store-derived half of #configured belongs to the old instance; only
       // credentials supplied via config/env survive a re-attach. Without this,
       // getInfo() can report a stale isConfigured before initialize() re-runs.
       this.#configured = this.#suppliedAppConfig() != null;
+    } else if (this.#storeIsFallback) {
+      // A public method (connect(), initialize(), …) ran before registration and
+      // pinned the provider to the in-memory fallback. Drop it on this first
+      // attach so the next access re-resolves against the Mastra storage that is
+      // now available — otherwise installs keep going to memory and are lost on
+      // restart even though real storage is configured.
+      this.#initPromise = null;
+      this.#store = undefined;
+      this.#storeIsFallback = false;
     }
     this.#mastra = mastra;
   }
@@ -223,6 +238,20 @@ export class DiscordProvider implements ChannelProvider {
       k => credentials[k] !== undefined && credentials[k] !== previous?.[k],
     );
     if (!changed) return;
+
+    // Persist the rotation. Every credential consumer — #resolveAppConfig,
+    // #activateInstallation, #handleWebhook — reads the *stored* app config, so
+    // updating only #config.app would leave adapters rebuilding from the old
+    // credentials and Ed25519 still verifying against the superseded key.
+    const store = await this.#getStore();
+    const stored = await store.getAppConfig();
+    if (stored) {
+      const merged = { ...stored, ...credentials };
+      if (merged.botToken && merged.publicKey && merged.applicationId) {
+        await store.saveAppConfig(merged);
+      }
+    }
+
     const wasInitialized = this.#initPromise !== null;
     this.#adapters.clear();
     this.#initPromise = null;
@@ -306,6 +335,8 @@ export class DiscordProvider implements ChannelProvider {
       applicationId: app.applicationId,
       permissions: options.permissions ?? this.#config.permissions ?? DEFAULT_INVITE_PERMISSIONS,
       scopes: DEFAULT_INVITE_SCOPES,
+      // Preselect the requested guild so the authorized one matches the install.
+      ...(options.guildId !== undefined ? { guildId: options.guildId } : {}),
     });
     return { type: 'oauth', authorizationUrl, installationId };
   }
@@ -594,24 +625,31 @@ export class DiscordProvider implements ChannelProvider {
   async #getStore(): Promise<DiscordInstallStore> {
     if (this.#store) return this.#store;
     const encryptionKey = this.#config.encryptionKey ?? process.env.MASTRA_ENCRYPTION_KEY;
-    this.#store = new DiscordInstallStore(await this.#resolveStorage(), encryptionKey);
+    const { storage, isFallback } = await this.#resolveStorage();
+    this.#storeIsFallback = isFallback;
+    this.#store = new DiscordInstallStore(storage, encryptionKey);
     return this.#store;
   }
 
-  async #resolveStorage(): Promise<ChannelsStorage> {
-    if (this.#config.storage) return this.#config.storage;
+  /**
+   * Resolve the backing storage, reporting whether it is the in-memory fallback
+   * so {@link __attach} can drop a store that was built before Mastra was
+   * available.
+   */
+  async #resolveStorage(): Promise<{ storage: ChannelsStorage; isFallback: boolean }> {
+    if (this.#config.storage) return { storage: this.#config.storage, isFallback: false };
     const mastraStore = this.#mastra?.getStorage();
     if (mastraStore) {
       try {
         await mastraStore.init();
         const channels = await mastraStore.getStore('channels');
-        if (channels) return channels;
+        if (channels) return { storage: channels, isFallback: false };
       } catch {
         // Fall through to the in-memory store below.
       }
     }
     // No persistent storage available — fall back to in-memory. Installs won't
     // survive a restart; pass `storage` or configure Mastra storage in prod.
-    return new InMemoryChannelsStorage();
+    return { storage: new InMemoryChannelsStorage(), isFallback: true };
   }
 }
