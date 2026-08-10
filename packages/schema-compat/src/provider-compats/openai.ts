@@ -32,6 +32,30 @@ const allowedStringFormats = [
   'uuid',
 ] as const;
 
+// Keywords that only apply to a single JSON Schema type. When an optional
+// property is expanded into anyOf branches, each keyword moves into the branch
+// of its matching type instead of being copied across the property and branches
+// (which caused exponential schema growth with nesting depth).
+const typeSpecificKeywords: Partial<Record<string, readonly string[]>> = {
+  object: [
+    'properties',
+    'required',
+    'additionalProperties',
+    'patternProperties',
+    'propertyNames',
+    'minProperties',
+    'maxProperties',
+    'dependencies',
+    'x-optional',
+  ],
+  array: ['items', 'additionalItems', 'contains', 'minItems', 'maxItems', 'uniqueItems'],
+  string: ['minLength', 'maxLength', 'pattern', 'format', 'x-date'],
+  number: ['minimum', 'maximum', 'exclusiveMinimum', 'exclusiveMaximum', 'multipleOf'],
+  integer: ['minimum', 'maximum', 'exclusiveMinimum', 'exclusiveMaximum', 'multipleOf'],
+};
+
+const allTypeSpecificKeywords = new Set(Object.values(typeSpecificKeywords).flat());
+
 export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
   getSchemaTarget(): Targets | undefined {
     return `jsonSchema7`;
@@ -260,39 +284,41 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
             // @ts-expect-error - x-optional is a custom property
             schema['x-optional'] = [...(schema['x-optional'] || []), key];
             schema.required?.push(key);
-            if (prop.type) {
-              if (Array.isArray(prop.type)) {
-                const types = [...prop.type];
-                if (!types.includes('null')) {
-                  types.push('null');
+            if (prop.type && prop.type !== 'null') {
+              const types = Array.isArray(prop.type) ? [...prop.type] : [prop.type];
+              if (!types.includes('null')) {
+                types.push('null');
+              }
+
+              delete prop.anyOf;
+              delete prop.type;
+
+              // Build branch-local schemas: type-specific keywords move into the
+              // branch of their matching type so nested subtrees are serialized once.
+              // Type-independent constraints and annotations (enum, description,
+              // default, etc.) stay once on the containing property.
+              prop.anyOf = types.map(type => {
+                if (type === 'null') {
+                  return { type: 'null' } as JSONSchema7;
                 }
 
-                const propSchema = { ...prop } as JSONSchema7;
-                delete propSchema.anyOf;
-                delete propSchema.type;
-                delete prop.type;
+                const branch = { type } as JSONSchema7;
+                for (const keyword of typeSpecificKeywords[type] ?? []) {
+                  if (keyword in prop) {
+                    // @ts-expect-error - keyword is a valid property for JSON Schema
+                    branch[keyword] = prop[keyword];
+                  }
+                }
 
-                prop.anyOf = types.map(type =>
-                  type === 'null'
-                    ? { type: 'null' }
-                    : {
-                        ...propSchema,
-                        type,
-                      },
-                );
-              } else if (prop.type !== 'null') {
-                const originalType = prop.type;
-                const propSchema = { ...prop } as JSONSchema7;
-                delete propSchema.anyOf;
-                delete propSchema.type;
-                delete prop.type;
-                prop.anyOf = [
-                  {
-                    ...propSchema,
-                    type: originalType,
-                  },
-                  { type: 'null' },
-                ];
+                return branch;
+              });
+
+              // Remove all type-specific keywords from the containing property so
+              // nothing schema-bearing lingers next to anyOf (keywords for types not
+              // present in the union are unusable and dropped).
+              for (const keyword of allTypeSpecificKeywords) {
+                // @ts-expect-error - keyword is a valid property for JSON Schema
+                delete prop[keyword];
               }
             }
           }
@@ -302,8 +328,8 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
   }
 
   #traverse(value: unknown, schema: Record<string, unknown>): unknown {
-    // If schema uses anyOf, find the non-null variant for traversal
-    const resolved = this.#resolveAnyOf(schema);
+    // If schema uses anyOf, find the variant matching the value for traversal
+    const resolved = this.#resolveAnyOf(schema, value);
 
     if ((isDateFormat(resolved) || resolved['x-date'] === true) && typeof value === 'string') {
       return new Date(value);
@@ -343,14 +369,42 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
   }
 
   /**
-   * If schema has anyOf, return the first non-null variant for traversal.
+   * If schema has anyOf, return the variant whose type matches the value's shape
+   * (branches are type-specific), falling back to the first non-null variant.
    * Otherwise return the schema itself.
    */
-  #resolveAnyOf(schema: Record<string, unknown>): Record<string, unknown> {
+  #resolveAnyOf(schema: Record<string, unknown>, value?: unknown): Record<string, unknown> {
     if (Array.isArray(schema.anyOf)) {
-      const nonNull = (schema.anyOf as Record<string, unknown>[]).find(s => s.type !== 'null');
-      if (nonNull) {
-        return nonNull;
+      const nonNullVariants = (schema.anyOf as Record<string, unknown>[]).filter(s => s && s.type !== 'null');
+
+      const valueType = Array.isArray(value)
+        ? 'array'
+        : value !== null && typeof value === 'object'
+          ? 'object'
+          : typeof value === 'number'
+            ? Number.isInteger(value)
+              ? 'integer'
+              : 'number'
+            : typeof value === 'string' || typeof value === 'boolean'
+              ? typeof value
+              : undefined;
+      if (valueType) {
+        const hasType = (variant: Record<string, unknown>, type: string) =>
+          (Array.isArray(variant.type) ? (variant.type as string[]) : [variant.type]).includes(type);
+        const exactMatch = nonNullVariants.find(variant => hasType(variant, valueType));
+        if (exactMatch) {
+          return exactMatch;
+        }
+        if (valueType === 'integer') {
+          const numberMatch = nonNullVariants.find(variant => hasType(variant, 'number'));
+          if (numberMatch) {
+            return numberMatch;
+          }
+        }
+      }
+
+      if (nonNullVariants[0]) {
+        return nonNullVariants[0];
       }
     }
 

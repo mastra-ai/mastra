@@ -9,7 +9,7 @@
   },
   "recordings": [
     {
-      "hash": "0482d3b9ce63e25e",
+      "hash": "c69bf50d603e7bf4",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -195,7 +195,6 @@
                     "description": "leave this field empty as an example of an optional field",
                     "anyOf": [
                       {
-                        "description": "leave this field empty as an example of an optional field",
                         "type": "string"
                       },
                       {
@@ -561,7 +560,6 @@
                     "description": "leave this field empty as an example of an optional field",
                     "anyOf": [
                       {
-                        "description": "leave this field empty as an example of an optional field",
                         "type": "string"
                       },
                       {
@@ -726,7 +724,7 @@
       }
     },
     {
-      "hash": "2b82eb5fb664db02",
+      "hash": "33123cc5e0701ce2",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -912,7 +910,6 @@
                     "description": "leave this field empty as an example of an optional field",
                     "anyOf": [
                       {
-                        "description": "leave this field empty as an example of an optional field",
                         "type": "string"
                       },
                       {
@@ -1300,7 +1297,6 @@
                     "description": "leave this field empty as an example of an optional field",
                     "anyOf": [
                       {
-                        "description": "leave this field empty as an example of an optional field",
                         "type": "string"
                       },
                       {
@@ -1444,7 +1440,7 @@
       }
     },
     {
-      "hash": "045049f0b89ac12a",
+      "hash": "a75112b3b7cdafa8",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -1641,7 +1637,6 @@
                     "description": "leave this field empty as an example of an optional field",
                     "anyOf": [
                       {
-                        "description": "leave this field empty as an example of an optional field",
                         "type": "string"
                       },
                       {
@@ -2035,7 +2030,6 @@
                     "description": "leave this field empty as an example of an optional field",
                     "anyOf": [
                       {
-                        "description": "leave this field empty as an example of an optional field",
                         "type": "string"
                       },
                       {
@@ -2179,7 +2173,7 @@
       }
     },
     {
-      "hash": "1c8958d6671b5a63",
+      "hash": "e40019e7da0a49c6",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -2365,7 +2359,6 @@
                     "description": "leave this field empty as an example of an optional field",
                     "anyOf": [
                       {
-                        "description": "leave this field empty as an example of an optional field",
                         "type": "string"
                       },
                       {
@@ -2753,7 +2746,6 @@
                     "description": "leave this field empty as an example of an optional field",
                     "anyOf": [
                       {
-                        "description": "leave this field empty as an example of an optional field",
                         "type": "string"
                       },
                       {
@@ -2897,7 +2889,7 @@
       }
     },
     {
-      "hash": "e272d3e936f89635",
+      "hash": "12ec1fcd6dfb123f",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -3094,7 +3086,6 @@
                     "description": "leave this field empty as an example of an optional field",
                     "anyOf": [
                       {
-                        "description": "leave this field empty as an example of an optional field",
                         "type": "string"
                       },
                       {
@@ -3488,7 +3479,6 @@
                     "description": "leave this field empty as an example of an optional field",
                     "anyOf": [
                       {
-                        "description": "leave this field empty as an example of an optional field",
                         "type": "string"
                       },
                       {
