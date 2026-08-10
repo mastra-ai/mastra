@@ -39,24 +39,25 @@ function formatModelName(id: string): string {
 
 /** Current model id and whether its provider has usable credentials. */
 export function ActiveModel() {
-  const { kind } = useChatSessionContext();
+  const { kind, sessionEnabled, draftSessionId } = useChatSessionContext();
   const { activeModelId, setModel } = useChatModels();
   const { status } = useChatConnection();
   const modelsQuery = useAvailableModelsQuery();
   const [pendingModelId, setPendingModelId] = useState<string>();
 
-  // While the connection is still resolving there is no model id yet — show a
-  // placeholder instead of a misleading "No model" label.
-  if (!activeModelId && status === 'connecting') {
+  const selectedModelId = pendingModelId ?? activeModelId;
+  // Show a placeholder rather than a misleading "No model" label while the
+  // model is still being resolved.
+  if (!selectedModelId && status === 'connecting') {
     return <Skeleton aria-label="Loading model" className="h-3.5 w-24" />;
   }
 
-  const selectedModelId = pendingModelId ?? activeModelId;
   const label = selectedModelId ? formatModelName(selectedModelId) : 'No model';
   const notConfigured =
     Boolean(selectedModelId) && modelsQuery.isSuccess && !modelsQuery.data.some(model => model.id === selectedModelId);
+  const switchable = Boolean(draftSessionId) || (kind === 'factory' && sessionEnabled);
 
-  if (kind === 'factory' && modelsQuery.data?.length) {
+  if (switchable && modelsQuery.data?.length) {
     return (
       <Select
         value={selectedModelId}
@@ -102,7 +103,7 @@ export function ActiveModel() {
     <span
       className={notConfigured ? 'text-accent2' : 'text-neutral3'}
       aria-label={notConfigured ? `${label} is not configured` : undefined}
-      title={activeModelId}
+      title={selectedModelId}
     >
       {label}
       {notConfigured ? ' · not configured' : null}

@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
@@ -36,6 +36,8 @@ const createdSession = {
 interface DraftRoute {
   createBodies: unknown[];
   posted: string[];
+  bindings: string[];
+  bindingsBeforePrompt: string[];
   finishWorkspace: () => void;
 }
 
@@ -50,7 +52,20 @@ function stubDraftRoute(): DraftRoute {
   const workspaceReady = new Promise<void>(resolve => {
     releaseWorkspace = resolve;
   });
-  const route: DraftRoute = { createBodies: [], posted: [], finishWorkspace: () => releaseWorkspace() };
+  // The controller binds the thread when it creates the session, so reading it
+  // before then fails exactly as the server does.
+  let threadCreated = false;
+  const route: DraftRoute = {
+    createBodies: [],
+    posted: [],
+    bindings: [],
+    bindingsBeforePrompt: [],
+    finishWorkspace: () => releaseWorkspace(),
+  };
+
+  function readBody(body: unknown, key: string): string {
+    return typeof body === 'object' && body !== null && key in body ? String(Reflect.get(body, key)) : '';
+  }
 
   server.use(
     http.get(`${TEST_BASE_URL}/auth/me`, () =>
@@ -58,6 +73,9 @@ function stubDraftRoute(): DraftRoute {
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
       HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'Acme Factory' }] }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}`, () =>
+      HttpResponse.json({ project: { id: FACTORY_ID, name: 'Acme Factory', defaultModelId: 'openai/gpt-4o-mini' } }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/source-control-connections`, () =>
       HttpResponse.json({
@@ -96,9 +114,21 @@ function stubDraftRoute(): DraftRoute {
     ),
     http.post(`${AGENT_CONTROLLER_API}/sessions`, async () => {
       await workspaceReady;
+      threadCreated = true;
       return HttpResponse.json({ controllerId: 'code', resourceId: DRAFT_SESSION_ID, threadId: DRAFT_SESSION_ID });
     }),
-    http.get(`${AGENT_CONTROLLER_API}/modes`, () => HttpResponse.json({ modes: [{ id: 'build', label: 'Build' }] })),
+    http.get(`${AGENT_CONTROLLER_API}/modes`, () =>
+      HttpResponse.json({
+        modes: [
+          { id: 'build', name: 'Build' },
+          { id: 'plan', name: 'Plan' },
+        ],
+      }),
+    ),
+    http.post(`${AGENT_CONTROLLER_API}/sessions/:resourceId/mode`, async ({ request }) => {
+      route.bindings.push(`mode:${readBody(await request.json(), 'modeId')}`);
+      return HttpResponse.json({ ok: true });
+    }),
     http.get(`${AGENT_CONTROLLER_API}/models`, () => HttpResponse.json({ models: [] })),
     http.get(`${AGENT_CONTROLLER_API}/sessions/:resourceId`, ({ params }) =>
       HttpResponse.json({
@@ -113,8 +143,10 @@ function stubDraftRoute(): DraftRoute {
     http.put(`${AGENT_CONTROLLER_API}/sessions/:resourceId/state`, () => HttpResponse.json({})),
     http.get(`${AGENT_CONTROLLER_API}/sessions/:resourceId/permissions`, () => HttpResponse.json({})),
     http.get(`${AGENT_CONTROLLER_API}/sessions/:resourceId/threads`, () => HttpResponse.json({ threads: [] })),
-    http.get(`${AGENT_CONTROLLER_API}/sessions/:resourceId/threads/:threadId/messages`, () =>
-      HttpResponse.json({ messages: [] }),
+    http.get(`${AGENT_CONTROLLER_API}/sessions/:resourceId/threads/:threadId/messages`, ({ params }) =>
+      threadCreated
+        ? HttpResponse.json({ messages: [] })
+        : HttpResponse.json({ error: `Thread not found: ${String(params.threadId)}` }, { status: 500 }),
     ),
     http.get(
       `${AGENT_CONTROLLER_API}/sessions/:resourceId/stream`,
@@ -123,7 +155,12 @@ function stubDraftRoute(): DraftRoute {
           headers: { 'content-type': 'text/event-stream' },
         }),
     ),
+    http.post(`${AGENT_CONTROLLER_API}/sessions/:resourceId/model`, async ({ request }) => {
+      route.bindings.push(`model:${readBody(await request.json(), 'modelId')}`);
+      return HttpResponse.json({ ok: true });
+    }),
     http.post(`${AGENT_CONTROLLER_API}/sessions/:resourceId/messages`, async ({ request }) => {
+      route.bindingsBeforePrompt = [...route.bindings];
       route.posted.push(readSentMessage(await request.json()));
       await workspaceReady;
       return HttpResponse.json({ ok: true });
@@ -152,6 +189,9 @@ describe('a user session draft on the real thread route', () => {
 
     const message = await screen.findByRole('textbox', { name: 'Message' });
     await waitFor(() => expect(message).toBeEnabled());
+    // The draft offers the full run configuration: pick a non-default mode.
+    await user.click(await screen.findByLabelText('Session mode'));
+    await user.click(await screen.findByRole('option', { name: 'Plan' }));
     await user.type(message, 'fix the login bug');
     await user.keyboard('{Enter}');
 
@@ -164,6 +204,14 @@ describe('a user session draft on the real thread route', () => {
     // ThreadPage gates its content on the session fetch, not on materialization —
     // the handoff must reach the controller before the workspace is up.
     await waitFor(() => expect(route.posted).toEqual(['fix the login bug']));
+    // The composer named this mode and model while the session did not exist;
+    // the run must start on them — mode first, since switching it resets the model.
+    expect(route.bindingsBeforePrompt).toEqual(['mode:plan', 'model:openai/gpt-4o-mini']);
+    // The thread has no server-side history to read yet, and failing to read it
+    // must not take the prompt off screen.
+    const thread = within(screen.getByRole('main'));
+    await waitFor(() => expect(thread.getByText('fix the login bug')).toBeInTheDocument());
+    expect(thread.queryByText(/Failed to load messages/)).not.toBeInTheDocument();
 
     route.finishWorkspace();
     expect(route.posted).toEqual(['fix the login bug']);

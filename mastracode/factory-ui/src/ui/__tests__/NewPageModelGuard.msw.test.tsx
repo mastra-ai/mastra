@@ -52,7 +52,7 @@ describe('NewPage default-model guard', () => {
     expect(screen.queryByRole('heading', { name: 'What do you want to work on?' })).not.toBeInTheDocument();
   });
 
-  it('shows a spinner while the guard resolves instead of flashing the draft heading', async () => {
+  it('renders the chat immediately while the guard resolves, then swaps in the guard', async () => {
     let releaseProject!: () => void;
     const projectGate = new Promise<void>(resolve => {
       releaseProject = resolve;
@@ -72,18 +72,17 @@ describe('NewPage default-model guard', () => {
 
     renderNewPage();
 
-    expect(await screen.findByLabelText('Loading Factory')).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: 'What do you want to work on?' })).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole('heading', { name: 'No default model configured for this Factory' }),
-    ).not.toBeInTheDocument();
+    // The empty chat needs nothing from the guard queries, so it must not wait
+    // for them behind a page-level spinner.
+    expect(await screen.findByRole('heading', { name: 'What do you want to work on?' })).toBeInTheDocument();
+    expect(await screen.findByLabelText('Message')).toBeInTheDocument();
 
     releaseProject();
 
     expect(
       await screen.findByRole('heading', { name: 'No default model configured for this Factory' }),
     ).toBeInTheDocument();
-    expect(screen.queryByLabelText('Loading Factory')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Message')).not.toBeInTheDocument();
   });
 
   it('renders the composer when the Factory has a default model', async () => {

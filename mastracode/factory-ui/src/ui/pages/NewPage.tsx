@@ -22,7 +22,6 @@ import { TranscriptEntries } from '../domains/chat/components/Transcript';
 import { ChatSessionBoundary } from '../domains/chat/context/ChatSessionProvider';
 import { useChatTranscript } from '../domains/chat/context/useChatTranscript';
 import { useGlobalShortcuts } from '../domains/chat/hooks/useGlobalShortcuts';
-import { Spinner } from '@mastra/playground-ui/components/Spinner';
 
 const draftStartClass = 'flex w-full max-w-xl flex-col items-stretch gap-6';
 
@@ -33,10 +32,6 @@ export function NewPage() {
   const projectQuery = useFactoryProjectQuery(activeFactory?.id);
   const providersQuery = useProvidersQuery();
   const defaultModelId = projectQuery.data?.defaultModelId ?? undefined;
-  const resolvingModelGuard =
-    factoryQuery.isPending ||
-    (Boolean(activeFactory) && projectQuery.isPending) ||
-    (Boolean(defaultModelId) && providersQuery.isPending);
   const missingDefaultModel = Boolean(activeFactory) && projectQuery.isSuccess && !defaultModelId;
   // The factory default model is set, but the signed-in caller has no
   // credential for its provider — starting a chat would only fail at run
@@ -56,17 +51,11 @@ export function NewPage() {
       header={<ChatHeader />}
       main={
         <ChatSessionBoundary>
-          {resolvingModelGuard ? (
-            <div className="grid min-h-0 flex-1 place-items-center">
-              <Spinner aria-label="Loading Factory" className="text-icon3" />
-            </div>
-          ) : (
-            <NewPageContent
-              activeFactory={activeFactory}
-              missingDefaultModel={missingDefaultModel}
-              missingCredential={missingCredential}
-            />
-          )}
+          <NewPageContent
+            activeFactory={activeFactory}
+            missingDefaultModel={missingDefaultModel}
+            missingCredential={missingCredential}
+          />
         </ChatSessionBoundary>
       }
     />

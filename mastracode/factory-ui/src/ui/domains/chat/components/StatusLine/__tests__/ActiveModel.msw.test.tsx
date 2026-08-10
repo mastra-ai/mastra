@@ -32,15 +32,19 @@ function renderActiveModel({
   activeModelId,
   status,
   kind = 'user',
+  sessionEnabled = true,
+  draftSessionId,
   setModel = () => Promise.resolve(),
 }: {
   activeModelId: string | undefined;
   status: ChatConnectionApi['status'];
   kind?: ChatSessionContextApi['kind'];
+  sessionEnabled?: boolean;
+  draftSessionId?: string;
   setModel?: (modelId: string) => Promise<void>;
 }) {
   return renderWithProviders(
-    <ChatSessionContext.Provider value={{ ...factorySession, kind }}>
+    <ChatSessionContext.Provider value={{ ...factorySession, kind, sessionEnabled, draftSessionId }}>
       <ChatConnectionContext.Provider value={{ status }}>
         <ChatModelsContext.Provider value={{ activeModelId, setModel }}>
           <ActiveModel />
@@ -71,6 +75,27 @@ describe('ActiveModel', () => {
 
       expect(screen.getByLabelText('Loading model')).toBeInTheDocument();
       expect(screen.queryByText('No model')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('when there is no session yet — a draft composer', () => {
+    it('picks the model the first prompt will create the session on', async () => {
+      const user = userEvent.setup();
+      const setModel = vi.fn<(modelId: string) => Promise<void>>().mockResolvedValue();
+      stubModelCatalog(['anthropic/claude-sonnet-4-5', 'openai/gpt-5.6-sol']);
+
+      renderActiveModel({
+        activeModelId: 'anthropic/claude-sonnet-4-5',
+        status: 'connecting',
+        sessionEnabled: false,
+        draftSessionId: 'draft-1',
+        setModel,
+      });
+
+      await user.click(await screen.findByLabelText('Session model'));
+      await user.click(await screen.findByRole('option', { name: 'openai / gpt-5.6-sol' }));
+
+      expect(setModel).toHaveBeenCalledWith('openai/gpt-5.6-sol');
     });
   });
 

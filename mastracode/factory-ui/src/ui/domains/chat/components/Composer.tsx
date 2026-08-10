@@ -19,6 +19,7 @@ import { useMatch, useNavigate, useParams } from 'react-router';
 import { INITIAL_THREAD_MESSAGE_LIMIT, queryKeys } from '../../../../api/keys';
 import { useChatCommands } from '../context/ChatCommandsProvider';
 import { useChatConnection } from '../context/useChatConnection';
+import { useChatModels } from '../context/useChatModels';
 import { useChatModes } from '../context/useChatModes';
 import { useChatSessionContext } from '../context/useChatSessionContext';
 import { useChatTranscript } from '../context/useChatTranscript';
@@ -92,6 +93,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const { status } = useChatConnection();
   const { busy, localUser, reset, clearPending, pushNotice } = useChatTranscript();
   const { modes, activeModeId, setMode } = useChatModes();
+  const { activeModelId } = useChatModels();
   const { composerDraft: draft, composerInputRef: inputRef, setComposerDraft, runComposerCommand } = useChatCommands();
   const modeColorClass = getModeColorClass(activeModeId ?? modes[0]?.id);
 
@@ -223,9 +225,19 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
       });
       queryClient.setQueryData<FactoryUserSession>(queryKeys.userSession(session.sessionId), session);
       addCachedSession(queryClient, factorySessionState.projectRepositoryId, session);
+      // The controller only creates this thread once the workspace is ready, so reading it now fails.
+      queryClient.setQueryData<MastraDBMessage[]>(
+        queryKeys.agentControllerThreadMessages(
+          AGENT_CONTROLLER_ID,
+          session.sessionId,
+          session.sessionId,
+          INITIAL_THREAD_MESSAGE_LIMIT,
+        ),
+        [],
+      );
       void navigate(`/factories/${factoryId}/user/threads/${session.sessionId}`, {
         replace: true,
-        state: promptHandoffState(text),
+        state: promptHandoffState(text, { modeId: activeModeId, modelId: activeModelId }),
       });
     } catch (error) {
       updateDraft(text);

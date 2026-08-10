@@ -105,6 +105,7 @@ export function ChatSessionConfigProvider({
     projectPath,
     sessionThreadId: storedSession?.sessionId,
     workspacePending: storedSession !== undefined && !storedSession.materializedAt,
+    draftSessionId: isUserDraft ? draftSessionId : undefined,
     factorySessionState:
       factory && repository
         ? {
@@ -147,7 +148,9 @@ export function ChatSessionBoundary({
   const messages = {
     threadId,
     isPending: Boolean(threadId) && messagesQuery.isPending,
-    error: messagesQuery.error,
+    // A window already on screen survives a failed refetch: the live stream
+    // keeps it current, and blanking the transcript loses more than it tells.
+    error: messagesQuery.data ? undefined : messagesQuery.error,
   };
 
   if (deferUntilMessagesReady && threadId && (messages.isPending || messages.error)) {

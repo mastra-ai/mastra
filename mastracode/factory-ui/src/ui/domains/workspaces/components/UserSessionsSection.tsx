@@ -6,7 +6,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus } from 'lucide-react';
 import { useState } from 'react';
-import { useLocation, useMatch, useNavigate, useParams } from 'react-router';
+import { useLocation, useNavigate, useParams } from 'react-router';
 
 import { useApiConfig } from '../../../../api/config';
 import { queryKeys } from '../../../../api/keys';
@@ -25,7 +25,6 @@ export function UserSessionsSection() {
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
-  const draftSessionId = useMatch('/factories/:factoryId/user/new/:draftSessionId')?.params.draftSessionId;
   const [confirmDelete, setConfirmDelete] = useState<FactoryUserSession | null>(null);
   const { pinnedSessions, setPinned } = usePinnedSessions();
 
@@ -86,7 +85,6 @@ export function UserSessionsSection() {
 
       <div className="flex flex-col gap-1">
         <MainSidebar.NavList>
-          {draftSessionId && <SessionNavRow name="New session" url={location.pathname} active />}
           {sessions.map(session => {
             const name = getUserSessionLabel(session);
             const url = `/factories/${factoryId}/user/threads/${session.sessionId}`;
@@ -118,7 +116,7 @@ export function UserSessionsSection() {
             </Button>
           </div>
         )}
-        {sessionsQuery.isSuccess && sessions.length === 0 && !draftSessionId && (
+        {sessionsQuery.isSuccess && sessions.length === 0 && (
           <Txt as="p" variant="ui-xs" className="text-icon3 m-0 px-2 py-1">
             No sessions yet
           </Txt>

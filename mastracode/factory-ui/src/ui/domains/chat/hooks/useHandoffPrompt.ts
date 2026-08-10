@@ -2,19 +2,44 @@ import { useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 
 import { useSendAgentControllerMessageMutation } from '../../../../hooks/useAgentControllerRunMutations';
+import {
+  useSwitchAgentControllerModeMutation,
+  useSwitchAgentControllerModelMutation,
+} from '../../../../hooks/useAgentControllerStateMutations';
 import { useChatSessionContext } from '../context/useChatSessionContext';
 import { useChatTranscript } from '../context/useChatTranscript';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 
-/** Router state handing the prompt that created a session to the thread page it opens. */
-export function promptHandoffState(prompt: string): { handoffPrompt: string } {
-  return { handoffPrompt: prompt };
+interface PromptHandoff {
+  handoffPrompt: string;
+  handoffModeId?: string;
+  handoffModelId?: string;
+}
+
+/** Router state handing the prompt (and the mode/model it was composed on) to the thread page it opens. */
+export function promptHandoffState(
+  prompt: string,
+  config: { modeId: string | undefined; modelId: string | undefined },
+): PromptHandoff {
+  return { handoffPrompt: prompt, handoffModeId: config.modeId, handoffModelId: config.modelId };
 }
 
 function readHandoffPrompt(state: unknown): string | null {
   if (typeof state !== 'object' || state === null || !('handoffPrompt' in state)) return null;
   const { handoffPrompt } = state;
   return typeof handoffPrompt === 'string' && handoffPrompt ? handoffPrompt : null;
+}
+
+function readHandoffModeId(state: unknown): string | undefined {
+  if (typeof state !== 'object' || state === null || !('handoffModeId' in state)) return undefined;
+  const { handoffModeId } = state;
+  return typeof handoffModeId === 'string' && handoffModeId ? handoffModeId : undefined;
+}
+
+function readHandoffModelId(state: unknown): string | undefined {
+  if (typeof state !== 'object' || state === null || !('handoffModelId' in state)) return undefined;
+  const { handoffModelId } = state;
+  return typeof handoffModelId === 'string' && handoffModelId ? handoffModelId : undefined;
 }
 
 /**
@@ -26,15 +51,20 @@ export function useHandoffPrompt(): void {
   const navigate = useNavigate();
   const { resourceId, projectPath, baseUrl, sessionEnabled } = useChatSessionContext();
   const { localUser, clearPending, pushNotice } = useChatTranscript();
-  const sendMessage = useSendAgentControllerMessageMutation({
+  const mutationArgs = {
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
     scope: projectPath,
     baseUrl,
     enabled: sessionEnabled,
-  });
+  };
+  const sendMessage = useSendAgentControllerMessageMutation(mutationArgs);
+  const switchMode = useSwitchAgentControllerModeMutation(mutationArgs);
+  const switchModel = useSwitchAgentControllerModelMutation(mutationArgs);
   const handedOff = useRef(false);
   const prompt = readHandoffPrompt(location.state);
+  const modeId = readHandoffModeId(location.state);
+  const modelId = readHandoffModelId(location.state);
 
   useEffect(() => {
     if (!prompt || !sessionEnabled || handedOff.current) return;
@@ -42,7 +72,26 @@ export function useHandoffPrompt(): void {
     // history state outlives a reload; drop it before sending so the prompt cannot go twice
     void navigate({ pathname: location.pathname, search: location.search }, { replace: true, state: null });
     localUser(prompt);
-    void sendMessage.mutateAsync(prompt).catch(error => {
+    void (async () => {
+      // The composer named this mode and model before the session existed; bind
+      // them before the run starts — mode first, switching it resets the model —
+      // but never lose the prompt over a failed switch.
+      if (modeId) {
+        await switchMode
+          .mutateAsync(modeId)
+          .catch((error: unknown) =>
+            pushNotice(error instanceof Error ? error.message : `Could not start in ${modeId} mode.`, 'error'),
+          );
+      }
+      if (modelId) {
+        await switchModel
+          .mutateAsync(modelId)
+          .catch((error: unknown) =>
+            pushNotice(error instanceof Error ? error.message : `Could not start on ${modelId}.`, 'error'),
+          );
+      }
+      await sendMessage.mutateAsync(prompt);
+    })().catch(error => {
       clearPending();
       pushNotice(error instanceof Error ? error.message : 'The message could not be sent.', 'error');
     });
@@ -51,10 +100,14 @@ export function useHandoffPrompt(): void {
     localUser,
     location.pathname,
     location.search,
+    modeId,
+    modelId,
     navigate,
     prompt,
     pushNotice,
     sendMessage,
     sessionEnabled,
+    switchMode,
+    switchModel,
   ]);
 }

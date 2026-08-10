@@ -37,13 +37,15 @@ function ModeLabel({ modeId, name }: { modeId: string; name: string }) {
  * factory's own run prompts, so mode switching is hidden there.
  */
 export function ModesSelection() {
-  const { kind } = useChatSessionContext();
+  const { kind, sessionEnabled, draftSessionId } = useChatSessionContext();
   const { modes, activeModeId, setMode } = useChatModes();
   const [pendingModeId, setPendingModeId] = useState<string>();
   const selectedModeId = pendingModeId ?? activeModeId ?? modes[0]?.id;
   const selectedMode = modes.find(mode => mode.id === selectedModeId) ?? modes[0];
 
   if (kind === 'factory') return null;
+  // The mode either lives on the live session or rides the draft that creates one.
+  if (!sessionEnabled && !draftSessionId) return null;
   if (!selectedMode) return null;
 
   return (

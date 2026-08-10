@@ -75,14 +75,17 @@ export function useAgentControllerConnection({
     if (next === previous) return;
     sseStateRef.current = next;
     setSseConnectionState(next);
+    if (next !== 'connected') return;
     // Events sent while the stream was down are gone for good (the server does
     // not replay them), so a reconnect refetches the mounted message windows —
-    // mergeWindow folds whatever the gap dropped back into the transcript.
-    if (previous === 'dropped' && next === 'connected') {
-      void queryClient.invalidateQueries({
-        queryKey: queryKeys.agentControllerResourceThreadMessages(agentControllerId, resourceId),
-      });
-    }
+    // mergeWindow folds whatever the gap dropped back into the transcript. A
+    // first connect retries only failed windows: the stream opens after the
+    // session is bound to its thread, so a read that raced that binding works now.
+    const reconnected = previous === 'dropped';
+    void queryClient.invalidateQueries({
+      queryKey: queryKeys.agentControllerResourceThreadMessages(agentControllerId, resourceId),
+      predicate: query => reconnected || query.state.status === 'error',
+    });
   };
 
   const handleEvent = (event: AgentControllerEvent) => {
