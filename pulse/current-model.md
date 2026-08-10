@@ -1,6 +1,6 @@
 # Current Pulse Model
 
-This is the current candidate model after `fit_exploration_04/`, `fit_exploration_05/`, `fit_exploration_06/`, `fit_exploration_07/`, and `fit_exploration_08/`.
+This is the current candidate model after `fit_exploration_04/`, `fit_exploration_05/`, `fit_exploration_06/`, `fit_exploration_07/`, `fit_exploration_08/`, and `fit_exploration_09/`.
 It is not a final spec. It records the strongest working shape so future experiments do not reopen settled ground accidentally.
 
 ## Export Family
@@ -149,6 +149,7 @@ Promote a candidate to core only when reader behavior changes without it.
 - Agent Signals: no top-level `Signal` export; use delivery decision Pulses, content-introducing Pulses, state/notification ChangePulses, and relationships.
 - Signal queues: delivery is not model visibility; emit queue, drain, and model-input facts when delivery and model-context entry are separated.
 - Abort: model as run/thread/execution control, not Agent Signal content.
+- Branch refresh: no new top-level export family for Agent Controller, background tasks, file-routed agents/skills, schedules, or experiments. Use existing Pulse/ChangePulse/Relationship shape and skip UI/transport/storage projections.
 
 ## Agent Signals
 
@@ -196,3 +197,30 @@ Candidate actions:
 - `abort_completed`
 
 Expected `AbortError` under an already-aborted signal is not an error Pulse. Do not create content refs for abort. Do not use `SnapshotPulse`.
+
+## Branch Refresh Surfaces
+
+`fit_exploration_09/` tested current branch surfaces from `code_audit/13-current-branch-refresh.md`.
+Its second pass produced `fit_exploration_09/08-implementation-handoff.md` for concrete emit/avoid boundaries.
+
+Apply if Pulse covers current interactive agent runs:
+
+- Agent Controller/session runtime facts: inbound content, run start/end, approvals, suspensions/resumes, follow-up queues, abort, and model/mode/session setting changes.
+- Channel content identity: external message/thread ids and channel attributes should be metadata or relationships on content-introducing Pulses.
+- Background task lifecycle when linked to an agent/tool/run: queued/running/output/suspended/resumed/completed/failed/cancelled/recovered as semantic facts.
+- File-routed agents/skills as definition/config provenance: runtime use references resolved definitions instead of copying instructions/tools/skills.
+- Skill metadata injection as model-input visibility, using `included_in_model_input`.
+- Schedule fires when they introduce content, wake a run, skip, fail, or abort.
+- Concrete model route/fallback/provider option decisions when used by a model call.
+
+Defer or skip:
+
+- `display_state_changed` snapshots
+- channel rendering/adapters
+- pubsub subscription and worker mechanics
+- background task cleanup
+- storage progress/bookkeeping
+- dataset CRUD/list/read operations
+- generated provider registry churn
+
+Experiments/evals fit as run/item/scorer/score Pulses plus relationships, but can be deferred unless evaluation export is part of the initial release.

@@ -142,3 +142,34 @@ Questions answered:
 - Should delayed signal content be owned by delivery or drain/context-entry?
 - Are pre-run and pending queue scopes semantically different for replay?
 - Can original signal timestamps reconstruct prompt order?
+
+## 6. Branch Refresh Integration Experiment
+
+Status: second pass completed in `fit_exploration_09/`.
+
+Goal: test whether the branch-refresh audit surfaces can fit the current Pulse model without expanding Pulse into a generic product/event bus.
+
+Result: no new top-level export family is needed. Agent Controller/session facts, channel content identity, tool approvals/suspensions, follow-up queues, background task lifecycle tied to tool runs, file-routed definitions/skills, schedule-fired content, and concrete model route/fallback decisions fit the existing Pulse/ChangePulse/Relationship model. Defer experiment/eval export unless needed for launch; skip display mirrors, pubsub mechanics, storage bookkeeping, dataset CRUD, and generated provider registry churn. The second pass produced `fit_exploration_09/08-implementation-handoff.md` with concrete emit/avoid boundaries.
+
+Seed input:
+
+- `code_audit/13-current-branch-refresh.md`
+
+Candidate surfaces:
+
+- Agent Controller and channels
+- background tasks
+- file-routed agents and skills
+- experiments and evals
+- dynamic workflows and schedules
+- provider/model capability decisions
+- abort and Agent Signal facts only where they interact with the new surfaces
+
+Questions to answer:
+
+- Which refreshed surfaces are initial-spec requirements versus later product telemetry?
+- Do Agent Controller sessions replace, extend, or merely complement the older Harness runtime candidates?
+- Can background task lifecycle fit as tool/run Pulses plus relationships without exporting worker/pubsub plumbing?
+- Can file-routed agents and skills reuse the Definition/reference model from `fit_exploration_04/`?
+- Do experiments/evals need first-class Pulse families or are they just workflow/scorer/tool compositions?
+- What source audit line-level passes must happen before implementation starts?

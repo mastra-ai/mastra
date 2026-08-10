@@ -33,3 +33,4 @@ Ordinary `IMastraLogger` infrastructure logging, `console.*`, EventEmitter event
 - [10-protocol-telemetry-adapter-pulse-candidates.md](./10-protocol-telemetry-adapter-pulse-candidates.md): A2A, ToolLoopAgent adapter, Agent Builder policy, telemetry, logging, and thin boundary re-exports.
 - [11-pulse-applicability-review.md](./11-pulse-applicability-review.md): narrows the raw audit to user-primitive Pulse candidates and marks admin/query/storage/infrastructure items to skip or defer.
 - [12-harness-agent-config-pulse-candidates.md](./12-harness-agent-config-pulse-candidates.md): follow-up audit for Harness v1 runtime candidates and Agent Builder/CMS-style config provenance.
+- [13-current-branch-refresh.md](./13-current-branch-refresh.md): current branch refresh after recent core updates, aligning audit candidates with the initial Pulse export spec.
