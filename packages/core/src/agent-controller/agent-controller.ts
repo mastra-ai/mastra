@@ -39,6 +39,7 @@ import type {
   AgentControllerRequestContext,
   AgentControllerRequestStateUpdater,
   AgentControllerSessionCreatedListener,
+  AgentControllerSessionDeletedListener,
   AgentControllerThread,
   ModelAuthStatus,
   ToolCategory,
@@ -197,6 +198,8 @@ export class AgentController<TState = {}> {
    */
   readonly #sessionsByResource = new Map<string, Promise<Session<TState>>>();
   readonly #sessionCreatedListeners: AgentControllerSessionCreatedListener<TState>[] = [];
+  readonly #sessionDeletedListeners: AgentControllerSessionDeletedListener<TState>[] = [];
+  readonly #sessionsBeingDeleted = new WeakSet<Session<TState>>();
   /**
    * The scope each live session was created under, so re-keying operations
    * (e.g. {@link setResourceId}) preserve the session's registry scope.
@@ -273,6 +276,30 @@ export class AgentController<TState = {}> {
         }
       } catch (error) {
         console.error('Error in session-created listener:', error);
+      }
+    }
+  }
+
+  /** Subscribe to process-local notifications after live sessions are torn down. */
+  onSessionDeleted(listener: AgentControllerSessionDeletedListener<TState>): () => void {
+    this.#sessionDeletedListeners.push(listener);
+    return () => {
+      const index = this.#sessionDeletedListeners.indexOf(listener);
+      if (index !== -1) {
+        this.#sessionDeletedListeners.splice(index, 1);
+      }
+    };
+  }
+
+  #notifySessionDeleted(session: Session<TState>): void {
+    for (const listener of [...this.#sessionDeletedListeners]) {
+      try {
+        const result = listener(session);
+        if (result && typeof result === 'object' && 'catch' in result) {
+          (result as Promise<void>).catch(error => console.error('Error in session-deleted listener:', error));
+        }
+      } catch (error) {
+        console.error('Error in session-deleted listener:', error);
       }
     }
   }
@@ -621,6 +648,35 @@ export class AgentController<TState = {}> {
    */
   async getSessionByResource(resourceId: string, scope?: string): Promise<Session<TState> | undefined> {
     return this.#sessionsByResource.get(sessionRegistryKey(resourceId, scope));
+  }
+
+  /**
+   * Tear down the live session registered for a resource and optional scope.
+   * This only removes runtime state; persisted threads and messages remain.
+   * Returns `false` when no live session is registered.
+   */
+  async deleteSession({ resourceId, scope }: { resourceId: string; scope?: string }): Promise<boolean> {
+    const registryKey = sessionRegistryKey(resourceId, scope);
+    const pending = this.#sessionsByResource.get(registryKey);
+    if (!pending) return false;
+
+    const session = await pending;
+    if (this.#sessionsBeingDeleted.has(session)) return false;
+
+    this.#sessionsBeingDeleted.add(session);
+    try {
+      session.abort();
+      session.thread.cleanupSubscription();
+      try {
+        await session.thread.clearAndReleaseLock();
+      } finally {
+        await this.#dropSessionFromRegistry(registryKey, session);
+      }
+      this.#notifySessionDeleted(session);
+      return true;
+    } finally {
+      this.#sessionsBeingDeleted.delete(session);
+    }
   }
 
   // ===========================================================================

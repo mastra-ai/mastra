@@ -225,6 +225,9 @@ export type BuiltinToolId =
 /** Process-local listener notified after AgentController materializes a live session. */
 export type AgentControllerSessionCreatedListener<TState = {}> = (session: Session<TState>) => void | Promise<void>;
 
+/** Process-local listener notified after AgentController tears down a live session. */
+export type AgentControllerSessionDeletedListener<TState = {}> = (session: Session<TState>) => void | Promise<void>;
+
 export interface AgentControllerConfig<TState = {}> {
   /** Unique identifier for this controller instance */
   id: string;
