@@ -392,6 +392,16 @@ describe('mountFactoryAuth /auth routes (enabled)', () => {
     expect(mockHandleCallback).not.toHaveBeenCalled();
   });
 
+  it('surfaces an IdP denial on /signin instead of looping back through login', async () => {
+    const { app } = buildApp();
+    const res = await app.request(
+      '/auth/callback?error=access_denied&error_description=You%20do%20not%20have%20access',
+    );
+    expect(res.status).toBe(302);
+    expect(res.headers.get('location')).toBe('/signin?error=access_denied&error_description=You+do+not+have+access');
+    expect(mockHandleCallback).not.toHaveBeenCalled();
+  });
+
   it('redirects callback back to login when the code exchange fails', async () => {
     mockHandleCallback.mockRejectedValue(new Error('expired code'));
     const { app } = buildApp();

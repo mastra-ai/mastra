@@ -161,6 +161,33 @@ describe('SignInPage', () => {
     });
   });
 
+  describe('given an IdP access_denied redirect', () => {
+    it('shows the denied banner and collapses the dead /login returnTo', async () => {
+      stubAuthMe({ provider: 'mastra-studio' });
+      const deadLogin = `/login?error=access_denied&error_description=${encodeURIComponent(
+        'You do not have access to this application.',
+      )}`;
+      renderSignIn(`/signin?returnTo=${encodeURIComponent(deadLogin)}`);
+
+      const alert = await screen.findByRole('alert');
+      expect(alert).toHaveTextContent('Access denied');
+      expect(alert).toHaveTextContent('You do not have access to this application.');
+      expect(alert).toHaveTextContent('Ask an organization admin to add your account');
+
+      await userEvent.click(await screen.findByRole('button', { name: 'Sign in with Mastra Platform' }));
+      expect(redirectToLogin).toHaveBeenCalledWith(TEST_BASE_URL, '/');
+    });
+
+    it('shows the banner for error params sent directly to /signin', async () => {
+      stubAuthMe({ provider: 'workos' });
+      renderSignIn('/signin?error=access_denied');
+
+      const alert = await screen.findByRole('alert');
+      expect(alert).toHaveTextContent('Access denied');
+      expect(alert).toHaveTextContent('Ask an organization admin to add your account');
+    });
+  });
+
   describe('returnTo sanitization', () => {
     it.each([
       ['/factory/board?x=1#frag', '/factory/board?x=1#frag'],
