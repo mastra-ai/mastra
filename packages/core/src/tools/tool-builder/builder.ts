@@ -962,7 +962,13 @@ export class CoreToolBuilder extends MastraBase {
 
     const schemaCompatLayers = [];
 
-    if (model) {
+    // `strict: false` opts the tool out of strict structured-output schema rewriting.
+    // OpenAI strict mode forces every property into `required` (nullable), which makes it
+    // impossible for a model to genuinely omit a field - tools that rely on partial input
+    // (e.g. working memory merge updates) need the original optionality preserved.
+    const optsOutOfStrictSchemas = 'strict' in this.originalTool && this.originalTool.strict === false;
+
+    if (model && !optsOutOfStrictSchemas) {
       // Respect the model's own capability flag; do not disable it based solely on specificationVersion.
       const supportsStructuredOutputs =
         'supportsStructuredOutputs' in model ? (model.supportsStructuredOutputs ?? false) : false;

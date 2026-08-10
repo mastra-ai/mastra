@@ -1998,6 +1998,104 @@ describe('GithubSignals', () => {
     );
   });
 
+  it('stops per-thread polling on shutdown', async () => {
+    vi.useFakeTimers();
+    const thread: StorageThreadType = {
+      id: 'thread-shutdown',
+      resourceId: 'resource-shutdown',
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+      metadata: {
+        mastra: {
+          [GITHUB_SIGNALS_METADATA_KEY]: {
+            subscriptions: [
+              {
+                owner: 'mastra-ai',
+                repo: 'mastra',
+                number: 1,
+                subscribedAt: '2026-01-01T00:00:00.000Z',
+                updatedAt: '2026-01-01T00:00:00.000Z',
+                lastSubscribeSignalId: 'signal-1',
+              },
+            ],
+          },
+        },
+      },
+    };
+    const threadStore = createThreadStore(thread);
+    const syncClient: GithubSignalsSyncClient = {
+      syncPullRequest: vi.fn(async () => ({ ok: true })),
+      getPullRequestSnapshot: vi.fn(async () => ({ githubUpdatedAt: '2026-01-01T00:00:00.000Z' })),
+    };
+    const processor = new GithubSignals({ threadStore, syncClient, pollIntervalMs: 1_000 });
+
+    await processor.startPollingForThread({ threadId: thread.id, resourceId: thread.resourceId });
+    expect(processor.isPollingThread({ threadId: thread.id, resourceId: thread.resourceId })).toBe(true);
+
+    processor.stop();
+
+    expect(processor.isPollingThread({ threadId: thread.id, resourceId: thread.resourceId })).toBe(false);
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(syncClient.syncPullRequest).not.toHaveBeenCalled();
+  });
+
+  it('abandons an in-flight poll when the provider stops mid-sync', async () => {
+    const thread: StorageThreadType = {
+      id: 'thread-inflight',
+      resourceId: 'resource-inflight',
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+      metadata: {
+        mastra: {
+          [GITHUB_SIGNALS_METADATA_KEY]: {
+            subscriptions: [
+              {
+                owner: 'mastra-ai',
+                repo: 'mastra',
+                number: 7,
+                subscribedAt: '2026-01-01T00:00:00.000Z',
+                updatedAt: '2026-01-01T00:00:00.000Z',
+                lastSubscribeSignalId: 'signal-1',
+                lastObservedGithubUpdatedAt: '2026-01-01T00:00:00.000Z',
+                lastObservedContentHash: 'old-hash',
+              },
+            ],
+          },
+        },
+      },
+    };
+    const threadStore = createThreadStore(thread);
+    // Sync pauses until we release it, so stop() lands while the poll is in flight.
+    let releaseSync!: () => void;
+    const syncStarted = new Promise<void>(resolve => {
+      releaseSync = () => resolve();
+    });
+    const syncGate = new Promise<{ ok: true }>(resolve => {
+      void syncStarted.then(() => resolve({ ok: true }));
+    });
+    const syncClient: GithubSignalsSyncClient = {
+      syncPullRequest: vi.fn(() => syncGate),
+      getPullRequestSnapshot: vi.fn(async () => ({
+        githubUpdatedAt: '2026-01-01T00:05:00.000Z',
+        contentHash: 'new-hash',
+      })),
+    };
+    const sendNotificationSignal = vi.fn(async () => ({ accepted: true }));
+    const processor = new GithubSignals({ threadStore, syncClient });
+    processor.addAgent({ sendSignal: vi.fn(), sendNotificationSignal });
+
+    const pollPromise = processor.pollThreadNow({ threadId: thread.id, resourceId: thread.resourceId });
+    // Let the poll reach the paused sync call before stopping the provider.
+    await vi.waitFor(() => expect(syncClient.syncPullRequest).toHaveBeenCalled());
+
+    processor.stop();
+    releaseSync();
+    await expect(pollPromise).resolves.toBe(0);
+
+    expect(threadStore.saveThread).not.toHaveBeenCalled();
+    expect(sendNotificationSignal).not.toHaveBeenCalled();
+  });
+
   it('only keeps one active polling thread at a time', async () => {
     vi.useFakeTimers();
     const firstThread: StorageThreadType = {

@@ -14,6 +14,8 @@ import {
   ScreencastStreamImpl,
   DEFAULT_THREAD_ID,
   createBrowserRecordingTools,
+  resolveViewportSize,
+  DEFAULT_BROWSER_VIEWPORT,
 } from '@mastra/core/browser';
 import type {
   BrowserState,
@@ -153,7 +155,9 @@ export class StagehandBrowser extends MastraBrowser {
       stagehandOptions.localBrowserLaunchOptions = {
         cdpUrl: wsUrl,
         headless: this.headless,
-        viewport: config.viewport,
+        // Omitting the viewport makes Stagehand skip emulation entirely on the
+        // CDP path, so the page follows the real window.
+        viewport: resolveViewportSize(config.viewport),
         userDataDir: config.profile,
         executablePath: config.executablePath,
         preserveUserDataDir: config.preserveUserDataDir,
@@ -161,7 +165,10 @@ export class StagehandBrowser extends MastraBrowser {
     } else if (config.env !== 'BROWSERBASE') {
       stagehandOptions.localBrowserLaunchOptions = {
         headless: this.headless,
-        viewport: config.viewport,
+        // Stagehand overwrites an absent viewport with its own default when it
+        // launches the browser itself, so `'window'` cannot be honored here and
+        // falls back to explicit dimensions.
+        viewport: resolveViewportSize(config.viewport) ?? DEFAULT_BROWSER_VIEWPORT,
         userDataDir: config.profile,
         executablePath: config.executablePath,
         preserveUserDataDir: config.preserveUserDataDir,

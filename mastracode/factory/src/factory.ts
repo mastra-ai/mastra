@@ -30,12 +30,12 @@ import type { FactoryStorage } from '@mastra/core/storage';
 import type { MastraVector } from '@mastra/core/vector';
 import { LocalSandbox } from '@mastra/core/workspace';
 import type { WorkspaceSandbox } from '@mastra/core/workspace';
-import type { FactoryAuthUser } from './auth.js';
 import {
   buildAuthRoutes,
   createFactoryAuthGate,
   createFactoryRouteAuth,
   getFactoryAuthOrgId,
+  getFactoryAuthUserFromContext,
   getFactoryAuthUserId,
 } from './auth.js';
 import type { FactoryIntegration, IntegrationPostToolContext, IntegrationTools } from './integrations/base.js';
@@ -424,7 +424,7 @@ export class MastraFactory {
       users: auth && isUserProvider(auth) ? auth : undefined,
       sinks: integrations,
       agentTenant: requestContext => {
-        const user = requestContext.get('user') as FactoryAuthUser | undefined;
+        const user = getFactoryAuthUserFromContext(requestContext);
         return { orgId: getFactoryAuthOrgId(user), userId: getFactoryAuthUserId(user) };
       },
     });

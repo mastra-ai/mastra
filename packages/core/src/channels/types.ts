@@ -13,8 +13,17 @@ export type { InlineLinkEntry } from './inline-media';
 // Agent-side configuration types (consumer-facing)
 // =============================================================================
 
-/** Message content that can be posted to a channel. */
-export type PostableMessage = string | CardElement;
+/**
+ * Message content that can be posted to a channel.
+ *
+ * - `string` - posted as-is; standard markdown is not converted, though the
+ *   platform may still apply its own dialect (e.g. Slack mrkdwn).
+ * - `CardElement` - rendered as a rich card (e.g. Slack Block Kit).
+ * - `{ markdown: string }` - converted by the adapter to its platform format
+ *   (e.g. Slack `markdown_text`); adapters without native markdown rendering
+ *   convert it to their own dialect.
+ */
+export type PostableMessage = string | CardElement | { markdown: string };
 
 /** Per-adapter configuration shared across all `toolDisplay` modes. */
 export interface ChannelAdapterBaseConfig {
@@ -40,6 +49,19 @@ export interface ChannelAdapterBaseConfig {
    * @default `"❌ Error: <error.message>"`
    */
   formatError?: (error: Error) => PostableMessage;
+
+  /**
+   * Dialect for the agent's final reply text.
+   * - `'markdown'` (default) - replies post as `{ markdown }`; adapters with native
+   *   markdown rendering (Slack `markdown_text`) use it, others convert to their
+   *   platform format.
+   * - `'plain'` - replies post as literal plain text (the pre-1.x-behavior escape
+   *   hatch for agents prompted to emit a platform dialect such as Slack mrkdwn).
+   *
+   * Applies to final reply text only; tool cards, error messages, and tripwire
+   * notices are unaffected.
+   */
+  textFormat?: 'markdown' | 'plain';
 
   /**
    * Show platform typing indicators (and adaptive status text where supported,

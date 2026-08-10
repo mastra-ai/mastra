@@ -104,15 +104,15 @@ export const workflowsFixture: Record<string, GetWorkflowResponse> = {
 };
 
 /**
- * Origin variants for the Stored badge: one workflow from code, one registered
- * via the stored-workflows API, and one legacy entry without the field (older
+ * Origin variants for the Dynamic badge: one workflow from code, one registered
+ * via the dynamic-workflows API, and one legacy entry without the field (older
  * server). Kept separate from the main roster so badge queries can't collide.
  */
 export const originWorkflowsFixture: Record<string, GetWorkflowResponse> = {
   codeWf: { ...workflowBase('code-wf', 'Defined in code'), origin: 'code', steps: {}, allSteps: {} },
-  storedWf: {
-    ...workflowBase('stored-wf', 'From the stored-workflows API'),
-    origin: 'stored',
+  dynamicWf: {
+    ...workflowBase('dynamic-wf', 'From the dynamic-workflows API'),
+    origin: 'dynamic',
     steps: {},
     allSteps: {},
   },

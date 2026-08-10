@@ -175,8 +175,8 @@ export class StoreMemoryLance extends MemoryStorage {
     metadata,
   }: {
     id: string;
-    title: string;
-    metadata: Record<string, unknown>;
+    title?: string;
+    metadata?: Record<string, unknown>;
   }): Promise<StorageThreadType> {
     const maxRetries = 5;
 
@@ -194,7 +194,7 @@ export class StoreMemoryLance extends MemoryStorage {
         // Update atomically
         const record = {
           id,
-          title,
+          title: title ?? current.title,
           metadata: JSON.stringify(mergedMetadata),
           updatedAt: new Date().getTime(),
         };
@@ -389,7 +389,7 @@ export class StoreMemoryLance extends MemoryStorage {
 
       // When perPage is 0, we only need included messages — skip COUNT and data queries
       if (perPage === 0 && include && include.length > 0) {
-        const includedMessages = await this._getIncludedMessages(table, include);
+        const includedMessages = await this._getIncludedMessages(table, include, resourceId);
         const list = new MessageList().add(includedMessages, 'memory');
         return {
           messages: this._sortMessages(list.get.all.db(), field, direction),
@@ -448,7 +448,7 @@ export class StoreMemoryLance extends MemoryStorage {
       // Step 2: Add included messages with context (if any), excluding duplicates
       const messageIds = new Set(messages.map(m => m.id));
       if (include && include.length > 0) {
-        const includedMessages = await this._getIncludedMessages(table, include);
+        const includedMessages = await this._getIncludedMessages(table, include, resourceId);
         for (const includeMsg of includedMessages) {
           if (!messageIds.has(includeMsg.id)) {
             messages.push(includeMsg);
@@ -713,11 +713,22 @@ export class StoreMemoryLance extends MemoryStorage {
     });
   }
 
+  /**
+   * Fetches the messages named by `include` together with their surrounding context.
+   *
+   * @param table - Open handle to the messages table.
+   * @param include - Message ids to pin, each with an optional before/after window.
+   * @param resourceId - When set, restricts both the pinned messages and their context
+   * to that resource so an id from another resource returns nothing.
+   */
   private async _getIncludedMessages(
     table: any,
     include: NonNullable<StorageListMessagesInput['include']>,
+    resourceId?: string,
   ): Promise<(MastraMessageV1 | MastraDBMessage)[]> {
     if (include.length === 0) return [];
+
+    const resourceCondition = resourceId ? ` AND resourceId = '${this.escapeSql(resourceId)}'` : '';
 
     // Phase 1: Fetch target messages by ID to discover their thread_ids
     const targetIds = include.map(item => item.id);
@@ -725,7 +736,7 @@ export class StoreMemoryLance extends MemoryStorage {
       targetIds.length === 1
         ? `id = '${this.escapeSql(targetIds[0]!)}'`
         : `id IN (${targetIds.map(id => `'${this.escapeSql(id)}'`).join(', ')})`;
-    const targetRecords = await table.query().where(idCondition).toArray();
+    const targetRecords = await table.query().where(`${idCondition}${resourceCondition}`).toArray();
 
     const needsContext = include.some(item => item.withPreviousMessages || item.withNextMessages);
 
@@ -740,7 +751,7 @@ export class StoreMemoryLance extends MemoryStorage {
     for (const tid of threadIdsToFetch) {
       const threadRecords = await table
         .query()
-        .where(`thread_id = '${this.escapeSql(tid)}'`)
+        .where(`thread_id = '${this.escapeSql(tid)}'${resourceCondition}`)
         .toArray();
       threadRecords.sort((a: any, b: any) => a.createdAt - b.createdAt);
       threadCache.set(tid, threadRecords);

@@ -64,6 +64,7 @@ function createRecording() {
 function makeChannels(
   opts: {
     streaming?: boolean | { updateIntervalMs?: number };
+    textFormat?: 'markdown' | 'plain';
     toolDisplay?: 'cards' | 'text' | 'timeline' | 'grouped' | 'hidden' | ((event: any, ctx: any) => any);
     typingStatus?: boolean | ((chunk: any, ctx: any) => any);
     cards?: boolean;
@@ -81,6 +82,7 @@ function makeChannels(
     adapter: recording.adapter,
     streaming: opts.streaming ?? false,
   };
+  if (opts.textFormat !== undefined) adapterConfig.textFormat = opts.textFormat;
   if (opts.toolDisplay !== undefined) adapterConfig.toolDisplay = opts.toolDisplay;
   if (opts.typingStatus !== undefined) adapterConfig.typingStatus = opts.typingStatus;
   if (opts.cards !== undefined) adapterConfig.cards = opts.cards;
@@ -160,7 +162,7 @@ describe('ChatChannelOutputProcessor', () => {
       );
 
       const posts = calls.filter(c => c.kind === 'post');
-      expect(posts).toEqual([{ kind: 'post', arg: 'Hello, world!' }]);
+      expect(posts).toEqual([{ kind: 'post', arg: { markdown: 'Hello, world!' } }]);
     });
 
     it('strips zero-width characters before posting', async () => {
@@ -174,7 +176,7 @@ describe('ChatChannelOutputProcessor', () => {
         ],
         chatThread,
       );
-      expect(calls.filter(c => c.kind === 'post')).toEqual([{ kind: 'post', arg: 'Hi' }]);
+      expect(calls.filter(c => c.kind === 'post')).toEqual([{ kind: 'post', arg: { markdown: 'Hi' } }]);
     });
 
     it('skips empty/whitespace-only buffers', async () => {
@@ -189,6 +191,112 @@ describe('ChatChannelOutputProcessor', () => {
         chatThread,
       );
       expect(calls.filter(c => c.kind === 'post')).toEqual([]);
+    });
+  });
+
+  describe('textFormat reply dialect', () => {
+    it('static driver with no textFormat posts the final reply as { markdown } (default)', async () => {
+      const { channels, calls, chatThread } = makeChannels({ streaming: false });
+      await drive(
+        channels,
+        [
+          { type: 'text-delta', payload: { text: '**bold** reply' } },
+          { type: 'step-finish', payload: {} },
+          { type: 'finish', payload: {} },
+        ],
+        chatThread,
+      );
+
+      expect(calls.filter(c => c.kind === 'post')).toEqual([{ kind: 'post', arg: { markdown: '**bold** reply' } }]);
+    });
+
+    it("static driver with textFormat: 'plain' posts the final reply as a bare string", async () => {
+      const { channels, calls, chatThread } = makeChannels({ streaming: false, textFormat: 'plain' });
+      await drive(
+        channels,
+        [
+          { type: 'text-delta', payload: { text: '**bold** reply' } },
+          { type: 'step-finish', payload: {} },
+          { type: 'finish', payload: {} },
+        ],
+        chatThread,
+      );
+
+      expect(calls.filter(c => c.kind === 'post')).toEqual([{ kind: 'post', arg: '**bold** reply' }]);
+    });
+
+    it('streaming buffered fallback posts { markdown } by default when the streaming post fails', async () => {
+      const { channels, calls, chatThread } = makeChannels({ streaming: true });
+      const { StreamingPlan } = await getChatModule();
+      chatThread.post.mockImplementation(async (content: unknown) => {
+        if (content instanceof StreamingPlan) {
+          throw new Error('streaming unsupported');
+        }
+        calls.push({ kind: 'post', arg: content });
+        return { id: 'fallback-1', text: '' };
+      });
+
+      await drive(
+        channels,
+        [
+          { type: 'text-delta', payload: { text: 'Hel' } },
+          { type: 'text-delta', payload: { text: 'lo!' } },
+          { type: 'step-finish', payload: {} },
+          { type: 'finish', payload: {} },
+        ],
+        chatThread,
+      );
+
+      expect(calls.filter(c => c.kind === 'post')).toEqual([{ kind: 'post', arg: { markdown: 'Hello!' } }]);
+    });
+
+    it("streaming buffered fallback posts a bare string under textFormat: 'plain'", async () => {
+      const { channels, calls, chatThread } = makeChannels({ streaming: true, textFormat: 'plain' });
+      const { StreamingPlan } = await getChatModule();
+      chatThread.post.mockImplementation(async (content: unknown) => {
+        if (content instanceof StreamingPlan) {
+          throw new Error('streaming unsupported');
+        }
+        calls.push({ kind: 'post', arg: content });
+        return { id: 'fallback-1', text: '' };
+      });
+
+      await drive(
+        channels,
+        [
+          { type: 'text-delta', payload: { text: 'Hel' } },
+          { type: 'text-delta', payload: { text: 'lo!' } },
+          { type: 'step-finish', payload: {} },
+          { type: 'finish', payload: {} },
+        ],
+        chatThread,
+      );
+
+      expect(calls.filter(c => c.kind === 'post')).toEqual([{ kind: 'post', arg: 'Hello!' }]);
+    });
+
+    it('static driver whitespace-only reply in markdown mode posts nothing', async () => {
+      const { channels, calls, chatThread } = makeChannels({ streaming: false });
+      await drive(
+        channels,
+        [
+          { type: 'text-delta', payload: { text: ' \u200B \n ' } },
+          { type: 'step-finish', payload: {} },
+          { type: 'finish', payload: {} },
+        ],
+        chatThread,
+      );
+
+      expect(calls.filter(c => c.kind === 'post')).toEqual([]);
+    });
+
+    it('error posts stay a plain string regardless of textFormat', async () => {
+      const { channels, calls, chatThread } = makeChannels({ streaming: false });
+      await drive(channels, [{ type: 'error', payload: { error: new Error('boom') } }], chatThread);
+
+      const posts = calls.filter(c => c.kind === 'post');
+      expect(posts).toHaveLength(1);
+      expect((posts[0] as any).arg).toBe('❌ Error: boom');
     });
   });
 
@@ -837,6 +945,130 @@ describe('ChatChannelOutputProcessor', () => {
       // No built-in 'text'-mode "Running…" / "Result" plain-text fallback
       // posts (those would show up alongside the fn's custom message).
       expect(posts).toHaveLength(1);
+    });
+
+    it('toolDisplay fn returning empty { markdown } posts nothing (empty-markdown guard)', async () => {
+      const { channels, calls, chatThread } = makeChannels({
+        streaming: false,
+        toolDisplay: event => {
+          if (event.kind === 'result') return { kind: 'post', message: { markdown: '' } };
+          return undefined;
+        },
+      });
+      await drive(
+        channels,
+        [
+          { type: 'tool-call', payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' } } },
+          {
+            type: 'tool-result',
+            payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' }, result: 'sunny' },
+          },
+          { type: 'finish', payload: {} },
+        ],
+        chatThread,
+      );
+
+      expect(calls.filter(c => c.kind === 'post')).toHaveLength(0);
+    });
+
+    it('toolDisplay fn returning whitespace-only { markdown } posts nothing', async () => {
+      const { channels, calls, chatThread } = makeChannels({
+        streaming: false,
+        toolDisplay: event => {
+          if (event.kind === 'result') return { kind: 'post', message: { markdown: '  \n\t ' } };
+          return undefined;
+        },
+      });
+      await drive(
+        channels,
+        [
+          { type: 'tool-call', payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' } } },
+          {
+            type: 'tool-result',
+            payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' }, result: 'sunny' },
+          },
+          { type: 'finish', payload: {} },
+        ],
+        chatThread,
+      );
+
+      expect(calls.filter(c => c.kind === 'post')).toHaveLength(0);
+    });
+
+    it('streaming toolDisplay fn returning empty { markdown } posts nothing', async () => {
+      const { channels, calls, chatThread } = makeChannels({
+        streaming: true,
+        toolDisplay: event => {
+          if (event.kind === 'result') return { kind: 'post', message: { markdown: '' } };
+          return undefined;
+        },
+      });
+      await drive(
+        channels,
+        [
+          { type: 'tool-call', payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' } } },
+          {
+            type: 'tool-result',
+            payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' }, result: 'sunny' },
+          },
+          { type: 'finish', payload: {} },
+        ],
+        chatThread,
+      );
+
+      expect(calls.filter(c => c.kind === 'post')).toHaveLength(0);
+      expect(calls.filter(c => c.kind === 'editMessage')).toHaveLength(0);
+    });
+
+    it('streaming toolDisplay fn returning whitespace-only { markdown } posts nothing', async () => {
+      const { channels, calls, chatThread } = makeChannels({
+        streaming: true,
+        toolDisplay: event => {
+          if (event.kind === 'result') return { kind: 'post', message: { markdown: '  \n\t ' } };
+          return undefined;
+        },
+      });
+      await drive(
+        channels,
+        [
+          { type: 'tool-call', payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' } } },
+          {
+            type: 'tool-result',
+            payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' }, result: 'sunny' },
+          },
+          { type: 'finish', payload: {} },
+        ],
+        chatThread,
+      );
+
+      expect(calls.filter(c => c.kind === 'post')).toHaveLength(0);
+      expect(calls.filter(c => c.kind === 'editMessage')).toHaveLength(0);
+    });
+
+    it('toolDisplay fn returning non-empty { markdown } posts it through unchanged', async () => {
+      const { channels, calls, chatThread } = makeChannels({
+        streaming: false,
+        toolDisplay: event => {
+          if (event.kind === 'result') return { kind: 'post', message: { markdown: '**done**' } };
+          return undefined;
+        },
+      });
+      await drive(
+        channels,
+        [
+          { type: 'tool-call', payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' } } },
+          {
+            type: 'tool-result',
+            payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' }, result: 'sunny' },
+          },
+          { type: 'finish', payload: {} },
+        ],
+        chatThread,
+      );
+
+      const posts = calls.filter(c => c.kind === 'post');
+      expect(posts).toHaveLength(1);
+      expect((posts[0] as any).arg).toEqual({ markdown: '**done**' });
     });
 
     it('deprecated formatToolCall shims into toolDisplay fn for result events', async () => {
@@ -1568,7 +1800,10 @@ describe('ChatChannelOutputProcessor', () => {
         ],
         chatThread,
       );
-      expect(calls.filter(c => c.kind === 'post').map(c => (c as any).arg)).toEqual(['pending', 'next run']);
+      expect(calls.filter(c => c.kind === 'post').map(c => (c as any).arg)).toEqual([
+        { markdown: 'pending' },
+        { markdown: 'next run' },
+      ]);
     });
 
     it('posts a friendly error message on error chunks and resets state', async () => {
@@ -1593,7 +1828,8 @@ describe('ChatChannelOutputProcessor', () => {
         chatThread,
       );
       const postArgs = calls.filter(c => c.kind === 'post').map(c => (c as any).arg);
-      expect(postArgs).toEqual(['partial', '❌ Error: boom', 'recovery']);
+      // Reply text posts as markdown; the error post stays a plain string.
+      expect(postArgs).toEqual([{ markdown: 'partial' }, '❌ Error: boom', { markdown: 'recovery' }]);
     });
 
     it('does not post anything on abort but still flushes pending text', async () => {
@@ -1607,7 +1843,7 @@ describe('ChatChannelOutputProcessor', () => {
         chatThread,
       );
       const postArgs = calls.filter(c => c.kind === 'post').map(c => (c as any).arg);
-      expect(postArgs).toEqual(['partial']);
+      expect(postArgs).toEqual([{ markdown: 'partial' }]);
     });
   });
 
@@ -1640,7 +1876,7 @@ describe('ChatChannelOutputProcessor', () => {
         chatThread,
       );
       const postArgs = calls.filter(c => c.kind === 'post').map(c => (c as any).arg);
-      expect(postArgs).toEqual(['shorter take']);
+      expect(postArgs).toEqual([{ markdown: 'shorter take' }]);
     });
   });
 
@@ -1659,7 +1895,7 @@ describe('ChatChannelOutputProcessor', () => {
         chatThread,
       );
       const postArgs = calls.filter(c => c.kind === 'post').map(c => (c as any).arg);
-      expect(postArgs).toEqual(['reply']);
+      expect(postArgs).toEqual([{ markdown: 'reply' }]);
     });
   });
 
@@ -1696,9 +1932,8 @@ describe('ChatChannelOutputProcessor', () => {
         chatThread,
       );
       const postArgs = calls.filter(c => c.kind === 'post').map(c => (c as any).arg);
-      expect(typeof postArgs[0]).toBe('string');
-      expect(postArgs[0]).toBe('here you go');
-      expect(typeof postArgs[1]).toBe('object');
+      expect(postArgs[0]).toEqual({ markdown: 'here you go' });
+      expect((postArgs[1] as any).files).toHaveLength(1);
     });
   });
 });
@@ -1793,7 +2028,7 @@ describe('ChatChannelOutputProcessor fallback render context', () => {
     });
 
     const posts = calls.filter(c => c.kind === 'post');
-    expect(posts).toEqual([{ kind: 'post', arg: 'schedule says hi' }]);
+    expect(posts).toEqual([{ kind: 'post', arg: { markdown: 'schedule says hi' } }]);
   });
 
   it('passes through when the thread has no channel metadata', async () => {
@@ -1858,6 +2093,6 @@ describe('ChatChannelOutputProcessor fallback render context', () => {
     });
 
     const posts = calls.filter(c => c.kind === 'post');
-    expect(posts).toEqual([{ kind: 'post', arg: 'inbound message' }]);
+    expect(posts).toEqual([{ kind: 'post', arg: { markdown: 'inbound message' } }]);
   });
 });

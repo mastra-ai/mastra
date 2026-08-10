@@ -16,7 +16,7 @@ The Datadog Bridge is currently **experimental**. APIs and configuration options
 
 The Datadog Bridge enables bidirectional integration between Mastra's tracing system and Datadog. Unlike exporters that send trace data after execution completes, the bridge creates native dd-trace spans in real time so that auto-instrumented APM operations (HTTP calls, database queries, etc.) inside your tools and processors are correctly nested under their parent Mastra spans.
 
-:::info Not using dd-trace APM?
+:::note Not using dd-trace APM?
 
 If you only need to send LLM Observability data and don't use `dd-trace` APM auto-instrumentation, the [Datadog Exporter](/docs/observability/integrations/exporters/datadog) is simpler, it supports agentless mode and sends spans directly to Datadog without a local agent.
 

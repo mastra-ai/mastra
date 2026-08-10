@@ -7,6 +7,12 @@ packages:
 
 # Tools
 
+:::beta
+
+Breaking changes may occur without a major version bump until the API is stable.
+
+:::
+
 A file-based agent discovers tools from `.ts` and `.js` files directly under its `tools/` directory. Each discovered file is imported at build time, the file must default-export a [`createTool()`](/reference/tools/create-tool) result, and the filename without its extension becomes the tool key the model can call.
 
 Use this page for the file-based convention. For tool schemas, execution options, output shaping, and approval options, see the [`createTool()` reference](/reference/tools/create-tool).

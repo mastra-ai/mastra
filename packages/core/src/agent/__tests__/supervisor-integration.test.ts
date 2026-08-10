@@ -300,6 +300,64 @@ describe('Supervisor Pattern Integration Tests', () => {
       );
     });
 
+    it('should let onDelegationComplete replace the tool result the parent sees in the same run', async () => {
+      // Sub-agent stops without producing text, which reads to the parent as an empty success.
+      const subAgent = makeSubAgent('silent-agent', '');
+      const promptsSeenByParent: string[] = [];
+
+      const supervisorModel = new MockLanguageModelV2({
+        doGenerate: async ({ prompt }) => {
+          promptsSeenByParent.push(JSON.stringify(prompt));
+          if (promptsSeenByParent.length === 1) {
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'tool-calls' as const,
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              text: '',
+              content: [
+                {
+                  type: 'tool-call' as const,
+                  toolCallId: 'call-1',
+                  toolName: 'agent-silentAgent',
+                  input: JSON.stringify({ prompt: 'do the thing' }),
+                },
+              ],
+              warnings: [],
+            };
+          }
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop' as const,
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            text: 'Done',
+            content: [{ type: 'text' as const, text: 'Done' }],
+            warnings: [],
+          };
+        },
+      });
+
+      const supervisorAgent = new Agent({
+        id: 'supervisor',
+        name: 'supervisor',
+        instructions: 'You orchestrate sub-agents.',
+        model: supervisorModel,
+        agents: { silentAgent: subAgent },
+        memory: new MockMemory(),
+      });
+
+      await supervisorAgent.generate('Do the thing', {
+        maxSteps: 3,
+        delegation: {
+          onDelegationComplete: ({ result }) =>
+            result.text ? undefined : { resultText: 'The sub-agent failed to produce a result.' },
+        },
+      });
+
+      // The second model call carries the tool result, and it must show the replacement.
+      expect(promptsSeenByParent).toHaveLength(2);
+      expect(promptsSeenByParent[1]).toContain('The sub-agent failed to produce a result.');
+    });
+
     it('should skip sub-agent when onDelegationStart returns proceed: false', async () => {
       const subAgentGenerate = vi.fn();
       const subAgent = makeSubAgent('blocked-agent', 'Should not be called');

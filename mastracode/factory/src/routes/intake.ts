@@ -47,7 +47,9 @@ export function parseIntakeConfig(body: unknown): IntakeConfig | null {
   const entries = Object.entries(body);
   if (entries.length > 50) return null;
 
-  const config: IntakeConfig = {};
+  // Null-prototype so an `__proto__` key lands as a real entry instead of silently
+  // reassigning the prototype and disappearing from the validation below.
+  const config: IntakeConfig = Object.create(null);
   for (const [integrationId, value] of entries) {
     if (
       !integrationId ||
@@ -130,26 +132,37 @@ export class IntakeRoutes extends Route<IntakeRoutesDeps> {
             return c.json({ error: 'Invalid JSON body' }, 400);
           }
           const config = parseIntakeConfig(body);
-          if (!config || Object.keys(config).some(integrationId => !integrationIds.includes(integrationId))) {
+          if (!config) {
             return c.json({ error: 'invalid_config' }, 400);
           }
 
+          const registeredConfig: IntakeConfig = Object.create(null);
+          for (const [integrationId, selection] of Object.entries(config)) {
+            if (integrationIds.includes(integrationId)) {
+              registeredConfig[integrationId] = selection;
+              continue;
+            }
+            if (selection.enabled || selection.sourceIds?.length) {
+              return c.json({ error: 'invalid_config' }, 400);
+            }
+          }
+
           await intake.ensureReady();
-          await intake.saveConfig({ ...tenant, config });
+          await intake.saveConfig({ ...tenant, config: registeredConfig });
           await audit.emit({
             context: loose(c),
             input: {
               action: 'factory.intake.config_updated',
               targets: [{ type: 'intake_config', id: tenant.orgId }],
               metadata: Object.fromEntries(
-                Object.entries(config).map(([integrationId, selection]) => [
+                Object.entries(registeredConfig).map(([integrationId, selection]) => [
                   integrationId,
                   { enabled: selection.enabled, sources: selection.sourceIds?.length ?? null },
                 ]),
               ),
             },
           });
-          return c.json({ config });
+          return c.json({ config: registeredConfig });
         },
       }),
       registerApiRoute('/web/intake/sources', {

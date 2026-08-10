@@ -6,6 +6,7 @@ import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
 import type { MCPHttpTransportResult, MCPSseTransportResult } from '@mastra/server/handlers/mcp';
 import type { ParsedRequestParams, ServerRoute } from '@mastra/server/server-adapter';
 import {
+  MASTRA_FRAMEWORK_PUBLIC_KEY,
   MastraServer as MastraServerBase,
   checkRouteFGA,
   isZodError,
@@ -17,6 +18,7 @@ import { toReqRes, toFetchResponse } from 'fetch-to-node';
 import type { Context, ExecutionContext, HonoRequest, MiddlewareHandler } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { stream } from 'hono/streaming';
+import { propagateClientDisconnect } from './mcp-disconnect';
 export { createAuthMiddleware } from './auth-middleware';
 export type { HonoAuthMiddlewareOptions } from './auth-middleware';
 // Browser stream setup (Hono-specific WebSocket implementation)
@@ -47,6 +49,40 @@ export type HonoVariables = {
   taskStore: InMemoryTaskStore;
   customRouteAuthConfig?: Map<string, boolean>;
   cachedBody?: unknown;
+  /**
+   * True when the current request targets a route the framework has declared
+   * public (`requiresAuth: false`). Adapter authors MUST wrap user-registered
+   * middleware with {@link skipIfFrameworkPublic} so that user middleware
+   * cannot 401 these routes.
+   */
+  [MASTRA_FRAMEWORK_PUBLIC_KEY]?: boolean;
+};
+
+// Re-export the framework-public context key so users configuring Hono apps
+// can reference it directly without importing from @mastra/server.
+export { MASTRA_FRAMEWORK_PUBLIC_KEY } from '@mastra/server/server-adapter';
+
+/**
+ * Wrap a Hono middleware handler so it becomes a no-op for framework-public
+ * routes (routes registered with `requiresAuth: false`).
+ *
+ * Adapters that expose user-provided middleware — for example `serverMiddleware`
+ * on the Mastra instance or `server.middleware` in Mastra config — MUST wrap
+ * those handlers with this before registering them. This is the framework's
+ * guarantee that user middleware cannot accidentally (or intentionally) 401
+ * routes the framework needs to keep reachable (e.g. Studio sign-in endpoints).
+ *
+ * The framework-public flag is computed once per request by
+ * {@link MastraServer.registerContextMiddleware} and stashed on the Hono
+ * context under `MASTRA_FRAMEWORK_PUBLIC_KEY`.
+ */
+export const skipIfFrameworkPublic = (handler: MiddlewareHandler): MiddlewareHandler => {
+  return async (c, next) => {
+    if (c.get(MASTRA_FRAMEWORK_PUBLIC_KEY)) {
+      return next();
+    }
+    return handler(c, next);
+  };
 };
 
 export type HonoBindings = {};
@@ -366,7 +402,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
           }
         });
 
-      return await toFetchResponse(res);
+      return propagateClientDisconnect(await toFetchResponse(res), res);
     } else if (route.responseType === 'mcp-sse') {
       // MCP SSE transport
       const { server, ssePath, messagePath } = result as MCPSseTransportResult;
@@ -754,7 +790,17 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
   }
 
   registerContextMiddleware(): void {
+    // Precompute the framework-public matcher once at registration time.
+    // Called per-request below; used by adapters (see `skipIfFrameworkPublic`)
+    // to short-circuit user-registered middleware for framework-public routes
+    // so users cannot 401 routes declared public via `requiresAuth: false`.
+    const isFrameworkPublic = this.getFrameworkPublicMatcher();
+
     this.app.use('*', this.createContextMiddleware());
+    this.app.use('*', async (c, next) => {
+      c.set(MASTRA_FRAMEWORK_PUBLIC_KEY, isFrameworkPublic(c.req.path, c.req.method));
+      return next();
+    });
     this.app.use('*', async (c, next) => {
       await next();
       this.warnIfUnregisteredChannelWebhook(c.req.path, c.req.method, c.res.status);

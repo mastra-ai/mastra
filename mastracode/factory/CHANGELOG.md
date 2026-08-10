@@ -1,5 +1,195 @@
 # @mastra/factory
 
+## 0.6.0-alpha.15
+
+### Patch Changes
+
+- Updated dependencies [[`72ce266`](https://github.com/mastra-ai/mastra/commit/72ce2669506e755c0bbe73baf3a7e8ea5208bdad)]:
+  - @mastra/code-sdk@1.2.0-alpha.14
+
+## 0.6.0-alpha.14
+
+### Patch Changes
+
+- Updated dependencies [[`2e4624e`](https://github.com/mastra-ai/mastra/commit/2e4624edb6917e61249cb60ee377735e7af7e4a9), [`2e4624e`](https://github.com/mastra-ai/mastra/commit/2e4624edb6917e61249cb60ee377735e7af7e4a9), [`e6534fa`](https://github.com/mastra-ai/mastra/commit/e6534fab031216f6cb48c4c9907cbfdce9d60bc6), [`7fdcaa6`](https://github.com/mastra-ai/mastra/commit/7fdcaa66105d64290f9b14432a12ec99f39c4d3a), [`cfd0d9e`](https://github.com/mastra-ai/mastra/commit/cfd0d9ec77ec3c69dd96f79cdb579e03d79f22ce), [`d9d93b2`](https://github.com/mastra-ai/mastra/commit/d9d93b25e4a65ad5fa153fa35be7ed149c8d587f)]:
+  - @mastra/core@1.58.0-alpha.12
+  - @mastra/code-sdk@1.2.0-alpha.13
+
+## 0.6.0-alpha.13
+
+### Patch Changes
+
+- Updated dependencies [[`b8ce7ec`](https://github.com/mastra-ai/mastra/commit/b8ce7ec96e39343c6c2f36d12d68a9ad816c09f7), [`a3a3624`](https://github.com/mastra-ai/mastra/commit/a3a3624f646b98e409424d8defccbd334da9e8b8), [`6246914`](https://github.com/mastra-ai/mastra/commit/62469146636911f3cbbe0880bd011c6a897a59a7), [`3f73c07`](https://github.com/mastra-ai/mastra/commit/3f73c076727e8c36b4fff7a1b40290fb68957fa8), [`7c1ebb1`](https://github.com/mastra-ai/mastra/commit/7c1ebb15690c4b3f0eabb19077cf8af573311e57), [`1315d8f`](https://github.com/mastra-ai/mastra/commit/1315d8f17e8e7acb61cca46b72a1d42f6d00d289), [`32980a3`](https://github.com/mastra-ai/mastra/commit/32980a3e2413d0274ac244d32c37d910edc13f00), [`4bcdfaf`](https://github.com/mastra-ai/mastra/commit/4bcdfaf0eac3199d7cb171b0a19a92c9c341eea4), [`af4636a`](https://github.com/mastra-ai/mastra/commit/af4636a74463275d71c1d13a38f7d2b738f128bf), [`a463cdf`](https://github.com/mastra-ai/mastra/commit/a463cdf1c95c3059e70f0bff27959e8558bb899d), [`0ea6b80`](https://github.com/mastra-ai/mastra/commit/0ea6b8001408ce02b56e8be0536b0fd8cbaf8ad2)]:
+  - @mastra/core@1.58.0-alpha.11
+  - @mastra/code-sdk@1.2.0-alpha.12
+
+## 0.6.0-alpha.12
+
+### Patch Changes
+
+- Updated dependencies [[`66bbfb5`](https://github.com/mastra-ai/mastra/commit/66bbfb5f05b473d39f88c0e4a481ccac41634f3a)]:
+  - @mastra/core@1.58.0-alpha.10
+  - @mastra/code-sdk@1.2.0-alpha.11
+
+## 0.6.0-alpha.11
+
+### Patch Changes
+
+- Updated dependencies [[`86b7b77`](https://github.com/mastra-ai/mastra/commit/86b7b777980d30f66e1fd134a37d2af4c22e54cc), [`80a3324`](https://github.com/mastra-ai/mastra/commit/80a33245d3110204de6f56d61211523ffe338692), [`d9d2881`](https://github.com/mastra-ai/mastra/commit/d9d2881ede6dd6c023d144215fc812062aed0890), [`82e3365`](https://github.com/mastra-ai/mastra/commit/82e3365ef7c9bf7bee2e7a7029035ea262d68895), [`1b482c2`](https://github.com/mastra-ai/mastra/commit/1b482c2d89244dd758c41e5f927a2b44041388d2), [`e6a2860`](https://github.com/mastra-ai/mastra/commit/e6a2860649cc51f87d32d78b766ae2126446ba07), [`7bd85ea`](https://github.com/mastra-ai/mastra/commit/7bd85ea7588b71c25ce9f4019c88f8539be5dcbc), [`833432b`](https://github.com/mastra-ai/mastra/commit/833432b92612b7f122aa7342132ea37f2ad96e77)]:
+  - @mastra/core@1.58.0-alpha.9
+  - @mastra/code-sdk@1.2.0-alpha.10
+
+## 0.6.0-alpha.10
+
+### Patch Changes
+
+- Updated dependencies [[`1c75e32`](https://github.com/mastra-ai/mastra/commit/1c75e32f7fc0b9fb6f548b4407feaec8a1440212), [`c47165c`](https://github.com/mastra-ai/mastra/commit/c47165c983c87594c6952f1fd2fa51a90205034c), [`e08e789`](https://github.com/mastra-ai/mastra/commit/e08e789c1bf4cd2fe46363f7a4728536ceccc9bd), [`35cc901`](https://github.com/mastra-ai/mastra/commit/35cc90102cf834a84827acaf9eee0b6d6d1e2a3b), [`a8b4cf0`](https://github.com/mastra-ai/mastra/commit/a8b4cf02823cffebc4751a53337dfacf097c1ae1), [`f33264f`](https://github.com/mastra-ai/mastra/commit/f33264f517ae603279afd5c4251e2b40f6dd3618), [`689f2c4`](https://github.com/mastra-ai/mastra/commit/689f2c4b6c0835fe455702b01d21daa8abcd9331), [`eeae63e`](https://github.com/mastra-ai/mastra/commit/eeae63e7fbe8e1f237adc69bca6e2ac13c5ca907), [`4c186a0`](https://github.com/mastra-ai/mastra/commit/4c186a017275f45e6ed4c09de0f89550e2d09e8c), [`b0fa077`](https://github.com/mastra-ai/mastra/commit/b0fa077bcbc9b08551846fe372a0d3d15b71ed72)]:
+  - @mastra/core@1.58.0-alpha.8
+  - @mastra/code-sdk@1.2.0-alpha.9
+
+## 0.6.0-alpha.9
+
+### Patch Changes
+
+- Fixed Factory review sessions losing caller identity when an existing request context is empty. ([#21055](https://github.com/mastra-ai/mastra/pull/21055))
+
+- Updated dependencies [[`7fb580a`](https://github.com/mastra-ai/mastra/commit/7fb580ac73fbcacf2ff00872a3395f73ae1b9fa5), [`333785c`](https://github.com/mastra-ai/mastra/commit/333785c93cbb01e42c60167e995457c28897ddbf), [`2eabc09`](https://github.com/mastra-ai/mastra/commit/2eabc097d86d52fbd0123da36a7c874154cc384f), [`83fa004`](https://github.com/mastra-ai/mastra/commit/83fa0044bfda8b703a83883dbd8bef204844d13f)]:
+  - @mastra/core@1.58.0-alpha.7
+  - @mastra/code-sdk@1.2.0-alpha.8
+
+## 0.6.0-alpha.8
+
+### Patch Changes
+
+- Fixed Factory intake saves when generated clients include disabled defaults for integrations that are not configured. ([#21019](https://github.com/mastra-ai/mastra/pull/21019))
+
+- Fixed reused Factory workspaces retaining GitHub credentials from an outdated work or review assignment. ([#21035](https://github.com/mastra-ai/mastra/pull/21035))
+
+## 0.6.0-alpha.7
+
+### Patch Changes
+
+- Fixed Factory sessions rejecting signed-in users when session-based authentication providers store the user and active organization in a wrapped session shape. Workspace ownership checks and GitHub session tools now recognize both flat and session-wrapped authenticated users. ([#21008](https://github.com/mastra-ai/mastra/pull/21008))
+
+- Updated dependencies [[`f59032a`](https://github.com/mastra-ai/mastra/commit/f59032a73699443555a08a479e7ac578975784f2), [`f59032a`](https://github.com/mastra-ai/mastra/commit/f59032a73699443555a08a479e7ac578975784f2), [`3e50f63`](https://github.com/mastra-ai/mastra/commit/3e50f63db85e9fe365b4ce5daecb0ac0dc464d93), [`bf936e2`](https://github.com/mastra-ai/mastra/commit/bf936e2c89b2ff0dad5695b873ddc009ba96d41e)]:
+  - @mastra/code-sdk@1.2.0-alpha.7
+  - @mastra/core@1.58.0-alpha.6
+
+## 0.6.0-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [[`25956fc`](https://github.com/mastra-ai/mastra/commit/25956fc8841780d506acb22b618fdb4dcf6c4e21)]:
+  - @mastra/code-sdk@1.2.0-alpha.6
+
+## 0.6.0-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [[`6445eba`](https://github.com/mastra-ai/mastra/commit/6445eba6020abac681aba1cc9289f446cb400cbe), [`df31eb0`](https://github.com/mastra-ai/mastra/commit/df31eb0c7087d782a0d9346e467f9a4af4b0eef6), [`fcd0667`](https://github.com/mastra-ai/mastra/commit/fcd0667a4e378be35c9a1b1eb19cce78fbfd7282), [`bab06b1`](https://github.com/mastra-ai/mastra/commit/bab06b18923873a584bdfc71a6b4ec7fb4727fb7)]:
+  - @mastra/core@1.58.0-alpha.5
+  - @mastra/code-sdk@1.2.0-alpha.5
+
+## 0.6.0-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [[`76e5132`](https://github.com/mastra-ai/mastra/commit/76e51328dbc0749c8304e6b3f21e4401f451b081), [`0282e16`](https://github.com/mastra-ai/mastra/commit/0282e16115538c8e9b248b90f0748eb01cb5dc98), [`0282e16`](https://github.com/mastra-ai/mastra/commit/0282e16115538c8e9b248b90f0748eb01cb5dc98)]:
+  - @mastra/core@1.58.0-alpha.4
+  - @mastra/slack@1.6.1-alpha.0
+  - @mastra/code-sdk@1.2.0-alpha.4
+
+## 0.6.0-alpha.3
+
+### Minor Changes
+
+- Add a reasoning-effort configuration surface across mastracode and Factory (fixes #20766): ([#20884](https://github.com/mastra-ai/mastra/pull/20884))
+
+  - New `max` thinking level (mapped to `reasoning effort: max` for OpenAI Codex and Anthropic `effort`).
+  - Anthropic extended-thinking wiring: the session thinking level now applies to anthropic/claude-opus-4-7 and other Anthropic models via provider thinking/effort options (previously OpenAI-only).
+  - New `models.modeThinkingDefaults` setting: per-mode (build/plan/fast) default thinking levels, resolved at request time with precedence session override → mode default → global `preferences.thinkingLevel`. Configuration changes now apply to the next request of every session, including automated Factory runs.
+  - Factory: new Settings → Defaults controls for editing global and per-mode thinking defaults in local deployments.
+  - TUI: `/think` now sets a session-only override, supports `/think default` to clear it, and `/think status` reports the effective level with provenance (session override / mode default / global default).
+
+  Example `settings.json` configuration:
+
+  ```json
+  {
+    "preferences": { "thinkingLevel": "medium" },
+    "models": {
+      "modeThinkingDefaults": {
+        "build": "high",
+        "plan": "max",
+        "fast": "off"
+      }
+    }
+  }
+  ```
+
+- Added persisted workspace file lists for Factory threads. The Files view now keeps a thread's captured file list available after an agent run while file contents continue to load from its live sandbox. ([#20937](https://github.com/mastra-ai/mastra/pull/20937))
+
+- Added label reconciliation and label filtering to Factory work and review boards. GitHub pull requests, GitHub issues, and Linear issues now keep their labels in sync with the provider, and boards expose a searchable multi-select label filter that shares state through the URL. ([#20845](https://github.com/mastra-ai/mastra/pull/20845))
+
+  Selected labels round-trip through the `label` query parameter (repeated per label to preserve values containing commas):
+
+  ```
+  /factory/project/<id>/work?label=bug&label=needs%20triage
+  /factory/project/<id>/review?teammate=<userId>&label=priority%3Ap0
+  ```
+
+- Added automatic GitHub and Linear issue reconciliation so Factory work items stay current when provider metadata changes outside Factory. Platform Linear now tails the Platform event stream and folds a periodic reconcile sweep in on its own cadence, so Issue updates flow into Factory through the normal rules pipeline without waiting for the next board poll. ([#20845](https://github.com/mastra-ai/mastra/pull/20845))
+
+  GitHub issue reconciliation runs inside the same worker as the pull-request reconciler (both self-hosted and Platform), sharing the same lease, cadence, and configured-repository target set. That means one sweep per repository per interval covers both writers of card state.
+
+  Reconciliation is on by default. Disable or tune it with environment variables on the Factory server:
+
+  ```bash
+  # Turn Linear reconciliation off entirely.
+  MASTRACODE_LINEAR_RECONCILE_ENABLED=false
+
+  # Slow the Linear reconcile sweep down (default: 5 minutes).
+  MASTRACODE_LINEAR_RECONCILE_INTERVAL_MS=600000
+
+  # Stop Platform Linear from tailing the event stream; the reconcile sweep still runs.
+  MASTRACODE_PLATFORM_LINEAR_POLLING_ENABLED=false
+
+  # GitHub reconciliation uses the same shape.
+  MASTRACODE_GITHUB_RECONCILE_ENABLED=false
+  MASTRACODE_GITHUB_RECONCILE_INTERVAL_MS=600000
+  ```
+
+### Patch Changes
+
+- Fixed workspace re-open hard-failing when a session branch was auto-deleted after merge. `git pull` messages like "no such ref was fetched" and "couldn't find remote ref" are now treated as benign, so materialization keeps the checkout as-is instead of leaving permanent rule-effect alerts on Done items. ([#20910](https://github.com/mastra-ai/mastra/pull/20910))
+
+- Added `dispatcher.maxInFlight` to `MastraFactoryConfig` and the `MASTRACODE_DISPATCH_MAX_IN_FLIGHT` deployment setting to configure the maximum number of concurrent Factory background dispatches per replica. ([#20903](https://github.com/mastra-ai/mastra/pull/20903))
+
+  ```sh
+  export MASTRACODE_DISPATCH_MAX_IN_FLIGHT=10
+  ```
+
+- Make factory review sessions survive server restarts, dropped connections, and strict git configs. ([#20899](https://github.com/mastra-ai/mastra/pull/20899))
+
+  - Crash-resumed sessions recover their run binding and untrusted-checkout posture from the binding table instead of silently losing the transition tool.
+  - Overly long transition rationales are clamped instead of failing the run.
+  - Clones and pulls retry when the transfer to github.com drops partway through.
+  - Checkouts with `pull.rebase` set no longer fail workspace materialization.
+
+- Improved Factory issue investigations with structured summaries and GitHub triage-label updates. ([#20988](https://github.com/mastra-ai/mastra/pull/20988))
+
+- Hardened the GitHub reconcile worker, the Platform Linear event worker, and the shared issue reconciler: ([#20845](https://github.com/mastra-ai/mastra/pull/20845))
+
+  - Platform Linear Issue events now only dispatch to `(orgId, factoryProjectId)` pairs that already have a persisted work item for the incoming Linear issue. Previously the worker fanned an event out to every Factory project regardless of tenant, which could materialize a triage card in an unrelated org via the default `linearIssueObserved` rule.
+  - Reconciler metadata patches no longer spread `undefined` values over stored fields, so a live issue that omits (for example) an author does not clobber the previously recorded value.
+  - Documented the event worker's at-most-once delivery contract explicitly: the cursor advances past a failing ingest and drift is caught by the folded reconciler sweep on its own cadence.
+  - `GithubReconcileWorker` now renews its lease while a sweep is in flight, so folding the issue sweep into the same tick can no longer let the lease expire and hand off to a replica mid-sweep. A `renewLease` result of `false` or a renewal error is treated as lease loss: the worker aborts before running the folded issue sweep and skips `releaseLease` so the new owner's TTL is not disturbed.
+  - The Platform Linear event worker no longer calls `listWorkspaces` in reconcile-only mode, so a workspace-listing outage cannot block the reconcile sweep.
+  - The Platform Linear event worker now resolves the project list once per event page rather than once per event, avoiding up to `EVENT_PAGE_SIZE` × N project scans per poll cycle.
+
+- Updated dependencies [[`cdd5c33`](https://github.com/mastra-ai/mastra/commit/cdd5c33ac6c7118a9f139e6dc0e14e6a8ae31658), [`d7cf7fa`](https://github.com/mastra-ai/mastra/commit/d7cf7fafc1ae1b50bd8462dd0e6c671a8606db93), [`0f9a448`](https://github.com/mastra-ai/mastra/commit/0f9a448502157e59f7b76f24360ad497168f5ef8), [`289f4ce`](https://github.com/mastra-ai/mastra/commit/289f4ce16e3293370440172132c52ee787cbc09f), [`4f16ff8`](https://github.com/mastra-ai/mastra/commit/4f16ff824bf2f9b0ddc93f210477c10c8a4fb1ab), [`1c67d85`](https://github.com/mastra-ai/mastra/commit/1c67d85e9da8285662f4dbbf47e0378c3fee0747), [`ba24be6`](https://github.com/mastra-ai/mastra/commit/ba24be662439c331ab23a600041f93803c89eca8), [`842b5fe`](https://github.com/mastra-ai/mastra/commit/842b5fe22b6a7fa811bd14e48eb9af523ac989f2), [`80bdf3a`](https://github.com/mastra-ai/mastra/commit/80bdf3ae16ade6ff63bde0cb16fa2df8ab7dd4dd), [`9ba1247`](https://github.com/mastra-ai/mastra/commit/9ba12470c77f1c03642d720ce67e517e878f666e), [`fd96298`](https://github.com/mastra-ai/mastra/commit/fd96298a8367622f4ebfcaa97b5b6c1fbbd14564), [`6a84954`](https://github.com/mastra-ai/mastra/commit/6a84954a2667f85b6d59da652dab1bbff007ccb0), [`52d8ef0`](https://github.com/mastra-ai/mastra/commit/52d8ef03801f1deb7ee48532fc4190dd4a33916c), [`cdd5c33`](https://github.com/mastra-ai/mastra/commit/cdd5c33ac6c7118a9f139e6dc0e14e6a8ae31658), [`87db0e4`](https://github.com/mastra-ai/mastra/commit/87db0e49a8c04030eb74fff7f051fac330678839), [`efd5c81`](https://github.com/mastra-ai/mastra/commit/efd5c81cc25fde3c2ddd86fc1178deb4ec176e19), [`0976933`](https://github.com/mastra-ai/mastra/commit/0976933142333ec78451feef265b68bcb45aa5e7), [`242b945`](https://github.com/mastra-ai/mastra/commit/242b94558777bfbdeb42cbfea84afff0b6ad0633), [`fea5cae`](https://github.com/mastra-ai/mastra/commit/fea5caedc7e2cfea51784a15e015952692027abf), [`4b59f78`](https://github.com/mastra-ai/mastra/commit/4b59f786cbc9a7d1ef07a07517dbd4b96865e99d), [`7010c5d`](https://github.com/mastra-ai/mastra/commit/7010c5d15728bf9c5dfe4fb6b1bf80ce23bf143a)]:
+  - @mastra/core@1.58.0-alpha.3
+  - @mastra/code-sdk@1.2.0-alpha.3
+
 ## 0.6.0-alpha.2
 
 ### Minor Changes

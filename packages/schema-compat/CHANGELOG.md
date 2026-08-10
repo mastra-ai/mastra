@@ -1,5 +1,19 @@
 # @mastra/schema-compat
 
+## 1.3.6-alpha.3
+
+### Patch Changes
+
+- Fixed Zod v3 schema conversion for CommonJS consumers. ([#21147](https://github.com/mastra-ai/mastra/pull/21147))
+
+## 1.3.6-alpha.2
+
+### Patch Changes
+
+- Fixed OpenAI structured output requests failing when a schema uses `z.record()`. The OpenAI compatibility layer now removes the `propertyNames` keyword, which OpenAI strict mode does not permit. Requests that used to fail with "Invalid schema ... 'propertyNames' is not permitted" are now accepted. ([#20977](https://github.com/mastra-ai/mastra/pull/20977))
+
+  **Known limitation.** OpenAI strict mode cannot express an open-ended map. A `z.record()` field is still sent as a plain object with no value schema, so the model is not told what keys or values to produce. Use an explicit `z.object({ ... })` shape when you need the model to fill a map. See [#19273](https://github.com/mastra-ai/mastra/issues/19273).
+
 ## 1.3.6-alpha.1
 
 ### Patch Changes

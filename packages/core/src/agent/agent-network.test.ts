@@ -4201,6 +4201,53 @@ describe('Agent - network - tool approval and suspension', () => {
       expect(mockToolExecute).not.toHaveBeenCalled();
     });
 
+    it('should decline a direct network tool call with a custom reason (#20495)', async () => {
+      mockToolExecute.mockClear();
+
+      const declineReason = 'That query touches restricted data';
+      const mockModel = createRoutingMockModel('approvalTool', 'tool', JSON.stringify({ query: 'decline test' }));
+
+      const networkAgent = new Agent({
+        id: 'decline-reason-network-agent',
+        name: 'Decline Reason Network Agent',
+        instructions: 'You help users process queries. Use the approval-tool when asked to process something.',
+        model: mockModel,
+        tools: { approvalTool },
+        memory,
+      });
+
+      const mastra = new Mastra({ agents: { networkAgent }, storage, logger: false });
+      const registeredAgent = mastra.getAgent('networkAgent');
+
+      const memoryConfig = {
+        thread: 'test-thread-decline-reason',
+        resource: 'test-resource-decline-reason',
+      };
+
+      const anStream = await registeredAgent.network('Process the query "decline test"', { memory: memoryConfig });
+      for await (const _chunk of anStream) {
+        // drain until suspension
+      }
+
+      const resumeStream = await registeredAgent.declineNetworkToolCall({
+        runId: anStream.runId,
+        reason: declineReason,
+        memory: memoryConfig,
+      });
+
+      const resumeChunks: any[] = [];
+      for await (const chunk of resumeStream) {
+        resumeChunks.push(chunk);
+      }
+
+      const executionEnd = resumeChunks.find(chunk => chunk.type === 'tool-execution-end');
+      expect(executionEnd?.payload?.result).toBe(declineReason);
+      // The loop must still recognise this as a decline even though the text no longer
+      // matches the default reason.
+      expect(resumeChunks[resumeChunks.length - 1].type).toBe('network-execution-event-finish');
+      expect(mockToolExecute).not.toHaveBeenCalled();
+    });
+
     it('should decline a nested agent tool call', async () => {
       mockToolExecute.mockClear();
 

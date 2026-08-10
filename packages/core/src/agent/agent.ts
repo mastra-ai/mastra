@@ -54,13 +54,17 @@ import type { VersionOverrides } from '../mastra/types';
 import { mergeVersionOverrides } from '../mastra/types';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig, MemoryConfigInternal } from '../memory/types';
-import { resolveDeliveryFailureUpdate, resolveNotificationDeliveryDecision } from '../notifications/delivery-policy';
+import {
+  resolveDeliveryFailureUpdate,
+  resolveNotificationDeliveryDecision,
+  type NotificationDeliveryPolicyInput,
+} from '../notifications/delivery-policy';
 import {
   createNotificationSignal,
   createNotificationSummarySignal,
   summarizeNotifications,
 } from '../notifications/signals';
-import type { SendNotificationSignalInput } from '../notifications/types';
+import type { NotificationDeliveryDecision, SendNotificationSignalInput } from '../notifications/types';
 import type {
   DefinitionSource,
   TracingProperties,
@@ -301,6 +305,7 @@ type ResolvedModelSelection = MastraModelConfig | ModelFallbacks;
 type ProcessorLoadedToolsProvider = {
   getLoadedToolsForRequestContext?: (args: {
     requestContext: RequestContext;
+    tools?: Record<string, unknown>;
   }) => Record<string, ToolToConvert> | Promise<Record<string, ToolToConvert>>;
 };
 
@@ -4020,9 +4025,16 @@ export class Agent<
     outputWriter,
     autoResumeSuspendedTools,
     backgroundTaskEnabled,
+    tools,
     ...rest
   }: {
     processors: InputProcessorOrWorkflow[];
+    /**
+     * Tools already resolved for this request. A processor that made a
+     * request-scoped tool searchable needs them to rebuild its executor here,
+     * since the resumed run never re-enters processInputStep.
+     */
+    tools?: Record<string, unknown>;
     runId?: string;
     resourceId?: string;
     threadId?: string;
@@ -4048,7 +4060,7 @@ export class Agent<
         return;
       }
 
-      const loadedTools = await toolProvider.getLoadedToolsForRequestContext({ requestContext });
+      const loadedTools = await toolProvider.getLoadedToolsForRequestContext({ requestContext, tools });
       if (!loadedTools || Object.keys(loadedTools).length === 0) {
         return;
       }
@@ -5407,6 +5419,12 @@ export class Agent<
                     requestContext.set('__mastra_delegationBailed', true);
                   }
 
+                  // Apply an in-run replacement for the text the parent model sees,
+                  // so the hook can correct a misleading result before the parent reasons on it.
+                  if (typeof completeResult?.resultText === 'string') {
+                    result = { ...result, text: completeResult.resultText };
+                  }
+
                   // Handle feedback if provided
                   if (completeResult?.feedback) {
                     const feedbackMessage: MastraDBMessage = {
@@ -6065,8 +6083,21 @@ export class Agent<
       backgroundTaskEnabled,
     });
 
+    const requestResolvedTools = {
+      ...assignedTools,
+      ...memoryTools,
+      ...toolsetTools,
+      ...clientSideTools,
+      ...agentTools,
+      ...workflowTools,
+      ...workspaceTools,
+      ...skillTools,
+      ...browserTools,
+    };
+
     const inputProcessorLoadedTools = await this.listInputProcessorLoadedTools({
       processors: configuredInputProcessors,
+      tools: requestResolvedTools,
       runId,
       resourceId,
       threadId,
@@ -6079,15 +6110,7 @@ export class Agent<
     });
 
     const allTools = {
-      ...assignedTools,
-      ...memoryTools,
-      ...toolsetTools,
-      ...clientSideTools,
-      ...agentTools,
-      ...workflowTools,
-      ...workspaceTools,
-      ...skillTools,
-      ...browserTools,
+      ...requestResolvedTools,
       ...inputProcessorLoadedTools,
     };
 
@@ -7143,6 +7166,7 @@ export class Agent<
     structuredOutput = false,
     overrideScorers,
     onTitleGenerated,
+    waitUntil,
   }: AgentExecuteOnFinishOptions) {
     const observabilityContext = createObservabilityContext({ currentSpan: agentSpan });
 
@@ -7242,7 +7266,10 @@ export class Agent<
             const userMessage = this.getMostRecentUserMessage(threadUiMessages);
 
             if (userMessage) {
-              void this.genTitle(
+              // Fire-and-forget so generate()/stream() stay fast. On serverless
+              // runtimes that freeze after the response, pass
+              // `serverless.waitUntil` so the platform keeps this promise alive (#20682).
+              const titlePromise = this.genTitle(
                 userMessage,
                 requestContext,
                 observabilityContext,
@@ -7267,6 +7294,12 @@ export class Agent<
                 .catch(error => {
                   this.logger.error('Error persisting generated title:', error);
                 });
+
+              if (typeof waitUntil === 'function') {
+                waitUntil(titlePromise);
+              } else {
+                void titlePromise;
+              }
             }
           }
         }
@@ -7520,8 +7553,11 @@ export class Agent<
    * }
    * ```
    */
-  async declineNetworkToolCall(options: Omit<MultiPrimitiveExecutionOptions, 'runId'> & { runId: string }) {
-    return this.resumeNetwork({ approved: false }, options);
+  async declineNetworkToolCall(
+    options: Omit<MultiPrimitiveExecutionOptions, 'runId'> & { runId: string; reason?: string },
+  ) {
+    const { reason, ...resumeOptions } = options;
+    return this.resumeNetwork({ approved: false, ...(reason !== undefined ? { reason } : {}) }, resumeOptions);
   }
 
   async generate<
@@ -7867,6 +7903,22 @@ export class Agent<
   }
 
   /**
+   * Run this agent's notification delivery policy for a record. Called at
+   * receipt time by `sendNotificationSignal` and again at delivery time by the
+   * notification dispatch workflow, so a deferred delivery can carry
+   * freshly-resolved decision fields (e.g. `streamOptions` with the request
+   * context a woken idle thread needs to resolve a model).
+   *
+   * @experimental Agent notification signal APIs are experimental and may change in a future release.
+   */
+  resolveNotificationDeliveryDecision(input: NotificationDeliveryPolicyInput): Promise<NotificationDeliveryDecision> {
+    return resolveNotificationDeliveryDecision({
+      config: this.#notifications?.deliveryPolicy,
+      ...input,
+    });
+  }
+
+  /**
    * @experimental Agent notification signal APIs are experimental and may change in a future release.
    */
   async sendNotificationSignal<OUTPUT = TOutput>(
@@ -7917,12 +7969,7 @@ export class Agent<
     for (const record of records) {
       planned.push({
         record,
-        decision: await resolveNotificationDeliveryDecision({
-          config: this.#notifications?.deliveryPolicy,
-          now,
-          record,
-          threadState,
-        }),
+        decision: await this.resolveNotificationDeliveryDecision({ now, record, threadState }),
       });
     }
 
@@ -7981,7 +8028,19 @@ export class Agent<
           const result = agentThreadStreamRuntime.sendSignal<OUTPUT>(
             this as Agent<any, any, any, any>,
             signal,
-            { ...target, ifIdle: { ...target.ifIdle, behavior: record.priority === 'high' ? 'persist' : 'wake' } },
+            {
+              ...target,
+              ifIdle: {
+                // Caller-supplied stream options win over the policy's. The
+                // policy's options are typed on the default OUTPUT, matching
+                // how deliveries run.
+                ...(decision.streamOptions
+                  ? { streamOptions: decision.streamOptions as AgentExecutionOptions<OUTPUT> }
+                  : {}),
+                ...target.ifIdle,
+                behavior: record.priority === 'high' ? 'persist' : 'wake',
+              },
+            },
             this.getPubSub(),
           );
           let summaryAccepted: SendAgentSignalAccepted<OUTPUT>;
@@ -8035,10 +8094,20 @@ export class Agent<
       }
 
       const signal = createNotificationSignal({ ...record, status: 'delivered' });
+      // An immediate `deliver` to an idle thread is a wake, so it needs the
+      // policy's stream options as much as a deferred dispatch does.
+      // Caller-supplied stream options win over the policy's.
+      const deliverTarget =
+        decision.streamOptions && !target.ifIdle?.streamOptions
+          ? {
+              ...target,
+              ifIdle: { ...target.ifIdle, streamOptions: decision.streamOptions as AgentExecutionOptions<OUTPUT> },
+            }
+          : target;
       const result = agentThreadStreamRuntime.sendSignal<OUTPUT>(
         this as Agent<any, any, any, any>,
         signal,
-        target,
+        deliverTarget,
         this.getPubSub(),
       );
       let delivered: SendAgentSignalAccepted<OUTPUT>;
@@ -8897,16 +8966,43 @@ export class Agent<
 
     const resumeOptions = (streamOptions ?? {}) as AgentExecutionOptionsBase<unknown> & { toolCallId?: string };
 
-    await this.resumeStream(resumeData, {
-      ...resumeOptions,
+    await agentThreadStreamRuntime.queueStreamResume(
       runId,
-      ...(resumableRun.toolCallId ? { toolCallId: resumableRun.toolCallId } : {}),
-      memory: {
-        ...(resumeOptions.memory ?? {}),
-        thread: threadId,
-        resource: resourceId,
+      async () => {
+        const queuedResumableRun = hasLocalRun
+          ? agentThreadStreamRuntime.getResumableThreadRun(
+              { threadId, resourceId, runId, toolCallId: resumableRun.toolCallId },
+              this.getPubSub(),
+            )
+          : resumableRun;
+        if (!queuedResumableRun) {
+          throw new MastraError({
+            id: 'AGENT_SEND_STREAM_RESUME_NO_SUSPENDED_THREAD_RUN',
+            domain: ErrorDomain.AGENT,
+            category: ErrorCategory.USER,
+            text: `Agent "${this.name}" sendStreamResume() could not find a suspended run "${runId}" for thread "${threadId}".`,
+            details: {
+              threadId,
+              resourceId,
+              runId,
+              agentName: this.name,
+            },
+          });
+        }
+
+        return this.resumeStream(resumeData, {
+          ...resumeOptions,
+          runId,
+          ...(queuedResumableRun.toolCallId ? { toolCallId: queuedResumableRun.toolCallId } : {}),
+          memory: {
+            ...(resumeOptions.memory ?? {}),
+            thread: threadId,
+            resource: resourceId,
+          },
+        });
       },
-    });
+      this.getPubSub(),
+    );
 
     return { accepted: true, runId, toolCallId: resumableRun.toolCallId };
   }
@@ -9067,16 +9163,21 @@ export class Agent<
    * @example
    * ```typescript
    * const stream = await agent.declineToolCall({
-   *   runId: 'pending-run-id'
+   *   runId: 'pending-run-id',
+   *   reason: 'The user does not want to share their location'
    * });
    *
    * for await (const chunk of stream) {
    *   console.log(chunk);
    * }
    * ```
+   *
+   * @param options.reason - Optional explanation for the decline. It is persisted on the
+   * tool invocation's `approval.reason` and surfaced to the model in place of the default
+   * "Tool call was not approved by the user" message.
    */
   async declineToolCall<OUTPUT = undefined>(
-    options: AgentExecutionOptions<OUTPUT> & { runId: string; toolCallId?: string } & {
+    options: AgentExecutionOptions<OUTPUT> & { runId: string; toolCallId?: string; reason?: string } & {
       model?: DynamicArgument<MastraModelConfig>;
     },
   ): Promise<MastraModelOutput<OUTPUT>> {
@@ -9087,8 +9188,9 @@ export class Agent<
       return durable.declineToolCall(options) as Promise<MastraModelOutput<OUTPUT>>;
     }
 
+    const { reason, ...resumeOptions } = options;
     // @ts-expect-error - the types here are wrong
-    return this.resumeStream({ approved: false }, options);
+    return this.resumeStream({ approved: false, ...(reason !== undefined ? { reason } : {}) }, resumeOptions);
   }
 
   /**
@@ -9126,19 +9228,24 @@ export class Agent<
    * if (output.finishReason === 'suspended') {
    *   const result = await agent.declineToolCallGenerate({
    *     runId: output.runId,
-   *     toolCallId: output.suspendPayload.toolCallId
+   *     toolCallId: output.suspendPayload.toolCallId,
+   *     reason: 'Budget approval is required first'
    *   });
    *   console.log(result.text);
    * }
    * ```
+   *
+   * @param options.reason - Optional explanation for the decline, persisted on the tool
+   * invocation's `approval.reason` and surfaced to the model.
    */
   async declineToolCallGenerate<OUTPUT = undefined>(
-    options: AgentExecutionOptions<OUTPUT> & { runId: string; toolCallId?: string } & {
+    options: AgentExecutionOptions<OUTPUT> & { runId: string; toolCallId?: string; reason?: string } & {
       model?: DynamicArgument<MastraModelConfig>;
     },
   ): Promise<Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>> {
+    const { reason, ...resumeOptions } = options;
     // @ts-expect-error - the types here are wrong
-    return this.resumeGenerate({ approved: false }, options);
+    return this.resumeGenerate({ approved: false, ...(reason !== undefined ? { reason } : {}) }, resumeOptions);
   }
 
   /**

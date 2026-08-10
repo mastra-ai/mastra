@@ -96,6 +96,30 @@ jobs:
           set -euo pipefail
           mapfile -t test_files < /tmp/changed-test-files
 
+          # New packages do not have their package or Vitest config on the base
+          # branch. Restore only the missing test support files after the base
+          # build so Vitest can discover the changed tests without adding the
+          # incomplete package to the build graph.
+          for file in "${test_files[@]}"; do
+            search_dir="$(dirname "$file")"
+
+            while [ "$search_dir" != "." ] && [ "$search_dir" != "/" ]; do
+              for support_file in package.json vitest.config.ts vitest.config.mts; do
+                candidate="$search_dir/$support_file"
+                if [ ! -f "$candidate" ] && git cat-file -e "FETCH_HEAD:$candidate" 2>/dev/null; then
+                  git checkout FETCH_HEAD -- "$candidate"
+                  echo "Restored test support file: $candidate"
+                fi
+              done
+
+              if [ -f "$search_dir/package.json" ]; then
+                break
+              fi
+
+              search_dir="$(dirname "$search_dir")"
+            done
+          done
+
           # --silent=true: in Vitest 4, a bare --silent consumes the following
           # positional test-file argument and errors out, false-greening the gate.
           vitest_args=(run --passWithNoTests --reporter=dot --silent=true)
