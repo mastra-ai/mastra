@@ -83,7 +83,7 @@ const requestModernServerWithOptions = async ({
     } catch (error) {
       startError = error;
       res.writeHead(500, { 'Content-Type': 'text/plain' });
-      res.end(error instanceof Error ? error.message : String(error));
+      res.end('Failed to start MCP request');
     }
   });
   const port = await listenOnFreePort(httpServer);
@@ -335,7 +335,8 @@ describe('MCPServer with protocolVersion 2026-07-28 (dual-era HTTP)', () => {
       const result = await requestModernServerWithOptions({ options });
       expect(result.statusCode).toBe(500);
       expect(result.startError).toBeInstanceOf(Error);
-      expect(result.body).toContain(`startHTTP options \"${name}\" are incompatible`);
+      expect((result.startError as Error).message).toContain(`startHTTP options \"${name}\" are incompatible`);
+      expect(result.body).toBe('Failed to start MCP request');
     }
   });
 
