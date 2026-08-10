@@ -107,6 +107,34 @@ describe('Sankey geometry motion', () => {
       expect(animatedNodeX).toBeLessThan(220);
     });
 
+    it('keeps animating when the reordered geometry is recalculated with the same perspective key', () => {
+      const animationFrames: FrameRequestCallback[] = [];
+      vi.stubGlobal('matchMedia', () => ({ matches: false }));
+      vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+        animationFrames.push(callback);
+        return animationFrames.length;
+      });
+      vi.stubGlobal('cancelAnimationFrame', vi.fn());
+      vi.spyOn(performance, 'now').mockReturnValue(0);
+      const previous = geometry({ nodeX: 20, linkSourceX: 20, linkTargetX: 120 });
+      const current = geometry({ nodeX: 220, linkSourceX: 220, linkTargetX: 320 });
+      const recalculatedCurrent = geometry({ nodeX: 220, linkSourceX: 220, linkTargetX: 320 });
+      const { result, rerender } = renderHook(
+        ({ value, transitionKey }) => useSankeyGeometryTransition({ geometry: value, transitionKey }),
+        { initialProps: { value: previous, transitionKey: 'goal:sentiment' } },
+      );
+
+      rerender({ value: current, transitionKey: 'sentiment:goal' });
+      rerender({ value: recalculatedCurrent, transitionKey: 'sentiment:goal' });
+
+      expect(result.current?.nodes.get('theme')?.x).toBe(20);
+      const firstFrame = animationFrames[0];
+      if (!firstFrame) throw new Error('Expected an animation frame');
+      act(() => firstFrame(425));
+      expect(result.current?.nodes.get('theme')?.x).toBeGreaterThan(20);
+      expect(result.current?.nodes.get('theme')?.x).toBeLessThan(220);
+    });
+
     it('continues from the displayed geometry when another reorder interrupts the animation', () => {
       const animationFrames: FrameRequestCallback[] = [];
       vi.stubGlobal('matchMedia', () => ({ matches: false }));

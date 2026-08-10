@@ -103,10 +103,16 @@ class SankeyGeometryMotionStore {
     if (key === this.key && geometry === this.target) return;
 
     const keyChanged = key !== this.key;
-    cancelAnimationFrame(this.animationFrame);
-    this.animationFrame = 0;
     this.key = key;
     this.target = geometry;
+
+    if (!keyChanged && geometry && this.transition) {
+      this.transition = { ...this.transition, to: geometry };
+      return;
+    }
+
+    cancelAnimationFrame(this.animationFrame);
+    this.animationFrame = 0;
 
     if (!keyChanged || !geometry || !this.snapshot || prefersReducedMotion()) {
       this.transition = undefined;
