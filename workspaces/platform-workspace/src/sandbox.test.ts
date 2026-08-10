@@ -2247,7 +2247,9 @@ describe('PlatformSandbox', () => {
   describe('boot timing log', () => {
     it('logs one start-complete summary on fresh provision', async () => {
       vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
-      const fetchMock = vi.fn().mockResolvedValueOnce(json({ id: 'sbx_timing', createdAt: '2026-06-26T00:00:00.000Z' }));
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(json({ id: 'sbx_timing', createdAt: '2026-06-26T00:00:00.000Z' }));
       const sandbox = new PlatformSandbox({
         accessToken: 'sk_test',
         projectId: 'proj_123',
