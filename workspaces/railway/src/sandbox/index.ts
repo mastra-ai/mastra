@@ -336,6 +336,11 @@ export class RailwaySandbox extends MastraSandbox {
     };
   }
 
+  /** Persist the configured recovery checkpoint when available. */
+  async snapshot(): Promise<void> {
+    await this.captureCheckpoint();
+  }
+
   /**
    * Capture the sandbox's checkpoint on demand, outside the idle-timer schedule.
    *
