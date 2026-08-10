@@ -750,9 +750,8 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
   }
 
   async registerCustomApiRoutes(): Promise<void> {
-    if (!(await this.buildCustomRouteHandler())) return;
-
-    const routes = this.customApiRoutes ?? this.mastra.getServer()?.apiRoutes ?? [];
+    const routes = await this.registerSchemaApiRoutes();
+    if (!(await this.buildCustomRouteHandler(routes))) return;
 
     for (const route of routes) {
       // Create pseudo ServerRoute for auth checking
