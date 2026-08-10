@@ -297,7 +297,7 @@ const sidebars = {
             {
               type: 'doc',
               id: 'workspace/search',
-              label: 'Search and Indexing',
+              label: 'Search',
             },
             {
               type: 'doc',
