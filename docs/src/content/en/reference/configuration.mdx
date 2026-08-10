@@ -643,7 +643,7 @@ const mastra = new Mastra({
 
 Additional process entries to emit alongside the server bundle, as a map of output name to source path relative to your Mastra directory. Each entry becomes its own `<name>.mjs` in `.mastra/output`.
 
-Use this for long-running processes that run beside your Mastra server rather than inside it, such as a [LiveKit voice worker](/guides/voice/realtime-voice). The entry shares the output directory, `package.json`, and installed dependencies with the server, so one `mastra build` produces one deployable artifact you can start with different commands.
+Use this for long-running processes that run beside your Mastra server rather than inside it, such as a [LiveKit voice worker](/integrations/voice/livekit). The entry shares the output directory, `package.json`, and installed dependencies with the server, so one `mastra build` produces one deployable artifact you can start with different commands.
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
