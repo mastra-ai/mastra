@@ -971,31 +971,34 @@ describe('Fastify Server Adapter', () => {
       await adapter.init();
       const address = await app.listen({ port: 0 });
 
-      const invalidResponse = await fetch(`${address}/custom/validated`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: 42 }),
-      });
-      expect(invalidResponse.status).toBe(400);
-      await expect(invalidResponse.json()).resolves.toMatchObject({ error: 'Invalid request body' });
+      try {
+        const invalidResponse = await fetch(`${address}/custom/validated`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: 42 }),
+        });
+        expect(invalidResponse.status).toBe(400);
+        await expect(invalidResponse.json()).resolves.toMatchObject({ error: 'Invalid request body' });
 
-      const validResponse = await fetch(`${address}/custom/validated`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: 'Ada' }),
-      });
-      expect(validResponse.status).toBe(200);
-      await expect(validResponse.json()).resolves.toEqual({ greeting: 'Hello, Ada' });
+        const validResponse = await fetch(`${address}/custom/validated`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: 'Ada' }),
+        });
+        expect(validResponse.status).toBe(200);
+        await expect(validResponse.json()).resolves.toEqual({ greeting: 'Hello, Ada' });
 
-      const unauthenticated = await fetch(`${address}/custom/secure`);
-      expect(unauthenticated.status).toBe(401);
+        const unauthenticated = await fetch(`${address}/custom/secure`);
+        expect(unauthenticated.status).toBe(401);
 
-      const authenticated = await fetch(`${address}/custom/secure`, {
-        headers: { Authorization: 'Bearer valid-token' },
-      });
-      expect(authenticated.status).toBe(200);
-      await expect(authenticated.json()).resolves.toEqual({ secret: true });
-      await app.close();
+        const authenticated = await fetch(`${address}/custom/secure`, {
+          headers: { Authorization: 'Bearer valid-token' },
+        });
+        expect(authenticated.status).toBe(200);
+        await expect(authenticated.json()).resolves.toEqual({ secret: true });
+      } finally {
+        await app.close();
+      }
     });
   });
 
