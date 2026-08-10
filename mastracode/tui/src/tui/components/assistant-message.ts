@@ -89,10 +89,18 @@ export class AssistantMessageComponent extends Container {
         part.kind === 'text' || part.kind === 'thinking',
     );
 
+    // Tracks whether a "Thinking..." label was already emitted for the current
+    // run of consecutive thinking parts (models can emit several reasoning
+    // spans back to back; hidden mode should show one label per run, not one
+    // per span). A run never spans a tool call: callers slice an assistant
+    // message at tool boundaries and render each slice with its own component.
+    let inHiddenThinkingRun = false;
+
     for (let i = 0; i < renderParts.length; i++) {
       const part = renderParts[i]!;
 
       if (part.kind === 'text' && part.text.trim()) {
+        inHiddenThinkingRun = false;
         // Assistant text messages - trim and sanitize escape codes
         this.contentContainer.addChild(
           new Markdown(sanitizeAnsiForRendering(part.text.trim()), CHAT_INDENT, 0, this.markdownTheme, {
@@ -100,15 +108,20 @@ export class AssistantMessageComponent extends Container {
           }),
         );
       } else if (part.kind === 'thinking' && part.text.trim()) {
-        // Check if there's text content after this thinking block
-        const hasTextAfter = renderParts.slice(i + 1).some(p => p.kind === 'text' && p.text.trim());
-
         if (this.hideThinkingBlock) {
-          // Show static "Thinking..." label when hidden
-          this.contentContainer.addChild(
-            new Text(theme.italic(theme.fg('thinkingText', 'Thinking...')), CHAT_INDENT, 0),
-          );
-          if (hasTextAfter) {
+          // The next part that actually renders something; used to keep the
+          // spacer attached to the end of a run rather than to every part in it.
+          const nextRenderedPart = renderParts.slice(i + 1).find(p => p.text.trim());
+
+          // Show a single static "Thinking..." label per run of consecutive
+          // thinking parts when hidden
+          if (!inHiddenThinkingRun) {
+            this.contentContainer.addChild(
+              new Text(theme.italic(theme.fg('thinkingText', 'Thinking...')), CHAT_INDENT, 0),
+            );
+            inHiddenThinkingRun = true;
+          }
+          if (nextRenderedPart?.kind === 'text') {
             this.contentContainer.addChild(new Spacer(1));
           }
         } else {
