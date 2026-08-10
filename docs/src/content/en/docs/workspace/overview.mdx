@@ -60,7 +60,7 @@ Choose providers based on what the agent needs to do:
 | Inspect code with language servers | `lsp` with a compatible filesystem or sandbox | [LSP inspection](/docs/workspace/lsp) |
 | Search files or load reusable instructions | Search options or `skills` | [Search](/docs/workspace/search) and [Skills](/docs/workspace/skills) |
 
-Use resolver functions when each request needs its own filesystem or sandbox. See [dynamic filesystems](/docs/workspace/filesystem#dynamic-filesystem) and [dynamic sandboxes](/docs/workspace/sandbox#dynamic-sandbox) for request-scoped configuration.
+Use resolver functions when each request needs its own filesystem or sandbox. See [dynamic filesystems](/docs/workspace/filesystem#dynamic-filesystem) and [dynamic sandboxes](/docs/workspace/sandbox#dynamic-sandboxes) for request-scoped configuration.
 
 ## Tool configuration
 
@@ -74,7 +74,7 @@ Most providers initialize on first use, so calling `workspace.init()` is optiona
 
 Mastra registers global and agent-level workspaces. Calling `mastra.shutdown()` destroys registered workspaces that Mastra owns and closes resources such as filesystem handles, language servers, browsers, and sandbox processes.
 
-Static providers are owned by their workspace. Your application owns providers returned by resolver functions and decides when to destroy them. See [sandbox lifecycle ownership](/docs/workspace/sandbox#lifecycle-ownership) for resolver cleanup patterns.
+Static providers are owned by their workspace. Your application owns providers returned by resolver functions and decides when to destroy them. See [sandbox resolver ownership](/docs/workspace/sandbox#resolver-ownership) for cleanup patterns.
 
 Use [`mastra.removeWorkspace()`](/reference/core/removeWorkspace) to remove a workspace from the registry. Pass `{ destroy: true }` to destroy it before removal.
 

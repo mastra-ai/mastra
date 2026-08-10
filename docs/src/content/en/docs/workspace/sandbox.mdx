@@ -110,31 +110,42 @@ const workspace = new Workspace({
 
 ## Use a sandbox from application code
 
-Keep a reference to a static sandbox when application code needs to execute commands directly. Commands start the sandbox automatically and block until they finish:
+Mastra passes the agent's workspace to authored tools through the tool execution context. The tool function runs in your application process. A command runs in the sandbox only when the tool calls the sandbox API:
 
-```typescript
-import { LocalSandbox, Workspace } from '@mastra/core/workspace'
+```typescript title="src/mastra/tools/run-analysis.ts"
+import { createTool } from '@mastra/core/tools'
+import { z } from 'zod'
 
-const sandbox = new LocalSandbox({ workingDirectory: './workspace' })
-const workspace = new Workspace({ sandbox })
+export const runAnalysisTool = createTool({
+  id: 'run-analysis',
+  description: 'Runs a JavaScript analysis in the agent sandbox',
+  inputSchema: z.object({
+    script: z.string(),
+  }),
+  execute: async ({ script }, { workspace }) => {
+    // This tool function runs in the application process.
+    const sandbox = workspace?.sandbox
+    if (!sandbox?.executeCommand) {
+      throw new Error('This tool requires a workspace with command execution')
+    }
 
-const result = await sandbox.executeCommand('node', ['--version'])
-console.log(result.stdout)
+    // The Node.js command runs inside the configured sandbox.
+    const result = await sandbox.executeCommand('node', ['-e', script])
+    return { stdout: result.stdout, stderr: result.stderr }
+  },
+})
 ```
 
-For resolver-backed workspaces, call `workspace.resolveSandbox()` with the request context that selects the sandbox:
+Here, `workspace` is the workspace assigned to the agent that called the tool. The `workspace.sandbox` property contains the provider instance when `Workspace` was configured with `sandbox: new LocalSandbox(...)` or another provider object.
+
+Outside a tool call, use the same `Workspace` object that your application passes to `Mastra` or an agent. Use the process manager when a command must continue running while your application does other work:
 
 ```typescript
-const sandbox = await workspace.resolveSandbox({ requestContext })
-
-if (sandbox) {
-  const result = await sandbox.executeCommand?.('node', ['--version'])
+const sandbox = workspace.sandbox
+if (!sandbox?.processes) {
+  throw new Error('This sandbox does not support background processes')
 }
-```
 
-Use the process manager when a command must continue running while your application does other work:
-
-```typescript
 const server = await sandbox.processes.spawn('python -m http.server 8000')
 
 // Do other work while the server runs.
@@ -144,120 +155,9 @@ await server.kill()
 
 Process handles support output streams, `wait()`, `kill()`, and, when the provider supports it, `sendStdin()`. See the [`SandboxProcessManager` reference](/reference/workspace/process-manager) for the full API.
 
-## Dynamic sandbox
-
-The `sandbox` option accepts a resolver function instead of a static instance. The resolver receives `requestContext` and returns a sandbox per request, allowing a single workspace to serve different sandboxes based on the caller's identity, role, or tenant.
-
-```typescript title="src/mastra/workspaces.ts"
-import { Agent } from '@mastra/core/agent'
-import { Workspace, LocalSandbox } from '@mastra/core/workspace'
-
-const workspace = new Workspace({
-  // highlight-start
-  sandbox: ({ requestContext }) => {
-    const userId = requestContext.get('user-id') as string
-    return new LocalSandbox({
-      workingDirectory: `/workspaces/${userId}`,
-    })
-  },
-  // highlight-end
-})
-
-const agent = new Agent({
-  id: 'multi-tenant-agent',
-  model: 'your-provider/your-model',
-  workspace,
-})
-```
-
-Each request resolves its own sandbox at tool execution time:
-
-```typescript
-import { RequestContext } from '@mastra/core/request-context'
-
-// User Alice — commands run in /workspaces/alice
-const aliceCtx = new RequestContext([['user-id', 'alice']])
-await agent.generate('List files in cwd', { requestContext: aliceCtx })
-
-// User Bob — commands run in /workspaces/bob
-const bobCtx = new RequestContext([['user-id', 'bob']])
-await agent.generate('List files in cwd', { requestContext: bobCtx })
-```
-
-By default, workspace instructions describe the runtime sandbox with stable placeholder text. See [Workspace instructions](#workspace-instructions) to include concrete per-request details.
-
-The resolver can also be asynchronous, for example to look up tenant configuration from a database:
-
-```typescript
-const workspace = new Workspace({
-  sandbox: async ({ requestContext }) => {
-    const tenant = await db.getTenant(requestContext.get('tenant-id'))
-    return new LocalSandbox({ workingDirectory: tenant.workspacePath })
-  },
-})
-```
-
-### Lifecycle ownership
-
-When the sandbox is a static instance, `workspace.init()` calls its `start()` method and `workspace.destroy()` calls its `destroy()` method. With a resolver, the workspace has no instance to manage at construction time, the caller owns the returned sandbox's lifecycle.
-
-The resolver must return a sandbox that's ready to use, either already started or able to handle calls without explicit startup. The caller also owns cleanup timing for returned sandboxes.
-
-Cleanup can happen per request, tenant, or user. It can also be part of a long-lived sandbox pool. `workspace.destroy()` doesn't destroy resolver-returned sandboxes.
-
-:::note
-
-`sandbox` resolvers are incompatible with `mounts` and `lsp: true`. Both require a concrete sandbox instance at construction time, so combining them with a resolver throws an `INVALID_CONFIG` error (for `mounts`) or disables LSP with a warning (for `lsp: true`).
-
-:::
-
-### Tool registration
-
-With a static sandbox, the workspace inspects the instance to decide which tools to register. With a resolver, the workspace assumes full capabilities and registers `mastra_workspace_execute_command` (with `background` support), `mastra_workspace_get_process_output`, and `mastra_workspace_kill_process`. If the resolved sandbox doesn't implement a capability, the runtime throws a clear `SandboxFeatureNotSupportedError`.
-
-### Background process continuity
-
-Background processes can outlive a single tool call, so `mastra_workspace_get_process_output` and `mastra_workspace_kill_process` must reach the same sandbox that started the process. By default, a resolved sandbox is cached per request. For continuity across follow-up requests, such as a later conversation turn, set `sandboxCacheKey` to a stable identifier. The resolved sandbox is then cached by that key instead of by request:
-
-```typescript
-const workspace = new Workspace({
-  sandbox: ({ requestContext }) => resolveSandbox(requestContext),
-  sandboxCacheKey: ({ requestContext }) => requestContext.get('thread-id') as string,
-})
-```
-
-Without a `sandboxCacheKey`, the resolver must return the same sandbox itself for follow-up calls that share a tenant, user, or session.
-
-When a cached sandbox is no longer needed, destroy the sandbox in your own lifecycle code and call `workspace.clearSandboxCache(cacheKey)` to drop the workspace cache entry. Call `workspace.clearSandboxCache()` to clear all keyed sandbox entries.
-
-### Workspace instructions
-
-Workspace instructions describe the environment in the agent's system message. With a sandbox resolver, the workspace doesn't call the resolver to build these instructions. It emits stable placeholder text, so constructing the prompt never provisions a caller-owned sandbox and the system message stays consistent across requests, which keeps prompt caching effective.
-
-To include concrete per-request sandbox details, set `instructions.dynamicSandbox` to `'resolve'`:
-
-```typescript
-const workspace = new Workspace({
-  sandbox: ({ requestContext }) => resolveSandbox(requestContext),
-  instructions: { dynamicSandbox: 'resolve' },
-})
-```
-
-`'resolve'` calls the resolver on every request, which may provision the sandbox and makes the system message request-specific. Pass a function instead to return custom text from `requestContext` without resolving the sandbox:
-
-```typescript
-const workspace = new Workspace({
-  sandbox: ({ requestContext }) => resolveSandbox(requestContext),
-  instructions: {
-    dynamicSandbox: ({ requestContext }) =>
-      `Sandbox scoped to tenant ${requestContext.get('tenant-id')}.`,
-  },
-})
-```
-
 ## Lifecycle and persistence
 
-Static sandboxes are owned by their workspace. `workspace.init()` starts them, and `workspace.destroy()` destroys them. Calling `mastra.shutdown()` destroys registered workspaces and their owned sandboxes.
+Sandbox provider objects passed directly to a workspace are owned by that workspace. `workspace.init()` starts them, and `workspace.destroy()` destroys them. Calling `mastra.shutdown()` destroys registered workspaces and their owned sandboxes.
 
 The meaning of `stop()` is provider-specific. It may pause existing compute or tear it down, and some providers preserve a snapshot as part of that operation. Files and processes aren't guaranteed to survive a stop. Application restarts and idle timeouts also have provider-specific persistence.
 
@@ -342,7 +242,7 @@ const workspace = new Workspace({
 })
 ```
 
-These callbacks fire for all background processes started by the agent through the `execute_command` tool.
+These callbacks fire for all background processes started by the agent through `mastra_workspace_execute_command`.
 
 ### Abort signal
 
@@ -373,11 +273,83 @@ Use `null` or `false` for cloud sandboxes (for example, E2B, Daytona, or Modal) 
 For the full `SandboxProcessManager` API (spawning processes programmatically and reading output, plus sending stdin), see the [`SandboxProcessManager` reference](/reference/workspace/process-manager).
 :::
 
+## Dynamic sandboxes
+
+Most workspaces pass a provider object directly to `sandbox`. Use a resolver function instead when the sandbox must change by request, user, role, or tenant:
+
+```typescript title="src/mastra/workspaces.ts"
+import { LocalSandbox, Workspace } from '@mastra/core/workspace'
+
+const workspace = new Workspace({
+  sandbox: ({ requestContext }) => {
+    const userId = requestContext.get('user-id') as string
+    return new LocalSandbox({
+      workingDirectory: `/workspaces/${userId}`,
+    })
+  },
+})
+```
+
+Workspace tools resolve the sandbox automatically from the request context used for the agent call. Application code can resolve the same sandbox explicitly:
+
+```typescript
+const sandbox = await workspace.resolveSandbox({ requestContext })
+```
+
+The resolver can be asynchronous when sandbox configuration comes from another service:
+
+```typescript
+const workspace = new Workspace({
+  sandbox: async ({ requestContext }) => {
+    const tenant = await db.getTenant(requestContext.get('tenant-id'))
+    return new LocalSandbox({ workingDirectory: tenant.workspacePath })
+  },
+})
+```
+
+### Resolver ownership
+
+The workspace doesn't own sandboxes returned by a resolver. Return a sandbox that's ready to use, and destroy it through your application's lifecycle code when it's no longer needed. `workspace.destroy()` doesn't destroy resolver-returned sandboxes.
+
+Resolvers are incompatible with `mounts` and `lsp: true`, because both require a provider object when the workspace is constructed. Using a resolver with `mounts` throws an `INVALID_CONFIG` error. With `lsp: true`, Mastra disables LSP and logs a warning.
+
+### Tool registration
+
+When `sandbox` contains a provider object, the workspace inspects its capabilities before registering tools. With a resolver, the workspace registers all sandbox tools because the provider isn't known until execution. Calling an unsupported capability throws `SandboxFeatureNotSupportedError`.
+
+### Background process continuity
+
+Background process tools must resolve the same sandbox that started the process. By default, a resolved sandbox is cached for one request. Set `sandboxCacheKey` when later requests or conversation turns must reach the same sandbox:
+
+```typescript
+const workspace = new Workspace({
+  sandbox: ({ requestContext }) => resolveSandbox(requestContext),
+  sandboxCacheKey: ({ requestContext }) => requestContext.get('thread-id') as string,
+})
+```
+
+Destroy the resolved sandbox in your lifecycle code before calling `workspace.clearSandboxCache(cacheKey)`. Clearing the cache only removes the workspace's reference.
+
+### Workspace instructions
+
+By default, workspace instructions use stable placeholder text for a resolver-backed sandbox. This prevents prompt construction from provisioning a sandbox and keeps the system message consistent across requests.
+
+Set `instructions.dynamicSandbox` to `'resolve'` when the agent needs instructions from the resolved provider:
+
+```typescript
+const workspace = new Workspace({
+  sandbox: ({ requestContext }) => resolveSandbox(requestContext),
+  instructions: { dynamicSandbox: 'resolve' },
+})
+```
+
+This calls the resolver while building instructions. To describe the request-specific environment without provisioning it, pass a function that returns instruction text from `requestContext`.
+
 ## Custom sandbox providers
 
 Implement [`WorkspaceSandbox`](/reference/workspace/sandbox) to connect another execution backend. The interface defines identity and lifecycle, while command execution, background processes, public port URLs, native file upload, cloning, and mounts are separate capabilities.
 
-Extend `MastraSandbox` when you want the base lifecycle state management, mount handling, and command execution built on a `SandboxProcessManager`. A provider that doesn't support a capability can omit it, and Mastra won't register the corresponding tools for a static sandbox.
+Extend `MastraSandbox` when you want the base lifecycle state management, mount handling, and command execution built on a `SandboxProcessManager`. A provider that doesn't support a capability can omit it, and Mastra won't register the corresponding tools when that provider object is passed directly to a workspace.
 
 ## Related
 
