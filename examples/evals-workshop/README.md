@@ -129,6 +129,33 @@ every eval talk skips: *where do datasets come from?*
 The span panel also has a **Feedback** tab — thumbs, ratings, corrections from
 humans, stored alongside the machine scores.
 
+### Workspaces and skills
+
+**Workspaces** in the sidebar opens the `studio/workspace/` directory: a
+**Files** tab that browses and searches it, and a **Skills** tab listing every
+directory under `workspace/skills/` that contains a `SKILL.md`.
+
+Skills are just markdown. Each one is a directory with a `SKILL.md` carrying
+`name` and `description` frontmatter, plus whatever supporting files it needs —
+`skills/eval-triage/` has a `references/score-reasons.md` next to its
+`SKILL.md`, which is the multi-file shape the Agent Skills spec expects. Adding
+a skill means adding a directory; nothing is registered in code.
+
+**Add Skill** searches [skills.sh](https://skills.sh) and installs into the
+workspace directory, so the same page covers both hand-written and third-party
+skills.
+
+The workspace is registered as `workspace` on the `Mastra` instance, which
+makes it *global* — agents inherit it unless they declare their own. It is
+independent of the editor: skills show up here whether or not `@mastra/editor`
+is configured.
+
+> The agent editor's own **Skills** section is a different thing and stays
+> hidden. For a code-defined agent the CMS hard-limits the sidebar to
+> Instructions, Tools and Variables, and that section is additionally gated
+> behind the Agent Builder, an Enterprise feature. Neither gate has anything to
+> do with workspaces — see "Not covered, and why".
+
 ### Editing the prompt in the browser
 
 **Agents → Nimbus Support Agent → Editor** is the visual half of exercise 12:
@@ -285,6 +312,16 @@ snapshot what was in the repository first, so unless you record a baseline
 version deliberately (`pnpm seed` does), the original prompt never enters the
 version history and there is nothing to compare against. Exercise 12a.
 
+**A workspace's `basePath` must be absolute.** Under `mastra dev` the process
+runs from `src/mastra/public`, not the project root, so a relative path browses
+an empty directory and finds no skills — with nothing logged either way. Same
+trap as the database paths; see `studio/src/mastra/db-path.ts`.
+
+**The agent editor's Skills section is not what a workspace unlocks.** For a
+code-defined agent the CMS sidebar is hard-limited to Instructions, Tools and
+Variables, and Skills is separately gated behind the Enterprise Agent Builder.
+Workspace skills live at **Workspaces → Skills** instead, which needs neither.
+
 **The Studio DuckDB file takes a single writer.** `pnpm seed` while `pnpm dev`
 is running fails with a lock error from `observability.duckdb`. Stop the server
 first — `pnpm reset` assumes you have.
@@ -303,6 +340,7 @@ first — `pnpm reset` assumes you have.
 - Live sampled scoring on real traffic, and retroactive scoring of traces
 - Memory-enabled agents, thread isolation strategies
 - Prompt versioning via `@mastra/editor`, and version-pinned experiments
+- A workspace with filesystem-backed skills, browsable and searchable in Studio
 
 ## Not covered, and why
 
@@ -322,6 +360,17 @@ it has a `scorer` namespace and the playground has a scorer-edit route, but the
 Scorers page in this CLI version still lists code scorers with no way to author
 one. Demo judge-prompt design with exercise 2 and
 `shared/src/scorers/support-rubric.ts` instead.
+
+**Attaching skills to an agent from the agent editor** is likewise unavailable
+here, for two independent reasons. The CMS builds a code-defined agent's
+sidebar from a hard-coded list — `Instructions`, `Tools`, `Variables`, nothing
+else — so no configuration surfaces a Skills section for an agent defined in
+code. And Skills is gated on `features.agent.skills` from
+`/editor/builder/settings`, which requires the **Agent Builder** — an
+Enterprise feature (`new MastraEditor({ builder: … })`, licensed via
+`MASTRA_LICENSE_KEY`, with a dev-mode bypass). Getting that section would mean
+making the agent DB-defined *and* enabling EE. The workspace covered above
+gives you the skills system without either.
 
 Also worth a mention but not built here: dataset **CSV/JSON import**,
 **AI-generated dataset items** (`POST /datasets/:id/generate-items`, which
