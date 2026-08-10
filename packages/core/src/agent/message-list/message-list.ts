@@ -42,7 +42,7 @@ import type {
   SerializedMessageListState,
 } from './state';
 import type { AIV5Type, AIV5ResponseMessage, AIV6Type, MessageInput, MessageListInput } from './types';
-import { ensureGeminiCompatibleMessages } from './utils/provider-compat';
+import { ensureGeminiCompatibleMessages, findToolCallArgs } from './utils/provider-compat';
 import { stampPart } from './utils/stamp-part';
 
 function isSignalDataMessage<T extends { role: string; parts: Array<{ type: string }> }>(message: T): boolean {
@@ -1796,12 +1796,33 @@ export class MessageList {
 
     for (const storedMessage of this.messages) {
       this.updateLastCreatedAt(storedMessage);
+      this.recoverEmptyToolCallArgs(storedMessage);
     }
 
     // make sure messages are always stored in order of when they were created!
     this.messages.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
 
     return this;
+  }
+
+  // Backfill a tool-result's args from its originating call; an empty `{}` left
+  // here is replayed to the model as an argument-less call and imitated.
+  private recoverEmptyToolCallArgs(message: MastraDBMessage): void {
+    if (message.role !== 'assistant') return;
+
+    const fill = (invocation: { toolCallId: string; args?: unknown }) => {
+      const args = invocation.args;
+      if (args && typeof args === 'object' && Object.keys(args).length > 0) return;
+      const recovered = findToolCallArgs(this.messages, invocation.toolCallId);
+      if (Object.keys(recovered).length > 0) invocation.args = recovered;
+    };
+
+    for (const part of message.content.parts ?? []) {
+      if (part.type === 'tool-invocation') fill(part.toolInvocation);
+    }
+    for (const invocation of message.content.toolInvocations ?? []) {
+      fill(invocation);
+    }
   }
 
   private pushMessageToSource(messageV2: MastraDBMessage, messageSource: MessageSource) {
