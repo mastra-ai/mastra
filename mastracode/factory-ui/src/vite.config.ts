@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import ts from 'typescript';
-import { defineConfig, loadEnv, searchForWorkspaceRoot } from 'vite';
+import { createLogger, defineConfig, loadEnv, searchForWorkspaceRoot } from 'vite';
 import type { Plugin } from 'vite';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -28,6 +28,31 @@ const fsAllow = [searchForWorkspaceRoot(here), monaSansPackageRoot];
  */
 const apiTarget = process.env.MASTRACODE_API_TARGET ?? 'http://localhost:4111';
 const uiPort = Number(process.env.MASTRACODE_UI_PORT ?? 5173);
+
+/**
+ * A dead API server turns every proxied request into a multi-line
+ * ECONNREFUSED stack, and the auth query retries every 2s — the terminal
+ * drowns in stacks that all say the same thing. Say it once instead.
+ */
+function apiDownLogger() {
+  const logger = createLogger();
+  const logError = logger.error;
+  let lastWarnedAt = 0;
+
+  logger.error = (message, options) => {
+    const error = options?.error;
+    if (!error || !('code' in error) || error.code !== 'ECONNREFUSED') {
+      logError(message, options);
+      return;
+    }
+
+    if (Date.now() - lastWarnedAt < 15_000) return;
+    lastWarnedAt = Date.now();
+    logError(`API server at ${apiTarget} is not answering — see the [web:api] output above.`, { timestamp: true });
+  };
+
+  return logger;
+}
 
 /**
  * Dev-only injection of `window.__MASTRACODE_CONFIG__` into index.html.
@@ -279,6 +304,7 @@ export default defineConfig(({ mode }) => {
   return {
     root: resolve(here, 'ui'),
     envDir: process.env.MASTRACODE_ENV_DIR ?? resolve(here, '..'),
+    customLogger: apiDownLogger(),
     plugins: [react(), tailwindcss(), runtimeConfigPlugin(), routesManifestPlugin()],
     resolve: {
       // Monorepo packages arrive via `link:`/`workspace:` and would otherwise
