@@ -64,7 +64,8 @@ Open `http://localhost:5873`.
 
 ### Split UI mode
 
-Use this for UI work. One command starts the API on :4111 and Vite on :5173:
+Use this for UI work. One command starts the Docker services, the API on :4111,
+and Vite on :5173:
 
 ```shell
 pnpm --filter ./mastracode/factory-ui web
