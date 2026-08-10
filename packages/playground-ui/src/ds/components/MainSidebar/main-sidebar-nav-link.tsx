@@ -80,10 +80,6 @@ export function MainSidebarNavLink({
   const isCollapsed = state === 'collapsed';
   const isFeatured = link?.variant === 'featured';
   const level = levelProp ?? (link?.indent ? 1 : 0);
-  const isExternal = Boolean(link?.url && /^(https?:)?\/\//.test(link.url));
-  const linkParams = isExternal ? { target: '_blank', rel: 'noreferrer' } : {};
-  const tooltip = navTooltipLabel(link, isCollapsed);
-
   // A collapsed rail has no room for a trailing control, so the action is dropped there.
   const rowAction = isCollapsed ? undefined : action;
 
@@ -91,39 +87,61 @@ export function MainSidebarNavLink({
     ? cn(navItemLayoutClasses({ level, size }), 'flex-1 pr-1')
     : navItemClasses({ isActive, isCollapsed, isFeatured, level, size });
 
-  let interactiveEl: React.ReactNode = undefined;
+  return (
+    <li {...props} className={cn('relative flex min-w-0 flex-col', className)}>
+      <NavRowBody action={rowAction} surfaceClassName={navRowSurfaceClasses({ isActive, isFeatured })}>
+        <NavRowTooltip label={navTooltipLabel(link, isCollapsed)}>
+          {navInteractiveRow({ render, asChild, children, link, state, Link, className: itemClassName })}
+        </NavRowTooltip>
+      </NavRowBody>
+      {!isCollapsed && subItems}
+    </li>
+  );
+}
 
-  if (render) {
-    interactiveEl = React.cloneElement(render, {
-      className: cn(itemClassName, render.props.className),
-    });
-  } else if (asChild) {
+/**
+ * Builds the element the row is interactive through. It is slotted into
+ * `Tooltip`'s `render`, so it must be an element value, not a component.
+ */
+function navInteractiveRow({
+  render,
+  asChild,
+  children,
+  link,
+  state,
+  Link,
+  className,
+}: {
+  render?: React.ReactElement<SlottedNavChildProps>;
+  asChild: boolean;
+  children?: React.ReactNode;
+  link?: NavLink;
+  state: SidebarState;
+  Link: LinkComponent;
+  className: string;
+}) {
+  if (render) return React.cloneElement(render, { className: cn(className, render.props.className) });
+
+  if (asChild) {
     if (!React.isValidElement<SlottedNavChildProps>(children)) {
       throw new Error(
         'MainSidebarNavLink requires a valid React element child when `asChild` is true so it can apply `SlottedNavChildProps` and merge `itemClassName`.',
       );
     }
 
-    interactiveEl = React.cloneElement(children, {
-      className: cn(itemClassName, children.props.className),
-    });
-  } else if (link) {
-    interactiveEl = (
-      <Link href={link.url} {...linkParams} className={itemClassName}>
-        {link.icon}
-        <MainSidebarNavLabel state={state}>{link.name}</MainSidebarNavLabel>
-        {children}
-      </Link>
-    );
+    return React.cloneElement(children, { className: cn(className, children.props.className) });
   }
 
+  if (!link) return children;
+
+  const externalParams = /^(https?:)?\/\//.test(link.url) ? { target: '_blank', rel: 'noreferrer' } : {};
+
   return (
-    <li {...props} className={cn('relative flex min-w-0 flex-col', className)}>
-      <NavRowBody action={rowAction} surfaceClassName={navRowSurfaceClasses({ isActive, isFeatured })}>
-        <NavRowTooltip label={tooltip}>{interactiveEl ?? children}</NavRowTooltip>
-      </NavRowBody>
-      {!isCollapsed && subItems}
-    </li>
+    <Link href={link.url} {...externalParams} className={className}>
+      {link.icon}
+      <MainSidebarNavLabel state={state}>{link.name}</MainSidebarNavLabel>
+      {children}
+    </Link>
   );
 }
 
