@@ -37,7 +37,7 @@
     },
     {
       "source": "/docs/voice/livekit",
-      "destination": "/integrations/voice/livekit#quickstart",
+      "destination": "/integrations/voice/livekit",
       "permanent": true
     },
     {
@@ -72,7 +72,7 @@
     },
     {
       "source": "/docs/observability/tracing/exporters/datadog",
-      "destination": "/integrations/observability/datadog#exporter",
+      "destination": "/integrations/observability/datadog",
       "permanent": true
     },
     {
@@ -92,7 +92,7 @@
     },
     {
       "source": "/docs/observability/tracing/exporters/otel",
-      "destination": "/integrations/observability/opentelemetry#exporter",
+      "destination": "/integrations/observability/opentelemetry",
       "permanent": true
     },
     {
@@ -112,12 +112,12 @@
     },
     {
       "source": "/docs/observability/tracing/bridges/datadog",
-      "destination": "/integrations/observability/datadog#bridge",
+      "destination": "/integrations/observability/datadog",
       "permanent": true
     },
     {
       "source": "/docs/observability/tracing/bridges/otel",
-      "destination": "/integrations/observability/opentelemetry#bridge",
+      "destination": "/integrations/observability/opentelemetry",
       "permanent": true
     },
     {
@@ -997,12 +997,12 @@
     },
     {
       "source": "/reference/workspace/vercel",
-      "destination": "/integrations/sandboxes/vercel#vercel-serverless-sandbox",
+      "destination": "/integrations/sandboxes/vercel",
       "permanent": true
     },
     {
       "source": "/reference/workspace/vercel-microvm-sandbox",
-      "destination": "/integrations/sandboxes/vercel#vercel-sandbox",
+      "destination": "/integrations/sandboxes/vercel",
       "permanent": true
     },
     {
@@ -1392,7 +1392,7 @@
     },
     {
       "source": "/reference/workspace/vercel-sandbox",
-      "destination": "/integrations/sandboxes/vercel#vercel-sandbox",
+      "destination": "/integrations/sandboxes/vercel",
       "permanent": true
     },
     {
@@ -1417,7 +1417,7 @@
     },
     {
       "source": "/docs/observability/integrations/exporters/datadog",
-      "destination": "/integrations/observability/datadog#exporter",
+      "destination": "/integrations/observability/datadog",
       "permanent": true
     },
     {
@@ -1437,7 +1437,7 @@
     },
     {
       "source": "/docs/observability/integrations/exporters/otel",
-      "destination": "/integrations/observability/opentelemetry#exporter",
+      "destination": "/integrations/observability/opentelemetry",
       "permanent": true
     },
     {
@@ -1552,17 +1552,17 @@
     },
     {
       "source": "/reference/voice/google",
-      "destination": "/integrations/voice/google#speech",
+      "destination": "/integrations/voice/google",
       "permanent": true
     },
     {
       "source": "/reference/voice/inworld",
-      "destination": "/integrations/voice/inworld#voice",
+      "destination": "/integrations/voice/inworld",
       "permanent": true
     },
     {
       "source": "/guides/voice/realtime-voice",
-      "destination": "/integrations/voice/livekit#quickstart",
+      "destination": "/integrations/voice/livekit",
       "permanent": true
     },
     {
@@ -1577,7 +1577,7 @@
     },
     {
       "source": "/reference/voice/openai",
-      "destination": "/integrations/voice/openai#voice",
+      "destination": "/integrations/voice/openai",
       "permanent": true
     },
     {
@@ -1777,52 +1777,52 @@
     },
     {
       "source": "/docs/capabilities/channels/other-adapters",
-      "destination": "/docs/capabilities/channels#other-adapters",
+      "destination": "/docs/capabilities/channels",
       "permanent": true
     },
     {
       "source": "/guides/build-your-ui/copilotkit/generative-ui",
-      "destination": "/integrations/agentic-ui/copilotkit#generative-ui",
+      "destination": "/integrations/agentic-ui/copilotkit",
       "permanent": true
     },
     {
       "source": "/guides/build-your-ui/copilotkit/channels",
-      "destination": "/integrations/agentic-ui/copilotkit#channels",
+      "destination": "/integrations/agentic-ui/copilotkit",
       "permanent": true
     },
     {
       "source": "/reference/workspace/vercel-serverless",
-      "destination": "/integrations/sandboxes/vercel#vercel-serverless-sandbox",
+      "destination": "/integrations/sandboxes/vercel",
       "permanent": true
     },
     {
       "source": "/docs/observability/integrations/bridges/datadog",
-      "destination": "/integrations/observability/datadog#bridge",
+      "destination": "/integrations/observability/datadog",
       "permanent": true
     },
     {
       "source": "/docs/observability/integrations/bridges/otel",
-      "destination": "/integrations/observability/opentelemetry#bridge",
+      "destination": "/integrations/observability/opentelemetry",
       "permanent": true
     },
     {
       "source": "/reference/voice/google-gemini-live",
-      "destination": "/integrations/voice/google#gemini-live",
+      "destination": "/integrations/voice/google",
       "permanent": true
     },
     {
       "source": "/reference/voice/inworld-realtime",
-      "destination": "/integrations/voice/inworld#realtime",
+      "destination": "/integrations/voice/inworld",
       "permanent": true
     },
     {
       "source": "/reference/voice/livekit",
-      "destination": "/integrations/voice/livekit#api-reference",
+      "destination": "/integrations/voice/livekit",
       "permanent": true
     },
     {
       "source": "/reference/voice/openai-realtime",
-      "destination": "/integrations/voice/openai#realtime",
+      "destination": "/integrations/voice/openai",
       "permanent": true
     },
     {
@@ -1892,7 +1892,7 @@
     },
     {
       "source": "/docs/voice/livekit/llms.txt",
-      "destination": "/integrations/voice/livekit/llms.txt#quickstart",
+      "destination": "/integrations/voice/livekit/llms.txt",
       "permanent": true
     },
     {
@@ -1927,7 +1927,7 @@
     },
     {
       "source": "/docs/observability/tracing/exporters/datadog/llms.txt",
-      "destination": "/integrations/observability/datadog/llms.txt#exporter",
+      "destination": "/integrations/observability/datadog/llms.txt",
       "permanent": true
     },
     {
@@ -1947,7 +1947,7 @@
     },
     {
       "source": "/docs/observability/tracing/exporters/otel/llms.txt",
-      "destination": "/integrations/observability/opentelemetry/llms.txt#exporter",
+      "destination": "/integrations/observability/opentelemetry/llms.txt",
       "permanent": true
     },
     {
@@ -1967,12 +1967,12 @@
     },
     {
       "source": "/docs/observability/tracing/bridges/datadog/llms.txt",
-      "destination": "/integrations/observability/datadog/llms.txt#bridge",
+      "destination": "/integrations/observability/datadog/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/observability/tracing/bridges/otel/llms.txt",
-      "destination": "/integrations/observability/opentelemetry/llms.txt#bridge",
+      "destination": "/integrations/observability/opentelemetry/llms.txt",
       "permanent": true
     },
     {
@@ -2587,12 +2587,12 @@
     },
     {
       "source": "/reference/workspace/vercel/llms.txt",
-      "destination": "/integrations/sandboxes/vercel/llms.txt#vercel-serverless-sandbox",
+      "destination": "/integrations/sandboxes/vercel/llms.txt",
       "permanent": true
     },
     {
       "source": "/reference/workspace/vercel-microvm-sandbox/llms.txt",
-      "destination": "/integrations/sandboxes/vercel/llms.txt#vercel-sandbox",
+      "destination": "/integrations/sandboxes/vercel/llms.txt",
       "permanent": true
     },
     {
@@ -2907,7 +2907,7 @@
     },
     {
       "source": "/reference/workspace/vercel-sandbox/llms.txt",
-      "destination": "/integrations/sandboxes/vercel/llms.txt#vercel-sandbox",
+      "destination": "/integrations/sandboxes/vercel/llms.txt",
       "permanent": true
     },
     {
@@ -2932,7 +2932,7 @@
     },
     {
       "source": "/docs/observability/integrations/exporters/datadog/llms.txt",
-      "destination": "/integrations/observability/datadog/llms.txt#exporter",
+      "destination": "/integrations/observability/datadog/llms.txt",
       "permanent": true
     },
     {
@@ -2952,7 +2952,7 @@
     },
     {
       "source": "/docs/observability/integrations/exporters/otel/llms.txt",
-      "destination": "/integrations/observability/opentelemetry/llms.txt#exporter",
+      "destination": "/integrations/observability/opentelemetry/llms.txt",
       "permanent": true
     },
     {
@@ -3067,17 +3067,17 @@
     },
     {
       "source": "/reference/voice/google/llms.txt",
-      "destination": "/integrations/voice/google/llms.txt#speech",
+      "destination": "/integrations/voice/google/llms.txt",
       "permanent": true
     },
     {
       "source": "/reference/voice/inworld/llms.txt",
-      "destination": "/integrations/voice/inworld/llms.txt#voice",
+      "destination": "/integrations/voice/inworld/llms.txt",
       "permanent": true
     },
     {
       "source": "/guides/voice/realtime-voice/llms.txt",
-      "destination": "/integrations/voice/livekit/llms.txt#quickstart",
+      "destination": "/integrations/voice/livekit/llms.txt",
       "permanent": true
     },
     {
@@ -3092,7 +3092,7 @@
     },
     {
       "source": "/reference/voice/openai/llms.txt",
-      "destination": "/integrations/voice/openai/llms.txt#voice",
+      "destination": "/integrations/voice/openai/llms.txt",
       "permanent": true
     },
     {
@@ -3292,52 +3292,52 @@
     },
     {
       "source": "/docs/capabilities/channels/other-adapters/llms.txt",
-      "destination": "/docs/capabilities/channels/llms.txt#other-adapters",
+      "destination": "/docs/capabilities/channels/llms.txt",
       "permanent": true
     },
     {
       "source": "/guides/build-your-ui/copilotkit/generative-ui/llms.txt",
-      "destination": "/integrations/agentic-ui/copilotkit/llms.txt#generative-ui",
+      "destination": "/integrations/agentic-ui/copilotkit/llms.txt",
       "permanent": true
     },
     {
       "source": "/guides/build-your-ui/copilotkit/channels/llms.txt",
-      "destination": "/integrations/agentic-ui/copilotkit/llms.txt#channels",
+      "destination": "/integrations/agentic-ui/copilotkit/llms.txt",
       "permanent": true
     },
     {
       "source": "/reference/workspace/vercel-serverless/llms.txt",
-      "destination": "/integrations/sandboxes/vercel/llms.txt#vercel-serverless-sandbox",
+      "destination": "/integrations/sandboxes/vercel/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/observability/integrations/bridges/datadog/llms.txt",
-      "destination": "/integrations/observability/datadog/llms.txt#bridge",
+      "destination": "/integrations/observability/datadog/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/observability/integrations/bridges/otel/llms.txt",
-      "destination": "/integrations/observability/opentelemetry/llms.txt#bridge",
+      "destination": "/integrations/observability/opentelemetry/llms.txt",
       "permanent": true
     },
     {
       "source": "/reference/voice/google-gemini-live/llms.txt",
-      "destination": "/integrations/voice/google/llms.txt#gemini-live",
+      "destination": "/integrations/voice/google/llms.txt",
       "permanent": true
     },
     {
       "source": "/reference/voice/inworld-realtime/llms.txt",
-      "destination": "/integrations/voice/inworld/llms.txt#realtime",
+      "destination": "/integrations/voice/inworld/llms.txt",
       "permanent": true
     },
     {
       "source": "/reference/voice/livekit/llms.txt",
-      "destination": "/integrations/voice/livekit/llms.txt#api-reference",
+      "destination": "/integrations/voice/livekit/llms.txt",
       "permanent": true
     },
     {
       "source": "/reference/voice/openai-realtime/llms.txt",
-      "destination": "/integrations/voice/openai/llms.txt#realtime",
+      "destination": "/integrations/voice/openai/llms.txt",
       "permanent": true
     },
     {
