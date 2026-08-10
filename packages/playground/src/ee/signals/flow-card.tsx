@@ -34,20 +34,14 @@ export function FlowCard({
   signalOrder: TraceSignalName[];
   reorderDisabled: boolean;
 }) {
-  const columnsById = new Map(columns.map(column => [column.id, column]));
-  const linkedColumnIds = new Set(columnsById.keys());
-  const orderedLinkedSignals = signalOrder.filter(signalName => linkedColumnIds.has(signalName));
-  const orderedSignalSet = new Set(orderedLinkedSignals);
-  const headerSignalNames = [
-    ...orderedLinkedSignals,
-    ...stages
-      .map(stage => stage.signalName)
-      .filter(signalName => linkedColumnIds.has(signalName) && !orderedSignalSet.has(signalName)),
-  ];
-  const chartColumns = headerSignalNames.flatMap(signalName => {
-    const column = columnsById.get(signalName);
-    return column ? [{ ...column, label: column.label.toUpperCase() }] : [];
-  });
+  const linkedColumnIds = new Set(columns.map(column => column.id));
+  const stageSignalNames = stages.map(stage => stage.signalName).filter(signalName => linkedColumnIds.has(signalName));
+  const optimisticSignalNames = signalOrder.filter(signalName => linkedColumnIds.has(signalName));
+  const optimisticSignalSet = new Set(optimisticSignalNames);
+  const headerSignalNames = reorderDisabled
+    ? [...optimisticSignalNames, ...stageSignalNames.filter(signalName => !optimisticSignalSet.has(signalName))]
+    : stageSignalNames;
+  const chartColumns = columns.map(column => ({ ...column, label: column.label.toUpperCase() }));
   const handleHeaderOrderChange = (reordered: TraceSignalName[]) => {
     const seen = new Set<TraceSignalName>(reordered);
     onOrderChange([...reordered, ...signalOrder.filter(name => !seen.has(name))]);
