@@ -51,8 +51,10 @@ export function LifelinePoint({
       ) : (
         <span
           aria-label={title}
-          className="absolute bottom-px w-1.5 -translate-x-1/2 rounded-xs"
+          className="absolute bottom-px w-1.5 -translate-x-1/2 rounded-xs focus-visible:outline-2 focus-visible:outline-offset-2"
+          role="img"
           style={style}
+          tabIndex={0}
           {...interactionProps}
         />
       )}

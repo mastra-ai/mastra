@@ -1,4 +1,4 @@
-import type { ThemeHistoryResponse } from './types';
+import type { ThemeHistoryResponse } from '@mastra/client-js';
 
 export type ThemeHistoryPoint = ThemeHistoryResponse['points'][number];
 

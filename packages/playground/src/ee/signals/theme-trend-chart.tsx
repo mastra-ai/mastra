@@ -1,7 +1,7 @@
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 
 import { formatSnapshotDate, traceLabel } from './signal-formatting';
-import type { ThemeHistoryPoint } from './theme-trend-data';
+import type { ThemeHistoryPoint } from '@/domains/traces/theme-trend';
 
 const TREND_CHART_HEIGHT = 32;
 

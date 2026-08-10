@@ -4,21 +4,18 @@ import { SignalsOverviewPage as SignalsEmptyState } from '@mastra/playground-ui/
 import { Link } from '../../lib/link';
 import { useEntityLearningProgress } from './hooks';
 import { SankeySignals } from './sankey-signals';
+import { SIGNAL_PROCESSING_ORDER } from './signal-formatting';
 import { SignalsErrorState } from './signals-error-state';
 import { SignalsLoadingSkeleton } from './signals-loading-skeleton';
-import type { TraceSignalName } from './types';
 import { useSelectedThemeEntity } from './use-selected-theme-entity';
 import { useSignalsDateUrlState } from './use-signals-date-url-state';
-
-// Default columns follow the order signals are produced during an interaction:
-// the user states a goal, sentiment surfaces while it runs, the agent's
-// behavior responds, and the outcome lands last.
-const SIGNAL_ORDER: TraceSignalName[] = ['goal', 'sentiment', 'behavior', 'outcome'];
 
 export function SignalsOverviewPage() {
   const { entitiesQuery, entity } = useSelectedThemeEntity();
   const url = useSignalsDateUrlState();
-  const signalNames = entity ? SIGNAL_ORDER.filter(signalName => entity.availableSignals.includes(signalName)) : [];
+  const signalNames = entity
+    ? SIGNAL_PROCESSING_ORDER.filter(signalName => entity.availableSignals.includes(signalName))
+    : [];
   const progressQuery = useEntityLearningProgress(
     entity?.entityId,
     entity?.entityType ?? 'agent',

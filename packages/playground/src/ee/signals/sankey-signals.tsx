@@ -19,6 +19,7 @@ import {
   snapshotSummaryLabel,
   stabilizeThemeFlow,
 } from './sankey-signals-data';
+import { SIGNAL_PROCESSING_ORDER } from './signal-formatting';
 import { SignalsErrorState } from './signals-error-state';
 import { SignalsFrameLoadingSkeleton, SignalsLoadingSkeleton } from './signals-loading-skeleton';
 import { SnapshotTimeline } from './snapshot-timeline';
@@ -46,10 +47,11 @@ export interface SankeySignalsProps {
 }
 
 const DRILL_IN_TRACE_LIMIT = 2000;
+const FLOW_SIGNAL_LIST = `${SIGNAL_PROCESSING_ORDER.slice(0, -1).join(', ')}, and ${SIGNAL_PROCESSING_ORDER[SIGNAL_PROCESSING_ORDER.length - 1]}`;
 
 /** One-line answer to "what am I looking at?" for each view, shown under the tabs. */
 const VIEW_DESCRIPTIONS: Record<SignalsViewMode, string> = {
-  flow: "How this agent's traces distribute across goal, sentiment, behavior, and outcome themes at this point in time.",
+  flow: `How this agent's traces distribute across ${FLOW_SIGNAL_LIST} themes at this point in time.`,
   compare: 'Which themes grew, shrank, appeared, or disappeared between two points in time.',
   lifelines: "Each theme's share of traces across the whole selected range.",
 };

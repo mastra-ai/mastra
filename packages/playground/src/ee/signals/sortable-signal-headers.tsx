@@ -1,5 +1,12 @@
 import type { DragStart, DragUpdate, DraggableStateSnapshot, DropResult, DroppableProvided } from '@hello-pangea/dnd';
-import { DragDropContext, Draggable, Droppable, useMouseSensor, useTouchSensor } from '@hello-pangea/dnd';
+import {
+  DragDropContext,
+  Draggable,
+  Droppable,
+  useKeyboardSensor,
+  useMouseSensor,
+  useTouchSensor,
+} from '@hello-pangea/dnd';
 import { nodeColor } from '@mastra/playground-ui/components/SankeyChart';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { getSignalHue } from '@mastra/playground-ui/ee/signals';
@@ -9,7 +16,7 @@ import { useState } from 'react';
 import { formatSignalName, getSignalDescription } from './signal-formatting';
 import type { TraceSignalName } from './types';
 
-const DRAG_SENSORS = [useMouseSensor, useTouchSensor];
+const DRAG_SENSORS = [useMouseSensor, useTouchSensor, useKeyboardSensor];
 
 type DragProjection = {
   sourceIndex: number;

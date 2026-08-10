@@ -16,8 +16,8 @@ import { useThemeDetail, useThemeExamples, useThemeHistory } from './hooks';
 import { formatSnapshotDate, shareSentence, SIGNAL_DESCRIPTIONS } from './signal-formatting';
 import type { ThemeSelection } from './theme-drilldown-data';
 import { ThemeTrendChart } from './theme-trend-chart';
-import { chronologicalHistoryPoints, themeTrendDirection } from './theme-trend-data';
 import { TraceInsightView } from './trace-insight-view';
+import { chronologicalHistoryPoints, themeTrendDirection } from '@/domains/traces/theme-trend';
 
 interface ThemeDetailPanelProps {
   entityId: string;
@@ -36,7 +36,9 @@ export function ThemeDetailPanel({
   selection,
   onClose,
 }: ThemeDetailPanelProps) {
-  const [examplesOffset, setExamplesOffset] = useState(0);
+  const examplesContextKey = `${snapshotId}:${selection?.signalName ?? ''}:${selection?.themeId ?? ''}`;
+  const [examplesPage, setExamplesPage] = useState(() => ({ contextKey: examplesContextKey, offset: 0 }));
+  const examplesOffset = examplesPage.contextKey === examplesContextKey ? examplesPage.offset : 0;
   const [insightTraceId, setInsightTraceId] = useState<string>();
   const detailQuery = useThemeDetail(
     entityId,
@@ -68,6 +70,7 @@ export function ThemeDetailPanel({
     <Drawer
       onOpenChange={open => {
         if (!open) {
+          setExamplesPage({ contextKey: '', offset: 0 });
           setInsightTraceId(undefined);
           onClose();
         }
@@ -155,7 +158,7 @@ export function ThemeDetailPanel({
                         <ExamplesPager
                           traceCount={detailQuery.data.theme.traceCount}
                           offset={examplesOffset}
-                          onOffsetChange={setExamplesOffset}
+                          onOffsetChange={offset => setExamplesPage({ contextKey: examplesContextKey, offset })}
                         />
                       </>
                     )}

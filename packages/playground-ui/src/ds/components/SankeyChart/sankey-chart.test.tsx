@@ -421,14 +421,26 @@ describe('SankeyChart', () => {
       expect(screen.getByRole('tooltip').textContent).toContain('Where the lead came from.');
     });
 
-    it('shows the description when the column header receives focus', async () => {
+    it('shows the description when the named column header receives focus', async () => {
       const { container } = renderDescribedColumns();
       await screen.findAllByText('Channel');
       const header = findColumnHeader(container, 'Channel');
 
       fireEvent.focus(header);
 
+      expect(screen.getByRole('img', { name: 'Channel' })).toBe(header);
       expect(screen.getByRole('tooltip').textContent).toContain('Where the lead came from.');
+    });
+
+    it('hides the description again when the header loses focus', async () => {
+      const { container } = renderDescribedColumns();
+      await screen.findAllByText('Channel');
+      const header = findColumnHeader(container, 'Channel');
+      fireEvent.focus(header);
+
+      fireEvent.blur(header);
+
+      expect(screen.queryByRole('tooltip')).toBeNull();
     });
 
     it('hides the description again when the pointer leaves the header', async () => {

@@ -40,18 +40,25 @@ function usePanelHandlers({
 
 function renderPanel({ snapshotTotal = 4 }: { snapshotTotal?: number } = {}) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(
+  const selection = { signalName: 'goal', themeId: '101', label: 'Add transcript' } as const;
+  const panel = (snapshotId: string) => (
     <QueryClientProvider client={queryClient}>
       <ThemeDetailPanel
         entityId="support-agent"
         entityType="agent"
-        snapshotId="opaque-snapshot-cursor"
+        snapshotId={snapshotId}
         snapshotTotal={snapshotTotal}
-        selection={{ signalName: 'goal', themeId: '101', label: 'Add transcript' }}
+        selection={selection}
         onClose={vi.fn()}
       />
-    </QueryClientProvider>,
+    </QueryClientProvider>
   );
+  const result = render(panel('opaque-snapshot-cursor'));
+
+  return {
+    ...result,
+    rerenderSnapshot: (snapshotId: string) => result.rerender(panel(snapshotId)),
+  };
 }
 
 afterEach(() => {
@@ -111,6 +118,21 @@ describe('ThemeDetailPanel', () => {
       expect(screen.queryByText(/^birth$/i)).toBeNull();
       expect(screen.queryByText(/^continue$/i)).toBeNull();
       expect(screen.queryByRole('heading', { name: 'History' })).toBeNull();
+    });
+  });
+
+  describe('when the selected snapshot changes after paging examples', () => {
+    it('returns to the first examples page for the new snapshot', async () => {
+      usePanelHandlers();
+      const { rerenderSnapshot } = renderPanel();
+      await screen.findByText('Add this transcript to my workspace.');
+      fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+      await screen.findByText('Save the transcript with the project.');
+
+      rerenderSnapshot('new-snapshot-cursor');
+
+      expect(await screen.findByText('Add this transcript to my workspace.')).not.toBeNull();
+      expect(screen.getByText('Page 1 of 2')).not.toBeNull();
     });
   });
 

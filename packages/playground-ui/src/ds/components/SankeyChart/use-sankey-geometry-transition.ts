@@ -52,7 +52,7 @@ export function interpolateSankeyGeometry(
   to: FixedSankeyGeometry,
   progress: number,
 ): FixedSankeyGeometry {
-  const previousLinks = [...from.links.values()];
+  const replacedPreviousLinks = [...from.links].filter(([id]) => !to.links.has(id)).map(([, link]) => link);
   const nodes = new Map<string, FixedSankeyNodeGeometry>();
   const links = new Map<string, FixedSankeyLinkGeometry>();
 
@@ -60,11 +60,11 @@ export function interpolateSankeyGeometry(
     nodes.set(id, interpolateNode(from.nodes.get(id) ?? target, target, progress));
   }
 
-  let linkIndex = 0;
+  let replacedLinkIndex = 0;
   for (const [id, target] of to.links) {
-    const syntheticSource = previousLinks[linkIndex % previousLinks.length];
-    links.set(id, interpolateLink(from.links.get(id) ?? syntheticSource ?? target, target, progress));
-    linkIndex += 1;
+    const matchingSource = from.links.get(id);
+    const syntheticSource = matchingSource ? undefined : replacedPreviousLinks[replacedLinkIndex++];
+    links.set(id, interpolateLink(matchingSource ?? syntheticSource ?? target, target, progress));
   }
 
   return { nodes, links };

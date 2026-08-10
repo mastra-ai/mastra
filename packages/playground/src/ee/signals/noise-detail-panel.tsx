@@ -23,7 +23,9 @@ interface NoiseDetailPanelProps {
 }
 
 export function NoiseDetailPanel({ entityId, entityType, snapshotId, signalName, onClose }: NoiseDetailPanelProps) {
-  const [examplesOffset, setExamplesOffset] = useState(0);
+  const examplesContextKey = `${snapshotId}:${signalName ?? ''}`;
+  const [examplesPage, setExamplesPage] = useState(() => ({ contextKey: examplesContextKey, offset: 0 }));
+  const examplesOffset = examplesPage.contextKey === examplesContextKey ? examplesPage.offset : 0;
   const [insightTraceId, setInsightTraceId] = useState<string>();
   const noiseQuery = useNoise(entityId, entityType, signalName, snapshotId);
   const examplesQuery = useNoiseExamples(
@@ -39,6 +41,7 @@ export function NoiseDetailPanel({ entityId, entityType, snapshotId, signalName,
     <Drawer
       onOpenChange={open => {
         if (!open) {
+          setExamplesPage({ contextKey: '', offset: 0 });
           setInsightTraceId(undefined);
           onClose();
         }
@@ -106,7 +109,7 @@ export function NoiseDetailPanel({ entityId, entityType, snapshotId, signalName,
                       <ExamplesPager
                         traceCount={noiseQuery.data.noise.traceCount}
                         offset={examplesOffset}
-                        onOffsetChange={setExamplesOffset}
+                        onOffsetChange={offset => setExamplesPage({ contextKey: examplesContextKey, offset })}
                       />
                     )}
                   </>

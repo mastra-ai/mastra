@@ -1,5 +1,8 @@
 import type { TraceSignalName } from './types';
 
+/** Order signals are produced during an interaction. */
+export const SIGNAL_PROCESSING_ORDER: TraceSignalName[] = ['goal', 'sentiment', 'behavior', 'outcome'];
+
 export function formatSignalName(signalName: TraceSignalName) {
   return signalName.charAt(0).toUpperCase() + signalName.slice(1);
 }
@@ -13,7 +16,7 @@ export const SIGNAL_DESCRIPTIONS: Record<TraceSignalName, string> = {
 };
 
 function isTraceSignalName(value: string): value is TraceSignalName {
-  return value in SIGNAL_DESCRIPTIONS;
+  return Object.prototype.hasOwnProperty.call(SIGNAL_DESCRIPTIONS, value);
 }
 
 /** Signal description lookup for callers that only hold an untyped column id. */

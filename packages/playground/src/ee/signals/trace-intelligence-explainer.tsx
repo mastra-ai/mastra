@@ -4,10 +4,7 @@ import { getSignalHue } from '@mastra/playground-ui/ee/signals';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { Info } from 'lucide-react';
 
-import { SIGNAL_DESCRIPTIONS } from './signal-formatting';
-import type { TraceSignalName } from './types';
-
-const EXPLAINER_SIGNAL_ORDER: TraceSignalName[] = ['goal', 'sentiment', 'behavior', 'outcome'];
+import { SIGNAL_DESCRIPTIONS, SIGNAL_PROCESSING_ORDER } from './signal-formatting';
 
 /** Info tooltip for first-time viewers: signals → themes → snapshots. */
 export function TraceIntelligenceExplainer() {
@@ -28,7 +25,7 @@ export function TraceIntelligenceExplainer() {
           named themes.
         </p>
         <ul className="space-y-1.5">
-          {EXPLAINER_SIGNAL_ORDER.map(signalName => (
+          {SIGNAL_PROCESSING_ORDER.map(signalName => (
             <li key={signalName} className="text-neutral4">
               <span
                 className="font-mono text-[10px] font-semibold tracking-widest uppercase"

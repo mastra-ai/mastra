@@ -114,6 +114,10 @@ function columnHeaderLabels() {
   return screen.getAllByTestId('signal-column-header').map(header => header.textContent);
 }
 
+function translatePercent(element: HTMLElement | null | undefined) {
+  return Number.parseFloat(element?.style.translate ?? '');
+}
+
 beforeEach(() => {
   vi.stubGlobal('ResizeObserver', ChartResizeObserver);
   vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(800);
@@ -613,7 +617,12 @@ describe('SankeySignals', () => {
         .map(header => header.style.translate);
 
       expect(draggableOffsets).toEqual(['', '', '', '']);
-      expect(alignmentOffsets).toEqual(['-50%', '-16.666666666666668%', '16.666666666666664%', '50%']);
+      expect(alignmentOffsets.map(Number.parseFloat)).toEqual([
+        expect.closeTo(-50, 6),
+        expect.closeTo(-100 / 6, 6),
+        expect.closeTo(100 / 6, 6),
+        expect.closeTo(50, 6),
+      ]);
       expect(screen.getAllByTestId('signal-column-header-content').map(header => header.dataset.headerAnchor)).toEqual([
         'start',
         'middle',
@@ -724,8 +733,8 @@ describe('SankeySignals', () => {
           const behaviorRail = screen
             .getByLabelText('Reorder Behavior')
             .closest('[data-testid="signal-column-header-content"]')?.parentElement;
-          expect(outcomeRail?.style.translate).toBe('16.666666666666664%');
-          expect(behaviorRail?.style.translate).toBe('-16.666666666666668%');
+          expect(translatePercent(outcomeRail)).toBeCloseTo(100 / 6, 6);
+          expect(translatePercent(behaviorRail)).toBeCloseTo(-100 / 6, 6);
         });
       });
 
@@ -1292,6 +1301,26 @@ describe('SankeySignals', () => {
 
       await screen.findByRole('region', { name: 'Trace signal theme flow' });
       expect(columnHeaderLabels()).toEqual(['GOAL', 'OUTCOME']);
+    });
+
+    it('retains omitted stages in the perspective after a keyboard reorder', async () => {
+      const snapshotOrders: string[] = [];
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, ({ request }) => {
+          snapshotOrders.push(new URL(request.url).searchParams.get('signalNames') ?? '');
+          return HttpResponse.json(themeSnapshotsResponse);
+        }),
+      );
+      renderSankeySignals();
+      const outcomeHandle = await screen.findByLabelText('Reorder Outcome');
+
+      outcomeHandle.focus();
+      fireEvent.keyDown(outcomeHandle, { key: ' ', code: 'Space', keyCode: 32 });
+      fireEvent.keyDown(outcomeHandle, { key: 'ArrowLeft', code: 'ArrowLeft', keyCode: 37 });
+      fireEvent.keyDown(outcomeHandle, { key: ' ', code: 'Space', keyCode: 32 });
+
+      await waitFor(() => expect(snapshotOrders).toHaveLength(2));
+      expect(snapshotOrders[1]).toBe('outcome,goal,behavior,sentiment');
     });
 
     it('preserves the API-defined trace signal order', () => {

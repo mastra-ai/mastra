@@ -49,6 +49,35 @@ describe('Sankey geometry motion', () => {
       expect(halfway.nodes.get('theme')).toMatchObject({ x: 120, y: 10, height: 20 });
       expect(halfway.links.get('link-220')).toMatchObject({ sourceX: 120, targetX: 220 });
     });
+
+    it('pairs replaced ribbons without consuming retained ribbon geometry', () => {
+      const retained = geometry({ nodeX: 20, linkSourceX: 20, linkTargetX: 120 }).links.values().next().value;
+      const replaced = geometry({ nodeX: 20, linkSourceX: 40, linkTargetX: 140 }).links.values().next().value;
+      const targetRetained = geometry({ nodeX: 220, linkSourceX: 220, linkTargetX: 320 }).links.values().next().value;
+      const targetReplacement = geometry({ nodeX: 220, linkSourceX: 240, linkTargetX: 340 })
+        .links.values()
+        .next().value;
+      if (!retained || !replaced || !targetRetained || !targetReplacement) throw new Error('Expected link geometry');
+      const previous = {
+        nodes: new Map(),
+        links: new Map([
+          ['retained', retained],
+          ['replaced-before', replaced],
+        ]),
+      } satisfies FixedSankeyGeometry;
+      const current = {
+        nodes: new Map(),
+        links: new Map([
+          ['replacement-after', targetReplacement],
+          ['retained', targetRetained],
+        ]),
+      } satisfies FixedSankeyGeometry;
+
+      const halfway = interpolateSankeyGeometry(previous, current, 0.5);
+
+      expect(halfway.links.get('replacement-after')).toMatchObject({ sourceX: 140, targetX: 240 });
+      expect(halfway.links.get('retained')).toMatchObject({ sourceX: 120, targetX: 220 });
+    });
   });
 
   describe('when the perspective key changes', () => {
@@ -76,6 +105,37 @@ describe('Sankey geometry motion', () => {
       const animatedNodeX = result.current?.nodes.get('theme')?.x;
       expect(animatedNodeX).toBeGreaterThan(20);
       expect(animatedNodeX).toBeLessThan(220);
+    });
+
+    it('continues from the displayed geometry when another reorder interrupts the animation', () => {
+      const animationFrames: FrameRequestCallback[] = [];
+      vi.stubGlobal('matchMedia', () => ({ matches: false }));
+      vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+        animationFrames.push(callback);
+        return animationFrames.length;
+      });
+      vi.stubGlobal('cancelAnimationFrame', vi.fn());
+      vi.spyOn(performance, 'now').mockReturnValue(0);
+      const first = geometry({ nodeX: 20, linkSourceX: 20, linkTargetX: 120 });
+      const second = geometry({ nodeX: 220, linkSourceX: 220, linkTargetX: 320 });
+      const third = geometry({ nodeX: 420, linkSourceX: 420, linkTargetX: 520 });
+      const { result, rerender } = renderHook(
+        ({ value, transitionKey }) => useSankeyGeometryTransition({ geometry: value, transitionKey }),
+        { initialProps: { value: first, transitionKey: 'first' } },
+      );
+      rerender({ value: second, transitionKey: 'second' });
+      const firstTransitionFrame = animationFrames[0];
+      if (!firstTransitionFrame) throw new Error('Expected the first transition frame');
+      act(() => firstTransitionFrame(425));
+      const displayedNodeX = result.current?.nodes.get('theme')?.x;
+      if (displayedNodeX === undefined) throw new Error('Expected displayed node geometry');
+
+      rerender({ value: third, transitionKey: 'third' });
+      const interruptedTransitionFrame = animationFrames[2];
+      if (!interruptedTransitionFrame) throw new Error('Expected the interrupted transition frame');
+      act(() => interruptedTransitionFrame(0));
+
+      expect(result.current?.nodes.get('theme')?.x).toBeCloseTo(displayedNodeX);
     });
   });
 

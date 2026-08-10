@@ -46,7 +46,7 @@ export function FlowCard({
   ];
   const handleHeaderOrderChange = (reordered: TraceSignalName[]) => {
     const seen = new Set<TraceSignalName>(reordered);
-    onOrderChange([...reordered, ...stages.map(stage => stage.signalName).filter(name => !seen.has(name))]);
+    onOrderChange([...reordered, ...signalOrder.filter(name => !seen.has(name))]);
   };
 
   return (

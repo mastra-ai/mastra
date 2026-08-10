@@ -1,6 +1,30 @@
 ---
-'@mastra/playground-ui': patch
 '@internal/playground': patch
 ---
 
-Reworked the Trace Intelligence views for clarity. The flow chart now has sortable column headers with signal descriptions on hover, horizontal SIGNALS/THEMES section rules, and continuous node-and-ribbon movement when columns are reordered; the bottom distribution rail and stage legend are gone, and clicking a theme opens its details while isolating it in the flow. Compare uses two identical movable points instead of A/B markers and reports deltas as percentages. Lifelines rows fill the area under each theme's share and show instant point tooltips. The theme details panel gains page-numbered examples, a plain-language share sentence, a hue-colored signal heading, and a Trend section with a trace-count-over-time chart replacing the clustering-state history list. Each view explains itself with a one-line description and an info-icon tooltip.
+Reworked the Trace Intelligence views for clarity.
+
+**Flow**
+
+- Column headers are sortable and show signal descriptions on hover.
+- Horizontal SIGNALS and THEMES rules replace the distribution rail and stage legend.
+- Clicking a theme opens its details and isolates it in the flow.
+
+**Compare**
+
+- Two identical movable points replace the A and B markers.
+- Deltas now use percentages.
+
+**Lifelines**
+
+- Each row fills the area under the theme's share.
+- Points show tooltips immediately.
+
+**Theme details**
+
+- Examples use page-numbered navigation.
+- A plain-language sentence states the theme's share of traces.
+- Signal headings are hue-colored.
+- A Trend section charts trace count over time instead of listing clustering states.
+
+Each view now states its purpose in one line and offers an info-icon tooltip.

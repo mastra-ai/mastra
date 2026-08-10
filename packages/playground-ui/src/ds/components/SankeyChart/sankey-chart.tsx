@@ -1,6 +1,5 @@
-import { useId, useState } from 'react';
+import { useState } from 'react';
 import type { ComponentProps, CSSProperties, KeyboardEvent } from 'react';
-import { createPortal } from 'react-dom';
 import { ResponsiveContainer, Sankey as RechartsSankey } from 'recharts';
 import {
   getSankeyChartCurveSelection,
@@ -16,9 +15,11 @@ import type {
   SankeyLabelWidths,
 } from './sankey-chart-utils';
 import { useSankeyRenderContext } from './sankey-context';
+import { SankeyPortalTooltip } from './sankey-portal-tooltip';
 import { nodeColor, nodeColorVivid } from './sankeyColor';
 import { useSankeyChartMeasurements } from './use-sankey-chart-measurements';
 import { useSankeyGeometryTransition } from './use-sankey-geometry-transition';
+import { useSankeyHoverTooltip } from './use-sankey-hover-tooltip';
 import { Colors } from '@/ds/tokens';
 import { cn } from '@/lib/utils';
 
@@ -248,14 +249,7 @@ function SankeyNode({
   const visibleColumnLabel = columnLabel
     ? truncateSankeyLabel(columnLabel, { fontSize: COLUMN_LABEL_FONT_SIZE, maxWidth: nodeLabelWidth })
     : undefined;
-  const tooltipId = useId();
-  const [isHovered, setIsHovered] = useState(false);
-  const [isFocused, setIsFocused] = useState(false);
-  const [tooltipPosition, setTooltipPosition] = useState<{
-    left: number;
-    top: number;
-    placement: 'above' | 'below';
-  }>();
+  const tooltip = useSankeyHoverTooltip(description !== undefined);
   const numericValue = nodeValue ?? (typeof payload.value === 'number' ? payload.value : Number(payload.value));
   const value = Number.isFinite(numericValue) ? String(numericValue) : '';
   const percentage =
@@ -265,16 +259,6 @@ function SankeyNode({
   const textAnchor = isFirstColumn ? 'start' : isLastColumn ? 'end' : 'middle';
   const labelX = isFirstColumn ? x : isLastColumn ? x + width : x + width / 2;
   const hue = hueMap[name] ?? 0;
-  const isTooltipVisible = Boolean(description && tooltipPosition && (isHovered || isFocused));
-  const showTooltipAt = (target: SVGGElement) => {
-    const rect = target.getBoundingClientRect();
-    const placement = rect.top < 120 ? 'below' : 'above';
-    setTooltipPosition({
-      left: Math.min(Math.max(rect.left, 16), Math.max(window.innerWidth - 336, 16)),
-      top: placement === 'above' ? rect.top - 8 : rect.bottom + 8,
-      placement,
-    });
-  };
   const handleKeyDown = (event: KeyboardEvent<SVGGElement>) => {
     if (event.key !== 'Enter' && event.key !== ' ') return;
     event.preventDefault();
@@ -295,7 +279,7 @@ function SankeyNode({
         />
       ) : null}
       <g
-        aria-describedby={description ? tooltipId : undefined}
+        aria-describedby={description ? tooltip.id : undefined}
         aria-label={`${accessibleLabel}: ${value} ${numericValue === 1 ? 'trace' : 'traces'} (${percentage}%)`}
         className="focus-visible:[&>rect]:stroke-neutral6 outline-hidden focus-visible:[&>rect]:stroke-2"
         onClick={clickable ? onSelect : undefined}
@@ -303,21 +287,19 @@ function SankeyNode({
         role={clickable ? 'button' : undefined}
         onFocus={event => {
           onFocusChange(name);
-          setIsFocused(true);
-          showTooltipAt(event.currentTarget);
+          tooltip.showOnFocus(event.currentTarget);
         }}
         onBlur={() => {
           onFocusChange(undefined);
-          setIsFocused(false);
+          tooltip.hideOnBlur();
         }}
         onMouseEnter={event => {
           onHoverChange(name);
-          setIsHovered(true);
-          showTooltipAt(event.currentTarget);
+          tooltip.showOnHover(event.currentTarget);
         }}
         onMouseLeave={() => {
           onHoverChange(undefined);
-          setIsHovered(false);
+          tooltip.hideOnLeave();
         }}
         style={{ cursor: clickable ? 'pointer' : undefined }}
         tabIndex={0}
@@ -339,27 +321,15 @@ function SankeyNode({
           {value} ({percentage}%)
         </text>
       </g>
-      {description && isTooltipVisible && tooltipPosition
-        ? createPortal(
-            <div
-              aria-label={`${visibleDisplayLabel}: ${description}`}
-              className="border-border1 bg-surface5 text-neutral6 shadow-elevated pointer-events-none fixed z-50 rounded-md border p-2 text-xs leading-4"
-              id={tooltipId}
-              role="tooltip"
-              style={{
-                left: tooltipPosition.left,
-                maxWidth: 'min(20rem, calc(100vw - 2rem))',
-                top: tooltipPosition.top,
-                transform: tooltipPosition.placement === 'above' ? 'translateY(-100%)' : undefined,
-                width: 'max-content',
-              }}
-            >
-              <div className="font-medium">{visibleDisplayLabel}</div>
-              <div className="text-neutral4 whitespace-pre-wrap">{description}</div>
-            </div>,
-            document.body,
-          )
-        : null}
+      {description ? (
+        <SankeyPortalTooltip
+          id={tooltip.id}
+          title={visibleDisplayLabel}
+          description={description}
+          position={tooltip.position}
+          visible={tooltip.isVisible}
+        />
+      ) : null}
     </>
   );
 }
@@ -383,29 +353,14 @@ function SankeyColumnHeader({
   fullLabel: string;
   description?: string;
 }) {
-  const tooltipId = useId();
-  const [isHovered, setIsHovered] = useState(false);
-  const [isFocused, setIsFocused] = useState(false);
-  const [tooltipPosition, setTooltipPosition] = useState<{
-    left: number;
-    top: number;
-    placement: 'above' | 'below';
-  }>();
-  const isTooltipVisible = Boolean(description && tooltipPosition && (isHovered || isFocused));
-  const showTooltipAt = (target: SVGTextElement) => {
-    const rect = target.getBoundingClientRect();
-    const placement = rect.top < 120 ? 'below' : 'above';
-    setTooltipPosition({
-      left: Math.min(Math.max(rect.left, 16), Math.max(window.innerWidth - 336, 16)),
-      top: placement === 'above' ? rect.top - 8 : rect.bottom + 8,
-      placement,
-    });
-  };
+  const tooltip = useSankeyHoverTooltip(description !== undefined);
 
   return (
     <>
       <text
-        aria-describedby={description ? tooltipId : undefined}
+        aria-describedby={description ? tooltip.id : undefined}
+        aria-label={description ? fullLabel : undefined}
+        role={description ? 'img' : undefined}
         x={x}
         y={18}
         textAnchor={textAnchor}
@@ -413,50 +368,24 @@ function SankeyColumnHeader({
         fontSize={COLUMN_LABEL_FONT_SIZE}
         fontWeight={600}
         tabIndex={description ? 0 : undefined}
-        onMouseEnter={
-          description
-            ? event => {
-                setIsHovered(true);
-                showTooltipAt(event.currentTarget);
-              }
-            : undefined
-        }
-        onMouseLeave={description ? () => setIsHovered(false) : undefined}
-        onFocus={
-          description
-            ? event => {
-                setIsFocused(true);
-                showTooltipAt(event.currentTarget);
-              }
-            : undefined
-        }
-        onBlur={description ? () => setIsFocused(false) : undefined}
+        onMouseEnter={description ? event => tooltip.showOnHover(event.currentTarget) : undefined}
+        onMouseLeave={description ? tooltip.hideOnLeave : undefined}
+        onFocus={description ? event => tooltip.showOnFocus(event.currentTarget) : undefined}
+        onBlur={description ? tooltip.hideOnBlur : undefined}
       >
         {/* The custom tooltip already names the column; a native title would stack a second popup. */}
         {label === fullLabel || description ? null : <title>{fullLabel}</title>}
         {label}
       </text>
-      {description && isTooltipVisible && tooltipPosition
-        ? createPortal(
-            <div
-              aria-label={`${fullLabel}: ${description}`}
-              className="border-border1 bg-surface5 text-neutral6 shadow-elevated pointer-events-none fixed z-50 rounded-md border p-2 text-xs leading-4"
-              id={tooltipId}
-              role="tooltip"
-              style={{
-                left: tooltipPosition.left,
-                maxWidth: 'min(20rem, calc(100vw - 2rem))',
-                top: tooltipPosition.top,
-                transform: tooltipPosition.placement === 'above' ? 'translateY(-100%)' : undefined,
-                width: 'max-content',
-              }}
-            >
-              <div className="font-medium">{fullLabel}</div>
-              <div className="text-neutral4 whitespace-pre-wrap">{description}</div>
-            </div>,
-            document.body,
-          )
-        : null}
+      {description ? (
+        <SankeyPortalTooltip
+          id={tooltip.id}
+          title={fullLabel}
+          description={description}
+          position={tooltip.position}
+          visible={tooltip.isVisible}
+        />
+      ) : null}
     </>
   );
 }
