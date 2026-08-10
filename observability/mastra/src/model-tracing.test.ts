@@ -1801,6 +1801,7 @@ describe('ModelSpanTracker', () => {
 
       const [inferenceSpan] = testExporter.getSpansByType(SpanType.MODEL_INFERENCE);
       expect(inferenceSpan).toBeDefined();
+      expect(inferenceSpan!.attributes.model).toBe('requested-model');
       expect(inferenceSpan!.attributes.responseModel).toBe('provider/selected-model');
 
       modelSpan.end();
