@@ -5,6 +5,8 @@ import { MainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { GitBranch, MoreHorizontal, Pin, PinOff, Trash2 } from 'lucide-react';
+import { useRef } from 'react';
+import type { RefObject } from 'react';
 
 import { PullRequestStatusIcon } from '../../factory/components/PullRequestStatusIcon';
 import { SessionPreviewCard } from './SessionPreviewCard';
@@ -15,7 +17,9 @@ import type { SessionPreviewDetails } from './SessionPreviewCard';
  * so every session list (work, review, user) renders with identical density,
  * hover, and active states. Spinner, status dot and actions menu share one
  * trailing slot beside the label: they swap in place, and the slot collapses
- * when there is nothing to show so the label gets the full row.
+ * when there is nothing to show so the label gets the full row. Because that
+ * slot comes and goes, the menu and the preview card anchor to the row box
+ * instead — a resized or hidden anchor would drag them across the screen.
  */
 export function SessionNavRow({
   name,
@@ -49,6 +53,7 @@ export function SessionNavRow({
   onPinChange: (pinned: boolean) => void;
   onDelete: () => void;
 }) {
+  const anchor = useRef<HTMLLIElement>(null);
   const button = (
     <button
       type="button"
@@ -72,6 +77,7 @@ export function SessionNavRow({
       {indicator === 'loading' ? null : (
         <SessionActionsMenu
           name={name}
+          anchor={anchor}
           disabled={disabled}
           pinned={pinned}
           onPinChange={onPinChange}
@@ -82,6 +88,7 @@ export function SessionNavRow({
   );
   const row = (
     <MainSidebar.NavLink
+      ref={anchor}
       link={{ name, url }}
       isActive={active}
       className="group/session"
@@ -96,7 +103,7 @@ export function SessionNavRow({
   return (
     <HoverCard>
       {row}
-      <SessionPreviewCard name={name} status={status} merged={merged} details={preview} />
+      <SessionPreviewCard name={name} anchor={anchor} status={status} merged={merged} details={preview} />
     </HoverCard>
   );
 }
@@ -125,12 +132,14 @@ function indicatorKind({
 
 function SessionActionsMenu({
   name,
+  anchor,
   disabled,
   pinned,
   onPinChange,
   onDelete,
 }: {
   name: string;
+  anchor: RefObject<HTMLElement | null>;
   disabled: boolean;
   pinned: boolean;
   onPinChange: (pinned: boolean) => void;
@@ -152,7 +161,7 @@ function SessionActionsMenu({
           </Button>
         }
       />
-      <DropdownMenu.Content align="end" className="min-w-28">
+      <DropdownMenu.Content anchor={anchor} align="end" className="min-w-28">
         <DropdownMenu.Item onClick={() => onPinChange(!pinned)}>
           {pinned ? <PinOff /> : <Pin />}
           {pinned ? 'Unpin' : 'Pin session'}

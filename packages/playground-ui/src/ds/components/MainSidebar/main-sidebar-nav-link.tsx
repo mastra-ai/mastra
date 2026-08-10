@@ -1,5 +1,5 @@
 import React from 'react';
-import type { ComponentPropsWithoutRef } from 'react';
+import type { ComponentProps } from 'react';
 import type { SidebarState } from './main-sidebar-context';
 import { useMaybeSidebarState } from './main-sidebar-context';
 import { navItemClasses, navItemLayoutClasses, navRowSurfaceClasses } from './main-sidebar-nav-item-classes';
@@ -21,7 +21,7 @@ export type NavLink = {
   indent?: boolean;
 };
 
-export type MainSidebarNavLinkProps = Omit<ComponentPropsWithoutRef<'li'>, 'children'> & {
+export type MainSidebarNavLinkProps = Omit<ComponentProps<'li'>, 'children'> & {
   link?: NavLink;
   isActive?: boolean;
   state?: SidebarState;
