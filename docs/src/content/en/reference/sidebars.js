@@ -718,6 +718,12 @@ const sidebars = {
         },
         { type: 'doc', id: 'tools/mcp-client', label: 'MCPClient' },
         { type: 'doc', id: 'tools/mcp-server', label: 'MCPServer' },
+        {
+          type: 'doc',
+          id: 'tools/quickjs-transport',
+          label: 'QuickJsCodeModeTransport',
+          customProps: { tags: ['beta'] },
+        },
         { type: 'doc', id: 'tools/submit-plan-tool', label: 'submitPlanTool' },
         { type: 'doc', id: 'tools/task-tools', label: 'Task tools' },
       ],

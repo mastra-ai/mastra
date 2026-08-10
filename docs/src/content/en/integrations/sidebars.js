@@ -94,6 +94,7 @@ const sidebars = {
         { type: 'doc', id: 'databases/libsql', label: 'libSQL' },
         { type: 'doc', id: 'databases/mongodb', label: 'MongoDB' },
         { type: 'doc', id: 'databases/mssql', label: 'MSSQL' },
+        { type: 'doc', id: 'databases/oracledb', label: 'OracleDB' },
         { type: 'doc', id: 'databases/postgresql', label: 'PostgreSQL' },
         { type: 'doc', id: 'databases/redis', label: 'Redis' },
         { type: 'doc', id: 'databases/upstash', label: 'Upstash' },
