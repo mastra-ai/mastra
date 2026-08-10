@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, realpath } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -20,6 +20,7 @@ const cliRoot = join(rootDir, 'mastracode', 'mastra-factory');
 describe('create-factory scaffold', () => {
   let workDir: string;
   let scaffoldDir: string;
+  let packedCliRoot: string;
   let registryEnv: Record<string, string>;
 
   beforeAll(async () => {
@@ -39,17 +40,29 @@ describe('create-factory scaffold', () => {
       stdio: 'inherit',
     });
 
-    // Build the standalone artifact so the E2E exercises the same packaged
-    // command implementation and scaffold assets users receive.
-    await execa('pnpm', ['--filter', './mastracode/mastra-factory', 'build'], {
-      cwd: rootDir,
+    // Pack and extract the standalone artifact so the E2E exercises the exact
+    // command implementation and generated scaffold assets users receive.
+    await execa('npm', ['pack', '--pack-destination', workDir], {
+      cwd: cliRoot,
       stdio: 'inherit',
     });
+    const tarball = (await readdir(workDir)).find(file => file.endsWith('.tgz'));
+    if (!tarball) {
+      throw new Error('create-factory pack did not produce a tarball');
+    }
+    const runnerDir = join(workDir, 'runner');
+    await mkdir(runnerDir);
+    await execa('npm', ['install', join(workDir, tarball), '--ignore-scripts', '--omit=dev'], {
+      cwd: runnerDir,
+      stdio: 'inherit',
+      env: { ...process.env, ...registryEnv },
+    });
+    packedCliRoot = join(runnerDir, 'node_modules', 'create-factory');
 
-    // Exercise the same package-owned default scaffold shipped to users. The
+    // Exercise the package-owned default scaffold shipped to users. The
     // dependency-tag override points its Mastra packages at this E2E run's
-    // isolated registry snapshot without changing the public stable ranges.
-    await execa('node', [join(cliRoot, 'dist', 'index.js'), 'factory', '--no-platform'], {
+    // isolated registry snapshot without changing the packaged release ranges.
+    await execa('node', [join(packedCliRoot, 'dist', 'index.js'), 'factory', '--no-platform'], {
       cwd: workDir,
       stdio: 'inherit',
       env: {
@@ -59,6 +72,14 @@ describe('create-factory scaffold', () => {
         MASTRA_TELEMETRY_DISABLED: '1',
       },
     });
+  });
+
+  it('ships the current mastracode/web Factory source', async () => {
+    const [generatedSource, webSource] = await Promise.all([
+      readFile(join(scaffoldDir, 'src/mastra/index.ts'), 'utf8'),
+      readFile(join(rootDir, 'mastracode/web/src/mastra/index.ts'), 'utf8'),
+    ]);
+    expect(generatedSource).toBe(webSource);
   });
 
   it('seeds .env with commented placeholders only', async () => {

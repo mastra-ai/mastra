@@ -6,6 +6,6 @@ const config = await createConfig();
 export default [
   ...config.map(conf => ({
     ...conf,
-    ignores: [...(conf.ignores || []), 'template-out/**', 'dist/**'],
+    ignores: [...(conf.ignores || []), 'template-out/**', 'generated/**', 'dist/**'],
   })),
 ];

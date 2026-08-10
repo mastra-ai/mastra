@@ -159,14 +159,13 @@ describe('create --no-platform', () => {
     const pkg = JSON.parse(fs.readFileSync(path.join(projectPath, 'package.json'), 'utf8'));
     expect(pkg.name).toBe('my-factory');
     for (const [packageName, spec] of Object.entries({ ...pkg.dependencies, ...pkg.devDependencies })) {
-      expect(spec).not.toMatch(/alpha|beta|rc|next/i);
       if (packageName === 'mastra' || packageName.startsWith('@mastra/')) {
-        expect(spec).toMatch(/^\^\d+\.\d+\.\d+$/);
+        expect(spec).toMatch(/^(?:\^\d+\.\d+\.\d+|\d+\.\d+\.\d+-(?:alpha|beta|rc|next)\.\d+)$/);
         expect(spec).not.toBe('latest');
       }
     }
-    expect(pkg.dependencies['@mastra/core']).toBe('^1.57.0');
-    expect(pkg.devDependencies.mastra).toBe('^1.23.0');
+    expect(pkg.dependencies['@mastra/core']).toBeTruthy();
+    expect(pkg.devDependencies.mastra).toBeTruthy();
     const packageManager = detectPackageManager();
     expect(tinyexec.x).toHaveBeenCalledWith(packageManager, getInstallArgs(packageManager), {
       throwOnError: true,

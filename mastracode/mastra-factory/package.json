@@ -9,14 +9,15 @@
   },
   "files": [
     "dist",
-    "scaffold",
+    "generated/scaffold",
     "CHANGELOG.md"
   ],
   "scripts": {
-    "build": "tsdown --silent --config tsdown.config.ts",
+    "generate:scaffold": "node scripts/generate-scaffold.mjs",
+    "build": "pnpm generate:scaffold && tsdown --silent --config tsdown.config.ts",
     "prepack": "npm run build",
     "check": "tsc --noEmit",
-    "test": "vitest run",
+    "test": "pnpm generate:scaffold && vitest run",
     "lint": "oxlint . && eslint .",
     "lint:fix": "oxlint --fix . && eslint --fix ."
   },

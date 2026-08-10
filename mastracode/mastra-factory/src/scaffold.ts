@@ -2,15 +2,16 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const SCAFFOLD_DIRECTORY = fileURLToPath(new URL('../scaffold/', import.meta.url));
+const SCAFFOLD_DIRECTORY = fileURLToPath(new URL('../generated/scaffold/', import.meta.url));
 
-/**
- * The scaffold source and its dependency versions are one release unit.
- * Update and verify them together against the packed create-factory artifact.
- */
+/** The generated scaffold and create-factory package are published as one release unit. */
 export function writeFactoryScaffold(projectPath: string, projectName: string): void {
   fs.cpSync(SCAFFOLD_DIRECTORY, projectPath, { recursive: true, errorOnExist: true });
   fs.renameSync(path.join(projectPath, 'gitignore'), path.join(projectPath, '.gitignore'));
+  const npmrcPath = path.join(projectPath, 'npmrc');
+  if (fs.existsSync(npmrcPath)) {
+    fs.renameSync(npmrcPath, path.join(projectPath, '.npmrc'));
+  }
 
   const packageJsonPath = path.join(projectPath, 'package.json');
   const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8')) as {

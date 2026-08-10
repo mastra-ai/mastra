@@ -35,9 +35,11 @@ If you omit `[project-name]`, the command prompts you for it. Project names must
 
 ## Default scaffold
 
-By default, `create-factory` writes the Factory scaffold packaged with its release directly to the new directory. The scaffold includes the Factory server entry point, environment schema and example, Docker Compose configuration, TypeScript and package-manager configuration, and project documentation.
+By default, `create-factory` writes the immutable Factory scaffold packaged with its release directly to the new directory. The scaffold includes the Factory server entry point, environment schema and example, Docker Compose configuration, TypeScript and package-manager configuration, and project documentation.
 
-The generated project uses an explicit set of compatible stable package ranges selected and tested with the `create-factory` release. The default path doesn't clone a remote Git template.
+At package build time, Mastra derives the scaffold from the Factory configuration in `mastracode/web` and resolves its Mastra dependencies from the workspace versions assigned to the same release. Stable versions use caret ranges, while intentional prereleases use exact matching versions. Runtime project creation only copies the packaged snapshot and doesn't clone a remote Git template.
+
+`npm create factory@latest` receives the newest tested scaffold included in the latest published `create-factory` release. It doesn't include unreleased changes from the Mastra repository's main branch.
 
 ## Platform setup
 

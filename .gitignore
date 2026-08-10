@@ -16,6 +16,7 @@ test-outputs/
 .dev/db/*
 .pr-review/
 .artifacts/
+mastracode/mastra-factory/generated/
 
 .env
 .env.local

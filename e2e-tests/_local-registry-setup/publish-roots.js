@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { readdir } from 'node:fs/promises';
 import { join, relative, sep } from 'node:path';
@@ -41,21 +42,8 @@ const SHARED_REGISTRY_SUITES = {
   softwarefactory: {
     tag: 'softwarefactory-e2e-test',
     manifestGlobs: [],
-    // Keep this aligned with the package-owned manifest in
-    // mastracode/mastra-factory/scaffold/package.json.
-    extraRoots: [
-      'create-factory',
-      '@mastra/auth-workos',
-      '@mastra/code-sdk',
-      '@mastra/core',
-      '@mastra/factory',
-      '@mastra/libsql',
-      '@mastra/memory',
-      '@mastra/pg',
-      '@mastra/platform-workspace',
-      '@mastra/redis-streams',
-      'mastra',
-    ],
+    extraRoots: ['create-factory'],
+    includeFactoryScaffoldRoots: true,
   },
 };
 
@@ -140,6 +128,17 @@ function getCreateMastraBuildRoots(rootDir) {
     .map(dep => dep.slice(0, -'#build'.length));
 }
 
+function getFactoryScaffoldRoots(rootDir) {
+  execFileSync(process.execPath, ['mastracode/mastra-factory/scripts/generate-scaffold.mjs'], {
+    cwd: rootDir,
+    stdio: 'inherit',
+  });
+
+  const manifest = readJson(join(rootDir, 'mastracode/mastra-factory/generated/scaffold/package.json'));
+  const dependencies = { ...manifest.dependencies, ...manifest.devDependencies };
+  return Object.keys(dependencies).filter(name => name === 'mastra' || name.startsWith('@mastra/'));
+}
+
 function rootsToFilters(roots) {
   return [...new Set(roots)].map(root => `--filter="${root}..."`);
 }
@@ -153,6 +152,9 @@ export async function getSuitePublishRoots(rootDir, suiteName) {
   const roots = [...(suite.extraRoots || []), ...(await getFixtureRoots(rootDir, suite))];
   if (suite.includeCreateMastraBuildRoots) {
     roots.push(...getCreateMastraBuildRoots(rootDir));
+  }
+  if (suite.includeFactoryScaffoldRoots) {
+    roots.push(...getFactoryScaffoldRoots(rootDir));
   }
 
   return [...new Set(roots)];
