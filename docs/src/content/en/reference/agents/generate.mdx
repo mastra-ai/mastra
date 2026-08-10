@@ -356,6 +356,14 @@ const result = await agent.generate('message for agent')
               "When true, all tool calls require explicit approval before execution. The generate() method will return with `finishReason: 'suspended'` and include a `suspendPayload` with tool call details (`toolCallId`, `toolName`, `args`). Use `approveToolCallGenerate()` or `declineToolCallGenerate()` to proceed. See [Agent Approval](/docs/agents/agent-approval#tool-approval-with-generate) for details.",
           },
           {
+            name: 'approvalPersistence',
+            type: "'full' | 'minimal'",
+            isOptional: true,
+            defaultValue: "'full'",
+            description:
+              "Controls persisted state for pre-execution tool approval. Use `'minimal'` to store an approval-only checkpoint that can continue through `approveToolCallGenerate()` or `declineToolCallGenerate()`. Runtime `suspend()` calls continue to use full persistence. See [Agent approval](/docs/agents/agent-approval#choose-approval-snapshot-persistence).",
+          },
+          {
             name: 'autoResumeSuspendedTools',
             type: 'boolean',
             isOptional: true,

@@ -59,9 +59,85 @@ for await (const chunk of stream.fullStream) {
 
 Agent approval uses snapshots to capture request state. Configure a [storage provider](/docs/storage/overview) on your Mastra instance or you'll see a "snapshot not found" error.
 
-Snapshots for agent runs are minimal resume artifacts: they hold only what's needed to resume the suspended run and are deleted once the run finishes. Use [tracing](/docs/observability/overview) for the execution record and [memory](/docs/memory/overview) for the conversation history.
+Snapshots for agent runs are temporary resume artifacts and are deleted once the run finishes. Use [tracing](/docs/observability/overview) for the execution record and [memory](/docs/memory/overview) for the conversation history.
 
 :::
+
+## Choose approval snapshot persistence
+
+Agent approval snapshots use `approvalPersistence: 'full'` by default. Full persistence keeps the internal workflow state needed for every supported resume path. Choose `minimal` when a run only needs to survive until a reviewer approves or declines a pre-execution tool call and snapshot size is more important than full workflow recovery.
+
+| Mode | Persisted state | Supported continuation |
+| - | - | - |
+| `full` (default) | Full resumable state for the internal agent workflows | Approval, decline, runtime `suspend()`, and other supported resume operations |
+| `minimal` | A versioned checkpoint with the pending approval, routing data, and model context needed to continue | `approveToolCall()` and `declineToolCall()` for pre-execution approval |
+
+The following example opts one agent run into minimal approval persistence. Register persistent storage before starting the run so another process can load the checkpoint later:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { Agent } from '@mastra/core/agent'
+import { createTool } from '@mastra/core/tools'
+import { LibSQLStore } from '@mastra/libsql'
+import { z } from 'zod'
+
+const sendEmail = createTool({
+  id: 'send-email',
+  description: 'Send an email after approval',
+  inputSchema: z.object({
+    to: z.string(),
+    subject: z.string(),
+  }),
+  outputSchema: z.object({ sent: z.boolean() }),
+  requireApproval: true,
+  execute: async ({ to, subject }) => {
+    console.log(`Sending "${subject}" to ${to}`)
+    return { sent: true }
+  },
+})
+
+const agent = new Agent({
+  id: 'email-agent',
+  name: 'Email Agent',
+  instructions: 'Draft and send emails only after approval.',
+  model: '__GATEWAY_OPENAI_MODEL_MINI__',
+  tools: { sendEmail },
+})
+
+export const mastra = new Mastra({
+  agents: { agent },
+  storage: new LibSQLStore({
+    id: 'mastra-storage',
+    url: 'file:./mastra.db',
+  }),
+})
+
+const stream = await agent.stream('Email the launch update to dev@example.com', {
+  approvalPersistence: 'minimal',
+})
+
+for await (const chunk of stream.fullStream) {
+  if (chunk.type === 'tool-call-approval') {
+    const resumed = await agent.approveToolCall({
+      runId: stream.runId,
+      toolCallId: chunk.payload.toolCallId,
+    })
+    for await (const text of resumed.textStream) process.stdout.write(text)
+  }
+}
+```
+
+Persist `stream.runId` or rediscover it with [`listSuspendedRuns()`](/reference/agents/listSuspendedRuns). A process that uses the same storage and registers the same agent and tool definitions can then call `approveToolCall()` or `declineToolCall()`.
+
+Minimal mode applies only when a tool is waiting for pre-execution approval. If a tool calls [`suspend()`](#approval-using-suspend) with custom resume data, Mastra stores the full resumable state for that suspension. A minimal approval checkpoint doesn't support generic workflow resume, restart, or time travel.
+
+:::warning
+
+Tool names, tool call IDs, and tool arguments are part of the approval checkpoint. Protect the workflow snapshot store as application data. After a deployment, the process that resumes a run must still register compatible agent and tool definitions.
+
+:::
+
+Minimal checkpoints use the existing workflow snapshot storage record and don't require a storage migration. All processes that may resume them must run a Mastra version that supports the checkpoint version. Storage adapters should persist snapshots through Mastra's storage interfaces instead of inspecting or copying the internal checkpoint shape.
 
 ## How approval works
 
