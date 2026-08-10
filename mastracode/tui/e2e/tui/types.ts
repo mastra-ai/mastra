@@ -164,6 +164,7 @@ export type ScenarioName =
   | 'workspace-plan-mode-tools'
   | 'workspace-tool-names'
   | 'workspace-tool-output-rendering'
+  | 'workflows-command'
   | 'work-idle-status'
   | 'worktree-cross-thread-resume'
   | 'worktree-thread-scoping'

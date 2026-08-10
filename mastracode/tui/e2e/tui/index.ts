@@ -162,6 +162,7 @@ import { updateStartupPromptScenario } from './update-startup-prompt.js';
 import { visibleCommandsScenario } from './visible-commands.js';
 import { webSearchRenderingScenario } from './web-search-rendering.js';
 import { workIdleStatusScenario } from './work-idle-status.js';
+import { workflowsCommandScenario } from './workflows-command.js';
 import { workspaceCommandsScenario } from './workspace-commands.js';
 import { workspacePlanModeToolsScenario } from './workspace-plan-mode-tools.js';
 import { workspaceToolNamesScenario } from './workspace-tool-names.js';
@@ -334,6 +335,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'workspace-plan-mode-tools': workspacePlanModeToolsScenario,
   'workspace-tool-names': workspaceToolNamesScenario,
   'workspace-tool-output-rendering': workspaceToolOutputRenderingScenario,
+  'workflows-command': workflowsCommandScenario,
   'work-idle-status': workIdleStatusScenario,
   'resourceid-drift-prompt-accept': resourceidDriftPromptAcceptScenario,
   'resourceid-drift-prompt-decline': resourceidDriftPromptDeclineScenario,
