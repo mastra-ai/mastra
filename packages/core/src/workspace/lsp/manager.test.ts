@@ -342,6 +342,56 @@ describe('LSPManager', () => {
       await restrictedManager.shutdownAll();
     });
 
+    it('leases a newly initialized client before another cold diagnostics request can evict it', async () => {
+      const restrictedManager = new LSPManager(mockProcessManager, '/project', { maxOpenClients: 1 });
+      let finishInitialization!: () => void;
+      let finishDiagnostics!: (diagnostics: any[]) => void;
+      mockInitialize.mockImplementationOnce(
+        () =>
+          new Promise<void>(resolve => {
+            finishInitialization = resolve;
+          }),
+      );
+      mockWaitForDiagnostics.mockImplementationOnce(
+        () =>
+          new Promise<any[]>(resolve => {
+            finishDiagnostics = resolve;
+          }),
+      );
+
+      const firstDiagnostics = restrictedManager.getDiagnostics('/project/src/app.ts', 'const first = 1');
+      await vi.waitFor(() => expect(mockInitialize).toHaveBeenCalledTimes(1));
+      const secondDiagnostics = restrictedManager.getDiagnostics('/other-project/src/app.ts', 'const second = 2');
+
+      finishInitialization();
+      await vi.waitFor(() => expect(mockWaitForDiagnostics).toHaveBeenCalledTimes(1));
+      expect(mockInitialize).toHaveBeenCalledTimes(1);
+      expect(mockShutdown).not.toHaveBeenCalled();
+
+      finishDiagnostics([]);
+      await expect(firstDiagnostics).resolves.toEqual([]);
+      await expect(secondDiagnostics).resolves.toEqual(expect.any(Array));
+      expect(mockInitialize).toHaveBeenCalledTimes(2);
+      expect(mockShutdown).toHaveBeenCalledTimes(1);
+      await restrictedManager.shutdownAll();
+    });
+
+    it('keeps a prepared query client leased until the caller releases it', async () => {
+      const restrictedManager = new LSPManager(mockProcessManager, '/project', { maxOpenClients: 1 });
+      const query = await restrictedManager.prepareQuery('/project/src/app.ts');
+      expect(query).not.toBeNull();
+
+      const otherDiagnostics = restrictedManager.getDiagnostics('/other-project/src/app.ts', 'const second = 2');
+      await Promise.resolve();
+      expect(mockShutdown).not.toHaveBeenCalled();
+
+      query!.client.notifyClose('/project/src/app.ts');
+      query!.release();
+      await expect(otherDiagnostics).resolves.toEqual(expect.any(Array));
+      expect(mockShutdown).toHaveBeenCalledTimes(1);
+      await restrictedManager.shutdownAll();
+    });
+
     it('rejects invalid maxOpenClients values', () => {
       expect(() => new LSPManager(mockProcessManager, '/project', { maxOpenClients: 0 })).toThrow(
         'maxOpenClients must be a positive integer',
@@ -385,6 +435,7 @@ describe('LSPManager', () => {
         const client = await clientPromise;
 
         expect(client).toBeNull();
+        expect(mockShutdown).toHaveBeenCalled();
         await timeoutManager.shutdownAll();
       } finally {
         vi.useRealTimers();
@@ -400,6 +451,7 @@ describe('LSPManager', () => {
         const clientPromise = timeoutManager.getClient('/project/src/app.ts');
         await vi.advanceTimersByTimeAsync(5000);
         await clientPromise;
+        expect(mockShutdown).toHaveBeenCalled();
 
         // Subsequent call should attempt a fresh initialization
         mockInitialize.mockResolvedValueOnce(undefined);
@@ -417,6 +469,7 @@ describe('LSPManager', () => {
       const client = await manager.getClient('/project/src/app.ts');
 
       expect(client).toBeNull();
+      expect(mockShutdown).toHaveBeenCalled();
     });
   });
 

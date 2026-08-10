@@ -38,6 +38,7 @@ export class LSPManager {
   private clients: Map<string, LSPClient> = new Map();
   private initPromises: Map<string, Promise<void>> = new Map();
   private clientInitQueue: Promise<void> = Promise.resolve();
+  private clientLeaseAcquisitionQueue: Promise<void> = Promise.resolve();
   private activeClientLeases: Map<LSPClient, number> = new Map();
   private clientLeaseWaiters: Set<() => void> = new Set();
   private shutdownPromise?: Promise<void>;
@@ -121,21 +122,59 @@ export class LSPManager {
     return !this.shuttingDown;
   }
 
-  /** Keep a client alive while an operation is using it. */
-  private async withClientLease<T>(client: LSPClient, operation: () => Promise<T>): Promise<T> {
-    this.activeClientLeases.set(client, (this.activeClientLeases.get(client) ?? 0) + 1);
+  /** Acquire a client and lease it before another capped acquisition can evict it. */
+  private async acquireClientLease(
+    acquire: (onAcquired: (client: LSPClient) => void) => Promise<LSPClient | null>,
+  ): Promise<{ client: LSPClient; release: () => void } | null> {
+    const previous = this.clientLeaseAcquisitionQueue;
+    let finishAcquisition!: () => void;
+    const current = new Promise<void>(resolve => {
+      finishAcquisition = resolve;
+    });
+    this.clientLeaseAcquisitionQueue = previous.then(() => current);
+
+    await previous;
     try {
-      return await operation();
+      if (this.shuttingDown) return null;
+
+      const client = await acquire(acquired => {
+        this.activeClientLeases.set(acquired, (this.activeClientLeases.get(acquired) ?? 0) + 1);
+      });
+      if (!client) return null;
+      let released = false;
+      return {
+        client,
+        release: () => {
+          if (released) return;
+          released = true;
+
+          const remaining = (this.activeClientLeases.get(client) ?? 1) - 1;
+          if (remaining > 0) {
+            this.activeClientLeases.set(client, remaining);
+            return;
+          }
+
+          this.activeClientLeases.delete(client);
+          this.wakeClientLeaseWaiters();
+        },
+      };
     } finally {
-      const remaining = (this.activeClientLeases.get(client) ?? 1) - 1;
-      if (remaining > 0) {
-        this.activeClientLeases.set(client, remaining);
-      } else {
-        this.activeClientLeases.delete(client);
-        const waiters = Array.from(this.clientLeaseWaiters);
-        this.clientLeaseWaiters.clear();
-        waiters.forEach(resolve => resolve());
-      }
+      finishAcquisition();
+    }
+  }
+
+  /** Keep an acquired client alive while an operation is using it. */
+  private async withClientLease<T>(
+    acquire: (onAcquired: (client: LSPClient) => void) => Promise<LSPClient | null>,
+    operation: (client: LSPClient) => Promise<T>,
+  ): Promise<T | null> {
+    const lease = await this.acquireClientLease(acquire);
+    if (!lease) return null;
+
+    try {
+      return await operation(lease.client);
+    } finally {
+      lease.release();
     }
   }
 
@@ -184,24 +223,44 @@ export class LSPManager {
    * Initialize an LSP client for the given server definition and project root.
    * Handles timeout, deduplication of concurrent init calls, and caching.
    */
-  private async initClient(serverDef: LSPServerDef, projectRoot: string, key: string): Promise<LSPClient | null> {
+  private async initClient(
+    serverDef: LSPServerDef,
+    projectRoot: string,
+    key: string,
+    onAcquired?: (client: LSPClient) => void,
+  ): Promise<LSPClient | null> {
     if (this.shuttingDown) return null;
 
     // In-progress initialization — wait for it
     if (this.initPromises.has(key)) {
       await this.initPromises.get(key);
-      return this.shuttingDown ? null : (this.clients.get(key) ?? null);
+      const client = this.shuttingDown ? null : (this.clients.get(key) ?? null);
+      if (client) onAcquired?.(client);
+      return client;
     }
 
     const initialize = async (): Promise<void> => {
       if (!(await this.ensureClientCapacity())) return;
       const initTimeout = this.config.initTimeout ?? 15000;
       let timedOut = false;
+      let client: LSPClient | undefined;
+      let cleanupPromise: Promise<void> | undefined;
+      const cleanupClient = async (): Promise<void> => {
+        if (!client) return;
+        cleanupPromise ??= client.shutdown().catch(() => {});
+        await cleanupPromise;
+        cleanupPromise = undefined;
+      };
       const startPromise = (async () => {
-        const client = new LSPClient(serverDef, projectRoot, this.processManager);
-        await client.initialize(initTimeout);
+        client = new LSPClient(serverDef, projectRoot, this.processManager);
+        try {
+          await client.initialize(initTimeout);
+        } catch (error) {
+          await cleanupClient();
+          throw error;
+        }
         if (timedOut || this.shuttingDown) {
-          await client.shutdown().catch(() => {});
+          await cleanupClient();
           return;
         }
         this.clients.set(key, client);
@@ -209,14 +268,16 @@ export class LSPManager {
       startPromise.catch(() => {}); // prevent unhandled rejection if timeout wins
 
       try {
+        let initTimer: ReturnType<typeof setTimeout>;
         await Promise.race([
           startPromise,
-          new Promise<void>((_, reject) =>
-            setTimeout(() => reject(new Error('LSP client initialization timed out')), initTimeout + 1000),
-          ),
-        ]);
+          new Promise<void>((_, reject) => {
+            initTimer = setTimeout(() => reject(new Error('LSP client initialization timed out')), initTimeout + 1000);
+          }),
+        ]).finally(() => clearTimeout(initTimer!));
       } catch (err) {
         timedOut = true;
+        await cleanupClient();
         this.clients.delete(key);
         const command = serverDef.command(projectRoot);
         const hint = this.config.binaryOverrides?.[serverDef.id]
@@ -225,6 +286,10 @@ export class LSPManager {
             ? ` (command: "${command}")`
             : '';
         console.warn(`[LSP] Failed to start ${serverDef.name}${hint}: ${err instanceof Error ? err.message : err}`);
+      }
+
+      if (client && this.clients.get(key) === client) {
+        onAcquired?.(client);
       }
     };
 
@@ -249,7 +314,10 @@ export class LSPManager {
    * Resolves the project root per-file using the server's markers.
    * Returns null if no server is available.
    */
-  async getClient(filePath: string): Promise<LSPClient | null> {
+  private async getClientInternal(
+    filePath: string,
+    onAcquired?: (client: LSPClient) => void,
+  ): Promise<LSPClient | null> {
     if (this.shuttingDown) return null;
 
     const servers = getServersForFile(filePath, this.config.disableServers, this.serverDefs, this.customExtensions);
@@ -281,45 +349,61 @@ export class LSPManager {
         existing.shutdown().catch(() => {});
       } else {
         this.touchClient(key, existing);
+        onAcquired?.(existing);
         return existing;
       }
     }
 
-    return this.initClient(serverDef, projectRoot, key);
+    return this.initClient(serverDef, projectRoot, key, onAcquired);
+  }
+
+  async getClient(filePath: string): Promise<LSPClient | null> {
+    return this.getClientInternal(filePath);
   }
 
   /**
    * Get LSP client ready to query a file.
-   * Opens the file in the client so queries can be made.
+   * Opens the file in the client so queries can be made. Call `release` after
+   * closing the file to allow the client to be evicted.
    * Returns null when no LSP client is available.
    */
   async prepareQuery(filePath: string): Promise<{
     client: LSPClient;
     uri: string;
-    languageId: string | null;
+    languageId: string;
     serverName: string;
+    release: () => void;
   } | null> {
-    const client = await this.getClient(filePath);
-    if (!client) return null;
+    const lease = await this.acquireClientLease(onAcquired => this.getClientInternal(filePath, onAcquired));
+    if (!lease) return null;
 
+    const { client, release } = lease;
     const languageId = getLanguageId(filePath, this.customExtensions);
-    if (!languageId) return null;
-
-    // Open the file (content doesn't matter for position queries, but server may need it)
-    const fs = await import('node:fs/promises');
-    let content = '';
-    try {
-      content = await fs.readFile(filePath, 'utf-8');
-    } catch {
-      content = '';
+    if (!languageId) {
+      release();
+      return null;
     }
 
-    client.notifyOpen(filePath, content, languageId);
+    try {
+      // Open the file (content doesn't matter for position queries, but server may need it)
+      const fs = await import('node:fs/promises');
+      let content = '';
+      try {
+        content = await fs.readFile(filePath, 'utf-8');
+      } catch {
+        content = '';
+      }
 
-    // Use the same URI format as notifyOpen (pathToFileURL for proper encoding)
-    const { pathToFileURL } = await import('node:url');
-    const uri = pathToFileURL(filePath).toString();
-    return { client, uri, languageId, serverName: client.serverName };
+      client.notifyOpen(filePath, content, languageId);
+
+      // Use the same URI format as notifyOpen (pathToFileURL for proper encoding)
+      const { pathToFileURL } = await import('node:url');
+      const uri = pathToFileURL(filePath).toString();
+      return { client, uri, languageId, serverName: client.serverName, release };
+    } catch (error) {
+      release();
+      throw error;
+    }
   }
 
   /**
@@ -331,33 +415,33 @@ export class LSPManager {
   async getDiagnostics(filePath: string, content: string): Promise<LSPDiagnostic[] | null> {
     const release = await this.acquireFileLock(filePath);
     try {
-      const client = await this.getClient(filePath);
-      if (!client) return null;
+      return await this.withClientLease(
+        onAcquired => this.getClientInternal(filePath, onAcquired),
+        async client => {
+          const languageId = getLanguageId(filePath, this.customExtensions);
+          if (!languageId) return [];
 
-      return await this.withClientLease(client, async () => {
-        const languageId = getLanguageId(filePath, this.customExtensions);
-        if (!languageId) return [];
+          // Open + change → triggers diagnostics
+          client.notifyOpen(filePath, content, languageId);
+          client.notifyChange(filePath, content, 1);
 
-        // Open + change → triggers diagnostics
-        client.notifyOpen(filePath, content, languageId);
-        client.notifyChange(filePath, content, 1);
+          const diagnosticTimeout = this.config.diagnosticTimeout ?? 5000;
+          let rawDiagnostics: any[];
+          try {
+            rawDiagnostics = await client.waitForDiagnostics(filePath, diagnosticTimeout);
+          } finally {
+            client.notifyClose(filePath);
+          }
 
-        const diagnosticTimeout = this.config.diagnosticTimeout ?? 5000;
-        let rawDiagnostics: any[];
-        try {
-          rawDiagnostics = await client.waitForDiagnostics(filePath, diagnosticTimeout);
-        } finally {
-          client.notifyClose(filePath);
-        }
-
-        return rawDiagnostics.map((d: any) => ({
-          severity: mapSeverity(d.severity),
-          message: d.message,
-          line: (d.range?.start?.line ?? 0) + 1, // LSP is 0-indexed, we report 1-indexed
-          character: (d.range?.start?.character ?? 0) + 1,
-          source: d.source,
-        }));
-      });
+          return rawDiagnostics.map((d: any) => ({
+            severity: mapSeverity(d.severity),
+            message: d.message,
+            line: (d.range?.start?.line ?? 0) + 1, // LSP is 0-indexed, we report 1-indexed
+            character: (d.range?.start?.character ?? 0) + 1,
+            source: d.source,
+          }));
+        },
+      );
     } catch {
       return [];
     } finally {
@@ -390,24 +474,26 @@ export class LSPManager {
 
           const key = `${serverDef.name}:${projectRoot}`;
 
-          // Existing client — check liveness
-          if (this.clients.has(key)) {
-            const existing = this.clients.get(key)!;
-            if (!existing.isAlive) {
-              this.clients.delete(key);
-              existing.shutdown().catch(() => {});
-            } else {
-              this.touchClient(key, existing);
-              return this.withClientLease(existing, () =>
-                this.collectDiagnostics(existing, filePath, content, languageId),
-              );
-            }
-          }
+          const diagnostics = await this.withClientLease(
+            async onAcquired => {
+              // Existing client — check liveness
+              if (this.clients.has(key)) {
+                const existing = this.clients.get(key)!;
+                if (!existing.isAlive) {
+                  this.clients.delete(key);
+                  existing.shutdown().catch(() => {});
+                } else {
+                  this.touchClient(key, existing);
+                  onAcquired(existing);
+                  return existing;
+                }
+              }
 
-          const client = await this.initClient(serverDef, projectRoot, key);
-          if (!client) return [];
-
-          return this.withClientLease(client, () => this.collectDiagnostics(client, filePath, content, languageId));
+              return this.initClient(serverDef, projectRoot, key, onAcquired);
+            },
+            client => this.collectDiagnostics(client, filePath, content, languageId),
+          );
+          return diagnostics ?? [];
         }),
       );
 
@@ -468,9 +554,9 @@ export class LSPManager {
     this.shuttingDown = true;
     this.wakeClientLeaseWaiters();
     this.shutdownPromise = (async () => {
-      // Drain initialization before taking the final client snapshot. New
-      // acquisitions are rejected once shuttingDown is set.
-      await Promise.allSettled([...this.initPromises.values(), this.clientInitQueue]);
+      // Drain acquisition and initialization before taking the final client
+      // snapshot. New acquisitions are rejected once shuttingDown is set.
+      await Promise.allSettled([...this.initPromises.values(), this.clientInitQueue, this.clientLeaseAcquisitionQueue]);
       await Promise.allSettled(Array.from(this.clients.values()).map(client => client.shutdown()));
       this.clients.clear();
       this.initPromises.clear();

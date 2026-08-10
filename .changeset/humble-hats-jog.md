@@ -9,3 +9,5 @@ const workspace = new Workspace({
   lsp: { maxOpenClients: 4 },
 });
 ```
+
+When using `workspace.lsp.prepareQuery()`, call `release()` on the returned query after closing the file.

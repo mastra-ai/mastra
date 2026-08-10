@@ -6,11 +6,12 @@ import { RequestContext } from '@mastra/core/request-context';
 import { MastraLanguageModelV2Mock } from '@mastra/core/test-utils/llm-mock';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+const settingsMock = vi.hoisted(() => ({ value: {} as Record<string, unknown> }));
 vi.mock('../onboarding/settings.js', () => ({
-  loadSettings: () => ({}),
+  loadSettings: () => settingsMock.value,
 }));
 vi.mock('../../onboarding/settings.js', () => ({
-  loadSettings: () => ({}),
+  loadSettings: () => settingsMock.value,
 }));
 
 const originalEnv = { ...process.env };
@@ -46,7 +47,39 @@ function toStream(chunks: any[]) {
 
 afterEach(() => {
   process.env = { ...originalEnv };
+  settingsMock.value = {};
   vi.resetModules();
+});
+
+describe('mastracode workspace LSP configuration', () => {
+  it('limits retained language server clients to four by default', async () => {
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'mastracode-workspace-lsp-'));
+
+    try {
+      const { getDynamicWorkspace } = await import('../workspace.js');
+      const workspace = await getDynamicWorkspace({ requestContext: createRequestContext(tempDir) as any });
+
+      expect(Reflect.get(workspace.lsp!, 'config')).toMatchObject({ maxOpenClients: 4 });
+      await workspace.destroy();
+    } finally {
+      await fs.rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('allows user settings to override the default client limit', async () => {
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'mastracode-workspace-lsp-'));
+    settingsMock.value = { lsp: { maxOpenClients: 2 } };
+
+    try {
+      const { getDynamicWorkspace } = await import('../workspace.js');
+      const workspace = await getDynamicWorkspace({ requestContext: createRequestContext(tempDir) as any });
+
+      expect(Reflect.get(workspace.lsp!, 'config')).toMatchObject({ maxOpenClients: 2 });
+      await workspace.destroy();
+    } finally {
+      await fs.rm(tempDir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe('mastracode workspace sandbox environment', () => {
