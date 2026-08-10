@@ -384,6 +384,18 @@ export async function handlePlanApproval(
         ?.runPermissionResult('plan_approval', toolCallId, 'submit_plan', decision, { path: snapshotKey })
         .catch(() => {});
     };
+    // #21139: never force editor focus while an overlay is still up (it would
+    // deadlock the overlay via pi-tui's blocked-restore transfer), and drop any
+    // deferred focus that pointed at this approval.
+    const releaseApprovalFocus = () => {
+      state.activeInlinePlanApproval = undefined;
+      if (state.pendingFocus === approvalComponent) {
+        state.pendingFocus = undefined;
+      }
+      if (!state.ui.hasOverlay()) {
+        state.ui.setFocus(state.editor);
+      }
+    };
     const approvalOptions = {
       toolCallId,
       title: resolvedTitle,
@@ -391,15 +403,13 @@ export async function handlePlanApproval(
       planFilename,
       previousPlan,
       onApprove: async () => {
-        state.activeInlinePlanApproval = undefined;
-        state.ui.setFocus(state.editor);
+        releaseApprovalFocus();
         firePermissionResult('approved');
         await approvePlan(ctx, toolCallId, resolvedTitle, plan, planPath, snapshotKey);
         resolve();
       },
       onGoal: async () => {
-        state.activeInlinePlanApproval = undefined;
-        state.ui.setFocus(state.editor);
+        releaseApprovalFocus();
         firePermissionResult('approved');
         await approvePlan(ctx, toolCallId, resolvedTitle, plan, planPath, snapshotKey);
 
@@ -416,8 +426,7 @@ export async function handlePlanApproval(
         resolve();
       },
       onReject: () => {
-        state.activeInlinePlanApproval = undefined;
-        state.ui.setFocus(state.editor);
+        releaseApprovalFocus();
         firePermissionResult('declined');
         // Resume the tool with a rejection so the rejection result is persisted
         // in thread history (the next run sees it for context). For submit_plan,
@@ -477,6 +486,16 @@ export async function handlePlanApproval(
     }
     state.ui.requestRender();
     state.chatContainer.invalidate();
-    state.ui.setFocus(approvalComponent);
+    // #21139: focusing the approval while a command overlay (e.g. the /models
+    // pack selector) is focused makes pi-tui record a blocked overlay-restore
+    // state; the unconditional editor refocus on resolve then transfers that
+    // block onto the editor and permanently deadlocks the overlay. Defer focus
+    // until the overlay stack empties (see installOverlayFocusHandoff in
+    // setup.ts).
+    if (state.ui.hasOverlay()) {
+      state.pendingFocus = approvalComponent;
+    } else {
+      state.ui.setFocus(approvalComponent);
+    }
   });
 }

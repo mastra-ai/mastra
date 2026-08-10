@@ -670,10 +670,11 @@ export class AgentController<TState = {}> {
   }
 
   /**
-   * Eagerly resolve the workspace. For dynamic workspaces (factory function),
-   * this triggers resolution against the given session's request context and
-   * caches the result so {@link getWorkspace} returns it. Useful for code paths
-   * outside the request flow (e.g. slash commands).
+   * The workspace this session runs against, for code paths outside the request
+   * flow (e.g. slash commands). Sessions resolve their workspace once at
+   * creation — dynamic factories included — so this returns that instance
+   * rather than re-resolving, and only falls back to the factory for a session
+   * created without one.
    */
   async resolveWorkspace({
     session,
@@ -682,11 +683,11 @@ export class AgentController<TState = {}> {
     session: Session<TState>;
     requestContext?: RequestContext;
   }): Promise<Workspace | undefined> {
+    const sessionWorkspace = session.getWorkspace();
+    if (sessionWorkspace) return sessionWorkspace;
     if (typeof this.workspace !== 'function') return this.workspace ?? undefined;
     const ctx = await this.buildRequestContext(session, requestContext);
-    const resolved = await this.workspace({ requestContext: ctx, mastra: this.getMastra() });
-    this.workspace = resolved;
-    return resolved ?? undefined;
+    return (await this.workspace({ requestContext: ctx, mastra: this.getMastra() })) ?? undefined;
   }
 
   /**

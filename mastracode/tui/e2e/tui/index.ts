@@ -4,6 +4,7 @@ import { apiKeyDeleteEnvScenario } from './api-key-delete-env.js';
 import { apiKeyMultiProviderDeleteScenario } from './api-key-multi-provider-delete.js';
 import { apiKeyPromptScenario } from './api-key-prompt.js';
 import { apiKeyReopenStoredScenario } from './api-key-reopen-stored.js';
+import { approvalOverlayFocusScenario } from './approval-overlay-focus.js';
 import { askUserAdvancedPromptsScenario } from './ask-user-advanced-prompts.js';
 import { autocompleteWrappingNavigationScenario } from './autocomplete-wrapping-navigation.js';
 import { automatedChatScenario } from './automated-chat.js';
@@ -49,6 +50,7 @@ import { goalDurationToolApprovalScenario } from './goal-duration-tool-approval.
 import { goalJudgeOmModelIsolationScenario } from './goal-judge-om-model-isolation.js';
 import { goalJudgeSingleRenderScenario } from './goal-judge-single-render.js';
 import { headlessMcpToolAvailabilityScenario } from './headless-mcp-tool-availability.js';
+import { hiddenReasoningSingleLabelScenario } from './hidden-reasoning-single-label.js';
 import { integrationCommandsScenario } from './integration-commands.js';
 import { lifecycleHooksConfiguredScenario } from './lifecycle-hooks-configured.js';
 import { lifecycleHooksEventsScenario } from './lifecycle-hooks-events.js';
@@ -177,6 +179,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'autocomplete-wrapping-navigation': autocompleteWrappingNavigationScenario,
   'api-key-delete-env': apiKeyDeleteEnvScenario,
   'api-key-multi-provider-delete': apiKeyMultiProviderDeleteScenario,
+  'approval-overlay-focus': approvalOverlayFocusScenario,
   'api-key-prompt': apiKeyPromptScenario,
   'api-key-reopen-stored': apiKeyReopenStoredScenario,
   'ask-user-advanced-prompts': askUserAdvancedPromptsScenario,
@@ -222,6 +225,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'goal-judge-single-render': goalJudgeSingleRenderScenario,
   'controller-api-config': controllerApiConfigScenario,
   'headless-mcp-tool-availability': headlessMcpToolAvailabilityScenario,
+  'hidden-reasoning-single-label': hiddenReasoningSingleLabelScenario,
   'visible-commands': visibleCommandsScenario,
   'integration-commands': integrationCommandsScenario,
   'lifecycle-hooks-configured': lifecycleHooksConfiguredScenario,
