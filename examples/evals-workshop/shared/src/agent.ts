@@ -10,6 +10,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
+import { MastraEditor } from '@mastra/editor';
 import { LibSQLStore } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
 import { NIMBUS_KNOWLEDGE } from './data/support-qa.ts';
@@ -38,6 +39,14 @@ export type BuildOptions = {
   /** Path used when `storage: 'persistent'`. */
   dbPath?: string;
   /**
+   * Register a `MastraEditor`, which is what makes agent *versions* possible.
+   *
+   * Off by default: it costs nothing at runtime, but every exercise that does
+   * not need it is better off without the extra moving part. Exercise 12 turns
+   * it on — that is where prompt versions get evaluated.
+   */
+  editor?: boolean;
+  /**
    * Extra scorers to register, keyed by id.
    *
    * Any scorer whose scores you want persisted has to be registered on the
@@ -52,11 +61,19 @@ export type AgentBundle = {
   mastra: Mastra;
   agent: Agent;
   storage: LibSQLStore;
+  /** Present only when `editor: true` was passed. */
+  editor?: MastraEditor;
   cleanup: () => void;
 };
 
 export function buildSupportAgent(opts: BuildOptions = {}): AgentBundle {
-  const { model = 'mock', storage: storageMode = 'temp', dbPath = 'file:./eval.db', scorers = {} } = opts;
+  const {
+    model = 'mock',
+    storage: storageMode = 'temp',
+    dbPath = 'file:./eval.db',
+    scorers = {},
+    editor: withEditor = false,
+  } = opts;
 
   let url: string;
   let cleanup: () => void;
@@ -94,11 +111,14 @@ export function buildSupportAgent(opts: BuildOptions = {}): AgentBundle {
     memory,
   });
 
+  const editor = withEditor ? new MastraEditor({ source: 'db' }) : undefined;
+
   const mastra = new Mastra({
     storage,
     agents: { 'support-agent': agent },
     // Evals are not agent-only — `runEvals` takes a Workflow target too.
     workflows: { 'support-workflow': supportWorkflow },
+    ...(editor ? { editor } : {}),
     // Scorers must be registered here for their scores to persist. Without
     // this, runs still produce scores but every save logs
     // MASTRA_GET_SCORER_BY_ID_NOT_FOUND and nothing reaches storage — so
@@ -113,8 +133,11 @@ export function buildSupportAgent(opts: BuildOptions = {}): AgentBundle {
   // Resolve the agent through Mastra so memory inherits the configured storage.
   void mastra.getAgent('support-agent');
 
-  return { mastra, agent, storage, cleanup };
+  return { mastra, agent, storage, editor, cleanup };
 }
+
+/** The prompt the agent ships with — exercise 12 versions it. */
+export const SUPPORT_INSTRUCTIONS = INSTRUCTIONS;
 
 /**
  * A second agent, this one with a tool — for the tool-mocking exercise.

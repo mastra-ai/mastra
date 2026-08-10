@@ -22,17 +22,49 @@ export function hasApiKey(): boolean {
 }
 
 /**
+ * A prompt directive this mock obeys, and the transform it applies.
+ *
+ * Real models read their system prompt. This one has to be *told* how, and the
+ * shape of that telling is deliberately narrow: one recognisable instruction —
+ * "answer without specific numbers" — and one transform that strips the
+ * figures out of an answer while leaving it reading like a sentence a
+ * well-meaning support agent would write.
+ *
+ * That is enough to make a prompt edit genuinely causal. Exercise 12 changes
+ * only the instructions, and the score moves — no network, no API key, same
+ * numbers on every machine in the room.
+ */
+const AVOID_SPECIFICS =
+  /avoid (?:overwhelming|specific|exact)|without specific|no specific numbers|skip the numbers|keep (?:it|answers|things) (?:vague|general|high-level)/i;
+
+/** Drop the figures, keep the sentence. What a "friendlier tone" edit does in practice. */
+function generalise(text: string): string {
+  return text
+    .replace(/\b\d+(?:\.\d+)?\s*(?:GB|TB|MB)\b/gi, 'plenty of space')
+    .replace(/\b\d+\s*days?\b/gi, 'a limited window')
+    .replace(/\b\d+\b/g, 'several');
+}
+
+/**
  * Deterministic v2 mock model.
  *
  * Answers from a tiny fixed knowledge base so that outputs are stable *and*
  * meaningfully gradeable — an echo-only mock cannot fail a relevance check in
  * an interesting way, which makes for a boring scorer demo.
+ *
+ * It also reads its own system prompt (see `AVOID_SPECIFICS`). Without that,
+ * editing an agent's prompt would change nothing at all here, and the entire
+ * prompt-versioning exercise would be theatre: two versions, identical scores.
+ * Exercises 1–11 are unaffected — their instructions do not carry the
+ * directive, so they answer exactly as before.
  */
 export function echoModel(knowledge: Record<string, string> = {}) {
-  const answerFor = (question: string): string => {
+  const answerFor = (question: string, system: string): string => {
     const q = question.toLowerCase();
     for (const [key, answer] of Object.entries(knowledge)) {
-      if (q.includes(key.toLowerCase())) return answer;
+      if (q.includes(key.toLowerCase())) {
+        return AVOID_SPECIFICS.test(system) ? generalise(answer) : answer;
+      }
     }
     return `I don't have information about that. Question was: ${question}`;
   };
@@ -43,6 +75,17 @@ export function echoModel(knowledge: Record<string, string> = {}) {
     return lastUser?.content?.find?.((p: any) => p.type === 'text')?.text ?? '';
   };
 
+  /** The system prompt, whichever of the two shapes it arrives in. */
+  const systemText = (prompt: any[]): string =>
+    prompt
+      .filter((m: any) => m.role === 'system')
+      .map((m: any) =>
+        typeof m.content === 'string'
+          ? m.content
+          : (m.content ?? []).map((p: any) => p?.text ?? '').join(' '),
+      )
+      .join('\n');
+
   return {
     specificationVersion: 'v2' as const,
     provider: 'mock',
@@ -51,11 +94,11 @@ export function echoModel(knowledge: Record<string, string> = {}) {
       rawCall: { rawPrompt: null, rawSettings: {} },
       finishReason: 'stop' as const,
       usage: { inputTokens: 5, outputTokens: 5, totalTokens: 10 },
-      content: [{ type: 'text' as const, text: answerFor(lastUserText(prompt)) }],
+      content: [{ type: 'text' as const, text: answerFor(lastUserText(prompt), systemText(prompt)) }],
       warnings: [],
     }),
     doStream: async ({ prompt }: any) => {
-      const delta = answerFor(lastUserText(prompt));
+      const delta = answerFor(lastUserText(prompt), systemText(prompt));
       return {
         rawCall: { rawPrompt: null, rawSettings: {} },
         warnings: [],

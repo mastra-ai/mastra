@@ -6,6 +6,7 @@ packages:
 catalog:
   '@mastra/core': 1.57.0
   '@mastra/duckdb': 1.6.0
+  '@mastra/editor': 0.13.11
   '@mastra/evals': 1.7.0
   '@mastra/libsql': 1.19.0
   '@mastra/observability': 1.16.5

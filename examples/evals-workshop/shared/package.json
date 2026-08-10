@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@mastra/core": "catalog:",
+    "@mastra/editor": "catalog:",
     "@mastra/evals": "catalog:",
     "@mastra/libsql": "catalog:",
     "@mastra/memory": "catalog:",

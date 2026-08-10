@@ -16,14 +16,16 @@
     "ex:9": "tsx --env-file-if-exists=../.env src/09-dataset-versioning.ts",
     "ex:10": "tsx --env-file-if-exists=../.env src/10-tool-mocks.ts",
     "ex:11": "tsx --env-file-if-exists=../.env src/11-score-traces.ts",
-    "ex:offline": "pnpm ex:1 && pnpm ex:3 && pnpm ex:4 && pnpm ex:5 && pnpm ex:6 && pnpm ex:7 && pnpm ex:8 && pnpm ex:9 && pnpm ex:10 && pnpm ex:11",
-    "ex:all": "pnpm ex:1 && pnpm ex:2 && pnpm ex:3 && pnpm ex:4 && pnpm ex:5 && pnpm ex:6 && pnpm ex:7 && pnpm ex:8 && pnpm ex:9 && pnpm ex:10 && pnpm ex:11",
+    "ex:12": "tsx --env-file-if-exists=../.env src/12-prompt-versions.ts",
+    "ex:offline": "pnpm ex:1 && pnpm ex:3 && pnpm ex:4 && pnpm ex:5 && pnpm ex:6 && pnpm ex:7 && pnpm ex:8 && pnpm ex:9 && pnpm ex:10 && pnpm ex:11 && pnpm ex:12",
+    "ex:all": "pnpm ex:1 && pnpm ex:2 && pnpm ex:3 && pnpm ex:4 && pnpm ex:5 && pnpm ex:6 && pnpm ex:7 && pnpm ex:8 && pnpm ex:9 && pnpm ex:10 && pnpm ex:11 && pnpm ex:12",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf node_modules"
   },
   "dependencies": {
     "@mastra/core": "catalog:",
     "@mastra/duckdb": "catalog:",
+    "@mastra/editor": "catalog:",
     "@mastra/evals": "catalog:",
     "@mastra/libsql": "catalog:",
     "@mastra/memory": "catalog:",

@@ -23,8 +23,9 @@
  * Run:  pnpm seed
  */
 import { SUPPORT_QA } from '@workshop/shared/data';
+import { JUDGE_MODEL } from '@workshop/shared/models';
 import { answerAccuracyScorer } from '@workshop/shared/scorers';
-import { mastra, observability, supportAgent } from './mastra/index.ts';
+import { editor, mastra, observability, supportAgent } from './mastra/index.ts';
 
 /** Answers the way the shipped agent does. */
 async function baselineTask({ input }: { input: unknown }) {
@@ -85,6 +86,38 @@ async function main() {
     );
   }
 
+  // -------------------------------------------------------------------
+  // Snapshot the shipped prompt as agent v1, and publish it.
+  //
+  // Without this the Editor tab opens on "No versions yet", and the first
+  // thing anyone saves becomes v1 — meaning the edit *is* the baseline and
+  // there is nothing to compare it against. Recording what the code says
+  // first is both better practice and the only way the demo has two versions
+  // to put side by side.
+  //
+  // Publishing matters as much as saving. A saved-but-unpublished version is
+  // inert: the server resolves agents at `status: 'published'`, so v2 sitting
+  // in draft changes nothing about what the agent answers. Save writes a
+  // version; Publish is what makes it the live one.
+  //
+  // The `model` field is required by the stored-agent row and then ignored —
+  // overrides only ever replace instructions and tools, never the model.
+  // -------------------------------------------------------------------
+  const instructions = await supportAgent.getInstructions();
+  await editor.agent.create({
+    id: 'support-agent',
+    name: 'Nimbus Support Agent',
+    description: 'Answers Nimbus product questions from the documentation.',
+    instructions: typeof instructions === 'string' ? instructions : String(instructions),
+    model: JUDGE_MODEL,
+  } as any);
+
+  const agentsStore: any = await (mastra.getStorage() as any).getStore('agents');
+  const { versions } = await agentsStore.listVersions({ agentId: 'support-agent' });
+  const v1 = versions.find((v: any) => v.versionNumber === 1);
+  await agentsStore.update({ id: 'support-agent', status: 'published', activeVersionId: v1.id });
+  console.log(`  agent "support-agent" — v1 snapshotted from code and published`);
+
   // Flush the trace spans this seed just produced. Spans export in batches and
   // this script is about to exit, so without the flush the Observability →
   // Traces view is empty on a fresh clone — silently, with no error. Doing it
@@ -98,6 +131,9 @@ Done. Now:
 
 Then open http://localhost:4111 → Evaluation → Datasets → "nimbus-support-qa".
 The three experiments are listed newest-first; the middle one is the regression.
+
+The agent's Editor tab opens on v1 — the prompt as the code has it, published.
+Edit it there and save to create v2; publish to make v2 the one users get.
 
 Chat with the agent too — it is wired for live scoring, so each reply is graded
 as it arrives and shows up alongside the dataset runs.`);

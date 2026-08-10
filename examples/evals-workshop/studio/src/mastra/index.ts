@@ -22,6 +22,7 @@ import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
 import { MastraCompositeStore } from '@mastra/core/storage';
 import { DuckDBStore } from '@mastra/duckdb';
+import { MastraEditor } from '@mastra/editor';
 import { LibSQLStore } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
 import { MastraStorageExporter, Observability, SensitiveDataFilter } from '@mastra/observability';
@@ -164,11 +165,45 @@ export const observability = new Observability({
   },
 });
 
+/**
+ * The editor — what turns the prompt from a code constant into something you
+ * can change in the browser and then *measure*.
+ *
+ * Without this, Studio renders the agent's instructions read-only: the prompt
+ * lives in this file and the only way to try a variant is to edit, restart,
+ * and lose the comparison. With it, editing the prompt writes a **version**,
+ * and a version is a thing an experiment can be pinned to. That is the whole
+ * reason it earns a place in an evals workshop — see exercise 12.
+ *
+ * `source: 'db'` is a real choice, not a default worth skipping over:
+ *
+ *   'db'    edits are stored as versions in the storage above. Studio shows
+ *           "Save" and "Publish This Version". This is what you want when the
+ *           point is to iterate on a prompt and eval each iteration.
+ *
+ *   'code'  the prompt is treated as owned by the repository. Studio replaces
+ *           Save/Publish with "Download JSON" and "Open PR", and the editor
+ *           re-routes its own storage domain to a FilesystemStore — which
+ *           would also quietly wrap the composite store built above. That is
+ *           the right mode for a team that reviews prompt changes in git, and
+ *           the wrong one for a workshop about measuring them.
+ *
+ * What the editor can and cannot override is worth saying out loud, because
+ * the boundary surprises people: `instructions` and `tools` are overridable.
+ * `model`, `memory`, and `scorers` are not — they can hold SDK instances and
+ * live functions that cannot be serialized into a database row. So a prompt
+ * edit made in the browser changes what the agent *says*, never what it runs
+ * on. For this workshop that is a feature: the model stays pinned, so a score
+ * that moves between versions moved because of the prompt.
+ */
+export const editor = new MastraEditor({ source: 'db' });
+
 export const mastra = new Mastra({
   storage,
   agents: { 'support-agent': supportAgent },
   workflows: { 'support-workflow': supportWorkflow },
   observability,
+  editor,
   // Registered here so their scores persist and Studio can resolve them by id.
   scorers: {
     'answer-accuracy': answerAccuracyScorer as any,
