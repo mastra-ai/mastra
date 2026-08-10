@@ -13,6 +13,7 @@ export type ScenarioName =
   | 'api-key-multi-provider-delete'
   | 'api-key-prompt'
   | 'api-key-reopen-stored'
+  | 'approval-overlay-focus'
   | 'ask-user-advanced-prompts'
   | 'automated-chat'
   | 'browser-active-pending-status'

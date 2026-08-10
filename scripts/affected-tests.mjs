@@ -16,13 +16,16 @@
  */
 
 import { execSync } from 'node:child_process';
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { existsSync, readFileSync } from 'node:fs';
 import { resolve, relative, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '..');
+const require = createRequire(import.meta.url);
+const { buildWorkspaceSourceAliases } = require('./workspace-source-aliases.cjs');
 
 // ---------------------------------------------------------------------------
 // CLI argument parsing
@@ -330,19 +333,6 @@ for (const [node, deps] of Object.entries(graph)) {
 
 const ALL = '*';
 const EXTENSIONS = ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs'];
-const SKIP_DIRS = new Set([
-  'node_modules',
-  'dist',
-  'build',
-  '.pnpm',
-  '.turbo',
-  '.git',
-  '.next',
-  '.mastra',
-  '.claude',
-  '.mastracode',
-  '.agents',
-]);
 
 function toRel(root, path) {
   return path.replace(`${root}/`, '').replaceAll('\\', '/');
@@ -350,47 +340,6 @@ function toRel(root, path) {
 
 function normalizeRel(path) {
   return path.replaceAll('\\', '/').replace(/^\.\//, '');
-}
-
-function findPackageJsonFiles(dir) {
-  const results = [];
-  let entries;
-  try {
-    entries = readdirSync(dir, { withFileTypes: true });
-  } catch {
-    return results;
-  }
-
-  for (const entry of entries) {
-    if (entry.isFile() && entry.name === 'package.json') {
-      results.push(join(dir, entry.name));
-      continue;
-    }
-    if (!entry.isDirectory()) continue;
-    if (SKIP_DIRS.has(entry.name)) continue;
-    if (entry.name === '__fixtures__' || entry.name === 'fixtures' || entry.name === 'test-fixtures') continue;
-    results.push(...findPackageJsonFiles(join(dir, entry.name)));
-  }
-
-  return results;
-}
-
-function buildAliasMap(root) {
-  const alias = new Map();
-  for (const pkgJsonPath of findPackageJsonFiles(root)) {
-    const pkgDir = dirname(pkgJsonPath);
-    const srcDir = join(pkgDir, 'src');
-    if (!existsSync(srcDir)) continue;
-    if (pkgDir.includes('__fixtures__') || pkgDir.includes('/fixtures/')) continue;
-
-    try {
-      const json = JSON.parse(readFileSync(pkgJsonPath, 'utf-8'));
-      if (json.name) alias.set(json.name, srcDir);
-    } catch {
-      // ignore malformed package.json files in fixture-like directories
-    }
-  }
-  return alias;
 }
 
 function scriptKindFor(file) {
@@ -542,13 +491,13 @@ function resolveModuleToGraphDep(root, fromFile, moduleName, deps, aliasMap) {
   if (moduleName.startsWith('.')) {
     basePath = resolve(root, dirname(fromFile), moduleName);
   } else {
-    const matchingAlias = [...aliasMap.keys()]
-      .filter(name => moduleName === name || moduleName.startsWith(`${name}/`))
-      .sort((a, b) => b.length - a.length)[0];
+    const matchingAlias = aliasMap
+      .filter(alias => moduleName === alias.name || (!alias.exact && moduleName.startsWith(`${alias.name}/`)))
+      .sort((a, b) => b.name.length - a.name.length)[0];
 
     if (matchingAlias) {
-      const suffix = moduleName === matchingAlias ? '' : moduleName.slice(matchingAlias.length + 1);
-      basePath = join(aliasMap.get(matchingAlias), suffix);
+      const suffix = moduleName === matchingAlias.name ? '' : moduleName.slice(matchingAlias.name.length + 1);
+      basePath = join(matchingAlias.target, suffix);
     }
   }
 
@@ -567,7 +516,7 @@ function edgeKey(from, to) {
 }
 
 function buildSymbolIndex({ graph, root }) {
-  const aliasMap = buildAliasMap(root);
+  const aliasMap = buildWorkspaceSourceAliases(root);
   const fileSymbols = new Map();
   const edges = new Map();
 
