@@ -14,32 +14,47 @@ interface ChatModelsProviderProps {
 }
 
 export function ChatModelsProvider({ children }: ChatModelsProviderProps) {
-  const { resourceId, projectPath, baseUrl, sessionEnabled, draftSessionId, factorySessionState } =
-    useChatSessionContext();
+  const { draftSessionId } = useChatSessionContext();
+  return draftSessionId ? (
+    <DraftChatModelsProvider>{children}</DraftChatModelsProvider>
+  ) : (
+    <LiveChatModelsProvider>{children}</LiveChatModelsProvider>
+  );
+}
+
+function DraftChatModelsProvider({ children }: ChatModelsProviderProps) {
+  const { factorySessionState } = useChatSessionContext();
+  const factoryProjectQuery = useFactoryProjectQuery(factorySessionState?.factoryProjectId);
+  const [draftModelId, setDraftModelId] = useState<string>();
+  const value: ChatModelsApi = {
+    activeModelId: draftModelId ?? factoryProjectQuery.data?.defaultModelId ?? undefined,
+    isLoading: factoryProjectQuery.isPending,
+    error: factoryProjectQuery.error ?? undefined,
+    setModel: modelId => {
+      setDraftModelId(modelId);
+      return Promise.resolve();
+    },
+  };
+
+  return <ChatModelsContext.Provider value={value}>{children}</ChatModelsContext.Provider>;
+}
+
+function LiveChatModelsProvider({ children }: ChatModelsProviderProps) {
+  const { resourceId, projectPath, baseUrl, sessionEnabled } = useChatSessionContext();
   const { state } = useChatConnection();
-  const switchModelMutation = useSwitchAgentControllerModelMutation({
+  const { mutateAsync: switchModel } = useSwitchAgentControllerModelMutation({
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
     scope: projectPath,
     baseUrl,
     enabled: sessionEnabled,
   });
-  // A draft has no session to hold a model, so the pick lives here and travels
-  // with the prompt that creates the session. It starts on the Factory default.
-  const factoryProjectQuery = useFactoryProjectQuery(
-    draftSessionId ? factorySessionState?.factoryProjectId : undefined,
-  );
-  const [draftModelId, setDraftModelId] = useState<string>();
-
-  const value: ChatModelsApi = draftSessionId
-    ? {
-        activeModelId: draftModelId ?? factoryProjectQuery.data?.defaultModelId ?? undefined,
-        setModel: modelId => Promise.resolve(setDraftModelId(modelId)),
-      }
-    : {
-        activeModelId: state?.modelId,
-        setModel: modelId => switchModelMutation.mutateAsync(modelId),
-      };
+  const value: ChatModelsApi = {
+    activeModelId: state?.modelId,
+    isLoading: false,
+    error: undefined,
+    setModel: modelId => switchModel(modelId),
+  };
 
   return <ChatModelsContext.Provider value={value}>{children}</ChatModelsContext.Provider>;
 }

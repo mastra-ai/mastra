@@ -62,12 +62,6 @@ export function ChatSessionConfigProvider({
   // memory resourceId and no scope (see FactoryStartCoordinator.prepare and
   // UserSessionsSection), so the chat surface must address the same
   // (resourceId, no scope) session to read threads and share the live run.
-  // On user routes the :threadId param IS the sessionId, and a draft's route
-  // UUID becomes that id once the first prompt creates the session. Factory
-  // routes with no workspace session (e.g. /settings/*) fall back to the
-  // factory-level session address — which is the factory project id, the same
-  // value /ensure returns — so resource-scoped surfaces (behavior settings, tool
-  // permissions) stay functional without provisioning a sandbox.
   const resourceId = userScoped ? (draftSessionId ?? threadId) : (storedSession?.sessionId ?? sessionId ?? factory?.id);
   const projectPath = undefined;
   // A `?resourceId=` query param overrides the resolved factory resource so the
@@ -89,7 +83,6 @@ export function ChatSessionConfigProvider({
       ? Boolean(resourceOverride)
       : ensureQuery.isSuccess && Boolean(storedSession) && !resolvingSession;
   const sessionError = userScoped ? undefined : (ensureQuery.error ?? undefined);
-  // A draft's resource only exists once the first prompt creates the session.
   // Outside a session the factory resource is addressable straight away (its id
   // is the factory project id); inside one we keep the original ordering and
   // wait for the workspace so resource reads follow materialization.
@@ -148,8 +141,6 @@ export function ChatSessionBoundary({
   const messages = {
     threadId,
     isPending: Boolean(threadId) && messagesQuery.isPending,
-    // A window already on screen survives a failed refetch: the live stream
-    // keeps it current, and blanking the transcript loses more than it tells.
     error: messagesQuery.data ? undefined : messagesQuery.error,
   };
 

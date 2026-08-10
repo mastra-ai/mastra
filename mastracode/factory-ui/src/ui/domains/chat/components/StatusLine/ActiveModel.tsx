@@ -37,19 +37,23 @@ function formatModelName(id: string): string {
   return slug.split(/[-_]+/).filter(Boolean).map(titleCase).join(' ');
 }
 
-/** Current model id and whether its provider has usable credentials. */
 export function ActiveModel() {
   const { kind, sessionEnabled, draftSessionId } = useChatSessionContext();
-  const { activeModelId, setModel } = useChatModels();
+  const { activeModelId, isLoading, error, setModel } = useChatModels();
   const { status } = useChatConnection();
   const modelsQuery = useAvailableModelsQuery();
   const [pendingModelId, setPendingModelId] = useState<string>();
 
   const selectedModelId = pendingModelId ?? activeModelId;
-  // Show a placeholder rather than a misleading "No model" label while the
-  // model is still being resolved.
-  if (!selectedModelId && status === 'connecting') {
+  if (!selectedModelId && (isLoading || status === 'connecting')) {
     return <Skeleton aria-label="Loading model" className="h-3.5 w-24" />;
+  }
+  if (!selectedModelId && error) {
+    return (
+      <span className="text-accent2" aria-label="Model unavailable" title={error.message}>
+        Model unavailable
+      </span>
+    );
   }
 
   const label = selectedModelId ? formatModelName(selectedModelId) : 'No model';
@@ -69,7 +73,6 @@ export function ActiveModel() {
             () => setPendingModelId(undefined),
             (cause: unknown) => {
               setPendingModelId(undefined);
-              // failed switch must be loud — label alone just snaps back
               toast.error(cause instanceof Error ? cause.message : 'Failed to switch model');
             },
           );

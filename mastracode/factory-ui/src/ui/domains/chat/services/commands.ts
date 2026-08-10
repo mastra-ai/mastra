@@ -31,7 +31,6 @@ export const SLASH_COMMANDS: SlashCommand[] = [
 
 export function commandRequiresReadySession(text: string): boolean {
   const [name] = text.slice(1).split(/\s+/, 1);
-  // Unknown names are not session commands — they fall through to the runner, which rejects them.
   return SLASH_COMMANDS.find(command => command.name === name)?.requiresSession ?? false;
 }
 

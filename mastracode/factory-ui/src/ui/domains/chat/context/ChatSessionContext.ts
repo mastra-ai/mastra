@@ -30,7 +30,6 @@ export interface ChatSessionContextApi {
   sessionThreadId?: string;
   /** Workspace needs sandbox provision + clone before the controller can connect. */
   workspacePending?: boolean;
-  /** Id a user session will be created with by the first prompt; set only on the draft route. */
   draftSessionId?: string;
   factorySessionState?: FactorySessionState;
   baseUrl: string;

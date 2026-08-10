@@ -613,7 +613,7 @@ export interface FactoryUserSession {
   projectRepositoryId: string;
   orgId: string;
   userId: string;
-  title?: string | null;
+  title?: string;
   branch: string;
   baseBranch: string;
   sandboxId: string | null;
@@ -621,6 +621,12 @@ export interface FactoryUserSession {
   materializedAt: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+type FactoryUserSessionPayload = Omit<FactoryUserSession, 'title'> & { title?: string | null };
+
+function normalizeUserSession({ title, ...session }: FactoryUserSessionPayload): FactoryUserSession {
+  return { ...session, title: title ?? undefined };
 }
 
 export async function listUserSessions(
@@ -633,30 +639,26 @@ export async function listUserSessions(
     credentials: 'include',
     signal,
   });
-  const body = await readJsonOrThrow<{ sessions: FactoryUserSession[] }>(res, 'Failed to list sessions');
-  return body.sessions;
+  const body = await readJsonOrThrow<{ sessions: FactoryUserSessionPayload[] }>(res, 'Failed to list sessions');
+  return body.sessions.map(normalizeUserSession);
 }
 
-export interface CreateUserSessionOptions {
-  branch?: string;
-  baseBranch?: string;
-  sessionId?: string;
-  title?: string;
-}
+export type CreateUserSessionOptions =
+  | { branch: string; baseBranch?: string; sessionId?: never; title?: never }
+  | { sessionId: string; title: string; branch?: never; baseBranch?: never };
 
-/** Omit `branch` and the server names the session. */
 export async function createUserSession(
   baseUrl: string,
   projectRepositoryId: string,
-  options: CreateUserSessionOptions = {},
+  options: CreateUserSessionOptions,
 ): Promise<FactoryUserSession> {
-  const result = await postRepositoryGitOp<{ session: FactoryUserSession }>(
+  const result = await postRepositoryGitOp<{ session: FactoryUserSessionPayload }>(
     baseUrl,
     projectRepositoryId,
     'sessions',
     options,
   );
-  return result.session;
+  return normalizeUserSession(result.session);
 }
 
 export async function getUserSession(baseUrl: string, sessionId: string): Promise<FactoryUserSession> {
@@ -664,8 +666,8 @@ export async function getUserSession(baseUrl: string, sessionId: string): Promis
     headers: { Accept: 'application/json' },
     credentials: 'include',
   });
-  if (!res.ok) throw new Error(`Failed to load session (${res.status})`);
-  return ((await res.json()) as { session: FactoryUserSession }).session;
+  const body = await readJsonOrThrow<{ session: FactoryUserSessionPayload }>(res, 'Failed to load session');
+  return normalizeUserSession(body.session);
 }
 
 export async function deleteUserSession(baseUrl: string, sessionId: string): Promise<void> {

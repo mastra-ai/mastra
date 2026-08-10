@@ -16,11 +16,7 @@ interface PromptHandoff {
   handoffModelId?: string;
 }
 
-/** Router state handing the prompt (and the mode/model it was composed on) to the thread page it opens. */
-export function promptHandoffState(
-  prompt: string,
-  config: { modeId: string | undefined; modelId: string | undefined },
-): PromptHandoff {
+export function promptHandoffState(prompt: string, config: { modeId: string; modelId: string }): PromptHandoff {
   return { handoffPrompt: prompt, handoffModeId: config.modeId, handoffModelId: config.modelId };
 }
 
@@ -34,10 +30,6 @@ function readHandoffField(state: unknown, key: keyof PromptHandoff): string | un
   return typeof value === 'string' && value ? value : undefined;
 }
 
-/**
- * Sends the prompt that created this session. The controller holds the message
- * until the workspace finishes preparing, so it needs no client-side queue.
- */
 export function useHandoffPrompt(): void {
   const location = useLocation();
   const navigate = useNavigate();
@@ -50,9 +42,9 @@ export function useHandoffPrompt(): void {
     baseUrl,
     enabled: sessionEnabled,
   };
-  const sendMessage = useSendAgentControllerMessageMutation(mutationArgs);
-  const switchMode = useSwitchAgentControllerModeMutation(mutationArgs);
-  const switchModel = useSwitchAgentControllerModelMutation(mutationArgs);
+  const { mutateAsync: sendMessage } = useSendAgentControllerMessageMutation(mutationArgs);
+  const { mutateAsync: switchMode } = useSwitchAgentControllerModeMutation(mutationArgs);
+  const { mutateAsync: switchModel } = useSwitchAgentControllerModelMutation(mutationArgs);
   const handedOff = useRef(false);
   const prompt = readHandoffField(location.state, 'handoffPrompt');
   const modeId = readHandoffField(location.state, 'handoffModeId');
@@ -65,24 +57,18 @@ export function useHandoffPrompt(): void {
     void navigate({ pathname: location.pathname, search: location.search }, { replace: true, state: null });
     localUser(prompt);
     void (async () => {
-      // The composer named this mode and model before the session existed; bind
-      // them before the run starts — mode first, switching it resets the model —
-      // but never lose the prompt over a failed switch.
+      // mode first — switching it resets the model; a failed bind must not lose the prompt
       if (modeId) {
-        await switchMode
-          .mutateAsync(modeId)
-          .catch((error: unknown) =>
-            pushNotice(error instanceof Error ? error.message : `Could not start in ${modeId} mode.`, 'error'),
-          );
+        await switchMode(modeId).catch((error: unknown) =>
+          pushNotice(error instanceof Error ? error.message : `Could not start in ${modeId} mode.`, 'error'),
+        );
       }
       if (modelId) {
-        await switchModel
-          .mutateAsync(modelId)
-          .catch((error: unknown) =>
-            pushNotice(error instanceof Error ? error.message : `Could not start on ${modelId}.`, 'error'),
-          );
+        await switchModel(modelId).catch((error: unknown) =>
+          pushNotice(error instanceof Error ? error.message : `Could not start on ${modelId}.`, 'error'),
+        );
       }
-      await sendMessage.mutateAsync(prompt);
+      await sendMessage(prompt);
     })().catch(error => {
       clearPending();
       pushNotice(error instanceof Error ? error.message : 'The message could not be sent.', 'error');

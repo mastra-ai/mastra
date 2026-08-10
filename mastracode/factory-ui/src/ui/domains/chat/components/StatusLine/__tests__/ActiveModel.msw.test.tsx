@@ -1,10 +1,3 @@
-/**
- * BDD coverage for `ActiveModel`, the status-line model indicator below the
- * composer. While the agent connection is still resolving there is no model id
- * yet, so the component must show a loading skeleton instead of a misleading
- * "No model" label; once connected it renders the formatted model name and
- * flags models whose provider has no usable credentials.
- */
 import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -34,6 +27,8 @@ function renderActiveModel({
   kind = 'user',
   sessionEnabled = true,
   draftSessionId,
+  modelLoading = false,
+  modelError,
   setModel = () => Promise.resolve(),
 }: {
   activeModelId: string | undefined;
@@ -41,12 +36,14 @@ function renderActiveModel({
   kind?: ChatSessionContextApi['kind'];
   sessionEnabled?: boolean;
   draftSessionId?: string;
+  modelLoading?: boolean;
+  modelError?: Error;
   setModel?: (modelId: string) => Promise<void>;
 }) {
   return renderWithProviders(
     <ChatSessionContext.Provider value={{ ...factorySession, kind, sessionEnabled, draftSessionId }}>
       <ChatConnectionContext.Provider value={{ status }}>
-        <ChatModelsContext.Provider value={{ activeModelId, setModel }}>
+        <ChatModelsContext.Provider value={{ activeModelId, isLoading: modelLoading, error: modelError, setModel }}>
           <ActiveModel />
           <Toaster position="bottom-right" />
         </ChatModelsContext.Provider>
@@ -74,6 +71,19 @@ describe('ActiveModel', () => {
       renderActiveModel({ activeModelId: undefined, status: 'connecting' });
 
       expect(screen.getByLabelText('Loading model')).toBeInTheDocument();
+      expect(screen.queryByText('No model')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('when the draft model fails to resolve', () => {
+    it('shows the failure instead of a "No model" label', () => {
+      renderActiveModel({
+        activeModelId: undefined,
+        status: 'ready',
+        modelError: new Error('Factory unavailable'),
+      });
+
+      expect(screen.getByLabelText('Model unavailable')).toHaveAttribute('title', 'Factory unavailable');
       expect(screen.queryByText('No model')).not.toBeInTheDocument();
     });
   });
@@ -147,7 +157,7 @@ describe('ActiveModel', () => {
 
     it('disables further model changes while a switch is pending', async () => {
       const user = userEvent.setup();
-      const setModel = vi.fn<(modelId: string) => Promise<void>>(() => new Promise(() => {}));
+      const setModel = vi.fn<(modelId: string) => Promise<void>>(() => new Promise<void>(() => {}));
       stubModelCatalog(['anthropic/claude-sonnet-4-5', 'openai/gpt-5.6-sol']);
       renderActiveModel({
         activeModelId: 'anthropic/claude-sonnet-4-5',

@@ -41,19 +41,21 @@ interface DraftRoute {
   finishWorkspace: () => void;
 }
 
+interface DraftRouteOptions {
+  factoryProjectGate?: Promise<void>;
+  failModeSwitch?: boolean;
+}
+
 function readSentMessage(body: unknown): string {
   if (typeof body !== 'object' || body === null || !('message' in body)) return '';
   return typeof body.message === 'string' ? body.message : '';
 }
 
-/** The controller resolves the session before accepting a message, and resolving it is what prepares the workspace. */
-function stubDraftRoute(): DraftRoute {
+function stubDraftRoute({ factoryProjectGate, failModeSwitch = false }: DraftRouteOptions = {}): DraftRoute {
   let releaseWorkspace = () => {};
   const workspaceReady = new Promise<void>(resolve => {
     releaseWorkspace = resolve;
   });
-  // The controller binds the thread when it creates the session, so reading it
-  // before then fails exactly as the server does.
   let threadCreated = false;
   const route: DraftRoute = {
     createBodies: [],
@@ -74,9 +76,12 @@ function stubDraftRoute(): DraftRoute {
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
       HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'Acme Factory' }] }),
     ),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}`, () =>
-      HttpResponse.json({ project: { id: FACTORY_ID, name: 'Acme Factory', defaultModelId: 'openai/gpt-4o-mini' } }),
-    ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}`, async () => {
+      await factoryProjectGate;
+      return HttpResponse.json({
+        project: { id: FACTORY_ID, name: 'Acme Factory', defaultModelId: 'openai/gpt-4o-mini' },
+      });
+    }),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/source-control-connections`, () =>
       HttpResponse.json({
         connections: [
@@ -127,7 +132,9 @@ function stubDraftRoute(): DraftRoute {
     ),
     http.post(`${AGENT_CONTROLLER_API}/sessions/:resourceId/mode`, async ({ request }) => {
       route.bindings.push(`mode:${readBody(await request.json(), 'modeId')}`);
-      return HttpResponse.json({ ok: true });
+      return failModeSwitch
+        ? HttpResponse.json({ message: 'Mode unavailable' }, { status: 500 })
+        : HttpResponse.json({ ok: true });
     }),
     http.get(`${AGENT_CONTROLLER_API}/models`, () => HttpResponse.json({ models: [] })),
     http.get(`${AGENT_CONTROLLER_API}/sessions/:resourceId`, ({ params }) =>
@@ -189,7 +196,6 @@ describe('a user session draft on the real thread route', () => {
 
     const message = await screen.findByRole('textbox', { name: 'Message' });
     await waitFor(() => expect(message).toBeEnabled());
-    // The draft offers the full run configuration: pick a non-default mode.
     await user.click(await screen.findByLabelText('Session mode'));
     await user.click(await screen.findByRole('option', { name: 'Plan' }));
     await user.type(message, 'fix the login bug');
@@ -201,20 +207,71 @@ describe('a user session draft on the real thread route', () => {
     await waitFor(() =>
       expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/user/threads/${DRAFT_SESSION_ID}`),
     );
-    // ThreadPage gates its content on the session fetch, not on materialization —
-    // the handoff must reach the controller before the workspace is up.
     await waitFor(() => expect(route.posted).toEqual(['fix the login bug']));
-    // The composer named this mode and model while the session did not exist;
-    // the run must start on them — mode first, since switching it resets the model.
     expect(route.bindingsBeforePrompt).toEqual(['mode:plan', 'model:openai/gpt-4o-mini']);
-    // The thread has no server-side history to read yet, and failing to read it
-    // must not take the prompt off screen.
     const thread = within(screen.getByRole('main'));
     await waitFor(() => expect(thread.getByText('fix the login bug')).toBeInTheDocument());
     expect(thread.queryByText(/Failed to load messages/)).not.toBeInTheDocument();
 
     route.finishWorkspace();
-    // Settle the released controller POSTs so a duplicate send would surface here.
+    await waitForMutationsIdle(client);
+    expect(route.posted).toEqual(['fix the login bug']);
+  });
+
+  it('keeps typing free while the draft model resolves, but holds the send', async () => {
+    let releaseFactoryProject = () => {};
+    const factoryProjectGate = new Promise<void>(resolve => {
+      releaseFactoryProject = resolve;
+    });
+    const route = stubDraftRoute({ factoryProjectGate });
+    const user = userEvent.setup();
+    const router = createMemoryRouter(createAppRoutes(), {
+      initialEntries: [`/factories/${FACTORY_ID}/user/new/${DRAFT_SESSION_ID}`],
+    });
+    renderWithProviders(<RouterProvider router={router} />);
+
+    const message = await screen.findByRole('textbox', { name: 'Message' });
+    expect(await screen.findByLabelText('Loading model')).toBeInTheDocument();
+    expect(message).toBeEnabled();
+
+    await user.type(message, 'fix the login bug');
+    await user.keyboard('{Enter}');
+
+    expect(screen.getByRole('button', { name: 'Send message' })).toBeDisabled();
+    expect(message).toHaveValue('fix the login bug');
+    expect(route.createBodies).toEqual([]);
+
+    releaseFactoryProject();
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Send message' })).toBeEnabled());
+    expect(message).toHaveValue('fix the login bug');
+  });
+
+  it('does not lose the prompt when the mode bind fails', async () => {
+    const route = stubDraftRoute({ failModeSwitch: true });
+    const user = userEvent.setup();
+    const router = createMemoryRouter(createAppRoutes(), {
+      initialEntries: [`/factories/${FACTORY_ID}/user/new/${DRAFT_SESSION_ID}`],
+    });
+    const { client } = renderWithProviders(<RouterProvider router={router} />);
+
+    const message = await screen.findByRole('textbox', { name: 'Message' });
+    await waitFor(() => expect(message).toBeEnabled());
+    await user.type(message, 'fix the login bug');
+    await user.keyboard('{Enter}');
+
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/user/threads/${DRAFT_SESSION_ID}`),
+    );
+    await waitFor(() => expect(route.bindings).toContain('mode:build'));
+    await waitFor(() => expect(route.posted).toEqual(['fix the login bug']));
+    expect(
+      await screen.findByText(/Mode unavailable|Could not start in/, undefined, { timeout: 5000 }),
+    ).toBeInTheDocument();
+    // the handoff state is dropped up front so a reload can never resend the prompt
+    expect(router.state.location.state).toBeNull();
+
+    route.finishWorkspace();
     await waitForMutationsIdle(client);
     expect(route.posted).toEqual(['fix the login bug']);
   });

@@ -151,7 +151,6 @@ export function useRunPaletteCommand(prefillComposer: (draft: string) => void) {
         if (arg) await setGoalMutation.mutateAsync(arg);
         return true;
       case 'follow-up':
-      case 'followup':
         if (arg) {
           localUser(arg);
           await followUpMutation.mutateAsync(arg);

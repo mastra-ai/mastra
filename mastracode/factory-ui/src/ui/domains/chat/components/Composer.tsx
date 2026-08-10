@@ -4,16 +4,15 @@ import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import {
   Composer as ComposerRoot,
   ComposerActions,
-  ComposerAttachments,
   ComposerBox,
   ComposerInput,
   ComposerRing,
 } from '@mastra/playground-ui/components/Composer';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { useQueryClient } from '@tanstack/react-query';
-import { ArrowUp, ImagePlus, Square, X } from 'lucide-react';
+import { ArrowUp, ImagePlus, Square } from 'lucide-react';
 import { useRef, useState } from 'react';
-import type { ChangeEvent, ClipboardEvent, DragEvent, KeyboardEvent } from 'react';
+import type { KeyboardEvent } from 'react';
 import { useMatch, useNavigate, useParams } from 'react-router';
 
 import { INITIAL_THREAD_MESSAGE_LIMIT, queryKeys } from '../../../../api/keys';
@@ -28,17 +27,17 @@ import {
   useSendAgentControllerMessageMutation,
   useSteerAgentControllerMutation,
 } from '../../../../hooks/useAgentControllerRunMutations';
-import { addCachedSession } from '../../../../hooks/useWorkspaces';
-import { createUserSession } from '../../workspaces/services/github';
-import type { FactoryUserSession } from '../../workspaces/services/github';
 import { useCreateAgentControllerThreadMutation } from '../../../../hooks/useAgentControllerThreadMutations';
-import { promptHandoffState } from '../hooks/useHandoffPrompt';
 import { usePreparingThreadId } from '../hooks/usePreparingThreadId';
+import { useCreateUserSessionFromDraft } from '../hooks/useCreateUserSessionFromDraft';
 import { commandRequiresReadySession, matchCommands } from '../services/commands';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { getModeColorClass } from './mode-colors';
 import { StatusLine } from './StatusLine';
+import { ComposerImageAttachments, ComposerSuggestions } from './ComposerParts';
 import { useComposerSpotlight } from './useComposerSpotlight';
+import { useComposerImages } from './useComposerImages';
+import type { PendingImage } from './useComposerImages';
 
 type ComposerVariant = 'inline' | 'textarea';
 
@@ -56,44 +55,17 @@ type ComposerProps = {
   variant?: ComposerVariant;
 };
 
-interface PendingImage {
-  id: string;
-  /** Raw base64 payload (no `data:` prefix). */
-  data: string;
-  mediaType: string;
-  filename?: string;
-}
-
-let pendingImageSeq = 0;
-
-/** Per-image cap; base64 adds ~33% and attachments travel in a JSON POST body. */
-const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
-/** Aggregate cap across all pending images on a single message. */
-const MAX_TOTAL_IMAGE_BYTES = 20 * 1024 * 1024;
-
-function readFileAsBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = String(reader.result);
-      resolve(result.slice(result.indexOf(',') + 1));
-    };
-    reader.onerror = () => reject(reader.error ?? new Error('Failed to read file'));
-    reader.readAsDataURL(file);
-  });
-}
-
 export function Composer({ variant = 'inline' }: ComposerProps) {
   const { kind, resourceId, sessionEnabled, projectPath, baseUrl, factorySessionState } = useChatSessionContext();
-  const { factoryId, draftSessionId } = useParams<{ factoryId: string; draftSessionId: string }>();
+  const { factoryId } = useParams<{ factoryId: string }>();
   const onDraftComposer = useMatch('/factories/:factoryId/new') !== null;
   const onUserDraft = useMatch('/factories/:factoryId/user/new/:draftSessionId') !== null;
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { status } = useChatConnection();
   const { busy, localUser, reset, clearPending, pushNotice } = useChatTranscript();
-  const { modes, activeModeId, setMode } = useChatModes();
-  const { activeModelId } = useChatModels();
+  const { modes, activeModeId, isLoading: modesLoading, error: modesError, setMode } = useChatModes();
+  const { activeModelId, isLoading: modelLoading, error: modelError } = useChatModels();
   const { composerDraft: draft, composerInputRef: inputRef, setComposerDraft, runComposerCommand } = useChatCommands();
   const modeColorClass = getModeColorClass(activeModeId ?? modes[0]?.id);
 
@@ -110,15 +82,22 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const abortMutation = useAbortAgentControllerMutation(hookArgs);
 
   const preparingThreadId = usePreparingThreadId();
+  const createDraftSessionMutation = useCreateUserSessionFromDraft();
 
-  const [images, setImages] = useState<PendingImage[]>([]);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const { images, setImages, fileInputRef, removeImage, onPaste, onDrop, onFileInputChange } =
+    useComposerImages(onUserDraft);
   const spotlightRef = useComposerSpotlight(!busy);
   const modeSwitchPendingRef = useRef(false);
   const suggestions = matchCommands(draft);
   const showSuggestions = suggestions.length > 0;
   const [activeSuggestion, setActiveSuggestion] = useState(0);
-  const [creatingDraftSession, setCreatingDraftSession] = useState(false);
+  const blocked = onUserDraft ? !factorySessionState : status !== 'ready' && !preparingThreadId;
+  // typing stays free while the mode/model catalogs load; only creating the session commits to them
+  const draftConfigNotReady =
+    onUserDraft && (modesLoading || modesError !== undefined || modelLoading || modelError !== undefined);
+  const attachDisabled = onUserDraft || blocked;
+  const disabled = createDraftSessionMutation.isPending || blocked;
+  const sendDisabled = disabled || draftConfigNotReady;
 
   const updateDraft = (next: string) => {
     setComposerDraft(next);
@@ -155,99 +134,6 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
     );
   };
 
-  const addImageFiles = async (fileList: Iterable<File>) => {
-    // drop/paste bypass the disabled attach button; a draft has no session to attach to
-    if (onUserDraft) {
-      pushNotice('Images can be attached once the session is ready.');
-      return;
-    }
-    const imageFiles = Array.from(fileList).filter(
-      file => file.type.startsWith('image/') && file.size <= MAX_IMAGE_BYTES,
-    );
-    if (imageFiles.length === 0) return;
-    // Enforce the aggregate cap across already-pending images plus new selections.
-    let budget = MAX_TOTAL_IMAGE_BYTES - images.reduce((sum, img) => sum + Math.floor(img.data.length * 0.75), 0);
-    const accepted = imageFiles.filter(file => {
-      if (file.size > budget) return false;
-      budget -= file.size;
-      return true;
-    });
-    if (accepted.length === 0) return;
-    const additions = await Promise.all(
-      accepted.map(
-        async (file): Promise<PendingImage> => ({
-          id: `pending-image-${pendingImageSeq++}`,
-          data: await readFileAsBase64(file),
-          mediaType: file.type,
-          filename: file.name || undefined,
-        }),
-      ),
-    );
-    setImages(prev => [...prev, ...additions]);
-  };
-
-  const removeImage = (id: string) => {
-    setImages(prev => prev.filter(img => img.id !== id));
-  };
-
-  const onPaste = (e: ClipboardEvent<HTMLTextAreaElement>) => {
-    const files = Array.from(e.clipboardData?.files ?? []).filter(file => file.type.startsWith('image/'));
-    if (files.length === 0) return;
-    e.preventDefault();
-    void addImageFiles(files);
-  };
-
-  const onDrop = (e: DragEvent<HTMLFormElement>) => {
-    // Always cancel the default action so dropped files never navigate the page away.
-    e.preventDefault();
-    const files = Array.from(e.dataTransfer?.files ?? []).filter(file => file.type.startsWith('image/'));
-    if (files.length === 0) return;
-    void addImageFiles(files);
-  };
-
-  const onFileInputChange = (e: ChangeEvent<HTMLInputElement>) => {
-    void addImageFiles(e.target.files ?? []);
-    e.target.value = '';
-  };
-
-  const createSessionFromDraft = async (text: string) => {
-    if (!draftSessionId || !factoryId || !factorySessionState?.projectRepositoryId) {
-      updateDraft(text);
-      pushNotice('Could not create the session. Reload the page and try again.', 'error');
-      return;
-    }
-
-    setCreatingDraftSession(true);
-    try {
-      const session = await createUserSession(baseUrl, factorySessionState.projectRepositoryId, {
-        sessionId: draftSessionId,
-        title: text,
-      });
-      queryClient.setQueryData<FactoryUserSession>(queryKeys.userSession(session.sessionId), session);
-      addCachedSession(queryClient, factorySessionState.projectRepositoryId, session);
-      // The controller only creates this thread once the workspace is ready, so reading it now fails.
-      queryClient.setQueryData<MastraDBMessage[]>(
-        queryKeys.agentControllerThreadMessages(
-          AGENT_CONTROLLER_ID,
-          session.sessionId,
-          session.sessionId,
-          INITIAL_THREAD_MESSAGE_LIMIT,
-        ),
-        [],
-      );
-      void navigate(`/factories/${factoryId}/user/threads/${session.sessionId}`, {
-        replace: true,
-        state: promptHandoffState(text, { modeId: activeModeId, modelId: activeModelId }),
-      });
-    } catch (error) {
-      updateDraft(text);
-      const message = error instanceof Error ? error.message : 'Session creation failed';
-      pushNotice(`Could not create the session: ${message}. Try again.`, 'error');
-    } finally {
-      setCreatingDraftSession(false);
-    }
-  };
-
   const send = async (text: string, files: PendingImage[]) => {
     if (!text.trim() && files.length === 0) return;
     const outgoing = files.map(f => ({ data: f.data, mediaType: f.mediaType, filename: f.filename }));
@@ -271,6 +157,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
 
   const onSubmit = (e: { preventDefault: () => void }) => {
     e.preventDefault();
+    if (sendDisabled) return;
     const text = draft.trim();
     if (!text && images.length === 0) return;
     updateDraft('');
@@ -339,7 +226,6 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   };
 
   async function handleInput(text: string) {
-    // user drafts have no controller; only local commands can run
     if (onUserDraft && text.startsWith('/')) {
       if (commandRequiresReadySession(text)) {
         updateDraft(text);
@@ -350,17 +236,20 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
       return;
     }
     if (onUserDraft) {
-      await createSessionFromDraft(text);
+      try {
+        await createDraftSessionMutation.mutateAsync(text);
+      } catch (error) {
+        updateDraft(text);
+        throw error;
+      }
       return;
     }
-    // commands act on a live session, unlike a message the controller can hold
     if (preparingThreadId && text.startsWith('/') && commandRequiresReadySession(text)) {
       updateDraft(text);
       pushNotice('Commands run once the session is ready.');
       return;
     }
     if (await runComposerCommand(text)) return;
-    // Steering is text-only; attached images stay pending until the next send.
     if (busy && !preparingThreadId) {
       await steer(text);
       return;
@@ -370,67 +259,18 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
     try {
       await send(text, files);
     } catch (error) {
-      // Requeue the attachments so a failed send can be retried without re-selecting them.
       setImages(current => [...files, ...current]);
       throw error;
     }
   }
 
-  // the controller holds a message until the workspace is ready, so preparing sessions stay usable
-  const blocked = onUserDraft ? !factorySessionState : status !== 'ready' && !preparingThreadId;
-  const attachDisabled = onUserDraft || blocked;
-  const disabled = creatingDraftSession || blocked;
-
   return (
     <ComposerRoot onSubmit={onSubmit} onDrop={onDrop} onDragOver={e => e.preventDefault()} className="relative">
-      {/* Rendered outside ComposerBox: its overflow-hidden clips anything above the box. */}
-      {showSuggestions && (
-        <div className="border-border1 bg-surface3 absolute right-0 bottom-full left-0 z-20 mx-auto mb-2 w-full max-w-3xl rounded-md border p-1 shadow-lg">
-          {suggestions.map((cmd, index) => (
-            <button
-              key={cmd.name}
-              type="button"
-              className={cn(
-                'flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-ui-sm',
-                index === activeSuggestion ? 'bg-surface4 text-icon6' : 'text-icon3',
-              )}
-              onMouseDown={e => {
-                e.preventDefault();
-                applyCommand(cmd.name);
-              }}
-            >
-              <span>/{cmd.name}</span>
-              <span>{cmd.description}</span>
-            </button>
-          ))}
-        </div>
-      )}
+      <ComposerSuggestions suggestions={suggestions} activeIndex={activeSuggestion} onSelect={applyCommand} />
       <ComposerRing busy={busy} className={modeColorClass}>
         <ComposerBox ref={spotlightRef} className={cn('composer-spotlight', modeColorClass)}>
           <div aria-hidden="true" className="composer-spotlight-surface" />
-          {images.length > 0 && (
-            <ComposerAttachments className="mx-3 mt-3 flex max-w-none justify-start gap-2 pb-0">
-              {images.map(img => (
-                <div key={img.id} className="relative">
-                  <img
-                    src={`data:${img.mediaType};base64,${img.data}`}
-                    alt={img.filename ?? 'Attached image'}
-                    className="border-border1 h-14 w-14 rounded-md border object-cover"
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon-xs"
-                    className="bg-surface3 absolute -top-1 -right-1 rounded-full"
-                    onClick={() => removeImage(img.id)}
-                    aria-label="Remove image"
-                  >
-                    <X size={10} />
-                  </Button>
-                </div>
-              ))}
-            </ComposerAttachments>
-          )}
+          <ComposerImageAttachments images={images} onRemove={removeImage} />
           <ComposerInput
             ref={inputRef}
             value={draft}
@@ -481,7 +321,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
                 type="submit"
                 variant="outline"
                 size="icon-sm"
-                disabled={disabled || (!draft.trim() && images.length === 0)}
+                disabled={sendDisabled || (!draft.trim() && images.length === 0)}
                 aria-label="Send message"
               >
                 <ArrowUp size={16} />

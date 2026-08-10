@@ -12,57 +12,85 @@ import { useChatSessionContext } from './useChatSessionContext';
 interface ChatModesProviderProps {
   children: ReactNode;
 }
+const EMPTY_MODES: ChatModesApi['modes'] = [];
 
 export function ChatModesProvider({ children }: ChatModesProviderProps) {
-  const { resourceId, projectPath, baseUrl, sessionEnabled, draftSessionId } = useChatSessionContext();
-  const { state } = useChatConnection();
-  // The modes catalog is controller-global, so a draft can offer it before the
-  // session exists; the pick lives here and travels with the prompt.
+  const { draftSessionId } = useChatSessionContext();
+  return draftSessionId ? (
+    <DraftChatModesProvider>{children}</DraftChatModesProvider>
+  ) : (
+    <LiveChatModesProvider>{children}</LiveChatModesProvider>
+  );
+}
+
+function DraftChatModesProvider({ children }: ChatModesProviderProps) {
+  const { resourceId, projectPath, baseUrl } = useChatSessionContext();
   const modesQuery = useAgentControllerModes({
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
     scope: projectPath,
     baseUrl,
-    enabled: sessionEnabled || Boolean(draftSessionId),
+    enabled: true,
   });
-  const switchModeMutation = useSwitchAgentControllerModeMutation({
+  const modes = modesQuery.data ?? EMPTY_MODES;
+  const [draftModeId, setDraftModeId] = useState<string>();
+  const activeModeId = draftModeId ?? modes[0]?.id;
+  const value: ChatModesApi = {
+    modes,
+    activeModeId,
+    activeMode: modes.find(mode => mode.id === activeModeId),
+    isLoading: modesQuery.isPending,
+    error: modesQuery.error ?? undefined,
+    setMode: modeId => {
+      setDraftModeId(modeId);
+      return Promise.resolve();
+    },
+  };
+
+  return <ChatModesContext.Provider value={value}>{children}</ChatModesContext.Provider>;
+}
+
+function LiveChatModesProvider({ children }: ChatModesProviderProps) {
+  const { resourceId, projectPath, baseUrl, sessionEnabled } = useChatSessionContext();
+  const { state } = useChatConnection();
+  const modesQuery = useAgentControllerModes({
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
     scope: projectPath,
     baseUrl,
     enabled: sessionEnabled,
   });
-  const modes = modesQuery.data ?? [];
+  const { mutateAsync: switchMode } = useSwitchAgentControllerModeMutation({
+    agentControllerId: AGENT_CONTROLLER_ID,
+    resourceId,
+    scope: projectPath,
+    baseUrl,
+    enabled: sessionEnabled,
+  });
+  const modes = modesQuery.data ?? EMPTY_MODES;
   const [activeModeId, setActiveModeId] = useState(state?.modeId);
-  const [draftModeId, setDraftModeId] = useState<string>();
 
   useEffect(() => {
     setActiveModeId(state?.modeId);
   }, [state?.modeId]);
 
-  const selectedDraftModeId = draftModeId ?? modes[0]?.id;
-  const value: ChatModesApi = draftSessionId
-    ? {
-        modes,
-        activeModeId: selectedDraftModeId,
-        activeMode: modes.find(mode => mode.id === selectedDraftModeId),
-        setMode: modeId => Promise.resolve(setDraftModeId(modeId)),
+  const value: ChatModesApi = {
+    modes,
+    activeModeId,
+    activeMode: modes.find(mode => mode.id === activeModeId),
+    isLoading: modesQuery.isPending,
+    error: modesQuery.error ?? undefined,
+    setMode: async modeId => {
+      const previousModeId = activeModeId;
+      setActiveModeId(modeId);
+      try {
+        await switchMode(modeId);
+      } catch (error) {
+        setActiveModeId(currentModeId => (currentModeId === modeId ? previousModeId : currentModeId));
+        throw error;
       }
-    : {
-        modes,
-        activeModeId,
-        activeMode: modes.find(mode => mode.id === activeModeId),
-        setMode: async modeId => {
-          const previousModeId = activeModeId;
-          setActiveModeId(modeId);
-          try {
-            await switchModeMutation.mutateAsync(modeId);
-          } catch (error) {
-            setActiveModeId(currentModeId => (currentModeId === modeId ? previousModeId : currentModeId));
-            throw error;
-          }
-        },
-      };
+    },
+  };
 
   return <ChatModesContext.Provider value={value}>{children}</ChatModesContext.Provider>;
 }
