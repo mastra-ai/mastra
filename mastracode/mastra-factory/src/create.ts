@@ -403,9 +403,12 @@ async function resolveOrgFromFlag(token: string, value: string): Promise<{ orgId
  * outside that, and clip length.
  */
 function sanitizeDatabaseName(projectName: string): string {
-  const cleaned = projectName.replace(/[^a-zA-Z0-9_-]/g, '-').replace(/^-+|-+$/g, '');
-  const truncated = (cleaned || 'factory').slice(0, 64);
-  return truncated;
+  const cleaned = projectName.replace(/[^a-zA-Z0-9_-]/g, '-');
+  let start = 0;
+  let end = cleaned.length;
+  while (cleaned[start] === '-') start++;
+  while (end > start && cleaned[end - 1] === '-') end--;
+  return (cleaned.slice(start, end) || 'factory').slice(0, 64);
 }
 
 /**
