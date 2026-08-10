@@ -233,3 +233,36 @@ describe('deploy artifact for a workspace package that stays external', () => {
     expect(artifact.emitted).not.toContain(join('workspace-module', 'repo-mid-0.2.0.tgz'));
   });
 });
+
+describe('deploy artifact for a workspace subpath imported straight from the entry', () => {
+  let artifact: Awaited<ReturnType<typeof buildArtifact>>;
+
+  beforeAll(async () => {
+    artifact = await buildArtifact({
+      entry: `import { value } from '@repo/subpath-only/value';\nexport const mastra = { value };\n`,
+      packages: [
+        {
+          dir: 'subpath-only',
+          manifest: {
+            name: '@repo/subpath-only',
+            version: '0.3.0',
+            type: 'module',
+            exports: { './value': './value.js' },
+          },
+          files: { 'value.js': `export const value = 'value from subpath-only';\n` },
+        },
+      ],
+    });
+  }, timeout);
+
+  it('packs it even though the imported subpath is bundled', () => {
+    // Only the subpaths that are imported get compiled in. Any other subpath the app reaches
+    // later still resolves against node_modules, so the package has to be installed.
+    expect(artifact.bundledCode).toContain('value from subpath-only');
+    expect(artifact.manifest.dependencies).toHaveProperty(
+      '@repo/subpath-only',
+      'file:./workspace-module/repo-subpath-only-0.3.0.tgz',
+    );
+    expect(artifact.emitted).toContain(join('workspace-module', 'repo-subpath-only-0.3.0.tgz'));
+  });
+});
