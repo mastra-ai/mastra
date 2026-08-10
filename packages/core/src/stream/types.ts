@@ -144,6 +144,7 @@ export interface FilePayload {
   data: string | Uint8Array;
   base64?: string;
   mimeType: string;
+  filename?: string;
   providerMetadata?: ProviderMetadata;
 }
 
