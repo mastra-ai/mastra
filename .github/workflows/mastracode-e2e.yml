@@ -29,7 +29,7 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@v7
-        timeout-minutes: 3
+        timeout-minutes: 5
         with:
           ref: ${{ inputs.head_sha }}
 

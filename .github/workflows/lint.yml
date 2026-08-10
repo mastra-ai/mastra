@@ -23,7 +23,7 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
-        timeout-minutes: 3
+        timeout-minutes: 5
         with:
           fetch-depth: 0
 
@@ -63,7 +63,7 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
-        timeout-minutes: 3
+        timeout-minutes: 5
 
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
@@ -87,7 +87,7 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
-        timeout-minutes: 3
+        timeout-minutes: 5
 
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
@@ -119,7 +119,7 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
-        timeout-minutes: 3
+        timeout-minutes: 5
 
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
@@ -146,7 +146,7 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
-        timeout-minutes: 3
+        timeout-minutes: 5
 
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
@@ -169,7 +169,7 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
-        timeout-minutes: 3
+        timeout-minutes: 5
         with:
           # Fetch entire git history so Changesets can generate changelogs
           # with the correct commits
@@ -220,7 +220,7 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
-        timeout-minutes: 3
+        timeout-minutes: 5
 
       - name: Setup Node.js 22.x
         uses: actions/setup-node@04be95cf3511ea51ebf9f224ddfb99cc7ab87cd4
