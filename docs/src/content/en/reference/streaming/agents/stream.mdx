@@ -681,6 +681,14 @@ const stream = await agent.stream('message for agent')
               'When true, all tool calls require explicit approval before execution. The stream will emit `tool-call-approval` chunks and pause until `approveToolCall()` or `declineToolCall()` is called.',
           },
           {
+            name: 'approvalPersistence',
+            type: "'full' | 'minimal'",
+            isOptional: true,
+            defaultValue: "'full'",
+            description:
+              "Controls persisted state for pre-execution tool approval. Use `'minimal'` to store an approval-only checkpoint that can continue through `approveToolCall()` or `declineToolCall()`. Runtime `suspend()` calls continue to use full persistence. See [Agent approval](/docs/agents/agent-approval#choose-approval-snapshot-persistence).",
+          },
+          {
             name: 'autoResumeSuspendedTools',
             type: 'boolean',
             isOptional: true,

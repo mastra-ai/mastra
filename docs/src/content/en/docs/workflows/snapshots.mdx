@@ -85,6 +85,14 @@ Each snapshot includes the `runId`, input, step status (`success`, `suspended`, 
 }
 ```
 
+## Agent approval snapshot modes
+
+Workflow snapshots contain complete resume state. Agent tool approval can use a smaller, approval-only checkpoint because the continuation is limited to approving or declining one parked tool call.
+
+Set `approvalPersistence: 'minimal'` on an agent execution to opt in. The default `full` mode keeps the existing full-resume behavior. Minimal checkpoints remain in the same workflow snapshot storage record, but generic workflow resume, restart, and time travel can't consume them. Visit [Agent approval](/docs/agents/agent-approval#choose-approval-snapshot-persistence) for the mode comparison and a TypeScript example.
+
+Custom `pruneSnapshot` hooks are an advanced workflow option. A hook must preserve every field that the workflow's future resume paths read. Prefer the built-in agent approval mode when its narrower contract fits. Storage adapters should treat snapshots as values supplied by Mastra and shouldn't hand-copy or reconstruct Mastra's internal snapshot shape.
+
 ## How snapshots are saved and retrieved
 
 Snapshots are saved to the configured storage system. By default, they use libSQL, but you can configure Upstash, PostgreSQL, or OracleDB instead. Each snapshot is saved in the `workflow_snapshots` table and identified by the workflow's `runId`.
