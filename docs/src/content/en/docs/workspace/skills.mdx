@@ -105,23 +105,6 @@ const workspace = new Workspace({
 })
 ```
 
-## Dynamic skills
-
-For runtime skill paths based on context, pass a function:
-
-```typescript
-const workspace = new Workspace({
-  filesystem: new LocalFilesystem({ basePath: './workspace' }),
-  skills: ctx => {
-    const paths = ['skills']
-    if (ctx.requestContext?.get('userRole') === 'developer') {
-      paths.push('dev-skills')
-    }
-    return paths
-  },
-})
-```
-
 ## How agents use skills
 
 When a workspace has skills configured, agents automatically get access to skill tools. Available skills are listed in the system message so the agent knows what's available, and the agent can load any skill on demand.
@@ -204,6 +187,23 @@ When `skillSource` is provided, it's used instead of the workspace filesystem fo
 You can also attach skills directly to an agent without a workspace using `createSkill()` and the agent's `skills` config. When both agent-level and workspace-level skills exist, they merge, agent-level skills take precedence on name conflicts.
 
 See [Agent skills](/docs/agents/skills) for details.
+
+## Dynamic skills
+
+For runtime skill paths based on context, pass a function:
+
+```typescript
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  skills: ctx => {
+    const paths = ['skills']
+    if (ctx.requestContext?.get('userRole') === 'developer') {
+      paths.push('dev-skills')
+    }
+    return paths
+  },
+})
+```
 
 ## Related
 
