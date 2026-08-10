@@ -51,10 +51,11 @@ Run them in order; each builds on the last.
 | 9 | `pnpm ex:9` | Dataset versioning, item history, and the score that lies | no |
 | 10 | `pnpm ex:10` | Tool mocks; recording a real trace and replaying it forever | no |
 | 11 | `pnpm ex:11` | Scoring traffic that already happened | no |
+| 12 | `pnpm ex:12` | Versioning the prompt, and evaluating the edit | no |
 
-`pnpm ex:offline` runs everything that needs no key. `pnpm ex:all` runs all eleven.
+`pnpm ex:offline` runs everything that needs no key. `pnpm ex:all` runs all twelve.
 
-### What the last four are for
+### What the last five are for
 
 **8 — comparing.** Exercises 3 and 8 both fail a build, and the difference
 matters. A gate asks *is this output acceptable at all*; `compareExperiments`
@@ -77,6 +78,18 @@ in one step.
 **11 — scoring history.** Inverts the usual order: the traffic happened first,
 the scorer came second. Write a scorer today, find out how the agent has been
 doing on it since March. Nothing is re-run.
+
+**12 — the prompt itself.** Everything above treats the prompt as a constant,
+and it is the thing teams change most often and measure least. `@mastra/editor`
+turns an edit into a numbered version, and an experiment can be *pinned* to a
+version — so "this wording reads better" becomes a number. The edit under test
+is one a real support lead would ask for ("stop overwhelming people with
+numbers"), and it takes `answer-accuracy` from `0.875` to `0.125`.
+
+The exercise ends on the trap: run the same dataset without `agentVersion` and
+it silently evaluates the prompt in the *code*, which by then is neither
+version anyone is arguing about. Eval runs that are not pinned are not
+measuring what your users are talking to.
 
 ## The browser half
 
@@ -115,6 +128,39 @@ every eval talk skips: *where do datasets come from?*
 
 The span panel also has a **Feedback** tab — thumbs, ratings, corrections from
 humans, stored alongside the machine scores.
+
+### Editing the prompt in the browser
+
+**Agents → Nimbus Support Agent → Editor** is the visual half of exercise 12:
+the system prompt on the left, a live chat on the right, and a version picker
+at the top. `pnpm seed` snapshots the code prompt as **v1** and publishes it,
+so the tab opens on a real baseline rather than "No versions yet".
+
+Edit the prompt — appending *"Avoid overwhelming the customer with specific
+numbers."* is the edit exercise 12 measures — then:
+
+| Button | What it actually does |
+|---|---|
+| **Save New Version** | writes v2. Changes nothing for anyone. |
+| **Publish** | points the live agent at v2. This is the one that ships. |
+
+Save and Publish being separate is the part worth saying out loud, because the
+editor's own banner blurs it: *"Save your draft to ensure the chat uses your
+latest changes"* is not true. Agents resolve at `status: 'published'`, chat
+pane included, so a saved-but-unpublished version is inert. Verified here: with
+v2 saved and v1 published, the server still serves v1.
+
+Two more boundaries worth knowing before someone asks:
+
+- **Only `instructions` and `tools` are overridable.** `model`, `memory` and
+  `scorers` stay code-defined — they hold live objects that cannot survive a
+  database row. Handy for evals: the model is pinned, so a score that moves
+  between versions moved because of the prompt.
+- **`source: 'db'` vs `'code'`.** This project uses `'db'`, where versions live
+  in storage and you get Save/Publish. In `'code'` mode Studio swaps those for
+  **Download JSON** and **Open PR**, and the editor re-routes its storage to a
+  filesystem store — the right choice for a team that reviews prompts in git,
+  the wrong one for measuring them.
 
 Chat with the agent under **Agents** too. With a key, `answer-relevancy` and
 `toxicity` score every reply as it arrives and appear under
@@ -223,6 +269,26 @@ of logging failures somewhere you have to go looking. Exercise 11.
 `compareExperiments` notices the version mismatch and still returns a delta.
 Treating that warning as an error in CI is your job. Exercises 8 and 9.
 
+**An experiment ignores your prompt edits unless you pin it.** Without
+`agentVersion`, the target resolves straight out of the code registry — no
+overrides, no published version, no warning. Prompts get edited in the browser
+for weeks while CI keeps grading the prompt in the repo, and the dashboard
+stays green as the deployed agent drifts. Exercise 12e.
+
+**Saving a version does not ship it.** Save writes v2; only Publish moves
+`activeVersionId`. Everything that resolves an agent normally reads
+`status: 'published'`, so an unpublished version affects nothing — including
+the chat pane sitting next to the editor, whose banner implies otherwise.
+
+**A code agent's first save becomes v1 — including the edit.** Studio does not
+snapshot what was in the repository first, so unless you record a baseline
+version deliberately (`pnpm seed` does), the original prompt never enters the
+version history and there is nothing to compare against. Exercise 12a.
+
+**The Studio DuckDB file takes a single writer.** `pnpm seed` while `pnpm dev`
+is running fails with a lock error from `observability.duckdb`. Stop the server
+first — `pnpm reset` assumes you have.
+
 ## What is covered
 
 - Custom scorers, all four steps, as plain functions and as an LLM judge
@@ -236,6 +302,7 @@ Treating that warning as an error in CI is your job. Exercises 8 and 9.
 - Datasets, items with metadata, experiments, both execution paths
 - Live sampled scoring on real traffic, and retroactive scoring of traces
 - Memory-enabled agents, thread isolation strategies
+- Prompt versioning via `@mastra/editor`, and version-pinned experiments
 
 ## Not covered, and why
 
@@ -250,7 +317,10 @@ backend is complete — `POST /api/stored/scorers` creates one, versions it, and
 supports activate/restore/compare — but new definitions land in `status:
 'draft'`, the list endpoint only returns `published`, and neither the API's
 update schema nor the shipped UI exposes a transition between them. So a
-created judge is invisible. Demo judge-prompt design with exercise 2 and
+created judge is invisible. Registering `@mastra/editor` does not change this —
+it has a `scorer` namespace and the playground has a scorer-edit route, but the
+Scorers page in this CLI version still lists code scorers with no way to author
+one. Demo judge-prompt design with exercise 2 and
 `shared/src/scorers/support-rubric.ts` instead.
 
 Also worth a mention but not built here: dataset **CSV/JSON import**,
