@@ -17,7 +17,7 @@ npm create factory@latest
 npx mastra factory create
 ```
 
-Both commands use the same implementation. They create a new project directory, install its dependencies, initialize a Git repository, and optionally connect the project to Mastra Platform.
+Both commands use the same implementation to create a new project directory and install its dependencies. The command also initializes a Git repository and can connect the project to Mastra Platform.
 
 This command creates a new Factory project. To add Mastra to an existing project instead, use [`mastra init`](./mastra#mastra-init).
 
@@ -31,7 +31,7 @@ npm create factory@latest -- [project-name] [options]
 npx mastra factory create [project-name] [options]
 ```
 
-If you omit `[project-name]`, the command prompts you for it. Project names must be valid npm package names and cannot point to a non-empty directory.
+If you omit `[project-name]`, the command prompts you for it. Project names must be valid npm package names and can't point to a non-empty directory.
 
 ## Default scaffold
 

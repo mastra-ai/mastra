@@ -58,12 +58,16 @@
   },
   "exports": {
     ".": {
-      "types": "./dist/api.d.ts",
-      "import": "./dist/api.js"
+      "import": {
+        "types": "./dist/api.d.ts",
+        "default": "./dist/api.js"
+      }
     },
     "./command": {
-      "types": "./dist/api.d.ts",
-      "import": "./dist/api.js"
+      "import": {
+        "types": "./dist/api.d.ts",
+        "default": "./dist/api.js"
+      }
     }
   }
 }
