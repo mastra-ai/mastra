@@ -155,6 +155,41 @@ mastra deploy --env staging --env-file .env.staging
 
 To change variables on a running service without a redeploy, update them in the dashboard and run [`mastra env restart`](/reference/cli/mastra#mastra-env-restart).
 
+## Private npm packages
+
+Projects that depend on packages from a private registry install them during the deploy using the standard `NPM_TOKEN` contract.
+
+<Steps>
+  <StepItem>
+    Store a read-only registry token as `NPM_TOKEN` on the project or environment through the dashboard.
+  </StepItem>
+
+  <StepItem>
+    Commit a token-free `.npmrc` that points your scope at the registry and reads the token from the environment:
+
+    ```ini title=".npmrc"
+    @your-org:registry=https://npm.pkg.github.com
+    //npm.pkg.github.com/:_authToken=${NPM_TOKEN}
+    ```
+
+    Keep the `${NPM_TOKEN}` reference literal. The package manager resolves it at install time, so the token itself never lands in your repository.
+  </StepItem>
+
+  <StepItem>
+    Deploy as usual:
+
+    ```bash
+    mastra deploy
+    ```
+  </StepItem>
+</Steps>
+
+In a monorepo, a `.npmrc` in your project directory takes precedence over one at the repository root.
+
+`NPM_TOKEN` is scoped to the dependency install. It isn't passed to your build or lint steps, isn't written into the container image, and isn't available to your application at runtime. Its value is redacted from build logs. If your code needs registry access after deploy, read it from a separate variable.
+
+Deploys behave exactly as before when `NPM_TOKEN` isn't set, so public-only projects need no changes.
+
 ## Project resolution
 
 Every deploy resolves its target project in this order:
