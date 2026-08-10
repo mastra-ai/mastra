@@ -92,15 +92,11 @@ function buildWorkspaceSourceAliases(root) {
     if (!existsSync(srcDir)) continue;
     if (packageDir.includes('__fixtures__') || packageDir.includes('/fixtures/')) continue;
 
-    try {
-      const json = JSON.parse(readFileSync(packageJsonPath, 'utf-8'));
-      if (!json.name) continue;
+    const json = JSON.parse(readFileSync(packageJsonPath, 'utf-8'));
+    if (!json.name) continue;
 
-      addExportAliases(aliases, json.name, packageDir, json.exports);
-      aliases.push({ name: json.name, target: srcDir, exact: false });
-    } catch {
-      // Ignore malformed package.json files in fixture-like directories.
-    }
+    addExportAliases(aliases, json.name, packageDir, json.exports);
+    aliases.push({ name: json.name, target: srcDir, exact: false });
   }
 
   return aliases;
