@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "MASTRACODE_ENV_DIR=../web vite --config src/vite.config.ts",
     "web": "run-p --print-label --race dev web:api",
-    "web:api": "pnpm --dir ../web db:up && pnpm --dir ../web api",
+    "web:api": "pnpm --dir ../web api",
     "build": "vite --config src/vite.config.ts build",
     "typecheck": "tsc --noEmit -p src/ui/tsconfig.json",
     "test": "vitest run",
