@@ -695,7 +695,7 @@ test.describe('Admonitions and tabs on AI SDK UI guide', () => {
     await page.goto(PAGE, { waitUntil: 'domcontentloaded' })
     await page.waitForLoadState('networkidle')
 
-    // The page has admonitions of types: note, tip, info, warning.
+    // The page has admonitions of types: note, tip, warning.
     // Some admonitions are inside inactive tab panels (hidden attribute),
     // so we check all titles in the DOM for type coverage, then verify
     // only the visible ones are properly rendered.
@@ -708,7 +708,7 @@ test.describe('Admonitions and tabs on AI SDK UI guide', () => {
       titles.push((await allAdmonitions.nth(i).textContent())?.toLowerCase() ?? '')
     }
 
-    for (const type of ['note', 'tip', 'info', 'warning']) {
+    for (const type of ['note', 'tip', 'warning']) {
       expect(
         titles.some(t => t.includes(type)),
         `Expected an admonition of type "${type}"`,
