@@ -75,7 +75,7 @@ export const mastra = new Mastra({
 })
 ```
 
-Mastra returns a `400` response when validation fails. Validated values and the `Mastra` server context are passed directly to the handler.
+By default, Mastra returns a `400` response when validation fails. The `onValidationError` callback can override the status and response body. Validated values and the `Mastra` server context are passed directly to the handler.
 
 ## Middleware
 
