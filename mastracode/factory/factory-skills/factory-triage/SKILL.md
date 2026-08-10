@@ -51,7 +51,7 @@ Form the verdict. First, is the issue what it appears to be — genuine bug, con
 
 When multiple explanations remain plausible, pick the one the evidence best supports, record the ranking and why as an assumption, and list what would discriminate between them. Do not present candidates and wait — decide and move.
 
-For `mastra-ai/mastra`, mark a bug as direct `@mastra/core` ownership only when its primary fix traces to `packages/core`. Skip features, adjacent packages, and uncertain ownership.
+For `mastra-ai/mastra`, add `@mastra/core` only when the issue reports broken existing behavior and its primary fix traces to `packages/core` or the published package. A core mention or stack frame is not enough; skip features, adjacent packages, and uncertain ownership.
 
 ## Output contract
 
