@@ -1761,11 +1761,6 @@
       "permanent": true
     },
     {
-      "source": "/docs/capabilities/channels/overview",
-      "destination": "/docs/capabilities/channels",
-      "permanent": true
-    },
-    {
       "source": "/docs/capabilities/channels/other-adapters",
       "destination": "/docs/capabilities/channels#other-adapters",
       "permanent": true
@@ -1848,6 +1843,11 @@
     {
       "source": "/reference/core/addStoredWorkflows",
       "destination": "/reference/core/addDynamicWorkflows",
+      "permanent": true
+    },
+    {
+      "source": "/docs/capabilities/channels/overview",
+      "destination": "/docs/capabilities/channels",
       "permanent": true
     }
   ]

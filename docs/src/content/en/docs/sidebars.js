@@ -275,7 +275,7 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'capabilities/channels/overview',
+          id: 'capabilities/channels',
           label: 'Channels',
         },
         {
