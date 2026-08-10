@@ -1,5 +1,21 @@
 # mastracode
 
+## 0.33.0-alpha.13
+
+### Patch Changes
+
+- A plan approval arriving while a command overlay (such as the /models pack selector) is open no longer steals focus from the overlay or deadlocks it. The approval defers its focus until the overlay closes, then takes focus so it must still be answered. ([#21142](https://github.com/mastra-ai/mastra/pull/21142))
+
+- Fixed duplicate `Thinking...` lines in the chat transcript. When a model emitted more than one reasoning span in a single step, each span rendered its own label; consecutive hidden reasoning parts now collapse into a single `Thinking...` line. ([#21134](https://github.com/mastra-ai/mastra/pull/21134))
+
+- Updated dependencies [[`2e4624e`](https://github.com/mastra-ai/mastra/commit/2e4624edb6917e61249cb60ee377735e7af7e4a9), [`2e4624e`](https://github.com/mastra-ai/mastra/commit/2e4624edb6917e61249cb60ee377735e7af7e4a9), [`e6534fa`](https://github.com/mastra-ai/mastra/commit/e6534fab031216f6cb48c4c9907cbfdce9d60bc6), [`7fdcaa6`](https://github.com/mastra-ai/mastra/commit/7fdcaa66105d64290f9b14432a12ec99f39c4d3a), [`65b1183`](https://github.com/mastra-ai/mastra/commit/65b11832834f87a9bc8719391deb27559de5138a), [`5dba2a4`](https://github.com/mastra-ai/mastra/commit/5dba2a41600385751f5aace79878904e1972609d), [`cfd0d9e`](https://github.com/mastra-ai/mastra/commit/cfd0d9ec77ec3c69dd96f79cdb579e03d79f22ce), [`d9d93b2`](https://github.com/mastra-ai/mastra/commit/d9d93b25e4a65ad5fa153fa35be7ed149c8d587f)]:
+  - @mastra/core@1.58.0-alpha.12
+  - @mastra/code-sdk@1.2.0-alpha.13
+  - @mastra/observability@1.16.6-alpha.3
+  - @mastra/schema-compat@1.3.6-alpha.3
+  - @mastra/mcp@1.16.0-alpha.2
+  - @mastra/memory@1.26.1-alpha.6
+
 ## 0.33.0-alpha.12
 
 ### Minor Changes
