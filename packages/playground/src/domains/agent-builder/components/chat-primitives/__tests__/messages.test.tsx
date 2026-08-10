@@ -250,6 +250,25 @@ describe('MessageRow dynamic-tool rendering', () => {
     });
   });
 
+  describe('when system text contains an external link', () => {
+    it('keeps the default new-tab target', () => {
+      const { getByRole } = renderMessage({
+        id: 'system-link-1',
+        role: 'system',
+        createdAt: new Date(),
+        content: {
+          format: 2,
+          parts: [{ type: 'text', text: '[System reference](https://example.com/reference)' }],
+        },
+      } as unknown as MastraDBMessage);
+
+      const link = getByRole('link', { name: 'System reference' });
+
+      expect(link.getAttribute('target')).toBe('_blank');
+      expect(link.getAttribute('rel')).toBe('noopener noreferrer');
+    });
+  });
+
   it('routes assistant text through the shared MessageText error-prefix handling', () => {
     const { container } = renderMessage(buildMessage([{ type: 'text', text: 'Error: it broke' } as ToolPart]));
 

@@ -284,7 +284,7 @@ export const Txtmessage = ({
         className="text-neutral4 max-w-[80%] [&_li]:!my-0 [&_li]:!leading-normal [&_ol]:!space-y-1 [&_p]:!leading-normal [&_p]:!whitespace-normal [&_ul]:!space-y-1"
         as="div"
       >
-        <MessageText text={txt} metadata={metadata} externalLinkTarget="window" />
+        <MessageText text={txt} metadata={metadata} externalLinkTarget={role === 'assistant' ? 'window' : undefined} />
       </Txt>
     );
   }
