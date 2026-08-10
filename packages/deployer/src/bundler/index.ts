@@ -682,17 +682,21 @@ export abstract class Bundler extends MastraBundler {
       dependenciesToInstall.set(dep, applySourceDependencyRange(dep, depInfo, sourceDependencyConstraints));
     }
 
-    const initialWorkspaceDependencies = new Set<string>();
+    // Workspace packages the analyze step compiled into the bundle. They ship as code, not as
+    // dependencies, but they still seed the search for workspace packages of their own that the
+    // bundle imports at runtime.
+    const bundledWorkspacePackages = new Set<string>();
     for (const dep of analyzedBundleInfo.dependencies.keys()) {
       const pkgName = getPackageName(dep);
       if (pkgName && analyzedBundleInfo.workspaceMap.has(pkgName)) {
-        initialWorkspaceDependencies.add(pkgName);
+        bundledWorkspacePackages.add(pkgName);
       }
     }
 
     const transitiveWorkspaceDependencies = collectTransitiveWorkspaceDependencies({
       workspaceMap: analyzedBundleInfo.workspaceMap,
-      initialDependencies: initialWorkspaceDependencies,
+      initialDependencies: bundledWorkspacePackages,
+      bundledPackages: bundledWorkspacePackages,
       logger: this.logger,
     });
 
