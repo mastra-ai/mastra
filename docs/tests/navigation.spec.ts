@@ -496,7 +496,7 @@ test.describe('Contextual sidebar', () => {
 
     const deploymentPane = visibleSidebarPane(page, 'contextual')
     await expect(deploymentPane).toBeVisible()
-    await expect(deploymentPane.getByRole('button', { name: 'Back to global sidebar' })).toHaveText('Deployment')
+    await expect(deploymentPane.getByRole('button', { name: 'Back to global sidebar' })).toHaveText('Deploy')
     await expect(deploymentPane.locator('a.menu__link[href="/docs/deployment/workflow-runners"]')).toHaveAttribute(
       'aria-current',
       'page',
