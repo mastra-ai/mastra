@@ -274,6 +274,11 @@ const sidebars = {
           label: 'Skills',
         },
         {
+          type: 'doc',
+          id: 'capabilities/channels/overview',
+          label: 'Channels',
+        },
+        {
           type: 'category',
           label: 'Sandbox',
           link: {
@@ -310,11 +315,6 @@ const sidebars = {
               label: 'Search and Indexing',
             },
           ],
-        },
-        {
-          type: 'doc',
-          id: 'capabilities/channels/overview',
-          label: 'Channels',
         },
         {
           type: 'category',
