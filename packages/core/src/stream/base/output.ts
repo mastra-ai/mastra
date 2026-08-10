@@ -1240,6 +1240,11 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               });
 
               self.#closeTransportIfNeeded();
+              // An errored stream never reaches flush(), so emit 'finish' here too.
+              // Without it, _waitUntilFinished() callers that subscribed before the
+              // error hang forever while later callers resolve immediately via the
+              // #streamFinished flag set above.
+              self.#emitter.emit('finish');
               break;
           }
           self.#emitChunk(chunk);
