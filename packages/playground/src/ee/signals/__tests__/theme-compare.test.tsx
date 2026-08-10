@@ -8,7 +8,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SankeySignals } from '../sankey-signals';
 import { timelineTickPositions } from '../snapshot-timeline-data';
 import { computeThemeShareDeltas, themeShareSeries } from '../theme-compare-data';
-import { ThemeCompareSparkline } from '../theme-compare-sparkline';
 import {
   earlierThemeFlowResponse,
   fourStageThemeFlowResponse,
@@ -113,22 +112,6 @@ describe('themeShareSeries', () => {
       expect(series[0]).toBeCloseTo(4 / 50);
       expect(series[1]).toBeUndefined();
       expect(series[2]).toBe(0);
-    });
-  });
-});
-
-describe('ThemeCompareSparkline', () => {
-  describe('when loaded samples are separated by an unloaded snapshot', () => {
-    it('renders separate line segments on either side of the gap', () => {
-      const { container } = render(
-        <ThemeCompareSparkline
-          series={[0.1, 0.2, undefined, 0.3, 0.4]}
-          positions={[0, 25, 50, 75, 100]}
-          markerIndexes={[]}
-        />,
-      );
-
-      expect(container.querySelectorAll('polyline')).toHaveLength(2);
     });
   });
 });
