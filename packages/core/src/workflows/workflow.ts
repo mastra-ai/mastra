@@ -2083,9 +2083,19 @@ export class Workflow<
   ): Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, any, TRequestContext> {
     // Build a declarative `{ type: 'mapping' }` graph entry; the mapping logic is
     // interpreted at execution time by `createMappingStep`, not baked in here.
+    // Mapping ids must be stable across process restarts: they are recorded in
+    // workflow snapshots, and `timeTravel()` matches the live graph against those
+    // recorded ids. Only defer to `generateId` when a CUSTOM id generator is
+    // configured (the built-in default is `randomUUID()`, which would mint a
+    // different id per build and break time travel across restarts). Otherwise
+    // mint a deterministic id from the workflow id plus the ordinal of this
+    // mapping entry within the step flow.
+    const mappingOrdinal = this.stepFlow.filter(entry => entry.type === 'mapping').length;
     const mappingId =
       stepOptions?.id ||
-      `mapping_${this.#mastra?.generateId({ idType: 'step', source: 'workflow', entityId: this.id, stepType: 'mapping' }) || randomUUID()}`;
+      (this.#mastra?.getIdGenerator()
+        ? `mapping_${this.#mastra.generateId({ idType: 'step', source: 'workflow', entityId: this.id, stepType: 'mapping' })}`
+        : `mapping_${this.id}_${mappingOrdinal}`);
 
     const truncate = (s: string) => (s.length > 1000 ? s.slice(0, 1000) + '...\n}' : s);
 
