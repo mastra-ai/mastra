@@ -16,9 +16,41 @@ so no API key is required and runs are reproducible in CI.
 ## Run
 
 ```bash
-pnpm install --ignore-workspace
+pnpm install
 pnpm ex:all
 ```
+
+No `.env` and no API keys — see [Environment](#environment) below.
+
+This example is self-contained: it has its own `pnpm-workspace.yaml` and is
+not part of the root workspace, so a plain `pnpm install` here installs only
+this example. Do **not** pass `--ignore-workspace` — that skips the local
+`pnpm-workspace.yaml`, which is where the `tsx` catalog entry lives, and the
+install fails with `ERR_PNPM_CATALOG_ENTRY_NOT_FOUND_FOR_SPEC`.
+
+The `@mastra/*` deps are `link:` overrides pointing at the monorepo, so the
+scripts run against each package's built `dist/`. If you change core, evals,
+memory, or libsql while working here, rebuild that package for the change to
+take effect:
+
+```bash
+pnpm --filter @mastra/evals build   # from the monorepo root
+```
+
+## Environment
+
+**None required.** There is no `.env` file and no `process.env` read anywhere
+in `src/`:
+
+- **No model API key.** The agent and the observational-memory observation
+  model both use the deterministic `createEchoModel()` mock in `src/shared.ts`.
+- **No database credentials.** `LibSQLStore` points at a `file:` URL inside a
+  fresh `mkdtemp` directory per script, removed on exit.
+
+If you swap the mock for a real model (e.g. `model: 'openai/gpt-5.5'`), you
+will then need that provider's key in the environment — but runs stop being
+deterministic, so the fixed `groundTruth` assertions in these scripts will
+need revisiting.
 
 ## The three approaches
 
@@ -42,28 +74,36 @@ await runEvals({
 Verified: all items land in one thread, scorer runs cleanly, no
 `threadId required` errors.
 
-### 2. `runEvals` once per item (per-item threads)
+### 2. Per-item threads
 
 Script: `src/runeval-per-item.ts`
 
-`runEvals` does **not** support per-item agent options today. Pre-seeding
-`RequestContext.MastraMemory` on each data item does NOT drive thread
-resolution — only `args.memory.thread` does (`resolveThreadIdFromArgs`
-in `packages/core/src/agent/utils.ts`).
+> **Outdated — `runEvals` does this for you now.** The script still loops,
+> calling `runEvals` once per item and aggregating by hand. That is no longer
+> necessary: switching `input: x` to `inputs: [x]` puts the item on the
+> multi-turn path, where runEvals generates a thread per item and overrides
+> any thread you passed (`runAgentTurns` in
+> `packages/core/src/evals/run/index.ts`). Verified: three data items produce
+> three isolated threads from a single call.
 
-The supported CI shape is therefore: loop, calling `runEvals` once per item
-with its own `targetOptions.memory`, then aggregate scores yourself.
+The supported shape:
 
 ```ts
-for (const it of items) {
-  const result = await runEvals({
-    target: agent,
-    scorers: [scorer],
-    targetOptions: { memory: { thread: it.thread, resource: 'ci-user' } },
-    data: [{ input: it.input, groundTruth: it.groundTruth }],
-  });
-}
+await runEvals({
+  target: agent,
+  scorers: [scorer],
+  targetOptions: { memory: { resource: 'ci-user' } }, // no thread — runEvals owns it
+  data: items.map(it => ({ inputs: [it.input], groundTruth: it.groundTruth })),
+});
 ```
+
+The rule, which inverts between the two paths:
+
+- single `input` → your `memory.thread` is passed through untouched
+- `inputs` / `turns` → runEvals generates one per item and overrides yours;
+  `resource` defaults to the generated thread id
+
+The manual loop in the script is kept as a contrast, not as a recommendation.
 
 ### 3. `dataset.startExperiment` with inline task
 
@@ -71,8 +111,11 @@ Script: `src/dataset.ts`
 
 The dataset / experiment runner (`runExperiment` under the hood) does
 **not** pass any `memory` option to `agent.generate()` — only
-`requestContext`. So the registry-based `target: agent` path can't drive
-memory either.
+`requestContext`. So the registry path can't drive memory either.
+
+(Note the registry path is `targetType: 'agent'` + `targetId: '<id>'`, a
+type/id pair — not an object reference. Passing `target: agent` fails with
+*"No task: provide targetType+targetId or task"*.)
 
 Workaround that stays inside Mastra primitives: use an **inline `task`**
 function, stash the per-item `{ threadId, resourceId }` in the dataset
@@ -104,13 +147,14 @@ await dataset.startExperiment({
 - **Thread scope requires the thread to exist before observational memory
   reads it.** Each example pre-creates threads with
   `memory.createThread(...)`.
-- `runEvals.targetOptions` is **global per call**. There's no per-item
-  override there today.
+- `runEvals.targetOptions` is **global per call** — but you rarely need a
+  per-item override for threads, because `inputs`/`turns` already isolate
+  per item (see approach 2).
 - Pre-setting `RequestContext.MastraMemory` (the trick used inside
   workflow-tool isolation and processor tests) does **not** by itself give
   the agent a thread — it's an internal contract populated by
   `prepare-memory-step` after a thread is resolved.
-- `Dataset.startExperiment({ target: agent })` does not forward memory.
+- `Dataset.startExperiment` does not forward memory on the registry path.
   Use the inline `task` workaround above, or call `runEvals` and skip the
   dataset entirely.
 - The scorers in these examples are registered on the `Mastra` instance
@@ -123,6 +167,15 @@ await dataset.startExperiment({
   `targetOptions` field that mirrors `runEvals.targetOptions`, so dataset
   users can pass `{ memory: { thread, resource } }` without dropping to an
   inline task.
-- `runEvals` could accept per-item `targetOptions` (or a `memory` field on
-  `RunEvalsDataItem`) so per-item threads don't require a manual loop +
-  aggregation.
+
+~~`runEvals` could accept per-item `targetOptions` so per-item threads don't
+require a manual loop.~~ **Closed** — `inputs`/`turns` give each data item its
+own thread. See approach 2.
+
+## Going further
+
+`examples/evals-workshop/` covers the rest of the eval surface — custom and
+prebuilt scorers, gates and thresholds, workflow and per-step scoring,
+datasets, and a seeded Studio dashboard. This example is the memory-focused
+slice of it, kept standalone because it links against the local monorepo
+packages rather than published ones.
