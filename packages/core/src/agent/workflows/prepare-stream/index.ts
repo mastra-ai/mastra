@@ -14,6 +14,7 @@ import type { RequireToolApproval, ToolPayloadTransformPolicy } from '../../../t
 import { createWorkflow } from '../../../workflows/create';
 import type { Workspace } from '../../../workspace/workspace';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
+import type { ApprovalPersistenceMode } from '../../approval-persistence';
 import type { SaveQueueManager } from '../../save-queue';
 import type { CreatedAgentSignal } from '../../signals';
 import type { AgentMethodType } from '../../types';
@@ -40,6 +41,7 @@ interface CreatePrepareStreamWorkflowOptions<OUTPUT = undefined> {
   returnScorerData?: boolean;
   saveQueueManager?: SaveQueueManager;
   requireToolApproval?: RequireToolApproval;
+  approvalPersistence: ApprovalPersistenceMode;
   toolCallConcurrency?: ToolCallConcurrency;
   resumeContext?: {
     resumeData: any;
@@ -77,6 +79,7 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
   returnScorerData,
   saveQueueManager,
   requireToolApproval,
+  approvalPersistence,
   toolCallConcurrency,
   resumeContext,
   agentId,
@@ -138,6 +141,7 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
     runId,
     returnScorerData,
     requireToolApproval,
+    approvalPersistence,
     toolCallConcurrency,
     resumeContext,
     agentId,

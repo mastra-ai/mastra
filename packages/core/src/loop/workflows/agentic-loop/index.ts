@@ -11,6 +11,7 @@ import type { RunScopeContext } from '../../run-scope-access';
 import { readScoped, writeScoped } from '../../run-scope-access';
 import { DELEGATION_BAILED_KEY, DRAIN_PENDING_SIGNALS_KEY, RESOURCE_ID_KEY, THREAD_ID_KEY } from '../../run-scope-keys';
 import type { LoopRun } from '../../types';
+import { createAgentApprovalSnapshotPersistence } from '../agent-approval-checkpoint';
 import { createAgenticExecutionWorkflow } from '../agentic-execution';
 import { pruneAgentLoopSnapshot } from '../prune-snapshot';
 import { llmIterationOutputSchema } from '../schema';
@@ -89,6 +90,10 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
       // resume never reads (stale suspend payloads, duplicated message
       // arrays, AI SDK step history) before persisting.
       pruneSnapshot: pruneAgentLoopSnapshot,
+      prepareSnapshotForPersistence: createAgentApprovalSnapshotPersistence({
+        workflowId: 'agentic-loop',
+        approvalPersistence: rest.approvalPersistence ?? 'full',
+      }),
       validateInputs: false,
     },
   })

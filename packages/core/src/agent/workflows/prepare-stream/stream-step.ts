@@ -12,6 +12,7 @@ import { MastraModelOutput } from '../../../stream';
 import type { RequireToolApproval, ToolPayloadTransformPolicy } from '../../../tools';
 import { createStep } from '../../../workflows/workflow';
 import type { Workspace } from '../../../workspace/workspace';
+import type { ApprovalPersistenceMode } from '../../approval-persistence';
 import type { SaveQueueManager } from '../../save-queue';
 import type { CreatedAgentSignal } from '../../signals';
 import type { AgentMethodType } from '../../types';
@@ -24,6 +25,7 @@ interface StreamStepOptions<OUTPUT = undefined> {
   runId: string;
   returnScorerData?: boolean;
   requireToolApproval?: RequireToolApproval;
+  approvalPersistence: ApprovalPersistenceMode;
   toolCallConcurrency?: ToolCallConcurrency;
   resumeContext?: {
     resumeData: any;
@@ -57,6 +59,7 @@ export function createStreamStep<OUTPUT = undefined>({
   runId: _runId,
   returnScorerData,
   requireToolApproval,
+  approvalPersistence,
   toolCallConcurrency,
   resumeContext,
   agentId,
@@ -106,6 +109,7 @@ export function createStreamStep<OUTPUT = undefined>({
         returnScorerData,
         ...resolveObservabilityContext(observabilityContext),
         requireToolApproval,
+        approvalPersistence,
         toolCallConcurrency,
         resumeContext,
         _internal: {

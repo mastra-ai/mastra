@@ -407,6 +407,52 @@ export interface WorkflowRunState {
   tracingContext?: WorkflowStateTracingContext;
 }
 
+export type WorkflowCheckpointJsonObject = { [key: string]: WorkflowCheckpointJsonValue };
+export type WorkflowCheckpointJsonValue =
+  | null
+  | boolean
+  | number
+  | string
+  | WorkflowCheckpointJsonValue[]
+  | WorkflowCheckpointJsonObject;
+
+export interface AgentApprovalCheckpointApproval {
+  toolCallId: string;
+  toolName: string;
+  args?: WorkflowCheckpointJsonValue;
+  resumeLabel: string;
+  stepId: string;
+  foreachIndex?: number;
+  executionPath: number[];
+  suspendPayload: WorkflowCheckpointJsonObject;
+}
+
+/** Versioned partial state used only for durable agent tool approval. */
+export interface AgentApprovalCheckpoint {
+  kind: 'agent-approval-checkpoint';
+  version: 1;
+  workflowId: string;
+  runId: string;
+  status: 'suspended';
+  timestamp: number;
+  approvals: AgentApprovalCheckpointApproval[];
+  routing: {
+    activePaths: number[];
+    activeStepsPath: Record<string, number[]>;
+    suspendedPaths: Record<string, number[]>;
+    resumeLabels: Record<string, WorkflowResumeLabel>;
+    waitingPaths: Record<string, number[]>;
+    stepExecutionPath?: string[];
+  };
+  rehydration: {
+    input?: WorkflowCheckpointJsonObject;
+    /** Small completed-step outputs required by the continuation path. */
+    steps?: WorkflowCheckpointJsonObject;
+  };
+}
+
+export type WorkflowRunSnapshot = WorkflowRunState | AgentApprovalCheckpoint;
+
 /**
  * Info object passed to the onStart callback before a workflow run begins.
  */
@@ -522,6 +568,16 @@ export interface WorkflowOptions {
    * read on resume (stale suspend payloads, duplicated message arrays).
    */
   pruneSnapshot?: (params: { snapshot: WorkflowRunState; workflowStatus: WorkflowRunStatus }) => WorkflowRunState;
+
+  /**
+   * Internal representation selector applied after `pruneSnapshot`. This is
+   * separate so the existing full-snapshot extension contract stays intact.
+   * @internal
+   */
+  prepareSnapshotForPersistence?: (params: {
+    snapshot: WorkflowRunState;
+    workflowStatus: WorkflowRunStatus;
+  }) => WorkflowRunSnapshot;
 
   /**
    * Called before a workflow run starts executing, and awaited.

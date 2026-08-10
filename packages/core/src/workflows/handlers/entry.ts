@@ -5,6 +5,7 @@ import type { PubSub } from '../../events/pubsub';
 import { resolveObservabilityContext } from '../../observability';
 import type { ObservabilityContext } from '../../observability';
 import type { DefaultExecutionEngine } from '../default';
+import { prepareWorkflowSnapshotForPersistence } from '../snapshot-persistence';
 import type {
   EntryExecutionResult,
   ExecutionContext,
@@ -223,7 +224,7 @@ export async function persistStepUpdate(
       workflowName: workflowId,
       runId,
       resourceId,
-      snapshot: engine.options?.pruneSnapshot ? engine.options.pruneSnapshot({ snapshot, workflowStatus }) : snapshot,
+      snapshot: prepareWorkflowSnapshotForPersistence({ snapshot, workflowStatus, options: engine.options }),
     });
     engine.setLastPersistedStatus(runId, workflowStatus);
   });

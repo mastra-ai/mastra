@@ -328,4 +328,21 @@ describe('Agent Type Tests', () => {
       assertType<string>(decline.runId);
     });
   });
+
+  describe('approval persistence options', () => {
+    it('accepts the full and minimal persistence contracts', () => {
+      const full = { approvalPersistence: 'full' } satisfies AgentExecutionOptions;
+      const minimal = { approvalPersistence: 'minimal' } satisfies AgentExecutionOptions;
+      assertType<'full'>(full.approvalPersistence);
+      assertType<'minimal'>(minimal.approvalPersistence);
+    });
+
+    it('rejects unknown persistence contracts', () => {
+      const invalid = {
+        // @ts-expect-error - only the documented persistence contracts are accepted
+        approvalPersistence: 'compact',
+      } satisfies AgentExecutionOptions;
+      assertType<'compact'>(invalid.approvalPersistence);
+    });
+  });
 });

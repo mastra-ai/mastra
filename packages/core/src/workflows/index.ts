@@ -7,6 +7,7 @@ export * from './types';
 export * from './utils';
 export * from './scheduler';
 export * from './state-reader';
+export * from './snapshot-persistence';
 export * from './create';
 export * from './dynamic';
 export * from './predicate';

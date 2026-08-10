@@ -2,6 +2,7 @@ import type { ToolSet } from '@internal/ai-sdk-v5';
 import { InternalSpans } from '../../../observability';
 import { createWorkflow } from '../../../workflows/create';
 import type { OuterLLMRun } from '../../types';
+import { createAgentApprovalSnapshotPersistence } from '../agent-approval-checkpoint';
 import { pruneAgentLoopSnapshot } from '../prune-snapshot';
 import { llmIterationOutputSchema } from '../schema';
 import type { LLMIterationData } from '../schema';
@@ -110,6 +111,10 @@ export function createAgenticExecutionWorkflow<Tools extends ToolSet = ToolSet, 
       // resume never reads (stale suspend payloads, duplicated message
       // arrays, AI SDK step history) before persisting.
       pruneSnapshot: pruneAgentLoopSnapshot,
+      prepareSnapshotForPersistence: createAgentApprovalSnapshotPersistence({
+        workflowId: AGENTIC_EXECUTION_WORKFLOW_ID,
+        approvalPersistence: rest.approvalPersistence ?? 'full',
+      }),
       validateInputs: false,
     },
   })

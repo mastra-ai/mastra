@@ -57,6 +57,7 @@ import type { ExecutionEngine, ExecutionGraph } from './execution-engine';
 import { validateTemplate } from './mapping-template';
 import { derivePredicateLabel, evaluatePredicate } from './predicate';
 import type { Predicate } from './predicate';
+import { prepareWorkflowSnapshotForPersistence } from './snapshot-persistence';
 import type {
   ConditionFunction,
   ExecuteFunction,
@@ -114,6 +115,19 @@ import {
 // so the execution engines can use them without importing this module.
 export { createMappingStep, createStepFromAgent, createStepFromTool } from './step-factories';
 export type { AgentStepOptions } from './step-factories';
+
+function rejectApprovalCheckpointOperation(snapshot: unknown, operation: string): void {
+  if (!snapshot || typeof snapshot !== 'object' || (snapshot as any).kind !== 'agent-approval-checkpoint') return;
+  throw new MastraError({
+    id: 'WORKFLOW_AGENT_APPROVAL_CHECKPOINT_UNSUPPORTED_OPERATION',
+    domain: ErrorDomain.MASTRA_WORKFLOW,
+    category: ErrorCategory.USER,
+    text:
+      `Workflow ${operation}() cannot consume a minimal agent approval checkpoint. ` +
+      'Continue the run with Agent.approveToolCall() or Agent.declineToolCall() instead.',
+    details: { operation },
+  });
+}
 
 /**
  * Extract the JSON-safe subset of an agent-step options bag for the in-process
@@ -1692,6 +1706,7 @@ export class Workflow<
       emitStepEvents: options.emitStepEvents ?? true,
       shouldPersistSnapshot: options.shouldPersistSnapshot ?? (() => true),
       pruneSnapshot: options.pruneSnapshot,
+      prepareSnapshotForPersistence: options.prepareSnapshotForPersistence,
       tracingPolicy: options.tracingPolicy,
       onStart: options.onStart,
       onFinish: options.onFinish,
@@ -2614,9 +2629,11 @@ export class Workflow<
         workflowName: this.id,
         runId: runIdToUse,
         resourceId: options?.resourceId,
-        snapshot: this.#options.pruneSnapshot
-          ? this.#options.pruneSnapshot({ snapshot: initialSnapshot, workflowStatus: 'pending' })
-          : initialSnapshot,
+        snapshot: prepareWorkflowSnapshotForPersistence({
+          snapshot: initialSnapshot,
+          workflowStatus: 'pending',
+          options: this.#options,
+        }),
       });
     }
 
@@ -4268,6 +4285,7 @@ export class Run<
     if (!snapshot) {
       throw new Error('No snapshot found for this workflow run: ' + this.workflowId + ' ' + this.runId);
     }
+    rejectApprovalCheckpointOperation(snapshot, 'resume');
 
     if (snapshot.status !== 'suspended') {
       throw new Error('This workflow run was not suspended');
@@ -4484,6 +4502,7 @@ export class Run<
     if (!snapshot) {
       throw new Error(`Snapshot not found for run ${this.runId}`);
     }
+    rejectApprovalCheckpointOperation(snapshot, 'restart');
 
     // Parent parallel activeStepsPath can lag behind nested child completion after a crash:
     // children may already be terminal while the parent still lists them as active and
@@ -4642,6 +4661,7 @@ export class Run<
     if (!snapshot) {
       throw new Error(`Snapshot not found for run ${this.runId}`);
     }
+    rejectApprovalCheckpointOperation(snapshot, 'timeTravel');
 
     if (snapshot.status === 'running') {
       throw new Error('This workflow run is still running, cannot time travel');

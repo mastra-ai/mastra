@@ -29,6 +29,7 @@ export {
   type ListSchedulesFilter,
 } from '../schedules';
 export * from './agent';
+export { APPROVAL_PERSISTENCE_MODES, type ApprovalPersistenceMode } from './approval-persistence';
 export { getGoalActivityDurationMs } from './goal';
 export { DEFAULT_TOOL_DECLINE_REASON, resolveDeclineReason } from './tool-approval';
 export * from './utils';

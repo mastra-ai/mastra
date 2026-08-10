@@ -32,6 +32,7 @@ import type {
 } from '../../tools/types';
 import type { Workspace } from '../../workspace';
 import type { AgentExecutionOptions } from '../agent.types';
+import type { ApprovalPersistenceMode } from '../approval-persistence';
 import type { MessageList } from '../message-list';
 import type { SerializedMessageListState } from '../message-list/state';
 import type { SaveQueueManager } from '../save-queue';
@@ -182,6 +183,8 @@ export interface SerializableDurableOptions {
   modelSettings?: SerializableModelSettings;
   /** Whether to require tool approval globally */
   requireToolApproval?: boolean;
+  /** Persistence contract selected for approval suspensions. */
+  approvalPersistence: ApprovalPersistenceMode;
   /** Concurrency limit / strategy for parallel tool calls (JSON-safe union) */
   toolCallConcurrency?: ToolCallConcurrency;
   /** Whether to auto-resume suspended tools */

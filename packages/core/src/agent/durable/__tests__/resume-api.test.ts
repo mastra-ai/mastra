@@ -240,6 +240,86 @@ describe('Resume API', () => {
       result.cleanup();
     });
 
+    it('rehydrates a missing registry entry from a minimal approval checkpoint', async () => {
+      const store = new InMemoryStore();
+      const baseAgent = new Agent({
+        id: 'minimal-cold-resume-agent',
+        name: 'Minimal Cold Resume Agent',
+        instructions: 'Test minimal cold resume rehydration',
+        model: createTextModel('Resumed!') as LanguageModelV2,
+      });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+      void new Mastra({ agents: { minimalColdResumeAgent: durableAgent }, storage: store, logger: false });
+      const runId = 'minimal-cold-run-aaaaaaaa';
+      const workflows = (await store.getStore('workflows'))!;
+      const checkpoint = {
+        kind: 'agent-approval-checkpoint' as const,
+        version: 1 as const,
+        workflowId: DurableStepIds.AGENTIC_LOOP,
+        runId,
+        status: 'suspended' as const,
+        timestamp: Date.now(),
+        approvals: [
+          {
+            toolCallId: 'call-1',
+            toolName: 'approvalTool',
+            args: {},
+            resumeLabel: 'call-1',
+            stepId: DurableStepIds.AGENTIC_EXECUTION,
+            executionPath: [0],
+            suspendPayload: {
+              requireToolApproval: { toolCallId: 'call-1', toolName: 'approvalTool', args: {} },
+              __streamState: {
+                messageList: { memoryInfo: { threadId: 'minimal-thread', resourceId: 'minimal-resource' } },
+              },
+            },
+          },
+        ],
+        routing: {
+          activePaths: [0],
+          activeStepsPath: {},
+          suspendedPaths: { [DurableStepIds.AGENTIC_EXECUTION]: [0] },
+          resumeLabels: { 'call-1': { stepId: DurableStepIds.AGENTIC_EXECUTION } },
+          waitingPaths: {},
+        },
+        rehydration: {
+          input: {
+            __workflowKind: 'durable-agent',
+            runId,
+            agentId: durableAgent.id,
+            requestContextEntries: { tenantId: 'tenant-minimal' },
+            state: { threadId: 'minimal-thread', resourceId: 'minimal-resource' },
+          },
+        },
+      };
+      await workflows.persistWorkflowSnapshot({
+        workflowName: DurableStepIds.AGENTIC_LOOP,
+        runId,
+        resourceId: 'minimal-resource',
+        snapshot: checkpoint,
+      });
+      const prepareSpy = vi.spyOn(durableAgent, 'prepare');
+
+      const result = await durableAgent.resume(runId, { approved: true });
+
+      expect(prepareSpy).toHaveBeenCalledWith(
+        [],
+        expect.objectContaining({
+          runId,
+          memory: { thread: 'minimal-thread', resource: 'minimal-resource' },
+          requestContext: expect.anything(),
+        }),
+      );
+      expect(prepareSpy.mock.calls[0]?.[1]?.requestContext?.get('tenantId')).toBe('tenant-minimal');
+      expect(
+        (await workflows.getWorkflowRunById({ workflowName: DurableStepIds.AGENTIC_LOOP, runId }))?.snapshot,
+      ).toMatchObject({
+        status: 'suspended',
+        context: { input: { __workflowKind: 'durable-agent' } },
+      });
+      result.cleanup();
+    });
+
     it('rejects a persisted run that is not suspended before rehydrating', async () => {
       const store = new InMemoryStore();
       const baseAgent = new Agent({

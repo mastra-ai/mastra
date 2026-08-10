@@ -1,4 +1,4 @@
-import type { StepResult, WorkflowRunState } from '../../../workflows';
+import type { StepResult, WorkflowRunSnapshot, WorkflowRunState } from '../../../workflows';
 import { normalizePerPage } from '../../base';
 import type {
   StorageWorkflowRun,
@@ -285,7 +285,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     workflowName: string;
     runId: string;
     resourceId?: string;
-    snapshot: WorkflowRunState;
+    snapshot: WorkflowRunSnapshot;
     createdAt?: Date;
     updatedAt?: Date;
   }): Promise<void> {
@@ -296,7 +296,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
       workflow_name: workflowName,
       run_id: runId,
       resourceId,
-      snapshot,
+      snapshot: snapshot as WorkflowRunState,
       // Preserve the original creation time when re-persisting an existing run; only set it
       // on first insert. Otherwise listWorkflowRuns ordering and date filters drift to the
       // last activity time. Matches the persistent stores (pg/mysql/mongodb/libsql).
