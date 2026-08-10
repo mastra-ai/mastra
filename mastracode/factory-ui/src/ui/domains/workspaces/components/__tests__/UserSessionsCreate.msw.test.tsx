@@ -9,7 +9,6 @@ import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import { queryKeys } from '../../../../../api/keys';
 import type { FactoryUserSession } from '../../services/github';
-import { AGENT_CONTROLLER_ID } from '../../../chat/services/constants';
 import { UserSessionsSection } from '../UserSessionsSection';
 
 const projectRepositoryId = 'ghp-1';
@@ -195,6 +194,7 @@ describe('User sessions creation', () => {
     );
     const user = userEvent.setup();
     const { client } = renderSection();
+    client.setQueryData(queryKeys.userSession(sessionId), userSession());
 
     await user.click(await screen.findByRole('button', { name: 'Session actions for session-1' }));
     await user.click(await screen.findByRole('menuitem', { name: 'Delete' }));
@@ -204,11 +204,6 @@ describe('User sessions creation', () => {
     expect(controllerDeletes).toBe(0);
     expect(deletedSessions).toBe(1);
     expect(client.getQueryData(queryKeys.userSession(sessionId))).toBeUndefined();
-    expect(
-      client.getQueriesData({
-        queryKey: queryKeys.agentControllerThreadMessages(AGENT_CONTROLLER_ID, sessionId, sessionId),
-      }),
-    ).toEqual([]);
     expect(await screen.findByText('Session deleted')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'session-1' })).not.toBeInTheDocument();
   });

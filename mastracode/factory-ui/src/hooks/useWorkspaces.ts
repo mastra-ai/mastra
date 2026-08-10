@@ -68,7 +68,7 @@ export function removeCachedSession(
 
 export function addCachedSession(
   queryClient: ReturnType<typeof useQueryClient>,
-  projectRepositoryId: string | undefined,
+  projectRepositoryId: string,
   session: FactoryUserSession,
 ) {
   const queryKey = queryKeys.sessions(projectRepositoryId);

@@ -659,14 +659,11 @@ export async function createUserSession(
   return result.session;
 }
 
-export class UserSessionNotFoundError extends Error {}
-
 export async function getUserSession(baseUrl: string, sessionId: string): Promise<FactoryUserSession> {
   const res = await fetch(`${baseUrl}/web/user-sessions/${encodeURIComponent(sessionId)}`, {
     headers: { Accept: 'application/json' },
     credentials: 'include',
   });
-  if (res.status === 404) throw new UserSessionNotFoundError('Session not found');
   if (!res.ok) throw new Error(`Failed to load session (${res.status})`);
   return ((await res.json()) as { session: FactoryUserSession }).session;
 }
