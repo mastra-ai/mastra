@@ -22,6 +22,9 @@ afterEach(async () => {
 interface AgentFiles {
   config?: string;
   instructions?: string;
+  /** Contents of `instructions.ts` (or `instructions.js` when `instructionsModuleExt` is set). */
+  instructionsModule?: string;
+  instructionsModuleExt?: 'ts' | 'js';
   memory?: string;
   workspace?: string;
   /** Map of relative path under `workspace/` to seed file content. */
@@ -44,6 +47,9 @@ async function writeAgentDir(agentDir: string, files: AgentFiles) {
   }
   if (files.instructions !== undefined) {
     await writeFile(join(agentDir, 'instructions.md'), files.instructions);
+  }
+  if (files.instructionsModule !== undefined) {
+    await writeFile(join(agentDir, `instructions.${files.instructionsModuleExt ?? 'ts'}`), files.instructionsModule);
   }
   if (files.memory !== undefined) {
     await writeFile(join(agentDir, 'memory.ts'), files.memory);
@@ -264,6 +270,83 @@ describe('discoverFsAgents', () => {
     expect(agent.instructionsPath).toBeUndefined();
   });
 
+  it('discovers instructions.ts alongside config.ts', async () => {
+    await writeAgent('weather', {
+      config: `export default { model: 'openai/gpt-4o' };`,
+      instructionsModule: `export default 'Be helpful.';`,
+    });
+
+    const agent = (await discoverFsAgents(dir))[0]!;
+    expect(agent.instructionsModulePath).toMatch(/agents\/weather\/instructions\.ts$/);
+    expect(agent.instructionsPath).toBeUndefined();
+  });
+
+  it('discovers instructions.js', async () => {
+    await writeAgent('weather', {
+      config: `export default { model: 'openai/gpt-4o' };`,
+      instructionsModule: `export default 'Be helpful.';`,
+      instructionsModuleExt: 'js',
+    });
+
+    const agent = (await discoverFsAgents(dir))[0]!;
+    expect(agent.instructionsModulePath).toMatch(/agents\/weather\/instructions\.js$/);
+  });
+
+  it('treats a directory holding only instructions.ts as an agent', async () => {
+    await writeAgent('weather', { instructionsModule: `export default 'Be helpful.';` });
+
+    const agents = await discoverFsAgents(dir);
+    expect(agents.map(a => a.name)).toEqual(['weather']);
+    expect(agents[0]!.instructionsModulePath).toMatch(/agents\/weather\/instructions\.ts$/);
+  });
+
+  it('discovers both instructions files when both are present', async () => {
+    await writeAgent('weather', {
+      config: `export default { model: 'openai/gpt-4o' };`,
+      instructions: 'from md',
+      instructionsModule: `export default 'from module';`,
+    });
+
+    const agent = (await discoverFsAgents(dir))[0]!;
+    expect(agent.instructionsPath).toMatch(/agents\/weather\/instructions\.md$/);
+    expect(agent.instructionsModulePath).toMatch(/agents\/weather\/instructions\.ts$/);
+  });
+
+  it('discovers instructions.ts on a subagent', async () => {
+    await writeAgent('parent', {
+      config: `export default { model: 'openai/gpt-4o' };`,
+      instructions: 'hi',
+      subagents: {
+        child: {
+          config: `export default { model: 'openai/gpt-4o', description: 'd' };`,
+          instructionsModule: `export default 'child module';`,
+        },
+      },
+    });
+
+    const child = (await discoverFsAgents(dir))[0]!.subagents[0]!;
+    expect(child.instructionsModulePath).toMatch(/subagents\/child\/instructions\.ts$/);
+  });
+
+  it('skips a symlinked instructions.ts so it is not imported into the bundle', async () => {
+    const secret = join(dir, 'secret-instructions.ts');
+    await writeFile(secret, `export default 'leaked';`);
+    await writeAgent('weather', { config: `export default { model: 'openai/gpt-4o' };`, instructions: 'hi' });
+    await symlink(secret, join(dir, 'agents', 'weather', 'instructions.ts'));
+
+    const agent = (await discoverFsAgents(dir))[0]!;
+    expect(agent.instructionsModulePath).toBeUndefined();
+  });
+
+  it('does not treat a directory holding only a symlinked instructions.ts as an agent', async () => {
+    const secret = join(dir, 'secret-instructions.ts');
+    await writeFile(secret, `export default 'leaked';`);
+    await mkdir(join(dir, 'agents', 'weather'), { recursive: true });
+    await symlink(secret, join(dir, 'agents', 'weather', 'instructions.ts'));
+
+    expect(await discoverFsAgents(dir)).toEqual([]);
+  });
+
   it('skips a symlinked config.ts so it is not imported into the bundle', async () => {
     const secret = join(dir, 'secret-config.ts');
     await writeFile(secret, `export default { model: 'openai/gpt-4o' };`);
@@ -452,6 +535,56 @@ describe('generateFsAgentsModule', () => {
 
     const source = await generateFsAgentsModule('/project/index.ts', agents);
     expect(source).not.toContain('instructionsMd:');
+  });
+
+  it('imports instructions.ts rather than inlining it', async () => {
+    await writeAgent('weather', {
+      config: `export default { model: 'openai/gpt-4o' };`,
+      instructionsModule: `export default 'Be a weather assistant.';`,
+    });
+    const agents = await discoverFsAgents(dir);
+
+    const source = await generateFsAgentsModule('/project/index.ts', agents);
+
+    expect(source).toMatch(/import instructions_\d+_\w+ from "[^"]*instructions\.ts";/);
+    expect(source).toMatch(/instructions: instructions_\d+_\w+/);
+    // The module is imported, so its text never lands in the generated wrapper.
+    expect(source).not.toContain('Be a weather assistant.');
+    expect(source).not.toContain('instructionsMd:');
+  });
+
+  it('emits both instructions sources when both files exist, leaving precedence to core', async () => {
+    await writeAgent('weather', {
+      config: `export default { model: 'openai/gpt-4o' };`,
+      instructions: 'from md',
+      instructionsModule: `export default 'from module';`,
+    });
+    const agents = await discoverFsAgents(dir);
+
+    const source = await generateFsAgentsModule('/project/index.ts', agents);
+
+    expect(source).toMatch(/instructions: instructions_\d+_\w+/);
+    expect(source).toContain(`instructionsMd: ${JSON.stringify('from md')}`);
+  });
+
+  it('imports a subagent instructions.ts under a distinct identifier', async () => {
+    await writeAgent('parent', {
+      config: `export default { model: 'openai/gpt-4o' };`,
+      instructionsModule: `export default 'parent';`,
+      subagents: {
+        child: {
+          config: `export default { model: 'openai/gpt-4o', description: 'd' };`,
+          instructionsModule: `export default 'child';`,
+        },
+      },
+    });
+    const agents = await discoverFsAgents(dir);
+
+    const source = await generateFsAgentsModule('/project/index.ts', agents);
+
+    const identifiers = [...source.matchAll(/import (instructions_\S+) from/g)].map(match => match[1]);
+    expect(identifiers).toHaveLength(2);
+    expect(new Set(identifiers).size).toBe(2);
   });
 
   it('inlines packaged skills via createSkill and imports module skills', async () => {

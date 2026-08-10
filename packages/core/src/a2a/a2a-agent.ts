@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { AgentCard, Message, Task, TaskArtifactUpdateEvent, TaskStatusUpdateEvent } from '@a2a-js/sdk';
+import type { AgentCard, Message, Task, TaskArtifactUpdateEvent, TaskStatusUpdateEvent } from '@a2a-js/sdk-v0_3';
 import type { AgentExecutionOptionsBase } from '../agent/agent.types';
 import { MessageList } from '../agent/message-list';
 import type { MastraDBMessage, MessageListInput } from '../agent/message-list';

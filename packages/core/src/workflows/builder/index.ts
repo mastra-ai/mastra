@@ -1,5 +1,5 @@
+import type { ValidatableStepFlowEntry, WorkflowValidationInput } from '../dynamic/validate/types';
 import type { Predicate } from '../predicate';
-import type { ValidatableStepFlowEntry, WorkflowValidationInput } from '../stored/validate/types';
 import type { SerializedSingleStepEntry, SerializedStepOptions } from '../types';
 
 export type WorkflowBuilderJsonValue =

@@ -64,6 +64,18 @@ A2A represents work as messages and tasks. Messages carry text, file, or structu
 
 Tasks are stateful units of work with IDs and lifecycle states. Clients can follow long-running work and send follow-up turns. They can also cancel work or resubscribe after a disconnect.
 
+## Protocol versions
+
+Mastra supports A2A Protocol v0.3 and v1.0 on the same agent card and execution URLs. The `A2A-Version` request header selects the wire protocol:
+
+- Missing, empty, or `0.3`: Uses the existing v0.3 API.
+- `1.0`: Uses the v1.0 API.
+- Any other value: Returns a `VersionNotSupported` protocol error.
+
+Existing `A2AAgent` and `MastraClient.getA2A()` integrations continue to use v0.3. Use `MastraClient.getA2AV1()` for v1.0 requests. The v1 client sends `A2A-Version: 1.0` automatically and adds the `tasks/list` operation.
+
+Import v1.0 protocol types and codecs from `@mastra/core/a2a/v1`. The existing `@mastra/core/a2a/client` export remains on v0.3.
+
 ## Get started
 
 A2A has two common paths in Mastra:
@@ -161,6 +173,33 @@ for await (const event of updates) {
   console.log(event)
 }
 ```
+
+### Use the v1.0 client
+
+Use `getA2AV1()` to opt into the A2A v1.0 wire protocol. The protocol package provides codecs for creating v1 request values from JSON-shaped input:
+
+```typescript title="src/a2a-v1-client.ts"
+import { ListTasksRequest } from '@mastra/core/a2a/v1'
+import { MastraClient } from '@mastra/client-js'
+
+const client = new MastraClient({
+  baseUrl: 'https://agent.example.com',
+})
+
+const a2a = client.getA2AV1('weather-agent')
+const response = await a2a.listTasks(
+  ListTasksRequest.fromJSON({
+    contextId: 'customer-support',
+    pageSize: 20,
+  }),
+)
+
+for (const task of response.tasks) {
+  console.log(task.id, task.status)
+}
+```
+
+The v1.0 client supports `getAgentCard()`, `sendMessage()`, `sendMessageStream()`, `getTask()`, `listTasks()`, `cancelTask()`, and `resubscribeTask()`.
 
 ## Configure subagent calls
 

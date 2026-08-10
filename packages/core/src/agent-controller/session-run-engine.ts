@@ -10,6 +10,7 @@ import type { RequestContext } from '../request-context';
 import type { GoalEvaluationPayload } from '../stream/types';
 import { getTransformedToolPayload, hasTransformedToolPayload } from '../tools/payload-transform';
 import type { Session, SessionMachinery } from './session';
+import { ABORTED_BY_USER_REASON } from './session';
 import {
   addOptionalUsageField,
   describeNonSuccessFinishReason,
@@ -74,6 +75,7 @@ type StreamChunk =
   | StreamPayloadChunk<'tool-call'>
   | StreamPayloadChunk<'tool-result'>
   | StreamPayloadChunk<'tool-error'>
+  | StreamPayloadChunk<'tool-output-denied'>
   | StreamPayloadChunk<'tool-call-approval'>
   | StreamPayloadChunk<'tool-call-suspended'>
   | StreamPayloadChunk<'error'>
@@ -301,8 +303,14 @@ export class SessionRunEngine {
    * (text/reasoning deltas, tool-invocation upgrades) and `setStopReason` /
    * `setErrorMessage` mutate `content.metadata`, so emitted snapshots must
    * deep-clone the content or later mutations rewrite earlier snapshots.
+   *
+   * With no subscribers there is no earlier snapshot to protect, and the only
+   * remaining consumer is the display state, which already aliases the live
+   * message on `message_end`. Skipping the clone there drops a full
+   * `structuredClone` of the message per streamed delta.
    */
   private cloneMessage(message: MastraDBMessage): MastraDBMessage {
+    if (!this.#session.hasListeners()) return message;
     return { ...message, content: structuredClone(message.content) };
   }
 
@@ -465,16 +473,15 @@ export class SessionRunEngine {
       this.#session.emit({ type: 'error', error: new Error(state.terminalError) });
     }
 
-    this.#session.emit({
-      type: 'agent_end',
-      reason: error
+    await this.#session.finishAgentRun(
+      error
         ? 'error'
         : result.suspended
           ? 'suspended'
           : aborted || this.#session.run.isAbortRequested()
             ? 'aborted'
             : 'complete',
-    });
+    );
 
     this.#session.run.reset();
     await this.#session.drainFollowUpQueue();
@@ -617,6 +624,41 @@ export class SessionRunEngine {
         break;
       }
 
+      case 'tool-output-denied': {
+        const payload = getPayload(chunk);
+        const toolCallId = getString(payload.toolCallId) ?? '';
+        const toolName = getString(payload.toolName) ?? '';
+        const approval = getRecord(payload.approval);
+        const reason = getString(approval?.reason);
+        const approvalTransform = getTransformedToolPayload(chunk.metadata, 'display', 'approval');
+        const args = hasTransformedToolPayload(approvalTransform)
+          ? approvalTransform.transformed
+          : getDisplayTransform(chunk.metadata, 'input-available', payload.args);
+        const toolIndex = state.toolPartById.get(toolCallId);
+        const existing = toolIndex !== undefined ? state.currentMessage.content.parts[toolIndex] : undefined;
+        const toolInvocation = {
+          state: 'output-denied' as const,
+          toolCallId,
+          toolName,
+          args,
+          approval: {
+            id: getString(approval?.id) ?? '',
+            approved: false as const,
+            ...(reason ? { reason } : {}),
+          },
+        };
+
+        if (existing && existing.type === 'tool-invocation') {
+          existing.toolInvocation = Object.assign(existing.toolInvocation, toolInvocation);
+        } else {
+          state.currentMessage.content.parts.push({ type: 'tool-invocation', toolInvocation });
+        }
+
+        this.#session.emit({ type: 'tool_end', toolCallId, result: reason, isError: false });
+        this.#session.emit({ type: 'message_update', message: this.cloneMessage(state.currentMessage) });
+        break;
+      }
+
       case 'tool-call-approval': {
         const toolCallId = getString(getPayload(chunk).toolCallId) ?? '';
         const toolName = getString(getPayload(chunk).toolName) ?? '';
@@ -643,7 +685,14 @@ export class SessionRunEngine {
         const approval = await approvalPromise;
         this.#session.approval.clearToolName();
 
-        if (approval.decision === 'approve') {
+        // `session.abort()` releases a parked gate as a decline and defers the
+        // stream/signal teardown to us, so the decline can still be driven
+        // through the (live) agent run and persist an `output-denied` result.
+        // Once it lands we finish the teardown, which stops the run rather than
+        // letting the model continue past the denied call.
+        const deferredAbort = this.#session.run.isAbortRequested();
+
+        if (!deferredAbort && approval.decision === 'approve') {
           await this.#session.approveToolCall({
             toolCallId,
             requestContext: approval.requestContext ?? requestContext,
@@ -652,8 +701,20 @@ export class SessionRunEngine {
           await this.#session.declineToolCall({
             toolCallId,
             requestContext: approval.requestContext ?? requestContext,
-            declineContext: approval.declineContext,
+            declineContext: deferredAbort
+              ? { reason: ABORTED_BY_USER_REASON, message: ABORTED_BY_USER_REASON }
+              : approval.declineContext,
           });
+        }
+
+        if (deferredAbort) {
+          // The denial chunk the agent emits for this decline can never reach
+          // us: we are blocking the consumer loop that would read it, and the
+          // teardown below ends the loop. Settle the call locally so the
+          // display state shows the denied result instead of a call stuck
+          // mid-flight.
+          this.settleToolCallAsDenied(state, { toolCallId, toolName, args: toolArgs });
+          this.#session.completeDeferredAbort();
         }
         break;
       }
@@ -1062,6 +1123,36 @@ export class SessionRunEngine {
     }
   }
 
+  /**
+   * Mark a tool call as denied on the in-flight assistant message and notify
+   * subscribers, mirroring what the `tool-output-denied` chunk would do. Used
+   * when the run is torn down before that chunk can be consumed (abort while a
+   * tool-approval gate is parked).
+   */
+  private settleToolCallAsDenied(
+    state: StreamState,
+    { toolCallId, toolName, args }: { toolCallId: string; toolName: string; args: unknown },
+  ): void {
+    const toolInvocation: MastraToolInvocationPart['toolInvocation'] = {
+      state: 'output-denied',
+      toolCallId,
+      toolName,
+      args,
+      approval: { id: toolCallId, approved: false, reason: ABORTED_BY_USER_REASON },
+    };
+
+    const toolIndex = state.toolPartById.get(toolCallId);
+    const existing = toolIndex !== undefined ? state.currentMessage.content.parts[toolIndex] : undefined;
+    if (existing && existing.type === 'tool-invocation') {
+      existing.toolInvocation = Object.assign(existing.toolInvocation, toolInvocation);
+    } else {
+      state.currentMessage.content.parts.push({ type: 'tool-invocation', toolInvocation });
+    }
+
+    this.#session.emit({ type: 'tool_end', toolCallId, result: ABORTED_BY_USER_REASON, isError: false });
+    this.#session.emit({ type: 'message_update', message: this.cloneMessage(state.currentMessage) });
+  }
+
   private finishStreamState(state: StreamState): { message: MastraDBMessage; suspended?: boolean } {
     if (this.hasCurrentMessageContent(state) || !state.lastFinishedMessage) {
       this.#session.emit({ type: 'message_end', message: state.currentMessage });
@@ -1087,17 +1178,17 @@ export class SessionRunEngine {
         : aborted || this.#session.run.isAbortRequested()
           ? 'aborted'
           : 'complete';
-    this.#session.emit({ type: 'agent_end', reason });
+    await this.#session.finishAgentRun(reason);
     this.#session.run.reset();
     await this.#session.drainFollowUpQueue();
   }
 
   private async handleSubscribedStreamError(error: unknown): Promise<void> {
     if (error instanceof Error && error.name === 'AbortError') {
-      this.#session.emit({ type: 'agent_end', reason: 'aborted' });
+      await this.#session.finishAgentRun('aborted');
     } else {
       this.#session.emit({ type: 'error', error: getErrorFromUnknown(error) });
-      this.#session.emit({ type: 'agent_end', reason: 'error' });
+      await this.#session.finishAgentRun('error');
     }
     this.#session.stream.detach();
     this.#session.run.reset();

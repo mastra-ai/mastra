@@ -89,12 +89,10 @@ export function UserSessionsSection() {
 
   const deleteSession = useMutation({
     mutationFn: async (session: FactoryUserSession) => {
-      const chatSession = controllerSession(session.sessionId);
-      try {
-        await chatSession.deleteThread(session.sessionId);
-      } finally {
-        await deleteUserSession(baseUrl, session.sessionId);
-      }
+      // The thread is deliberately left behind: its transcript is the record of
+      // what was worked on here, and a new session always gets a fresh id, so it
+      // can never be re-attached to a later session.
+      await deleteUserSession(baseUrl, session.sessionId);
       return session;
     },
     onSuccess: session => {
@@ -221,8 +219,8 @@ export function UserSessionsSection() {
             </DialogHeader>
             <div className="flex flex-col gap-4 px-5 pb-4">
               <Txt as="p" variant="ui-sm" className="text-icon4 m-0">
-                This deletes the <span className="text-icon6">{getUserSessionLabel(confirmDelete)}</span> session, its
-                checkout with any uncommitted changes, and its conversation. This can’t be undone.
+                This deletes the <span className="text-icon6">{getUserSessionLabel(confirmDelete)}</span> session and
+                its checkout with any uncommitted changes. This can’t be undone. Its conversation is kept.
               </Txt>
               <div className="flex justify-end gap-2">
                 <Button variant="ghost" onClick={() => setConfirmDelete(null)} disabled={deleteSession.isPending}>

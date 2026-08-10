@@ -19,10 +19,12 @@ import {
   getAgentCardByIdHandler,
   getAgentExecutionHandler,
   handleTaskGet,
+  handleTaskList,
   handleMessageSend,
   handleMessageStream,
   handleTaskCancel,
   handleTaskResubscribe,
+  resolveA2AProtocolVersion,
 } from './a2a';
 
 class MockAgent extends Agent {
@@ -3777,6 +3779,29 @@ describe('A2A Handler', () => {
     });
   });
 
+  describe('A2A protocol version negotiation', () => {
+    it.each([
+      [undefined, '0.3'],
+      ['', '0.3'],
+      ['0.3', '0.3'],
+      ['1.0', '1.0'],
+    ] as const)('resolves %s to protocol version %s', (header, expected) => {
+      const request = new Request('http://localhost/api/a2a/test-agent', {
+        headers: header === undefined ? undefined : { 'A2A-Version': header },
+      });
+
+      expect(resolveA2AProtocolVersion(request)).toBe(expected);
+    });
+
+    it('rejects unsupported protocol versions', () => {
+      const request = new Request('http://localhost/api/a2a/test-agent', {
+        headers: { 'A2A-Version': '2.0' },
+      });
+
+      expect(() => resolveA2AProtocolVersion(request)).toThrow('Version not supported: 2.0');
+    });
+  });
+
   describe('AGENT_EXECUTION_ROUTE', () => {
     let mockMastra: Mastra;
     let mockTaskStore: InMemoryTaskStore;
@@ -3816,6 +3841,103 @@ describe('A2A Handler', () => {
         error: {
           code: -32001,
           message: 'Task not found: missing-task',
+        },
+      });
+    });
+
+    it('accepts and returns A2A v1 message shapes', async () => {
+      const mockAgent = mockMastra.getAgentById('test-agent');
+      // @ts-expect-error - mockResolvedValue is not available on the Agent class
+      mockAgent.generate.mockResolvedValue({ text: 'Hello from v1' });
+
+      const response = await AGENT_EXECUTION_ROUTE.handler({
+        mastra: mockMastra,
+        agentId: 'test-agent',
+        requestContext: new RequestContext(),
+        taskStore: mockTaskStore,
+        abortSignal: AbortSignal.abort(),
+        request: new Request('http://localhost/api/a2a/test-agent', {
+          headers: { 'A2A-Version': '1.0' },
+        }),
+        id: 2,
+        method: 'message/send',
+        params: {
+          message: {
+            messageId: 'v1-message',
+            role: 'ROLE_USER',
+            parts: [{ text: 'Hello' }],
+          },
+          configuration: { returnImmediately: false },
+        },
+      });
+
+      expect(await response.json()).toMatchObject({
+        jsonrpc: '2.0',
+        id: 2,
+        result: {
+          task: {
+            status: { state: 'TASK_STATE_COMPLETED' },
+            artifacts: [{ parts: [{ text: 'Hello from v1' }] }],
+          },
+        },
+      });
+    });
+
+    it('lists tasks using the A2A v1 pagination response', async () => {
+      const task = {
+        id: 'task-1',
+        contextId: 'context-1',
+        kind: 'task' as const,
+        status: { state: 'completed' as const, timestamp: '2026-08-06T12:00:00.000Z' },
+      };
+      await mockTaskStore.save({ agentId: 'test-agent', data: task });
+
+      expect(
+        handleTaskList({
+          requestId: 3,
+          taskStore: mockTaskStore,
+          agentId: 'test-agent',
+          params: { contextId: 'context-1', pageSize: 10 },
+        }),
+      ).toEqual({
+        jsonrpc: '2.0',
+        id: 3,
+        result: {
+          tasks: [
+            expect.objectContaining({
+              id: 'task-1',
+              status: expect.objectContaining({ state: 'TASK_STATE_COMPLETED' }),
+            }),
+          ],
+          nextPageToken: '',
+          pageSize: 10,
+          totalSize: 1,
+        },
+      });
+    });
+
+    it('returns a protocol error for unsupported A2A versions', async () => {
+      const response = await AGENT_EXECUTION_ROUTE.handler({
+        mastra: mockMastra,
+        agentId: 'test-agent',
+        requestContext: new RequestContext(),
+        taskStore: mockTaskStore,
+        abortSignal: AbortSignal.abort(),
+        request: new Request('http://localhost/api/a2a/test-agent', {
+          headers: { 'A2A-Version': '2.0' },
+        }),
+        id: 2,
+        method: 'tasks/get',
+        params: { id: 'missing-task' },
+      });
+
+      expect(await response.json()).toEqual({
+        jsonrpc: '2.0',
+        id: 2,
+        error: {
+          code: -32009,
+          message: 'Version not supported: 2.0',
+          data: { version: '2.0' },
         },
       });
     });

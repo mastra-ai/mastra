@@ -3,6 +3,7 @@ import {
   ScreencastStreamImpl,
   DEFAULT_THREAD_ID,
   createBrowserRecordingTools,
+  resolveLaunchViewport,
 } from '@mastra/core/browser';
 import type {
   BrowserState,
@@ -185,7 +186,7 @@ export class AgentBrowser extends MastraBrowser {
     const localConfig = this.config as BrowserConfig;
     const launchOptions: BrowserLaunchOptions & { cdpHeaders?: Record<string, string> } = {
       headless: this.headless,
-      viewport: localConfig.viewport,
+      ...resolveLaunchViewport(localConfig.viewport),
       profile: localConfig.profile,
       executablePath: localConfig.executablePath,
       storageState: localConfig.storageState,

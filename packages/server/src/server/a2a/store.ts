@@ -94,6 +94,12 @@ export class InMemoryTaskStore {
     return this.versions.get(this.getKey(agentId, taskId)) ?? 0;
   }
 
+  list({ agentId }: { agentId: string }): Task[] {
+    const prefix = `${agentId}-`;
+
+    return [...this.store.entries()].filter(([key]) => key.startsWith(prefix)).map(([, task]) => ({ ...task }));
+  }
+
   registerAbortController({
     agentId,
     taskId,

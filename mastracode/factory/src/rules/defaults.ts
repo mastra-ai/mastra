@@ -157,6 +157,30 @@ function issueOpened(context: FactoryGithubRuleContext) {
       githubIssueNumber: context.issue.number,
       ...(githubActorLogin(context) ? { author: githubActorLogin(context) } : {}),
       assignees: context.issue.assignees ?? [],
+      labels: context.issue.labels ?? [],
+    },
+  } as const;
+}
+
+function issueClosed(context: FactoryGithubRuleContext) {
+  if (!context.item || context.item.source !== 'github-issue' || !context.issue) return;
+  if (context.board !== 'work') return;
+  // Already off the board: nothing to reconcile.
+  if (context.item.stages.some(stage => stage === 'done' || stage === 'canceled')) return;
+  // Issue closure is a repository fact, not third-party input — no actor trust
+  // gate. `not_planned` (and `duplicate`) means abandoned, everything else is
+  // completed work.
+  const canceled = context.issue.stateReason === 'not_planned' || context.issue.stateReason === 'duplicate';
+  return {
+    type: 'transition',
+    idempotencyKey: `${context.ingress.id}:issue-closed`,
+    board: 'work',
+    stage: canceled ? 'canceled' : 'done',
+    message: {
+      text:
+        `GitHub issue #${context.issue.number} was closed` +
+        `${context.issue.stateReason ? ` (${context.issue.stateReason})` : ''}; ` +
+        `this Work card was moved to ${canceled ? 'Canceled' : 'Done'}.`,
     },
   } as const;
 }
@@ -184,6 +208,7 @@ function pullRequestOpened(context: FactoryGithubRuleContext) {
       merged: context.pullRequest.merged,
       assignees: context.pullRequest.assignees ?? [],
       requestedReviewers: context.pullRequest.requestedReviewers ?? [],
+      labels: context.pullRequest.labels ?? [],
       headBranch: context.pullRequest.headBranch,
       baseBranch: context.pullRequest.baseBranch,
       ...(githubActorLogin(context) ? { author: githubActorLogin(context) } : {}),
@@ -280,8 +305,29 @@ function linearIssueObserved(context: FactoryLinearRuleContext) {
       linearAssignee: context.issue.assignee,
       linearCreator: context.issue.creator,
       linearTeam: context.issue.team,
+      labels: [...context.issue.labels] as string[],
       ...(context.issue.assignee ? { assignee: context.issue.assignee } : {}),
       ...(context.issue.creator ? { creator: context.issue.creator, author: context.issue.creator } : {}),
+    },
+  } as const;
+}
+
+function linearIssueClosed(context: FactoryLinearRuleContext) {
+  if (!context.item || context.item.source !== 'linear-issue') return;
+  if (context.board !== 'work') return;
+  // Already off the board: nothing to reconcile.
+  if (context.item.stages.some(stage => stage === 'done' || stage === 'canceled')) return;
+  // Only terminal state types trigger close.
+  const stateType = context.issue.stateType;
+  if (stateType !== 'completed' && stateType !== 'canceled') return;
+  const canceled = stateType === 'canceled';
+  return {
+    type: 'transition',
+    idempotencyKey: `${context.ingress.id}:issue-closed`,
+    board: 'work',
+    stage: canceled ? 'canceled' : 'done',
+    message: {
+      text: `Linear issue ${context.issue.identifier} was ${canceled ? 'canceled' : 'completed'}; this Work card was moved to ${canceled ? 'Canceled' : 'Done'}.`,
     },
   } as const;
 }
@@ -303,6 +349,7 @@ const BUILT_IN_DEFAULTS: FactoryRulesOverrides = {
   github: {
     issueOpened: { onEvent: issueOpened },
     issueEdited: { onEvent: retriageGithubIssue },
+    issueClosed: { onEvent: issueClosed },
     issueCommentCreated: { onEvent: retriageGithubIssue },
     issueCommentEdited: { onEvent: retriageGithubIssue },
     issueCommentDeleted: { onEvent: retriageGithubIssue },
@@ -311,7 +358,7 @@ const BUILT_IN_DEFAULTS: FactoryRulesOverrides = {
     pullRequestMerged: { onEvent: pullRequestMerged },
     pullRequestClosed: { onEvent: pullRequestClosed },
   },
-  linear: { issueObserved: { onEvent: linearIssueObserved } },
+  linear: { issueObserved: { onEvent: linearIssueObserved }, issueClosed: { onEvent: linearIssueClosed } },
 };
 
 function mergeBoardRules(

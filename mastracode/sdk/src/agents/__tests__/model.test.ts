@@ -29,6 +29,7 @@ vi.mock('../../providers/claude-max.js', () => ({
   claudeCodeMiddleware: { specificationVersion: 'v3', transformParams: vi.fn() },
   promptCacheMiddleware: { specificationVersion: 'v3', transformParams: vi.fn() },
   buildAnthropicOAuthFetch: vi.fn(() => mockAnthropicOAuthFetch),
+  createAnthropicThinkingMiddleware: vi.fn(() => undefined),
 }));
 
 // Mock openai-codex provider
@@ -44,6 +45,7 @@ vi.mock('../../providers/openai-codex.js', () => ({
     medium: 'medium',
     high: 'high',
     xhigh: 'xhigh',
+    max: 'max',
   },
 }));
 
@@ -202,6 +204,7 @@ import {
   getOpenAIApiKey,
   MastraCodeGateway,
   resolveAuth,
+  resolveRequestThinkingLevel,
 } from '../model.js';
 
 function makeRequestContext({ threadId, resourceId }: { threadId?: string; resourceId?: string } = {}) {
@@ -1059,5 +1062,69 @@ describe('getOpenAIApiKey', () => {
   it('ignores the env var when the credential store disables environment fallback', () => {
     process.env.OPENAI_API_KEY = 'sk-env-key';
     expect(getOpenAIApiKey(makeTenantCredentialStore())).toBeUndefined();
+  });
+});
+
+describe('resolveRequestThinkingLevel', () => {
+  const settingsWithThinking = (overrides?: {
+    modeThinkingDefaults?: Record<string, string>;
+    thinkingLevel?: string;
+  }) =>
+    ({
+      customProviders: [],
+      memoryGateway: {},
+      models: { modeThinkingDefaults: overrides?.modeThinkingDefaults ?? {} },
+      preferences: { thinkingLevel: overrides?.thinkingLevel ?? 'off' },
+    }) as any;
+
+  beforeEach(() => {
+    mockLoadSettings.mockReset();
+    mockLoadSettings.mockImplementation(() => settingsWithThinking());
+  });
+
+  it('prefers the session override over all defaults', () => {
+    mockLoadSettings.mockImplementation(() =>
+      settingsWithThinking({ modeThinkingDefaults: { build: 'high' }, thinkingLevel: 'low' }),
+    );
+
+    const level = resolveRequestThinkingLevel({
+      state: { thinkingLevel: 'xhigh' },
+      session: { modeId: 'build' },
+    } as any);
+
+    expect(level).toBe('xhigh');
+    expect(mockLoadSettings).not.toHaveBeenCalled();
+  });
+
+  it('falls back to the mode default when no session override is set', () => {
+    mockLoadSettings.mockImplementation(() =>
+      settingsWithThinking({ modeThinkingDefaults: { build: 'high' }, thinkingLevel: 'low' }),
+    );
+
+    const level = resolveRequestThinkingLevel({ state: {}, session: { modeId: 'build' } } as any);
+
+    expect(level).toBe('high');
+  });
+
+  it('falls back to the global default when neither override nor mode default exist', () => {
+    mockLoadSettings.mockImplementation(() =>
+      settingsWithThinking({ modeThinkingDefaults: { build: 'high' }, thinkingLevel: 'medium' }),
+    );
+
+    const level = resolveRequestThinkingLevel({ state: {}, session: { modeId: 'plan' } } as any);
+
+    expect(level).toBe('medium');
+  });
+
+  it('resolves defaults when no controller context exists at all', () => {
+    mockLoadSettings.mockImplementation(() => settingsWithThinking({ thinkingLevel: 'low' }));
+
+    expect(resolveRequestThinkingLevel(undefined)).toBe('low');
+  });
+
+  it('passes the settings path through to loadSettings', () => {
+    resolveRequestThinkingLevel(undefined, '/tmp/custom-settings.json');
+
+    expect(mockLoadSettings).toHaveBeenCalledWith('/tmp/custom-settings.json');
   });
 });

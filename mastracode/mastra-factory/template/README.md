@@ -38,7 +38,7 @@ Day-to-day configuration (model providers, integrations) happens in the web UI. 
 | Linear intake            | WorkOS + `LINEAR_CLIENT_ID`, `LINEAR_CLIENT_SECRET` + `APP_DATABASE_URL` + a state secret (`GITHUB_APP_WEBHOOK_SECRET` or `WORKOS_COOKIE_PASSWORD`) |
 | Slack channels           | `SLACK_APP_SIGNING_SECRET`, `SLACK_APP_BOT_TOKEN`, `SLACK_APP_CLIENT_ID`, `SLACK_APP_CLIENT_SECRET` + WorkOS + a state secret (see above)           |
 | Distributed event bus    | `REDIS_URL` (only needed for multi-process deployments)                                                                                             |
-| Cloud sandboxes          | `RAILWAY_API_TOKEN` (defaults to a local git sandbox otherwise)                                                                                     |
+| Cloud sandboxes          | `MASTRA_PLATFORM_SECRET_KEY`, `MASTRA_PROJECT_ID`, `MASTRA_ENVIRONMENT_ID` (defaults to a local git sandbox otherwise)                              |
 
 ### Database
 

@@ -8,6 +8,7 @@ import type { WorkerDeps } from '@mastra/core/worker';
 
 import type { IntegrationStorageHandle } from '../../../storage/domains/integrations/base.js';
 import type { GithubRepositoryPermission } from '../../github/integration.js';
+import type { GithubIssueReconciler } from '../../github/issue-reconciler.js';
 import type { GithubPullRequestReconciler, ReconcileRepository } from '../../github/rules.js';
 import { listPullRequestSubscriptionsForWebhook, retirePullRequestSubscription } from '../../github/subscriptions.js';
 import type { GithubSubscriptionStorage } from '../../github/subscriptions.js';
@@ -74,6 +75,12 @@ export interface PlatformGithubEventWorkerConfig {
   storage: PlatformGithubEventStorage;
   ingestFactoryEvent?: (event: ParsedGithubWebhook) => Promise<unknown>;
   reconcileFactoryState?: GithubPullRequestReconciler;
+  /**
+   * Optional issue-metadata reconciler. When set, folded into the same
+   * reconcile tick as `reconcileFactoryState` so a single lease covers both
+   * writers of card state for the currently discovered repositories.
+   */
+  reconcileIssuesFactoryState?: GithubIssueReconciler;
   /** When false the worker skips event tailing and only runs the reconcile sweep. */
   pollEventsEnabled?: boolean;
   intervalMs?: number;
@@ -91,6 +98,7 @@ export class PlatformGithubEventWorker extends MastraWorker {
   readonly #storage: PlatformGithubEventStorage;
   readonly #ingestFactoryEvent: ((event: ParsedGithubWebhook) => Promise<unknown>) | undefined;
   readonly #reconcileFactoryState: GithubPullRequestReconciler | undefined;
+  readonly #reconcileIssuesFactoryState: GithubIssueReconciler | undefined;
   readonly #pollEventsEnabled: boolean;
   readonly #reconcileIntervalMs: number;
   readonly #intervalMs: number;
@@ -117,6 +125,7 @@ export class PlatformGithubEventWorker extends MastraWorker {
     this.#storage = config.storage;
     this.#ingestFactoryEvent = config.ingestFactoryEvent;
     this.#reconcileFactoryState = config.reconcileFactoryState;
+    this.#reconcileIssuesFactoryState = config.reconcileIssuesFactoryState;
     this.#pollEventsEnabled = config.pollEventsEnabled ?? true;
     this.#reconcileIntervalMs = config.reconcileIntervalMs ?? DEFAULT_RECONCILE_INTERVAL_MS;
     this.#intervalMs = config.intervalMs ?? DEFAULT_POLL_INTERVAL_MS;
@@ -305,6 +314,32 @@ export class PlatformGithubEventWorker extends MastraWorker {
       this.deps?.logger.error('Platform GitHub pull request reconcile failed', {
         repositories: targets.length,
         durationMs: Date.now() - startedAt,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+
+    // Same tick as the PR reconciler: repository set already discovered, lease
+    // already held, cadence already gated. Issues have no closed-webhook replay
+    // so this only patches drifted metadata (state/author/assignees/labels).
+    if (!this.#reconcileIssuesFactoryState) return;
+    const issueStartedAt = Date.now();
+    try {
+      const { errors, ...counts } = await this.#reconcileIssuesFactoryState(targets);
+      const context = { ...counts, candidateRepositories: targets.length, durationMs: Date.now() - issueStartedAt };
+      if (counts.failed > 0) {
+        this.deps?.logger.warn('Platform GitHub issue reconcile sweep completed with failures', {
+          ...context,
+          errors,
+        });
+      } else if (counts.updated > 0) {
+        this.deps?.logger.info('Platform GitHub issue reconcile patched stale metadata', context);
+      } else {
+        this.deps?.logger.debug('Platform GitHub issue reconcile sweep completed', context);
+      }
+    } catch (error) {
+      this.deps?.logger.error('Platform GitHub issue reconcile failed', {
+        repositories: targets.length,
+        durationMs: Date.now() - issueStartedAt,
         error: error instanceof Error ? error.message : String(error),
       });
     }

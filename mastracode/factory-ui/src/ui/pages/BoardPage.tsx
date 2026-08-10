@@ -28,10 +28,15 @@ import { useBoardItems } from '../domains/factory/hooks/useBoardItems';
 import { useBoardRuns } from '../domains/factory/hooks/useBoardRuns';
 import { useBoardScroll } from '../domains/factory/hooks/useBoardScroll';
 import {
+  boardLabels,
+  boardLabelsFromQuery,
+  boardLabelsQueryValues,
   boardParticipants,
   boardRelevanceFromQuery,
   boardRelevanceQueryValue,
+  candidateMatchesLabels,
   candidateMatchesRelevance,
+  workItemMatchesLabels,
   workItemMatchesRelevance,
 } from '../domains/factory/boardRelevance';
 import type { BoardRelevanceType } from '../domains/factory/boardRelevance';
@@ -104,6 +109,7 @@ function BoardContent({
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedParticipantId = searchParams.get('teammate') || undefined;
   const selectedRelevanceTypes = boardRelevanceFromQuery(searchParams.get('relevance'), kind);
+  const selectedLabels = boardLabelsFromQuery(searchParams.getAll('label'));
 
   const auth = useFactoryAuth();
   const items = useBoardItems({ factoryProjectId, kind });
@@ -128,8 +134,11 @@ function BoardContent({
   const participantCandidateBySourceKey = new Map(
     intake.participantCandidates.map(candidate => [candidate.sourceKey, candidate]),
   );
-  const filteredCandidates = intake.candidates.filter(candidate =>
-    candidateMatchesRelevance(candidate, selectedParticipantId, selectedRelevanceTypes),
+  const availableLabels = boardLabels({ items: items.all, candidates: intake.participantCandidates });
+  const filteredCandidates = intake.candidates.filter(
+    candidate =>
+      candidateMatchesRelevance(candidate, selectedParticipantId, selectedRelevanceTypes) &&
+      candidateMatchesLabels(candidate, selectedLabels),
   );
   const setParticipant = (participantId: string | undefined) => {
     const next = new URLSearchParams(searchParams);
@@ -150,10 +159,20 @@ function BoardContent({
     else next.delete('relevance');
     setSearchParams(next, { replace: true });
   };
+  const setLabel = (label: string, selected: boolean) => {
+    const nextLabels = new Set(selectedLabels);
+    if (selected) nextLabels.add(label);
+    else nextLabels.delete(label);
+    const next = new URLSearchParams(searchParams);
+    next.delete('label');
+    for (const value of boardLabelsQueryValues(nextLabels)) next.append('label', value);
+    setSearchParams(next, { replace: true });
+  };
   const resetFilters = () => {
     const next = new URLSearchParams(searchParams);
     next.delete('teammate');
     next.delete('relevance');
+    next.delete('label');
     setSearchParams(next, { replace: true });
   };
   const loadingStages = boardLoadingStages({
@@ -166,15 +185,13 @@ function BoardContent({
     boardKey: `${factoryProjectId}:${kind}`,
     settled: loadingStages.size === 0,
     stages,
-    workItems: items.visible.filter(item =>
-      workItemMatchesRelevance(
-        item,
-        activityPage,
-        selectedParticipantId,
-        selectedRelevanceTypes,
-        item.sourceKey ? participantCandidateBySourceKey.get(item.sourceKey) : undefined,
-      ),
-    ),
+    workItems: items.visible.filter(item => {
+      const liveCandidate = item.sourceKey ? participantCandidateBySourceKey.get(item.sourceKey) : undefined;
+      return (
+        workItemMatchesRelevance(item, activityPage, selectedParticipantId, selectedRelevanceTypes, liveCandidate) &&
+        workItemMatchesLabels(item, selectedLabels, liveCandidate)
+      );
+    }),
     candidates: filteredCandidates,
   });
 
@@ -195,21 +212,20 @@ function BoardContent({
       return false;
     });
   const workItemsForStage = (stage: (typeof stages)[number]['id']) =>
-    unfilteredWorkItemsForStage(stage).filter(item =>
-      workItemMatchesRelevance(
-        item,
-        activityPage,
-        selectedParticipantId,
-        selectedRelevanceTypes,
-        item.sourceKey ? participantCandidateBySourceKey.get(item.sourceKey) : undefined,
-      ),
-    );
+    unfilteredWorkItemsForStage(stage).filter(item => {
+      const liveCandidate = item.sourceKey ? participantCandidateBySourceKey.get(item.sourceKey) : undefined;
+      return (
+        workItemMatchesRelevance(item, activityPage, selectedParticipantId, selectedRelevanceTypes, liveCandidate) &&
+        workItemMatchesLabels(item, selectedLabels, liveCandidate)
+      );
+    });
   const mutationError = runs.error ?? items.mutationError;
   const visibleWorkItems = new Set(stages.flatMap(stage => workItemsForStage(stage.id)));
   const unfilteredVisibleWorkItems = new Set(stages.flatMap(stage => unfilteredWorkItemsForStage(stage.id)));
   const totalTaskCount = visibleWorkItems.size + filteredCandidates.length;
   const unfilteredTaskCount = unfilteredVisibleWorkItems.size + intake.candidates.length;
-  const filtersExcludeAll = selectedParticipantId !== undefined && totalTaskCount === 0 && unfilteredTaskCount > 0;
+  const anyFilterActive = selectedParticipantId !== undefined || selectedLabels.size > 0;
+  const filtersExcludeAll = anyFilterActive && totalTaskCount === 0 && unfilteredTaskCount > 0;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
@@ -223,9 +239,12 @@ function BoardContent({
         participants={participants}
         selectedParticipantId={selectedParticipantId}
         selectedTypes={selectedRelevanceTypes}
+        availableLabels={availableLabels}
+        selectedLabels={selectedLabels}
         currentUserId={auth.data?.user?.userId}
         onParticipantChange={setParticipant}
         onTypeChange={setRelevanceType}
+        onLabelChange={setLabel}
         onReset={resetFilters}
       />
       <ScrollArea
@@ -307,6 +326,7 @@ function BoardContent({
                     pendingRunRoles={runs.pendingRolesFor(item.id)}
                     onCreateSession={() => void runs.openOrCreateSession(item, stage.id)}
                     onStartRun={(_spec, action) => void runs.openOrStartRun(item, action.role)}
+                    onRestartRun={(_spec, action) => void runs.restartRun(item, action.role)}
                     onMove={toStage => items.move(item.id, toStage)}
                     onRemove={() => items.remove(item.id)}
                   />

@@ -263,7 +263,7 @@ export const SignalsEmptyState = ({
             >
               Read the docs<span className="sr-only"> (opens in new tab)</span>
             </Button>
-            <Button as={LinkComponent} href="/observability" variant="primary" size="sm">
+            <Button as={LinkComponent} href="/traces" variant="primary" size="sm">
               View incoming traces
             </Button>
           </div>

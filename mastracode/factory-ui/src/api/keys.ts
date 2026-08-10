@@ -59,12 +59,15 @@ export const queryKeys = {
   /** Prefix that matches every `modelPacks(*)` entry — pack CRUD is global, so it invalidates all of them. */
   modelPacksAll: () => ['model-packs'] as const,
   om: (resourceId: string | undefined) => ['om', resourceId ?? null] as const,
+  thinkingConfig: () => ['thinking-config'] as const,
   fsList: (path: string | undefined) => ['fs-list', path ?? null] as const,
   artifactsList: (path: string | undefined) => ['artifacts-list', path ?? null] as const,
   workspaceRenderedList: (workspacePath: string | undefined, renderedRoot: string | undefined) =>
     ['workspace-rendered-list', workspacePath ?? null, renderedRoot ?? null] as const,
-  workspaceFile: (workspacePath: string | undefined, filePath: string | undefined) =>
-    ['workspace-file', workspacePath ?? null, filePath ?? null] as const,
+  workspaceFiles: (workspacePath: string | undefined, threadId: string | undefined) =>
+    ['workspace-files', workspacePath ?? null, threadId ?? null] as const,
+  workspaceFile: (workspacePath: string | undefined, filePath: string | undefined, threadId?: string) =>
+    ['workspace-file', workspacePath ?? null, filePath ?? null, threadId ?? null] as const,
   workspaceChanges: (workspacePath: string | undefined) => ['workspace-changes', workspacePath ?? null] as const,
   workspaceDiff: (
     workspacePath: string | undefined,

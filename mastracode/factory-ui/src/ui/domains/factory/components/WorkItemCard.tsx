@@ -64,6 +64,7 @@ export function WorkItemCard({
   pendingRunRoles,
   onCreateSession,
   onStartRun,
+  onRestartRun,
   onMove,
   onRemove,
 }: {
@@ -86,6 +87,8 @@ export function WorkItemCard({
   /** Card click fallback when the item has no run spec: open an empty session (no run). */
   onCreateSession: (spec: { branch: string; threadTitle: string }) => void;
   onStartRun: (spec: ItemRunSpec, action: RunAction) => void;
+  /** Re-run an action whose session slot is already used (e.g. re-review an updated PR). */
+  onRestartRun: (spec: ItemRunSpec, action: RunAction) => void;
   onMove: (toStage: string) => void;
   onRemove: () => void;
 }) {
@@ -98,6 +101,16 @@ export function WorkItemCard({
   // Offer only runs whose session slot hasn't been used yet on this card.
   const runActions = runSpec === undefined ? [] : runSpec.actions.filter(action => !(action.role in sessions));
   const defaultRunAction = runActions[0];
+  // A Done-lane PR that's still open likely picked up commits after its
+  // review; offer a manual re-review even though the review slot is used. The
+  // run re-enters Reviewing and follows up in the existing thread.
+  const reReviewAction =
+    columnStage === 'done' &&
+    item.source === 'github-pr' &&
+    ['open', 'draft'].includes(pullRequestStatusForItem(item)) &&
+    runSpec !== undefined
+      ? runSpec.actions.find(action => action.role === 'review' && action.role in sessions)
+      : undefined;
   const threadSession = itemThreadSession(sessions);
   const relatedItems = relatedWorkItems(item, allItems);
   const labels = metadataLabels(item.metadata);
@@ -179,6 +192,15 @@ export function WorkItemCard({
                     </DropdownMenu.Item>
                   );
                 })}
+              {runSpec !== undefined && reReviewAction !== undefined && (
+                <DropdownMenu.Item
+                  disabled={runDisabled || pendingRunRoles.has(reReviewAction.role)}
+                  onClick={() => onRestartRun(runSpec, reReviewAction)}
+                >
+                  {actionIcon(reReviewAction.label)}
+                  <span>{pendingRunRoles.has(reReviewAction.role) ? 'Starting…' : 'Re-review'}</span>
+                </DropdownMenu.Item>
+              )}
               {item.url !== null && (
                 <DropdownMenu.Item render={<a href={item.url} target="_blank" rel="noreferrer" />}>
                   <ArrowUpRight aria-hidden />

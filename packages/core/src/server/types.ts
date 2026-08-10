@@ -219,7 +219,7 @@ export type ServerConfig = {
   middleware?: Middleware | Middleware[];
   /**
    * CORS configuration for the server.
-   * @default { origin: '*', allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'], allowHeaders: ['Content-Type', 'Authorization', 'x-mastra-client-type', 'x-mastra-dev-playground'], exposeHeaders: ['Content-Length', 'X-Requested-With'], credentials: false }
+   * @default { origin: '*', allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'], allowHeaders: ['Content-Type', 'Authorization', 'A2A-Version', 'x-mastra-client-type', 'x-mastra-dev-playground'], exposeHeaders: ['Content-Length', 'X-Requested-With'], credentials: false }
    */
   cors?: CorsOptions | false;
   /**

@@ -103,6 +103,20 @@ function stripTerminalOutputFields<T>(value: T): T {
   if (isPlainObject(pruned.output)) {
     const output = { ...pruned.output };
     delete output.messages;
+    // The step history has to survive (resume re-reads it), but each entry
+    // carries the request that produced it, whose body is the tool schemas plus
+    // the system instruction — invariant across the run and re-serialized in
+    // full for every step. That is what pushed a single suspended run past
+    // MongoDB's 16 MB document limit. Resume only reads step number, stopWhen
+    // input and processor history from these entries, and the sibling
+    // `metadata.request` is already dropped above, so the body goes too.
+    if (Array.isArray(output.steps)) {
+      output.steps = output.steps.map((step: unknown) => {
+        if (!isPlainObject(step) || !isPlainObject(step.request) || !('body' in step.request)) return step;
+        const { body: _body, ...request } = step.request;
+        return { ...step, request };
+      });
+    }
     pruned.output = output;
   }
 

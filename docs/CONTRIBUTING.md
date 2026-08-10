@@ -208,12 +208,6 @@ Some **content** with _Markdown_ `syntax`. Check [this `api`](#).
 
 :::
 
-:::info
-
-Some **content** with _Markdown_ `syntax`. Check [this `api`](#).
-
-:::
-
 :::warning
 
 Some **content** with _Markdown_ `syntax`. Check [this `api`](#).
@@ -225,7 +219,15 @@ Some **content** with _Markdown_ `syntax`. Check [this `api`](#).
 Some **content** with _Markdown_ `syntax`. Check [this `api`](#).
 
 :::
+
+:::beta
+
+Some **content** with _Markdown_ `syntax`. Check [this `api`](#).
+
+:::
 ```
+
+`info` is an alias for `note` and renders identically, so prefer `note`.
 
 ### `<Tabs>`
 

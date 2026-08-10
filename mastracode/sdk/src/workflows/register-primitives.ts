@@ -34,14 +34,6 @@ import { workflowBuilderAgent } from '../agents/workflow-builder-agent.js';
 import type { McpManager } from '../mcp';
 import { MC_TOOLS } from '../tool-names.js';
 import { createWebExtractTool, createWebSearchTool, hasTavilyKey } from '../tools/web-search.js';
-// TODO: REMOVE BEFORE MERGE — feature-branch validation fixtures only.
-import {
-  addNumbers,
-  createSupportTicket,
-  greetingWorkflow,
-  lookupCustomer,
-  supportAgent,
-} from './manual-registry-fixtures.js';
 
 export interface RegisterWorkflowBuilderPrimitivesOptions {
   projectPath: string;
@@ -74,16 +66,6 @@ export async function registerWorkflowBuilderPrimitives(
   // 1. Agents workflows can compose.
   mastra.addAgent(workflowBuilderAgent, 'workflow-builder');
   mastra.addAgent(codeAgent, 'code-agent');
-  // TODO: REMOVE BEFORE MERGE — the registrations below exist only so the
-  // Workflow Builder has a known catalog to author against during feature-branch
-  // validation. Delete these lines together with `manual-registry-fixtures.ts`.
-  mastra.addAgent(supportAgent, 'support-agent');
-
-  mastra.addTool(addNumbers, 'add-numbers');
-  mastra.addTool(lookupCustomer, 'lookup-customer');
-  mastra.addTool(createSupportTicket, 'create-support-ticket');
-  mastra.addWorkflow(greetingWorkflow, 'greeting-workflow');
-  // TODO: REMOVE BEFORE MERGE — end of validation fixtures.
 
   // 2. Workspace tools — bound to a project-rooted local workspace.
   const workspace = new Workspace({

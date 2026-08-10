@@ -21,7 +21,7 @@
 
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
-
+import type { MastraWorker } from '@mastra/core/worker';
 import type { IntegrationConnection } from '../../capabilities/connection.js';
 import type {
   CreateIntakeCommentInput,
@@ -36,7 +36,9 @@ import type { RouteAuth } from '../../routes/route.js';
 import type { IntegrationStorageHandle } from '../../storage/domains/integrations/base.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../base.js';
+import { IssueReconcileWorker } from '../issue-reconcile-worker.js';
 import { buildLinearAgentTools } from './agent-tools.js';
+import { attachLinearIssueReconciler } from './issue-reconciler.js';
 import { buildLinearRoutes } from './routes.js';
 import { attachLinearRules } from './rules.js';
 import type { LinearConnectionRow, LinearStorageHandle, UpsertLinearConnectionInput } from './storage.js';
@@ -968,6 +970,20 @@ export class LinearIntegration implements FactoryIntegration {
   }
 
   // ── FactoryIntegration surface ───────────────────────────────────────────
+
+  workers(ctx: IntegrationContext): MastraWorker[] {
+    if (process.env.MASTRACODE_LINEAR_RECONCILE_ENABLED?.trim().toLowerCase() === 'false') return [];
+    const reconcile = attachLinearIssueReconciler(this, ctx);
+    if (!reconcile) return [];
+    const intervalMs = Number(process.env.MASTRACODE_LINEAR_RECONCILE_INTERVAL_MS);
+    return [
+      new IssueReconcileWorker({
+        integrationId: this.id,
+        reconcile,
+        ...(Number.isSafeInteger(intervalMs) && intervalMs > 0 ? { intervalMs } : {}),
+      }),
+    ];
+  }
 
   /**
    * The integration's HTTP surface: `/web/linear/*` + `/auth/linear/*` Mastra

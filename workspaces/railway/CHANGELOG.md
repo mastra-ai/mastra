@@ -1,5 +1,18 @@
 # @mastra/railway
 
+## 0.4.1-alpha.1
+
+### Patch Changes
+
+- Improved Railway sandbox recovery and checkpoint management: ([#20739](https://github.com/mastra-ai/mastra/pull/20739))
+
+  - A configured `sandboxId` reconnects when the sandbox is running, or creates a replacement when it is missing or stopped.
+  - Use `captureCheckpoint()` to save a recovery point on demand. Saved checkpoints provide the baseline filesystem for new sandboxes; `stop()` captures one before teardown and `destroy()` removes it.
+  - `start()` no longer resolves `template`. The option is still accepted and copied by `clone()`, but has no effect: callers receive neither a custom base image nor an error.
+
+- Updated dependencies [[`b4c89b4`](https://github.com/mastra-ai/mastra/commit/b4c89b4371b0c86da57403ad1a3b3ef0681f3128), [`e44e8f3`](https://github.com/mastra-ai/mastra/commit/e44e8f370b66c339ddcaba946d33da6d3c3f06cd), [`c967a5e`](https://github.com/mastra-ai/mastra/commit/c967a5eec150c5dc5418c4a4388982d1fb7ad27c), [`f53d5bd`](https://github.com/mastra-ai/mastra/commit/f53d5bd4885b29e4ac29a428a6044088ea8d6aa3), [`bda2235`](https://github.com/mastra-ai/mastra/commit/bda22353ee28f2df0eaea555f7cae1549f979c0b), [`a7eb4a1`](https://github.com/mastra-ai/mastra/commit/a7eb4a11450f6170274ed5141bffe821d4fdd5a6), [`2f9ef3f`](https://github.com/mastra-ai/mastra/commit/2f9ef3f4ca06fc2dcdd5088c26b7f4da6a016791), [`e7eefcb`](https://github.com/mastra-ai/mastra/commit/e7eefcb162cda7c493e8c3bf43050ead0efbcb2c), [`4d7aca2`](https://github.com/mastra-ai/mastra/commit/4d7aca2fe75f225c83d1502d63079568e6ec163f), [`c4ec889`](https://github.com/mastra-ai/mastra/commit/c4ec889561c0264c43f66d04d587bee4ce35e792), [`9be8878`](https://github.com/mastra-ai/mastra/commit/9be8878dcf0388e84fc4873e0eec27bd49b881a4)]:
+  - @mastra/core@1.58.0-alpha.2
+
 ## 0.4.1-alpha.0
 
 ### Patch Changes

@@ -16,7 +16,7 @@ describe('usePinnedSessions', () => {
 
   it('preserves in-memory pins when localStorage writes fail', () => {
     const { result } = renderHook(() => usePinnedSessions());
-    const setItem = vi.spyOn(window.localStorage, 'setItem').mockImplementation(() => {
+    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
       throw new Error('storage unavailable');
     });
 
@@ -34,7 +34,7 @@ describe('usePinnedSessions', () => {
 
     act(() => result.current.setPinned('session-1', true));
 
-    const getItem = vi.spyOn(window.localStorage, 'getItem').mockImplementation(() => {
+    const getItem = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
       throw new Error('storage unavailable');
     });
     act(() => window.dispatchEvent(new StorageEvent('storage', { key: STORAGE_KEY })));

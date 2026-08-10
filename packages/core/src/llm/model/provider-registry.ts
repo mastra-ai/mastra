@@ -7,6 +7,7 @@ import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
+import type { Provider, ModelForProvider, ModelRouterModelId } from '../index.js';
 import { getCapabilityFileName } from './capability-file.js';
 import type { ProviderConfig, MastraModelGatewayInterface } from './gateways/base.js';
 import { getGatewayId, shouldEnableGateway } from './gateways/gateway-helpers.js';
@@ -14,7 +15,9 @@ import { MastraGateway } from './gateways/mastra.js';
 import { ModelsDevGateway } from './gateways/models-dev.js';
 import { NetlifyGateway } from './gateways/netlify.js';
 import staticRegistryJson from './provider-registry.json';
-import type { Provider, ModelForProvider, ModelRouterModelId, ProviderModels } from './provider-types.generated.js';
+// Sourced from the package entry point so that `ProviderModelsMap` augmentations
+// declared against `@mastra/core/llm` flow into these derived types.
+import type { ProviderModels } from './provider-types.generated.js';
 
 // Re-export types for convenience
 export type { Provider, ModelForProvider, ModelRouterModelId, ProviderModels };

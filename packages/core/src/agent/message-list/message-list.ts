@@ -1256,12 +1256,43 @@ export class MessageList {
       providerMetadata?: unknown;
     };
 
+    // `providerMetadata` is a two-level map — provider namespace -> key -> value —
+    // so merging it must also be two levels deep. A one-level merge let a caller
+    // either keep a whole namespace or clobber it, never replace a single key
+    // inside it. That stranded stale keys: a completing background task passes
+    // fresh `mastra.modelOutput`, and under a shallow merge either the dispatch's
+    // placeholder survived or the rest of the `mastra` namespace was dropped.
+    // Merging per-namespace preserves untouched sibling keys (the point of the
+    // original shallow merge) while letting the incoming part replace the keys it
+    // actually sets.
     const mergedProviderMetadata =
       originalPart.providerMetadata !== undefined || inputPartWithMeta.providerMetadata !== undefined
-        ? ({
-            ...((originalPart.providerMetadata ?? {}) as Record<string, Record<string, AIV5Type.JSONValue>>),
-            ...((inputPartWithMeta.providerMetadata ?? {}) as Record<string, Record<string, AIV5Type.JSONValue>>),
-          } as AIV5Type.ProviderMetadata)
+        ? (() => {
+            const original = (originalPart.providerMetadata ?? {}) as Record<
+              string,
+              Record<string, AIV5Type.JSONValue>
+            >;
+            const incoming = (inputPartWithMeta.providerMetadata ?? {}) as Record<
+              string,
+              Record<string, AIV5Type.JSONValue>
+            >;
+            const merged: Record<string, Record<string, AIV5Type.JSONValue>> = { ...original };
+            for (const [namespace, values] of Object.entries(incoming)) {
+              const existing = merged[namespace];
+              // Only merge when both sides are plain objects; a namespace set to a
+              // non-object (or absent) is replaced wholesale, as before.
+              merged[namespace] =
+                existing &&
+                typeof existing === 'object' &&
+                !Array.isArray(existing) &&
+                values &&
+                typeof values === 'object' &&
+                !Array.isArray(values)
+                  ? { ...existing, ...values }
+                  : values;
+            }
+            return merged as AIV5Type.ProviderMetadata;
+          })()
         : undefined;
 
     msg.content.parts![i] = {

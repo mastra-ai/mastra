@@ -762,13 +762,13 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
       });
     }
 
-    // Add test stored workflow definition so GET /stored/workflows/:storedWorkflowId
-    // finds a row matching getDefaultValidPathParams' 'test-stored-workflow'
+    // Add test dynamic workflow definition so GET /stored/workflows/:dynamicWorkflowId
+    // finds a row matching getDefaultValidPathParams' 'test-dynamic-workflow'
     const workflowDefinitions = await storage.getStore('workflowDefinitions');
     if (workflowDefinitions) {
       await workflowDefinitions.upsert({
-        id: 'test-stored-workflow',
-        description: 'Test stored workflow',
+        id: 'test-dynamic-workflow',
+        description: 'Test dynamic workflow',
         inputSchema: { type: 'object', properties: { name: { type: 'string' } }, required: ['name'] },
         outputSchema: { type: 'object', properties: { message: { type: 'string' } } },
         graph: [

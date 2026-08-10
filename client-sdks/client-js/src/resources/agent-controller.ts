@@ -264,8 +264,8 @@ export interface CreateAgentControllerSessionResponse {
 export interface AgentControllerSessionSettings {
   /** Auto-approve all tool calls (no per-tool prompt). */
   yolo: boolean;
-  /** Extended-thinking budget. */
-  thinkingLevel: 'off' | 'low' | 'medium' | 'high' | 'xhigh';
+  /** Extended-thinking budget (session override). Absent when the session inherits a configured default. */
+  thinkingLevel?: 'off' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
   /** How completion/notification alerts are delivered. */
   notifications: 'off' | 'bell' | 'system' | 'both';
   /** Use AST-aware smart editing when available. */

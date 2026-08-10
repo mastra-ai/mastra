@@ -38,7 +38,7 @@ export function WorkflowHeader({ workflowName, workflowId }: { workflowName: str
             Schedules ({scheduleCount})
           </Button>
         )}
-        <Button as={Link} to={`/observability?entity=${encodeURIComponent(workflowName)}`} size="sm">
+        <Button as={Link} to={`/traces?entity=${encodeURIComponent(workflowName)}`} size="sm">
           <Icon>
             <EyeIcon />
           </Icon>

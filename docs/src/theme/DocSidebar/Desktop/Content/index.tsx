@@ -1,6 +1,6 @@
 import React, { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import clsx from 'clsx'
-import { ThemeClassNames } from '@docusaurus/theme-common'
+import { prefersReducedMotion, ThemeClassNames } from '@docusaurus/theme-common'
 import { useAnnouncementBar, useScrollPosition } from '@docusaurus/theme-common/internal'
 import { translate } from '@docusaurus/Translate'
 import DocSidebarItems from '@theme/DocSidebarItems'
@@ -32,10 +32,12 @@ export default function DocSidebarDesktopContent({ path, sidebar, className }: P
   const versionControlRef = useRef<HTMLDivElement>(null)
   const { activateSidebar, clearSidebar, resolveSidebar } = useContextualSidebar()
   const contextualSidebar = resolveSidebar(sidebar)
+  const [exitingContextualSidebar, setExitingContextualSidebar] = useState<typeof contextualSidebar>()
+  const renderedContextualSidebar = contextualSidebar ?? exitingContextualSidebar
+  const isContextualSidebarExiting = !contextualSidebar && Boolean(exitingContextualSidebar)
   const paneKey = contextualSidebar?.state.categoryHref ?? 'root'
   const previousPaneKey = useRef(paneKey)
   const shouldAnimateContextualEntry = previousPaneKey.current === 'root' && paneKey !== 'root'
-  const shouldAnimateRootEntry = previousPaneKey.current !== 'root' && paneKey === 'root'
 
   useLayoutEffect(() => {
     if (previousPaneKey.current !== paneKey) {
@@ -85,11 +87,28 @@ export default function DocSidebarDesktopContent({ path, sidebar, className }: P
       navigation.removeEventListener('scroll', updateBottomFade)
       resizeObserver.disconnect()
     }
-  }, [contextualSidebar, sidebar])
+  }, [renderedContextualSidebar, sidebar])
+
+  const finishContextualExit = () => {
+    setExitingContextualSidebar(undefined)
+    requestAnimationFrame(() => navigationRef.current?.focus())
+  }
 
   const handleBack = () => {
+    if (!contextualSidebar || prefersReducedMotion()) {
+      clearSidebar()
+      requestAnimationFrame(() => navigationRef.current?.focus())
+      return
+    }
+
+    setExitingContextualSidebar(contextualSidebar)
     clearSidebar()
-    requestAnimationFrame(() => navigationRef.current?.focus())
+  }
+
+  const handleContextualExitAnimationEnd: React.AnimationEventHandler<HTMLDivElement> = event => {
+    if (exitingContextualSidebar && event.target === event.currentTarget) {
+      finishContextualExit()
+    }
   }
 
   return (
@@ -116,21 +135,27 @@ export default function DocSidebarDesktopContent({ path, sidebar, className }: P
             ThemeClassNames.docs.docSidebarMenu,
             'menu__list',
             styles.pane,
-            contextualSidebar ? styles.rootPaneInactive : shouldAnimateRootEntry && styles.rootPaneEntry,
+            contextualSidebar && styles['root-pane-inactive'],
           )}
+          aria-hidden={contextualSidebar ? true : undefined}
+          inert={contextualSidebar ? true : undefined}
         >
           <DocSidebarItems items={sidebar} activePath={path} level={1} />
         </ul>
-        {contextualSidebar && (
+        {renderedContextualSidebar && (
           <ContextualContent
+            key={paneKey}
             activePath={path}
-            items={contextualSidebar.items}
-            label={contextualSidebar.state.categoryLabel}
+            items={renderedContextualSidebar.items}
+            label={renderedContextualSidebar.state.categoryLabel}
             onBack={handleBack}
-            onItemClick={() => activateSidebar(contextualSidebar.state)}
+            onItemClick={() => activateSidebar(renderedContextualSidebar.state)}
             paneClassName={styles.pane}
-            entryAnimationClassName={styles.contextualPane}
+            entryAnimationClassName={styles['contextual-pane-enter']}
+            exitAnimationClassName={styles['contextual-pane-exit']}
             animateEntry={shouldAnimateContextualEntry}
+            isExiting={isContextualSidebarExiting}
+            onExitAnimationEnd={handleContextualExitAnimationEnd}
           />
         )}
         <div ref={versionControlRef} className={styles.versionControl}>

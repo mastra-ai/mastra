@@ -249,8 +249,8 @@ export class MemoryConvex extends MemoryStorage {
     metadata,
   }: {
     id: string;
-    title: string;
-    metadata: Record<string, unknown>;
+    title?: string;
+    metadata?: Record<string, unknown>;
   }): Promise<StorageThreadType> {
     const updated = await this.#db.updateThread({
       id,
@@ -389,7 +389,7 @@ export class MemoryConvex extends MemoryStorage {
 
     // When perPage is 0, we only need included messages — skip full thread load
     if (perPage === 0 && include && include.length > 0) {
-      const messages = await this._getIncludedMessages(include);
+      const messages = await this._getIncludedMessages(include, undefined, resourceId);
       const list = new MessageList().add(messages, 'memory');
       return {
         messages: this._sortMessages(list.get.all.db(), field, direction),
@@ -452,7 +452,7 @@ export class MemoryConvex extends MemoryStorage {
         }
       }
 
-      const includedMessages = await this._getIncludedMessages(include, preloadedThreads);
+      const includedMessages = await this._getIncludedMessages(include, preloadedThreads, resourceId);
       for (const msg of includedMessages) {
         if (!messageIds.has(msg.id)) {
           messages.push(msg);
@@ -751,11 +751,22 @@ export class MemoryConvex extends MemoryStorage {
     });
   }
 
+  /**
+   * Fetches the messages named by `include` together with their surrounding context.
+   *
+   * @param include - Message ids to pin, each with an optional before/after window.
+   * @param preloadedThreads - Thread snapshots already loaded by the caller, reused instead of re-querying.
+   * @param resourceId - When set, restricts both the pinned messages and their context
+   * to that resource so an id from another resource returns nothing.
+   */
   private async _getIncludedMessages(
     include: NonNullable<StorageListMessagesInput['include']>,
     preloadedThreads?: Map<string, StoredMessage[]>,
+    resourceId?: string,
   ): Promise<MastraDBMessage[]> {
     if (include.length === 0) return [];
+
+    const resourceFilters = resourceId ? [{ field: 'resourceId', value: resourceId }] : [];
 
     const messages: MastraDBMessage[] = [];
     const messageIds = new Set<string>();
@@ -782,6 +793,7 @@ export class MemoryConvex extends MemoryStorage {
       if (!target) {
         const messageRows = await this.#db.queryTable<StoredMessage>(TABLE_MESSAGES, [
           { field: 'id', value: includeItem.id },
+          ...resourceFilters,
         ]);
         if (messageRows.length > 0) {
           target = messageRows[0];
@@ -790,6 +802,7 @@ export class MemoryConvex extends MemoryStorage {
           if (targetThreadId && !threadMessagesCache.has(targetThreadId)) {
             const otherThreadRows = await this.#db.queryTable<StoredMessage>(TABLE_MESSAGES, [
               { field: 'thread_id', value: targetThreadId },
+              ...resourceFilters,
             ]);
             threadMessagesCache.set(targetThreadId, otherThreadRows);
             for (const row of otherThreadRows) {

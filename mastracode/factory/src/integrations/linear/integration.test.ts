@@ -261,3 +261,23 @@ describe('LinearIntegration capability surface', () => {
     expect(() => new LinearIntegration({ clientId: '', clientSecret: '' })).toThrow(/clientId, clientSecret/);
   });
 });
+
+describe('LinearIntegration workers', () => {
+  it('registers a standalone issue reconciler worker', () => {
+    const linear = integration() as unknown as {
+      workers(ctx: unknown): Array<{ name: string }>;
+    };
+    const context = {
+      controller: {},
+      storage: {
+        generic: {},
+        sourceControl: {},
+        projects: { listAll: async () => [] },
+        intake: {},
+      },
+      rules: { config: {}, workItems: {} },
+    };
+
+    expect(linear.workers(context).map(worker => worker.name)).toEqual(['linear-issue-reconcile']);
+  });
+});

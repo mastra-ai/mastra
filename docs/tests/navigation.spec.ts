@@ -230,7 +230,7 @@ function visibleSidebarPane(page: Page, pane: 'root' | 'contextual') {
 
 function contextualTopLevelLinks(pane: Locator) {
   return pane.locator(
-    ':scope > ul[data-sidebar-panel="contextual"] > li > a.menu__link, :scope > ul[data-sidebar-panel="contextual"] > li > .menu__list-item-collapsible > a.menu__link',
+    'ul[data-sidebar-panel="contextual"] > li > a.menu__link, ul[data-sidebar-panel="contextual"] > li > .menu__list-item-collapsible > a.menu__link',
   )
 }
 
@@ -269,6 +269,36 @@ async function openMobileSidebar(page: Page) {
 }
 
 test.describe('Contextual sidebar', () => {
+  test('desktop: contextual root links share the standard link hover layer', async ({ page, isMobile }) => {
+    test.skip(isMobile, 'Desktop sidebar not rendered on mobile')
+
+    await page.goto('/docs', { waitUntil: 'domcontentloaded' })
+    const rootPane = visibleSidebarPane(page, 'root')
+    const standardLink = rootPane.getByRole('link', { name: 'Subagents', exact: true })
+    const contextualLink = rootPane.getByRole('link', { name: 'Sandbox', exact: true })
+
+    await standardLink.hover()
+    const standardHover = await standardLink.evaluate(link => ({
+      backgroundColor: getComputedStyle(link).backgroundColor,
+      transition: getComputedStyle(link).transition,
+    }))
+
+    await contextualLink.hover()
+    const contextualHover = await contextualLink.evaluate(link => ({
+      backgroundColor: getComputedStyle(link).backgroundColor,
+      transition: getComputedStyle(link).transition,
+      chevronContent: getComputedStyle(link, '::after').content,
+      parentTagName: link.parentElement?.tagName,
+    }))
+
+    expect(contextualHover).toMatchObject({
+      backgroundColor: standardHover.backgroundColor,
+      transition: standardHover.transition,
+      parentTagName: 'LI',
+    })
+    expect(contextualHover.chevronContent).not.toBe('none')
+  })
+
   test('desktop: navigates child links and restores root focus on Back', async ({ page, isMobile }) => {
     test.skip(isMobile, 'Desktop sidebar not rendered on mobile')
     const getErrors = trackJsErrors(page)
@@ -290,8 +320,13 @@ test.describe('Contextual sidebar', () => {
 
         requestAnimationFrame(() => {
           document.documentElement.dataset.sidebarTransitionSample = JSON.stringify({
-            visibility: getComputedStyle(rootPanel).visibility,
-            activeAnimations: rootPanel.getAnimations().length,
+            rootAriaHidden: rootPanel.getAttribute('aria-hidden'),
+            rootInert: rootPanel.hasAttribute('inert'),
+            rootActiveAnimations: rootPanel.getAnimations().filter(animation => animation.playState === 'running')
+              .length,
+            contextualActiveAnimations: (contextualPanel.parentElement?.getAnimations() ?? []).filter(
+              animation => animation.playState === 'running',
+            ).length,
           })
           observer.disconnect()
         })
@@ -310,7 +345,12 @@ test.describe('Contextual sidebar', () => {
           return sample ? JSON.parse(sample) : undefined
         }),
       )
-      .toEqual({ visibility: 'hidden', activeAnimations: 0 })
+      .toMatchObject({ rootAriaHidden: 'true', rootInert: true })
+    const transitionSample = await page.evaluate(() =>
+      JSON.parse(document.documentElement.dataset.sidebarTransitionSample ?? '{}'),
+    )
+    expect(transitionSample.rootActiveAnimations).toBeGreaterThan(0)
+    expect(transitionSample.contextualActiveAnimations).toBeGreaterThan(0)
     const backButton = contextualPane.getByRole('button', { name: 'Back to global sidebar' })
     await expect(backButton).toHaveText('Agents')
     await expect(contextualPane.getByRole('heading', { name: 'Agents' })).toHaveCount(0)
@@ -330,7 +370,16 @@ test.describe('Contextual sidebar', () => {
 
     const urlBeforeBack = page.url()
     await backButton.focus()
-    await backButton.press('Enter')
+    const exitTransition = await backButton.evaluate(button => {
+      const panel = button.closest<HTMLElement>('[data-sidebar-panel-container="contextual"]')
+      button.click()
+      return {
+        animationName: panel ? getComputedStyle(panel).animationName : 'none',
+        isConnected: panel?.isConnected ?? false,
+      }
+    })
+    expect(exitTransition.isConnected).toBe(true)
+    expect(exitTransition.animationName).not.toBe('none')
     const restoredRootPane = visibleSidebarPane(page, 'root')
     await expect(restoredRootPane).toBeVisible()
     await expect(page).toHaveURL(urlBeforeBack)
@@ -414,12 +463,14 @@ test.describe('Contextual sidebar', () => {
         listRight: listRect.right - buttonRect.right,
         outerLeft: buttonRect.left - navigationRect.left,
         outerRight: navigationRect.right - buttonRect.right,
+        scrollbarGutter: element.offsetWidth - element.clientWidth,
       }
     })
     expect(Math.abs(alignment.listLeft)).toBeLessThan(1)
     expect(Math.abs(alignment.listRight)).toBeLessThan(1)
     expect(alignment.outerLeft).toBeCloseTo(16, 0)
-    expect(alignment.outerRight).toBeCloseTo(16, 0)
+    expect(alignment.outerRight).toBeGreaterThanOrEqual(alignment.outerLeft - 1)
+    expect(alignment.outerRight).toBeLessThanOrEqual(alignment.outerLeft + alignment.scrollbarGutter + 1)
 
     const initialBottom = await versionControl.evaluate(element => element.getBoundingClientRect().bottom)
     await rootPane.evaluate(element => {
@@ -445,7 +496,7 @@ test.describe('Contextual sidebar', () => {
 
     const deploymentPane = visibleSidebarPane(page, 'contextual')
     await expect(deploymentPane).toBeVisible()
-    await expect(deploymentPane.getByRole('button', { name: 'Back to global sidebar' })).toHaveText('Deployment')
+    await expect(deploymentPane.getByRole('button', { name: 'Back to global sidebar' })).toHaveText('Deploy')
     await expect(deploymentPane.locator('a.menu__link[href="/docs/deployment/workflow-runners"]')).toHaveAttribute(
       'aria-current',
       'page',
@@ -487,7 +538,7 @@ test.describe('Contextual sidebar', () => {
     await expect
       .poll(() =>
         directContextualPane
-          .locator('ul[data-sidebar-panel="contextual"]')
+          .locator('[data-sidebar-panel-container="contextual"]')
           .evaluate(element => getComputedStyle(element).animationName),
       )
       .toBe('none')
@@ -502,7 +553,7 @@ test.describe('Contextual sidebar', () => {
     await expect
       .poll(() =>
         reenteredContextualPane
-          .locator('ul[data-sidebar-panel="contextual"]')
+          .locator('[data-sidebar-panel-container="contextual"]')
           .evaluate(element => getComputedStyle(element).animationName),
       )
       .not.toBe('none')
@@ -644,7 +695,7 @@ test.describe('Admonitions and tabs on AI SDK UI guide', () => {
     await page.goto(PAGE, { waitUntil: 'domcontentloaded' })
     await page.waitForLoadState('networkidle')
 
-    // The page has admonitions of types: note, tip, info, warning.
+    // The page has admonitions of types: note, tip, warning.
     // Some admonitions are inside inactive tab panels (hidden attribute),
     // so we check all titles in the DOM for type coverage, then verify
     // only the visible ones are properly rendered.
@@ -657,7 +708,7 @@ test.describe('Admonitions and tabs on AI SDK UI guide', () => {
       titles.push((await allAdmonitions.nth(i).textContent())?.toLowerCase() ?? '')
     }
 
-    for (const type of ['note', 'tip', 'info', 'warning']) {
+    for (const type of ['note', 'tip', 'warning']) {
       expect(
         titles.some(t => t.includes(type)),
         `Expected an admonition of type "${type}"`,

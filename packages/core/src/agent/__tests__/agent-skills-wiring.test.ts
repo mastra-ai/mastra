@@ -9,6 +9,8 @@
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { executeWithContext, initContextStorage } from '../../observability/context-storage';
+import { RequestContext } from '../../request-context';
 import { createSkill } from '../../skills/create-skill';
 import type { Skill, SkillMetadata, WorkspaceSkills } from '../../workspace/skills';
 import type { Workspace } from '../../workspace/workspace';
@@ -264,6 +266,189 @@ describe('Agent-level skills wiring', () => {
       const sharedSkill = skillsList.find(s => s.name === 'shared-name');
       expect(sharedSkill).toBeDefined();
       expect(sharedSkill!.description).toBe('inline version wins');
+    });
+  });
+
+  describe('dynamic skills resolver', () => {
+    it('runs the resolver once per execution, not once per resolution site', async () => {
+      const resolver = vi.fn(() => [
+        createSkill({
+          name: 'per-request',
+          description: 'Resolved per request.',
+          instructions: 'Do the thing.',
+        }),
+      ]);
+
+      const agent = new Agent({
+        id: 'dynamic-skills-once',
+        instructions: 'You have dynamic skills.',
+        model: mockModel,
+        skills: resolver,
+      });
+
+      await agent.generate('Hello');
+      expect(resolver).toHaveBeenCalledTimes(1);
+
+      // Skills still reach the model on the single resolution
+      const systemMsgs = getSystemMessages(capturedPrompt);
+      expect(systemMsgs.join('\n')).toContain('per-request');
+    });
+
+    it('runs the resolver again for the next execution', async () => {
+      const resolver = vi.fn(() => []);
+
+      const agent = new Agent({
+        id: 'dynamic-skills-per-request',
+        instructions: 'You have dynamic skills.',
+        model: mockModel,
+        skills: resolver,
+      });
+
+      await agent.generate('First');
+      await agent.generate('Second');
+
+      expect(resolver).toHaveBeenCalledTimes(2);
+    });
+
+    it('shares one resolution across calls that pass the same requestContext', async () => {
+      const resolver = vi.fn(() => []);
+
+      const agent = new Agent({
+        id: 'dynamic-skills-shared-rc',
+        instructions: 'You have dynamic skills.',
+        model: mockModel,
+        skills: resolver,
+      });
+
+      const requestContext = new RequestContext();
+      await agent.listSkills({ requestContext });
+      await agent.listSkills({ requestContext });
+
+      expect(resolver).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not cache a failed resolution', async () => {
+      const resolver = vi.fn().mockRejectedValueOnce(new Error('skills service unavailable')).mockResolvedValue([]);
+
+      const agent = new Agent({
+        id: 'dynamic-skills-retry',
+        instructions: 'You have dynamic skills.',
+        model: mockModel,
+        skills: resolver,
+      });
+
+      const requestContext = new RequestContext();
+      await expect(agent.listSkills({ requestContext })).rejects.toThrow('skills service unavailable');
+      await expect(agent.listSkills({ requestContext })).resolves.toEqual([]);
+
+      expect(resolver).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('tracing context for dynamic resolvers', () => {
+    function createRecordingSpan() {
+      const children: Array<{
+        options: any;
+        ended: boolean;
+        endOptions?: any;
+        errored: boolean;
+        errorOptions?: any;
+        span: any;
+      }> = [];
+      const parent: any = {
+        createChildSpan: vi.fn((options: any) => {
+          const record: any = { options, ended: false, errored: false };
+          record.span = {
+            end: vi.fn((endOptions?: any) => {
+              record.ended = true;
+              record.endOptions = endOptions;
+            }),
+            error: vi.fn((errorOptions?: any) => {
+              record.errored = true;
+              record.errorOptions = errorOptions;
+            }),
+          };
+          children.push(record);
+          return record.span;
+        }),
+      };
+      return { parent, children };
+    }
+
+    it('opens one resolve-skills span per request and hands it to the resolver', async () => {
+      initContextStorage();
+      const { parent, children } = createRecordingSpan();
+      const seenSpans: unknown[] = [];
+
+      const agent = new Agent({
+        id: 'skills-span',
+        instructions: 'You have dynamic skills.',
+        model: mockModel,
+        skills: ({ tracingContext }) => {
+          seenSpans.push(tracingContext?.currentSpan);
+          return [createSkill({ name: 'traced', description: 'Traced skill.', instructions: 'Trace things.' })];
+        },
+      });
+
+      const requestContext = new RequestContext();
+      await executeWithContext({
+        span: parent,
+        fn: async () => {
+          await agent.listSkills({ requestContext });
+          await agent.listSkills({ requestContext });
+        },
+      });
+
+      expect(parent.createChildSpan).toHaveBeenCalledTimes(1);
+      expect(children[0]!.options).toMatchObject({ name: 'resolve-skills', metadata: { agentId: 'skills-span' } });
+      expect(seenSpans).toEqual([children[0]!.span]);
+      expect(children[0]!.ended).toBe(true);
+      expect(children[0]!.endOptions).toMatchObject({ metadata: { skillCount: 1 } });
+    });
+
+    it('records a resolver failure on the span and opens a fresh one on retry', async () => {
+      initContextStorage();
+      const { parent, children } = createRecordingSpan();
+      const resolver = vi.fn().mockRejectedValueOnce(new Error('skills service unavailable')).mockResolvedValue([]);
+
+      const agent = new Agent({
+        id: 'skills-span-error',
+        instructions: 'You have dynamic skills.',
+        model: mockModel,
+        skills: resolver,
+      });
+
+      const requestContext = new RequestContext();
+      await executeWithContext({
+        span: parent,
+        fn: async () => {
+          await expect(agent.listSkills({ requestContext })).rejects.toThrow('skills service unavailable');
+          await expect(agent.listSkills({ requestContext })).resolves.toEqual([]);
+        },
+      });
+
+      expect(parent.createChildSpan).toHaveBeenCalledTimes(2);
+      expect(children[0]!.errored).toBe(true);
+      expect(children[0]!.errorOptions).toMatchObject({ endSpan: true });
+      expect(children[1]!.ended).toBe(true);
+      expect(children[1]!.endOptions).toMatchObject({ metadata: { skillCount: 0 } });
+    });
+
+    it('passes an empty tracingContext on metadata reads like listSkills', async () => {
+      let seen: unknown = 'never-called';
+      const agent = new Agent({
+        id: 'dynamic-skills-tracing-metadata',
+        instructions: 'You have dynamic skills.',
+        model: mockModel,
+        skills: ({ tracingContext }) => {
+          seen = tracingContext;
+          return [];
+        },
+      });
+
+      await agent.listSkills();
+
+      expect(seen).toHaveProperty('currentSpan', undefined);
     });
   });
 });

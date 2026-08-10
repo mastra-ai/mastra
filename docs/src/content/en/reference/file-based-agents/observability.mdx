@@ -8,6 +8,12 @@ packages:
 
 # Observability
 
+:::beta
+
+Breaking changes may occur without a major version bump until the API is stable.
+
+:::
+
 Mastra configures [observability](/docs/observability/overview) from an `observability.ts` file directly under `src/mastra/`. The file default-exports an `Observability` instance that sets up tracing, logging, metrics, and feedback for the project.
 
 Use this page for the file-based convention. For the signal model, exporters, storage, and multi-config setup, see the [observability overview](/docs/observability/overview) and [observability configuration](/docs/observability/overview#configuration).

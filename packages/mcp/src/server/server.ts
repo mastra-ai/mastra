@@ -989,8 +989,15 @@ export class MCPServer extends MCPServerBase {
           response.structuredContent = structuredContent;
         }
 
-        if (response.structuredContent) {
-          response.content = [{ type: 'text', text: JSON.stringify(response.structuredContent) }];
+        if (response.structuredContent !== undefined) {
+          const authorContent =
+            result && typeof result === 'object' && 'content' in result && Array.isArray(result.content)
+              ? result.content
+              : undefined;
+          response.content =
+            authorContent && authorContent.length > 0
+              ? authorContent
+              : [{ type: 'text', text: JSON.stringify(response.structuredContent) }];
         } else {
           response.content = [
             {

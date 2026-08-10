@@ -165,6 +165,24 @@ const toolErrorChunk = (toolCallId: string, error: string): ChunkType =>
     payload: { toolCallId, error },
   }) as unknown as ChunkType;
 
+const toolOutputDeniedChunk = (
+  toolCallId: string,
+  toolName: string,
+  args: Record<string, unknown>,
+  reason?: string,
+): ChunkType =>
+  ({
+    type: 'tool-output-denied',
+    runId: RUN_ID,
+    from: 'AGENT',
+    payload: {
+      toolCallId,
+      toolName,
+      args,
+      approval: { id: 'approval-1', approved: false, ...(reason ? { reason } : {}) },
+    },
+  }) as unknown as ChunkType;
+
 const toolCallApprovalChunk = (toolCallId: string, toolName: string, args: Record<string, unknown>): ChunkType =>
   ({
     type: 'tool-call-approval',
@@ -819,6 +837,22 @@ describe('accumulateChunk - tool calls', () => {
       state: 'output-error',
       toolCallId: 'tc-1',
       errorText: 'boom',
+    });
+  });
+
+  it('tool-output-denied transitions to output-denied with approval details', () => {
+    const out = reduce([
+      startChunk(),
+      toolCallChunk('tc-1', 'sendMail', { to: 'x' }),
+      toolOutputDeniedChunk('tc-1', 'sendMail', { to: 'x' }, 'Not now'),
+    ]);
+    const toolPart = out[0].content.parts.find(p => p.type === 'tool-invocation') as MastraToolInvocationPart;
+    expect(toolPart.toolInvocation).toMatchObject({
+      state: 'output-denied',
+      toolCallId: 'tc-1',
+      toolName: 'sendMail',
+      args: { to: 'x' },
+      approval: { id: 'approval-1', approved: false, reason: 'Not now' },
     });
   });
 

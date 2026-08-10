@@ -2497,6 +2497,8 @@ export class Agent extends BaseResource {
   async declineNetworkToolCall(params: {
     runId: string;
     model?: string;
+    /** Optional explanation surfaced in place of the default decline message. */
+    reason?: string;
     requestContext?: RequestContext | Record<string, any>;
   }): Promise<
     Response & {
@@ -2885,6 +2887,8 @@ export class Agent extends BaseResource {
     runId: string;
     toolCallId: string;
     model?: string;
+    /** Optional explanation surfaced to the model in place of the default decline message. */
+    reason?: string;
     requestContext?: RequestContext | Record<string, any>;
   }): Promise<
     Response & {
@@ -3214,6 +3218,8 @@ export class Agent extends BaseResource {
     runId: string;
     toolCallId: string;
     model?: string;
+    /** Optional explanation surfaced to the model in place of the default decline message. */
+    reason?: string;
     requestContext?: RequestContext | Record<string, any>;
   }): Promise<any> {
     const { requestContext, ...rest } = params;

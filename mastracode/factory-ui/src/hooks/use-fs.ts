@@ -8,6 +8,7 @@ import type {
   WorkspaceChanges,
   WorkspaceDiff,
   WorkspaceFile,
+  WorkspaceFilesListing,
   WorkspaceRenderedListing,
 } from '../api/types';
 
@@ -27,9 +28,9 @@ function workspaceRenderedListingUrl(workspacePath: string | undefined, root: st
   return `/web/workspace/rendered/list?${new URLSearchParams({ workspacePath, root })}`;
 }
 
-function workspaceFileUrl(workspacePath: string | undefined, path: string | undefined) {
-  if (!workspacePath || !path) return undefined;
-  return `/web/workspace/file?${new URLSearchParams({ workspacePath, path })}`;
+function workspaceFileUrl(workspacePath: string | undefined, path: string | undefined, threadId: string | undefined) {
+  if (!workspacePath || !path || !threadId) return undefined;
+  return `/web/workspace/file?${new URLSearchParams({ workspacePath, path, threadId })}`;
 }
 
 function workspaceChangesUrl(workspacePath: string | undefined) {
@@ -88,15 +89,31 @@ export function useWorkspaceRenderedListing(
   });
 }
 
-export function useWorkspaceFile(
+export function useWorkspaceFiles(
   workspacePath: string | undefined,
-  filePath: string | undefined,
+  threadId: string | undefined,
   { enabled = true }: { enabled?: boolean } = {},
 ) {
   const { client } = useApiConfig();
-  const url = workspaceFileUrl(workspacePath, filePath);
+  const url =
+    workspacePath && threadId ? `/web/workspace/files?${new URLSearchParams({ workspacePath, threadId })}` : undefined;
+  return useQuery<WorkspaceFilesListing>({
+    queryKey: queryKeys.workspaceFiles(workspacePath, threadId),
+    enabled,
+    queryFn: url ? () => client.get<WorkspaceFilesListing>(url) : skipToken,
+  });
+}
+
+export function useWorkspaceFile(
+  workspacePath: string | undefined,
+  filePath: string | undefined,
+  threadId: string | undefined,
+  { enabled = true }: { enabled?: boolean } = {},
+) {
+  const { client } = useApiConfig();
+  const url = workspaceFileUrl(workspacePath, filePath, threadId);
   return useQuery<WorkspaceFile>({
-    queryKey: queryKeys.workspaceFile(workspacePath, filePath),
+    queryKey: queryKeys.workspaceFile(workspacePath, filePath, threadId),
     enabled,
     queryFn: url ? () => client.get<WorkspaceFile>(url) : skipToken,
   });
