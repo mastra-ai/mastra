@@ -443,11 +443,6 @@ const sidebars = {
       className: 'sidebar-group-name',
       items: [
         {
-          type: 'doc',
-          id: 'storage/overview',
-          label: 'Storage',
-        },
-        {
           type: 'category',
           label: 'Studio',
           link: {
@@ -527,6 +522,11 @@ const sidebars = {
               label: 'Mastra Client',
             },
           ],
+        },
+        {
+          type: 'doc',
+          id: 'storage/overview',
+          label: 'Storage',
         },
         {
           type: 'category',
@@ -616,7 +616,7 @@ const sidebars = {
         },
         {
           type: 'category',
-          label: 'Deployment',
+          label: 'Deploy',
           link: {
             type: 'doc',
             id: 'deployment/overview',
