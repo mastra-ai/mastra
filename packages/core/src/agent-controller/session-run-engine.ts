@@ -415,7 +415,8 @@ export class SessionRunEngine {
   }
 
   /**
-   * Process a stream response (shared between sendMessage and tool approval).
+   * Process a stream response. Production runs stream through
+   * `processSubscribedThreadStream`; only tests call this entry directly.
    */
   async processStream(
     response: { fullStream: AsyncIterable<StreamChunk> },

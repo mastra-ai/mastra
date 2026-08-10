@@ -3014,7 +3014,8 @@ export class Session<TState = unknown> {
   /**
    * Consume an agent stream response, folding chunks into this session's display
    * messages and usage and driving tool approval. Delegates to the per-session
-   * run engine. Used by the initial run path and tool resume.
+   * run engine. Production runs go through `processSubscribedThreadStream`;
+   * only tests call this directly.
    */
   processStream(
     response: { fullStream: AsyncIterable<any> },
