@@ -1,6 +1,6 @@
 export default {
   '*.{ts,tsx}': [
-    'oxlint --fix --deny-warnings',
+    'oxlint --fix --deny-warnings --no-error-on-unmatched-pattern',
     'eslint --fix --max-warnings=0 --no-warn-ignored',
     'oxfmt --no-error-on-unmatched-pattern',
   ],

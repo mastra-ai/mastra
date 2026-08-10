@@ -65,17 +65,27 @@ function getAgentControllerOrThrow(
 async function getSession(
   controller: AgentController<any>,
   resourceId: string,
-  options?: { tags?: Record<string, string>; scope?: string; threadId?: string },
+  options?: { tags?: Record<string, string>; scope?: string; threadId?: string; modeId?: string; modelId?: string },
   requestContext?: RequestContext,
 ): Promise<Session<any>> {
   await controller.init();
-  const { tags, scope, threadId } = options ?? {};
+  const { tags, scope, threadId, modeId, modelId } = options ?? {};
   // Scoped sessions are independent sessions over the same resource (e.g. one
   // per git worktree), so qualify the stable session id with the scope to keep
   // their identities distinct as well. An exact thread binding doubles as the
   // stable session id when supplied.
   const id = threadId ?? (scope ? `${resourceId}::${scope}` : resourceId);
-  return controller.createSession({ resourceId, id, ownerId: controller.id, tags, scope, threadId, requestContext });
+  return controller.createSession({
+    resourceId,
+    id,
+    ownerId: controller.id,
+    tags,
+    scope,
+    threadId,
+    modeId,
+    modelId,
+    requestContext,
+  });
 }
 
 /**
@@ -140,6 +150,14 @@ const createSessionBodySchema = z.object({
   tags: z.record(z.string(), z.string()).optional(),
   threadId: z.string().optional(),
   sessionScope: z.string().optional(),
+  /**
+   * Initial mode/model for a newly materialized session (born configured).
+   * Creation-time seeds, not overrides: an already live session is returned
+   * unchanged and a resumed thread's persisted selection wins. An unknown
+   * modeId fails the request.
+   */
+  modeId: z.string().optional(),
+  modelId: z.string().optional(),
 });
 // Server-side attachment limits mirroring the web composer caps (10MB per
 // file, 20MB total), adjusted for base64 overhead (~4/3x).
@@ -242,6 +260,9 @@ const createSessionResponseSchema = z.object({
   controllerId: z.string(),
   resourceId: z.string(),
   threadId: z.string().optional(),
+  /** The mode/model the session actually starts with, so callers can confirm creation seeds. */
+  modeId: z.string().optional(),
+  modelId: z.string().optional(),
 });
 const ackResponseSchema = z.object({ ok: z.boolean() });
 /**
@@ -283,7 +304,16 @@ const sessionStateResponseSchema = z.object({
   settings: sessionSettingsSchema.optional(),
 });
 const listModesResponseSchema = z.object({
-  modes: z.array(z.object({ id: z.string(), name: z.string().optional() })),
+  modes: z.array(
+    z.object({
+      id: z.string(),
+      name: z.string().optional(),
+      /** Whether new sessions start in this mode. */
+      default: z.boolean(),
+      /** The model this mode starts on unless a session overrides it. */
+      defaultModelId: z.string().optional(),
+    }),
+  ),
 });
 const listThreadsResponseSchema = z.object({
   threads: z.array(
@@ -404,14 +434,31 @@ export const CREATE_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
   tags: ['AgentController'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:execute',
-  handler: async ({ mastra, controllerId, resourceId, sessionScope, tags, threadId, requestContext }) => {
+  handler: async ({
+    mastra,
+    controllerId,
+    resourceId,
+    sessionScope,
+    tags,
+    threadId,
+    modeId,
+    modelId,
+    requestContext,
+  }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
-      const session = await getSession(controller, resourceId, { tags, scope: sessionScope, threadId }, requestContext);
+      const session = await getSession(
+        controller,
+        resourceId,
+        { tags, scope: sessionScope, threadId, modeId, modelId },
+        requestContext,
+      );
       return {
         controllerId,
         resourceId,
         threadId: session.thread.getId() ?? undefined,
+        modeId: session.mode.get() || undefined,
+        modelId: session.model.get() || undefined,
       };
     } catch (error) {
       return handleError(error, 'error creating controller session');
@@ -828,7 +875,12 @@ export const LIST_AGENT_CONTROLLER_MODES_ROUTE = createRoute({
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       return {
-        modes: controller.listModes().map(mode => ({ id: mode.id, name: mode.name })),
+        modes: controller.listModes().map(mode => ({
+          id: mode.id,
+          name: mode.name,
+          default: mode.id === controller.defaultModeId,
+          defaultModelId: mode.defaultModelId,
+        })),
       };
     } catch (error) {
       return handleError(error, 'error listing controller modes');

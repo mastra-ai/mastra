@@ -1656,6 +1656,15 @@ export class SessionMode {
   }
 
   /**
+   * Persist the current selection so a restart restores it. Creation-time
+   * seeds go through {@link set} and skip {@link switch}'s ceremony (events,
+   * per-mode model resolution), so they persist explicitly via this method.
+   */
+  async persistSelection(): Promise<void> {
+    await this.#store()?.set(MODE_ID_KEY, this.#id);
+  }
+
+  /**
    * Switch to a different mode.
    *
    * Emits `mode_changed`, then runs the version-guarded sequence: remember the

@@ -19898,6 +19898,8 @@ export type GetAgentControllerControllerIdModes_Response = {
   modes: {
     id: string;
     name?: string | undefined;
+    default: boolean;
+    defaultModelId?: string | undefined;
   }[];
 };
 
@@ -19964,12 +19966,16 @@ export type PostAgentControllerControllerIdSessions_Body = {
     | undefined;
   threadId?: string | undefined;
   sessionScope?: string | undefined;
+  modeId?: string | undefined;
+  modelId?: string | undefined;
 };
 
 export type PostAgentControllerControllerIdSessions_Response = {
   controllerId: string;
   resourceId: string;
   threadId?: string | undefined;
+  modeId?: string | undefined;
+  modelId?: string | undefined;
 };
 
 export type PostAgentControllerControllerIdSessions_Request = Simplify<

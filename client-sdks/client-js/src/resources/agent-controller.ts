@@ -258,6 +258,9 @@ export interface CreateAgentControllerSessionResponse {
   controllerId: string;
   resourceId: string;
   threadId?: string;
+  /** The mode/model the session actually starts with (confirms creation seeds). */
+  modeId?: string;
+  modelId?: string;
 }
 
 /** Agent behavior settings, mirroring the TUI's `/settings` toggles. */
@@ -292,6 +295,10 @@ export interface AgentControllerSessionState {
 export interface AgentControllerModeInfo {
   id: string;
   name?: string;
+  /** Whether new sessions start in this mode. Absent on servers predating creation seeds. */
+  default?: boolean;
+  /** The model this mode starts on unless a session overrides it. */
+  defaultModelId?: string;
 }
 
 export interface AgentControllerThreadInfo {
@@ -474,11 +481,15 @@ export class AgentControllerSession extends BaseResource {
    * Create or resume this session. Pass `tags` to scope initial thread
    * selection — a thread is a resume candidate only when its metadata matches
    * every tag. Pass `threadId` to bind the session to one exact thread,
-   * creating it with that id when it does not exist.
+   * creating it with that id when it does not exist. Pass `modeId`/`modelId`
+   * to seed a newly created session's initial mode and model; a resumed
+   * thread's persisted selection wins over the seeds.
    */
   create(options?: {
     tags?: Record<string, string>;
     threadId?: string;
+    modeId?: string;
+    modelId?: string;
   }): Promise<CreateAgentControllerSessionResponse> {
     return this.request(`/agent-controller/${encodeURIComponent(this.controllerId)}/sessions`, {
       method: 'POST',
@@ -486,6 +497,8 @@ export class AgentControllerSession extends BaseResource {
         resourceId: this.resourceId,
         tags: options?.tags,
         threadId: options?.threadId,
+        modeId: options?.modeId,
+        modelId: options?.modelId,
         sessionScope: this.scope,
       },
     });

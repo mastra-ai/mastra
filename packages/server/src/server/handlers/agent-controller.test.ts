@@ -111,6 +111,39 @@ describe('agent-controller routes', () => {
         CREATE_AGENT_CONTROLLER_SESSION_ROUTE.handler({ mastra, controllerId: 'nope', resourceId: 'user-1' } as any),
       ).rejects.toBeInstanceOf(HTTPException);
     });
+
+    it('seeds a new session with the requested mode and model and reports them back', async () => {
+      const res = (await CREATE_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-seeded',
+        threadId: 'seeded-thread',
+        modeId: 'plan',
+        modelId: 'openai/gpt-5.2-codex',
+      } as any)) as { modeId?: string; modelId?: string };
+
+      expect(res.modeId).toBe('plan');
+      expect(res.modelId).toBe('openai/gpt-5.2-codex');
+
+      const state = (await GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-seeded',
+      } as any)) as { modeId: string; modelId: string };
+      expect(state.modeId).toBe('plan');
+      expect(state.modelId).toBe('openai/gpt-5.2-codex');
+    });
+
+    it('rejects an unknown initial mode', async () => {
+      await expect(
+        CREATE_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+          mastra,
+          controllerId: 'code',
+          resourceId: 'user-bad-mode',
+          modeId: 'nope',
+        } as any),
+      ).rejects.toBeInstanceOf(HTTPException);
+    });
   });
 
   describe('scoped sessions (sessionScope)', () => {
@@ -520,12 +553,12 @@ describe('agent-controller routes', () => {
   });
 
   describe('LIST_AGENT_CONTROLLER_MODES_ROUTE', () => {
-    it('lists the agent controller modes', async () => {
+    it('lists the agent controller modes with their defaults', async () => {
       const res = await LIST_AGENT_CONTROLLER_MODES_ROUTE.handler({ mastra, controllerId: 'code' } as any);
       expect(res).toEqual({
         modes: [
-          { id: 'build', name: 'Build' },
-          { id: 'plan', name: 'Plan' },
+          { id: 'build', name: 'Build', default: true },
+          { id: 'plan', name: 'Plan', default: false },
         ],
       });
     });

@@ -288,9 +288,8 @@ export class AgentController<TState = {}> {
    * dependencies (config catalog, resolvers, tracker, thread store). Extracted
    * from the constructor so additional sessions can be wired the same way.
    */
-  #wireSession(session: Session<TState>): Session<TState> {
-    const defaultMode = this.#defaultMode;
-    session.mode.set({ modeId: defaultMode.id });
+  #wireSession(session: Session<TState>, initial: { mode: AgentControllerMode; modelId?: string }): Session<TState> {
+    session.mode.set({ modeId: initial.mode.id });
     session.setStore({
       get: key => session.thread.getSetting({ key }),
       set: (key, value) => session.thread.setSetting({ key, value }),
@@ -333,15 +332,16 @@ export class AgentController<TState = {}> {
       saveSystemReminder: input => this.saveSystemReminder(input),
     });
 
-    // Seed the selected model: an explicit initialState.currentModelId wins,
-    // otherwise fall back to the default mode's model. The model lives on the
-    // session, not in persisted state, so initialState.currentModelId is read
-    // here as a construction-time input only.
-    const initialModelId = (this.config.initialState as { currentModelId?: string } | undefined)?.currentModelId;
+    // Seed the selected model: an explicit creation-time modelId wins, then
+    // initialState.currentModelId, then the initial mode's own default. The
+    // model lives on the session, not in persisted state, so these are
+    // construction-time inputs only.
+    const initialModelId =
+      initial.modelId ?? (this.config.initialState as { currentModelId?: string } | undefined)?.currentModelId;
     if (initialModelId) {
       session.model.set({ modelId: initialModelId });
-    } else if (defaultMode.defaultModelId) {
-      session.model.set({ modelId: defaultMode.defaultModelId });
+    } else if (initial.mode.defaultModelId) {
+      session.model.set({ modelId: initial.mode.defaultModelId });
     }
 
     return session;
@@ -374,6 +374,8 @@ export class AgentController<TState = {}> {
     scope,
     tags,
     threadId,
+    modeId,
+    modelId,
     workspace,
     browser,
     requestContext,
@@ -401,10 +403,27 @@ export class AgentController<TState = {}> {
     tags?: Record<string, string>;
     /** Exact thread id to bind during session creation. Existing threads are resumed; missing threads are created with this id. */
     threadId?: string;
+    /**
+     * Initial mode for a newly materialized session, so it is born configured
+     * instead of born-default-then-mutated. A creation-time seed, not an
+     * override: a resumed thread's persisted mode still wins, and an already
+     * live session for this (resourceId, scope) is returned unchanged. Throws
+     * when the mode is not configured on this controller.
+     */
+    modeId?: string;
+    /**
+     * Initial model for a newly materialized session. Same seed semantics as
+     * `modeId`; defaults to the initial mode's `defaultModelId`.
+     */
+    modelId?: string;
     workspace?: Workspace;
     browser?: MastraBrowser;
     requestContext?: RequestContext;
   } = {}): Promise<Session<TState>> {
+    const initialMode = modeId ? this.config.modes.find(mode => mode.id === modeId) : undefined;
+    if (modeId && !initialMode) {
+      throw new Error(`Mode not found: ${modeId}`);
+    }
     const effectiveResourceId = resourceId ?? this.config.resourceId ?? this.config.id;
     const effectiveSessionId = id ?? this.config.id;
     const effectiveOwnerId = ownerId ?? this.config.id;
@@ -443,6 +462,8 @@ export class AgentController<TState = {}> {
     const creation = this.#createSessionForResource(effectiveOwnerId, effectiveSessionId, effectiveResourceId, tags, {
       scope,
       threadId,
+      initialMode,
+      initialModelId: modelId,
       workspace,
       browser,
       requestContext,
@@ -469,6 +490,8 @@ export class AgentController<TState = {}> {
     overrides?: {
       scope?: string;
       threadId?: string;
+      initialMode?: AgentControllerMode;
+      initialModelId?: string;
       workspace?: Workspace;
       browser?: MastraBrowser;
       requestContext?: RequestContext;
@@ -483,7 +506,8 @@ export class AgentController<TState = {}> {
     if (tags && Object.keys(tags).length > 0) {
       initialState = { ...initialState, ...tags } as TState;
     }
-    const defaultMode = this.#defaultMode;
+    const initialMode = overrides?.initialMode ?? this.#defaultMode;
+    const initialModelId = overrides?.initialModelId;
     requestContext.set('controller', {
       controllerId: this.id,
       harnessId: this.id,
@@ -507,8 +531,8 @@ export class AgentController<TState = {}> {
         id,
         ownerId,
         resourceId: effectiveResourceId,
-        modeId: defaultMode.id,
-        modelId: defaultMode.defaultModelId ?? '',
+        modeId: initialMode.id,
+        modelId: initialModelId ?? initialMode.defaultModelId ?? '',
         state: {
           get: () => initialState as Readonly<TState>,
           set: (updates: Partial<TState>) => {
@@ -554,6 +578,7 @@ export class AgentController<TState = {}> {
         workspace: workspaceToConnect,
         browser: browserToConnect,
       }),
+      { mode: initialMode, modelId: initialModelId },
     );
 
     if (workspaceToConnect && workspaceToConnect instanceof Workspace) {
@@ -606,6 +631,17 @@ export class AgentController<TState = {}> {
         await session.thread.loadMetadata();
         await session.thread.ensureCurrentSubscription();
       }
+    }
+
+    // Persist explicit creation seeds so a restart restores them the way a
+    // user-driven switch would. Guarded on the live values: when the bound
+    // thread restored a different persisted selection, that selection wins and
+    // is already persisted.
+    if (overrides?.initialMode && session.mode.get() === overrides.initialMode.id) {
+      await session.mode.persistSelection();
+    }
+    if (overrides?.initialModelId && session.model.get() === overrides.initialModelId) {
+      await session.model.saveForMode({ modeId: session.mode.get(), modelId: overrides.initialModelId });
     }
 
     this.#notifySessionCreated(session);
@@ -1093,6 +1129,11 @@ export class AgentController<TState = {}> {
 
   listModes(): AgentControllerMode[] {
     return this.config.modes;
+  }
+
+  /** The mode new sessions start in: `config.defaultModeId`, else the mode flagged default, else the first mode. */
+  get defaultModeId(): string {
+    return this.#defaultMode.id;
   }
 
   private propagateRuntimeServicesToAgent(agent: Agent, _session?: Session<TState>): Agent {

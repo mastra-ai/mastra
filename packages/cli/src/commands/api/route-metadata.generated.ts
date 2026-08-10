@@ -5958,6 +5958,8 @@ export const API_ROUTE_METADATA = {
     ],
     "queryParams": [],
     "bodyParams": [
+      "modeId",
+      "modelId",
       "resourceId",
       "sessionScope",
       "tags",
