@@ -240,7 +240,50 @@ For local development, you typically don't need `mounts`, a `LocalFilesystem` an
 
 ## Agent tools
 
-When you configure a filesystem on a workspace, agents receive tools for reading, writing, listing, and deleting files. See [workspace class reference](/reference/workspace/workspace-class#filesystem-tools) for details.
+When you configure a filesystem on a workspace, agents receive tools for reading, writing, editing, listing, deleting, and searching files. See [workspace class reference](/reference/workspace/workspace-class#filesystem-tools) for the complete tool list.
+
+### Configure filesystem tools
+
+Use `WORKSPACE_TOOLS.FILESYSTEM` constants to configure individual file tools. The following configuration requires approval before writes and prevents writes to unread files. It also removes the delete tool from the agent's toolset:
+
+```typescript title="src/mastra/workspaces.ts"
+import { LocalFilesystem, Workspace, WORKSPACE_TOOLS } from '@mastra/core/workspace'
+
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  tools: {
+    [WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE]: {
+      requireApproval: true,
+      requireReadBeforeWrite: true,
+    },
+    [WORKSPACE_TOOLS.FILESYSTEM.DELETE]: {
+      enabled: false,
+    },
+  },
+})
+```
+
+See [`WorkspaceToolsConfig`](/reference/workspace/workspace-class#tool-configuration) for shared settings, dynamic policies, tool naming, and hooks.
+
+### Read-before-write
+
+When `requireReadBeforeWrite` is enabled on a write or edit tool, the agent must read an existing file before changing it. New files don't require a read.
+
+The write fails when the file has changed since the agent read it. This protection is enforced in two places:
+
+1. The tool checks whether the agent has read the file and whether the recorded modification time is current. A failed check throws `FileReadRequiredError`.
+1. The filesystem compares the current modification time with `expectedMtime` during the write. A mismatch throws `StaleFileError`.
+
+Workspace tools pass the recorded modification time to the filesystem automatically. When you call the filesystem API directly, pass `expectedMtime` yourself:
+
+```typescript
+const filesystem = new LocalFilesystem({ basePath: './workspace' })
+const stat = await filesystem.stat('/docs/file.md')
+
+await filesystem.writeFile('/docs/file.md', content, {
+  expectedMtime: stat.modifiedAt,
+})
+```
 
 ## Related
 

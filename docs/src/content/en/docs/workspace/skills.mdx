@@ -132,6 +132,8 @@ The agent has three skill tools:
 - **`skill_read`**: Reads a file from a skill's `references/`, `scripts/`, or `assets/` directory.
 - **`skill_search`**: Searches across all skill content. Uses BM25 or vector search when configured, otherwise falls back to basic text matching.
 
+Skill tools are registered when skills are configured. They aren't part of `WORKSPACE_TOOLS`, which configures filesystem, sandbox, search, and LSP tools.
+
 This design is stateless, there is no activation state to track. If the skill instructions leave the conversation context (due to context window limits or compaction), the agent can call `skill` again to reload them.
 
 ## Same-named skills

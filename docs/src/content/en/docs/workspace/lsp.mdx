@@ -62,7 +62,7 @@ The tool returns up to three result groups:
 
 ## Tool name remapping
 
-Rename the tool if your agent expects a shorter name:
+Use `WORKSPACE_TOOLS.LSP.LSP_INSPECT` to configure the inspection tool. Set `enabled: false` to remove it from the agent's toolset, or set `name` if the agent expects a different name:
 
 ```typescript title="src/mastra/workspaces.ts"
 import { Workspace, LocalFilesystem, WORKSPACE_TOOLS } from '@mastra/core/workspace'
@@ -79,6 +79,8 @@ const workspace = new Workspace({
 ```
 
 This changes the exposed tool name only. The configuration key stays `WORKSPACE_TOOLS.LSP.LSP_INSPECT`.
+
+See [`WorkspaceToolsConfig`](/reference/workspace/workspace-class#tool-configuration) for approval settings, dynamic policies, output limits, and hooks shared by workspace tools.
 
 ## LSP configuration
 

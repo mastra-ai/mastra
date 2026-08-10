@@ -71,6 +71,18 @@ const response = await agent.generate('Run `ls -la` in the workspace directory')
 
 See [`LocalSandbox` reference](/reference/workspace/local-sandbox) for configuration options including environment isolation and native OS sandboxing.
 
+### Sandbox without a filesystem
+
+Configure only `sandbox` when an agent needs command execution without filesystem tools:
+
+```typescript
+import { LocalSandbox, Workspace } from '@mastra/core/workspace'
+
+const workspace = new Workspace({
+  sandbox: new LocalSandbox({ workingDirectory: './workspace' }),
+})
+```
+
 ## Dynamic sandbox
 
 The `sandbox` option accepts a resolver function instead of a static instance. The resolver receives `requestContext` and returns a sandbox per request, allowing a single workspace to serve different sandboxes based on the caller's identity, role, or tenant.
@@ -195,6 +207,34 @@ If your sandbox provider supports running processes in the background, the `exec
 | `kill_process` | Stop a background process by PID. Returns recent output. |
 
 These tools are registered automatically. See [Workspace class reference](/reference/workspace/workspace-class#sandbox-tools) for the full tool name list.
+
+### Configure sandbox tools
+
+Use `WORKSPACE_TOOLS.SANDBOX` constants to configure command and process tools. The following configuration requires approval before command execution and limits command output to 5,000 tokens:
+
+```typescript title="src/mastra/workspaces.ts"
+import { LocalSandbox, Workspace, WORKSPACE_TOOLS } from '@mastra/core/workspace'
+
+const workspace = new Workspace({
+  sandbox: new LocalSandbox({ workingDirectory: './workspace' }),
+  tools: {
+    [WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]: {
+      requireApproval: true,
+      maxOutputTokens: 5000,
+    },
+  },
+})
+```
+
+Set `enabled: false` on a tool to remove it from the agent's toolset. See [`WorkspaceToolsConfig`](/reference/workspace/workspace-class#tool-configuration) for shared settings, dynamic policies, tool naming, and hooks.
+
+### Output limits
+
+Command output is limited to the last 200 lines by default. Set the command's `tail` argument to change the line limit, or set it to `0` to disable line-based truncation.
+
+After applying the line limit, Mastra limits the output to 2,000 tokens by default. Set `maxOutputTokens` on `execute_command`, `get_process_output`, or `kill_process` to change the token limit for that tool.
+
+ANSI escape codes are removed before output reaches the model. Raw output keeps its formatting in streams and terminal interfaces.
 
 ## Background process callbacks
 

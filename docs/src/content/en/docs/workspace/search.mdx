@@ -283,7 +283,23 @@ interface SearchResult {
 
 ## Agent tools
 
-When you configure search on a workspace, agents receive tools for searching and indexing content. See [workspace class reference](/reference/workspace/workspace-class#search-tools) for details.
+When you configure search on a workspace, agents receive `mastra_workspace_search` and `mastra_workspace_index` tools. Use `WORKSPACE_TOOLS.SEARCH` constants to configure them independently. For example, remove indexing when the agent should search existing content without changing the index:
+
+```typescript title="src/mastra/workspaces.ts"
+import { LocalFilesystem, Workspace, WORKSPACE_TOOLS } from '@mastra/core/workspace'
+
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  bm25: true,
+  tools: {
+    [WORKSPACE_TOOLS.SEARCH.INDEX]: {
+      enabled: false,
+    },
+  },
+})
+```
+
+See [workspace class reference](/reference/workspace/workspace-class#search-tools) for the complete tool list and [`WorkspaceToolsConfig`](/reference/workspace/workspace-class#tool-configuration) for shared settings.
 
 ## Related
 
