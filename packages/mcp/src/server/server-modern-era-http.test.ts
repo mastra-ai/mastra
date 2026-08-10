@@ -57,17 +57,19 @@ const authInfo: AuthInfo = {
 
 type StartHTTPTransportOptions = NonNullable<Parameters<MCPServer['startHTTP']>[0]['options']>;
 
-const requestModernServerWithOptions = async ({
+const requestServerWithOptions = async ({
   options,
   headers,
+  modernEra = true,
 }: {
   options: StartHTTPTransportOptions;
   headers?: Record<string, string>;
+  modernEra?: boolean;
 }): Promise<{ statusCode: number; body: string; startError?: unknown }> => {
   const server = new MCPServer({
-    name: 'Modern Option Test Server',
+    name: 'HTTP Option Test Server',
     version: '1.0.0',
-    protocolVersion: '2026-07-28',
+    ...(modernEra ? { protocolVersion: '2026-07-28' as const } : {}),
     tools: makeTools(),
   });
   let startError: unknown;
@@ -352,7 +354,7 @@ describe('MCPServer with protocolVersion 2026-07-28 (dual-era HTTP)', () => {
     ];
 
     for (const [name, options] of cases) {
-      const result = await requestModernServerWithOptions({ options });
+      const result = await requestServerWithOptions({ options });
       expect(result.statusCode).toBe(500);
       expect(result.startError).toBeInstanceOf(Error);
       expect((result.startError as Error).message).toContain(`startHTTP options \"${name}\" are incompatible`);
@@ -361,7 +363,7 @@ describe('MCPServer with protocolVersion 2026-07-28 (dual-era HTTP)', () => {
   });
 
   it('preserves DNS rebinding protection on the modern HTTP path', async () => {
-    const blockedHost = await requestModernServerWithOptions({
+    const blockedHost = await requestServerWithOptions({
       options: {
         enableDnsRebindingProtection: true,
         allowedHosts: ['allowed.example'],
@@ -369,9 +371,9 @@ describe('MCPServer with protocolVersion 2026-07-28 (dual-era HTTP)', () => {
       headers: { Host: 'blocked.example' },
     });
     expect(blockedHost.statusCode).toBe(403);
-    expect(blockedHost.body).toContain('Invalid Host header: blocked.example');
+    expect(blockedHost.body).toContain('Invalid Host: blocked.example');
 
-    const blockedOrigin = await requestModernServerWithOptions({
+    const blockedOrigin = await requestServerWithOptions({
       options: {
         enableDnsRebindingProtection: true,
         allowedOrigins: ['https://allowed.example'],
@@ -379,9 +381,9 @@ describe('MCPServer with protocolVersion 2026-07-28 (dual-era HTTP)', () => {
       headers: { Origin: 'https://blocked.example' },
     });
     expect(blockedOrigin.statusCode).toBe(403);
-    expect(blockedOrigin.body).toContain('Invalid Origin header: https://blocked.example');
+    expect(blockedOrigin.body).toContain('Invalid Origin: blocked.example');
 
-    const allowedHostAndOrigin = await requestModernServerWithOptions({
+    const allowedHostAndOrigin = await requestServerWithOptions({
       options: {
         enableDnsRebindingProtection: true,
         allowedHosts: ['allowed.example'],
@@ -392,7 +394,7 @@ describe('MCPServer with protocolVersion 2026-07-28 (dual-era HTTP)', () => {
     expect(allowedHostAndOrigin.statusCode).not.toBe(403);
     expect(allowedHostAndOrigin.startError).toBeUndefined();
 
-    const missingOrigin = await requestModernServerWithOptions({
+    const missingOrigin = await requestServerWithOptions({
       options: {
         enableDnsRebindingProtection: true,
         allowedOrigins: ['https://allowed.example'],
@@ -443,6 +445,21 @@ describe('MCPServer without protocolVersion (legacy default)', () => {
     } finally {
       await client.close();
     }
+  });
+
+  it('applies DNS rebinding protection before legacy transport dispatch', async () => {
+    const blockedHost = await requestServerWithOptions({
+      modernEra: false,
+      options: {
+        serverless: true,
+        enableDnsRebindingProtection: true,
+        allowedHosts: ['allowed.example'],
+      },
+      headers: { Host: 'blocked.example' },
+    });
+
+    expect(blockedHost.statusCode).toBe(403);
+    expect(blockedHost.body).toContain('Invalid Host: blocked.example');
   });
 
   it('fails loudly when a client pinned to 2026-07-28 connects to a legacy-only server', async () => {
