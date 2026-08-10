@@ -4,7 +4,41 @@ import type { McE2eScenario } from './types.js';
 export const workflowsCommandScenario: McE2eScenario = {
   name: 'workflows-command',
   description: 'Exercise the /workflows management command through the real TUI.',
-  testName: 'shows workflow management help and the empty stored-workflow state',
+  testName: 'lists, inspects, runs, and deletes a saved workflow',
+  async inProcessApp({ startMastraCodeApp }) {
+    return startMastraCodeApp({
+      async onCreated(result) {
+        const mastra = result.controller.getMastra();
+        if (!mastra) throw new Error('Mastra instance unavailable');
+        const dynamicMastra = mastra as typeof mastra & {
+          addDynamicWorkflow: (definition: unknown) => Promise<void>;
+        };
+        await dynamicMastra.addDynamicWorkflow({
+          id: 'e2e-greeting',
+          description: 'Create a greeting for a name.',
+          inputSchema: {
+            type: 'object',
+            properties: { name: { type: 'string' } },
+            required: ['name'],
+            additionalProperties: false,
+          },
+          outputSchema: {
+            type: 'object',
+            properties: { message: { type: 'string' } },
+            required: ['message'],
+            additionalProperties: false,
+          },
+          graph: [
+            {
+              type: 'mapping',
+              id: 'format-greeting',
+              mapConfig: { message: { template: 'Hello, ${initData.name}!' } },
+            },
+          ],
+        });
+      },
+    });
+  },
   async run({ terminal, runtime }) {
     runtime.startLiveOutput(terminal);
     runtime.printScreen('spawned', terminal);
@@ -14,13 +48,26 @@ export const workflowsCommandScenario: McE2eScenario = {
     ).toBeVisible();
 
     terminal.submit('/workflows help');
-    await runtime.waitForScreenText(/Workflows — manage chat-built static workflows/i, terminal);
+    await runtime.waitForScreenText(/Dynamic Workflows — manage chat-built workflows/i, terminal);
     await runtime.waitForScreenText(/To CREATE a workflow, ask the chat in build mode/i, terminal);
-    runtime.printScreen('after /workflows help', terminal);
+
+    terminal.submit('/workflows list');
+    await runtime.waitForScreenText(/e2e-greeting \(active\).*Create a greeting for a name/i, terminal);
+
+    terminal.submit('/workflows show e2e-greeting');
+    await runtime.waitForScreenText(/"id": "e2e-greeting"/i, terminal);
+    await runtime.waitForScreenText(/format-greeting/i, terminal);
+
+    terminal.submit('/workflows run e2e-greeting {"name":"Ada"}');
+    await runtime.waitForScreenText(/Running "e2e-greeting"/i, terminal);
+    await runtime.waitForScreenText(/Hello, Ada!/i, terminal);
+
+    terminal.submit('/workflows delete e2e-greeting');
+    await runtime.waitForScreenText(/Deleted workflow "e2e-greeting"\./i, terminal);
 
     terminal.submit('/workflows list');
     await runtime.waitForScreenText(/No saved workflows\. Ask the chat in build mode/i, terminal);
-    runtime.printScreen('after /workflows list', terminal);
+    runtime.printScreen('after workflow lifecycle', terminal);
 
     terminal.keyCtrlC();
   },

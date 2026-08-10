@@ -285,7 +285,7 @@ function renderWorkflowDefinition(def: StoredWorkflowRow): string {
 function help(ctx: SlashCommandContext): void {
   ctx.showInfo(
     [
-      'Workflows — manage chat-built static workflows.',
+      'Dynamic Workflows — manage chat-built workflows.',
       '',
       '  /workflows [list]         List saved workflows.',
       '  /workflows show <id>      Pretty-print the full graph + schemas.',
@@ -403,7 +403,7 @@ export async function handleWorkflowsCommand(ctx: SlashCommandContext, args: str
           return;
         }
         await deleteWorkflow(mastra, id);
-        ctx.showInfo(`Deleted workflow "${id}". (In-process Workflow instance stays until next restart.)`);
+        ctx.showInfo(`Deleted workflow "${id}".`);
         return;
       }
       case 'help':
