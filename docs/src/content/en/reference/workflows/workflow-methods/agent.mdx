@@ -9,7 +9,7 @@ packages:
 
 The `.agent()` method adds an agent as a declarative step. The step accepts `{ prompt: string }` as input and returns `{ text: string }` by default. Use `.map()` before the agent to build the prompt from workflow data.
 
-Unlike wrapping an agent with `createStep()`, `.agent()` records a declarative entry in the workflow graph. This makes the workflow portable: the same graph can be serialized and persisted as a [stored workflow](/docs/workflows/stored-workflows).
+Unlike wrapping an agent with `createStep()`, `.agent()` records a declarative entry in the workflow graph. This makes the workflow portable: the same graph can be serialized and persisted as a [dynamic workflow](/docs/workflows/dynamic-workflows).
 
 ## Usage example
 
@@ -86,10 +86,10 @@ workflow.agent("test-agent", { maxSteps: 3 }).commit();
 
 ## Persisting agent steps
 
-Workflows built with `.agent()` serialize to the same declarative entries that [stored workflows](/docs/workflows/stored-workflows) use. Only `retries` and `metadata` round-trip through storage. Options that hold functions, such as `onFinish` or a function-valued `toolChoice`, throw an error when the workflow is stored.
+Workflows built with `.agent()` serialize to the same declarative entries that [dynamic workflows](/docs/workflows/dynamic-workflows) use. Only `retries` and `metadata` round-trip through storage. Options that hold functions, such as `onFinish` or a function-valued `toolChoice`, throw an error when the workflow is stored.
 
 ## Related
 
 - [Agents and Tools](/docs/workflows/agents-and-tools)
-- [Stored workflows](/docs/workflows/stored-workflows)
+- [Dynamic workflows](/docs/workflows/dynamic-workflows)
 - [Workflow.tool()](/reference/workflows/workflow-methods/tool)

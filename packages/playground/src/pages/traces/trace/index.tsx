@@ -141,7 +141,7 @@ export default function TracePage() {
   }, [updateSearchParams]);
 
   const handleTraceClose = useCallback(() => {
-    void navigate('/observability');
+    void navigate('/traces');
   }, [navigate]);
 
   const handleEvaluateTrace = useCallback(() => {

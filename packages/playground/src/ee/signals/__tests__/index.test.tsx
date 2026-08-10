@@ -32,10 +32,10 @@ import { server } from '@/test/msw-server';
 
 const BASE_URL = window.location.origin;
 
-function renderSignalsPage() {
+function renderSignalsPage(initialEntry = '/') {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={[initialEntry]}>
       <QueryClientProvider client={queryClient}>
         <SignalsOverviewPage />
       </QueryClientProvider>
@@ -265,6 +265,52 @@ describe('Trace Intelligence page', () => {
       expect(snapshotRequests).toHaveLength(1);
       expect(snapshotRequests[0]?.searchParams.get('from')).toBe('2026-07-20T12:00:00.000Z');
       expect(snapshotRequests[0]?.searchParams.has('to')).toBe(false);
+    });
+  });
+
+  describe('when the page loads with a snapshot date query parameter', () => {
+    it('restores the selected range and requests snapshots for it', async () => {
+      vi.spyOn(Date, 'now').mockReturnValue(new Date('2026-07-27T12:00:00.000Z').getTime());
+      const snapshotRequests: URL[] = [];
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities`, () => HttpResponse.json(populatedThemeEntitiesResponse)),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, ({ request }) => {
+          snapshotRequests.push(new URL(request.url));
+          return HttpResponse.json(themeSnapshotsResponse);
+        }),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-flow`, () =>
+          HttpResponse.json(themeFlowResponse),
+        ),
+      );
+
+      renderSignalsPage('/?datePreset=last-14d');
+
+      expect(await screen.findByRole('button', { name: 'Last 14 days' })).not.toBeNull();
+      await waitFor(() => expect(snapshotRequests).toHaveLength(1));
+      expect(snapshotRequests[0]?.searchParams.get('from')).toBe('2026-07-13T12:00:00.000Z');
+    });
+  });
+
+  describe('when the page loads with custom date query parameters', () => {
+    it('restores the custom range and requests snapshots for it', async () => {
+      const snapshotRequests: URL[] = [];
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities`, () => HttpResponse.json(populatedThemeEntitiesResponse)),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, ({ request }) => {
+          snapshotRequests.push(new URL(request.url));
+          return HttpResponse.json(themeSnapshotsResponse);
+        }),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-flow`, () =>
+          HttpResponse.json(themeFlowResponse),
+        ),
+      );
+
+      renderSignalsPage('/?datePreset=custom&dateFrom=2026-07-01T00:00:00.000Z&dateTo=2026-07-15T00:00:00.000Z');
+
+      expect(await screen.findByRole('region', { name: 'Trace signal theme flow' })).not.toBeNull();
+      await waitFor(() => expect(snapshotRequests).toHaveLength(1));
+      expect(snapshotRequests[0]?.searchParams.get('from')).toBe('2026-07-01T00:00:00.000Z');
+      expect(snapshotRequests[0]?.searchParams.get('to')).toBe('2026-07-15T00:00:00.000Z');
     });
   });
 

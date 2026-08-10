@@ -15,7 +15,7 @@ import type { AgentConfig, AgentInstructions, ToolsInput } from '../types';
  * Identity helper for a file-system routed agent config. Returns the provided
  * partial config unchanged — its only purpose is to give authors editor types
  * for `agents/<name>/config.ts` while letting `instructions`/`model`/`tools` be
- * supplied by sibling files (`instructions.md`, `tools/*.ts`).
+ * supplied by sibling files (`instructions.md`/`instructions.ts`, `tools/*.ts`).
  *
  * @example
  * ```ts
@@ -36,6 +36,30 @@ export type FsAgentConfig = Partial<Omit<AgentConfig, 'id' | 'name'>> & {
 
 export function agentConfig(config: FsAgentConfig): FsAgentConfig {
   return config;
+}
+
+/**
+ * Identity helper for a file-system routed agent's `instructions.ts`. Returns
+ * the provided value unchanged — its only purpose is to give authors editor
+ * types for `agents/<name>/instructions.ts`, which is the code counterpart to
+ * `instructions.md`: use it when the prompt is computed, composed from shared
+ * constants, or resolved per request.
+ *
+ * @example
+ * ```ts
+ * // src/mastra/agents/support/instructions.ts
+ * import { agentInstructions } from '@mastra/core/agent';
+ *
+ * export default agentInstructions(({ requestContext }) => {
+ *   const tier = requestContext.get('tier') ?? 'standard';
+ *   return `You are a support agent. Treat this as a ${tier}-tier customer.`;
+ * });
+ * ```
+ */
+export function agentInstructions<TRequestContext extends Record<string, any> | unknown = unknown>(
+  instructions: DynamicArgument<AgentInstructions, TRequestContext>,
+): DynamicArgument<AgentInstructions, TRequestContext> {
+  return instructions;
 }
 
 // Re-exported so authoring a file-based agent needs one import path: schedules
@@ -85,6 +109,14 @@ export interface FsAgentEntry {
    * partial or a fully code-defined `Agent` instance (`new Agent({...})`).
    */
   config?: FsAgentConfig | Agent;
+  /**
+   * Default export of `agents/<name>/instructions.ts`, if present. Either an
+   * `AgentInstructions` value or a function resolved per request. Unlike
+   * `instructionsMd` this is a live module value, so it can be computed. Set the
+   * key only when the file exists: assembly reads presence from the key, so an
+   * `undefined` value is a broken module rather than an absent one.
+   */
+  instructions?: DynamicArgument<AgentInstructions>;
   /** Raw contents of `instructions.md`, if present. */
   instructionsMd?: string;
   /** Tools discovered under `tools/`, already loaded. */
@@ -165,9 +197,10 @@ export const MAX_FS_SUBAGENT_DEPTH = 3;
  *
  * Precedence rules:
  * - `id`/`name` default to the directory name when omitted in config.
- * - `instructions`: a dynamic (function) `config.instructions` wins over
- *   `instructions.md`; otherwise `instructions.md` wins over a static
- *   `config.instructions`. Missing both is an error.
+ * - `instructions`: a dynamic (function) `config.instructions` wins over both
+ *   instructions files; otherwise `instructions.ts` wins over `instructions.md`,
+ *   which wins over a static `config.instructions`. Missing all of them is an
+ *   error.
  * - `model` is required (from config); missing is an error.
  * - `tools`: discovered `tools/*.ts` are merged with `config.tools`; on key
  *   collision `config.tools` wins (a warning is surfaced via `onWarn`).
@@ -193,6 +226,7 @@ function assembleAtDepth(entry: FsAgentEntry, depth: number, options?: { onWarn?
   const {
     name,
     config = {},
+    instructions: instructionsModule,
     instructionsMd,
     tools = [],
     skills = [],
@@ -209,6 +243,9 @@ function assembleAtDepth(entry: FsAgentEntry, depth: number, options?: { onWarn?
 
   // A code-defined agent (`export default new Agent({...})`) is used verbatim.
   if (config instanceof Agent) {
+    if (instructionsModule !== undefined) {
+      onWarn(`Agent "${name}": config.ts exports a new Agent(), so agents/${name}/instructions.ts is ignored.`);
+    }
     if (instructionsMd !== undefined) {
       onWarn(`Agent "${name}": config.ts exports a new Agent(), so agents/${name}/instructions.md is ignored.`);
     }
@@ -263,7 +300,18 @@ function assembleAtDepth(entry: FsAgentEntry, depth: number, options?: { onWarn?
     return config;
   }
 
-  const instructions = resolveInstructions(name, config.instructions, instructionsMd);
+  // Presence is the key being set, not the value being defined: codegen emits
+  // `instructions` only when the file exists, so a module that default-exports
+  // `undefined` has to read as a broken file rather than as no file at all.
+  // Own key only: an inherited one never came from a discovered file.
+  const instructions = resolveInstructions(
+    name,
+    config.instructions,
+    instructionsModule,
+    Object.hasOwn(entry, 'instructions'),
+    instructionsMd,
+    onWarn,
+  );
 
   if (!config.model) {
     throw new MastraError({
@@ -345,17 +393,52 @@ function resolveSchedules(name: string, schedules: FsAgentScheduleEntry[], depth
   return resolved;
 }
 
+/**
+ * Resolve the instructions for a file-based agent from the three sources that
+ * can supply them, in this order:
+ *
+ * 1. A dynamic (function) `config.instructions` — it can't be expressed by
+ *    static markdown, and it stays ahead of `instructions.ts` so adding the file
+ *    never silently overrides a config already resolving per request.
+ * 2. `instructions.ts` — the code counterpart to the markdown file, so it wins
+ *    over it (with a warning when both exist).
+ * 3. `instructions.md`, then a static `config.instructions`.
+ *
+ * Missing all of them is a build error naming the agent directory.
+ */
 function resolveInstructions(
   name: string,
   configInstructions: FsAgentConfig['instructions'],
+  instructionsModule: DynamicArgument<AgentInstructions> | undefined,
+  hasModule: boolean,
   instructionsMd: string | undefined,
+  onWarn: (message: string) => void,
 ): FsAgentConfig['instructions'] {
   const hasConfigInstructions = configInstructions !== undefined && configInstructions !== null;
   const hasMd = instructionsMd !== undefined;
 
   if (hasConfigInstructions && typeof configInstructions === 'function') {
-    // Dynamic instructions can't be overridden by static markdown.
+    // A config already resolving per request stays authoritative, so adding
+    // either file later can't silently take the agent's prompt over.
+    const overridden = [hasModule ? 'instructions.ts' : undefined, hasMd ? 'instructions.md' : undefined].filter(
+      (file): file is string => file !== undefined,
+    );
+    if (overridden.length > 0) {
+      const sources =
+        overridden.length === 1 ? `both config.ts and ${overridden[0]}` : `config.ts, ${overridden.join(', and ')}`;
+      onWarn(`Agent "${name}": instructions defined in ${sources}; config.instructions is a function, so it wins.`);
+    }
     return configInstructions;
+  }
+
+  if (hasModule) {
+    assertValidInstructionsModule(name, instructionsModule);
+    if (hasMd) {
+      onWarn(
+        `Agent "${name}": instructions defined in both instructions.ts and instructions.md; instructions.ts wins.`,
+      );
+    }
+    return instructionsModule;
   }
 
   if (hasMd) {
@@ -371,8 +454,67 @@ function resolveInstructions(
     domain: ErrorDomain.AGENT,
     category: ErrorCategory.USER,
     details: { agentName: name },
-    text: `Agent "${name}": missing instructions. Provide agents/${name}/instructions.md or an 'instructions' field in config.ts.`,
+    text: `Agent "${name}": missing instructions. Provide agents/${name}/instructions.md, agents/${name}/instructions.ts, or an 'instructions' field in config.ts.`,
   });
+}
+
+/**
+ * Reject an `instructions.ts` whose default export isn't a usable instructions
+ * value. Anything outside the `AgentInstructions` shapes is silently coerced to
+ * an empty prompt downstream, so without this an author who exported the wrong
+ * thing gets a mute agent and no clue which file caused it — the error has to
+ * name the file while assembly still knows it. `null` and `undefined` are
+ * rejected the same way rather than reading as "no file here" — the caller
+ * decides presence from the file existing, not from the value. (A module with
+ * no default export at all never reaches here; the bundler fails first, naming
+ * the same file.)
+ */
+function assertValidInstructionsModule(
+  name: string,
+  instructions: unknown,
+): asserts instructions is DynamicArgument<AgentInstructions> {
+  const isUsable =
+    typeof instructions === 'function' ||
+    (Array.isArray(instructions)
+      ? instructions.length > 0 && instructions.every(isUsableSystemMessage)
+      : isUsableSystemMessage(instructions));
+
+  if (isUsable) {
+    return;
+  }
+
+  const received = describeInstructionsExport(instructions);
+  throw new MastraError({
+    id: 'AGENT_FS_ROUTING_INSTRUCTIONS_INVALID',
+    domain: ErrorDomain.AGENT,
+    category: ErrorCategory.USER,
+    details: { agentName: name, received },
+    text: `Agent "${name}": agents/${name}/instructions.ts must default-export a string, a system message, an array of either, or a function returning one, but got ${received}.`,
+  });
+}
+
+/**
+ * One entry of an `AgentInstructions` value: a bare string, or a system message
+ * whose `content` is a string. Anything else reaches the model as an empty
+ * string, so the entries have to be checked rather than just the container —
+ * `[123]` is exactly as mute as `123`.
+ */
+function isUsableSystemMessage(value: unknown): boolean {
+  return (
+    typeof value === 'string' ||
+    (typeof value === 'object' && value !== null && typeof (value as { content?: unknown }).content === 'string')
+  );
+}
+
+/** Name what an unusable default export actually was, for the error text. */
+function describeInstructionsExport(value: unknown): string {
+  if (value === null) {
+    return 'null';
+  }
+  if (Array.isArray(value)) {
+    return value.length === 0 ? 'an empty array' : 'an array holding something other than strings or system messages';
+  }
+  return typeof value;
 }
 
 function mergeTools(

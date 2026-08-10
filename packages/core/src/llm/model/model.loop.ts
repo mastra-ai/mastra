@@ -325,6 +325,7 @@ export class MastraLLMVNext extends MastraBase {
               },
               usage: props?.totalUsage,
               providerMetadata: props?.providerMetadata,
+              stepProviderMetadata: props?.steps.map(step => step.providerMetadata),
             });
 
             try {

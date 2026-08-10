@@ -1,5 +1,6 @@
 import type { AgentBrowserConfig } from '@mastra/agent-browser';
 import { AgentBrowser } from '@mastra/agent-browser';
+import { resolveViewportSize, DEFAULT_BROWSER_VIEWPORT } from '@mastra/core/browser';
 import type { BrowserLaunchOptions } from 'agent-browser';
 import { BrowserManager } from 'agent-browser';
 import { Firecrawl } from 'firecrawl';
@@ -91,7 +92,9 @@ export class FirecrawlBrowser extends AgentBrowser {
 
       const launchOptions: BrowserLaunchOptions = {
         headless: localConfig.headless ?? true,
-        viewport: localConfig.viewport,
+        // Firecrawl drives a remote browser, so there is no local window to
+        // match; `'window'` falls back to the default dimensions.
+        viewport: resolveViewportSize(localConfig.viewport) ?? DEFAULT_BROWSER_VIEWPORT,
         profile: localConfig.profile,
         executablePath: localConfig.executablePath,
         storageState: localConfig.storageState,

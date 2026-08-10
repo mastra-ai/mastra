@@ -738,7 +738,7 @@ describe('MessageHistory', () => {
       );
     });
 
-    it('should update thread metadata', async () => {
+    it('should not rewrite an existing thread row when persisting messages', async () => {
       const mockStorage = {
         saveMessages: vi.fn().mockResolvedValue(undefined),
         getThreadById: vi.fn().mockResolvedValue({
@@ -773,13 +773,9 @@ describe('MessageHistory', () => {
         messageList,
       });
 
-      expect(mockStorage.updateThread).toHaveBeenCalledWith({
-        id: 'thread-1',
-        title: 'Test Thread',
-        metadata: expect.objectContaining({
-          createdAt: expect.any(Date),
-        }),
-      });
+      // Writing back the row we just read would clobber a title generated
+      // concurrently with this save.
+      expect(mockStorage.updateThread).not.toHaveBeenCalled();
     });
 
     it('should return original messages when no threadId', async () => {

@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { UniqueViolationError } from '@mastra/core/storage';
 
 import type {
   ConfiguredExternalRepositoryKey,
@@ -481,10 +482,14 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
     create: async (input: CreateSourceControlSessionInput): Promise<SourceControlSession> => {
       const existing = await this.sessions.getForBranch(input);
       if (existing) return existing;
+      if (this.sessionsRows.some(row => row.sessionId === input.sessionId)) {
+        throw new UniqueViolationError('Source-control session ID already exists');
+      }
       const now = new Date();
       const session: SourceControlSession = {
         id: randomUUID(),
         ...input,
+        title: input.title ?? null,
         sandboxId: null,
         sandboxWorkdir: null,
         materializedAt: null,

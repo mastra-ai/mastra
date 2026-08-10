@@ -22,7 +22,7 @@ import type {
   ObservabilityContext,
   TracingContext,
 } from '../../../observability';
-import { executeWithContextSync, getStepAvailableToolNames } from '../../../observability/utils';
+import { executeWithContextSync, getRootExportSpan, getStepAvailableToolNames } from '../../../observability/utils';
 import type {
   CachedLLMStepResponse,
   InputProcessorOrWorkflow,
@@ -400,6 +400,7 @@ async function addToolPayloadTransformToChunk<OUTPUT>(
 function buildResponseModelMetadata(
   runState: AgenticRunState,
   model?: { provider?: string; modelId?: string },
+  tracingContext?: TracingContext,
 ): { metadata: Record<string, unknown> } | undefined {
   const metadata: Record<string, unknown> = {};
   const modelId = model?.modelId ?? runState.state.responseMetadata?.modelId;
@@ -410,6 +411,16 @@ function buildResponseModelMetadata(
 
   if (model?.provider) {
     metadata.provider = model.provider;
+  }
+
+  // Correlate the persisted message with its trace (#19891). Message rows carry no
+  // traceId column and spans carry no messageId, so this metadata is the only link
+  // between a stored assistant message and the trace that produced it. Use the same
+  // root export span the stream result uses for its own traceId so both agree.
+  const traceId = getRootExportSpan(tracingContext?.currentSpan)?.externalTraceId;
+
+  if (traceId) {
+    metadata.traceId = traceId;
   }
 
   return Object.keys(metadata).length > 0 ? { metadata } : undefined;
@@ -1716,7 +1727,11 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           const builtMessages = buildMessagesFromChunks({
             chunks: collectedChunks,
             messageId: currentStep.messageId,
-            responseModelMetadata: buildResponseModelMetadata(runState, currentStep.model),
+            responseModelMetadata: buildResponseModelMetadata(
+              runState,
+              currentStep.model,
+              modelSpanTracker?.getTracingContext() ?? tracingContext,
+            ),
             tools: currentStep.tools,
           });
           for (const msg of builtMessages) {

@@ -3,6 +3,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playgr
 import { Switch } from '@mastra/playground-ui/components/Switch';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { SlackIcon } from '@mastra/playground-ui/icons/SlackIcon';
 import { ChevronRight } from 'lucide-react';
 import { useParams } from 'react-router';
 
@@ -20,7 +21,6 @@ import { SettingsCard, SettingsRow } from '../domains/settings/components/Settin
 import { SlackNotConfigured } from '../domains/settings/components/ConnectedAccountsSection';
 import { SettingsSubsection } from '../domains/settings/components/SettingsSubsection';
 import { connectSlackUrl, type ConnectedChannelAccount } from '../domains/settings/services/channelAccounts';
-import { SlackLogo } from '../ui/SlackLogo';
 import { SettingsPageLayout } from './SettingsPage';
 
 const linkedDateFormatter = new Intl.DateTimeFormat(undefined, {
@@ -95,7 +95,7 @@ export function SlackConnectionSettings() {
       backTo={factoryId ? `/factories/${factoryId}/settings/connections` : '/'}
       title={
         <span className="flex items-center gap-3">
-          <SlackLogo className="size-6" />
+          <SlackIcon className="size-6" />
           Slack
         </span>
       }

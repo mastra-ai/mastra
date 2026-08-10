@@ -8,6 +8,7 @@ import { setDragPayload } from '../boardDrag';
 import { AUTO_TRIAGED_LABEL, externalLinkLabel, hasLabel, metadataLabels } from '../boardItems';
 import type { RunAction } from '../boardRunSpecs';
 import { CardLabels, CardTitleTooltip, SourceTitle } from './BoardCardParts';
+import { SourceIcon } from './BoardIcons';
 import { FactoryItemActions } from './FactoryItemActions';
 
 export function CandidateCard({
@@ -30,7 +31,6 @@ export function CandidateCard({
   /** Run first-contact issue triage without leaving the board. */
   onTriage?: () => void;
 }) {
-  const Icon = candidate.icon;
   const labels = metadataLabels(candidate.metadata);
   const showTriage = candidate.source === 'github-issue' && !hasLabel(labels, AUTO_TRIAGED_LABEL) && onTriage;
   const [defaultAction, ...otherActions] = candidate.runActions;
@@ -57,7 +57,7 @@ export function CandidateCard({
         <div className="flex min-w-0 flex-col gap-1.5">
           <span className="text-ui-xs text-icon2 block truncate">{candidate.meta}</span>
           <div className="flex min-w-0 items-center gap-1.5">
-            <Icon size={16} className={cn('shrink-0', candidate.iconClassName)} aria-hidden />
+            <SourceIcon source={candidate.source} />
             <button
               type="button"
               disabled={disabled}

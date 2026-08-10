@@ -126,6 +126,53 @@ describe('intake configuration', () => {
     });
     expect(invalid.status).toBe(400);
   });
+
+  it('drops disabled empty entries for unregistered integrations', async () => {
+    const response = await buildApp(orgUser, [{ id: 'github', intake: github }]).request('/web/intake/config', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        github: { enabled: true, sourceIds: ['repo-1'] },
+        linear: { enabled: false, sourceIds: null },
+      }),
+    });
+
+    const config = { github: { enabled: true, sourceIds: ['repo-1'] } };
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ config });
+    expect(await seed.intake.getConfig({ orgId: 'org1', userId: 'u1' })).toEqual(config);
+    expect(auditEvents).toEqual([
+      {
+        action: 'factory.intake.config_updated',
+        metadata: { github: { enabled: true, sources: 1 } },
+      },
+    ]);
+  });
+
+  it('rejects unregistered integrations with active selections', async () => {
+    for (const selection of [
+      { enabled: true, sourceIds: null },
+      { enabled: false, sourceIds: ['team-1'] },
+    ]) {
+      const response = await buildApp(orgUser, [{ id: 'github', intake: github }]).request('/web/intake/config', {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ github: { enabled: true, sourceIds: null }, linear: selection }),
+      });
+      expect(response.status).toBe(400);
+    }
+  });
+
+  it('rejects an active selection sent under a prototype key', async () => {
+    const response = await buildApp(orgUser, [{ id: 'github', intake: github }]).request('/web/intake/config', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: '{"github":{"enabled":true,"sourceIds":null},"__proto__":{"enabled":true,"sourceIds":["team-1"]}}',
+    });
+
+    expect(response.status).toBe(400);
+    expect(auditEvents).toEqual([]);
+  });
 });
 
 describe('aggregated intake', () => {

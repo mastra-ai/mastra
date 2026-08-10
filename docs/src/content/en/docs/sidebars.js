@@ -16,28 +16,21 @@ const sidebars = {
   // Docs sidebar - main documentation
   docsSidebar: [
     {
-      type: 'category',
-      label: 'Start',
-      collapsed: false,
-      collapsible: false,
-      items: [
-        {
-          type: 'doc',
-          id: 'index',
-          label: 'Get Started',
-        },
-        {
-          type: 'doc',
-          id: 'getting-started/develop',
-          label: 'Develop',
-        },
-      ],
+      type: 'doc',
+      id: 'index',
+      label: 'Get Started',
+    },
+    {
+      type: 'doc',
+      id: 'getting-started/develop',
+      label: 'Develop',
     },
     {
       type: 'category',
       label: 'Build',
       collapsed: false,
       collapsible: false,
+      className: 'sidebar-group-name',
       items: [
         {
           type: 'category',
@@ -114,8 +107,8 @@ const sidebars = {
             },
             {
               type: 'doc',
-              id: 'workflows/stored-workflows',
-              label: 'Stored Workflows',
+              id: 'workflows/dynamic-workflows',
+              label: 'Dynamic Workflows',
               customProps: {
                 tags: ['beta'],
               },
@@ -268,6 +261,7 @@ const sidebars = {
       label: 'Extend',
       collapsible: false,
       collapsed: false,
+      className: 'sidebar-group-name',
       items: [
         {
           type: 'doc',
@@ -446,44 +440,12 @@ const sidebars = {
       label: 'Develop / Deploy',
       collapsible: false,
       collapsed: false,
+      className: 'sidebar-group-name',
       items: [
         {
           type: 'doc',
           id: 'storage/overview',
           label: 'Storage',
-        },
-        {
-          type: 'category',
-          label: 'Studio',
-          link: {
-            type: 'doc',
-            id: 'studio/overview',
-          },
-          customProps: {
-            contextualSidebar: true,
-          },
-          items: [
-            {
-              type: 'doc',
-              id: 'studio/deployment',
-              label: 'Deployment',
-            },
-            {
-              type: 'doc',
-              id: 'studio/auth',
-              label: 'Auth',
-            },
-            {
-              type: 'doc',
-              id: 'studio/observability',
-              label: 'Observability',
-            },
-            {
-              type: 'doc',
-              id: 'editor/overview',
-              label: 'Editor',
-            },
-          ],
         },
         {
           type: 'category',
@@ -530,6 +492,39 @@ const sidebars = {
               type: 'doc',
               id: 'server/mastra-client',
               label: 'Mastra Client',
+            },
+          ],
+        },
+        {
+          type: 'category',
+          label: 'Studio',
+          link: {
+            type: 'doc',
+            id: 'studio/overview',
+          },
+          customProps: {
+            contextualSidebar: true,
+          },
+          items: [
+            {
+              type: 'doc',
+              id: 'studio/deployment',
+              label: 'Deployment',
+            },
+            {
+              type: 'doc',
+              id: 'studio/auth',
+              label: 'Auth',
+            },
+            {
+              type: 'doc',
+              id: 'studio/observability',
+              label: 'Observability',
+            },
+            {
+              type: 'doc',
+              id: 'editor/overview',
+              label: 'Editor',
             },
           ],
         },
@@ -621,7 +616,7 @@ const sidebars = {
         },
         {
           type: 'category',
-          label: 'Deployment',
+          label: 'Deploy',
           link: {
             type: 'doc',
             id: 'deployment/overview',
@@ -677,6 +672,7 @@ const sidebars = {
       label: 'Observe',
       collapsible: false,
       collapsed: false,
+      className: 'sidebar-group-name',
       items: [
         {
           type: 'category',

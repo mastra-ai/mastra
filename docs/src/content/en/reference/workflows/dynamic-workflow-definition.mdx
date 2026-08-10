@@ -1,0 +1,301 @@
+---
+title: "Reference: Dynamic workflow definition | Workflows"
+description: "Reference for the JSON definition format used to persist and register dynamic workflows."
+packages:
+  - "@mastra/core"
+---
+
+# Dynamic workflow definition
+
+:::experimental
+
+Dynamic workflows are in beta. Breaking changes may occur without a major version bump until the API is stable.
+
+:::
+
+A dynamic workflow definition is a JSON-compatible `DynamicWorkflowGraph` accepted by [`Mastra.addDynamicWorkflow()`](/reference/core/addDynamicWorkflow), the stored-workflow server routes, and the Client SDK workflows API.
+
+See [Dynamic workflows](/docs/workflows/dynamic-workflows) for a complete setup and usage example.
+
+## Definition fields
+
+| Field | Type | Required | Description |
+| - | - | - | - |
+| `id` | `string` | Yes | Unique workflow ID. This is also the ID used to retrieve and run the workflow. |
+| `description` | `string` | No | Human-readable description |
+| `inputSchema` | `JsonSchema` | Yes | JSON Schema for the workflow input |
+| `outputSchema` | `JsonSchema` | Yes | JSON Schema for the workflow output |
+| `stateSchema` | `JsonSchema` | No | JSON Schema for shared workflow state |
+| `requestContextSchema` | `JsonSchema` | No | JSON Schema for values read from the request context |
+| `metadata` | `Record<string, unknown>` | No | Arbitrary JSON metadata preserved through storage |
+| `graph` | `SerializedStepFlowEntry[]` | Yes | Step entries that make up the workflow |
+
+Schemas use JSON Schema rather than Zod so the definition can round-trip through JSON. Mastra converts each schema to Zod when it registers the workflow.
+
+```json
+{
+  "id": "greeting-workflow",
+  "description": "Returns a greeting for the supplied name",
+  "inputSchema": {
+    "type": "object",
+    "properties": { "name": { "type": "string" } },
+    "required": ["name"]
+  },
+  "outputSchema": {
+    "type": "object",
+    "properties": { "message": { "type": "string" } },
+    "required": ["message"]
+  },
+  "graph": [
+    {
+      "type": "mapping",
+      "id": "create-greeting",
+      "mapConfig": "{\"message\":{\"template\":\"Hello, ${initData.name}!\"}}"
+    }
+  ]
+}
+```
+
+## Graph entries
+
+Entries in the `graph` run in order. Each entry receives the previous entry's output, and the first entry receives the workflow input.
+
+| Entry type | Description |
+| - | - |
+| `agent` | Invoke a registered agent |
+| `tool` | Invoke a registered tool |
+| `mapping` | Reshape data between steps |
+| `workflow` | Invoke a registered workflow as a nested step |
+| `parallel` | Run several steps concurrently and merge their outputs |
+| `conditional` | Run every branch whose predicate is true, concurrently |
+| `foreach` | Run one step per item of an array input |
+| `loop` | Repeat a step while or until a predicate holds |
+| `sleep` | Pause for a fixed duration |
+| `sleepUntil` | Pause until a fixed date |
+
+Code-defined workflows that use [`.agent()`](/reference/workflows/workflow-methods/agent) and [`.tool()`](/reference/workflows/workflow-methods/tool) produce the same declarative entries when serialized.
+
+### Agent steps
+
+An `agent` entry invokes a registered agent by ID. Agent steps accept `{ prompt: string }` as input and return `{ text: string }` by default.
+
+```json
+{
+  "type": "agent",
+  "id": "summarize",
+  "agentId": "support-agent"
+}
+```
+
+The `id` identifies this call site within the workflow. Later steps address the result as `stepResults.summarize`, regardless of the agent's own ID.
+
+Add an `outputSchema` to request structured output from the agent:
+
+```json
+{
+  "type": "agent",
+  "id": "extract-subtopics",
+  "agentId": "support-agent",
+  "outputSchema": {
+    "type": "array",
+    "items": {
+      "type": "object",
+      "properties": { "title": { "type": "string" } },
+      "required": ["title"]
+    }
+  }
+}
+```
+
+Use a `mapping` entry before an agent to build its `{ prompt }` input from workflow data.
+
+Agent entries accept an optional `description` and an `options` object:
+
+```json
+{
+  "type": "agent",
+  "id": "summarize",
+  "agentId": "support-agent",
+  "description": "Summarize the incoming request",
+  "options": { "retries": 2, "metadata": { "team": "support" } }
+}
+```
+
+Only `retries` and `metadata` persist. Function-valued options such as `onFinish` and function-valued `toolChoice` are rejected when a code-defined workflow is stored. Other agent call options don't persist.
+
+### Tool steps
+
+A `tool` entry invokes a tool by its registration key from the `Mastra` `tools` object. Mastra resolves the tool's input and output schemas from the registry when it registers the workflow.
+
+```json
+{
+  "type": "tool",
+  "id": "lookup",
+  "toolId": "lookup-customer"
+}
+```
+
+Tool entries accept the same optional `description` and `options` fields as agent entries. Only `retries` and `metadata` persist.
+
+### Mapping steps
+
+A `mapping` entry reshapes data. Its `mapConfig` is a JSON string that encodes an object. Each key becomes a key in the step output, and each descriptor defines one source.
+
+| Descriptor | Description |
+| - | - |
+| `{ "value": ... }` | A constant JSON value |
+| `{ "template": "..." }` | A string built from `${...}` placeholders |
+| `{ "initData": true, "path": "a.b" }` | A value from the workflow input |
+| `{ "step": "step-id", "path": "a.b" }` | A value from a preceding step's output |
+| `{ "requestContextPath": "a.b" }` | A value from the request context |
+
+The `step` source also accepts an array of step IDs:
+
+```json
+{ "step": ["escalate", "auto-reply"], "path": "text" }
+```
+
+The first listed step with a non-empty result supplies the value. This can select the branch that ran after a `conditional` entry.
+
+Templates resolve placeholders against `initData`, `inputData`, `state`, `requestContext`, and `stepResults.<step-id>`:
+
+```json
+{
+  "type": "mapping",
+  "id": "build-prompt",
+  "mapConfig": "{\"prompt\":{\"template\":\"Summarize this request: ${initData.request}\"}}"
+}
+```
+
+Objects and arrays resolved by a template are stringified as JSON. A `null` value inside a present result renders as an empty string. A template that references a step without a successful output fails the run.
+
+Mapping entries must be top-level graph entries. They can't be placed inside `parallel`, `conditional`, `foreach`, or `loop` containers.
+
+### Nested workflow steps
+
+A `workflow` entry invokes another registered workflow. The target can be code-defined or stored.
+
+```json
+{
+  "type": "workflow",
+  "id": "lookup-first",
+  "workflowId": "lookup-customer-workflow"
+}
+```
+
+The `id` identifies the call site. The same nested workflow can appear several times under different call-site IDs, and later steps address each result as `stepResults.<id>`. A `workflow` entry also accepts an optional `description`.
+
+### Parallel entries
+
+A `parallel` entry runs several single steps concurrently and merges their outputs into an object keyed by step ID.
+
+```json
+{
+  "type": "parallel",
+  "steps": [
+    { "type": "tool", "id": "first", "toolId": "lookup-customer" },
+    { "type": "tool", "id": "second", "toolId": "lookup-customer" }
+  ]
+}
+```
+
+Each child must be an `agent`, `tool`, or `workflow` entry. All children receive the parallel entry's input directly.
+
+### Conditional entries
+
+A `conditional` entry pairs each step with a declarative predicate and runs every branch whose predicate is true.
+
+```json
+{
+  "type": "conditional",
+  "steps": [
+    { "type": "agent", "id": "escalate", "agentId": "support-agent" },
+    { "type": "agent", "id": "auto-reply", "agentId": "support-agent" }
+  ],
+  "predicates": [
+    { "op": "eq", "left": { "path": "inputData.priority" }, "right": { "literal": "urgent" } },
+    { "op": "ne", "left": { "path": "inputData.priority" }, "right": { "literal": "urgent" } }
+  ]
+}
+```
+
+Each child must be an `agent`, `tool`, or `workflow` entry, and each child needs a predicate. All children receive the conditional entry's input directly.
+
+### Predicates
+
+Conditional entries and loops use a JSON predicate DSL. Operands are `{ "path": "..." }` references or `{ "literal": ... }` values. Paths resolve against `initData`, `inputData`, `stepResults`, and `state`.
+
+| Operator | Shape |
+| - | - |
+| `eq`, `ne`, `lt`, `lte`, `gt`, `gte` | `{ "op": "eq", "left": ..., "right": ... }` |
+| `in`, `notIn` | `{ "op": "in", "value": ..., "set": [...] }` |
+| `exists`, `notExists` | `{ "op": "exists", "path": "..." }` |
+| `truthy`, `falsy` | `{ "op": "truthy", "value": ... }` |
+| `and`, `or` | `{ "op": "and", "args": [...] }` |
+| `not` | `{ "op": "not", "arg": ... }` |
+
+Missing paths don't throw. Path-based operators return `false` when the path can't be resolved. Use `exists` or `notExists` to distinguish a missing value from a falsy value.
+
+### Foreach entries
+
+A `foreach` entry runs its body once for each item in an array input. The preceding entry must produce a raw array. Results preserve input order, and concurrency defaults to `1`.
+
+```json
+{
+  "type": "foreach",
+  "step": { "type": "workflow", "id": "write-blurb", "workflowId": "blurb-workflow" },
+  "opts": { "concurrency": 3 }
+}
+```
+
+The body can be an `agent`, `tool`, or `workflow` entry, but not a `mapping` entry.
+
+### Loop entries
+
+A `loop` repeats one step while (`dowhile`) or until (`dountil`) a predicate holds.
+
+```json
+{
+  "type": "loop",
+  "loopType": "dountil",
+  "step": { "type": "tool", "id": "poll", "toolId": "check-status" },
+  "predicate": {
+    "op": "eq",
+    "left": { "path": "inputData.status" },
+    "right": { "literal": "done" }
+  }
+}
+```
+
+The loop body must be a single step, and stored loops require a declarative predicate.
+
+### Sleep entries
+
+A `sleep` entry pauses for a fixed number of milliseconds. A `sleepUntil` entry pauses until a fixed date represented by an ISO date string. Stored definitions require literal values.
+
+```json
+{ "type": "sleep", "id": "wait", "duration": 5000 }
+```
+
+```json
+{ "type": "sleepUntil", "id": "wait-for-launch", "date": "2027-01-01T00:00:00.000Z" }
+```
+
+Use a code-defined workflow when the duration or date must be calculated at runtime.
+
+## Validation
+
+Mastra validates definitions before it persists or registers them:
+
+- Structure: Entry shapes and required fields, including placement rules such as top-level-only mappings.
+- References: Each `agentId` and `workflowId` must resolve against the live registries or the same bundle. A `toolId` must match a tool registration key.
+- Schema flow: Each entry's input must be compatible with the preceding output, including inferred mapping outputs.
+
+Validation errors include a dotted path, such as `graph.2.steps.0`, that identifies the invalid entry.
+
+## Related
+
+- [Use dynamic workflows](/docs/workflows/dynamic-workflows)
+- [`Mastra.addDynamicWorkflow()`](/reference/core/addDynamicWorkflow)
+- [`Mastra.addDynamicWorkflows()`](/reference/core/addDynamicWorkflows)
+- [Client SDK workflows API](/reference/client-js/workflows)

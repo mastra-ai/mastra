@@ -234,6 +234,7 @@ const listRepoOpenIssues = vi.fn(
         title: 'Fix flaky test',
         url: 'https://github.com/octo/hello/issues/12',
         author: 'ada',
+        assignee: 'grace',
         labels: ['bug'],
         comments: 3,
         createdAt: '2026-07-01T00:00:00Z',
@@ -246,6 +247,9 @@ const listRepoOpenIssues = vi.fn(
 const addIssueLabels = vi.fn(
   async (_installationId: number, _repoFullName: string, _issueNumber: number, _labels: string[]) => {},
 );
+const removeIssueLabel = vi.fn(
+  async (_installationId: number, _repoFullName: string, _issueNumber: number, _label: string) => {},
+);
 const listRepoOpenPullRequests = vi.fn(async (_installationId: number, _repoFullName: string, _page: number) => ({
   pullRequests: [
     {
@@ -253,6 +257,8 @@ const listRepoOpenPullRequests = vi.fn(async (_installationId: number, _repoFull
       title: 'Add factory pages',
       url: 'https://github.com/octo/hello/pull/34',
       author: 'grace',
+      assignees: ['ada'],
+      requestedReviewers: ['octocat'],
       baseBranch: 'main',
       headBranch: 'feat/factory',
       createdAt: '2026-07-03T00:00:00Z',
@@ -300,6 +306,8 @@ const githubStub = {
   mintInstallationToken: vi.fn(async () => 'install-token'),
   addIssueLabels: (installationId: number, repoFullName: string, issueNumber: number, labels: string[]) =>
     addIssueLabels(installationId, repoFullName, issueNumber, labels),
+  removeIssueLabel: (installationId: number, repoFullName: string, issueNumber: number, label: string) =>
+    removeIssueLabel(installationId, repoFullName, issueNumber, label),
   listRepoOpenIssues: (installationId: number, repoFullName: string, page: number, options?: { label?: string }) =>
     listRepoOpenIssues(installationId, repoFullName, page, options),
   intake: {
@@ -321,7 +329,7 @@ const githubStub = {
           state: 'open',
           stateType: 'open',
           priority: null,
-          assignee: null,
+          assignee: issue.assignee,
           source: input.sourceIds[0]!,
           labels: issue.labels,
           commentCount: issue.comments,
@@ -672,6 +680,7 @@ beforeEach(() => {
   pushBranch.mockClear();
   createPullRequest.mockClear();
   addIssueLabels.mockClear();
+  removeIssueLabel.mockClear();
   githubStub.versionControl.getRepositoryAccess.mockClear();
   listRepoOpenIssues.mockClear();
   listRepoOpenPullRequests.mockClear();
@@ -1419,6 +1428,7 @@ function seedMaterializedSession() {
     orgId: 'org1',
     userId: 'u1',
     branch: 'feat/x',
+    title: null,
     baseBranch: 'main',
     sandboxId: 'sb-1',
     sandboxWorkdir: '/workspace/worktrees/feat-x',
@@ -1464,7 +1474,12 @@ describe('issues route', () => {
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.issues).toHaveLength(1);
-    expect(json.issues[0]).toMatchObject({ number: 12, title: 'Fix flaky test', labels: ['bug'] });
+    expect(json.issues[0]).toMatchObject({
+      number: 12,
+      title: 'Fix flaky test',
+      assignee: 'grace',
+      labels: ['bug'],
+    });
     expect(json.nextPage).toBeNull();
     expect(listRepoOpenIssues).toHaveBeenCalledWith(7, 'octo/hello', 1, { label: undefined });
   });
@@ -1526,7 +1541,7 @@ describe('issues route', () => {
         body: JSON.stringify({
           title: 'Fix flaky test',
           url: 'https://github.com/octo/hello/issues/12',
-          labels: ['bug', 'auto-triaged', ''],
+          labels: ['bug', 'auto-triaged', 'status: needs triage', ''],
         }),
       },
     );
@@ -1539,6 +1554,8 @@ describe('issues route', () => {
     });
     expect(addIssueLabels).toHaveBeenCalledWith(7, 'octo/hello', 12, ['auto-triaged']);
     expect(addIssueLabels).toHaveBeenCalledOnce();
+    expect(removeIssueLabel).toHaveBeenCalledWith(7, 'octo/hello', 12, 'status: needs triage');
+    expect(removeIssueLabel).toHaveBeenCalledOnce();
     expect(runIssueTriage).toHaveBeenCalledWith({
       repository: 'octo/hello',
       issueNumber: 12,
@@ -1572,6 +1589,7 @@ describe('issues route', () => {
     // The wrapper calls addIssueLabels exactly once (no duplicate from the handler).
     expect(addIssueLabels).toHaveBeenCalledOnce();
     expect(addIssueLabels).toHaveBeenCalledWith(7, 'octo/hello', 5, ['auto-triaged']);
+    expect(removeIssueLabel).not.toHaveBeenCalled();
     // The runner receives labels with 'auto-triaged' appended by the wrapper.
     expect(runIssueTriage).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -1652,7 +1670,13 @@ describe('prs route', () => {
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.pullRequests).toHaveLength(1);
-    expect(json.pullRequests[0]).toMatchObject({ number: 34, title: 'Add factory pages', headBranch: 'feat/factory' });
+    expect(json.pullRequests[0]).toMatchObject({
+      number: 34,
+      title: 'Add factory pages',
+      assignees: ['ada'],
+      requestedReviewers: ['octocat'],
+      headBranch: 'feat/factory',
+    });
     expect(json.nextPage).toBeNull();
     expect(listRepoOpenPullRequests).toHaveBeenCalledWith(7, 'octo/hello', 1);
   });
@@ -1765,6 +1789,7 @@ describe('Factory session routes', () => {
       userId: 'u1',
       branch: 'feat/x',
       baseBranch: 'main',
+      title: null,
       sandboxId: null,
       sandboxWorkdir: null,
     });
@@ -1772,6 +1797,129 @@ describe('Factory session routes', () => {
     expect(tables.sessions).toHaveLength(1);
     expect(ensureWorktree).not.toHaveBeenCalled();
     expect(ensureProjectSandbox).not.toHaveBeenCalled();
+  });
+
+  it('uses a supplied UUID for branch identity and persists a normalized title', async () => {
+    seedMaterializedProject();
+    const app = buildApp({ workosId: 'u1' });
+    const sessionId = '00000000-0000-4000-8000-000000000001';
+    const first = await postJson(app, '/web/github/projects/p1/sessions', {
+      sessionId,
+      title: '  Fix\n  the\tlogin flow  ',
+    });
+
+    expect(first.status).toBe(200);
+    const firstSession = (await first.json()).session;
+    expect(firstSession).toMatchObject({
+      sessionId,
+      branch: `user/session-${sessionId}`,
+      title: 'Fix the login flow',
+    });
+
+    const loaded = await app.request(`/web/user-sessions/${sessionId}`);
+    expect((await loaded.json()).session.title).toBe('Fix the login flow');
+    const listed = await app.request('/web/github/projects/p1/sessions');
+    expect((await listed.json()).sessions).toEqual([
+      expect.objectContaining({ sessionId, title: 'Fix the login flow' }),
+    ]);
+  });
+
+  it('returns the same session when a supplied UUID is retried', async () => {
+    seedMaterializedProject();
+    const app = buildApp({ workosId: 'u1' });
+    const request = {
+      sessionId: '00000000-0000-4000-8000-000000000001',
+      title: 'Fix login flow',
+    };
+
+    const first = await postJson(app, '/web/github/projects/p1/sessions', request);
+    const second = await postJson(app, '/web/github/projects/p1/sessions', request);
+
+    expect((await second.json()).session).toEqual((await first.json()).session);
+    expect(tables.sessions).toHaveLength(1);
+  });
+
+  it('derives a branch from a server-generated UUID when no session ID is supplied', async () => {
+    seedMaterializedProject();
+    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/sessions', {});
+    const session = (await res.json()).session;
+
+    expect(session.branch).toBe(`user/session-${session.sessionId}`);
+    expect(session.title).toBeNull();
+  });
+
+  it('truncates titles to 80 code points and stores blank titles as null', async () => {
+    seedMaterializedProject();
+    const app = buildApp({ workosId: 'u1' });
+    const long = await postJson(app, '/web/github/projects/p1/sessions', {
+      sessionId: '00000000-0000-4000-8000-000000000001',
+      title: `${'x'.repeat(79)} word`,
+    });
+    const blank = await postJson(app, '/web/github/projects/p1/sessions', {
+      sessionId: '00000000-0000-4000-8000-000000000002',
+      title: ' \n\t ',
+    });
+    const atCap = await postJson(app, '/web/github/projects/p1/sessions', {
+      sessionId: '00000000-0000-4000-8000-000000000003',
+      title: `${'x'.repeat(79)}🙂`,
+    });
+    const pastCap = await postJson(app, '/web/github/projects/p1/sessions', {
+      sessionId: '00000000-0000-4000-8000-000000000004',
+      title: `${'x'.repeat(80)}🙂`,
+    });
+
+    expect((await long.json()).session.title).toBe('x'.repeat(79));
+    expect((await blank.json()).session.title).toBeNull();
+    expect((await atCap.json()).session.title).toBe(`${'x'.repeat(79)}🙂`);
+    expect((await pastCap.json()).session.title).toBe('x'.repeat(80));
+  });
+
+  it.each([
+    [{ sessionId: 'not-a-uuid' }, 'Invalid sessionId'],
+    [{ sessionId: '00000000-0000-4000-8000-00000000000A' }, 'Invalid sessionId'],
+    [{ sessionId: 42 }, 'Invalid sessionId'],
+    [{ title: 42 }, 'Invalid title'],
+    [{ baseBranch: 42 }, 'Invalid baseBranch'],
+  ])('rejects invalid optional session fields', async (body, error) => {
+    seedMaterializedProject();
+    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/sessions', body);
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error });
+    expect(tables.sessions).toHaveLength(0);
+  });
+
+  it('rejects a supplied UUID already bound to another session identity', async () => {
+    seedMaterializedProject();
+    const app = buildApp({ workosId: 'u1' });
+    const sessionId = '00000000-0000-4000-8000-000000000001';
+    await postJson(app, '/web/github/projects/p1/sessions', { branch: 'feat/x', sessionId });
+
+    const conflict = await postJson(app, '/web/github/projects/p1/sessions', { sessionId });
+
+    expect(conflict.status).toBe(409);
+    expect(await conflict.json()).toEqual({ error: 'Session ID conflict' });
+    expect(tables.sessions).toHaveLength(1);
+  });
+
+  it('returns a conflict when two identities concurrently claim the same supplied UUID', async () => {
+    seedMaterializedProject();
+    const sessionId = '00000000-0000-4000-8000-000000000001';
+
+    const responses = await Promise.all([
+      postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/sessions', { sessionId }),
+      postJson(buildApp({ workosId: 'u2' }), '/web/github/projects/p1/sessions', { sessionId }),
+    ]);
+
+    expect(responses.map(response => response.status).sort()).toEqual([200, 409]);
+    expect(tables.sessions).toHaveLength(1);
+  });
+
+  it('rejects a non-object body instead of treating it as an unnamed session', async () => {
+    seedMaterializedProject();
+    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/sessions', 42);
+    expect(res.status).toBe(400);
+    expect(tables.sessions).toHaveLength(0);
   });
 
   it('reuses the session for the same repository, user, and branch', async () => {

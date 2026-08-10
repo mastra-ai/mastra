@@ -98,6 +98,18 @@ async function mockTraceResponse(page: Page, status: number, body: unknown = { e
       body: JSON.stringify(body),
     });
   });
+  // Registered last so it wins over the `traces/*` glob above, which would otherwise
+  // swallow the trace LIST's lightweight requests (traces/light?...) with detail bodies.
+  await page.route('**/api/observability/traces/light?**', async route => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        spans: [],
+        pagination: { page: 0, perPage: 25, total: 0, hasMore: false },
+      }),
+    });
+  });
 }
 
 async function mockLongTrace(page: Page) {
@@ -130,10 +142,10 @@ test.describe('Trace detail page', () => {
       await expectCurrentBreadcrumb(page, 'trace');
     });
 
-    test('has breadcrumb link pointing back to observability', async ({ page }) => {
+    test('has breadcrumb link pointing back to the traces list', async ({ page }) => {
       await page.goto(`/traces/${FAKE_TRACE_ID}`);
 
-      await expectBreadcrumbLink(page, 'Traces', '/observability');
+      await expectBreadcrumbLink(page, 'Traces', '/traces');
     });
 
     test('has Traces documentation link', async ({ page }) => {
@@ -148,11 +160,11 @@ test.describe('Trace detail page', () => {
   });
 
   test.describe('when the Traces breadcrumb is clicked', () => {
-    test('navigates to observability', async ({ page }) => {
+    test('navigates to the traces list', async ({ page }) => {
       await page.goto(`/traces/${FAKE_TRACE_ID}`);
 
       await page.getByLabel('Breadcrumb').getByRole('link', { name: 'Traces' }).click();
-      await expect(page).toHaveURL(/\/observability$/);
+      await expect(page).toHaveURL(/\/traces$/);
       await expectCurrentBreadcrumb(page, 'Traces');
     });
   });
@@ -163,7 +175,7 @@ test.describe('Trace detail page', () => {
 
       // Page shell still renders - the panels themselves depend on server data that may not exist.
       await expectCurrentBreadcrumb(page, 'trace');
-      await expectBreadcrumbLink(page, 'Traces', '/observability');
+      await expectBreadcrumbLink(page, 'Traces', '/traces');
     });
   });
 
@@ -179,15 +191,7 @@ test.describe('Trace detail page', () => {
     test('keeps the timeline and span details independently scrollable within the page', async ({ page }) => {
       await page.setViewportSize({ width: 1280, height: 800 });
       await mockLongTrace(page);
-      // Warm the mocked trace query, then remount the route with the final span selected through the URL.
-      await page.goto(`/traces/${LONG_TRACE_ID}`);
-      await expect(page.getByRole('button', { name: 'tool call 60', exact: true })).toBeAttached();
-      await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Traces' }).click();
-      await expect(page).toHaveURL(/\/observability$/);
-      await page.evaluate(url => {
-        window.history.pushState(null, '', url);
-        window.dispatchEvent(new PopStateEvent('popstate'));
-      }, `/traces/${LONG_TRACE_ID}?spanId=${SELECTED_SPAN_ID}`);
+      await page.goto(`/traces/${LONG_TRACE_ID}?spanId=${SELECTED_SPAN_ID}`);
       await expect(page).toHaveURL(new RegExp(`spanId=${SELECTED_SPAN_ID}`));
 
       const timelinePanel = page.locator('section').filter({
@@ -243,7 +247,7 @@ test.describe('Trace detail page', () => {
 
       await expect(page.getByText('Session Expired')).toBeVisible();
       // Shared top area still renders in the error state.
-      await expectBreadcrumbLink(page, 'Traces', '/observability');
+      await expectBreadcrumbLink(page, 'Traces', '/traces');
     });
   });
 
@@ -254,7 +258,7 @@ test.describe('Trace detail page', () => {
 
       await expect(page.getByText('Permission Denied')).toBeVisible();
       await expect(page.getByText(/You don't have permission to access traces/)).toBeVisible();
-      await expectBreadcrumbLink(page, 'Traces', '/observability');
+      await expectBreadcrumbLink(page, 'Traces', '/traces');
     });
   });
 
@@ -266,7 +270,7 @@ test.describe('Trace detail page', () => {
       await page.goto(`/traces/${FAKE_TRACE_ID}`);
 
       await expect(page.getByText('Failed to load trace')).toBeVisible();
-      await expectBreadcrumbLink(page, 'Traces', '/observability');
+      await expectBreadcrumbLink(page, 'Traces', '/traces');
     });
   });
 });

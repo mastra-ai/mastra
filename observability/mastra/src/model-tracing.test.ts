@@ -1,6 +1,6 @@
 import { ReadableStream } from 'node:stream/web';
 import { coreFeatures } from '@mastra/core/features';
-import type { ObservabilityExporter, TracingEvent, ExportedSpan } from '@mastra/core/observability';
+import type { ObservabilityExporter, TracingEvent, ExportedSpan, MetricEvent } from '@mastra/core/observability';
 import { SpanType, SamplingStrategyType, TracingEventType } from '@mastra/core/observability';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -13,13 +13,23 @@ import { ModelSpanTracker } from './model-tracing';
 class TestExporter implements ObservabilityExporter {
   name = 'test-exporter';
   events: TracingEvent[] = [];
+  metricEvents: MetricEvent[] = [];
 
   async exportTracingEvent(event: TracingEvent): Promise<void> {
     this.events.push(event);
   }
 
+  async onMetricEvent(event: MetricEvent): Promise<void> {
+    this.metricEvents.push(event);
+  }
+
   async shutdown(): Promise<void> {
     this.events = [];
+    this.metricEvents = [];
+  }
+
+  getMetricsByName(name: string) {
+    return this.metricEvents.filter(event => event.metric.name === name).map(event => event.metric);
   }
 
   getSpansByName(name: string): ExportedSpan[] {
@@ -2013,6 +2023,123 @@ describe('ModelSpanTracker', () => {
       expect(stepSpansBefore).toHaveLength(0);
 
       modelSpan.end();
+    });
+
+    describe('Gateway provider costs', () => {
+      function endGeneration(options: Parameters<ModelSpanTracker['endGeneration']>[0]) {
+        const modelSpan = tracing.startSpan({
+          type: SpanType.MODEL_GENERATION,
+          name: 'test-generation',
+        });
+
+        new ModelSpanTracker(modelSpan).endGeneration(options);
+        return testExporter.getSpansByType(SpanType.MODEL_GENERATION)[0]!;
+      }
+
+      it('aggregates numeric and numeric-string Gateway costs from every completed step', () => {
+        const span = endGeneration({
+          attributes: { model: 'anthropic/claude-haiku-4.5', provider: 'gateway' },
+          usage: { inputTokens: 100, outputTokens: 50 },
+          stepProviderMetadata: [{ gateway: { cost: '0.0012' } }, { gateway: { cost: 0.0008 } }],
+        });
+
+        expect(span.attributes.costContext).toEqual({
+          estimatedCost: 0.002,
+          costUnit: 'USD',
+          costMetadata: {
+            source: 'provider_reported',
+            sdkProvider: 'vercel_ai_gateway',
+            sdkCostField: 'gateway.cost',
+            scope: 'query_total',
+            reportedStepCount: 2,
+          },
+        });
+      });
+
+      it('preserves an explicit zero cost reported by the Gateway', () => {
+        const span = endGeneration({
+          attributes: { model: 'anthropic/claude-haiku-4.5', provider: 'gateway' },
+          usage: { inputTokens: 100, outputTokens: 50 },
+          stepProviderMetadata: [{ gateway: { cost: 0 } }],
+        });
+
+        expect(span.attributes.costContext?.estimatedCost).toBe(0);
+      });
+
+      it('falls back to pricing estimates when the aggregate Gateway cost is non-finite', () => {
+        const span = endGeneration({
+          attributes: { model: 'anthropic/claude-haiku-4.5', provider: 'gateway' },
+          usage: { inputTokens: 100, outputTokens: 50 },
+          stepProviderMetadata: [{ gateway: { cost: Number.MAX_VALUE } }, { gateway: { cost: Number.MAX_VALUE } }],
+        });
+
+        expect(span.attributes.costContext).toBeUndefined();
+        expect(testExporter.getMetricsByName('mastra_model_total_input_tokens')[0]?.costContext).toMatchObject({
+          provider: 'vercel',
+          model: 'claude-haiku-4-5',
+          estimatedCost: expect.any(Number),
+          costMetadata: { pricing_id: expect.any(String) },
+        });
+      });
+
+      it.each([-0.0008, 'invalid-cost', NaN, Infinity])(
+        'falls back to pricing estimates when any Gateway step has invalid reported cost %p',
+        cost => {
+          const span = endGeneration({
+            attributes: { model: 'anthropic/claude-haiku-4.5', provider: 'gateway' },
+            usage: { inputTokens: 100, outputTokens: 50 },
+            stepProviderMetadata: [{ gateway: { cost: '0.0012' } }, { gateway: { cost } }],
+          });
+
+          expect(span.attributes.costContext).toBeUndefined();
+        },
+      );
+
+      it('does not report a partial Gateway cost when a completed step has no metadata', () => {
+        const span = endGeneration({
+          attributes: { model: 'anthropic/claude-haiku-4.5', provider: 'gateway' },
+          usage: { inputTokens: 100, outputTokens: 50 },
+          stepProviderMetadata: [{ gateway: { cost: '0.0012' } }, undefined],
+        });
+
+        expect(span.attributes.costContext).toBeUndefined();
+      });
+
+      it('does not use final-step provider metadata without per-step metadata', () => {
+        const span = endGeneration({
+          attributes: { model: 'anthropic/claude-haiku-4.5', provider: 'gateway' },
+          usage: { inputTokens: 100, outputTokens: 50 },
+          providerMetadata: { gateway: { cost: '0.0012' } },
+        });
+
+        expect(span.attributes.costContext).toBeUndefined();
+      });
+
+      it('does not overwrite caller-supplied cost context', () => {
+        const span = endGeneration({
+          attributes: {
+            model: 'claude-sonnet-4-6',
+            provider: '@anthropic-ai/claude-agent-sdk',
+            costContext: {
+              provider: 'anthropic',
+              model: 'claude-sonnet-4-6',
+              estimatedCost: 0.0123,
+              costUnit: 'USD',
+              costMetadata: { source: 'sdk_estimate' },
+            },
+          },
+          usage: { inputTokens: 15, outputTokens: 4 },
+          stepProviderMetadata: [{ gateway: { cost: '0.9999' } }],
+        });
+
+        expect(span.attributes.costContext).toEqual({
+          provider: 'anthropic',
+          model: 'claude-sonnet-4-6',
+          estimatedCost: 0.0123,
+          costUnit: 'USD',
+          costMetadata: { source: 'sdk_estimate' },
+        });
+      });
     });
   });
 });

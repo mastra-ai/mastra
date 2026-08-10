@@ -83,19 +83,31 @@ export interface ResolveRuntimeOptions {
   agentId: string;
   /** Workflow input containing serialized state */
   input: DurableAgenticWorkflowInput;
+  /**
+   * The step's run-level RequestContext, used when the step input carries no
+   * `requestContextEntries` snapshot. See `restoreRequestContext`.
+   */
+  requestContext?: RequestContext;
   /** Logger for debugging */
   logger?: { debug?: (...args: any[]) => void; error?: (...args: any[]) => void };
 }
 
 /**
  * Restore a RequestContext from the JSON-safe `requestContextEntries`
- * snapshot serialized onto the workflow input (see preparation.ts). Returns
- * an empty context when no snapshot is present.
+ * snapshot serialized onto the workflow input (see preparation.ts).
+ *
+ * `entries` is absent on a step input even when the run itself has a context:
+ * the snapshot is propagated at the run level, not copied onto every step.
+ * `runLevel` is that run-level context, which the execution engine has already
+ * rebuilt in the step's scope — falling back to it is what keeps request-scoped
+ * resolution (tenant/user, workspace, dynamic model/memory) working for tools
+ * rebuilt on a cross-process worker, including a delegated subagent's.
  */
-function restoreRequestContext(entries?: Record<string, unknown>): RequestContext {
-  return entries
-    ? new RequestContext(Object.entries(entries) as Iterable<readonly [string, unknown]>)
-    : new RequestContext();
+function restoreRequestContext(entries?: Record<string, unknown>, runLevel?: RequestContext): RequestContext {
+  if (entries) {
+    return new RequestContext(Object.entries(entries) as Iterable<readonly [string, unknown]>);
+  }
+  return runLevel ?? new RequestContext();
 }
 
 /**
@@ -190,7 +202,7 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
       // the workflow input (mirrors durable-agent.ts resume handling), so
       // request-scoped tools / workspace / memory / processors resolve with
       // the same configuration as the original call site.
-      const resolveRequestContext = restoreRequestContext(input.requestContextEntries);
+      const resolveRequestContext = restoreRequestContext(input.requestContextEntries, options.requestContext);
 
       tools = await agent.getToolsForExecution({
         runId,
@@ -255,6 +267,10 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
     logger?.debug?.(`[DurableAgent:${agentId}] No tools resolved for run ${runId}`);
   }
 
+  // Build this before the registry write-back. On a remote worker that
+  // write-back is what makes finish-time persistence available to later steps.
+  const saveQueueManager = makeSaveQueueManager(memory, mastra);
+
   // Write the rebuilt state back into the per-process registry so sibling
   // durable steps in THIS process (e.g. the tool-call step that runs after the
   // LLM step on the same worker) reuse it instead of rebuilding per call. Only
@@ -270,6 +286,7 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
       modelList,
       workspace,
       memory,
+      saveQueueManager,
       inputProcessors,
       llmRequestInputProcessors,
       outputProcessors,
@@ -283,10 +300,7 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
     }
   }
 
-  // 3. Get or create SaveQueueManager
-  const saveQueueManager = makeSaveQueueManager(memory, mastra);
-
-  // 4. Reconstruct _internal for compatibility with existing code
+  // 3. Reconstruct _internal for compatibility with existing code
   const _internal = resolveInternalState({
     state: input.state,
     memory,
@@ -350,16 +364,30 @@ export async function rebuildRunToolsFromMastra(options: {
   options?: SerializableDurableOptions;
   /** JSON-safe request-context snapshot from the workflow input (see preparation.ts). */
   requestContextEntries?: Record<string, unknown>;
+  /**
+   * The step's run-level RequestContext, used when `requestContextEntries` is
+   * absent. See `restoreRequestContext`.
+   */
+  requestContext?: RequestContext;
   logger?: { debug?: (...args: any[]) => void };
 }): Promise<RebuiltRunTools | undefined> {
-  const { mastra, runId, agentId, state, options: execOptions, requestContextEntries, logger } = options;
+  const {
+    mastra,
+    runId,
+    agentId,
+    state,
+    options: execOptions,
+    requestContextEntries,
+    requestContext,
+    logger,
+  } = options;
   if (!mastra) return undefined;
 
   try {
     const agent = mastra.getAgentById(agentId);
     // Restore the caller's request context so request-scoped tools, workspace
     // and memory resolve with the same configuration as the original call.
-    const resolveRequestContext = restoreRequestContext(requestContextEntries);
+    const resolveRequestContext = restoreRequestContext(requestContextEntries, requestContext);
 
     const tools = await agent.getToolsForExecution({
       runId,

@@ -12,7 +12,7 @@ export type { WorkflowDataPart, WorkflowStepDataPart } from './transformers';
 export { networkRoute, handleNetworkStream } from './network-route';
 export type { NetworkRouteOptions, NetworkStreamHandlerParams, NetworkStreamHandlerOptions } from './network-route';
 export type { NetworkDataPart } from './transformers';
-export type { AgentDataPart } from './transformers';
+export type { AgentDataPart, AgentStepDataPart } from './transformers';
 
 export { toAISdkStream, toAISdkV5Stream } from './convert-streams';
 export { workflowSnapshotToStream } from './convert-snapshot';

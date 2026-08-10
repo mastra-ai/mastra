@@ -8,6 +8,8 @@ description: 'Create your first Mastra application in seconds. Build AI agents, 
 import { CardGrid, CardGridItem } from '@site/src/components/cards/card-grid';
 import QuickstartPrompt from '@site/src/content/en/docs/getting-started/_partial-quickstart-prompt.mdx';
 import AgentQuickstart from '@site/src/content/en/docs/getting-started/_partial-agent-quickstart.mdx';
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
 
 # Get started
 
@@ -23,9 +25,31 @@ Mastra is a TypeScript framework for building AI agents and applications. Create
 
 Run this command to create a general-purpose agent harness with a local workspace, shell tools, memory, task tracking, web access, and recurring schedules. It also installs Mastra skills for your installed coding agent, so you can start prompting and editing it:
 
-```bash npm2yarn
-npm create mastra@latest
-```
+<Tabs groupId="npm2yarn">
+  <TabItem value="npm" label="npm">
+    ```bash
+    npm create mastra@latest
+    ```
+  </TabItem>
+
+  <TabItem value="pnpm" label="pnpm">
+    ```bash
+    pnpm create mastra@latest
+    ```
+  </TabItem>
+
+  <TabItem value="yarn" label="Yarn">
+    ```bash
+    yarn create mastra
+    ```
+  </TabItem>
+
+  <TabItem value="bun" label="Bun">
+    ```bash
+    bunx create-mastra
+    ```
+  </TabItem>
+</Tabs>
 
 You can open [Studio](/docs/studio/overview) immediately, which is an interactive UI for your Mastra project. See the [quickstart guide](/guides/getting-started/quickstart) for a full walkthrough.
 

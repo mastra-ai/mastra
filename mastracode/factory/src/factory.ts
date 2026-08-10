@@ -24,18 +24,18 @@ import { AgentControllerChannels } from '@mastra/core/channels';
 import type { PubSub } from '@mastra/core/events';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
-import { hasAuthInit } from '@mastra/core/server';
+import { hasAuthInit, isUserProvider } from '@mastra/core/server';
 import type { IMastraAuthProvider } from '@mastra/core/server';
 import type { FactoryStorage } from '@mastra/core/storage';
 import type { MastraVector } from '@mastra/core/vector';
 import { LocalSandbox } from '@mastra/core/workspace';
 import type { WorkspaceSandbox } from '@mastra/core/workspace';
-import type { FactoryAuthUser } from './auth.js';
 import {
   buildAuthRoutes,
   createFactoryAuthGate,
   createFactoryRouteAuth,
   getFactoryAuthOrgId,
+  getFactoryAuthUserFromContext,
   getFactoryAuthUserId,
 } from './auth.js';
 import type { FactoryIntegration, IntegrationPostToolContext, IntegrationTools } from './integrations/base.js';
@@ -64,6 +64,7 @@ import { assertFactoryRules } from './rules/validation.js';
 import { SandboxFleet } from './sandbox/fleet.js';
 import { registerSandboxReattach } from './sandbox/reattach.js';
 import { handleServerError } from './server-error.js';
+import { observeSessionFilesystem } from './session/filesystem-capture.js';
 import { createSpaStaticMiddleware, resolveUiDistDir } from './spa-static.js';
 import { createStateSigner } from './state-signing.js';
 import { observeAgentGitAction } from './storage/domains/audit/agent-audit.js';
@@ -72,6 +73,7 @@ import { AuditDomain } from './storage/domains/audit/domain.js';
 import { ChannelIdentityStorage } from './storage/domains/channel-identity/base.js';
 import { ModelCredentialsStorage } from './storage/domains/credentials/base.js';
 import { CustomProvidersStorage } from './storage/domains/custom-providers/base.js';
+import { FilesystemStorage } from './storage/domains/filesystem/base.js';
 import { IntakeStorage } from './storage/domains/intake/base.js';
 import { IntegrationStorage } from './storage/domains/integrations/base.js';
 import { MemorySettingsStorage } from './storage/domains/memory-settings/base.js';
@@ -142,6 +144,8 @@ export interface MastraFactoryConfig {
   allowedOrigins?: string[];
   /** Sandbox configuration. Omitted → repository sandboxes are disabled. */
   sandbox?: MastraFactorySandboxConfig;
+  /** Background Factory dispatcher configuration. */
+  dispatcher?: MastraFactoryDispatcherConfig;
   /**
    * Deployment-stable secret for signing integration OAuth `state` values.
    * Omitted → a per-process random secret, which is fine for single-process
@@ -199,6 +203,15 @@ export interface MastraFactorySandboxConfig {
    * unlimited. A lightweight per-process budget, not a cross-replica scheduler.
    */
   maxSandboxes?: number;
+}
+
+/**
+ * Per-process cap on concurrent background Factory dispatches. Omitted means
+ * the dispatcher default; this is a local replica budget, not a global queue
+ * limit shared across deployments.
+ */
+export interface MastraFactoryDispatcherConfig {
+  maxInFlight?: number;
 }
 
 const CONTROLLER_ID = 'code';
@@ -377,6 +390,7 @@ export class MastraFactory {
     // default persistence surface for integrations without a bespoke domain.
     const integrationStorage = storage.registerDomain(new IntegrationStorage());
     const factoryProjectsStorage = storage.registerDomain(new FactoryProjectsStorage());
+    const filesystemStorage = storage.registerDomain(new FilesystemStorage());
     const sourceControlStorage = storage.registerDomain(new SourceControlStorage());
     // Reverse index from a platform sender (Slack/Discord/...) to a Mastra
     // tenant, so inbound channel events can resolve the sender's model creds.
@@ -389,6 +403,7 @@ export class MastraFactory {
       modelPacks: modelPacksStorage,
       memorySettings: memorySettingsStorage,
       customProviders: customProvidersStorage,
+      filesystem: filesystemStorage,
       projects: factoryProjectsStorage,
       queueHealth: queueHealthStorage,
       workItems: workItemsStorage,
@@ -406,9 +421,10 @@ export class MastraFactory {
       auth: routeAuth,
       audit: auditStorage,
       projects: factoryProjectsStorage,
+      users: auth && isUserProvider(auth) ? auth : undefined,
       sinks: integrations,
       agentTenant: requestContext => {
-        const user = requestContext.get('user') as FactoryAuthUser | undefined;
+        const user = getFactoryAuthUserFromContext(requestContext);
         return { orgId: getFactoryAuthOrgId(user), userId: getFactoryAuthUserId(user) };
       },
     });
@@ -649,6 +665,14 @@ export class MastraFactory {
                       requestContext,
                       storage: workItemsStorage,
                       transitionService,
+                      // Heals crash-resumed sessions: recovered addresses re-seed
+                      // projectRepositoryId/baseRef from the source session record.
+                      // Only offered while the source-control domain is ready — a
+                      // throwing lookup would abort recovery's catch block and also
+                      // skip the metadata baseRef fallback.
+                      ...(storage.isDomainReady('source-control')
+                        ? { sessions: sourceControlStorage.forIntegration('github').sessions }
+                        : {}),
                     }),
                   );
                 }
@@ -722,6 +746,7 @@ export class MastraFactory {
                 controller,
                 transitionService: runtimeTransitionService,
                 storage: storage.getDomain<WorkItemsStorage>('work-items'),
+                maxInFlight: this.#config.dispatcher?.maxInFlight,
                 reconcileToolResults: () => factoryProcessor?.reconcileAllBoundThreads() ?? Promise.resolve(),
                 prepareBinding,
                 primeCredentials: tenant => primeTenantCredentials({ tenant, credentials: modelCredentialsStorage }),
@@ -784,6 +809,13 @@ export class MastraFactory {
         },
       }),
     );
+
+    prepared.base.controller.onSessionCreated(session => {
+      observeSessionFilesystem(session, {
+        filesystem: filesystemStorage,
+        sourceControl: sourceControlStorage.forIntegration('github'),
+      });
+    });
 
     this.#prepared = prepared;
     this.#factoryProcessor = factoryProcessor;

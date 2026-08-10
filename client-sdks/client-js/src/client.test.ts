@@ -944,6 +944,93 @@ describe('MastraClient', () => {
     });
   });
 
+  describe('Dataset Experiments', () => {
+    const mockSuccess = () => {
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        headers: { get: () => 'application/json' },
+        json: async () => ({ experiments: [], pagination: { total: 0, page: 0, perPage: 10, hasMore: false } }),
+      });
+    };
+
+    beforeEach(() => {
+      vi.resetAllMocks();
+      client = new MastraClient({ baseUrl: 'http://localhost:4111', retries: 0 });
+    });
+
+    it('serializes grouping filters for global experiment listings including trialIndex 0', async () => {
+      mockSuccess();
+
+      await client.listExperiments({
+        page: 2,
+        perPage: 25,
+        experimentSetId: 'set-1',
+        comparisonId: 'comparison-1',
+        variantId: 'variant-1',
+        trialIndex: 0,
+      });
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        'http://localhost:4111/api/experiments?page=2&perPage=25&experimentSetId=set-1&comparisonId=comparison-1&variantId=variant-1&trialIndex=0',
+        expect.any(Object),
+      );
+    });
+
+    it('serializes grouping filters for dataset experiment listings including trialIndex 0', async () => {
+      mockSuccess();
+
+      await client.listDatasetExperiments('dataset/1', {
+        experimentSetId: 'set 1',
+        comparisonId: 'comparison-1',
+        variantId: 'variant-1',
+        trialIndex: 0,
+      });
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        'http://localhost:4111/api/datasets/dataset%2F1/experiments?experimentSetId=set+1&comparisonId=comparison-1&variantId=variant-1&trialIndex=0',
+        expect.any(Object),
+      );
+    });
+
+    it('posts provenance and grouping when triggering an experiment', async () => {
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        headers: { get: () => 'application/json' },
+        json: async () => ({ experimentId: 'experiment-1', status: 'pending' }),
+      });
+      const provenance = {
+        source: 'github',
+        sourceId: 'mastra-ai/mastra',
+        sourceVersion: 'abc123',
+        metadata: { pullRequest: 20645 },
+      };
+      const grouping = {
+        experimentSetId: 'set-1',
+        comparisonId: 'comparison-1',
+        variantId: 'variant-1',
+        trialIndex: 0,
+      };
+
+      await client.triggerDatasetExperiment({
+        datasetId: 'dataset-1',
+        targetType: 'agent',
+        targetId: 'agent-1',
+        provenance,
+        grouping,
+      });
+
+      const [url, init] = (global.fetch as any).mock.calls[0];
+      expect(url).toBe('http://localhost:4111/api/datasets/dataset-1/experiments');
+      expect(init.method).toBe('POST');
+      expect(JSON.parse(init.body)).toMatchObject({
+        targetType: 'agent',
+        targetId: 'agent-1',
+        provenance,
+        grouping,
+      });
+    });
+  });
+
   describe('Dataset Item Tool Mocks', () => {
     let client: MastraClient;
 
@@ -1036,6 +1123,46 @@ describe('MastraClient', () => {
       expect(init.method).toBe('POST');
       expect(JSON.parse(init.body)).toMatchObject({ input: { q: 'x' }, scorerIds });
       expect(result.scorerIds).toEqual(scorerIds);
+    });
+
+    it('triggerDatasetExperiment posts name, description, and metadata in the request body', async () => {
+      const name = 'smoke-run';
+      const description = 'baseline quality check';
+      const metadata = { model: 'anthropic/claude-haiku-4-5' };
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        headers: { get: () => 'application/json' },
+        json: async () => ({
+          experimentId: 'exp-1',
+          status: 'pending',
+          totalItems: 1,
+          succeededCount: 0,
+          failedCount: 0,
+          startedAt: new Date().toISOString(),
+          completedAt: null,
+          results: [],
+        }),
+      });
+
+      await client.triggerDatasetExperiment({
+        datasetId: 'ds-1',
+        targetType: 'agent',
+        targetId: 'agent-1',
+        name,
+        description,
+        metadata,
+      });
+
+      const [url, init] = (global.fetch as any).mock.calls[0];
+      expect(url).toBe('http://localhost:4111/api/datasets/ds-1/experiments');
+      expect(init.method).toBe('POST');
+      expect(JSON.parse(init.body)).toMatchObject({
+        targetType: 'agent',
+        targetId: 'agent-1',
+        name,
+        description,
+        metadata,
+      });
     });
 
     it('batchInsertDatasetItems preserves an explicit empty scorerIds override', async () => {

@@ -1,5 +1,103 @@
 # @mastra/mcp
 
+## 1.16.0-alpha.2
+
+### Minor Changes
+
+- Add serializable MCP tool definitions and lazy hydration. ([#21119](https://github.com/mastra-ai/mastra/pull/21119))
+
+  `MCPClient` can now export its tool catalog as plain JSON and rebuild executable tools from it later, without reconnecting at startup. This removes the need to connect to every MCP server on every cold start just to discover tools that may never be called.
+
+  - `listToolDefinitions()` returns definitions grouped by server and keyed by tool name. The result is JSON-serializable, so it can be cached in Redis, a database, or a build artifact.
+  - `listToolDefinitionsWithErrors()` also reports per-server failures, so a partial catalog isn't cached silently.
+  - `toolFromDefinition({ serverName, definition })` rebuilds a single tool from a cached definition.
+  - `toolsFromDefinitions({ definitions })` rebuilds a whole namespaced tool map, matching the `serverName_toolName` keys from `listTools()`.
+
+  Hydrated tools connect lazily on first execution and behave the same as discovered tools, including strict-mode metadata, approval policies, structured content, tool error handling, progress metadata, abort signals, and reconnect and retry behavior. Definitions capture the server version and instructions recorded at discovery time so that metadata isn't lost.
+
+  Existing `listTools()` and `listToolsets()` behavior is unchanged.
+
+### Patch Changes
+
+- Updated dependencies [[`b8ce7ec`](https://github.com/mastra-ai/mastra/commit/b8ce7ec96e39343c6c2f36d12d68a9ad816c09f7), [`a3a3624`](https://github.com/mastra-ai/mastra/commit/a3a3624f646b98e409424d8defccbd334da9e8b8), [`6246914`](https://github.com/mastra-ai/mastra/commit/62469146636911f3cbbe0880bd011c6a897a59a7), [`3f73c07`](https://github.com/mastra-ai/mastra/commit/3f73c076727e8c36b4fff7a1b40290fb68957fa8), [`7c1ebb1`](https://github.com/mastra-ai/mastra/commit/7c1ebb15690c4b3f0eabb19077cf8af573311e57), [`32980a3`](https://github.com/mastra-ai/mastra/commit/32980a3e2413d0274ac244d32c37d910edc13f00), [`4bcdfaf`](https://github.com/mastra-ai/mastra/commit/4bcdfaf0eac3199d7cb171b0a19a92c9c341eea4), [`af4636a`](https://github.com/mastra-ai/mastra/commit/af4636a74463275d71c1d13a38f7d2b738f128bf), [`a463cdf`](https://github.com/mastra-ai/mastra/commit/a463cdf1c95c3059e70f0bff27959e8558bb899d), [`0ea6b80`](https://github.com/mastra-ai/mastra/commit/0ea6b8001408ce02b56e8be0536b0fd8cbaf8ad2)]:
+  - @mastra/core@1.58.0-alpha.11
+
+## 1.16.0-alpha.1
+
+### Patch Changes
+
+- **Fixed spurious MCP reconnects when tool-execution errors contain transport-like substrings.** ([#20793](https://github.com/mastra-ai/mastra/pull/20793))
+
+  When an MCP tool returns an in-band error (\`isError: true\`) whose text contains words like "session", "404", or "connection closed", the client no longer misclassifies it as a transport failure and triggers a reconnect + retry. This prevents duplicate calls for non-idempotent tools (e.g. payments, writes).
+
+  **Surface the real failure after a failed reconnect.**
+
+  When a transport-level reconnect fails, the caller now receives the actual reconnection error instead of the stale tool/transport error that triggered the recovery attempt.
+
+- Fixed MCP tools with outputSchema to send LLM-facing content text to the model via toModelOutput while keeping structuredContent on tool.execute() results. ([#20176](https://github.com/mastra-ai/mastra/pull/20176))
+
+- Updated dependencies [[`cdd5c33`](https://github.com/mastra-ai/mastra/commit/cdd5c33ac6c7118a9f139e6dc0e14e6a8ae31658), [`d7cf7fa`](https://github.com/mastra-ai/mastra/commit/d7cf7fafc1ae1b50bd8462dd0e6c671a8606db93), [`0f9a448`](https://github.com/mastra-ai/mastra/commit/0f9a448502157e59f7b76f24360ad497168f5ef8), [`289f4ce`](https://github.com/mastra-ai/mastra/commit/289f4ce16e3293370440172132c52ee787cbc09f), [`4f16ff8`](https://github.com/mastra-ai/mastra/commit/4f16ff824bf2f9b0ddc93f210477c10c8a4fb1ab), [`1c67d85`](https://github.com/mastra-ai/mastra/commit/1c67d85e9da8285662f4dbbf47e0378c3fee0747), [`ba24be6`](https://github.com/mastra-ai/mastra/commit/ba24be662439c331ab23a600041f93803c89eca8), [`842b5fe`](https://github.com/mastra-ai/mastra/commit/842b5fe22b6a7fa811bd14e48eb9af523ac989f2), [`80bdf3a`](https://github.com/mastra-ai/mastra/commit/80bdf3ae16ade6ff63bde0cb16fa2df8ab7dd4dd), [`9ba1247`](https://github.com/mastra-ai/mastra/commit/9ba12470c77f1c03642d720ce67e517e878f666e), [`fd96298`](https://github.com/mastra-ai/mastra/commit/fd96298a8367622f4ebfcaa97b5b6c1fbbd14564), [`6a84954`](https://github.com/mastra-ai/mastra/commit/6a84954a2667f85b6d59da652dab1bbff007ccb0), [`52d8ef0`](https://github.com/mastra-ai/mastra/commit/52d8ef03801f1deb7ee48532fc4190dd4a33916c), [`cdd5c33`](https://github.com/mastra-ai/mastra/commit/cdd5c33ac6c7118a9f139e6dc0e14e6a8ae31658), [`efd5c81`](https://github.com/mastra-ai/mastra/commit/efd5c81cc25fde3c2ddd86fc1178deb4ec176e19), [`0976933`](https://github.com/mastra-ai/mastra/commit/0976933142333ec78451feef265b68bcb45aa5e7), [`242b945`](https://github.com/mastra-ai/mastra/commit/242b94558777bfbdeb42cbfea84afff0b6ad0633), [`fea5cae`](https://github.com/mastra-ai/mastra/commit/fea5caedc7e2cfea51784a15e015952692027abf), [`4b59f78`](https://github.com/mastra-ai/mastra/commit/4b59f786cbc9a7d1ef07a07517dbd4b96865e99d), [`7010c5d`](https://github.com/mastra-ai/mastra/commit/7010c5d15728bf9c5dfe4fb6b1bf80ce23bf143a)]:
+  - @mastra/core@1.58.0-alpha.3
+
+## 1.16.0-alpha.0
+
+### Minor Changes
+
+- Updated the MCP client and server to run on the MCP 2.0 packages. Request context, authentication, logging, and progress behavior are unchanged, so tools that read `context.mcp.extra.authInfo`, send progress, or use elicitation keep working as before. ([#18683](https://github.com/mastra-ai/mastra/pull/18683))
+
+  Tool schemas advertised over MCP no longer declare a draft-07 `$schema` dialect. The MCP 2.0 default validator rejects that dialect, which previously made tools with output schemas fail on the client.
+
+  **If you pass a custom schema validator**
+
+  The optional `jsonSchemaValidator` option now takes its validator from the MCP packages. Update the import path:
+
+  ```ts
+  // Before
+  import { CfWorkerJsonSchemaValidator } from '@modelcontextprotocol/sdk/validation/cfworker';
+
+  // After
+  import { CfWorkerJsonSchemaValidator } from '@modelcontextprotocol/client/validators/cf-worker';
+
+  const mcp = new MCPClient({
+    servers: {
+      weather: { url: new URL('https://example.com/mcp'), jsonSchemaValidator: new CfWorkerJsonSchemaValidator() },
+    },
+  });
+  ```
+
+  **If you import MCP protocol types directly**
+
+  Types re-exported by `@mastra/mcp` (such as `ToolAnnotations`, `LoggingLevel`, and the OAuth helpers) are unchanged and need no edits. Only imports that reached past `@mastra/mcp` into `@modelcontextprotocol/sdk` need repointing to `@modelcontextprotocol/client` or `@modelcontextprotocol/server`.
+
+- Add opt-in security hardening options to the MCP client. Both options are opt-in; default behavior is unchanged. ([#20868](https://github.com/mastra-ai/mastra/pull/20868))
+
+  - `allowedHosts` on HTTP server configs restricts which hosts the client's HTTP requests may target, covering the initial connection, the SSE fallback, and OAuth discovery. On the default fetch path redirect hops are blocked before they are sent; with a custom `fetch`, the final response URL is validated after the request runs, so custom fetch implementations must enforce redirect policy themselves when preventing outbound contact is required.
+  - `inheritDefaultEnv: false` on stdio server configs stops the subprocess from inheriting the SDK's default environment variables; only the entries you list in `env` are passed.
+
+  ```typescript
+  const mcp = new MCPClient({
+    servers: {
+      weather: {
+        url: new URL('https://weather.example/mcp'),
+        allowedHosts: ['weather.example'],
+      },
+      local: {
+        command: 'npx',
+        args: ['tsx', 'stdio-server.ts'],
+        inheritDefaultEnv: false,
+        env: { WEATHER_API_KEY: process.env.WEATHER_API_KEY! },
+      },
+    },
+  });
+  ```
+
+### Patch Changes
+
+- Fix SSE transport fallback against MCP 2.0 servers. The Streamable HTTP transport reports non-OK responses as `SdkHttpError`, which carries the HTTP status on `status` while `code` holds a string error code, so the fallback check read a string where it expected a status number and rethrew instead of retrying over the deprecated HTTP+SSE transport. Servers that only speak HTTP+SSE are reachable again. ([#18683](https://github.com/mastra-ai/mastra/pull/18683))
+
+- Updated dependencies [[`e7109ee`](https://github.com/mastra-ai/mastra/commit/e7109ee6f731bacc79c885906f3c7dca8d8f013a), [`772c0c8`](https://github.com/mastra-ai/mastra/commit/772c0c897cec383258de2e6178147f8014767c7b), [`578bf2e`](https://github.com/mastra-ai/mastra/commit/578bf2e6a88e9d5b8bf502204e15a95dfbb679ae), [`06b2d87`](https://github.com/mastra-ai/mastra/commit/06b2d87e63bcdd0ed59215c6789692b9b12de376), [`ac01d63`](https://github.com/mastra-ai/mastra/commit/ac01d6355974aec73fdb8781449ed12bac582094), [`a810a05`](https://github.com/mastra-ai/mastra/commit/a810a058f62ad407cfc1701e0be36ae91145d7cf), [`f8da216`](https://github.com/mastra-ai/mastra/commit/f8da21633e7eb0e31c9ce0fc30567870d19416d3), [`6104347`](https://github.com/mastra-ai/mastra/commit/61043473ba6bfd0a25156824e853e13165562e6c), [`45bfb88`](https://github.com/mastra-ai/mastra/commit/45bfb88fd52f1dd3be20e2a38905777c96499c90), [`e3b9307`](https://github.com/mastra-ai/mastra/commit/e3b9307098daefbfae2a52ae2ef51bc9fc701190), [`d6834c5`](https://github.com/mastra-ai/mastra/commit/d6834c5a7866b16734d23900163c2414ed70d791), [`c52d346`](https://github.com/mastra-ai/mastra/commit/c52d3462ec831a5d95926ecd3d3373f5928ad2e5), [`0023e79`](https://github.com/mastra-ai/mastra/commit/0023e7919431078280abd11c89d1edeae35fcc69), [`c2ad51e`](https://github.com/mastra-ai/mastra/commit/c2ad51e2467f901eecba8c9f4a45e22a50bd7c18), [`3dc97ea`](https://github.com/mastra-ai/mastra/commit/3dc97ea415fad353b48a13095fad1835933cc12a), [`3d01cd3`](https://github.com/mastra-ai/mastra/commit/3d01cd387321b6f9c5cac31d487c84bf51b19c78), [`7bf3086`](https://github.com/mastra-ai/mastra/commit/7bf308663f0115ca74ad20554ade740f06640859), [`a8dd139`](https://github.com/mastra-ai/mastra/commit/a8dd1391a9fe9a6632c25809ef236980afa9a020), [`e5786be`](https://github.com/mastra-ai/mastra/commit/e5786be02bb903073082bd9d6da880ebaacc343f), [`2093fbd`](https://github.com/mastra-ai/mastra/commit/2093fbd53bb744bae19ec89f6d73db9a66fbe8a7), [`e7a5da4`](https://github.com/mastra-ai/mastra/commit/e7a5da4ef8e4dd452d2f232961b4e682a85ffe43), [`7b4393d`](https://github.com/mastra-ai/mastra/commit/7b4393d557411fdcf07b0e30e5acaf7cc85154ae)]:
+  - @mastra/core@1.58.0-alpha.1
+
 ## 1.15.1
 
 ### Patch Changes

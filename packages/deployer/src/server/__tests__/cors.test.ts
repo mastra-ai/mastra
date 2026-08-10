@@ -176,6 +176,7 @@ describe('server CORS', () => {
     const allowHeaders = response.headers.get('Access-Control-Allow-Headers');
 
     expect(response.headers.get('Access-Control-Allow-Origin')).toBe('https://custom.example');
+    expect(allowHeaders).toContain('A2A-Version');
     expect(allowHeaders).toContain('x-mastra-client-type');
     expect(allowHeaders).toContain('x-custom-header');
   });

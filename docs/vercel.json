@@ -1211,6 +1211,26 @@
       "permanent": true
     },
     {
+      "source": "/docs/workflows/stored-workflows",
+      "destination": "/docs/workflows/dynamic-workflows",
+      "permanent": true
+    },
+    {
+      "source": "/reference/workflows/stored-workflow-definition",
+      "destination": "/reference/workflows/dynamic-workflow-definition",
+      "permanent": true
+    },
+    {
+      "source": "/reference/core/addStoredWorkflow",
+      "destination": "/reference/core/addDynamicWorkflow",
+      "permanent": true
+    },
+    {
+      "source": "/reference/core/addStoredWorkflows",
+      "destination": "/reference/core/addDynamicWorkflows",
+      "permanent": true
+    },
+    {
       "source": "/docs/editor/prompts/llms.txt",
       "destination": "/docs/editor/overview/llms.txt",
       "permanent": true
@@ -2063,6 +2083,26 @@
     {
       "source": "/docs/mcp/mcp-apps/llms.txt",
       "destination": "/docs/mcp/overview/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/workflows/stored-workflows/llms.txt",
+      "destination": "/docs/workflows/dynamic-workflows/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/reference/workflows/stored-workflow-definition/llms.txt",
+      "destination": "/reference/workflows/dynamic-workflow-definition/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/reference/core/addStoredWorkflow/llms.txt",
+      "destination": "/reference/core/addDynamicWorkflow/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/reference/core/addStoredWorkflows/llms.txt",
+      "destination": "/reference/core/addDynamicWorkflows/llms.txt",
       "permanent": true
     }
   ]

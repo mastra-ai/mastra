@@ -16,6 +16,7 @@
     "qwen3-5-397b-a17b",
     "qwen3-5-4b",
     "qwen3-5-9b",
+    "qwen3-5-flash",
     "qwen3-5-plus",
     "qwen3-6-27b",
     "qwen3-6-flash",
@@ -26,6 +27,7 @@
     "step-3-7-flash"
   ],
   "temperature": [
+    "deepseek-v3-2",
     "deepseek-v4-flash",
     "deepseek-v4-flash-0731",
     "deepseek-v4-pro",
@@ -49,6 +51,7 @@
     "qwen3-5-397b-a17b",
     "qwen3-5-4b",
     "qwen3-5-9b",
+    "qwen3-5-flash",
     "qwen3-5-plus",
     "qwen3-6-27b",
     "qwen3-6-35b-a3b",
@@ -65,6 +68,7 @@
     "step-3-7-flash"
   ],
   "structuredOutput": [
+    "deepseek-v3-2",
     "deepseek-v4-flash",
     "deepseek-v4-flash-0731",
     "deepseek-v4-pro",
@@ -91,6 +95,7 @@
     "qwen3-5-397b-a17b",
     "qwen3-5-4b",
     "qwen3-5-9b",
+    "qwen3-5-flash",
     "qwen3-5-plus",
     "qwen3-6-27b",
     "qwen3-6-35b-a3b",

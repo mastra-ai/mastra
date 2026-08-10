@@ -12,6 +12,7 @@ export interface GithubIssue {
   title: string;
   url: string;
   author: string | null;
+  assignee?: string | null;
   labels: string[];
   comments: number;
   createdAt: string;
@@ -23,6 +24,8 @@ export interface GithubPullRequest {
   title: string;
   url: string;
   author: string | null;
+  assignees?: string[];
+  requestedReviewers?: string[];
   baseBranch: string;
   headBranch: string;
   createdAt: string;

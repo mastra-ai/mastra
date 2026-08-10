@@ -1,5 +1,93 @@
 # create-factory
 
+## 0.1.7-alpha.12
+
+### Patch Changes
+
+- Updated dependencies:
+  - mastra@1.24.0-alpha.12
+
+## 0.1.7-alpha.11
+
+### Patch Changes
+
+- Updated dependencies:
+  - mastra@1.24.0-alpha.11
+
+## 0.1.7-alpha.10
+
+### Patch Changes
+
+- Updated dependencies:
+  - mastra@1.24.0-alpha.10
+
+## 0.1.7-alpha.9
+
+### Patch Changes
+
+- Updated dependencies:
+  - mastra@1.24.0-alpha.9
+
+## 0.1.7-alpha.8
+
+### Patch Changes
+
+- Updated dependencies:
+  - mastra@1.24.0-alpha.8
+
+## 0.1.7-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [[`682ca96`](https://github.com/mastra-ai/mastra/commit/682ca9600654bbce738e978d70f93874faab0160)]:
+  - mastra@1.24.0-alpha.7
+
+## 0.1.7-alpha.6
+
+### Patch Changes
+
+- Updated dependencies:
+  - mastra@1.24.0-alpha.6
+
+## 0.1.7-alpha.5
+
+### Patch Changes
+
+- Updated dependencies:
+  - mastra@1.24.0-alpha.5
+
+## 0.1.7-alpha.4
+
+### Patch Changes
+
+- Updated dependencies:
+  - mastra@1.24.0-alpha.4
+
+## 0.1.7-alpha.3
+
+### Patch Changes
+
+- Removed the Railway sandbox settings from the generated Factory template's `.env.schema` and README. They advertised a cloud sandbox provider the template cannot select, so setting `RAILWAY_API_TOKEN` quietly did nothing and projects kept running in the non-isolated local sandbox. Cloud sandboxes now come from Mastra Platform, and the sandbox docs say so. Also dropped `MASTRACODE_SANDBOX_PROVIDER` and `MASTRACODE_SANDBOX_IDLE_MINUTES`, which the template reads nowhere. ([#20942](https://github.com/mastra-ai/mastra/pull/20942))
+
+- Updated dependencies [[`928b489`](https://github.com/mastra-ai/mastra/commit/928b4890d6bbe015c42d161dba3ec5283b90c3b4)]:
+  - mastra@1.24.0-alpha.3
+
+## 0.1.7-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`f83bb07`](https://github.com/mastra-ai/mastra/commit/f83bb0757cb2b542bc55f8f40ed34ce1538c62fa)]:
+  - mastra@1.23.1-alpha.2
+
+## 0.1.7-alpha.1
+
+### Patch Changes
+
+- dependencies updates: ([#19783](https://github.com/mastra-ai/mastra/pull/19783))
+  - Updated dependency [`posthog-node@^5.46.1` ↗︎](https://www.npmjs.com/package/posthog-node/v/5.46.1) (from `^5.37.0`, in `dependencies`)
+- Updated dependencies [[`697d059`](https://github.com/mastra-ai/mastra/commit/697d05953049bf6d09e89646c137b76f8ed472ad), [`12de4fe`](https://github.com/mastra-ai/mastra/commit/12de4fed92b18007a007d82b1f342a15798e2d5b), [`e7109ee`](https://github.com/mastra-ai/mastra/commit/e7109ee6f731bacc79c885906f3c7dca8d8f013a), [`2d48b60`](https://github.com/mastra-ai/mastra/commit/2d48b605cdb05f5f9f9b34b06ca7d72092ec2289), [`f8da216`](https://github.com/mastra-ai/mastra/commit/f8da21633e7eb0e31c9ce0fc30567870d19416d3), [`f012dcf`](https://github.com/mastra-ai/mastra/commit/f012dcf74f37c83366c53e4fa253c4f667904e1b), [`e5786be`](https://github.com/mastra-ai/mastra/commit/e5786be02bb903073082bd9d6da880ebaacc343f), [`12de4fe`](https://github.com/mastra-ai/mastra/commit/12de4fed92b18007a007d82b1f342a15798e2d5b)]:
+  - mastra@1.23.1-alpha.1
+
 ## 0.1.7-alpha.0
 
 ### Patch Changes

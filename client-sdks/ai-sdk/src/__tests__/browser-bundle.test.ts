@@ -71,6 +71,8 @@ it('loads toAISdkMessages in a browser bundle', async () => {
 
   // Supply only the web globals touched during module initialization. Node-only
   // globals such as require, process, and Buffer remain unavailable.
+  // `fetch` is a browser global too — @ai-sdk/provider-utils inspects it
+  // (Function.prototype.toString) at module init, so it must be a function.
   const sandbox: {
     self?: unknown;
     convertedMessages?: unknown;
@@ -78,7 +80,14 @@ it('loads toAISdkMessages in a browser bundle', async () => {
     TextDecoder: typeof TextDecoder;
     TextEncoder: typeof TextEncoder;
     URL: typeof URL;
-  } = { TransformStream, TextDecoder, TextEncoder, URL };
+    fetch: typeof fetch;
+  } = {
+    TransformStream,
+    TextDecoder,
+    TextEncoder,
+    URL,
+    fetch: () => Promise.reject(new Error('fetch not available in sandbox')),
+  };
   sandbox.self = sandbox;
   runInNewContext(await readFile(path.join(outputPath, 'bundle.js'), 'utf8'), sandbox);
 

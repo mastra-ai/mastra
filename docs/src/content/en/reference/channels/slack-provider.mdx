@@ -101,6 +101,14 @@ await slack.configure({
       "Stream agent text deltas to Slack as they're generated. Pass `{ updateIntervalMs }` to customize the post-and-edit interval, or `false` to buffer text until step-finish. Disabling streaming restricts `toolDisplay` to static modes.",
   },
   {
+    name: 'textFormat',
+    type: "'markdown' | 'plain'",
+    isOptional: true,
+    defaultValue: "'markdown'",
+    description:
+      "Dialect for the agent's final reply text, forwarded to the Slack adapter. `'markdown'` (the default) posts replies as markdown so Slack renders bold text, links, and tables natively. `'plain'` posts literal plain text, the escape hatch for agents prompted to emit Slack mrkdwn. Applies to buffered replies (`streaming: false`) and the streaming fallback; native streaming is always markdown.",
+  },
+  {
     name: 'toolDisplay',
     type: 'ToolDisplay',
     isOptional: true,

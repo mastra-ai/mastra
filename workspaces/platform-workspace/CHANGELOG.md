@@ -1,5 +1,67 @@
 # @mastra/platform
 
+## 1.2.0-alpha.1
+
+### Minor Changes
+
+- Split `PlatformSandbox.stop()` from `PlatformSandbox.destroy()` so the two lifecycle exits mirror `@mastra/railway` `RailwaySandbox` ([#20956](https://github.com/mastra-ai/mastra/pull/20956))
+
+  **Before:** `stop()` was an alias for `destroy()`, and `destroy()` only released the sandbox VM — the on-provider recovery checkpoint was never actively deleted. There was no way to end a hosted sandbox while preserving its checkpoint for a later resume, and destroyed sandboxes accumulated stray checkpoints until the upstream provider's own GC.
+
+  **After:**
+
+  - **`stop()`** — releases the VM but **preserves the recovery checkpoint**. Any in-flight capture is awaited first so the preserved checkpoint reflects the caller's latest state. Corresponds to `DELETE /v1/projects/:pid/sandbox/:sandboxId` on workspace-proxy, which by contract does not touch the checkpoint.
+  - **`destroy()`** — releases the VM **and deletes the recovery checkpoint**. Cancels any in-flight capture (no reason to burn a capture on state we're releasing), asks the proxy to delete the checkpoint via `DELETE /v1/projects/:pid/sandbox/:sandboxId/checkpoint`, then releases the VM. Both remote operations are best-effort — an already-absent checkpoint or a transient checkpoint-delete failure does not block the VM teardown, since a half-torn-down sandbox is worse than a lingering checkpoint alone.
+
+  Callers constructed without a recovery `id` skip the checkpoint DELETE and behave identically to `stop()`, because they have no on-provider checkpoint to release.
+
+  This restores the "providers move in lockstep" invariant that broke after `@mastra/railway` gained its own `stop()`/`destroy()` split.
+
+  **Requires** a matching workspace-proxy release that exposes `DELETE /v1/projects/:pid/sandbox/:sandboxId/checkpoint`. Callers on older workspace-proxy versions will see the checkpoint DELETE 404 and fall through to the VM DELETE — same net effect as the pre-split behavior.
+
+### Patch Changes
+
+- Add public `captureCheckpoint()` method to `PlatformSandbox` — mirrors `@mastra/railway`'s `RailwaySandbox.captureCheckpoint()` so callers (e.g. a factory-side scheduler) can capture the recovery checkpoint on demand at semantic moments (turn end, session-idle, pre-teardown) without having to know which provider is underneath. ([#20882](https://github.com/mastra-ai/mastra/pull/20882))
+
+  ```ts
+  const result = await sandbox.captureCheckpoint();
+  switch (result.status) {
+    case 'captured':
+    case 'coalesced':
+      await persistBinding({ sessionId, checkpointName: result.checkpointName });
+      break;
+    case 'skipped':
+      // result.reason: 'no-checkpoint-name-configured' | 'sandbox-not-running'
+      break;
+  }
+  ```
+
+  - POSTs to `/v1/projects/:projectId/sandbox/:sandboxId/checkpoint` with the caller-supplied recovery key (the `id` the sandbox was constructed with) as the body, matching the shape the workspace-proxy expects.
+  - Coalesces concurrent callers on the same instance onto a single upstream request, so N simultaneous turn-end fires do not each round-trip the proxy.
+  - Returns `{ status: 'skipped', reason: 'no-checkpoint-name-configured' }` when the sandbox was constructed without a caller-supplied `id` (an auto-generated random id is never a meaningful recovery key), and `{ status: 'skipped', reason: 'sandbox-not-running' }` when the sandbox has not been started yet.
+  - Normalizes upstream "sandbox destroyed" outcomes (a 410 from the proxy, or the proxy's own `skipped` status) to `{ status: 'skipped', reason: 'sandbox-not-running' }` — the discriminant matches the pre-flight case so callers branch uniformly, and the sandbox's local state is cleared as a side effect so the next `start()` provisions fresh instead of reattaching to a dead id.
+  - Transport failures other than 410 (5xx, 429) propagate as `PlatformApiError` for the caller to handle.
+
+- Coalesce concurrent `PlatformSandbox.start()` callers onto a single in-flight attempt ([#20960](https://github.com/mastra-ai/mastra/pull/20960))
+
+  Two callers hitting `start()` on the same instance before the first one resolves used to both race to `POST /v1/projects/:pid/sandbox` (or `GET /sandbox/:id` on the reattach path), burning N proxy provisions and leaving `N-1` stray sandboxes behind. Fleet-level coalescing on the caller side masked most of this, but the underlying invariant "providers move in lockstep" was false — `@mastra/railway` `RailwaySandbox` has always had `_startInFlight` coalescing.
+
+  `start()` now publishes a single shared promise via `??=` **before** the first `await`, so a second caller entering `start()` while the first is mid-round-trip joins the existing promise instead of racing past the null check. The slot is cleared in `.finally()` on both success and failure paths so a failed attempt isn't a permanent latch — the next call starts fresh. Failures propagate to every joined caller.
+
+  Bug fix; no public API surface change. Callers already awaiting `start()` see the same success/failure semantics; the only observable difference is one upstream call instead of N.
+
+- Updated dependencies [[`cdd5c33`](https://github.com/mastra-ai/mastra/commit/cdd5c33ac6c7118a9f139e6dc0e14e6a8ae31658), [`d7cf7fa`](https://github.com/mastra-ai/mastra/commit/d7cf7fafc1ae1b50bd8462dd0e6c671a8606db93), [`0f9a448`](https://github.com/mastra-ai/mastra/commit/0f9a448502157e59f7b76f24360ad497168f5ef8), [`289f4ce`](https://github.com/mastra-ai/mastra/commit/289f4ce16e3293370440172132c52ee787cbc09f), [`4f16ff8`](https://github.com/mastra-ai/mastra/commit/4f16ff824bf2f9b0ddc93f210477c10c8a4fb1ab), [`1c67d85`](https://github.com/mastra-ai/mastra/commit/1c67d85e9da8285662f4dbbf47e0378c3fee0747), [`ba24be6`](https://github.com/mastra-ai/mastra/commit/ba24be662439c331ab23a600041f93803c89eca8), [`842b5fe`](https://github.com/mastra-ai/mastra/commit/842b5fe22b6a7fa811bd14e48eb9af523ac989f2), [`80bdf3a`](https://github.com/mastra-ai/mastra/commit/80bdf3ae16ade6ff63bde0cb16fa2df8ab7dd4dd), [`9ba1247`](https://github.com/mastra-ai/mastra/commit/9ba12470c77f1c03642d720ce67e517e878f666e), [`fd96298`](https://github.com/mastra-ai/mastra/commit/fd96298a8367622f4ebfcaa97b5b6c1fbbd14564), [`6a84954`](https://github.com/mastra-ai/mastra/commit/6a84954a2667f85b6d59da652dab1bbff007ccb0), [`52d8ef0`](https://github.com/mastra-ai/mastra/commit/52d8ef03801f1deb7ee48532fc4190dd4a33916c), [`cdd5c33`](https://github.com/mastra-ai/mastra/commit/cdd5c33ac6c7118a9f139e6dc0e14e6a8ae31658), [`efd5c81`](https://github.com/mastra-ai/mastra/commit/efd5c81cc25fde3c2ddd86fc1178deb4ec176e19), [`0976933`](https://github.com/mastra-ai/mastra/commit/0976933142333ec78451feef265b68bcb45aa5e7), [`242b945`](https://github.com/mastra-ai/mastra/commit/242b94558777bfbdeb42cbfea84afff0b6ad0633), [`fea5cae`](https://github.com/mastra-ai/mastra/commit/fea5caedc7e2cfea51784a15e015952692027abf), [`4b59f78`](https://github.com/mastra-ai/mastra/commit/4b59f786cbc9a7d1ef07a07517dbd4b96865e99d), [`7010c5d`](https://github.com/mastra-ai/mastra/commit/7010c5d15728bf9c5dfe4fb6b1bf80ce23bf143a)]:
+  - @mastra/core@1.58.0-alpha.3
+
+## 1.1.1-alpha.0
+
+### Patch Changes
+
+- Improved `PlatformSandbox.getInfo()` to return cached sandbox information when the sandbox is known to be directly reachable, removing a redundant network round-trip on every workspace status poll. When no cached address is available, `getInfo()` behaves exactly as before. ([#20855](https://github.com/mastra-ai/mastra/pull/20855))
+
+- Updated dependencies [[`e7109ee`](https://github.com/mastra-ai/mastra/commit/e7109ee6f731bacc79c885906f3c7dca8d8f013a), [`772c0c8`](https://github.com/mastra-ai/mastra/commit/772c0c897cec383258de2e6178147f8014767c7b), [`578bf2e`](https://github.com/mastra-ai/mastra/commit/578bf2e6a88e9d5b8bf502204e15a95dfbb679ae), [`06b2d87`](https://github.com/mastra-ai/mastra/commit/06b2d87e63bcdd0ed59215c6789692b9b12de376), [`ac01d63`](https://github.com/mastra-ai/mastra/commit/ac01d6355974aec73fdb8781449ed12bac582094), [`a810a05`](https://github.com/mastra-ai/mastra/commit/a810a058f62ad407cfc1701e0be36ae91145d7cf), [`f8da216`](https://github.com/mastra-ai/mastra/commit/f8da21633e7eb0e31c9ce0fc30567870d19416d3), [`6104347`](https://github.com/mastra-ai/mastra/commit/61043473ba6bfd0a25156824e853e13165562e6c), [`45bfb88`](https://github.com/mastra-ai/mastra/commit/45bfb88fd52f1dd3be20e2a38905777c96499c90), [`e3b9307`](https://github.com/mastra-ai/mastra/commit/e3b9307098daefbfae2a52ae2ef51bc9fc701190), [`d6834c5`](https://github.com/mastra-ai/mastra/commit/d6834c5a7866b16734d23900163c2414ed70d791), [`c52d346`](https://github.com/mastra-ai/mastra/commit/c52d3462ec831a5d95926ecd3d3373f5928ad2e5), [`0023e79`](https://github.com/mastra-ai/mastra/commit/0023e7919431078280abd11c89d1edeae35fcc69), [`c2ad51e`](https://github.com/mastra-ai/mastra/commit/c2ad51e2467f901eecba8c9f4a45e22a50bd7c18), [`3dc97ea`](https://github.com/mastra-ai/mastra/commit/3dc97ea415fad353b48a13095fad1835933cc12a), [`3d01cd3`](https://github.com/mastra-ai/mastra/commit/3d01cd387321b6f9c5cac31d487c84bf51b19c78), [`7bf3086`](https://github.com/mastra-ai/mastra/commit/7bf308663f0115ca74ad20554ade740f06640859), [`a8dd139`](https://github.com/mastra-ai/mastra/commit/a8dd1391a9fe9a6632c25809ef236980afa9a020), [`e5786be`](https://github.com/mastra-ai/mastra/commit/e5786be02bb903073082bd9d6da880ebaacc343f), [`2093fbd`](https://github.com/mastra-ai/mastra/commit/2093fbd53bb744bae19ec89f6d73db9a66fbe8a7), [`e7a5da4`](https://github.com/mastra-ai/mastra/commit/e7a5da4ef8e4dd452d2f232961b4e682a85ffe43), [`7b4393d`](https://github.com/mastra-ai/mastra/commit/7b4393d557411fdcf07b0e30e5acaf7cc85154ae)]:
+  - @mastra/core@1.58.0-alpha.1
+
 ## 1.1.0
 
 ### Minor Changes

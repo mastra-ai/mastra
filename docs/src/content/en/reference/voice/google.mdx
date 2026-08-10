@@ -261,7 +261,17 @@ Converts speech to text using Google Cloud Speech-to-Text service. Supports both
 
 Pass `v2: true` to use the Cloud Speech-to-Text v2 API, which supports additional audio formats like AAC-in-MP4 (iOS Safari).
 
+The v2 `recognize` call is IAM-authorized and does not accept API-key-only authentication. Configure service account credentials on the `listeningModel` (or set `GOOGLE_APPLICATION_CREDENTIALS`) and set `GOOGLE_CLOUD_PROJECT` so the recognizer path can be resolved, even when `vertexAI` is not enabled.
+
 ```typescript
+import { GoogleVoice } from '@mastra/voice-google'
+
+// v2 listen() requires service account credentials, not just GOOGLE_API_KEY.
+// Set GOOGLE_CLOUD_PROJECT so the recognizer path can be resolved.
+const voice = new GoogleVoice({
+  listeningModel: { keyFilename: process.env.GOOGLE_APPLICATION_CREDENTIALS },
+})
+
 const transcript = await voice.listen(iosSafariAacStream, {
   v2: true,
   config: {
@@ -269,6 +279,10 @@ const transcript = await voice.listen(iosSafariAacStream, {
   },
 })
 ```
+
+:::note
+`listen({ v2: true })` fails with `PERMISSION_DENIED` on `speech.recognizers.recognize` when only `GOOGLE_API_KEY` is set. An API-key request carries no OAuth identity, so granting `roles/speech.client` to a user account does not help — the role must be granted to the service account presented in the request. This applies regardless of the `vertexAI` setting; `speak()` and v1 `listen()` still work with an API key alone.
+:::
 
 <PropertiesTable
   content={[
@@ -361,7 +375,7 @@ The Google Voice provider supports two authentication methods:
 
 ### Standard Mode (API Key)
 
-Uses a Google Cloud API key for authentication. Suitable for development and basic use cases.
+Uses a Google Cloud API key for authentication. Covers `speak()` and v1 `listen()`. It does not cover `listen({ v2: true })`, which is IAM-authorized and requires service account credentials (see [v2](#v2)).
 
 ```typescript
 // Using environment variable (GOOGLE_API_KEY)
@@ -437,6 +451,8 @@ For Speech-to-Text:
 
 - `roles/speech.client` - Speech-to-Text Client
 
+Grant `roles/speech.client` to the service account whose credentials the request presents (via `keyFilename`, `credentials`, or `GOOGLE_APPLICATION_CREDENTIALS`). This role is required for `listen({ v2: true })` specifically, not only for Vertex AI mode. Granting it to a user account has no effect on API-key-only requests, which carry no identity to authorize.
+
 #### OAuth Scopes
 
 For synchronous Text-to-Speech synthesis:
@@ -461,5 +477,6 @@ For long-audio Text-to-Speech operations:
 1. Both text-to-speech and speech-to-text services use LINEAR16 as the default audio encoding.
 1. The `speak()` method supports advanced audio configuration through the Google Cloud Text-to-Speech API.
 1. The `listen()` method supports various recognition configurations through the Google Cloud Speech-to-Text API.
+1. `listen({ v2: true })` requires service account credentials and `GOOGLE_CLOUD_PROJECT`; it fails with `PERMISSION_DENIED` when only `GOOGLE_API_KEY` is set. `speak()` and v1 `listen()` work with an API key alone.
 1. Available voices can be filtered by language code using the `getSpeakers()` method.
 1. Vertex AI mode provides enterprise features including IAM control, audit logs, and project-level billing.

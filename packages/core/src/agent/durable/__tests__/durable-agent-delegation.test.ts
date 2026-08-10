@@ -190,4 +190,46 @@ describe('DurableAgent delegation hooks', () => {
 
     cleanup();
   });
+
+  it('applies onDelegationStart context mutations to the delegated run', async () => {
+    let subAgentSawSpecialty: unknown;
+
+    const subAgent = new Agent({
+      id: 'specialistAgent',
+      name: 'specialistAgent',
+      description: 'Runtime-configured sub-agent',
+      instructions: ({ requestContext }) => {
+        subAgentSawSpecialty = requestContext.get('specialty');
+        return 'You are a helpful sub-agent.';
+      },
+      model: makeSubAgentModel('Task done.') as LanguageModelV2,
+    });
+
+    const supervisor = new Agent({
+      id: 'supervisor-delegation-context',
+      name: 'supervisor-delegation-context',
+      instructions: 'You orchestrate sub-agents.',
+      model: makeSupervisorModel('specialistAgent', 'do specialized work') as LanguageModelV2,
+      agents: { specialistAgent: subAgent },
+    });
+
+    const durableAgent = createDurableAgent({ agent: supervisor, pubsub });
+
+    const { fullStream, cleanup } = await durableAgent.stream('Do the work', {
+      maxSteps: 3,
+      delegation: {
+        onDelegationStart: context => {
+          context.requestContext.set('specialty', context.primitiveId);
+        },
+      },
+    });
+
+    for await (const _chunk of fullStream) {
+      // no-op
+    }
+
+    expect(subAgentSawSpecialty).toBe('specialistAgent');
+
+    cleanup();
+  });
 });

@@ -65,7 +65,7 @@ export const evaluatedAgent = new Agent({
 
 ### Adding scorers to workflow steps
 
-You can also add scorers to individual workflow steps to evaluate outputs at specific points in your process:
+You can also add scorers to individual workflow steps to evaluate outputs at specific points in your process. Each scorer receives that step's own input and output, so you can measure quality at each step instead of only scoring the final answer:
 
 ```typescript title="src/mastra/workflows/content-generation.ts" prettier:false
 import { createWorkflow, createStep } from "@mastra/core/workflows";
@@ -73,21 +73,33 @@ import { z } from "zod";
 import { customStepScorer } from "../scorers/custom-step-scorer";
 
 const contentStep = createStep({
+  id: "content-step",
+  inputSchema: z.object({ topic: z.string() }),
+  outputSchema: z.object({ content: z.string() }),
   scorers: {
     customStepScorer: {
       scorer: customStepScorer(),
       sampling: {
         type: "ratio",
         rate: 1, // Score every step execution
-      }
-    }
+      },
+    },
+  },
+  execute: async ({ inputData }) => {
+    return { content: await generateContent(inputData.topic) };
   },
 });
 
-export const contentWorkflow = createWorkflow({ ... })
+export const contentWorkflow = createWorkflow({
+  id: "content-workflow",
+  inputSchema: z.object({ topic: z.string() }),
+  outputSchema: z.object({ content: z.string() }),
+})
   .then(contentStep)
   .commit();
 ```
+
+For the step-level `scorers` API, see the [Step class reference](/reference/workflows/step#scoring-step-output).
 
 ### How live evaluations work
 

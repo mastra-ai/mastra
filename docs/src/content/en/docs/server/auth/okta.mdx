@@ -175,16 +175,39 @@ export const mastraClient = new MastraClient({
 
 ### Bearer token
 
-You can also pass an Okta access token as a Bearer token. The token is verified against Okta's JWKS endpoint:
+You can also pass an Okta token as a Bearer token. The token is verified against Okta's JWKS endpoint, and its `aud` claim must match the configured audience. The audience defaults to your client ID, and you can override it with the `audience` option or `OKTA_AUDIENCE`.
+
+Okta puts the client ID in the `aud` claim of **ID tokens**, so ID tokens work with the default. **Access tokens** carry the audience of the authorization server that issued them, so set the audience to match:
+
+- **Org authorization server** (the default, issuer `https://{domain}`): set the audience to `https://{domain}`.
+- **Custom authorization server** (issuer `https://{domain}/oauth2/{name}`): set the audience to the server's audience value from the Okta Admin Console, for example `api://default`.
+
+```env title=".env"
+OKTA_AUDIENCE=https://dev-123456.okta.com
+```
+
+Pass an array to accept more than one audience, for example ID tokens from browsers and access tokens from service callers against the same provider:
+
+```typescript title="src/mastra/index.ts"
+new MastraAuthOkta({
+  audience: ['your-client-id', 'https://dev-123456.okta.com'],
+})
+```
+
+:::note
+
+`audience` applies only to Bearer tokens. The ID token exchanged during the SSO login flow is always verified against your client ID.
+
+:::
 
 ```typescript title="lib/mastra-client.ts"
 import { MastraClient } from '@mastra/client-js'
 
-export const createMastraClient = (accessToken: string) => {
+export const createMastraClient = (token: string) => {
   return new MastraClient({
     baseUrl: 'http://localhost:4111',
     headers: {
-      Authorization: `Bearer ${accessToken}`,
+      Authorization: `Bearer ${token}`,
     },
   })
 }
@@ -209,7 +232,7 @@ Visit [Mastra Client SDK](/docs/server/mastra-client) for more configuration opt
     ```bash
     curl -X POST http://localhost:4111/api/agents/weatherAgent/generate \
       -H "Content-Type: application/json" \
-      -H "Authorization: Bearer <your-okta-access-token>" \
+      -H "Authorization: Bearer <your-okta-token>" \
       -d '{
         "messages": "Weather in London"
       }'
@@ -220,6 +243,7 @@ Visit [Mastra Client SDK](/docs/server/mastra-client) for more configuration opt
 ## Troubleshooting
 
 - **401 on every request**: Verify your Okta domain, client ID, and client secret are correct. Check that the redirect URI in your Okta application matches `OKTA_REDIRECT_URI`.
+- **401 with `unexpected "aud" claim value` in the server logs**: The Bearer token's audience doesn't match the configured audience. This usually means you sent an access token while the audience is still the default client ID. Set `OKTA_AUDIENCE` to the audience of the authorization server that issued the token. See [Bearer token](#bearer-token).
 - **Cookies not sent cross-origin**: Set `credentials: "include"` in `MastraClient` and configure `server.cors` with your frontend origin and `credentials: true`.
 - **Session lost on restart**: Set `OKTA_COOKIE_PASSWORD` to a stable value (at least 32 characters). Without it, an auto-generated key is used that changes on each restart.
 - **RBAC returns empty permissions**: Verify `OKTA_API_TOKEN` is set and the token has permission to list user groups. Check that group names in `roleMapping` match your Okta group names exactly.

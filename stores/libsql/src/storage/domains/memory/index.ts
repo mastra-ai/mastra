@@ -266,7 +266,19 @@ export class MemoryLibSQL extends MemoryStorage {
     });
   }
 
-  private async _getIncludedMessages({ include }: { include: StorageListMessagesInput['include'] }) {
+  /**
+   * Fetches included messages by ID, discovering their thread automatically.
+   * This handles cross-thread includes where the include item doesn't specify a threadId.
+   * When a resourceId is given, both the target lookup and the surrounding window stay
+   * inside that resource, so an include never leaks another resource's messages.
+   */
+  private async _getIncludedMessages({
+    include,
+    resourceId,
+  }: {
+    include: StorageListMessagesInput['include'];
+    resourceId?: string;
+  }) {
     if (!include || include.length === 0) return null;
 
     // Phase 1: Batch-fetch metadata for all target messages in a single query.
@@ -274,10 +286,11 @@ export class MemoryLibSQL extends MemoryStorage {
     const targetIds = include.map(inc => inc.id).filter(Boolean);
     if (targetIds.length === 0) return null;
 
+    const resourceCondition = resourceId ? ` AND "resourceId" = ?` : '';
     const idPlaceholders = targetIds.map(() => '?').join(', ');
     const targetResult = await this.#client.execute({
-      sql: `SELECT id, thread_id, "createdAt" FROM "${TABLE_MESSAGES}" WHERE id IN (${idPlaceholders})`,
-      args: targetIds,
+      sql: `SELECT id, thread_id, "createdAt" FROM "${TABLE_MESSAGES}" WHERE id IN (${idPlaceholders})${resourceCondition}`,
+      args: resourceId ? [...targetIds, resourceId] : targetIds,
     });
 
     if (!targetResult.rows || targetResult.rows.length === 0) return null;
@@ -303,11 +316,13 @@ export class MemoryLibSQL extends MemoryStorage {
         SELECT id, content, role, type, "createdAt", thread_id, "resourceId"
         FROM "${TABLE_MESSAGES}"
         WHERE thread_id = ?
-          AND "createdAt" <= ?
+          AND "createdAt" <= ?${resourceCondition}
         ORDER BY "createdAt" DESC, id DESC
         LIMIT ?
       )`);
-      params.push(target.threadId, target.createdAt, withPreviousMessages + 1);
+      params.push(target.threadId, target.createdAt);
+      if (resourceId) params.push(resourceId);
+      params.push(withPreviousMessages + 1);
 
       // Fetch messages after the target (only if requested)
       if (withNextMessages > 0) {
@@ -315,11 +330,13 @@ export class MemoryLibSQL extends MemoryStorage {
           SELECT id, content, role, type, "createdAt", thread_id, "resourceId"
           FROM "${TABLE_MESSAGES}"
           WHERE thread_id = ?
-            AND "createdAt" > ?
+            AND "createdAt" > ?${resourceCondition}
           ORDER BY "createdAt" ASC, id ASC
           LIMIT ?
         )`);
-        params.push(target.threadId, target.createdAt, withNextMessages);
+        params.push(target.threadId, target.createdAt);
+        if (resourceId) params.push(resourceId);
+        params.push(withNextMessages);
       }
     }
 
@@ -454,7 +471,7 @@ export class MemoryLibSQL extends MemoryStorage {
       // When perPage is 0 and we have include targets, skip COUNT(*) and data queries.
       // This is the semantic recall path where we only need the included messages.
       if (perPage === 0 && include && include.length > 0) {
-        const includeMessages = await this._getIncludedMessages({ include });
+        const includeMessages = await this._getIncludedMessages({ include, resourceId });
         if (!includeMessages || includeMessages.length === 0) {
           return { messages: [], total: 0, page, perPage: perPageForResponse, hasMore: false };
         }
@@ -498,7 +515,7 @@ export class MemoryLibSQL extends MemoryStorage {
       // Step 2: Add included messages with context (if any), excluding duplicates
       const messageIds = new Set(messages.map(m => m.id));
       if (include && include.length > 0) {
-        const includeMessages = await this._getIncludedMessages({ include });
+        const includeMessages = await this._getIncludedMessages({ include, resourceId });
         if (includeMessages) {
           // Deduplicate: only add messages that aren't already in the paginated results
           for (const includeMsg of includeMessages) {
@@ -534,6 +551,10 @@ export class MemoryLibSQL extends MemoryStorage {
         hasMore,
       };
     } catch (error) {
+      // Re-throw USER errors (validation errors) directly so callers get proper 400 responses
+      if (error instanceof MastraError && error.category === ErrorCategory.USER) {
+        throw error;
+      }
       const mastraError = new MastraError(
         {
           id: createStorageErrorId('LIBSQL', 'LIST_MESSAGES', 'FAILED'),
@@ -548,13 +569,7 @@ export class MemoryLibSQL extends MemoryStorage {
       );
       this.logger?.error?.(mastraError.toString());
       this.logger?.trackException?.(mastraError);
-      return {
-        messages: [],
-        total: 0,
-        page,
-        perPage: perPageForResponse,
-        hasMore: false,
-      };
+      throw mastraError;
     }
   }
 
@@ -566,7 +581,7 @@ export class MemoryLibSQL extends MemoryStorage {
     if (!resourceId || typeof resourceId !== 'string' || resourceId.trim().length === 0) {
       throw new MastraError(
         {
-          id: createStorageErrorId('LIBSQL', 'LIST_MESSAGES', 'INVALID_QUERY'),
+          id: createStorageErrorId('LIBSQL', 'LIST_MESSAGES_BY_RESOURCE_ID', 'INVALID_QUERY'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: { resourceId: resourceId ?? '' },
@@ -578,7 +593,7 @@ export class MemoryLibSQL extends MemoryStorage {
     if (page < 0) {
       throw new MastraError(
         {
-          id: createStorageErrorId('LIBSQL', 'LIST_MESSAGES', 'INVALID_PAGE'),
+          id: createStorageErrorId('LIBSQL', 'LIST_MESSAGES_BY_RESOURCE_ID', 'INVALID_PAGE'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: { page },
@@ -631,7 +646,7 @@ export class MemoryLibSQL extends MemoryStorage {
 
       // Fast path: when perPage is 0 and include is provided, skip COUNT and data queries.
       if (perPage === 0 && include && include.length > 0) {
-        const includeMessages = await this._getIncludedMessages({ include });
+        const includeMessages = await this._getIncludedMessages({ include, resourceId });
         if (!includeMessages || includeMessages.length === 0) {
           return { messages: [], total: 0, page, perPage: perPageForResponse, hasMore: false };
         }
@@ -674,7 +689,7 @@ export class MemoryLibSQL extends MemoryStorage {
       // Step 2: Add included messages with context (if any), excluding duplicates
       const messageIds = new Set(messages.map(m => m.id));
       if (include && include.length > 0) {
-        const includeMessages = await this._getIncludedMessages({ include });
+        const includeMessages = await this._getIncludedMessages({ include, resourceId });
         if (includeMessages) {
           // Deduplicate: only add messages that aren't already in the paginated results
           for (const includeMsg of includeMessages) {
@@ -701,9 +716,13 @@ export class MemoryLibSQL extends MemoryStorage {
         hasMore,
       };
     } catch (error) {
+      // Re-throw USER errors (validation errors) directly so callers get proper 400 responses
+      if (error instanceof MastraError && error.category === ErrorCategory.USER) {
+        throw error;
+      }
       const mastraError = new MastraError(
         {
-          id: createStorageErrorId('LIBSQL', 'LIST_MESSAGES', 'FAILED'),
+          id: createStorageErrorId('LIBSQL', 'LIST_MESSAGES_BY_RESOURCE_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { resourceId },
@@ -712,13 +731,7 @@ export class MemoryLibSQL extends MemoryStorage {
       );
       this.logger?.error?.(mastraError.toString());
       this.logger?.trackException?.(mastraError);
-      return {
-        messages: [],
-        total: 0,
-        page,
-        perPage: perPageForResponse,
-        hasMore: false,
-      };
+      throw mastraError;
     }
   }
 
@@ -1261,13 +1274,7 @@ export class MemoryLibSQL extends MemoryStorage {
       );
       this.logger?.trackException?.(mastraError);
       this.logger?.error?.(mastraError.toString());
-      return {
-        threads: [],
-        total: 0,
-        page,
-        perPage: perPageForResponse,
-        hasMore: false,
-      };
+      throw mastraError;
     }
   }
 
@@ -1304,8 +1311,8 @@ export class MemoryLibSQL extends MemoryStorage {
     metadata,
   }: {
     id: string;
-    title: string;
-    metadata: Record<string, unknown>;
+    title?: string;
+    metadata?: Record<string, unknown>;
   }): Promise<StorageThreadType> {
     const thread = await this.getThreadById({ threadId: id });
     if (!thread) {
@@ -1324,7 +1331,7 @@ export class MemoryLibSQL extends MemoryStorage {
     const now = new Date();
     const updatedThread = {
       ...thread,
-      title,
+      title: title ?? thread.title,
       metadata: {
         ...thread.metadata,
         ...metadata,
@@ -1334,8 +1341,9 @@ export class MemoryLibSQL extends MemoryStorage {
 
     try {
       await this.#client.execute({
-        sql: `UPDATE ${TABLE_THREADS} SET title = ?, metadata = jsonb(?), updatedAt = ? WHERE id = ?`,
-        args: [title, JSON.stringify(updatedThread.metadata), now.toISOString(), id],
+        // COALESCE so an omitted title leaves the stored one alone.
+        sql: `UPDATE ${TABLE_THREADS} SET title = COALESCE(?, title), metadata = jsonb(?), updatedAt = ? WHERE id = ?`,
+        args: [title ?? null, JSON.stringify(updatedThread.metadata), now.toISOString(), id],
       });
 
       return updatedThread;

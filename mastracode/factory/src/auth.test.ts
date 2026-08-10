@@ -262,18 +262,53 @@ describe('mountFactoryAuth gate (enabled)', () => {
     expect(res.status).toBe(401);
   });
 
-  it('stashes the authenticated user on the context for downstream routes', async () => {
-    mockAuthenticate.mockResolvedValue({ workosId: 'user_123', email: 'user@example.com', name: 'User' });
+  it('stashes flat-provider avatar URLs on the context for downstream routes', async () => {
+    mockAuthenticate.mockResolvedValue({
+      workosId: 'user_123',
+      email: 'user@example.com',
+      name: 'User',
+      avatarUrl: 'https://avatars.example/user.png',
+    });
     const app = new Hono();
     mountFactoryAuth(app, { redirectUri: 'http://localhost:4111/auth/callback' });
     app.get('/web/whoami', c => {
       const user = getFactoryAuthUser(c);
-      return c.json({ userId: getFactoryAuthUserId(user) });
+      return c.json({ userId: getFactoryAuthUserId(user), avatarUrl: user?.avatarUrl });
     });
 
     const res = await app.request('/web/whoami', { headers: { Accept: 'application/json' } });
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ userId: 'user_123' });
+    expect(await res.json()).toEqual({ userId: 'user_123', avatarUrl: 'https://avatars.example/user.png' });
+  });
+
+  it('stashes session-provider avatar URLs on the context for downstream routes', async () => {
+    mockAuthenticate.mockResolvedValue({
+      session: { activeOrganizationId: 'org_123' },
+      user: {
+        id: 'user_123',
+        email: 'user@example.com',
+        name: 'User',
+        avatarUrl: 'https://avatars.example/user.png',
+      },
+    });
+    const app = new Hono();
+    mountFactoryAuth(app, { redirectUri: 'http://localhost:4111/auth/callback' });
+    app.get('/web/whoami', c => {
+      const user = getFactoryAuthUser(c);
+      return c.json({
+        userId: getFactoryAuthUserId(user),
+        organizationId: getFactoryAuthOrgId(user),
+        avatarUrl: user?.avatarUrl,
+      });
+    });
+
+    const res = await app.request('/web/whoami', { headers: { Accept: 'application/json' } });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      userId: 'user_123',
+      organizationId: 'org_123',
+      avatarUrl: 'https://avatars.example/user.png',
+    });
   });
 });
 
