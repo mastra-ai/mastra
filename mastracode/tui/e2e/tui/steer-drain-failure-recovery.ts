@@ -134,7 +134,9 @@ export const steerDrainFailureRecoveryScenario = {
     await runtime.waitForScreenText(/Steer recovery follow-up completed\./i, terminal, 60_000);
     runtime.printScreen('after steer redelivery', terminal);
 
-    const completedView = terminal.serialize().view;
+    // Read the full scrollback, not just the viewport, so earlier transcript
+    // lines that scrolled offscreen still count toward the assertions.
+    const completedView = terminal.serializeHistory?.().output ?? terminal.serialize().view;
     expect(completedView).toContain(STEER_TEXT);
     expect(completedView).toContain('failed to start follow-up run for queued message');
     const steerOccurrences = completedView.split(STEER_TEXT).length - 1;
