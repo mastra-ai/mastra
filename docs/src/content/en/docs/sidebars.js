@@ -296,8 +296,8 @@ const sidebars = {
             },
             {
               type: 'doc',
-              id: 'workspace/lsp',
-              label: 'LSP Inspection',
+              id: 'workspace/search',
+              label: 'Search and Indexing',
             },
             {
               type: 'doc',
@@ -306,8 +306,8 @@ const sidebars = {
             },
             {
               type: 'doc',
-              id: 'workspace/search',
-              label: 'Search and Indexing',
+              id: 'workspace/lsp',
+              label: 'LSP Inspection',
             },
           ],
         },
