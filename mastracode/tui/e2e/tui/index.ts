@@ -49,6 +49,7 @@ import { goalDurationToolApprovalScenario } from './goal-duration-tool-approval.
 import { goalJudgeOmModelIsolationScenario } from './goal-judge-om-model-isolation.js';
 import { goalJudgeSingleRenderScenario } from './goal-judge-single-render.js';
 import { headlessMcpToolAvailabilityScenario } from './headless-mcp-tool-availability.js';
+import { hiddenReasoningSingleLabelScenario } from './hidden-reasoning-single-label.js';
 import { integrationCommandsScenario } from './integration-commands.js';
 import { lifecycleHooksConfiguredScenario } from './lifecycle-hooks-configured.js';
 import { lifecycleHooksEventsScenario } from './lifecycle-hooks-events.js';
@@ -222,6 +223,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'goal-judge-single-render': goalJudgeSingleRenderScenario,
   'controller-api-config': controllerApiConfigScenario,
   'headless-mcp-tool-availability': headlessMcpToolAvailabilityScenario,
+  'hidden-reasoning-single-label': hiddenReasoningSingleLabelScenario,
   'visible-commands': visibleCommandsScenario,
   'integration-commands': integrationCommandsScenario,
   'lifecycle-hooks-configured': lifecycleHooksConfiguredScenario,
