@@ -36,29 +36,6 @@ export function safeReturnTo(raw?: string): string {
   }
 }
 
-export type AuthRedirectError = { code: string; description: string | null };
-
-/**
- * OAuth error params reach `/signin` two ways: directly (the server callback
- * redirects IdP denials here) or buried in a `returnTo` targeting the
- * IdP-facing `/login` path that the auth guards forwarded verbatim. That
- * returnTo is a dead end, so it collapses to `/`.
- */
-export function readAuthRedirect(params: URLSearchParams): { error: AuthRedirectError | null; returnTo: string } {
-  const returnTo = safeReturnTo(params.get('returnTo') ?? undefined);
-  const direct = params.get('error');
-  if (direct) return { error: { code: direct, description: params.get('error_description') }, returnTo };
-  const nested = new URL(returnTo, window.location.origin);
-  const nestedError = nested.searchParams.get('error');
-  if (nested.pathname === '/login' && nestedError) {
-    return {
-      error: { code: nestedError, description: nested.searchParams.get('error_description') },
-      returnTo: '/',
-    };
-  }
-  return { error: null, returnTo };
-}
-
 /**
  * Email/password credential form for the self-hosted better-auth provider.
  * Posts to the better-auth endpoints (which set the session cookie), then does
@@ -171,8 +148,10 @@ export function SignInPage() {
   const auth = useFactoryAuth();
   const [searchParams] = useSearchParams();
   const [redirecting, setRedirecting] = useState(false);
-  const { error: authError, returnTo } = readAuthRedirect(searchParams);
-  const accessDenied = authError?.code === 'access_denied';
+  const returnTo = safeReturnTo(searchParams.get('returnTo') ?? undefined);
+  const authError = searchParams.get('error');
+  const authErrorDescription = searchParams.get('error_description');
+  const accessDenied = authError === 'access_denied';
   const credentialForm = auth.data?.provider === 'better-auth';
   const studioAuth = auth.data?.provider === 'mastra-studio';
   const hostedLoginLabel = studioAuth ? 'Sign in with Mastra Platform' : 'Continue with GitHub';
@@ -207,9 +186,9 @@ export function SignInPage() {
                 <Txt as="p" variant="ui-md" className="text-accent2 font-medium">
                   {accessDenied ? 'Access denied' : 'Sign-in failed'}
                 </Txt>
-                {authError.description ? (
+                {authErrorDescription ? (
                   <Txt as="p" variant="ui-sm" className="text-neutral4 mt-1 leading-5">
-                    {authError.description}
+                    {authErrorDescription}
                   </Txt>
                 ) : null}
                 {accessDenied ? (

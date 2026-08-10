@@ -124,6 +124,19 @@ describe('mountFactoryAuth gate (enabled)', () => {
     expect(await res.text()).toBe('ok');
   });
 
+  it('forwards the platform deploy-auth /login landing to /signin with its query intact', async () => {
+    mockAuthenticate.mockResolvedValue(null);
+    const { app } = buildApp();
+
+    const res = await app.request('/login?error=access_denied&error_description=You%20do%20not%20have%20access', {
+      headers: { Accept: 'text/html' },
+    });
+    expect(res.status).toBe(302);
+    expect(res.headers.get('location')).toBe(
+      '/signin?error=access_denied&error_description=You%20do%20not%20have%20access',
+    );
+  });
+
   it('lets unauthenticated requests fetch static assets and metadata needed by the sign-in page', async () => {
     mockAuthenticate.mockResolvedValue(null);
     const { app } = buildApp();

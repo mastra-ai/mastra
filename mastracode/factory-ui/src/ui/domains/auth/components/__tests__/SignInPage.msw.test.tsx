@@ -162,12 +162,10 @@ describe('SignInPage', () => {
   });
 
   describe('given an IdP access_denied redirect', () => {
-    it('shows the denied banner and collapses the dead /login returnTo', async () => {
+    it('shows the denial with the IdP description and still allows a retry', async () => {
       stubAuthMe({ provider: 'mastra-studio' });
-      const deadLogin = `/login?error=access_denied&error_description=${encodeURIComponent(
-        'You do not have access to this application.',
-      )}`;
-      renderSignIn(`/signin?returnTo=${encodeURIComponent(deadLogin)}`);
+      const description = encodeURIComponent('You do not have access to this application.');
+      renderSignIn(`/signin?error=access_denied&error_description=${description}`);
 
       const alert = await screen.findByRole('alert');
       expect(alert).toHaveTextContent('Access denied');
@@ -178,7 +176,7 @@ describe('SignInPage', () => {
       expect(redirectToLogin).toHaveBeenCalledWith(TEST_BASE_URL, '/');
     });
 
-    it('shows the banner for error params sent directly to /signin', async () => {
+    it('falls back to the admin hint when the IdP sends no description', async () => {
       stubAuthMe({ provider: 'workos' });
       renderSignIn('/signin?error=access_denied');
 

@@ -752,6 +752,12 @@ export function createFactoryAuthGate(provider: IMastraAuthProvider) {
     if (c.req.method === 'GET' && (path === '/connect/slack' || path.startsWith('/connect/slack/'))) {
       return next();
     }
+    // The platform's deploy-auth flow lands IdP denials on `/login`
+    // (`error=access_denied&error_description=...`); the SPA serves sign-in at
+    // `/signin`, so forward the query there instead of burying it in returnTo.
+    if (c.req.method === 'GET' && path === '/login') {
+      return c.redirect(`/signin${new URL(c.req.url).search}`);
+    }
     // The SPA sign-in page, its static bundle, and browser-fetched metadata
     // must be reachable while signed out; no user is stashed, so `/api/*`
     // stays protected.
