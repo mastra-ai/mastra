@@ -18,6 +18,7 @@ import type { BundlerPlatform } from '../build/utils';
 import { getPackageName, isBareModuleSpecifier, slash } from '../build/utils';
 import { DepsService } from '../services/deps';
 import { FileService } from '../services/fs';
+import { resolveExtraEntries } from './entries';
 import {
   collectTransitiveWorkspaceDependencies,
   getWorkspaceInformation,
@@ -493,7 +494,7 @@ export abstract class Bundler extends MastraBundler {
     mastraEntryFile: string,
     analyzedBundleInfo: Awaited<ReturnType<typeof analyzeBundle>>,
     toolsPaths: (string | string[])[],
-    { enableSourcemap, enableEsmShim, externals }: BundlerOptions,
+    { enableSourcemap, enableMinify, enableEsmShim, externals, entries }: BundlerOptions,
   ) {
     const { workspaceRoot } = await getWorkspaceInformation({ mastraEntryFile });
     const closestPkgJson = pkg.up({ cwd: dirname(mastraEntryFile) });
@@ -506,13 +507,25 @@ export abstract class Bundler extends MastraBundler {
       {
         'process.env.NODE_ENV': JSON.stringify('production'),
       },
-      { sourcemap: enableSourcemap, workspaceRoot, projectRoot, enableEsmShim, externalsPreset: externals === true },
+      {
+        sourcemap: enableSourcemap,
+        minify: enableMinify,
+        workspaceRoot,
+        projectRoot,
+        enableEsmShim,
+        externalsPreset: externals === true,
+      },
     );
     const isVirtual = serverFile.includes('\n') || !existsSync(serverFile);
     const toolsInputOptions = await this.listToolsInputOptions(toolsPaths);
 
+    // User-declared extra entries (`bundler.entries`) are emitted beside the server
+    // bundle as their own `<name>.mjs`. They share this input map so they also share
+    // the `#mastra` chunk and the analyzed dependency graph.
+    const extraEntries = entries ?? {};
+
     if (isVirtual) {
-      inputOptions.input = { index: '#entry', ...toolsInputOptions };
+      inputOptions.input = { index: '#entry', ...extraEntries, ...toolsInputOptions };
 
       if (Array.isArray(inputOptions.plugins)) {
         inputOptions.plugins.unshift(virtual({ '#entry': serverFile }));
@@ -520,7 +533,7 @@ export abstract class Bundler extends MastraBundler {
         inputOptions.plugins = [virtual({ '#entry': serverFile })];
       }
     } else {
-      inputOptions.input = { index: serverFile, ...toolsInputOptions };
+      inputOptions.input = { index: serverFile, ...extraEntries, ...toolsInputOptions };
     }
 
     return inputOptions;
@@ -604,18 +617,29 @@ export abstract class Bundler extends MastraBundler {
     const analyzeDir = join(outputDirectory, this.analyzeOutputDir);
 
     const bundlerOptions = await this.getUserBundlerOptions(mastraEntryFile, outputDirectory);
+    // Throws a USER-category MastraError on bad config, deliberately outside the try
+    // blocks below so it surfaces as-is instead of as an analyze/bundle stage failure.
+    const extraEntries = resolveExtraEntries(bundlerOptions.entries, mastraEntryFile);
     const internalBundlerOptions: BundlerOptions = {
       enableSourcemap: !!bundlerOptions.sourcemap,
+      enableMinify: !!bundlerOptions.minify,
       externals: bundlerOptions.externals ?? [],
       enableEsmShim,
       dynamicPackages: bundlerOptions.dynamicPackages,
+      entries: extraEntries,
     };
+
+    if (Object.keys(extraEntries).length > 0) {
+      this.logger.info('Found additional entries', { entries: Object.keys(extraEntries) });
+    }
 
     let analyzedBundleInfo;
     try {
       const resolvedToolsPaths = await this.listToolsInputOptions(toolsPaths);
       analyzedBundleInfo = await analyzeBundle(
-        [serverFile, ...Object.values(resolvedToolsPaths)],
+        // Extra entries are analyzed too — otherwise their externals never reach the
+        // generated package.json and the emitted bundle cannot resolve them at runtime.
+        [serverFile, ...Object.values(extraEntries), ...Object.values(resolvedToolsPaths)],
         mastraEntryFile,
         {
           outputDir: analyzeDir,

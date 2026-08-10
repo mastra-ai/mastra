@@ -143,6 +143,7 @@ export class MastraAuthOkta
   protected issuer: string;
   protected endpointBase: string;
   protected redirectUri: string;
+  protected audience: string | string[];
   protected scopes: string[];
   protected cookieName: string;
   protected cookieMaxAge: number;
@@ -199,6 +200,9 @@ export class MastraAuthOkta
     this.endpointBase =
       this.issuer.includes('/oauth2/') || this.issuer.endsWith('/oauth2') ? this.issuer : `${this.issuer}/oauth2`;
     this.redirectUri = redirectUri;
+    // Defaults to the client ID, which is the `aud` of an Okta ID token. Deployments that
+    // send access tokens need the authorization server's audience instead.
+    this.audience = options?.audience ?? process.env.OKTA_AUDIENCE ?? clientId;
     this.scopes = options?.scopes ?? DEFAULT_SCOPES;
     this.cookieName = options?.session?.cookieName ?? DEFAULT_COOKIE_NAME;
     this.cookieMaxAge = options?.session?.cookieMaxAge ?? DEFAULT_COOKIE_MAX_AGE;
@@ -246,7 +250,7 @@ export class MastraAuthOkta
     try {
       const { payload } = await jwtVerify(token, this.jwks, {
         issuer: this.issuer,
-        audience: this.clientId,
+        audience: this.audience,
       });
 
       return mapOktaClaimsToUser(payload);

@@ -214,8 +214,8 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     metadata,
   }: {
     id: string;
-    title: string;
-    metadata: Record<string, unknown>;
+    title?: string;
+    metadata?: Record<string, unknown>;
   }): Promise<StorageThreadType> {
     this.logger.debug('Updating thread', { threadId: id });
 
@@ -411,7 +411,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
 
       // When perPage is 0, we only need included messages — skip thread load entirely
       if (perPage === 0 && include && include.length > 0) {
-        const includeMessages = await this._getIncludedMessages({ include });
+        const includeMessages = await this._getIncludedMessages({ include, resourceId });
         const list = new MessageList().add(includeMessages, 'memory');
         return {
           messages: this._sortMessages(list.get.all.db(), field, direction),
@@ -538,7 +538,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
 
       if (include && include.length > 0) {
         // Use the existing _getIncludedMessages helper, but adapt it for listMessages format
-        includeMessages = await this._getIncludedMessages({ include });
+        includeMessages = await this._getIncludedMessages({ include, resourceId });
 
         // Deduplicate: only add messages that aren't already in the paginated results
         for (const includeMsg of includeMessages) {
@@ -811,10 +811,19 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     });
   }
 
+  /**
+   * Fetches the messages named by `include` together with their surrounding context.
+   *
+   * @param include - Message ids to pin, each with an optional before/after window.
+   * @param resourceId - When set, restricts both the pinned messages and their context
+   * to that resource so an id from another resource returns nothing.
+   */
   private async _getIncludedMessages({
     include,
+    resourceId,
   }: {
     include: StorageListMessagesInput['include'];
+    resourceId?: string;
   }): Promise<MastraDBMessage[]> {
     if (!include?.length) {
       return [];
@@ -834,7 +843,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
 
     const targetMap = new Map<string, { threadId: string; createdAt: string }>();
     for (const { id, data } of targetResults) {
-      if (data) {
+      if (data && (!resourceId || (data as any).resourceId === resourceId)) {
         const createdAt =
           typeof (data as any).createdAt === 'string'
             ? (data as any).createdAt
@@ -851,7 +860,8 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
         .filter(
           (msg: MastraDBMessage | MastraMessageV1): msg is MastraDBMessage =>
             'content' in msg && typeof msg.content === 'object',
-        );
+        )
+        .filter((msg: MastraDBMessage) => !resourceId || msg.resourceId === resourceId);
 
     const includeMessages: MastraDBMessage[] = [];
 

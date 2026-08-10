@@ -249,6 +249,14 @@ export async function runMCCli(predrainedInput?: string | null): Promise<never> 
   } finally {
     // --- Teardown (always runs, even on a thrown error) ---
     releaseAllThreadLocks();
+    // Stop plugin-contributed signal providers (and the plugin reload listener)
+    // before quiescing workers: a provider that keeps polling past this point
+    // could dispatch into a controller that is shutting down.
+    try {
+      boot.stopPluginSignalProviders();
+    } catch {
+      // Best-effort — the process is exiting.
+    }
     const closeSignalsPubSub = (boot.signalsPubSub as { close?: () => Promise<void> | void } | undefined)?.close;
     await Promise.allSettled([
       mcpManager?.disconnect(),

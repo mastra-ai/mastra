@@ -359,6 +359,57 @@ const res = await agent.stream(prompt, {
 })
 ```
 
+### `listToolDefinitions()`
+
+Returns every server's tools as plain, serializable definitions, grouped by server name and keyed by the server's own tool name (without the `serverName_toolName` namespacing that `listTools()` applies).
+
+Unlike `listTools()`, the result contains no functions or references to a live client, so it can be passed through `JSON.stringify` and cached in Redis, a database, or a build artifact. Each definition holds the data from the MCP `tools/list` response (name, description, input schema, output schema, annotations, and `_meta`), plus the server name, version, and instructions captured at discovery time.
+
+```typescript
+const definitions = await mcp.listToolDefinitions()
+
+await cache.set('mcp-tools', JSON.stringify(definitions))
+```
+
+### `listToolDefinitionsWithErrors()`
+
+Like `listToolDefinitions()`, but also returns per-server errors for servers that failed to connect. Use this when caching a catalog, so you don't persist a partial manifest that omits a server that was down at discovery time.
+
+```typescript
+const { definitions, errors } = await mcp.listToolDefinitionsWithErrors()
+
+if (Object.keys(errors).length === 0) {
+  await cache.set('mcp-tools', JSON.stringify(definitions))
+}
+```
+
+### `toolFromDefinition()`
+
+Rebuilds a single executable tool from a cached definition. No connection is opened here. The client connects lazily, the first time the tool is executed.
+
+The returned tool behaves exactly like one from `listTools()`, with the same strict-mode metadata, approval policy, structured content handling, tool error handling, and reconnect behavior.
+
+```typescript
+const definitions = JSON.parse(await cache.get('mcp-tools'))
+
+const tool = await mcp.toolFromDefinition({
+  serverName: 'weather',
+  definition: definitions.weather.getForecast,
+})
+```
+
+### `toolsFromDefinitions()`
+
+Rebuilds an entire cached catalog into a namespaced tool map, without connecting. This is the cached counterpart to `listTools()`. It produces the same `serverName_toolName` keys, so you can reconstruct an agent's tool map on a cold start, and connections only open for the servers whose tools are actually called.
+
+Servers present in the catalog but no longer configured on the client are skipped, so a stale cached manifest degrades gracefully.
+
+```typescript
+const definitions = JSON.parse(await cache.get('mcp-tools'))
+
+new Agent({ id: 'agent', tools: await mcp.toolsFromDefinitions({ definitions }) })
+```
+
 ### `getServerInstructions()`
 
 Returns the instructions currently known for each configured MCP server. Servers that haven't connected yet, or don't advertise instructions, return `undefined`.

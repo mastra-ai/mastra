@@ -57,7 +57,7 @@ export function ThreadPage() {
         ) : (
           <ChatSessionBoundary threadId={threadId}>
             <WorkspaceFilesProvider>
-              <ThreadPageMain workspacePath={workspace.workspacePath} />
+              <ThreadPageMain workspacePath={workspace.workspacePath} threadId={workspace.threadId} />
             </WorkspaceFilesProvider>
           </ChatSessionBoundary>
         )
@@ -66,7 +66,13 @@ export function ThreadPage() {
   );
 }
 
-function ThreadPageMain({ workspacePath }: { workspacePath: string | undefined }) {
+function ThreadPageMain({
+  workspacePath,
+  threadId,
+}: {
+  workspacePath: string | undefined;
+  threadId: string | undefined;
+}) {
   useGlobalShortcuts();
   useRouteThreadSync();
   useHandoffPrompt();
@@ -74,7 +80,7 @@ function ThreadPageMain({ workspacePath }: { workspacePath: string | undefined }
   const railFits = useWiderThan(railBoxRef, RAIL_MIN_REM);
 
   return (
-    <ThreadShell workspacePath={workspacePath}>
+    <ThreadShell workspacePath={workspacePath} threadId={threadId}>
       <ChatShell.Bar>
         <FactorySessionHeader />
       </ChatShell.Bar>
@@ -112,9 +118,17 @@ function ThreadPageMain({ workspacePath }: { workspacePath: string | undefined }
 
 // Reads the transcript so its caller does not: the context republishes on every
 // streamed chunk, and children passed through keep their element identity.
-function ThreadShell({ workspacePath, children }: { workspacePath: string | undefined; children: ReactNode }) {
+function ThreadShell({
+  workspacePath,
+  threadId,
+  children,
+}: {
+  workspacePath: string | undefined;
+  threadId: string | undefined;
+  children: ReactNode;
+}) {
   const { busy, loadMore } = useChatTranscript();
-  useInvalidateWorkspaceChangesOnRunCompletion(workspacePath, busy);
+  useInvalidateWorkspaceChangesOnRunCompletion(workspacePath, threadId, busy);
   const canLoadMore = loadMore.hasMore && !loadMore.isLoading;
 
   return (

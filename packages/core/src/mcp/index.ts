@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import slugify from '@sindresorhus/slugify';
 import type { ToolsInput } from '../agent';
 import { MastraBase } from '../base';
 import { MastraError } from '../error';
@@ -7,6 +6,7 @@ import { RegisteredLogger } from '../logger';
 import type { Mastra } from '../mastra';
 import type { RequestContext } from '../request-context';
 import type { InternalCoreTool, MCPToolType } from '../tools';
+import { slugify } from '../utils/slugify';
 import type {
   MCPServerConfig,
   MCPServerHonoSSEOptions,

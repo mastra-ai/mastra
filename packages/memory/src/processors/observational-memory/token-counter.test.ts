@@ -1,3 +1,4 @@
+import type { MastraToolInvocation } from '@mastra/core/agent/message-list';
 import probeImageSize from 'probe-image-size';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
@@ -14,6 +15,31 @@ function createMessage(content: any) {
     createdAt: new Date(),
     content,
   } as any;
+}
+
+const TOOL_NAME = 'findUserTool';
+const TOOL_ARGS = { name: 'Dero Israel' };
+
+/**
+ * One assistant message that holds a single tool invocation in the given state. `extra` overrides
+ * or adds invocation fields such as `approval`, `errorText`, `toolName` or `args`.
+ */
+function createToolInvocationMessage(state: MastraToolInvocation['state'], extra: Record<string, unknown> = {}) {
+  return createMessage({
+    format: 2,
+    parts: [
+      {
+        type: 'tool-invocation',
+        toolInvocation: {
+          state,
+          toolCallId: 'tool-1',
+          toolName: TOOL_NAME,
+          args: TOOL_ARGS,
+          ...extra,
+        },
+      },
+    ],
+  });
 }
 
 async function createToolResultPartFromExecutedTool({
@@ -1227,21 +1253,7 @@ describe('TokenCounter', () => {
     const DEFAULT_DECLINE_REASON = 'Tool call was not approved by the user';
 
     const createDeniedMessage = (approval?: { id: string; approved: boolean; reason?: string }) =>
-      createMessage({
-        format: 2,
-        parts: [
-          {
-            type: 'tool-invocation',
-            toolInvocation: {
-              state: 'output-denied',
-              toolCallId: 'tool-1',
-              toolName: 'findUserTool',
-              args: { name: 'Dero Israel' },
-              ...(approval ? { approval } : {}),
-            },
-          },
-        ],
-      });
+      createToolInvocationMessage('output-denied', approval ? { approval } : {});
 
     it('counts a declined approval by its approval reason instead of throwing', () => {
       const counter = new TokenCounter();
@@ -1283,20 +1295,10 @@ describe('TokenCounter', () => {
     it('counts the tool error instead of rejecting async message counting', async () => {
       const counter = new TokenCounter();
       const errorText = 'File not found: __intentional_missing_file_for_tool_error_test__';
-      const message = createMessage({
-        format: 2,
-        parts: [
-          {
-            type: 'tool-invocation',
-            toolInvocation: {
-              state: 'output-error',
-              toolCallId: 'tool-1',
-              toolName: 'view',
-              args: { path: '__intentional_missing_file_for_tool_error_test__' },
-              errorText,
-            },
-          },
-        ],
+      const message = createToolInvocationMessage('output-error', {
+        toolName: 'view',
+        args: { path: '__intentional_missing_file_for_tool_error_test__' },
+        errorText,
       });
 
       await expect(counter.countMessagesAsync([message])).resolves.toBeGreaterThan(0);
@@ -1304,6 +1306,99 @@ describe('TokenCounter', () => {
       const estimate = message.content.parts[0].providerMetadata?.mastra?.tokenEstimate;
       expect(estimate?.key).toContain('tool-result-error');
       expect(estimate?.tokens).toBe(counter.countString(errorText));
+    });
+  });
+
+  describe('pending approvals (approval-requested / approval-responded)', () => {
+    // Regression: a conversation that waits for approval persists as state 'approval-requested',
+    // and the reply to it persists as 'approval-responded'. The counter did not handle either
+    // state and threw ("Unhandled tool-invocation state ..."), so observational memory could not
+    // run on those threads at all.
+    // TOKENS_PER_MESSAGE is private, so read it from the class to keep the expected totals below
+    // exact instead of approximate.
+    const TOKENS_PER_MESSAGE = (TokenCounter as unknown as { TOKENS_PER_MESSAGE: number }).TOKENS_PER_MESSAGE;
+    // The counter discounts JSON tool arguments by this many tokens.
+    const JSON_ARGS_DISCOUNT = 12;
+
+    /** Payload tokens of the fixture: the role, the tool name and the JSON arguments. */
+    const signatureTokens = (counter: TokenCounter) =>
+      counter.countString('assistant') +
+      counter.countString(TOOL_NAME) +
+      counter.countString(JSON.stringify(TOOL_ARGS));
+
+    it('counts a pending approval exactly like the tool call it holds instead of throwing', () => {
+      const counter = new TokenCounter();
+      const pending = createToolInvocationMessage('approval-requested');
+      const call = createToolInvocationMessage('call');
+
+      expect(counter.countMessage(pending)).toBe(
+        Math.round(signatureTokens(counter) + TOKENS_PER_MESSAGE - JSON_ARGS_DISCOUNT),
+      );
+      expect(counter.countMessage(pending)).toBe(counter.countMessage(call));
+    });
+
+    it('charges an answered approval one extra message on top of the call it answers', async () => {
+      const counter = new TokenCounter();
+      const responded = createToolInvocationMessage('approval-responded', {
+        approval: { id: 'tool-1', approved: true },
+      });
+      const expected = Math.round(signatureTokens(counter) + 2 * TOKENS_PER_MESSAGE - JSON_ARGS_DISCOUNT);
+
+      expect(counter.countMessage(responded)).toBe(expected);
+      // The async path walks the same parts, so it must reach the same total.
+      await expect(counter.countMessagesAsync([responded])).resolves.toBe(counter.countMessages([responded]));
+    });
+
+    it('adds the approval reason text to an answered approval', () => {
+      const counter = new TokenCounter();
+      const reason = 'Manager approved this lookup for the on-call rotation';
+      const withReason = createToolInvocationMessage('approval-responded', {
+        approval: { id: 'tool-1', approved: true, reason },
+      });
+
+      expect(counter.countMessage(withReason)).toBe(
+        Math.round(
+          signatureTokens(counter) + counter.countString(reason) + 2 * TOKENS_PER_MESSAGE - JSON_ARGS_DISCOUNT,
+        ),
+      );
+    });
+
+    it('does not throw when the approval-responded invocation carries no approval object', () => {
+      const counter = new TokenCounter();
+      const message = createToolInvocationMessage('approval-responded');
+
+      expect(counter.countMessage(message)).toBe(
+        Math.round(signatureTokens(counter) + 2 * TOKENS_PER_MESSAGE - JSON_ARGS_DISCOUNT),
+      );
+    });
+
+    it('reuses the cached call estimate when the invocation moves from requested to responded', () => {
+      const counter = new TokenCounter();
+      // MessageMerger mutates one part in place as the approval progresses, so the cache kinds
+      // must not embed the state.
+      const message = createToolInvocationMessage('approval-requested');
+      counter.countMessage(message);
+      const keysAfterRequest = Object.keys(message.content.parts[0].providerMetadata.mastra.tokenEstimate);
+      // Watch the second pass only, so a re-estimate of the call signature is visible.
+      const countString = vi.spyOn(counter, 'countString');
+
+      message.content.parts[0].toolInvocation.state = 'approval-responded';
+      counter.countMessage(message);
+      const keysAfterResponse = Object.keys(message.content.parts[0].providerMetadata.mastra.tokenEstimate);
+
+      expect(countString).not.toHaveBeenCalledWith(TOOL_NAME);
+      expect(countString).not.toHaveBeenCalledWith(JSON.stringify(TOOL_ARGS));
+      expect(keysAfterRequest.length).toBeGreaterThan(0);
+      expect(keysAfterResponse).toEqual(keysAfterRequest);
+    });
+
+    it('falls back to generic serialization for invocation states written by a newer core version', async () => {
+      const counter = new TokenCounter();
+      const message = createToolInvocationMessage('future-state' as MastraToolInvocation['state']);
+
+      expect(counter.countMessage(message)).toBeGreaterThan(0);
+      await expect(counter.countMessagesAsync([message])).resolves.toBeGreaterThan(0);
+      expect(message.content.parts[0].providerMetadata?.mastra?.tokenEstimate).toBeTruthy();
     });
   });
 

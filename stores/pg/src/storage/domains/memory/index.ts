@@ -708,8 +708,8 @@ export class MemoryPG extends MemoryStorage {
     metadata,
   }: {
     id: string;
-    title: string;
-    metadata: Record<string, unknown>;
+    title?: string;
+    metadata?: Record<string, unknown>;
   }): Promise<StorageThreadType> {
     const threadTableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
     const existingThread = await this.getThreadById({ threadId: id });
@@ -721,7 +721,7 @@ export class MemoryPG extends MemoryStorage {
         text: `Thread ${id} not found`,
         details: {
           threadId: id,
-          title,
+          title: title ?? null,
         },
       });
     }
@@ -737,14 +737,14 @@ export class MemoryPG extends MemoryStorage {
       const thread = await this.#db.client.one<StorageThreadType & { createdAtZ: Date; updatedAtZ: Date }>(
         `UPDATE ${threadTableName}
                     SET
-                        title = $1,
+                        title = COALESCE($1, title),
                         metadata = $2,
                         "updatedAt" = $3,
                         "updatedAtZ" = $4
                     WHERE id = $5
                     RETURNING *
                 `,
-        [title, mergedMetadata, nowStr, nowStr, id],
+        [title ?? null, mergedMetadata, nowStr, nowStr, id],
       );
 
       return {
@@ -763,7 +763,7 @@ export class MemoryPG extends MemoryStorage {
           category: ErrorCategory.THIRD_PARTY,
           details: {
             threadId: id,
-            title,
+            title: title ?? null,
           },
         },
         error,
@@ -847,7 +847,19 @@ export class MemoryPG extends MemoryStorage {
     });
   }
 
-  private async _getIncludedMessages({ include }: { include: StorageListMessagesInput['include'] }) {
+  /**
+   * Fetches included messages by ID, discovering their thread automatically.
+   * This handles cross-thread includes where the include item doesn't specify a threadId.
+   * When a resourceId is given, both the target lookup and the surrounding window stay
+   * inside that resource, so an include never leaks another resource's messages.
+   */
+  private async _getIncludedMessages({
+    include,
+    resourceId,
+  }: {
+    include: StorageListMessagesInput['include'];
+    resourceId?: string;
+  }) {
     if (!include || include.length === 0) return null;
 
     const tableName = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) });
@@ -859,11 +871,15 @@ export class MemoryPG extends MemoryStorage {
     if (targetIds.length === 0) return null;
 
     const idPlaceholders = targetIds.map((_, i) => '$' + (i + 1)).join(', ');
+    const targetResourceCondition = resourceId ? ` AND "resourceId" = $${targetIds.length + 1}` : '';
     const targetRows = await this.#db.client.manyOrNone<{
       id: string;
       thread_id: string;
       createdAt: Date | string;
-    }>(`SELECT id, thread_id, "createdAt" FROM ${tableName} WHERE id IN (${idPlaceholders})`, targetIds);
+    }>(
+      `SELECT id, thread_id, "createdAt" FROM ${tableName} WHERE id IN (${idPlaceholders})${targetResourceCondition}`,
+      resourceId ? [...targetIds, resourceId] : targetIds,
+    );
 
     if (targetRows.length === 0) return null;
 
@@ -876,7 +892,14 @@ export class MemoryPG extends MemoryStorage {
     // copy for timezone-correctness), so using createdAt for ordering is safe.
     const unionQueries: string[] = [];
     const params: any[] = [];
-    let paramIdx = 1;
+    // resourceId is the same for every subquery, so bind it once as $1 and reference
+    // that placeholder from each subquery instead of re-binding it per include item.
+    let resourceCondition = '';
+    if (resourceId) {
+      params.push(resourceId);
+      resourceCondition = ` AND m."resourceId" = $1`;
+    }
+    let paramIdx = params.length + 1;
 
     for (const inc of include) {
       const { id, withPreviousMessages = 0, withNextMessages = 0 } = inc;
@@ -892,7 +915,7 @@ export class MemoryPG extends MemoryStorage {
         SELECT ${selectColumns}
         FROM ${tableName} m
         WHERE m.thread_id = ${p1}
-          AND m."createdAt" <= ${p2}
+          AND m."createdAt" <= ${p2}${resourceCondition}
         ORDER BY m."createdAt" DESC, m.id DESC
         LIMIT ${p3}
       )`);
@@ -908,7 +931,7 @@ export class MemoryPG extends MemoryStorage {
           SELECT ${selectColumns}
           FROM ${tableName} m
           WHERE m.thread_id = ${p4}
-            AND m."createdAt" > ${p5}
+            AND m."createdAt" > ${p5}${resourceCondition}
           ORDER BY m."createdAt" ASC, m.id ASC
           LIMIT ${p6}
         )`);
@@ -997,6 +1020,55 @@ export class MemoryPG extends MemoryStorage {
     }
   }
 
+  /**
+   * Reads one page of messages together with the total row count.
+   *
+   * `COUNT(*) OVER ()` reports the count over the whole WHERE result on the same
+   * statement as the page, so the page costs one database round-trip instead of
+   * two. The page and the count also come from one snapshot, so the count always
+   * describes the returned rows. A separate `COUNT(*)` runs only when the page is
+   * empty and the caller asked for a page after the last row, because a window
+   * function has no row to carry the count on.
+   */
+  async #fetchMessagePage({
+    selectStatement,
+    tableName,
+    whereClause,
+    orderByStatement,
+    queryParams,
+    perPageInput,
+    perPage,
+    offset,
+  }: {
+    selectStatement: string;
+    tableName: string;
+    whereClause: string;
+    orderByStatement: string;
+    queryParams: any[];
+    perPageInput: number | false | undefined;
+    perPage: number;
+    offset: number;
+  }): Promise<{ total: number; messages: MessageRowFromDB[] }> {
+    // `perPageInput === false` means "every row", so no LIMIT is applied.
+    const limitClause =
+      perPageInput === false ? '' : ` LIMIT $${queryParams.length + 1} OFFSET $${queryParams.length + 2}`;
+    const dataParams = perPageInput === false ? queryParams : [...queryParams, perPage, offset];
+    const rows =
+      (await this.#db.client.manyOrNone<MessageRowFromDB & { __total?: string | number }>(
+        `${selectStatement}, COUNT(*) OVER () AS "__total" FROM ${tableName} ${whereClause} ${orderByStatement}${limitClause}`,
+        dataParams,
+      )) || [];
+
+    if (rows.length > 0) {
+      return { total: Number(rows[0]!.__total), messages: rows };
+    }
+    if (offset === 0) {
+      return { total: 0, messages: [] };
+    }
+    const countResult = await this.#db.client.one(`SELECT COUNT(*) FROM ${tableName} ${whereClause}`, queryParams);
+    return { total: parseInt(countResult.count, 10), messages: [] };
+  }
+
   public async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
     const { threadId, resourceId, include, filter, perPage: perPageInput, page = 0, orderBy } = args;
 
@@ -1071,7 +1143,7 @@ export class MemoryPG extends MemoryStorage {
       // When perPage is 0 and we have include targets, skip COUNT(*) and data queries.
       // This is the semantic recall path where we only need the included messages.
       if (perPage === 0 && include && include.length > 0) {
-        const includeMessages = await this._getIncludedMessages({ include });
+        const includeMessages = await this._getIncludedMessages({ include, resourceId });
         if (!includeMessages || includeMessages.length === 0) {
           return { messages: [], total: 0, page, perPage: perPageForResponse, hasMore: false };
         }
@@ -1086,6 +1158,18 @@ export class MemoryPG extends MemoryStorage {
         };
       }
 
+      // The included messages do not depend on the page, so start that read now and
+      // let it overlap the page read. The rejection is captured here so a failure of
+      // the page read cannot leave this promise unhandled.
+      let includeFailure: unknown;
+      const includePromise =
+        include && include.length > 0
+          ? this._getIncludedMessages({ include, resourceId }).catch((error: unknown) => {
+              includeFailure = error;
+              return null;
+            })
+          : null;
+
       let total: number;
       let messages: MessageRowFromDB[];
       if (metadataFilter) {
@@ -1099,12 +1183,16 @@ export class MemoryPG extends MemoryStorage {
         total = filteredRows.length;
         messages = perPageInput === false ? filteredRows : filteredRows.slice(offset, offset + perPage);
       } else {
-        const countResult = await this.#db.client.one(`SELECT COUNT(*) FROM ${tableName} ${whereClause}`, queryParams);
-        total = parseInt(countResult.count, 10);
-        const limitValue = perPageInput === false ? total : perPage;
-        const dataQuery = `${selectStatement} FROM ${tableName} ${whereClause} ${orderByStatement} LIMIT $${paramIndex++} OFFSET $${paramIndex++}`;
-        const rows = await this.#db.client.manyOrNone(dataQuery, [...queryParams, limitValue, offset]);
-        messages = [...(rows || [])];
+        ({ total, messages } = await this.#fetchMessagePage({
+          selectStatement,
+          tableName,
+          whereClause,
+          orderByStatement,
+          queryParams,
+          perPageInput,
+          perPage,
+          offset,
+        }));
       }
       const primaryPageCount = messages.length;
 
@@ -1120,7 +1208,8 @@ export class MemoryPG extends MemoryStorage {
 
       const messageIds = new Set(messages.map(m => m.id));
       if (include && include.length > 0) {
-        const includeMessages = await this._getIncludedMessages({ include });
+        const includeMessages = await includePromise;
+        if (includeFailure) throw includeFailure;
         if (includeMessages) {
           for (const includeMsg of includeMessages) {
             if (!messageIds.has(includeMsg.id)) {
@@ -1254,7 +1343,7 @@ export class MemoryPG extends MemoryStorage {
       // (vector-matched) messages are needed. Skipping the COUNT(*) avoids scanning
       // the entire thread which was a major source of latency for large threads.
       if (perPage === 0 && include && include.length > 0) {
-        const includeMessages = await this._getIncludedMessages({ include });
+        const includeMessages = await this._getIncludedMessages({ include, resourceId });
         if (!includeMessages || includeMessages.length === 0) {
           return {
             messages: [],
@@ -1277,6 +1366,18 @@ export class MemoryPG extends MemoryStorage {
         };
       }
 
+      // The included messages do not depend on the page, so start that read now and
+      // let it overlap the page read. The rejection is captured here so a failure of
+      // the page read cannot leave this promise unhandled.
+      let includeFailure: unknown;
+      const includePromise =
+        include && include.length > 0
+          ? this._getIncludedMessages({ include, resourceId }).catch((error: unknown) => {
+              includeFailure = error;
+              return null;
+            })
+          : null;
+
       let total: number;
       let messages: MessageRowFromDB[];
       if (metadataFilter) {
@@ -1290,12 +1391,16 @@ export class MemoryPG extends MemoryStorage {
         total = filteredRows.length;
         messages = perPageInput === false ? filteredRows : filteredRows.slice(offset, offset + perPage);
       } else {
-        const countResult = await this.#db.client.one(`SELECT COUNT(*) FROM ${tableName} ${whereClause}`, queryParams);
-        total = parseInt(countResult.count, 10);
-        const limitValue = perPageInput === false ? total : perPage;
-        const dataQuery = `${selectStatement} FROM ${tableName} ${whereClause} ${orderByStatement} LIMIT $${paramIndex++} OFFSET $${paramIndex++}`;
-        const rows = await this.#db.client.manyOrNone(dataQuery, [...queryParams, limitValue, offset]);
-        messages = [...(rows || [])];
+        ({ total, messages } = await this.#fetchMessagePage({
+          selectStatement,
+          tableName,
+          whereClause,
+          orderByStatement,
+          queryParams,
+          perPageInput,
+          perPage,
+          offset,
+        }));
       }
 
       if (total === 0 && messages.length === 0 && (!include || include.length === 0)) {
@@ -1310,7 +1415,8 @@ export class MemoryPG extends MemoryStorage {
 
       const messageIds = new Set(messages.map(m => m.id));
       if (include && include.length > 0) {
-        const includeMessages = await this._getIncludedMessages({ include });
+        const includeMessages = await includePromise;
+        if (includeFailure) throw includeFailure;
         if (includeMessages) {
           for (const includeMsg of includeMessages) {
             if (!messageIds.has(includeMsg.id)) {

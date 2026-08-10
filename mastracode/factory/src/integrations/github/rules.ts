@@ -61,6 +61,15 @@ function actorLogins(value: unknown): string[] {
   });
 }
 
+function labelNames(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap(label => {
+    if (typeof label === 'string') return label ? [label] : [];
+    const name = string(object(label)?.name);
+    return name ? [name] : [];
+  });
+}
+
 function eventName(parsed: ParsedGithubWebhook): FactoryGithubEventName | undefined {
   const action = string(parsed.payload.action);
   if (parsed.event === 'issues' && action === 'opened') return 'issueOpened';
@@ -294,6 +303,7 @@ export class GithubRules {
               ...(string(issue?.created_at) ? { createdAt: string(issue?.created_at) } : {}),
               ...(string(issue?.updated_at) ? { updatedAt: string(issue?.updated_at) } : {}),
               assignees: actorLogins(issue?.assignees),
+              labels: labelNames(issue?.labels),
               ...(string(issue?.state) === 'closed' || string(issue?.state) === 'open'
                 ? { state: string(issue?.state) as 'open' | 'closed' }
                 : {}),
@@ -329,6 +339,7 @@ export class GithubRules {
               merged: boolean(pullRequest?.merged) ?? false,
               assignees: actorLogins(pullRequest?.assignees),
               requestedReviewers: actorLogins(pullRequest?.requested_reviewers),
+              labels: labelNames(pullRequest?.labels),
               headBranch: string(object(pullRequest?.head)?.ref) ?? '',
               baseBranch: string(object(pullRequest?.base)?.ref) ?? '',
             },
@@ -450,6 +461,7 @@ export interface ReconcilePullRequestState {
   merged: boolean;
   assignees?: string[];
   requestedReviewers?: string[];
+  labels?: string[];
   headBranch: string;
   baseBranch: string;
   author?: string;
@@ -470,6 +482,7 @@ export interface ReconcileIssueState {
   /** GitHub close reason: `completed`, `not_planned`, or `duplicate`. */
   stateReason?: string;
   assignees?: string[];
+  labels?: string[];
   author?: string;
   createdAt?: string;
   updatedAt?: string;
@@ -496,10 +509,6 @@ export interface ReconcileSweepSummary {
   merged: number;
   /** Missed closes-without-merge replayed through the rules ingress. */
   closed: number;
-  /** Issue-backed work cards whose live state was fetched from GitHub. */
-  issuesChecked: number;
-  /** Missed issue closes replayed through the rules ingress. */
-  issuesClosed: number;
   /** PRs/issues (or whole repositories) skipped because of an error. */
   failed: number;
   /** Error samples with context, capped at {@link RECONCILE_ERROR_SAMPLE_LIMIT}. */
@@ -508,9 +517,9 @@ export interface ReconcileSweepSummary {
 
 export type GithubPullRequestReconciler = (repositories: ReconcileRepository[]) => Promise<ReconcileSweepSummary>;
 
-const RECONCILE_ERROR_SAMPLE_LIMIT = 5;
+export const RECONCILE_ERROR_SAMPLE_LIMIT = 5;
 
-function sameStrings(left: unknown, right: string[] | undefined): boolean {
+export function sameStrings(left: unknown, right: string[] | undefined): boolean {
   if (right === undefined) return true;
   if (!Array.isArray(left)) return false;
   const leftValues = new Set(left.flatMap(value => (typeof value === 'string' ? [value] : [])));
@@ -548,7 +557,7 @@ function reconcilablePullRequestNumber(item: WorkItemRow, repository: ReconcileR
  * trusted when the intake-stamped `githubRepositoryId` confirms the
  * repository, because the sweep initiates closes on its own.
  */
-function reconcilableIssueNumber(item: WorkItemRow, repository: ReconcileRepository): number | undefined {
+export function reconcilableIssueNumber(item: WorkItemRow, repository: ReconcileRepository): number | undefined {
   if (item.externalSource?.type !== 'issue') return undefined;
   const url = item.externalSource.url;
   if (url) {
@@ -624,6 +633,7 @@ export function reconciledClosedEvent(
         merged: state.merged,
         assignees: (state.assignees ?? []).map(login => ({ login })),
         requested_reviewers: (state.requestedReviewers ?? []).map(login => ({ login })),
+        labels: (state.labels ?? []).map(name => ({ name })),
         head: { ref: state.headBranch },
         base: { ref: state.baseBranch },
       },
@@ -664,7 +674,6 @@ async function retireReconciledSubscriptions(
 export function createGithubPullRequestReconciler(
   options: GithubRulesOptions,
   fetchPullRequest: GithubPullRequestFetcher,
-  fetchIssue?: GithubIssueFetcher,
 ): GithubPullRequestReconciler {
   const rules = new GithubRules(options);
   return async repositories => {
@@ -673,22 +682,19 @@ export function createGithubPullRequestReconciler(
       checked: 0,
       merged: 0,
       closed: 0,
-      issuesChecked: 0,
-      issuesClosed: 0,
       failed: 0,
       errors: [],
     };
     const recordFailure = (
       repository: ReconcileRepository,
       error: unknown,
-      numbers?: { pullRequestNumber?: number; issueNumber?: number },
+      pullRequestNumber?: number,
     ) => {
       summary.failed += 1;
       if (summary.errors.length < RECONCILE_ERROR_SAMPLE_LIMIT) {
         summary.errors.push({
           repository: repository.fullName,
-          ...(numbers?.pullRequestNumber === undefined ? {} : { pullRequestNumber: numbers.pullRequestNumber }),
-          ...(numbers?.issueNumber === undefined ? {} : { issueNumber: numbers.issueNumber }),
+          ...(pullRequestNumber === undefined ? {} : { pullRequestNumber }),
           error: error instanceof Error ? error.message : String(error),
         });
       }
@@ -709,7 +715,6 @@ export function createGithubPullRequestReconciler(
       // One broken repository (or a failing token exchange for its
       // installation) must not abort the sweep for the others.
       let cardsByNumber: Map<number, WorkItemRow[]>;
-      const issueNumbers = new Set<number>();
       try {
         const projects = await options.sourceControl.projectRepositories.listByExternalRepository({
           installationExternalId: String(repository.installationId),
@@ -724,12 +729,6 @@ export function createGithubPullRequestReconciler(
           });
           for (const item of items) {
             const stage = item.stages[0];
-            if (fetchIssue) {
-              const issueNumber = reconcilableIssueNumber(item, repository);
-              // Issue cards need no metadata sync: only cards still on the
-              // board can have missed a close, so terminal stages are final.
-              if (issueNumber && stage !== 'done' && stage !== 'canceled') issueNumbers.add(issueNumber);
-            }
             const pullRequestNumber = reconcilablePullRequestNumber(item, repository);
             if (!pullRequestNumber) continue;
             const metadata = item.metadata ?? {};
@@ -739,7 +738,8 @@ export function createGithubPullRequestReconciler(
               typeof metadata.merged === 'boolean' &&
               typeof metadata.author === 'string' &&
               Array.isArray(metadata.assignees) &&
-              Array.isArray(metadata.requestedReviewers);
+              Array.isArray(metadata.requestedReviewers) &&
+              Array.isArray(metadata.labels);
             if ((stage === 'done' || stage === 'canceled') && hasReconciledMetadata) continue;
             const cards = cardsByNumber.get(pullRequestNumber) ?? [];
             cards.push(item);
@@ -766,7 +766,8 @@ export function createGithubPullRequestReconciler(
             const authorChanged = state.author !== undefined && metadata.author !== state.author;
             const assigneesChanged = !sameStrings(metadata.assignees, state.assignees);
             const reviewersChanged = !sameStrings(metadata.requestedReviewers, state.requestedReviewers);
-            if (!statusChanged && !authorChanged && !assigneesChanged && !reviewersChanged) continue;
+            const labelsChanged = !sameStrings(metadata.labels, state.labels);
+            if (!statusChanged && !authorChanged && !assigneesChanged && !reviewersChanged && !labelsChanged) continue;
             try {
               await options.storage.update({
                 orgId: card.orgId,
@@ -780,11 +781,12 @@ export function createGithubPullRequestReconciler(
                     ...(state.author ? { author: state.author } : {}),
                     ...(state.assignees ? { assignees: state.assignees } : {}),
                     ...(state.requestedReviewers ? { requestedReviewers: state.requestedReviewers } : {}),
+                    ...(state.labels ? { labels: state.labels } : {}),
                   },
                 },
               });
             } catch (error) {
-              recordFailure(repository, error, { pullRequestNumber });
+              recordFailure(repository, error, pullRequestNumber);
             }
           }
           if (state.state !== 'closed') continue;
@@ -793,23 +795,7 @@ export function createGithubPullRequestReconciler(
           if (state.merged) summary.merged += 1;
           else summary.closed += 1;
         } catch (error) {
-          recordFailure(repository, error, { pullRequestNumber });
-        }
-      }
-      if (!fetchIssue) continue;
-      for (const issueNumber of issueNumbers) {
-        try {
-          const state = await fetchIssue({
-            installationId: repository.installationId,
-            repository: repository.fullName,
-            number: issueNumber,
-          });
-          summary.issuesChecked += 1;
-          if (!state || state.state !== 'closed') continue;
-          await rules.ingest(reconciledIssueClosedEvent(repository, issueNumber, state));
-          summary.issuesClosed += 1;
-        } catch (error) {
-          recordFailure(repository, error, { issueNumber });
+          recordFailure(repository, error, pullRequestNumber);
         }
       }
     }
@@ -817,7 +803,7 @@ export function createGithubPullRequestReconciler(
   };
 }
 
-function githubRulesOptions(
+export function githubRulesOptions(
   github: GithubRulesIntegration,
   context: IntegrationContext,
 ): GithubRulesOptions | undefined {
@@ -846,9 +832,8 @@ export function attachGithubReconciler(
   github: GithubRulesIntegration,
   context: IntegrationContext,
   fetchPullRequest: GithubPullRequestFetcher,
-  fetchIssue?: GithubIssueFetcher,
 ): GithubPullRequestReconciler | undefined {
   const options = githubRulesOptions(github, context);
   if (!options) return undefined;
-  return createGithubPullRequestReconciler(options, fetchPullRequest, fetchIssue);
+  return createGithubPullRequestReconciler(options, fetchPullRequest);
 }

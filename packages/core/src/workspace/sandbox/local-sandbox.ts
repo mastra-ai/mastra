@@ -28,7 +28,13 @@ import { MastraSandbox } from './mastra-sandbox';
 import type { MastraSandboxOptions } from './mastra-sandbox';
 import type { MountManager } from './mount-manager';
 import type { IsolationBackend, NativeSandboxConfig } from './native-sandbox';
-import { detectIsolation, isIsolationAvailable, generateSeatbeltProfile, wrapCommand } from './native-sandbox';
+import {
+  detectIsolation,
+  isIsolationAvailable,
+  generateSeatbeltProfile,
+  isGeneratedSeatbeltProfile,
+  wrapCommand,
+} from './native-sandbox';
 import type { SandboxCloneOptions } from './sandbox';
 import type { SandboxInfo } from './types';
 
@@ -163,10 +169,16 @@ export class LocalSandbox extends MastraSandbox {
   declare readonly mounts: MountManager;
   private readonly env: NodeJS.ProcessEnv;
   private _nativeSandboxConfig: NativeSandboxConfig;
-  private _seatbeltProfile?: string;
+  /**
+   * SBPL the user wrote, read from `seatbeltProfilePath` at start. Set only when that file
+   * already existed and does not carry our generated-profile marker. While it is undefined,
+   * `wrapCommand()` generates the profile from the live `_nativeSandboxConfig` on every call,
+   * so the profile always tracks the allowlist.
+   */
+  private _customSeatbeltProfile?: string;
+  /** Where the profile file lives on disk: the configured path, or one we generated. */
   private _seatbeltProfilePath?: string;
   private _sandboxFolderPath?: string;
-  private _userProvidedProfilePath = false;
   private readonly _createdAt: Date;
   private readonly _instructionsOverride?: InstructionsOption;
   private _activeMountPaths: Set<string> = new Set();
@@ -258,24 +270,35 @@ export class LocalSandbox extends MastraSandbox {
       if (userProvidedPath) {
         // User provided a custom path
         this._seatbeltProfilePath = userProvidedPath;
-        this._userProvidedProfilePath = true;
 
         // Check if file exists at user's path
+        let existingProfile: string | undefined;
         try {
-          this._seatbeltProfile = await fs.readFile(userProvidedPath, 'utf-8');
+          existingProfile = await fs.readFile(userProvidedPath, 'utf-8');
         } catch (err: unknown) {
           if (err instanceof Error && 'code' in err && (err as NodeJS.ErrnoException).code !== 'ENOENT') {
             throw err;
           }
-          // File doesn't exist, generate default and write to user's path
-          this._seatbeltProfile = generateSeatbeltProfile(this.workingDirectory, this._nativeSandboxConfig);
+        }
+
+        if (existingProfile !== undefined && !isGeneratedSeatbeltProfile(existingProfile)) {
+          // The user wrote this SBPL. Keep it and pass it to sandbox-exec exactly as written.
+          this._customSeatbeltProfile = existingProfile;
+        } else {
+          // The file is missing, or it carries our marker from an earlier run. Either way the
+          // profile is ours, so generate it again and clear `_customSeatbeltProfile`: it must
+          // keep tracking the allowlist that mounts change. Clearing matters when this instance
+          // was started before with a user-authored profile that has since been removed or taken
+          // over by us, because `stop()` leaves the cached profile in place for a later `start()`.
+          this._customSeatbeltProfile = undefined;
+          const generatedProfile = generateSeatbeltProfile(this.workingDirectory, this._nativeSandboxConfig);
           // Ensure parent directory exists
           await fs.mkdir(path.dirname(userProvidedPath), { recursive: true });
-          await fs.writeFile(userProvidedPath, this._seatbeltProfile, 'utf-8');
+          await fs.writeFile(userProvidedPath, generatedProfile, 'utf-8');
         }
       } else {
         // No custom path, use default location
-        this._seatbeltProfile = generateSeatbeltProfile(this.workingDirectory, this._nativeSandboxConfig);
+        const generatedProfile = generateSeatbeltProfile(this.workingDirectory, this._nativeSandboxConfig);
 
         // Generate a deterministic hash from workspace path and config
         // This allows identical sandboxes to share profiles while preventing collisions
@@ -291,7 +314,7 @@ export class LocalSandbox extends MastraSandbox {
         this._sandboxFolderPath = path.join(process.cwd(), '.sandbox-profiles');
         await fs.mkdir(this._sandboxFolderPath, { recursive: true });
         this._seatbeltProfilePath = path.join(this._sandboxFolderPath, `seatbelt-${configHash}.sb`);
-        await fs.writeFile(this._seatbeltProfilePath, this._seatbeltProfile, 'utf-8');
+        await fs.writeFile(this._seatbeltProfilePath, generatedProfile, 'utf-8');
       }
     }
 
@@ -339,8 +362,9 @@ export class LocalSandbox extends MastraSandbox {
     this._activeMountPaths.clear();
     this.mounts.clear();
 
-    // Clean up seatbelt profile only if it was auto-generated (not user-provided)
-    if (this._seatbeltProfilePath && !this._userProvidedProfilePath) {
+    // Clean up the profile file only when we chose its location. A path the user configured
+    // belongs to the user, so never unlink it.
+    if (this._seatbeltProfilePath && !this._nativeSandboxConfig.seatbeltProfilePath) {
       try {
         await fs.unlink(this._seatbeltProfilePath);
       } catch {
@@ -348,8 +372,7 @@ export class LocalSandbox extends MastraSandbox {
       }
     }
     this._seatbeltProfilePath = undefined;
-    this._seatbeltProfile = undefined;
-    this._userProvidedProfilePath = false;
+    this._customSeatbeltProfile = undefined;
 
     // Try to remove .sandbox folder if empty
     if (this._sandboxFolderPath) {
@@ -698,7 +721,7 @@ export class LocalSandbox extends MastraSandbox {
   /**
    * Dynamically add a mount path to the sandbox isolation allowlist.
    *
-   * - Seatbelt: pushes to readWritePaths, regenerates inline profile
+   * - Seatbelt: pushes to readWritePaths (wrapCommand reads config each call)
    * - Bwrap: pushes to readWritePaths (buildBwrapCommand reads config each call)
    *
    * Local mounts are symlinks under `workingDirectory`. Bubblewrap cannot
@@ -733,12 +756,7 @@ export class LocalSandbox extends MastraSandbox {
       this._mountIsolationRefCount.set(isolationPath, (this._mountIsolationRefCount.get(isolationPath) ?? 0) + 1);
     }
     this._mountPathToIsolationPath.set(normMount, isolationPath);
-
-    // Seatbelt: regenerate the inline profile so the next executeCommand() picks it up
-    if (this.isolation === 'seatbelt') {
-      this._seatbeltProfile = generateSeatbeltProfile(this.workingDirectory, this._nativeSandboxConfig);
-    }
-    // Bwrap: buildBwrapCommand reads config.readWritePaths each call, so no extra work needed
+    // Both backends read config.readWritePaths on every wrapCommand() call, so no extra work needed
   }
 
   /**
@@ -769,9 +787,6 @@ export class LocalSandbox extends MastraSandbox {
         if (idx !== -1) {
           paths.splice(idx, 1);
         }
-      }
-      if (this.isolation === 'seatbelt') {
-        this._seatbeltProfile = generateSeatbeltProfile(this.workingDirectory, this._nativeSandboxConfig);
       }
     } else {
       this._mountIsolationRefCount.set(isolationPath, next);
@@ -805,7 +820,9 @@ export class LocalSandbox extends MastraSandbox {
     return wrapCommand(command, {
       backend: this.isolation,
       workspacePath: this.workingDirectory,
-      seatbeltProfile: this._seatbeltProfile,
+      // Undefined unless the user wrote their own profile file. wrapCommand() then generates
+      // one from the current config, so mounts added after start() are in the allowlist.
+      seatbeltProfile: this._customSeatbeltProfile,
       config: this._nativeSandboxConfig,
     });
   }

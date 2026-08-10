@@ -69,6 +69,20 @@ export interface PIIDetectionResult {
 }
 
 /**
+ * Event passed to the `onDetection` callback
+ */
+export interface PIIDetectionEvent {
+  /** The raw detection result produced for this piece of content */
+  detectionResult: PIIDetectionResult;
+  /** The content that was analyzed */
+  input: string;
+  /** Whether the result crossed the configured threshold */
+  flagged: boolean;
+  /** The configured strategy when flagged, otherwise 'none' */
+  strategyApplied: 'block' | 'warn' | 'filter' | 'redact' | 'none';
+}
+
+/**
  * Configuration options for PIIDetector
  */
 export interface PIIDetectorOptions extends LastMessageOnlyOption {
@@ -156,6 +170,19 @@ export interface PIIDetectorOptions extends LastMessageOnlyOption {
    * Lower values reduce latency but may miss PII that spans multiple chunks.
    */
   bufferSize?: number;
+
+  /**
+   * Called whenever a detection result is produced, so consumers can emit
+   * metrics or attach metadata to their own tracing.
+   *
+   * Fires for every analyzed message (flagged or not) in `processInput` and
+   * `processOutputResult`, and for every LLM buffer flush during streaming.
+   * During streaming, the zero-cost regex pass only reports when PII is
+   * actually found, to avoid firing once per token.
+   *
+   * Errors thrown by the callback are logged and ignored.
+   */
+  onDetection?: (event: PIIDetectionEvent) => void | Promise<void>;
 }
 
 /**
@@ -180,6 +207,7 @@ export class PIIDetector implements Processor<'pii-detector'> {
   private structuredOutputOptions?: PIIDetectorOptions['structuredOutputOptions'];
   private providerOptions?: ProviderOptions;
   private bufferSize: number;
+  private onDetection?: (event: PIIDetectionEvent) => void | Promise<void>;
 
   // Default PII types based on common privacy regulations and comprehensive PII detection
   private static readonly DEFAULT_DETECTION_TYPES = [
@@ -240,6 +268,7 @@ export class PIIDetector implements Processor<'pii-detector'> {
     this.structuredOutputOptions = options.structuredOutputOptions;
     this.providerOptions = options.providerOptions;
     this.bufferSize = options.bufferSize ?? PIIDetector.DEFAULT_BUFFER_SIZE;
+    this.onDetection = options.onDetection;
 
     // Create internal detection agent
     this.detectionAgent = new Agent({
@@ -285,8 +314,10 @@ export class PIIDetector implements Processor<'pii-detector'> {
         }
 
         const detectionResult = await this.detectPII(textContent, observabilityContext);
+        const flagged = this.isPIIFlagged(detectionResult);
+        await this.emitDetection(textContent, detectionResult, flagged);
 
-        if (this.isPIIFlagged(detectionResult)) {
+        if (flagged) {
           const processedMessage = this.handleDetectedPII(message, detectionResult, this.strategy, abort);
 
           // If we reach here, strategy is 'warn', 'filter', or 'redact'
@@ -311,6 +342,23 @@ export class PIIDetector implements Processor<'pii-detector'> {
         throw error; // Re-throw tripwire errors
       }
       throw new Error(`PII detection failed: ${error instanceof Error ? error.stack : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Notify the consumer-supplied `onDetection` callback. Never throws.
+   */
+  private async emitDetection(input: string, detectionResult: PIIDetectionResult, flagged: boolean): Promise<void> {
+    if (!this.onDetection) return;
+    try {
+      await this.onDetection({
+        detectionResult,
+        input,
+        flagged,
+        strategyApplied: flagged ? this.strategy : 'none',
+      });
+    } catch (error) {
+      console.warn('[PIIDetector] onDetection callback failed:', error);
     }
   }
 
@@ -764,6 +812,8 @@ IMPORTANT: Only include PII types that are actually detected. If no PII is found
     if (!buffer) return null;
 
     const detectionResult = await this.detectPII(buffer, observabilityContext);
+    const flagged = this.isPIIFlagged(detectionResult);
+    await this.emitDetection(buffer, detectionResult, flagged);
 
     const combinedPart: ChunkType = {
       type: 'text-delta',
@@ -772,7 +822,7 @@ IMPORTANT: Only include PII types that are actually detected. If no PII is found
       from: ChunkFrom.AGENT,
     };
 
-    if (this.isPIIFlagged(detectionResult)) {
+    if (flagged) {
       return this.applyStreamStrategy(combinedPart, detectionResult, abort);
     }
 
@@ -862,6 +912,7 @@ IMPORTANT: Only include PII types that are actually detected. If no PII is found
         this.isPIIFlagged(regexResult) && (regexResult.detections?.some(d => d.end > tail.length) ?? false);
 
       if (hasNewPII) {
+        await this.emitDetection(combined, regexResult, true);
         // Regex caught pattern-based PII — apply strategy to original chunk
         // (redaction is applied to `combined` then we extract the new portion)
         const combinedRedacted = regexResult.redacted_content;
@@ -967,8 +1018,10 @@ IMPORTANT: Only include PII types that are actually detected. If no PII is found
         }
 
         const detectionResult = await this.detectPII(textContent, observabilityContext);
+        const flagged = this.isPIIFlagged(detectionResult);
+        await this.emitDetection(textContent, detectionResult, flagged);
 
-        if (this.isPIIFlagged(detectionResult)) {
+        if (flagged) {
           const processedMessage = this.handleDetectedPII(message, detectionResult, this.strategy, abort);
 
           // If we reach here, strategy is 'warn', 'filter', or 'redact'

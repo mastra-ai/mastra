@@ -1,4 +1,3 @@
-import { MastraClientError } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@mastra/playground-ui/components/Dialog';
 import { MainSidebar } from '@mastra/playground-ui/components/MainSidebar';
@@ -13,10 +12,8 @@ import { useApiConfig } from '../../../../api/config';
 import { queryKeys } from '../../../../api/keys';
 import { useFactoryQuery } from '../../../../hooks/useFactories';
 import { removeCachedSession, useWorkspacesQuery } from '../../../../hooks/useWorkspaces';
-import { createAgentControllerClient, requireAgentControllerSession } from '../../chat/services/agentControllerClient';
-import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import { usePinnedSessions } from '../hooks/usePinnedSessions';
-import { UserSessionNotFoundError, deleteUserSession, getUserSession } from '../services/github';
+import { deleteUserSession } from '../services/github';
 import type { FactoryUserSession } from '../services/github';
 import { getUserSessionLabel, getUserSessionTooltip } from '../services/sessionPresentation';
 import { SessionNavRow } from './SessionNavRow';
@@ -43,43 +40,18 @@ export function UserSessionsSection() {
     void queryClient.invalidateQueries({ queryKey: queryKeys.sessions(repository?.projectRepositoryId) });
   };
 
-  const controllerSession = (sessionId: string) => {
-    const { session } = createAgentControllerClient({
-      agentControllerId: AGENT_CONTROLLER_ID,
-      resourceId: sessionId,
-      baseUrl,
-    });
-    return requireAgentControllerSession(session);
-  };
   const deleteSession = useMutation({
     mutationFn: async (session: FactoryUserSession) => {
-      let storedSession: FactoryUserSession | null;
-      try {
-        storedSession = await getUserSession(baseUrl, session.sessionId);
-      } catch (error) {
-        if (!(error instanceof UserSessionNotFoundError)) throw error;
-        storedSession = null;
-      }
-      // A thread only exists once the workspace materialized; asking the controller
-      // for one before that would provision a sandbox just to delete nothing.
-      if (storedSession?.materializedAt) {
-        const chatSession = controllerSession(session.sessionId);
-        try {
-          await chatSession.deleteThread(session.sessionId);
-        } catch (error) {
-          if (!(error instanceof MastraClientError) || error.status !== 404) throw error;
-        }
-      }
-      if (storedSession) await deleteUserSession(baseUrl, session.sessionId);
+      // The thread is deliberately left behind: its transcript is the record of
+      // what was worked on here, and a new session always gets a fresh id, so it
+      // can never be re-attached to a later session.
+      await deleteUserSession(baseUrl, session.sessionId);
       return session;
     },
     onSuccess: session => {
       setConfirmDelete(null);
       removeCachedSession(queryClient, repository?.projectRepositoryId, session.sessionId);
       queryClient.removeQueries({ queryKey: queryKeys.userSession(session.sessionId) });
-      queryClient.removeQueries({
-        queryKey: queryKeys.agentControllerThreadMessages(AGENT_CONTROLLER_ID, session.sessionId, session.sessionId),
-      });
       invalidate();
       toast('Session deleted');
       if (location.pathname === `/factories/${factoryId}/user/threads/${session.sessionId}`) {
@@ -161,8 +133,8 @@ export function UserSessionsSection() {
             </DialogHeader>
             <div className="flex flex-col gap-4 px-5 pb-4">
               <Txt as="p" variant="ui-sm" className="text-icon4 m-0">
-                This deletes the <span className="text-icon6">{getUserSessionLabel(confirmDelete)}</span> session, its
-                checkout with any uncommitted changes, and its conversation. This can’t be undone.
+                This deletes the <span className="text-icon6">{getUserSessionLabel(confirmDelete)}</span> session and
+                its checkout with any uncommitted changes. This can’t be undone. Its conversation is kept.
               </Txt>
               <div className="flex justify-end gap-2">
                 <Button variant="ghost" onClick={() => setConfirmDelete(null)} disabled={deleteSession.isPending}>

@@ -671,6 +671,117 @@ describe('MastraMCPClient - isError handling', () => {
   });
 });
 
+describe('MastraMCPClient - tool-execution errors vs reconnection', () => {
+  let testServer: {
+    httpServer: HttpServer;
+    mcpServer: McpServer;
+    baseUrl: URL;
+    toolCalls: string[];
+    breakAfterToolCall: boolean;
+  };
+
+  beforeEach(async () => {
+    const toolCalls: string[] = [];
+    const httpServer: HttpServer = createServer();
+    const mcpServer = new McpServer(
+      { name: 'reconnect-test-server', version: '1.0.0' },
+      { capabilities: { logging: {}, tools: {} } },
+    );
+
+    mcpServer.registerTool(
+      'chargeCard',
+      {
+        description: 'Non-idempotent tool',
+        inputSchema: z.object({ amount: z.number().default(1) }),
+      },
+      async ({ amount }) => {
+        toolCalls.push(`charge:${amount}`);
+        return { content: [{ type: 'text', text: 'Session expired for object 42' }], isError: true };
+      },
+    );
+
+    let broken = false;
+    httpServer.on('request', async (req, res) => {
+      if (broken) {
+        req.socket.destroy();
+        return;
+      }
+      await mcpServer.close().catch(() => {});
+      const transport = new NodeStreamableHTTPServerTransport({ sessionIdGenerator: undefined });
+      await mcpServer.connect(transport);
+      await transport.handleRequest(req, res);
+      if (testServer?.breakAfterToolCall && toolCalls.length > 0) broken = true;
+    });
+
+    const baseUrl = await new Promise<URL>(resolve => {
+      httpServer.listen(0, '127.0.0.1', () => {
+        const addr = httpServer.address() as AddressInfo;
+        resolve(new URL(`http://127.0.0.1:${addr.port}/mcp`));
+      });
+    });
+
+    testServer = { httpServer, mcpServer, baseUrl, toolCalls, breakAfterToolCall: false };
+  });
+
+  afterEach(async () => {
+    await testServer?.mcpServer.close().catch(() => {});
+    testServer?.httpServer.close();
+  });
+
+  it('does not retry tool-execution errors that contain reconnectable substrings', async () => {
+    const client = new InternalMastraMCPClient({ name: 'no-retry-client', server: { url: testServer.baseUrl } });
+    await client.connect();
+    const tools = await client.tools();
+
+    await expect(tools['chargeCard'].execute?.({ amount: 100 })).rejects.toThrow('Session expired for object 42');
+    expect(testServer.toolCalls).toEqual(['charge:100']);
+
+    await client.disconnect().catch(() => {});
+  });
+
+  it('surfaces the reconnect failure when reconnect fails, not the original error', async () => {
+    const client = new InternalMastraMCPClient({ name: 'reconnect-fail-client', server: { url: testServer.baseUrl } });
+    await client.connect();
+
+    const sdkClient = (client as any).client as Client;
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [{ name: 'fetch', description: 'Fetches data', inputSchema: { type: 'object' as const } }],
+    });
+
+    const transportError = new Error('HTTP 404: session not found');
+    const reconnectError = new Error('Could not reconnect');
+    vi.spyOn(sdkClient, 'callTool').mockRejectedValueOnce(transportError);
+    vi.spyOn(client as any, 'reconnectAfterTransportFailure').mockRejectedValue(reconnectError);
+
+    const tools = await client.tools();
+
+    await expect(tools['fetch'].execute?.({})).rejects.toThrow('Could not reconnect');
+
+    await client.disconnect().catch(() => {});
+  });
+
+  it('surfaces the retry failure when reconnect succeeds but the retried call fails', async () => {
+    const client = new InternalMastraMCPClient({ name: 'retry-fail-client', server: { url: testServer.baseUrl } });
+    await client.connect();
+
+    const sdkClient = (client as any).client as Client;
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [{ name: 'fetch', description: 'Fetches data', inputSchema: { type: 'object' as const } }],
+    });
+
+    const transportError = new Error('HTTP 404: session not found');
+    const retryError = new Error('Retry failed after reconnect');
+    vi.spyOn(sdkClient, 'callTool').mockRejectedValueOnce(transportError).mockRejectedValueOnce(retryError);
+    vi.spyOn(client as any, 'reconnectAfterTransportFailure').mockResolvedValue(undefined);
+
+    const tools = await client.tools();
+
+    await expect(tools['fetch'].execute?.({})).rejects.toThrow('Retry failed after reconnect');
+
+    await client.disconnect().catch(() => {});
+  });
+});
+
 describe('MastraMCPClient - no outputSchema', () => {
   // MCP tools that do NOT declare an outputSchema return the full
   // CallToolResult envelope. We don't extract or transform the result.
@@ -734,9 +845,9 @@ describe('MastraMCPClient - no outputSchema', () => {
 });
 
 describe('MastraMCPClient - outputSchema with structuredContent', () => {
-  // When a tool has an outputSchema and returns structuredContent, the
-  // structuredContent is returned directly. We don't pass outputSchema to
-  // createTool so there's no Zod stripping — the MCP client validates via AJV.
+  // When a tool has an outputSchema and returns structuredContent, execute() still
+  // returns the structured object for callers/UI. toModelOutput maps MCP content
+  // text for the LLM without changing the execute return shape.
   let testServer: {
     httpServer: HttpServer;
     mcpServer: McpServer;
@@ -761,7 +872,100 @@ describe('MastraMCPClient - outputSchema with structuredContent', () => {
     testServer?.httpServer.close();
   });
 
-  it('should return structuredContent directly, preserving all fields', async () => {
+  it('should return content text for the model when structuredContent is also present', async () => {
+    const sdkClient = (client as any).client as Client;
+
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'calendar_search',
+          description: 'Search calendar events',
+          inputSchema: {
+            type: 'object' as const,
+            properties: {
+              startdate: { type: 'string' },
+              enddate: { type: 'string' },
+            },
+          },
+          outputSchema: {
+            type: 'object' as const,
+            properties: {
+              count: { type: 'number' },
+              events: { type: 'array', items: { type: 'object' } },
+            },
+          },
+        },
+      ],
+    });
+
+    const fullResult = {
+      success: true,
+      events: [{ id: 1, title: 'Meeting' }],
+      count: 1,
+      message: 'Found 1 calendar event(s)',
+      tool: 'microsoft_calendar_search',
+    };
+
+    vi.spyOn(sdkClient, 'callTool').mockResolvedValue({
+      structuredContent: fullResult,
+      content: [{ type: 'text', text: 'Found 1 calendar event(s)' }],
+      isError: false,
+    });
+
+    const tools = await client.tools();
+    const tool = tools['calendar_search'];
+    const result = await tool.execute?.({
+      startdate: '2026-02-27T00:00:00Z',
+      enddate: '2026-02-27T23:59:59Z',
+    });
+
+    expect(result).toEqual(fullResult);
+    expect(tool.toModelOutput?.(result)).toEqual({
+      type: 'text',
+      value: 'Found 1 calendar event(s)',
+    });
+  });
+
+  it('should fall back to json toModelOutput when content has no text blocks', async () => {
+    const sdkClient = (client as any).client as Client;
+
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'image_only_tool',
+          description: 'Returns structured output without text content',
+          inputSchema: {
+            type: 'object' as const,
+            properties: { query: { type: 'string' } },
+          },
+          outputSchema: {
+            type: 'object' as const,
+            properties: { count: { type: 'number' } },
+          },
+        },
+      ],
+    });
+
+    const fullResult = { count: 3 };
+
+    vi.spyOn(sdkClient, 'callTool').mockResolvedValue({
+      structuredContent: fullResult,
+      content: [{ type: 'image', data: 'abc', mimeType: 'image/png' }],
+      isError: false,
+    });
+
+    const tools = await client.tools();
+    const tool = tools['image_only_tool'];
+    const result = await tool.execute?.({ query: 'test' });
+
+    expect(result).toEqual(fullResult);
+    expect(tool.toModelOutput?.(result)).toEqual({
+      type: 'json',
+      value: fullResult,
+    });
+  });
+
+  it('should use JSON content text in toModelOutput when the server mirrors structuredContent in content', async () => {
     const sdkClient = (client as any).client as Client;
 
     vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
@@ -808,11 +1012,15 @@ describe('MastraMCPClient - outputSchema with structuredContent', () => {
       enddate: '2026-02-27T23:59:59Z',
     });
 
-    // structuredContent is returned directly — all fields preserved
+    // execute() keeps returning structuredContent for callers
     expect(result).toEqual(fullResult);
+    expect(tool.toModelOutput?.(result)).toEqual({
+      type: 'text',
+      value: JSON.stringify(fullResult),
+    });
   });
 
-  it('should return structuredContent even with generic object outputSchema', async () => {
+  it('should use JSON content text in toModelOutput for generic object outputSchema', async () => {
     const sdkClient = (client as any).client as Client;
 
     vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
@@ -844,6 +1052,169 @@ describe('MastraMCPClient - outputSchema with structuredContent', () => {
     const result = await tool.execute?.({ query: 'test' });
 
     expect(result).toEqual(fullResult);
+    expect(tool.toModelOutput?.(result)).toEqual({
+      type: 'text',
+      value: JSON.stringify(fullResult),
+    });
+  });
+
+  it('should return authored content text in toModelOutput when structuredContent is a scalar', async () => {
+    const sdkClient = (client as any).client as Client;
+
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'count_tool',
+          description: 'Returns a scalar structured result',
+          inputSchema: {
+            type: 'object' as const,
+            properties: { query: { type: 'string' } },
+          },
+          outputSchema: {
+            type: 'number' as const,
+          },
+        },
+      ],
+    });
+
+    vi.spyOn(sdkClient, 'callTool').mockResolvedValue({
+      structuredContent: 0,
+      content: [{ type: 'text', text: 'count is zero' }],
+      isError: false,
+    });
+
+    const tools = await client.tools();
+    const tool = tools['count_tool'];
+    const result = await tool.execute?.({ query: 'test' });
+
+    expect(result).toBe(0);
+    expect(tool.toModelOutput?.(result)).toEqual({
+      type: 'text',
+      value: 'count is zero',
+    });
+  });
+
+  it('should return authored content text in toModelOutput when structuredContent is null', async () => {
+    const sdkClient = (client as any).client as Client;
+
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'nullable_tool',
+          description: 'Returns null structured output',
+          inputSchema: {
+            type: 'object' as const,
+            properties: { query: { type: 'string' } },
+          },
+          outputSchema: {
+            type: 'null' as const,
+          },
+        },
+      ],
+    });
+
+    vi.spyOn(sdkClient, 'callTool').mockResolvedValue({
+      structuredContent: null,
+      content: [{ type: 'text', text: 'no data available' }],
+      isError: false,
+    });
+
+    const tools = await client.tools();
+    const tool = tools['nullable_tool'];
+    const result = await tool.execute?.({ query: 'test' });
+
+    expect(result).toBeNull();
+    expect(tool.toModelOutput?.(result)).toEqual({
+      type: 'text',
+      value: 'no data available',
+    });
+  });
+
+  it('should map authored content to the matching scalar invocation when the same value is returned twice', async () => {
+    const sdkClient = (client as any).client as Client;
+
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'count_tool',
+          description: 'Returns a scalar structured result',
+          inputSchema: {
+            type: 'object' as const,
+            properties: { query: { type: 'string' } },
+          },
+          outputSchema: {
+            type: 'number' as const,
+          },
+        },
+      ],
+    });
+
+    vi.spyOn(sdkClient, 'callTool')
+      .mockResolvedValueOnce({
+        structuredContent: 0,
+        content: [{ type: 'text', text: 'first zero' }],
+        isError: false,
+      })
+      .mockResolvedValueOnce({
+        structuredContent: 0,
+        content: [{ type: 'text', text: 'second zero' }],
+        isError: false,
+      });
+
+    const tools = await client.tools();
+    const tool = tools['count_tool'];
+
+    const first = await tool.execute?.({ query: 'first' });
+    const second = await tool.execute?.({ query: 'second' });
+
+    expect(first).toBe(0);
+    expect(second).toBe(0);
+    expect(tool.toModelOutput?.(first)).toEqual({ type: 'text', value: 'first zero' });
+    expect(tool.toModelOutput?.(second)).toEqual({ type: 'text', value: 'second zero' });
+  });
+
+  it('should preserve invocation order when concurrent scalar calls resolve out of order', async () => {
+    const sdkClient = (client as any).client as Client;
+
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'count_tool',
+          description: 'Returns a scalar structured result',
+          inputSchema: {
+            type: 'object' as const,
+            properties: { query: { type: 'string' } },
+          },
+          outputSchema: { type: 'number' as const },
+        },
+      ],
+    });
+
+    vi.spyOn(sdkClient, 'callTool').mockImplementation(async request => {
+      if (request.arguments?.query === 'first') {
+        await new Promise(resolve => setTimeout(resolve, 20));
+        return {
+          structuredContent: 0,
+          content: [{ type: 'text', text: 'first zero' }],
+          isError: false,
+        };
+      }
+      return {
+        structuredContent: 0,
+        content: [{ type: 'text', text: 'second zero' }],
+        isError: false,
+      };
+    });
+
+    const tools = await client.tools();
+    const tool = tools['count_tool'];
+    const [first, second] = await Promise.all([
+      tool.execute?.({ query: 'first' }),
+      tool.execute?.({ query: 'second' }),
+    ]);
+
+    expect(tool.toModelOutput?.(first)).toEqual({ type: 'text', value: 'first zero' });
+    expect(tool.toModelOutput?.(second)).toEqual({ type: 'text', value: 'second zero' });
   });
 });
 
@@ -3996,7 +4367,7 @@ describe('InternalMastraMCPClient - concurrent tool reconnects', () => {
     await client.disconnect();
     rejectToolCall(new Error('Connection closed'));
 
-    await expect(result).rejects.toThrow('Connection closed');
+    await expect(result).rejects.toThrow('MCP client was disconnected while recovering the failed transport');
     expect(connect).not.toHaveBeenCalled();
     expect(transport.close).toHaveBeenCalledOnce();
   });

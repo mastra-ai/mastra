@@ -183,7 +183,32 @@ Composio tools use uppercase slug format: `GITHUB_CREATE_ISSUE`, `SLACK_SEND_MES
 
 ### Authentication
 
-Connections use per-author scope by default. Set `defaultScope: 'caller-supplied'` to bucket authorization by the caller identity resolved from request context.
+Connections use per-author scope by default. Set `defaultScope: 'caller-supplied'` to bucket authorization by the caller identity resolved from `MASTRA_RESOURCE_ID_KEY` in request context. Ensure each authenticated request provides a stable, unique resource ID. When using `MastraAuthWorkos`, configure `mapUserToResourceId` to set this value from the authenticated user.
+
+### Connection management tools
+
+Composio provides tools for starting and monitoring authorization from an agent chat. When `allowedToolkits` is set, include `composio` to make these tools available:
+
+```typescript title="src/mastra/index.ts"
+const editor = new MastraEditor({
+  toolProviders: {
+    composio: new ComposioToolProvider({
+      apiKey: process.env.COMPOSIO_API_KEY!,
+      allowedToolkits: ['composio', 'gmail'],
+      defaultScope: 'caller-supplied',
+    }),
+  },
+})
+```
+
+Add only the connection management tools that the agent needs:
+
+| Tool | Behavior |
+| - | - |
+| `COMPOSIO_MANAGE_CONNECTIONS` | Creates an authorization link in chat through a session owned by the caller. |
+| `COMPOSIO_WAIT_FOR_CONNECTIONS` | Waits for the caller to finish authorization before the agent continues. |
+
+`COMPOSIO_WAIT_FOR_CONNECTIONS` is optional. Without it, complete authorization and return to the chat. Then ask the agent to continue. The connected account remains associated with the caller resource ID for later requests.
 
 ---
 
