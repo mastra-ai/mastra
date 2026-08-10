@@ -563,17 +563,23 @@ export interface ObservationalMemoryObservationConfig {
   activateOnProviderChange?: boolean;
 
   /**
-   * Token threshold above which synchronous (blocking) observation is forced.
-   * When set, the system will never block for observation between `messageTokens`
-   * and `blockAfter` — only async buffering and activation are used in that range.
-   * Once unobserved tokens exceed `blockAfter`, a synchronous observation runs as a
-   * last resort to prevent context window overflow.
+   * Token threshold above which buffered activation is allowed to overshoot the
+   * retention target. Above `blockAfter`, activation uses the smallest set of buffered
+   * chunks that reaches the retention target, even when that overshoots the target by
+   * more than the usual safeguard allows. It never activates more chunks than are needed
+   * to reach the retention target, and it changes the result only when the retention
+   * floor is above roughly 20,000 tokens — with the default `bufferActivation` it has no
+   * observable effect.
+   *
+   * Crossing `blockAfter` does not trigger a blocking observation. A synchronous
+   * (blocking) observation runs when the `messageTokens` threshold is reached and
+   * buffered activation did not happen.
    *
    * Accepts either:
-   * - A **multiplier** (1 < value < 2): multiplied by `messageTokens`.
-   *   e.g. `blockAfter: 1.5` with `messageTokens: 20_000` → blocks at 30,000 tokens.
-   * - An **absolute token count** (≥ 2): must be greater than `messageTokens`.
-   *   e.g. `blockAfter: 80_000` → blocks at 80,000 tokens.
+   * - A **multiplier** (1 ≤ value < 100): multiplied by `messageTokens`.
+   *   e.g. `blockAfter: 1.5` with `messageTokens: 20_000` → resolves to 30,000 tokens.
+   * - An **absolute token count** (≥ 100): must be greater than `messageTokens`.
+   *   e.g. `blockAfter: 80_000` → resolves to 80,000 tokens.
    *
    * Only relevant when `bufferTokens` is set. When `bufferTokens` is not set,
    * synchronous observation is used directly at `messageTokens` and this setting has no effect.

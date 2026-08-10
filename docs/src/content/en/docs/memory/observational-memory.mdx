@@ -437,7 +437,7 @@ With default settings, the context window doesn't grow unbounded. It oscillates 
 1. **Repeat**: History grows from \~6k back toward 30k and shrinks again. Each cycle appends to the observation log, which grows much more slowly than raw history.
 1. **Observations reach 40k**: The Reflector creates a smaller log from the current observations and any earlier reflections.
 
-In the normal buffered cycle, raw history oscillates between roughly 6k and 30k tokens. The observation log stays around 40k tokens, however long the conversation runs. These are activation thresholds rather than hard caps. If background buffering doesn't keep pace, history can grow past the threshold until `blockAfter` (default `1.2`) forces a synchronous observation at \~36k tokens (\~48k for reflection) as a safety ceiling.
+In the normal buffered cycle, raw history oscillates between roughly 6k and 30k tokens. The observation log stays around 40k tokens, however long the conversation runs. These are activation thresholds rather than hard caps. If background buffering doesn't keep pace, history can grow past the threshold. Above `blockAfter` (default `1.2`, \~36k tokens) activation is allowed to overshoot the retention target instead of activating fewer chunks. It does not drain the buffer, and with the default settings it removes the same amount of history as below the threshold. Reflection falls back to a synchronous run above its own `blockAfter` (\~48k tokens).
 
 With [`shareTokenBudget`](/reference/memory/observational-memory#shared-token-budget) enabled, the two budgets pool together. While the observation log is small, message history can expand into the unused observation space (up to \~70k tokens with the defaults) before observation triggers. It then shrinks as observations accumulate.
 
@@ -739,7 +739,7 @@ When message tokens reach the `messageTokens` threshold, buffered chunks activat
 
 Buffered observations also include continuation hints, a suggested next response and the current task, so the main agent maintains conversational continuity after activation shrinks the context window.
 
-If the agent produces messages faster than the Observer can process them, a `blockAfter` safety threshold forces a synchronous observation as a last resort. Buffered activation still preserves a minimum remaining context (the smaller of \~1k tokens or the configured retention floor).
+If the agent produces messages faster than the Observer can process them, the `blockAfter` safety threshold lets activation overshoot the retention target instead of activating fewer chunks. It never activates more chunks than are needed to reach that target, and with the default `bufferActivation` it changes nothing. A synchronous observation runs when the threshold is reached and buffered activation did not happen. Buffered activation usually preserves a minimum remaining context (the smaller of \~1k tokens or the configured retention floor), but a single buffered chunk that covers the whole pending window still activates and can leave less.
 
 Reflection works similarly, the Reflector runs in the background when observations reach a fraction of the reflection threshold.
 
@@ -749,13 +749,13 @@ Reflection works similarly, the Reflector runs in the background when observatio
 | - | - | - |
 | `observation.bufferTokens` | `0.2` | How often to buffer. `0.2` means every 20% of `messageTokens`. With the default 30k threshold, that's roughly every 6k tokens. Can also be an absolute token count (e.g. `5000`). |
 | `observation.bufferActivation` | `0.8` | How aggressively to clear the message window on activation. `0.8` means remove enough messages to keep only 20% of `messageTokens` remaining. Lower values keep more message history. |
-| `observation.blockAfter` | `1.2` | Safety net if buffering can't keep up. Values from 1 up to (but not including) 100 multiply `messageTokens`: at `1.2`, synchronous observation is forced at 36k tokens (1.2 × 30k). Values of 100 or more are absolute token counts (e.g. `50_000`). |
+| `observation.blockAfter` | `1.2` | Safety net if buffering can't keep up. Values from 1 up to (but not including) 100 multiply `messageTokens`: at `1.2`, the threshold is 36k tokens (1.2 × 30k). Above it, activation may overshoot the retention target instead of activating fewer chunks. Values of 100 or more are absolute token counts (e.g. `50_000`). |
 | `activateAfterIdle` | none | Forces buffered observations to activate after a period of inactivity, even before `observation.messageTokens` is reached. Accepts a numeric millisecond value such as `300_000`, duration strings like `"5m"` or `"1hr"`, or `"auto"` for a provider-aware prompt cache TTL. |
 | `activateOnProviderChange` | `false` | Forces buffered observations to activate when the next step uses a different `provider/model` than the one that produced the latest assistant step. Use this when switching providers or models would invalidate prompt cache reuse. |
 | `reflection.bufferActivation` | `0.5` | When to start background reflection. `0.5` means reflection begins when observations reach 50% of the `observationTokens` threshold. |
 | `reflection.activateAfterIdle` | none | Opts buffered reflections into idle activation. Reflections don't inherit top-level `activateAfterIdle`. |
 | `reflection.activateOnProviderChange` | `false` | Opts buffered reflections into provider-change activation. Reflections don't inherit top-level `activateOnProviderChange`. |
-| `reflection.blockAfter` | `1.2` | Safety threshold for reflection, same logic as observation. |
+| `reflection.blockAfter` | `1.2` | Safety threshold for reflection. Same value format as observation, but above it reflection runs synchronously when no buffered reflection is ready to activate. |
 
 If you're relying on prompt caching, set `activateAfterIdle` to `"auto"` or to a specific cache TTL. That way, once a thread has been idle long enough for the cache to expire, the next request can activate buffered observations first and send a smaller compressed context window.
 
