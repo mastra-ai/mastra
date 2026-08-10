@@ -405,13 +405,16 @@ describe('mountFactoryAuth /auth routes (enabled)', () => {
     expect(mockHandleCallback).not.toHaveBeenCalled();
   });
 
-  it('surfaces an IdP denial on /signin instead of looping back through login', async () => {
+  it('surfaces an IdP denial on /signin, keeping the intended destination for a retry', async () => {
     const { app } = buildApp();
+    const state = `uuid-1|${encodeURIComponent('/dashboard')}`;
     const res = await app.request(
-      '/auth/callback?error=access_denied&error_description=You%20do%20not%20have%20access',
+      `/auth/callback?error=access_denied&error_description=You%20do%20not%20have%20access&state=${state}`,
     );
     expect(res.status).toBe(302);
-    expect(res.headers.get('location')).toBe('/signin?error=access_denied&error_description=You+do+not+have+access');
+    expect(res.headers.get('location')).toBe(
+      '/signin?error=access_denied&error_description=You+do+not+have+access&returnTo=%2Fdashboard',
+    );
     expect(mockHandleCallback).not.toHaveBeenCalled();
   });
 

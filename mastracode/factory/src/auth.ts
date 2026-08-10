@@ -559,6 +559,7 @@ function providerAuthRoutes(provider: IMastraAuthProvider, publicUrl?: string): 
             const query = new URLSearchParams({ error: idpError.slice(0, 64) });
             const description = c.req.query('error_description');
             if (description) query.set('error_description', description.slice(0, 256));
+            if (returnTo !== '/') query.set('returnTo', returnTo);
             return c.redirect(`/signin?${query.toString()}`);
           }
           if (!code) {
