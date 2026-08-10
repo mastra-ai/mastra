@@ -51,6 +51,8 @@ Form the verdict. First, is the issue what it appears to be — genuine bug, con
 
 When multiple explanations remain plausible, pick the one the evidence best supports, record the ranking and why as an assumption, and list what would discriminate between them. Do not present candidates and wait — decide and move.
 
+For `mastra-ai/mastra`, mark a bug as direct `@mastra/core` ownership only when its primary fix traces to `packages/core`. Skip features, adjacent packages, and uncertain ownership.
+
 ## Output contract
 
 Write one concise **handoff** for whoever plans the fix. It must begin with the existing marker and then this classification header, followed by the detailed investigation:
@@ -110,6 +112,7 @@ After a GitHub comment is posted or updated, reconcile the triage labels before 
 - Add `auto-triaged` for every GitHub issue: `gh issue edit "$ISSUE" --add-label "auto-triaged"`.
 - Remove `status: needs triage` when it appears in the labels fetched in Phase 1: `gh issue edit "$ISSUE" --remove-label "status: needs triage"`.
 - Add `needs-approval` when `Route: Await approval`, or when the recommended next action needs maintainer approval or prep before someone should investigate, implement, close, or reject: `gh issue edit "$ISSUE" --add-label "needs-approval"`.
+- For confirmed direct core bugs in `mastra-ai/mastra`, add `@mastra/core`; never remove it.
 
 Apply only these label mutations. Do not remove `needs-approval` merely because a later refresh has a different route. For Linear issues, use the same structured handoff without attempting GitHub publication or label mutations.
 
