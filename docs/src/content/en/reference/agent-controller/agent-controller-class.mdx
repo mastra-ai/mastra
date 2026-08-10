@@ -488,7 +488,7 @@ Returns: `boolean`
 
 #### `getWorkspace()`
 
-Return a static controller workspace. Dynamic workspace factories return `undefined` — they resolve per session, so use `resolveWorkspace` instead.
+Return a static controller workspace. Dynamic workspace factories resolve per session and return `undefined` here, so use `resolveWorkspace` instead.
 
 ```typescript
 const workspace = controller.getWorkspace()

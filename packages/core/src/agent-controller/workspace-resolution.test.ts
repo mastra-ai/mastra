@@ -173,8 +173,11 @@ describe('AgentController workspace — dynamic factory', () => {
       tags: { projectPath: '/repo-b' },
     });
 
+    expect(sessionA.getWorkspace()).toBe(wsA);
     expect(sessionB.getWorkspace()).toBe(wsB);
+    expect(await controller.resolveWorkspace({ session: sessionA })).toBe(wsA);
     expect(await controller.resolveWorkspace({ session: sessionB })).toBe(wsB);
+    expect(factory).toHaveBeenCalledTimes(2);
     expect(controller.getWorkspace()).toBeUndefined();
     expect(controller.isWorkspaceReady()).toBe(true);
   });

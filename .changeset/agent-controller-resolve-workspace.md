@@ -2,4 +2,6 @@
 '@mastra/core': patch
 ---
 
-Stop `AgentController.resolveWorkspace` from pinning one session's workspace onto the controller. It cached the resolved instance on `this.workspace`, which replaced the dynamic workspace factory: every session created afterwards skipped resolution and inherited that instance, so on a multi-session controller one user's workspace became everyone's. It also made `isWorkspaceReady()` flip from `true` to `false` for factory configs. `resolveWorkspace` now returns the workspace the session already resolved at creation, and only falls back to the factory for a session created without one — which also means slash commands read the same instance the session's runs use, instead of a second one materialized from a fresh context.
+Fixed `AgentController.resolveWorkspace` handing one session's workspace to every session created after it. On a controller configured with a dynamic workspace factory, the first call cached its result over the factory itself, so later sessions skipped resolution and ran against the first session's workspace instead of their own.
+
+`resolveWorkspace` now returns the workspace a session already resolved at creation, and caches nothing on the controller. Two smaller fixes come with it: `isWorkspaceReady()` no longer flips to `false` for factory configs, and slash commands read the same workspace instance the session's runs use.
