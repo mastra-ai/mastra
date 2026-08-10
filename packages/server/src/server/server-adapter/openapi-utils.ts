@@ -137,6 +137,7 @@ function convertToJsonSchema(spec: OpenAPIRoute): any {
     summary: spec.summary,
     description: spec.description,
     tags: spec.tags,
+    deprecated: spec.deprecated,
     responses: {},
   };
 

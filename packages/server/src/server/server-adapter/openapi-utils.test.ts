@@ -58,6 +58,7 @@ describe('convertCustomRoutesToOpenAPIPaths', () => {
       method: 'POST',
       path: '/widgets/:widgetId',
       responseType: 'json',
+      deprecated: true,
       pathParamSchema: z.object({ widgetId: z.string() }),
       bodySchema: z.object({ name: z.string() }),
       responseSchema: z.object({ id: z.string() }),
@@ -67,6 +68,7 @@ describe('convertCustomRoutesToOpenAPIPaths', () => {
     expect(route._mastraSchemaRoute).toBe(true);
     const paths = convertCustomRoutesToOpenAPIPaths([route satisfies ApiRoute]);
 
+    expect(paths['/widgets/{widgetId}'].post.deprecated).toBe(true);
     expect(paths['/widgets/{widgetId}'].post.parameters).toEqual([
       expect.objectContaining({ name: 'widgetId', in: 'path', required: true }),
     ]);
