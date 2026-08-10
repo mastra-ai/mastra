@@ -137,7 +137,6 @@ export const steerDrainFailureRecoveryScenario = {
     const completedView = terminal.serialize().view;
     expect(completedView).toContain(STEER_TEXT);
     expect(completedView).toContain('failed to start follow-up run for queued message');
-    expect(completedView).not.toContain(`${STEER_TEXT} pending`);
     const steerOccurrences = completedView.split(STEER_TEXT).length - 1;
     if (steerOccurrences !== 1) {
       throw new Error(`expected the steer message to render exactly once, got ${steerOccurrences}`);

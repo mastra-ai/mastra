@@ -1260,18 +1260,21 @@ export class AgentThreadStreamRuntime {
         runId: failedRunId,
         error: `failed to start follow-up run for queued message: ${getErrorFromUnknown(err).message}; the message was requeued and will deliver on the next turn`,
       });
+      if (previousRun.runId !== failedRunId) {
+        // A synchronous throw from the lease transfer leaves the lease still
+        // owned by the finished previous run with its renewal timer alive,
+        // which would hold the key forever. Release it unconditionally before
+        // the handoff below: the handoff helpers can report work without
+        // starting a local run (e.g. the idle drain's lease-lost branch), so
+        // gating this release on their outcome would leak the lease. Releasing
+        // is owner-guarded, so this is a no-op when the transfer completed and
+        // the failed run owned the lease.
+        this.#releaseThreadLease(pubsub, key, previousRun.runId);
+      }
       void this.#drainPendingContinuations(state, pubsub, key, failedRunId).then(async started => {
         if (started) return;
         if (await this.#drainPendingIdleSignals(state, pubsub, key, failedRunId)) return;
         this.#releaseThreadLease(pubsub, key, failedRunId);
-        if (previousRun.runId !== failedRunId) {
-          // A synchronous throw from the lease transfer leaves the lease still
-          // owned by the finished previous run with its renewal timer alive,
-          // which would hold the key forever. Releasing is owner-guarded, so
-          // this is a no-op when the transfer completed and the failed run
-          // owned the lease.
-          this.#releaseThreadLease(pubsub, key, previousRun.runId);
-        }
       });
       return;
     }

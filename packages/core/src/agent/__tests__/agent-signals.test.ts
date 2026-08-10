@@ -3191,6 +3191,53 @@ describe('Agent signals', () => {
     expect(JSON.stringify(streamMock.mock.calls[0]?.[0])).toContain('steer follow-up');
   });
 
+  it('releases the stale previous-run lease on a transfer throw even when an idle signal is queued', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new ControlledLeasePubSub();
+    vi.spyOn(pubsub, 'transferLease').mockImplementationOnce(() => {
+      throw new Error('lease backend down');
+    });
+    const streamMock = vi.fn().mockResolvedValue({} as any);
+    const agent = {
+      id: 'drain-lease-throw-idle-agent',
+      stream: streamMock,
+    } as unknown as Agent<any, any, any, any>;
+    const runId = 'drain-lease-throw-idle-run';
+    const threadId = 'drain-lease-throw-idle-thread';
+    const resourceId = 'drain-lease-throw-idle-user';
+    let finishRun!: () => void;
+    const finished = new Promise<void>(resolve => {
+      finishRun = resolve;
+    });
+
+    runtime.registerRun(
+      agent,
+      createFakeThreadRun(runId, finished),
+      { memory: { thread: threadId, resource: resourceId } } as any,
+      pubsub,
+    );
+
+    const result = runtime.sendMessage(agent, 'steer follow-up', { resourceId, threadId }, pubsub);
+    await expect(result.accepted).resolves.toMatchObject({ action: 'deliver', runId });
+    // Queue an idle message while the run is active so the failure path's
+    // handoff has idle work to consider. The idle drain reports work on its
+    // lease-lost branch without starting a local run, so a release gated on
+    // the handoff outcome would be skipped here and the finished run would
+    // hold the lease forever.
+    const queued = runtime.queueMessage(agent, 'idle follow-up', { resourceId, threadId }, pubsub);
+    await expect(queued.accepted).resolves.toMatchObject({ action: 'deliver' });
+
+    finishRun();
+    await waitForCondition(() =>
+      pubsub.publishedData.some(
+        data => data?.type === 'run-failed' && String(data?.error).includes('failed to start follow-up run'),
+      ),
+    );
+
+    // The finished run must not own the lease, no matter what the handoff did.
+    await waitForCondition(() => ![...pubsub.owners.values()].includes(runId));
+  });
+
   it('redelivers the restored signal exactly once on the next natural drain trigger', async () => {
     const runtime = new AgentThreadStreamRuntime();
     const streamMock = vi
@@ -3284,8 +3331,12 @@ describe('Agent signals', () => {
     await nextTick();
     await nextTick();
 
-    // The lease was handed to the continuation, not released.
-    expect(releaseSpy).not.toHaveBeenCalled();
+    // The lease was handed to the continuation, not released. The failure path
+    // does release the finished previous run's id unconditionally (an
+    // owner-guarded no-op here), so assert ownership rather than call count:
+    // the continuation's lease must survive, and nothing may release its runId.
+    expect(releaseSpy.mock.calls.some(call => call[1] === continuation.runId)).toBe(false);
+    expect([...pubsub.owners.values()]).toContain(continuation.runId);
 
     // The failed steer signal is still queued for a later drain, untouched by
     // the continuation handoff.
