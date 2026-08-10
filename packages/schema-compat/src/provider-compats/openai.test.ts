@@ -151,19 +151,34 @@ describe('OpenAISchemaCompatLayer', () => {
       expect(value).not.toHaveProperty('minLength');
     });
 
-    it('keeps type-independent enum constraints once on the containing property', () => {
-      const result = compat.processToJSONSchema({
+    it('keeps enum and const constraints once while accepting optional nulls', async () => {
+      const compatSchema = compat.processToCompatSchema({
         type: 'object',
         properties: {
           mode: { type: ['string', 'integer'], enum: ['fast', 'slow', 1, 2] },
+          status: { type: 'string', const: 'ready' },
         },
         required: [],
-      } as any) as Record<string, any>;
+      } as any);
+      const result = compatSchema['~standard'].jsonSchema.input({ target: 'draft-07' }) as Record<string, any>;
 
       const mode = result.properties.mode;
-      expect(mode.enum).toEqual(['fast', 'slow', 1, 2]);
+      expect(mode.enum).toEqual(['fast', 'slow', 1, 2, null]);
       expect(mode.anyOf).toEqual([{ type: 'string' }, { type: 'integer' }, { type: 'null' }]);
       expect(JSON.stringify(mode).split('"enum"').length - 1).toBe(1);
+
+      const status = result.properties.status;
+      expect(status.enum).toEqual(['ready', null]);
+      expect(status).not.toHaveProperty('const');
+
+      const nullResult: any = await compatSchema['~standard'].validate({ mode: null, status: null });
+      expect(nullResult).not.toHaveProperty('issues');
+      expect(nullResult.value).toEqual({ mode: undefined, status: undefined });
+
+      const validResult: any = await compatSchema['~standard'].validate({ mode: 'fast', status: 'ready' });
+      expect(validResult).not.toHaveProperty('issues');
+      const invalidResult: any = await compatSchema['~standard'].validate({ mode: 'invalid', status: 'waiting' });
+      expect(invalidResult).toHaveProperty('issues');
     });
 
     it('does not duplicate subtrees for single-type optional object properties', () => {

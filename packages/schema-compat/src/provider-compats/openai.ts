@@ -1,4 +1,4 @@
-import type { JSONSchema7 } from 'json-schema';
+import type { JSONSchema7, JSONSchema7Type } from 'json-schema';
 import { z } from 'zod';
 import type { ZodType as ZodTypeV3, ZodObject as ZodObjectV3 } from 'zod/v3';
 import type { ZodType as ZodTypeV4, ZodObject as ZodObjectV4 } from 'zod/v4';
@@ -292,6 +292,16 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
 
               delete prop.anyOf;
               delete prop.type;
+
+              if ('const' in prop) {
+                const constValue = prop.const as JSONSchema7Type;
+                const enumAllowsConst =
+                  !prop.enum || prop.enum.some(value => JSON.stringify(value) === JSON.stringify(constValue));
+                prop.enum = enumAllowsConst ? [constValue, null] : [null];
+                delete prop.const;
+              } else if (prop.enum && !prop.enum.includes(null)) {
+                prop.enum = [...prop.enum, null];
+              }
 
               // Build branch-local schemas: type-specific keywords move into the
               // branch of their matching type so nested subtrees are serialized once.
