@@ -380,6 +380,26 @@ describe('MCPServer with protocolVersion 2026-07-28 (dual-era HTTP)', () => {
     });
     expect(blockedOrigin.statusCode).toBe(403);
     expect(blockedOrigin.body).toContain('Invalid Origin header: https://blocked.example');
+
+    const allowedHostAndOrigin = await requestModernServerWithOptions({
+      options: {
+        enableDnsRebindingProtection: true,
+        allowedHosts: ['allowed.example'],
+        allowedOrigins: ['https://allowed.example'],
+      },
+      headers: { Host: 'allowed.example', Origin: 'https://allowed.example' },
+    });
+    expect(allowedHostAndOrigin.statusCode).not.toBe(403);
+    expect(allowedHostAndOrigin.startError).toBeUndefined();
+
+    const missingOrigin = await requestModernServerWithOptions({
+      options: {
+        enableDnsRebindingProtection: true,
+        allowedOrigins: ['https://allowed.example'],
+      },
+    });
+    expect(missingOrigin.statusCode).not.toBe(403);
+    expect(missingOrigin.startError).toBeUndefined();
   });
 });
 
