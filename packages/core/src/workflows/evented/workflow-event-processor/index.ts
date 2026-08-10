@@ -2542,9 +2542,11 @@ export class WorkflowEventProcessor extends EventProcessor {
             id: stepId,
             // Strip completion fields of the step's *previous* run (a stale
             // `output` would otherwise re-publish state blobs), then re-add
-            // the fields describing the current suspension.
+            // the fields describing the current suspension.  Use the
+            // step-execution timestamp so a delayed or retried event doesn't
+            // report a different time than the persisted result.
             ...omitPriorCompletionFields(prevResult),
-            suspendedAt: Date.now(),
+            suspendedAt: prevResult.suspendedAt,
             suspendPayload: prevResult.suspendPayload,
             ...(prevResult.suspendOutput !== undefined ? { suspendOutput: prevResult.suspendOutput } : {}),
           },
