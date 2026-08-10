@@ -19,13 +19,13 @@ describe('MCPServer with protocolVersion 2026-07-28 over stdio', () => {
       { name: 'modern-era-stdio-client', version: '1.0.0' },
       { versionNegotiation: { mode: { pin: '2026-07-28' } } },
     );
-    await client.connect(
-      new StdioClientTransport({
-        command: process.execPath,
-        args: [tsxCli, fixturePath],
-        stderr: 'pipe',
-      }),
-    );
+    const transport = new StdioClientTransport({
+      command: process.execPath,
+      args: [tsxCli, fixturePath],
+      stderr: 'pipe',
+    });
+    transport.stderr?.on('data', (chunk: Buffer) => process.stderr.write(chunk));
+    await client.connect(transport);
 
     const changed = new Promise<void>(resolve => {
       client!.setNotificationHandler('notifications/tools/list_changed', async () => resolve());

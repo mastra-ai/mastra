@@ -21,7 +21,12 @@ import { makeCoreTool } from '@mastra/core/utils';
 import type { Workflow } from '@mastra/core/workflows';
 import { PromptSchema } from '@modelcontextprotocol/core';
 import { RESOURCE_MIME_TYPE, RESOURCE_URI_META_KEY } from '@modelcontextprotocol/ext-apps';
-import { NodeStreamableHTTPServerTransport, toNodeHandler } from '@modelcontextprotocol/node';
+import {
+  hostHeaderValidation,
+  NodeStreamableHTTPServerTransport,
+  originValidation,
+  toNodeHandler,
+} from '@modelcontextprotocol/node';
 import type { StreamableHTTPServerTransportOptions, NodeMcpRequestHandler } from '@modelcontextprotocol/node';
 import { Server, ProtocolError, ProtocolErrorCode, createMcpHandler } from '@modelcontextprotocol/server';
 import type {
@@ -111,20 +116,13 @@ type MCPServerStreamableHTTPOptions = Partial<StreamableHTTPServerTransportOptio
   serverlessStreaming?: boolean;
 };
 
-const MODERN_ERA_HTTP_OPTION_KEYS = new Set([
+const ACCEPTED_MODERN_ERA_HTTP_OPTION_KEYS = new Set([
   'allowedHosts',
   'allowedOrigins',
   'enableDnsRebindingProtection',
-  'enableJsonResponse',
-  'eventStore',
-  'keepAliveMs',
-  'onsessionclosed',
-  'onsessioninitialized',
-  'retryInterval',
   'serverless',
   'serverlessStreaming',
   'sessionIdGenerator',
-  'supportedProtocolVersions',
 ]);
 
 /**
@@ -575,17 +573,10 @@ export class MCPServer extends MCPServerBase {
     if (!options) return;
 
     const incompatibleOptions = new Set(
-      Object.keys(options).filter(option => !MODERN_ERA_HTTP_OPTION_KEYS.has(option)),
+      Object.keys(options).filter(option => !ACCEPTED_MODERN_ERA_HTTP_OPTION_KEYS.has(option)),
     );
 
     if (options.sessionIdGenerator !== undefined) incompatibleOptions.add('sessionIdGenerator');
-    if (options.onsessioninitialized !== undefined) incompatibleOptions.add('onsessioninitialized');
-    if (options.onsessionclosed !== undefined) incompatibleOptions.add('onsessionclosed');
-    if (options.eventStore !== undefined) incompatibleOptions.add('eventStore');
-    if (options.enableJsonResponse !== undefined) incompatibleOptions.add('enableJsonResponse');
-    if (options.retryInterval !== undefined) incompatibleOptions.add('retryInterval');
-    if (options.keepAliveMs !== undefined) incompatibleOptions.add('keepAliveMs');
-    if (options.supportedProtocolVersions !== undefined) incompatibleOptions.add('supportedProtocolVersions');
     if (options.serverless === false) incompatibleOptions.add('serverless');
     if (options.serverlessStreaming === false) incompatibleOptions.add('serverlessStreaming');
 
@@ -601,37 +592,21 @@ export class MCPServer extends MCPServerBase {
     });
   }
 
-  private validateModernEraRequestHeaders(
+  private validateHTTPRequestHeaders(
     req: http.IncomingMessage,
     res: http.ServerResponse<http.IncomingMessage>,
     options?: MCPServerStreamableHTTPOptions,
   ): boolean {
     if (!options?.enableDnsRebindingProtection) return true;
 
-    const host = req.headers.host;
-    if (options.allowedHosts?.length && (!host || !options.allowedHosts.includes(host))) {
-      res.writeHead(403, { 'Content-Type': 'application/json' });
-      res.end(
-        JSON.stringify({
-          jsonrpc: '2.0',
-          error: { code: -32000, message: `Invalid Host header: ${host}` },
-          id: null,
-        }),
-      );
-      return false;
+    if (options.allowedHosts?.length) {
+      const allowedHostnames = options.allowedHosts.map(host => new URL(`http://${host}`).hostname);
+      if (!hostHeaderValidation(allowedHostnames)(req, res)) return false;
     }
 
-    const origin = req.headers.origin;
-    if (options.allowedOrigins?.length && origin && !options.allowedOrigins.includes(origin)) {
-      res.writeHead(403, { 'Content-Type': 'application/json' });
-      res.end(
-        JSON.stringify({
-          jsonrpc: '2.0',
-          error: { code: -32000, message: `Invalid Origin header: ${origin}` },
-          id: null,
-        }),
-      );
-      return false;
+    if (options.allowedOrigins?.length) {
+      const allowedOriginHostnames = options.allowedOrigins.map(origin => new URL(origin).hostname);
+      if (!originValidation(allowedOriginHostnames)(req, res)) return false;
     }
 
     return true;
@@ -2088,15 +2063,15 @@ export class MCPServer extends MCPServerBase {
       return;
     }
 
+    if (this.servesModernEra()) this.assertModernEraHTTPOptions(options);
+    if (!this.validateHTTPRequestHeaders(req, res, options)) return;
+
     // 2026-07-28 revision: serve every request through the SDK's dual-era handler.
     // Modern clients are served natively (stateless, per-request envelope); legacy
     // clients are served by the handler's built-in stateless fallback on the same
     // endpoint. Stateless declarations and request security guards remain valid;
     // session and handler-lifetime options fail explicitly instead of being ignored.
     if (this.servesModernEra()) {
-      this.assertModernEraHTTPOptions(options);
-      if (!this.validateModernEraRequestHeaders(req, res, options)) return;
-
       try {
         await this.getModernEraNodeHandler()(req, res);
       } catch (error) {

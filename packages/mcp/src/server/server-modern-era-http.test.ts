@@ -57,17 +57,19 @@ const authInfo: AuthInfo = {
 
 type StartHTTPTransportOptions = NonNullable<Parameters<MCPServer['startHTTP']>[0]['options']>;
 
-const requestModernServerWithOptions = async ({
+const requestServerWithOptions = async ({
   options,
   headers,
+  modernEra = true,
 }: {
   options: StartHTTPTransportOptions;
   headers?: Record<string, string>;
+  modernEra?: boolean;
 }): Promise<{ statusCode: number; body: string; startError?: unknown }> => {
   const server = new MCPServer({
-    name: 'Modern Option Test Server',
+    name: 'HTTP Option Test Server',
     version: '1.0.0',
-    protocolVersion: '2026-07-28',
+    ...(modernEra ? { protocolVersion: '2026-07-28' as const } : {}),
     tools: makeTools(),
   });
   let startError: unknown;
@@ -83,7 +85,7 @@ const requestModernServerWithOptions = async ({
     } catch (error) {
       startError = error;
       res.writeHead(500, { 'Content-Type': 'text/plain' });
-      res.end(error instanceof Error ? error.message : String(error));
+      res.end('Failed to start MCP request');
     }
   });
   const port = await listenOnFreePort(httpServer);
@@ -309,6 +311,26 @@ describe('MCPServer with protocolVersion 2026-07-28 (dual-era HTTP)', () => {
     }
   });
 
+  it('delivers opted-in tool logs to a legacy client through the stateless fallback', async () => {
+    const client = new Client({ name: 'legacy-log-client', version: '1.0.0' });
+    await client.connect(new StreamableHTTPClientTransport(baseUrl));
+    const logged = new Promise<unknown>(resolve => {
+      client.setNotificationHandler('notifications/message', async notification => {
+        resolve(notification.params.data);
+      });
+    });
+    try {
+      await client.setLoggingLevel('info');
+      const result = await client.callTool({ name: 'loggingTool', arguments: {} });
+      const toolResult = result as { isError?: boolean; content: Array<{ text?: string }> };
+      expect(toolResult.isError).toBeFalsy();
+      expect(toolResult.content[0]?.text).toBe('logged');
+      await expect(logged).resolves.toEqual({ message: 'log from loggingTool' });
+    } finally {
+      await client.close();
+    }
+  });
+
   it('rejects session and handler-lifetime options instead of ignoring them', async () => {
     const cases: Array<[string, StartHTTPTransportOptions]> = [
       ['sessionIdGenerator', { sessionIdGenerator: () => 'session-id' }],
@@ -332,15 +354,16 @@ describe('MCPServer with protocolVersion 2026-07-28 (dual-era HTTP)', () => {
     ];
 
     for (const [name, options] of cases) {
-      const result = await requestModernServerWithOptions({ options });
+      const result = await requestServerWithOptions({ options });
       expect(result.statusCode).toBe(500);
       expect(result.startError).toBeInstanceOf(Error);
-      expect(result.body).toContain(`startHTTP options \"${name}\" are incompatible`);
+      expect((result.startError as Error).message).toContain(`startHTTP options \"${name}\" are incompatible`);
+      expect(result.body).toBe('Failed to start MCP request');
     }
   });
 
   it('preserves DNS rebinding protection on the modern HTTP path', async () => {
-    const blockedHost = await requestModernServerWithOptions({
+    const blockedHost = await requestServerWithOptions({
       options: {
         enableDnsRebindingProtection: true,
         allowedHosts: ['allowed.example'],
@@ -348,9 +371,9 @@ describe('MCPServer with protocolVersion 2026-07-28 (dual-era HTTP)', () => {
       headers: { Host: 'blocked.example' },
     });
     expect(blockedHost.statusCode).toBe(403);
-    expect(blockedHost.body).toContain('Invalid Host header: blocked.example');
+    expect(blockedHost.body).toContain('Invalid Host: blocked.example');
 
-    const blockedOrigin = await requestModernServerWithOptions({
+    const blockedOrigin = await requestServerWithOptions({
       options: {
         enableDnsRebindingProtection: true,
         allowedOrigins: ['https://allowed.example'],
@@ -358,7 +381,27 @@ describe('MCPServer with protocolVersion 2026-07-28 (dual-era HTTP)', () => {
       headers: { Origin: 'https://blocked.example' },
     });
     expect(blockedOrigin.statusCode).toBe(403);
-    expect(blockedOrigin.body).toContain('Invalid Origin header: https://blocked.example');
+    expect(blockedOrigin.body).toContain('Invalid Origin: blocked.example');
+
+    const allowedHostAndOrigin = await requestServerWithOptions({
+      options: {
+        enableDnsRebindingProtection: true,
+        allowedHosts: ['allowed.example'],
+        allowedOrigins: ['https://allowed.example'],
+      },
+      headers: { Host: 'allowed.example', Origin: 'https://allowed.example' },
+    });
+    expect(allowedHostAndOrigin.statusCode).not.toBe(403);
+    expect(allowedHostAndOrigin.startError).toBeUndefined();
+
+    const missingOrigin = await requestServerWithOptions({
+      options: {
+        enableDnsRebindingProtection: true,
+        allowedOrigins: ['https://allowed.example'],
+      },
+    });
+    expect(missingOrigin.statusCode).not.toBe(403);
+    expect(missingOrigin.startError).toBeUndefined();
   });
 });
 
@@ -402,6 +445,21 @@ describe('MCPServer without protocolVersion (legacy default)', () => {
     } finally {
       await client.close();
     }
+  });
+
+  it('applies DNS rebinding protection before legacy transport dispatch', async () => {
+    const blockedHost = await requestServerWithOptions({
+      modernEra: false,
+      options: {
+        serverless: true,
+        enableDnsRebindingProtection: true,
+        allowedHosts: ['allowed.example'],
+      },
+      headers: { Host: 'blocked.example' },
+    });
+
+    expect(blockedHost.statusCode).toBe(403);
+    expect(blockedHost.body).toContain('Invalid Host: blocked.example');
   });
 
   it('fails loudly when a client pinned to 2026-07-28 connects to a legacy-only server', async () => {
