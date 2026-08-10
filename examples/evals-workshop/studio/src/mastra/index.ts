@@ -26,11 +26,12 @@ import { MastraEditor } from '@mastra/editor';
 import { LibSQLStore } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
 import { MastraStorageExporter, Observability, SensitiveDataFilter } from '@mastra/observability';
+import { LocalFilesystem, Workspace } from '@mastra/core/workspace';
 import { NIMBUS_KNOWLEDGE } from '@workshop/shared/data';
 import { echoModel, hasApiKey, JUDGE_MODEL } from '@workshop/shared/models';
 import { answerAccuracyScorer, answerRelevancy, supportRubricScorer, toxicity } from '@workshop/shared/scorers';
 import { supportWorkflow } from '@workshop/shared/workflow';
-import { DATABASE_URL, DUCKDB_PATH } from './db-path.ts';
+import { DATABASE_URL, DUCKDB_PATH, WORKSPACE_PATH } from './db-path.ts';
 
 /**
  * Storage is a composite, and the reason is worth understanding rather than
@@ -198,12 +199,47 @@ export const observability = new Observability({
  */
 export const editor = new MastraEditor({ source: 'db' });
 
+/**
+ * The workspace — a directory on disk that Studio can browse, search, and read
+ * skills out of.
+ *
+ * Two things come from this, and they are worth separating because they are
+ * often confused:
+ *
+ *   Files   `workspace/` is browsable under Studio's **Workspaces** page. Any
+ *           file you drop in there is readable and searchable from the UI.
+ *   Skills  every directory under `workspace/skills/` containing a `SKILL.md`
+ *           is discovered as a skill — name and description from the
+ *           frontmatter, body and `references/` as the content.
+ *
+ * Skills are just markdown. `skills/eval-triage/` has a `references/` file
+ * alongside its `SKILL.md`, which is the multi-file shape the spec expects and
+ * what the registry at skills.sh distributes.
+ *
+ * Registering it here rather than on the agent makes it the *global*
+ * workspace: agents inherit it unless they declare their own, so the support
+ * agent picks up the skills without needing its own copy.
+ *
+ * `basePath` is absolute deliberately — see db-path.ts. Under `mastra dev` the
+ * process runs from `src/mastra/public`, so a relative path would browse an
+ * empty directory and find no skills, with nothing logged to explain it.
+ */
+export const workspace = new Workspace({
+  id: 'workshop-workspace',
+  name: 'Nimbus Support Workspace',
+  filesystem: new LocalFilesystem({ basePath: WORKSPACE_PATH }),
+  // Paths are relative to the workspace root, and each entry is a directory
+  // *containing* skill directories — not a skill directory itself.
+  skills: ['skills'],
+});
+
 export const mastra = new Mastra({
   storage,
   agents: { 'support-agent': supportAgent },
   workflows: { 'support-workflow': supportWorkflow },
   observability,
   editor,
+  workspace,
   // Registered here so their scores persist and Studio can resolve them by id.
   scorers: {
     'answer-accuracy': answerAccuracyScorer as any,

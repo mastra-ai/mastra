@@ -38,3 +38,14 @@ export const DATABASE_URL = process.env.DATABASE_URL ?? `file:${join(findProject
  * create their own copy and the score charts would stay empty.
  */
 export const DUCKDB_PATH = process.env.DUCKDB_PATH ?? join(findProjectRoot(), 'observability.duckdb');
+
+/**
+ * Absolute path to the workspace root — the directory Studio's Workspaces
+ * page browses, and the one the skills under `skills/` are read from.
+ *
+ * Same trap as above, and worse here: a relative `basePath` would resolve
+ * against `<project>/src/mastra/public` under `mastra dev`, so the Files tab
+ * would show an empty directory and the Skills tab would find nothing, with
+ * no error to explain either.
+ */
+export const WORKSPACE_PATH = process.env.WORKSPACE_PATH ?? join(findProjectRoot(), 'workspace');
