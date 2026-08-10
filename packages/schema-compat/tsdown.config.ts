@@ -19,7 +19,7 @@ export default defineConfig({
   treeshake: true,
   sourcemap: true,
   deps: {
-    alwaysBundle: ['@internal/ai-sdk-v4', 'ajv'],
+    alwaysBundle: ['@internal/ai-sdk-v4', 'ajv', 'zod-to-json-schema'],
   },
   onSuccess: async () => {
     await generateTypes(
