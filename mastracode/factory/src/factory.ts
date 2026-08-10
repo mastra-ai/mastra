@@ -65,6 +65,7 @@ import { SandboxFleet } from './sandbox/fleet.js';
 import { registerSandboxReattach } from './sandbox/reattach.js';
 import { handleServerError } from './server-error.js';
 import { observeSessionFilesystem } from './session/filesystem-capture.js';
+import { observeSessionFirstExec } from './session/first-exec-capture.js';
 import { observeSessionFirstMessage } from './session/first-message-capture.js';
 import { createSpaStaticMiddleware, resolveUiDistDir } from './spa-static.js';
 import { createStateSigner } from './state-signing.js';
@@ -817,6 +818,9 @@ export class MastraFactory {
         sourceControl: sourceControlStorage.forIntegration('github'),
       });
       observeSessionFirstMessage(session, {
+        sourceControl: sourceControlStorage.forIntegration('github'),
+      });
+      observeSessionFirstExec(session, {
         sourceControl: sourceControlStorage.forIntegration('github'),
       });
     });
