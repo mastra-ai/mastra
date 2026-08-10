@@ -92,22 +92,22 @@ export async function resolveFactorySourceRepository(args: {
   // row can sit ahead of the healthy one. Try every candidate and skip the ones
   // that no longer resolve rather than failing on the first.
   for (const connection of candidates) {
-    let projectRepositories;
+    let resolved;
     try {
-      projectRepositories = await sourceControl.projectRepositories.list({ orgId, connectionId: connection.id });
+      const projectRepositories = await sourceControl.projectRepositories.list({ orgId, connectionId: connection.id });
+      const resolvedRepositories = await Promise.all(
+        projectRepositories.map(async projectRepository => ({
+          projectRepository,
+          repository: await sourceControl.repositories.get({ orgId, id: projectRepository.repositoryId }),
+        })),
+      );
+      resolved = resolvedRepositories.find(
+        candidate => candidate.repository && (!repositorySlug || candidate.repository.slug === repositorySlug),
+      );
     } catch {
       // The connection no longer resolves (e.g. its installation was deleted).
       continue;
     }
-    const resolvedRepositories = await Promise.all(
-      projectRepositories.map(async projectRepository => ({
-        projectRepository,
-        repository: await sourceControl.repositories.get({ orgId, id: projectRepository.repositoryId }),
-      })),
-    );
-    const resolved = resolvedRepositories.find(
-      candidate => candidate.repository && (!repositorySlug || candidate.repository.slug === repositorySlug),
-    );
     if (!resolved?.repository) continue;
 
     return {
