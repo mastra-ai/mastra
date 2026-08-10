@@ -9,6 +9,7 @@
 
 import type { ClickHouseClient } from '@clickhouse/client';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import type { IMastraLogger } from '@mastra/core/logger';
 import { createStorageErrorId, ObservabilityStorage } from '@mastra/core/storage';
 import type {
   ObservabilityStorageStrategy,
@@ -264,19 +265,29 @@ async function filterAppliedRetention(
 async function assertExistingTablesCompatibleWithReplication(
   client: ClickHouseClient,
   replication?: ClickhouseReplicationConfig,
+  logger?: IMastraLogger,
 ): Promise<void> {
   if (!isReplicationConfigured(replication)) return;
+  if (replication.allowMixedEngines) return;
 
-  const result = await client.query({
-    query: `SELECT name, engine FROM system.tables WHERE database = currentDatabase() AND name IN ({tables:Array(String)})`,
-    query_params: { tables: [...ALL_TABLE_NAMES] },
-    format: 'JSONEachRow',
-  });
-  const rows = (await result.json()) as Array<{ name: string; engine: string }>;
-  const localTable = rows.find(row => !isReplicatedOrSharedEngine(row.engine));
+  try {
+    const result = await client.query({
+      query: `SELECT name, engine FROM system.tables WHERE database = currentDatabase() AND name IN ({tables:Array(String)})`,
+      query_params: { tables: [...ALL_TABLE_NAMES] },
+      format: 'JSONEachRow',
+    });
+    const rows = (await result.json()) as Array<{ name: string; engine: string }>;
+    const localTable = rows.find(row => !isReplicatedOrSharedEngine(row.engine));
 
-  if (localTable) {
-    throw buildLocalTableReplicationError([{ name: localTable.name, engine: localTable.engine }]);
+    if (localTable) {
+      logger?.warn?.(
+        `ClickHouse replication is enabled, but pre-existing observability table '${localTable.name}' uses local engine '${localTable.engine}'. ` +
+          `CREATE TABLE IF NOT EXISTS will leave existing tables untouched. ` +
+          `Set replication.allowMixedEngines to true to suppress this warning.`,
+      );
+    }
+  } catch {
+    // Ignore system.tables query failures
   }
 }
 
@@ -426,6 +437,9 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
     this.#replication = replication;
     this.#retention = config.retention;
     this.#deltaCursorStrategyOverride = config.deltaCursorStrategy;
+    if (config.logger) {
+      this.logger = config.logger;
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -460,7 +474,7 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
     }
 
     try {
-      await assertExistingTablesCompatibleWithReplication(this.#client, this.#replication);
+      await assertExistingTablesCompatibleWithReplication(this.#client, this.#replication, this.logger);
       const existingStrategy = await detectExistingDeltaCursorStrategy(this.#client);
       if (existingStrategy === 'mixed') {
         this.#deltaCursorStrategy = null;

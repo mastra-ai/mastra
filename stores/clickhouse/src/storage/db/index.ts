@@ -2,6 +2,7 @@ import type { ClickHouseClient } from '@clickhouse/client';
 import { createClient } from '@clickhouse/client';
 import { MastraBase } from '@mastra/core/base';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import type { IMastraLogger } from '@mastra/core/logger';
 import {
   createStorageErrorId,
   getSqlType,
@@ -37,6 +38,7 @@ export interface ClickhouseDomainClientConfig {
   client: ClickHouseClient;
   ttl?: ClickhouseConfig['ttl'];
   replication?: ClickhouseConfig['replication'];
+  logger?: IMastraLogger;
 }
 
 /**
@@ -48,6 +50,7 @@ export interface ClickhouseDomainRestConfig {
   password: string;
   ttl?: ClickhouseConfig['ttl'];
   replication?: ClickhouseConfig['replication'];
+  logger?: IMastraLogger;
 }
 
 /**
@@ -187,16 +190,25 @@ export class ClickhouseDB extends MastraBase {
 
   private async assertExistingTableCompatibleWithReplication(tableName: string): Promise<void> {
     if (!isReplicationConfigured(this.replication)) return;
+    if (this.replication.allowMixedEngines) return;
 
-    const result = await this.client.query({
-      query: `SELECT name, engine FROM system.tables WHERE database = currentDatabase() AND name = {tableName:String}`,
-      query_params: { tableName },
-      format: 'JSONEachRow',
-    });
-    const rows = (await result.json()) as Array<{ name: string; engine: string }>;
-    const localTables = rows.filter(row => row.engine && !isReplicatedOrSharedEngine(row.engine));
-    if (localTables.length > 0) {
-      throw buildLocalTableReplicationError(localTables);
+    try {
+      const result = await this.client.query({
+        query: `SELECT name, engine FROM system.tables WHERE database = currentDatabase() AND name = {tableName:String}`,
+        query_params: { tableName },
+        format: 'JSONEachRow',
+      });
+      const rows = (await result.json()) as Array<{ name: string; engine: string }>;
+      const localTables = rows.filter(row => row.engine && !isReplicatedOrSharedEngine(row.engine));
+      if (localTables.length > 0) {
+        this.logger?.warn?.(
+          `ClickHouse replication is enabled, but pre-existing table '${tableName}' uses local engine '${localTables[0]?.engine}'. ` +
+            `CREATE TABLE IF NOT EXISTS will leave existing tables untouched. ` +
+            `Set replication.allowMixedEngines to true to suppress this warning.`,
+        );
+      }
+    } catch {
+      // Ignore system.tables query failures
     }
   }
 

@@ -1,6 +1,7 @@
 import { createClient } from '@clickhouse/client';
 import { TABLE_SCHEMAS, TABLE_SPANS } from '@mastra/core/storage';
 import { describe, expect, it } from 'vitest';
+import { ObservabilityStorageClickhouseVNext } from '../domains/observability/v-next';
 import {
   addOnClusterToDDL,
   applyReplicationToDDL,
@@ -187,21 +188,80 @@ ORDER BY id`;
     );
   });
 
-  it('throws on existing local tables before emitting CREATE TABLE DDL', async () => {
+  it('logs warning and emits CREATE TABLE DDL when pre-existing local tables exist', async () => {
     const queries: string[] = [];
     const client = {
       query: async ({ query }: { query: string }) => {
         queries.push(query);
         return { json: async () => [{ name: TABLE_SPANS, engine: 'ReplacingMergeTree' }] };
       },
+      command: async ({ query }: { query: string }) => {
+        queries.push(query);
+      },
     };
     const db = new ClickhouseDB({ client: client as any, ttl: undefined, replication: { cluster: 'cluster-a' } });
 
-    await expect(db.createTable({ tableName: TABLE_SPANS, schema: TABLE_SCHEMAS[TABLE_SPANS] })).rejects.toThrow(
-      'existing Mastra tables use non-replicated local engines',
-    );
-    expect(queries).toHaveLength(1);
+    await db.createTable({ tableName: TABLE_SPANS, schema: TABLE_SCHEMAS[TABLE_SPANS] });
     expect(queries[0]).toContain('FROM system.tables');
+    expect(queries[1]).toContain(`CREATE TABLE IF NOT EXISTS ${TABLE_SPANS} ON CLUSTER 'cluster-a'`);
+  });
+
+  it('ObservabilityStorageClickhouseVNext.init logs warning and proceeds when pre-existing local tables exist', async () => {
+    const queries: string[] = [];
+    const warnings: string[] = [];
+    const client = {
+      query: async ({ query }: { query: string }) => {
+        queries.push(query);
+        if (query.includes('system.tables')) {
+          return { json: async () => [{ name: 'mastra_ai_spans', engine: 'ReplacingMergeTree' }] };
+        }
+        return { json: async () => [] };
+      },
+      command: async ({ query }: { query: string }) => {
+        queries.push(query);
+      },
+    };
+    const logger = {
+      warn: (msg: string) => warnings.push(msg),
+      info: () => {},
+      error: () => {},
+      debug: () => {},
+    };
+    const storage = new ObservabilityStorageClickhouseVNext({
+      client: client as any,
+      replication: { cluster: 'cluster-a' },
+      logger: logger as any,
+    });
+
+    await expect(storage.init()).resolves.not.toThrow();
+    expect(warnings.some(w => w.includes("pre-existing observability table 'mastra_ai_spans'"))).toBe(true);
+  });
+
+  it('suppresses warning when allowMixedEngines is true', async () => {
+    const warnings: string[] = [];
+    const client = {
+      query: async ({ query }: { query: string }) => {
+        if (query.includes('system.tables')) {
+          return { json: async () => [{ name: 'mastra_ai_spans', engine: 'ReplacingMergeTree' }] };
+        }
+        return { json: async () => [] };
+      },
+      command: async () => {},
+    };
+    const logger = {
+      warn: (msg: string) => warnings.push(msg),
+      info: () => {},
+      error: () => {},
+      debug: () => {},
+    };
+    const storage = new ObservabilityStorageClickhouseVNext({
+      client: client as any,
+      replication: { cluster: 'cluster-a', allowMixedEngines: true },
+      logger: logger as any,
+    });
+
+    await expect(storage.init()).resolves.not.toThrow();
+    expect(warnings).toHaveLength(0);
   });
 
   it('emits ON CLUSTER syntax accepted by ClickHouse', async () => {
