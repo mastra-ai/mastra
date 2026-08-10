@@ -1776,11 +1776,6 @@
       "permanent": true
     },
     {
-      "source": "/docs/capabilities/channels/overview",
-      "destination": "/docs/capabilities/channels",
-      "permanent": true
-    },
-    {
       "source": "/docs/capabilities/channels/other-adapters",
       "destination": "/docs/capabilities/channels#other-adapters",
       "permanent": true
@@ -1863,6 +1858,16 @@
     {
       "source": "/reference/core/addStoredWorkflows",
       "destination": "/reference/core/addDynamicWorkflows",
+      "permanent": true
+    },
+    {
+      "source": "/docs/capabilities/channels/overview",
+      "destination": "/docs/capabilities/channels",
+      "permanent": true
+    },
+    {
+      "source": "/reference/storage/oracledb",
+      "destination": "/integrations/databases/oracledb",
       "permanent": true
     },
     {
@@ -3286,11 +3291,6 @@
       "permanent": true
     },
     {
-      "source": "/docs/capabilities/channels/overview/llms.txt",
-      "destination": "/docs/capabilities/channels/llms.txt",
-      "permanent": true
-    },
-    {
       "source": "/docs/capabilities/channels/other-adapters/llms.txt",
       "destination": "/docs/capabilities/channels/llms.txt#other-adapters",
       "permanent": true
@@ -3373,6 +3373,16 @@
     {
       "source": "/reference/core/addStoredWorkflows/llms.txt",
       "destination": "/reference/core/addDynamicWorkflows/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/capabilities/channels/overview/llms.txt",
+      "destination": "/docs/capabilities/channels/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/reference/storage/oracledb/llms.txt",
+      "destination": "/integrations/databases/oracledb/llms.txt",
       "permanent": true
     }
   ]

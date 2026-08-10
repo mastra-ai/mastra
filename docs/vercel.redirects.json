@@ -1849,6 +1849,11 @@
       "source": "/docs/capabilities/channels/overview",
       "destination": "/docs/capabilities/channels",
       "permanent": true
+    },
+    {
+      "source": "/reference/storage/oracledb",
+      "destination": "/integrations/databases/oracledb",
+      "permanent": true
     }
   ]
 }
