@@ -25,6 +25,7 @@ jobs:
     steps:
       - name: Checkout base
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 3
         with:
           persist-credentials: false
           ref: ${{ github.event.pull_request.base.sha }}

@@ -37,6 +37,7 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 3
         with:
           persist-credentials: false
       - name: Setup pnpm and Node.js
@@ -79,6 +80,7 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 3
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup-pnpm-node
@@ -127,6 +129,7 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 3
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup-pnpm-node
@@ -180,6 +183,7 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 3
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup-pnpm-node
@@ -229,6 +233,7 @@ jobs:
     permissions: { contents: read }
     steps:
       - uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 3
         with:
           persist-credentials: false
       - run: node scripts/gated-interface.mjs remote-sandbox
@@ -258,6 +263,7 @@ jobs:
     permissions: { contents: read }
     steps:
       - uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 3
         with:
           persist-credentials: false
       - run: node scripts/gated-interface.mjs object-store
@@ -288,6 +294,7 @@ jobs:
     permissions: { contents: read }
     steps:
       - uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 3
         with:
           persist-credentials: false
       - run: node scripts/gated-interface.mjs real-model
@@ -317,6 +324,7 @@ jobs:
     permissions: { contents: read }
     steps:
       - uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 3
         with:
           persist-credentials: false
       - run: node scripts/gated-interface.mjs hosted-proxy

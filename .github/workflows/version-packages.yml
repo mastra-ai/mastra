@@ -16,6 +16,7 @@ jobs:
     steps:
       - name: Initial checkout
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 3
         with:
           # Use default GITHUB_TOKEN for initial checkout
           # This is needed to access the .github/actions/app-auth action
@@ -34,6 +35,7 @@ jobs:
 
       - name: Re-checkout with app token
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 3
         with:
           token: ${{ steps.app-auth.outputs.token }}
           # Fetch entire git history so Changesets can generate changelogs
