@@ -12,6 +12,13 @@ export function deepEqual(a: unknown, b: unknown): boolean {
   // Handle different types
   if (typeof a !== typeof b) return false;
 
+  // An array is only ever equal to another array, and a Date only to another
+  // Date. Without these guards the generic object branch below compares
+  // `Object.keys`, so a Date (no own enumerable keys) would equal `{}` and
+  // `[1, 2]` would equal `{ '0': 1, '1': 2 }`.
+  if (Array.isArray(a) !== Array.isArray(b)) return false;
+  if (a instanceof Date !== b instanceof Date) return false;
+
   // Handle arrays
   if (Array.isArray(a) && Array.isArray(b)) {
     if (a.length !== b.length) return false;

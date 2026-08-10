@@ -1103,6 +1103,32 @@ describe('deepEqual', () => {
   it('returns false for values of different types', () => {
     expect(deepEqual(1, '1')).toBe(false);
   });
+
+  it('returns false when comparing a Date to a plain object', () => {
+    // A Date has no own enumerable keys, so without a type guard it would
+    // compare equal to an empty object via the generic object branch.
+    expect(deepEqual(new Date('2024-01-01'), {})).toBe(false);
+    expect(deepEqual({}, new Date('2024-01-01'))).toBe(false);
+    expect(deepEqual(new Date('2024-01-01'), { getTime: 1 })).toBe(false);
+  });
+
+  it('returns false when comparing an array to a plain object with matching index keys', () => {
+    expect(deepEqual([1, 2], { '0': 1, '1': 2 })).toBe(false);
+    expect(deepEqual({ '0': 1, '1': 2 }, [1, 2])).toBe(false);
+  });
+
+  it('returns false when comparing a Date to an array', () => {
+    expect(deepEqual(new Date('2024-01-01'), [])).toBe(false);
+    expect(deepEqual([], new Date('2024-01-01'))).toBe(false);
+  });
+
+  it('applies the type guards recursively for nested values', () => {
+    expect(deepEqual({ when: new Date('2024-01-01') }, { when: {} })).toBe(false);
+    expect(deepEqual({ items: [1, 2] }, { items: { '0': 1, '1': 2 } })).toBe(false);
+    // Sanity: genuinely equal nested Dates/arrays still match.
+    expect(deepEqual({ when: new Date('2024-01-01') }, { when: new Date('2024-01-01') })).toBe(true);
+    expect(deepEqual({ items: [1, 2] }, { items: [1, 2] })).toBe(true);
+  });
 });
 
 describe('omitKeys', () => {
