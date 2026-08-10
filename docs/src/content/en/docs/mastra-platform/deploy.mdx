@@ -186,9 +186,9 @@ Projects that depend on packages from a private registry install them during the
 
 In a monorepo, a `.npmrc` in your project directory takes precedence over one at the repository root.
 
-`NPM_TOKEN` is scoped to the dependency install, and Mastra redacts its value from the build logs it streams. The generated Dockerfile receives it as a build argument, so the container image itself stays free of the token. Like your other stored variables, `NPM_TOKEN` is injected into the running service, so treat it as a secret your application can read.
+`NPM_TOKEN` is available during dependency installation. Mastra redacts its value from the Mastra source-build logs that it streams. The generated Dockerfile receives it as a build argument, so the runtime image stays free of the token. `NPM_TOKEN` is also injected into the running service as a regular environment variable, so treat it as a secret your application can read.
 
-Projects that depend only on public packages need no changes.
+Projects without a private-registry `.npmrc` need no changes. When your `.npmrc` references `${NPM_TOKEN}`, set the variable or the dependency install fails.
 
 ## Project resolution
 
