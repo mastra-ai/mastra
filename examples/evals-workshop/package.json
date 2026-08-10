@@ -1,0 +1,24 @@
+{
+  "name": "evals-workshop",
+  "private": true,
+  "type": "module",
+  "description": "Mastra evals workshop — a headless CI-safe surface and a Studio demo surface over one shared core",
+  "scripts": {
+    "ex:1": "pnpm --filter @workshop/headless ex:1",
+    "ex:2": "pnpm --filter @workshop/headless ex:2",
+    "ex:3": "pnpm --filter @workshop/headless ex:3",
+    "ex:4": "pnpm --filter @workshop/headless ex:4",
+    "ex:5": "pnpm --filter @workshop/headless ex:5",
+    "ex:6": "pnpm --filter @workshop/headless ex:6",
+    "ex:7": "pnpm --filter @workshop/headless ex:7",
+    "ex:all": "pnpm --filter @workshop/headless ex:all",
+    "ex:offline": "pnpm --filter @workshop/headless ex:offline",
+    "dev": "pnpm --filter @workshop/studio dev",
+    "seed": "pnpm --filter @workshop/studio seed",
+    "clean": "pnpm -r clean"
+  },
+  "devDependencies": {
+    "typescript": "catalog:"
+  },
+  "packageManager": "pnpm@10.29.3"
+}
