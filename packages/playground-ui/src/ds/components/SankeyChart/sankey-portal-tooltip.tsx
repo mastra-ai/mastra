@@ -1,5 +1,6 @@
 import { createPortal } from 'react-dom';
 
+import { SANKEY_TOOLTIP_MAX_WIDTH_PX } from './use-sankey-hover-tooltip';
 import type { SankeyTooltipPosition } from './use-sankey-hover-tooltip';
 
 export function SankeyPortalTooltip({
@@ -25,7 +26,7 @@ export function SankeyPortalTooltip({
       role="tooltip"
       style={{
         left: position.left,
-        maxWidth: 'min(20rem, calc(100vw - 2rem))',
+        maxWidth: `min(${SANKEY_TOOLTIP_MAX_WIDTH_PX}px, calc(100vw - 2rem))`,
         top: position.top,
         transform: position.placement === 'above' ? 'translateY(-100%)' : undefined,
         width: 'max-content',

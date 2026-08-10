@@ -18,7 +18,19 @@ export function ThemeCompareSparkline({
     x: ((positions[point.index] ?? 0) / 100) * SPARKLINE_WIDTH,
     y: SPARKLINE_HEIGHT - 2 - (point.share / maxShare) * (SPARKLINE_HEIGHT - 4),
   });
-  const polyline = loaded.map(point => `${pointFor(point).x.toFixed(1)},${pointFor(point).y.toFixed(1)}`).join(' ');
+  const segments: Array<Array<{ share: number; index: number }>> = [];
+  for (const point of loaded) {
+    const currentSegment = segments.at(-1);
+    const previousPoint = currentSegment?.at(-1);
+    if (!currentSegment || !previousPoint || point.index !== previousPoint.index + 1) {
+      segments.push([point]);
+    } else {
+      currentSegment.push(point);
+    }
+  }
+  const polylines = segments
+    .filter(segment => segment.length > 1)
+    .map(segment => segment.map(point => `${pointFor(point).x.toFixed(1)},${pointFor(point).y.toFixed(1)}`).join(' '));
   const markers = markerIndexes.flatMap(markerIndex => {
     const point = loaded.find(candidate => candidate.index === markerIndex);
     return point ? [point] : [];
@@ -31,12 +43,15 @@ export function ThemeCompareSparkline({
         preserveAspectRatio="none"
         viewBox={`0 0 ${SPARKLINE_WIDTH} ${SPARKLINE_HEIGHT}`}
       >
-        <polyline
-          className="stroke-neutral3 fill-none"
-          points={polyline}
-          strokeWidth="1"
-          vectorEffect="non-scaling-stroke"
-        />
+        {polylines.map(points => (
+          <polyline
+            key={points}
+            className="stroke-neutral3 fill-none"
+            points={points}
+            strokeWidth="1"
+            vectorEffect="non-scaling-stroke"
+          />
+        ))}
       </svg>
       {markers.map(point => (
         <span

@@ -6,9 +6,11 @@ export type SankeyTooltipPosition = {
   placement: 'above' | 'below';
 };
 
+export const SANKEY_TOOLTIP_MAX_WIDTH_PX = 320;
+
 const TOOLTIP_TOP_FLIP_THRESHOLD = 120;
-const TOOLTIP_RIGHT_INSET = 336;
 const TOOLTIP_EDGE_INSET = 16;
+const TOOLTIP_RIGHT_INSET = SANKEY_TOOLTIP_MAX_WIDTH_PX + TOOLTIP_EDGE_INSET;
 
 export function useSankeyHoverTooltip(enabled: boolean) {
   const id = useId();
