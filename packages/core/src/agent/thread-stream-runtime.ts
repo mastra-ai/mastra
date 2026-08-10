@@ -1264,6 +1264,14 @@ export class AgentThreadStreamRuntime {
         if (started) return;
         if (await this.#drainPendingIdleSignals(state, pubsub, key, failedRunId)) return;
         this.#releaseThreadLease(pubsub, key, failedRunId);
+        if (previousRun.runId !== failedRunId) {
+          // A synchronous throw from the lease transfer leaves the lease still
+          // owned by the finished previous run with its renewal timer alive,
+          // which would hold the key forever. Releasing is owner-guarded, so
+          // this is a no-op when the transfer completed and the failed run
+          // owned the lease.
+          this.#releaseThreadLease(pubsub, key, previousRun.runId);
+        }
       });
       return;
     }

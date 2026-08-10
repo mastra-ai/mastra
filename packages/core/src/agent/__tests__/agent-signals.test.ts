@@ -3130,10 +3130,14 @@ describe('Agent signals', () => {
   it('restores the signal when the lease transfer step throws', async () => {
     const runtime = new AgentThreadStreamRuntime();
     const pubsub = new ControlledLeasePubSub();
-    vi.spyOn(pubsub, 'transferLease').mockImplementation(() => {
+    // Only a SYNCHRONOUS throw reaches the drain's catch: async provider
+    // rejections are swallowed inside the lease helpers and take the
+    // lease-lost branch instead. Throw once so the follow-up drain below can
+    // prove the restored signal still delivers afterwards.
+    vi.spyOn(pubsub, 'transferLease').mockImplementationOnce(() => {
       throw new Error('lease backend down');
     });
-    const streamMock = vi.fn();
+    const streamMock = vi.fn().mockResolvedValue({} as any);
     const agent = {
       id: 'drain-lease-throw-agent',
       stream: streamMock,
@@ -3164,15 +3168,27 @@ describe('Agent signals', () => {
     );
     expect(streamMock).not.toHaveBeenCalled();
 
+    // The synchronous transfer throw leaves the lease still owned by the
+    // FINISHED previous run (the transfer never got to stop its renewal), so
+    // the catch must release that owner too or the key is held forever and
+    // the next drain loses the restored signal via the lease-lost branch.
+    await waitForCondition(() => ![...pubsub.owners.values()].includes(runId));
+
+    // Prove a subsequent NATURAL drain actually delivers the restored signal,
+    // not merely that it sits in the queue.
+    let finishSecondRun!: () => void;
+    const secondFinished = new Promise<void>(resolve => {
+      finishSecondRun = resolve;
+    });
     runtime.registerRun(
       agent,
-      createFakeThreadRun('drain-lease-throw-probe', new Promise<void>(() => {})),
+      createFakeThreadRun('drain-lease-throw-second', secondFinished),
       { memory: { thread: threadId, resource: resourceId } } as any,
       pubsub,
     );
-    const restored = runtime.drainPendingSignals('drain-lease-throw-probe', pubsub);
-    expect(restored).toHaveLength(1);
-    expect(restored[0]).toMatchObject({ contents: 'steer follow-up' });
+    finishSecondRun();
+    await waitForCondition(() => streamMock.mock.calls.length === 1);
+    expect(JSON.stringify(streamMock.mock.calls[0]?.[0])).toContain('steer follow-up');
   });
 
   it('redelivers the restored signal exactly once on the next natural drain trigger', async () => {

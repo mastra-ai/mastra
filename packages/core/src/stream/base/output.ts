@@ -1240,12 +1240,15 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               });
 
               self.#closeTransportIfNeeded();
-              // An errored stream never reaches flush(), so emit 'finish' here too.
-              // Without it, _waitUntilFinished() callers that subscribed before the
-              // error hang forever while later callers resolve immediately via the
-              // #streamFinished flag set above.
+              // Deliver the error chunk downstream first, then emit 'finish'
+              // (matching the tripwire case above). An errored stream never
+              // reaches flush(), so without this emit, _waitUntilFinished()
+              // callers that subscribed before the error hang forever while
+              // later callers resolve immediately via the #streamFinished flag.
+              self.#emitChunk(chunk);
+              controller.enqueue(chunk);
               self.#emitter.emit('finish');
-              break;
+              return;
           }
           self.#emitChunk(chunk);
           controller.enqueue(chunk);
