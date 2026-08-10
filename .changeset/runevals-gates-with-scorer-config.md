@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Fix `runEvals` type overloads so `gates` can be combined with a categorized scorer config (`AgentScorerConfig` / `WorkflowScorerConfig`). The runtime already ran gates independently of the scorer shape, but the TypeScript overloads only declared `gates` alongside a flat `ScorerEntry[]`, so calls like `runEvals({ target, data, gates, scorers: { trajectory: [...] } })` failed to compile with TS2769. Added the optional `gates` property to both the agent and workflow categorized-config overloads.
+`runEvals` now accepts `gates` together with a categorized scorer config (`AgentScorerConfig` / `WorkflowScorerConfig`) without a TypeScript error. Previously a call like `runEvals({ target, data, gates, scorers: { trajectory: [...] } })` failed to compile with TS2769 because the categorized-config overloads didn't declare `gates`, even though the runtime already ran gates independently of the scorer shape. The optional `gates` property was added to both the agent and workflow categorized-config overloads.
