@@ -42,6 +42,10 @@ import { ModelRouterLanguageModel } from '../llm/model/router';
 import type { MastraLanguageModel, MastraLegacyLanguageModel, MastraModelConfig } from '../llm/model/shared.types';
 import { RegisteredLogger } from '../logger';
 import { networkLoop } from '../loop/network';
+import {
+  isAgentApprovalCheckpoint,
+  materializeAgentApprovalCheckpoint,
+} from '../loop/workflows/agent-approval-checkpoint';
 // `Mastra` is imported type-only here: a runtime import would create an ESM
 // init cycle (agent → mastra → agent/durable → agent) that breaks
 // `class DurableAgent extends Agent` with a TDZ error. The constructor is read
@@ -148,6 +152,7 @@ import type {
   DelegationStartResult,
   DelegationCompleteContext,
 } from './agent.types';
+import { resolveApprovalPersistenceMode } from './approval-persistence';
 // Value import of durable constants is safe: constants.ts is a leaf module
 // with no imports, so it cannot create the runtime cycle `agent →
 // agent/durable → agent`.
@@ -6442,7 +6447,25 @@ export class Agent<
   async #loadAgenticLoopSnapshotOrThrow({ runId, method }: { runId: string; method: string }) {
     const effectiveMastra = this.#mastra ?? (await this.#getOrCreateEphemeralMastra());
     const workflowsStore = await effectiveMastra?.getStorage()?.getStore('workflows');
-    const existingSnapshot = await waitForSuspendedSnapshot(workflowsStore, 'agentic-loop', runId);
+    let existingSnapshot = await waitForSuspendedSnapshot(workflowsStore, 'agentic-loop', runId);
+
+    if (existingSnapshot && isAgentApprovalCheckpoint(existingSnapshot)) {
+      const workflowNames = ['agentic-loop', 'executionWorkflow'];
+      for (const workflowName of workflowNames) {
+        const run = await workflowsStore?.getWorkflowRunById({ workflowName, runId });
+        const persisted = run?.snapshot;
+        if (!persisted || typeof persisted === 'string' || !isAgentApprovalCheckpoint(persisted)) continue;
+        const materialized = materializeAgentApprovalCheckpoint(persisted, { workflowId: workflowName, runId });
+        await workflowsStore?.persistWorkflowSnapshot({
+          workflowName,
+          runId,
+          resourceId: run.resourceId,
+          snapshot: materialized,
+          createdAt: run.createdAt,
+        });
+        if (workflowName === 'agentic-loop') existingSnapshot = materialized;
+      }
+    }
 
     if (!existingSnapshot) {
       const hasStorage = !!workflowsStore;
@@ -6792,6 +6815,7 @@ export class Agent<
     _threadStreamPubSub,
     ...options
   }: InnerAgentExecutionOptions<OUTPUT> & { _threadStreamPubSub?: PubSub }) {
+    const approvalPersistence = resolveApprovalPersistenceMode(options.approvalPersistence);
     const threadStreamPubSub = _threadStreamPubSub ?? this.getPubSub();
     const existingSnapshot = resumeContext?.snapshot;
     const snapshotMemoryInfo = this.#getSnapshotMemoryInfo(existingSnapshot);
@@ -7111,6 +7135,7 @@ export class Agent<
       saveQueueManager,
       returnScorerData: options.returnScorerData,
       requireToolApproval: options.requireToolApproval,
+      approvalPersistence,
       toolCallConcurrency: options.toolCallConcurrency,
       resumeContext,
       agentId: this.id,

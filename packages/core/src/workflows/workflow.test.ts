@@ -225,6 +225,64 @@ createWorkflowTestSuite({
   },
 });
 
+describe('minimal approval checkpoint operations', () => {
+  it('rejects full workflow restart with an actionable approval-only message', async () => {
+    const storage = new MockStore();
+    const step = createStep({
+      id: 'approval-step',
+      inputSchema: z.object({ value: z.string() }),
+      outputSchema: z.object({ value: z.string() }),
+      execute: async ({ inputData }) => inputData,
+    });
+    const workflow = createWorkflow({
+      id: 'minimal-checkpoint-restart',
+      inputSchema: z.object({ value: z.string() }),
+      outputSchema: z.object({ value: z.string() }),
+    })
+      .then(step)
+      .commit();
+    void new Mastra({ workflows: { workflow }, storage, logger: false });
+    const runId = 'minimal-checkpoint-restart-run';
+    const run = await workflow.createRun({ runId });
+    const workflowsStore = (await storage.getStore('workflows'))!;
+    await workflowsStore.persistWorkflowSnapshot({
+      workflowName: workflow.id,
+      runId,
+      snapshot: {
+        kind: 'agent-approval-checkpoint',
+        version: 1,
+        workflowId: workflow.id,
+        runId,
+        status: 'suspended',
+        timestamp: Date.now(),
+        approvals: [
+          {
+            toolCallId: 'call-1',
+            toolName: 'approvalTool',
+            args: {},
+            resumeLabel: 'call-1',
+            stepId: 'approval-step',
+            executionPath: [0],
+            suspendPayload: { requireToolApproval: { toolCallId: 'call-1', toolName: 'approvalTool' } },
+          },
+        ],
+        routing: {
+          activePaths: [0],
+          activeStepsPath: {},
+          suspendedPaths: { 'approval-step': [0] },
+          resumeLabels: { 'call-1': { stepId: 'approval-step' } },
+          waitingPaths: {},
+        },
+        rehydration: {},
+      },
+    });
+
+    await expect(run.restart()).rejects.toThrow(
+      'Workflow restart() cannot consume a minimal agent approval checkpoint. Continue the run with Agent.approveToolCall() or Agent.declineToolCall() instead.',
+    );
+  });
+});
+
 // ============================================================================
 // Default Engine-Specific Tests
 // ============================================================================

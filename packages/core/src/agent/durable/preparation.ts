@@ -16,6 +16,7 @@ import { boundedStringify, deepMerge } from '../../utils';
 import type { Workspace } from '../../workspace';
 import type { Agent } from '../agent';
 import type { AgentExecutionOptions, DelegationConfig } from '../agent.types';
+import { resolveApprovalPersistenceMode } from '../approval-persistence';
 import { MessageList } from '../message-list';
 import type { MessageListInput } from '../message-list';
 import { SaveQueueManager } from '../save-queue';
@@ -605,6 +606,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
       // restart), which is the safe default.
       requireToolApproval:
         typeof execOptions?.requireToolApproval === 'function' ? true : execOptions?.requireToolApproval,
+      approvalPersistence: resolveApprovalPersistenceMode(execOptions?.approvalPersistence),
       toolCallConcurrency: execOptions?.toolCallConcurrency,
       autoResumeSuspendedTools: execOptions?.autoResumeSuspendedTools,
       maxProcessorRetries: execOptions?.maxProcessorRetries,

@@ -276,6 +276,11 @@ describe('serializeDurableOptions', () => {
     expect(result.maxSteps).toBe(10);
     expect(result.modelSettings?.temperature).toBe(0.7);
     expect(result.requireToolApproval).toBe(true);
+    expect(result.approvalPersistence).toBe('full');
+  });
+
+  it('serialises minimal approval persistence', () => {
+    expect(serializeDurableOptions({ approvalPersistence: 'minimal' }).approvalPersistence).toBe('minimal');
   });
 
   it('serialises string toolChoice directly', () => {

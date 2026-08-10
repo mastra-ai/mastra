@@ -71,6 +71,7 @@ import type {
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
 import { validateCron } from '../scheduler/cron';
 import type { WorkflowScheduleConfig } from '../scheduler/types';
+import { prepareWorkflowSnapshotForPersistence } from '../snapshot-persistence';
 import { forwardAgentStreamChunk } from '../stream-utils';
 import type { StreamChunkWriter } from '../stream-utils';
 import { Workflow, Run } from '../workflow';
@@ -1650,6 +1651,7 @@ export function createWorkflow<
       validateInputs: params.options?.validateInputs ?? true,
       shouldPersistSnapshot: params.options?.shouldPersistSnapshot ?? (() => true),
       pruneSnapshot: params.options?.pruneSnapshot,
+      prepareSnapshotForPersistence: params.options?.prepareSnapshotForPersistence,
       tracingPolicy: params.options?.tracingPolicy,
       onStart: params.options?.onStart,
       onFinish: params.options?.onFinish,
@@ -1803,9 +1805,11 @@ export class EventedWorkflow<
         workflowName: this.id,
         runId: runIdToUse,
         resourceId: options?.resourceId,
-        snapshot: this.options?.pruneSnapshot
-          ? this.options.pruneSnapshot({ snapshot: initialSnapshot, workflowStatus: 'pending' })
-          : initialSnapshot,
+        snapshot: prepareWorkflowSnapshotForPersistence({
+          snapshot: initialSnapshot,
+          workflowStatus: 'pending',
+          options: this.options,
+        }),
       });
     }
 
@@ -1932,9 +1936,11 @@ export class EventedRun<
       workflowName: this.workflowId,
       runId: this.runId,
       resourceId: this.resourceId,
-      snapshot: this.executionEngine.options?.pruneSnapshot
-        ? this.executionEngine.options.pruneSnapshot({ snapshot: initialRunSnapshot, workflowStatus: 'running' })
-        : initialRunSnapshot,
+      snapshot: prepareWorkflowSnapshotForPersistence({
+        snapshot: initialRunSnapshot,
+        workflowStatus: 'running',
+        options: this.executionEngine.options,
+      }),
     });
 
     if (!this.mastra?.pubsub) {
@@ -2065,9 +2071,11 @@ export class EventedRun<
       workflowName: this.workflowId,
       runId: this.runId,
       resourceId: this.resourceId,
-      snapshot: this.executionEngine.options?.pruneSnapshot
-        ? this.executionEngine.options.pruneSnapshot({ snapshot: initialRunSnapshot, workflowStatus: 'running' })
-        : initialRunSnapshot,
+      snapshot: prepareWorkflowSnapshotForPersistence({
+        snapshot: initialRunSnapshot,
+        workflowStatus: 'running',
+        options: this.executionEngine.options,
+      }),
     });
 
     if (!this.mastra?.pubsub) {

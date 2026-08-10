@@ -178,6 +178,39 @@ describe('DurableAgent tool approval', () => {
       });
 
       expect(result.workflowInput.options.requireToolApproval).toBe(true);
+      expect(result.workflowInput.options.approvalPersistence).toBe('full');
+    });
+
+    it('should include minimal approval persistence in workflow input', async () => {
+      const mockModel = createToolCallModel('findUser', { name: 'Alice' });
+      const baseAgent = new Agent({
+        id: 'minimal-approval-agent',
+        name: 'Minimal Approval Agent',
+        instructions: 'You can find users',
+        model: mockModel as LanguageModelV2,
+      });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+      const result = await durableAgent.prepare('Find user Alice', {
+        requireToolApproval: true,
+        approvalPersistence: 'minimal',
+      });
+
+      expect(result.workflowInput.options.approvalPersistence).toBe('minimal');
+    });
+
+    it('should reject an invalid approval persistence contract', async () => {
+      const baseAgent = new Agent({
+        id: 'invalid-approval-persistence-agent',
+        name: 'Invalid Approval Persistence Agent',
+        instructions: 'You can find users',
+        model: createToolCallModel('findUser', { name: 'Alice' }) as LanguageModelV2,
+      });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+      await expect(durableAgent.prepare('Find user Alice', { approvalPersistence: 'compact' as any })).rejects.toThrow(
+        'Invalid approvalPersistence value "compact". Expected "full" or "minimal".',
+      );
     });
 
     it('should set requireToolApproval to false by default', async () => {

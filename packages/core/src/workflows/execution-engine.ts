@@ -11,6 +11,7 @@ import type {
   SerializedStepFlowEntry,
   StepResult,
   WorkflowRunStatus,
+  WorkflowRunSnapshot,
   WorkflowRunState,
   WorkflowFinishCallbackResult,
   WorkflowErrorCallbackInfo,
@@ -40,6 +41,12 @@ export interface ExecutionEngineOptions {
    * Must be pure and return JSON-safe data. Defaults to identity.
    */
   pruneSnapshot?: (params: { snapshot: WorkflowRunState; workflowStatus: WorkflowRunStatus }) => WorkflowRunState;
+
+  /** @internal Selects a partial persisted representation after full-snapshot pruning. */
+  prepareSnapshotForPersistence?: (params: {
+    snapshot: WorkflowRunState;
+    workflowStatus: WorkflowRunStatus;
+  }) => WorkflowRunSnapshot;
 
   /**
    * Called and awaited before a run starts executing. Errors are propagated, which

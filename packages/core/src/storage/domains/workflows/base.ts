@@ -1,4 +1,4 @@
-import type { StepResult, WorkflowRunState } from '../../../workflows';
+import type { StepResult, WorkflowRunSnapshot, WorkflowRunState } from '../../../workflows';
 import type { UpdateWorkflowStateOptions, WorkflowRun, WorkflowRuns, StorageListWorkflowRunsInput } from '../../types';
 import { StorageDomain } from '../base';
 
@@ -40,7 +40,7 @@ export abstract class WorkflowsStorage extends StorageDomain {
     workflowName: string;
     runId: string;
     resourceId?: string;
-    snapshot: WorkflowRunState;
+    snapshot: WorkflowRunSnapshot;
     createdAt?: Date;
     updatedAt?: Date;
   }): Promise<void>;
