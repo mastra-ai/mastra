@@ -443,37 +443,9 @@ const sidebars = {
       className: 'sidebar-group-name',
       items: [
         {
-          type: 'category',
-          label: 'Studio',
-          link: {
-            type: 'doc',
-            id: 'studio/overview',
-          },
-          customProps: {
-            contextualSidebar: true,
-          },
-          items: [
-            {
-              type: 'doc',
-              id: 'studio/deployment',
-              label: 'Deployment',
-            },
-            {
-              type: 'doc',
-              id: 'studio/auth',
-              label: 'Auth',
-            },
-            {
-              type: 'doc',
-              id: 'studio/observability',
-              label: 'Observability',
-            },
-            {
-              type: 'doc',
-              id: 'editor/overview',
-              label: 'Editor',
-            },
-          ],
+          type: 'doc',
+          id: 'storage/overview',
+          label: 'Storage',
         },
         {
           type: 'category',
@@ -524,9 +496,37 @@ const sidebars = {
           ],
         },
         {
-          type: 'doc',
-          id: 'storage/overview',
-          label: 'Storage',
+          type: 'category',
+          label: 'Studio',
+          link: {
+            type: 'doc',
+            id: 'studio/overview',
+          },
+          customProps: {
+            contextualSidebar: true,
+          },
+          items: [
+            {
+              type: 'doc',
+              id: 'studio/deployment',
+              label: 'Deployment',
+            },
+            {
+              type: 'doc',
+              id: 'studio/auth',
+              label: 'Auth',
+            },
+            {
+              type: 'doc',
+              id: 'studio/observability',
+              label: 'Observability',
+            },
+            {
+              type: 'doc',
+              id: 'editor/overview',
+              label: 'Editor',
+            },
+          ],
         },
         {
           type: 'category',
