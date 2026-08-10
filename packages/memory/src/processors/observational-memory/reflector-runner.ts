@@ -100,7 +100,6 @@ async function persistThreadExtractedValues(
   });
   await storage.updateThread({
     id: threadId,
-    title: thread.title ?? '',
     metadata: newMetadata,
   });
 }

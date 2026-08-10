@@ -704,6 +704,81 @@ describe('MessageList.updateToolInvocation', () => {
     });
   });
 
+  it('should let the incoming part replace a single key inside an existing namespace', () => {
+    const messageList = new MessageList();
+
+    // A background-task dispatch stores a placeholder modelOutput alongside
+    // another key in the same namespace.
+    const msg = makeAssistantMessage([
+      {
+        type: 'tool-invocation',
+        toolInvocation: {
+          state: 'result',
+          toolCallId: 'tc-1',
+          toolName: 'agent-sub',
+          args: { query: 'test' },
+          result: 'Background task started. Task ID: t-1 is running in the background.',
+        },
+        providerMetadata: {
+          mastra: {
+            modelOutput: { type: 'text', value: 'Background task started. Task ID: t-1' },
+            dispatchedAt: '2026-01-01T00:00:00.000Z',
+          },
+        },
+      } as any,
+    ]);
+    messageList.add(msg, 'response');
+
+    messageList.updateToolInvocation({
+      type: 'tool-invocation',
+      toolInvocation: {
+        state: 'result',
+        toolCallId: 'tc-1',
+        toolName: 'agent-sub',
+        args: {},
+        result: { text: 'The answer is ZEBRA-7742-QUOKKA.' },
+      },
+      providerMetadata: { mastra: { modelOutput: { type: 'text', value: 'The answer is ZEBRA-7742-QUOKKA.' } } },
+    } as any);
+
+    const part = msg.content.parts[0] as any;
+    // The key the caller set is replaced...
+    expect(part.providerMetadata.mastra.modelOutput).toEqual({
+      type: 'text',
+      value: 'The answer is ZEBRA-7742-QUOKKA.',
+    });
+    // ...and untouched siblings in the same namespace survive.
+    expect(part.providerMetadata.mastra.dispatchedAt).toBe('2026-01-01T00:00:00.000Z');
+  });
+
+  it('should replace a namespace wholesale when the stored value is not a plain object', () => {
+    const messageList = new MessageList();
+
+    const msg = makeAssistantMessage([
+      {
+        type: 'tool-invocation',
+        toolInvocation: { state: 'call', toolCallId: 'tc-1', toolName: 'web_search', args: {} },
+        providerMetadata: { mastra: 'not-an-object' },
+      } as any,
+    ]);
+    messageList.add(msg, 'response');
+
+    messageList.updateToolInvocation({
+      type: 'tool-invocation',
+      toolInvocation: {
+        state: 'result',
+        toolCallId: 'tc-1',
+        toolName: 'web_search',
+        args: {},
+        result: { data: 'search' },
+      },
+      providerMetadata: { mastra: { modelOutput: true } },
+    } as any);
+
+    const part = msg.content.parts[0] as any;
+    expect(part.providerMetadata.mastra).toEqual({ modelOutput: true });
+  });
+
   it('should match a provider-executed call by toolName when the result toolCallId differs', () => {
     const messageList = new MessageList();
 

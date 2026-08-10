@@ -114,6 +114,25 @@ export function getFactoryAuthUser(c: Context): FactoryAuthUser | undefined {
   return c.get(FACTORY_AUTH_USER_KEY) as FactoryAuthUser | undefined;
 }
 
+/**
+ * Read the authenticated user off a request context, normalizing whatever the
+ * active auth provider put there.
+ *
+ * The server's auth layer writes the provider's `authenticateToken` result into
+ * the request context's `user` slot verbatim, so the value's shape follows the
+ * provider: WorkOS writes a flat user, better-auth writes a `{ session, user }`
+ * wrapper whose org lives on the session. Reading that slot as a
+ * {@link FactoryAuthUser} therefore yields `undefined` for both the id and the
+ * org under better-auth, which reads as "this session belongs to somebody else"
+ * at every ownership check. Normalize on the way in instead.
+ */
+export function getFactoryAuthUserFromContext(
+  requestContext: { get: (key: string) => unknown } | undefined,
+): FactoryAuthUser | undefined {
+  if (!requestContext || typeof requestContext.get !== 'function') return undefined;
+  return toFactoryAuthUser(requestContext.get('user')) ?? undefined;
+}
+
 /** Resolve the stable user id from an authenticated user shape. */
 export function getFactoryAuthUserId(user: FactoryAuthUser | undefined): string | undefined {
   return user?.workosId ?? user?.id;
@@ -172,7 +191,10 @@ function toFactoryAuthUser(result: unknown): FactoryAuthUser | null {
   if (!result || typeof result !== 'object') return null;
   const record = result as Record<string, unknown>;
 
-  // Session-shaped results: { session, user }.
+  // Session-shaped results: { session, user }. A result carrying both halves and
+  // top-level identity fields is read as session-shaped: the session half is the
+  // authenticated one, and preferring it keeps the org and the id from coming
+  // from two different places.
   if (record.user && typeof record.user === 'object' && record.session && typeof record.session === 'object') {
     const user = record.user as { id?: unknown; email?: unknown; name?: unknown; avatarUrl?: unknown };
     const session = record.session as { activeOrganizationId?: unknown };

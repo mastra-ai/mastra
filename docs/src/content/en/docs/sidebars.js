@@ -107,8 +107,8 @@ const sidebars = {
             },
             {
               type: 'doc',
-              id: 'workflows/stored-workflows',
-              label: 'Stored Workflows',
+              id: 'workflows/dynamic-workflows',
+              label: 'Dynamic Workflows',
               customProps: {
                 tags: ['beta'],
               },
@@ -449,39 +449,6 @@ const sidebars = {
         },
         {
           type: 'category',
-          label: 'Studio',
-          link: {
-            type: 'doc',
-            id: 'studio/overview',
-          },
-          customProps: {
-            contextualSidebar: true,
-          },
-          items: [
-            {
-              type: 'doc',
-              id: 'studio/deployment',
-              label: 'Deployment',
-            },
-            {
-              type: 'doc',
-              id: 'studio/auth',
-              label: 'Auth',
-            },
-            {
-              type: 'doc',
-              id: 'studio/observability',
-              label: 'Observability',
-            },
-            {
-              type: 'doc',
-              id: 'editor/overview',
-              label: 'Editor',
-            },
-          ],
-        },
-        {
-          type: 'category',
           label: 'Server',
           link: {
             type: 'doc',
@@ -525,6 +492,39 @@ const sidebars = {
               type: 'doc',
               id: 'server/mastra-client',
               label: 'Mastra Client',
+            },
+          ],
+        },
+        {
+          type: 'category',
+          label: 'Studio',
+          link: {
+            type: 'doc',
+            id: 'studio/overview',
+          },
+          customProps: {
+            contextualSidebar: true,
+          },
+          items: [
+            {
+              type: 'doc',
+              id: 'studio/deployment',
+              label: 'Deployment',
+            },
+            {
+              type: 'doc',
+              id: 'studio/auth',
+              label: 'Auth',
+            },
+            {
+              type: 'doc',
+              id: 'studio/observability',
+              label: 'Observability',
+            },
+            {
+              type: 'doc',
+              id: 'editor/overview',
+              label: 'Editor',
             },
           ],
         },
@@ -616,7 +616,7 @@ const sidebars = {
         },
         {
           type: 'category',
-          label: 'Deployment',
+          label: 'Deploy',
           link: {
             type: 'doc',
             id: 'deployment/overview',

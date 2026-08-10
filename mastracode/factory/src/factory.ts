@@ -30,12 +30,12 @@ import type { FactoryStorage } from '@mastra/core/storage';
 import type { MastraVector } from '@mastra/core/vector';
 import { LocalSandbox } from '@mastra/core/workspace';
 import type { WorkspaceSandbox } from '@mastra/core/workspace';
-import type { FactoryAuthUser } from './auth.js';
 import {
   buildAuthRoutes,
   createFactoryAuthGate,
   createFactoryRouteAuth,
   getFactoryAuthOrgId,
+  getFactoryAuthUserFromContext,
   getFactoryAuthUserId,
 } from './auth.js';
 import type { FactoryIntegration, IntegrationPostToolContext, IntegrationTools } from './integrations/base.js';
@@ -64,6 +64,7 @@ import { assertFactoryRules } from './rules/validation.js';
 import { SandboxFleet } from './sandbox/fleet.js';
 import { registerSandboxReattach } from './sandbox/reattach.js';
 import { handleServerError } from './server-error.js';
+import { observeSessionFilesystem } from './session/filesystem-capture.js';
 import { createSpaStaticMiddleware, resolveUiDistDir } from './spa-static.js';
 import { createStateSigner } from './state-signing.js';
 import { observeAgentGitAction } from './storage/domains/audit/agent-audit.js';
@@ -72,6 +73,7 @@ import { AuditDomain } from './storage/domains/audit/domain.js';
 import { ChannelIdentityStorage } from './storage/domains/channel-identity/base.js';
 import { ModelCredentialsStorage } from './storage/domains/credentials/base.js';
 import { CustomProvidersStorage } from './storage/domains/custom-providers/base.js';
+import { FilesystemStorage } from './storage/domains/filesystem/base.js';
 import { IntakeStorage } from './storage/domains/intake/base.js';
 import { IntegrationStorage } from './storage/domains/integrations/base.js';
 import { MemorySettingsStorage } from './storage/domains/memory-settings/base.js';
@@ -388,6 +390,7 @@ export class MastraFactory {
     // default persistence surface for integrations without a bespoke domain.
     const integrationStorage = storage.registerDomain(new IntegrationStorage());
     const factoryProjectsStorage = storage.registerDomain(new FactoryProjectsStorage());
+    const filesystemStorage = storage.registerDomain(new FilesystemStorage());
     const sourceControlStorage = storage.registerDomain(new SourceControlStorage());
     // Reverse index from a platform sender (Slack/Discord/...) to a Mastra
     // tenant, so inbound channel events can resolve the sender's model creds.
@@ -400,6 +403,7 @@ export class MastraFactory {
       modelPacks: modelPacksStorage,
       memorySettings: memorySettingsStorage,
       customProviders: customProvidersStorage,
+      filesystem: filesystemStorage,
       projects: factoryProjectsStorage,
       queueHealth: queueHealthStorage,
       workItems: workItemsStorage,
@@ -420,7 +424,7 @@ export class MastraFactory {
       users: auth && isUserProvider(auth) ? auth : undefined,
       sinks: integrations,
       agentTenant: requestContext => {
-        const user = requestContext.get('user') as FactoryAuthUser | undefined;
+        const user = getFactoryAuthUserFromContext(requestContext);
         return { orgId: getFactoryAuthOrgId(user), userId: getFactoryAuthUserId(user) };
       },
     });
@@ -805,6 +809,13 @@ export class MastraFactory {
         },
       }),
     );
+
+    prepared.base.controller.onSessionCreated(session => {
+      observeSessionFilesystem(session, {
+        filesystem: filesystemStorage,
+        sourceControl: sourceControlStorage.forIntegration('github'),
+      });
+    });
 
     this.#prepared = prepared;
     this.#factoryProcessor = factoryProcessor;

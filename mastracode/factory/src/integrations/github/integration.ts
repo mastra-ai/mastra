@@ -991,6 +991,25 @@ export class GithubIntegration implements FactoryIntegration {
     });
   }
 
+  /** Remove one label from an issue. */
+  async removeIssueLabel(
+    installationId: number,
+    repoFullName: string,
+    issueNumber: number,
+    label: string,
+  ): Promise<void> {
+    const parts = splitRepoFullName(repoFullName);
+    const labelName = label.trim();
+    if (!parts || !labelName) return;
+    const octokit = this.getInstallationOctokit(installationId);
+    await octokit.issues.removeLabel({
+      owner: parts.owner,
+      repo: parts.repo,
+      issue_number: issueNumber,
+      name: labelName,
+    });
+  }
+
   /**
    * List one page of a repo's open issues through an installation token. The
    * issues API also returns pull requests, so those are filtered out (the

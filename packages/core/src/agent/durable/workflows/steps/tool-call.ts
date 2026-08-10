@@ -6,7 +6,8 @@ import type { PubSub } from '../../../../events/pubsub';
 import type { Mastra } from '../../../../mastra';
 import type { MastraMemory } from '../../../../memory/memory';
 import type { MemoryConfig } from '../../../../memory/types';
-import type { ExportedSpan, SpanType } from '../../../../observability';
+import { EntityType, SpanType } from '../../../../observability';
+import type { ExportedSpan } from '../../../../observability';
 import type { ProcessorState } from '../../../../processors';
 import { ProcessorRunner } from '../../../../processors/runner';
 import type { ChunkType } from '../../../../stream/types';
@@ -18,6 +19,7 @@ import { createStep } from '../../../../workflows/workflow';
 import { stopGoalActivity } from '../../../goal';
 import type { MessageList } from '../../../message-list';
 import type { SaveQueueManager } from '../../../save-queue';
+import { resolveDeclineReason } from '../../../tool-approval';
 import { DurableStepIds } from '../../constants';
 import { globalRunRegistry } from '../../run-registry';
 import { emitSuspendedEvent, emitChunkEvent } from '../../stream-adapter';
@@ -30,6 +32,7 @@ import type {
 import { applyToolPayloadTransformToChunk } from '../../utils/apply-tool-payload-transform';
 import { rebuildRunToolsFromMastra, resolveTool, toolRequiresApproval } from '../../utils/resolve-runtime';
 import { serializeError } from '../../utils/serialize-state';
+import { normalizeModelOutput } from './normalize-model-output';
 
 /**
  * Input schema for the durable tool call step.
@@ -52,6 +55,7 @@ const durableToolCallInputSchema = z.object({
  */
 const durableToolCallOutputSchema = durableToolCallInputSchema.extend({
   result: z.any().optional(),
+  modelOutputComputed: z.boolean().optional(),
   error: z
     .object({
       name: z.string(),
@@ -382,6 +386,7 @@ export function createDurableToolCallStep() {
           state: state as any,
           options: agentOptions,
           requestContextEntries: initData.requestContextEntries,
+          requestContext,
           logger,
         });
         if (rebuilt) {
@@ -627,6 +632,7 @@ export function createDurableToolCallStep() {
           type: 'object',
           properties: {
             approved: { type: 'boolean' },
+            reason: { type: 'string' },
           },
           required: ['approved'],
         });
@@ -701,7 +707,7 @@ export function createDurableToolCallStep() {
           const approval = {
             id: toolCallId,
             approved: false as const,
-            reason: 'Tool call was not approved by the user',
+            reason: resolveDeclineReason(resumeData),
           };
           if (pubsub) {
             try {
@@ -892,6 +898,7 @@ export function createDurableToolCallStep() {
               type: 'object',
               properties: {
                 approved: { type: 'boolean' },
+                reason: { type: 'string' },
               },
               required: ['approved'],
             });
@@ -1294,6 +1301,44 @@ export function createDurableToolCallStep() {
           }
         }
 
+        // Compute model-facing output while invocation-scoped execution metadata is still available.
+        // Durable step outputs are serialized before the LLM mapping step, which strips symbols and
+        // other non-JSON side channels used by tools such as MCP structured-output tools.
+        let providerMetadata = typedInput.providerMetadata;
+        let modelOutputComputed: boolean | undefined;
+        const mappingTool = globalRunRegistry.get(runId)?.tools?.[toolName] ?? tool;
+        const toModelOutput = mappingTool.toModelOutput;
+        if (toModelOutput) {
+          modelOutputComputed = true;
+          const mappingSpan = stepSpan?.createChildSpan({
+            type: SpanType.MAPPING,
+            name: `tool output mapping: '${toolName}'`,
+            entityType: EntityType.TOOL,
+            entityId: toolName,
+            entityName: toolName,
+            input: result,
+            attributes: {
+              mappingType: 'toModelOutput',
+              toolCallId,
+            },
+          });
+          try {
+            const modelOutput = normalizeModelOutput(await toModelOutput(result));
+            mappingSpan?.end({ output: modelOutput });
+
+            if (modelOutput != null) {
+              const existingMastra = (providerMetadata as any)?.mastra;
+              providerMetadata = {
+                ...providerMetadata,
+                mastra: { ...existingMastra, modelOutput },
+              };
+            }
+          } catch (mappingError) {
+            mappingSpan?.error({ error: mappingError as Error, endSpan: true });
+            logger?.warn?.(`[DurableAgent] toModelOutput failed for tool "${toolName}": ${mappingError}`);
+          }
+        }
+
         // Emit tool-result chunk (non-fatal — result is returned regardless).
         // Skip emission when the tool called suspend() — the workflow engine's
         // suspend() sets a flag but does NOT throw, so execution continues past
@@ -1335,7 +1380,9 @@ export function createDurableToolCallStep() {
 
         return {
           ...typedInput,
+          providerMetadata,
           result,
+          modelOutputComputed,
           ...(approvalGrant ?? {}),
         };
       } catch (error) {

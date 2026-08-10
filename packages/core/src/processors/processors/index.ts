@@ -10,6 +10,7 @@ export {
   type PromptInjectionOptions,
   type PromptInjectionResult,
   type PromptInjectionCategoryScores,
+  type PromptInjectionDetectionEvent,
 } from './prompt-injection-detector';
 export {
   PIIDetector,
@@ -18,6 +19,7 @@ export {
   type PIICategories,
   type PIICategoryScores,
   type PIIDetection,
+  type PIIDetectionEvent,
 } from './pii-detector';
 export {
   LanguageDetector,

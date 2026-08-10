@@ -82,7 +82,7 @@ import {
   Conversations,
   Observability,
   StoredAgent,
-  StoredWorkflow,
+  DynamicWorkflow,
   StoredPromptBlock,
   StoredMCPClient,
   StoredScorer,
@@ -111,6 +111,7 @@ import type {
   GetToolResponse,
   GetProcessorResponse,
   GetWorkflowResponse,
+  ListWorkflowRunCountsResponse,
   SaveMessageToMemoryParams,
   SaveMessageToMemoryResponse,
   McpServerListResponse,
@@ -132,10 +133,10 @@ import type {
   ListStoredAgentsResponse,
   CreateStoredAgentParams,
   StoredAgentResponse,
-  ListStoredWorkflowsParams,
-  ListStoredWorkflowsResponse,
-  UpsertStoredWorkflowParams,
-  UpsertStoredWorkflowResponse,
+  ListDynamicWorkflowsParams,
+  ListDynamicWorkflowsResponse,
+  UpsertDynamicWorkflowParams,
+  UpsertDynamicWorkflowResponse,
   ListStoredPromptBlocksParams,
   ListStoredPromptBlocksResponse,
   CreateStoredPromptBlockParams,
@@ -576,6 +577,26 @@ export class MastraClient extends BaseResource {
 
     const queryString = searchParams.toString();
     return this.request(`/workflows${queryString ? `?${queryString}` : ''}`);
+  }
+
+  /**
+   * Retrieves per-workflow counts of running and suspended (awaiting resume) runs
+   * @param requestContext - Optional request context to pass as query parameter
+   * @returns Promise containing map of workflow IDs to run counts
+   */
+  public listWorkflowRunCounts(
+    requestContext?: RequestContext | Record<string, any>,
+  ): Promise<ListWorkflowRunCountsResponse> {
+    const requestContextParam = base64RequestContext(parseClientRequestContext(requestContext));
+
+    const searchParams = new URLSearchParams();
+
+    if (requestContextParam) {
+      searchParams.set('requestContext', requestContextParam);
+    }
+
+    const queryString = searchParams.toString();
+    return this.request(`/workflows/run-counts${queryString ? `?${queryString}` : ''}`);
   }
 
   /**
@@ -1314,15 +1335,15 @@ export class MastraClient extends BaseResource {
   }
 
   // ============================================================================
-  // Stored Workflows
+  // Dynamic Workflows
   // ============================================================================
 
   /**
-   * Lists stored workflow definitions, optionally filtered by status or author
+   * Lists dynamic workflow definitions, optionally filtered by status or author
    * @param params - Optional filters: `status` ('active' | 'archived') and `authorId`
    * @returns Promise containing the matching definitions and a total count
    */
-  public listStoredWorkflows(params?: ListStoredWorkflowsParams): Promise<ListStoredWorkflowsResponse> {
+  public listDynamicWorkflows(params?: ListDynamicWorkflowsParams): Promise<ListDynamicWorkflowsResponse> {
     const searchParams = new URLSearchParams();
     if (params?.status) searchParams.set('status', params.status);
     if (params?.authorId) searchParams.set('authorId', params.authorId);
@@ -1332,13 +1353,13 @@ export class MastraClient extends BaseResource {
   }
 
   /**
-   * Creates or replaces a stored workflow definition and live-registers it on the server.
+   * Creates or replaces a dynamic workflow definition and live-registers it on the server.
    * Optional `dependencies` lets helper workflows referenced by the root definition be
    * saved in the same request; their ids are echoed back as `dependencyIds`.
    * @param params - The workflow definition (id, schemas, graph) plus optional helper dependencies
    * @returns Promise containing the persisted definition and any dependency ids
    */
-  public upsertStoredWorkflow(params: UpsertStoredWorkflowParams): Promise<UpsertStoredWorkflowResponse> {
+  public upsertDynamicWorkflow(params: UpsertDynamicWorkflowParams): Promise<UpsertDynamicWorkflowResponse> {
     return this.request('/stored/workflows', {
       method: 'POST',
       body: params,
@@ -1346,13 +1367,13 @@ export class MastraClient extends BaseResource {
   }
 
   /**
-   * Gets a stored workflow instance by ID for further operations (details, delete).
-   * To execute a stored workflow, use `getWorkflow(id).createRun()` like any other workflow.
-   * @param storedWorkflowId - ID of the stored workflow definition
-   * @returns StoredWorkflow instance
+   * Gets a dynamic workflow instance by ID for further operations (details, delete).
+   * To execute a dynamic workflow, use `getWorkflow(id).createRun()` like any other workflow.
+   * @param dynamicWorkflowId - ID of the dynamic workflow definition
+   * @returns DynamicWorkflow instance
    */
-  public getStoredWorkflow(storedWorkflowId: string): StoredWorkflow {
-    return new StoredWorkflow(this.options, storedWorkflowId);
+  public getDynamicWorkflow(dynamicWorkflowId: string): DynamicWorkflow {
+    return new DynamicWorkflow(this.options, dynamicWorkflowId);
   }
 
   // ============================================================================

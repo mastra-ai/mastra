@@ -205,12 +205,14 @@ session.abort()
 
 Return the workspace resolved for this session. This preserves session-level overrides and workspaces selected from the session scope.
 
+A workspace is optional. When neither the session nor the `AgentController` configures one, the session still runs without filesystem or sandbox access, and this returns `undefined`. Check the result before using it.
+
 ```typescript
 const workspace = session.getWorkspace()
-const skill = await workspace.skills?.get('code-review')
+const skill = await workspace?.skills?.get('code-review')
 ```
 
-Returns: `Workspace`
+Returns: `Workspace | undefined`
 
 ### Session grants
 

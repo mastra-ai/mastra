@@ -5,8 +5,7 @@
  * semantic (vector), and combined hybrid search across indexed content.
  */
 
-import pMap from 'p-map';
-
+import { pMap } from '../../utils/p-map';
 import type { MastraVector, VectorFilter } from '../../vector';
 import type { LineRange } from '../line-utils';
 
@@ -160,8 +159,11 @@ export interface SearchOptions {
 /** Options for batch indexing */
 export interface IndexManyOptions {
   /**
-   * Maximum number of documents to index concurrently (embedder + vector upsert).
+   * Maximum number of indexing units to run concurrently (embedder + vector upsert).
    * Must be a safe integer ≥ 1 (same rule as `p-map`).
+   *
+   * A unit is one document, or — when the embedder is batch-capable — one group of up to
+   * `maxBatchSize` documents sharing a single embedder call.
    * @default 8
    */
   concurrency?: number;
@@ -174,6 +176,42 @@ export interface IndexManyOptions {
 
 /** Default `indexMany` / lazy-vector flush concurrency (embedder + upsert). */
 const DEFAULT_INDEX_MANY_CONCURRENCY = 8;
+
+/** Documents per embedder call when the embedder does not declare its own `maxBatchSize`. */
+const DEFAULT_EMBED_GROUP_SIZE = 256;
+
+/**
+ * Upper bound on vectors handed to a single `upsert`.
+ *
+ * Vector stores cap how much one write request may carry — `PineconeVector` already slices at
+ * this exact size — and each document's metadata carries its full text, so an unbounded batch
+ * turns into an unbounded request. Kept separate from the embedder's `maxBatchSize`, which
+ * limits the embedding API rather than the store.
+ */
+const MAX_VECTORS_PER_UPSERT = 100;
+
+/**
+ * Documents to group per embedder call, honouring the embedder's own limit.
+ *
+ * A `maxBatchSize` of `0`, a negative number or `NaN` (easy to produce with
+ * `Number(process.env.EMBED_BATCH_SIZE)`) would otherwise mean "never make progress", so those
+ * fall back to the default rather than stalling or silently indexing nothing.
+ */
+function resolveEmbedGroupSize(embedder: BatchEmbedder): number {
+  const declared = embedder.maxBatchSize;
+  if (declared === undefined || !Number.isFinite(declared) || declared < 1) {
+    return DEFAULT_EMBED_GROUP_SIZE;
+  }
+  return Math.floor(declared);
+}
+
+function chunkItems<T>(items: readonly T[], size: number): T[][] {
+  const groups: T[][] = [];
+  for (let i = 0; i < items.length; i += size) {
+    groups.push(items.slice(i, i + size));
+  }
+  return groups;
+}
 
 /**
  * Configuration for SearchEngine
@@ -328,6 +366,29 @@ export class SearchEngine {
    * Index a document for search
    */
   async index(doc: IndexDocument): Promise<void> {
+    const docWithMergedMetadata = this.#indexNonVectorParts(doc);
+
+    // Vector indexing
+    if (this.#vectorConfig) {
+      if (this.#lazyVectorIndex) {
+        // Store for later indexing
+        this.#pendingVectorDocs.push(docWithMergedMetadata);
+        this.#vectorIndexBuilt = false;
+      } else {
+        // Index immediately
+        await this.#indexVector(docWithMergedMetadata);
+      }
+    }
+  }
+
+  /**
+   * Run the synchronous, per-document half of indexing: metadata merge, id tracking and BM25.
+   *
+   * Returns the document with merged metadata so the caller can hand it to the vector path.
+   * Split out of {@link SearchEngine.index} so `indexMany` can keep BM25 per-document while
+   * batching the vector work.
+   */
+  #indexNonVectorParts(doc: IndexDocument): IndexDocument {
     // Merge startLineOffset into metadata for retrieval at search time
     const metadata: Record<string, unknown> = {
       ...doc.metadata,
@@ -343,18 +404,7 @@ export class SearchEngine {
       this.#bm25Index.add(doc.id, doc.content, metadata);
     }
 
-    // Vector indexing
-    if (this.#vectorConfig) {
-      const docWithMergedMetadata = { ...doc, metadata };
-      if (this.#lazyVectorIndex) {
-        // Store for later indexing
-        this.#pendingVectorDocs.push(docWithMergedMetadata);
-        this.#vectorIndexBuilt = false;
-      } else {
-        // Index immediately
-        await this.#indexVector(docWithMergedMetadata);
-      }
-    }
+    return { ...doc, metadata };
   }
 
   /**
@@ -366,7 +416,78 @@ export class SearchEngine {
   async indexMany(docs: IndexDocument[], options?: IndexManyOptions): Promise<void> {
     const stopOnError = options?.stopOnError;
     const concurrency = options?.concurrency ?? DEFAULT_INDEX_MANY_CONCURRENCY;
-    await pMap(docs, doc => this.index(doc), { stopOnError, concurrency });
+
+    // A batch-capable embedder is only worth grouping for on the eager vector path. Lazy mode
+    // already batches at flush time, and a single-text embedder gains nothing from grouping.
+    const embedder = this.#vectorConfig?.embedder;
+    if (!embedder || this.#lazyVectorIndex || !isBatchEmbedder(embedder)) {
+      await pMap(docs, doc => this.index(doc), { stopOnError, concurrency });
+      return;
+    }
+
+    // Match the lazy path: a repeated id must not appear twice in one upsert payload.
+    const unique = this.#dedupeDocsLastWins(docs);
+
+    const groups = chunkItems(unique, resolveEmbedGroupSize(embedder));
+    if (groups.length === 0) return;
+
+    // Contract for `stopOnError: false`: every document is processed and the call rejects with a
+    // flat `AggregateError` of the individual failures. Collect them here rather than letting a
+    // failed group reject, so the caller never sees an `AggregateError` nested inside another one.
+    const failures: unknown[] = [];
+    const runGroup = async (group: IndexDocument[]) => {
+      const merged = this.#indexNonVectorPartsOf(group);
+      if (stopOnError !== false) {
+        await this.#embedAndUpsertGroup(merged);
+        return;
+      }
+      try {
+        await this.#embedAndUpsertGroup(merged);
+      } catch {
+        // One unusable document must not drop the rest of its group.
+        for (const doc of merged) {
+          try {
+            await this.#indexVector(doc);
+          } catch (error) {
+            failures.push(error);
+          }
+        }
+      }
+    };
+
+    // The first group runs alone so `createIndex` completes before any parallel writes, matching
+    // what the lazy flush does. Otherwise every concurrent group sees `#vectorIndexReady === false`
+    // and upserts against an index that may still be under construction.
+    await runGroup(groups[0]!);
+    if (groups.length > 1) {
+      await pMap(groups.slice(1), runGroup, { stopOnError, concurrency });
+    }
+
+    if (failures.length > 0) {
+      throw new AggregateError(failures);
+    }
+  }
+
+  /**
+   * BM25-index a group of documents as it is attempted.
+   *
+   * Keeping this inside the group task means a rejected `indexMany` leaves the keyword index in
+   * the same shape the per-document path would have: populated only for documents that indexing
+   * actually reached, rather than for every document handed in.
+   */
+  #indexNonVectorPartsOf(group: IndexDocument[]): IndexDocument[] {
+    return group.map(doc => this.#indexNonVectorParts(doc));
+  }
+
+  /**
+   * Collapse duplicate document ids so a single upsert runs per id (last entry wins).
+   */
+  #dedupeDocsLastWins(docs: readonly IndexDocument[]): IndexDocument[] {
+    const byId = new Map<string, IndexDocument>();
+    for (const doc of docs) {
+      byId.set(doc.id, doc);
+    }
+    return [...byId.values()];
   }
 
   /**
@@ -584,16 +705,14 @@ export class SearchEngine {
     const { embedder } = this.#vectorConfig;
 
     if (isBatchEmbedder(embedder)) {
-      const max = embedder.maxBatchSize;
-      if (max === undefined || texts.length <= max) {
+      // Same sanitized size the callers group by, so an unusable `maxBatchSize` can never turn
+      // this loop into a non-advancing one.
+      const max = resolveEmbedGroupSize(embedder);
+      if (texts.length <= max) {
         return embedder(texts);
       }
       // Chunk by maxBatchSize and run chunks in parallel up to DEFAULT_INDEX_MANY_CONCURRENCY.
-      const chunks: string[][] = [];
-      for (let i = 0; i < texts.length; i += max) {
-        chunks.push(texts.slice(i, i + max));
-      }
-      const results = await pMap(chunks, chunk => embedder(chunk), {
+      const results = await pMap(chunkItems(texts, max), chunk => embedder(chunk), {
         concurrency: DEFAULT_INDEX_MANY_CONCURRENCY,
       });
       return results.flat();
@@ -650,14 +769,14 @@ export class SearchEngine {
   /**
    * Embed and upsert a batch of documents in as few provider calls as possible.
    *
-   * - If the embedder is batch-capable, all texts go through a single embedder
-   *   call (chunked by `maxBatchSize`), then a single `upsert` with all vectors.
+   * - If the embedder is batch-capable, texts are grouped into `maxBatchSize` embedder calls
+   *   and written with upserts bounded by {@link MAX_VECTORS_PER_UPSERT}.
    * - Otherwise falls back to per-doc embedding via {@link SearchEngine.#indexVector}.
    */
   async #flushVectorBatch(docs: IndexDocument[]): Promise<void> {
     if (!this.#vectorConfig || docs.length === 0) return;
 
-    const { vectorStore, embedder, indexName } = this.#vectorConfig;
+    const { embedder } = this.#vectorConfig;
 
     if (!isBatchEmbedder(embedder)) {
       // Single-text embedder: parallelize per-doc work, preserving prior semantics.
@@ -666,6 +785,29 @@ export class SearchEngine {
       });
       return;
     }
+
+    const groups = chunkItems(docs, resolveEmbedGroupSize(embedder));
+
+    // The first group runs alone so `createIndex` happens once, before any parallel writes.
+    await this.#embedAndUpsertGroup(groups[0]!);
+    if (groups.length > 1) {
+      await pMap(groups.slice(1), group => this.#embedAndUpsertGroup(group), {
+        concurrency: DEFAULT_INDEX_MANY_CONCURRENCY,
+      });
+    }
+  }
+
+  /**
+   * Embed one group of documents with a single embedder call, then write the vectors using
+   * upserts no larger than {@link MAX_VECTORS_PER_UPSERT}.
+   *
+   * Vectors are paired with their documents positionally, so the embedder must return exactly
+   * one embedding per input in input order.
+   */
+  async #embedAndUpsertGroup(docs: IndexDocument[]): Promise<void> {
+    if (!this.#vectorConfig || docs.length === 0) return;
+
+    const { vectorStore, indexName } = this.#vectorConfig;
 
     const embeddings = await this.#embedAll(docs.map(d => d.content));
     if (embeddings.length !== docs.length) {
@@ -681,29 +823,23 @@ export class SearchEngine {
       }
     }
 
-    await vectorStore.upsert({
-      indexName,
-      vectors: embeddings,
-      metadata: docs.map(doc => ({
-        id: doc.id,
-        text: doc.content,
-        ...doc.metadata,
-      })),
-      ids: docs.map(d => d.id),
-    });
+    for (let start = 0; start < docs.length; start += MAX_VECTORS_PER_UPSERT) {
+      const slice = docs.slice(start, start + MAX_VECTORS_PER_UPSERT);
+      await vectorStore.upsert({
+        indexName,
+        vectors: embeddings.slice(start, start + MAX_VECTORS_PER_UPSERT),
+        metadata: slice.map(doc => ({
+          id: doc.id,
+          text: doc.content,
+          ...doc.metadata,
+        })),
+        ids: slice.map(d => d.id),
+      });
 
-    this.#vectorIndexReady = true;
-  }
-
-  /**
-   * Collapse duplicate document ids so a single deterministic upsert runs per id (last queue entry wins).
-   */
-  #dedupePendingVectorDocsLastWins(docs: readonly IndexDocument[]): IndexDocument[] {
-    const byId = new Map<string, IndexDocument>();
-    for (const doc of docs) {
-      byId.set(doc.id, doc);
+      // Mark index as ready only after a successful upsert so createIndex is retried
+      // on subsequent writes if the previous attempt did not produce a usable index.
+      this.#vectorIndexReady = true;
     }
-    return [...byId.values()];
   }
 
   /**
@@ -727,7 +863,7 @@ export class SearchEngine {
       const batch = this.#pendingVectorDocs;
       this.#pendingVectorDocs = [];
 
-      const uniqueDocs = this.#dedupePendingVectorDocsLastWins(batch);
+      const uniqueDocs = this.#dedupeDocsLastWins(batch);
 
       try {
         await this.#flushVectorBatch(uniqueDocs);

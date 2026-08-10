@@ -28,6 +28,7 @@ import type {
   WorkspaceChangeStatus,
   WorkspaceDiff,
   WorkspaceFile,
+  WorkspaceFilesListing,
   WorkspaceRenderedEntry,
   WorkspaceRenderedListing,
 } from '@mastra/factory/routes/fs';
@@ -51,6 +52,7 @@ export type {
   WorkspaceChangeStatus,
   WorkspaceDiff,
   WorkspaceFile,
+  WorkspaceFilesListing,
   WorkspaceRenderedEntry,
   WorkspaceRenderedListing,
 };

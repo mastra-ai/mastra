@@ -3447,7 +3447,7 @@ ${formattedMessages}
         const shouldUpdateThreadTitle = !!newTitle && newTitle.length >= 3 && newTitle !== oldTitle;
         await this.storage.updateThread({
           id: threadId,
-          title: shouldUpdateThreadTitle ? newTitle : (thread.title ?? ''),
+          ...(shouldUpdateThreadTitle ? { title: newTitle } : {}),
           metadata: newMetadata,
         });
       }
@@ -3724,7 +3724,6 @@ ${formattedMessages}
         });
         await this.storage.updateThread({
           id: threadId,
-          title: thread.title ?? '',
           metadata: newMetadata,
         });
       }
