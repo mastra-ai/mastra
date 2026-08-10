@@ -356,7 +356,7 @@ function FlowCard({
         </div>
         <div
           aria-label="Themes"
-          className="text-neutral3 flex items-center gap-2 px-4 py-1 font-mono text-[10px] tracking-[0.18em]"
+          className="text-neutral3 flex items-center gap-2 py-1 font-mono text-[10px] tracking-[0.18em]"
           role="separator"
         >
           <span aria-hidden="true" className="bg-border1 h-px w-5" />
