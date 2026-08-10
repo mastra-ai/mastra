@@ -49,6 +49,12 @@ function renderSankeySignals() {
   );
 }
 
+function requiredElementAt(elements: HTMLElement[], index: number) {
+  const element = elements[index];
+  if (!element) throw new Error(`Expected an element at index ${index}`);
+  return element;
+}
+
 beforeEach(() => {
   vi.stubGlobal('ResizeObserver', ChartResizeObserver);
   vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(800);
@@ -231,9 +237,10 @@ describe('SankeySignals compare mode', () => {
       const track = within(comparison).getByRole('group', { name: 'Snapshot landmarks' });
       const ticks = within(track).getAllByRole('button', { name: /Snapshot \d+ of/ });
       // Grab the first point, then drop it on the second point's landmark.
-      fireEvent.click(ticks[0]!);
-      expect(ticks[0]!.getAttribute('aria-pressed')).toBe('true');
-      fireEvent.click(ticks[ticks.length - 1]!);
+      const firstTick = requiredElementAt(ticks, 0);
+      fireEvent.click(firstTick);
+      expect(firstTick.getAttribute('aria-pressed')).toBe('true');
+      fireEvent.click(requiredElementAt(ticks, ticks.length - 1));
 
       expect(
         await within(comparison).findByText('Pick two different landmarks on the timeline to compare them.'),
@@ -287,7 +294,7 @@ describe('SankeySignals compare mode', () => {
       const ticks = within(track).getAllByRole('button', { name: /Snapshot \d+ of/ });
       // Landmark 4 sits in the final burst (>90% along the track), so the
       // later point is nearest and moves; the earlier point stays put.
-      fireEvent.click(ticks[3]!);
+      fireEvent.click(requiredElementAt(ticks, 3));
 
       expect(await within(comparison).findByText(/^Jul 7, 2026, 18:00/)).not.toBeNull();
       expect(within(comparison).getByText(/^Jul 1, 2026, 04:00/)).not.toBeNull();
@@ -305,8 +312,8 @@ describe('SankeySignals compare mode', () => {
       const ticks = within(track).getAllByRole('button', { name: /Snapshot \d+ of/ });
       // Grab the first point, then click a landmark nearest to the *other*
       // point — the grab wins and the first point jumps past the midpoint.
-      fireEvent.click(ticks[0]!);
-      fireEvent.click(ticks[3]!);
+      fireEvent.click(requiredElementAt(ticks, 0));
+      fireEvent.click(requiredElementAt(ticks, 3));
 
       expect(await within(comparison).findByText(/^Jul 7, 2026, 18:00/)).not.toBeNull();
       expect(within(comparison).getByText(/^Jul 8, 2026, 00:00/)).not.toBeNull();

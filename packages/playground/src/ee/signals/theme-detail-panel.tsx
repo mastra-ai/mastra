@@ -13,13 +13,11 @@ import { useState } from 'react';
 
 import { EXAMPLES_PAGE_SIZE, ExamplesPager } from './examples-pager';
 import { useThemeDetail, useThemeExamples, useThemeHistory } from './hooks';
-import { formatSnapshotDate, shareSentence, SIGNAL_DESCRIPTIONS, traceLabel } from './signal-formatting';
+import { formatSnapshotDate, shareSentence, SIGNAL_DESCRIPTIONS } from './signal-formatting';
 import type { ThemeSelection } from './theme-drilldown-data';
+import { ThemeTrendChart } from './theme-trend-chart';
 import { chronologicalHistoryPoints, themeTrendDirection } from './theme-trend-data';
-import type { ThemeHistoryPoint } from './theme-trend-data';
 import { TraceInsightView } from './trace-insight-view';
-
-const TREND_CHART_HEIGHT = 32;
 
 interface ThemeDetailPanelProps {
   entityId: string;
@@ -28,74 +26,6 @@ interface ThemeDetailPanelProps {
   snapshotTotal: number;
   selection: ThemeSelection | undefined;
   onClose: () => void;
-}
-
-function trendPointLabel(point: ThemeHistoryPoint) {
-  return `${formatSnapshotDate(point.startedAt)} · ${traceLabel(point.traceCount)} (${Math.round(point.coverage * 100)}%)`;
-}
-
-/**
- * Trace count over time for one theme. Absent stretches (death points with
- * zero traces) drop the area to the baseline, so a theme's rise and fall —
- * including disappearing and coming back — reads without clustering jargon.
- */
-function TrendChart({ points, color }: { points: ThemeHistoryPoint[]; color: string }) {
-  const firstTime = new Date(points[0].startedAt).getTime();
-  const lastTime = new Date(points[points.length - 1].startedAt).getTime();
-  const timeSpan = lastTime - firstTime;
-  const maxCount = Math.max(1, ...points.map(point => point.traceCount));
-  const x = (point: ThemeHistoryPoint) =>
-    timeSpan === 0 ? 50 : ((new Date(point.startedAt).getTime() - firstTime) / timeSpan) * 100;
-  const y = (point: ThemeHistoryPoint) => (1 - point.traceCount / maxCount) * (TREND_CHART_HEIGHT - 4) + 2;
-  const coordinates = points.map(point => `${x(point)},${y(point)}`);
-
-  return (
-    <div className="mt-3">
-      <div className="relative h-8" data-testid="trend-chart">
-        <svg
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-0 size-full"
-          preserveAspectRatio="none"
-          viewBox={`0 0 100 ${TREND_CHART_HEIGHT}`}
-        >
-          <polygon
-            fill={color}
-            fillOpacity={0.14}
-            points={[`0,${TREND_CHART_HEIGHT}`, ...coordinates, `100,${TREND_CHART_HEIGHT}`].join(' ')}
-          />
-          <polyline
-            fill="none"
-            stroke={color}
-            strokeOpacity={0.7}
-            strokeWidth={1.2}
-            vectorEffect="non-scaling-stroke"
-            points={coordinates.join(' ')}
-          />
-        </svg>
-        {points.map(point => {
-          const label = trendPointLabel(point);
-          return (
-            <Tooltip key={point.snapshotId}>
-              <TooltipTrigger
-                aria-label={label}
-                className="absolute size-2 -translate-x-1/2 -translate-y-1/2 cursor-default rounded-full hover:brightness-125"
-                style={{
-                  left: `${x(point)}%`,
-                  top: `${(y(point) / TREND_CHART_HEIGHT) * 100}%`,
-                  backgroundColor: color,
-                }}
-              />
-              <TooltipContent>{label}</TooltipContent>
-            </Tooltip>
-          );
-        })}
-      </div>
-      <div className="text-neutral3 mt-1 flex justify-between font-mono text-[11px]">
-        <span>{formatSnapshotDate(points[0].startedAt)}</span>
-        <span>{formatSnapshotDate(points[points.length - 1].startedAt)}</span>
-      </div>
-    </div>
-  );
 }
 
 export function ThemeDetailPanel({
@@ -249,7 +179,10 @@ export function ThemeDetailPanel({
                             · {themeTrendDirection(historyPoints)}
                           </p>
                           {historyPoints.length >= 2 && (
-                            <TrendChart points={historyPoints} color={nodeColor(getSignalHue(signalName ?? 'goal'))} />
+                            <ThemeTrendChart
+                              points={historyPoints}
+                              color={nodeColor(getSignalHue(signalName ?? 'goal'))}
+                            />
                           )}
                         </>
                       )}

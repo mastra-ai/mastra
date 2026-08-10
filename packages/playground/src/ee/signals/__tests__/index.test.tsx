@@ -198,10 +198,10 @@ describe('Trace Intelligence page', () => {
     });
 
     it('requests signals in processing order: goal, sentiment, behavior, outcome', async () => {
-      const snapshotSignalNames: (string | null)[] = [];
+      const snapshotSignalNames: Array<string | undefined> = [];
       server.use(
         http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, ({ request }) => {
-          snapshotSignalNames.push(new URL(request.url).searchParams.get('signalNames'));
+          snapshotSignalNames.push(new URL(request.url).searchParams.get('signalNames') ?? undefined);
           return HttpResponse.json(themeSnapshotsResponse);
         }),
       );

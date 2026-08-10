@@ -319,7 +319,11 @@ describe('SankeySignals lifelines mode', () => {
       const row = await within(goalSection).findByRole('listitem', {
         name: 'Resolve support request: present in 5 of 5 landmarks',
       });
-      fireEvent.click(within(row).getAllByRole('button', { name: /^Resolve support request ·/ })[0]!);
+      const firstPoint = within(row)
+        .getAllByRole('button', { name: /^Resolve support request ·/ })
+        .at(0);
+      if (!firstPoint) throw new Error('Expected a lifeline point');
+      fireEvent.click(firstPoint);
 
       expect(await screen.findByRole('dialog', { name: 'Resolve support request' })).not.toBeNull();
     });
@@ -354,7 +358,10 @@ describe('SankeySignals lifelines mode', () => {
       const row = await within(goalSection).findByRole('listitem', {
         name: 'Resolve support request: present in 5 of 5 landmarks',
       });
-      const point = within(row).getAllByRole('button', { name: /^Resolve support request ·/ })[0]!;
+      const point = within(row)
+        .getAllByRole('button', { name: /^Resolve support request ·/ })
+        .at(0);
+      if (!point) throw new Error('Expected a lifeline point');
 
       fireEvent.mouseEnter(point);
 
