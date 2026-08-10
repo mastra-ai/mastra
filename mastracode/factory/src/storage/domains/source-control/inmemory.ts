@@ -493,6 +493,7 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
         sandboxId: null,
         sandboxWorkdir: null,
         materializedAt: null,
+        firstMessageAt: null,
         createdAt: now,
         updatedAt: now,
       };
@@ -514,6 +515,10 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
     markMaterialized: async ({ id }: { id: string }) => {
       const row = this.sessionsRows.find(candidate => candidate.id === id);
       if (row) Object.assign(row, { materializedAt: new Date(), updatedAt: new Date() });
+    },
+    markFirstMessage: async ({ sessionId }: { sessionId: string }) => {
+      const row = this.sessionsRows.find(candidate => candidate.sessionId === sessionId);
+      if (row && row.firstMessageAt === null) Object.assign(row, { firstMessageAt: new Date(), updatedAt: new Date() });
     },
     delete: async (id: string) => {
       this.sessionsRows.splice(0, this.sessionsRows.length, ...this.sessionsRows.filter(row => row.id !== id));
