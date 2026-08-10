@@ -1960,15 +1960,33 @@ describe('MastraPlatformExporter', () => {
       output: { response: 'result' },
     });
 
-    function disabledResponse(retryAfter?: string): Response {
+    function quotaHeaders(retryAfter?: string): Record<string, string> {
       const headers: Record<string, string> = { 'x-mastra-observability': 'disabled' };
       if (retryAfter !== undefined) {
         headers['x-mastra-observability-retry-after'] = retryAfter;
       }
-      return new Response(JSON.stringify({ ok: true, data: { spanCount: 0 }, observability: 'disabled' }), {
-        status: 200,
-        headers,
+      return headers;
+    }
+
+    function quota402Response(retryAfter?: string): Response {
+      return new Response(JSON.stringify({ ok: false, code: 'OBSERVABILITY_QUOTA_EXCEEDED' }), {
+        status: 402,
+        statusText: 'Payment Required',
+        headers: quotaHeaders(retryAfter),
       });
+    }
+
+    // Emulates the real fetchWithRetry contract for a 402: the retry predicate
+    // is consulted, then the request throws without the Response. Records each
+    // predicate decision so tests can assert the 402'd batch was never retried.
+    function mockQuota402(retryAfter?: string): { retryDecisions: boolean[] } {
+      const retryDecisions: boolean[] = [];
+      mockFetchWithRetry.mockImplementation(async (_url, _options, _maxRetries, retryOptions) => {
+        const decision = retryOptions?.shouldRetryResponse?.(quota402Response(retryAfter)) ?? true;
+        retryDecisions.push(decision);
+        throw new Error('Request failed with status: 402 Payment Required');
+      });
+      return { retryDecisions };
     }
 
     function createQuotaExporter(): MastraPlatformExporter {
@@ -1986,13 +2004,14 @@ describe('MastraPlatformExporter', () => {
       vi.useRealTimers();
     });
 
-    it('should pause all signals, drop buffered events, and stop POSTs on disabled header', async () => {
+    it('should pause all signals, drop the batch without retrying, and stop POSTs on 402', async () => {
       const quotaExporter = createQuotaExporter();
       const warnSpy = vi.spyOn((quotaExporter as any).logger, 'warn');
-      mockFetchWithRetry.mockImplementation(async () => disabledResponse('300'));
+      const errorSpy = vi.spyOn((quotaExporter as any).logger, 'error');
+      const { retryDecisions } = mockQuota402('300');
 
       try {
-        // Buffer two signal types so both uploads see the header
+        // Buffer two signal types so both uploads see the 402
         await quotaExporter.exportTracingEvent({ type: TracingEventType.SPAN_ENDED, exportedSpan: mockSpan });
         await quotaExporter.onLogEvent(getMockLogEvent());
         await quotaExporter.flush();
@@ -2000,7 +2019,11 @@ describe('MastraPlatformExporter', () => {
         expect((quotaExporter as any).quotaPaused).toBe(true);
         expect((quotaExporter as any).buffer.totalSize).toBe(0);
         expect(mockFetchWithRetry).toHaveBeenCalledTimes(2); // traces + logs uploads only
-        // Exactly one warn despite both signal responses carrying the header
+        // The 402'd batches are never auto-retried
+        expect(retryDecisions).toEqual([false, false]);
+        // Quota-dropped batches are not logged as upload failures
+        expect(errorSpy).not.toHaveBeenCalled();
+        // Exactly one warn despite both signal responses being 402s
         expect(warnSpy).toHaveBeenCalledTimes(1);
         expect(warnSpy).toHaveBeenCalledWith(
           'Mastra observability paused: quota exhausted, dropping telemetry and probing every 300s',
@@ -2022,10 +2045,10 @@ describe('MastraPlatformExporter', () => {
       }
     });
 
-    it('should probe after retry-after seconds and resume when header is absent', async () => {
+    it('should probe after retry-after seconds and resume when the probe gets a 2xx without the header', async () => {
       const quotaExporter = createQuotaExporter();
       const warnSpy = vi.spyOn((quotaExporter as any).logger, 'warn');
-      mockFetchWithRetry.mockResolvedValue(disabledResponse('60'));
+      mockQuota402('60');
 
       try {
         await quotaExporter.exportTracingEvent({ type: TracingEventType.SPAN_ENDED, exportedSpan: mockSpan });
@@ -2033,7 +2056,7 @@ describe('MastraPlatformExporter', () => {
         expect((quotaExporter as any).quotaPaused).toBe(true);
         expect(mockFetchWithRetry).toHaveBeenCalledTimes(1);
 
-        // Recovery: collector stops sending the header
+        // Recovery: collector stops rejecting with 402
         mockFetchWithRetry.mockResolvedValue(new Response('{}', { status: 200 }));
 
         await vi.advanceTimersByTimeAsync(59_000);
@@ -2060,18 +2083,18 @@ describe('MastraPlatformExporter', () => {
       }
     });
 
-    it('should stay paused and reschedule when probe response still has the header', async () => {
+    it('should stay paused and reschedule when the probe still gets a 402', async () => {
       const quotaExporter = createQuotaExporter();
       const warnSpy = vi.spyOn((quotaExporter as any).logger, 'warn');
-      mockFetchWithRetry.mockResolvedValue(disabledResponse('60'));
+      mockQuota402('60');
 
       try {
         await quotaExporter.exportTracingEvent({ type: TracingEventType.SPAN_ENDED, exportedSpan: mockSpan });
         await quotaExporter.flush();
         expect(mockFetchWithRetry).toHaveBeenCalledTimes(1);
 
-        // Probe still gets the header, with an updated retry-after hint
-        mockFetchWithRetry.mockResolvedValue(disabledResponse('120'));
+        // Probe still gets a 402, with an updated retry-after hint
+        mockQuota402('120');
         await vi.advanceTimersByTimeAsync(60_000);
         expect(mockFetchWithRetry).toHaveBeenCalledTimes(2);
         expect((quotaExporter as any).quotaPaused).toBe(true);
@@ -2089,7 +2112,7 @@ describe('MastraPlatformExporter', () => {
 
     it('should default to 300s when retry-after header is missing or unparseable', async () => {
       const quotaExporter = createQuotaExporter();
-      mockFetchWithRetry.mockResolvedValue(disabledResponse());
+      mockQuota402();
 
       try {
         await quotaExporter.exportTracingEvent({ type: TracingEventType.SPAN_ENDED, exportedSpan: mockSpan });
@@ -2097,25 +2120,25 @@ describe('MastraPlatformExporter', () => {
         expect(mockFetchWithRetry).toHaveBeenCalledTimes(1);
         expect((quotaExporter as any).quotaProbeIntervalSeconds).toBe(300);
 
-        // Probe still disabled, now with an unparseable retry-after
-        mockFetchWithRetry.mockResolvedValue(disabledResponse('not-a-number'));
+        // Probe still 402, now with an unparseable retry-after
+        mockQuota402('not-a-number');
         await vi.advanceTimersByTimeAsync(300_000);
         expect(mockFetchWithRetry).toHaveBeenCalledTimes(2);
         expect((quotaExporter as any).quotaProbeIntervalSeconds).toBe(300);
 
         // Trailing characters are rejected, not silently truncated to 60
-        mockFetchWithRetry.mockResolvedValue(disabledResponse('60seconds'));
+        mockQuota402('60seconds');
         await vi.advanceTimersByTimeAsync(300_000);
         expect(mockFetchWithRetry).toHaveBeenCalledTimes(3);
         expect((quotaExporter as any).quotaProbeIntervalSeconds).toBe(300);
 
         // Negative and zero values fall back to the default
-        mockFetchWithRetry.mockResolvedValue(disabledResponse('-60'));
+        mockQuota402('-60');
         await vi.advanceTimersByTimeAsync(300_000);
         expect(mockFetchWithRetry).toHaveBeenCalledTimes(4);
         expect((quotaExporter as any).quotaProbeIntervalSeconds).toBe(300);
 
-        mockFetchWithRetry.mockResolvedValue(disabledResponse('0'));
+        mockQuota402('0');
         await vi.advanceTimersByTimeAsync(300_000);
         expect(mockFetchWithRetry).toHaveBeenCalledTimes(5);
         expect((quotaExporter as any).quotaProbeIntervalSeconds).toBe(300);
@@ -2127,7 +2150,7 @@ describe('MastraPlatformExporter', () => {
     it('should clamp oversized retry-after values to the Node timer limit', async () => {
       const quotaExporter = createQuotaExporter();
       // 10_000_000s * 1000 exceeds 2^31 - 1 ms; unclamped it would wrap to ~1ms
-      mockFetchWithRetry.mockResolvedValue(disabledResponse('10000000'));
+      mockQuota402('10000000');
 
       try {
         await quotaExporter.exportTracingEvent({ type: TracingEventType.SPAN_ENDED, exportedSpan: mockSpan });
@@ -2149,7 +2172,7 @@ describe('MastraPlatformExporter', () => {
 
     it('should stay paused and reschedule when the probe request fails', async () => {
       const quotaExporter = createQuotaExporter();
-      mockFetchWithRetry.mockResolvedValue(disabledResponse('60'));
+      mockQuota402('60');
 
       try {
         await quotaExporter.exportTracingEvent({ type: TracingEventType.SPAN_ENDED, exportedSpan: mockSpan });
@@ -2191,9 +2214,46 @@ describe('MastraPlatformExporter', () => {
       }
     });
 
+    it('should pause when a 2xx response carries the disabled header (robustness)', async () => {
+      const quotaExporter = createQuotaExporter();
+      mockFetchWithRetry.mockResolvedValue(new Response('{}', { status: 200, headers: quotaHeaders('300') }));
+
+      try {
+        await quotaExporter.exportTracingEvent({ type: TracingEventType.SPAN_ENDED, exportedSpan: mockSpan });
+        await quotaExporter.flush();
+
+        expect((quotaExporter as any).quotaPaused).toBe(true);
+      } finally {
+        await quotaExporter.shutdown();
+      }
+    });
+
+    it('should not pause on non-402 error statuses', async () => {
+      const quotaExporter = createQuotaExporter();
+      const retryDecisions: boolean[] = [];
+      mockFetchWithRetry.mockImplementation(async (_url, _options, _maxRetries, retryOptions) => {
+        const response = new Response('oops', { status: 500, statusText: 'Internal Server Error' });
+        retryDecisions.push(retryOptions?.shouldRetryResponse?.(response) ?? true);
+        throw new Error('Request failed with status: 500 Internal Server Error');
+      });
+
+      try {
+        await quotaExporter.exportTracingEvent({ type: TracingEventType.SPAN_ENDED, exportedSpan: mockSpan });
+        await quotaExporter.flush();
+
+        // Existing behavior: batch dropped after retries, but no quota pause
+        expect((quotaExporter as any).quotaPaused).toBe(false);
+        expect((quotaExporter as any).quotaProbeTimer).toBeNull();
+        // 5xx responses remain retryable
+        expect(retryDecisions).toEqual([true]);
+      } finally {
+        await quotaExporter.shutdown();
+      }
+    });
+
     it('should clear the probe timer on shutdown', async () => {
       const quotaExporter = createQuotaExporter();
-      mockFetchWithRetry.mockResolvedValue(disabledResponse('300'));
+      mockQuota402('300');
 
       await quotaExporter.exportTracingEvent({ type: TracingEventType.SPAN_ENDED, exportedSpan: mockSpan });
       await quotaExporter.flush();
@@ -2210,7 +2270,7 @@ describe('MastraPlatformExporter', () => {
 
     it('should not rearm the probe timer when a probe is in flight during shutdown', async () => {
       const quotaExporter = createQuotaExporter();
-      mockFetchWithRetry.mockResolvedValue(disabledResponse('60'));
+      mockQuota402('60');
 
       await quotaExporter.exportTracingEvent({ type: TracingEventType.SPAN_ENDED, exportedSpan: mockSpan });
       await quotaExporter.flush();
@@ -2225,8 +2285,8 @@ describe('MastraPlatformExporter', () => {
       await quotaExporter.shutdown();
       expect((quotaExporter as any).quotaProbeTimer).toBeNull();
 
-      // Probe completes after shutdown with a still-disabled response
-      resolveProbe(disabledResponse('60'));
+      // Probe completes after shutdown while the org is still exhausted
+      resolveProbe(quota402Response('60'));
       await vi.advanceTimersByTimeAsync(0);
 
       // No new timer was scheduled and no further probes fire

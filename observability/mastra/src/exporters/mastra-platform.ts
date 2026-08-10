@@ -42,8 +42,10 @@ const SIGNAL_PUBLISH_SUFFIXES: Record<PlatformSignal, string> = {
 const DEFAULT_PLATFORM_SPAN_FILTER = (span: AnyExportedSpan): boolean => span.type !== SpanType.MODEL_CHUNK;
 
 // Stop-signal contract: when the org's observability quota is exhausted, the
-// collector returns 200 with this header on every publish route. The exporter
-// must pause (dropping events) and probe until the header disappears.
+// collector rejects every publish route with 402 Payment Required plus the
+// headers below. 402 is deliberately non-retryable: the exporter must drop the
+// batch (no auto-retry), pause, and probe until the collector stops sending it.
+const QUOTA_EXCEEDED_STATUS = 402;
 const OBSERVABILITY_STATUS_HEADER = 'x-mastra-observability';
 const OBSERVABILITY_DISABLED_VALUE = 'disabled';
 const OBSERVABILITY_RETRY_AFTER_HEADER = 'x-mastra-observability-retry-after';
@@ -53,6 +55,11 @@ const MAX_QUOTA_PROBE_INTERVAL_SECONDS = Math.floor(0x7fffffff / 1000);
 
 function isObservabilityDisabled(response: Response): boolean {
   return response.headers.get(OBSERVABILITY_STATUS_HEADER) === OBSERVABILITY_DISABLED_VALUE;
+}
+
+// The contract says either signal means pause; check both for robustness.
+function isQuotaExceededResponse(response: Response): boolean {
+  return response.status === QUOTA_EXCEEDED_STATUS || isObservabilityDisabled(response);
 }
 
 function parseQuotaRetryAfterSeconds(response: Response): number {
@@ -629,7 +636,37 @@ export class MastraPlatformExporter extends BaseExporter {
       body: JSON.stringify({ [SIGNAL_PUBLISH_SEGMENTS[signal]]: records }),
     };
 
-    const response = await fetchWithAuthFailureHandling(endpointMap[signal], options, this.platformConfig.maxRetries);
+    // Capture a quota-exceeded response in the retry predicate: returning
+    // false makes fetchWithRetry throw without retrying (the 402'd batch must
+    // never be re-sent), but the thrown error loses the Response and its
+    // retry-after header, so we keep a reference here.
+    let quotaResponse: Response | undefined;
+    let response: Response;
+
+    try {
+      response = await fetchWithAuthFailureHandling(
+        endpointMap[signal],
+        options,
+        this.platformConfig.maxRetries,
+        res => {
+          if (isQuotaExceededResponse(res)) {
+            quotaResponse = res;
+            return false;
+          }
+
+          return true;
+        },
+      );
+    } catch (error) {
+      if (quotaResponse) {
+        // Quota exhaustion is the pause signal, not an upload failure: drop
+        // the batch silently (the pause transition logs once) and pause.
+        this.enterQuotaPause(parseQuotaRetryAfterSeconds(quotaResponse));
+        return;
+      }
+
+      throw error;
+    }
 
     if (isObservabilityDisabled(response)) {
       this.enterQuotaPause(parseQuotaRetryAfterSeconds(response));
@@ -638,9 +675,9 @@ export class MastraPlatformExporter extends BaseExporter {
 
   /**
    * Enter the quota-exhausted paused state: drop buffered events, stop the
-   * flush timer, and start probing until the collector stops sending the
-   * disabled header. The gate is per-org, so a signal on any publish route
-   * pauses all five signal types.
+   * flush timer, and start probing until the collector stops rejecting with
+   * 402. The gate is per-org, so a signal on any publish route pauses all
+   * five signal types.
    */
   private enterQuotaPause(retryAfterSeconds: number): void {
     this.quotaProbeIntervalSeconds = retryAfterSeconds;
@@ -684,12 +721,16 @@ export class MastraPlatformExporter extends BaseExporter {
 
   /**
    * Send an empty spans batch as a free probe. The collector treats an empty
-   * batch as a no-op, and an exhausted org still gets the disabled header on it.
+   * batch as a no-op, and an exhausted org still gets the 402 on it. A 402
+   * throws out of fetchWithRetry without the Response, so the retry predicate
+   * captures it to keep the retry-after hint.
    */
   private async probeQuotaStatus(): Promise<void> {
     if (this.shuttingDown || !this.quotaPaused) {
       return;
     }
+
+    let quotaResponse: Response | undefined;
 
     try {
       const response = await fetchWithRetry(
@@ -703,6 +744,16 @@ export class MastraPlatformExporter extends BaseExporter {
           body: JSON.stringify({ spans: [] }),
         },
         1,
+        {
+          shouldRetryResponse: res => {
+            if (isQuotaExceededResponse(res)) {
+              quotaResponse = res;
+            }
+
+            // Probes are best-effort; never retry them.
+            return false;
+          },
+        },
       );
 
       if (this.shuttingDown) {
@@ -718,7 +769,12 @@ export class MastraPlatformExporter extends BaseExporter {
 
       this.quotaProbeIntervalSeconds = parseQuotaRetryAfterSeconds(response);
     } catch {
-      // Probe failed (network error or non-2xx); stay paused and try again later.
+      if (quotaResponse) {
+        // Still exhausted (402); honor the collector's updated probe hint.
+        this.quotaProbeIntervalSeconds = parseQuotaRetryAfterSeconds(quotaResponse);
+      }
+      // Otherwise the probe failed (network error or non-402 failure); stay
+      // paused and try again later.
     }
 
     this.scheduleQuotaProbe();
