@@ -234,6 +234,13 @@ export interface TUIState {
   /** Queue of pending inline questions waiting to be shown (when one is already active) */
   pendingInlineQuestions: Array<() => void>;
   activeInlinePlanApproval?: PlanApprovalInlineComponent;
+  /**
+   * Focus deferred because a command overlay was open when a plan approval
+   * arrived. Handed off (setFocus) when the overlay stack empties, guarded by
+   * `pendingFocus === activeInlinePlanApproval` so a stale value never steals
+   * focus. See installOverlayFocusHandoff in setup.ts.
+   */
+  pendingFocus?: Component;
   activeOnboarding?: OnboardingInlineComponent;
   lastSubmitPlanComponent?: Component;
   pendingSubmitPlanComponents: Map<string, PlanApprovalInlineComponent>;

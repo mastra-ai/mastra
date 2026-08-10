@@ -114,7 +114,7 @@ describe('AgentController workspace — dynamic factory', () => {
     expect(factory).toHaveBeenCalledTimes(2);
   });
 
-  it('resolveWorkspace provides session state to the factory', async () => {
+  it('the factory reads session state through the request context', async () => {
     const ws = createMockWorkspace('dynamic-ws');
     // Simulates a dynamic workspace factory that reads session state via
     // getState() — the recommended accessor on AgentControllerRequestContext.
@@ -137,11 +137,49 @@ describe('AgentController workspace — dynamic factory', () => {
 
     const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
-    // resolveWorkspace is called outside the request flow (e.g. from slash
-    // commands). createSession does not cache the resolved workspace on
-    // this.workspace, so this re-invokes the factory with a fresh context.
-    const resolved = await controller.resolveWorkspace({ session });
-    expect(resolved).toBe(ws);
+    // Callers outside the request flow (e.g. slash commands) get the instance
+    // the session already runs against, so the factory is not asked twice.
+    expect(await controller.resolveWorkspace({ session })).toBe(ws);
+    expect(factory).toHaveBeenCalledTimes(1);
+  });
+
+  it('resolveWorkspace does not pin one session workspace onto the controller', async () => {
+    const wsA = createMockWorkspace('ws-a');
+    const wsB = createMockWorkspace('ws-b');
+    const factory = vi.fn(async ({ requestContext }) => {
+      const projectPath = requestContext.get('controller').getState().projectPath;
+      return projectPath === '/repo-a' ? wsA : wsB;
+    });
+    const controller = new AgentController({
+      id: 'test',
+      storage: new InMemoryStore(),
+      modes: [{ id: 'default', name: 'Default', default: true, agent: createAgent() }],
+      workspace: factory,
+    });
+    await controller.init();
+
+    const sessionA = await controller.createSession({
+      id: 'session-a',
+      ownerId: 'test-owner',
+      resourceId: 'resource-a',
+      tags: { projectPath: '/repo-a' },
+    });
+    await controller.resolveWorkspace({ session: sessionA });
+
+    const sessionB = await controller.createSession({
+      id: 'session-b',
+      ownerId: 'test-owner',
+      resourceId: 'resource-b',
+      tags: { projectPath: '/repo-b' },
+    });
+
+    expect(sessionA.getWorkspace()).toBe(wsA);
+    expect(sessionB.getWorkspace()).toBe(wsB);
+    expect(await controller.resolveWorkspace({ session: sessionA })).toBe(wsA);
+    expect(await controller.resolveWorkspace({ session: sessionB })).toBe(wsB);
+    expect(factory).toHaveBeenCalledTimes(2);
+    expect(controller.getWorkspace()).toBeUndefined();
+    expect(controller.isWorkspaceReady()).toBe(true);
   });
 });
 

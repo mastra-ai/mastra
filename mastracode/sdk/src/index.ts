@@ -715,7 +715,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
           update: updater => session.state.update(updater),
         },
       },
-      workspace: controller.getWorkspace(),
+      workspace: session.getWorkspace(),
       getSubagentModelId: params => session.subagents.model.get(params ?? {}),
     };
     requestContext.set('controller', agentControllerContext);

@@ -488,7 +488,7 @@ Returns: `boolean`
 
 #### `getWorkspace()`
 
-Return a static controller workspace. Dynamic workspace factories return `undefined` until resolved.
+Return a static controller workspace. Dynamic workspace factories resolve per session and return `undefined` here, so use `resolveWorkspace` instead.
 
 ```typescript
 const workspace = controller.getWorkspace()
@@ -498,7 +498,7 @@ Returns: `Workspace | undefined`
 
 #### `resolveWorkspace({ session, requestContext? })`
 
-Resolve a dynamic workspace for a session and cache the result on the controller.
+Return the workspace a session runs against. Sessions resolve theirs at creation, dynamic factories included, so this returns that instance and only falls back to the factory for a session created without one.
 
 ```typescript
 const workspace = await controller.resolveWorkspace({ session, requestContext })
