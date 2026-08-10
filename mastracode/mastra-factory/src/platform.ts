@@ -1,4 +1,4 @@
-import { MASTRA_PLATFORM_API_URL, authHeaders, extractApiErrorDetail, platformFetch } from '../auth/client.js';
+import { MASTRA_PLATFORM_API_URL, authHeaders, extractApiErrorDetail, platformFetch } from './auth/client.js';
 
 export type ProjectRegion = 'eu' | 'us';
 
@@ -144,7 +144,7 @@ export async function attachNeonDatabase({
     if (res.status === 403) {
       throw new PlatformApiError(
         403,
-        `Attaching a database requires the admin role in your organization. Ask an org admin to run \`mastra factory init\`, or attach a database from the dashboard.`,
+        `Attaching a database requires the admin role in your organization. Ask an org admin to run \`mastra factory create\`, or attach a database from the dashboard.`,
       );
     }
     throw new PlatformApiError(res.status, `Failed to attach Neon database — ${await extractError(res)}`);

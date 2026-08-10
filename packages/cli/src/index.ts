@@ -1,6 +1,7 @@
 #! /usr/bin/env node
 import { coreFeatures } from '@mastra/core/features';
 import { Command } from 'commander';
+import { configureFactoryCreateCommand, runFactoryCreateCommand } from 'create-factory/command';
 import pc from 'picocolors';
 import type { PackageJson } from 'type-fest';
 
@@ -27,7 +28,6 @@ import { registerEnvDbCommands } from './commands/db/index.js';
 import { unifiedDeployAction } from './commands/deploy/index.js';
 import { registerEnvCommands } from './commands/env/index.js';
 import { buildExperimentWorker } from './commands/experiment/build';
-import { configureFactoryInitCommand, runFactoryInitCommand } from './commands/factory/index.js';
 import { COMPONENTS, LLMProvider } from './commands/init/utils';
 import { serverDeployAction } from './commands/server/deploy';
 import { serverSuggestionsAction } from './commands/server/deploy-suggestions';
@@ -143,8 +143,8 @@ program
 
 const factoryCommand = program.command('factory').description('Manage Mastra Factory');
 
-configureFactoryInitCommand(factoryCommand.command('init')).action(
-  wrapAction((projectName, options) => runFactoryInitCommand(projectName, options, analytics)),
+configureFactoryCreateCommand(factoryCommand.command('create')).action(
+  wrapAction((projectName, options) => runFactoryCreateCommand(projectName, options, analytics)),
 );
 
 factoryCommand

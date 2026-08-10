@@ -1,38 +1,28 @@
 #!/usr/bin/env node
 import { Command } from 'commander';
-import {
-  configureFactoryInitCommand,
-  runFactoryInitCommand,
-  type FactoryInitOptions,
-} from 'mastra/commands/factory';
-import { PosthogAnalytics } from 'mastra/dist/analytics/index.js';
 import pkgJson from '../package.json' with { type: 'json' };
+import { noopFactoryAnalytics } from './analytics.js';
+import { configureFactoryCreateCommand, runFactoryCreateCommand, type FactoryCreateOptions } from './command.js';
 import { redactError } from './utils/redact.js';
 
-const analytics = new PosthogAnalytics({
-  apiKey: 'phc_SBLpZVAB6jmHOct9CABq3PF0Yn5FU3G2FgT4xUr2XrT',
-  host: 'https://us.posthog.com',
-  version: pkgJson.version,
-});
+const program = configureFactoryCreateCommand(new Command().name('create-factory').version(pkgJson.version));
 
-const program = configureFactoryInitCommand(new Command().name('create-factory').version(pkgJson.version));
-
-program.action(async (projectName: string | undefined, options: FactoryInitOptions) => {
+program.action(async (projectName: string | undefined, options: FactoryCreateOptions) => {
   const validRegion = options.region === 'eu' || options.region === 'us' ? options.region : undefined;
   let rawError: unknown;
 
   try {
-    await analytics.trackCommandExecution({
+    await noopFactoryAnalytics.trackCommandExecution({
       command: 'create-factory',
       args: {
-        default_template: options.template === 'https://github.com/mastra-ai/softwarefactory-template',
+        scaffold_source: options.template ? 'custom_template' : 'built_in',
         no_platform: !options.platform,
         has_org: Boolean(options.org),
         region: validRegion ?? (options.region ? 'invalid' : undefined),
       },
       execution: async () => {
         try {
-          await runFactoryInitCommand(projectName, options, analytics);
+          await runFactoryCreateCommand(projectName, options, noopFactoryAnalytics);
         } catch (error) {
           rawError = error;
           throw redactError(error, [
@@ -54,6 +44,4 @@ try {
 } catch (error) {
   console.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
   process.exitCode = 1;
-} finally {
-  await analytics.shutdown(1000);
 }

@@ -6,10 +6,10 @@ import { defineConfig } from 'tsdown';
  * import one file.
  */
 export default defineConfig({
-  entry: ['src/index.ts'],
+  entry: ['src/index.ts', 'src/api.ts'],
   format: ['esm'],
   clean: true,
-  dts: false,
+  dts: true,
   sourcemap: false,
   fixedExtension: false,
 });

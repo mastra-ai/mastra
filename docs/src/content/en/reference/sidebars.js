@@ -146,6 +146,7 @@ const sidebars = {
       label: 'CLI',
       collapsed: true,
       items: [
+        { type: 'doc', id: 'cli/create-factory', label: 'create-factory' },
         { type: 'doc', id: 'cli/create-mastra', label: 'create-mastra' },
         { type: 'doc', id: 'cli/mastra', label: 'mastra' },
       ],
@@ -904,6 +905,6 @@ const sidebars = {
       ],
     },
   ],
-}
+};
 
-export default sidebars
+export default sidebars;

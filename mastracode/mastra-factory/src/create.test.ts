@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { PosthogAnalytics } from '../../analytics/index.js';
+import type { FactoryAnalytics } from './analytics.js';
 
 const clack = vi.hoisted(() => ({
   intro: vi.fn(),
@@ -48,15 +48,15 @@ const cliAuth = vi.hoisted(() => ({
 vi.mock('@clack/prompts', () => clack);
 vi.mock('tinyexec', () => tinyexec);
 vi.mock('./platform.js', () => platform);
-vi.mock('../auth/api.js', () => cliAuth);
-vi.mock('../auth/credentials.js', () => cliAuth);
-vi.mock('../auth/orgs.js', () => cliAuth);
+vi.mock('./auth/api.js', () => cliAuth);
+vi.mock('./auth/credentials.js', () => cliAuth);
+vi.mock('./auth/orgs.js', () => cliAuth);
 
 import { create } from './create.js';
 import { detectPackageManager, getInstallArgs } from './utils/pm.js';
 
-const analytics = { trackEvent: () => {}, shutdown: async () => {} } as unknown as PosthogAnalytics;
-const TEMPLATE_REPO = 'https://github.com/mastra-ai/softwarefactory-template';
+const analytics = { trackEvent: () => {}, shutdown: async () => {} } as unknown as FactoryAnalytics;
+const TEMPLATE_REPO = 'https://github.com/example/custom-factory-template';
 
 const ENV_EXAMPLE = `# Mastra Factory environment.
 
@@ -122,27 +122,51 @@ afterEach(() => {
 });
 
 describe('create --no-platform', () => {
-  it('scaffolds a project with a verbatim .env and shows the next steps', async () => {
+  it('writes the built-in scaffold without cloning a template', async () => {
     await create({
       projectName: 'my-factory',
-      template: TEMPLATE_REPO,
       noPlatform: true,
       analytics,
     });
 
     const projectPath = path.join(workDir, 'my-factory');
     const env = fs.readFileSync(path.join(projectPath, '.env'), 'utf8');
+    const expectedFiles = [
+      '.env',
+      '.env.example',
+      '.env.schema',
+      '.gitignore',
+      'README.md',
+      'docker-compose.yml',
+      'package.json',
+      'pnpm-workspace.yaml',
+      'src/mastra/index.ts',
+      'tsconfig.json',
+    ];
 
-    // With --no-platform, .env stays a verbatim copy of .env.example — the
-    // CLI writes no values. Everything stays a commented placeholder (an
-    // active `KEY=` would load as the empty string and poison
-    // `process.env.X ?? default` fallbacks).
-    expect(env).toBe(ENV_EXAMPLE);
-    expect(env).not.toMatch(/^[A-Z][A-Z0-9_]*=/m);
+    for (const file of expectedFiles) {
+      expect(fs.existsSync(path.join(projectPath, file)), file).toBe(true);
+    }
+    expect(tinyexec.x).not.toHaveBeenCalledWith('npx', expect.arrayContaining(['degit']), expect.anything());
+
+    // With --no-platform, .env stays a verbatim copy of the built-in
+    // .env.example and the CLI writes no platform credentials.
+    expect(env).toBe(fs.readFileSync(path.join(projectPath, '.env.example'), 'utf8'));
+    expect(env).not.toMatch(/^MASTRA_PLATFORM_SECRET_KEY=/m);
+    expect(env).not.toMatch(/^MASTRA_PROJECT_ID=/m);
 
     // Project renamed and installed.
     const pkg = JSON.parse(fs.readFileSync(path.join(projectPath, 'package.json'), 'utf8'));
     expect(pkg.name).toBe('my-factory');
+    for (const [packageName, spec] of Object.entries({ ...pkg.dependencies, ...pkg.devDependencies })) {
+      expect(spec).not.toMatch(/alpha|beta|rc|next/i);
+      if (packageName === 'mastra' || packageName.startsWith('@mastra/')) {
+        expect(spec).toMatch(/^\^\d+\.\d+\.\d+$/);
+        expect(spec).not.toBe('latest');
+      }
+    }
+    expect(pkg.dependencies['@mastra/core']).toBe('^1.57.0');
+    expect(pkg.devDependencies.mastra).toBe('^1.23.0');
     const packageManager = detectPackageManager();
     expect(tinyexec.x).toHaveBeenCalledWith(packageManager, getInstallArgs(packageManager), {
       throwOnError: true,
@@ -250,7 +274,7 @@ describe('create (platform provisioning)', () => {
     expect(platform.mintOrgApiKey).toHaveBeenCalledWith({
       token: 'wos-token',
       orgId: 'org_123',
-      keyName: 'mastra factory init: my-factory',
+      keyName: 'mastra factory create: my-factory',
     });
     expect(platform.attachNeonDatabase).toHaveBeenCalledWith({
       token: 'wos-token',

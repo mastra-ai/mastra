@@ -20,7 +20,7 @@ const cliAuth = vi.hoisted(() => ({
   platformFetch: vi.fn(),
 }));
 
-vi.mock('../auth/client.js', () => cliAuth);
+vi.mock('./auth/client.js', () => cliAuth);
 
 import { attachNeonDatabase, createServerProject, PlatformApiError, waitForDatabaseReady } from './platform.js';
 

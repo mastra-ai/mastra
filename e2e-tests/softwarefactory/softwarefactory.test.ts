@@ -13,16 +13,11 @@ const cliRoot = join(rootDir, 'mastracode', 'mastra-factory');
 /**
  * Validates the artifacts users receive from `npm create factory`
  * against the monorepo's local package set (served by the E2E registry):
- * generate the server scaffold from mastracode/web, scaffold with the CLI's
- * --default path, then typecheck, build the CLI-bundled UI and server, boot,
- * and probe the scaffold.
- *
- * Published-npm compatibility is intentionally NOT checked here — sources
- * may legitimately be ahead of npm between release trains. The
- * sync-softwarefactory-template workflow gates the public template repo on
- * published versions instead.
+ * scaffold with create-factory's built-in project, then typecheck, build the
+ * CLI-bundled UI and server, boot, and probe the scaffold against the
+ * monorepo's local package snapshot.
  */
-describe('softwarefactory template', () => {
+describe('create-factory scaffold', () => {
   let workDir: string;
   let scaffoldDir: string;
   let registryEnv: Record<string, string>;
@@ -35,7 +30,6 @@ describe('softwarefactory template', () => {
     registryEnv = { npm_config_registry: registry, pnpm_config_registry: registry };
 
     workDir = await realpath(await mkdtemp(join(tmpdir(), 'sf-e2e-')));
-    const templateDir = join(workDir, 'template');
     scaffoldDir = join(workDir, 'factory');
 
     // `pnpm --filter` bypasses turbo, so the embedded SPA that `build:lib`
@@ -45,37 +39,25 @@ describe('softwarefactory template', () => {
       stdio: 'inherit',
     });
 
-    // The create-factory bundle externalizes its `mastra/internal/auth`
-    // dependency, so both package dist directories must exist before it runs.
-    await execa('pnpm', ['--filter', './packages/cli', 'build:lib'], {
-      cwd: rootDir,
-      stdio: 'inherit',
-    });
+    // Build the standalone artifact so the E2E exercises the same packaged
+    // command implementation and scaffold assets users receive.
     await execa('pnpm', ['--filter', './mastracode/mastra-factory', 'build'], {
       cwd: rootDir,
       stdio: 'inherit',
     });
 
-    // Generate the template pinned to the registry's snapshot dist-tag.
-    await execa('node', [join(cliRoot, 'scripts', 'sync-template.mjs'), '--out', templateDir, '--tag', tag], {
-      cwd: rootDir,
-      stdio: 'inherit',
-      env: { ...process.env, ...registryEnv },
-    });
-
-    // The CLI accepts a Git template source, so make the generated directory
-    // cloneable and scaffold it through the built create-factory entrypoint.
-    await execa('git', ['init', '-q', '-b', 'main'], { cwd: templateDir });
-    await execa('git', ['add', '-A'], { cwd: templateDir });
-    await execa(
-      'git',
-      ['-c', 'user.name=Software Factory E2E', '-c', 'user.email=e2e@mastra.ai', 'commit', '-q', '-m', 'Template'],
-      { cwd: templateDir },
-    );
-    await execa('node', [join(cliRoot, 'dist', 'index.js'), 'factory', '--no-platform', '--template', templateDir], {
+    // Exercise the same package-owned default scaffold shipped to users. The
+    // dependency-tag override points its Mastra packages at this E2E run's
+    // isolated registry snapshot without changing the public stable ranges.
+    await execa('node', [join(cliRoot, 'dist', 'index.js'), 'factory', '--no-platform'], {
       cwd: workDir,
       stdio: 'inherit',
-      env: { ...process.env, ...registryEnv, MASTRA_TELEMETRY_DISABLED: '1' },
+      env: {
+        ...process.env,
+        ...registryEnv,
+        MASTRA_FACTORY_DEPENDENCY_TAG: tag,
+        MASTRA_TELEMETRY_DISABLED: '1',
+      },
     });
   });
 

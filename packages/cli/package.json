@@ -11,7 +11,6 @@
   },
   "exports": {
     ".": "./dist/index.js",
-    "./commands/factory": "./dist/commands/factory/index.js",
     "./internal/auth": "./dist/internal/auth.js",
     "./package.json": "./package.json",
     "./dist/*": [
@@ -61,6 +60,7 @@
     "@mastra/loggers": "workspace:^",
     "archiver": "^8.0.0",
     "commander": "^14.0.3",
+    "create-factory": "workspace:^",
     "dotenv": "^17.3.1",
     "execa": "^9.6.1",
     "fs-extra": "^11.3.5",
