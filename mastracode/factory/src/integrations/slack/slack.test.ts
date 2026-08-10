@@ -445,6 +445,20 @@ describe('repo-backed thread sessions (resolveResourceId)', () => {
     });
   });
 
+  // Top-level DM and channel conversations use the empty-threadTs thread form
+  // (`slack:D-1:`), which previously derived the invalid git ref `slack/` and
+  // made every top-level DM session fail its clone.
+  it('a top-level conversation thread (empty threadTs) derives its branch from the channel id', async () => {
+    const deps = makeResolverDeps();
+    const resolve = createChannelResourceIdResolver(deps as any);
+
+    await expect(resolve(resolveArgs({ id: 'slack:D-1:' }))).resolves.toBe('us-new');
+
+    expect(deps.sourceControl.sessions.create).toHaveBeenCalledWith(
+      expect.objectContaining({ branch: 'slack/D-1' }),
+    );
+  });
+
   it('a repeat message on the same thread reuses the existing session, no second row', async () => {
     const sourceControl = makeSourceControl({ existingSession: { sessionId: 'us-existing' } });
     const deps = makeResolverDeps({ sourceControl });

@@ -84,27 +84,41 @@ export async function resolveFactorySourceRepository(args: {
   const { sourceControl, orgId, factoryProjectId, repositorySlug } = args;
 
   const connections = await sourceControl.connections.list({ orgId, factoryProjectId });
-  const connection = connections.find(candidate => candidate.integrationId === sourceControl.integrationId);
-  if (!connection) return { found: false, reason: 'connection' };
+  const candidates = connections.filter(candidate => candidate.integrationId === sourceControl.integrationId);
+  if (candidates.length === 0) return { found: false, reason: 'connection' };
 
-  const projectRepositories = await sourceControl.projectRepositories.list({ orgId, connectionId: connection.id });
-  const resolvedRepositories = await Promise.all(
-    projectRepositories.map(async projectRepository => ({
-      projectRepository,
-      repository: await sourceControl.repositories.get({ orgId, id: projectRepository.repositoryId }),
-    })),
-  );
-  const resolved = resolvedRepositories.find(
-    candidate => candidate.repository && (!repositorySlug || candidate.repository.slug === repositorySlug),
-  );
-  if (!resolved?.repository) return { found: false, reason: 'repository' };
+  // A project can carry stale connections: a provider-app reinstall leaves the
+  // old connection pointing at an installation that no longer exists, and that
+  // row can sit ahead of the healthy one. Try every candidate and skip the ones
+  // that no longer resolve rather than failing on the first.
+  for (const connection of candidates) {
+    let projectRepositories;
+    try {
+      projectRepositories = await sourceControl.projectRepositories.list({ orgId, connectionId: connection.id });
+    } catch {
+      // The connection no longer resolves (e.g. its installation was deleted).
+      continue;
+    }
+    const resolvedRepositories = await Promise.all(
+      projectRepositories.map(async projectRepository => ({
+        projectRepository,
+        repository: await sourceControl.repositories.get({ orgId, id: projectRepository.repositoryId }),
+      })),
+    );
+    const resolved = resolvedRepositories.find(
+      candidate => candidate.repository && (!repositorySlug || candidate.repository.slug === repositorySlug),
+    );
+    if (!resolved?.repository) continue;
 
-  return {
-    found: true,
-    projectRepositoryId: resolved.projectRepository.id,
-    baseBranch: resolved.projectRepository.branch ?? resolved.repository.defaultBranch,
-    connectedByUserId: connection.createdByUserId,
-  };
+    return {
+      found: true,
+      projectRepositoryId: resolved.projectRepository.id,
+      baseBranch: resolved.projectRepository.branch ?? resolved.repository.defaultBranch,
+      connectedByUserId: connection.createdByUserId,
+    };
+  }
+
+  return { found: false, reason: 'repository' };
 }
 
 /**

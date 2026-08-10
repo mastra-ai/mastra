@@ -726,6 +726,23 @@ describe('GitHub session workspace preparation', () => {
     });
   }
 
+  // A chat-only resourceId (e.g. `channel:slack:C1:170042` from an unrouted
+  // Slack sender) resolves no Factory session. On a remote-sandbox deploy that
+  // used to throw on every message; the session must instead run without a
+  // workspace — never a host-backed one, and never a provisioned sandbox.
+  it('a chat-only session on a remote-sandbox deploy gets no workspace instead of an error', async () => {
+    const workspace = createRemoteFactory();
+    addProject({ sandboxProvider: 'railway' });
+    // No session row: `sessions.getBySessionId` misses for the chat-only id.
+
+    await expect(
+      workspace({ requestContext: createGithubRequestContext('project-1', 'channel:slack:C-1:1700.42') }),
+    ).resolves.toBeUndefined();
+
+    expect(mocks.ensureSandbox).not.toHaveBeenCalled();
+    expect(mocks.materializeRepo).not.toHaveBeenCalled();
+  });
+
   it('claims a pooled sandbox for a new remote session instead of provisioning fresh', async () => {
     const workspace = createRemoteFactory();
     addProject({ sandboxProvider: 'railway' });
