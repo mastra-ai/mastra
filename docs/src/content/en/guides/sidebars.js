@@ -20,21 +20,6 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'getting-started/express',
-          label: 'Express',
-        },
-        {
-          type: 'doc',
-          id: 'getting-started/nestjs',
-          label: 'NestJS',
-        },
-        {
-          type: 'doc',
-          id: 'getting-started/hono',
-          label: 'Hono',
-        },
-        {
-          type: 'doc',
           id: 'getting-started/manual-install',
           label: 'Manual Install',
         },

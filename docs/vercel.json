@@ -282,7 +282,7 @@
     },
     {
       "source": "/docs/frameworks/servers/express",
-      "destination": "/guides/getting-started/express",
+      "destination": "/integrations/frameworks/express",
       "permanent": true
     },
     {
@@ -1831,6 +1831,21 @@
       "permanent": true
     },
     {
+      "source": "/guides/getting-started/express",
+      "destination": "/integrations/frameworks/express",
+      "permanent": true
+    },
+    {
+      "source": "/guides/getting-started/hono",
+      "destination": "/integrations/frameworks/hono",
+      "permanent": true
+    },
+    {
+      "source": "/guides/getting-started/nestjs",
+      "destination": "/integrations/frameworks/nestjs",
+      "permanent": true
+    },
+    {
       "source": "/docs/editor/prompts/llms.txt",
       "destination": "/docs/editor/overview/llms.txt",
       "permanent": true
@@ -2067,7 +2082,7 @@
     },
     {
       "source": "/docs/frameworks/servers/express/llms.txt",
-      "destination": "/guides/getting-started/express/llms.txt",
+      "destination": "/integrations/frameworks/express/llms.txt",
       "permanent": true
     },
     {
@@ -3303,6 +3318,21 @@
     {
       "source": "/reference/voice/openai-realtime/llms.txt",
       "destination": "/integrations/voice/openai/llms.txt#realtime",
+      "permanent": true
+    },
+    {
+      "source": "/guides/getting-started/express/llms.txt",
+      "destination": "/integrations/frameworks/express/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/guides/getting-started/hono/llms.txt",
+      "destination": "/integrations/frameworks/hono/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/guides/getting-started/nestjs/llms.txt",
+      "destination": "/integrations/frameworks/nestjs/llms.txt",
       "permanent": true
     }
   ]

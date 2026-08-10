@@ -267,7 +267,7 @@
     },
     {
       "source": "/docs/frameworks/servers/express",
-      "destination": "/guides/getting-started/express",
+      "destination": "/integrations/frameworks/express",
       "permanent": true
     },
     {
@@ -1813,6 +1813,21 @@
     {
       "source": "/reference/voice/openai-realtime",
       "destination": "/integrations/voice/openai#realtime",
+      "permanent": true
+    },
+    {
+      "source": "/guides/getting-started/express",
+      "destination": "/integrations/frameworks/express",
+      "permanent": true
+    },
+    {
+      "source": "/guides/getting-started/hono",
+      "destination": "/integrations/frameworks/hono",
+      "permanent": true
+    },
+    {
+      "source": "/guides/getting-started/nestjs",
+      "destination": "/integrations/frameworks/nestjs",
       "permanent": true
     }
   ]
