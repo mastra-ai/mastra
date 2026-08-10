@@ -69,6 +69,10 @@ export function MainSidebarNavLink({
   asChild = false,
   ...props
 }: MainSidebarNavLinkProps) {
+  if (render && asChild) {
+    throw new Error('MainSidebarNavLink accepts either `render` or `asChild`, not both.');
+  }
+
   // Auto-inherit state + LinkComponent from context; explicit props still win.
   const ctx = useMaybeSidebarState();
   const state: SidebarState = stateProp ?? ctx?.state ?? 'default';
@@ -78,7 +82,7 @@ export function MainSidebarNavLink({
   const level = levelProp ?? (link?.indent ? 1 : 0);
   const isExternal = Boolean(link?.url && /^(https?:)?\/\//.test(link.url));
   const linkParams = isExternal ? { target: '_blank', rel: 'noreferrer' } : {};
-  const needsTooltip = link ? isCollapsed || Boolean(link.tooltipMsg) : false;
+  const tooltip = navTooltipLabel(link, isCollapsed);
 
   // A collapsed rail has no room for a trailing control, so the action is dropped there.
   const rowAction = isCollapsed ? undefined : action;
@@ -87,11 +91,7 @@ export function MainSidebarNavLink({
     ? cn(navItemLayoutClasses({ level, size }), 'flex-1 pr-1')
     : navItemClasses({ isActive, isCollapsed, isFeatured, level, size });
 
-  let interactiveEl: React.ReactNode = null;
-
-  if (render && asChild) {
-    throw new Error('MainSidebarNavLink accepts either `render` or `asChild`, not both.');
-  }
+  let interactiveEl: React.ReactNode = undefined;
 
   if (render) {
     interactiveEl = React.cloneElement(render, {
@@ -117,25 +117,33 @@ export function MainSidebarNavLink({
     );
   }
 
-  const rowEl =
-    link && needsTooltip && React.isValidElement(interactiveEl) ? (
-      <Tooltip>
-        <TooltipTrigger render={interactiveEl} />
-        <TooltipContent side="right" align="center" sideOffset={16}>
-          {link.tooltipMsg ? (isCollapsed ? `${link.name} | ${link.tooltipMsg}` : link.tooltipMsg) : link.name}
-        </TooltipContent>
-      </Tooltip>
-    ) : (
-      (interactiveEl ?? children)
-    );
-
   return (
     <li {...props} className={cn('relative flex min-w-0 flex-col', className)}>
       <NavRowBody action={rowAction} surfaceClassName={navRowSurfaceClasses({ isActive, isFeatured })}>
-        {rowEl}
+        <NavRowTooltip label={tooltip}>{interactiveEl ?? children}</NavRowTooltip>
       </NavRowBody>
       {!isCollapsed && subItems}
     </li>
+  );
+}
+
+/** A collapsed rail hides the label, so the row names itself through a tooltip. */
+function navTooltipLabel(link: NavLink | undefined, isCollapsed: boolean) {
+  if (!link) return undefined;
+  if (link.tooltipMsg) return isCollapsed ? `${link.name} | ${link.tooltipMsg}` : link.tooltipMsg;
+  return isCollapsed ? link.name : undefined;
+}
+
+function NavRowTooltip({ label, children }: { label?: string; children: React.ReactNode }) {
+  if (!label || !React.isValidElement(children)) return children;
+
+  return (
+    <Tooltip>
+      <TooltipTrigger render={children} />
+      <TooltipContent side="right" align="center" sideOffset={16}>
+        {label}
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
