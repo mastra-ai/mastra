@@ -186,9 +186,9 @@ Projects that depend on packages from a private registry install them during the
 
 In a monorepo, a `.npmrc` in your project directory takes precedence over one at the repository root.
 
-`NPM_TOKEN` is scoped to the dependency install. It isn't passed to your build or lint steps, isn't written into the container image, and isn't available to your application at runtime. Its value is redacted from build logs. If your code needs registry access after deploy, read it from a separate variable.
+`NPM_TOKEN` reaches the dependency install and stops there. The build step, the container image, and your running application all exclude it, and its value is redacted from build logs. Store a separate variable when your code needs registry access at runtime.
 
-Deploys behave exactly as before when `NPM_TOKEN` isn't set, so public-only projects need no changes.
+Projects that depend only on public packages need no changes.
 
 ## Project resolution
 
