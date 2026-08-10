@@ -251,6 +251,7 @@ export class MastraPlatformExporter extends BaseExporter {
   private quotaPaused = false;
   private quotaProbeTimer: NodeJS.Timeout | null = null;
   private quotaProbeIntervalSeconds = DEFAULT_QUOTA_PROBE_INTERVAL_SECONDS;
+  private shuttingDown = false;
 
   constructor(config: MastraPlatformExporterConfig = {}) {
     super(config);
@@ -658,6 +659,10 @@ export class MastraPlatformExporter extends BaseExporter {
   }
 
   private scheduleQuotaProbe(): void {
+    if (this.shuttingDown) {
+      return;
+    }
+
     if (this.quotaProbeTimer) {
       clearTimeout(this.quotaProbeTimer);
     }
@@ -676,7 +681,7 @@ export class MastraPlatformExporter extends BaseExporter {
    * batch as a no-op, and an exhausted org still gets the disabled header on it.
    */
   private async probeQuotaStatus(): Promise<void> {
-    if (!this.quotaPaused) {
+    if (this.shuttingDown || !this.quotaPaused) {
       return;
     }
 
@@ -693,6 +698,10 @@ export class MastraPlatformExporter extends BaseExporter {
         },
         1,
       );
+
+      if (this.shuttingDown) {
+        return;
+      }
 
       if (!isObservabilityDisabled(response)) {
         this.quotaPaused = false;
@@ -787,6 +796,8 @@ export class MastraPlatformExporter extends BaseExporter {
   }
 
   async shutdown(): Promise<void> {
+    this.shuttingDown = true;
+
     if (this.isDisabled) {
       return;
     }

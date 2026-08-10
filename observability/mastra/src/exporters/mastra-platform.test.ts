@@ -2167,6 +2167,33 @@ describe('MastraPlatformExporter', () => {
       await vi.advanceTimersByTimeAsync(600_000);
       expect(mockFetchWithRetry.mock.calls.length).toBe(callsAfterShutdown);
     });
+
+    it('should not rearm the probe timer when a probe is in flight during shutdown', async () => {
+      const quotaExporter = createQuotaExporter();
+      mockFetchWithRetry.mockResolvedValue(disabledResponse('60'));
+
+      await quotaExporter.exportTracingEvent({ type: TracingEventType.SPAN_ENDED, exportedSpan: mockSpan });
+      await quotaExporter.flush();
+      expect((quotaExporter as any).quotaPaused).toBe(true);
+
+      // Next probe hangs on a deferred response so it is in flight when shutdown runs
+      let resolveProbe!: (response: Response) => void;
+      mockFetchWithRetry.mockImplementation(() => new Promise<Response>(resolve => (resolveProbe = resolve)));
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(mockFetchWithRetry).toHaveBeenCalledTimes(2); // probe fired, still pending
+
+      await quotaExporter.shutdown();
+      expect((quotaExporter as any).quotaProbeTimer).toBeNull();
+
+      // Probe completes after shutdown with a still-disabled response
+      resolveProbe(disabledResponse('60'));
+      await vi.advanceTimersByTimeAsync(0);
+
+      // No new timer was scheduled and no further probes fire
+      expect((quotaExporter as any).quotaProbeTimer).toBeNull();
+      await vi.advanceTimersByTimeAsync(600_000);
+      expect(mockFetchWithRetry).toHaveBeenCalledTimes(2);
+    });
   });
 
   describe('Shutdown Functionality', () => {
