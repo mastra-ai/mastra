@@ -302,6 +302,99 @@ export const getStepIds = (entry: StepFlowEntry): string[] => {
   return [];
 };
 
+const MAX_REPORTED_SNAPSHOT_IDS = 10;
+
+/**
+ * Verifies that the live execution graph is consistent with the recorded snapshot
+ * before a time-travel reconstruction is built. Without this check, any step id that
+ * exists in the live graph but not in the recorded snapshot context silently
+ * reconstructs to `{}`, and the execution engine then persists that reconstruction
+ * over the original snapshot — irreversibly corrupting it (see issue #21137).
+ *
+ * Divergence rules:
+ * - The target step id must exist in the live graph (enumerated via {@link getStepIds}).
+ * - Every step that precedes the target in the live graph must have an entry in the
+ *   recorded snapshot context or the caller-supplied context, EXCEPT legitimate
+ *   no-entry cases: unselected branch steps of a pre-target conditional entry (the
+ *   entry is healthy when at least one of its branch steps was recorded), sleep /
+ *   sleepUntil entries, and foreach / loop entries (which may record no per-step
+ *   entry when they ran zero iterations).
+ * - When the snapshot context records no step entries at all (only the reserved
+ *   `input` key, or nothing), the guard is a no-op: there is no recorded data to
+ *   protect, and the evented engine legitimately fabricates an empty snapshot
+ *   context for nested time travel when no nested snapshot exists.
+ */
+export const assertTimeTravelGraphMatchesSnapshot = (params: {
+  targetStepId: string;
+  graph: ExecutionGraph;
+  snapshot: WorkflowRunState;
+  context?: Record<string, any>;
+}): void => {
+  const { targetStepId, graph, snapshot, context } = params;
+  const snapshotContext = (snapshot.context ?? {}) as Record<string, any>;
+  const recordedStepIds = Object.keys(snapshotContext).filter(key => key !== 'input');
+
+  // Empty snapshot context: nothing recorded, nothing to protect.
+  if (recordedStepIds.length === 0) {
+    return;
+  }
+
+  const targetEntryIndex = graph.steps.findIndex(entry => getStepIds(entry).includes(targetStepId));
+  const reportedIds = recordedStepIds.slice(0, MAX_REPORTED_SNAPSHOT_IDS);
+  const reportedIdsSuffix =
+    recordedStepIds.length > MAX_REPORTED_SNAPSHOT_IDS
+      ? `${reportedIds.join(', ')} (and ${recordedStepIds.length - MAX_REPORTED_SNAPSHOT_IDS} more)`
+      : reportedIds.join(', ');
+
+  if (targetEntryIndex === -1) {
+    throw new Error(
+      `Cannot time travel to step '${targetStepId}': the step does not exist in the current execution graph. ` +
+        `The workflow definition has likely changed since the run was recorded (renamed step, or an unnamed .map() ` +
+        `step whose generated id changed across processes). Steps recorded in the snapshot: ${reportedIdsSuffix}. ` +
+        `The stored snapshot has not been modified.`,
+    );
+  }
+
+  const hasRecordedEntry = (stepId: string) => stepId in snapshotContext || (context != null && stepId in context);
+
+  const missingStepIds: string[] = [];
+  for (const [index, entry] of graph.steps.entries()) {
+    if (index >= targetEntryIndex) {
+      break;
+    }
+    // sleep / sleepUntil entries and zero-iteration foreach / loop entries may
+    // legitimately have no recorded snapshot entry.
+    if (entry.type === 'sleep' || entry.type === 'sleepUntil' || entry.type === 'foreach' || entry.type === 'loop') {
+      continue;
+    }
+    const stepIds = getStepIds(entry);
+    if (entry.type === 'conditional') {
+      // A pre-target conditional is healthy when at least one of its branch steps
+      // was recorded; unselected branches legitimately have no entry.
+      if (stepIds.length > 0 && !stepIds.some(hasRecordedEntry)) {
+        missingStepIds.push(...stepIds);
+      }
+      continue;
+    }
+    for (const stepId of stepIds) {
+      if (!hasRecordedEntry(stepId)) {
+        missingStepIds.push(stepId);
+      }
+    }
+  }
+
+  if (missingStepIds.length > 0) {
+    throw new Error(
+      `Cannot time travel to step '${targetStepId}': step(s) ${missingStepIds.map(id => `'${id}'`).join(', ')} ` +
+        `precede the target in the current execution graph but were not recorded in the snapshot. Either the ` +
+        `workflow definition changed since the run was recorded (renamed steps, or unnamed .map() steps whose ` +
+        `generated ids changed across processes), or the recorded run never reached these steps (it failed, was ` +
+        `canceled, or was suspended before them). Steps recorded in the snapshot: ${reportedIdsSuffix}. ` +
+        `The stored snapshot has not been modified.`,
+    );
+  }
+};
+
 export const createTimeTravelExecutionParams = (params: {
   steps: string[];
   inputData?: any;
@@ -315,6 +408,8 @@ export const createTimeTravelExecutionParams = (params: {
 }) => {
   const { steps, inputData, resumeData, context, nestedStepsContext, snapshot, initialState, graph, perStep } = params;
   const firstStepId = steps[0]!;
+
+  assertTimeTravelGraphMatchesSnapshot({ targetStepId: firstStepId, graph, snapshot, context });
 
   let executionPath: number[] = [];
   const stepResults: Record<string, StepResult<any, any, any, any>> = {};
