@@ -2,7 +2,7 @@
   "name": "evals-workshop",
   "private": true,
   "type": "module",
-  "description": "Mastra evals workshop — a headless CI-safe surface and a Studio demo surface over one shared core",
+  "description": "Mastra evals workshop \u2014 a headless CI-safe surface and a Studio demo surface over one shared core",
   "scripts": {
     "ex:1": "pnpm --filter @workshop/headless ex:1",
     "ex:2": "pnpm --filter @workshop/headless ex:2",
@@ -11,10 +11,15 @@
     "ex:5": "pnpm --filter @workshop/headless ex:5",
     "ex:6": "pnpm --filter @workshop/headless ex:6",
     "ex:7": "pnpm --filter @workshop/headless ex:7",
+    "ex:8": "pnpm --filter @workshop/headless ex:8",
+    "ex:9": "pnpm --filter @workshop/headless ex:9",
+    "ex:10": "pnpm --filter @workshop/headless ex:10",
+    "ex:11": "pnpm --filter @workshop/headless ex:11",
     "ex:all": "pnpm --filter @workshop/headless ex:all",
     "ex:offline": "pnpm --filter @workshop/headless ex:offline",
     "dev": "pnpm --filter @workshop/studio dev",
     "seed": "pnpm --filter @workshop/studio seed",
+    "reset": "rm -f studio/eval.db* studio/observability.duckdb* && pnpm seed",
     "clean": "pnpm -r clean"
   },
   "devDependencies": {

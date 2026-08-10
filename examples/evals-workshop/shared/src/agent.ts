@@ -13,9 +13,10 @@ import { Mastra } from '@mastra/core/mastra';
 import { LibSQLStore } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
 import { NIMBUS_KNOWLEDGE } from './data/support-qa.ts';
-import { echoModel, JUDGE_MODEL } from './models.ts';
+import { echoModel, JUDGE_MODEL, toolCallingModel } from './models.ts';
 import { answerAccuracyScorer } from './scorers/answer-accuracy.ts';
 import { supportRubricScorer } from './scorers/support-rubric.ts';
+import { lookupAccount } from './tools.ts';
 import { supportWorkflow } from './workflow.ts';
 
 const INSTRUCTIONS = `You are a support agent for Nimbus, a file-sync service.
@@ -111,6 +112,64 @@ export function buildSupportAgent(opts: BuildOptions = {}): AgentBundle {
   });
   // Resolve the agent through Mastra so memory inherits the configured storage.
   void mastra.getAgent('support-agent');
+
+  return { mastra, agent, storage, cleanup };
+}
+
+/**
+ * A second agent, this one with a tool — for the tool-mocking exercise.
+ *
+ * Kept separate from the support agent rather than bolted onto it, because
+ * tool mocks apply per experiment and mixing tool-using and text-only items in
+ * one dataset would muddy what the exercise is showing.
+ *
+ * The model is the deterministic `toolCallingModel`, so the *decision to call
+ * the tool* is fixed and the only thing that varies between runs is what the
+ * tool returns. That isolation is the whole point: it makes the tool the
+ * single source of non-determinism, which is what mocks then remove.
+ */
+export function buildBillingAgent(opts: BuildOptions = {}): AgentBundle {
+  const { storage: storageMode = 'temp', dbPath = 'file:./eval.db', scorers = {} } = opts;
+
+  let url: string;
+  let cleanup: () => void;
+  if (storageMode === 'persistent') {
+    url = dbPath;
+    cleanup = () => {};
+  } else {
+    const dir = mkdtempSync(join(tmpdir(), 'evals-workshop-'));
+    url = `file:${join(dir, 'eval.db')}`;
+    cleanup = () => {
+      try {
+        rmSync(dir, { recursive: true, force: true });
+      } catch {
+        void 0;
+      }
+    };
+  }
+
+  const storage = new LibSQLStore({ id: `workshop-billing-${storageMode}`, url });
+
+  const agent = new Agent({
+    id: 'billing-agent',
+    name: 'Nimbus Billing Agent',
+    description: 'Answers questions about a customer account by looking it up.',
+    instructions: `You are a Nimbus billing agent. When asked about an account,
+call lookupAccount to get the current plan and storage usage, then answer in
+one sentence using the numbers it returns. Never guess at usage figures.`,
+    model: toolCallingModel('lookupAccount', 'acct-42') as any,
+    tools: { lookupAccount },
+  });
+
+  const mastra = new Mastra({
+    storage,
+    agents: { 'billing-agent': agent },
+    scorers: {
+      'answer-accuracy': answerAccuracyScorer as any,
+      ...(scorers as Record<string, any>),
+    },
+  });
+  void mastra.getAgent('billing-agent');
 
   return { mastra, agent, storage, cleanup };
 }

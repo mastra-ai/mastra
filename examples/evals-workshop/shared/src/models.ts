@@ -83,3 +83,102 @@ export function echoModel(knowledge: Record<string, string> = {}) {
     },
   };
 }
+
+/**
+ * Deterministic mock that CALLS A TOOL, for the tool-mocking exercise.
+ *
+ * Two turns, decided by looking at the prompt rather than by counting calls
+ * (the agent loop may retry, and a counter would drift):
+ *
+ *   turn 1 — no tool result in the conversation yet → emit a tool call
+ *   turn 2 — a tool result is present → summarise it as text
+ *
+ * The summary is built from whatever the tool returned, which is what makes
+ * the exercise work: serve a different value through a mock and the final
+ * answer changes, with no other moving parts.
+ */
+export function toolCallingModel(toolName = 'lookupAccount', accountId = 'acct-42') {
+  /** Find a tool result anywhere in the prompt, whatever shape it arrives in. */
+  const findToolResult = (prompt: any[]): any => {
+    for (const message of [...prompt].reverse()) {
+      const parts = Array.isArray(message?.content) ? message.content : [];
+      for (const part of parts) {
+        if (part?.type === 'tool-result') {
+          return part.output ?? part.result ?? part.value;
+        }
+      }
+    }
+    return undefined;
+  };
+
+  /** Unwrap the {type:'json', value} envelope the tool result may be wrapped in. */
+  const unwrap = (value: any): any => (value && typeof value === 'object' && 'value' in value ? value.value : value);
+
+  const summarise = (raw: any): string => {
+    const result = unwrap(raw);
+    if (!result || typeof result !== 'object') return 'I could not read the account details.';
+    const { plan, storageUsedGb, storageLimitGb } = result as Record<string, unknown>;
+    return `Account ${accountId} is on the ${plan} plan and has used ${storageUsedGb} GB of ${storageLimitGb} GB.`;
+  };
+
+  const toolCallPart = {
+    type: 'tool-call' as const,
+    toolCallId: 'call-1',
+    toolName,
+    // `input` is a JSON *string* in the v2 content shape, not an object.
+    input: JSON.stringify({ accountId }),
+  };
+
+  return {
+    specificationVersion: 'v2' as const,
+    provider: 'mock',
+    modelId: 'mock-tool-agent',
+    doGenerate: async ({ prompt }: any) => {
+      const toolResult = findToolResult(prompt);
+      const answered = toolResult !== undefined;
+      return {
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: answered ? ('stop' as const) : ('tool-calls' as const),
+        usage: { inputTokens: 5, outputTokens: 5, totalTokens: 10 },
+        content: answered
+          ? [{ type: 'text' as const, text: summarise(toolResult) }]
+          : [toolCallPart],
+        warnings: [],
+      };
+    },
+    doStream: async ({ prompt }: any) => {
+      const toolResult = findToolResult(prompt);
+      const answered = toolResult !== undefined;
+      return {
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+        stream: new ReadableStream({
+          start(controller) {
+            controller.enqueue({ type: 'stream-start', warnings: [] });
+            controller.enqueue({
+              type: 'response-metadata',
+              id: 'r1',
+              modelId: 'mock-tool-agent',
+              timestamp: new Date(0),
+            });
+            if (answered) {
+              const text = summarise(toolResult);
+              controller.enqueue({ type: 'text-start', id: 't1' });
+              controller.enqueue({ type: 'text-delta', id: 't1', delta: text });
+              controller.enqueue({ type: 'text-end', id: 't1' });
+            } else {
+              controller.enqueue(toolCallPart);
+            }
+            controller.enqueue({
+              type: 'finish',
+              finishReason: answered ? 'stop' : 'tool-calls',
+              usage: { inputTokens: 5, outputTokens: 5, totalTokens: 10 },
+            });
+            controller.close();
+          },
+        }),
+      };
+    },
+  };
+}
+

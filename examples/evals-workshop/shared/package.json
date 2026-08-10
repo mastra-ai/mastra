@@ -7,6 +7,7 @@
   "exports": {
     "./agent": "./src/agent.ts",
     "./models": "./src/models.ts",
+    "./tools": "./src/tools.ts",
     "./workflow": "./src/workflow.ts",
     "./scorers": "./src/scorers/index.ts",
     "./data": "./src/data/support-qa.ts"
