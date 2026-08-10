@@ -24,22 +24,14 @@ export function promptHandoffState(
   return { handoffPrompt: prompt, handoffModeId: config.modeId, handoffModelId: config.modelId };
 }
 
-function readHandoffPrompt(state: unknown): string | null {
-  if (typeof state !== 'object' || state === null || !('handoffPrompt' in state)) return null;
-  const { handoffPrompt } = state;
-  return typeof handoffPrompt === 'string' && handoffPrompt ? handoffPrompt : null;
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
 }
 
-function readHandoffModeId(state: unknown): string | undefined {
-  if (typeof state !== 'object' || state === null || !('handoffModeId' in state)) return undefined;
-  const { handoffModeId } = state;
-  return typeof handoffModeId === 'string' && handoffModeId ? handoffModeId : undefined;
-}
-
-function readHandoffModelId(state: unknown): string | undefined {
-  if (typeof state !== 'object' || state === null || !('handoffModelId' in state)) return undefined;
-  const { handoffModelId } = state;
-  return typeof handoffModelId === 'string' && handoffModelId ? handoffModelId : undefined;
+function readHandoffField(state: unknown, key: keyof PromptHandoff): string | undefined {
+  if (!isRecord(state)) return undefined;
+  const value = state[key];
+  return typeof value === 'string' && value ? value : undefined;
 }
 
 /**
@@ -62,9 +54,9 @@ export function useHandoffPrompt(): void {
   const switchMode = useSwitchAgentControllerModeMutation(mutationArgs);
   const switchModel = useSwitchAgentControllerModelMutation(mutationArgs);
   const handedOff = useRef(false);
-  const prompt = readHandoffPrompt(location.state);
-  const modeId = readHandoffModeId(location.state);
-  const modelId = readHandoffModelId(location.state);
+  const prompt = readHandoffField(location.state, 'handoffPrompt');
+  const modeId = readHandoffField(location.state, 'handoffModeId');
+  const modelId = readHandoffField(location.state, 'handoffModelId');
 
   useEffect(() => {
     if (!prompt || !sessionEnabled || handedOff.current) return;
