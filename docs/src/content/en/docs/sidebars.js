@@ -286,13 +286,13 @@ const sidebars = {
           items: [
             {
               type: 'doc',
-              id: 'workspace/filesystem',
-              label: 'Filesystem',
+              id: 'workspace/sandbox',
+              label: 'Sandbox',
             },
             {
               type: 'doc',
-              id: 'workspace/sandbox',
-              label: 'Sandbox',
+              id: 'workspace/filesystem',
+              label: 'Filesystem',
             },
             {
               type: 'doc',
