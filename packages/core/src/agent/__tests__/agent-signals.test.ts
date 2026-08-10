@@ -3034,6 +3034,256 @@ describe('Agent signals', () => {
     }
   });
 
+  function createFakeThreadRun(runId: string, finished: Promise<void>) {
+    return {
+      runId,
+      status: 'running',
+      fullStream: new ReadableStream({
+        start(controller) {
+          controller.enqueue({ type: 'start', runId });
+          controller.enqueue({ type: 'finish', runId, payload: {} });
+          controller.close();
+        },
+      }),
+      _waitUntilFinished: () => finished,
+    } as any;
+  }
+
+  it('restores the failed signal at the queue head ahead of later queued signals', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const streamMock = vi.fn().mockRejectedValue(new Error('connection error: ECONNRESET'));
+    const agent = {
+      id: 'drain-order-agent',
+      stream: streamMock,
+    } as unknown as Agent<any, any, any, any>;
+    const runId = 'drain-order-run';
+    const threadId = 'drain-order-thread';
+    const resourceId = 'drain-order-user';
+    let finishRun!: () => void;
+    const finished = new Promise<void>(resolve => {
+      finishRun = resolve;
+    });
+
+    runtime.registerRun(agent, createFakeThreadRun(runId, finished), {
+      memory: { thread: threadId, resource: resourceId },
+    } as any);
+
+    const first = runtime.sendMessage(agent, 'first steer', { resourceId, threadId });
+    const second = runtime.sendMessage(agent, 'second steer', { resourceId, threadId });
+    await expect(first.accepted).resolves.toMatchObject({ action: 'deliver', runId });
+    await expect(second.accepted).resolves.toMatchObject({ action: 'deliver', runId });
+
+    finishRun();
+    await waitForCondition(() => streamMock.mock.calls.length === 1);
+    await nextTick();
+    await nextTick();
+
+    runtime.registerRun(agent, createFakeThreadRun('drain-order-probe', new Promise<void>(() => {})), {
+      memory: { thread: threadId, resource: resourceId },
+    } as any);
+    const restored = runtime.drainPendingSignals('drain-order-probe');
+    expect(restored).toHaveLength(2);
+    expect(restored[0]).toMatchObject({ contents: 'first steer' });
+    expect(restored[1]).toMatchObject({ contents: 'second steer' });
+  });
+
+  it('releases the thread lease with the failed run id when the handoff starts nothing', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new ControlledLeasePubSub();
+    const releaseSpy = vi.spyOn(pubsub, 'releaseLease');
+    const streamMock = vi.fn().mockRejectedValue(new Error('connection error: ECONNRESET'));
+    const agent = {
+      id: 'drain-release-agent',
+      stream: streamMock,
+    } as unknown as Agent<any, any, any, any>;
+    const runId = 'drain-release-run';
+    const threadId = 'drain-release-thread';
+    const resourceId = 'drain-release-user';
+    let finishRun!: () => void;
+    const finished = new Promise<void>(resolve => {
+      finishRun = resolve;
+    });
+
+    runtime.registerRun(
+      agent,
+      createFakeThreadRun(runId, finished),
+      { memory: { thread: threadId, resource: resourceId } } as any,
+      pubsub,
+    );
+
+    const result = runtime.sendMessage(agent, 'steer follow-up', { resourceId, threadId }, pubsub);
+    await expect(result.accepted).resolves.toMatchObject({ action: 'deliver', runId });
+
+    finishRun();
+    await waitForCondition(() => streamMock.mock.calls.length === 1);
+    const nextRunId = streamMock.mock.calls[0]?.[1]?.runId;
+    expect(nextRunId).toBeTruthy();
+    expect(nextRunId).not.toBe(runId);
+
+    // Run registration fails open on lease acquisition, so "a fresh run can
+    // start" would pass even without the release. Assert the release call
+    // directly, with the FAILED run's id (its renewal timer is keyed by it).
+    await waitForCondition(() => releaseSpy.mock.calls.some(call => call[1] === nextRunId));
+    expect(releaseSpy).toHaveBeenCalledWith(expect.stringContaining(threadId), nextRunId);
+  });
+
+  it('restores the signal when the lease transfer step throws', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new ControlledLeasePubSub();
+    vi.spyOn(pubsub, 'transferLease').mockImplementation(() => {
+      throw new Error('lease backend down');
+    });
+    const streamMock = vi.fn();
+    const agent = {
+      id: 'drain-lease-throw-agent',
+      stream: streamMock,
+    } as unknown as Agent<any, any, any, any>;
+    const runId = 'drain-lease-throw-run';
+    const threadId = 'drain-lease-throw-thread';
+    const resourceId = 'drain-lease-throw-user';
+    let finishRun!: () => void;
+    const finished = new Promise<void>(resolve => {
+      finishRun = resolve;
+    });
+
+    runtime.registerRun(
+      agent,
+      createFakeThreadRun(runId, finished),
+      { memory: { thread: threadId, resource: resourceId } } as any,
+      pubsub,
+    );
+
+    const result = runtime.sendMessage(agent, 'steer follow-up', { resourceId, threadId }, pubsub);
+    await expect(result.accepted).resolves.toMatchObject({ action: 'deliver', runId });
+
+    finishRun();
+    await waitForCondition(() =>
+      pubsub.publishedData.some(
+        data => data?.type === 'run-failed' && String(data?.error).includes('failed to start follow-up run'),
+      ),
+    );
+    expect(streamMock).not.toHaveBeenCalled();
+
+    runtime.registerRun(
+      agent,
+      createFakeThreadRun('drain-lease-throw-probe', new Promise<void>(() => {})),
+      { memory: { thread: threadId, resource: resourceId } } as any,
+      pubsub,
+    );
+    const restored = runtime.drainPendingSignals('drain-lease-throw-probe', pubsub);
+    expect(restored).toHaveLength(1);
+    expect(restored[0]).toMatchObject({ contents: 'steer follow-up' });
+  });
+
+  it('redelivers the restored signal exactly once on the next natural drain trigger', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const streamMock = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('connection error: ECONNRESET'))
+      .mockResolvedValue({} as any);
+    const agent = {
+      id: 'drain-redeliver-agent',
+      stream: streamMock,
+    } as unknown as Agent<any, any, any, any>;
+    const threadId = 'drain-redeliver-thread';
+    const resourceId = 'drain-redeliver-user';
+    let finishFirst!: () => void;
+    const firstFinished = new Promise<void>(resolve => {
+      finishFirst = resolve;
+    });
+
+    runtime.registerRun(agent, createFakeThreadRun('drain-redeliver-run-1', firstFinished), {
+      memory: { thread: threadId, resource: resourceId },
+    } as any);
+
+    const result = runtime.sendMessage(agent, 'steer follow-up', { resourceId, threadId });
+    await expect(result.accepted).resolves.toMatchObject({ action: 'deliver', runId: 'drain-redeliver-run-1' });
+
+    finishFirst();
+    await waitForCondition(() => streamMock.mock.calls.length === 1);
+    await nextTick();
+    await nextTick();
+
+    // The next natural trigger: another run on the same thread completing.
+    let finishSecond!: () => void;
+    const secondFinished = new Promise<void>(resolve => {
+      finishSecond = resolve;
+    });
+    runtime.registerRun(agent, createFakeThreadRun('drain-redeliver-run-2', secondFinished), {
+      memory: { thread: threadId, resource: resourceId },
+    } as any);
+    finishSecond();
+
+    await waitForCondition(() => streamMock.mock.calls.length === 2);
+    expect(streamMock.mock.calls[1]?.[0]).toMatchObject({ type: 'user', contents: 'steer follow-up' });
+
+    await nextTick();
+    await nextTick();
+    expect(streamMock.mock.calls).toHaveLength(2);
+
+    runtime.registerRun(agent, createFakeThreadRun('drain-redeliver-probe', new Promise<void>(() => {})), {
+      memory: { thread: threadId, resource: resourceId },
+    } as any);
+    expect(runtime.drainPendingSignals('drain-redeliver-probe')).toHaveLength(0);
+  });
+
+  it('hands the lease to a pending continuation instead of releasing it when the signal drain fails', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new ControlledLeasePubSub();
+    const releaseSpy = vi.spyOn(pubsub, 'releaseLease');
+    const streamMock = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('connection error: ECONNRESET'))
+      .mockResolvedValue({} as any);
+    const agent = {
+      id: 'drain-continuation-agent',
+      stream: streamMock,
+    } as unknown as Agent<any, any, any, any>;
+    const runId = 'drain-continuation-run';
+    const threadId = 'drain-continuation-thread';
+    const resourceId = 'drain-continuation-user';
+    let finishRun!: () => void;
+    const finished = new Promise<void>(resolve => {
+      finishRun = resolve;
+    });
+
+    runtime.registerRun(
+      agent,
+      createFakeThreadRun(runId, finished),
+      { memory: { thread: threadId, resource: resourceId } } as any,
+      pubsub,
+    );
+
+    const result = runtime.sendMessage(agent, 'steer follow-up', { resourceId, threadId }, pubsub);
+    await expect(result.accepted).resolves.toMatchObject({ action: 'deliver', runId });
+    const continuation = runtime.continueWithMessages(agent, 'continuation work', { resourceId, threadId }, pubsub);
+    expect(continuation.accepted).toBe(true);
+
+    finishRun();
+    // Call 1: the failed signal drain. Call 2: the continuation started by the
+    // failure path's handoff.
+    await waitForCondition(() => streamMock.mock.calls.length === 2);
+    expect(streamMock.mock.calls[1]?.[0]).toBe('continuation work');
+    expect(streamMock.mock.calls[1]?.[1]?.runId).toBe(continuation.runId);
+    await nextTick();
+    await nextTick();
+
+    // The lease was handed to the continuation, not released.
+    expect(releaseSpy).not.toHaveBeenCalled();
+
+    // The failed steer signal is still queued for a later drain, untouched by
+    // the continuation handoff.
+    runtime.registerRun(
+      agent,
+      createFakeThreadRun('drain-continuation-probe', new Promise<void>(() => {})),
+      { memory: { thread: threadId, resource: resourceId } } as any,
+      pubsub,
+    );
+    const restored = runtime.drainPendingSignals('drain-continuation-probe', pubsub);
+    expect(restored).toHaveLength(1);
+    expect(restored[0]).toMatchObject({ contents: 'steer follow-up' });
+  });
+
   it.each(['request_access', 'ask_user'])('keeps %s suspensions discoverable and blocks idle wake', async toolName => {
     const runtime = new AgentThreadStreamRuntime();
     const pubsub = new EventEmitterPubSub();
