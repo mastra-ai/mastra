@@ -434,7 +434,7 @@ const storage = new MastraCompositeStore({
 
 Don't set `replication` on ClickHouse Cloud. Cloud rewrites `MergeTree` to `SharedMergeTree` server-side. See the [ClickHouse storage reference](/reference/storage/clickhouse) for the full config shape and operator notes.
 
-:::info
+:::note
 
 This approach is also required when using storage providers that don't support observability (like Convex, DynamoDB, or Cloudflare). See the [MastraStorageExporter documentation](/docs/observability/integrations/exporters/mastra-storage#storage-provider-support) for the full list of supported providers.
 
