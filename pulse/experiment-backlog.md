@@ -99,10 +99,46 @@ Questions to answer:
 - Can the relationship graph answer which definitions were active for a Pulse without copying definition refs onto every Pulse?
 - What minimal indexes are needed to make graph reads practical?
 
-## Parked Gap: Agent Signals
+## 3. Agent Signals Mapping Experiment
 
-Agent Signals need a deeper source review before choosing a mapping.
+Agent Signals needed a deeper source review before choosing a mapping.
 
-Known question:
+Status: completed in `fit_exploration_06/`.
+
+Result: no top-level `Signal` export. Use delivery decision Pulses for routing, content-introducing Pulses when signal bodies enter context, ChangePulses for state-signal tracking and notification record lifecycle, and relationships to connect those facts. Do not emit a generic signal-arrival Pulse by default.
+
+Goal: decide how Agent Signals map into Pulse without duplicating the same fact as both an arrival record and a state-change record.
+
+Questions to answer:
 
 - Should signal handling emit a signal-arrival Pulse, a state-change Pulse, or one Pulse with both arrival and mutation semantics?
+- When a signal only informs state, is the arrival itself useful as an observable fact?
+- When a signal changes runtime state, should the mutation be a `ChangePulse` that references the arrival Pulse?
+- Are there signal types that should be represented only as relationships or definition/config applicability changes?
+- Which source paths define Agent Signals semantics today?
+
+## 4. Signal Queue Drain And Abort Follow-Up
+
+Status: completed in `fit_exploration_07/`.
+
+Result: queued Agent Signals need explicit queue/drain facts when delivery and model-context entry are separated. Pre-run signals are folded into the first model request; pending signals become a later model turn and force continuation. Abort signals are not Agent Signals; model abort as run/thread/execution control with request, intent, propagation, observation, and completion facts.
+
+Questions answered:
+
+- Is `signal.delivery_decided: deliver` enough to reconstruct when the model saw a signal?
+- Should pre-run and pending signal drains emit different Pulse shapes?
+- Is abort a Signal, ChangePulse, Relationship, or something else?
+- Which abort facts matter: requested, propagated, observed, completed, or all of them?
+
+## 5. Signal Visibility Reconstruction Follow-Up
+
+Status: completed in `fit_exploration_08/`.
+
+Result: the key unit for reconstruction is model visibility, not signal delivery. For delayed Agent Signals, use `signal.delivery_decided`, `signal_queue.enqueued`, `signal.drained_to_context`, `introduced_content`, and `included_in_model_input`. The drain/content Pulse owns the signal body because MessageList assigns transcript order at context-entry time. Add a derived `model_input` endpoint for prompt-turn reconstruction.
+
+Questions answered:
+
+- What exact facts are needed to know when the model saw a delivered signal?
+- Should delayed signal content be owned by delivery or drain/context-entry?
+- Are pre-run and pending queue scopes semantically different for replay?
+- Can original signal timestamps reconstruct prompt order?

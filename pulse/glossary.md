@@ -18,7 +18,7 @@ A coherent execution made of related Pulse records and relationships.
 
 `flow` is the preferred Pulse term for what tracing systems usually call a trace. A flow can include hierarchy, sequence, nested work, and references to config or definitions.
 
-Current leaning: `Flow` should be a derived read/query index, not an exported Pulse-like envelope. It should be reconstructed from Pulses and exported relationships.
+Decision after `fit_exploration_05`: `Flow` should be a derived or materialized read/query index, not an exported Pulse-like envelope. It should be reconstructed from Pulses and exported relationships.
 
 ### Origin Pulse
 
@@ -56,17 +56,15 @@ A relationship from the current flow to the flow that came before it in a thread
 
 Any append-only record emitted by the Pulse system.
 
-This term is intentionally unsettled. A prior exploration used `PulseExport` for a small family of append-only records:
+The current candidate after `fit_exploration_04` and `fit_exploration_05` is:
 
 ```ts
 type PulseExport =
   | Pulse
-  | Change
-  | Relationship
-  | Snapshot;
+  | Relationship;
 ```
 
-That shape may be too broad. `Change` and `Snapshot` may be better understood as special kinds of Pulse rather than siblings of Pulse:
+`Change` and any forced `Snapshot` are special kinds of Pulse rather than siblings of Pulse:
 
 ```ts
 type Pulse =
@@ -75,19 +73,19 @@ type Pulse =
   | SnapshotPulse;
 ```
 
-If that direction holds, `Relationship` remains the main non-Pulse candidate because it records links that may only be known after the related Pulses exist.
+`Relationship` remains the main non-Pulse candidate because it records links that may only be known after the related Pulses exist.
 
-The expanded candidate family also considers whether `Flow` and `Definition` are exported records, derived read models, or Pulse specializations.
+`Flow` is a derived/materialized index. `Definition` bodies are referenced artifacts/contracts, with lifecycle and applicability represented by Pulses and relationships.
 
 ### Change
 
 A Pulse specialization describing that a durable or logical state changed.
 
-Use `Change` for agent config edits, context truncation, message removal, state-signal updates, task-list updates, pending-item state, and possibly definition creation or updates.
+Use `ChangePulse` for agent config edits, context truncation, message removal, state-signal updates, task-list updates, pending-item state, and definition lifecycle or applicability changes.
 
-`Change` absorbs delta-like behavior through operations. There is no current need for a separate `Delta` export shape.
+`ChangePulse` absorbs delta-like behavior through operations. There is no current need for a separate `Delta` export shape.
 
-Open question: whether this should be named `Change`, `ChangePulse`, or just `Pulse` with `type: 'state'` and change-specific fields.
+Earlier notes may say `Change`; current naming preference is `ChangePulse`.
 
 ### Change Operation
 
@@ -109,11 +107,11 @@ A bounded reconstruction checkpoint.
 
 Avoid snapshots by default. They are a concession to bounded reconstruction, not a concept to add for neatness.
 
-Use `Snapshot` only if read/query needs require a checkpoint that cannot be reconstructed cheaply from prior Pulses and Changes. If a snapshot only means "this state changed to this ref set," it should collapse into `Change`.
+Use `SnapshotPulse` only if read/query needs require a checkpoint that cannot be reconstructed cheaply from prior Pulses and ChangePulses. If a snapshot only means "this state changed to this ref set," it should collapse into `ChangePulse`.
 
 Snapshots should mostly contain refs, counts, hashes, and bounded summary data. They should not reintroduce full repeated message arrays.
 
-Open question: how a snapshot attaches to a flow. If a snapshot is emitted, current leaning is that it should be a special Pulse type rather than a sibling export artifact.
+Decision after `fit_exploration_05`: snapshots are not core exports for Flow reconstruction. Prefer materialized read-model checkpoints before adding exported SnapshotPulses.
 
 ### Definition
 
@@ -128,9 +126,7 @@ Definitions may be temporary or permanent by scope of effect:
 - temporary definitions apply only to a bounded scope, such as the next step, one tool call, one model call, or one decision
 - permanent definitions keep applying until another change replaces them, such as for the remainder of a run, a published version, or future runs
 
-`Definition` is unresolved. It may become a separate artifact, a special Pulse type, or a body attached to definition-created / definition-updated Pulses. More fit exploration is needed before choosing.
-
-Current leaning from `fit_exploration_04`: durable or reusable definitions should be referenced artifacts/contracts, while lifecycle, selection, applicability, and use should be represented by Pulses and relationships. Temporary definitions should usually be inline or referenced bodies on ChangePulses. `DefinitionPulse` should remain rare and provisional until a concrete source case needs it.
+Decision after `fit_exploration_04`: durable or reusable definitions should be referenced artifacts/contracts, while lifecycle, selection, applicability, and use should be represented by Pulses and relationships. Temporary definitions should usually be inline or referenced bodies on ChangePulses. `DefinitionPulse` should remain rare and provisional until a concrete source case needs it.
 
 ## Pulse Fields
 
@@ -224,13 +220,27 @@ A common read-model object for chat-style UI and model context.
 
 A signal delivered to an agent thread or run.
 
-Mapping is unresolved pending deeper source review. Signal arrival may be a Pulse, signal-caused state mutation may be a ChangePulse, and some signal handling may need one Pulse with both arrival and mutation semantics.
+Decision after `fit_exploration_06`: Agent Signals are source/runtime objects, not Pulse exports. Use delivery decision Pulses for routing, content-introducing Pulses when signal bodies enter context, ChangePulses for state and notification mutations, and relationships to connect those facts. Do not emit a generic signal-arrival Pulse by default.
+
+Decision after `fit_exploration_08`: delivery is not model visibility. Queued Agent Signals need explicit queue, drain, and model-input facts when delivery and model-context entry are separated. Pre-run signals are folded into the first model request; pending signals become a later model turn and force continuation. Do not infer model visibility from original signal timestamps.
+
+### Model Input
+
+A derived/index endpoint representing the prompt sent to the model for one model turn.
+
+Use model input ids to reconstruct which content items were visible to the model and in what turn. A model input id may be a relationship endpoint, but it is not an exported Pulse-like envelope.
 
 ### State Signal
 
 A signal that updates or contributes to agent context or state.
 
-State signal snapshots and deltas may map to ChangePulses, using operations where needed. This needs more testing against the Agent Signals implementation before settling the rule.
+State signal snapshots and deltas are Agent Signal domain modes, not Pulse `SnapshotPulse`. Accepted state signals usually produce a content-introducing Pulse plus a `ChangePulse` for thread-scoped state tracking. Skipped duplicate state signals do not introduce content.
+
+### Abort Signal
+
+A runtime cancellation signal, usually an `AbortSignal`, used to stop or interrupt execution.
+
+Abort signals are not Agent Signals and do not carry content. Model them as run/thread/execution control facts, such as `abort_requested`, `abort_intent_recorded`, `abort_propagated`, `abort_observed`, and `abort_completed`. Expected aborts should not become error Pulses.
 
 ### Harness
 
