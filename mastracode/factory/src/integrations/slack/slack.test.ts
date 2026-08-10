@@ -448,15 +448,16 @@ describe('repo-backed thread sessions (resolveResourceId)', () => {
   // Top-level DM and channel conversations use the empty-threadTs thread form
   // (`slack:D-1:`), which previously derived the invalid git ref `slack/` and
   // made every top-level DM session fail its clone.
-  it('a top-level conversation thread (empty threadTs) derives its branch from the channel id', async () => {
+  it.each([
+    { id: 'slack:D-1:', branch: 'slack/D-1' },
+    { id: 'slack:C-1:', branch: 'slack/C-1' },
+  ])('a top-level conversation thread (empty threadTs) derives its branch from the channel id ($id)', async ({ id, branch }) => {
     const deps = makeResolverDeps();
     const resolve = createChannelResourceIdResolver(deps as any);
 
-    await expect(resolve(resolveArgs({ id: 'slack:D-1:' }))).resolves.toBe('us-new');
+    await expect(resolve(resolveArgs({ id }))).resolves.toBe('us-new');
 
-    expect(deps.sourceControl.sessions.create).toHaveBeenCalledWith(
-      expect.objectContaining({ branch: 'slack/D-1' }),
-    );
+    expect(deps.sourceControl.sessions.create).toHaveBeenCalledWith(expect.objectContaining({ branch }));
   });
 
   it('a repeat message on the same thread reuses the existing session, no second row', async () => {
