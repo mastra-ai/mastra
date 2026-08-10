@@ -1,4 +1,4 @@
 {
-  "temperature": ["glm-4.7", "glm-5-turbo", "glm-5.2", "glm-5.2-highspeed[1m]"],
-  "structuredOutput": ["glm-5-turbo", "glm-5.2", "glm-5.2-highspeed[1m]"]
+  "temperature": ["glm-4.7", "glm-5-turbo", "glm-5.2", "glm-5.2-highspeed"],
+  "structuredOutput": ["glm-5-turbo", "glm-5.2", "glm-5.2-highspeed"]
 }

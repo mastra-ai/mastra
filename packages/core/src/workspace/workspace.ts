@@ -31,13 +31,13 @@
  */
 
 import * as path from 'node:path';
-import pMap, { pMapSkip } from 'p-map';
 import type { MastraBrowser } from '../browser';
 import type { IMastraLogger } from '../logger';
 import { RequestContext } from '../request-context';
+import { pMap, pMapSkip } from '../utils/p-map';
 import type { MastraVector } from '../vector';
 
-import { WorkspaceError, SearchNotAvailableError } from './errors';
+import { WorkspaceError, SearchNotAvailableError, WorkspaceNotReadyError } from './errors';
 import { CompositeFilesystem, LocalFilesystem } from './filesystem';
 import type { WorkspaceFilesystem, FilesystemInfo } from './filesystem';
 import { MastraFilesystem } from './filesystem/mastra-filesystem';
@@ -584,6 +584,8 @@ export class Workspace<
   private readonly _config: WorkspaceConfig<TFilesystem, TSandbox, TMounts>;
   private readonly _searchEngine?: SearchEngine;
   private _skills?: WorkspaceSkills;
+  /** Set as soon as `destroy()` begins, and never cleared. */
+  private _teardownStarted = false;
   private _lsp?: LSPManager;
   private _logger?: IMastraLogger;
 
@@ -945,6 +947,8 @@ export class Workspace<
       return undefined;
     }
 
+    this.assertSearchWritable();
+
     // Lazy initialization
     if (!this._skills) {
       // Priority: explicit skillSource > workspace filesystem > LocalSkillSource (read-only from local disk)
@@ -955,6 +959,7 @@ export class Workspace<
         skills: this._config.skills!,
         searchEngine: this._searchEngine,
         validateOnLoad: true,
+        assertAvailable: () => this.assertSearchWritable(),
         checkSkillFileMtime: this._config.checkSkillFileMtime,
       });
     }
@@ -1010,6 +1015,7 @@ export class Workspace<
       startLineOffset?: number;
     },
   ): Promise<void> {
+    this.assertSearchWritable();
     if (!this._searchEngine) {
       throw new SearchNotAvailableError();
     }
@@ -1054,6 +1060,7 @@ export class Workspace<
    * indexed directly, directory matches are recursed.
    */
   private async rebuildSearchIndex(paths: string[]): Promise<void> {
+    this.assertSearchWritable();
     if (!this._searchEngine || !this._fs || paths.length === 0) {
       return;
     }
@@ -1281,6 +1288,20 @@ export class Workspace<
   }
 
   /**
+   * Reject search writes once teardown has begun, so that a late caller cannot
+   * repopulate an index that `destroy()` has already released.
+   *
+   * Keyed off `_teardownStarted` rather than `_status`: a failed teardown ends
+   * in `'error'`, which is also the status of a failed `init()`, and the index
+   * has been released either way once `destroy()` has run.
+   */
+  private assertSearchWritable(): void {
+    if (this._teardownStarted) {
+      throw new WorkspaceNotReadyError(this.id, this._status);
+    }
+  }
+
+  /**
    * Destroy the workspace and clean up all resources.
    */
   async destroy(): Promise<void> {
@@ -1291,6 +1312,7 @@ export class Workspace<
       return await this._destroyPromise;
     }
 
+    this._teardownStarted = true;
     this._status = 'destroying';
     this._destroyPromise = this._performDestroy();
 
@@ -1336,6 +1358,14 @@ export class Workspace<
     } catch (error) {
       this._status = 'error';
       throw error;
+    } finally {
+      // Release indexed content. The search engine holds the full text of every
+      // indexed document, and the skills registry holds the source of every
+      // loaded skill version; without this a destroyed workspace keeps them
+      // alive for the lifetime of the process. Done in `finally` so a failed
+      // resource shutdown above cannot pin the index either.
+      this._searchEngine?.clear();
+      this._skills = undefined;
     }
   }
 

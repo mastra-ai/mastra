@@ -405,6 +405,29 @@ const HistoryHarness = ({
   </MessageScrollerProvider>
 );
 
+const HistoryRailHarness = ({ messageIds }: { messageIds: string[] }) => (
+  <MessageScrollerProvider>
+    <MessageScrollerViewport data-testid="history-rail-viewport">
+      <MessageScrollerContent>
+        {messageIds.map(messageId => (
+          <MessageScrollerItem key={messageId} messageId={messageId} scrollAnchor>
+            <div>{messageId}</div>
+          </MessageScrollerItem>
+        ))}
+      </MessageScrollerContent>
+    </MessageScrollerViewport>
+    <ThreadRail
+      turns={messageIds.map(messageId => ({
+        key: messageId,
+        messageId,
+        prompt: messageId,
+        files: [],
+        hiddenFileCount: 0,
+      }))}
+    />
+  </MessageScrollerProvider>
+);
+
 const contentResizeObserver = () => {
   const content = document.querySelector<HTMLElement>('[data-slot="message-scroller-content"]');
   if (!content) throw new Error('No scroller content');
@@ -414,6 +437,33 @@ const contentResizeObserver = () => {
 };
 
 describe('MessageScroller older history', () => {
+  it('tracks the active anchor in document order after older messages are prepended', async () => {
+    vi.stubGlobal('IntersectionObserver', undefined);
+    const { rerender } = render(<HistoryRailHarness messageIds={['message-3', 'message-4']} />);
+    const viewport = screen.getByTestId('history-rail-viewport');
+    installScrollTo(viewport);
+    setScrollMetrics(viewport, { scrollHeight: 1000, clientHeight: 400, scrollTop: 200 });
+    setTop(viewport, 100);
+    setTop(getItem('message-3'), 80);
+    setTop(getItem('message-4'), 180);
+    fireEvent.scroll(viewport);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Jump to message-3' }).getAttribute('aria-current')).toBe('location');
+    });
+
+    rerender(<HistoryRailHarness messageIds={['message-1', 'message-2', 'message-3', 'message-4']} />);
+    setTop(getItem('message-1'), -120);
+    setTop(getItem('message-2'), -20);
+    setTop(getItem('message-3'), 80);
+    setTop(getItem('message-4'), 180);
+    fireEvent.scroll(viewport);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Jump to message-3' }).getAttribute('aria-current')).toBe('location');
+    });
+  });
+
   it('does not request older history before the transcript has settled at the end', () => {
     const onReachStart = vi.fn();
     render(<HistoryHarness messageIds={['message-1']} onReachStart={onReachStart} />);

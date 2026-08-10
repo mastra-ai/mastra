@@ -1,0 +1,316 @@
+---
+title: "Schedules | File-based Agents"
+description: Declare recurring cron tasks for a file-based agent under schedules/.
+packages:
+  - "@mastra/core"
+---
+
+# Schedules
+
+:::beta
+
+Breaking changes may occur without a major version bump until the API is stable.
+
+:::
+
+A file-based agent discovers **schedules** from its `schedules/` directory. Each file declares one recurring task: a cron expression plus what the agent should do when it fires. Mastra registers them into schedule storage at startup, so a scheduled agent needs no runtime registration code.
+
+Use this page for the file-based convention. To create schedules at runtime instead, see [Schedules](/reference/schedules/overview).
+
+`defineSchedule` is re-exported from `@mastra/core/agent` so file-based agents need one import path. `@mastra/core/schedules` exports it too.
+
+## Quickstart
+
+Add a file under the agent's `schedules/` directory:
+
+```typescript title="src/mastra/agents/support/schedules/heartbeat.ts"
+import { defineSchedule } from '@mastra/core/agent'
+
+export default defineSchedule({
+  cron: '*/5 * * * *',
+  prompt: 'Check system health and report any failures.',
+})
+```
+
+Every five minutes, Mastra runs the `support` agent with that prompt.
+
+## Schedule identity
+
+A schedule's id is its path relative to `schedules/` with the extension stripped, so nested directories are a way to group related schedules:
+
+```text title="Schedule layout"
+src/mastra/agents/
+└── support/
+    ├── config.ts
+    ├── instructions.md
+    └── schedules/
+        ├── heartbeat.ts      # id: heartbeat
+        ├── cleanup.md        # id: cleanup
+        └── billing/
+            └── sweep.ts      # id: billing/sweep
+```
+
+That id is stable across builds, which is what lets Mastra tell an edited schedule from a new one. Renaming or moving a file is treated as deleting one schedule and creating another.
+
+`heartbeat.ts` and `heartbeat.md` resolve to the same id, so declaring both is a build error.
+
+## Execution modes
+
+A schedule sets exactly one execution mode. Setting both, or neither, fails the build.
+
+### Prompt mode
+
+`prompt` runs the owning agent with a fixed message. This is fire-and-forget: nothing waits for the result.
+
+```typescript title="src/mastra/agents/support/schedules/digest.ts"
+import { defineSchedule } from '@mastra/core/agent'
+
+export default defineSchedule({
+  cron: '0 9 * * 1',
+  timezone: 'America/New_York',
+  prompt: 'Summarize last week and post the digest.',
+})
+```
+
+### Handler mode
+
+`handler` computes the fire's parameters when the schedule triggers. Use it when the prompt depends on current state, when some fires should be skipped, or when the run needs channel delivery context.
+
+```typescript title="src/mastra/agents/support/schedules/billing/sweep.ts"
+import { defineSchedule } from '@mastra/core/agent'
+
+export default defineSchedule({
+  cron: '0 3 * * *',
+  handler: async ({ mastra, agentId }) => {
+    const overdue = await findOverdueInvoices()
+
+    // Returning null skips this fire; nothing runs and the trigger is
+    // recorded with outcome 'skipped'.
+    if (overdue.length === 0) return null
+
+    return {
+      prompt: `Chase these overdue invoices: ${overdue.join(', ')}`,
+      threadId: 'billing-ops',
+      resourceId: agentId,
+    }
+  },
+})
+```
+
+The handler's return value is merged over the schedule's stored fields. Returning `undefined` applies no overrides, so the fire falls back to those stored fields. Since a handler-mode schedule can't declare a `prompt`, that fire then fails for a missing prompt. Return a `prompt` to run, or `null` to skip.
+
+Handlers are functions, so they can't be persisted on the stored schedule row. Mastra resolves them in-process when the schedule fires. A handler-mode schedule that supplies no prompt (and declares none) fails that fire with a reason rather than sending the agent an empty message.
+
+That in-process lookup means the process running the scheduler must have the owning agent registered. A normal deployment boots a single entry and gets that for free. Standalone workers need the same entry as your server. Boot one from a trimmed entry and it has no handler to call, so its fires fail rather than run.
+
+### Markdown schedules
+
+A `.md` schedule uses frontmatter for the cron and the document body as the prompt. This is prompt mode with more room to write:
+
+```markdown title="src/mastra/agents/support/schedules/cleanup.md"
+---
+cron: '0 3 * * *'
+timezone: 'UTC'
+name: 'nightly cleanup'
+---
+
+Review tickets untouched for 30 days.
+
+Close the ones that are clearly resolved and summarize the rest.
+```
+
+Always quote the cron. A leading `*` is a YAML alias, so `cron: */5 * * * *` is a parse error while `cron: "*/5 * * * *"` is fine.
+
+Frontmatter accepts every option below except `handler`, which needs a function and so needs a `.ts` or `.js` schedule module. `prompt` isn't settable either, because the body is the prompt. Unknown frontmatter fields fail the build rather than being silently ignored, so a typo like `ifIdel` is caught at build time.
+
+## Options
+
+<PropertiesTable
+  content={[
+  {
+    name: 'cron',
+    type: 'string',
+    description:
+      'Standard five-field cron expression. Required. The scheduler evaluates schedules on a tick loop, so the effective granularity is one minute. Sub-minute fields are not supported.',
+  },
+  {
+    name: 'prompt',
+    type: 'string',
+    description: 'Message the agent runs on each fire. Set this or `handler`, not both.',
+    isOptional: true,
+  },
+  {
+    name: 'handler',
+    type: '(ctx) => ScheduleOverrides | null | undefined',
+    description:
+      'Computes the fire at trigger time. Return overrides to apply, or `null` to skip this fire. Returning nothing applies no overrides, which fails the fire because handler mode has no stored prompt. Set this or `prompt`, not both.',
+    isOptional: true,
+  },
+  {
+    name: 'timezone',
+    type: 'string',
+    description:
+      'IANA timezone the cron is evaluated in (e.g. `America/New_York`). Defaults to the host process timezone, which varies by deployment, so set this explicitly for anything time-of-day sensitive. DST transitions are handled by the timezone rules, so `0 9 * * *` stays 9am local across the shift.',
+    isOptional: true,
+  },
+  {
+    name: 'name',
+    type: 'string',
+    description: 'Free-form label shown in Studio and filterable via `mastra.schedules.list({ name })`.',
+    isOptional: true,
+  },
+  {
+    name: 'threadId',
+    type: 'string',
+    description:
+      'Sends the fire as a signal into an existing thread instead of starting a fresh run. Requires `resourceId`.',
+    isOptional: true,
+  },
+  {
+    name: 'resourceId',
+    type: 'string',
+    description: 'Owner of the target thread. Required when `threadId` is set.',
+    isOptional: true,
+  },
+  {
+    name: 'signalType',
+    type: "'user' | 'state' | 'reactive' | 'notification' | 'user-message' | 'system-reminder'",
+    description: 'Signal category for the fire. Threaded schedules only.',
+    isOptional: true,
+    defaultValue: "'notification'",
+  },
+  {
+    name: 'tagName',
+    type: 'string',
+    description: 'XML tag the signal renders as, so a fire reaches the agent as `<schedule>…</schedule>`.',
+    isOptional: true,
+    defaultValue: "'schedule'",
+  },
+  {
+    name: 'attributes',
+    type: 'Record<string, string | number | boolean | null>',
+    description: 'Attributes rendered onto the signal XML tag.',
+    isOptional: true,
+  },
+  {
+    name: 'providerOptions',
+    type: 'Record<string, unknown>',
+    description: 'Provider options merged into the schedule signal payload on every fire. Must be JSON-safe.',
+    isOptional: true,
+  },
+  {
+    name: 'ifActive',
+    type: 'ScheduleIfActive',
+    description:
+      'What to do when the target thread is already streaming: `deliver`, `persist`, or `discard`. Threaded schedules only.',
+    isOptional: true,
+  },
+  {
+    name: 'ifIdle',
+    type: 'ScheduleIfIdle',
+    description: 'What to do when the target thread is idle: `wake`, `persist`, or `discard`. Threaded schedules only.',
+    isOptional: true,
+  },
+  {
+    name: 'status',
+    type: "'active' | 'paused'",
+    description:
+      'Status the row is created with. Applies on first create only, because the sync never patches `status` so that pausing through the API survives a redeploy. Changing this value in code later has no effect on an existing schedule.',
+    isOptional: true,
+    defaultValue: "'active'",
+  },
+  {
+    name: 'metadata',
+    type: 'Record<string, unknown>',
+    description: 'Arbitrary JSON-safe data stored alongside the schedule row.',
+    isOptional: true,
+  },
+]}
+/>
+
+## Testing a schedule in development
+
+Schedules fire on their cron cadence, which is impractical while iterating. Fire one on demand by id instead:
+
+```bash
+# List schedules to find the id
+curl http://localhost:4111/api/schedules
+
+# Fire one now, out-of-band from its cron
+curl -X POST http://localhost:4111/api/schedules/<scheduleId>/run
+```
+
+This records a trigger with `triggerKind: "manual"` and doesn't advance `nextFireAt`, so the regular cadence is unaffected. Studio lists the same schedules and their trigger history.
+
+Stored ids are namespaced and URL-encoded. `billing/sweep` on the `support` agent becomes `fsa_support__billing%2Fsweep`, so copy the id from the list response rather than assembling it by hand.
+
+## Registration and lifecycle
+
+Mastra syncs declared schedules into schedule storage when it starts, and again whenever an agent is registered afterward. Declaring a schedule is enough to start the scheduler, with no `scheduler: { enabled: true }` needed.
+
+The sync compares each declared schedule against its stored row and writes only what changed:
+
+- A new schedule file creates a row.
+- Editing `cron` or `timezone` patches the row and recomputes the next fire time, so an edited schedule never fires on its old cadence.
+- Deleting or renaming a schedule file deletes its row.
+- Pausing a schedule through the API survives a redeploy. The sync deliberately leaves `status` alone.
+
+The sync only removes rows belonging to agents registered in the current process, so a process holding a subset of your agents never deletes the others' schedules. When an agent is removed from the project entirely, its leftover rows are cleaned up on their next fire, when the scheduler finds no agent to run.
+
+Schedules created at runtime through `mastra.schedules.create(...)` live in a separate namespace and are never touched by this sync.
+
+## Limits
+
+**Root agents only.** Schedules must be declared on a top-level agent. A `schedules/` directory under `subagents/` is a build error, because subagents are wired into their parent rather than registered on the Mastra instance, so the scheduler could never resolve one as a target. Give the parent the schedule and let it delegate.
+
+**Storage required.** Schedules are persisted rows, so the instance needs [storage](/reference/file-based-agents/storage) configured. Rows in an in-memory store don't survive a restart.
+
+**Hosting.** The scheduler runs as a background worker inside the Mastra process, so it needs a host that keeps that process alive. Long-running Node servers and containers work. Environments that freeze or recycle the process between requests, which includes most serverless function platforms, will miss fires. Use the platform's own cron to call the run endpoint there instead.
+
+**Code-defined agents.** An agent directory whose `config.ts` exports `new Agent({...})` is used verbatim, so its `schedules/` directory is ignored with a warning. Use `mastra.schedules.create(...)` for those.
+
+## Example
+
+A support agent with two schedules: a fixed weekly digest, and a nightly sweep that only runs when there's something to do.
+
+```text title="Scheduled support agent"
+src/mastra/agents/
+└── support/
+    ├── config.ts
+    ├── instructions.md
+    └── schedules/
+        ├── weekly-digest.md
+        └── billing/
+            └── sweep.ts
+```
+
+```typescript title="src/mastra/agents/support/config.ts"
+import { agentConfig } from '@mastra/core/agent'
+
+export default agentConfig({
+  model: '__GATEWAY_OPENAI_MODEL__',
+})
+```
+
+```markdown title="src/mastra/agents/support/schedules/weekly-digest.md"
+---
+cron: '0 9 * * 1'
+timezone: 'America/New_York'
+---
+
+Summarize the past week's tickets and post the digest to the team channel.
+```
+
+```typescript title="src/mastra/agents/support/schedules/billing/sweep.ts"
+import { defineSchedule } from '@mastra/core/agent'
+
+export default defineSchedule({
+  cron: '0 3 * * *',
+  timezone: 'America/New_York',
+  handler: async () => {
+    const overdue = await findOverdueInvoices()
+    if (overdue.length === 0) return null
+    return { prompt: `Draft reminders for ${overdue.length} overdue invoices.` }
+  },
+})
+```

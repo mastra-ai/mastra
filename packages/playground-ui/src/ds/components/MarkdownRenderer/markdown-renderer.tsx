@@ -96,11 +96,21 @@ const COMPONENTS: Components = {
       {children}
     </strong>
   ),
-  a: ({ children, ...props }) => (
-    <a className="underline underline-offset-2" {...props}>
-      {children}
-    </a>
-  ),
+  a: ({ children, href, ...props }) => {
+    const isExternal = /^https?:\/\//i.test(href ?? '');
+
+    return (
+      <a
+        className="underline underline-offset-2"
+        href={href}
+        {...props}
+        target={isExternal ? '_blank' : undefined}
+        rel={isExternal ? 'noopener noreferrer' : undefined}
+      >
+        {children}
+      </a>
+    );
+  },
   blockquote: ({ children, ...props }) => (
     <blockquote className="border-neutral6 border-l-2 pl-4" {...props}>
       {children}

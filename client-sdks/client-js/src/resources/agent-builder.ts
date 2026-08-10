@@ -2,9 +2,8 @@ import type { RequestContext } from '@mastra/core/request-context';
 import type { WorkflowInfo } from '@mastra/core/workflows';
 import type { ClientOptions, ListWorkflowRunsParams } from '../types';
 import { parseClientRequestContext } from '../utils';
+import { createRecordSeparatorJsonTransform } from '../utils/stream-transforms';
 import { BaseResource } from './base';
-
-const RECORD_SEPARATOR = '\x1E';
 
 export interface AgentBuilderActionRequest {
   /** Input data specific to the workflow type */
@@ -65,40 +64,8 @@ export class AgentBuilder extends BaseResource {
     }
   }
 
-  /**
-   * Creates a transform stream that parses binary chunks into JSON records.
-   */
   private createRecordParserTransform(): TransformStream<ArrayBuffer, { type: string; payload: any }> {
-    let failedChunk: string | undefined = undefined;
-
-    return new TransformStream<ArrayBuffer, { type: string; payload: any }>({
-      start() {},
-      async transform(chunk, controller) {
-        try {
-          // Decode binary data to text
-          const decoded = new TextDecoder().decode(chunk);
-
-          // Split by record separator
-          const chunks = decoded.split(RECORD_SEPARATOR);
-
-          // Process each chunk
-          for (const chunk of chunks) {
-            if (chunk) {
-              const newChunk: string = failedChunk ? failedChunk + chunk : chunk;
-              try {
-                const parsedChunk = JSON.parse(newChunk);
-                controller.enqueue(parsedChunk);
-                failedChunk = undefined;
-              } catch {
-                failedChunk = newChunk;
-              }
-            }
-          }
-        } catch {
-          // Silently ignore processing errors
-        }
-      },
-    });
+    return createRecordSeparatorJsonTransform();
   }
 
   /**
@@ -208,79 +175,6 @@ export class AgentBuilder extends BaseResource {
     });
 
     return this.transformWorkflowResult(result);
-  }
-
-  /**
-   * Creates an async generator that processes a readable stream and yields action records
-   * separated by the Record Separator character (\x1E)
-   *
-   * @param stream - The readable stream to process
-   * @returns An async generator that yields parsed records
-   */
-  private async *streamProcessor(
-    stream: ReadableStream,
-  ): AsyncGenerator<{ type: string; payload: any }, void, unknown> {
-    const reader = stream.getReader();
-
-    // Track if we've finished reading from the stream
-    let doneReading = false;
-    // Buffer to accumulate partial chunks
-    let buffer = '';
-
-    try {
-      while (!doneReading) {
-        // Read the next chunk from the stream
-        const { done, value } = await reader.read();
-        doneReading = done;
-
-        // Skip processing if we're done and there's no value
-        if (done && !value) continue;
-
-        try {
-          // Decode binary data to text
-          const decoded = value ? new TextDecoder().decode(value) : '';
-
-          // Split the combined buffer and new data by record separator
-          const chunks = (buffer + decoded).split(RECORD_SEPARATOR);
-
-          // The last chunk might be incomplete, so save it for the next iteration
-          buffer = chunks.pop() || '';
-
-          // Process complete chunks
-          for (const chunk of chunks) {
-            if (chunk) {
-              // Only process non-empty chunks
-              if (typeof chunk === 'string') {
-                try {
-                  const parsedChunk = JSON.parse(chunk);
-                  yield parsedChunk;
-                } catch {
-                  // Silently ignore parsing errors to maintain stream processing
-                  // This allows the stream to continue even if one record is malformed
-                }
-              }
-            }
-          }
-        } catch {
-          // Silently ignore parsing errors to maintain stream processing
-          // This allows the stream to continue even if one record is malformed
-        }
-      }
-
-      // Process any remaining data in the buffer after stream is done
-      if (buffer) {
-        try {
-          yield JSON.parse(buffer);
-        } catch {
-          // Ignore parsing error for final chunk
-        }
-      }
-    } finally {
-      // Always ensure we clean up the reader
-      reader.cancel().catch(() => {
-        // Ignore cancel errors
-      });
-    }
   }
 
   /**

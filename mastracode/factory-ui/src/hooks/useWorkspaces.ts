@@ -13,15 +13,6 @@ import {
 } from '../ui/domains/workspaces/services/github';
 import type { FactoryUserSession } from '../ui/domains/workspaces/services/github';
 
-/**
- * The slice of the agent-controller session the delete mutation needs to
- * cascade a worktree deletion onto the threads that ran inside it.
- */
-export interface WorkspaceThreadSession {
-  listThreads: (opts: { limit?: number; tags?: Record<string, string> }) => Promise<Array<{ id: string }>>;
-  deleteThread: (threadId: string) => Promise<unknown>;
-}
-
 interface AgentControllerThreadsScope {
   agentControllerId?: string;
   resourceId?: string;
@@ -141,13 +132,17 @@ export function useCreateWorkspaceMutation(
 }
 
 /**
- * Delete a workspace: removes the sandbox checkout + branch server-side and
- * deletes every thread that ran inside it. Destructive; callers confirm first.
+ * Delete a workspace: removes the sandbox checkout + branch server-side.
+ *
+ * The threads that ran inside it are deliberately left in place. A workspace is
+ * a disposable checkout, but its transcripts are the record of what was decided
+ * and why, and they stay readable long after the branch is gone. Session ids are
+ * freshly generated per session, so a workspace recreated on the same branch can
+ * never inherit these threads.
  */
 export function useDeleteWorkspaceMutation(
   factoryId: string | undefined,
   projectRepositoryId: string | undefined,
-  threadSession: WorkspaceThreadSession | null | undefined,
   scope?: AgentControllerThreadsScope,
 ) {
   const { baseUrl } = useApiConfig();
@@ -159,18 +154,6 @@ export function useDeleteWorkspaceMutation(
       if (!factoryId) throw new Error('No Factory selected');
       if (!projectRepositoryId) throw new Error('Connect a repository before deleting a workspace');
       await deleteUserSession(baseUrl, workspace.sessionId);
-
-      if (threadSession) {
-        for (let round = 0; round < 20; round++) {
-          const threads = await threadSession.listThreads({
-            limit: 50,
-            tags: { projectPath: workspace.sessionId },
-          });
-          if (threads.length === 0) break;
-          await Promise.all(threads.map(thread => threadSession.deleteThread(thread.id)));
-        }
-      }
-
       return workspace;
     },
     onSuccess: workspace => {

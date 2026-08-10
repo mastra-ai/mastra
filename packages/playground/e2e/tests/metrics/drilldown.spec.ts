@@ -39,7 +39,7 @@ test.describe('Metrics dashboard drilldown links', () => {
       await expect(openInTraces).toBeVisible();
 
       const agentHref = await openInTraces.getAttribute('href');
-      expect(agentHref).toContain('/observability?');
+      expect(agentHref).toContain('/traces?');
       expect(agentHref).toContain('datePreset=last-24h');
       expect(agentHref).toContain('rootEntityType=agent');
     });

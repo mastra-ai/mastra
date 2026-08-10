@@ -17,12 +17,10 @@ export const pages: PageConfig[] = [
   { path: '/docs/agents/overview', name: 'Docs – Agents' },
   { path: '/docs/workflows/overview', name: 'Docs – Workflows' },
   { path: '/docs/memory/overview', name: 'Docs – Memory' },
-  { path: '/docs/rag/overview', name: 'Docs – RAG' },
   { path: '/docs/mcp/overview', name: 'Docs – MCP' },
   { path: '/docs/server/mastra-server', name: 'Docs – Server' },
   { path: '/docs/observability/overview', name: 'Docs – Observability' },
   { path: '/docs/evals/running-in-ci', name: 'Docs – Evals CI' },
-  { path: '/docs/voice/overview', name: 'Docs – Voice' },
   { path: '/docs/deployment/overview', name: 'Docs – Deployment' },
 
   // --- Models ---

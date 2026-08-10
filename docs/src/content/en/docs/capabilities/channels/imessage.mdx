@@ -1,0 +1,150 @@
+---
+title: "iMessage | Channels"
+description: "Configure a Mastra agent to receive iMessage messages through a channel adapter."
+packages:
+  - "@mastra/core"
+---
+
+# iMessage
+
+iMessage channels let a Mastra agent receive direct messages and group messages from iMessage. Mastra handles the agent wiring, the webhook route, and the gateway listener; the Photon iMessage adapter docs cover number provisioning, credentials, and webhook registration.
+
+## Install the adapter
+
+Install the Photon iMessage adapter:
+
+```bash npm2yarn
+npm install @photon-ai/chat-adapter-imessage
+```
+
+## Agent configuration
+
+Add `createiMessageAdapter()` to the agent's `channels.adapters` object:
+
+```typescript title="src/mastra/agents/imessage-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { createiMessageAdapter } from '@photon-ai/chat-adapter-imessage'
+
+export const imessageAgent = new Agent({
+  id: 'imessage-agent',
+  name: 'iMessage Agent',
+  instructions: 'Answer questions and help with tasks over iMessage.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  channels: {
+    adapters: {
+      imessage: {
+        adapter: createiMessageAdapter(),
+        toolDisplay: 'text',
+      },
+    },
+    threadContext: { maxMessages: 0 },
+  },
+})
+```
+
+Register the agent on the Mastra instance:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { imessageAgent } from './agents/imessage-agent'
+
+export const mastra = new Mastra({
+  agents: { imessageAgent },
+})
+```
+
+Use `imessage` as the adapter key. Mastra derives the webhook path and the `platform` value on `requestContext` from this key.
+
+`toolDisplay: 'text'` describes tool calls in the message, since iMessage has no interactive cards for Approve and Deny actions. `threadContext: { maxMessages: 0 }` skips the platform history lookup Mastra runs when an agent is first mentioned in a group chat, which the adapter can't perform. Both override defaults that assume platform features iMessage lacks.
+
+## Adapter setup
+
+Follow the [Photon iMessage adapter docs](https://github.com/photon-hq/vercel-chat-adapter-imessage) for iMessage-specific setup, including number provisioning, hosted and self-hosted modes, and webhook registration. The adapter picks its mode from the environment variables you set.
+
+For the hosted service, create a project at [app.photon.codes](https://app.photon.codes) and use the project credentials:
+
+```bash title=".env"
+IMESSAGE_PROJECT_ID=your-project-id
+IMESSAGE_PROJECT_SECRET=your-project-secret
+IMESSAGE_WEBHOOK_SECRET=your-webhook-signing-secret
+```
+
+For a self-hosted server, point the adapter at its gRPC address, written as `host:port`. The adapter strips any URL scheme and appends `:443` to a bare host:
+
+```bash title=".env"
+IMESSAGE_SERVER_URL=imessage.example.com:443
+IMESSAGE_API_KEY=your-server-token
+IMESSAGE_PHONE=+15551234567
+```
+
+`IMESSAGE_PHONE` is optional and routes messages when a self-hosted server has several numbers. You can also pass these values to `createiMessageAdapter()` directly, including a `credentials` function that resolves the project ID and secret at first use from a secret store.
+
+## Webhook URL
+
+Mastra generates the iMessage webhook route from the agent ID and adapter key:
+
+```text
+/api/agents/imessage-agent/channels/imessage/webhook
+```
+
+Use your public Mastra server URL as the base URL:
+
+```text
+https://your-app.example.com/api/agents/imessage-agent/channels/imessage/webhook
+```
+
+Register this URL in the [Photon dashboard](https://app.photon.codes), then set the signing secret it returns as `IMESSAGE_WEBHOOK_SECRET`. The secret is shown once at registration. The adapter verifies the signature on every delivery and rejects requests that don't match. Webhooks are available in hosted mode only.
+
+Photon retries failed deliveries with backoff and delivers at least once, so the same message can arrive twice. Chat SDK drops the repeat using the channel state adapter, and Mastra's default keeps those dedup keys in memory. That covers a single long-running server.
+
+A repeat can still reach the agent after a restart, or on serverless where the retry is routed to a different instance. Pass a shared state adapter on `channels.state` so dedup keys are visible everywhere. Install one alongside the adapter:
+
+```bash npm2yarn
+npm install @chat-adapter/state-redis
+```
+
+`createRedisState()` reads the `REDIS_URL` environment variable:
+
+```typescript title="src/mastra/agents/imessage-agent.ts"
+import { createRedisState } from '@chat-adapter/state-redis'
+
+channels: {
+  adapters: {
+    imessage: {
+      adapter: createiMessageAdapter(),
+      toolDisplay: 'text',
+    },
+  },
+  threadContext: { maxMessages: 0 },
+  state: createRedisState(),
+},
+```
+
+This matters most for tools with side effects, where handling the same message twice is visible to the user.
+
+:::note
+
+Photon delivers to public HTTPS endpoints only. It won't deliver to `http://`, to private addresses like `localhost`, or through a redirect. For local development, use a tunnel as described in the [Channels overview](/docs/capabilities/channels/overview#webhook-routes).
+
+:::
+
+## Gateway listener
+
+The adapter can hold an open connection and stream messages in real time instead of receiving webhooks. This works in both hosted and self-hosted modes.
+
+Mastra starts this listener during initialization and reconnects it if it drops, so no cron job or extra route is needed on a long-running server. Set `gateway: false` on the adapter config to turn it off when you use webhooks:
+
+```typescript title="src/mastra/agents/imessage-agent.ts"
+imessage: {
+  adapter: createiMessageAdapter(),
+  toolDisplay: 'text',
+  gateway: false,
+},
+```
+
+On serverless platforms, prefer webhooks. A gateway listener needs a process that stays alive. See [Serverless deployment](/docs/capabilities/channels/overview#serverless-deployment).
+
+## Related
+
+- [Channels overview](/docs/capabilities/channels/overview)
+- [More](/docs/capabilities/channels/other-adapters)

@@ -1,6 +1,6 @@
 import type { AgentControllerEvent, AgentControllerSessionState } from '@mastra/client-js';
 import { useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { queryKeys } from '../../../../api/keys';
 import type { FactorySessionState } from '../context/ChatSessionContext';
 import { createAgentControllerClient } from '../services/agentControllerClient';
@@ -10,6 +10,11 @@ import { useAgentControllerSessionSync } from '../../../../hooks/useAgentControl
 
 export type ConnectionStatus = 'connecting' | 'ready' | 'reconnecting' | 'error';
 type SseConnectionState = 'never' | 'connected' | 'dropped';
+
+function nextSseConnectionState(previous: SseConnectionState, connected: boolean): SseConnectionState {
+  if (connected) return 'connected';
+  return previous === 'connected' ? 'dropped' : previous;
+}
 
 interface UseAgentControllerConnectionArgs {
   agentControllerId: string;
@@ -35,6 +40,7 @@ export function useAgentControllerConnection({
 }: UseAgentControllerConnectionArgs) {
   const queryClient = useQueryClient();
   const [sseConnectionState, setSseConnectionState] = useState<SseConnectionState>('never');
+  const sseStateRef = useRef<SseConnectionState>('never');
   const sseConnected = sseConnectionState === 'connected';
   const hasEverConnected = sseConnectionState !== 'never';
   const { session } = createAgentControllerClient({
@@ -62,11 +68,21 @@ export function useAgentControllerConnection({
     sseConnected,
   });
   const handleConnectedChange = (connected: boolean) => {
-    setSseConnectionState(current => {
-      if (connected) return 'connected';
-      if (current === 'connected') return 'dropped';
-      return current;
-    });
+    // Ref mirrors the state so back-to-back events see the true previous value
+    // even when React batches the renders in between.
+    const previous = sseStateRef.current;
+    const next = nextSseConnectionState(previous, connected);
+    if (next === previous) return;
+    sseStateRef.current = next;
+    setSseConnectionState(next);
+    // Events sent while the stream was down are gone for good (the server does
+    // not replay them), so a reconnect refetches the mounted message windows —
+    // mergeWindow folds whatever the gap dropped back into the transcript.
+    if (previous === 'dropped' && next === 'connected') {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.agentControllerResourceThreadMessages(agentControllerId, resourceId),
+      });
+    }
   };
 
   const handleEvent = (event: AgentControllerEvent) => {

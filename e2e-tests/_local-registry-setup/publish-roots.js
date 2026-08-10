@@ -33,6 +33,11 @@ const SHARED_REGISTRY_SUITES = {
     extraRoots: ['create-mastra'],
     includeCreateMastraBuildRoots: true,
   },
+  'experiment-worker': {
+    tag: 'experiment-worker-e2e-test',
+    manifestGlobs: ['e2e-tests/experiment-worker/fixtures/**/package.json'],
+    extraRoots: ['@mastra/deployer'],
+  },
   softwarefactory: {
     tag: 'softwarefactory-e2e-test',
     manifestGlobs: [],

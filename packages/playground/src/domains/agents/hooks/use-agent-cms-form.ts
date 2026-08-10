@@ -1,4 +1,4 @@
-import type { CreateStoredAgentParams } from '@mastra/client-js';
+import { MastraClientError, type CreateStoredAgentParams } from '@mastra/client-js';
 import type { AgentEditorConfig } from '@mastra/core/agent';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useMastraClient } from '@mastra/react';
@@ -17,7 +17,17 @@ import {
 import { collectMCPClientIds } from '../utils/collect-mcp-client-ids';
 import { computeAgentInitialValues } from '../utils/compute-agent-initial-values';
 import type { AgentDataSource } from '../utils/compute-agent-initial-values';
+import {
+  EMPTY_RUNTIME_INSTRUCTIONS_MESSAGE,
+  formatUnpublishedPromptBlocksMessage,
+  formatUnknownPromptBlocksMessage,
+  formatUnresolvedPromptBlocksMessage,
+  instructionsResolveEmptyDueToDrafts,
+  type PromptBlockPublicationStatus,
+  type UnresolvedPromptBlock,
+} from '../utils/instruction-blocks-runtime';
 import { useStoredAgentMutations } from './use-stored-agents';
+import { usePlaygroundStore } from '@/store/playground-store';
 
 type CreateOptions = {
   mode: 'create';
@@ -43,6 +53,7 @@ export type UseAgentCmsFormOptions = CreateOptions | EditOptions;
 export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
   const client = useMastraClient();
   const queryClient = useQueryClient();
+  const { requestContext } = usePlaygroundStore();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSavingDraft, setIsSavingDraft] = useState(false);
 
@@ -269,6 +280,71 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
     };
   }, []);
 
+  const blocksWouldPreventSave = useCallback(
+    async (values: AgentFormValues): Promise<boolean> => {
+      if (isCodeAgentOverride && !ownsInstructions) return false;
+
+      const refIds = Array.from(
+        new Set(
+          (values.instructionBlocks ?? [])
+            .filter(block => block.type === 'prompt_block_ref')
+            .map(block => block.promptBlockId.trim())
+            .filter(Boolean),
+        ),
+      );
+      if (refIds.length === 0) return false;
+
+      const publicationStatuses = new Map<string, PromptBlockPublicationStatus>();
+      const unresolvedBlocks: UnresolvedPromptBlock[] = [];
+
+      await Promise.all(
+        refIds.map(async id => {
+          try {
+            const details = await client.getStoredPromptBlock(id).details(requestContext);
+            if (!details) {
+              publicationStatuses.set(id, 'unknown');
+              unresolvedBlocks.push({ id, reason: 'not_found' });
+              return;
+            }
+            publicationStatuses.set(id, details.activeVersionId ? 'published' : 'unpublished');
+          } catch (error) {
+            const status = error instanceof MastraClientError ? error.status : undefined;
+            publicationStatuses.set(id, 'unknown');
+            unresolvedBlocks.push({
+              id,
+              reason: status === 404 ? 'not_found' : status === 403 ? 'forbidden' : 'request_failed',
+            });
+          }
+        }),
+      );
+
+      if (unresolvedBlocks.length > 0) {
+        toast.error(formatUnresolvedPromptBlocksMessage(unresolvedBlocks));
+        return true;
+      }
+
+      const unpublishedIds = refIds.filter(id => publicationStatuses.get(id) === 'unpublished');
+      if (unpublishedIds.length > 0) {
+        toast.error(formatUnpublishedPromptBlocksMessage(unpublishedIds));
+        return true;
+      }
+
+      const runtimeResult = instructionsResolveEmptyDueToDrafts(values.instructionBlocks, publicationStatuses);
+      if (runtimeResult.type === 'unknown') {
+        toast.error(formatUnknownPromptBlocksMessage(runtimeResult.ids));
+        return true;
+      }
+
+      if (runtimeResult.type === 'empty') {
+        toast.error(EMPTY_RUNTIME_INSTRUCTIONS_MESSAGE);
+        return true;
+      }
+
+      return false;
+    },
+    [client, isCodeAgentOverride, ownsInstructions, requestContext],
+  );
+
   const handleSaveDraft = useCallback(
     async (changeMessage?: string) => {
       if (!isEdit) return;
@@ -283,6 +359,8 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
       setIsSavingDraft(true);
 
       try {
+        if (await blocksWouldPreventSave(values)) return;
+
         const sharedParams = await buildSharedParams(values);
         const editMemory = isCodeAgentOverride ? undefined : buildMemoryParams(values);
 
@@ -348,6 +426,7 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
       createStoredAgent,
       updateStoredAgent,
       queryClient,
+      blocksWouldPreventSave,
     ],
   );
 
@@ -366,6 +445,8 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
       setIsSubmitting(true);
 
       try {
+        if (!publishVersionId && (await blocksWouldPreventSave(values))) return;
+
         if (isEdit) {
           if (publishVersionId) {
             // Publishing a specific version (e.g. an older read-only version)
@@ -458,6 +539,7 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
       buildSharedParams,
       buildMemoryParams,
       queryClient,
+      blocksWouldPreventSave,
     ],
   );
 

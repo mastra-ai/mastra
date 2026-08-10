@@ -1,7 +1,7 @@
 import React from 'react';
 import type { ComponentPropsWithoutRef } from 'react';
 import type { SidebarState } from './main-sidebar-context';
-import { useMaybeSidebar } from './main-sidebar-context';
+import { useMaybeSidebarState } from './main-sidebar-context';
 import { navItemClasses } from './main-sidebar-nav-item-classes';
 import type { MainSidebarNavItemSize } from './main-sidebar-nav-item-classes';
 import { MainSidebarNavLabel } from './main-sidebar-nav-label';
@@ -70,7 +70,7 @@ export function MainSidebarNavLink({
   ...props
 }: MainSidebarNavLinkProps) {
   // Auto-inherit state + LinkComponent from context; explicit props still win.
-  const ctx = useMaybeSidebar();
+  const ctx = useMaybeSidebarState();
   const state: SidebarState = stateProp ?? ctx?.state ?? 'default';
   const Link: LinkComponent = LinkProp ?? ctx?.LinkComponent ?? 'a';
   const isCollapsed = state === 'collapsed';

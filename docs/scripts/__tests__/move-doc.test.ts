@@ -10,6 +10,8 @@ import {
   routeToFilePath,
   filePathToRoute,
   routeToSidebarId,
+  updateMdxLinks,
+  updateRedirects,
 } from '../move-doc'
 
 async function createTempFiles(files: Array<{ path: string; content: string }>) {
@@ -317,6 +319,21 @@ describe('move-doc Mastra integration tests', () => {
     expect(result.results.every(r => r.status === 'would-move')).toBe(true)
     expect(await tempSetup.readFile('vercel.redirects.json')).toBe(initialRedirects)
     expect(await tempSetup.listFiles()).toContain('src/content/en/docs/references/auth.mdx')
+  })
+
+  test('lets redirect and link helpers suppress informational logging', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {})
+    const paths = await updateRedirects('/docs/auth/overview', '/docs/authentication/guide', { verbose: false })
+    await updateMdxLinks(paths, '/docs/authentication/guide', { verbose: false })
+    expect(log).not.toHaveBeenCalled()
+  })
+
+  test('keeps redirect and link helper logging enabled by default', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {})
+    await updateRedirects('/docs/auth/overview', '/docs/auth/overview')
+    await updateMdxLinks(['/docs/auth/overview'], '/docs/authentication/guide')
+    expect(log).toHaveBeenCalledWith('Skipped redundant static redirect: /docs/auth/overview -> /docs/auth/overview')
+    expect(log).toHaveBeenCalledWith('Updated links in src/content/en/docs/other-doc.mdx')
   })
 
   test('moves a single file, updates redirects, sidebars, and inbound links', async () => {

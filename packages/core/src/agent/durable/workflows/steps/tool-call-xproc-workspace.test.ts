@@ -112,6 +112,10 @@ describe('durable tool-call cross-process workspace tool resolution', () => {
     globalRunRegistry.set(RUN_ID, {
       tools: { skill: { id: 'skill', execute: executeMock } as any },
       model: {} as any,
+      // A registry entry produced by a real `stream()` call carries a SaveQueueManager;
+      // without one the flush-gating rebuild (needsSaveQueueForFlush) would fire and
+      // defeat what this test asserts — that a registry hit avoids the Mastra rebuild.
+      saveQueueManager: {} as any,
     } as any);
 
     const step = createDurableToolCallStep();

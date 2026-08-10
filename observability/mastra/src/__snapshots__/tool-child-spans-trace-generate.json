@@ -34,9 +34,7 @@
         },
         "input": "Use child span tool to process test-data",
         "output": {
-          "text": {
-            "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-          },
+          "text": "Mock V2 generate response",
           "files": []
         }
       },
@@ -58,6 +56,24 @@
               "provider": "mock-provider",
               "streaming": true,
               "parameters": {},
+              "tools": [
+                {
+                  "type": "function",
+                  "name": "childSpanTool",
+                  "description": "A tool that creates child spans",
+                  "parameters": {
+                    "$schema": "http://json-schema.org/draft-07/schema#",
+                    "type": "object",
+                    "properties": {
+                      "input": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["input"],
+                    "additionalProperties": false
+                  }
+                }
+              ],
               "finishReason": "stop",
               "responseId": "<responseId-1>",
               "responseModel": "mock-model-id",
@@ -98,9 +114,7 @@
               "files": [],
               "reasoning": [],
               "sources": [],
-              "text": {
-                "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-              },
+              "text": "Mock V2 generate response",
               "warnings": []
             }
           },
@@ -388,9 +402,7 @@
                   }
                 ],
                 "output": {
-                  "text": {
-                    "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-                  },
+                  "text": "Mock V2 generate response",
                   "toolCalls": []
                 }
               },
@@ -434,9 +446,7 @@
                       "environment": "test"
                     },
                     "output": {
-                      "text": {
-                        "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-                      },
+                      "text": "Mock V2 generate response",
                       "toolCalls": []
                     }
                   },
@@ -462,9 +472,7 @@
                           "environment": "test"
                         },
                         "output": {
-                          "text": {
-                            "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-                          }
+                          "text": "Mock V2 generate response"
                         }
                       }
                     }

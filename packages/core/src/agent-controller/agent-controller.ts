@@ -38,6 +38,7 @@ import type {
   AgentControllerMode,
   AgentControllerRequestContext,
   AgentControllerRequestStateUpdater,
+  AgentControllerSessionCreatedListener,
   AgentControllerThread,
   ModelAuthStatus,
   ToolCategory,
@@ -195,6 +196,7 @@ export class AgentController<TState = {}> {
    * that session's model/mode/state instead of an arbitrary one.
    */
   readonly #sessionsByResource = new Map<string, Promise<Session<TState>>>();
+  readonly #sessionCreatedListeners: AgentControllerSessionCreatedListener<TState>[] = [];
   /**
    * The scope each live session was created under, so re-keying operations
    * (e.g. {@link setResourceId}) preserve the session's registry scope.
@@ -246,6 +248,33 @@ export class AgentController<TState = {}> {
 
     this.workspace = config.workspace;
     this.browser = config.browser;
+  }
+
+  /**
+   * Subscribe to process-local notifications for newly materialized sessions.
+   * Cached `createSession()` calls do not notify listeners again.
+   */
+  onSessionCreated(listener: AgentControllerSessionCreatedListener<TState>): () => void {
+    this.#sessionCreatedListeners.push(listener);
+    return () => {
+      const index = this.#sessionCreatedListeners.indexOf(listener);
+      if (index !== -1) {
+        this.#sessionCreatedListeners.splice(index, 1);
+      }
+    };
+  }
+
+  #notifySessionCreated(session: Session<TState>): void {
+    for (const listener of [...this.#sessionCreatedListeners]) {
+      try {
+        const result = listener(session);
+        if (result && typeof result === 'object' && 'catch' in result) {
+          (result as Promise<void>).catch(error => console.error('Error in session-created listener:', error));
+        }
+      } catch (error) {
+        console.error('Error in session-created listener:', error);
+      }
+    }
   }
 
   /**
@@ -522,7 +551,7 @@ export class AgentController<TState = {}> {
           initialState,
           stateSchema: this.config.stateSchema,
         },
-        workspace: workspaceToConnect as Workspace,
+        workspace: workspaceToConnect,
         browser: browserToConnect,
       }),
     );
@@ -557,30 +586,17 @@ export class AgentController<TState = {}> {
         await session.thread.create({ id: overrides.threadId });
       }
     } else {
-      // Bring the session online with a current thread. Selection is tag-aware so
-      // worktrees sharing a resourceId each resume their own thread without
-      // claiming threads owned by another scope. A thread is a candidate only when
-      // its metadata matches every provided tag; with no tags every thread
-      // qualifies. Tags default to the controller-global state when omitted.
-      const selectionTags: Record<string, string> = {};
-      if (tags && Object.keys(tags).length > 0) {
-        Object.assign(selectionTags, tags);
-      } else {
-        const projectPath = (this.config.initialState as any)?.projectPath as string | undefined;
-        if (projectPath) selectionTags.projectPath = projectPath;
-      }
-      const tagEntries = Object.entries(selectionTags);
+      // Same scope `thread.create()` stamps, matched strictly: a thread outside
+      // this session's scope — including one carrying no scope at all — belongs
+      // to nobody here and must not be auto-resumed.
+      const scopeEntries = Object.entries(session.getThreadScope());
 
       const threads = await session.thread.list();
-      const candidates =
-        tagEntries.length > 0
-          ? threads.filter(t => {
-              const metadata = (t.metadata as Record<string, unknown> | undefined) ?? {};
-              return tagEntries.every(([key, value]) => metadata[key] === value);
-            })
-          : threads;
+      const candidates = threads.filter(t => {
+        const metadata = (t.metadata as Record<string, unknown> | undefined) ?? {};
+        return scopeEntries.every(([key, value]) => metadata[key] === value);
+      });
 
-      // Resume the most recent same-resource candidate, or create a new thread.
       if (candidates.length === 0) {
         await session.thread.create();
       } else {
@@ -592,6 +608,7 @@ export class AgentController<TState = {}> {
       }
     }
 
+    this.#notifySessionCreated(session);
     return session;
   }
 
@@ -653,10 +670,11 @@ export class AgentController<TState = {}> {
   }
 
   /**
-   * Eagerly resolve the workspace. For dynamic workspaces (factory function),
-   * this triggers resolution against the given session's request context and
-   * caches the result so {@link getWorkspace} returns it. Useful for code paths
-   * outside the request flow (e.g. slash commands).
+   * The workspace this session runs against, for code paths outside the request
+   * flow (e.g. slash commands). Sessions resolve their workspace once at
+   * creation — dynamic factories included — so this returns that instance
+   * rather than re-resolving, and only falls back to the factory for a session
+   * created without one.
    */
   async resolveWorkspace({
     session,
@@ -665,11 +683,11 @@ export class AgentController<TState = {}> {
     session: Session<TState>;
     requestContext?: RequestContext;
   }): Promise<Workspace | undefined> {
+    const sessionWorkspace = session.getWorkspace();
+    if (sessionWorkspace) return sessionWorkspace;
     if (typeof this.workspace !== 'function') return this.workspace ?? undefined;
     const ctx = await this.buildRequestContext(session, requestContext);
-    const resolved = await this.workspace({ requestContext: ctx, mastra: this.getMastra() });
-    this.workspace = resolved;
-    return resolved ?? undefined;
+    return (await this.workspace({ requestContext: ctx, mastra: this.getMastra() })) ?? undefined;
   }
 
   /**

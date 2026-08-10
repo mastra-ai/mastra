@@ -703,6 +703,9 @@ describe('GithubSignals', () => {
                 lastObservedContentHash: 'aggregate-hash',
                 lastObservedThreadContentHash: 'thread-hash',
                 lastObservedHeadSha: 'head-sha',
+                lastObservedCommentUrl: 'https://github.com/mastra-ai/mastra/pull/123#issuecomment-1',
+                lastObservedCommentAuthor: 'coderabbitai[bot]',
+                lastObservedCommentIsBot: true,
               },
             ],
           },
@@ -730,6 +733,9 @@ describe('GithubSignals', () => {
       lastObservedContentHash: 'aggregate-hash',
       lastObservedThreadContentHash: 'thread-hash',
       lastObservedHeadSha: 'head-sha',
+      lastObservedCommentUrl: 'https://github.com/mastra-ai/mastra/pull/123#issuecomment-1',
+      lastObservedCommentAuthor: 'coderabbitai[bot]',
+      lastObservedCommentIsBot: true,
       lastSyncStatus: 'skipped',
     });
   });
@@ -1992,6 +1998,104 @@ describe('GithubSignals', () => {
     );
   });
 
+  it('stops per-thread polling on shutdown', async () => {
+    vi.useFakeTimers();
+    const thread: StorageThreadType = {
+      id: 'thread-shutdown',
+      resourceId: 'resource-shutdown',
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+      metadata: {
+        mastra: {
+          [GITHUB_SIGNALS_METADATA_KEY]: {
+            subscriptions: [
+              {
+                owner: 'mastra-ai',
+                repo: 'mastra',
+                number: 1,
+                subscribedAt: '2026-01-01T00:00:00.000Z',
+                updatedAt: '2026-01-01T00:00:00.000Z',
+                lastSubscribeSignalId: 'signal-1',
+              },
+            ],
+          },
+        },
+      },
+    };
+    const threadStore = createThreadStore(thread);
+    const syncClient: GithubSignalsSyncClient = {
+      syncPullRequest: vi.fn(async () => ({ ok: true })),
+      getPullRequestSnapshot: vi.fn(async () => ({ githubUpdatedAt: '2026-01-01T00:00:00.000Z' })),
+    };
+    const processor = new GithubSignals({ threadStore, syncClient, pollIntervalMs: 1_000 });
+
+    await processor.startPollingForThread({ threadId: thread.id, resourceId: thread.resourceId });
+    expect(processor.isPollingThread({ threadId: thread.id, resourceId: thread.resourceId })).toBe(true);
+
+    processor.stop();
+
+    expect(processor.isPollingThread({ threadId: thread.id, resourceId: thread.resourceId })).toBe(false);
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(syncClient.syncPullRequest).not.toHaveBeenCalled();
+  });
+
+  it('abandons an in-flight poll when the provider stops mid-sync', async () => {
+    const thread: StorageThreadType = {
+      id: 'thread-inflight',
+      resourceId: 'resource-inflight',
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+      metadata: {
+        mastra: {
+          [GITHUB_SIGNALS_METADATA_KEY]: {
+            subscriptions: [
+              {
+                owner: 'mastra-ai',
+                repo: 'mastra',
+                number: 7,
+                subscribedAt: '2026-01-01T00:00:00.000Z',
+                updatedAt: '2026-01-01T00:00:00.000Z',
+                lastSubscribeSignalId: 'signal-1',
+                lastObservedGithubUpdatedAt: '2026-01-01T00:00:00.000Z',
+                lastObservedContentHash: 'old-hash',
+              },
+            ],
+          },
+        },
+      },
+    };
+    const threadStore = createThreadStore(thread);
+    // Sync pauses until we release it, so stop() lands while the poll is in flight.
+    let releaseSync!: () => void;
+    const syncStarted = new Promise<void>(resolve => {
+      releaseSync = () => resolve();
+    });
+    const syncGate = new Promise<{ ok: true }>(resolve => {
+      void syncStarted.then(() => resolve({ ok: true }));
+    });
+    const syncClient: GithubSignalsSyncClient = {
+      syncPullRequest: vi.fn(() => syncGate),
+      getPullRequestSnapshot: vi.fn(async () => ({
+        githubUpdatedAt: '2026-01-01T00:05:00.000Z',
+        contentHash: 'new-hash',
+      })),
+    };
+    const sendNotificationSignal = vi.fn(async () => ({ accepted: true }));
+    const processor = new GithubSignals({ threadStore, syncClient });
+    processor.addAgent({ sendSignal: vi.fn(), sendNotificationSignal });
+
+    const pollPromise = processor.pollThreadNow({ threadId: thread.id, resourceId: thread.resourceId });
+    // Let the poll reach the paused sync call before stopping the provider.
+    await vi.waitFor(() => expect(syncClient.syncPullRequest).toHaveBeenCalled());
+
+    processor.stop();
+    releaseSync();
+    await expect(pollPromise).resolves.toBe(0);
+
+    expect(threadStore.saveThread).not.toHaveBeenCalled();
+    expect(sendNotificationSignal).not.toHaveBeenCalled();
+  });
+
   it('only keeps one active polling thread at a time', async () => {
     vi.useFakeTimers();
     const firstThread: StorageThreadType = {
@@ -2458,6 +2562,170 @@ describe('GithubSignals', () => {
       latestCommentIsBot: true,
     });
     expect(botNoise).not.toHaveBeenCalled();
+  });
+
+  it('ignores transient unknown mergeability recomputes', async () => {
+    const thread: StorageThreadType = {
+      id: 'thread-mergeability-noise',
+      resourceId: 'resource-mergeability-noise',
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+      metadata: {
+        mastra: {
+          [GITHUB_SIGNALS_METADATA_KEY]: {
+            subscriptions: [
+              {
+                owner: 'mastra-ai',
+                repo: 'mastra',
+                number: 42,
+                subscribedAt: '2026-01-01T00:00:00.000Z',
+                updatedAt: '2026-01-01T00:00:00.000Z',
+                lastSubscribeSignalId: 'signal-mergeability-noise',
+                lastObservedGithubUpdatedAt: '2026-01-01T00:00:00.000Z',
+                lastObservedContentHash: 'blocked-hash',
+                lastObservedThreadContentHash: 'thread-hash',
+                lastObservedHeadSha: 'head-sha',
+                lastObservedState: 'open',
+                lastObservedMergeableState: 'blocked',
+                lastObservedCiState: 'success',
+                lastObservedReviewStateHash: 'reviews-0',
+              },
+            ],
+          },
+        },
+      },
+    };
+    const mergeableStates = ['unknown', 'blocked'];
+    const syncClient: GithubSignalsSyncClient = {
+      syncPullRequest: vi.fn(async () => ({ ok: true })),
+      getPullRequestSnapshot: vi.fn(async () => ({
+        title: 'Test PR',
+        state: 'open',
+        githubUpdatedAt: '2026-01-01T00:00:00.000Z',
+        contentHash: `${mergeableStates[0]}-hash`,
+        threadContentHash: 'thread-hash',
+        headSha: 'head-sha',
+        mergeableState: mergeableStates.shift(),
+        ciState: 'success' as const,
+        reviewStateHash: 'reviews-0',
+      })),
+    };
+    const threadStore = createThreadStore(thread);
+    const sendNotificationSignal = vi.fn(() => ({ accepted: Promise.resolve({ accepted: true }) }));
+    const processor = new GithubSignals({ threadStore, syncClient, agentId: 'code-agent' });
+    processor.__registerMastra({
+      getAgentById: vi.fn(() => ({ sendSignal: vi.fn(), sendNotificationSignal })),
+    } as any);
+
+    await processor.pollThreadNow({ threadId: thread.id, resourceId: thread.resourceId });
+    await processor.pollThreadNow({ threadId: thread.id, resourceId: thread.resourceId });
+
+    expect(sendNotificationSignal).not.toHaveBeenCalled();
+    const savedThread = vi.mocked(threadStore.saveThread).mock.calls.at(-1)![0].thread;
+    const [subscription] = (savedThread.metadata?.mastra as any)[GITHUB_SIGNALS_METADATA_KEY].subscriptions;
+    expect(subscription.lastObservedMergeableState).toBe('blocked');
+  });
+
+  it('ignores observed bot comment edits without suppressing other thread activity', async () => {
+    const firstCommentUrl = 'https://github.com/mastra-ai/mastra/pull/42#issuecomment-1';
+    const secondCommentUrl = 'https://github.com/mastra-ai/mastra/pull/42#issuecomment-2';
+    const thread: StorageThreadType = {
+      id: 'thread-bot-edit',
+      resourceId: 'resource-bot-edit',
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+      metadata: {
+        mastra: {
+          [GITHUB_SIGNALS_METADATA_KEY]: {
+            subscriptions: [
+              {
+                owner: 'mastra-ai',
+                repo: 'mastra',
+                number: 42,
+                subscribedAt: '2026-01-01T00:00:00.000Z',
+                updatedAt: '2026-01-01T00:00:00.000Z',
+                lastSubscribeSignalId: 'signal-bot-edit',
+                lastObservedGithubUpdatedAt: '2026-01-01T00:01:00.000Z',
+                lastObservedContentHash: 'content-hash',
+                lastObservedThreadContentHash: 'thread-hash',
+                lastObservedHeadSha: 'head-sha',
+                lastObservedState: 'open',
+                lastObservedMergeableState: 'blocked',
+                lastObservedCiState: 'success',
+                lastObservedReviewStateHash: 'reviews-0',
+                lastObservedCommentUrl: firstCommentUrl,
+                lastObservedCommentAuthor: 'coderabbitai[bot]',
+                lastObservedCommentIsBot: true,
+              },
+            ],
+          },
+        },
+      },
+    };
+    const comments = [
+      {
+        url: firstCommentUrl,
+        body: 'Updated walkthrough for the same comment',
+        updatedAt: '2026-01-01T00:02:00.000Z',
+        threadContentHash: 'edited-bot-comment-hash',
+      },
+      {
+        url: firstCommentUrl,
+        body: 'Updated walkthrough for the same comment',
+        githubUpdatedAt: '2026-01-01T00:03:00.000Z',
+        updatedAt: '2026-01-01T00:02:00.000Z',
+        threadContentHash: 'updated-pr-body-hash',
+      },
+      {
+        url: secondCommentUrl,
+        body: 'A new review comment',
+        githubUpdatedAt: '2026-01-01T00:04:00.000Z',
+        updatedAt: '2026-01-01T00:04:00.000Z',
+        threadContentHash: 'new-bot-comment-hash',
+      },
+    ];
+    const syncClient: GithubSignalsSyncClient = {
+      syncPullRequest: vi.fn(async () => ({ ok: true })),
+      getPullRequestSnapshot: vi.fn(async () => {
+        const comment = comments.shift()!;
+        return {
+          title: 'Test PR',
+          state: 'open',
+          githubUpdatedAt: comment.githubUpdatedAt ?? comment.updatedAt,
+          contentHash: `${comment.threadContentHash}-aggregate`,
+          threadContentHash: comment.threadContentHash,
+          headSha: 'head-sha',
+          mergeableState: 'blocked',
+          ciState: 'success' as const,
+          reviewStateHash: 'reviews-0',
+          latestCommentAuthor: 'coderabbitai[bot]',
+          latestCommentAuthorType: 'Bot',
+          latestCommentIsBot: true,
+          latestCommentBody: comment.body,
+          latestCommentUrl: comment.url,
+          latestCommentUpdatedAt: comment.updatedAt,
+        };
+      }),
+    };
+    const threadStore = createThreadStore(thread);
+    const sendNotificationSignal = vi.fn(() => ({ accepted: Promise.resolve({ accepted: true }) }));
+    const processor = new GithubSignals({ threadStore, syncClient, agentId: 'code-agent' });
+    processor.__registerMastra({
+      getAgentById: vi.fn(() => ({ sendSignal: vi.fn(), sendNotificationSignal })),
+    } as any);
+
+    await processor.pollThreadNow({ threadId: thread.id, resourceId: thread.resourceId });
+    expect(sendNotificationSignal).not.toHaveBeenCalled();
+
+    await processor.pollThreadNow({ threadId: thread.id, resourceId: thread.resourceId });
+    expect(sendNotificationSignal).toHaveBeenCalledTimes(1);
+
+    await processor.pollThreadNow({ threadId: thread.id, resourceId: thread.resourceId });
+    expect(sendNotificationSignal).toHaveBeenCalledTimes(2);
+    expect(sendNotificationSignal).toHaveBeenCalledWith(
+      [expect.objectContaining({ kind: 'pull-request-activity', priority: 'high' })],
+      expect.anything(),
+    );
   });
 
   it('suppresses activity notifications from unauthorized commenters', async () => {
@@ -2942,5 +3210,515 @@ describe('GithubSignals', () => {
     });
 
     expect(processor.isPollingThread({ threadId: thread.id, resourceId: thread.resourceId })).toBe(false);
+  });
+
+  it('stopAllPolling cancels side effects of an in-flight poll', async () => {
+    // stopAllPolling() increments a generation counter so that an in-flight
+    // #pollThread bails out before executing saveThread or
+    // sendNotificationSignal.
+    vi.useFakeTimers();
+
+    const thread: StorageThreadType = {
+      id: 'thread-stop-inflight',
+      resourceId: 'resource-stop-inflight',
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+      metadata: {
+        mastra: {
+          [GITHUB_SIGNALS_METADATA_KEY]: {
+            subscriptions: [
+              {
+                owner: 'mastra-ai',
+                repo: 'mastra',
+                number: 999,
+                subscribedAt: '2026-01-01T00:00:00.000Z',
+                updatedAt: '2026-01-01T00:00:00.000Z',
+                lastSubscribeSignalId: 'signal-stop',
+                lastObservedGithubUpdatedAt: '2026-01-01T00:00:00.000Z',
+                lastObservedContentHash: 'old-hash',
+              },
+            ],
+          },
+        },
+      },
+    };
+    const threadStore = createThreadStore(thread);
+
+    // Use a deferred promise so we can control exactly when the poll completes.
+    let resolveSync!: () => void;
+    const syncBlocked = new Promise<void>(resolve => {
+      resolveSync = resolve;
+    });
+
+    const syncClient: GithubSignalsSyncClient = {
+      syncPullRequest: vi.fn(async () => {
+        await syncBlocked;
+        return { ok: true };
+      }),
+      getPullRequestSnapshot: vi.fn(async () => ({
+        title: 'Stop in-flight poll test',
+        state: 'open',
+        githubUpdatedAt: '2026-01-01T00:10:00.000Z',
+        contentHash: 'new-hash',
+        latestCommentAuthor: 'contributor',
+      })),
+    };
+    const sendNotificationSignal = vi.fn(async () => ({ accepted: true }));
+    const permissionResolver = { getPermission: vi.fn(async () => 'write' as const) };
+    const processor = new GithubSignals({
+      threadStore,
+      syncClient,
+      pollIntervalMs: 1_000,
+      agentId: 'code-agent',
+      permissionResolver,
+    });
+    processor.__registerMastra({
+      getAgentById: vi.fn(() => ({ sendSignal: vi.fn(), sendNotificationSignal })),
+    } as any);
+
+    // Start polling. The first poll is not immediate; it fires on the interval.
+    await processor.startPollingForThread({ threadId: thread.id, resourceId: thread.resourceId });
+    expect(processor.isPollingThread({ threadId: thread.id, resourceId: thread.resourceId })).toBe(true);
+
+    // Advance past the interval to trigger a poll. The poll blocks on syncBlocked.
+    await vi.advanceTimersByTimeAsync(1_000);
+    // syncPullRequest was called but is awaiting the deferred promise.
+    expect(syncClient.syncPullRequest).toHaveBeenCalledTimes(1);
+
+    // While the poll is in-flight, stop all polling.
+    processor.stopAllPolling();
+    // After stopAllPolling, the polling map is cleared.
+    expect(processor.isPollingThread({ threadId: thread.id, resourceId: thread.resourceId })).toBe(false);
+
+    // Now unblock the in-flight poll. It should bail out early because the
+    // generation counter was incremented by stopAllPolling().
+    resolveSync();
+    // Wait for the async poll to settle.
+    await vi.advanceTimersByTimeAsync(0);
+
+    // The in-flight poll must NOT execute side effects after stopAllPolling().
+    // The authorized author above would produce a notification without the
+    // generation guard, so this assertion exercises cancellation directly.
+    expect(permissionResolver.getPermission).not.toHaveBeenCalled();
+    expect(sendNotificationSignal).not.toHaveBeenCalled();
+    // The poll should NOT have saved thread metadata after the stop.
+    expect(threadStore.saveThread).not.toHaveBeenCalled();
+  });
+
+  it('stop-then-restart polling uses fresh generation so the new poll proceeds normally', async () => {
+    vi.useFakeTimers();
+    const thread: StorageThreadType = {
+      id: 'thread-stop-restart',
+      resourceId: 'resource-stop-restart',
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+      metadata: {
+        mastra: {
+          [GITHUB_SIGNALS_METADATA_KEY]: {
+            subscriptions: [
+              {
+                owner: 'mastra-ai',
+                repo: 'mastra',
+                number: 100,
+                subscribedAt: '2026-01-01T00:00:00.000Z',
+                updatedAt: '2026-01-01T00:00:00.000Z',
+                lastSubscribeSignalId: 'signal-restart',
+                lastObservedGithubUpdatedAt: '2026-01-01T00:00:00.000Z',
+                lastObservedContentHash: 'old-hash',
+              },
+            ],
+          },
+        },
+      },
+    };
+    const threadStore = createThreadStore(thread);
+
+    let resolveSync!: () => void;
+    const syncBlocked = new Promise<void>(resolve => {
+      resolveSync = resolve;
+    });
+
+    const syncClient: GithubSignalsSyncClient = {
+      syncPullRequest: vi.fn(async () => {
+        await syncBlocked;
+        return { ok: true };
+      }),
+      getPullRequestSnapshot: vi.fn(async () => ({
+        title: 'Restart test',
+        state: 'open',
+        githubUpdatedAt: '2026-01-01T00:10:00.000Z',
+        contentHash: 'new-hash',
+      })),
+    };
+    const sendNotificationSignal = vi.fn(async () => ({ accepted: true }));
+    const processor = new GithubSignals({
+      threadStore,
+      syncClient,
+      pollIntervalMs: 1_000,
+      agentId: 'code-agent',
+    });
+    processor.__registerMastra({
+      getAgentById: vi.fn(() => ({ sendSignal: vi.fn(), sendNotificationSignal })),
+    } as any);
+
+    // Start polling.
+    await processor.startPollingForThread({ threadId: thread.id, resourceId: thread.resourceId });
+
+    // Trigger a poll that blocks.
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(syncClient.syncPullRequest).toHaveBeenCalledTimes(1);
+
+    // Stop all polling while poll is in-flight.
+    processor.stopAllPolling();
+    expect(processor.isPollingThread({ threadId: thread.id, resourceId: thread.resourceId })).toBe(false);
+
+    // Restart polling with a fresh sync mock that resolves immediately.
+    let resolveRestartedSync!: () => void;
+    const restartedSyncBlocked = new Promise<void>(resolve => {
+      resolveRestartedSync = resolve;
+    });
+    const restartedSyncPullRequest = vi.mocked(syncClient.syncPullRequest);
+    restartedSyncPullRequest.mockReset();
+    restartedSyncPullRequest.mockImplementation(async () => {
+      await restartedSyncBlocked;
+      return { ok: true };
+    });
+    await processor.startPollingForThread({ threadId: thread.id, resourceId: thread.resourceId });
+    expect(processor.isPollingThread({ threadId: thread.id, resourceId: thread.resourceId })).toBe(true);
+
+    // Start the new poll and keep it in flight.
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(processor.isPollingThreadRunning({ threadId: thread.id, resourceId: thread.resourceId })).toBe(true);
+
+    // Unblock the old poll. It should bail out without clearing the new
+    // generation's running flag or saving stale metadata.
+    resolveSync();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(threadStore.saveThread).not.toHaveBeenCalled();
+    expect(processor.isPollingThreadRunning({ threadId: thread.id, resourceId: thread.resourceId })).toBe(true);
+
+    // The restarted poll should proceed normally once released.
+    resolveRestartedSync();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(threadStore.saveThread).toHaveBeenCalled();
+    expect(processor.isPollingThreadRunning({ threadId: thread.id, resourceId: thread.resourceId })).toBe(false);
+
+    processor.stopAllPolling();
+  });
+
+  it('stopping while author permission is pending prevents notification and persistence', async () => {
+    const thread: StorageThreadType = {
+      id: 'thread-stop-permission',
+      resourceId: 'resource-stop-permission',
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+      metadata: {
+        mastra: {
+          [GITHUB_SIGNALS_METADATA_KEY]: {
+            subscriptions: [
+              {
+                owner: 'mastra-ai',
+                repo: 'mastra',
+                number: 101,
+                subscribedAt: '2026-01-01T00:00:00.000Z',
+                updatedAt: '2026-01-01T00:00:00.000Z',
+                lastSubscribeSignalId: 'signal-permission',
+                lastObservedGithubUpdatedAt: '2026-01-01T00:00:00.000Z',
+                lastObservedContentHash: 'old-hash',
+                lastObservedState: 'open',
+              },
+            ],
+          },
+        },
+      },
+    };
+    const threadStore = createThreadStore(thread);
+    let resolvePermission!: () => void;
+    const permissionBlocked = new Promise<void>(resolve => {
+      resolvePermission = resolve;
+    });
+    const permissionResolver = {
+      getPermission: vi.fn(async () => {
+        await permissionBlocked;
+        return 'write' as const;
+      }),
+    };
+    const syncClient: GithubSignalsSyncClient = {
+      syncPullRequest: vi.fn(async () => ({ ok: true })),
+      getPullRequestSnapshot: vi.fn(async () => ({
+        title: 'Permission race',
+        state: 'open',
+        githubUpdatedAt: '2026-01-01T00:10:00.000Z',
+        contentHash: 'new-hash',
+        latestCommentAuthor: 'contributor',
+        latestCommentBody: 'A new comment',
+        latestCommentUpdatedAt: '2026-01-01T00:10:00.000Z',
+      })),
+    };
+    const sendNotificationSignal = vi.fn(async () => ({ accepted: true }));
+    const processor = new GithubSignals({ threadStore, syncClient, permissionResolver, agentId: 'code-agent' });
+    processor.__registerMastra({
+      getAgentById: vi.fn(() => ({ sendSignal: vi.fn(), sendNotificationSignal })),
+    } as any);
+
+    const poll = processor.pollThreadNow({ threadId: thread.id, resourceId: thread.resourceId });
+    await vi.waitFor(() => expect(permissionResolver.getPermission).toHaveBeenCalledTimes(1));
+
+    processor.stopAllPolling();
+    resolvePermission();
+    await poll;
+
+    expect(sendNotificationSignal).not.toHaveBeenCalled();
+    expect(threadStore.saveThread).not.toHaveBeenCalled();
+  });
+
+  it('stopping while notification options are pending prevents notification dispatch', async () => {
+    const thread: StorageThreadType = {
+      id: 'thread-stop-notification',
+      resourceId: 'resource-stop-notification',
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+      metadata: {
+        mastra: {
+          [GITHUB_SIGNALS_METADATA_KEY]: {
+            subscriptions: [
+              {
+                owner: 'mastra-ai',
+                repo: 'mastra',
+                number: 102,
+                subscribedAt: '2026-01-01T00:00:00.000Z',
+                updatedAt: '2026-01-01T00:00:00.000Z',
+                lastSubscribeSignalId: 'signal-notification',
+                lastObservedGithubUpdatedAt: '2026-01-01T00:00:00.000Z',
+                lastObservedContentHash: 'old-hash',
+                lastObservedState: 'open',
+              },
+            ],
+          },
+        },
+      },
+    };
+    const threadStore = createThreadStore(thread);
+    let resolveStreamOptions!: () => void;
+    const streamOptionsBlocked = new Promise<void>(resolve => {
+      resolveStreamOptions = resolve;
+    });
+    const getNotificationStreamOptions = vi.fn(async () => {
+      await streamOptionsBlocked;
+      return { stream: 'test' };
+    });
+    const syncClient: GithubSignalsSyncClient = {
+      syncPullRequest: vi.fn(async () => ({ ok: true })),
+      getPullRequestSnapshot: vi.fn(async () => ({
+        title: 'Notification race',
+        state: 'closed',
+        githubUpdatedAt: '2026-01-01T00:10:00.000Z',
+        contentHash: 'new-hash',
+      })),
+    };
+    const sendNotificationSignal = vi.fn(async () => ({ accepted: true }));
+    const processor = new GithubSignals({
+      threadStore,
+      syncClient,
+      agentId: 'code-agent',
+      getNotificationStreamOptions,
+    });
+    processor.__registerMastra({
+      getAgentById: vi.fn(() => ({ sendSignal: vi.fn(), sendNotificationSignal })),
+    } as any);
+
+    const poll = processor.pollThreadNow({ threadId: thread.id, resourceId: thread.resourceId });
+    await vi.waitFor(() => expect(getNotificationStreamOptions).toHaveBeenCalledTimes(1));
+
+    processor.stopAllPolling();
+    resolveStreamOptions();
+    await poll;
+
+    expect(sendNotificationSignal).not.toHaveBeenCalled();
+    expect(threadStore.saveThread).not.toHaveBeenCalled();
+  });
+
+  it('stopping after saveThread starts suppresses the completion callback', async () => {
+    const thread: StorageThreadType = {
+      id: 'thread-stop-save',
+      resourceId: 'resource-stop-save',
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+      metadata: {
+        mastra: {
+          [GITHUB_SIGNALS_METADATA_KEY]: {
+            subscriptions: [
+              {
+                owner: 'mastra-ai',
+                repo: 'mastra',
+                number: 103,
+                subscribedAt: '2026-01-01T00:00:00.000Z',
+                updatedAt: '2026-01-01T00:00:00.000Z',
+                lastSubscribeSignalId: 'signal-save',
+                lastObservedGithubUpdatedAt: '2026-01-01T00:00:00.000Z',
+                lastObservedContentHash: 'old-hash',
+                lastObservedState: 'open',
+              },
+            ],
+          },
+        },
+      },
+    };
+    const threadStore = createThreadStore(thread);
+    let resolveSave!: () => void;
+    const saveBlocked = new Promise<void>(resolve => {
+      resolveSave = resolve;
+    });
+    vi.mocked(threadStore.saveThread).mockImplementation(async ({ thread: nextThread }) => {
+      await saveBlocked;
+      return nextThread;
+    });
+    const syncClient: GithubSignalsSyncClient = {
+      syncPullRequest: vi.fn(async () => ({ ok: true })),
+      getPullRequestSnapshot: vi.fn(async () => ({
+        title: 'Save race',
+        state: 'closed',
+        githubUpdatedAt: '2026-01-01T00:10:00.000Z',
+        contentHash: 'new-hash',
+      })),
+    };
+    const onSubscriptionsChanged = vi.fn();
+    const processor = new GithubSignals({ threadStore, syncClient });
+    processor.onSubscriptionsChanged(onSubscriptionsChanged);
+
+    const poll = processor.pollThreadNow({ threadId: thread.id, resourceId: thread.resourceId });
+    await vi.waitFor(() => expect(threadStore.saveThread).toHaveBeenCalledTimes(1));
+
+    processor.stopAllPolling();
+    resolveSave();
+    await poll;
+
+    expect(threadStore.saveThread).toHaveBeenCalledTimes(1);
+    expect(onSubscriptionsChanged).not.toHaveBeenCalled();
+  });
+
+  it('stopPollingForThread cancels an in-flight poll for that thread', async () => {
+    vi.useFakeTimers();
+    const thread: StorageThreadType = {
+      id: 'thread-stop-single',
+      resourceId: 'resource-stop-single',
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+      metadata: {
+        mastra: {
+          [GITHUB_SIGNALS_METADATA_KEY]: {
+            subscriptions: [
+              {
+                owner: 'mastra-ai',
+                repo: 'mastra',
+                number: 104,
+                subscribedAt: '2026-01-01T00:00:00.000Z',
+                updatedAt: '2026-01-01T00:00:00.000Z',
+                lastSubscribeSignalId: 'signal-stop-single',
+                lastObservedGithubUpdatedAt: '2026-01-01T00:00:00.000Z',
+                lastObservedContentHash: 'old-hash',
+              },
+            ],
+          },
+        },
+      },
+    };
+    const threadStore = createThreadStore(thread);
+    let resolveSync!: () => void;
+    const syncBlocked = new Promise<void>(resolve => {
+      resolveSync = resolve;
+    });
+    const syncClient: GithubSignalsSyncClient = {
+      syncPullRequest: vi.fn(async () => {
+        await syncBlocked;
+        return { ok: true };
+      }),
+      getPullRequestSnapshot: vi.fn(async () => ({
+        title: 'Single-thread stop race',
+        state: 'closed',
+        githubUpdatedAt: '2026-01-01T00:10:00.000Z',
+        contentHash: 'new-hash',
+      })),
+    };
+    const processor = new GithubSignals({ threadStore, syncClient, pollIntervalMs: 1_000 });
+    const polling = { threadId: thread.id, resourceId: thread.resourceId };
+
+    await processor.startPollingForThread(polling);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(syncClient.syncPullRequest).toHaveBeenCalledTimes(1);
+
+    processor.stopPollingForThread(polling);
+    expect(processor.isPollingThread(polling)).toBe(false);
+    resolveSync();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(threadStore.saveThread).not.toHaveBeenCalled();
+  });
+
+  it('evicting a thread polling entry cancels its in-flight poll', async () => {
+    vi.useFakeTimers();
+    const createThread = (id: string, resourceId: string, number: number): StorageThreadType => ({
+      id,
+      resourceId,
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+      metadata: {
+        mastra: {
+          [GITHUB_SIGNALS_METADATA_KEY]: {
+            subscriptions: [
+              {
+                owner: 'mastra-ai',
+                repo: 'mastra',
+                number,
+                subscribedAt: '2026-01-01T00:00:00.000Z',
+                updatedAt: '2026-01-01T00:00:00.000Z',
+                lastSubscribeSignalId: `signal-evict-${number}`,
+                lastObservedGithubUpdatedAt: '2026-01-01T00:00:00.000Z',
+                lastObservedContentHash: 'old-hash',
+              },
+            ],
+          },
+        },
+      },
+    });
+    const firstThread = createThread('thread-evict-first', 'resource-evict-first', 105);
+    const secondThread = createThread('thread-evict-second', 'resource-evict-second', 106);
+    const threadStore: GithubSignalsThreadStore = {
+      getThreadById: vi.fn(async ({ threadId }) => (threadId === firstThread.id ? firstThread : secondThread)),
+      saveThread: vi.fn(async ({ thread: nextThread }) => nextThread),
+    };
+    let resolveFirstSync!: () => void;
+    const firstSyncBlocked = new Promise<void>(resolve => {
+      resolveFirstSync = resolve;
+    });
+    const syncClient: GithubSignalsSyncClient = {
+      syncPullRequest: vi.fn(async input => {
+        if (input.number === 105) {
+          await firstSyncBlocked;
+        }
+        return { ok: true };
+      }),
+      getPullRequestSnapshot: vi.fn(async input => ({
+        title: `Eviction race ${input.number}`,
+        state: 'closed',
+        githubUpdatedAt: '2026-01-01T00:10:00.000Z',
+        contentHash: `new-hash-${input.number}`,
+      })),
+    };
+    const processor = new GithubSignals({ threadStore, syncClient, pollIntervalMs: 1_000 });
+    const firstPolling = { threadId: firstThread.id, resourceId: firstThread.resourceId };
+    const secondPolling = { threadId: secondThread.id, resourceId: secondThread.resourceId };
+
+    await processor.startPollingForThread(firstPolling);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(syncClient.syncPullRequest).toHaveBeenCalledTimes(1);
+
+    await processor.startPollingForThread(secondPolling);
+    expect(processor.isPollingThread(firstPolling)).toBe(false);
+    expect(processor.isPollingThread(secondPolling)).toBe(true);
+
+    resolveFirstSync();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(threadStore.saveThread).not.toHaveBeenCalled();
   });
 });

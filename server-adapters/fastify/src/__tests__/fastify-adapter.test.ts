@@ -1036,6 +1036,32 @@ describe('Fastify Server Adapter', () => {
     });
   });
 
+  describe('Channel webhook diagnostics', () => {
+    it('warns for an unregistered channel webhook when no custom API routes exist', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const app = Fastify();
+      const adapter = new MastraServer({ app, mastra: new Mastra({}) });
+
+      try {
+        await adapter.init();
+
+        const response = await app.inject({
+          method: 'POST',
+          url: '/api/agents/support/channels/slack/webhook',
+        });
+
+        expect(response.statusCode).toBe(404);
+        expect(warnSpy).toHaveBeenCalledWith(
+          expect.stringContaining('channels.adapters configuration'),
+          expect.objectContaining({ agentId: 'support', platform: 'slack' }),
+        );
+      } finally {
+        warnSpy.mockRestore();
+        await app.close();
+      }
+    });
+  });
+
   createBodyLimitTestSuite({
     suiteName: 'Body Size Limit',
 

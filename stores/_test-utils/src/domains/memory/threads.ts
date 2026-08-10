@@ -1140,7 +1140,13 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
 
 function isStorageSupportsSort(storage: MastraStorage): boolean {
   const storageType = storage.constructor.name;
-  return ['InMemoryStore', 'LibSQLStore', 'PostgresStore', 'MSSQLStore', 'DynamoDBStore', 'MySQLStore'].includes(
-    storageType,
-  );
+  return [
+    'InMemoryStore',
+    'LibSQLStore',
+    'PostgresStore',
+    'MSSQLStore',
+    'DynamoDBStore',
+    'MySQLStore',
+    'OracleStore',
+  ].includes(storageType);
 }

@@ -1,7 +1,9 @@
 {
   "attachment": [
     "gemma-4-31b-it",
+    "greg-1-mini",
     "kimi-k2.5",
+    "kimi-k2.5-lightning",
     "kimi-k2.6",
     "kimi-k2.7-code",
     "kimi-k3",
@@ -13,6 +15,7 @@
   "temperature": [
     "deepseek-v3.2",
     "deepseek-v4-flash",
+    "deepseek-v4-flash-0731",
     "deepseek-v4-pro",
     "deepseek-v4-pro-lightning",
     "gemma-4-31b-it",
@@ -34,6 +37,7 @@
   ],
   "structuredOutput": [
     "deepseek-v4-flash",
+    "deepseek-v4-flash-0731",
     "deepseek-v4-pro",
     "deepseek-v4-pro-lightning",
     "gemma-4-31b-it",

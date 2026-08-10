@@ -3,7 +3,7 @@ import type {
   ListBranchesArgs,
   ListBranchesResponse,
   ListTracesArgs,
-  ListTracesResponse,
+  ListTracesLightResponse,
 } from '@mastra/core/storage';
 import { useMastraClient } from '@mastra/react';
 import type { InfiniteData } from '@tanstack/react-query';
@@ -20,6 +20,26 @@ import { is403ForbiddenError } from '@/lib/query-utils';
  */
 type DeltaSupport = 'unknown' | 'unsupported';
 const deltaSupportByClient = new WeakMap<ReturnType<typeof useMastraClient>, DeltaSupport>();
+
+/**
+ * Per-MastraClient light-list support cache. Sticks once the light endpoint is
+ * shown not to be served, so every subsequent page fetch, delta poll and periodic
+ * refresh uses the full list endpoint instead. Other failures (auth, rate limits,
+ * outages) propagate without pinning — they'd hit the full endpoint too.
+ */
+type LightListSupport = 'unknown' | 'unsupported';
+const lightListSupportByClient = new WeakMap<ReturnType<typeof useMastraClient>, LightListSupport>();
+
+/** When the current run of light-endpoint 500s started, per client. Cleared by any light success. */
+const lightListFirstServerErrorAtByClient = new WeakMap<ReturnType<typeof useMastraClient>, number>();
+
+/** A 500 is ambiguous — an old core's store throwing, or a transient fault (DB hiccup, timeout).
+ *  Serve the request from the full endpoint either way, but only pin the session once the 500s
+ *  have outlasted a blip; a hiccup would otherwise degrade the list until the tab is reloaded.
+ *  Elapsed time, not a request count: the page refetch, the delta poll and the status refresh can
+ *  fail in the same instant, and a fallback response still looks like a success to the delta query,
+ *  so chase mode keeps re-polling every `deltaChaseIntervalMs` throughout the outage. */
+const LIGHT_LIST_SERVER_ERROR_PIN_AFTER_MS = 10_000;
 
 /** Tunables for live-tail polling. All fields optional — defaults below.
  *  Platform consumers override individual fields to throttle traffic or
@@ -75,6 +95,30 @@ function isHttp501(error: unknown): boolean {
   return (error as { status?: number } | null)?.status === 501;
 }
 
+/** Only 404 and 500 can mean the light endpoint isn't served: 404 from servers without
+ *  the route, 500 from cores whose store throws instead of serving the projection.
+ *  Anything else (401, 403, 429, other 5xx, the 501 disabled-domain signal) is a
+ *  condition the full endpoint would hit too, so it propagates instead of falling
+ *  back — mirroring how the delta-support cache matches exactly 501. */
+function lightListFallbackStatus(error: unknown): 404 | 500 | undefined {
+  const status = (error as { status?: number } | null)?.status;
+  return status === 404 || status === 500 ? status : undefined;
+}
+
+/** Whether a failed light-list request should pin the session to the full endpoint.
+ *  `firstServerErrorAt` is undefined when this 500 opens a new run of them, so a single
+ *  fault never pins. Exported for testing — pure function of the status and timestamps. */
+export function shouldPinLightList(
+  status: number | undefined,
+  firstServerErrorAt: number | undefined,
+  now: number,
+): boolean {
+  if (status === 404) return true;
+  if (status !== 500) return false;
+  if (firstServerErrorAt === undefined) return false;
+  return now - firstServerErrorAt >= LIGHT_LIST_SERVER_ERROR_PIN_AFTER_MS;
+}
+
 type FetchTracesFnArgs = TracesFilters & {
   client: ReturnType<typeof useMastraClient>;
 } & ({ mode: 'delta'; after?: string; limit?: number } | { mode?: 'page'; page: number; perPage: number });
@@ -90,7 +134,44 @@ const fetchTracesFn = async (args: FetchTracesFnArgs) => {
     return client.listBranches(params as ListBranchesArgs);
   }
 
-  return client.listTraces(params as ListTracesArgs);
+  // The list only renders identity, timing, status and a short input preview, so ask
+  // for the lightweight projection. Selecting a row fetches the full record separately.
+  // Clients pinned to full mode keep using listTraces (page and delta alike), exactly
+  // as before the light endpoint existed; full rows are a superset of the light ones.
+  if (lightListSupportByClient.get(client) === 'unsupported') {
+    return client.listTraces(params as ListTracesArgs);
+  }
+  try {
+    const response = await client.listTracesLight(params as ListTracesArgs);
+    // A 200 can still be a legacy projection: servers whose store implements the
+    // pre-preview light list answer with rows carrying none of the new fields.
+    // Current servers always set `status` on every row, so a non-empty page where
+    // every row lacks it is legacy-shaped — pin and refetch the full rows. Empty
+    // pages never pin (indistinguishable, and they render identically either way;
+    // the next non-empty page decides).
+    if (args.mode !== 'delta') {
+      const spans = response.spans ?? [];
+      if (spans.length > 0 && spans.every(span => span.status === undefined)) {
+        lightListSupportByClient.set(client, 'unsupported');
+        return client.listTraces(params as ListTracesArgs);
+      }
+    }
+    lightListFirstServerErrorAtByClient.delete(client);
+    return response;
+  } catch (error) {
+    const status = lightListFallbackStatus(error);
+    if (status === undefined) throw error;
+
+    const now = Date.now();
+    const firstServerErrorAt = lightListFirstServerErrorAtByClient.get(client);
+    if (status === 500 && firstServerErrorAt === undefined) {
+      lightListFirstServerErrorAtByClient.set(client, now);
+    }
+    if (shouldPinLightList(status, firstServerErrorAt, now)) {
+      lightListSupportByClient.set(client, 'unsupported');
+    }
+    return client.listTraces(params as ListTracesArgs);
+  }
 };
 
 export const TRACES_PER_PAGE = 25;
@@ -102,7 +183,7 @@ export interface TracesFilters {
 
 /** Returns the next page number if the server indicates more pages are available. */
 export function getTracesNextPageParam(
-  lastPage: ListTracesResponse | ListBranchesResponse | undefined,
+  lastPage: ListTracesLightResponse | ListBranchesResponse | undefined,
   _allPages: unknown,
   lastPageParam: number,
 ) {
@@ -112,9 +193,11 @@ export function getTracesNextPageParam(
   return undefined;
 }
 
-type TracesPageResponse = ListTracesResponse | ListBranchesResponse;
+type TracesPageResponse = ListTracesLightResponse | ListBranchesResponse;
 
-function getPageSpans(page: TracesPageResponse) {
+/** Branch rows are full spans and trace rows are lightweight; the list only reads the
+ *  fields they share, so both are surfaced as `LightSpanRecord`. */
+function getPageSpans(page: TracesPageResponse): LightSpanRecord[] {
   if ('branches' in page) return page.branches ?? [];
   return page.spans ?? [];
 }
@@ -138,6 +221,16 @@ export function selectUniqueTraces(data: { pages: TracesPageResponse[] }): {
   return { spans, deltaCursor: data.pages[0]?.deltaCursor };
 }
 
+type RowIdentity = { traceId: string; spanId?: string | null };
+
+function rowKey(row: RowIdentity): string {
+  return `${row.traceId}:${row.spanId}`;
+}
+
+function indexRowsByKey<TRow extends RowIdentity>(rows: TRow[]): Map<string, TRow> {
+  return new Map(rows.map(row => [rowKey(row), row]));
+}
+
 /** Replaces existing page-0 rows in place (keyed by traceId:spanId) with
  *  refreshed copies from the server. Rows the server doesn't return are kept
  *  as-is so delta-accumulated rows that have aged off the server's page 0
@@ -145,40 +238,29 @@ export function selectUniqueTraces(data: { pages: TracesPageResponse[] }): {
  *  delivers those. */
 export function refreshPage0Rows(
   old: InfiniteData<TracesPageResponse> | undefined,
-  refreshed: ListTracesResponse | ListBranchesResponse,
+  refreshed: ListTracesLightResponse | ListBranchesResponse,
   listMode: TraceListMode,
 ): InfiniteData<TracesPageResponse> | undefined {
   if (!old || old.pages.length === 0) return old;
   const [firstPage, ...rest] = old.pages;
   if (!firstPage) return old;
 
-  const refreshedRows =
-    listMode === 'branches' && 'branches' in refreshed
-      ? (refreshed.branches ?? [])
-      : 'spans' in refreshed
-        ? (refreshed.spans ?? [])
-        : [];
-
-  if (refreshedRows.length === 0) return old;
-
-  const refreshedByKey = new Map<string, (typeof refreshedRows)[number]>();
-  for (const row of refreshedRows) {
-    refreshedByKey.set(`${row.traceId}:${row.spanId}`, row);
-  }
-
+  // Branch and trace rows have different row shapes, so each mode keys its own map.
   let updatedFirst: TracesPageResponse;
-  if (listMode === 'branches' && 'branches' in firstPage) {
-    const updated = (firstPage.branches ?? []).map(existing => {
-      const fresh = refreshedByKey.get(`${existing.traceId}:${existing.spanId}`);
-      return fresh ?? existing;
-    });
-    updatedFirst = { ...firstPage, branches: updated };
-  } else if ('spans' in firstPage) {
-    const updated = (firstPage.spans ?? []).map(existing => {
-      const fresh = refreshedByKey.get(`${existing.traceId}:${existing.spanId}`);
-      return fresh ?? existing;
-    });
-    updatedFirst = { ...firstPage, spans: updated };
+  if (listMode === 'branches' && 'branches' in firstPage && 'branches' in refreshed) {
+    const refreshedByKey = indexRowsByKey(refreshed.branches ?? []);
+    if (refreshedByKey.size === 0) return old;
+    updatedFirst = {
+      ...firstPage,
+      branches: (firstPage.branches ?? []).map(existing => refreshedByKey.get(rowKey(existing)) ?? existing),
+    };
+  } else if ('spans' in firstPage && 'spans' in refreshed) {
+    const refreshedByKey = indexRowsByKey(refreshed.spans ?? []);
+    if (refreshedByKey.size === 0) return old;
+    updatedFirst = {
+      ...firstPage,
+      spans: (firstPage.spans ?? []).map(existing => refreshedByKey.get(rowKey(existing)) ?? existing),
+    };
   } else {
     return old;
   }
@@ -205,7 +287,7 @@ function sortRowsByStartedAtDesc<T extends { startedAt?: unknown }>(rows: T[]): 
  *  selectUniqueTraces. */
 export function mergeDeltaIntoPage0(
   old: InfiniteData<TracesPageResponse> | undefined,
-  delta: ListTracesResponse | ListBranchesResponse,
+  delta: ListTracesLightResponse | ListBranchesResponse,
   listMode: TraceListMode,
 ): InfiniteData<TracesPageResponse> | undefined {
   if (!old || old.pages.length === 0) return old;
@@ -222,7 +304,7 @@ export function mergeDeltaIntoPage0(
       deltaCursor: nextCursor,
     };
   } else if ('spans' in firstPage) {
-    const newRows = (delta as ListTracesResponse).spans ?? [];
+    const newRows = (delta as ListTracesLightResponse).spans ?? [];
     updatedFirst = {
       ...firstPage,
       spans: sortRowsByStartedAtDesc([...newRows, ...(firstPage.spans ?? [])]),
@@ -353,7 +435,7 @@ export const useTraces: (args: UseTracesArgs) => UseTracesReturn = ({
     retry: false,
     refetchInterval: q => {
       if (q.state.error) return false;
-      const data = q.state.data as ListTracesResponse | ListBranchesResponse | null | undefined;
+      const data = q.state.data as ListTracesLightResponse | ListBranchesResponse | null | undefined;
       if (data?.delta?.hasMore) return deltaChaseIntervalMs;
       return deltaPollIntervalMs;
     },
@@ -371,7 +453,7 @@ export const useTraces: (args: UseTracesArgs) => UseTracesReturn = ({
       mergeDeltaIntoPage0(old, result, listMode),
     );
 
-    const newRows =
+    const newRows: RowIdentity[] =
       listMode === 'branches' && 'branches' in result
         ? (result.branches ?? [])
         : 'spans' in result

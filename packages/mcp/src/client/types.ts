@@ -1,23 +1,22 @@
 import type { IOType } from 'node:child_process';
 import type { RequestContext } from '@mastra/core/di';
-import type { SSEClientTransportOptions } from '@modelcontextprotocol/sdk/client/sse.js';
-import type { StreamableHTTPClientTransportOptions } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-// FetchLike is used internally when wrapping MastraFetchLike for transport compatibility
-export type { FetchLike } from '@modelcontextprotocol/sdk/shared/transport.js';
 import type {
+  SSEClientTransportOptions,
+  StreamableHTTPClientTransportOptions,
   ClientCapabilities,
   ElicitRequest,
   ElicitResult,
   LoggingLevel,
   ProgressNotification,
   ToolAnnotations,
-} from '@modelcontextprotocol/sdk/types.js';
+  jsonSchemaValidator,
+} from '@modelcontextprotocol/client';
 
+// FetchLike is used internally when wrapping MastraFetchLike for transport compatibility
+export type { FetchLike } from '@modelcontextprotocol/client';
 // Re-export so consumers of @mastra/mcp can type their requireToolApproval callbacks
-// without having to add @modelcontextprotocol/sdk as a direct dependency.
-export type { ToolAnnotations } from '@modelcontextprotocol/sdk/types.js';
-import type { jsonSchemaValidator } from '@modelcontextprotocol/sdk/validation/types.js';
-
+// without having to add @modelcontextprotocol/client as a direct dependency.
+export type { ToolAnnotations } from '@modelcontextprotocol/client';
 /**
  * Extended fetch function type that receives the current request context as a third argument.
  *
@@ -52,8 +51,8 @@ export type MastraFetchLike = (
   requestContext?: RequestContext | null,
 ) => Promise<Response>;
 
-// Re-export MCP SDK LoggingLevel for convenience
-export type { LoggingLevel } from '@modelcontextprotocol/sdk/types.js';
+// Re-export the MCP LoggingLevel for convenience
+export type { LoggingLevel } from '@modelcontextprotocol/client';
 
 /**
  * Log message structure for MCP client logging.
@@ -243,18 +242,18 @@ export type BaseServerOptions = {
    */
   onToolError?: 'throw' | 'return';
   /**
-   * Optional custom JSON Schema validator forwarded to the underlying MCP SDK
+   * Optional custom JSON Schema validator forwarded to the underlying MCP
    * client. Use this to opt into a non-default validator implementation.
    *
    * Pass `CfWorkerJsonSchemaValidator` (from
-   * `@modelcontextprotocol/sdk/validation/cfworker`) when running in
+   * `@modelcontextprotocol/client/validators/cf-worker`) when running in
    * Cloudflare Workers / V8 isolates: the default `AjvJsonSchemaValidator`
    * compiles validators with `new Function(...)`, which workerd refuses to
    * evaluate when a tool advertises an `outputSchema`.
    *
    * @example
    * ```typescript
-   * import { CfWorkerJsonSchemaValidator } from '@modelcontextprotocol/sdk/validation/cfworker';
+   * import { CfWorkerJsonSchemaValidator } from '@modelcontextprotocol/client/validators/cf-worker';
    *
    * const mcp = new MCPClient({
    *   servers: {
@@ -305,6 +304,23 @@ export type StdioServerDefinition = BaseServerOptions & {
   /** Optional environment variables for the subprocess */
   env?: Record<string, string>;
   /**
+   * Whether the subprocess environment starts from the MCP SDK's default
+   * inherited environment. Defaults to `true`.
+   *
+   * The default is NOT the full `process.env`: the SDK's
+   * `getDefaultEnvironment()` inherits only a curated platform whitelist —
+   * on POSIX: `HOME`, `LOGNAME`, `PATH`, `SHELL`, `TERM`, `USER`; on Windows:
+   * `APPDATA`, `HOMEDRIVE`, `HOMEPATH`, `LOCALAPPDATA`, `PATH`,
+   * `PROCESSOR_ARCHITECTURE`, `SYSTEMDRIVE`, `SYSTEMROOT`, `TEMP`, `USERNAME`,
+   * `USERPROFILE` — and skips functions and variables starting with `()`.
+   *
+   * When `false`, the subprocess environment base is empty (`{}`) and only the
+   * variables explicitly listed in `env` are passed to the subprocess. Note
+   * that a subprocess without `PATH` may fail to spawn commands that are not
+   * absolute paths.
+   */
+  inheritDefaultEnv?: boolean;
+  /**
    * How to handle stderr of the child process. Matches the semantics of Node's `child_process.spawn`.
    *
    * - `"inherit"` (default): stderr is printed to the parent process's stderr
@@ -327,6 +343,7 @@ export type StdioServerDefinition = BaseServerOptions & {
   sessionId?: never;
   connectTimeout?: never;
   fetch?: never;
+  allowedHosts?: never;
 };
 
 /**
@@ -345,6 +362,7 @@ export type HttpServerDefinition = BaseServerOptions & {
   command?: never;
   args?: never;
   env?: never;
+  inheritDefaultEnv?: never;
   stderr?: never;
   cwd?: never;
 
@@ -381,6 +399,45 @@ export type HttpServerDefinition = BaseServerOptions & {
    * ```
    */
   fetch?: MastraFetchLike;
+  /**
+   * Optional allowlist of hosts this server's HTTP requests may target.
+   *
+   * When set, every outgoing request made on behalf of this server (initial
+   * connect, Streamable HTTP POSTs, the SSE fallback and its event stream,
+   * OAuth discovery/token requests routed through the transport fetch, and
+   * every redirect hop) is checked against this list. When unset, no
+   * restriction applies (current behavior).
+   *
+   * Matching semantics:
+   * - Entries are host values matched against `URL.host` — the hostname plus
+   *   the port when the URL carries a non-default port. WHATWG URL elides
+   *   default ports, so `https://x.com:443` has host `x.com` and matches the
+   *   entry `'x.com'`, not `'x.com:443'`. Examples: `'api.example.com'`,
+   *   `'localhost:8080'`.
+   * - Matching is exact and case-insensitive on the hostname. No wildcards.
+   * - The URL scheme is NOT checked — matching is host-only, so `http://` and
+   *   `https://` URLs to an allowed host both pass. The `Authorization` header
+   *   is still dropped on any cross-origin redirect hop (scheme, host, or port
+   *   change), so a same-host scheme downgrade never re-sends credentials.
+   * - An empty array (`allowedHosts: []`) denies all hosts.
+   *
+   * Enforcement strength varies by path:
+   * - On the default path (no custom `fetch`), requests to disallowed hosts —
+   *   including redirect hops, via manual redirect following — are blocked
+   *   BEFORE being sent.
+   * - When a custom `fetch` (or a caller-supplied `eventSourceInit.fetch`) is
+   *   in play, the initial URL is checked before the request, but redirect
+   *   hops are validated post-hoc via `response.url`: the outbound hop may
+   *   occur, but the response never reaches the caller or the model. A
+   *   hand-built `Response` with an empty `response.url` skips the post-hoc
+   *   check (documented limitation — custom fetches legitimately construct
+   *   such responses).
+   *
+   * OAuth note: the SDK routes OAuth discovery and token requests through the
+   * transport's fetch, so when using an `authProvider` whose authorization
+   * server lives on a different host, that host must also be allowlisted.
+   */
+  allowedHosts?: string[];
   /** Optional request configuration for HTTP requests (optional when `fetch` is provided) */
   requestInit?: StreamableHTTPClientTransportOptions['requestInit'];
   /** Optional configuration for SSE fallback (required when using custom headers with SSE, optional when `fetch` is provided) */
@@ -456,3 +513,51 @@ export type InternalMastraMCPClientOptions = {
   /** Optional timeout in milliseconds */
   timeout?: number;
 };
+
+/**
+ * A fully serializable description of a single tool advertised by an MCP server.
+ *
+ * This is the data returned by the MCP `tools/list` response, plus the server metadata needed
+ * to reconstruct the tool faithfully. It contains no functions, class instances or references
+ * to a live client, so it survives `JSON.stringify` and can be cached in Redis, a database, or
+ * a build artifact and reused by other processes.
+ *
+ * Obtain these via {@link MCPClient.listToolDefinitions} and turn them back into executable
+ * tools with {@link MCPClient.toolFromDefinition}.
+ */
+export type SerializableMCPToolDefinition = {
+  /** Tool name as advertised by the server, without any server namespace prefix. */
+  name: string;
+  /** Human readable description from the server, if it supplied one. */
+  description?: string;
+  /** Raw JSON Schema for the tool's arguments, exactly as sent by the server. */
+  inputSchema: unknown;
+  /** Raw JSON Schema for the tool's structured output, if the server declared one. */
+  outputSchema?: unknown;
+  /** Server-advertised annotations (title, readOnlyHint, destructiveHint, ...). */
+  annotations?: ToolAnnotations;
+  /** Server-supplied `_meta`, including `ui.resourceUri` for MCP Apps. */
+  _meta?: Record<string, unknown>;
+  /**
+   * Metadata about the server that advertised this tool.
+   *
+   * Captured at discovery time because it is otherwise only available from a live connection.
+   * Without it, hydrating a tool would silently drop the server version and instructions that
+   * a normally discovered tool carries.
+   */
+  server: {
+    /** The name this server is configured under. */
+    name: string;
+    /** Server version reported during the MCP handshake, if any. */
+    version?: string;
+    /** Instructions the server returned during initialization, if any. */
+    instructions?: string;
+  };
+};
+
+/**
+ * A serializable catalog of MCP tool definitions, keyed by server name and then tool name.
+ *
+ * This is the shape returned by {@link MCPClient.listToolDefinitions}.
+ */
+export type SerializableMCPToolCatalog = Record<string, Record<string, SerializableMCPToolDefinition>>;

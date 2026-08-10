@@ -63,6 +63,11 @@ const sidebars = {
           id: 'getting-started/electron',
           label: 'Electron',
         },
+        {
+          type: 'doc',
+          id: 'getting-started/manual-install',
+          label: 'Manual Install',
+        },
       ],
     },
     {
@@ -84,13 +89,70 @@ const sidebars = {
     },
     {
       type: 'category',
-      label: 'Agent Frameworks',
+      label: 'Capabilities',
       collapsed: false,
       items: [
         {
-          type: 'doc',
-          id: 'agent-frameworks/ai-sdk',
-          label: 'AI SDK',
+          type: 'category',
+          label: 'RAG',
+          items: [
+            {
+              type: 'doc',
+              id: 'rag/overview',
+              label: 'Overview',
+            },
+            {
+              type: 'doc',
+              id: 'rag/chunking-and-embedding',
+              label: 'Chunking and Embedding',
+            },
+            {
+              type: 'doc',
+              id: 'rag/vector-databases',
+              label: 'Vector Databases',
+            },
+            {
+              type: 'doc',
+              id: 'rag/retrieval',
+              label: 'Retrieval',
+            },
+            {
+              type: 'doc',
+              id: 'rag/graph-rag',
+              label: 'GraphRAG',
+            },
+          ],
+        },
+        {
+          type: 'category',
+          label: 'Voice',
+          items: [
+            {
+              type: 'doc',
+              id: 'voice/overview',
+              label: 'Overview',
+            },
+            {
+              type: 'doc',
+              id: 'voice/text-to-speech',
+              label: 'Text to Speech',
+            },
+            {
+              type: 'doc',
+              id: 'voice/speech-to-text',
+              label: 'Speech to Text',
+            },
+            {
+              type: 'doc',
+              id: 'voice/speech-to-speech',
+              label: 'Speech to Speech',
+            },
+            {
+              type: 'doc',
+              id: 'voice/realtime-voice',
+              label: 'Realtime Voice',
+            },
+          ],
         },
       ],
     },
@@ -108,6 +170,11 @@ const sidebars = {
           type: 'doc',
           id: 'build-your-ui/assistant-ui',
           label: 'Assistant UI',
+        },
+        {
+          type: 'doc',
+          id: 'build-your-ui/openui',
+          label: 'OpenUI',
         },
         {
           type: 'category',
@@ -130,17 +197,24 @@ const sidebars = {
             },
           ],
         },
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Agent Frameworks',
+      collapsed: true,
+      items: [
         {
           type: 'doc',
-          id: 'build-your-ui/openui',
-          label: 'OpenUI',
+          id: 'agent-frameworks/ai-sdk',
+          label: 'AI SDK',
         },
       ],
     },
     {
       type: 'category',
       label: 'Deployment',
-      collapsed: false,
+      collapsed: true,
       items: [
         {
           type: 'doc',
@@ -191,7 +265,7 @@ const sidebars = {
           id: 'deployment/mastra-workers',
           label: 'Mastra Workers',
           customProps: {
-            tags: ['beta'],
+            tags: ['new'],
           },
         },
         {
@@ -214,7 +288,7 @@ const sidebars = {
     {
       type: 'category',
       label: 'Tutorials',
-      collapsed: false,
+      collapsed: true,
       items: [
         {
           type: 'category',
@@ -324,7 +398,7 @@ const sidebars = {
     {
       type: 'category',
       label: 'Migrations',
-      collapsed: false,
+      collapsed: true,
       items: [
         {
           type: 'category',

@@ -137,6 +137,63 @@ console.log(`Status: ${summary2.status}`)
     description:
       'Controls undeclared agent tool calls. `allow` executes them live. `deny` fails the item with `TOOL_MOCK_NOT_DECLARED` before execution. An item-level value overrides this experiment default.',
   },
+  {
+    name: 'beforeAll',
+    type: '(args: ExperimentHookArgs) => void | Promise<void>',
+    isOptional: true,
+    description:
+      'Runs once before any item executes. Receives `experimentId`, `mastra`, and `signal`. A failure fails the experiment and no items run.',
+  },
+  {
+    name: 'beforeEach',
+    type: '(args: ExperimentItemHookArgs) => void | Promise<void>',
+    isOptional: true,
+    description:
+      'Runs before each item executes. Also receives the `item` (`id`, `input`, `groundTruth`, `metadata`). A failure fails that item with `EXPERIMENT_ITEM_BEFORE_EACH_FAILED` and skips its target, scorers, and `afterEach`.',
+  },
+  {
+    name: 'afterEach',
+    type: '(args: ExperimentItemResultHookArgs) => void | Promise<void>',
+    isOptional: true,
+    description:
+      "Runs after each item completes. Also receives the item's `result` with its scores. Skipped when `beforeEach` failed. A failure is logged and doesn't change the item's outcome.",
+  },
+  {
+    name: 'afterAll',
+    type: '(args: ExperimentRunResultHookArgs) => void | Promise<void>',
+    isOptional: true,
+    description:
+      "Runs once after the experiment finishes, on every exit path including failure. Also receives the `summary`. A failure is logged and doesn't change the summary.",
+  },
+  {
+    name: 'persistence',
+    type: 'ExperimentPersistencePolicy',
+    isOptional: true,
+    description:
+      'Controls whether this run writes experiment records and score records. Targets and scorers still execute, and results remain available in the returned summary.',
+    properties: [
+      {
+        type: 'ExperimentPersistencePolicy',
+        parameters: [
+          {
+            name: 'experiments',
+            type: "'default' | 'none'",
+            isOptional: true,
+            defaultValue: "'default'",
+            description:
+              'Set to `none` to skip experiment creation, item results, progress, and terminal status writes.',
+          },
+          {
+            name: 'scores',
+            type: "'default' | 'none'",
+            isOptional: true,
+            defaultValue: "'default'",
+            description: 'Set to `none` to skip score writes while still running scorers.',
+          },
+        ],
+      },
+    ],
+  },
 ]}
 />
 

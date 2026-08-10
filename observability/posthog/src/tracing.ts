@@ -536,6 +536,18 @@ export class PosthogExporter extends TrackingExporter<
       if (attrs.parameters.maxOutputTokens !== undefined) props.$ai_max_tokens = attrs.parameters.maxOutputTokens;
     }
     if (attrs.streaming !== undefined) props.$ai_stream = attrs.streaming;
+    if (attrs.tools?.length) {
+      // OpenAI-style shape — the format PostHog's own AI SDKs send and its
+      // trace view renders. Provider-defined tools pass through as-is.
+      props.$ai_tools = attrs.tools.map(tool =>
+        tool.type === 'function'
+          ? {
+              type: 'function',
+              function: { name: tool.name, description: tool.description, parameters: tool.parameters },
+            }
+          : tool,
+      );
+    }
 
     return { ...props, ...this.extractErrorProperties(span.errorInfo), ...this.extractCustomMetadata(span.metadata) };
   }

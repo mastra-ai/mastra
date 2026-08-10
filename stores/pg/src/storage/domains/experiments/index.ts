@@ -90,7 +90,17 @@ export class ExperimentsPG extends ExperimentsStorage {
     await this.#db.alterTable({
       tableName: TABLE_EXPERIMENTS,
       schema: EXPERIMENTS_SCHEMA,
-      ifNotExists: ['agentVersion', 'organizationId', 'projectId'],
+      ifNotExists: [
+        'agentVersion',
+        'organizationId',
+        'projectId',
+        'provenance',
+        'runnerAttestation',
+        'experimentSetId',
+        'comparisonId',
+        'variantId',
+        'trialIndex',
+      ],
     });
     await this.#db.alterTable({
       tableName: TABLE_EXPERIMENT_RESULTS,
@@ -184,6 +194,11 @@ export class ExperimentsPG extends ExperimentsStorage {
   getDefaultIndexDefinitions(): CreateIndexOptions[] {
     return [
       { name: 'idx_experiments_datasetid', table: TABLE_EXPERIMENTS, columns: ['datasetId'] },
+      {
+        name: 'idx_experiments_grouping',
+        table: TABLE_EXPERIMENTS,
+        columns: ['experimentSetId', 'comparisonId', 'variantId', 'trialIndex'],
+      },
       { name: 'idx_experiment_results_experimentid', table: TABLE_EXPERIMENT_RESULTS, columns: ['experimentId'] },
       {
         name: 'idx_experiment_results_exp_item',
@@ -235,6 +250,12 @@ export class ExperimentsPG extends ExperimentsStorage {
       name: (row.name as string) ?? undefined,
       description: (row.description as string) ?? undefined,
       metadata: row.metadata ? safelyParseJSON(row.metadata) : undefined,
+      provenance: row.provenance ? safelyParseJSON(row.provenance) : null,
+      runnerAttestation: row.runnerAttestation ? safelyParseJSON(row.runnerAttestation) : null,
+      experimentSetId: (row.experimentSetId as string | null) ?? null,
+      comparisonId: (row.comparisonId as string | null) ?? null,
+      variantId: (row.variantId as string | null) ?? null,
+      trialIndex: row.trialIndex != null ? (row.trialIndex as number) : null,
       datasetId: (row.datasetId as string | null) ?? null,
       datasetVersion: row.datasetVersion != null ? (row.datasetVersion as number) : null,
       agentVersion: (row.agentVersion as string | null) ?? null,
@@ -293,6 +314,12 @@ export class ExperimentsPG extends ExperimentsStorage {
           name: input.name ?? null,
           description: input.description ?? null,
           metadata: input.metadata ?? null,
+          provenance: input.provenance ?? null,
+          runnerAttestation: input.runnerAttestation ?? null,
+          experimentSetId: input.experimentSetId ?? null,
+          comparisonId: input.comparisonId ?? null,
+          variantId: input.variantId ?? null,
+          trialIndex: input.trialIndex ?? null,
           datasetId: input.datasetId ?? null,
           datasetVersion: input.datasetVersion ?? null,
           agentVersion: input.agentVersion ?? null,
@@ -317,6 +344,12 @@ export class ExperimentsPG extends ExperimentsStorage {
         name: input.name,
         description: input.description,
         metadata: input.metadata,
+        provenance: input.provenance ?? null,
+        runnerAttestation: input.runnerAttestation ?? null,
+        experimentSetId: input.experimentSetId ?? null,
+        comparisonId: input.comparisonId ?? null,
+        variantId: input.variantId ?? null,
+        trialIndex: input.trialIndex ?? null,
         datasetId: input.datasetId ?? null,
         datasetVersion: input.datasetVersion ?? null,
         agentVersion: input.agentVersion ?? null,
@@ -481,6 +514,22 @@ export class ExperimentsPG extends ExperimentsStorage {
       if (args.status) {
         conditions.push(`"status" = $${paramIndex++}`);
         queryParams.push(args.status);
+      }
+      if (args.experimentSetId !== undefined) {
+        conditions.push(`"experimentSetId" = $${paramIndex++}`);
+        queryParams.push(args.experimentSetId);
+      }
+      if (args.comparisonId !== undefined) {
+        conditions.push(`"comparisonId" = $${paramIndex++}`);
+        queryParams.push(args.comparisonId);
+      }
+      if (args.variantId !== undefined) {
+        conditions.push(`"variantId" = $${paramIndex++}`);
+        queryParams.push(args.variantId);
+      }
+      if (args.trialIndex !== undefined) {
+        conditions.push(`"trialIndex" = $${paramIndex++}`);
+        queryParams.push(args.trialIndex);
       }
       if (args.filters) {
         const { organizationId, projectId } = args.filters;

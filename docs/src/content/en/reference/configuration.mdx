@@ -551,7 +551,7 @@ export const mastra = new Mastra({
 
 Text-to-speech providers for voice synthesis capabilities. Register voice providers to enable agents to convert text responses into spoken audio.
 
-Visit the [Voice documentation](/docs/voice/overview) to learn more.
+Visit the [Voice documentation](/guides/voice/overview) to learn more.
 
 :::note
 Most users configure voice directly on agents. This top-level configuration is for defining reusable voice providers that can be shared across multiple agents.
@@ -572,9 +572,9 @@ export const mastra = new Mastra({
 
 **Type:** `Record<string, MastraVector>`
 
-Vector stores for semantic search and embeddings. Used in RAG pipelines, similarity search, and other embedding-based features. Mastra supports multiple vector databases including Pinecone, PostgreSQL with pgvector, MongoDB, and more.
+Vector stores for semantic search and embeddings. Used in RAG pipelines, similarity search, and other embedding-based features. Mastra supports multiple vector databases including Pinecone, PostgreSQL with pgvector, OracleDB, MongoDB, and more.
 
-Visit the [RAG documentation](/docs/rag/overview) to learn more.
+Visit the [RAG documentation](/guides/rag/overview) to learn more.
 
 :::note
 Most users create vector stores directly when building RAG pipelines. This top-level configuration is for defining reusable vector store instances that can be shared across your application.
@@ -636,6 +636,35 @@ const mastra = new Mastra({
 
 ## Bundler options
 
+### bundler.entries
+
+**Type:** `Record<string, string>`\
+**Default:** `{}`
+
+Additional process entries to emit alongside the server bundle, as a map of output name to source path relative to your Mastra directory. Each entry becomes its own `<name>.mjs` in `.mastra/output`.
+
+Use this for long-running processes that run beside your Mastra server rather than inside it, such as a [LiveKit voice worker](/guides/voice/realtime-voice). The entry shares the output directory, `package.json`, and installed dependencies with the server, so one `mastra build` produces one deployable artifact you can start with different commands.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+
+export const mastra = new Mastra({
+  bundler: {
+    entries: { 'voice-worker': './voice-worker.ts' },
+  },
+})
+```
+
+This emits `.mastra/output/voice-worker.mjs` next to `.mastra/output/index.mjs`. Dependencies imported only by the extra entry are analyzed too, so they're installed into the output.
+
+Entry names can contain `/` to nest the output. They can't be `index`, which is the server bundle, `tools`, which is the tool aggregator, or start with `tools/`, which is reserved for tool bundles.
+
+:::note
+
+`mastra build` applies the [`bundler.externals`](#bundlerexternals) default of `true` only when you set no bundler options at all. Once you set `entries`, set `externals` explicitly as well if your extra entry depends on packages that can't be bundled, such as native modules.
+
+:::
+
 ### bundler.externals
 
 **Type:** `boolean | string[]`\
@@ -674,6 +703,25 @@ import { Mastra } from '@mastra/core'
 export const mastra = new Mastra({
   bundler: {
     sourcemap: true,
+  },
+})
+```
+
+### bundler.minify
+
+**Type:** `boolean`\
+**Default:** `false`
+
+Minifies the bundled output, stripping comments and whitespace and shortening local identifiers. Exported names are preserved.
+
+Off by default so build output stays readable and stack traces stay usable. Enable it when bundle size matters, such as packaging a container image for an on-prem deployment. `mastra dev` is never minified.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+
+export const mastra = new Mastra({
+  bundler: {
+    minify: true,
   },
 })
 ```

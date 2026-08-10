@@ -177,6 +177,7 @@ export const SOURCE_CONTROL_SCHEMAS: CollectionSchema[] = [
       user_id: { type: 'text' },
       branch: { type: 'text' },
       base_branch: { type: 'text' },
+      title: { type: 'text', nullable: true },
       sandbox_id: { type: 'text', nullable: true },
       sandbox_workdir: { type: 'text', nullable: true },
       materialized_at: { type: 'timestamp', nullable: true },
@@ -356,6 +357,7 @@ export interface SourceControlSession {
   orgId: string;
   userId: string;
   branch: string;
+  title: string | null;
   baseBranch: string;
   sandboxId: string | null;
   sandboxWorkdir: string | null;
@@ -370,6 +372,7 @@ export interface CreateSourceControlSessionInput {
   orgId: string;
   userId: string;
   branch: string;
+  title?: string | null;
   baseBranch: string;
 }
 
@@ -557,6 +560,7 @@ interface SessionDbRow extends Record<string, unknown> {
   org_id: string;
   user_id: string;
   branch: string;
+  title: string | null;
   base_branch: string;
   sandbox_id: string | null;
   sandbox_workdir: string | null;
@@ -662,6 +666,7 @@ function toSession(row: SessionDbRow): SourceControlSession {
     orgId: row.org_id,
     userId: row.user_id,
     branch: row.branch,
+    title: row.title,
     baseBranch: row.base_branch,
     sandboxId: row.sandbox_id,
     sandboxWorkdir: row.sandbox_workdir,
@@ -1217,6 +1222,7 @@ export class SourceControlStorage extends FactoryStorageDomain {
               org_id: input.orgId,
               user_id: input.userId,
               branch: input.branch,
+              title: input.title ?? null,
               base_branch: input.baseBranch,
               sandbox_id: null,
               sandbox_workdir: null,

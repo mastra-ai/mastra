@@ -539,8 +539,8 @@ https://mastra.ai/en/docs/memory/overview`,
     memoryConfig,
   }: {
     id: string;
-    title: string;
-    metadata: Record<string, unknown>;
+    title?: string;
+    metadata?: Record<string, unknown>;
     memoryConfig?: MemoryConfigInternal;
   }): Promise<StorageThreadType>;
 

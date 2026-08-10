@@ -1,0 +1,95 @@
+---
+title: "Reference: Workflow.agent() | Workflows"
+description: Documentation for the `Workflow.agent()` method in workflows, which adds an agent as a declarative step.
+packages:
+  - "@mastra/core"
+---
+
+# Workflow\.agent()
+
+The `.agent()` method adds an agent as a declarative step. The step accepts `{ prompt: string }` as input and returns `{ text: string }` by default. Use `.map()` before the agent to build the prompt from workflow data.
+
+Unlike wrapping an agent with `createStep()`, `.agent()` records a declarative entry in the workflow graph. This makes the workflow portable: the same graph can be serialized and persisted as a [dynamic workflow](/docs/workflows/dynamic-workflows).
+
+## Usage example
+
+```typescript filename="src/mastra/workflows/test-workflow.ts" prettier:false
+workflow
+  .map({ prompt: mapVariable({ initData: workflow, path: "topic" }) })
+  .agent(testAgent)
+  .commit();
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'agentOrId',
+    type: 'Agent | string',
+    description:
+      'An agent instance, or the ID of an agent registered on the Mastra instance. When passing an ID, the agent is resolved from the registry at execution time.',
+    isOptional: false,
+  },
+  {
+    name: 'options',
+    type: 'AgentStepOptions & { structuredOutput?: { schema }, retries?: number, scorers?: DynamicArgument<MastraScorers>, metadata?: StepMetadata }',
+    description:
+      'Agent call options such as `maxSteps`, `modelSettings`, `memory`, and `providerOptions`, plus step-level `retries`, `scorers`, and `metadata`. Per-request fields such as `requestContext`, `resourceId`, `threadId`, and `onStepFinish` are managed by the workflow engine and excluded.',
+    isOptional: true,
+  },
+  {
+    name: 'stepOptions',
+    type: '{ id?: string }',
+    description:
+      "The step's call-site ID within the workflow. Defaults to the agent's ID. Set this when the same agent appears more than once in one workflow.",
+    isOptional: true,
+  },
+]}
+/>
+
+## Returns
+
+<PropertiesTable
+  content={[
+  {
+    name: 'workflow',
+    type: 'Workflow',
+    description: 'The workflow instance for method chaining',
+  },
+]}
+/>
+
+## Structured output
+
+By default the step's output is `{ text: string }`. Pass `structuredOutput.schema` to make the step return that shape instead. The schema becomes the step's output schema, so later steps chain against it with full type safety:
+
+```typescript filename="src/mastra/workflows/test-workflow.ts" prettier:false
+workflow
+  .agent(testAgent, {
+    structuredOutput: {
+      schema: z.object({
+        subtopics: z.array(z.string()),
+      }),
+    },
+  })
+  .commit();
+```
+
+## Referencing an agent by ID
+
+Pass a string to reference a registered agent without importing it. The agent must be registered on the Mastra instance when the workflow runs:
+
+```typescript filename="src/mastra/workflows/test-workflow.ts" prettier:false
+workflow.agent("test-agent", { maxSteps: 3 }).commit();
+```
+
+## Persisting agent steps
+
+Workflows built with `.agent()` serialize to the same declarative entries that [dynamic workflows](/docs/workflows/dynamic-workflows) use. Only `retries` and `metadata` round-trip through storage. Options that hold functions, such as `onFinish` or a function-valued `toolChoice`, throw an error when the workflow is stored.
+
+## Related
+
+- [Agents and Tools](/docs/workflows/agents-and-tools)
+- [Dynamic workflows](/docs/workflows/dynamic-workflows)
+- [Workflow.tool()](/reference/workflows/workflow-methods/tool)

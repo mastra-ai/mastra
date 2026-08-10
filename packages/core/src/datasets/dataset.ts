@@ -365,7 +365,8 @@ export class Dataset {
   async startExperimentAsync<I = unknown, O = unknown, E = unknown>(
     config: StartExperimentConfig<I, O, E>,
   ): Promise<{ experimentId: string; status: 'pending'; totalItems: number }> {
-    const experimentsStore = await this.#getExperimentsStore();
+    const persistExperiments = config.persistence?.experiments !== 'none';
+    const experimentsStore = persistExperiments ? await this.#getExperimentsStore() : undefined;
     const datasetsStore = await this.#getDatasetsStore();
 
     const dataset = await datasetsStore.getDatasetById({ id: this.id, filters: this.#scope });
@@ -393,21 +394,29 @@ export class Dataset {
       });
     }
 
-    const run = await experimentsStore.createExperiment({
-      datasetId: this.id,
-      datasetVersion: targetVersion,
-      targetType: config.targetType ?? 'agent',
-      targetId: config.targetId ?? 'inline',
-      totalItems: items.length,
-      name: config.name,
-      description: config.description,
-      metadata: config.metadata,
-      agentVersion: config.agentVersion,
-      organizationId: dataset.organizationId ?? null,
-      projectId: dataset.projectId ?? null,
-    });
+    const experimentId = crypto.randomUUID();
 
-    const experimentId = run.id;
+    if (experimentsStore) {
+      await experimentsStore.createExperiment({
+        id: experimentId,
+        datasetId: this.id,
+        datasetVersion: targetVersion,
+        targetType: config.targetType ?? 'agent',
+        targetId: config.targetId ?? 'inline',
+        totalItems: items.length,
+        name: config.name,
+        description: config.description,
+        metadata: config.metadata,
+        provenance: config.provenance,
+        experimentSetId: config.grouping?.experimentSetId,
+        comparisonId: config.grouping?.comparisonId,
+        variantId: config.grouping?.variantId,
+        trialIndex: config.grouping?.trialIndex,
+        agentVersion: config.agentVersion,
+        organizationId: dataset.organizationId ?? null,
+        projectId: dataset.projectId ?? null,
+      });
+    }
 
     // Fire-and-forget — runExperiment resolves the applicable run, item, or dataset scorer source
     void runExperiment(this.#mastra, {
@@ -417,13 +426,15 @@ export class Dataset {
       version: targetVersion,
       filters: this.#scope,
     } as ExperimentConfig).catch(async err => {
-      await experimentsStore
-        .updateExperiment({
-          id: experimentId,
-          status: 'failed',
-          completedAt: new Date(),
-        })
-        .catch(() => {});
+      if (experimentsStore) {
+        await experimentsStore
+          .updateExperiment({
+            id: experimentId,
+            status: 'failed',
+            completedAt: new Date(),
+          })
+          .catch(() => {});
+      }
       this.#mastra.getLogger()?.error(`Experiment ${experimentId} failed: ${err?.message ?? err}`);
     });
 
@@ -448,6 +459,10 @@ export class Dataset {
     targetId?: string;
     agentVersion?: string;
     status?: ExperimentStatus;
+    experimentSetId?: string;
+    comparisonId?: string;
+    variantId?: string;
+    trialIndex?: number;
     filters?: ExperimentTenancyFilters;
     page?: number;
     perPage?: number;
@@ -460,6 +475,10 @@ export class Dataset {
       ...(args?.targetId !== undefined ? { targetId: args.targetId } : {}),
       ...(args?.agentVersion !== undefined ? { agentVersion: args.agentVersion } : {}),
       ...(args?.status !== undefined ? { status: args.status } : {}),
+      ...(args?.experimentSetId !== undefined ? { experimentSetId: args.experimentSetId } : {}),
+      ...(args?.comparisonId !== undefined ? { comparisonId: args.comparisonId } : {}),
+      ...(args?.variantId !== undefined ? { variantId: args.variantId } : {}),
+      ...(args?.trialIndex !== undefined ? { trialIndex: args.trialIndex } : {}),
       ...(args?.filters !== undefined ? { filters: args.filters } : {}),
       pagination: { page: args?.page ?? 0, perPage: args?.perPage ?? 20 },
     });

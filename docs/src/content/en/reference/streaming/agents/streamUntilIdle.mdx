@@ -41,7 +41,7 @@ for await (const chunk of stream.fullStream) {
 }
 ```
 
-:::info
+:::note
 
 `streamUntilIdle()` requires both a [`BackgroundTaskManager`](/reference/configuration#backgroundtasks) and a [memory](/docs/memory/overview) backend. Without either, it uses a plain `agent.stream()` call.
 

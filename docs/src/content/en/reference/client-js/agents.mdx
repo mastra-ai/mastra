@@ -486,12 +486,13 @@ Returns `{ accepted: true, runId: string, toolCallId?: string }`.
 
 ### `declineToolCall()`
 
-Decline a pending tool call and return a continuation stream. Use this when you are rendering the resumed chunks from the decline response.
+Decline a pending tool call and return a continuation stream. Use this when you are rendering the resumed chunks from the decline response. Pass an optional `reason` to tell the model why the call was rejected. The default is `Tool call was not approved by the user`.
 
 ```typescript
 const response = await agent.declineToolCall({
   runId: 'run-123',
   toolCallId: 'tool-call-456',
+  reason: 'This file is outside the allowed directory', // optional
 })
 
 response.processDataStream({
@@ -903,7 +904,7 @@ console.log(result.success) // true
 
 ## Version management
 
-Both `Agent` (code-defined) and `StoredAgent` instances have methods for managing configuration versions. See the [Editor overview](/docs/editor/overview#versioning) for an introduction to version management.
+Both `Agent` (code-defined) and `StoredAgent` instances have methods for managing configuration versions. See [Editor versioning](/docs/editor/overview#versioning) for lifecycle and selection behavior.
 
 ### Getting an agent with a specific version
 

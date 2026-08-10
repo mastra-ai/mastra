@@ -67,7 +67,7 @@
     "@internal/core": "workspace:*"
   },
   "devDependencies": {
-    "@ai-sdk/openai-v5": "npm:@ai-sdk/openai@2.0.114",
+    "@ai-sdk/openai-v5": "npm:@ai-sdk/openai@2.0.115",
     "@internal/lint": "workspace:*",
     "@internal/llm-recorder": "workspace:*",
     "@internal/test-utils": "workspace:*",

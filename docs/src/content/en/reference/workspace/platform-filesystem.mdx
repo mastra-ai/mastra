@@ -14,7 +14,7 @@ Stores files in a Mastra Platform workspace bucket. Each Mastra Platform environ
 
 Related providers: [`S3Filesystem`](/reference/workspace/s3-filesystem) for direct S3 access, [`LocalFilesystem`](/reference/workspace/local-filesystem) for local directories.
 
-:::info
+:::note
 
 For interface details, see [WorkspaceFilesystem interface](/reference/workspace/filesystem).
 
@@ -31,7 +31,7 @@ Configure the platform credentials. The access token, project ID, and bucket nam
 <Tabs>
   <TabItem value="env-file" label=".env file">
     ```bash
-    MASTRA_PLATFORM_SECRET_KEY=your-platform-secret-key
+    MASTRA_PLATFORM_ACCESS_TOKEN=your-platform-access-token
     MASTRA_PROJECT_ID=your-project-id
     MASTRA_PLATFORM_BUCKET_NAME=your-bucket-name
     ```
@@ -48,7 +48,7 @@ Configure the platform credentials. The access token, project ID, and bucket nam
   </TabItem>
 </Tabs>
 
-On a Mastra Platform deployment these variables are injected automatically, so the constructor can be called with no options.
+On a Mastra Platform deployment, `MASTRA_PLATFORM_ACCESS_TOKEN`, `MASTRA_PROJECT_ID`, and `MASTRA_PLATFORM_BUCKET_NAME` are injected automatically, so the constructor can be called with no options. For local development, `MASTRA_PLATFORM_ACCESS_TOKEN` can contain an `sk_` API token from your organization's settings page under **API Tokens**.
 
 ## Usage
 
@@ -115,8 +115,7 @@ await fs.writeFile('/analyses/repo.md', 'x') // throws WorkspaceReadOnlyError
   {
     name: 'accessToken',
     type: 'string',
-    description:
-      'Platform secret key. Falls back to the MASTRA_PLATFORM_SECRET_KEY environment variable (MASTRA_PLATFORM_ACCESS_TOKEN is a deprecated fallback).',
+    description: 'Platform access token. Falls back to the MASTRA_PLATFORM_ACCESS_TOKEN environment variable.',
     isOptional: true,
   },
   {

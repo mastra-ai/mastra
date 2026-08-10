@@ -36,10 +36,30 @@ function renderSection() {
 }
 
 describe('ConnectedAccountsSection', () => {
-  // Without the Slack app env the integration never mounts, so the route is
-  // absent and the SPA's index.html answers instead. The old code fed that HTML
-  // to res.json() and rendered the parse error ("Unexpected token '<'").
-  it('given Slack is not configured on the server, when rendered, then it names the missing env instead of a parse error', async () => {
+  // Modern factories answer the path with a stub when no Slack integration is
+  // registered. Naming the env vars here would be a half-truth — they only
+  // enable Slack in deployments whose entry registers SlackIntegration, which
+  // the server can't see — so the card states the fact and stops there.
+  it('given the server reports the Slack integration is not registered, when rendered, then it states the fact without naming env vars', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/channel-accounts`, () =>
+        HttpResponse.json({ accounts: [], canConnect: false, reason: 'not_registered' }),
+      ),
+    );
+
+    renderSection();
+
+    expect(await screen.findByText('Not configured')).toBeInTheDocument();
+    expect(screen.getByText(/Slack is not set up for this factory/)).toBeInTheDocument();
+    expect(screen.queryByText(/SLACK_APP_SIGNING_SECRET/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Connect/ })).not.toBeInTheDocument();
+  });
+
+  // An old server has no channel route and no stub, so the SPA's index.html
+  // answers instead. The old code fed that HTML to res.json() and rendered the
+  // parse error ("Unexpected token '<'"); the not-configured card must stand in
+  // for it.
+  it('given an old server with no channel route, when rendered, then it shows the not-configured card instead of a parse error', async () => {
     server.use(
       http.get(`${TEST_BASE_URL}/web/channel-accounts`, () =>
         HttpResponse.html('<!doctype html><html><body>app shell</body></html>'),
@@ -49,7 +69,8 @@ describe('ConnectedAccountsSection', () => {
     renderSection();
 
     expect(await screen.findByText('Not configured')).toBeInTheDocument();
-    expect(screen.getByText(/^Missing required environment variables: SLACK_APP_SIGNING_SECRET/)).toBeInTheDocument();
+    expect(screen.getByText(/Slack is not set up for this factory/)).toBeInTheDocument();
+    expect(screen.queryByText(/^Missing required environment variables/)).not.toBeInTheDocument();
     expect(screen.queryByText(/is not valid JSON/)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Connect/ })).not.toBeInTheDocument();
   });

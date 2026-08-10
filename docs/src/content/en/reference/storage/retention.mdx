@@ -135,7 +135,7 @@ Each domain declares which of its tables can be age-pruned and which timestamp c
 - Experiments prune as whole units: an aged experiment's result rows are deleted together with it (results cascade with their parent), so a run is never left partially deleted. Retention doesn't have a separate `results` key.
 - For `schedules`, the growth table is the fire history (`schedule_triggers`, one row per fire): schedule definitions are config and aren't pruned.
 - On PostgreSQL, timestamp anchors use the timezone-aware mirror columns (for example `createdAtZ`, `completedAtZ`).
-- LibSQL supports all domains above; PostgreSQL and MongoDB support all except `threadState` and `harness`, which they don't implement.
+- LibSQL and PostgreSQL support all domains above except `harness`, which PostgreSQL doesn't implement. MongoDB supports all except `threadState` and `harness`.
 - The v-next PostgreSQL observability domain stores signal events in day-partitioned tables (`spans`, `metrics`, `logs`, `scores`, `feedback`). For it, `prune()` drops whole day partitions (or TimescaleDB chunks) that are entirely older than the cutoff instead of deleting rows: effective level of detail is one day, and a partition is only dropped once its entire day is past `maxAge`. `PruneResult.deleted` reports the number of rows in the dropped partitions.
 
 :::

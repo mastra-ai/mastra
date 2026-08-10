@@ -1,5 +1,4 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
-import { CLIENT_MESSAGE_ID_KEY } from '@mastra/react';
 import { describe, expect, it } from 'vitest';
 
 import { buildThreadRailTurns } from './thread-rail-turns';
@@ -29,7 +28,7 @@ const signalMessage = (id: string, signalType: string, text: string): MastraDBMe
 describe('buildThreadRailTurns', () => {
   it('creates one turn per displayable user message with stable client keys and assistant previews', () => {
     const turns = buildThreadRailTurns([
-      userMessage('server-user-1', 'first question', { [CLIENT_MESSAGE_ID_KEY]: 'client-user-1' }),
+      userMessage('server-user-1', 'first question', { clientMessageId: 'client-user-1' }),
       assistantMessage('assistant-1', 'first answer'),
       userMessage('server-user-2', 'second question'),
     ]);

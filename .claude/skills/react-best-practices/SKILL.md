@@ -70,7 +70,7 @@ Rules are prioritized by impact:
 - Keep component, hook, function, and utility APIs narrow: split oversized props, arguments, and return objects into focused units composed at the component level; wrapping the same values in one object is not a fix (`structure-narrow-apis`)
 - Use PascalCase components for JSX-returning helpers; keep lowercase helpers for non-JSX values (`structure-component-naming`)
 - Derive props/params instead of accepting a value computable from another arg (`structure-derive-dont-duplicate`)
-- Extract complex derived logic into named locals plus predicates or pure helpers with early returns: oversized conditions, nested ternaries, fallback chains, and `let`-based render prep are code smells (`structure-complex-derived-logic`)
+- Extract complex derived logic into named locals plus predicates or pure helpers with early returns: oversized conditions, nested ternaries, ternaries that compute instead of picking (multi-line branches, or an `as` cast re-asserting what the condition tested), fallback chains, and `let`-based render prep are code smells, in render prep and in hook options, request builders, config maps, and reducers alike (`structure-complex-derived-logic`)
 - Pick the view with early `if` guards but keep the layout wrapper in one place — branch a body component, don't ternary or duplicate the shell (`structure-early-return-render-branches`)
 - For a fixed set of items, write one component per item with explicit props that owns its data and loading — don't map a config-object array onto a component shape (`structure-composition-over-config`)
 

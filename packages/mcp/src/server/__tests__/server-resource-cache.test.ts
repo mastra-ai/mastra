@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 
 import { MCPServer } from '../server';
+import { makeMockExtra } from './mock-extra';
 
 /**
  * Regression tests for cross-tenant resource leakage.
@@ -16,19 +17,7 @@ import { MCPServer } from '../server';
  * @see https://github.com/mastra-ai/mastra/issues/17609
  */
 describe('MCPServer dynamic resource provider does not leak across callers', () => {
-  type Extra = {
-    authInfo?: { subject?: string };
-    signal: AbortSignal;
-    sendNotification: () => void;
-    sendRequest: () => void;
-  };
-
-  const makeExtra = (subject: string): Extra => ({
-    authInfo: { subject },
-    signal: new AbortController().signal,
-    sendNotification: vi.fn(),
-    sendRequest: vi.fn(),
-  });
+  const makeExtra = (subject: string) => makeMockExtra({ authInfo: { subject } });
 
   /**
    * A tenant-scoped provider: the resource list and content depend entirely on

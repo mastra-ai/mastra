@@ -1,0 +1,170 @@
+---
+title: "Reference: createBedrockKBTool() | Tools and MCP"
+description: Documentation for the Bedrock Knowledge Base Tool in Mastra, which retrieves documents from Amazon Bedrock Knowledge Bases with agentic retrieval support.
+packages:
+  - "@mastra/core"
+  - "@mastra/rag"
+---
+
+# createBedrockKBTool()
+
+The `createBedrockKBTool()` function creates a tool that retrieves relevant documents from an Amazon Bedrock Knowledge Base. It supports both managed search configuration and agentic retrieval (query decomposition and managed reranking) with automatic fallback to standard retrieval.
+
+## Usage example
+
+```typescript
+import { createBedrockKBTool } from '@mastra/rag'
+
+const kbTool = createBedrockKBTool({
+  knowledgeBaseId: 'YOUR_KB_ID',
+  region: 'us-west-2',
+  numberOfResults: 5,
+  useAgenticRetrieval: true,
+})
+```
+
+### With an Agent
+
+```typescript
+import { Agent } from '@mastra/core/agent'
+import { createBedrockKBTool } from '@mastra/rag'
+
+const kbTool = createBedrockKBTool({
+  knowledgeBaseId: 'YOUR_KB_ID',
+})
+
+const agent = new Agent({
+  name: 'KnowledgeAssistant',
+  instructions: 'Use the knowledge base tool to answer questions.',
+  model: myModel,
+  tools: { kb: kbTool },
+})
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'knowledgeBaseId',
+    type: 'string',
+    description: 'The ID of the Amazon Bedrock Knowledge Base to query.',
+    isOptional: false,
+  },
+  {
+    name: 'region',
+    type: 'string',
+    description:
+      'AWS region where the Knowledge Base is deployed. Defaults to AWS_REGION environment variable or us-east-1.',
+    isOptional: true,
+  },
+  {
+    name: 'numberOfResults',
+    type: 'number',
+    description: 'Maximum number of results to return. Defaults to 5.',
+    isOptional: true,
+  },
+  {
+    name: 'useAgenticRetrieval',
+    type: 'boolean',
+    description:
+      'Use AgenticRetrieveStream for complex queries with query decomposition and managed reranking. Falls back to standard Retrieve on failure. Defaults to true (disable with USE_AGENTIC_RETRIEVAL=false env var).',
+    isOptional: true,
+  },
+  {
+    name: 'userId',
+    type: 'string',
+    description:
+      'Default AWS user ID for document-level access control. A userId in the Mastra request context takes precedence.',
+    isOptional: true,
+  },
+]}
+/>
+
+## Input Schema
+
+The tool accepts the following input when called by an agent:
+
+<PropertiesTable
+  content={[
+  {
+    name: 'queryText',
+    type: 'string',
+    description: 'The search query to find relevant documents in the knowledge base.',
+    isOptional: false,
+  },
+]}
+/>
+
+## Output Schema
+
+The tool returns an object with:
+
+<PropertiesTable
+  content={[
+  {
+    name: 'results',
+    type: 'BedrockKBResult[]',
+    description:
+      'Array of retrieval results. Standard retrieval includes source and score when Bedrock provides them; agentic retrieval may omit those fields.',
+    isOptional: false,
+  },
+]}
+/>
+
+### BedrockKBResult
+
+| Field | Type | Description |
+| - | - | - |
+| `content` | `string` | The text content of the retrieved passage. |
+| `source` | `string \| undefined` | The source URI when Bedrock provides one. Agentic retrieval only includes this field when the result metadata contains `_source_uri`. |
+| `score` | `number \| undefined` | The relevance score returned by standard retrieval. The agentic API doesn't return a score for result items. |
+| `metadata` | `Record<string, unknown>` | Additional metadata from the retrieval result. |
+
+## Retrieval Modes
+
+### Agentic Retrieval (default)
+
+When `useAgenticRetrieval` is `true` (default), the tool uses `AgenticRetrieveStreamCommand` which:
+
+- Decomposes complex queries into sub-queries
+- Retrieves across multiple passes
+- Applies managed reranking for better results
+
+If agentic retrieval fails (e.g., older SDK, permissions), it automatically falls back to standard managed retrieval.
+
+### Standard Managed Retrieval
+
+When `useAgenticRetrieval` is `false`, the tool uses `RetrieveCommand` with `managedSearchConfiguration` for direct single-pass retrieval.
+
+## User-based access control
+
+Set `userId` in the Mastra request context to forward it as the Bedrock `userContext.userId`. This supports knowledge bases that enforce document-level access control. The request context value overrides the default `userId` configured on the tool.
+
+```typescript
+import { RequestContext } from '@mastra/core/request-context'
+
+const requestContext = new RequestContext()
+requestContext.set('userId', 'user-123')
+
+await agent.generate('Find my private documents', { requestContext })
+```
+
+## Required IAM Permissions
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": ["bedrock:Retrieve", "bedrock:AgenticRetrieveStream"],
+      "Resource": "arn:aws:bedrock:*:*:knowledge-base/*"
+    }
+  ]
+}
+```
+
+## SDK Requirements
+
+- `@aws-sdk/client-bedrock-agent-runtime` >= 3.1000 (AgenticRetrieveStreamCommand requires \~3.1000+)

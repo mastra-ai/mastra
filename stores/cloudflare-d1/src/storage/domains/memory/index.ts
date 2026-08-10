@@ -432,13 +432,7 @@ export class MemoryStorageD1 extends MemoryStorage {
       );
       this.logger?.error(mastraError.toString());
       this.logger?.trackException(mastraError);
-      return {
-        threads: [],
-        total: 0,
-        page,
-        perPage: perPageForResponse,
-        hasMore: false,
-      };
+      throw mastraError;
     }
   }
 
@@ -498,8 +492,8 @@ export class MemoryStorageD1 extends MemoryStorage {
     metadata,
   }: {
     id: string;
-    title: string;
-    metadata: Record<string, unknown>;
+    title?: string;
+    metadata?: Record<string, unknown>;
   }): Promise<StorageThreadType> {
     const thread = await this.getThreadById({ threadId: id });
     try {
@@ -515,7 +509,7 @@ export class MemoryStorageD1 extends MemoryStorage {
 
       const updatedAt = new Date();
       const columns = ['title', 'metadata', 'updatedAt'];
-      const values = [title, JSON.stringify(mergedMetadata), updatedAt.toISOString()];
+      const values = [title ?? thread.title, JSON.stringify(mergedMetadata), updatedAt.toISOString()];
 
       const query = createSqlBuilder().update(fullTableName, columns, values).where('id = ?', id);
 
@@ -525,7 +519,7 @@ export class MemoryStorageD1 extends MemoryStorage {
 
       return {
         ...thread,
-        title,
+        title: title ?? thread.title,
         metadata: {
           ...(typeof thread.metadata === 'string' ? JSON.parse(thread.metadata) : thread.metadata),
           ...(metadata as Record<string, any>),
@@ -667,10 +661,18 @@ export class MemoryStorageD1 extends MemoryStorage {
     });
   }
 
-  private async _getIncludedMessages(include: StorageListMessagesInput['include']) {
+  /**
+   * Fetches the messages named by `include` together with their surrounding context.
+   *
+   * @param include - Message ids to pin, each with an optional before/after window.
+   * @param resourceId - When set, restricts both the pinned messages and their context
+   * to that resource so an id from another resource returns nothing.
+   */
+  private async _getIncludedMessages(include: StorageListMessagesInput['include'], resourceId?: string) {
     if (!include || include.length === 0) return null;
 
     const tableName = this.#db.getTableName(TABLE_MESSAGES);
+    const resourceCondition = resourceId ? ` AND resourceId = ?` : '';
 
     // Phase 1: Batch-fetch metadata for all target messages in a single query.
     // This eliminates the correlated subselects that previously ran per-subquery.
@@ -679,8 +681,8 @@ export class MemoryStorageD1 extends MemoryStorage {
 
     const idPlaceholders = targetIds.map(() => '?').join(', ');
     const targetResult = await this.#db.executeQuery({
-      sql: `SELECT id, thread_id, createdAt FROM ${tableName} WHERE id IN (${idPlaceholders})`,
-      params: targetIds,
+      sql: `SELECT id, thread_id, createdAt FROM ${tableName} WHERE id IN (${idPlaceholders})${resourceCondition}`,
+      params: resourceId ? [...targetIds, resourceId] : targetIds,
     });
 
     if (!Array.isArray(targetResult) || targetResult.length === 0) return null;
@@ -727,22 +729,26 @@ export class MemoryStorageD1 extends MemoryStorage {
         SELECT id, content, role, type, createdAt, thread_id AS threadId, resourceId
         FROM ${tableName}
         WHERE thread_id = ?
-          AND createdAt <= ?
+          AND createdAt <= ?${resourceCondition}
         ORDER BY createdAt DESC, id DESC
         LIMIT ?
       )`);
-      unionParams.push(target.threadId, target.createdAt, withPreviousMessages + 1);
+      unionParams.push(target.threadId, target.createdAt);
+      if (resourceId) unionParams.push(resourceId);
+      unionParams.push(withPreviousMessages + 1);
 
       if (withNextMessages > 0) {
         unionQueries.push(`SELECT * FROM (
           SELECT id, content, role, type, createdAt, thread_id AS threadId, resourceId
           FROM ${tableName}
           WHERE thread_id = ?
-            AND createdAt > ?
+            AND createdAt > ?${resourceCondition}
           ORDER BY createdAt ASC, id ASC
           LIMIT ?
         )`);
-        unionParams.push(target.threadId, target.createdAt, withNextMessages);
+        unionParams.push(target.threadId, target.createdAt);
+        if (resourceId) unionParams.push(resourceId);
+        unionParams.push(withNextMessages);
       }
     }
 
@@ -904,7 +910,7 @@ export class MemoryStorageD1 extends MemoryStorage {
       // When perPage is 0 and we have include targets, skip COUNT and data queries.
       // This is the semantic recall path where we only need the included messages.
       if (perPage === 0 && include && include.length > 0) {
-        const includeResult = await this._getIncludedMessages(include);
+        const includeResult = await this._getIncludedMessages(include, resourceId);
         if (!Array.isArray(includeResult) || includeResult.length === 0) {
           return { messages: [], total: 0, page, perPage: perPageForResponse, hasMore: false };
         }
@@ -993,7 +999,7 @@ export class MemoryStorageD1 extends MemoryStorage {
 
       if (include && include.length > 0) {
         // Use the existing _getIncludedMessages helper, but adapt it for listMessages format
-        const includeResult = (await this._getIncludedMessages(include)) as MastraDBMessage[];
+        const includeResult = (await this._getIncludedMessages(include, resourceId)) as MastraDBMessage[];
         if (Array.isArray(includeResult)) {
           includeMessages = includeResult;
 
@@ -1031,6 +1037,10 @@ export class MemoryStorageD1 extends MemoryStorage {
         hasMore,
       };
     } catch (error: any) {
+      // Re-throw USER errors (validation errors) directly so callers get proper 400 responses
+      if (error instanceof MastraError && error.category === ErrorCategory.USER) {
+        throw error;
+      }
       const mastraError = new MastraError(
         {
           id: createStorageErrorId('CLOUDFLARE_D1', 'LIST_MESSAGES', 'FAILED'),
@@ -1048,13 +1058,7 @@ export class MemoryStorageD1 extends MemoryStorage {
       );
       this.logger?.error?.(mastraError.toString());
       this.logger?.trackException?.(mastraError);
-      return {
-        messages: [],
-        total: 0,
-        page,
-        perPage: perPageForResponse,
-        hasMore: false,
-      };
+      throw mastraError;
     }
   }
 

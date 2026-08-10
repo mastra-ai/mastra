@@ -3,7 +3,6 @@ import { useParams } from 'react-router';
 import { useFactoryQuery } from '../../../../../hooks/useFactories';
 import { useWorkItemsQuery } from '../../../../../hooks/useWorkItems';
 import { useChatSessionContext } from '../../context/useChatSessionContext';
-import { useChatTranscript } from '../../context/useChatTranscript';
 import { PullRequestLinks } from '../PullRequestLinks';
 import { ActiveModel } from './ActiveModel';
 import { ConnectionActivity } from './ConnectionActivity';
@@ -19,13 +18,11 @@ import { RuntimeActivity } from './RuntimeActivity';
  */
 export function StatusLine() {
   const { factoryId, threadId } = useParams<{ factoryId: string; threadId: string }>();
-  const { baseUrl, resourceId, projectPath, factorySessionState } = useChatSessionContext();
+  const { projectPath, factorySessionState } = useChatSessionContext();
   const { data: factory } = useFactoryQuery(factoryId);
-  const { transcript, busy } = useChatTranscript();
   const repository = factory?.repositories.find(
     repo => repo.projectRepositoryId === factorySessionState?.projectRepositoryId,
   );
-  const projectRepositoryId = repository?.projectRepositoryId;
   const factoryProjectId = factorySessionState?.factoryProjectId;
   const factoryProjectKey = typeof factoryProjectId === 'string' ? factoryProjectId : undefined;
   const workItems = useWorkItemsQuery(factoryProjectKey);
@@ -49,16 +46,7 @@ export function StatusLine() {
       <QueuedFollowUps />
       <GoalStatus />
       {!workItemsPending && currentItem?.source !== 'github-pr' ? (
-        <PullRequestLinks
-          baseUrl={baseUrl}
-          resourceId={resourceId}
-          projectPath={projectPath}
-          projectRepositoryId={projectRepositoryId}
-          repositorySlug={repository?.slug}
-          threadId={threadId}
-          transcriptEntries={transcript.entries}
-          busy={busy}
-        />
+        <PullRequestLinks repository={repository} threadId={threadId} />
       ) : null}
     </div>
   );

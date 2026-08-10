@@ -31,11 +31,14 @@ export function fetchThemeSnapshots(
   signalNames: string[],
   dateFrom?: Date,
   dateTo?: Date,
-  limit = 50,
+  limit = 24,
 ) {
+  // Landmarks presentation returns a bounded, time-balanced selection over the
+  // whole range instead of the newest-first inventory page.
   const query = new URLSearchParams({
     entityType,
     signalNames: signalNames.join(','),
+    presentation: 'landmarks',
     limit: String(limit),
   });
   if (dateFrom) query.set('from', dateFrom.toISOString());

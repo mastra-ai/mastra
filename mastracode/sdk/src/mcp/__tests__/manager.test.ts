@@ -1380,4 +1380,391 @@ describe('createMcpManager', () => {
       }
     });
   });
+
+  describe('disable/enable servers', () => {
+    async function withTempAppData(fn: () => Promise<void>) {
+      const dataDir = await fs.mkdtemp(join(tmpdir(), 'mc-disable-test-'));
+      const prevDataDir = process.env.MASTRA_APP_DATA_DIR;
+      process.env.MASTRA_APP_DATA_DIR = dataDir;
+      try {
+        await fn();
+      } finally {
+        if (prevDataDir === undefined) {
+          delete process.env.MASTRA_APP_DATA_DIR;
+        } else {
+          process.env.MASTRA_APP_DATA_DIR = prevDataDir;
+        }
+        await fs.rm(dataDir, { recursive: true, force: true });
+      }
+    }
+
+    function mockClientWithToolsets(toolsets: Record<string, Record<string, any>>) {
+      // Like the real MCPClient, only report toolsets for the servers the
+      // client was actually constructed with.
+      MockedMCPClient.mockImplementation(function (this: any, options: any) {
+        const configured = Object.keys(options?.servers ?? {});
+        this.listToolsetsWithErrors = vi.fn().mockImplementation(async () => ({
+          toolsets: Object.fromEntries(Object.entries(toolsets).filter(([name]) => configured.includes(name))),
+          errors: {},
+        }));
+        this.disconnect = vi.fn().mockResolvedValue(undefined);
+      } as any);
+    }
+
+    it('setServerDisabled removes tools, reports disabled status, and rebuilds without the server', async () => {
+      await withTempAppData(async () => {
+        setupConfig({ mcpServers: { fs: { command: 'npx' }, api: { url: 'https://api.example.com/mcp' } } });
+        mockClientWithToolsets({ fs: { read: {} }, api: { fetch: {} } });
+
+        const manager = createMcpManager('/tmp/test');
+        await manager.init();
+        expect(Object.keys(manager.getTools()).sort()).toEqual(['api_fetch', 'fs_read']);
+
+        const status = await manager.setServerDisabled('fs', true);
+        expect(status.disabled).toBe(true);
+        expect(status.connected).toBe(false);
+
+        // Tools from the disabled server are gone; the other server's remain.
+        expect(Object.keys(manager.getTools())).toEqual(['api_fetch']);
+
+        // The rebuilt client only contains the enabled server.
+        const lastCall = MockedMCPClient.mock.calls.at(-1)![0]!;
+        expect(Object.keys(lastCall.servers)).toEqual(['api']);
+
+        // Disabled server stays visible in statuses.
+        const statuses = manager.getServerStatuses();
+        expect(statuses.find(s => s.name === 'fs')?.disabled).toBe(true);
+        expect(statuses.find(s => s.name === 'api')?.connected).toBe(true);
+        expect(manager.getDisabledServers()).toEqual(['fs']);
+      });
+    });
+
+    it('persists disabled state across manager instances (restart)', async () => {
+      await withTempAppData(async () => {
+        setupConfig({ mcpServers: { fs: { command: 'npx' }, api: { url: 'https://api.example.com/mcp' } } });
+        mockClientWithToolsets({ fs: { read: {} }, api: { fetch: {} } });
+
+        const first = createMcpManager('/tmp/test');
+        await first.init();
+        await first.setServerDisabled('fs', true);
+
+        // New manager (simulating a restart) picks up the persisted state.
+        const second = createMcpManager('/tmp/test');
+        await second.init();
+        expect(second.getDisabledServers()).toEqual(['fs']);
+        expect(second.getServerStatuses().find(s => s.name === 'fs')?.disabled).toBe(true);
+        expect(Object.keys(second.getTools())).toEqual(['api_fetch']);
+      });
+    });
+
+    it('does not leak disabled state across projects', async () => {
+      await withTempAppData(async () => {
+        setupConfig({ mcpServers: { fs: { command: 'npx' } } });
+        mockClientWithToolsets({ fs: { read: {} } });
+
+        const projectA = createMcpManager('/tmp/project-a');
+        await projectA.init();
+        await projectA.setServerDisabled('fs', true);
+
+        const projectB = createMcpManager('/tmp/project-b');
+        await projectB.init();
+        expect(projectB.getDisabledServers()).toEqual([]);
+        expect(Object.keys(projectB.getTools())).toEqual(['fs_read']);
+      });
+    });
+
+    it('setServerDisabled(false) re-enables and reconnects the server', async () => {
+      await withTempAppData(async () => {
+        setupConfig({ mcpServers: { fs: { command: 'npx' } } });
+        mockClientWithToolsets({ fs: { read: {} } });
+
+        const manager = createMcpManager('/tmp/test');
+        await manager.init();
+        await manager.setServerDisabled('fs', true);
+        expect(Object.keys(manager.getTools())).toEqual([]);
+
+        const status = await manager.setServerDisabled('fs', false);
+        expect(status.connected).toBe(true);
+        expect(status.disabled).toBeUndefined();
+        expect(Object.keys(manager.getTools())).toEqual(['fs_read']);
+        expect(manager.getDisabledServers()).toEqual([]);
+      });
+    });
+
+    it('setServerDisabled returns an error status for unknown servers', async () => {
+      await withTempAppData(async () => {
+        setupConfig({ mcpServers: { fs: { command: 'npx' } } });
+        mockClientWithToolsets({ fs: { read: {} } });
+
+        const manager = createMcpManager('/tmp/test');
+        await manager.init();
+
+        const status = await manager.setServerDisabled('nope', true);
+        expect(status.error).toContain('not found');
+        expect(manager.getDisabledServers()).toEqual([]);
+      });
+    });
+
+    it('setAllDisabled(true) disables every server and initInBackground reports no failures', async () => {
+      await withTempAppData(async () => {
+        setupConfig({ mcpServers: { fs: { command: 'npx' }, api: { url: 'https://api.example.com/mcp' } } });
+        mockClientWithToolsets({ fs: { read: {} }, api: { fetch: {} } });
+
+        const manager = createMcpManager('/tmp/test');
+        await manager.init();
+        await manager.setAllDisabled(true);
+
+        expect(manager.getDisabledServers()).toEqual(['api', 'fs']);
+        expect(Object.keys(manager.getTools())).toEqual([]);
+        expect(manager.getServerStatuses().every(s => s.disabled)).toBe(true);
+
+        // A fresh manager's initInBackground must not count disabled servers as failed.
+        const second = createMcpManager('/tmp/test');
+        const result = await second.initInBackground();
+        expect(result.connected).toEqual([]);
+        expect(result.failed).toEqual([]);
+
+        await manager.setAllDisabled(false);
+        expect(manager.getDisabledServers()).toEqual([]);
+        expect(Object.keys(manager.getTools()).sort()).toEqual(['api_fetch', 'fs_read']);
+      });
+    });
+
+    it('reconnectServer and authenticateServer refuse disabled servers', async () => {
+      await withTempAppData(async () => {
+        setupConfig({ mcpServers: { fs: { command: 'npx' } } });
+        mockClientWithToolsets({ fs: { read: {} } });
+
+        const manager = createMcpManager('/tmp/test');
+        await manager.init();
+        await manager.setServerDisabled('fs', true);
+
+        const reconnect = await manager.reconnectServer('fs');
+        expect(reconnect.error).toContain('disabled');
+
+        const auth = await manager.authenticateServer('fs');
+        expect(auth.error).toContain('disabled');
+      });
+    });
+
+    it('reload re-reads persisted disabled state', async () => {
+      await withTempAppData(async () => {
+        setupConfig({ mcpServers: { fs: { command: 'npx' } } });
+        mockClientWithToolsets({ fs: { read: {} } });
+
+        const manager = createMcpManager('/tmp/test');
+        await manager.init();
+
+        // Another manager (e.g. another window) disables the server on disk.
+        const other = createMcpManager('/tmp/test');
+        await other.setServerDisabled('fs', true);
+
+        await manager.reload();
+        expect(manager.getDisabledServers()).toEqual(['fs']);
+        expect(manager.getServerStatuses().find(s => s.name === 'fs')?.disabled).toBe(true);
+        expect(Object.keys(manager.getTools())).toEqual([]);
+      });
+    });
+
+    it('keeps a disabled name persisted when the server leaves and later rejoins the config', async () => {
+      await withTempAppData(async () => {
+        setupConfig({ mcpServers: { fs: { command: 'npx' }, api: { url: 'https://api.example.com/mcp' } } });
+        mockClientWithToolsets({ fs: { read: {} }, api: { fetch: {} } });
+
+        const manager = createMcpManager('/tmp/test');
+        await manager.init();
+        await manager.setServerDisabled('fs', true);
+
+        // Server disappears from config — the disabled name must be retained.
+        setupConfig({ mcpServers: { api: { url: 'https://api.example.com/mcp' } } });
+        await manager.reload();
+        expect(manager.getDisabledServers()).toEqual([]);
+
+        // Server is re-added — it must come back still disabled, not re-enabled.
+        setupConfig({ mcpServers: { fs: { command: 'npx' }, api: { url: 'https://api.example.com/mcp' } } });
+        await manager.reload();
+        expect(manager.getDisabledServers()).toEqual(['fs']);
+        expect(manager.getServerStatuses().find(s => s.name === 'fs')?.disabled).toBe(true);
+        expect(Object.keys(manager.getTools())).toEqual(['api_fetch']);
+      });
+    });
+
+    it('globally disabled server applies across projects and reports global scope', async () => {
+      await withTempAppData(async () => {
+        setupConfig({ mcpServers: { fs: { command: 'npx' }, api: { url: 'https://api.example.com/mcp' } } });
+        mockClientWithToolsets({ fs: { read: {} }, api: { fetch: {} } });
+
+        const projectA = createMcpManager('/tmp/project-a');
+        await projectA.init();
+        const status = await projectA.setServerDisabled('fs', true, { global: true });
+        expect(status.disabled).toBe(true);
+        expect(status.disabledScope).toBe('global');
+        expect(Object.keys(projectA.getTools())).toEqual(['api_fetch']);
+
+        // A different project sees the same server disabled with global scope.
+        const projectB = createMcpManager('/tmp/project-b');
+        await projectB.init();
+        expect(projectB.getDisabledServers()).toEqual(['fs']);
+        expect(projectB.getServerStatuses().find(s => s.name === 'fs')?.disabledScope).toBe('global');
+        expect(Object.keys(projectB.getTools())).toEqual(['api_fetch']);
+      });
+    });
+
+    it('project-level enable cannot undo a global disable', async () => {
+      await withTempAppData(async () => {
+        setupConfig({ mcpServers: { fs: { command: 'npx' } } });
+        mockClientWithToolsets({ fs: { read: {} } });
+
+        const manager = createMcpManager('/tmp/test');
+        await manager.init();
+        await manager.setServerDisabled('fs', true, { global: true });
+
+        const status = await manager.setServerDisabled('fs', false);
+        expect(status.disabled).toBe(true);
+        expect(status.disabledScope).toBe('global');
+        expect(Object.keys(manager.getTools())).toEqual([]);
+
+        // Enabling in the global scope actually re-enables it.
+        const enabled = await manager.setServerDisabled('fs', false, { global: true });
+        expect(enabled.disabled).toBeUndefined();
+        expect(enabled.connected).toBe(true);
+        expect(Object.keys(manager.getTools())).toEqual(['fs_read']);
+      });
+    });
+
+    it('global disable persists when project scope also had the server disabled', async () => {
+      await withTempAppData(async () => {
+        setupConfig({ mcpServers: { fs: { command: 'npx' } } });
+        mockClientWithToolsets({ fs: { read: {} } });
+
+        const manager = createMcpManager('/tmp/test');
+        await manager.init();
+        await manager.setServerDisabled('fs', true);
+        await manager.setServerDisabled('fs', true, { global: true });
+
+        // Removing the global scope leaves the project scope in effect.
+        const status = await manager.setServerDisabled('fs', false, { global: true });
+        expect(status.disabled).toBe(true);
+        expect(status.disabledScope).toBe('project');
+        expect(Object.keys(manager.getTools())).toEqual([]);
+      });
+    });
+
+    it('setAllDisabled(true, { global }) disables MCP everywhere until re-enabled', async () => {
+      await withTempAppData(async () => {
+        setupConfig({ mcpServers: { fs: { command: 'npx' }, api: { url: 'https://api.example.com/mcp' } } });
+        mockClientWithToolsets({ fs: { read: {} }, api: { fetch: {} } });
+
+        const manager = createMcpManager('/tmp/project-a');
+        await manager.init();
+        await manager.setAllDisabled(true, { global: true });
+
+        expect(manager.isAllDisabledGlobally()).toBe(true);
+        expect(manager.getDisabledServers()).toEqual(['api', 'fs']);
+        expect(Object.keys(manager.getTools())).toEqual([]);
+        expect(manager.getServerStatuses().every(s => s.disabled && s.disabledScope === 'global')).toBe(true);
+
+        // Other projects are affected too.
+        const other = createMcpManager('/tmp/project-b');
+        await other.init();
+        expect(other.isAllDisabledGlobally()).toBe(true);
+        expect(Object.keys(other.getTools())).toEqual([]);
+
+        // Project-scoped enable-all can't undo the global kill switch.
+        await manager.setAllDisabled(false);
+        expect(manager.isAllDisabledGlobally()).toBe(true);
+        expect(Object.keys(manager.getTools())).toEqual([]);
+
+        await manager.setAllDisabled(false, { global: true });
+        expect(manager.isAllDisabledGlobally()).toBe(false);
+        expect(Object.keys(manager.getTools()).sort()).toEqual(['api_fetch', 'fs_read']);
+      });
+    });
+
+    it('reload re-reads persisted global disable state', async () => {
+      await withTempAppData(async () => {
+        setupConfig({ mcpServers: { fs: { command: 'npx' } } });
+        mockClientWithToolsets({ fs: { read: {} } });
+
+        const manager = createMcpManager('/tmp/test');
+        await manager.init();
+
+        // Another manager (e.g. another window) flips the global kill switch.
+        const other = createMcpManager('/tmp/other');
+        await other.setAllDisabled(true, { global: true });
+
+        await manager.reload();
+        expect(manager.isAllDisabledGlobally()).toBe(true);
+        expect(manager.getServerStatuses().find(s => s.name === 'fs')?.disabledScope).toBe('global');
+        expect(Object.keys(manager.getTools())).toEqual([]);
+      });
+    });
+
+    it('does not clobber another process global kill switch when disabling one server globally', async () => {
+      await withTempAppData(async () => {
+        setupConfig({ mcpServers: { fs: { command: 'npx' }, api: { url: 'https://api.example.com/mcp' } } });
+        mockClientWithToolsets({ fs: { read: {} }, api: { fetch: {} } });
+
+        // Window B is constructed first, so its in-memory snapshot predates A's write.
+        const windowB = createMcpManager('/tmp/project-b');
+        await windowB.init();
+
+        // Window A enables the global kill switch.
+        const windowA = createMcpManager('/tmp/project-a');
+        await windowA.setAllDisabled(true, { global: true });
+
+        // Window B (stale snapshot) disables a single server globally. This
+        // must not wipe A's kill switch from disk.
+        await windowB.setServerDisabled('fs', true, { global: true });
+
+        const fresh = createMcpManager('/tmp/project-c');
+        expect(fresh.isAllDisabledGlobally()).toBe(true);
+        // B also adopts the merged on-disk state instead of its stale snapshot.
+        expect(windowB.isAllDisabledGlobally()).toBe(true);
+      });
+    });
+
+    it('does not clobber another process globally disabled servers when writing global state', async () => {
+      await withTempAppData(async () => {
+        setupConfig({ mcpServers: { fs: { command: 'npx' }, api: { url: 'https://api.example.com/mcp' } } });
+        mockClientWithToolsets({ fs: { read: {} }, api: { fetch: {} } });
+
+        const windowB = createMcpManager('/tmp/project-b');
+        await windowB.init();
+
+        // Window A globally disables "api" after B's snapshot was taken.
+        const windowA = createMcpManager('/tmp/project-a');
+        await windowA.setServerDisabled('api', true, { global: true });
+
+        // B globally disables "fs"; A's "api" entry must survive the write.
+        await windowB.setServerDisabled('fs', true, { global: true });
+
+        const fresh = createMcpManager('/tmp/project-c');
+        await fresh.init();
+        expect(fresh.getDisabledServers()).toEqual(['api', 'fs']);
+      });
+    });
+
+    it('does not clobber another process project-scope changes in the same project', async () => {
+      await withTempAppData(async () => {
+        setupConfig({ mcpServers: { fs: { command: 'npx' }, api: { url: 'https://api.example.com/mcp' } } });
+        mockClientWithToolsets({ fs: { read: {} }, api: { fetch: {} } });
+
+        // Two windows open on the same project.
+        const windowB = createMcpManager('/tmp/shared-project');
+        await windowB.init();
+
+        const windowA = createMcpManager('/tmp/shared-project');
+        await windowA.setServerDisabled('api', true);
+
+        // B's stale snapshot has no disabled servers; disabling "fs" must
+        // keep A's "api" entry.
+        await windowB.setServerDisabled('fs', true);
+
+        const fresh = createMcpManager('/tmp/shared-project');
+        await fresh.init();
+        expect(fresh.getDisabledServers()).toEqual(['api', 'fs']);
+      });
+    });
+  });
 });

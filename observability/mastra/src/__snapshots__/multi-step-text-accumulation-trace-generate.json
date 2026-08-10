@@ -56,6 +56,30 @@
               "provider": "mock-provider",
               "streaming": true,
               "parameters": {},
+              "tools": [
+                {
+                  "type": "function",
+                  "name": "calculator",
+                  "description": "Performs calculations",
+                  "parameters": {
+                    "$schema": "http://json-schema.org/draft-07/schema#",
+                    "type": "object",
+                    "properties": {
+                      "operation": {
+                        "type": "string"
+                      },
+                      "a": {
+                        "type": "number"
+                      },
+                      "b": {
+                        "type": "number"
+                      }
+                    },
+                    "required": ["operation", "a", "b"],
+                    "additionalProperties": false
+                  }
+                }
+              ],
               "finishReason": "stop",
               "responseId": "<responseId-1>",
               "responseModel": "mock-model-id",

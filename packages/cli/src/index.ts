@@ -26,6 +26,7 @@ import { configureCreateCommand } from './commands/create/create';
 import { registerEnvDbCommands } from './commands/db/index.js';
 import { unifiedDeployAction } from './commands/deploy/index.js';
 import { registerEnvCommands } from './commands/env/index.js';
+import { buildExperimentWorker } from './commands/experiment/build';
 import { COMPONENTS, LLMProvider } from './commands/init/utils';
 import { serverDeployAction } from './commands/server/deploy';
 import { serverSuggestionsAction } from './commands/server/deploy-suggestions';
@@ -174,6 +175,17 @@ program
   .option('-s, --studio', 'Bundle the studio UI with the build')
   .option('--debug', 'Enable debug logs', false)
   .action(buildProject);
+
+const experimentCommand = program.command('experiment').description('Build Mastra experiment artifacts');
+
+experimentCommand
+  .command('build')
+  .description('Build a standalone experiment worker artifact')
+  .option('-d, --dir <path>', 'Path to your Mastra folder')
+  .option('-r, --root <path>', 'Path to your root folder')
+  .option('-o, --output-dir <path>', 'Output directory for the experiment worker (default: .mastra/experiment-worker)')
+  .option('--debug', 'Enable debug logs', false)
+  .action((opts: { dir?: string; root?: string; outputDir?: string; debug: boolean }) => buildExperimentWorker(opts));
 
 const workerCommand = program.command('worker').description('Build and run standalone Mastra worker bundles');
 
@@ -431,7 +443,7 @@ serverEnvCommand
   .option('--project <id>', 'Project ID or slug (overrides linked project when MASTRA_PROJECT_ID is unset)')
   .action(wrapAction(envPullAction));
 
-program.parse(process.argv);
+await program.parseAsync(process.argv);
 
 export { PosthogAnalytics } from './analytics/index';
 export { create } from './commands/create/create';

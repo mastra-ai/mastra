@@ -1,18 +1,23 @@
-import type { MastraDBMessage } from '@mastra/core/agent-controller';
+import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent-controller';
 import { screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
 import { renderWithProviders } from '../../../../../../e2e/ui/render';
-import type { TimelineEntry } from '../../services/transcript';
+import type { TimelineEntry, ToolCall } from '../../services/transcript';
 import { TranscriptEntries } from '../Transcript';
 
 const CREATED_AT = new Date('2026-07-15T10:00:00.000Z');
 
-function assistantMessage(id: string, parts: MastraDBMessage['content']['parts']): TimelineEntry {
+function assistantMessage(
+  id: string,
+  parts: MastraDBMessage['content']['parts'],
+  runtimeTools?: Record<string, ToolCall>,
+): TimelineEntry {
   return {
     kind: 'message',
     id,
     message: { id, role: 'assistant', createdAt: CREATED_AT, content: { format: 2, parts } },
+    runtimeTools,
   };
 }
 
@@ -23,6 +28,12 @@ function userMessage(id: string, text: string): TimelineEntry {
     message: { id, role: 'user', createdAt: CREATED_AT, content: { format: 2, parts: [{ type: 'text', text }] } },
   };
 }
+
+// Core writes `isError` onto persisted result invocations (session-run-engine)
+// without it being part of the declared invocation type.
+type ToolInvocationFixture = Extract<MastraMessagePart, { type: 'tool-invocation' }>['toolInvocation'] & {
+  isError?: boolean;
+};
 
 function doneTool(toolCallId: string, toolName: string): MastraDBMessage['content']['parts'][number] {
   return {
@@ -70,6 +81,62 @@ describe('TranscriptEntries tool rows', () => {
     const failedRow = screen.getByRole('group', { name: 'Tool: write_file' });
     expect(within(failedRow).getByRole('img', { name: 'Failed' })).toBeInTheDocument();
   });
+
+  it('trusts the persisted result over a stale running overlay — a lost tool_end must not spin forever', () => {
+    renderEntries([
+      assistantMessage('msg-1', [doneTool('call-1', 'view')], {
+        'call-1': { toolCallId: 'call-1', toolName: 'view', argsText: '', status: 'running', output: '' },
+      }),
+    ]);
+
+    expect(screen.queryByLabelText('Running')).not.toBeInTheDocument();
+    const row = screen.getByRole('group', { name: 'Tool: view' });
+    expect(within(row).queryByRole('img')).not.toBeInTheDocument();
+  });
+
+  it('renders a persisted errored result as failed even under a stale running overlay', () => {
+    const toolInvocation: ToolInvocationFixture = {
+      state: 'result',
+      toolCallId: 'call-1',
+      toolName: 'write_file',
+      args: {},
+      result: 'boom',
+      isError: true,
+    };
+    renderEntries([
+      assistantMessage('msg-1', [{ type: 'tool-invocation', toolInvocation }], {
+        'call-1': { toolCallId: 'call-1', toolName: 'write_file', argsText: '', status: 'running', output: '' },
+      }),
+    ]);
+
+    const row = screen.getByRole('group', { name: 'Tool: write_file' });
+    expect(within(row).getByRole('img', { name: 'Failed' })).toBeInTheDocument();
+    expect(within(row).queryByLabelText('Running')).not.toBeInTheDocument();
+  });
+
+  it.each(['output-error', 'output-denied'] as const)(
+    'renders a persisted %s part as failed even under a stale running overlay',
+    state => {
+      renderEntries([
+        assistantMessage(
+          'msg-1',
+          [
+            {
+              type: 'tool-invocation',
+              toolInvocation: { state, toolCallId: 'call-1', toolName: 'write_file', args: {}, errorText: 'nope' },
+            },
+          ],
+          {
+            'call-1': { toolCallId: 'call-1', toolName: 'write_file', argsText: '', status: 'running', output: '' },
+          },
+        ),
+      ]);
+
+      const row = screen.getByRole('group', { name: 'Tool: write_file' });
+      expect(within(row).getByRole('img', { name: 'Failed' })).toBeInTheDocument();
+      expect(within(row).queryByLabelText('Running')).not.toBeInTheDocument();
+    },
+  );
 
   it('gives prose entries their own vertical margins so rows stay on a uniform rhythm', () => {
     renderEntries([

@@ -212,7 +212,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
     const cancelReader = (reason: string) => {
       if (readerCanceled) return;
       readerCanceled = true;
-      void reader.cancel(reason);
+      void reader.cancel(reason).catch(() => {});
     };
     const cancelReaderOnResponseClose = () => cancelReader('request aborted');
     const cancelReaderOnRequestClose = () => {
@@ -399,7 +399,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         const cancelReader = (reason: string) => {
           if (readerCanceled) return;
           readerCanceled = true;
-          void reader.cancel(reason);
+          void reader.cancel(reason).catch(() => {});
         };
 
         const cancelReaderOnResponseClose = () => cancelReader('request aborted');
@@ -913,6 +913,11 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
     });
 
     this.app.addHook('preHandler', this.createContextMiddleware());
+
+    this.app.addHook('onResponse', async (request, reply) => {
+      const path = request.url.split('?')[0]!;
+      this.warnIfUnregisteredChannelWebhook(path, request.method, reply.statusCode);
+    });
   }
 
   registerAuthMiddleware(): void {

@@ -1,6 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import { SpanType } from '../../../observability/types';
-import { extractBranchSpans, lightSpanRecordSchema, getTraceLightResponseSchema } from './tracing';
+import {
+  buildInputPreview,
+  extractBranchSpans,
+  getTraceLightResponseSchema,
+  INPUT_PREVIEW_MAX_LENGTH,
+  lightSpanRecordSchema,
+} from './tracing';
 
 describe('lightSpanRecordSchema', () => {
   const validLightSpan = {
@@ -13,9 +19,11 @@ describe('lightSpanRecordSchema', () => {
     parentSpanId: 'parent-span-789',
     endedAt: new Date('2024-01-01T00:01:00Z'),
     error: { message: 'something failed' },
+    status: 'error',
     entityType: 'agent',
     entityId: 'agent-1',
     entityName: 'Test Agent',
+    metadata: { environment: 'production' },
     createdAt: new Date('2024-01-01T00:00:00Z'),
     updatedAt: new Date('2024-01-01T00:00:01Z'),
   };
@@ -31,9 +39,11 @@ describe('lightSpanRecordSchema', () => {
     expect(result.parentSpanId).toBe('parent-span-789');
     expect(result.endedAt).toEqual(new Date('2024-01-01T00:01:00Z'));
     expect(result.error).toEqual({ message: 'something failed' });
+    expect(result.status).toBe('error');
     expect(result.entityType).toBe('agent');
     expect(result.entityId).toBe('agent-1');
     expect(result.entityName).toBe('Test Agent');
+    expect(result.metadata).toEqual({ environment: 'production' });
     expect(result.createdAt).toEqual(new Date('2024-01-01T00:00:00Z'));
     expect(result.updatedAt).toEqual(new Date('2024-01-01T00:00:01Z'));
   });
@@ -55,9 +65,11 @@ describe('lightSpanRecordSchema', () => {
     expect(result.parentSpanId).toBeUndefined();
     expect(result.endedAt).toBeUndefined();
     expect(result.error).toBeUndefined();
+    expect(result.status).toBeUndefined();
     expect(result.entityType).toBeUndefined();
     expect(result.entityId).toBeUndefined();
     expect(result.entityName).toBeUndefined();
+    expect(result.metadata).toBeUndefined();
   });
 
   it('should reject records missing required fields', () => {
@@ -140,13 +152,12 @@ describe('lightSpanRecordSchema', () => {
     ).toThrow();
   });
 
-  it('should NOT include input, output, attributes, metadata, tags, links fields in the parsed result', () => {
+  it('should NOT include input, output, attributes, tags, links fields in the parsed result', () => {
     const withHeavyFields = {
       ...validLightSpan,
       input: { message: 'hello' },
       output: { result: 'world' },
       attributes: { model: 'gpt-4' },
-      metadata: { custom: 'data' },
       tags: ['production'],
       links: [{ traceId: 'other-trace' }],
     };
@@ -154,7 +165,6 @@ describe('lightSpanRecordSchema', () => {
     expect('input' in result).toBe(false);
     expect('output' in result).toBe(false);
     expect('attributes' in result).toBe(false);
-    expect('metadata' in result).toBe(false);
     expect('tags' in result).toBe(false);
     expect('links' in result).toBe(false);
   });
@@ -246,5 +256,92 @@ describe('extractBranchSpans (helper)', () => {
     const visited = new Set(branch.map(s => s.spanId));
     expect(visited.size).toBe(branch.length);
     expect(branch[0]!.spanId).toBe('A');
+  });
+});
+
+describe('buildInputPreview', () => {
+  it('joins user message text and ignores assistant turns', () => {
+    const input = {
+      messages: [
+        { role: 'user', content: 'first question' },
+        { role: 'assistant', content: 'an answer nobody previews' },
+        { role: 'user', content: 'second question' },
+      ],
+    };
+
+    expect(buildInputPreview(input)).toBe('first question | second question');
+  });
+
+  it('accepts the raw JSON string a store hands back', () => {
+    const input = JSON.stringify({ messages: [{ role: 'user', content: 'from the wire' }] });
+
+    expect(buildInputPreview(input)).toBe('from the wire');
+  });
+
+  it('unwraps a JSON-encoded scalar string instead of keeping its quotes', () => {
+    expect(buildInputPreview('"plain scalar prompt"')).toBe('plain scalar prompt');
+    expect(buildInputPreview('"truncated scalar promp')).toBe('"truncated scalar promp');
+  });
+
+  it('reads text parts out of structured content', () => {
+    const input = [{ role: 'user', content: [{ type: 'text', text: 'part one' }, { type: 'image' }] }];
+
+    expect(buildInputPreview(input)).toBe('part one');
+  });
+
+  it('previews malformed JSON as empty, never leaking message text', () => {
+    // Writers keep stored JSON valid (truncation replaces values inside the structure,
+    // never slices the document), so an unparseable document previews as empty —
+    // matching how `parseJson` treats an unparseable column. Property order is
+    // caller-controlled, so a best-effort scan of broken JSON could surface assistant
+    // text; empty is the safe answer.
+    const roleFirst = JSON.stringify({
+      messages: [
+        { role: 'user', content: 'question' },
+        { role: 'assistant', content: 'x'.repeat(500) },
+      ],
+    });
+    const contentFirst = JSON.stringify({
+      messages: [
+        { content: 'summarize my medical report', role: 'user' },
+        { content: 'assistant text that must not leak', role: 'assistant' },
+        { content: 'z'.repeat(500), role: 'user' },
+      ],
+    });
+
+    expect(buildInputPreview(roleFirst.slice(0, 80))).toBeUndefined();
+    expect(buildInputPreview(contentFirst.slice(0, 250))).toBeUndefined();
+    expect(buildInputPreview('{"messages": [{"role"')).toBeUndefined();
+    expect(buildInputPreview(`[${'{"role":"user"},'.repeat(10_000)}`)).toBeUndefined();
+  });
+
+  it('previews content-before-role messages like any other when the JSON is intact', () => {
+    const input = {
+      messages: [
+        { content: 'content-first question', role: 'user' },
+        { content: 'skipped answer', role: 'assistant' },
+      ],
+    };
+
+    expect(buildInputPreview(JSON.stringify(input))).toBe('content-first question');
+  });
+
+  it('truncates past the max length with an ellipsis', () => {
+    const preview = buildInputPreview({ messages: [{ role: 'user', content: 'a'.repeat(400) }] });
+
+    expect(preview).toHaveLength(INPUT_PREVIEW_MAX_LENGTH + 1);
+    expect(preview?.endsWith('…')).toBe(true);
+  });
+
+  it('returns undefined for empty or missing input', () => {
+    expect(buildInputPreview(null)).toBeUndefined();
+    expect(buildInputPreview(undefined)).toBeUndefined();
+    expect(buildInputPreview('   ')).toBeUndefined();
+    expect(buildInputPreview({ messages: [{ role: 'assistant', content: 'no user turn' }] })).toBeUndefined();
+  });
+
+  it('falls back to the raw value when input is not a message list', () => {
+    expect(buildInputPreview('plain prompt text')).toBe('plain prompt text');
+    expect(buildInputPreview({ query: 'lookup' })).toBe('{"query":"lookup"}');
   });
 });

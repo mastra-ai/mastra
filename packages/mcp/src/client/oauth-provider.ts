@@ -373,7 +373,7 @@ export class MCPOAuthClientProvider implements OAuthClientProvider {
     if (!currentTokens.access_token) return false;
 
     // Note: Token expiration checking would require parsing the JWT
-    // or tracking when we received the token. The MCP SDK handles
+    // or tracking when we received the token. The MCP client handles
     // token refresh automatically when needed.
     return true;
   }
