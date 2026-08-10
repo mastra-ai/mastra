@@ -79,11 +79,13 @@ type PulseExport =
 
 ## Current Leaning
 
-Use the reduced family as the test harness, but keep `Definition` and `Flow` as likely escape valves.
+Use the reduced family as the historical test harness, but tighten the next pass around the premise that observable records should be Pulses. `Change` and any forced `Snapshot` should be tested as special Pulse types before treating them as sibling export artifacts.
 
-`Snapshot` should not be promoted for conceptual neatness. It should be promoted only if reconstruction without snapshots is too expensive or unbounded.
+`Snapshot` should be avoided by default. It should be promoted only if reconstruction without snapshots is too expensive or unbounded, and even then the likely shape is a special snapshot Pulse attached into a flow.
 
-`Flow` may be a derived read model rather than an exported record. That is the cleanest way to keep the export stream small while still making review/query ergonomic.
+`Definition` needs more research. It clarifies instructions, settings, configs, tool schemas, and model settings, especially when those bodies can be referenced by runtime Pulses. The next fit pass should test whether definitions are separate artifacts, special Pulse types, or payloads attached to definition-created / definition-updated Pulses. It should also test temporary definitions versus permanent definitions.
+
+`Flow` should be tested as a derived read model rather than an exported record. The stronger direction is to build the graph from exported Pulse relationships instead of embedding all relationship types on each Pulse object. This needs its own flow/relationship-graph experiment.
 
 ## Failure Conditions
 
@@ -93,6 +95,7 @@ The reduced family fails if:
 - every runtime ref points at a `Change` in a way that is semantically unclear.
 - flow-level fields get duplicated across Pulses.
 - content bodies have no clean storage/export story.
+- relationships are embedded in Pulse objects in a way that makes append-only graph construction awkward.
 
 The expanded family fails if:
 
@@ -100,4 +103,3 @@ The expanded family fails if:
 - `Definition` stores per-run payloads.
 - `Snapshot` stores full repeated message arrays.
 - query complexity increases without reducing duplicated payloads.
-

@@ -4,13 +4,15 @@
 
 ### Is `Snapshot` separate?
 
-Current leaning: maybe.
+Current leaning: avoid snapshots unless reconstruction forces them.
 
-`Snapshot` is useful if reconstruction needs bounded checkpoints with special query/storage behavior. If it only says "the context changed to this state," then it can be a `Change` with action `snapshot_created`.
+`Snapshot` is useful only if reconstruction needs bounded checkpoints with special query/storage behavior. If it only says "the context changed to this state," then it can be a `Change` with action `snapshot_created`.
 
 Decision pressure:
 
-- Keep separate if snapshots are read-optimized checkpoints.
+- Prefer no snapshot if Pulses, Changes, and relationships can reconstruct state cheaply enough.
+- If a snapshot is needed, prefer making it a special Pulse type rather than a sibling export artifact.
+- Decide how a snapshot attaches to a flow before promoting it.
 - Collapse into `Change` if snapshots are just another state transition.
 
 ### Is `Definition` separate?
@@ -19,39 +21,46 @@ Current leaning: unresolved.
 
 Tool schemas, instruction versions, model settings, and processor configs read naturally as `Definition`. But the reduced family can represent them as `Change` records with actions like `definition_created` and `definition_updated`.
 
+Definitions may also be temporary or permanent:
+
+- temporary: runtime overrides, generated instructions, run-local tool schemas, one-run settings
+- permanent: durable config, published versions, stored tool definitions, instruction revisions, reusable schemas
+
 Concern:
 
 - Collapsing `Definition` into `Change` makes runtime refs less semantic.
 - Keeping `Definition` adds another top-level shape.
+- Making `Definition` a special Pulse type may preserve the Pulse premise, but it needs concrete examples to prove it is not just a disguised artifact store.
 
 ### Is `Flow` separate?
 
-Current leaning: probably yes for read ergonomics, but not proven.
+Current leaning: derived index, not an exported Pulse-like envelope.
 
-A flow can be implied by an origin Pulse plus relationships. However, flow-level data like thread id, previous flow id, origin pulse, active config refs, and root ids may be awkward without a separate record.
+A flow should be reconstructable from Pulses and exported relationships. Rather than storing relationship fields directly on each Pulse object, the system may emit relationship records that connect Pulses into a graph in different ways.
 
-Possible compromise:
+Possible direction:
 
-- `Flow` is not a telemetry event.
-- `Flow` is an index/envelope record or derived read model.
-- The append-only export stream can still use `Relationship` for ordering.
+- `Flow` is not a telemetry event or Pulse-like envelope.
+- `Flow` is a derived read/query index over Pulses and relationships.
+- Exported relationships may replace embedded relationship fields on Pulse objects.
+- Build the execution graph from relationship records such as parent, next, previous flow, subagent, resume, and uses-definition.
+
+This should be tested in a separate flow/relationship-graph experiment.
 
 ## Messages And Context
 
 ### What owns content bodies?
 
-The examples use `contentRef`, but this pass has not named a content export shape.
+Current leaning: the Pulse from the moment content enters execution should contain that content item.
 
-Options:
+When a new section of context appears, such as an LLM return, memory pull, tool output, reasoning chunk, or user input, the Pulse for that moment should carry the item. Ideally the full message array can be recreated from content-bearing Pulses plus relationships.
 
-- use `Change` for content creation
-- use `Definition` for stable content
-- use an external content-addressed store
-- allow `Pulse.attributes` to carry small content inline
+When context is removed, replaced, truncated, or compacted, record that as a `ChangePulse`.
 
 Risk:
 
-- Without a content strategy, "no messages array" just moves duplicated payloads elsewhere.
+- Large content bodies may still need refs or external storage, but the conceptual owner is the moment Pulse that introduced the content.
+- Reconstructing a full message array depends on the relationship graph being expressive enough.
 
 ### Should context reconstruction use all retained message refs?
 
@@ -63,11 +72,13 @@ For large threads, retained refs could become another repeated array. Context ch
 
 ### Is an Agent Signal a Pulse, a Change, or both?
 
-It depends on the signal type.
+Current leaning: unresolved pending a deeper Agent Signals source review.
 
-- user/reactive/notification signals entering a flow are Pulses.
-- state signals that update context are Changes.
-- a state signal entering model context during a flow may also deserve a Pulse.
+Possible mapping still needs testing:
+
+- signal arrival may be a Pulse
+- signal-caused state mutation may be a ChangePulse
+- some signal handling may need one Pulse with both arrival and mutation semantics
 
 Concern:
 
@@ -125,4 +136,3 @@ Surface-specific.
 - persistence/query indexes
 - UI generation names
 - migration from current observability
-

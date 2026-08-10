@@ -269,9 +269,13 @@ See `scope-expansion-after-01.md` for notes on configuration Pulses, definition-
 
 See `scope-expansion-after-02.md` for notes on message arrays, context deltas, and avoiding duplicated thread context across flows.
 
+See `glossary.md` for working definitions of Pulse terms used across the research notes.
+
+See `experiment-backlog.md` for proposed next fit experiments.
+
 See `fit_exploration_procedure.md` for the repeatable process used to run numbered Pulse fit explorations.
 
-See `fit_exploration_01/`, `fit_exploration_02/`, and `fit_exploration_03/` for historical shape-fit passes.
+See `fit_exploration_01/`, `fit_exploration_02/`, `fit_exploration_03/`, `fit_exploration_04/`, and `fit_exploration_05/` for historical and in-progress shape-fit passes.
 
 See `code_audit/README.md` for source and candidate emission audits, including the Harness and agent config provenance addendum.
 
