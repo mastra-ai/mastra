@@ -104,8 +104,11 @@ beforeEach(() => {
   vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(680);
 });
 
-afterEach(() => {
+afterEach(async () => {
   cleanup();
+  // @hello-pangea/dnd removes its accessibility announcer in a zero-delay timer.
+  // Let that cleanup run before Vitest tears down this file's jsdom document.
+  await new Promise(resolve => setTimeout(resolve, 0));
   vi.restoreAllMocks();
 });
 
