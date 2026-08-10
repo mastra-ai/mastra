@@ -438,6 +438,15 @@ describe('Composer on a lazy user-session draft', () => {
     expect(message).toHaveValue('/goal ship it');
     expect(sessionPosts).toBe(0);
     expect(preparation.controllerCreates).toBe(0);
+
+    await user.clear(message);
+    await user.type(message, '/nope try this');
+    await user.keyboard('{Enter}');
+
+    expect(await screen.findByText('Unknown command: /nope')).toBeInTheDocument();
+    expect(message).toHaveValue('/nope try this');
+    expect(sessionPosts).toBe(0);
+    expect(preparation.controllerCreates).toBe(0);
   });
 });
 

@@ -5,7 +5,7 @@ import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../e2e/ui/msw-server';
-import { renderWithProviders, TEST_BASE_URL } from '../../../../e2e/ui/render';
+import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../e2e/ui/render';
 import { createAppRoutes } from '../../router';
 
 if (typeof globalThis.Element !== 'undefined' && !Element.prototype.scrollIntoView) {
@@ -185,7 +185,7 @@ describe('a user session draft on the real thread route', () => {
     const router = createMemoryRouter(createAppRoutes(), {
       initialEntries: [`/factories/${FACTORY_ID}/user/new/${DRAFT_SESSION_ID}`],
     });
-    renderWithProviders(<RouterProvider router={router} />);
+    const { client } = renderWithProviders(<RouterProvider router={router} />);
 
     const message = await screen.findByRole('textbox', { name: 'Message' });
     await waitFor(() => expect(message).toBeEnabled());
@@ -214,6 +214,8 @@ describe('a user session draft on the real thread route', () => {
     expect(thread.queryByText(/Failed to load messages/)).not.toBeInTheDocument();
 
     route.finishWorkspace();
+    // Settle the released controller POSTs so a duplicate send would surface here.
+    await waitForMutationsIdle(client);
     expect(route.posted).toEqual(['fix the login bug']);
   });
 });

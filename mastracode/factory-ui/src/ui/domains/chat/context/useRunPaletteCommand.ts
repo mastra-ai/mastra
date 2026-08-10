@@ -158,6 +158,11 @@ export function useRunPaletteCommand(prefillComposer: (draft: string) => void) {
         }
         return true;
       default:
+        if (!SLASH_COMMANDS.some(command => command.name === name)) {
+          prefillComposer(text);
+          pushNotice(`Unknown command: /${name}`, 'error');
+          return true;
+        }
         if (name === 'permissions' && permissionsLoading) return true;
         await runNoArg(name);
         return true;
