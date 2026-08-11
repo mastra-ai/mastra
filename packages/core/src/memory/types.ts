@@ -568,7 +568,7 @@ export interface ObservationalMemoryObservationConfig {
    * chunks that reaches the retention target, even when that overshoots the target by
    * more than the usual safeguard allows. It never activates more chunks than are needed
    * to reach the retention target, and it changes the result only when the retention
-   * floor is above roughly 20,000 tokens — with the default `bufferActivation` it has no
+   * floor is above roughly 20,000 tokens — with the default settings it has no
    * observable effect.
    *
    * Crossing `blockAfter` does not trigger a blocking observation. A synchronous
