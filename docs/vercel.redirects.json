@@ -1244,6 +1244,11 @@
       "source": "/guides/guide/stock-agent",
       "destination": "/docs/agents/using-tools#quickstart",
       "permanent": true
+    },
+    {
+      "source": "/guides/migrations/:path*",
+      "destination": "/reference/migrations/:path*",
+      "permanent": true
     }
   ]
 }

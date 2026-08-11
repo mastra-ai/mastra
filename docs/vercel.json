@@ -1261,6 +1261,11 @@
       "permanent": true
     },
     {
+      "source": "/guides/migrations/:path*",
+      "destination": "/reference/migrations/:path*",
+      "permanent": true
+    },
+    {
       "source": "/docs/editor/prompts/llms.txt",
       "destination": "/docs/editor/overview/llms.txt",
       "permanent": true
@@ -2163,6 +2168,11 @@
     {
       "source": "/guides/guide/stock-agent/llms.txt",
       "destination": "/docs/agents/using-tools/llms.txt#quickstart",
+      "permanent": true
+    },
+    {
+      "source": "/guides/migrations/:path*/llms.txt",
+      "destination": "/reference/migrations/:path*/llms.txt",
       "permanent": true
     }
   ]
