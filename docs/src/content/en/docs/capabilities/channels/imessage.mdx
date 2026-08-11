@@ -128,6 +128,12 @@ Photon delivers to public HTTPS endpoints only. It won't deliver to `http://`, t
 
 :::
 
+## Read receipts
+
+iPhone Messages sends a read receipt for every message the agent posts, and the adapter delivers those receipts as inbound messages with no text and no attachments. Mastra skips them, so the agent doesn't answer its own reply in a loop. Their message IDs carry a `:read:` suffix, and they show up as skipped messages at `debug` log level.
+
+The same rule applies to every adapter: an inbound message with neither text nor attachments never starts an agent run. A custom `onDirectMessage`, `onMention`, or `onSubscribedMessage` handler still receives it and can act on it before calling `defaultHandler`.
+
 ## Gateway listener
 
 The adapter can hold an open connection and stream messages in real time instead of receiving webhooks. This works in both hosted and self-hosted modes.
