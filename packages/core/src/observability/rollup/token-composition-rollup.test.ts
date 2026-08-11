@@ -121,4 +121,31 @@ describe('formatTokenCompositionRollup', () => {
     expect(output).toContain('uninstrumented (no promptRegions) 1');
     expect(output).toContain('unreported 1');
   });
+
+  it('refuses to let a heavily unattributed session pass as gate input', () => {
+    const withUnattributed = (unattributed: number, system: number) =>
+      [
+        {
+          id: 'u',
+          traceId: 't',
+          spanId: 'u',
+          parentSpanId: 'gen-u',
+          type: SpanType.MODEL_STEP,
+          attributes: {
+            promptRegions: {
+              method: 'tokenx-estimate',
+              totalEstimated: unattributed + system,
+              regions: { system, unattributed },
+            },
+          },
+        },
+      ] as any;
+
+    // Text rewritten after render falls through to `unattributed`; a large
+    // bucket there means the named regions are quietly missing mass.
+    expect(formatTokenCompositionRollup(rollupTokenComposition(withUnattributed(300, 700)))).toContain(
+      'WARNING: 30.0% of estimated prompt tokens are unattributed',
+    );
+    expect(formatTokenCompositionRollup(rollupTokenComposition(withUnattributed(1, 999)))).not.toContain('WARNING');
+  });
 });

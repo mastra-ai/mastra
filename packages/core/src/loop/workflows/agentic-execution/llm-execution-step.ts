@@ -1564,12 +1564,18 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         // composition by MessageList region onto the current MODEL_STEP span.
         // Attribute-only — never alters inputMessages, ordering, or control flow.
         const stepSpanForRegions = modelSpanTracker?.getTracingContext()?.currentSpan;
+        // The prefix baseline is stateful and must advance on EVERY step, even
+        // steps with no MODEL_STEP span to report on. Skipping it would leave
+        // the next step comparing against a prompt two steps old and reporting
+        // the result as if it were a step-to-step comparison.
+        let prefixChanged: boolean | undefined;
+        try {
+          prefixChanged = didPromptPrefixChange(messageList, inputMessages);
+        } catch (error) {
+          logger?.debug('Failed to update prompt prefix baseline', { error });
+        }
         if (stepSpanForRegions?.type === SpanType.MODEL_STEP) {
           try {
-            // Prefix baseline first: it is stateful, and skipping it because
-            // attribution threw would silently compare the NEXT step against a
-            // stale prompt.
-            const prefixChanged = didPromptPrefixChange(messageList, inputMessages);
             stepSpanForRegions.update({
               attributes: {
                 promptRegions: attributePromptRegions({ messageList, inputMessages }),

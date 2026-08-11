@@ -249,6 +249,20 @@ export function formatTokenCompositionRollup(rollup: TokenCompositionRollup): st
     `  (token-weighted estimate bias vs provider-reported input: ${pct(rollup.estimateDelta.biasFraction)}` +
       `, over ${rollup.estimateDelta.samples}/${rollup.steps.total - rollup.steps.uninstrumented} instrumented steps)`,
   );
+  // A region total is only trustworthy if the prompt was mostly attributable.
+  // System text rewritten after render (or roles synthesized at the adapter
+  // boundary) falls through to `unattributed`, and a large bucket there means
+  // the named regions are quietly missing mass.
+  const unattributed = rollup.regions.totals.unattributed ?? 0;
+  if (rollup.regions.totalEstimated > 0) {
+    const unattributedShare = unattributed / rollup.regions.totalEstimated;
+    if (unattributedShare > 0.02) {
+      lines.push(
+        `  WARNING: ${pct(unattributedShare)} of estimated prompt tokens are unattributed — ` +
+          `named region totals are missing mass and should not be used as gate inputs.`,
+      );
+    }
+  }
   lines.push('');
   const spt = rollup.stepsPerTurn;
   lines.push(
