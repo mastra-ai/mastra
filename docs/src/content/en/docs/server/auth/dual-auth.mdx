@@ -1,0 +1,203 @@
+---
+title: "Dual Auth | Auth"
+description: "Configure separate authentication for your API and Studio to support different user populations with different auth flows."
+packages:
+  - "@mastra/core"
+---
+
+# Dual Auth
+
+Dual auth lets you configure separate authentication providers for your API and Studio. This supports real-world scenarios where your API serves external customers while Studio is used by internal team members.
+
+## When to use dual auth
+
+- Your API authenticates external customers with JWT tokens or API keys, but your team logs into Studio with SSO.
+- You want Studio protected by your corporate identity provider (WorkOS, Okta) while the API uses a customer-facing provider (Clerk, Auth0).
+- Different user populations need different auth flows: customers get API keys, team members get SSO.
+
+## Quickstart
+
+Configure `server.auth` for your API and `studio.auth` for Studio:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { SimpleAuth } from '@mastra/core/server'
+import { MastraAuthWorkos } from '@mastra/auth-workos'
+
+export const mastra = new Mastra({
+  server: {
+    // API authentication (external customers)
+    auth: new SimpleAuth({
+      tokens: {
+        'sk-customer-key': {
+          id: 'customer-1',
+          name: 'Acme Corp',
+        },
+      },
+    }),
+  },
+  studio: {
+    // Studio authentication (internal team)
+    auth: new MastraAuthWorkos({
+      clientId: process.env.WORKOS_CLIENT_ID!,
+      apiKey: process.env.WORKOS_API_KEY!,
+      redirectUri: process.env.WORKOS_REDIRECT_URI!,
+      cookieSecret: process.env.WORKOS_COOKIE_SECRET!,
+    }),
+  },
+})
+```
+
+With this configuration:
+
+- API requests authenticate using `server.auth` (SimpleAuth with API keys)
+- Studio requests authenticate using `studio.auth` (WorkOS SSO)
+
+## How it works
+
+Mastra routes authentication based on the request source:
+
+| Request source | Auth provider used |
+| - | - |
+| Studio UI | `studio.auth` if configured, otherwise falls back to `server.auth` |
+| Direct API calls | `server.auth` |
+
+Studio sends a header (`x-mastra-client-type: studio`) to identify itself. The server uses this header to route to the correct auth provider.
+
+### Fallback behavior
+
+Dual auth is opt-in. If you only configure `server.auth`, both API and Studio use that provider:
+
+```typescript
+// Single auth provider for everything
+export const mastra = new Mastra({
+  server: {
+    auth: myAuthProvider, // Used by both API and Studio
+  },
+})
+```
+
+This preserves backward compatibility with existing configurations.
+
+## Common patterns
+
+### SSO for Studio, API keys for customers
+
+The most common pattern: team members use corporate SSO to access Studio, while external integrations use API keys.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { SimpleAuth } from '@mastra/core/server'
+import { MastraAuthWorkos } from '@mastra/auth-workos'
+
+export const mastra = new Mastra({
+  server: {
+    auth: new SimpleAuth({
+      tokens: {
+        'sk-integration-1': { id: 'int-1', name: 'CI Pipeline' },
+        'sk-integration-2': { id: 'int-2', name: 'Partner API' },
+      },
+    }),
+  },
+  studio: {
+    auth: new MastraAuthWorkos({
+      clientId: process.env.WORKOS_CLIENT_ID!,
+      apiKey: process.env.WORKOS_API_KEY!,
+      redirectUri: process.env.WORKOS_REDIRECT_URI!,
+      cookieSecret: process.env.WORKOS_COOKIE_SECRET!,
+    }),
+  },
+})
+```
+
+### Different OAuth providers
+
+Use Clerk for your customer-facing API and Auth0 for internal Studio access:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { MastraAuthClerk } from '@mastra/auth-clerk'
+import { MastraAuthAuth0 } from '@mastra/auth-auth0'
+
+export const mastra = new Mastra({
+  server: {
+    auth: new MastraAuthClerk({
+      publishableKey: process.env.CLERK_PUBLISHABLE_KEY!,
+      secretKey: process.env.CLERK_SECRET_KEY!,
+    }),
+  },
+  studio: {
+    auth: new MastraAuthAuth0({
+      domain: process.env.AUTH0_DOMAIN!,
+      clientId: process.env.AUTH0_CLIENT_ID!,
+      clientSecret: process.env.AUTH0_CLIENT_SECRET!,
+      redirectUri: process.env.AUTH0_REDIRECT_URI!,
+      cookieSecret: process.env.AUTH0_COOKIE_SECRET!,
+    }),
+  },
+})
+```
+
+### Separate RBAC per provider
+
+Each auth provider can have its own RBAC configuration:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { SimpleAuth } from '@mastra/core/server'
+import { StaticRBACProvider, DEFAULT_ROLES } from '@mastra/core/auth/ee'
+import { MastraAuthWorkos } from '@mastra/auth-workos'
+
+// API: customers get limited permissions
+const apiRbac = new StaticRBACProvider({
+  roles: {
+    customer: ['agents:read', 'agents:execute'],
+  },
+  getUserRoles: () => ['customer'],
+})
+
+// Studio: team members get full access based on their role
+const studioRbac = new StaticRBACProvider({
+  roles: DEFAULT_ROLES,
+  getUserRoles: user => [user.role ?? 'member'],
+})
+
+export const mastra = new Mastra({
+  server: {
+    auth: new SimpleAuth({
+      tokens: {
+        'sk-customer': { id: 'cust-1', name: 'Customer' },
+      },
+    }),
+    rbac: apiRbac,
+  },
+  studio: {
+    auth: new MastraAuthWorkos({
+      clientId: process.env.WORKOS_CLIENT_ID!,
+      apiKey: process.env.WORKOS_API_KEY!,
+      redirectUri: process.env.WORKOS_REDIRECT_URI!,
+      cookieSecret: process.env.WORKOS_COOKIE_SECRET!,
+    }),
+    rbac: studioRbac,
+  },
+})
+```
+
+## Security considerations
+
+### Header spoofing
+
+The `x-mastra-client-type` header only routes to the correct auth provider. It doesn't bypass authentication. A request claiming to be from Studio still needs valid credentials for `studio.auth`.
+
+If someone spoofs the header without valid Studio credentials, authentication fails with 401 Unauthorized.
+
+### Token isolation
+
+Tokens from one auth provider don't work with the other. An API key valid for `server.auth` won't authenticate a Studio session, and vice versa.
+
+## Related
+
+- [Auth overview](/docs/server/auth): Full list of supported auth providers
+- [Studio Auth](/docs/studio/auth): How authentication works in Studio
+- [Composite Auth](/docs/server/auth/composite-auth): Combine multiple providers for a single auth context
+- [WorkOS](/docs/server/auth/workos): Enterprise SSO provider

@@ -548,6 +548,11 @@ const sidebars = {
             },
             {
               type: 'doc',
+              id: 'server/auth/dual-auth',
+              label: 'Dual Auth',
+            },
+            {
+              type: 'doc',
               id: 'server/auth/firebase',
               label: 'Firebase',
             },
