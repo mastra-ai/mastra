@@ -151,6 +151,11 @@ describe('step durable operation IDs', () => {
       suspendSchema: z.string(),
       suspendPayload: 'approval required',
     },
+    {
+      payloadType: 'date',
+      suspendSchema: z.date(),
+      suspendPayload: new Date('2026-08-11T12:00:00.000Z'),
+    },
   ])('preserves $payloadType suspend payloads when resuming', async ({ suspendSchema, suspendPayload }) => {
     const workflowId = 'test-workflow';
     const runId = 'test-run';

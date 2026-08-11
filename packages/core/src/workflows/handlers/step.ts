@@ -108,7 +108,12 @@ function getStepExecutionOperationIdentity({
 const WRAPPED_SUSPEND_PAYLOAD_KEY = '__workflow_suspend_payload';
 
 function isObjectSuspendPayload(suspendPayload: any): suspendPayload is Record<string, any> {
-  return suspendPayload !== null && typeof suspendPayload === 'object' && !Array.isArray(suspendPayload);
+  if (suspendPayload === null || typeof suspendPayload !== 'object' || Array.isArray(suspendPayload)) {
+    return false;
+  }
+
+  const prototype = Object.getPrototypeOf(suspendPayload);
+  return prototype === Object.prototype || prototype === null;
 }
 
 function withResumeGeneration(suspendPayload: any, resumeGeneration: number | undefined): any {
