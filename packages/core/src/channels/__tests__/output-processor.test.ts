@@ -1365,6 +1365,28 @@ describe('ChatChannelOutputProcessor', () => {
       expect((edits[0] as Extract<Call, { kind: 'editMessage' }>).messageId).toBe('m1');
     });
 
+    it("posts approval card even when toolDisplay is 'hidden' (static mode)", async () => {
+      const { channels, calls, chatThread } = makeChannels({ streaming: false, toolDisplay: 'hidden' });
+      await drive(
+        channels,
+        [
+          {
+            type: 'tool-call',
+            payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' } },
+          },
+          {
+            type: 'tool-call-approval',
+            payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' } },
+          },
+        ],
+        chatThread,
+      );
+      // Tool call itself is hidden (no post for running card), but approval MUST post
+      const posts = calls.filter(c => c.kind === 'post');
+      expect(posts).toHaveLength(1);
+      expect((channels as any).pendingApprovalCards.has('t1')).toBe(true);
+    });
+
     it('uses the pendingApprovalCards entry when tool-result arrives without a matching tool-call (resumed run)', async () => {
       const { channels, calls, chatThread } = makeChannels({ streaming: false });
       // Pre-seed a pending card as if the click handler posted the "Approved ⋯" card.
