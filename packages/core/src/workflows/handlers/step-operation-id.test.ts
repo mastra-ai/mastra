@@ -140,6 +140,72 @@ describe('step durable operation IDs', () => {
     expect(engine.operationIds).toContain('workflow.test-workflow.step.loop-step.path.[0].iteration.2.resume.2');
   });
 
+  it.each([
+    {
+      payloadType: 'array',
+      suspendSchema: z.array(z.string()),
+      suspendPayload: ['first', 'second'],
+    },
+    {
+      payloadType: 'scalar',
+      suspendSchema: z.string(),
+      suspendPayload: 'approval required',
+    },
+  ])('preserves $payloadType suspend payloads when resuming', async ({ suspendSchema, suspendPayload }) => {
+    const workflowId = 'test-workflow';
+    const runId = 'test-run';
+    const stepId = 'suspend-payload-step';
+    const engine = new RecordingExecutionEngine({ mastra: undefined });
+    const executionContext = createExecutionContext(workflowId, runId);
+    let receivedSuspendData: unknown;
+    const step = {
+      id: stepId,
+      inputSchema: z.any(),
+      outputSchema: z.any(),
+      suspendSchema,
+      resumeSchema: z.object({ approved: z.boolean() }),
+      execute: async ({ resumeData, suspendData, suspend }: any) => {
+        if (!resumeData) {
+          await suspend(suspendPayload);
+          return undefined;
+        }
+
+        receivedSuspendData = suspendData;
+        return suspendData;
+      },
+    };
+    const params = {
+      workflowId,
+      runId,
+      step,
+      prevOutput: null,
+      serializedStepGraph: [],
+      executionContext,
+      pubsub: new EventEmitterPubSub(),
+      abortController: new AbortController(),
+      requestContext: new RequestContext(),
+      tracingContext: {},
+    };
+
+    const suspended = await engine.executeStep({ ...params, stepResults: {} });
+    expect(suspended.result.status).toBe('suspended');
+
+    const resumed = await engine.executeStep({
+      ...params,
+      stepResults: suspended.stepResults,
+      resume: {
+        steps: [stepId],
+        stepResults: suspended.stepResults,
+        resumePayload: { approved: true },
+        resumePath: [0],
+      },
+    });
+
+    expect(resumed.result.status).toBe('success');
+    expect(receivedSuspendData).toEqual(suspendPayload);
+    expect((resumed.result as any).output).toEqual(suspendPayload);
+  });
+
   it('distinguishes concurrent foreach items even when their values repeat', async () => {
     const workflowId = 'test-workflow';
     const runId = 'test-run';

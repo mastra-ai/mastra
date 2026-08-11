@@ -105,9 +105,25 @@ function getStepExecutionOperationIdentity({
   };
 }
 
+const WRAPPED_SUSPEND_PAYLOAD_KEY = '__workflow_suspend_payload';
+
+function isObjectSuspendPayload(suspendPayload: any): suspendPayload is Record<string, any> {
+  return suspendPayload !== null && typeof suspendPayload === 'object' && !Array.isArray(suspendPayload);
+}
+
 function withResumeGeneration(suspendPayload: any, resumeGeneration: number | undefined): any {
   // Keep the generation in the snapshot-owned metadata so a replay computes the
   // same ID, while a later external resume advances to the next occurrence.
+  if (!isObjectSuspendPayload(suspendPayload)) {
+    return {
+      [WRAPPED_SUSPEND_PAYLOAD_KEY]: suspendPayload,
+      __workflow_meta: {
+        resumeGeneration: resumeGeneration ?? 0,
+        isWrappedSuspendPayload: true,
+      },
+    };
+  }
+
   return {
     ...suspendPayload,
     __workflow_meta: {
@@ -115,6 +131,19 @@ function withResumeGeneration(suspendPayload: any, resumeGeneration: number | un
       resumeGeneration: resumeGeneration ?? 0,
     },
   };
+}
+
+function withoutWorkflowMetadata(suspendPayload: any): any {
+  if (!isObjectSuspendPayload(suspendPayload) || !('__workflow_meta' in suspendPayload)) {
+    return suspendPayload;
+  }
+
+  const { __workflow_meta, ...userSuspendData } = suspendPayload;
+  if (__workflow_meta?.isWrappedSuspendPayload) {
+    return suspendPayload[WRAPPED_SUSPEND_PAYLOAD_KEY];
+  }
+
+  return userSuspendData;
 }
 
 export async function executeStep(
@@ -207,11 +236,8 @@ export async function executeStep(
   const durableStepOperationId = `workflow.${workflowId}.step.${step.id}${operationSuffix}`;
   const stepLifecycleOperationId = `workflow.${workflowId}.run.${runId}.step.${step.id}${operationSuffix}`;
 
-  // Filter out internal workflow metadata before exposing to step code
-  if (suspendDataToUse && '__workflow_meta' in suspendDataToUse) {
-    const { __workflow_meta, ...userSuspendData } = suspendDataToUse;
-    suspendDataToUse = userSuspendData;
-  }
+  // Filter out internal workflow metadata before exposing to step code.
+  suspendDataToUse = withoutWorkflowMetadata(suspendDataToUse);
 
   const startTime = resumeDataToUse ? undefined : Date.now();
   const resumeTime = resumeDataToUse ? Date.now() : undefined;
