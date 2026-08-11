@@ -75,8 +75,8 @@ function MetricsContent({ factoryProjectId }: { factoryProjectId: string | undef
     return <Notice variant="destructive">{message}</Notice>;
   }
   const metrics = metricsQuery.data;
-  // server count, not the picker — placeholderData keeps the old range during a refetch
-  const windowDays = metrics?.windowDays ?? rangeDays;
+  // server count, not the picker — it clips the range to the board's life
+  const daysCovered = metrics?.daysCovered ?? rangeDays;
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-20 pb-16">
@@ -87,7 +87,7 @@ function MetricsContent({ factoryProjectId }: { factoryProjectId: string | undef
           <RangePicker rangeDays={rangeDays} onSelect={setRangeDays} />
         </div>
         {metrics ? (
-          <FlowOverview metrics={metrics} agentsRunning={agentsRunning} windowDays={windowDays} />
+          <FlowOverview metrics={metrics} agentsRunning={agentsRunning} daysCovered={daysCovered} />
         ) : (
           <MetricsLoading />
         )}
@@ -115,7 +115,7 @@ const BREAKDOWN_VIEWS = {
     label: 'Automation coverage',
     shortLabel: 'Automation',
     icon: Workflow,
-    description: 'Completed stage passes handled end to end by automation.',
+    description: 'First pass through each stage, handled end to end by automation. Redos count as an outcome.',
   },
 } as const;
 
@@ -241,29 +241,29 @@ function MetricsLoading() {
 function FlowOverview({
   metrics,
   agentsRunning,
-  windowDays,
+  daysCovered,
 }: {
   metrics: FactoryMetrics;
   agentsRunning: number;
-  windowDays: number;
+  daysCovered: number;
 }) {
   const completed = metrics.throughput.reduce((sum, point) => sum + point.count, 0);
-  const averagePerDay = completed / windowDays;
+  const averagePerDay = daysCovered === 0 ? 0 : completed / daysCovered;
   const automatedMoves = metrics.transitions.total - metrics.transitions.human;
   const automationRate =
     metrics.transitions.total === 0 ? EM_DASH : `${Math.round((automatedMoves / metrics.transitions.total) * 100)}%`;
 
   return (
     <dl className="m-0 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-      <ThroughputCard metrics={metrics} completed={completed} averagePerDay={averagePerDay} windowDays={windowDays} />
+      <ThroughputCard metrics={metrics} completed={completed} averagePerDay={averagePerDay} daysCovered={daysCovered} />
       <OverviewReadout
         icon={<Clock3 aria-hidden="true" />}
-        label="Median cycle time"
-        value={formatDuration(metrics.cycleTime.medianMs)}
+        label="Median lead time"
+        value={formatDuration(metrics.leadTime.medianMs)}
         detail={
-          metrics.cycleTime.p90Ms === null
-            ? `${metrics.cycleTime.samples} completed samples`
-            : `p90 ${formatDuration(metrics.cycleTime.p90Ms)} · ${metrics.cycleTime.samples} samples`
+          metrics.leadTime.p90Ms === null
+            ? `${metrics.leadTime.samples} completed samples`
+            : `p90 ${formatDuration(metrics.leadTime.p90Ms)} · ${metrics.leadTime.samples} samples`
         }
       />
       <OverviewReadout
@@ -309,12 +309,12 @@ function ThroughputCard({
   metrics,
   completed,
   averagePerDay,
-  windowDays,
+  daysCovered,
 }: {
   metrics: FactoryMetrics;
   completed: number;
   averagePerDay: number;
-  windowDays: number;
+  daysCovered: number;
 }) {
   const [expanded, setExpanded] = useState(false);
   const chartId = useId();
@@ -371,7 +371,7 @@ function ThroughputCard({
             className="motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-top-2 mt-5 motion-safe:duration-300"
           >
             <Txt as="p" variant="ui-xs" className="text-icon3 m-0 mb-2">
-              Daily completions over {windowDays} days
+              Daily completions over {daysCovered} days
             </Txt>
             <MetricsLineChart
               data={metrics.throughput.map(point => ({ time: point.date, done: point.count }))}
