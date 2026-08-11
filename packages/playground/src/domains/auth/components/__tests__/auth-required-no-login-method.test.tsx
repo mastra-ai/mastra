@@ -135,23 +135,16 @@ describe('AuthRequired', () => {
       expect(screen.getByRole('button', { name: 'Add Header' })).toBeDefined();
     });
 
+    // The header form has no platform carve-out: a header-only auth provider
+    // deadlocks the same way on Mastra platform, so the form must show there too.
     describe('when Studio runs on Mastra platform', () => {
-      it('shows the administrator message', async () => {
+      it('shows the header form on the blocked screen', async () => {
         window.MASTRA_CLOUD_API_ENDPOINT = 'https://api.mastra.ai';
         useNoLoginMethodHandler();
 
         await renderAuthRequiredAt('/agents');
 
-        expect(screen.getByText('No login method is configured. Please contact your administrator.')).toBeDefined();
-      });
-
-      it('does not show the header form', async () => {
-        window.MASTRA_CLOUD_API_ENDPOINT = 'https://api.mastra.ai';
-        useNoLoginMethodHandler();
-
-        await renderAuthRequiredAt('/agents');
-
-        expect(screen.queryByRole('button', { name: 'Add Header' })).toBeNull();
+        expect(screen.getByRole('button', { name: 'Add Header' })).toBeDefined();
       });
     });
 
