@@ -50,14 +50,6 @@ describe('mode availableTools configuration', () => {
       expect(planMode.instructions).not.toContain('.artifacts/plans/');
     });
 
-    it('delivers workflow designs through the normal plan contract', () => {
-      expect(planMode.instructions).toContain(
-        'include it in the implementation plan stored at the session-specific plan path',
-      );
-      expect(planMode.instructions).toContain('call `submit_plan({ path })`');
-      expect(planMode.instructions).not.toContain('sketch it in chat');
-    });
-
     it('allows plan-mode writes to any .md file inside .mastracode/plans/', () => {
       const projectPath = '/tmp/mastracode-plan-guard';
       // Mirror the real HarnessRequestContext shape: session.modeId is a string

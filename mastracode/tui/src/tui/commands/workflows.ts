@@ -420,6 +420,7 @@ export async function handleWorkflowsCommand(
         ctx.showError(`Unknown /workflows subcommand: "${sub}". Try /workflows help.`);
     }
   } catch (e) {
-    ctx.showError(`Workflow command failed: ${(e as Error).message}`);
+    const message = e instanceof Error ? e.message : String(e);
+    ctx.showError(`Workflow command failed: ${message}`);
   }
 }
