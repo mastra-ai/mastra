@@ -392,6 +392,7 @@ export const deleteStoredWorkflowResponseSchema = z.object({
   message: z.string(),
 });
 
+export type WorkflowBuilderDefinitionInput = z.input<typeof workflowBuilderDefinitionInputSchema>;
 export type StoredWorkflowDefinition = z.infer<typeof storedWorkflowDefinitionSchema>;
 export type ListStoredWorkflowsResponse = z.infer<typeof listStoredWorkflowsResponseSchema>;
 export type UpsertStoredWorkflowResponse = z.infer<typeof upsertStoredWorkflowResponseSchema>;
