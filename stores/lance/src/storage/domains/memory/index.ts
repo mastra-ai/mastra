@@ -27,7 +27,9 @@ import type { LanceDomainConfig } from '../../db';
 import { getTableSchema, processResultWithTypeConversion } from '../../db/utils';
 
 export class StoreMemoryLance extends MemoryStorage {
-  override readonly supportsPartialThreadUpdate = true;
+  // Note: not declaring supportsPartialThreadUpdate — Lance's updateThread uses a
+  // read-modify-write mergeInsert that rewrites the full row, so an omitted title
+  // is not atomically preserved. patchThread's legacy backfill path matches that.
   private client: Connection;
   #db: LanceDB;
 

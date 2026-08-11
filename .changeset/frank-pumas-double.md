@@ -11,7 +11,6 @@
 '@mastra/core': patch
 '@mastra/convex': patch
 '@mastra/libsql': patch
-'@mastra/lance': patch
 '@mastra/mssql': patch
 '@mastra/mysql': patch
 '@mastra/redis': patch
