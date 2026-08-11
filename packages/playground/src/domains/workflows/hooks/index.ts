@@ -1,2 +1,2 @@
 export * from './use-workflows';
-export * from './use-stored-workflows';
+export * from './use-dynamic-workflows';

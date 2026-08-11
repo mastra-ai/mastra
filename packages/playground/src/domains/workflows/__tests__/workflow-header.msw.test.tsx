@@ -65,10 +65,10 @@ function renderHeader() {
 afterEach(() => cleanup());
 
 describe('WorkflowHeader', () => {
-  describe('when a stored workflow is opened by a user who can write', () => {
+  describe('when a dynamic workflow is opened by a user who can write', () => {
     it('offers an Edit in builder action linking to the workflow builder', async () => {
       serve({
-        origin: 'stored',
+        origin: 'dynamic',
         capabilities: rbacCapabilities(['stored-workflows:read', 'stored-workflows:write', 'workflows:execute']),
       });
 
@@ -79,10 +79,10 @@ describe('WorkflowHeader', () => {
     });
   });
 
-  describe('when a stored workflow is opened by a read-only user', () => {
+  describe('when a dynamic workflow is opened by a read-only user', () => {
     it('hides the Edit in builder action', async () => {
       serve({
-        origin: 'stored',
+        origin: 'dynamic',
         capabilities: rbacCapabilities(['stored-workflows:read']),
       });
 

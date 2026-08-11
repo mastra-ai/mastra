@@ -1,4 +1,4 @@
-import type { UpsertStoredWorkflowParams } from '@mastra/client-js';
+import type { UpsertDynamicWorkflowParams } from '@mastra/client-js';
 import { normalizeWorkflowBuilderDefinition, preflightWorkflowDefinition } from '@mastra/core/workflows/builder';
 import type {
   WorkflowDefinitionPreflightContext,
@@ -6,7 +6,7 @@ import type {
   WorkflowDefinitionPreflightIssueCode,
 } from '@mastra/core/workflows/builder';
 
-export type WorkflowDraft = UpsertStoredWorkflowParams;
+export type WorkflowDraft = UpsertDynamicWorkflowParams;
 /** One member of a draft: the workflow being built, or a helper it nests. */
 export type WorkflowDraftDefinition = NonNullable<WorkflowDraft['dependencies']>[number];
 export type WorkflowDraftStep = WorkflowDraft['graph'][number];

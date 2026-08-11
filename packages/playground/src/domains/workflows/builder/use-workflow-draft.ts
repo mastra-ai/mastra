@@ -1,4 +1,4 @@
-import type { StoredWorkflowDefinition } from '@mastra/client-js';
+import type { DynamicWorkflowDefinition } from '@mastra/client-js';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 
 import {
@@ -21,7 +21,7 @@ import type {
 } from './workflow-draft';
 import { createWorkflowDraftTools } from './workflow-draft-tools';
 import type { WorkflowDraftCandidate, WorkflowDraftToolResult } from './workflow-draft-tools';
-import { useUpsertStoredWorkflow } from '@/domains/workflows/hooks/use-stored-workflows';
+import { useUpsertDynamicWorkflow } from '@/domains/workflows/hooks/use-dynamic-workflows';
 
 export class WorkflowDraftValidationError extends Error {
   constructor(public readonly issues: WorkflowDraftValidationIssue[]) {
@@ -30,7 +30,7 @@ export class WorkflowDraftValidationError extends Error {
   }
 }
 
-function fromStoredWorkflow(definition: StoredWorkflowDefinition): WorkflowDraft {
+function fromDynamicWorkflow(definition: DynamicWorkflowDefinition): WorkflowDraft {
   return {
     id: definition.id,
     description: definition.description,
@@ -43,12 +43,12 @@ function fromStoredWorkflow(definition: StoredWorkflowDefinition): WorkflowDraft
 }
 
 function initializeAuthoringState(
-  initialDefinition: StoredWorkflowDefinition | undefined,
+  initialDefinition: DynamicWorkflowDefinition | undefined,
   initialId: string,
   validationContext?: WorkflowDraftValidationContext,
 ): WorkflowDraftAuthoringState {
   return initialDefinition
-    ? createLoadedWorkflowDraftAuthoringState(fromStoredWorkflow(initialDefinition), validationContext)
+    ? createLoadedWorkflowDraftAuthoringState(fromDynamicWorkflow(initialDefinition), validationContext)
     : createWorkflowDraftAuthoringState(initialId);
 }
 
@@ -67,7 +67,7 @@ function createValidationContextKey(validationContext?: WorkflowDraftValidationC
 }
 
 export function useWorkflowDraft(
-  initialDefinition: StoredWorkflowDefinition | undefined,
+  initialDefinition: DynamicWorkflowDefinition | undefined,
   initialId: string,
   validationContext?: WorkflowDraftValidationContext,
 ) {
@@ -81,7 +81,7 @@ export function useWorkflowDraft(
   const identityRef = useRef(identity);
   const initializationKeyRef = useRef(initializationKey);
   const mountedRef = useRef(true);
-  const saveMutation = useUpsertStoredWorkflow();
+  const saveMutation = useUpsertDynamicWorkflow();
 
   const replaceState = useCallback((next: WorkflowDraftAuthoringState) => {
     stateRef.current = next;
@@ -157,13 +157,13 @@ export function useWorkflowDraft(
   const tools = useMemo(() => createTools(), [createTools]);
 
   const reset = useCallback(
-    (definition?: StoredWorkflowDefinition) => {
+    (definition?: DynamicWorkflowDefinition) => {
       if (stateRef.current.savingRevision !== undefined) return false;
       const nextIdentity = definition?.id ?? initialId;
       identityRef.current = nextIdentity;
       replaceState(
         definition
-          ? createLoadedWorkflowDraftAuthoringState(fromStoredWorkflow(definition), validationContext)
+          ? createLoadedWorkflowDraftAuthoringState(fromDynamicWorkflow(definition), validationContext)
           : createWorkflowDraftAuthoringState(nextIdentity),
       );
       return true;

@@ -17,7 +17,7 @@ export function WorkflowHeader({ workflowName, workflowId }: { workflowName: str
   const schedulesHref = singleSchedule
     ? `/workflows/schedules/${encodeURIComponent(singleSchedule.id)}`
     : `/workflows/schedules?workflowId=${encodeURIComponent(workflowId)}`;
-  const canEditInBuilder = workflow?.origin === 'stored' && canWrite;
+  const canEditInBuilder = workflow?.origin === 'dynamic' && canWrite;
 
   return (
     <RouteHeaderActions owner="workflow-detail">

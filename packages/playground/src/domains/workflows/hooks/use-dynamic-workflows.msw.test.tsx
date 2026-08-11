@@ -1,7 +1,7 @@
 import type {
-  ListStoredWorkflowsResponse,
-  StoredWorkflowDefinition,
-  UpsertStoredWorkflowParams,
+  ListDynamicWorkflowsResponse,
+  DynamicWorkflowDefinition,
+  UpsertDynamicWorkflowParams,
 } from '@mastra/client-js';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -11,17 +11,17 @@ import type { PropsWithChildren } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
 import {
-  storedWorkflowKeys,
-  useDeleteStoredWorkflow,
-  useStoredWorkflow,
-  useStoredWorkflows,
-  useUpsertStoredWorkflow,
-} from './use-stored-workflows';
+  dynamicWorkflowKeys,
+  useDeleteDynamicWorkflow,
+  useDynamicWorkflow,
+  useDynamicWorkflows,
+  useUpsertDynamicWorkflow,
+} from './use-dynamic-workflows';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
 
-const workflow: StoredWorkflowDefinition = {
+const workflow: DynamicWorkflowDefinition = {
   id: 'daily-summary',
   description: 'Summarizes the day',
   inputSchema: { type: 'object' },
@@ -43,7 +43,7 @@ const createHarness = () => {
   return { queryClient, wrapper };
 };
 
-const upsertInput: UpsertStoredWorkflowParams = {
+const upsertInput: UpsertDynamicWorkflowParams = {
   id: workflow.id,
   inputSchema: workflow.inputSchema,
   outputSchema: workflow.outputSchema,
@@ -53,7 +53,7 @@ const upsertInput: UpsertStoredWorkflowParams = {
 describe('stored workflow hooks', () => {
   describe('when active stored workflows exist', () => {
     it('lists definitions through the real client', async () => {
-      const list: ListStoredWorkflowsResponse = { workflows: [workflow], total: 1 };
+      const list: ListDynamicWorkflowsResponse = { workflows: [workflow], total: 1 };
       server.use(
         http.get(`${BASE_URL}/api/stored/workflows`, ({ request }) => {
           expect(new URL(request.url).searchParams.get('status')).toBe('active');
@@ -61,7 +61,7 @@ describe('stored workflow hooks', () => {
         }),
       );
       const { wrapper } = createHarness();
-      const listed = renderHook(() => useStoredWorkflows({ status: 'active' }), { wrapper });
+      const listed = renderHook(() => useDynamicWorkflows({ status: 'active' }), { wrapper });
 
       await waitFor(() => expect(listed.result.current.isSuccess).toBe(true));
       expect(listed.result.current.data).toEqual(list);
@@ -75,7 +75,7 @@ describe('stored workflow hooks', () => {
         }),
       );
       const { wrapper } = createHarness();
-      const detailed = renderHook(() => useStoredWorkflow(workflow.id), { wrapper });
+      const detailed = renderHook(() => useDynamicWorkflow(workflow.id), { wrapper });
 
       await waitFor(() => expect(detailed.result.current.isSuccess).toBe(true));
       expect(detailed.result.current.data).toEqual(workflow);
@@ -96,15 +96,15 @@ describe('stored workflow hooks', () => {
         }),
       );
       const { queryClient, wrapper } = createHarness();
-      queryClient.setQueryData(storedWorkflowKeys.lists(), { workflows: [], total: 0 });
+      queryClient.setQueryData(dynamicWorkflowKeys.lists(), { workflows: [], total: 0 });
       queryClient.setQueryData(['workflows', {}], { stale: true });
-      const mutation = renderHook(() => useUpsertStoredWorkflow(), { wrapper });
+      const mutation = renderHook(() => useUpsertDynamicWorkflow(), { wrapper });
 
       await act(async () => {
         await mutation.result.current.mutateAsync(upsertInput);
       });
 
-      expect(queryClient.getQueryState(storedWorkflowKeys.lists())?.isInvalidated).toBe(true);
+      expect(queryClient.getQueryState(dynamicWorkflowKeys.lists())?.isInvalidated).toBe(true);
       expect(queryClient.getQueryState(['workflows', {}])?.isInvalidated).toBe(true);
       expect(runtimeRefetch).not.toHaveBeenCalled();
     });
@@ -118,17 +118,17 @@ describe('stored workflow hooks', () => {
         ),
       );
       const { queryClient, wrapper } = createHarness();
-      queryClient.setQueryData(storedWorkflowKeys.detail(workflow.id), workflow);
-      queryClient.setQueryData(storedWorkflowKeys.lists(), { workflows: [workflow], total: 1 });
+      queryClient.setQueryData(dynamicWorkflowKeys.detail(workflow.id), workflow);
+      queryClient.setQueryData(dynamicWorkflowKeys.lists(), { workflows: [workflow], total: 1 });
       queryClient.setQueryData(['workflows', {}], { [workflow.id]: {} });
-      const mutation = renderHook(() => useDeleteStoredWorkflow(), { wrapper });
+      const mutation = renderHook(() => useDeleteDynamicWorkflow(), { wrapper });
 
       await act(async () => {
         await mutation.result.current.mutateAsync(workflow.id);
       });
 
-      expect(queryClient.getQueryData(storedWorkflowKeys.detail(workflow.id))).toBeUndefined();
-      expect(queryClient.getQueryState(storedWorkflowKeys.lists())?.isInvalidated).toBe(true);
+      expect(queryClient.getQueryData(dynamicWorkflowKeys.detail(workflow.id))).toBeUndefined();
+      expect(queryClient.getQueryState(dynamicWorkflowKeys.lists())?.isInvalidated).toBe(true);
       expect(queryClient.getQueryState(['workflows', {}])?.isInvalidated).toBe(true);
     });
   });
@@ -141,15 +141,15 @@ describe('stored workflow hooks', () => {
         ),
       );
       const { queryClient, wrapper } = createHarness();
-      const existing: ListStoredWorkflowsResponse = { workflows: [workflow], total: 1 };
-      queryClient.setQueryData(storedWorkflowKeys.lists(), existing);
-      const mutation = renderHook(() => useUpsertStoredWorkflow(), { wrapper });
+      const existing: ListDynamicWorkflowsResponse = { workflows: [workflow], total: 1 };
+      queryClient.setQueryData(dynamicWorkflowKeys.lists(), existing);
+      const mutation = renderHook(() => useUpsertDynamicWorkflow(), { wrapper });
 
       await act(async () => {
         await expect(mutation.result.current.mutateAsync(upsertInput)).rejects.toThrow('400');
       });
 
-      expect(queryClient.getQueryData(storedWorkflowKeys.lists())).toEqual(existing);
+      expect(queryClient.getQueryData(dynamicWorkflowKeys.lists())).toEqual(existing);
     });
   });
 
@@ -161,14 +161,14 @@ describe('stored workflow hooks', () => {
         ),
       );
       const { queryClient, wrapper } = createHarness();
-      queryClient.setQueryData(storedWorkflowKeys.detail(workflow.id), workflow);
-      const mutation = renderHook(() => useDeleteStoredWorkflow(), { wrapper });
+      queryClient.setQueryData(dynamicWorkflowKeys.detail(workflow.id), workflow);
+      const mutation = renderHook(() => useDeleteDynamicWorkflow(), { wrapper });
 
       await act(async () => {
         await expect(mutation.result.current.mutateAsync(workflow.id)).rejects.toThrow('500');
       });
 
-      expect(queryClient.getQueryData(storedWorkflowKeys.detail(workflow.id))).toEqual(workflow);
+      expect(queryClient.getQueryData(dynamicWorkflowKeys.detail(workflow.id))).toEqual(workflow);
     });
   });
 });

@@ -1,4 +1,4 @@
-import type { StoredWorkflowDefinition } from '@mastra/client-js';
+import type { DynamicWorkflowDefinition } from '@mastra/client-js';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook } from '@testing-library/react';
@@ -10,7 +10,7 @@ import { useWorkflowDraft, WorkflowDraftValidationError } from './use-workflow-d
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
-const definition: StoredWorkflowDefinition = {
+const definition: DynamicWorkflowDefinition = {
   id: 'daily-report',
   description: 'Builds the daily report',
   inputSchema: { type: 'object' },

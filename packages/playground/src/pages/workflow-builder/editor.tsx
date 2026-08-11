@@ -33,7 +33,7 @@ import {
   rememberWorkflowConversationThread,
   WORKFLOW_BUILDER_AGENT_ID,
 } from '@/domains/workflows/builder/workflow-conversation-thread';
-import { useDeleteStoredWorkflow, useStoredWorkflow } from '@/domains/workflows/hooks/use-stored-workflows';
+import { useDeleteDynamicWorkflow, useDynamicWorkflow } from '@/domains/workflows/hooks/use-dynamic-workflows';
 import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
 import { useAgentMessages } from '@/hooks/use-agent-messages';
 
@@ -52,7 +52,7 @@ export default function WorkflowBuilderEditorPage({ create = false }: { create?:
   const access = useWorkflowBuilderAccess();
   const [generationFailure, setGenerationFailure] = useState<WorkflowGenerationFailure | null>(null);
   const [generationCandidate, setGenerationCandidate] = useState<WorkflowDraftCandidate>();
-  const workflowQuery = useStoredWorkflow(create ? undefined : routeWorkflowId);
+  const workflowQuery = useDynamicWorkflow(create ? undefined : routeWorkflowId);
   const agentsQuery = useAgents();
   const toolsQuery = useTools();
   const workflowsQuery = useWorkflows();
@@ -95,7 +95,7 @@ export default function WorkflowBuilderEditorPage({ create = false }: { create?:
   const threadId = getWorkflowConversationThreadId(initialWorkflowId, workflowQuery.data?.metadata);
   const conversationQuery = useAgentMessages({ agentId: WORKFLOW_BUILDER_AGENT_ID, threadId, memory: true });
   const initialMessages = conversationQuery.data?.messages ?? EMPTY_MESSAGES;
-  const deleteWorkflow = useDeleteStoredWorkflow();
+  const deleteWorkflow = useDeleteDynamicWorkflow();
   const [deleteOpen, setDeleteOpen] = useState(false);
 
   if (create && !access.canWrite) return <Navigate to={WORKFLOWS_ROUTE} replace />;

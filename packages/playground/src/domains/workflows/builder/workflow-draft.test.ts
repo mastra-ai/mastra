@@ -1,4 +1,4 @@
-import type { UpsertStoredWorkflowParams } from '@mastra/client-js';
+import type { UpsertDynamicWorkflowParams } from '@mastra/client-js';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -24,7 +24,7 @@ const objectSchema = {
 // the workflow input satisfies the first agent's `{ prompt }` contract, the
 // foreach consumes an unknown (tool) output, and the mapping reshapes the
 // flow into `{ prompt }` before the parallel agent consumes it.
-const createValidDraft = (): UpsertStoredWorkflowParams => ({
+const createValidDraft = (): UpsertDynamicWorkflowParams => ({
   id: 'support-triage',
   description: 'Triages support requests',
   inputSchema: { type: 'object', properties: { prompt: { type: 'string' } }, required: ['prompt'] },
