@@ -47,7 +47,8 @@ jobs:
           # before the no-test exemptions below so it applies to all contributors.
           if grep -q '^packages/deployer/' /tmp/changed-files \
             && ! grep -q '^e2e-tests/monorepo/' /tmp/changed-files; then
-            echo "::error::Changes under packages/deployer/ must include corresponding coverage under e2e-tests/monorepo/. The deployer build pipeline is not validated by package unit tests alone; add or update a monorepo E2E test."
+            first_deployer_file="$(grep -m1 '^packages/deployer/' /tmp/changed-files || true)"
+            echo "::error file=${first_deployer_file},title=Monorepo E2E coverage required::This PR changes packages/deployer/ but has no corresponding changes under e2e-tests/monorepo/. Deployer unit tests alone do not validate generated monorepo applications — add or update a monorepo E2E test. See packages/deployer/AGENTS.md for commands."
             exit 1
           fi
 
