@@ -15,6 +15,7 @@ import { useInvalidateWorkspaceChangesOnRunCompletion } from '../domains/workspa
 import { ChatHeader } from '../domains/chat/components/ChatHeader';
 import { FactorySessionHeader } from '../domains/factory/components/RelatedFactorySessions';
 import { ComposerPanel } from '../domains/chat/components/ComposerPanel';
+import { ActivityLine } from '../domains/chat/components/ActivityLine';
 import { ConnectionNotice } from '../domains/chat/components/ConnectionNotice';
 import { EmptyThreadState } from '../domains/chat/components/EmptyThreadState';
 import { GoalPanel } from '../domains/chat/components/GoalPanel';
@@ -153,6 +154,7 @@ function ThreadTranscript() {
       <TranscriptHistoryLoader />
       {transcript.entries.length === 0 && <EmptyThreadState />}
       <Transcript />
+      <ActivityLine />
     </>
   );
 }
