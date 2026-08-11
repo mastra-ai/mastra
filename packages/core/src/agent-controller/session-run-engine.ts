@@ -1238,7 +1238,7 @@ export class SessionRunEngine {
         }
 
         if (!currentRun) {
-          const runId = 'runId' in chunk ? chunk.runId : subscription.activeRunId();
+          const runId = ('runId' in chunk ? chunk.runId : undefined) ?? subscription.activeRunId();
           currentRun = this.createStreamState();
           this.#session.run.nextOperation();
           this.#session.run.ensureAbortController();
