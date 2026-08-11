@@ -926,6 +926,139 @@ describe('MastraMCPClient - outputSchema with structuredContent', () => {
     });
   });
 
+  it('should expose structured result content and metadata to UI consumers', async () => {
+    const sdkClient = (client as any).client as Client;
+
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'search_vendors',
+          description: 'Search vendors',
+          inputSchema: {
+            type: 'object' as const,
+            properties: { query: { type: 'string' } },
+          },
+          outputSchema: {
+            type: 'object' as const,
+            properties: {
+              vendors: { type: 'array', items: { type: 'object' } },
+            },
+          },
+        },
+      ],
+    });
+
+    const structuredContent = {
+      vendors: [{ name: 'Acme' }, { name: 'Globex' }],
+    };
+    const expectedSerialized = JSON.stringify(structuredContent);
+    const content = [{ type: 'text' as const, text: 'Found 2 vendors' }];
+    const meta = { ui: { resourceUri: 'ui://demo/vendors' } };
+
+    vi.spyOn(sdkClient, 'callTool').mockResolvedValue({
+      structuredContent,
+      content,
+      _meta: meta,
+      isError: false,
+    });
+
+    const tools = await client.tools();
+    const result = (await tools['search_vendors']?.execute?.({ query: 'hotel' })) as Record<string, unknown>;
+
+    expect(result).toEqual(structuredContent);
+    expect(result.content).toEqual(content);
+    expect(result._meta).toEqual(meta);
+    expect(Object.keys(result)).toEqual(['vendors']);
+    expect(JSON.stringify(result)).toBe(expectedSerialized);
+    expect(tools['search_vendors']?.toModelOutput?.(result)).toEqual({
+      type: 'text',
+      value: 'Found 2 vendors',
+    });
+  });
+
+  it('should preserve structured fields that collide with MCP result metadata', async () => {
+    const sdkClient = (client as any).client as Client;
+
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'inspect_result',
+          description: 'Inspect a result',
+          inputSchema: {
+            type: 'object' as const,
+            properties: {},
+          },
+          outputSchema: {
+            type: 'object' as const,
+            properties: {
+              content: { type: 'string' },
+              _meta: { type: 'object' },
+            },
+          },
+        },
+      ],
+    });
+
+    const structuredContent = {
+      content: 'structured content',
+      _meta: { source: 'structured payload' },
+    };
+    const expectedSerialized = JSON.stringify(structuredContent);
+    const content = [{ type: 'text' as const, text: 'MCP content' }];
+    const meta = { ui: { resourceUri: 'ui://demo/result' } };
+
+    vi.spyOn(sdkClient, 'callTool').mockResolvedValue({
+      structuredContent,
+      content,
+      _meta: meta,
+      isError: false,
+    });
+
+    const tools = await client.tools();
+    const tool = tools['inspect_result']!;
+    const result = (await tool.execute?.({})) as Record<string, unknown>;
+    const mcpResult = tool.getMcpCallToolResultMetadata(result);
+
+    expect(result.content).toBe('structured content');
+    expect(result._meta).toEqual({ source: 'structured payload' });
+    expect(mcpResult).toEqual({ content, _meta: meta });
+    expect(JSON.stringify(result)).toBe(expectedSerialized);
+    expect(tools['inspect_result']?.toModelOutput?.(result)).toEqual({
+      type: 'text',
+      value: 'MCP content',
+    });
+  });
+
+  it.each([
+    ['zero', 0],
+    ['null', null],
+  ])('should expose metadata for %s structured output', async (_name, structuredContent) => {
+    const sdkClient = (client as any).client as Client;
+
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'scalar_result',
+          description: 'Return a scalar result',
+          inputSchema: { type: 'object' as const, properties: {} },
+          outputSchema: { type: structuredContent === null ? 'null' : 'number' as const },
+        },
+      ],
+    });
+
+    const content = [{ type: 'text' as const, text: 'Scalar MCP content' }];
+    const meta = { ui: { resourceUri: 'ui://demo/scalar' } };
+    vi.spyOn(sdkClient, 'callTool').mockResolvedValue({ structuredContent, content, _meta: meta, isError: false });
+
+    const tools = await client.tools();
+    const tool = tools['scalar_result']!;
+    const result = await tool.execute?.({});
+
+    expect(result).toBe(structuredContent);
+    expect(tool.getMcpCallToolResultMetadata(result)).toEqual({ content, _meta: meta });
+    expect(tool.toModelOutput?.(result)).toEqual({ type: 'text', value: 'Scalar MCP content' });
+  });
+
   it('should fall back to json toModelOutput when content has no text blocks', async () => {
     const sdkClient = (client as any).client as Client;
 
