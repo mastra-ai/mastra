@@ -9,6 +9,7 @@ import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import { FACTORY_ID, SESSION_ID, stubPreparingSession } from '../../components/__tests__/composer-session-test-fixture';
 import { ChatSessionTestProvider } from '../ChatSessionTestProvider';
+import { useChatConnection } from '../useChatConnection';
 import { useChatModes } from '../useChatModes';
 
 const API = `${TEST_BASE_URL}/api/agent-controller/code`;
@@ -55,10 +56,12 @@ function stubModeSession({ failSwitch = false }: { failSwitch?: boolean } = {}) 
 
 function ModeProbe() {
   const { activeModeId, setMode } = useChatModes();
+  const { state } = useChatConnection();
   const [switchError, setSwitchError] = useState('');
   return (
     <>
       <output data-testid="active-mode">{activeModeId ?? 'none'}</output>
+      <output data-testid="connection-mode">{state?.modeId ?? 'none'}</output>
       <output data-testid="switch-error">{switchError}</output>
       <button
         onClick={() =>
@@ -101,9 +104,11 @@ describe('live chat modes', () => {
     await user.click(screen.getByRole('button', { name: 'switch-to-plan' }));
     await waitFor(() => expect(screen.getByTestId('active-mode')).toHaveTextContent('plan'));
 
-    // once the mutation settles the display is server truth, not a local echo — it must not snap back
+    // once the mutation settles the display is server truth, not a local echo — it must not snap back,
+    // and the connection-state cache must carry the new mode for every other consumer
     await waitForMutationsIdle(client);
     expect(screen.getByTestId('active-mode')).toHaveTextContent('plan');
+    await waitFor(() => expect(screen.getByTestId('connection-mode')).toHaveTextContent('plan'));
     expect(modeSwitches).toEqual(['plan']);
   });
 
