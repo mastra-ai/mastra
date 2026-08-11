@@ -485,6 +485,12 @@ export class AgentController<TState = {}> {
             await session.thread.create({ id: threadId });
           }
         }
+        // A deletion may have started during the thread-rebinding awaits.
+        pendingDeletion = this.#deletionsInProgress.get(registryKey);
+        if (pendingDeletion) {
+          await pendingDeletion;
+          continue;
+        }
         return session;
       }
 
