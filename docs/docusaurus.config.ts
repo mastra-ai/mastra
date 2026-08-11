@@ -83,6 +83,18 @@ const config: Config = {
     [
       '@docusaurus/plugin-content-docs',
       {
+        id: 'integrations',
+        path: 'src/content/en/integrations',
+        routeBasePath: 'integrations',
+        sidebarPath: './src/content/en/integrations/sidebars.js',
+        editUrl: 'https://github.com/mastra-ai/mastra/tree/main/docs',
+        admonitions: ADMONITIONS_CONFIG,
+        remarkPlugins: [...SHARED_REMARK_PLUGINS],
+      },
+    ],
+    [
+      '@docusaurus/plugin-content-docs',
+      {
         id: 'models',
         path: 'src/content/en/models',
         routeBasePath: 'models',

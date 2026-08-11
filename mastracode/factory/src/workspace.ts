@@ -151,7 +151,12 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
 
     if (!session) {
       if (sandboxConfig && !isLocalSandbox) {
-        throw new Error('A Factory session ID is required to create a remote sandbox workspace');
+        // Chat-only session on a remote-sandbox deploy: there is no repository
+        // to materialize, and the server host must never execute commands on a
+        // shared deployment. Run the session without a workspace (chat works,
+        // workspace tools are simply not registered) instead of erroring on
+        // every message.
+        return undefined;
       }
       return getDynamicWorkspace({ requestContext, mastra, skillExtension: effectiveSkillExtension });
     }

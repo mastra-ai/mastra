@@ -164,6 +164,7 @@ function dedupeMessagesForSave(messages: MastraDBMessage[]): MastraDBMessage[] {
 }
 
 export class MemoryPG extends MemoryStorage {
+  override readonly supportsPartialThreadUpdate = true;
   readonly supportsObservationalMemory = true;
 
   /**

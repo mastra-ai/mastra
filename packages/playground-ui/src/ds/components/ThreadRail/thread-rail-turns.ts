@@ -92,7 +92,8 @@ const getSignalType = (message: MastraDBMessage): string | undefined => {
   return typeof metadataType === 'string' ? metadataType : message.type;
 };
 
-const isDisplayableUserMessage = (message: MastraDBMessage): boolean => {
+/** What opens a turn: a rail stop, and the row the scroller parks at the top. */
+export const startsUserTurn = (message: MastraDBMessage): boolean => {
   if (message.role === 'user') return true;
   if (message.role !== 'signal') return false;
 
@@ -104,7 +105,7 @@ const getNextAssistantReply = (messages: MastraDBMessage[], startIndex: number):
   for (let index = startIndex + 1; index < messages.length; index += 1) {
     const message = messages[index];
     if (!message) continue;
-    if (isDisplayableUserMessage(message)) return undefined;
+    if (startsUserTurn(message)) return undefined;
     if (message.role !== 'assistant') continue;
 
     const reply = normalizeSummary(getTextFromParts(message), '');
@@ -116,7 +117,7 @@ const getNextAssistantReply = (messages: MastraDBMessage[], startIndex: number):
 
 export const buildThreadRailTurns = (messages: MastraDBMessage[]): ThreadRailTurn[] =>
   messages.flatMap((message, index) => {
-    if (!isDisplayableUserMessage(message)) return [];
+    if (!startsUserTurn(message)) return [];
 
     const files = getFileLabels(message);
     const visibleFiles = files.slice(0, FILE_PREVIEW_LIMIT);

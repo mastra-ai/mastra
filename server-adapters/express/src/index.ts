@@ -620,7 +620,8 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
   }
 
   async registerCustomApiRoutes(): Promise<void> {
-    if (!(await this.buildCustomRouteHandler())) return;
+    const routes = await this.registerSchemaApiRoutes();
+    if (!(await this.buildCustomRouteHandler(routes))) return;
 
     this.app.use(async (req: Request, res: Response, next: NextFunction) => {
       // Check if this request matches a protected custom route and run auth
