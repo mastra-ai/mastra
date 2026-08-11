@@ -18,7 +18,7 @@ function truncate(s: string, max: number): string {
 function stringify(v: unknown): string {
   if (typeof v === 'string') return v;
   try {
-    return JSON.stringify(v, null, 2);
+    return JSON.stringify(v, null, 2) ?? String(v);
   } catch {
     return String(v);
   }
@@ -45,35 +45,49 @@ function MonoBlock({ copyText, className, children }: { copyText: string; classN
   );
 }
 
-/** A unified-diff-style view of an edit's before/after text, syntax-highlighted. */
+const DIFF_MAX_LINES = 200;
+
+const DIFF_SIDES = {
+  removed: { sign: '-', row: 'bg-error/10', gutter: 'text-error' },
+  added: { sign: '+', row: 'bg-accent1/10', gutter: 'text-accent1' },
+} as const;
+
+function boundedLines(text: string): { lines: string[]; hidden: number } {
+  const lines = text.split('\n');
+  return { lines: lines.slice(0, DIFF_MAX_LINES), hidden: Math.max(0, lines.length - DIFF_MAX_LINES) };
+}
+
+function DiffSide({ lines, side, lang }: { lines: string[]; side: keyof typeof DIFF_SIDES; lang: string | undefined }) {
+  const { sign, row, gutter } = DIFF_SIDES[side];
+  return (
+    <>
+      {lines.map((line, i) => (
+        <div key={i} className={cn('flex whitespace-pre', row)}>
+          <span className={cn('w-5 shrink-0 text-center opacity-70 select-none', gutter)}>{sign}</span>
+          <span
+            className="text-icon6 [&_span]:font-inherit [&_span]:leading-inherit flex-1 pr-2.5 [&_span]:text-inherit dark:[&_span]:![background-color:var(--shiki-dark-bg)] dark:[&_span]:![color:var(--shiki-dark)]"
+            dangerouslySetInnerHTML={{ __html: highlightCode(line, lang) || '&nbsp;' }}
+          />
+        </div>
+      ))}
+    </>
+  );
+}
+
 function DiffView({ oldText, newText, path }: { oldText: string; newText: string; path?: string }) {
   const lang = languageForPath(path);
-  const removed = oldText.split('\n');
-  const added = newText.split('\n');
+  const removed = boundedLines(oldText);
+  const added = boundedLines(newText);
+  const hidden = removed.hidden + added.hidden;
   return (
     <div
       className="border-border1 bg-surface1 max-w-full min-w-0 overflow-x-auto rounded-md border font-mono text-xs leading-normal"
       role="group"
       aria-label="File change"
     >
-      {removed.map((line, i) => (
-        <div key={`r${i}`} className="bg-error/10 flex whitespace-pre">
-          <span className="text-error w-5 shrink-0 text-center opacity-70 select-none">-</span>
-          <span
-            className="text-icon6 [&_span]:font-inherit [&_span]:leading-inherit flex-1 pr-2.5 [&_span]:text-inherit dark:[&_span]:![background-color:var(--shiki-dark-bg)] dark:[&_span]:![color:var(--shiki-dark)]"
-            dangerouslySetInnerHTML={{ __html: highlightCode(line, lang) || '&nbsp;' }}
-          />
-        </div>
-      ))}
-      {added.map((line, i) => (
-        <div key={`a${i}`} className="bg-accent1/10 flex whitespace-pre">
-          <span className="text-accent1 w-5 shrink-0 text-center opacity-70 select-none">+</span>
-          <span
-            className="text-icon6 [&_span]:font-inherit [&_span]:leading-inherit flex-1 pr-2.5 [&_span]:text-inherit dark:[&_span]:![background-color:var(--shiki-dark-bg)] dark:[&_span]:![color:var(--shiki-dark)]"
-            dangerouslySetInnerHTML={{ __html: highlightCode(line, lang) || '&nbsp;' }}
-          />
-        </div>
-      ))}
+      <DiffSide lines={removed.lines} side="removed" lang={lang} />
+      <DiffSide lines={added.lines} side="added" lang={lang} />
+      {hidden > 0 && <div className="text-icon3 px-2.5 py-1 select-none">… {hidden} more lines</div>}
     </div>
   );
 }
