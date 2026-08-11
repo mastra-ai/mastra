@@ -738,7 +738,10 @@ describe('checkoutSessionBranch', () => {
     await expect(checkoutSessionBranch(sandbox, '/workspace/repo', opts)).resolves.toBeUndefined();
 
     const joined = sandbox.calls.join('\n');
-    expect(joined).toContain("update-ref -d refs/heads/'factory/pr-1'");
+    // `--no-deref` so a broken symref cannot redirect the delete onto another
+    // branch, and the loose-ref-file fallback survives an `update-ref` refusal.
+    expect(joined).toContain("update-ref --no-deref -d refs/heads/'factory/pr-1'");
+    expect(joined).toMatch(/update-ref [^\n]* \|\| rm -f -- "[^\n]*\/refs\/heads\/factory\/pr-1"/);
     expect(sandbox.calls).toContain("git -C '/workspace/repo' checkout -b 'factory/pr-1' FETCH_HEAD");
     // Token still scrubbed back to the clean URL in the finally.
     const scrub = sandbox.calls.filter(c => c.includes('remote set-url origin')).at(-1);
@@ -753,7 +756,7 @@ describe('checkoutSessionBranch', () => {
       if (script.includes('fetch origin')) {
         return { exitCode: 1, stdout: '', stderr: "fatal: a branch named 'factory/pr-1' already exists\n" };
       }
-      if (script.includes("checkout 'factory/pr-1'") || script.includes('update-ref -d')) {
+      if (script.includes("checkout 'factory/pr-1'") || script.includes('update-ref --no-deref -d')) {
         return { exitCode: 1, stdout: '', stderr: 'fatal: cannot lock ref\n' };
       }
       return OK;
@@ -797,7 +800,9 @@ describe('recycleClaimedWorkdir', () => {
 
     const sweep = sandbox.calls[2]!;
     expect(sweep).toContain('for-each-ref');
-    expect(sweep).toContain('update-ref -d');
+    // `--no-deref`: a stale symbolic ref pointing at the default branch must
+    // delete the symref itself, never follow it onto the default branch.
+    expect(sweep).toContain('update-ref --no-deref -d');
     // The default branch itself survives the sweep.
     expect(sweep).toContain("'refs/heads/main'");
   });

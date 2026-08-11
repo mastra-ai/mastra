@@ -445,11 +445,13 @@ export async function recycleClaimedWorkdir(
     // Ref names cannot contain spaces or shell metacharacters (git rejects
     // them), so word-splitting the for-each-ref output is safe. `update-ref -d`
     // instead of `branch -D` so deletion never trips over "not fully merged"
-    // checks; broken loose refs are skipped by for-each-ref and handled by the
-    // collision fallback in `checkoutSessionBranch`.
+    // checks; `--no-deref` so a symbolic ref pointing at the default branch
+    // deletes the symref itself rather than following it and deleting the
+    // default branch. Broken loose refs are skipped by for-each-ref and
+    // handled by the collision fallback in `checkoutSessionBranch`.
     const sweep = await sh(
       sandbox,
-      `set -e; for ref in $(git -C ${w} for-each-ref --format='%(refname)' refs/heads); do [ "$ref" = ${shellQuote(`refs/heads/${defaultBranch}`)} ] || git -C ${w} update-ref -d "$ref"; done`,
+      `set -e; for ref in $(git -C ${w} for-each-ref --format='%(refname)' refs/heads); do [ "$ref" = ${shellQuote(`refs/heads/${defaultBranch}`)} ] || git -C ${w} update-ref --no-deref -d "$ref"; done`,
       { phase: 'claimed workdir branch sweep' },
     );
     if (sweep.exitCode === 0) return;
@@ -530,10 +532,12 @@ async function checkoutSessionBranchImpl(
       if (adopt.exitCode === 0 || isBlockedByLocalWork(adopt)) return;
       const drop = await sh(
         sandbox,
-        // `update-ref -d` can itself refuse a broken ref; fall back to
-        // removing the loose ref file (branch passed isValidGitRef, so the
-        // interpolation inside the double quotes is inert).
-        `git -C ${shellQuote(workdir)} update-ref -d refs/heads/${shellQuote(branch)} || rm -f -- "$(git -C ${shellQuote(workdir)} rev-parse --absolute-git-dir)/refs/heads/${branch}"`,
+        // `--no-deref` so a broken symref is deleted itself instead of git
+        // following it to some other branch. `update-ref -d` can still refuse
+        // a broken ref; fall back to removing the loose ref file (branch
+        // passed isValidGitRef, so the interpolation inside the double quotes
+        // is inert).
+        `git -C ${shellQuote(workdir)} update-ref --no-deref -d refs/heads/${shellQuote(branch)} || rm -f -- "$(git -C ${shellQuote(workdir)} rev-parse --absolute-git-dir)/refs/heads/${branch}"`,
       );
       if (drop.exitCode !== 0) throw classifyGitFailure(fetch, 'clone-failed');
       const retry = await sh(sandbox, `git -C ${shellQuote(workdir)} checkout -b ${shellQuote(branch)} FETCH_HEAD`, {
