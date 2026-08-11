@@ -79,6 +79,27 @@ describe('AgentController Resource', () => {
     });
   });
 
+  it('sends creation seeds and surfaces the confirmed mode and model', async () => {
+    mockJson({
+      controllerId: 'code',
+      resourceId: 'user-1',
+      threadId: 't-123',
+      modeId: 'plan',
+      modelId: 'openai/gpt-5',
+    });
+    const res = await client
+      .getAgentController('code')
+      .session('user-1')
+      .create({ modeId: 'plan', modelId: 'openai/gpt-5' });
+    expect(JSON.parse(lastCall()[1].body as string)).toEqual({
+      resourceId: 'user-1',
+      modeId: 'plan',
+      modelId: 'openai/gpt-5',
+    });
+    expect(res.modeId).toBe('plan');
+    expect(res.modelId).toBe('openai/gpt-5');
+  });
+
   it('sends a message to the resource-scoped session', async () => {
     mockJson({ ok: true });
     await client.getAgentController('code').session('user-1').sendMessage('hello');
@@ -207,14 +228,14 @@ describe('AgentController Resource', () => {
   it('lists modes and threads, and switches thread', async () => {
     mockJson({
       modes: [
-        { id: 'build', name: 'Build' },
-        { id: 'plan', name: 'Plan' },
+        { id: 'build', name: 'Build', isDefault: true, defaultModelId: 'openai/gpt-5' },
+        { id: 'plan', name: 'Plan', isDefault: false },
       ],
     });
     const modes = await client.getAgentController('code').listModes();
     expect(modes).toEqual([
-      { id: 'build', name: 'Build' },
-      { id: 'plan', name: 'Plan' },
+      { id: 'build', name: 'Build', isDefault: true, defaultModelId: 'openai/gpt-5' },
+      { id: 'plan', name: 'Plan', isDefault: false },
     ]);
     expect(lastCall()[0]).toBe('http://localhost:4111/api/agent-controller/code/modes');
 

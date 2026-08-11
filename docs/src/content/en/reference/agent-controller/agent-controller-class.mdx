@@ -385,14 +385,14 @@ The same `resourceId` and `scope` return the same `Session` instance. A differen
     name: 'modeId',
     type: 'string',
     description:
-      'Initial mode for a newly created session. A creation-time seed, not an override: a resumed thread keeps its persisted mode and an already live session is returned unchanged. Throws when the mode is not configured.',
+      'Initial mode for a newly created session. A creation-time seed, not an override: a resumed thread keeps its persisted mode and an already live session is returned unchanged. Throws when the mode is not configured, even for a live session.',
     isOptional: true,
   },
   {
     name: 'modelId',
     type: 'string',
     description:
-      "Initial model for a newly created session. Same seed semantics as `modeId`; defaults to the initial mode's `defaultModelId`.",
+      "Initial model for a newly created session. Same seed semantics as `modeId`. When omitted, the configured `initialState.currentModelId` applies, then the initial mode's `defaultModelId`.",
     isOptional: true,
   },
   { name: 'workspace', type: 'Workspace', description: 'Workspace override for this session.', isOptional: true },
@@ -468,7 +468,7 @@ Returns: `AgentControllerMode[]`
 
 #### `defaultModeId`
 
-The mode new sessions start in: `defaultModeId` from the configuration, else the mode flagged as default, else the first mode.
+The mode new sessions start in: `defaultModeId` from the configuration, else the mode flagged as default (`default` or `metadata.default`), else the first mode.
 
 ```typescript
 const modeId = controller.defaultModeId

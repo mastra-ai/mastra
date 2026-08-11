@@ -413,7 +413,8 @@ export class AgentController<TState = {}> {
     modeId?: string;
     /**
      * Initial model for a newly materialized session. Same seed semantics as
-     * `modeId`; defaults to the initial mode's `defaultModelId`.
+     * `modeId`. When omitted, the configured `initialState.currentModelId`
+     * applies, then the initial mode's `defaultModelId`.
      */
     modelId?: string;
     workspace?: Workspace;
@@ -597,6 +598,7 @@ export class AgentController<TState = {}> {
       }
     }
 
+    const seeds = { seedModeId: overrides?.initialMode?.id, seedModelId: overrides?.initialModelId };
     if (overrides?.threadId) {
       const existingThread = await session.thread.getById({ threadId: overrides.threadId });
       if (existingThread) {
@@ -605,7 +607,7 @@ export class AgentController<TState = {}> {
         }
         await this.config.threadLock?.acquire(existingThread.id);
         session.thread.set({ threadId: existingThread.id });
-        await session.thread.loadMetadata();
+        await session.thread.loadMetadata(seeds);
         await session.thread.ensureCurrentSubscription();
       } else {
         await session.thread.create({ id: overrides.threadId });
@@ -628,20 +630,9 @@ export class AgentController<TState = {}> {
         const mostRecent = [...candidates].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())[0]!;
         await this.config.threadLock?.acquire(mostRecent.id);
         session.thread.set({ threadId: mostRecent.id });
-        await session.thread.loadMetadata();
+        await session.thread.loadMetadata(seeds);
         await session.thread.ensureCurrentSubscription();
       }
-    }
-
-    // Persist explicit creation seeds so a restart restores them the way a
-    // user-driven switch would. Guarded on the live values: when the bound
-    // thread restored a different persisted selection, that selection wins and
-    // is already persisted.
-    if (overrides?.initialMode && session.mode.get() === overrides.initialMode.id) {
-      await session.mode.persistSelection();
-    }
-    if (overrides?.initialModelId && session.model.get() === overrides.initialModelId) {
-      await session.model.saveForMode({ modeId: session.mode.get(), modelId: overrides.initialModelId });
     }
 
     this.#notifySessionCreated(session);
@@ -1131,7 +1122,7 @@ export class AgentController<TState = {}> {
     return this.config.modes;
   }
 
-  /** The mode new sessions start in: `config.defaultModeId`, else the mode flagged default, else the first mode. */
+  /** The mode new sessions start in: `config.defaultModeId`, else the mode flagged default (`default` or `metadata.default`), else the first mode. */
   get defaultModeId(): string {
     return this.#defaultMode.id;
   }
@@ -1791,17 +1782,13 @@ export class AgentController<TState = {}> {
 
   /**
    * Resolve the mode the session transitions to when a plan is approved: the
-   * current mode's `transitionsTo`, else the configured default mode. The mode
-   * catalog is AgentController config, so this is host-owned. Returns `undefined` when
-   * no default mode is configured.
+   * current mode's `transitionsTo`, else the default mode. The mode catalog is
+   * AgentController config, so this is host-owned. Returns `undefined` when
+   * `transitionsTo` names an unknown mode.
    */
   private resolveTransitionModeId(session: Session<TState>): string | undefined {
     const currentMode = session.mode.resolve();
-    const transitionModeId =
-      currentMode.transitionsTo ??
-      this.config.defaultModeId ??
-      this.config.modes.find(mode => mode.default || mode.metadata?.default === true)?.id ??
-      this.config.modes[0]?.id;
+    const transitionModeId = currentMode.transitionsTo ?? this.defaultModeId;
     return this.listModes().find(mode => mode.id === transitionModeId)?.id;
   }
 

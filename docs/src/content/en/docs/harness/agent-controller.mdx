@@ -136,6 +136,16 @@ const session = await controller.createSession({
 })
 ```
 
+Pass `modeId` and `modelId` to seed a newly created Session's initial mode and model instead of creating it on the controller's defaults and switching afterwards. The seeds persist, so a restart restores them. They are creation-time inputs, not overrides: a resumed thread's persisted selection wins, and a cached Session is returned unchanged.
+
+```typescript
+const session = await controller.createSession({
+  resourceId: 'user-123',
+  modeId: 'plan',
+  modelId: '__GATEWAY_OPENAI_MODEL__',
+})
+```
+
 Use [`session.thread.create()`](/reference/agent-controller/session#sessionthreadcreate-title-id-) and [`session.thread.switch()`](/reference/agent-controller/session#sessionthreadswitch-threadid-emitevent-) to move one live Session between conversations.
 
 ## Switch modes and models

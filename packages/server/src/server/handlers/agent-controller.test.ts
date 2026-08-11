@@ -134,7 +134,7 @@ describe('agent-controller routes', () => {
       expect(state.modelId).toBe('openai/gpt-5.2-codex');
     });
 
-    it('rejects an unknown initial mode', async () => {
+    it('rejects an unknown initial mode with a 400', async () => {
       await expect(
         CREATE_AGENT_CONTROLLER_SESSION_ROUTE.handler({
           mastra,
@@ -142,7 +142,7 @@ describe('agent-controller routes', () => {
           resourceId: 'user-bad-mode',
           modeId: 'nope',
         } as any),
-      ).rejects.toBeInstanceOf(HTTPException);
+      ).rejects.toMatchObject({ status: 400 });
     });
   });
 
@@ -557,8 +557,8 @@ describe('agent-controller routes', () => {
       const res = await LIST_AGENT_CONTROLLER_MODES_ROUTE.handler({ mastra, controllerId: 'code' } as any);
       expect(res).toEqual({
         modes: [
-          { id: 'build', name: 'Build', default: true },
-          { id: 'plan', name: 'Plan', default: false },
+          { id: 'build', name: 'Build', isDefault: true },
+          { id: 'plan', name: 'Plan', isDefault: false },
         ],
       });
     });

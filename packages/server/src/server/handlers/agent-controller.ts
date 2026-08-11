@@ -154,10 +154,10 @@ const createSessionBodySchema = z.object({
    * Initial mode/model for a newly materialized session (born configured).
    * Creation-time seeds, not overrides: an already live session is returned
    * unchanged and a resumed thread's persisted selection wins. An unknown
-   * modeId fails the request.
+   * modeId fails the request with a 400, even for a live session.
    */
-  modeId: z.string().optional(),
-  modelId: z.string().optional(),
+  modeId: z.string().min(1).optional(),
+  modelId: z.string().min(1).optional(),
 });
 // Server-side attachment limits mirroring the web composer caps (10MB per
 // file, 20MB total), adjusted for base64 overhead (~4/3x).
@@ -261,7 +261,7 @@ const createSessionResponseSchema = z.object({
   resourceId: z.string(),
   threadId: z.string().optional(),
   /** The mode/model the session actually starts with, so callers can confirm creation seeds. */
-  modeId: z.string().optional(),
+  modeId: z.string(),
   modelId: z.string().optional(),
 });
 const ackResponseSchema = z.object({ ok: z.boolean() });
@@ -309,8 +309,8 @@ const listModesResponseSchema = z.object({
       id: z.string(),
       name: z.string().optional(),
       /** Whether new sessions start in this mode. */
-      default: z.boolean(),
-      /** The model this mode starts on unless a session overrides it. */
+      isDefault: z.boolean(),
+      /** This mode's configured default model. */
       defaultModelId: z.string().optional(),
     }),
   ),
@@ -447,6 +447,9 @@ export const CREATE_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
   }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
+      if (modeId && !controller.listModes().some(mode => mode.id === modeId)) {
+        throw new HTTPException(400, { message: `Mode not found: ${modeId}` });
+      }
       const session = await getSession(
         controller,
         resourceId,
@@ -457,7 +460,7 @@ export const CREATE_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
         controllerId,
         resourceId,
         threadId: session.thread.getId() ?? undefined,
-        modeId: session.mode.get() || undefined,
+        modeId: session.mode.get(),
         modelId: session.model.get() || undefined,
       };
     } catch (error) {
@@ -878,7 +881,7 @@ export const LIST_AGENT_CONTROLLER_MODES_ROUTE = createRoute({
         modes: controller.listModes().map(mode => ({
           id: mode.id,
           name: mode.name,
-          default: mode.id === controller.defaultModeId,
+          isDefault: mode.id === controller.defaultModeId,
           defaultModelId: mode.defaultModelId,
         })),
       };

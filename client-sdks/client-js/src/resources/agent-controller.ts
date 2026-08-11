@@ -258,7 +258,7 @@ export interface CreateAgentControllerSessionResponse {
   controllerId: string;
   resourceId: string;
   threadId?: string;
-  /** The mode/model the session actually starts with (confirms creation seeds). */
+  /** The mode/model the session actually starts with (confirms creation seeds). Absent on servers predating creation seeds. */
   modeId?: string;
   modelId?: string;
 }
@@ -296,8 +296,8 @@ export interface AgentControllerModeInfo {
   id: string;
   name?: string;
   /** Whether new sessions start in this mode. Absent on servers predating creation seeds. */
-  default?: boolean;
-  /** The model this mode starts on unless a session overrides it. */
+  isDefault?: boolean;
+  /** This mode's configured default model. */
   defaultModelId?: string;
 }
 

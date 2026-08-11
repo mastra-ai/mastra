@@ -565,9 +565,12 @@ export class SessionThread {
     const modelId = currentStateModel || currentMode.defaultModelId;
 
     const metadata: Record<string, unknown> = {};
+    if (session.mode.get()) {
+      metadata[MODE_ID_KEY] = session.mode.get();
+    }
     if (modelId) {
       metadata.currentModelId = modelId;
-      metadata[`modeModelId_${session.mode.get()}`] = modelId;
+      metadata[modeModelKey(session.mode.get())] = modelId;
     }
 
     // Stamp the session's scope so thread selection can filter listings back to
@@ -811,8 +814,13 @@ export class SessionThread {
    * token usage, the persisted mode (restored first), the per-mode model, and
    * observer/reflector model ids + thresholds. Best-effort: on any failure the
    * token tally is reset and the rest is left at defaults.
+   *
+   * `seedModeId`/`seedModelId` are creation-time seeds already applied to the
+   * live session: a selection persisted on the thread wins over them; when the
+   * thread carries none, the seed stands and is persisted here so a restart
+   * restores it.
    */
-  async loadMetadata(): Promise<void> {
+  async loadMetadata({ seedModeId, seedModelId }: { seedModeId?: string; seedModelId?: string } = {}): Promise<void> {
     const session = this.#owner;
     const store = this.#store;
     const threadId = this.#threadId;
@@ -849,23 +857,27 @@ export class SessionThread {
       // override persisted (e.g. user only ever used the mode's default
       // model), leaving the wrong mode's model active on restart.
       let previousModeIdForEmit: string | undefined;
-      if (meta?.currentModeId) {
-        const savedModeId = meta.currentModeId as string;
-        const modeExists = store.getModeIds().includes(savedModeId);
-        if (modeExists && savedModeId !== session.mode.get()) {
-          previousModeIdForEmit = session.mode.get();
-          session.mode.set({ modeId: savedModeId });
-        }
+      const savedModeId = typeof meta?.currentModeId === 'string' ? meta.currentModeId : undefined;
+      const restoredModeId = savedModeId && store.getModeIds().includes(savedModeId) ? savedModeId : undefined;
+      if (restoredModeId && restoredModeId !== session.mode.get()) {
+        previousModeIdForEmit = session.mode.get();
+        session.mode.set({ modeId: restoredModeId });
+      } else if (!restoredModeId && seedModeId) {
+        await this.setSetting({ key: MODE_ID_KEY, value: seedModeId });
       }
 
       // Resolve the model for the (now-restored) current mode and apply it to
       // the session (source of truth for the selected model).
-      // Order: per-mode thread metadata → mode's defaultModelId → legacy
-      // global currentModelId (set by create()).
+      // Order: per-mode thread metadata → surviving creation seed → mode's
+      // defaultModelId → legacy global currentModelId (set by create()).
       const currentModeId = session.mode.get();
-      const modeModelKey = `modeModelId_${currentModeId}`;
-      if (meta?.[modeModelKey]) {
-        session.model.set({ modelId: meta[modeModelKey] as string });
+      const currentModeModelKey = modeModelKey(currentModeId);
+      // A model seed bound to a mode seed stands only when that mode survived.
+      const seedModelStands = seedModelId && (!seedModeId || seedModeId === currentModeId);
+      if (meta?.[currentModeModelKey]) {
+        session.model.set({ modelId: meta[currentModeModelKey] as string });
+      } else if (seedModelStands) {
+        await this.setSetting({ key: currentModeModelKey, value: seedModelId });
       } else {
         const currentMode = session.mode.resolve();
         if (currentMode.defaultModelId) {
@@ -1653,15 +1665,6 @@ export class SessionMode {
   /** Set the currently-selected mode id (on default resolution or hydration). */
   set({ modeId }: { modeId: string }): void {
     this.#id = modeId;
-  }
-
-  /**
-   * Persist the current selection so a restart restores it. Creation-time
-   * seeds go through {@link set} and skip {@link switch}'s ceremony (events,
-   * per-mode model resolution), so they persist explicitly via this method.
-   */
-  async persistSelection(): Promise<void> {
-    await this.#store()?.set(MODE_ID_KEY, this.#id);
   }
 
   /**

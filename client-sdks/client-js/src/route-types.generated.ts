@@ -19898,7 +19898,7 @@ export type GetAgentControllerControllerIdModes_Response = {
   modes: {
     id: string;
     name?: string | undefined;
-    default: boolean;
+    isDefault: boolean;
     defaultModelId?: string | undefined;
   }[];
 };
@@ -19974,7 +19974,7 @@ export type PostAgentControllerControllerIdSessions_Response = {
   controllerId: string;
   resourceId: string;
   threadId?: string | undefined;
-  modeId?: string | undefined;
+  modeId: string;
   modelId?: string | undefined;
 };
 
