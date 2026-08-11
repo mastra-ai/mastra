@@ -422,6 +422,17 @@ describe('attachWorkerDeployment', () => {
     expect(await attached.destroy()).toEqual({ state: 'destroyed', attempts: 1 });
   });
 
+  it('retries remote directory resolution after waking a stopped sandbox', async () => {
+    const sandbox = new FakeSandbox({ withNetworking: false });
+    sandbox.status = 'stopped';
+    vi.spyOn(sandbox, 'executeCommand').mockRejectedValueOnce(new Error('sandbox stopped'));
+    const attached = await attachWorkerDeployment({ sandbox, executionId: 'attempt-1' });
+
+    await expect(attached.readOutput('stdout')).resolves.toMatchObject({ interrupted: true, eof: false });
+    await expect(attached.status({ wake: true })).resolves.toEqual({ state: 'running', executionId: 'attempt-1' });
+    expect(sandbox.started).toBe(1);
+  });
+
   it('returns distinct typed outcomes for completed, missing or corrupt, and destroyed executions', async () => {
     const completed = new FakeSandbox({ withNetworking: false, workerStatus: 'exited|attempt-1|0' });
     const missing = new FakeSandbox({ withNetworking: false, workerStatus: 'unknown|attempt-1' });

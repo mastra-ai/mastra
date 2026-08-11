@@ -147,10 +147,10 @@ export async function attachWorkerDeployment(options: AttachWorkerDeploymentOpti
     throw new Error('terminationGraceMs must be greater than zero.');
   }
 
-  let remoteDir: Promise<string> | undefined;
+  let remoteDir: string | undefined;
   const config: WorkerExecutionConfig = {
     sandbox: options.sandbox,
-    resolveRemoteDir: () => (remoteDir ??= resolveRemoteDir(options.sandbox, options.remoteDir)),
+    resolveRemoteDir: async () => (remoteDir ??= await resolveRemoteDir(options.sandbox, options.remoteDir)),
     terminationGraceMs: options.terminationGraceMs ?? 5_000,
   };
   const info = await getInfoSafe(options.sandbox);
