@@ -36,11 +36,12 @@ type ToolInvocationFixture = Extract<MastraMessagePart, { type: 'tool-invocation
   isError?: boolean;
 };
 
-function doneTool(toolCallId: string, toolName: string): MastraDBMessage['content']['parts'][number] {
-  return {
-    type: 'tool-invocation',
-    toolInvocation: { state: 'result', toolCallId, toolName, args: { path: 'src/index.ts' }, result: 'ok' },
-  };
+function doneTool(
+  toolCallId: string,
+  toolName: string,
+  args: unknown = { path: 'src/index.ts' },
+): MastraDBMessage['content']['parts'][number] {
+  return { type: 'tool-invocation', toolInvocation: { state: 'result', toolCallId, toolName, args, result: 'ok' } };
 }
 
 function runningTool(toolCallId: string, toolName: string, args: unknown): MastraDBMessage['content']['parts'][number] {
@@ -151,6 +152,48 @@ describe('TranscriptEntries tool rows', () => {
 
     expect(screen.queryByRole('group', { name: /Tool group/ })).not.toBeInTheDocument();
     expect(screen.getAllByRole('group', { name: 'Tool: view' })).toHaveLength(3);
+  });
+
+  it.each([
+    ['ask_user', 'Question from the agent', { question: 'Which file should I edit?' }],
+    ['submit_plan', 'Plan approval', { plan: { title: 'Ship the fix', content: 'Step one' } }],
+  ])('breaks a run on %s so its prompt is never swallowed by a group', (toolName, promptLabel, args) => {
+    renderEntries([
+      assistantMessage('msg-1', [
+        doneTool('call-1', 'view'),
+        doneTool('call-2', 'view'),
+        doneTool('call-3', toolName, args),
+        doneTool('call-4', 'view'),
+        doneTool('call-5', 'view'),
+      ]),
+    ]);
+
+    expect(screen.queryByRole('group', { name: /Tool group/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('group', { name: promptLabel })).toBeInTheDocument();
+  });
+
+  it('breaks a run on a suspended call so the agent question stays answerable', () => {
+    renderEntries([
+      assistantMessage('msg-1', [
+        doneTool('call-1', 'view'),
+        doneTool('call-2', 'view'),
+        runningTool('call-3', 'ask_user', {}),
+        doneTool('call-4', 'view'),
+        doneTool('call-5', 'view'),
+      ]),
+      {
+        kind: 'suspension',
+        id: 'susp-1',
+        toolCallId: 'call-3',
+        toolName: 'ask_user',
+        args: {},
+        suspendPayload: { question: 'Which file should I edit?' },
+      },
+    ]);
+
+    expect(screen.queryByRole('group', { name: /Tool group/ })).not.toBeInTheDocument();
+    const question = screen.getByRole('group', { name: 'Question from the agent' });
+    expect(within(question).getByText('Which file should I edit?')).toBeInTheDocument();
   });
 
   it('trusts the persisted result over a stale running overlay — a lost tool_end must not spin forever', () => {
