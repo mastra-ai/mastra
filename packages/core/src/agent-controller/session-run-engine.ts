@@ -96,7 +96,8 @@ type StreamChunk =
   | StreamDataChunk<'data-om-thread-update'>
   | StreamDataChunk<'data-mastracode-tool-progress'>
   | StreamDataChunk<'data-sandbox-stdout'>
-  | StreamDataChunk<'data-sandbox-stderr'>;
+  | StreamDataChunk<'data-sandbox-stderr'>
+  | StreamDataChunk<'data-sandbox-exit'>;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -415,7 +416,8 @@ export class SessionRunEngine {
   }
 
   /**
-   * Process a stream response (shared between sendMessage and tool approval).
+   * Process a stream response. Production runs stream through
+   * `processSubscribedThreadStream`; only tests call this entry directly.
    */
   async processStream(
     response: { fullStream: AsyncIterable<StreamChunk> },
@@ -1132,6 +1134,20 @@ export class SessionRunEngine {
         const toolCallId = getString(d?.toolCallId);
         if (output && toolCallId) {
           this.#session.emit({ type: 'shell_output', toolCallId, output, stream: 'stderr' });
+        }
+        break;
+      }
+      case 'data-sandbox-exit': {
+        const d = getDataRecord(chunk);
+        const toolCallId = getString(d?.toolCallId);
+        const exitCode = getOptionalNumber(d?.exitCode);
+        if (toolCallId && exitCode !== undefined) {
+          this.#session.emit({
+            type: 'command_exit',
+            toolCallId,
+            exitCode,
+            success: getBoolean(d?.success, exitCode === 0),
+          });
         }
         break;
       }

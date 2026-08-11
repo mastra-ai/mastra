@@ -19,6 +19,7 @@ jobs:
     steps:
       - name: Initial checkout
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 5
         with:
           fetch-depth: 1
           persist-credentials: false
@@ -34,6 +35,7 @@ jobs:
 
       - name: Re-checkout with app token
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 5
         with:
           token: ${{ steps.app-auth.outputs.token }}
           fetch-depth: 0

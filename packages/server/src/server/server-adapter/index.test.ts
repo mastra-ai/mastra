@@ -21,8 +21,9 @@ class TestMastraServer extends MastraServer<any, any, any> {
     await this.writeCustomRouteResponse(response, nodeRes, signal);
   }
 
-  buildCustomRouteHandlerForTest() {
-    return this.buildCustomRouteHandler();
+  async buildCustomRouteHandlerForTest() {
+    const routes = await this.registerSchemaApiRoutes();
+    return this.buildCustomRouteHandler(routes);
   }
 
   handleCustomRouteRequestForTest(

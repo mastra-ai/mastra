@@ -1,4 +1,3 @@
-import { Button } from '@mastra/playground-ui/components/Button';
 import {
   Drawer,
   DrawerBody,
@@ -9,7 +8,9 @@ import {
 } from '@mastra/playground-ui/components/Drawer';
 import { useState } from 'react';
 
+import { EXAMPLES_PAGE_SIZE, ExamplesPager } from './examples-pager';
 import { useNoise, useNoiseExamples } from './hooks';
+import { shareSentence } from './signal-formatting';
 import { TraceInsightView } from './trace-insight-view';
 import type { TraceSignalName } from './types';
 
@@ -22,15 +23,25 @@ interface NoiseDetailPanelProps {
 }
 
 export function NoiseDetailPanel({ entityId, entityType, snapshotId, signalName, onClose }: NoiseDetailPanelProps) {
-  const [examplesOffset, setExamplesOffset] = useState(0);
+  const examplesContextKey = `${snapshotId}:${signalName ?? ''}`;
+  const [examplesPage, setExamplesPage] = useState(() => ({ contextKey: examplesContextKey, offset: 0 }));
+  const examplesOffset = examplesPage.contextKey === examplesContextKey ? examplesPage.offset : 0;
   const [insightTraceId, setInsightTraceId] = useState<string>();
   const noiseQuery = useNoise(entityId, entityType, signalName, snapshotId);
-  const examplesQuery = useNoiseExamples(entityId, entityType, signalName, snapshotId, 5, examplesOffset);
+  const examplesQuery = useNoiseExamples(
+    entityId,
+    entityType,
+    signalName,
+    snapshotId,
+    EXAMPLES_PAGE_SIZE,
+    examplesOffset,
+  );
 
   return (
     <Drawer
       onOpenChange={open => {
         if (!open) {
+          setExamplesPage({ contextKey: '', offset: 0 });
           setInsightTraceId(undefined);
           onClose();
         }
@@ -62,18 +73,9 @@ export function NoiseDetailPanel({ entityId, entityType, snapshotId, signalName,
                 {noiseQuery.isPending && <p className="text-neutral3 mt-4 text-sm">Loading noise details…</p>}
                 {noiseQuery.isError && <p className="mt-4 text-sm text-red-500">Unable to load noise details.</p>}
                 {noiseQuery.data && (
-                  <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
-                    <div>
-                      <dt className="text-neutral3">Traces</dt>
-                      <dd className="text-neutral5 mt-1 font-mono">{noiseQuery.data.noise.traceCount}</dd>
-                    </div>
-                    <div>
-                      <dt className="text-neutral3">Stage share</dt>
-                      <dd className="text-neutral5 mt-1 font-mono">
-                        {Math.round(noiseQuery.data.noise.coverage * 100)}%
-                      </dd>
-                    </div>
-                  </dl>
+                  <p className="text-neutral5 mt-4 font-mono text-sm tabular-nums">
+                    {shareSentence(noiseQuery.data.noise.traceCount, noiseQuery.data.noise.coverage)}
+                  </p>
                 )}
               </section>
 
@@ -103,15 +105,12 @@ export function NoiseDetailPanel({ entityId, entityType, snapshotId, signalName,
                         ))}
                       </ul>
                     )}
-                    {examplesQuery.data.nextOffset !== undefined && (
-                      <Button
-                        className="mt-3"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setExamplesOffset(examplesQuery.data.nextOffset ?? 0)}
-                      >
-                        Next examples
-                      </Button>
+                    {noiseQuery.data && (
+                      <ExamplesPager
+                        traceCount={noiseQuery.data.noise.traceCount}
+                        offset={examplesOffset}
+                        onOffsetChange={offset => setExamplesPage({ contextKey: examplesContextKey, offset })}
+                      />
                     )}
                   </>
                 )}
