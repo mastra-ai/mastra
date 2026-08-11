@@ -282,6 +282,14 @@ function renderWorkflowDefinition(def: StoredWorkflowRow): string {
   return lines.join('\n');
 }
 
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'object' && error !== null && 'message' in error && typeof error.message === 'string') {
+    return error.message;
+  }
+  return String(error);
+}
+
 function help(ctx: SlashCommandContext): void {
   ctx.showInfo(
     [
@@ -359,7 +367,7 @@ export async function handleWorkflowsCommand(
         try {
           inputData = JSON.parse(rawInput);
         } catch (e) {
-          ctx.showError(`Invalid JSON input: ${(e as Error).message}`);
+          ctx.showError(`Invalid JSON input: ${getErrorMessage(e)}`);
           return;
         }
         // Pass a session-derived request context so any `code-agent` agent steps
@@ -420,7 +428,6 @@ export async function handleWorkflowsCommand(
         ctx.showError(`Unknown /workflows subcommand: "${sub}". Try /workflows help.`);
     }
   } catch (e) {
-    const message = e instanceof Error ? e.message : String(e);
-    ctx.showError(`Workflow command failed: ${message}`);
+    ctx.showError(`Workflow command failed: ${getErrorMessage(e)}`);
   }
 }

@@ -52,12 +52,20 @@ export const workflowsCommandScenario: McE2eScenario = {
     await runtime.waitForScreenText(/e2e-greeting \(active\).*Create a greeting for a name/i, terminal);
 
     terminal.submit('/workflows show e2e-greeting');
-    await runtime.waitForScreenText(/"id": "e2e-greeting"/i, terminal);
-    await runtime.waitForScreenText(/format-greeting/i, terminal);
+    // The JSON dump prints `"id": "e2e-greeting"` first, so it scrolls out of
+    // the viewport before the graph renders. Assert against the diagram header
+    // instead, which renders `<id>  (<status>)` with two spaces — `list` uses
+    // one, so this stays a single match and proves `show` rendered the
+    // requested workflow rather than just some workflow.
+    await runtime.waitForScreenText(/e2e-greeting {2}\(active\)[\s\S]*?format-greeting[\s\S]*?mapping/i, terminal);
 
     terminal.submit('/workflows run e2e-greeting {"name":"Ada  Lovelace"}');
     await runtime.waitForScreenText(/Running "e2e-greeting"/i, terminal);
     await runtime.waitForScreenText(/Hello, Ada  Lovelace!/i, terminal);
+
+    terminal.submit('/workflows run e2e-greeting {"name":}');
+    // `\s*\S` asserts a message was actually interpolated rather than `undefined`.
+    await runtime.waitForScreenText(/Invalid JSON input:\s*\S/i, terminal);
 
     terminal.submit('/workflows delete e2e-greeting');
     await runtime.waitForScreenText(/Deleted workflow "e2e-greeting"\./i, terminal);
