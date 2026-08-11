@@ -201,8 +201,9 @@ describe('AgentController.deleteSession', () => {
 
     // Start deletion — it will block at clearAndReleaseLock.
     const deletionPromise = controller.deleteSession({ resourceId: 'resource-1' });
-    // Let the deletion IIFE advance to the clearAndReleaseLock await.
-    await vi.waitFor(() => expect(() => resolveLock()).not.toThrow());
+    // Wait for the lock resolver to be installed without invoking it, so the
+    // deletion stays in progress when setResourceId runs.
+    await vi.waitFor(() => expect(resolveLock).toBeTypeOf('function'));
 
     // Now setResourceId runs while deletion is in progress. The session is
     // already in #sessionsBeingDeleted, so setResourceId should return early.
