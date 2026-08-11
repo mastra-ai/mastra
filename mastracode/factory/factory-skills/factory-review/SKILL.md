@@ -123,6 +123,8 @@ First, compose the **review handoff** — don't send it to the conversation yet;
 - **Assumptions** — every recorded judgment call from the run.
 - **Open questions** — any decision that genuinely needs a human.
 
+The handoff renders as GitHub markdown, so `#2` links to issue 2 and `@name` pings an account. Refer to a finding by its subject and `file:line` — never by an ordinal like `#1` — and keep `#` and `@` for references you mean.
+
 Next, publish the review on the PR itself — this is part of every pass, not something to wait to be asked for. Write the handoff body to a temp file (avoids shell-quoting breakage) and submit a PR review matching the verdict:
 
 - approve → `gh pr review <number> --approve --body-file <file>`
