@@ -148,21 +148,6 @@ const sidebars = {
           items: [
             {
               type: 'doc',
-              id: 'guide/chef-michel',
-              label: 'Agents: Chef Michel',
-            },
-            {
-              type: 'doc',
-              id: 'guide/stock-agent',
-              label: 'Tools: Stock Agent',
-            },
-            {
-              type: 'doc',
-              id: 'guide/web-search',
-              label: 'Tools: Web Search',
-            },
-            {
-              type: 'doc',
               id: 'guide/ai-recruiter',
               label: 'Workflows: AI Recruiter',
             },
@@ -224,21 +209,6 @@ const sidebars = {
           type: 'doc',
           id: 'guide/github-actions-pr-description',
           label: 'GitHub Actions: PR Description',
-        },
-        {
-          type: 'doc',
-          id: 'guide/slack-assistant',
-          label: 'Channels: Slack Assistant',
-        },
-        {
-          type: 'doc',
-          id: 'guide/publishing-mcp-server',
-          label: 'Publishing an MCP Server',
-        },
-        {
-          type: 'doc',
-          id: 'guide/whatsapp-chat-bot',
-          label: 'WhatsApp Chat Bot',
         },
       ],
     },

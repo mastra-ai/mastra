@@ -297,7 +297,7 @@
     },
     {
       "source": "/examples/agents/whatsapp-chat-bot",
-      "destination": "/guides/guide/whatsapp-chat-bot",
+      "destination": "/docs/capabilities/channels/whatsapp",
       "permanent": true
     },
     {
@@ -877,7 +877,7 @@
     },
     {
       "source": "/docs/mcp/publishing-mcp-server",
-      "destination": "/guides/guide/publishing-mcp-server",
+      "destination": "/docs/mcp/overview",
       "permanent": true
     },
     {
@@ -1853,6 +1853,36 @@
     {
       "source": "/reference/storage/oracledb",
       "destination": "/integrations/databases/oracledb",
+      "permanent": true
+    },
+    {
+      "source": "/guides/guide/slack-assistant",
+      "destination": "/docs/capabilities/channels/slack",
+      "permanent": true
+    },
+    {
+      "source": "/guides/guide/whatsapp-chat-bot",
+      "destination": "/docs/capabilities/channels/whatsapp",
+      "permanent": true
+    },
+    {
+      "source": "/guides/guide/web-search",
+      "destination": "/docs/agents/using-tools",
+      "permanent": true
+    },
+    {
+      "source": "/guides/guide/publishing-mcp-server",
+      "destination": "/docs/mcp/overview",
+      "permanent": true
+    },
+    {
+      "source": "/guides/guide/chef-michel",
+      "destination": "/docs/agents/overview",
+      "permanent": true
+    },
+    {
+      "source": "/guides/guide/stock-agent",
+      "destination": "/docs/agents/using-tools",
       "permanent": true
     },
     {
