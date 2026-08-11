@@ -2,6 +2,7 @@ import type { Adapter, Thread } from 'chat';
 
 import type { IMastraLogger } from '../logger/logger';
 import type { AgentChunkType } from '../stream/types';
+import { formatToolApproval } from './formatting';
 import type { PendingApprovalRecord } from './stream-helpers';
 import {
   ToolTracker,
@@ -300,17 +301,15 @@ export async function runStaticDriver({
         toolName: chunk.payload.toolName,
         args: chunk.payload.args,
       });
-      const approvalMessage = renderToolEvent({
-        kind: 'approval',
-        toolName: enr.toolName,
-        displayName: enr.displayName,
-        argsSummary: enr.argsSummary,
-        args: enr.args,
-        toolCallId: enr.toolCallId,
-      });
+      // Approval cards are always rendered regardless of toolDisplay or
+      // toolDisplayFn — an approval is not tool chatter, it is the one
+      // message the flow cannot proceed without. This matches the streaming
+      // driver which always calls formatToolApproval directly (line 734).
+      // Approval cards always use Block Kit (`useCards: true`) so the
+      // Approve/Deny buttons render.
+      const approvalMessage = formatToolApproval(enr.displayName, enr.argsSummary, enr.toolCallId, true);
       const existingMessageId = toolMessageIds.get(enr.toolCallId) ?? getPendingApproval(enr.toolCallId)?.messageId;
-      const finalMessageId =
-        approvalMessage != null ? await editOrPost(existingMessageId, approvalMessage) : existingMessageId;
+      const finalMessageId = await editOrPost(existingMessageId, approvalMessage);
       // Stash by toolCallId so the click handler can resume the correct
       // run directly. The persisted-metadata path keys by toolName and
       // collides on parallel same-tool approvals.
