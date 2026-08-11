@@ -203,6 +203,7 @@ export function ToolCard({ tool }: { tool: ToolCall }) {
       className="max-w-full min-w-0"
       role="group"
       aria-label={`Tool: ${tool.toolName}`}
+      aria-busy={tool.status === 'running'}
     >
       <CollapsibleTrigger className={TOOL_ROW_TRIGGER}>
         <ToolRow

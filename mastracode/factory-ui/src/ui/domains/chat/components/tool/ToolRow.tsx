@@ -1,5 +1,4 @@
 import { Shimmer } from '@mastra/playground-ui/components/Shimmer';
-import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { ChevronRight, X } from 'lucide-react';
@@ -14,12 +13,6 @@ export const TOOL_ROW_TRIGGER =
 
 /** Left offset of the rail under an expanded row: the centre of the leading slot. */
 export const TOOL_RAIL_OFFSET = 'ml-[14px]';
-
-export function ToolStatusIcon({ status }: { status: ToolCall['status'] }) {
-  if (status === 'running') return <Spinner size="sm" aria-label="Running" className="text-icon3 size-3 shrink-0" />;
-  if (status === 'error') return <X size={13} role="img" aria-label="Failed" className="text-error shrink-0" />;
-  return null;
-}
 
 function Chevron({ expanded, className }: { expanded: boolean; className: string }) {
   // Nested, not a direct trigger child — the DS trigger rotates direct-child <svg> on open.
@@ -71,7 +64,7 @@ export function ToolRow({ icon: Icon, label, detail, status, expanded, rule, tra
       {Icon && <Chevron expanded={expanded} className="text-icon2 group-hover/tool:text-icon4" />}
       {rule ? <span aria-hidden className="bg-border1 h-px min-w-2 flex-1" /> : <span className="flex-1" />}
       {trailing}
-      <ToolStatusIcon status={status} />
+      {status === 'error' && <X size={13} role="img" aria-label="Failed" className="text-error shrink-0" />}
     </span>
   );
 }

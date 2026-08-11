@@ -27,6 +27,7 @@ export function ToolGroup({ tools }: { tools: ToolCall[] }) {
       className="max-w-full min-w-0"
       role="group"
       aria-label={`Tool group: ${tools.length} steps`}
+      aria-busy={Boolean(running)}
     >
       <CollapsibleTrigger className={TOOL_ROW_TRIGGER}>
         <ToolRow

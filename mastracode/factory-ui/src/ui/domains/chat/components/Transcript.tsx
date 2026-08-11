@@ -681,13 +681,6 @@ function MessageBubble({
       part.type === 'file',
   );
 
-  const lastTextPart = (() => {
-    for (let i = parts.length - 1; i >= 0; i--) {
-      if (parts[i].type === 'text') return parts[i];
-    }
-    return undefined;
-  })();
-
   const toolGroups = collectToolGroups(parts, suspensions, entry.runtimeTools);
   const origin = channelOrigin(entry);
   const roles: MessageRoleRenderers = {
@@ -721,18 +714,9 @@ function MessageBubble({
         );
       }
 
-      const showCursor = entry.streaming && part === lastTextPart;
       return (
         <div className="prose my-3">
-          <Markdown
-            className={
-              showCursor
-                ? "[&>:last-child]:after:bg-accent1 [&>:last-child]:after:ml-0.5 [&>:last-child]:after:inline-block [&>:last-child]:after:h-[1em] [&>:last-child]:after:w-0.5 [&>:last-child]:after:animate-pulse [&>:last-child]:after:align-text-bottom [&>:last-child]:after:content-['']"
-                : undefined
-            }
-          >
-            {part.text}
-          </Markdown>
+          <Markdown>{part.text}</Markdown>
         </div>
       );
     },

@@ -17,6 +17,17 @@ describe('presentTool', () => {
     });
   });
 
+  it('keeps the cd preamble out of the row but inside the command', () => {
+    const cd = "cd '/Users/me/work spaces/repo' && pnpm build";
+    expect(presentTool('execute_command', { command: cd })).toMatchObject({ detail: 'pnpm build', command: cd });
+  });
+
+  it('leaves a bare cd alone — it is the whole command', () => {
+    expect(presentTool('execute_command', { command: 'cd packages/core' })).toMatchObject({
+      detail: 'cd packages/core',
+    });
+  });
+
   it('strips the raw workspace prefix before lookup', () => {
     expect(presentTool('mastra_workspace_read_file', { path: 'a.ts' })).toMatchObject({
       label: 'Read',
