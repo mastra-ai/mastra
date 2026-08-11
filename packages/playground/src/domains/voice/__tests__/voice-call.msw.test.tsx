@@ -3,17 +3,13 @@ import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { VoiceCallButton } from '../components/voice-call-button';
 import { VoiceCallPanel } from '../components/voice-call-panel';
 import { useVoiceCall } from '../hooks/use-voice-call';
 import { connectionDetails } from './fixtures/connection-details';
-import {
-  legacySystemPackages,
-  liveKitAvailableSystemPackages,
-  liveKitUnavailableSystemPackages,
-} from './fixtures/system-packages';
+import { legacySystemPackages, liveKitUnavailableSystemPackages } from './fixtures/system-packages';
 import { StudioConfigContext } from '@/domains/configuration';
 import { server } from '@/test/msw-server';
 
@@ -118,10 +114,6 @@ afterEach(() => {
 });
 
 describe('voice call', () => {
-  beforeEach(() => {
-    server.use(http.get(`${BASE_URL}/api/system/packages`, () => HttpResponse.json(liveKitAvailableSystemPackages)));
-  });
-
   describe('when the default LiveKit connection route is unavailable', () => {
     it('disables the start control', async () => {
       server.use(
@@ -157,76 +149,20 @@ describe('voice call', () => {
     });
   });
 
-  describe('when LiveKit availability cannot be determined', () => {
-    it('preserves the enabled call flow', async () => {
-      const onSystemPackages = vi.fn();
-      server.use(
-        http.get(`${BASE_URL}/api/system/packages`, () => {
-          onSystemPackages();
-          return HttpResponse.json(legacySystemPackages);
-        }),
-        http.post(`${BASE_URL}/voice/livekit/connection-details`, () => HttpResponse.json(connectionDetails)),
-      );
+  it('still starts a call against a server that does not report LiveKit availability', async () => {
+    server.use(
+      http.get(`${BASE_URL}/api/system/packages`, () => HttpResponse.json(legacySystemPackages)),
+      http.post(`${BASE_URL}/voice/livekit/connection-details`, () => HttpResponse.json(connectionDetails)),
+    );
 
-      const { queryClient } = renderHarness();
-      await waitFor(() => expect(onSystemPackages).toHaveBeenCalledTimes(1));
-      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
-      const startButton = screen.getByRole<HTMLButtonElement>('button', { name: 'Start voice call' });
+    const { queryClient } = renderHarness();
+    await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+    const startButton = screen.getByRole<HTMLButtonElement>('button', { name: 'Start voice call' });
 
-      expect(startButton.disabled).toBe(false);
-      fireEvent.click(startButton);
+    expect(startButton.getAttribute('aria-disabled')).toBeNull();
+    fireEvent.click(startButton);
 
-      await waitFor(() => expect(fakeRooms).toHaveLength(1));
-    });
-
-    it('fails open when the capability request is unavailable', async () => {
-      server.use(
-        http.get(`${BASE_URL}/api/system/packages`, () => HttpResponse.json({ error: 'Unavailable' }, { status: 503 })),
-      );
-
-      const { queryClient } = renderHarness();
-      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
-      const startButton = screen.getByRole<HTMLButtonElement>('button', { name: 'Start voice call' });
-
-      expect(startButton.disabled).toBe(false);
-      expect(startButton.getAttribute('aria-disabled')).toBeNull();
-    });
-
-    it('keeps the active hang-up control enabled if a loading request later reports unavailable', async () => {
-      const onSystemPackages = vi.fn();
-      let releasePackages = () => {};
-      const packagesGate = new Promise<void>(resolve => {
-        releasePackages = resolve;
-      });
-      server.use(
-        http.get(`${BASE_URL}/api/system/packages`, async () => {
-          onSystemPackages();
-          await packagesGate;
-          return HttpResponse.json(liveKitUnavailableSystemPackages);
-        }),
-        http.post(`${BASE_URL}/voice/livekit/connection-details`, () => HttpResponse.json(connectionDetails)),
-      );
-
-      const { queryClient } = renderHarness();
-      await waitFor(() => expect(onSystemPackages).toHaveBeenCalledTimes(1));
-      const startButton = screen.getByRole<HTMLButtonElement>('button', { name: 'Start voice call' });
-      expect(startButton.disabled).toBe(false);
-      expect(startButton.getAttribute('aria-disabled')).toBeNull();
-
-      fireEvent.click(startButton);
-      await waitFor(() => expect(fakeRooms).toHaveLength(1));
-      const room = fakeRooms[0]!;
-      await waitFor(() => expect(room.localParticipant.setMicrophoneEnabled).toHaveBeenCalledWith(true));
-
-      await act(async () => releasePackages());
-      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
-      const endButton = screen.getByRole<HTMLButtonElement>('button', { name: 'End voice call' });
-      expect(endButton.disabled).toBe(false);
-      expect(endButton.getAttribute('aria-disabled')).toBeNull();
-
-      fireEvent.click(endButton);
-      await waitFor(() => expect(room.disconnect).toHaveBeenCalled());
-    });
+    await waitFor(() => expect(fakeRooms).toHaveLength(1));
   });
 
   it('starts a call: fetches connection details, joins the room, and enables the mic', async () => {

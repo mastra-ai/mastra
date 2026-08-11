@@ -9,11 +9,10 @@ import type {
   VoiceCallStatus,
   VoiceCaptionSegment,
 } from '../types';
+import { useIsLiveKitAvailable } from './use-is-livekit-available';
 import { useStudioConfig } from '@/domains/configuration';
-import { useMastraPackages } from '@/domains/configuration/hooks/use-mastra-packages';
 
-// Default path of liveKitConnectionRoute() from @mastra/livekit; the server's
-// liveKitConnectionRouteEnabled capability reports whether this exact route is registered.
+// Default path of liveKitConnectionRoute() from @mastra/livekit — the route the capability reports on.
 const LIVEKIT_CONNECTION_DETAILS_PATH = '/voice/livekit/connection-details';
 
 const AGENT_STATE_ATTRIBUTE = 'lk.agent.state';
@@ -56,10 +55,7 @@ function upsertSegment(
  */
 export const useVoiceCall = ({ agentId, threadId, onCallStarted }: UseVoiceCallArgs): VoiceCallControls => {
   const { baseUrl, headers } = useStudioConfig();
-  const { data: systemPackages } = useMastraPackages();
-  // Fail open: only a definitive `false` disables calls. Loading, legacy servers without
-  // the field, and failed capability requests all keep the call flow usable.
-  const liveKitUnavailable = systemPackages?.liveKitConnectionRouteEnabled === false;
+  const { isLiveKitAvailable } = useIsLiveKitAvailable();
   const queryClient = useQueryClient();
   const onCallStartedRef = useRef(onCallStarted);
   useEffect(() => {
@@ -124,8 +120,7 @@ export const useVoiceCall = ({ agentId, threadId, onCallStarted }: UseVoiceCallA
 
   const start = useCallback(async () => {
     if (status !== 'idle') return;
-    // The connection route is not registered; starting would only fire a doomed request.
-    if (liveKitUnavailable) return;
+    if (!isLiveKitAvailable) return;
     // Claim this run; any later cleanup()/start() supersedes it.
     const epoch = (startEpochRef.current += 1);
     const abortController = new AbortController();
@@ -212,13 +207,13 @@ export const useVoiceCall = ({ agentId, threadId, onCallStarted }: UseVoiceCallA
       cleanup();
       toast.error(error instanceof Error ? error.message : 'Failed to start the voice call.');
     }
-  }, [agentId, baseUrl, cleanup, headers, liveKitUnavailable, refreshThread, scheduleThreadRefresh, status, threadId]);
+  }, [agentId, baseUrl, cleanup, headers, isLiveKitAvailable, refreshThread, scheduleThreadRefresh, status, threadId]);
 
   return {
     status,
     agentState,
     captions,
-    liveKitUnavailable,
+    isLiveKitAvailable,
     start: () => void start(),
     stop,
   };

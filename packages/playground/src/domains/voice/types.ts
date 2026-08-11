@@ -20,13 +20,8 @@ export interface VoiceCallControls {
   status: VoiceCallStatus;
   agentState: VoiceAgentState;
   captions: VoiceCaptionSegment[];
-  /**
-   * True when the server reports that Studio's default LiveKit connection route is not
-   * registered: start() is a no-op and the UI shows setup guidance instead. Stays false
-   * while availability is unknown (loading, legacy servers, failed capability request)
-   * so calls fail open.
-   */
-  liveKitUnavailable: boolean;
+  /** False only once the server has reported the connection route missing, so unknown availability still allows calls. */
+  isLiveKitAvailable: boolean;
   start: () => void;
   stop: () => void;
 }

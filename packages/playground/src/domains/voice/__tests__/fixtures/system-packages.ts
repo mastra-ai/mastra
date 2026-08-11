@@ -1,15 +1,8 @@
 import type { GetSystemPackagesResponse } from '@mastra/client-js';
-
-export const liveKitAvailableSystemPackages: GetSystemPackagesResponse = {
-  packages: [],
-  isDev: false,
-  cmsEnabled: false,
-  observabilityEnabled: false,
-  liveKitConnectionRouteEnabled: true,
-};
+import { defaultSystemPackages } from '@/test/msw-server';
 
 export const liveKitUnavailableSystemPackages: GetSystemPackagesResponse = {
-  ...liveKitAvailableSystemPackages,
+  ...defaultSystemPackages,
   liveKitConnectionRouteEnabled: false,
 };
 

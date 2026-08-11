@@ -67,7 +67,8 @@ test.describe('Agent detail page', () => {
       await page.goto('/agents/weather-agent/chat/new');
 
       const callButton = page.getByRole('button', { name: 'Start voice call' });
-      await expect(callButton).toBeDisabled();
+      // aria-disabled, not disabled: the control stays focusable so the setup tooltip is reachable.
+      await expect(callButton).toHaveAttribute('aria-disabled', 'true');
 
       await callButton.focus();
       await expect(page.getByRole('tooltip')).toHaveText('Configure @mastra/livekit to start voice calls.');

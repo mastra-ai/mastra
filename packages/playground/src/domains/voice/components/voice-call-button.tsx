@@ -7,7 +7,7 @@ export interface VoiceCallButtonProps {
 }
 
 export const VoiceCallButton = ({ voiceCall }: VoiceCallButtonProps) => {
-  const { liveKitUnavailable } = voiceCall;
+  const { isLiveKitAvailable } = voiceCall;
 
   if (voiceCall.status === 'idle') {
     return (
@@ -16,9 +16,9 @@ export const VoiceCallButton = ({ voiceCall }: VoiceCallButtonProps) => {
         size="icon-md"
         type="button"
         aria-label="Start voice call"
-        aria-disabled={liveKitUnavailable || undefined}
+        aria-disabled={!isLiveKitAvailable || undefined}
         className="aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
-        tooltip={liveKitUnavailable ? 'Configure @mastra/livekit to start voice calls.' : 'Start voice call'}
+        tooltip={isLiveKitAvailable ? 'Start voice call' : 'Configure @mastra/livekit to start voice calls.'}
         data-testid="voice-call-button"
         onClick={() => voiceCall.start()}
       >

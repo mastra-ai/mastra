@@ -1,4 +1,3 @@
-import type { GetSystemPackagesResponse } from '@mastra/client-js';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -15,14 +14,6 @@ import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
 const AGENT_ID = 'agent-1';
-
-const systemPackagesWithLiveKit: GetSystemPackagesResponse = {
-  packages: [],
-  isDev: false,
-  cmsEnabled: false,
-  observabilityEnabled: false,
-  liveKitConnectionRouteEnabled: true,
-};
 
 const renderEditorTestChat = () => {
   const queryClient = new QueryClient({
@@ -61,7 +52,6 @@ describe('AgentPlaygroundTestChat', () => {
     const onBrowserProbe = vi.fn();
 
     server.use(
-      http.get(`${BASE_URL}/api/system/packages`, () => HttpResponse.json(systemPackagesWithLiveKit)),
       http.get(`${BASE_URL}/api/agents/${AGENT_ID}`, () =>
         HttpResponse.json({
           ...v2Agent,
@@ -96,7 +86,6 @@ describe('AgentPlaygroundTestChat', () => {
 
   it('accepts typed input in the composer textarea', async () => {
     server.use(
-      http.get(`${BASE_URL}/api/system/packages`, () => HttpResponse.json(systemPackagesWithLiveKit)),
       http.get(`${BASE_URL}/api/agents/${AGENT_ID}`, () => HttpResponse.json({ ...v2Agent, modelList: [] })),
       http.get(`${BASE_URL}/api/memory/config`, () => HttpResponse.json({ config: {} })),
       http.get(`${BASE_URL}/api/memory/status`, () => HttpResponse.json(memoryDisabled)),
