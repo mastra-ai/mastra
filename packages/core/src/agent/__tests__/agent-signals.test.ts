@@ -16,6 +16,7 @@ import { MAX_NOTIFICATION_DELIVERY_ATTEMPTS } from '../../notifications/delivery
 import { dispatchDueNotifications } from '../../notifications/dispatcher';
 import { InMemoryNotificationsStorage } from '../../notifications/storage';
 import { createNotificationInboxTool } from '../../notifications/tool';
+import { RequestContext } from '../../request-context';
 import { MastraCompositeStore } from '../../storage/base';
 import { Agent } from '../agent';
 import {
@@ -975,6 +976,70 @@ describe('Agent signals', () => {
     } finally {
       firstSubscription.unsubscribe();
       secondSubscription.unsubscribe();
+    }
+  });
+
+  it('keeps request context associated with the exact queued stream record', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const agent = { id: 'request-context-stream-agent' } as Agent<any, any, any, any>;
+    const threadId = 'request-context-stream-thread';
+    const resourceId = 'request-context-stream-user';
+    const runId = 'shared-run-id';
+    const firstContext = new RequestContext();
+    firstContext.set('name', 'first-context');
+    const secondContext = new RequestContext();
+    secondContext.set('name', 'second-context');
+
+    const subscription = await runtime.subscribeToThread(agent, { threadId, resourceId });
+    const iterator = subscription.stream[Symbol.asyncIterator]();
+
+    const registerCompletedRun = async (requestContext: RequestContext) => {
+      let finish!: () => void;
+      const finished = new Promise<void>(resolve => {
+        finish = resolve;
+      });
+      const parts = [
+        { type: 'start', runId },
+        { type: 'finish', runId, payload: { finishReason: 'stop' } },
+      ];
+      const output = {
+        runId,
+        status: 'running',
+        fullStream: new ReadableStream({
+          pull(controller) {
+            const part = parts.shift();
+            if (part) {
+              controller.enqueue(part);
+            } else {
+              controller.close();
+              finish();
+            }
+          },
+        }),
+        _waitUntilFinished: () => finished,
+      } as any;
+      await runtime.registerRun(agent, output, {
+        memory: { thread: threadId, resource: resourceId },
+        requestContext,
+      } as any);
+      await nextTick();
+    };
+
+    try {
+      await registerCompletedRun(firstContext);
+      await registerCompletedRun(secondContext);
+
+      const firstStart = await withTimeout(iterator.next(), 'Timed out waiting for first queued stream');
+      expect(firstStart.value).toMatchObject({ type: 'start', runId });
+      expect(subscription.__getCurrentRunRequestContext()).toBe(firstContext);
+      await withTimeout(iterator.next(), 'Timed out waiting for first queued stream finish');
+
+      const secondStart = await withTimeout(iterator.next(), 'Timed out waiting for second queued stream');
+      expect(secondStart.value).toMatchObject({ type: 'start', runId });
+      expect(subscription.__getCurrentRunRequestContext()).toBe(secondContext);
+      await withTimeout(iterator.next(), 'Timed out waiting for second queued stream finish');
+    } finally {
+      subscription.unsubscribe();
     }
   });
 
