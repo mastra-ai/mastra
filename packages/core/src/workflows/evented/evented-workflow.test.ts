@@ -77,13 +77,19 @@ createWorkflowTestSuite({
   registerWorkflows: async registry => {
     registeredRegistry = registry;
     const workflows: Record<string, any> = {};
+    const agents: Record<string, any> = {};
+    const tools: Record<string, any> = {};
     for (const [id, entry] of Object.entries(registry)) {
       workflows[id] = entry.workflow;
+      if (entry.mastraAgents) Object.assign(agents, entry.mastraAgents);
+      if (entry.mastraTools) Object.assign(tools, entry.mastraTools);
     }
     registeredMastra = new Mastra({
       logger: false,
       storage: sharedStorage,
       workflows,
+      agents: Object.keys(agents).length ? agents : undefined,
+      tools: Object.keys(tools).length ? tools : undefined,
       pubsub: new EventEmitterPubSub(),
     });
     await registeredMastra.startWorkers();
@@ -123,9 +129,15 @@ createWorkflowTestSuite({
 
   executeWorkflow: async (workflow, inputData, options = {}): Promise<WorkflowResult> => {
     // Create a fresh Mastra instance for each test execution
-    // This ensures proper isolation between tests
+    // This ensures proper isolation between tests.
+    // Carry through any mastraAgents/mastraTools declared for this workflow in the
+    // shared harness registry so declarative `.agent('id')` / `.tool('id')` builder
+    // calls can resolve their string references at execution time.
+    const registryEntry = registeredRegistry?.[workflow.id];
     const mastra = new Mastra({
       workflows: { [workflow.id]: workflow },
+      agents: registryEntry?.mastraAgents,
+      tools: registryEntry?.mastraTools,
       storage: sharedStorage,
       pubsub: new EventEmitterPubSub(),
     });
@@ -314,6 +326,89 @@ describe('Workflow (Evented Engine Specific)', () => {
     vi.resetAllMocks();
     const workflowsStore = await testStorage.getStore('workflows');
     await workflowsStore?.dangerouslyClearAll();
+  });
+
+  it('should run onStart before execution and abort the run when it throws', async () => {
+    const stepAction = vi.fn().mockResolvedValue({ value: 'done' });
+    const step1 = createStep({
+      id: 'step1',
+      execute: stepAction,
+      inputSchema: z.object({}),
+      outputSchema: z.object({ value: z.string() }),
+    });
+
+    const onStart = vi.fn();
+    const okWorkflow = createWorkflow({
+      id: 'on-start-ok-workflow',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ value: z.string() }),
+      steps: [step1],
+      options: { validateInputs: false, onStart },
+    });
+    okWorkflow.then(step1).commit();
+
+    const gatedAction = vi.fn().mockResolvedValue({ value: 'done' });
+    const gatedStep = createStep({
+      id: 'gated-step',
+      execute: gatedAction,
+      inputSchema: z.object({}),
+      outputSchema: z.object({ value: z.string() }),
+    });
+    const gatedWorkflow = createWorkflow({
+      id: 'on-start-gated-workflow',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ value: z.string() }),
+      steps: [gatedStep],
+      options: {
+        validateInputs: false,
+        onStart: async () => {
+          throw new Error('quota exceeded');
+        },
+      },
+    });
+    gatedWorkflow.then(gatedStep).commit();
+
+    const mastra = new Mastra({
+      workflows: {
+        'on-start-ok-workflow': okWorkflow,
+        'on-start-gated-workflow': gatedWorkflow,
+      },
+      storage: testStorage,
+      pubsub: new EventEmitterPubSub(),
+    });
+    await mastra.startWorkers();
+
+    try {
+      const okRun = await okWorkflow.createRun();
+      const okResult = await okRun.start({ inputData: {} });
+      expect(okResult.status).toBe('success');
+      expect(onStart).toHaveBeenCalledTimes(1);
+      expect(onStart.mock.calls[0]![0]!.runId).toBe(okRun.runId);
+
+      const gatedRun = await gatedWorkflow.createRun();
+      await expect(gatedRun.start({ inputData: {} })).rejects.toThrow('quota exceeded');
+      expect(gatedAction).not.toHaveBeenCalled();
+
+      // The hook runs ahead of the initial run-record write in start(), but createRun()
+      // has already persisted a pending record by then, so the gated run is parked at
+      // 'pending' rather than absent. Pinning that so the guarantee cannot drift.
+      const workflowsStore = await testStorage.getStore('workflows');
+      const gatedRecord = await workflowsStore?.getWorkflowRunById({
+        runId: gatedRun.runId,
+        workflowName: 'on-start-gated-workflow',
+      });
+      expect((gatedRecord?.snapshot as any)?.status).toBe('pending');
+
+      // Control: the allowed run advanced past pending, so the assertion above reflects the
+      // gate holding rather than this engine never updating the record.
+      const okRecord = await workflowsStore?.getWorkflowRunById({
+        runId: okRun.runId,
+        workflowName: 'on-start-ok-workflow',
+      });
+      expect((okRecord?.snapshot as any)?.status).toBe('success');
+    } finally {
+      await mastra.stopWorkers();
+    }
   });
 
   it('should create a processor step for state signal only processors', () => {
@@ -569,6 +664,10 @@ describe('Workflow (Evented Engine Specific)', () => {
       ]);
       // Result verification covered by shared suite
       expect(executionResult.status).toBe('success');
+      expect(watchData.at(-1)?.payload).toMatchObject({
+        workflowStatus: 'success',
+        finalWorkflowResult: executionResult.result,
+      });
 
       await mastra.stopWorkers();
     });

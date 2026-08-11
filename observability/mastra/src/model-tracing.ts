@@ -42,6 +42,54 @@ import { extractUsageMetrics } from './usage';
 
 type StepInputPreview = Array<{ role: string; content: string }> | Record<string, unknown> | string | undefined;
 
+function parseGatewayCost(providerMetadata: EndGenerationOptions['providerMetadata']): number | undefined {
+  const rawCost = providerMetadata?.gateway?.cost;
+  const cost =
+    typeof rawCost === 'number'
+      ? rawCost
+      : typeof rawCost === 'string' && rawCost.trim().length > 0
+        ? Number(rawCost)
+        : undefined;
+
+  return typeof cost === 'number' && Number.isFinite(cost) && cost >= 0 ? cost : undefined;
+}
+
+function getGatewayCostContext({ stepProviderMetadata }: Pick<EndGenerationOptions, 'stepProviderMetadata'>) {
+  if (!stepProviderMetadata) {
+    return undefined;
+  }
+
+  if (!stepProviderMetadata.some(metadata => metadata?.gateway !== undefined)) {
+    return undefined;
+  }
+
+  const costs: number[] = [];
+  for (const metadata of stepProviderMetadata) {
+    const cost = parseGatewayCost(metadata);
+    if (cost === undefined) {
+      return undefined;
+    }
+    costs.push(cost);
+  }
+
+  const estimatedCost = costs.reduce((total, cost) => total + cost, 0);
+  if (!Number.isFinite(estimatedCost)) {
+    return undefined;
+  }
+
+  return {
+    estimatedCost,
+    costUnit: 'USD',
+    costMetadata: {
+      source: 'provider_reported',
+      sdkProvider: 'vercel_ai_gateway',
+      sdkCostField: 'gateway.cost',
+      scope: 'query_total',
+      reportedStepCount: costs.length,
+    },
+  };
+}
+
 function formatPreviewLabel(label: unknown, fallback: string): string {
   return typeof label === 'string' && label.length > 0 ? label : fallback;
 }
@@ -114,7 +162,8 @@ function summarizePart(part: unknown): string {
           providerOptions?: Record<string, unknown>;
         };
         const mastraMeta = (toolResult.providerMetadata?.mastra ?? toolResult.providerOptions?.mastra) as
-          Record<string, unknown> | undefined;
+          | Record<string, unknown>
+          | undefined;
         const toolName = formatPreviewLabel((part as { toolName?: unknown }).toolName, 'unknown');
         if (mastraMeta?.modelOutput !== undefined) {
           return formatToolResultPreviewValue(mastraMeta.modelOutput);
@@ -348,11 +397,14 @@ export class ModelSpanTracker {
    * If usage is provided, it will be converted to UsageStats with cache token details.
    */
   endGeneration(options?: EndGenerationOptions): void {
-    const { usage, providerMetadata, ...spanOptions } = options ?? {};
+    const { usage, providerMetadata, stepProviderMetadata, ...spanOptions } = options ?? {};
 
     if (spanOptions.attributes) {
       spanOptions.attributes.completionStartTime = this.#completionStartTime;
       spanOptions.attributes.usage = extractUsageMetrics(usage, providerMetadata);
+      if (!spanOptions.attributes.costContext) {
+        spanOptions.attributes.costContext = getGatewayCostContext({ stepProviderMetadata });
+      }
     }
 
     this.#modelSpan?.end(spanOptions);
@@ -451,6 +503,7 @@ export class ModelSpanTracker {
 
     const { usage: rawUsage, ...otherOutput } = payload.output;
     const usage = extractUsageMetrics(rawUsage, payload.metadata?.providerMetadata);
+    const responseModel = typeof payload.metadata?.modelId === 'string' ? payload.metadata.modelId : undefined;
 
     this.#currentInferenceSpan.end({
       output: otherOutput,
@@ -459,6 +512,7 @@ export class ModelSpanTracker {
         finishReason: payload.stepResult.reason,
         warnings: payload.stepResult.warnings,
         completionStartTime: this.#completionStartTime,
+        ...(responseModel?.trim() ? { responseModel } : {}),
       },
     });
     this.#currentInferenceSpan = undefined;

@@ -22,7 +22,7 @@ export function FieldBlockLabel({ children, name, required, size = 'default', cl
       )}
     >
       {children}
-      {required && <i className="text-xs text-neutral2">(required)</i>}
+      {required && <i className="text-neutral2 text-xs">(required)</i>}
     </label>
   );
 }

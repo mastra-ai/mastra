@@ -1,6 +1,7 @@
 import pg from 'pg';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 
+import { PgFactoryStorage } from './factory-storage';
 import { PostgresStore, PostgresStoreVNext } from '.';
 
 // Points at a dead port — these tests need no live database. The pool only
@@ -45,6 +46,34 @@ describe('PostgresStore pool error listeners', () => {
       expect(userPool.listenerCount('error')).toBe(0);
     } finally {
       await store.close();
+      await userPool.end();
+    }
+  });
+
+  it('PgFactoryStorage attaches an error listener to pools it creates', async () => {
+    const storage = new PgFactoryStorage({ connectionString: DEAD_CONNECTION_STRING });
+    const db = storage.authDatabase();
+    if (db.dialect !== 'postgres') throw new Error('expected a postgres auth database');
+    const pool = db.pool as pg.Pool;
+
+    try {
+      expect(pool.listenerCount('error')).toBe(1);
+      expect(() => pool.emit('error', new Error('idle client dropped'))).not.toThrow();
+    } finally {
+      await storage.close();
+    }
+  });
+
+  it('PgFactoryStorage does not add a listener to a wrapped store pool', async () => {
+    const userPool = new pg.Pool({ connectionString: DEAD_CONNECTION_STRING });
+    const store = new PostgresStore({ id: 'pool-error-test', pool: userPool });
+    const storage = new PgFactoryStorage({ store });
+
+    try {
+      // The wrapped store's pool keeps the caller's listeners, mirroring close().
+      expect(userPool.listenerCount('error')).toBe(0);
+    } finally {
+      await storage.close();
       await userPool.end();
     }
   });

@@ -50,10 +50,10 @@ async function setupCluster() {
   }
 }
 
-async function waitForFtsReady(bucket: Bucket): Promise<void> {
+async function waitForFtsReady(cluster: Cluster): Promise<void> {
   const maxAttempts = 30;
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    const report = await bucket.ping({ serviceTypes: [ServiceType.Search] });
+    const report = await cluster.ping({ serviceTypes: [ServiceType.Search] });
     const endpoints = report.services[ServiceType.Search] ?? [];
     if (endpoints.length > 0 && endpoints.every(ep => ep.state === PingState.Ok)) {
       console.log(`FTS service ready after ${attempt + 1} attempt(s)`);
@@ -153,9 +153,8 @@ describe('Integration Testing CouchbaseVector', async () => {
         }
         bucket = cluster.bucket(test_bucketName);
 
-        // Wait for FTS to be fully ready via the SDK's built-in ping.
-        // Replaces the original 10s fixed sleep in setupCluster.
-        await waitForFtsReady(bucket);
+        // The bucket is not open yet, so its ping report has no service endpoints.
+        await waitForFtsReady(cluster);
 
         // If scope or collection are not there, then create it
         const all_scopes = await bucket.collections().getAllScopes();

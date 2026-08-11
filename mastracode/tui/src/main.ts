@@ -23,8 +23,11 @@ let mcpManager: Awaited<ReturnType<typeof createMastraCode>>['mcpManager'];
 let hookManager: Awaited<ReturnType<typeof createMastraCode>>['hookManager'];
 let authStorage: Awaited<ReturnType<typeof createMastraCode>>['authStorage'];
 let signalsPubSub: Awaited<ReturnType<typeof createMastraCode>>['signalsPubSub'];
+let storageMaintenance: Awaited<ReturnType<typeof createMastraCode>>['storageMaintenance'];
+let stopPluginSignalProviders: Awaited<ReturnType<typeof createMastraCode>>['stopPluginSignalProviders'] | undefined;
 let analytics: ReturnType<typeof createMastraCodeAnalytics> | undefined;
 let tui: MastraTUI | undefined;
+let storageClosed = false;
 
 function isTruthyEnv(name: string): boolean {
   return ['1', 'true', 'yes', 'on'].includes(process.env[name]?.trim().toLowerCase() ?? '');
@@ -71,6 +74,8 @@ async function tuiMain(pipedInput?: string | null) {
   hookManager = result.hookManager;
   authStorage = result.authStorage;
   signalsPubSub = result.signalsPubSub;
+  storageMaintenance = result.storageMaintenance;
+  stopPluginSignalProviders = result.stopPluginSignalProviders;
 
   if (result.storageWarning) {
     console.info(`⚠ ${result.storageWarning}`);
@@ -150,6 +155,14 @@ async function tuiMain(pipedInput?: string | null) {
 
 const asyncCleanup = async () => {
   releaseAllThreadLocks();
+  // Stop plugin-contributed signal providers (and the plugin reload listener)
+  // before quiescing workers: a provider that keeps polling past this point
+  // could dispatch into a controller that is shutting down.
+  try {
+    stopPluginSignalProviders?.();
+  } catch {
+    // Best-effort — the process is exiting.
+  }
   const closeSignalsPubSub = (signalsPubSub as { close?: () => Promise<void> | void } | undefined)?.close;
   await Promise.allSettled([
     mcpManager?.disconnect(),
@@ -158,6 +171,16 @@ const asyncCleanup = async () => {
     closeSignalsPubSub?.(),
     analytics?.shutdown(),
   ]);
+  // Checkpoint WAL and close the local storage connection after all producers
+  // and timers are quiesced. Idempotent — repeated signals (SIGINT then SIGHUP)
+  // close only once. LibSQLStore.close()/LibSQLVector.close() truncate the WAL
+  // and switch back to DELETE journal mode for a clean shutdown.
+  if (!storageClosed) {
+    storageClosed = true;
+    await storageMaintenance?.closeStorage?.().catch(() => {
+      // Swallow — best-effort cleanup during shutdown. The process is exiting.
+    });
+  }
 };
 
 process.on('beforeExit', () => {

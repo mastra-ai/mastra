@@ -106,7 +106,8 @@ describe('cross-process background tasks', () => {
     const storageInstance = producer.getStorage();
     if (!storageInstance) throw new Error('storage not available on producer');
     const bgStore = (await storageInstance.getStore('backgroundTasks')) as
-      { getTask: (id: string) => Promise<any | null> } | undefined;
+      | { getTask: (id: string) => Promise<any | null> }
+      | undefined;
     if (!bgStore) throw new Error('backgroundTasks store not available');
 
     let finalTask: any;
@@ -150,7 +151,8 @@ describe('cross-process background tasks', () => {
 
     const storageInstance = producer.getStorage();
     const bgStore = (await storageInstance!.getStore('backgroundTasks')) as
-      { getTask: (id: string) => Promise<any | null> } | undefined;
+      | { getTask: (id: string) => Promise<any | null> }
+      | undefined;
 
     let finalTask: any;
     await waitFor(async () => {
@@ -199,7 +201,8 @@ describe('cross-process background tasks', () => {
 
     const storageInstance = producer.getStorage();
     const bgStore = (await storageInstance!.getStore('backgroundTasks')) as
-      { getTask: (id: string) => Promise<any | null> } | undefined;
+      | { getTask: (id: string) => Promise<any | null> }
+      | undefined;
 
     await waitFor(async () => {
       for (const id of taskIds) {

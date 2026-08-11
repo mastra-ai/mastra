@@ -21,7 +21,7 @@ function ThemeOptionLabel({ option }: { option: (typeof THEME_OPTIONS)[number] }
   const { Icon } = option;
 
   return (
-    <span className="inline-flex min-w-0 max-w-full items-center gap-2">
+    <span className="inline-flex max-w-full min-w-0 items-center gap-2">
       <Icon aria-hidden="true" className="h-4 w-4 shrink-0 opacity-70" />
       <span className="min-w-0 truncate">{option.label}</span>
     </span>
@@ -34,7 +34,7 @@ export const StudioSettingsPage = () => {
 
   return (
     <PageLayout width="narrow">
-      <PageLayout.MainArea className="flex flex-col gap-5 mt-6">
+      <PageLayout.MainArea className="mt-6 flex flex-col gap-5">
         <SectionCard title="Theme" description="Customize the appearance of the studio.">
           <SettingsRow label="Theme mode" htmlFor="theme">
             <Select
@@ -44,7 +44,7 @@ export const StudioSettingsPage = () => {
               }}
             >
               <SelectTrigger id="theme" className="w-full sm:w-48">
-                <SelectValue className="inline-flex min-w-0 max-w-full items-center" />
+                <SelectValue className="inline-flex max-w-full min-w-0 items-center" />
               </SelectTrigger>
               <SelectContent>
                 {THEME_OPTIONS.map(option => (

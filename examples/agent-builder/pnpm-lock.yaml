@@ -34,7 +34,7 @@ importers:
         version: 3.0.14
       '@hono/node-ws':
         specifier: ^1.1.1
-        version: 1.3.1(@hono/node-server@1.19.14(hono@4.12.30))(hono@4.12.30)
+        version: 1.3.1(@hono/node-server@1.19.14(hono@4.12.31))(hono@4.12.31)
       '@mastra/ai-sdk':
         specifier: link:../../client-sdks/ai-sdk
         version: link:../../client-sdks/ai-sdk
@@ -82,7 +82,7 @@ importers:
         version: link:../../voice/openai
       ai:
         specifier: ^6.0.1
-        version: 6.0.230(zod@4.4.3)
+        version: 6.0.233(zod@4.4.3)
       typescript:
         specifier: ^5.9.3
         version: 5.9.3
@@ -102,8 +102,8 @@ importers:
 
 packages:
 
-  '@ai-sdk/gateway@3.0.153':
-    resolution: {integrity: sha512-R5r567od2Olqze/lL2dVS4wVOVyVqG6sJ3cEUI/kW12XQJYKf8fetyxWPYS0ZFe87QPcsh3Z3sDnrMAtAIiS3Q==}
+  '@ai-sdk/gateway@3.0.155':
+    resolution: {integrity: sha512-gP2i/z8gYqJNONZgUkfSe0u9iEvz+HJ/r+MKxmnJjSluPD9K9wwTs65KYyFl7pX8AEujnPny4Lq4l1ytPQD5TA==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
@@ -208,8 +208,8 @@ packages:
     resolution: {integrity: sha512-UycprH3T6n3jH0k44NHMa7pnFHGu/N05MjojYr+Mc6I7obkoLIJujSWwin1pCvdy/eOxrI/l3uDLQsmcrOb4ug==}
     engines: {node: '>= 20'}
 
-  ai@6.0.230:
-    resolution: {integrity: sha512-TQKOUPL7GLirkGvA2/sxA3bNzPeTY2w30mOyzwfQyiB8WvTQTr08mGgBBETPHwKIefgYF8HbLeVMgEahRVsX/Q==}
+  ai@6.0.233:
+    resolution: {integrity: sha512-P0dtR/JtnL05CiGZiVVeRePdgeBhe+DZAxwbOK0hpuWAcfysMPHueP6zwWOyEn07bVW4DMIk9nHbW0t9iIiW7g==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
@@ -272,8 +272,8 @@ packages:
   headers-polyfill@5.0.1:
     resolution: {integrity: sha512-1TJ6Fih/b8h5TIcv+1+Hw0PDQWJTKDKzFZzcKOiW1wJza3XoAQlkCuXLbymPYB8+ZQyw8mHvdw560e8zVFIWyA==}
 
-  hono@4.12.30:
-    resolution: {integrity: sha512-emn+JoJjrN9YTpRDS5it/UI2SO9BAE37T6I3d963RxcZ81G9A4pr2SZTEiiaiKbzx+NKRg5BZ89fCL7gCJCUog==}
+  hono@4.12.31:
+    resolution: {integrity: sha512-zJIHFrl6bq3RDd2YusFNCDlM8qUprxKswyi/OPzPyzKDdyBXDqWx8bZlZ7R+saTdSTatUmb3O7K4SspGPaEOQg==}
     engines: {node: '>=16.9.0'}
 
   is-fullwidth-code-point@3.0.0:
@@ -401,7 +401,7 @@ packages:
 
 snapshots:
 
-  '@ai-sdk/gateway@3.0.153(zod@4.4.3)':
+  '@ai-sdk/gateway@3.0.155(zod@4.4.3)':
     dependencies:
       '@ai-sdk/provider': 3.0.14
       '@ai-sdk/provider-utils': 4.0.40(zod@4.4.3)
@@ -425,14 +425,14 @@ snapshots:
     dependencies:
       json-schema: 0.4.0
 
-  '@hono/node-server@1.19.14(hono@4.12.30)':
+  '@hono/node-server@1.19.14(hono@4.12.31)':
     dependencies:
-      hono: 4.12.30
+      hono: 4.12.31
 
-  '@hono/node-ws@1.3.1(@hono/node-server@1.19.14(hono@4.12.30))(hono@4.12.30)':
+  '@hono/node-ws@1.3.1(@hono/node-server@1.19.14(hono@4.12.31))(hono@4.12.31)':
     dependencies:
-      '@hono/node-server': 1.19.14(hono@4.12.30)
-      hono: 4.12.30
+      '@hono/node-server': 1.19.14(hono@4.12.31)
+      hono: 4.12.31
       ws: 8.21.1
     transitivePeerDependencies:
       - bufferutil
@@ -501,9 +501,9 @@ snapshots:
 
   '@vercel/oidc@3.2.0': {}
 
-  ai@6.0.230(zod@4.4.3):
+  ai@6.0.233(zod@4.4.3):
     dependencies:
-      '@ai-sdk/gateway': 3.0.153(zod@4.4.3)
+      '@ai-sdk/gateway': 3.0.155(zod@4.4.3)
       '@ai-sdk/provider': 3.0.14
       '@ai-sdk/provider-utils': 4.0.40(zod@4.4.3)
       '@opentelemetry/api': 1.9.1
@@ -556,7 +556,7 @@ snapshots:
       '@types/set-cookie-parser': 2.4.10
       set-cookie-parser: 3.1.2
 
-  hono@4.12.30: {}
+  hono@4.12.31: {}
 
   is-fullwidth-code-point@3.0.0: {}
 

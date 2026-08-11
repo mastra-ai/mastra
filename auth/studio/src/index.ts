@@ -1,4 +1,7 @@
+import { createHash } from 'node:crypto';
+
 import type {
+  IOrganizationsProvider,
   ISSOProvider,
   ISessionProvider,
   IUserProvider,
@@ -56,6 +59,20 @@ export interface MastraAuthStudioOptions extends MastraAuthProviderOptions<Studi
 const COOKIE_NAME = 'wos-session';
 
 /**
+ * Upper bound for shared-API verification fetches. Matches the platform API
+ * client's request budget: a slow shared API must fail a single request in
+ * bounded time instead of hanging every authenticated endpoint behind it.
+ */
+const VERIFY_FETCH_TIMEOUT_MS = 15_000;
+
+/**
+ * How long a successful credential verification may be reused without
+ * re-contacting the shared API. Bounds revocation lag: a signed-out or
+ * revoked session can be honored for at most this long.
+ */
+const VERIFY_CACHE_TTL_MS = 30_000;
+
+/**
  * Auth provider for Mastra Studio deployed instances.
  *
  * Proxies all authentication through the shared API, keeping the
@@ -68,7 +85,7 @@ const COOKIE_NAME = 'wos-session';
  */
 export class MastraAuthStudio
   extends MastraAuthProvider<StudioUser>
-  implements ISSOProvider<StudioUser>, ISessionProvider<Session>, IUserProvider<StudioUser>
+  implements ISSOProvider<StudioUser>, ISessionProvider<Session>, IUserProvider<StudioUser>, IOrganizationsProvider
 {
   readonly isMastraCloudAuth = true;
 
@@ -76,10 +93,39 @@ export class MastraAuthStudio
   private organizationId: string | undefined;
   private useProductionCookies: boolean;
   private cookieDomain: string | undefined;
+  /**
+   * `userId → sealed session cookie` cache. The `IOrganizationsProvider`
+   * interface only hands us a `userId`, but the shared API's org endpoints are
+   * cookie-authenticated — so we remember the cookie last seen for a user
+   * inside `verifySessionCookie` and reuse it here. Kept small: bounded to
+   * the last 1000 users, LRU-evicted on insert.
+   */
+  private userSessionCookies = new Map<string, string>();
+  private readonly maxCachedSessions = 1000;
+
+  /**
+   * Short-TTL cache of SUCCESSFUL credential verifications, keyed by a
+   * sha256 of the credential (never the raw cookie/token). Every protected
+   * request re-verifies against the shared API otherwise — one network
+   * round trip per request. Failures are never cached, so a rejected
+   * credential is always re-checked. Bounded + insert-order evicted.
+   */
+  private verifiedCredentials = new Map<string, { user: StudioUser; expiresAt: number }>();
+  private readonly maxCachedVerifications = 1000;
+
+  /**
+   * In-flight `ensureOrganization` promises keyed by userId. Concurrent calls
+   * for the same brand-new user (multiple tabs, parallel requests) would
+   * otherwise all see "no org" from `GET /auth/me` and each fire
+   * `POST /auth/orgs`, creating duplicate personal organizations. The first
+   * caller's promise is reused by every follower until it settles.
+   */
+  private organizationBootstrapInFlight = new Map<string, Promise<string | undefined>>();
 
   constructor(options?: MastraAuthStudioOptions) {
     super({ name: 'mastra-studio', ...options });
-    this.sharedApiUrl = options?.sharedApiUrl || process.env.MASTRA_SHARED_API_URL || 'http://localhost:3010/v1';
+    const explicitSharedApiUrl = options?.sharedApiUrl || process.env.MASTRA_SHARED_API_URL;
+    this.sharedApiUrl = explicitSharedApiUrl || 'https://platform.mastra.ai/v1';
     this.organizationId = options?.organizationId || process.env.MASTRA_ORGANIZATION_ID;
 
     // Strip trailing slash
@@ -92,14 +138,19 @@ export class MastraAuthStudio
 
     // Use production cookie settings (Secure + Domain) when:
     // 1. An explicit cookieDomain is configured, OR
-    // 2. The shared API is on .mastra.ai (auto-detect default domain)
+    // 2. The shared API is *explicitly* configured on .mastra.ai (auto-detect
+    //    default domain). The built-in platform.mastra.ai fallback doesn't
+    //    count — a localhost studio using the default would otherwise mint
+    //    Domain=.mastra.ai cookies the browser rejects.
     // Use hostname-based detection to avoid false positives (e.g., api.mastra.ai.evil.com)
     let autoDetectMastraAi = false;
-    try {
-      const hostname = new URL(this.sharedApiUrl).hostname.toLowerCase();
-      autoDetectMastraAi = hostname === 'mastra.ai' || hostname.endsWith('.mastra.ai');
-    } catch {
-      autoDetectMastraAi = false;
+    if (explicitSharedApiUrl) {
+      try {
+        const hostname = new URL(this.sharedApiUrl).hostname.toLowerCase();
+        autoDetectMastraAi = hostname === 'mastra.ai' || hostname.endsWith('.mastra.ai');
+      } catch {
+        autoDetectMastraAi = false;
+      }
     }
     this.useProductionCookies = !!this.cookieDomain || autoDetectMastraAi;
 
@@ -395,19 +446,210 @@ export class MastraAuthStudio
   }
 
   // ---------------------------------------------------------------------------
+  // IOrganizationsProvider
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Ensure the user belongs to an organization, bootstrapping a personal org
+   * on first use when they have none.
+   *
+   * Because the shared API's org endpoints are cookie-authenticated but this
+   * method only receives a userId, we look up the user's sealed session cookie
+   * from the {@link userSessionCookies} cache populated by
+   * {@link verifySessionCookie}. If we have never seen a cookie for this user
+   * (e.g. bearer-token flow, or the cache was evicted), we skip bootstrap and
+   * return `undefined` — the caller keeps the user in their current no-org
+   * state and the next authenticated request retries.
+   *
+   * Best-effort: any shared-API failure returns `undefined` rather than
+   * throwing, mirroring `MastraAuthWorkos.ensureOrganization`.
+   */
+  async ensureOrganization(userId: string): Promise<string | undefined> {
+    // Dedupe concurrent bootstraps for the same user — otherwise parallel tabs
+    // for a brand-new user each POST /auth/orgs and create duplicate personal
+    // organizations.
+    const inFlight = this.organizationBootstrapInFlight.get(userId);
+    if (inFlight) return inFlight;
+
+    const bootstrap = this.doEnsureOrganization(userId).finally(() => {
+      this.organizationBootstrapInFlight.delete(userId);
+    });
+    this.organizationBootstrapInFlight.set(userId, bootstrap);
+    return bootstrap;
+  }
+
+  private async doEnsureOrganization(userId: string): Promise<string | undefined> {
+    const sessionCookie = this.userSessionCookies.get(userId);
+    if (!sessionCookie) {
+      this.logger.debug('ensureOrganization: no cached session cookie for user; skipping bootstrap', { userId });
+      return undefined;
+    }
+
+    try {
+      // Check /auth/me first — the session may already carry an organizationId
+      // (existing user) or memberOrgIds we can pick from (multi-org user with
+      // no active selection).
+      const me = await this.fetchMe(sessionCookie);
+      if (me?.organizationId) return me.organizationId;
+      if (me?.memberOrgIds && me.memberOrgIds.length > 0) return me.memberOrgIds[0];
+
+      // No org anywhere → create a personal org. The shared API auto-switches
+      // the session cookie to the new org, but the browser holds the sealed
+      // cookie, not us, so we can't update it in-place. Next validated request
+      // will observe the new org via /auth/me.
+      const orgName = me?.user?.email ? `${me.user.email}'s org` : `Personal (${userId})`;
+      const res = await fetch(`${this.sharedApiUrl}/auth/orgs`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Cookie: `${COOKIE_NAME}=${sessionCookie}`,
+        },
+        body: JSON.stringify({ name: orgName }),
+      });
+
+      if (!res.ok) {
+        this.logger.warn('ensureOrganization: shared API POST /auth/orgs returned non-OK', {
+          status: res.status,
+          userId,
+        });
+        return undefined;
+      }
+
+      const data = (await res.json()) as { organization?: { id?: string } };
+      return data.organization?.id;
+    } catch (error) {
+      this.logger.error('ensureOrganization: fetch to shared API failed', {
+        userId,
+        error: error instanceof Error ? { message: error.message, stack: error.stack } : String(error),
+      });
+      return undefined;
+    }
+  }
+
+  /**
+   * Whether the user holds an admin-equivalent role in the organization.
+   *
+   * Fast path: if the org matches the user's currently-active session org, we
+   * read the role directly from `/auth/me`. Cross-org path: we call
+   * `/auth/orgs` (which returns per-membership roles) and look up the target
+   * org. Any shared-API failure resolves to `false`.
+   */
+  async isOrganizationAdmin(organizationId: string, userId: string): Promise<boolean> {
+    const sessionCookie = this.userSessionCookies.get(userId);
+    if (!sessionCookie) return false;
+
+    try {
+      const me = await this.fetchMe(sessionCookie);
+      if (me?.organizationId === organizationId) {
+        return isAdminRole(me.role);
+      }
+
+      // Not the active org — fall back to /auth/orgs for the per-org role.
+      const res = await fetch(`${this.sharedApiUrl}/auth/orgs`, {
+        headers: { Cookie: `${COOKIE_NAME}=${sessionCookie}` },
+      });
+      if (!res.ok) return false;
+
+      const data = (await res.json()) as {
+        organizations?: Array<{ id: string; role?: string | null }>;
+      };
+      const membership = data.organizations?.find(o => o.id === organizationId);
+      return isAdminRole(membership?.role ?? undefined);
+    } catch {
+      return false;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
   // Internal helpers
   // ---------------------------------------------------------------------------
+
+  /**
+   * Record the sealed session cookie last seen for a user so
+   * {@link ensureOrganization} / {@link isOrganizationAdmin} can act on their
+   * behalf. LRU-evicted at {@link maxCachedSessions} entries.
+   */
+  private rememberUserSession(userId: string, sessionCookie: string): void {
+    // Refresh recency by re-inserting.
+    this.userSessionCookies.delete(userId);
+    this.userSessionCookies.set(userId, sessionCookie);
+    if (this.userSessionCookies.size > this.maxCachedSessions) {
+      const oldest = this.userSessionCookies.keys().next().value;
+      if (oldest !== undefined) this.userSessionCookies.delete(oldest);
+    }
+  }
+
+  /** Cache key for a verified credential — hash, never the raw secret. */
+  private verificationKey(kind: 'cookie' | 'bearer', credential: string): string {
+    return createHash('sha256').update(`${kind}:${credential}`).digest('hex');
+  }
+
+  private getCachedVerification(key: string): StudioUser | null {
+    const entry = this.verifiedCredentials.get(key);
+    if (!entry) return null;
+    if (entry.expiresAt <= Date.now()) {
+      this.verifiedCredentials.delete(key);
+      return null;
+    }
+    return entry.user;
+  }
+
+  private cacheVerification(key: string, user: StudioUser): void {
+    this.verifiedCredentials.delete(key);
+    this.verifiedCredentials.set(key, { user, expiresAt: Date.now() + VERIFY_CACHE_TTL_MS });
+    if (this.verifiedCredentials.size > this.maxCachedVerifications) {
+      const oldest = this.verifiedCredentials.keys().next().value;
+      if (oldest !== undefined) this.verifiedCredentials.delete(oldest);
+    }
+  }
+
+  /**
+   * Fetch the shared API's `/auth/me` and return the raw response body, or
+   * `null` on any non-OK / network error. Split out so `ensureOrganization`
+   * and `isOrganizationAdmin` can reuse it without duplicating the shape.
+   */
+  private async fetchMe(sessionCookie: string): Promise<{
+    user?: { id?: string; email?: string };
+    organizationId?: string;
+    role?: string;
+    memberOrgIds?: string[];
+  } | null> {
+    try {
+      const res = await fetch(`${this.sharedApiUrl}/auth/me`, {
+        headers: { Cookie: `${COOKIE_NAME}=${sessionCookie}` },
+        signal: AbortSignal.timeout(VERIFY_FETCH_TIMEOUT_MS),
+      });
+      if (!res.ok) return null;
+      return (await res.json()) as {
+        user?: { id?: string; email?: string };
+        organizationId?: string;
+        role?: string;
+        memberOrgIds?: string[];
+      };
+    } catch {
+      return null;
+    }
+  }
 
   /**
    * Forward a sealed session cookie to the shared API's /auth/me endpoint
    * to validate it and get user info.
    */
   private async verifySessionCookie(sessionCookie: string): Promise<StudioUser | null> {
+    const cacheKey = this.verificationKey('cookie', sessionCookie);
+    const cached = this.getCachedVerification(cacheKey);
+    if (cached) {
+      // Keep the userId → cookie mapping warm for IOrganizationsProvider.
+      this.rememberUserSession(cached.id, sessionCookie);
+      return cached;
+    }
+
     try {
       const res = await fetch(`${this.sharedApiUrl}/auth/me`, {
         headers: {
           Cookie: `${COOKIE_NAME}=${sessionCookie}`,
         },
+        signal: AbortSignal.timeout(VERIFY_FETCH_TIMEOUT_MS),
       });
 
       if (!res.ok) {
@@ -433,7 +675,11 @@ export class MastraAuthStudio
         memberOrgIds?: string[];
       };
 
-      return {
+      // Remember the sealed cookie for this user so IOrganizationsProvider
+      // methods (invoked with only a userId) can act on the user's behalf.
+      this.rememberUserSession(data.user.id, sessionCookie);
+
+      const user: StudioUser = {
         id: data.user.id,
         email: data.user.email,
         name: [data.user.firstName, data.user.lastName].filter(Boolean).join(' ') || undefined,
@@ -443,6 +689,10 @@ export class MastraAuthStudio
         permissions: data.permissions,
         memberOrgIds: data.memberOrgIds,
       };
+      // Don't pin brand-new users in the no-org state: org bootstrap runs on
+      // the next request, which must re-read /auth/me to see the new org.
+      if (user.organizationId) this.cacheVerification(cacheKey, user);
+      return user;
     } catch (error) {
       this.logger.error('verifySessionCookie: fetch to shared API failed', {
         url: `${this.sharedApiUrl}/auth/me`,
@@ -457,11 +707,16 @@ export class MastraAuthStudio
    * to validate it and get user info (used for CLI tokens).
    */
   private async verifyBearerToken(token: string): Promise<StudioUser | null> {
+    const cacheKey = this.verificationKey('bearer', token);
+    const cached = this.getCachedVerification(cacheKey);
+    if (cached) return cached;
+
     try {
       const res = await fetch(`${this.sharedApiUrl}/auth/verify`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
+        signal: AbortSignal.timeout(VERIFY_FETCH_TIMEOUT_MS),
       });
 
       if (!res.ok) {
@@ -484,7 +739,7 @@ export class MastraAuthStudio
         memberOrgIds?: string[];
       };
 
-      return {
+      const user: StudioUser = {
         id: data.user.id,
         email: data.user.email,
         name: [data.user.firstName, data.user.lastName].filter(Boolean).join(' ') || undefined,
@@ -492,6 +747,10 @@ export class MastraAuthStudio
         role: data.role,
         memberOrgIds: data.memberOrgIds,
       };
+      // Same no-org guard as verifySessionCookie: cache only after the user's
+      // organization bootstrap has completed.
+      if (user.organizationId) this.cacheVerification(cacheKey, user);
+      return user;
     } catch (error) {
       this.logger.error('verifyBearerToken: fetch to shared API failed', {
         url: `${this.sharedApiUrl}/auth/verify`,
@@ -510,6 +769,15 @@ function parseCookie(cookieHeader: string | null | undefined, name: string): str
   if (!cookieHeader) return null;
   const match = cookieHeader.match(new RegExp(`${name}=([^;]+)`));
   return match?.[1] ?? null;
+}
+
+/**
+ * WorkOS AuthKit conventionally uses `admin` / `owner` for admin-equivalent
+ * roles; the shared API surfaces the WorkOS role slug directly on
+ * `/auth/me` and `/auth/orgs`.
+ */
+function isAdminRole(role: string | undefined): boolean {
+  return role === 'admin' || role === 'owner';
 }
 
 /**

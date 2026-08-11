@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
@@ -57,6 +57,8 @@ export type GithubPRSubscription = {
   lastSyncAt?: string;
   lastSyncStatus?: 'success' | 'error' | 'skipped';
   lastSyncError?: string;
+  /** Error from reading the PR snapshot out of the gitcrawl database after a successful sync. */
+  lastSnapshotError?: string;
   lastObservedGithubUpdatedAt?: string;
   lastObservedContentHash?: string;
   lastObservedThreadContentHash?: string;
@@ -65,6 +67,9 @@ export type GithubPRSubscription = {
   lastObservedMergeableState?: string;
   lastObservedCiState?: string;
   lastObservedReviewStateHash?: string;
+  lastObservedCommentUrl?: string;
+  lastObservedCommentAuthor?: string;
+  lastObservedCommentIsBot?: boolean;
   lastNotificationAt?: string;
   lastNotificationKind?: string;
   lastNotificationPriority?: 'medium' | 'high';
@@ -226,7 +231,7 @@ type GithubSignalAgentOptions = {
   getNotificationStreamOptions?: (target: {
     resourceId: string;
     threadId: string;
-  }) => GithubNotificationStreamOptions | Promise<GithubNotificationStreamOptions>;
+  }) => GithubNotificationStreamOptions | undefined | Promise<GithubNotificationStreamOptions | undefined>;
 };
 
 type GithubSignalsMastra = {
@@ -310,23 +315,36 @@ function resolveHomePath(path: string): string {
   return path.startsWith('~/') ? join(homedir(), path.slice(2)) : path;
 }
 
-async function getGitcrawlDbPath(): Promise<string> {
-  if (process.env.GITCRAWL_DB_PATH) return resolveHomePath(process.env.GITCRAWL_DB_PATH);
-  const configPath = process.env.GITCRAWL_CONFIG_PATH ?? join(homedir(), '.config', 'gitcrawl', 'config.toml');
+async function readDbPathFromGitcrawlConfig(configPath: string): Promise<string | undefined> {
   try {
     const config = await readFile(resolveHomePath(configPath), 'utf8');
     const match = /^\s*db_path\s*=\s*['\"]([^'\"]+)['\"]/m.exec(config);
     if (match?.[1]) return resolveHomePath(match[1]);
   } catch {
-    // fall back to gitcrawl's default config location
+    // no readable config at this location
   }
-  return join(homedir(), '.config', 'gitcrawl', 'gitcrawl.db');
+  return undefined;
 }
 
-async function queryGitcrawlDb<T>(sql: string): Promise<T[]> {
-  const dbPath = await getGitcrawlDbPath();
-  const { stdout } = await execFileAsync('sqlite3', ['-json', dbPath, sql], { maxBuffer: 10 * 1024 * 1024 });
-  return JSON.parse(stdout || '[]') as T[];
+async function fileExists(path: string): Promise<boolean> {
+  try {
+    await stat(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Directories gitcrawl uses for its config and database by default. Linux
+ * uses the XDG path, but macOS uses ~/Library/Application Support, so probing
+ * only ~/.config silently misses the database on macOS.
+ */
+function gitcrawlDefaultDirs(): string[] {
+  return [
+    join(homedir(), '.config', 'gitcrawl'),
+    ...(process.platform === 'darwin' ? [join(homedir(), 'Library', 'Application Support', 'gitcrawl')] : []),
+  ];
 }
 
 function sqlString(value: string): string {
@@ -370,6 +388,9 @@ function getGithubMetadata(threadMetadata: Record<string, unknown> | undefined):
       ...(readString(rawSubscription.lastSyncError)
         ? { lastSyncError: readString(rawSubscription.lastSyncError)! }
         : {}),
+      ...(readString(rawSubscription.lastSnapshotError)
+        ? { lastSnapshotError: readString(rawSubscription.lastSnapshotError)! }
+        : {}),
       ...(readString(rawSubscription.lastObservedGithubUpdatedAt)
         ? { lastObservedGithubUpdatedAt: readString(rawSubscription.lastObservedGithubUpdatedAt)! }
         : {}),
@@ -393,6 +414,15 @@ function getGithubMetadata(threadMetadata: Record<string, unknown> | undefined):
         : {}),
       ...(readString(rawSubscription.lastObservedReviewStateHash)
         ? { lastObservedReviewStateHash: readString(rawSubscription.lastObservedReviewStateHash)! }
+        : {}),
+      ...(readString(rawSubscription.lastObservedCommentUrl)
+        ? { lastObservedCommentUrl: readString(rawSubscription.lastObservedCommentUrl)! }
+        : {}),
+      ...(readString(rawSubscription.lastObservedCommentAuthor)
+        ? { lastObservedCommentAuthor: readString(rawSubscription.lastObservedCommentAuthor)! }
+        : {}),
+      ...(typeof rawSubscription.lastObservedCommentIsBot === 'boolean'
+        ? { lastObservedCommentIsBot: rawSubscription.lastObservedCommentIsBot }
         : {}),
       ...(readString(rawSubscription.lastNotificationAt)
         ? { lastNotificationAt: readString(rawSubscription.lastNotificationAt)! }
@@ -662,6 +692,26 @@ function isBotOnlyActivity(snapshot: GithubPullRequestSnapshot): boolean {
   return snapshot.latestCommentIsBot === true && (!snapshot.ciState || snapshot.ciState === 'unknown');
 }
 
+function isKnownMergeableState(state: string | undefined): state is string {
+  return !!state && state.toLowerCase() !== 'unknown';
+}
+
+function hasMeaningfulMergeableStateChange(previous: string | undefined, current: string | undefined): boolean {
+  if (!isKnownMergeableState(current) || current === previous) return false;
+  return current === 'dirty' || previous === 'dirty' || isKnownMergeableState(previous);
+}
+
+function isExistingBotCommentEdit(subscription: GithubPRSubscription, snapshot: GithubPullRequestSnapshot): boolean {
+  return (
+    snapshot.latestCommentIsBot === true &&
+    subscription.lastObservedCommentIsBot === true &&
+    !!snapshot.latestCommentUrl &&
+    snapshot.latestCommentUrl === subscription.lastObservedCommentUrl &&
+    !!snapshot.latestCommentAuthor &&
+    snapshot.latestCommentAuthor === subscription.lastObservedCommentAuthor
+  );
+}
+
 function stringifyEvidence(value: unknown): string {
   if (typeof value === 'string') return value;
   try {
@@ -735,7 +785,7 @@ function classifyGithubActivityNotification(input: {
     };
   }
   if (
-    input.snapshot.mergeableState &&
+    isKnownMergeableState(input.snapshot.mergeableState) &&
     input.subscription.lastObservedMergeableState === 'dirty' &&
     input.snapshot.mergeableState !== 'dirty'
   ) {
@@ -824,9 +874,12 @@ function applySnapshotCursor(subscription: GithubPRSubscription, snapshot: Githu
   if (snapshot.threadContentHash) subscription.lastObservedThreadContentHash = snapshot.threadContentHash;
   if (snapshot.headSha) subscription.lastObservedHeadSha = snapshot.headSha;
   if (snapshot.state) subscription.lastObservedState = snapshot.state;
-  if (snapshot.mergeableState) subscription.lastObservedMergeableState = snapshot.mergeableState;
+  if (isKnownMergeableState(snapshot.mergeableState)) subscription.lastObservedMergeableState = snapshot.mergeableState;
   if (snapshot.ciState) subscription.lastObservedCiState = snapshot.ciState;
   if (snapshot.reviewStateHash) subscription.lastObservedReviewStateHash = snapshot.reviewStateHash;
+  if (snapshot.latestCommentUrl) subscription.lastObservedCommentUrl = snapshot.latestCommentUrl;
+  if (snapshot.latestCommentAuthor) subscription.lastObservedCommentAuthor = snapshot.latestCommentAuthor;
+  if (snapshot.latestCommentIsBot !== undefined) subscription.lastObservedCommentIsBot = snapshot.latestCommentIsBot;
 }
 
 function parseGitHubRemoteUrl(remoteUrl: string): GithubRepository | undefined {
@@ -854,9 +907,55 @@ export class GitRemoteRepositoryResolver implements GithubRepositoryResolver {
 
 export class GitcrawlSyncClient implements GithubSignalsSyncClient {
   readonly #command: string;
+  #dbPathPromise?: Promise<string>;
 
   constructor(options: { command?: string } = {}) {
     this.#command = options.command ?? 'gitcrawl';
+  }
+
+  /**
+   * Resolve the gitcrawl SQLite database path. Explicit env overrides win,
+   * then gitcrawl itself is asked (authoritative across platforms and
+   * versions), then known default locations are probed.
+   */
+  async #resolveDbPath(): Promise<string> {
+    if (process.env.GITCRAWL_DB_PATH) return resolveHomePath(process.env.GITCRAWL_DB_PATH);
+    if (process.env.GITCRAWL_CONFIG_PATH) {
+      const fromEnvConfig = await readDbPathFromGitcrawlConfig(process.env.GITCRAWL_CONFIG_PATH);
+      if (fromEnvConfig) return fromEnvConfig;
+    }
+    try {
+      const { stdout } = await execFileAsync(this.#command, ['status', '--json'], { maxBuffer: 10 * 1024 * 1024 });
+      const status = JSON.parse(stdout) as { database_path?: unknown; db_path?: unknown };
+      const reported = readString(status.database_path) ?? readString(status.db_path);
+      if (reported) return resolveHomePath(reported);
+    } catch {
+      // gitcrawl unavailable or output unparsable; probe default locations
+    }
+    const defaultDirs = gitcrawlDefaultDirs();
+    for (const dir of defaultDirs) {
+      const fromConfig = await readDbPathFromGitcrawlConfig(join(dir, 'config.toml'));
+      if (fromConfig) return fromConfig;
+    }
+    for (const dir of defaultDirs) {
+      const candidate = join(dir, 'gitcrawl.db');
+      if (await fileExists(candidate)) return candidate;
+    }
+    return join(defaultDirs[0]!, 'gitcrawl.db');
+  }
+
+  async #queryDb<T>(sql: string): Promise<T[]> {
+    this.#dbPathPromise ??= this.#resolveDbPath();
+    const dbPath = await this.#dbPathPromise;
+    try {
+      const { stdout } = await execFileAsync('sqlite3', ['-json', dbPath, sql], { maxBuffer: 10 * 1024 * 1024 });
+      return JSON.parse(stdout || '[]') as T[];
+    } catch (error) {
+      // Drop the cached path so a fixed or moved database is picked up on the next poll.
+      this.#dbPathPromise = undefined;
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`gitcrawl database query failed (db: ${dbPath}): ${message}`);
+    }
   }
 
   async syncPullRequest(input: GithubSignalsSyncInput): Promise<GithubSignalsSyncResult> {
@@ -883,38 +982,37 @@ export class GitcrawlSyncClient implements GithubSignalsSyncClient {
   }
 
   async getPullRequestSnapshot(input: GithubSignalsSyncInput): Promise<GithubPullRequestSnapshot | undefined> {
-    try {
-      const { stdout } = await execFileAsync(
-        this.#command,
-        ['threads', `${input.owner}/${input.repo}`, '--numbers', String(input.number), '--json'],
-        {
-          cwd: input.cwd,
-          signal: input.abortSignal,
-          maxBuffer: 10 * 1024 * 1024,
-        },
-      );
-      const parsed = JSON.parse(stdout) as { threads?: Array<Record<string, unknown>> };
-      const thread = parsed.threads?.find(item => readNumber(item.number) === input.number);
-      if (!thread) return undefined;
+    const { stdout } = await execFileAsync(
+      this.#command,
+      ['threads', `${input.owner}/${input.repo}`, '--numbers', String(input.number), '--json'],
+      {
+        cwd: input.cwd,
+        signal: input.abortSignal,
+        maxBuffer: 10 * 1024 * 1024,
+      },
+    );
+    const parsed = JSON.parse(stdout) as { threads?: Array<Record<string, unknown>> };
+    const thread = parsed.threads?.find(item => readNumber(item.number) === input.number);
+    if (!thread) return undefined;
 
-      const owner = sqlString(input.owner);
-      const repo = sqlString(input.repo);
-      const number = input.number;
-      const [threadDetails] = await queryGitcrawlDb<{
-        state?: string;
-        closed_at_gh?: string;
-        merged_at_gh?: string;
-      }>(`select t.state, t.closed_at_gh, t.merged_at_gh
+    const owner = sqlString(input.owner);
+    const repo = sqlString(input.repo);
+    const number = input.number;
+    const [threadDetails] = await this.#queryDb<{
+      state?: string;
+      closed_at_gh?: string;
+      merged_at_gh?: string;
+    }>(`select t.state, t.closed_at_gh, t.merged_at_gh
           from threads t
           join repositories r on r.id=t.repo_id
          where r.owner=${owner} and r.name=${repo} and t.number=${number}
          limit 1`);
-      const [details] = await queryGitcrawlDb<{
-        head_sha?: string;
-        head_ref?: string;
-        mergeable_state?: string;
-        merged_at?: string;
-      }>(`select d.head_sha, d.head_ref, d.mergeable_state,
+    const [details] = await this.#queryDb<{
+      head_sha?: string;
+      head_ref?: string;
+      mergeable_state?: string;
+      merged_at?: string;
+    }>(`select d.head_sha, d.head_ref, d.mergeable_state,
                  json_extract(d.raw_json, '$.merged_at') as merged_at
           from pull_request_details d
           join threads t on t.id=d.thread_id
@@ -922,50 +1020,50 @@ export class GitcrawlSyncClient implements GithubSignalsSyncClient {
          where r.owner=${owner} and r.name=${repo} and t.number=${number}
          limit 1`);
 
-      const headSha = readString(details?.head_sha);
-      const checkRows = await queryGitcrawlDb<{
-        name?: string;
-        status?: string;
-        conclusion?: string;
-        workflow_name?: string;
-        details_url?: string;
-        updated_at?: string;
-      }>(`select c.name, c.status, c.conclusion, c.workflow_name, c.details_url,
+    const headSha = readString(details?.head_sha);
+    const checkRows = await this.#queryDb<{
+      name?: string;
+      status?: string;
+      conclusion?: string;
+      workflow_name?: string;
+      details_url?: string;
+      updated_at?: string;
+    }>(`select c.name, c.status, c.conclusion, c.workflow_name, c.details_url,
                  coalesce(c.completed_at, c.started_at, c.fetched_at) as updated_at
             from pull_request_checks c
             join threads t on t.id=c.thread_id
             join repositories r on r.id=t.repo_id
            where r.owner=${owner} and r.name=${repo} and t.number=${number}${headSha ? ` and json_extract(c.raw_json, '$.head_sha')=${sqlString(headSha)}` : ''}`);
 
-      const workflowRows = details?.head_sha
-        ? await queryGitcrawlDb<{
-            workflow_name?: string;
-            status?: string;
-            conclusion?: string;
-            html_url?: string;
-            updated_at_gh?: string;
-          }>(`select workflow_name, status, conclusion, html_url, updated_at_gh
+    const workflowRows = details?.head_sha
+      ? await this.#queryDb<{
+          workflow_name?: string;
+          status?: string;
+          conclusion?: string;
+          html_url?: string;
+          updated_at_gh?: string;
+        }>(`select workflow_name, status, conclusion, html_url, updated_at_gh
                 from github_workflow_runs w
                 join repositories r on r.id=w.repo_id
                where r.owner=${owner} and r.name=${repo} and w.head_sha=${sqlString(details.head_sha)}`)
-        : [];
-      const [reviewState] = await queryGitcrawlDb<{
-        unresolved_count?: number;
-        latest_review_thread_at?: string;
-      }>(`select count(*) as unresolved_count,
+      : [];
+    const [reviewState] = await this.#queryDb<{
+      unresolved_count?: number;
+      latest_review_thread_at?: string;
+    }>(`select count(*) as unresolved_count,
                  max(coalesce(first_comment_updated_at, first_comment_created_at, fetched_at)) as latest_review_thread_at
             from pull_request_review_threads rt
             join threads t on t.id=rt.thread_id
             join repositories r on r.id=t.repo_id
            where r.owner=${owner} and r.name=${repo} and t.number=${number} and rt.is_resolved=0`);
-      const latestComments = await queryGitcrawlDb<{
-        author_login?: string;
-        author_type?: string;
-        is_bot?: number;
-        body?: string;
-        html_url?: string;
-        updated_at?: string;
-      }>(`select c.author_login, c.author_type, c.is_bot, c.body, json_extract(c.raw_json, '$.html_url') as html_url,
+    const latestComments = await this.#queryDb<{
+      author_login?: string;
+      author_type?: string;
+      is_bot?: number;
+      body?: string;
+      html_url?: string;
+      updated_at?: string;
+    }>(`select c.author_login, c.author_type, c.is_bot, c.body, json_extract(c.raw_json, '$.html_url') as html_url,
                  coalesce(c.updated_at_gh, c.created_at_gh) as updated_at
             from comments c
             join threads t on t.id=c.thread_id
@@ -973,94 +1071,91 @@ export class GitcrawlSyncClient implements GithubSignalsSyncClient {
            where r.owner=${owner} and r.name=${repo} and t.number=${number}
            order by coalesce(c.updated_at_gh, c.created_at_gh) desc
            limit 20`);
-      const latestComment = latestComments[0];
+    const latestComment = latestComments[0];
 
-      const checks = normalizeGithubChecksForSnapshot({
-        checkRows: checkRows.map(row => ({
-          source: 'check',
-          name: readString(row.name) ?? 'check',
-          status: readString(row.status),
-          conclusion: readString(row.conclusion),
-          workflowName: readString(row.workflow_name),
-          detailsUrl: readString(row.details_url),
-          updatedAt: readString(row.updated_at),
-        })),
-        workflowRows: workflowRows.map(row => ({
-          source: 'workflow',
-          name: readString(row.workflow_name) ?? 'workflow',
-          status: readString(row.status),
-          conclusion: readString(row.conclusion),
-          workflowName: readString(row.workflow_name),
-          detailsUrl: readString(row.html_url),
-          updatedAt: readString(row.updated_at_gh),
-        })),
-      });
-      const ciState = checks.some(check => check.conclusion === 'failure' || check.conclusion === 'timed_out')
-        ? 'failure'
-        : checks.some(check => check.status && check.status !== 'completed')
-          ? 'pending'
-          : checks.length > 0
-            ? 'success'
-            : 'unknown';
-      const threadContentHash = readString(thread.content_hash);
-      const unresolvedReviewThreads = Number(reviewState?.unresolved_count ?? 0);
-      const reviewStateHash = snapshotHash({
-        unresolvedReviewThreads,
-        latestReviewThreadAt: reviewState?.latest_review_thread_at,
-      });
-      const contentHash = snapshotHash({
-        threadContentHash,
-        state: thread.state,
-        headSha: details?.head_sha,
-        mergeableState: details?.mergeable_state,
-        ciState,
-        reviewStateHash,
-        checks: checks.map(check => ({
-          name: check.name,
-          status: check.status,
-          conclusion: check.conclusion,
-          detailsUrl: check.detailsUrl,
-          updatedAt: check.updatedAt,
-        })),
-      });
-      return {
-        title: readString(thread.title),
-        state:
-          readString(details?.merged_at) || readString(threadDetails?.merged_at_gh)
-            ? 'merged'
-            : (readString(threadDetails?.state) ?? readString(thread.state)),
-        htmlUrl: readString(thread.html_url),
-        githubUpdatedAt: readString(thread.updated_at_gh),
-        closedAt: readString(threadDetails?.closed_at_gh),
-        mergedAt: readString(details?.merged_at) ?? readString(threadDetails?.merged_at_gh),
-        threadContentHash,
-        contentHash,
-        headSha: readString(details?.head_sha),
-        headRef: readString(details?.head_ref),
-        mergeableState: readString(details?.mergeable_state),
-        checks,
-        ciState,
-        unresolvedReviewThreads,
-        reviewStateHash,
-        latestReviewThreadAt: readString(reviewState?.latest_review_thread_at),
-        latestCommentAuthor: readString(latestComment?.author_login),
-        latestCommentAuthorType: readString(latestComment?.author_type),
-        latestCommentIsBot: latestComment?.is_bot === 1,
-        latestCommentBody: sanitizeCommentBody(readString(latestComment?.body)),
-        latestCommentUrl: readString(latestComment?.html_url),
-        latestCommentUpdatedAt: readString(latestComment?.updated_at),
-        latestComments: latestComments.map(comment => ({
-          author: readString(comment.author_login),
-          authorType: readString(comment.author_type),
-          isBot: comment.is_bot === 1,
-          body: sanitizeCommentBody(readString(comment.body)),
-          url: readString(comment.html_url),
-          updatedAt: readString(comment.updated_at),
-        })),
-      };
-    } catch {
-      return undefined;
-    }
+    const checks = normalizeGithubChecksForSnapshot({
+      checkRows: checkRows.map(row => ({
+        source: 'check',
+        name: readString(row.name) ?? 'check',
+        status: readString(row.status),
+        conclusion: readString(row.conclusion),
+        workflowName: readString(row.workflow_name),
+        detailsUrl: readString(row.details_url),
+        updatedAt: readString(row.updated_at),
+      })),
+      workflowRows: workflowRows.map(row => ({
+        source: 'workflow',
+        name: readString(row.workflow_name) ?? 'workflow',
+        status: readString(row.status),
+        conclusion: readString(row.conclusion),
+        workflowName: readString(row.workflow_name),
+        detailsUrl: readString(row.html_url),
+        updatedAt: readString(row.updated_at_gh),
+      })),
+    });
+    const ciState = checks.some(check => check.conclusion === 'failure' || check.conclusion === 'timed_out')
+      ? 'failure'
+      : checks.some(check => check.status && check.status !== 'completed')
+        ? 'pending'
+        : checks.length > 0
+          ? 'success'
+          : 'unknown';
+    const threadContentHash = readString(thread.content_hash);
+    const unresolvedReviewThreads = Number(reviewState?.unresolved_count ?? 0);
+    const reviewStateHash = snapshotHash({
+      unresolvedReviewThreads,
+      latestReviewThreadAt: reviewState?.latest_review_thread_at,
+    });
+    const contentHash = snapshotHash({
+      threadContentHash,
+      state: thread.state,
+      headSha: details?.head_sha,
+      mergeableState: details?.mergeable_state,
+      ciState,
+      reviewStateHash,
+      checks: checks.map(check => ({
+        name: check.name,
+        status: check.status,
+        conclusion: check.conclusion,
+        detailsUrl: check.detailsUrl,
+        updatedAt: check.updatedAt,
+      })),
+    });
+    return {
+      title: readString(thread.title),
+      state:
+        readString(details?.merged_at) || readString(threadDetails?.merged_at_gh)
+          ? 'merged'
+          : (readString(threadDetails?.state) ?? readString(thread.state)),
+      htmlUrl: readString(thread.html_url),
+      githubUpdatedAt: readString(thread.updated_at_gh),
+      closedAt: readString(threadDetails?.closed_at_gh),
+      mergedAt: readString(details?.merged_at) ?? readString(threadDetails?.merged_at_gh),
+      threadContentHash,
+      contentHash,
+      headSha: readString(details?.head_sha),
+      headRef: readString(details?.head_ref),
+      mergeableState: readString(details?.mergeable_state),
+      checks,
+      ciState,
+      unresolvedReviewThreads,
+      reviewStateHash,
+      latestReviewThreadAt: readString(reviewState?.latest_review_thread_at),
+      latestCommentAuthor: readString(latestComment?.author_login),
+      latestCommentAuthorType: readString(latestComment?.author_type),
+      latestCommentIsBot: latestComment?.is_bot === 1,
+      latestCommentBody: sanitizeCommentBody(readString(latestComment?.body)),
+      latestCommentUrl: readString(latestComment?.html_url),
+      latestCommentUpdatedAt: readString(latestComment?.updated_at),
+      latestComments: latestComments.map(comment => ({
+        author: readString(comment.author_login),
+        authorType: readString(comment.author_type),
+        isBot: comment.is_bot === 1,
+        body: sanitizeCommentBody(readString(comment.body)),
+        url: readString(comment.html_url),
+        updatedAt: readString(comment.updated_at),
+      })),
+    };
   }
 }
 
@@ -1114,6 +1209,8 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
   readonly #syncClient: GithubSignalsSyncClient;
   readonly #repositoryResolver: GithubRepositoryResolver;
   readonly #polling = new Map<string, GithubPollingState>();
+  readonly #pollingThreadGenerations = new Map<string, number>();
+  #pollingGeneration = 0;
   readonly #permissionCache = new Map<string, { permission: GithubPermission; expiresAt: number }>();
   #agent?: GithubSignalAgent;
   #agentOptions: GithubSignalAgentOptions = {};
@@ -1208,6 +1305,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
     const key = this.#pollingKey(input);
     for (const [pollingKey, state] of this.#polling.entries()) {
       if (pollingKey === key) continue;
+      this.#invalidatePollingThread(pollingKey);
       clearInterval(state.timer);
       this.#polling.delete(pollingKey);
     }
@@ -1230,6 +1328,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
 
   stopPollingForThread(input: GithubPollingThread): void {
     const key = this.#pollingKey(input);
+    this.#invalidatePollingThread(key);
     const state = this.#polling.get(key);
     if (!state) return;
     clearInterval(state.timer);
@@ -1249,8 +1348,21 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
   }
 
   stopAllPolling(): void {
+    this.#pollingGeneration++;
+    this.#pollingThreadGenerations.clear();
     for (const state of this.#polling.values()) clearInterval(state.timer);
     this.#polling.clear();
+  }
+
+  /**
+   * Shutdown hook. Per-thread polling lives in this provider's own timer map, not in the base
+   * class's single timer, so the inherited `stop()` would leave those intervals running: a
+   * provider that has been shut down would keep polling GitHub and keep notifying through the
+   * agent it was still connected to.
+   */
+  override stop(): void {
+    super.stop();
+    this.stopAllPolling();
   }
 
   async pollThreadNow(input: GithubPollingThread): Promise<number> {
@@ -1353,7 +1465,8 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
     resourceId?: string;
   } {
     const memoryContext = args.requestContext?.get('MastraMemory') as
-      { thread?: { id?: string }; resourceId?: string } | undefined;
+      | { thread?: { id?: string }; resourceId?: string }
+      | undefined;
     return { threadId: memoryContext?.thread?.id, resourceId: memoryContext?.resourceId };
   }
 
@@ -1465,6 +1578,10 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
     return `${input.resourceId}:${input.threadId}`;
   }
 
+  #invalidatePollingThread(key: string): void {
+    this.#pollingThreadGenerations.set(key, (this.#pollingThreadGenerations.get(key) ?? 0) + 1);
+  }
+
   #getNotificationAgent(_input?: { agentId?: string }): GithubSignalAgent | undefined {
     if (this.#agent) return this.#agent;
     const agentId = _input?.agentId ?? this.#options.agentId;
@@ -1490,11 +1607,16 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
     if (state?.running) {
       return 0;
     }
+    const generation = this.#pollingGeneration;
+    const threadGeneration = this.#pollingThreadGenerations.get(key) ?? 0;
+    const isCurrentGeneration = () =>
+      this.#pollingGeneration === generation && (this.#pollingThreadGenerations.get(key) ?? 0) === threadGeneration;
     if (state) state.running = true;
     this.#notifyPollingChanged({ threadId: input.threadId, resourceId: input.resourceId, running: true });
 
     try {
       const { threadStore, loadedThread } = await this.#loadThread(input);
+      if (!isCurrentGeneration()) return 0;
       const githubMetadata = getGithubMetadata(loadedThread.metadata);
       if (githubMetadata.subscriptions.length === 0) {
         this.stopPollingForThread(input);
@@ -1512,9 +1634,28 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
           includeComments: options.includeComments,
         };
         const syncResult = await this.#syncClient.syncPullRequest(syncInput);
-        let snapshot = syncResult.ok ? await this.#syncClient.getPullRequestSnapshot?.(syncInput) : undefined;
+        if (!isCurrentGeneration()) return 0;
+        let snapshot: GithubPullRequestSnapshot | undefined;
+        let snapshotError: string | undefined;
+        if (syncResult.ok) {
+          try {
+            snapshot = await this.#syncClient.getPullRequestSnapshot?.(syncInput);
+          } catch (error) {
+            // A sync can succeed while the snapshot read fails (e.g. the
+            // gitcrawl database is missing or unreadable). Surface the error
+            // instead of silently reporting a healthy poll with no data.
+            snapshotError = error instanceof Error ? error.message : String(error);
+          }
+        }
+        if (!isCurrentGeneration()) return 0;
         if (snapshot)
-          snapshot = await this.#filterUnauthorizedLatestComment(subscription.owner, subscription.repo, snapshot);
+          snapshot = await this.#filterUnauthorizedLatestComment(
+            subscription.owner,
+            subscription.repo,
+            snapshot,
+            isCurrentGeneration,
+          );
+        if (!isCurrentGeneration()) return 0;
         const nextSubscription: GithubPRSubscription = {
           ...subscription,
           updatedAt: now,
@@ -1523,15 +1664,20 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
         };
         if (syncResult.error) nextSubscription.lastSyncError = syncResult.error;
         else delete nextSubscription.lastSyncError;
+        if (snapshotError) nextSubscription.lastSnapshotError = snapshotError;
+        else delete nextSubscription.lastSnapshotError;
 
         const previousGithubUpdatedAt = subscription.lastObservedGithubUpdatedAt;
         const previousContentHash = subscription.lastObservedContentHash;
         const previousThreadContentHash = subscription.lastObservedThreadContentHash;
         const previousHeadSha = subscription.lastObservedHeadSha;
-        const latestCommentChanged =
+        const latestCommentTimestampChanged =
           !!previousGithubUpdatedAt &&
           !!snapshot?.latestCommentUpdatedAt &&
           Date.parse(snapshot.latestCommentUpdatedAt) > Date.parse(previousGithubUpdatedAt);
+        const existingBotCommentEdited =
+          latestCommentTimestampChanged && !!snapshot && isExistingBotCommentEdit(subscription, snapshot);
+        const latestCommentChanged = latestCommentTimestampChanged && !existingBotCommentEdited;
         if (snapshot) applySnapshotCursor(nextSubscription, snapshot);
 
         // First observation (no previous cursor) always counts as changed so we
@@ -1552,12 +1698,11 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
               latestCommentChanged ||
               (previousThreadContentHash &&
                 snapshot.threadContentHash &&
-                previousThreadContentHash !== snapshot.threadContentHash) ||
+                previousThreadContentHash !== snapshot.threadContentHash &&
+                !existingBotCommentEdited) ||
               (previousHeadSha && snapshot.headSha && previousHeadSha !== snapshot.headSha) ||
               (subscription.lastObservedState && snapshot.state && subscription.lastObservedState !== snapshot.state) ||
-              (subscription.lastObservedMergeableState &&
-                snapshot.mergeableState &&
-                subscription.lastObservedMergeableState !== snapshot.mergeableState) ||
+              hasMeaningfulMergeableStateChange(subscription.lastObservedMergeableState, snapshot.mergeableState) ||
               (subscription.lastObservedCiState &&
                 snapshot.ciState &&
                 subscription.lastObservedCiState !== snapshot.ciState) ||
@@ -1565,7 +1710,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
                 snapshot.reviewStateHash &&
                 subscription.lastObservedReviewStateHash !== snapshot.reviewStateHash)));
         let shouldKeepSubscription = true;
-        if (changed && snapshot) {
+        if (changed && snapshot && isCurrentGeneration()) {
           const notifications = await this.#sendActivityNotifications({
             polling: input,
             subscription,
@@ -1573,7 +1718,9 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
             previousGithubUpdatedAt,
             previousContentHash,
             latestCommentChanged,
+            isCurrentGeneration,
           });
+          if (!isCurrentGeneration()) return 0;
           const primaryNotification = notifications[0];
           if (primaryNotification) {
             nextSubscription.lastNotificationAt = now;
@@ -1587,6 +1734,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
         if (shouldKeepSubscription) subscriptions.push(nextSubscription);
       }
 
+      if (!isCurrentGeneration()) return 0;
       await threadStore.saveThread({
         thread: {
           ...loadedThread,
@@ -1597,15 +1745,16 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
           metadata: setGithubMetadata(loadedThread.metadata, { subscriptions }),
         },
       });
+      if (!isCurrentGeneration()) return 0;
       this.#notifySubscriptionsChanged({ threadId: input.threadId, resourceId: input.resourceId, subscriptions });
       if (subscriptions.length === 0) this.stopPollingForThread(input);
       return subscriptions.length;
-    } catch (error) {
-      throw error;
     } finally {
       const latestState = this.#polling.get(key);
-      if (latestState) latestState.running = false;
-      this.#notifyPollingChanged({ threadId: input.threadId, resourceId: input.resourceId, running: false });
+      if (isCurrentGeneration()) {
+        if (latestState) latestState.running = false;
+        this.#notifyPollingChanged({ threadId: input.threadId, resourceId: input.resourceId, running: false });
+      }
     }
   }
 
@@ -1736,6 +1885,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
     repo: string,
     user: string | undefined,
     metadata: { authorType?: string; isBot?: boolean } = {},
+    isCurrentGeneration?: () => boolean,
   ): Promise<boolean> {
     if (!user) return false;
     const normalizedUser = user.toLowerCase();
@@ -1747,7 +1897,8 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
       const authorizedBots = this.#options.authorizedBots ?? DEFAULT_AUTHORIZED_BOTS;
       return authorizedBots.some(bot => bot.toLowerCase() === normalizedUser);
     }
-    const permission = await this.#loadAuthorPermission(owner, repo, user);
+    const permission = await this.#loadAuthorPermission(owner, repo, user, isCurrentGeneration);
+    if (isCurrentGeneration && !isCurrentGeneration()) return false;
     const authorizedPermissions = this.#options.authorizedPermissions ?? DEFAULT_AUTHORIZED_PERMISSIONS;
     return !!permission && authorizedPermissions.includes(permission);
   }
@@ -1756,6 +1907,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
     owner: string,
     repo: string,
     snapshot: GithubPullRequestSnapshot,
+    isCurrentGeneration?: () => boolean,
   ): Promise<GithubPullRequestSnapshot> {
     const comments = snapshot.latestComments?.length
       ? snapshot.latestComments
@@ -1773,11 +1925,18 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
     if (!comments.some(comment => comment.body || comment.url || comment.updatedAt)) return snapshot;
 
     for (const comment of comments) {
+      if (isCurrentGeneration && !isCurrentGeneration()) return snapshot;
       if (
-        !(await this.#isAuthorizedAuthor(owner, repo, comment.author, {
-          authorType: comment.authorType,
-          isBot: comment.isBot,
-        }))
+        !(await this.#isAuthorizedAuthor(
+          owner,
+          repo,
+          comment.author,
+          {
+            authorType: comment.authorType,
+            isBot: comment.isBot,
+          },
+          isCurrentGeneration,
+        ))
       ) {
         continue;
       }
@@ -1803,7 +1962,12 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
     };
   }
 
-  async #loadAuthorPermission(owner: string, repo: string, user: string): Promise<GithubPermission | undefined> {
+  async #loadAuthorPermission(
+    owner: string,
+    repo: string,
+    user: string,
+    isCurrentGeneration?: () => boolean,
+  ): Promise<GithubPermission | undefined> {
     const cacheKey = `${owner}/${repo}:${user.toLowerCase()}`;
     const cached = this.#permissionCache.get(cacheKey);
     if (cached && cached.expiresAt > Date.now()) return cached.permission;
@@ -1827,9 +1991,10 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
           ? (raw as GithubPermission)
           : undefined;
       }
-      if (permission) {
+      if (permission && (!isCurrentGeneration || isCurrentGeneration())) {
         this.#permissionCache.set(cacheKey, { permission, expiresAt: Date.now() + PERMISSION_CACHE_TTL_MS });
       }
+      if (isCurrentGeneration && !isCurrentGeneration()) return undefined;
       return permission;
     } catch {
       this.#permissionCache.delete(cacheKey);
@@ -1844,6 +2009,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
     previousGithubUpdatedAt?: string;
     previousContentHash?: string;
     latestCommentChanged?: boolean;
+    isCurrentGeneration: () => boolean;
   }): Promise<Array<{ kind: string; priority: 'medium' | 'high'; summary: string }>> {
     const agent = this.#getNotificationAgent(input.polling);
     if (!agent?.sendNotificationSignal) return [];
@@ -1875,7 +2041,9 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
             authorType: input.snapshot.latestCommentAuthorType,
             isBot: input.snapshot.latestCommentIsBot,
           },
+          input.isCurrentGeneration,
         );
+        if (!input.isCurrentGeneration()) return [];
         if (!authorized) continue;
       }
       notificationInputs.push(
@@ -1892,11 +2060,14 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
     }
     if (notificationInputs.length > 0) {
       const target = { resourceId: input.polling.resourceId, threadId: input.polling.threadId };
+      if (!input.isCurrentGeneration()) return [];
       const streamOptions = await this.#agentOptions.getNotificationStreamOptions?.(target);
+      if (!input.isCurrentGeneration()) return [];
       await agent.sendNotificationSignal(
         notificationInputs,
         streamOptions ? { ...target, ifIdle: { streamOptions } } : target,
       );
+      if (!input.isCurrentGeneration()) return [];
     }
     return sent;
   }
@@ -1943,6 +2114,11 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
       ...(existing?.lastObservedReviewStateHash
         ? { lastObservedReviewStateHash: existing.lastObservedReviewStateHash }
         : {}),
+      ...(existing?.lastObservedCommentUrl ? { lastObservedCommentUrl: existing.lastObservedCommentUrl } : {}),
+      ...(existing?.lastObservedCommentAuthor ? { lastObservedCommentAuthor: existing.lastObservedCommentAuthor } : {}),
+      ...(typeof existing?.lastObservedCommentIsBot === 'boolean'
+        ? { lastObservedCommentIsBot: existing.lastObservedCommentIsBot }
+        : {}),
     };
 
     let syncResult: GithubSignalsSyncResult | undefined;
@@ -1960,7 +2136,18 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
       subscription.lastSyncStatus = syncResult.ok ? 'success' : 'error';
       if (syncResult.error) subscription.lastSyncError = syncResult.error;
       else delete subscription.lastSyncError;
-      const snapshot = syncResult.ok ? await this.#syncClient.getPullRequestSnapshot?.(syncInput) : undefined;
+      let snapshot: GithubPullRequestSnapshot | undefined;
+      if (syncResult.ok) {
+        try {
+          snapshot = await this.#syncClient.getPullRequestSnapshot?.(syncInput);
+        } catch (error) {
+          // Snapshot read failures must not fail the subscribe itself: keep
+          // the subscription and record the error so polling (and /github
+          // debug) can surface and later clear it.
+          subscription.lastSnapshotError = error instanceof Error ? error.message : String(error);
+        }
+      }
+      if (snapshot) delete subscription.lastSnapshotError;
       baselineSnapshot = snapshot;
       if (snapshot) applySnapshotCursor(subscription, snapshot);
     } else {

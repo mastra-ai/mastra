@@ -615,9 +615,11 @@ function buildWhereClause(
 
   // Timestamp range
   const ts = filters.timestamp as
-    { start?: Date; end?: Date; startExclusive?: boolean; endExclusive?: boolean } | undefined;
+    | { start?: Date; end?: Date; startExclusive?: boolean; endExclusive?: boolean }
+    | undefined;
   if (ts?.start) bindScalar('timestamp', ts.start, ts.startExclusive ? '>' : '>=');
   if (ts?.end) bindScalar('timestamp', ts.end, ts.endExclusive ? '<' : '<=');
+  if (Array.isArray(filters.traceIds)) bindIn('traceId', filters.traceIds);
 
   // Scalar filters mapped 1:1 to columns
   const scalarKeys = [

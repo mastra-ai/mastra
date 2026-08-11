@@ -133,10 +133,10 @@ function TimeAxis({ domain }: { domain: TDomain }) {
   const ticks = [0, 0.25, 0.5, 0.75, 1];
   return (
     <div className="grid grid-cols-[6rem_1fr] items-center">
-      <p className="text-icon3 flex items-center self-stretch border-r border-border1/50 pl-3 text-ui-xs font-medium">
+      <p className="text-icon3 border-border1/50 text-ui-xs flex items-center self-stretch border-r pl-3 font-medium">
         Time
       </p>
-      <div className="text-icon3 flex justify-between px-1 py-1.5 font-mono text-ui-xs">
+      <div className="text-icon3 text-ui-xs flex justify-between px-1 py-1.5 font-mono">
         {ticks.map(t => (
           <span key={t}>{formatTimeDisplay(tToTimestamp(t, domain))}</span>
         ))}
@@ -163,7 +163,7 @@ function FlameTooltip({
 
   if (showValue) {
     return (
-      <div className="flex flex-col gap-0.5 rounded border border-border1 bg-surface3 px-2 py-1.5 font-mono text-ui-xs shadow">
+      <div className="border-border1 bg-surface3 text-ui-xs flex flex-col gap-0.5 rounded border px-2 py-1.5 font-mono shadow">
         {time && (
           <div className="flex items-center justify-between gap-3">
             <span className="text-icon3">time</span>
@@ -183,7 +183,7 @@ function FlameTooltip({
   }
 
   return (
-    <div className="rounded border border-border1 bg-surface3 px-2 py-1 font-mono text-ui-xs shadow">
+    <div className="border-border1 bg-surface3 text-ui-xs rounded border px-2 py-1 font-mono shadow">
       {time && <span className="text-neutral6">{time}</span>}
     </div>
   );
@@ -205,8 +205,8 @@ function AreaRow({ label, data, dataKey, color, gradientId, domain, zoomDomain, 
   const yMax = threshold != null ? Math.max(maxValue, threshold) : undefined;
 
   return (
-    <div className="relative grid grid-cols-[6rem_1fr] items-center border-b border-border1/50 hover:z-10">
-      <p className="text-icon3 flex items-center self-stretch border-r border-border1/50 pl-3 text-ui-xs font-medium">
+    <div className="border-border1/50 relative grid grid-cols-[6rem_1fr] items-center border-b hover:z-10">
+      <p className="text-icon3 border-border1/50 text-ui-xs flex items-center self-stretch border-r pl-3 font-medium">
         {label}
       </p>
       <div>
@@ -254,8 +254,8 @@ interface EventRowProps {
 
 function EventRow({ label, data, color, height = 32, domain, zoomDomain }: EventRowProps) {
   return (
-    <div className="relative grid grid-cols-[6rem_1fr] items-center border-b border-border1/50 hover:z-10">
-      <p className="text-icon3 flex items-center self-stretch border-r border-border1/50 pl-3 text-ui-xs font-medium">
+    <div className="border-border1/50 relative grid grid-cols-[6rem_1fr] items-center border-b hover:z-10">
+      <p className="text-icon3 border-border1/50 text-ui-xs flex items-center self-stretch border-r pl-3 font-medium">
         {label}
       </p>
       <div>
@@ -347,8 +347,8 @@ function CombinedRow({
   }
 
   return (
-    <div className="relative grid grid-cols-[6rem_1fr] items-center border-b border-border1/50 hover:z-10">
-      <p className="text-icon3 flex items-center self-stretch border-r border-border1/50 pl-3 text-ui-xs font-medium">
+    <div className="border-border1/50 relative grid grid-cols-[6rem_1fr] items-center border-b hover:z-10">
+      <p className="text-icon3 border-border1/50 text-ui-xs flex items-center self-stretch border-r pl-3 font-medium">
         {label}
       </p>
       <div>
@@ -453,8 +453,8 @@ function ZoomTrack({
   }, [toTimestamp, zoomLeft, zoomRight, onZoomLeftChange, onZoomRightChange]);
 
   return (
-    <div className="grid grid-cols-[6rem_1fr] items-center border-b border-border1/50">
-      <div className="flex items-center gap-1 self-stretch border-r border-border1/50 pl-3">
+    <div className="border-border1/50 grid grid-cols-[6rem_1fr] items-center border-b">
+      <div className="border-border1/50 flex items-center gap-1 self-stretch border-r pl-3">
         <p className="text-icon3 text-ui-xs font-medium">Zoom</p>
         <Button variant="ghost" size="icon-sm" aria-label="Reset zoom" onClick={onReset}>
           <RotateCcw className="size-3" />
@@ -478,14 +478,14 @@ function ZoomTrack({
           }
         }}
       >
-        <div className="absolute inset-y-0 left-0 bg-surface2/60" style={{ width: `${leftPercent}%` }} />
+        <div className="bg-surface2/60 absolute inset-y-0 left-0" style={{ width: `${leftPercent}%` }} />
         <div
-          className="absolute inset-y-0 border-y border-border1/30 bg-neutral6/5"
+          className="border-border1/30 bg-neutral6/5 absolute inset-y-0 border-y"
           style={{ left: `${leftPercent}%`, right: `${100 - rightPercent}%` }}
         />
-        <div className="absolute inset-y-0 right-0 bg-surface2/60" style={{ width: `${100 - rightPercent}%` }} />
+        <div className="bg-surface2/60 absolute inset-y-0 right-0" style={{ width: `${100 - rightPercent}%` }} />
         <div
-          className="absolute inset-y-0 w-1 cursor-col-resize bg-neutral6/50 hover:bg-neutral6"
+          className="bg-neutral6/50 hover:bg-neutral6 absolute inset-y-0 w-1 cursor-col-resize"
           style={{ left: `${leftPercent}%`, transform: 'translateX(-50%)' }}
           onMouseDown={e => {
             e.preventDefault();
@@ -494,7 +494,7 @@ function ZoomTrack({
           }}
         />
         <div
-          className="absolute inset-y-0 w-1 cursor-col-resize bg-neutral6/50 hover:bg-neutral6"
+          className="bg-neutral6/50 hover:bg-neutral6 absolute inset-y-0 w-1 cursor-col-resize"
           style={{ left: `${rightPercent}%`, transform: 'translateX(-50%)' }}
           onMouseDown={e => {
             e.preventDefault();

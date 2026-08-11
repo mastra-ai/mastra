@@ -62,7 +62,8 @@ describe('AIMock loop scenario: tool approval suspend/resume', () => {
     // original tool call id.
     const turn2Messages = requests[1]?.body?.messages ?? [];
     const toolMessage = turn2Messages.find(message => (message as { role?: string }).role === 'tool') as
-      { tool_call_id?: string } | undefined;
+      | { tool_call_id?: string }
+      | undefined;
     expect(toolMessage?.tool_call_id).toBe('call_lookup_alpha');
   });
 
@@ -92,5 +93,39 @@ describe('AIMock loop scenario: tool approval suspend/resume', () => {
 
     const text = await output.text;
     expect(text).toContain('will not look that up');
+  });
+
+  it('declineToolCall never executes when gated only by function requireToolApproval (#20470)', async () => {
+    let executions = 0;
+    const dangerTool = createTool({
+      id: 'do_the_thing',
+      description: 'Performs an irreversible action',
+      inputSchema: z.object({ label: z.string() }),
+      outputSchema: z.object({ done: z.boolean() }),
+      execute: async () => {
+        executions += 1;
+        return { done: true };
+      },
+    });
+
+    const { approvals, requests } = await runApprovalScenario({
+      llm: getMock(),
+      prompt: 'Use the label "beta".',
+      tools: { do_the_thing: dangerTool },
+      stopWhen: stepCountIs(5),
+      requireToolApproval: ({ toolName }) => toolName === 'do_the_thing',
+      decision: () => false,
+      fixtures: llm => {
+        llm.on(
+          { endpoint: 'chat', hasToolResult: false },
+          { toolCalls: [{ id: 'call_20470_stream', name: 'do_the_thing', arguments: { label: 'beta' } }] },
+        );
+        llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Declined.' });
+      },
+    });
+
+    expect(approvals).toEqual(['decline:call_20470_stream']);
+    expect(executions).toBe(0);
+    expect(JSON.stringify(requests[1]?.body?.messages ?? [])).not.toContain('"done":true');
   });
 });

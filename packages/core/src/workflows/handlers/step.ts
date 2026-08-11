@@ -339,7 +339,12 @@ export async function executeStep(
         result: stepResult,
         stepResults: { [step.id]: stepResult },
         mutableContext: engine.buildMutableContext(executionContext),
-        requestContext: engine.serializeRequestContext(requestContext),
+        // Serialize requestContext only for engines that restore it from
+        // serialized results (Inngest memoization); the default engine keeps
+        // the original reference and never reads this field.
+        requestContext: engine.requiresDurableContextSerialization()
+          ? engine.serializeRequestContext(requestContext)
+          : undefined,
       };
     }
   }
@@ -614,7 +619,13 @@ export async function executeStep(
         ? (stepRetryResult.result.contextMutations.stateUpdate ?? executionContext.state)
         : executionContext.state,
     }),
-    requestContext: engine.serializeRequestContext(requestContext),
+    // Serialize requestContext only for engines that restore it from
+    // serialized results (Inngest memoization); the default engine keeps
+    // the original reference and never reads this field, so serializing
+    // here would probe every stored value with JSON.stringify on every step.
+    requestContext: engine.requiresDurableContextSerialization()
+      ? engine.serializeRequestContext(requestContext)
+      : undefined,
   };
 }
 
@@ -667,6 +678,7 @@ export async function runScorersForStep(params: RunScorersParams): Promise<void>
         engine.mastra.addScorer(scorerObject.scorer, undefined, { source: 'code' });
       }
       runScorer({
+        mastra: engine.mastra,
         scorerId: scorerObject.scorer.id,
         scorerObject: scorerObject,
         runId: runId,

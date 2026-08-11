@@ -3500,6 +3500,37 @@ describe('ProcessorRunner', () => {
       ).rejects.toThrow('computeStateSignal requires Mastra memory');
     });
 
+    it('skips computeStateSignal when memory is present but no threadId/resourceId resolves', async () => {
+      const compute = vi.fn(() => ({ cacheKey: 'state', contents: 'state' }));
+      const memory = {
+        getThreadById: vi.fn(),
+        saveThread: vi.fn(),
+      };
+      runner = new ProcessorRunner({
+        inputProcessors: [{ id: 'state-processor', computeStateSignal: compute }],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      // Ephemeral invocation (e.g. workflow agent step): memory is configured
+      // but there is no thread/resource identity for this run.
+      await runner.runProcessInputStep({
+        messageList,
+        stepNumber: 0,
+        steps: [],
+        model: {} as any,
+        tools: {},
+        retryCount: 0,
+        requestContext: new RequestContext(),
+        memory: memory as any,
+      });
+
+      expect(compute).not.toHaveBeenCalled();
+      expect(messageList.get.all.db().filter(m => m.role === 'signal')).toHaveLength(0);
+      expect(memory.saveThread).not.toHaveBeenCalled();
+    });
+
     it('honors processor.stateId over processor.id in computeStateSignal', async () => {
       messageList = new MessageList({ threadId: 'thread-1' });
       const requestContext = new RequestContext();

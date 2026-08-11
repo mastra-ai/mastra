@@ -51,6 +51,7 @@ export {
   ensureGeminiCompatibleMessages,
   ensureAnthropicCompatibleMessages,
   sanitizeOrphanedToolPairs,
+  pairOrphanedToolCalls,
   hasOpenAIReasoningItemId,
   getOpenAIReasoningItemId,
   hasResponseProviderItemId,

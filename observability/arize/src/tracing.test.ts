@@ -159,6 +159,11 @@ describe('ArizeExporter', () => {
     expect(exporter).toBeDefined();
     expect(exportedSpans.length).toBe(1);
 
+    // The attribute shape below is dictated by @arizeai/openinference-genai, not by us. Two details
+    // are owned by that package rather than this exporter: tool messages carry a flat
+    // `message.content` (not the nested `contents.0.message_content` shape the other roles use), and
+    // `llm.system` is emitted alongside `llm.provider`. Both arrived in 0.3.0. If this snapshot
+    // fails after a dependency bump, diff it against that package before assuming a regression here.
     expect(exportedSpans[0].attributes).toMatchInlineSnapshot(`
       {
         "input.mime_type": "application/json",
@@ -175,8 +180,7 @@ describe('ArizeExporter', () => {
         "llm.input_messages.2.message.tool_calls.0.tool_call.function.arguments": ""{\\"city\\":\\"Tokyo\\"}"",
         "llm.input_messages.2.message.tool_calls.0.tool_call.function.name": "weatherTool",
         "llm.input_messages.2.message.tool_calls.0.tool_call.id": "weatherTool-1",
-        "llm.input_messages.3.message.contents.0.message_content.text": "{"city":"Tokyo","temperature":70,"condition":"sunny"}",
-        "llm.input_messages.3.message.contents.0.message_content.type": "text",
+        "llm.input_messages.3.message.content": "{"city":"Tokyo","temperature":70,"condition":"sunny"}",
         "llm.input_messages.3.message.role": "tool",
         "llm.input_messages.3.message.tool_call_id": "weatherTool-1",
         "llm.invocation_parameters": "{"model":"gpt-4"}",
@@ -185,6 +189,7 @@ describe('ArizeExporter', () => {
         "llm.output_messages.0.message.contents.0.message_content.type": "text",
         "llm.output_messages.0.message.role": "assistant",
         "llm.provider": "openai",
+        "llm.system": "openai",
         "llm.token_count.completion": 5,
         "llm.token_count.prompt": 10,
         "llm.token_count.total": 15,

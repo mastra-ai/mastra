@@ -113,14 +113,14 @@ function CapabilityItem({ view, label, status, description, docsHref, enabled, t
       </span>
       <span className="min-w-0 flex-1">
         <span className="flex min-w-0 items-center gap-2">
-          <span className="min-w-0 truncate font-medium text-neutral5">{label}</span>
-          <span className="shrink-0 tabular-nums text-neutral3">{status}</span>
+          <span className="text-neutral5 min-w-0 truncate font-medium">{label}</span>
+          <span className="text-neutral3 shrink-0 tabular-nums">{status}</span>
         </span>
-        <span className="mt-0.5 block text-neutral3 transition-colors duration-normal group-hover/capability-row:text-neutral4">
+        <span className="text-neutral3 duration-normal group-hover/capability-row:text-neutral4 mt-0.5 block transition-colors">
           {description}
         </span>
       </span>
-      <ExternalLink className="mt-0.5 size-3 shrink-0 text-neutral3 transition-colors duration-normal group-hover/capability-row:text-neutral5" />
+      <ExternalLink className="text-neutral3 duration-normal group-hover/capability-row:text-neutral5 mt-0.5 size-3 shrink-0 transition-colors" />
     </a>
   );
 }
@@ -286,7 +286,7 @@ function CapabilitiesSummary({ agentId }: { agentId: string }) {
   const enabledCount = enabledFlags.filter(Boolean).length;
 
   return (
-    <Txt as="span" variant="ui-xs" className="shrink-0 text-neutral3">
+    <Txt as="span" variant="ui-xs" className="text-neutral3 shrink-0">
       {enabledCount}/{enabledFlags.length}
     </Txt>
   );
@@ -297,12 +297,12 @@ export function AgentCapabilitiesFooter({ agentId }: { agentId: string }) {
 
   return (
     <Collapsible open={isExpanded} onOpenChange={setIsExpanded}>
-      <div className="shrink-0 border-t border-border1/50">
+      <div className="border-border1/50 shrink-0 border-t">
         <CollapsibleTrigger asChild aria-label={isExpanded ? 'Hide capability details' : 'Show capability details'}>
           <button
             type="button"
             data-testid="agent-capabilities-footer"
-            className="flex w-full cursor-pointer items-center gap-1.5 px-2 py-2 text-left text-neutral4 transition-colors duration-normal hover:!text-neutral4 hover:bg-surface4 focus-visible:!text-neutral4 focus-visible:bg-surface4 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-border2 active:bg-surface5/80 aria-expanded:bg-surface4/70 data-[panel-open]:bg-surface4/70"
+            className="text-neutral4 duration-normal hover:!text-neutral4 hover:bg-surface4 focus-visible:!text-neutral4 focus-visible:bg-surface4 focus-visible:ring-border2 active:bg-surface5/80 aria-expanded:bg-surface4/70 data-[panel-open]:bg-surface4/70 flex w-full cursor-pointer items-center gap-1.5 px-2 py-2 text-left transition-colors focus-visible:ring-1 focus-visible:outline-none focus-visible:ring-inset"
           >
             <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
               <MemoryCapability agentId={agentId} view="chip" />

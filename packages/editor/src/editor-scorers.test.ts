@@ -5,7 +5,7 @@ import { createScorer } from '@mastra/core/evals';
 import type { MastraDBMessage } from '@mastra/core/agent';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '@mastra/core/evals';
 import { MastraEditor } from './index';
-import { randomUUID } from 'crypto';
+import { randomUUID } from 'node:crypto';
 import { LibSQLStore } from '@mastra/libsql';
 import { convertArrayToReadableStream, LanguageModelV2, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { MastraModelGateway, ProviderConfig } from '@mastra/core/llm';

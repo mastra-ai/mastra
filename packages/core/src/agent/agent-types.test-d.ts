@@ -281,4 +281,28 @@ describe('Agent Type Tests', () => {
       });
     });
   });
+
+  describe('Issue #20201: tool-approval resume methods expose a typed `model` override', () => {
+    // `resumeStream`/`resumeGenerate` already accept and consume a per-resume `model`
+    // override, but the public approve/decline entry points previously omitted it from
+    // their option types — forcing callers to cast past the signature (the source even
+    // carried a `// @ts-expect-error - the types here are wrong`). A `model` key on the
+    // options literal must now type-check against each method's parameter type; without
+    // the fix these object literals fail excess-property checking.
+    const agent = new Agent({ id: 'a', name: 'A', model: {} as any, instructions: 'hi' });
+
+    it('accepts `model` on approveToolCall / declineToolCall (stream)', () => {
+      const approve: Parameters<typeof agent.approveToolCall>[0] = { runId: 'r', model: {} as any };
+      const decline: Parameters<typeof agent.declineToolCall>[0] = { runId: 'r', model: {} as any };
+      assertType<string>(approve.runId);
+      assertType<string>(decline.runId);
+    });
+
+    it('accepts `model` on approveToolCallGenerate / declineToolCallGenerate (generate)', () => {
+      const approve: Parameters<typeof agent.approveToolCallGenerate>[0] = { runId: 'r', model: {} as any };
+      const decline: Parameters<typeof agent.declineToolCallGenerate>[0] = { runId: 'r', model: {} as any };
+      assertType<string>(approve.runId);
+      assertType<string>(decline.runId);
+    });
+  });
 });

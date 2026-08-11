@@ -7,7 +7,8 @@ import json from '@rollup/plugin-json';
 import nodeResolve from '@rollup/plugin-node-resolve';
 import { rollup } from 'rollup';
 import type { InputOptions, OutputOptions, Plugin } from 'rollup';
-import type { analyzeBundle } from './analyze';
+import { minify as esbuildMinify } from 'rollup-plugin-esbuild';
+import type { WorkspacePackageInfo } from '../bundler/workspaceDependencies';
 import { esbuild } from './plugins/esbuild';
 import { esmShim } from './plugins/esm-shim';
 import { localStorageDetector } from './plugins/local-storage-detector';
@@ -16,6 +17,7 @@ import { protocolExternalResolver } from './plugins/protocol-external-resolver';
 import { removeDeployer } from './plugins/remove-deployer';
 import { subpathExternalsResolver } from './plugins/subpath-externals-resolver';
 import { tsConfigPaths } from './plugins/tsconfig-paths';
+import type { ExternalDependencyInfo } from './types';
 import { getNodeResolveOptions, slash } from './utils';
 import type { BundlerPlatform } from './utils';
 
@@ -60,11 +62,17 @@ export function mastraToolsAliasPlugin(): Plugin {
 
 export async function getInputOptions(
   entryFile: string,
-  analyzedBundleInfo: Awaited<ReturnType<typeof analyzeBundle>>,
+  analyzedBundleInfo: {
+    dependencies: Map<string, string>;
+    externalDependencies: Map<string, ExternalDependencyInfo>;
+    workspaceMap: Map<string, WorkspacePackageInfo>;
+    projectType?: string;
+  },
   platform: BundlerPlatform,
   env: Record<string, string> = { 'process.env.NODE_ENV': JSON.stringify('production') },
   {
     sourcemap = false,
+    minify = false,
     isDev = false,
     projectRoot,
     workspaceRoot = undefined,
@@ -72,6 +80,7 @@ export async function getInputOptions(
     externalsPreset = false,
   }: {
     sourcemap?: boolean;
+    minify?: boolean;
     isDev?: boolean;
     workspaceRoot?: string;
     projectRoot: string;
@@ -160,6 +169,11 @@ export async function getInputOptions(
         include: entryFile,
         platform,
       }),
+      // Runs at renderChunk, so the emitted chunks are minified as a whole rather
+      // than module by module. Last in the list so nothing transforms after it.
+      // `sourceMap` follows the build's own setting: the plugin defaults it to true,
+      // which would build a map Rollup then discards on a non-sourcemap build.
+      minify ? esbuildMinify({ target: 'node20', sourceMap: sourcemap }) : null,
     ].filter(Boolean),
   } satisfies InputOptions;
 }

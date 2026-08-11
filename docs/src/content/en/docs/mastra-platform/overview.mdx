@@ -8,12 +8,14 @@ description: The Mastra platform, with Observability, Studio, and Server, is the
 The [Mastra platform](https://projects.mastra.ai) provides three products for deploying, monitoring, and managing AI applications built with the Mastra framework:
 
 - [**Observability**](/docs/mastra-platform/observability): The baseline product for every platform project, with searchable traces, logs, and metrics across Mastra projects and deploys
-- [**Studio**](/docs/mastra-platform/studio): A hosted visual environment for testing agents, running workflows, and inspecting traces. Starting with Studio also gives you Observability.
+- [**Studio**](/docs/mastra-platform/studio): A hosted visual environment for testing agents and running workflows, with tools for inspecting traces. Starting with Studio also gives you Observability.
 - [**Server**](/docs/mastra-platform/server): A production deployment target that runs your Mastra application as an API server. Starting with Server also gives you Observability.
 
 Deploy with a single command, [`mastra deploy`](/docs/mastra-platform/deploy), or connect a GitHub repository for push-to-deploy. See the [GitHub integration](/docs/mastra-platform/github) for the repository-linked flow.
 
-Each project can run multiple [**Environments**](/docs/mastra-platform/environments) (for example `production` and `staging`), provision [**Hosted databases**](/docs/mastra-platform/database) from the CLI or project settings to persist application data, and get a managed [**Workspace**](/docs/mastra-platform/workspace) per environment that gives agents a filesystem and a sandbox with no manual configuration.
+Each project can run multiple [**Environments**](/docs/mastra-platform/environments) (for example `production` and `staging`), provision [**Hosted databases**](/docs/mastra-platform/database) from the CLI or project settings to persist application data, and get a managed [**Workspaces**](/docs/mastra-platform/workspaces) per environment that gives agents a filesystem and a sandbox with no manual configuration.
+
+[**Trace Intelligence**](/docs/mastra-platform/trace-intelligence) finds recurring goals, outcomes, behaviors, and sentiment across your agent traces. Trace Intelligence is available in private beta for selected projects.
 
 ## Get started
 
@@ -28,7 +30,7 @@ Choose the path that matches what you want to do:
 
 ## Key concepts
 
-**Projects** are the shared parent entity across all products. A single project can have Observability, a Studio deployment, and a Server deployment. Projects belong to an **Organization**, which is the multi-tenant container for your team.
+**Projects** are the shared parent entity across all products. A single project can include every product: Observability, Studio, and Server. Projects belong to an **Organization**, which is the multi-tenant container for your team.
 
 Your Mastra application is built from three building blocks:
 

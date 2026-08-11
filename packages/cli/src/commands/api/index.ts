@@ -3,6 +3,7 @@ import { getAnalytics } from '../../analytics/index.js';
 import { requestApi } from './client.js';
 import { ApiCliError, errorEnvelope, toApiCliError } from './errors.js';
 import { parseInput, resolvePathParams, stripPathParamsFromInput } from './input.js';
+import { LEARNING_ROUTE_METADATA } from './learning-route-metadata.js';
 import { normalizeData } from './normalizers.js';
 import { normalizeSuccess, writeJson } from './output.js';
 import { normalizeResponse } from './response-normalizer.js';
@@ -13,6 +14,12 @@ import type { ApiGlobalOptions } from './target.js';
 import type { ApiCommandActionOptions, ApiCommandDescriptor, HttpMethod } from './types.js';
 
 const API_ANALYTICS_SHUTDOWN_TIMEOUT_MS = 1000;
+
+/**
+ * All route metadata addressable by CLI commands: generated `@mastra/server`
+ * routes plus hand-authored Mastra platform learning routes.
+ */
+export const CLI_ROUTE_METADATA = { ...API_ROUTE_METADATA, ...LEARNING_ROUTE_METADATA } as const;
 
 export const API_COMMANDS = {} as Record<string, ApiCommandDescriptor>;
 
@@ -405,6 +412,119 @@ export function registerApiCommand(program: CommanderCommand): void {
     input: 'optional',
     list: true,
   });
+
+  const learning = api
+    .command('learning')
+    .description('Query Trace Intelligence themes across agent traces (Mastra platform)');
+  addAction(learning, 'entities', 'GET /learning/entities', {
+    description: 'List entities with Trace Intelligence output',
+    input: 'required',
+    list: true,
+    examples: [
+      {
+        description: 'List agents with available trace signal themes',
+        command: `mastra api learning entities '{"entityType":"agent"}'`,
+      },
+    ],
+  });
+  addAction(learning, 'snapshots', 'GET /learning/entities/:entityId/theme-snapshots', {
+    description: 'List analysis snapshots for an entity and ordered trace signals',
+    input: 'required',
+    list: true,
+    examples: [
+      {
+        description: 'List snapshots for an agent across all four trace signals',
+        command: `mastra api learning snapshots my-agent '{"entityType":"agent","signalNames":"goal,outcome,behavior,sentiment"}'`,
+      },
+    ],
+  });
+  addAction(learning, 'flow', 'GET /learning/entities/:entityId/theme-flow', {
+    description: 'Get the cross-signal theme flow for one snapshot',
+    input: 'required',
+    examples: [
+      {
+        description: 'Get the goal-to-outcome flow for a snapshot',
+        command: `mastra api learning flow my-agent '{"entityType":"agent","signalNames":"goal,outcome","snapshotId":"snapshot_abc"}'`,
+      },
+    ],
+  });
+  addAction(learning, 'paths', 'GET /learning/entities/:entityId/theme-paths', {
+    description: 'Get per-trace theme assignments for one snapshot',
+    input: 'required',
+    examples: [
+      {
+        description: 'Map traces to themes across goal and outcome',
+        command: `mastra api learning paths my-agent '{"entityType":"agent","signalNames":"goal,outcome","snapshotId":"snapshot_abc","limit":100}'`,
+      },
+    ],
+  });
+
+  const learningTheme = learning.command('theme').description('List and inspect trace signal themes');
+  addAction(learningTheme, 'list', 'GET /learning/entities/:entityId/themes', {
+    description: 'List themes for one trace signal in one snapshot',
+    input: 'required',
+    list: true,
+    examples: [
+      {
+        description: 'List goal themes in a snapshot',
+        command: `mastra api learning theme list my-agent '{"entityType":"agent","signalName":"goal","snapshotId":"snapshot_abc"}'`,
+      },
+    ],
+  });
+  addAction(learningTheme, 'get', 'GET /learning/entities/:entityId/themes/:themeId', {
+    description: 'Get one theme in one snapshot',
+    input: 'required',
+    examples: [
+      {
+        description: 'Get one goal theme in a snapshot',
+        command: `mastra api learning theme get my-agent 42 '{"entityType":"agent","signalName":"goal","snapshotId":"snapshot_abc"}'`,
+      },
+    ],
+  });
+  addAction(learningTheme, 'examples', 'GET /learning/entities/:entityId/themes/:themeId/examples', {
+    description: 'List trace examples for one theme in one snapshot',
+    input: 'required',
+    list: true,
+    examples: [
+      {
+        description: 'List trace examples for a theme',
+        command: `mastra api learning theme examples my-agent 42 '{"entityType":"agent","signalName":"goal","snapshotId":"snapshot_abc","limit":10}'`,
+      },
+    ],
+  });
+  addAction(learningTheme, 'history', 'GET /learning/entities/:entityId/themes/:themeId/history', {
+    description: 'Get lifecycle history for one durable theme',
+    input: 'required',
+    examples: [
+      {
+        description: 'Get history for a theme across snapshots',
+        command: `mastra api learning theme history my-agent 42 '{"entityType":"agent","signalName":"goal"}'`,
+      },
+    ],
+  });
+
+  const learningNoise = learning.command('noise').description('Inspect unclustered (noise) traces');
+  addAction(learningNoise, 'get', 'GET /learning/entities/:entityId/noise', {
+    description: 'Get the noise bucket for one trace signal in one snapshot',
+    input: 'required',
+    examples: [
+      {
+        description: 'Get the goal noise bucket in a snapshot',
+        command: `mastra api learning noise get my-agent '{"entityType":"agent","signalName":"goal","snapshotId":"snapshot_abc"}'`,
+      },
+    ],
+  });
+  addAction(learningNoise, 'examples', 'GET /learning/entities/:entityId/noise/examples', {
+    description: 'List trace examples for the noise bucket in one snapshot',
+    input: 'required',
+    list: true,
+    examples: [
+      {
+        description: 'List noise trace examples',
+        command: `mastra api learning noise examples my-agent '{"entityType":"agent","signalName":"goal","snapshotId":"snapshot_abc","limit":10}'`,
+      },
+    ],
+  });
 }
 
 /**
@@ -420,7 +540,7 @@ export function registerApiCommand(program: CommanderCommand): void {
 function addAction(
   parent: CommanderCommand,
   name: string,
-  routeKey: keyof typeof API_ROUTE_METADATA,
+  routeKey: keyof typeof CLI_ROUTE_METADATA,
   options: ApiCommandActionOptions,
 ): void {
   const descriptor = buildDescriptor(parent, name, routeKey, options);
@@ -511,12 +631,12 @@ function looksLikeJsonObject(value: string): boolean {
 function buildDescriptor(
   parent: CommanderCommand,
   name: string,
-  routeKey: keyof typeof API_ROUTE_METADATA,
+  routeKey: keyof typeof CLI_ROUTE_METADATA,
   options: ApiCommandActionOptions,
 ): ApiCommandDescriptor {
-  const route = API_ROUTE_METADATA[routeKey];
+  const route = CLI_ROUTE_METADATA[routeKey];
   const verboseRoute = options.verboseRouteKey
-    ? API_ROUTE_METADATA[options.verboseRouteKey as keyof typeof API_ROUTE_METADATA]
+    ? CLI_ROUTE_METADATA[options.verboseRouteKey as keyof typeof CLI_ROUTE_METADATA]
     : undefined;
   const commandName = [...commandPath(parent), parseCommandName(name)].join(' ');
   const pathParamsFromInput = new Set(options.pathParamsFromInput ?? []);

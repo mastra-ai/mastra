@@ -12,6 +12,7 @@ import {
   TABLE_SCHEMAS,
   calculatePagination,
   normalizePerPage,
+  validateStorageMetadataFilter,
   createStorageErrorId,
 } from '@mastra/core/storage';
 import type {
@@ -30,6 +31,7 @@ import type {
   StorageListMessagesOutput,
   StorageListThreadsInput,
   StorageListThreadsOutput,
+  StorageMetadataFilter,
   StorageResourceType,
   SwapBufferedReflectionToActiveInput,
   SwapBufferedToActiveInput,
@@ -142,6 +144,28 @@ function parseJSON<T>(value: T | string | null | undefined): T | null {
     return JSON.parse(value) as T;
   } catch {
     return null;
+  }
+}
+
+function addMySQLMessageMetadataFilter(
+  conditions: string[],
+  params: any[],
+  metadataFilter: StorageMetadataFilter | undefined,
+): void {
+  if (!metadataFilter) return;
+
+  for (const [key, value] of Object.entries(metadataFilter)) {
+    const path = `$.metadata.${key}`;
+    conditions.push(`JSON_VALID(${quoteIdentifier('content', 'column name')})`);
+    conditions.push(`JSON_CONTAINS_PATH(${quoteIdentifier('content', 'column name')}, 'one', ?)`);
+    params.push(path);
+    if (value === null) {
+      conditions.push(`JSON_TYPE(JSON_EXTRACT(${quoteIdentifier('content', 'column name')}, ?)) = 'NULL'`);
+      params.push(path);
+    } else {
+      conditions.push(`JSON_EXTRACT(${quoteIdentifier('content', 'column name')}, ?) = CAST(? AS JSON)`);
+      params.push(path, JSON.stringify(value));
+    }
   }
 }
 
@@ -350,9 +374,17 @@ export class MemoryMySQL extends MemoryStorage {
     return message;
   }
 
-  private async fetchMessagesForThread(threadId: string, limit?: number): Promise<MessageRow[]> {
-    let sql = `SELECT id, thread_id, content, role, type, createdAt, resourceId FROM ${formatTableName(TABLE_MESSAGES)} WHERE ${quoteIdentifier('thread_id', 'column name')} = ? ORDER BY ${quoteIdentifier('createdAt', 'column name')} ASC`;
-    const params: any[] = [threadId];
+  /**
+   * Loads a thread's messages in chronological order.
+   *
+   * @param threadId - Thread to read.
+   * @param limit - Optional cap on the number of rows.
+   * @param resourceId - When set, returns only the rows owned by that resource.
+   */
+  private async fetchMessagesForThread(threadId: string, limit?: number, resourceId?: string): Promise<MessageRow[]> {
+    const resourceCondition = resourceId ? ` AND ${quoteIdentifier('resourceId', 'column name')} = ?` : '';
+    let sql = `SELECT id, thread_id, content, role, type, createdAt, resourceId FROM ${formatTableName(TABLE_MESSAGES)} WHERE ${quoteIdentifier('thread_id', 'column name')} = ?${resourceCondition} ORDER BY ${quoteIdentifier('createdAt', 'column name')} ASC`;
+    const params: any[] = resourceId ? [threadId, resourceId] : [threadId];
     if (limit && limit > 0) {
       sql += ` LIMIT ?`;
       params.push(limit);
@@ -364,16 +396,23 @@ export class MemoryMySQL extends MemoryStorage {
   /**
    * Fetches included messages by ID, discovering their thread automatically.
    * This handles cross-thread includes where the include item doesn't specify a threadId.
+   *
+   * @param include - Message ids to pin, each with an optional before/after window.
+   * @param resourceId - When set, restricts both the pinned messages and their context
+   * to that resource so an id from another resource returns nothing.
    */
   private async _getIncludedMessages({
     include,
+    resourceId,
   }: {
     include: StorageListMessagesInput['include'];
+    resourceId?: string;
   }): Promise<MessageRow[] | null> {
     if (!include || include.length === 0) return null;
 
     const tableName = formatTableName(TABLE_MESSAGES);
     const selectColumns = `id, thread_id, content, role, type, createdAt, resourceId`;
+    const resourceCondition = resourceId ? ` AND m.${quoteIdentifier('resourceId', 'column name')} = ?` : '';
 
     // Phase 1: Batch-fetch metadata for all target messages
     const targetIds = include.map(inc => inc.id).filter(Boolean);
@@ -381,8 +420,10 @@ export class MemoryMySQL extends MemoryStorage {
 
     const idPlaceholders = targetIds.map(() => '?').join(', ');
     const [targetRows] = await this.pool.execute<RowDataPacket[]>(
-      `SELECT id, thread_id, createdAt FROM ${tableName} WHERE id IN (${idPlaceholders})`,
-      targetIds,
+      `SELECT id, thread_id, createdAt FROM ${tableName} WHERE id IN (${idPlaceholders})${
+        resourceId ? ` AND ${quoteIdentifier('resourceId', 'column name')} = ?` : ''
+      }`,
+      resourceId ? [...targetIds, resourceId] : targetIds,
     );
 
     if (!targetRows || targetRows.length === 0) return null;
@@ -407,11 +448,12 @@ export class MemoryMySQL extends MemoryStorage {
         SELECT ${selectColumns}
         FROM ${tableName} m
         WHERE m.thread_id = ?
-          AND m.createdAt <= ?
+          AND m.createdAt <= ?${resourceCondition}
         ORDER BY m.createdAt DESC, m.id DESC
         LIMIT ${prevLimit}
       )`);
       params.push(target.threadId, target.createdAt);
+      if (resourceId) params.push(resourceId);
 
       // Fetch messages after the target (only if requested)
       if (nextLimit > 0) {
@@ -419,11 +461,12 @@ export class MemoryMySQL extends MemoryStorage {
           SELECT ${selectColumns}
           FROM ${tableName} m
           WHERE m.thread_id = ?
-            AND m.createdAt > ?
+            AND m.createdAt > ?${resourceCondition}
           ORDER BY m.createdAt ASC, m.id ASC
           LIMIT ${nextLimit}
         )`);
         params.push(target.threadId, target.createdAt);
+        if (resourceId) params.push(resourceId);
       }
     }
 
@@ -436,37 +479,65 @@ export class MemoryMySQL extends MemoryStorage {
     return rows as unknown as MessageRow[];
   }
 
+  /**
+   * Resolves include items against loaded threads, adding each pinned message and its
+   * before/after window.
+   *
+   * @param threadId - Thread used when an include item names no thread of its own.
+   * @param include - Message ids to pin, each with an optional before/after window.
+   * @param messagesByThread - Cache of thread snapshots, reused and filled as threads load.
+   * @param resourceId - When set, restricts both the pinned messages and their context
+   * to that resource so an id from another resource returns nothing.
+   */
   private async collectIncludeMessages({
     threadId,
     include,
     messagesByThread,
+    resourceId,
   }: {
     threadId: string;
     include?: StorageListMessagesInput['include'];
     messagesByThread: Map<string, MastraDBMessage[]>;
+    resourceId?: string;
   }): Promise<MastraDBMessage[]> {
     if (!include?.length) return [];
 
     const includeMessages: MastraDBMessage[] = [];
     const seenIds = new Set<string>();
+    const unresolvedIds = include.filter(inc => !inc.threadId).map(inc => inc.id);
+    const resolvedThreadIds = new Map<string, string>();
+
+    if (unresolvedIds.length > 0) {
+      const placeholders = unresolvedIds.map(() => '?').join(', ');
+      const [rows] = await this.pool.execute<RowDataPacket[]>(
+        `SELECT id, thread_id FROM ${formatTableName(TABLE_MESSAGES)} WHERE id IN (${placeholders})${
+          resourceId ? ` AND ${quoteIdentifier('resourceId', 'column name')} = ?` : ''
+        }`,
+        resourceId ? [...unresolvedIds, resourceId] : unresolvedIds,
+      );
+      for (const row of rows) {
+        resolvedThreadIds.set(row.id, row.thread_id);
+      }
+    }
 
     for (const inc of include) {
-      const targetThreadId = inc.threadId ?? threadId;
+      const targetThreadId = inc.threadId ?? resolvedThreadIds.get(inc.id) ?? threadId;
 
       let threadMessages = messagesByThread.get(targetThreadId);
       if (!threadMessages) {
-        const rows = await this.fetchMessagesForThread(targetThreadId);
+        const rows = await this.fetchMessagesForThread(targetThreadId, undefined, resourceId);
         threadMessages = rows.map(row => this.mapMessage(row));
         messagesByThread.set(targetThreadId, threadMessages);
       }
 
       // If the current cached set might be partial (e.g., paginated main thread), reload full thread
       const needsContext =
+        !threadMessages.some(message => message.id === inc.id) ||
         (inc.withPreviousMessages ?? 0) > 0 ||
         (inc.withNextMessages ?? 0) > 0 ||
         threadMessages.length < (inc.withNextMessages ?? 0) + (inc.withPreviousMessages ?? 0) + 1;
       if (needsContext) {
-        const rows = await this.fetchMessagesForThread(targetThreadId);
+        const rows = await this.fetchMessagesForThread(targetThreadId, undefined, resourceId);
         threadMessages = rows.map(row => this.mapMessage(row));
         messagesByThread.set(targetThreadId, threadMessages);
       }
@@ -602,15 +673,22 @@ export class MemoryMySQL extends MemoryStorage {
         hasMore: perPageInput === false ? false : offset + perPageNormalized < total,
       };
     } catch (error) {
-      throw new MastraError(
+      // Re-throw USER errors (validation errors) directly so callers get proper 400 responses
+      if (error instanceof MastraError && error.category === ErrorCategory.USER) {
+        throw error;
+      }
+      const mastraError = new MastraError(
         {
-          id: 'MYSQL_MEMORY_LIST_THREADS_FAILED',
+          id: createStorageErrorId('MYSQL', 'LIST_THREADS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { filter: JSON.stringify(filter ?? {}) },
         },
         error,
       );
+      this.logger?.error?.(mastraError.toString());
+      this.logger?.trackException?.(mastraError);
+      throw mastraError;
     }
   }
 
@@ -662,8 +740,8 @@ export class MemoryMySQL extends MemoryStorage {
     metadata,
   }: {
     id: string;
-    title: string;
-    metadata: Record<string, unknown>;
+    title?: string;
+    metadata?: Record<string, unknown>;
   }): Promise<StorageThreadType> {
     try {
       const existing = await this.getThreadById({ threadId: id });
@@ -687,7 +765,7 @@ export class MemoryMySQL extends MemoryStorage {
         tableName: TABLE_THREADS,
         keys: { id },
         data: {
-          title,
+          title: title ?? existing.title,
           metadata: JSON.stringify(mergedMetadata),
           updatedAt,
         },
@@ -695,7 +773,7 @@ export class MemoryMySQL extends MemoryStorage {
 
       return {
         ...existing,
-        title,
+        title: title ?? existing.title,
         metadata: mergedMetadata,
         updatedAt,
       } satisfies StorageThreadType;
@@ -1204,6 +1282,7 @@ export class MemoryMySQL extends MemoryStorage {
       }
     ).selectBy;
     const include = args.include ?? selectBy?.include;
+    const metadataFilter = validateStorageMetadataFilter(filter?.metadata);
 
     // Normalize threadId to array
     const threadIds = Array.isArray(threadId) ? threadId : [threadId];
@@ -1265,6 +1344,8 @@ export class MemoryMySQL extends MemoryStorage {
         params.push(transformToSqlValue(filter.dateRange.end));
       }
 
+      addMySQLMessageMetadataFilter(conditions, params, metadataFilter);
+
       if (selectBy?.vectorSearchString) {
         conditions.push(`${quoteIdentifier('content', 'column name')} LIKE ?`);
         params.push(`%${selectBy.vectorSearchString}%`);
@@ -1286,7 +1367,7 @@ export class MemoryMySQL extends MemoryStorage {
 
       // Fast path: perPage=0 with includes skips COUNT and main query
       if (perPage === 0 && include && include.length > 0) {
-        const includeRows = await this._getIncludedMessages({ include });
+        const includeRows = await this._getIncludedMessages({ include, resourceId });
         if (!includeRows || includeRows.length === 0) {
           return {
             messages: [],
@@ -1353,6 +1434,7 @@ export class MemoryMySQL extends MemoryStorage {
         threadId: primaryThreadId,
         include,
         messagesByThread,
+        resourceId,
       });
 
       const combinedMap = new Map<string, MastraDBMessage>();
@@ -1372,7 +1454,7 @@ export class MemoryMySQL extends MemoryStorage {
       const mainThreadMessageCount = messages.filter(
         msg => msg.threadId !== undefined && threadIdSet.has(msg.threadId),
       ).length;
-      const hasMore = include && include.length ? (mainThreadMessageCount >= total ? false : baseHasMore) : baseHasMore;
+      const hasMore = metadataFilter || !include?.length || mainThreadMessageCount < total ? baseHasMore : false;
 
       return {
         messages,
@@ -1382,9 +1464,13 @@ export class MemoryMySQL extends MemoryStorage {
         hasMore,
       };
     } catch (error) {
+      // Re-throw USER errors (validation errors) directly so callers get proper 400 responses
+      if (error instanceof MastraError && error.category === ErrorCategory.USER) {
+        throw error;
+      }
       const mastraError = new MastraError(
         {
-          id: 'MYSQL_MEMORY_GET_MESSAGES_PAGINATED_FAILED',
+          id: createStorageErrorId('MYSQL', 'LIST_MESSAGES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -1397,7 +1483,7 @@ export class MemoryMySQL extends MemoryStorage {
       );
       this.logger?.error?.(mastraError.toString());
       this.logger?.trackException?.(mastraError);
-      return { messages: [], total: 0, page, perPage, hasMore: false };
+      throw mastraError;
     }
   }
 
@@ -1405,6 +1491,7 @@ export class MemoryMySQL extends MemoryStorage {
     args: StorageListMessagesByResourceIdInput,
   ): Promise<StorageListMessagesOutput> {
     const { resourceId, include, filter, perPage: perPageInput, page = 0, orderBy } = args;
+    const metadataFilter = validateStorageMetadataFilter(filter?.metadata);
 
     if (!resourceId || typeof resourceId !== 'string' || resourceId.trim().length === 0) {
       throw new MastraError(
@@ -1454,6 +1541,8 @@ export class MemoryMySQL extends MemoryStorage {
         params.push(transformToSqlValue(filter.dateRange.end));
       }
 
+      addMySQLMessageMetadataFilter(conditions, params, metadataFilter);
+
       const whereSql = `WHERE ${conditions.join(' AND ')}`;
       const tableName = formatTableName(TABLE_MESSAGES);
 
@@ -1489,8 +1578,8 @@ export class MemoryMySQL extends MemoryStorage {
             if (inc.threadId) return inc;
             // Look up the message's thread_id
             const [msgRows] = await this.pool.execute<RowDataPacket[]>(
-              `SELECT thread_id FROM ${tableName} WHERE id = ? LIMIT 1`,
-              [inc.id],
+              `SELECT thread_id FROM ${tableName} WHERE id = ? AND ${quoteIdentifier('resourceId', 'column name')} = ? LIMIT 1`,
+              [inc.id, resourceId],
             );
             const threadId = msgRows?.[0]?.thread_id as string | undefined;
             return threadId ? { ...inc, threadId } : inc;
@@ -1503,6 +1592,7 @@ export class MemoryMySQL extends MemoryStorage {
             threadId: validInclude[0]!.threadId!,
             include: validInclude,
             messagesByThread,
+            resourceId,
           });
           for (const includeMsg of includeMessages) {
             if (!messageIds.has(includeMsg.id)) {
@@ -1539,9 +1629,13 @@ export class MemoryMySQL extends MemoryStorage {
         hasMore,
       };
     } catch (error) {
+      // Re-throw USER errors (validation errors) directly so callers get proper 400 responses
+      if (error instanceof MastraError && error.category === ErrorCategory.USER) {
+        throw error;
+      }
       const mastraError = new MastraError(
         {
-          id: createStorageErrorId('MYSQL', 'LIST_MESSAGES', 'FAILED'),
+          id: createStorageErrorId('MYSQL', 'LIST_MESSAGES_BY_RESOURCE_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { resourceId },
@@ -1550,13 +1644,7 @@ export class MemoryMySQL extends MemoryStorage {
       );
       this.logger?.error?.(mastraError.toString());
       this.logger?.trackException?.(mastraError);
-      return {
-        messages: [],
-        total: 0,
-        page,
-        perPage: perPageForResponse,
-        hasMore: false,
-      };
+      throw mastraError;
     }
   }
 

@@ -81,7 +81,7 @@ describe('verifySlackRequest', () => {
   const body = 'token=abc&team_id=T123';
 
   function makeSignature(secret: string, ts: string, b: string): string {
-    const { createHmac } = require('crypto');
+    const { createHmac } = require('node:crypto');
     const sig = createHmac('sha256', secret).update(`v0:${ts}:${b}`).digest('hex');
     return `v0=${sig}`;
   }

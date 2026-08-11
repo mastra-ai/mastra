@@ -8,7 +8,8 @@ import type {
 import type { ReactNode } from 'react';
 
 export type WorkflowStepResult =
-  StepResult<unknown, unknown, unknown, unknown> | SerializedStepResult<unknown, unknown, unknown, unknown>;
+  | StepResult<unknown, unknown, unknown, unknown>
+  | SerializedStepResult<unknown, unknown, unknown, unknown>;
 
 export type ResolvedWorkflowStepBase<
   TKind extends string,
@@ -28,9 +29,25 @@ export type ResolvedWorkflowRegularStep = ResolvedWorkflowStepBase<
   Extract<SerializedStepFlowEntry, { type: 'step' }>
 >;
 
+/**
+ * `flow` is a union: newer graphs emit a dedicated flat `mapping` entry, while
+ * older serialized graphs encoded `.map()` as a `step` entry whose wrapped step
+ * carries `mapConfig`. Narrow on `flow.type` before reading `mapConfig`
+ * (`flow.mapConfig` vs `flow.step.mapConfig`).
+ */
 export type ResolvedWorkflowMapStep = ResolvedWorkflowStepBase<
   'map-step',
-  Extract<SerializedStepFlowEntry, { type: 'step' }>
+  Extract<SerializedStepFlowEntry, { type: 'mapping' | 'step' }>
+>;
+
+export type ResolvedWorkflowAgentStep = ResolvedWorkflowStepBase<
+  'agent-step',
+  Extract<SerializedStepFlowEntry, { type: 'agent' }>
+>;
+
+export type ResolvedWorkflowToolStep = ResolvedWorkflowStepBase<
+  'tool-step',
+  Extract<SerializedStepFlowEntry, { type: 'tool' }>
 >;
 
 export type ResolvedWorkflowForEachStep = ResolvedWorkflowStepBase<
@@ -65,7 +82,7 @@ export type ResolvedWorkflowSleepUntilStep = ResolvedWorkflowStepBase<
 
 export type ResolvedWorkflowNestedWorkflowStep = ResolvedWorkflowStepBase<
   'nested-workflow-step',
-  Extract<SerializedStepFlowEntry, { type: 'step' }>
+  Extract<SerializedStepFlowEntry, { type: 'step' | 'workflow' }>
 >;
 
 export type ResolvedWorkflowUnknownStep = ResolvedWorkflowStepBase<'unknown-step'>;
@@ -73,6 +90,8 @@ export type ResolvedWorkflowUnknownStep = ResolvedWorkflowStepBase<'unknown-step
 export type ResolvedWorkflowStep =
   | ResolvedWorkflowRegularStep
   | ResolvedWorkflowMapStep
+  | ResolvedWorkflowAgentStep
+  | ResolvedWorkflowToolStep
   | ResolvedWorkflowForEachStep
   | ResolvedWorkflowParallelStep
   | ResolvedWorkflowConditionalStep
@@ -87,6 +106,8 @@ export type WorkflowStepRenderer<TStep extends ResolvedWorkflowStep> = (step: TS
 export type WorkflowStepRenderers<TStep extends ResolvedWorkflowStep = ResolvedWorkflowStep> = {
   Step?: WorkflowStepRenderer<Extract<TStep, { kind: 'step' }>>;
   MapStep?: WorkflowStepRenderer<Extract<TStep, { kind: 'map-step' }>>;
+  AgentStep?: WorkflowStepRenderer<Extract<TStep, { kind: 'agent-step' }>>;
+  ToolStep?: WorkflowStepRenderer<Extract<TStep, { kind: 'tool-step' }>>;
   ForEachStep?: WorkflowStepRenderer<Extract<TStep, { kind: 'foreach-step' }>>;
   ParallelStep?: WorkflowStepRenderer<Extract<TStep, { kind: 'parallel-step' }>>;
   Conditional?: WorkflowStepRenderer<Extract<TStep, { kind: 'conditional' }>>;

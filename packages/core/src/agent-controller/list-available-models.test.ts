@@ -22,14 +22,16 @@ function createFakeGateway(options?: {
   resolveAuth?: (request: GatewayAuthRequest) => GatewayAuthResult | undefined;
 }): MastraModelGatewayInterface & { fetchProviders: ReturnType<typeof vi.fn> } {
   const models = options?.models ?? ['sonic-fast'];
-  const fetchProviders = vi.fn(async (): Promise<Record<string, ProviderConfig>> => ({
-    acme: {
-      name: 'Acme',
-      models,
-      apiKeyEnvVar: options?.apiKeyEnvVar ?? 'ACME_API_KEY',
-      gateway: 'test-gateway',
-    },
-  }));
+  const fetchProviders = vi.fn(
+    async (): Promise<Record<string, ProviderConfig>> => ({
+      acme: {
+        name: 'Acme',
+        models,
+        apiKeyEnvVar: options?.apiKeyEnvVar ?? 'ACME_API_KEY',
+        gateway: 'test-gateway',
+      },
+    }),
+  );
 
   return {
     id: 'test-gateway',

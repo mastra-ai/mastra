@@ -1,0 +1,124 @@
+---
+title: 'Trace Intelligence | Mastra platform'
+description: Find recurring goals, outcomes, behaviors, and sentiment across your agent traces with Trace Intelligence on Mastra platform.
+---
+
+# Trace Intelligence on Mastra platform
+
+Trace Intelligence finds recurring patterns across your agent's interactions. It analyzes traces captured by Mastra Observability, produces trace signals for four dimensions, and clusters similar trace signals into themes.
+
+Use Trace Intelligence to investigate questions such as:
+
+- What are users trying to accomplish?
+- Which goals tend to succeed, remain unresolved, or become blocked?
+- Which agent behaviors appear in successful and unsuccessful interactions?
+- How does user sentiment relate to goals and outcomes?
+
+:::warning Private beta
+Trace Intelligence is available by invitation for selected Mastra platform projects.
+:::
+
+## Get access
+
+1. Submit the [Trace Intelligence private beta form](https://mastra.ai/trace-intelligence) to request access.
+1. Confirm that [Mastra platform Observability](/docs/mastra-platform/observability) is enabled and that completed agent traces appear under **Traces**.
+1. Requires at least `@mastra/core@1.53.0` and `mastra@1.20.2`. Upgrade your project then deploy or redeploy Studio for the enrolled project. Local Studio and server-only deployments aren't supported during the private beta.
+1. Open the deployed Studio and select **Intelligence** in the sidebar.
+1. Send representative traffic to your agent and allow time for analysis.
+
+Once Mastra enrolls the project, you don't need to change your agent definition or calls.
+
+### When data is available
+
+Trace Intelligence needs enough processed traces from one agent to identify recurring patterns. Initial themes are usually available after at least **100 completed traces** from that agent have been processed.
+
+The trace count under **Traces** can reach 100 before Trace Intelligence is ready because the analysis pipeline runs asynchronously. Processing can take several minutes after the threshold is reached. Traces that can't be analyzed don't contribute, so 100 is a minimum, not an exact UI trigger.
+
+Trace Intelligence updates automatically as more traces arrive. Studio needs themes for at least two trace signal types before it can display the relationship flow.
+
+Use representative traffic. A small set of repeated test prompts can produce unrepresentative results, such as one broad theme or mostly Noise.
+
+## Understand the analysis
+
+Each analyzable completed trace produces four trace signals:
+
+| Trace signal | Meaning |
+| - | - |
+| **Goal** | What the user is trying to achieve or have completed. |
+| **Outcome** | The final completed, partial, blocked, failed, unresolved, or unclear state. |
+| **Behavior** | Observable agent actions and patterns, including tool use, omissions, retries, failures, and recovery. |
+| **Sentiment** | The user's emotional state or attitude. |
+
+Themes are clusters generated from similar trace signals. Clustering happens independently for each trace signal type. One trace can belong to a separate theme in every dimension: Goal, Outcome, Behavior, and Sentiment.
+
+### Themes and relationships
+
+The flow chart connects themes in adjacent trace signal columns:
+
+- A **node** represents a theme. Its count is the number of distinct traces assigned to that theme in the selected snapshot.
+- A **ribbon** connects traces assigned to themes in both adjacent columns. Its width represents the shared trace count.
+- Hover over or focus a node or ribbon to isolate its relationships.
+
+The flow shows association, not causation or execution order. For example, a ribbon between a Goal and an Outcome means that both themes occurred in the same traces. It doesn't show that the goal caused the outcome.
+
+### Other and Noise
+
+Each node shows its trace count: the number of distinct traces assigned to that theme in the selected snapshot. A theme's details also state its share, for example "28 of 70 traces in this snapshot (40%)".
+
+Studio shows the most common themes for each trace signal type. It may combine smaller themes into **Other** to preserve totals without overcrowding the chart.
+
+**Noise** contains summaries that didn't consistently match a recurring theme in the selected snapshot. It doesn't necessarily indicate an error or a low-quality interaction. Noise can include rare requests and emerging patterns. It can also contain ambiguous interactions or unrelated cases. A large Noise share can indicate highly varied traffic or insufficient data for stable themes.
+
+### Snapshots
+
+A snapshot is a moving analysis window over a set of traces. Snapshots can overlap, so don't add their trace counts together. Compare a theme's trace count and its share of the snapshot together because traffic volume can change between windows.
+
+A theme can persist, disappear, split, merge, or return across snapshots. Treat theme names and descriptions as generated summaries, not fixed taxonomies.
+
+## Use the Trace Intelligence page
+
+1. Use the **Agent** selector to switch between agents with available analysis. An agent doesn't appear until its first themes are ready.
+1. Select a theme in the flow to open its details and filter every column to traces containing that theme.
+1. The details panel shows the theme's description, its share of the snapshot, paged example summaries, and a trend of its trace count over time.
+1. Select **Clear filter** to restore the complete flow.
+
+You can also:
+
+- Select **Noise** in the flow to inspect its share and generated example summaries.
+- Drag the column headers above the chart to reorder the trace signal columns and see a different relationship perspective.
+- Use the timeline to select a snapshot, or select **Play** to watch themes change over time.
+- Switch to **Compare** to see which themes grew, shrank, entered the range, or left the range between two points in time, or **Lifelines** to follow each theme's share across the whole selected range.
+
+Filtering the flow by a theme is unavailable for snapshots with more than 2,000 traces. Selecting a theme still opens its details there without filtering the flow.
+
+## Troubleshooting
+
+### Intelligence isn't in the sidebar
+
+Confirm that Mastra enrolled the correct project, that you use the beta-compatible Mastra version, and that you redeployed Studio. The private beta doesn't support local Studio.
+
+### An agent is missing
+
+Confirm that its completed traces are listed under **Traces**. The agent is listed only after its first themes are ready. If it recently reached 100 traces, allow time for asynchronous processing.
+
+### The relationship flow is unavailable
+
+The flow requires themes for at least two trace signal types. Continue sending representative traffic and allow processing to finish.
+
+### Most summaries are Noise
+
+Collect more representative traffic and compare a later snapshot. Varied or rare interactions are harder to group, while repeated test prompts can produce an unrepresentative distribution.
+
+## Private-beta limitations
+
+- Trace Intelligence is available only for enrolled projects in deployed Studio.
+- Initial analysis requires at least 100 processed traces per agent. Some agents may require more.
+- Results depend on the diversity and quality of captured traces.
+- Trace signal summaries, theme labels, clustering, thresholds, and UI behavior can change during the beta.
+
+When reporting feedback, include the organization ID, project ID, agent ID, selected snapshot, and the theme or Noise examples that illustrate the issue.
+
+## Related
+
+- [Observability on Mastra platform](/docs/mastra-platform/observability)
+- [Studio on Mastra platform](/docs/mastra-platform/studio)

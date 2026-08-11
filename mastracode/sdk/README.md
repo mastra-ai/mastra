@@ -37,6 +37,26 @@ export const mastra = new Mastra(prepared.mastraArgs);
 await prepared.finalize();
 ```
 
+### Add input processors
+
+Embedding surfaces can prepend stateless input processors without replacing Mastra Code's required policy and compatibility processors:
+
+```ts
+const phaseProcessor = {
+  id: 'current-phase',
+  async processInputStep({ messages }) {
+    await reconcileCompletedTools(messages);
+  },
+};
+
+const prepared = await prepareAgentControllerMount({
+  cwd: process.cwd(),
+  inputProcessors: [phaseProcessor],
+});
+```
+
+Configured processors run before Mastra Code's built-in input processors. Keep processor instances stateless because the mounted agent shares them across sessions and runs.
+
 Deep modules are available as subpath imports, e.g.:
 
 ```ts

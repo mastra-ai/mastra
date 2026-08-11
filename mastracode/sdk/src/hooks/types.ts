@@ -26,7 +26,13 @@ export type BlockingHookEvent = 'PreToolUse' | 'Stop' | 'UserPromptSubmit';
 
 /** Lifecycle hook events are non-blocking: they observe behavior without changing it. */
 export type LifecycleHookEvent =
-  'AgentStart' | 'AgentEnd' | 'PermissionRequest' | 'PermissionResult' | 'Interrupt' | 'SubagentStart' | 'SubagentEnd';
+  | 'AgentStart'
+  | 'AgentEnd'
+  | 'PermissionRequest'
+  | 'PermissionResult'
+  | 'Interrupt'
+  | 'SubagentStart'
+  | 'SubagentEnd';
 
 export function isBlockingEvent(event: HookEventName): event is BlockingHookEvent {
   return event === 'PreToolUse' || event === 'Stop' || event === 'UserPromptSubmit';
@@ -104,8 +110,29 @@ export interface HookStdinStop extends HookStdinBase {
   assistant_message?: string;
   stop_reason: 'complete' | 'aborted' | 'error';
 }
+/**
+ * Describes the git worktree a session is running in. Absent for sessions
+ * started in an ordinary checkout.
+ */
+export interface SessionWorktreeInfo {
+  /** Absolute path to the worktree root. */
+  path: string;
+  /** Branch checked out in the worktree, when it can be resolved. */
+  branch?: string;
+  /** Absolute path to the main repository the worktree is linked to. */
+  mainRepoPath?: string;
+}
+
 export interface HookStdinSession extends HookStdinBase {
   hook_event_name: 'SessionStart' | 'SessionEnd';
+  /**
+   * Set only when the session's project directory is a git worktree, so a hook
+   * can provision or tear down per-worktree resources (a database, a bucket, a
+   * dev server) and distinguish that from a session in the main checkout.
+   */
+  worktree_path?: string;
+  branch?: string;
+  main_repo_path?: string;
 }
 
 export interface HookStdinNotification extends HookStdinBase {

@@ -10,6 +10,7 @@ import { getOAuthProviders } from '@mastra/code-sdk/auth/storage';
 import {
   getAvailableModePacks,
   getAvailableOmPacks,
+  selectPreferredOMPack,
   ONBOARDING_VERSION,
   loadSettings,
   saveSettings,
@@ -48,6 +49,7 @@ import { dispatchEvent } from './event-dispatch.js';
 import { isGoalJudgeInputLocked, showGoalJudgeInputLockInfo } from './goal-input-lock.js';
 import type { EventHandlerContext } from './handlers/types.js';
 import { askModalQuestion } from './modal-question.js';
+import { applyOMModelToSession, seedOMDefaultAfterLogin } from './om-defaults.js';
 import type { OnboardingResult } from './onboarding-inline.js';
 import { OnboardingInlineComponent } from './onboarding-inline.js';
 import { showModalOverlay } from './overlay.js';
@@ -160,7 +162,16 @@ export class MastraTUI {
   private caffeinateProcess: ChildProcess | null = null;
   private cleanupKeyHandlers?: () => void;
   private cleanupPluginReloadListener?: () => void;
+  private cleanupPluginUpdateListener?: () => void;
   private lastStreamError: string | null = null;
+  /**
+   * Text submitted while the main loop was busy (running a slash command or a
+   * shell passthrough) and so was not waiting on `getUserInput`. The editor's
+   * submit handler stays installed across loop iterations, so without this the
+   * submission would resolve an already-settled promise and be silently lost.
+   */
+  private queuedUserInput: string[] = [];
+  private pendingUserInputResolve: ((text: string) => void) | undefined;
 
   private static readonly DOUBLE_CTRL_C_MS = 500;
 
@@ -561,6 +572,11 @@ export class MastraTUI {
       this.cleanupPluginReloadListener = undefined;
     }
 
+    if (this.cleanupPluginUpdateListener) {
+      this.cleanupPluginUpdateListener();
+      this.cleanupPluginUpdateListener = undefined;
+    }
+
     if (this.state.unsubscribe) {
       this.state.unsubscribe();
     }
@@ -597,6 +613,14 @@ export class MastraTUI {
           process.stderr.write(`[plugin runtime refresh] ${msg}\n`);
         }),
       );
+    }
+
+    if (this.state.pluginManager && !this.cleanupPluginUpdateListener) {
+      this.cleanupPluginUpdateListener = this.state.pluginManager.onGithubPluginsUpdated(pluginNames => {
+        if (pluginNames.length === 0) return;
+        const label = pluginNames.length === 1 ? 'Plugin' : 'Plugins';
+        showInfo(this.state, `${label} updated to the latest version: ${pluginNames.join(', ')}`);
+      });
     }
 
     // Load custom slash commands
@@ -649,7 +673,11 @@ export class MastraTUI {
         .initInBackground()
         .then(result => {
           for (const s of result.failed) {
-            showInfo(this.state, `MCP: Failed to connect to "${s.name}": ${s.error}`);
+            if (s.needsAuth) {
+              showInfo(this.state, `MCP: \u26a0 "${s.name}" needs authentication \u2192 run /mcp to authenticate`);
+            } else {
+              showInfo(this.state, `MCP: Failed to connect to "${s.name}": ${s.error}`);
+            }
           }
           for (const s of result.skipped) {
             showInfo(this.state, `MCP: Skipped "${s.name}": ${s.reason}`);
@@ -998,27 +1026,22 @@ export class MastraTUI {
   private beginLifecycleRun(): void {
     const hookMgr = this.state.hookManager;
     if (!hookMgr) return;
-    const runId = randomUUID();
-    hookMgr.setRunId(runId);
+    // Reuse a run id set at receipt time (runPermissionHooksForEvent) so the
+    // PermissionRequest hook fired before the queued agent_start carries the
+    // same id as subsequent hooks in this run.
+    if (!hookMgr.getRunId()) {
+      hookMgr.setRunId(randomUUID());
+    }
     hookMgr.runAgentStart().catch(() => {});
   }
 
   private fireLifecycleHooksForEvent(event: AgentControllerEvent): void {
     const hookMgr = this.state.hookManager;
     if (!hookMgr) return;
+    // PermissionRequest dispatch moved to the receipt-time tap in display.ts
+    // (runPermissionHooksForEvent, #20861): firing it here, inside the queued
+    // task, starved the hook behind any pending prompt.
     switch (event.type) {
-      case 'tool_approval_required':
-        hookMgr.runPermissionRequest('tool_approval', event.toolCallId, event.toolName, event.args).catch(() => {});
-        break;
-      case 'tool_suspended': {
-        const payload = (event.suspendPayload ?? {}) as Record<string, unknown>;
-        if (event.toolName === 'request_access' || payload.kind === 'sandbox_access_request') {
-          hookMgr.runPermissionRequest('sandbox_access', event.toolCallId, event.toolName, payload).catch(() => {});
-        } else if (event.toolName === 'submit_plan') {
-          hookMgr.runPermissionRequest('plan_approval', event.toolCallId, event.toolName, payload).catch(() => {});
-        }
-        break;
-      }
       case 'subagent_start':
         hookMgr
           .runSubagentStart(event.toolCallId, event.agentType, event.task, event.modelId, event.forked)
@@ -1111,7 +1134,12 @@ export class MastraTUI {
   // ===========================================================================
 
   private getUserInput(): Promise<string> {
+    const queued = this.queuedUserInput.shift();
+    if (queued !== undefined) {
+      return Promise.resolve(queued);
+    }
     return new Promise(resolve => {
+      this.pendingUserInputResolve = resolve;
       this.state.editor.onSubmit = (text: string) => {
         if (isGoalJudgeInputLocked(this.state)) {
           this.state.editor.setText(text);
@@ -1138,6 +1166,13 @@ export class MastraTUI {
             return;
           }
 
+          if (text.startsWith('!')) {
+            // Shell passthrough runs locally and never touches the agent, so
+            // run it immediately instead of steering the active run with it.
+            void handleShellPassthrough(this.state, text.slice(1).trim());
+            return;
+          }
+
           const { content, images } = consumePendingImages(text, this.state.pendingImages);
           this.state.pendingImages = [];
           if (images?.length) {
@@ -1150,7 +1185,14 @@ export class MastraTUI {
           return;
         }
 
-        resolve(text);
+        const pending = this.pendingUserInputResolve;
+        if (!pending) {
+          // The loop is busy elsewhere; hand the text over on its next turn.
+          this.queuedUserInput.push(text);
+          return;
+        }
+        this.pendingUserInputResolve = undefined;
+        pending(text);
       };
     });
   }
@@ -1285,6 +1327,7 @@ export class MastraTUI {
           } else {
             showInfo(this.state, `Successfully logged in to ${providerName}`);
           }
+          await seedOMDefaultAfterLogin(this.state, providerId, message => showInfo(this.state, message));
 
           resolve();
         })
@@ -1316,6 +1359,7 @@ export class MastraTUI {
     const savedSettings = loadSettings();
     const modePacks = getAvailableModePacks(access, savedSettings.customModelPacks);
     const omPacks = getAvailableOmPacks(access);
+    const preferredOmPack = selectPreferredOMPack(access, savedSettings.models.activeModelPackId ?? undefined);
 
     let prevModePackId = savedSettings.onboarding.modePackId;
     if (prevModePackId === 'custom' && savedSettings.models.activeModelPackId?.startsWith('custom:')) {
@@ -1335,6 +1379,7 @@ export class MastraTUI {
         authProviders,
         modePacks,
         omPacks,
+        preferredOmPackId: preferredOmPack?.id,
         hasProviderAccess,
         previous,
         onComplete: async (result: OnboardingResult) => {
@@ -1360,7 +1405,9 @@ export class MastraTUI {
               const updatedAccess = await this.buildProviderAccess();
               const updatedHasAccess = Object.values(updatedAccess).some(Boolean);
               component.updateModePacks(getAvailableModePacks(updatedAccess, savedSettings.customModelPacks));
-              component.updateOmPacks(getAvailableOmPacks(updatedAccess));
+              const updatedOmPacks = getAvailableOmPacks(updatedAccess);
+              const preferred = selectPreferredOMPack(updatedAccess, providerId);
+              component.updateOmPacks(updatedOmPacks, preferred?.id);
               component.updateHasProviderAccess(updatedHasAccess);
             } catch (err) {
               console.error('Failed to refresh provider access after login:', err);
@@ -1433,15 +1480,17 @@ export class MastraTUI {
       }
     }
 
-    const omPack = result.omPack;
-    void this.state.session.state.set({ observerModelId: omPack.modelId, reflectorModelId: omPack.modelId });
-    void this.state.session.state.set({ yolo: result.yolo });
+    // With no reachable provider the OM step only offers an empty custom pack;
+    // recording that non-choice would block every later provider-aware seed.
+    const omPack = result.omPack.modelId ? result.omPack : undefined;
+    if (omPack) await applyOMModelToSession(this.state, omPack.modelId);
+    await this.state.session.state.set({ yolo: result.yolo });
 
     const settings = loadSettings();
     settings.onboarding.completedAt = new Date().toISOString();
     settings.onboarding.skippedAt = null;
     settings.onboarding.version = ONBOARDING_VERSION;
-    settings.onboarding.omPackId = omPack.id;
+    settings.onboarding.omPackId = omPack?.id ?? null;
 
     const modeDefaults: Record<string, string> = {};
     for (const mode of modes) {
@@ -1472,8 +1521,8 @@ export class MastraTUI {
       await this.state.session.thread.setSetting({ key: THREAD_ACTIVE_MODEL_PACK_ID_KEY, value: activeModePackId });
     }
 
-    settings.models.activeOmPackId = omPack.id;
-    settings.models.omModelOverride = omPack.id === 'custom' ? omPack.modelId : null;
+    settings.models.activeOmPackId = omPack?.id ?? null;
+    settings.models.omModelOverride = omPack?.id === 'custom' ? omPack.modelId : null;
     // Clear any per-role overrides from prior /om use so the newly-selected
     // pack (or custom modelId above) applies to both observer and reflector.
     settings.models.observerModelOverride = null;

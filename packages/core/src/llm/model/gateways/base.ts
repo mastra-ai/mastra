@@ -33,6 +33,10 @@ export interface ProviderConfig {
   // Per-model overrides (endpoint/shape/SDK) keyed by model id, when a provider
   // serves some models differently than its default (models.dev model `provider`).
   modelOverrides?: Record<string, ModelProviderOverride>;
+  // Model ids the upstream provider has marked deprecated. These stay in `models`
+  // so existing configs keep type-checking and keep their capability/override data;
+  // surfaces that offer models for *new* selection should de-emphasize or hide them.
+  deprecatedModels?: string[];
 }
 
 /**

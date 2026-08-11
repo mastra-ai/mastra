@@ -7,29 +7,21 @@ description: Collect searchable traces, logs, and metrics across Mastra projects
 
 Observability on Mastra platform is a standalone hosted product for searchable traces, logs, and metrics across Mastra projects and deploys. Use it when you want observability without deploying Studio first or setting up local storage.
 
-Mastra can configure platform observability during project setup. The CLI provisions a platform project, writes the required environment variables, and registers observability exporters in your Mastra config.
+Use `mastra init` to configure platform observability while adding Mastra to an existing application, or configure it manually in a newly created Mastra project.
 
 ## Quickstart
 
-Choose the setup path that matches your project. New and existing projects can use the CLI to provision Observability automatically, while manual setup is available when you already manage platform projects and environment variables yourself.
+Choose the setup path that matches your project.
 
 ### New project
 
-Create a new Mastra project:
+Create a managed Mastra project. When prompted, opt into Mastra Platform Observability to configure it automatically:
 
 ```bash npm2yarn
 npm create mastra@latest
 ```
 
-When prompted, enable Mastra Observability:
-
-```bash
-Enable Mastra Observability? (will open auth flow)
-
-> Yes
-```
-
-The CLI authenticates with Mastra platform, creates a platform project, writes the required environment variables, and configures the observability exporters.
+When you select observability, the create command authenticates with Mastra Platform, provisions a platform project, and writes the credentials to your project. If you skip platform setup or use a prompt-free creation flow, follow the [manual setup](#manual-setup) steps instead.
 
 ### Existing non-Mastra projects
 

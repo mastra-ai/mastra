@@ -7,6 +7,7 @@ import {
   MemoryStorage,
   normalizePerPage,
   calculatePagination,
+  validateStorageMetadataFilter,
   TABLE_MESSAGES,
   TABLE_RESOURCES,
   TABLE_THREADS,
@@ -18,12 +19,49 @@ import type {
   StorageListMessagesOutput,
   StorageListThreadsInput,
   StorageListThreadsOutput,
+  StorageMetadataFilter,
   CreateIndexOptions,
 } from '@mastra/core/storage';
 import sql from 'mssql';
 import { MssqlDB, resolveMssqlConfig } from '../../db';
 import type { MssqlDomainConfig } from '../../db';
 import { getTableName, getSchemaName, buildDateRangeFilter, prepareWhereClause } from '../utils';
+
+function bindMssqlMetadataParams(request: sql.Request, params: Record<string, unknown>): void {
+  for (const [paramName, paramValue] of Object.entries(params)) {
+    request.input(paramName, paramValue);
+  }
+}
+
+function buildMssqlMessageMetadataFilter(metadataFilter: StorageMetadataFilter | undefined): {
+  clauses: string[];
+  params: Record<string, unknown>;
+} {
+  if (!metadataFilter) return { clauses: [], params: {} };
+
+  const clauses: string[] = [];
+  const params: Record<string, unknown> = {};
+
+  Object.entries(metadataFilter).forEach(([key, value], index) => {
+    const keyParam = `metadataKey${index}`;
+    params[keyParam] = key;
+    clauses.push('ISJSON(content) = 1');
+
+    if (value === null) {
+      clauses.push(`EXISTS (SELECT 1 FROM OPENJSON(content, '$.metadata') WHERE [key] = @${keyParam} AND [type] = 0)`);
+      return;
+    }
+
+    const valueParam = `metadataValue${index}`;
+    params[valueParam] = String(value);
+    const jsonType = typeof value === 'string' ? 1 : typeof value === 'number' ? 2 : 3;
+    clauses.push(
+      `EXISTS (SELECT 1 FROM OPENJSON(content, '$.metadata') WHERE [key] = @${keyParam} AND [type] = ${jsonType} AND [value] = @${valueParam})`,
+    );
+  });
+
+  return { clauses, params };
+}
 
 export class MemoryMSSQL extends MemoryStorage {
   private pool: sql.ConnectionPool;
@@ -346,13 +384,7 @@ export class MemoryMSSQL extends MemoryStorage {
       );
       this.logger?.error?.(mastraError.toString());
       this.logger?.trackException?.(mastraError);
-      return {
-        threads: [],
-        total: 0,
-        page,
-        perPage: perPageForResponse,
-        hasMore: false,
-      };
+      throw mastraError;
     }
   }
 
@@ -410,8 +442,8 @@ export class MemoryMSSQL extends MemoryStorage {
     metadata,
   }: {
     id: string;
-    title: string;
-    metadata: Record<string, unknown>;
+    title?: string;
+    metadata?: Record<string, unknown>;
   }): Promise<StorageThreadType> {
     const existingThread = await this.getThreadById({ threadId: id });
     if (!existingThread) {
@@ -422,7 +454,7 @@ export class MemoryMSSQL extends MemoryStorage {
         text: `Thread ${id} not found`,
         details: {
           threadId: id,
-          title,
+          title: title ?? null,
         },
       });
     }
@@ -442,7 +474,7 @@ export class MemoryMSSQL extends MemoryStorage {
         WHERE id = @id`;
       const req = this.pool.request();
       req.input('id', id);
-      req.input('title', title);
+      req.input('title', title ?? existingThread.title);
       req.input('metadata', JSON.stringify(mergedMetadata));
       req.input('updatedAt', new Date());
       const result = await req.query(sql);
@@ -459,7 +491,7 @@ export class MemoryMSSQL extends MemoryStorage {
           text: `Thread ${id} not found after update`,
           details: {
             threadId: id,
-            title,
+            title: title ?? null,
           },
         });
       }
@@ -477,7 +509,7 @@ export class MemoryMSSQL extends MemoryStorage {
           category: ErrorCategory.THIRD_PARTY,
           details: {
             threadId: id,
-            title,
+            title: title ?? null,
           },
         },
         error,
@@ -533,7 +565,20 @@ export class MemoryMSSQL extends MemoryStorage {
     });
   }
 
-  private async _getIncludedMessages({ include }: { include: StorageListMessagesInput['include'] }) {
+  /**
+   * Fetches the messages named by `include` together with their surrounding context.
+   *
+   * @param include - Message ids to pin, each with an optional before/after window.
+   * @param resourceId - When set, restricts both the pinned messages and their context
+   * to that resource so an id from another resource returns nothing.
+   */
+  private async _getIncludedMessages({
+    include,
+    resourceId,
+  }: {
+    include: StorageListMessagesInput['include'];
+    resourceId?: string;
+  }) {
     if (!include || include.length === 0) return null;
 
     const unionQueries: string[] = [];
@@ -541,6 +586,7 @@ export class MemoryMSSQL extends MemoryStorage {
     let paramIdx = 1;
     const paramNames: string[] = [];
     const tableName = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.schema) });
+    const resourceCondition = resourceId ? ` AND [resourceId] = @presource` : '';
 
     for (const inc of include) {
       const { id, withPreviousMessages = 0, withNextMessages = 0 } = inc;
@@ -564,7 +610,7 @@ export class MemoryMSSQL extends MemoryStorage {
           FROM (
             SELECT *, ROW_NUMBER() OVER (ORDER BY [createdAt] ASC) as row_num
             FROM ${tableName}
-            WHERE [thread_id] = (SELECT thread_id FROM ${tableName} WHERE id = ${pId})
+            WHERE [thread_id] = (SELECT thread_id FROM ${tableName} WHERE id = ${pId}${resourceCondition})${resourceCondition}
           ) AS m
           WHERE m.id = ${pId}
           OR EXISTS (
@@ -572,7 +618,7 @@ export class MemoryMSSQL extends MemoryStorage {
             FROM (
               SELECT *, ROW_NUMBER() OVER (ORDER BY [createdAt] ASC) as row_num
               FROM ${tableName}
-              WHERE [thread_id] = (SELECT thread_id FROM ${tableName} WHERE id = ${pId})
+              WHERE [thread_id] = (SELECT thread_id FROM ${tableName} WHERE id = ${pId}${resourceCondition})${resourceCondition}
             ) AS target
             WHERE target.id = ${pId}
             AND (
@@ -601,6 +647,9 @@ export class MemoryMSSQL extends MemoryStorage {
     const req = this.pool.request();
     for (let i = 0; i < paramValues.length; ++i) {
       req.input(paramNames[i] as string, paramValues[i]);
+    }
+    if (resourceId) {
+      req.input('presource', resourceId);
     }
 
     const result = await req.query(finalQuery);
@@ -662,12 +711,13 @@ export class MemoryMSSQL extends MemoryStorage {
       );
       this.logger?.error?.(mastraError.toString());
       this.logger?.trackException?.(mastraError);
-      return { messages: [] };
+      throw mastraError;
     }
   }
 
   public async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
     const { threadId, resourceId, include, filter, perPage: perPageInput, page = 0, orderBy } = args;
+    const metadataFilter = validateStorageMetadataFilter(filter?.metadata);
 
     // Normalize threadId to array
     const threadIds = Array.isArray(threadId) ? threadId : [threadId];
@@ -714,12 +764,17 @@ export class MemoryMSSQL extends MemoryStorage {
         ...buildDateRangeFilter(filter?.dateRange, 'createdAt'),
       };
 
-      const { sql: actualWhereClause = '', params: whereParams } = prepareWhereClause(
+      const { sql: preparedWhereClause = '', params: whereParams } = prepareWhereClause(
         filters,
         TABLE_SCHEMAS[TABLE_MESSAGES],
       );
+      const metadataWhere = buildMssqlMessageMetadataFilter(metadataFilter);
+      const actualWhereClause = metadataWhere.clauses.length
+        ? `${preparedWhereClause || ' WHERE 1 = 1'} AND ${metadataWhere.clauses.join(' AND ')}`
+        : preparedWhereClause;
       const bindWhereParams = (req: sql.Request) => {
         Object.entries(whereParams).forEach(([paramName, paramValue]) => req.input(paramName, paramValue));
+        bindMssqlMetadataParams(req, metadataWhere.params);
       };
 
       // When perPage is 0 with no includes, there's nothing to return.
@@ -729,7 +784,7 @@ export class MemoryMSSQL extends MemoryStorage {
 
       // When perPage is 0, we only need included messages — skip COUNT and data queries
       if (perPage === 0 && include && include.length > 0) {
-        const includeMessages = await this._getIncludedMessages({ include });
+        const includeMessages = await this._getIncludedMessages({ include, resourceId });
         const messages = this._parseAndFormatMessages(includeMessages ?? [], 'v2') as MastraDBMessage[];
         return {
           messages: this._sortMessages(messages, field, direction),
@@ -766,6 +821,7 @@ export class MemoryMSSQL extends MemoryStorage {
       // Get paginated messages from the thread first (without excluding included ones)
       const baseRows = perPage === 0 ? [] : await fetchBaseMessages();
       const messages: any[] = [...baseRows];
+      const primaryPageCount = messages.length;
       const seqById = new Map<string, number>();
       messages.forEach(msg => {
         if (typeof msg.seq_id === 'number') seqById.set(msg.id, msg.seq_id);
@@ -785,7 +841,7 @@ export class MemoryMSSQL extends MemoryStorage {
       // Add included messages with context (if any), excluding duplicates
       if (include?.length) {
         const messageIds = new Set(messages.map(m => m.id));
-        const includeMessages = await this._getIncludedMessages({ include });
+        const includeMessages = await this._getIncludedMessages({ include, resourceId });
         includeMessages?.forEach(msg => {
           if (!messageIds.has(msg.id)) {
             messages.push(msg);
@@ -818,12 +874,11 @@ export class MemoryMSSQL extends MemoryStorage {
         return seqA != null && seqB != null ? (seqA - seqB) * mult : a.id.localeCompare(b.id);
       });
 
-      // Calculate hasMore based on pagination window
-      // If all thread messages have been returned (through pagination or include), hasMore = false
-      // Otherwise, check if there are more pages in the pagination window
       const threadIdSet = new Set(threadIds);
       const returnedThreadMessageCount = finalMessages.filter(m => m.threadId && threadIdSet.has(m.threadId)).length;
-      const hasMore = perPageInput !== false && returnedThreadMessageCount < total && offset + perPage < total;
+      const hasMore = metadataFilter
+        ? perPageInput !== false && offset + primaryPageCount < total
+        : perPageInput !== false && returnedThreadMessageCount < total && offset + perPage < total;
 
       return {
         messages: finalMessages,
@@ -833,6 +888,10 @@ export class MemoryMSSQL extends MemoryStorage {
         hasMore,
       };
     } catch (error) {
+      // Re-throw USER errors (validation errors) directly so callers get proper 400 responses
+      if (error instanceof MastraError && error.category === ErrorCategory.USER) {
+        throw error;
+      }
       const mastraError = new MastraError(
         {
           id: createStorageErrorId('MSSQL', 'LIST_MESSAGES', 'FAILED'),
@@ -847,13 +906,7 @@ export class MemoryMSSQL extends MemoryStorage {
       );
       this.logger?.error?.(mastraError.toString());
       this.logger?.trackException?.(mastraError);
-      return {
-        messages: [],
-        total: 0,
-        page,
-        perPage: perPageForResponse,
-        hasMore: false,
-      };
+      throw mastraError;
     }
   }
 

@@ -1,6 +1,6 @@
 {
   "name": "@internal/core",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "license": "Apache-2.0",
   "private": true,
   "type": "module",
@@ -83,8 +83,9 @@
   "sideEffects": false,
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.build.json",
-    "lint": "eslint .",
-    "build:lib": "tsup --config tsup.config.ts"
+    "lint": "oxlint . && eslint .",
+    "lint:fix": "oxlint --fix . && eslint --fix .",
+    "build:lib": "tsdown --config tsdown.config.ts"
   },
   "peerDependencies": {
     "zod": "^3.25.0 || ^4.0.0"
@@ -93,7 +94,7 @@
     "@internal/lint": "workspace:*",
     "@types/node": "22.20.1",
     "eslint": "^10.7.0",
-    "tsup": "^8.5.1",
+    "tsdown": "0.22.9",
     "typescript": "catalog:",
     "zod": "catalog:"
   },

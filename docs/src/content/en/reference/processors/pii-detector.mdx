@@ -7,7 +7,7 @@ packages:
 
 # PIIDetector
 
-The `PIIDetector` is a **hybrid processor** that can be used for both input and output processing to detect and redact personally identifiable information (PII) for privacy compliance. This processor helps maintain privacy by identifying various types of PII and providing flexible strategies for handling them, including multiple redaction methods to ensure compliance with GDPR, CCPA, HIPAA, and other privacy regulations.
+The `PIIDetector` is a **hybrid processor** that can be used for both input and output processing to detect and redact personally identifiable information (PII) for privacy compliance. This processor helps maintain privacy by identifying types of PII and providing flexible strategies for handling them, including multiple redaction methods to ensure compliance with GDPR, CCPA, HIPAA, and other privacy regulations.
 
 ## Usage example
 
@@ -110,6 +110,14 @@ const processor = new PIIDetector({
             type: 'ProviderOptions',
             description:
               "Provider-specific options passed to the internal detection agent. Use this to control model behavior like reasoning effort for thinking models (e.g., `{ openai: { reasoningEffort: 'low' } }`)",
+            isOptional: true,
+            default: 'undefined',
+          },
+          {
+            name: 'onDetection',
+            type: '(event: PIIDetectionEvent) => void | Promise<void>',
+            description:
+              'Called whenever a detection result is produced, with `detectionResult`, the analyzed `input`, whether it was `flagged`, and the `strategyApplied` (the configured strategy when flagged, otherwise `none`). Fires for every analyzed message in `processInput` and `processOutputResult`, and for every LLM buffer flush during streaming; the streaming regex pass only reports when PII is found. Errors thrown by the callback are logged and ignored',
             isOptional: true,
             default: 'undefined',
           },

@@ -108,7 +108,7 @@ export function getInstallCommand(pm: PackageManager, version?: string): string 
 }
 
 /**
- * Read the current version, injected at build time by tsup's `define` option.
+ * Read the current version, injected at build time by tsdown's `define` option.
  * Falls back to reading package.json at runtime (e.g. when running from source with tsx).
  */
 export function getCurrentVersion(): string {

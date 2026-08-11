@@ -1,35 +1,64 @@
+import { DateTimeRangePicker } from '@mastra/playground-ui/components/DateTimeRangePicker';
 import { SignalsOverviewPage as SignalsEmptyState } from '@mastra/playground-ui/ee/signals';
 
 import { Link } from '../../lib/link';
-import { useThemeEntities } from './hooks';
+import { useEntityLearningProgress } from './hooks';
 import { SankeySignals } from './sankey-signals';
+import { SIGNAL_PROCESSING_ORDER } from './signal-formatting';
+import { SignalsErrorState } from './signals-error-state';
 import { SignalsLoadingSkeleton } from './signals-loading-skeleton';
-import type { TraceSignalName } from './types';
-
-const SIGNAL_ORDER: TraceSignalName[] = ['goal', 'outcome', 'behavior', 'sentiment'];
+import { useSelectedThemeEntity } from './use-selected-theme-entity';
+import { useSignalsDateUrlState } from './use-signals-date-url-state';
 
 export function SignalsOverviewPage() {
-  const entitiesQuery = useThemeEntities('agent');
+  const { entitiesQuery, entity } = useSelectedThemeEntity();
+  const url = useSignalsDateUrlState();
+  const signalNames = entity
+    ? SIGNAL_PROCESSING_ORDER.filter(signalName => entity.availableSignals.includes(signalName))
+    : [];
+  const progressQuery = useEntityLearningProgress(
+    entity?.entityId,
+    entity?.entityType ?? 'agent',
+    !entitiesQuery.isPending && !entitiesQuery.isError && signalNames.length < 2,
+  );
 
   if (entitiesQuery.isPending) {
     return <SignalsLoadingSkeleton />;
   }
 
   if (entitiesQuery.isError) {
-    return <p>Unable to load signal entities.</p>;
+    return (
+      <SignalsErrorState message="Unable to load trace signal entities." onRetry={() => void entitiesQuery.refetch()} />
+    );
   }
-
-  const entity = entitiesQuery.data?.entities.find(currentEntity => currentEntity.availableSignals.length >= 2);
 
   if (!entity) {
     return <SignalsEmptyState LinkComponent={Link} />;
   }
 
-  const signalNames = SIGNAL_ORDER.filter(signalName => entity.availableSignals.includes(signalName));
-
   if (signalNames.length < 2) {
-    return <SignalsEmptyState LinkComponent={Link} />;
+    return <SignalsEmptyState LinkComponent={Link} progress={progressQuery.data} />;
   }
 
-  return <SankeySignals entityId={entity.entityId} entityType="agent" signalNames={signalNames} />;
+  return (
+    <SankeySignals
+      key={`${entity.entityId}:${signalNames.join(',')}:${url.selectedDateFrom?.toISOString() ?? 'open'}:${url.selectedDateTo?.toISOString() ?? 'open'}`}
+      entityId={entity.entityId}
+      entityType="agent"
+      signalNames={signalNames}
+      dateFrom={url.selectedDateFrom}
+      dateTo={url.selectedDateTo}
+      dateRangePicker={
+        <DateTimeRangePicker
+          preset={url.datePreset}
+          onPresetChange={url.handleDatePresetChange}
+          dateFrom={url.selectedDateFrom}
+          dateTo={url.selectedDateTo}
+          onDateChange={url.handleDateChange}
+          presets={['last-24h', 'last-3d', 'last-7d', 'last-14d', 'last-30d', 'custom']}
+          size="sm"
+        />
+      }
+    />
+  );
 }

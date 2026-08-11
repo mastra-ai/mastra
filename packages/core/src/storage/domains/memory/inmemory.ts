@@ -27,7 +27,13 @@ import type {
   CreateReflectionGenerationInput,
   UpdateObservationalMemoryConfigInput,
 } from '../../types';
-import { filterByDateRange, jsonValueEquals, safelyParseJSON } from '../../utils';
+import {
+  filterByDateRange,
+  jsonValueEquals,
+  safelyParseJSON,
+  storageMessageMatchesMetadataFilter,
+  validateStorageMetadataFilter,
+} from '../../utils';
 import type { InMemoryDB } from '../inmemory-db';
 import { MemoryStorage } from './base';
 
@@ -71,8 +77,8 @@ export class InMemoryMemory extends MemoryStorage {
     metadata,
   }: {
     id: string;
-    title: string;
-    metadata: Record<string, unknown>;
+    title?: string;
+    metadata?: Record<string, unknown>;
   }): Promise<StorageThreadType> {
     const thread = this.db.threads.get(id);
 
@@ -81,7 +87,7 @@ export class InMemoryMemory extends MemoryStorage {
     }
 
     if (thread) {
-      thread.title = title;
+      if (title !== undefined) thread.title = title;
       thread.metadata = { ...thread.metadata, ...metadata };
       thread.updatedAt = new Date();
     }
@@ -107,6 +113,7 @@ export class InMemoryMemory extends MemoryStorage {
     page = 0,
     orderBy,
   }: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
+    const metadataFilter = validateStorageMetadataFilter(filter?.metadata);
     // Normalize threadId to array
     const threadIds = Array.isArray(threadId) ? threadId : [threadId];
 
@@ -150,6 +157,9 @@ export class InMemoryMemory extends MemoryStorage {
 
     // Apply date filtering
     threadMessages = filterByDateRange(threadMessages, (msg: any) => new Date(msg.createdAt), filter?.dateRange);
+    threadMessages = threadMessages.filter(message =>
+      storageMessageMatchesMetadataFilter(message.content, metadataFilter),
+    );
 
     // Sort thread messages before pagination
     threadMessages.sort((a: any, b: any) => {
@@ -183,88 +193,13 @@ export class InMemoryMemory extends MemoryStorage {
       messageIds.add(msg.id);
     }
 
-    // Step 2: Add included messages with context (if any), excluding duplicates
-    if (include && include.length > 0) {
-      for (const includeItem of include) {
-        const targetMessage = this.db.messages.get(includeItem.id);
-        if (targetMessage) {
-          // Convert StorageMessageType to MastraDBMessage
-          const convertedMessage = {
-            id: targetMessage.id,
-            threadId: targetMessage.thread_id,
-            content: safelyParseJSON(targetMessage.content),
-            role: targetMessage.role as 'user' | 'assistant' | 'system' | 'tool',
-            type: targetMessage.type,
-            createdAt: targetMessage.createdAt,
-            resourceId: targetMessage.resourceId,
-          } as MastraDBMessage;
-
-          // Only add if not already in messages array (deduplication)
-          if (!messageIds.has(convertedMessage.id)) {
-            messages.push(convertedMessage);
-            messageIds.add(convertedMessage.id);
-          }
-
-          // Add previous messages if requested
-          if (includeItem.withPreviousMessages) {
-            const allThreadMessages = Array.from(this.db.messages.values())
-              .filter((msg: any) => msg.thread_id === (includeItem.threadId || threadId))
-              .sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-
-            const targetIndex = allThreadMessages.findIndex(msg => msg.id === includeItem.id);
-            if (targetIndex !== -1) {
-              const startIndex = Math.max(0, targetIndex - (includeItem.withPreviousMessages || 0));
-              for (let i = startIndex; i < targetIndex; i++) {
-                const message = allThreadMessages[i];
-                if (message && !messageIds.has(message.id)) {
-                  const convertedPrevMessage = {
-                    id: message.id,
-                    threadId: message.thread_id,
-                    content: safelyParseJSON(message.content),
-                    role: message.role as 'user' | 'assistant' | 'system' | 'tool',
-                    type: message.type,
-                    createdAt: message.createdAt,
-                    resourceId: message.resourceId,
-                  } as MastraDBMessage;
-                  messages.push(convertedPrevMessage);
-                  messageIds.add(message.id);
-                }
-              }
-            }
-          }
-
-          // Add next messages if requested
-          if (includeItem.withNextMessages) {
-            const allThreadMessages = Array.from(this.db.messages.values())
-              .filter((msg: any) => msg.thread_id === (includeItem.threadId || threadId))
-              .sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-
-            const targetIndex = allThreadMessages.findIndex(msg => msg.id === includeItem.id);
-            if (targetIndex !== -1) {
-              const endIndex = Math.min(
-                allThreadMessages.length,
-                targetIndex + (includeItem.withNextMessages || 0) + 1,
-              );
-              for (let i = targetIndex + 1; i < endIndex; i++) {
-                const message = allThreadMessages[i];
-                if (message && !messageIds.has(message.id)) {
-                  const convertedNextMessage = {
-                    id: message.id,
-                    threadId: message.thread_id,
-                    content: safelyParseJSON(message.content),
-                    role: message.role as 'user' | 'assistant' | 'system' | 'tool',
-                    type: message.type,
-                    createdAt: message.createdAt,
-                    resourceId: message.resourceId,
-                  } as MastraDBMessage;
-                  messages.push(convertedNextMessage);
-                  messageIds.add(message.id);
-                }
-              }
-            }
-          }
-        }
-      }
+    // Step 2: Add included messages with context (if any), excluding duplicates.
+    // The main filter above treats an empty resourceId as "no resource scope", so the
+    // include lookup is given the same meaning instead of scoping to the empty string.
+    for (const message of this.resolveIncludedMessages({ include, resourceId: optionalResourceId || undefined })) {
+      if (messageIds.has(message.id)) continue;
+      messages.push(this.parseStoredMessage(message));
+      messageIds.add(message.id);
     }
 
     // Sort all messages (paginated + included) for final output
@@ -286,6 +221,8 @@ export class InMemoryMemory extends MemoryStorage {
     if (perPage === 0) {
       // perPage=0 fast path skips pagination entirely
       hasMore = false;
+    } else if (metadataFilter) {
+      hasMore = offset + paginatedThreadMessages.length < totalThreadMessages;
     } else if (include && include.length > 0) {
       // When using include, check if we've returned all messages from the thread
       // because include might bring in messages beyond the pagination window
@@ -305,13 +242,61 @@ export class InMemoryMemory extends MemoryStorage {
     };
   }
 
+  /**
+   * Resolves `include` entries to their target message plus the requested context window.
+   * The thread is discovered from the target message itself so cross-thread includes work,
+   * but the resource scope of the query is always honoured: when a `resourceId` is given,
+   * neither the target nor its neighbours may belong to another resource.
+   */
+  private resolveIncludedMessages({
+    include,
+    resourceId,
+  }: {
+    include: StorageListMessagesInput['include'];
+    resourceId?: string;
+  }): StorageMessageType[] {
+    if (!include || include.length === 0) return [];
+
+    const resolved: StorageMessageType[] = [];
+    const resolvedIds = new Set<string>();
+    const hasResourceScope = resourceId !== undefined;
+
+    for (const includeItem of include) {
+      const targetMessage = this.db.messages.get(includeItem.id);
+      if (!targetMessage) continue;
+      if (hasResourceScope && targetMessage.resourceId !== resourceId) continue;
+
+      const contextWindow = Array.from(this.db.messages.values())
+        .filter(
+          msg => msg.thread_id === targetMessage.thread_id && (!hasResourceScope || msg.resourceId === resourceId),
+        )
+        .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+
+      const targetIndex = contextWindow.findIndex(msg => msg.id === includeItem.id);
+      if (targetIndex === -1) continue;
+
+      const startIndex = Math.max(0, targetIndex - (includeItem.withPreviousMessages ?? 0));
+      const endIndex = targetIndex + (includeItem.withNextMessages ?? 0) + 1;
+
+      for (const message of contextWindow.slice(startIndex, endIndex)) {
+        if (resolvedIds.has(message.id)) continue;
+        resolved.push(message);
+        resolvedIds.add(message.id);
+      }
+    }
+
+    return resolved;
+  }
+
   async listMessagesByResourceId({
     resourceId,
+    include,
     filter,
     perPage: perPageInput,
     page = 0,
     orderBy,
   }: StorageListMessagesByResourceIdInput): Promise<StorageListMessagesOutput> {
+    const metadataFilter = validateStorageMetadataFilter(filter?.metadata);
     const { field, direction } = this.parseOrderBy(orderBy, 'ASC');
 
     // Normalize perPage for query (false → MAX_SAFE_INTEGER, 0 → 0, undefined → 40)
@@ -334,6 +319,7 @@ export class InMemoryMemory extends MemoryStorage {
 
     // Apply date filtering
     messages = filterByDateRange(messages, (msg: any) => new Date(msg.createdAt), filter?.dateRange);
+    messages = messages.filter(message => storageMessageMatchesMetadataFilter(message.content, metadataFilter));
 
     // Sort messages
     messages.sort((a: any, b: any) => {
@@ -355,15 +341,37 @@ export class InMemoryMemory extends MemoryStorage {
     // Apply pagination
     const paginatedMessages = messages.slice(offset, offset + perPage);
 
+    const hasMore = offset + paginatedMessages.length < total;
+
+    // Add included messages with context, excluding duplicates. The include lookup is
+    // scoped to this resource, so it can never pull in another resource's messages.
+    const paginatedIds = new Set(paginatedMessages.map(m => m.id));
+    const includedMessages = this.resolveIncludedMessages({ include, resourceId }).filter(
+      message => !paginatedIds.has(message.id),
+    );
+
     const list = new MessageList().add(
-      paginatedMessages.map(m => this.parseStoredMessage(m)),
+      [...paginatedMessages, ...includedMessages].map(m => this.parseStoredMessage(m)),
       'memory',
     );
 
-    const hasMore = offset + paginatedMessages.length < total;
+    // Sort all messages (paginated + included) for final output
+    const finalMessages = list.get.all.db();
+    finalMessages.sort((a: any, b: any) => {
+      const isDateField = field === 'createdAt' || field === 'updatedAt';
+      const aValue = isDateField ? new Date(a[field]).getTime() : a[field];
+      const bValue = isDateField ? new Date(b[field]).getTime() : b[field];
+
+      if (typeof aValue === 'number' && typeof bValue === 'number') {
+        return direction === 'ASC' ? aValue - bValue : bValue - aValue;
+      }
+      return direction === 'ASC'
+        ? String(aValue).localeCompare(String(bValue))
+        : String(bValue).localeCompare(String(aValue));
+    });
 
     return {
-      messages: list.get.all.db(),
+      messages: finalMessages,
       total,
       page,
       perPage: perPageForResponse,

@@ -37,7 +37,7 @@ export const Default: Story = {
 
 export const Variants: Story = {
   render: () => (
-    <div className="flex w-dropdown-max-height flex-col gap-3">
+    <div className="w-dropdown-max-height flex flex-col gap-3">
       <Textarea variant="default" placeholder="default" />
       <Textarea variant="filled" placeholder="filled" />
       <Textarea variant="outline" placeholder="outline" />
@@ -48,7 +48,7 @@ export const Variants: Story = {
 
 export const Sizes: Story = {
   render: () => (
-    <div className="flex w-dropdown-max-height flex-col gap-3">
+    <div className="w-dropdown-max-height flex flex-col gap-3">
       <Textarea size="sm" placeholder="sm" />
       <Textarea size="md" placeholder="md" />
       <Textarea size="lg" placeholder="lg" />
@@ -75,16 +75,16 @@ export const Disabled: Story = {
 export const OnDifferentSurfaces: Story = {
   render: () => (
     <div className="flex w-96 flex-col gap-4">
-      <div className="rounded-lg border border-border1 bg-surface1 p-4">
+      <div className="border-border1 bg-surface1 rounded-lg border p-4">
         <Textarea placeholder="On bg-surface1" />
       </div>
-      <div className="rounded-lg border border-border1 bg-surface2 p-4">
+      <div className="border-border1 bg-surface2 rounded-lg border p-4">
         <Textarea placeholder="On bg-surface2" />
       </div>
-      <div className="rounded-lg border border-border1 bg-surface3 p-4">
+      <div className="border-border1 bg-surface3 rounded-lg border p-4">
         <Textarea placeholder="On bg-surface3" />
       </div>
-      <div className="rounded-lg border border-border1 bg-surface4 p-4">
+      <div className="border-border1 bg-surface4 rounded-lg border p-4">
         <Textarea placeholder="On bg-surface4" />
       </div>
     </div>

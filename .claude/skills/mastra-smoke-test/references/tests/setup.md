@@ -52,15 +52,13 @@ cd <directory>
 
 ### 2. Create Project
 
+Use the current managed-template flow. Do not pass the removed `-c` or `-e` flags.
+
 ```bash
-<pm> create mastra@<tag> <project-name> -c agents,tools,workflows,scorers -l <llm> -e
+<pm> create mastra@<tag> <project-name> --no-git --llm <llm> --timeout 120000
 ```
 
-| Flag                                | Purpose                                    |
-| ----------------------------------- | ------------------------------------------ |
-| `-c agents,tools,workflows,scorers` | Include all components                     |
-| `-l <provider>`                     | Set LLM provider (openai, anthropic, etc.) |
-| `-e`                                | Include example code                       |
+Use `--empty` only when the smoke scope explicitly requires an empty project, or `--template <template>` when testing a specific template. If the command rejects a documented flag, inspect the initializer's help with the syntax for the selected package manager: `npm create mastra@<tag> -- --help`, `npx create-mastra@<tag> --help`, `pnpm create mastra@<tag> --help`, `yarn dlx create-mastra@<tag> --help`, or `bunx create-mastra@<tag> --help`.
 
 ### 3. Enter Project
 
@@ -68,9 +66,22 @@ cd <directory>
 cd <project-name>
 ```
 
-### 4. Record Structure
+### 4. Verify Generated Versions and Structure
+
+For tagged smoke tests, compare the generated dependency versions with the published tag. A prerelease creator that writes stable Mastra dependencies is a release-channel regression and a failed setup result. Record the failure before changing anything, and preserve the generated project and original `package.json` as baseline evidence.
+
+```bash
+npm view create-mastra@<tag> version
+npm view mastra@<tag> version
+npm view @mastra/core@<tag> version
+<pm> list --depth 0
+cp package.json package.generated.json
+```
+
+Do not repair the baseline project in place. If later checks require the requested dependency channel, copy it to a clearly named sibling such as `<project-name>-repaired`, perform upgrades there, and report repaired-project results separately from the failed generated baseline.
 
 - [ ] Note if `package.json` exists
+- [ ] Confirm every generated `@mastra/*` and `mastra` dependency matches the requested release channel
 - [ ] Note if `src/mastra/index.ts` exists
 - [ ] Record agents found in `src/mastra/agents/`
 - [ ] Record tools found in `src/mastra/tools/`
@@ -134,6 +145,8 @@ export const mastra = new Mastra({
 ```bash
 <pm> add @mastra/stagehand @mastra/memory
 ```
+
+With pnpm, installation may stop with `ERR_PNPM_IGNORED_BUILDS` for Stagehand transitive dependencies such as `@google/genai`, `bufferutil`, or `protobufjs`. Treat pnpm's blocking as intentional security policy, not a runtime regression. Record the exact packages, approve only those required by the resolved dependency graph in `pnpm-workspace.yaml`, rerun install, and report the need for approval as a Stagehand documentation/template gap.
 
 ### 2. Create Agent
 

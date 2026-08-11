@@ -220,7 +220,7 @@ const BufferingFailedMarker = ({ data }: { data: DataOmBufferingFailedPart['data
 export const ObservationIndicator = ({ part }: { part: OmObservationMarkerPart }) => {
   if (part.type === 'data-om-observation-start') {
     return (
-      <span className="inline-flex items-center gap-1 text-accent1" title="Observing...">
+      <span className="text-accent1 inline-flex items-center gap-1" title="Observing...">
         <Brain className="h-3 w-3" />
         <Loader2 className="h-2.5 w-2.5 animate-spin" />
       </span>

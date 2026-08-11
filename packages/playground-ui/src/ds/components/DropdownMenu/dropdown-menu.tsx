@@ -21,6 +21,9 @@ const itemClass = cn(
   '[&:hover>svg]:opacity-100 [&>svg]:size-[1.1em] [&>svg]:opacity-60',
 );
 
+// A hidden anchor makes Floating UI fall back to the top-left corner, so the popup goes with it.
+const positionerClass = 'z-50 outline-none data-[anchor-hidden]:hidden';
+
 const popupClass = cn(
   'z-50 max-h-[min(20rem,var(--available-height))] min-w-44 origin-[var(--transform-origin)] overflow-x-hidden overflow-y-auto rounded-xl border border-border1 bg-surface3 p-1 text-neutral4 shadow-dialog outline-none',
   'data-[closed]:animate-out data-[closed]:fade-out-0 data-[closed]:zoom-out-95 data-[open]:animate-in data-[open]:fade-in-0 data-[open]:zoom-in-95',
@@ -117,7 +120,7 @@ const DropdownMenuSubContent = React.forwardRef<HTMLDivElement, DropdownMenuSubC
 
     return (
       <MenuPrimitive.Portal container={resolvedContainer}>
-        <MenuPrimitive.Positioner className="z-50 outline-none" {...positionerProps}>
+        <MenuPrimitive.Positioner className={positionerClass} {...positionerProps}>
           <MenuPrimitive.Popup
             ref={ref}
             data-slot="dropdown-menu-sub-content"
@@ -177,7 +180,7 @@ const DropdownMenuContent = React.forwardRef<HTMLDivElement, DropdownMenuContent
 
     return (
       <MenuPrimitive.Portal container={resolvedContainer}>
-        <MenuPrimitive.Positioner className="z-50 outline-none" {...positionerProps}>
+        <MenuPrimitive.Positioner className={positionerClass} {...positionerProps}>
           <MenuPrimitive.Popup
             ref={ref}
             data-slot="dropdown-menu-content"
@@ -223,7 +226,7 @@ DropdownMenuItem.displayName = 'DropdownMenuItem';
 const DropdownMenuCheckboxItem = React.forwardRef<HTMLDivElement, MenuPrimitive.CheckboxItem.Props>(
   ({ className, children, checked, ...props }, ref) => (
     <MenuPrimitive.CheckboxItem ref={ref} className={cn(itemClass, 'w-full', className)} checked={checked} {...props}>
-      <div className="flex size-4 items-center justify-center rounded-sm border border-border2">
+      <div className="border-border2 flex size-4 items-center justify-center rounded-sm border">
         <MenuPrimitive.CheckboxItemIndicator>
           <CheckIcon />
         </MenuPrimitive.CheckboxItemIndicator>

@@ -29,7 +29,8 @@ export function extractSuspendedToolsFromMessages(
   const assistantMessages = [...messages].reverse().filter(message => message.role === 'assistant');
   const suspendedToolsMessage = assistantMessages.find(message => {
     const metadata = message.content.metadata as
-      { suspendedTools?: Record<string, unknown>; pendingToolApprovals?: Record<string, unknown> } | undefined;
+      | { suspendedTools?: Record<string, unknown>; pendingToolApprovals?: Record<string, unknown> }
+      | undefined;
     if (
       (metadata?.suspendedTools && Object.keys(metadata.suspendedTools).length > 0) ||
       (metadata?.pendingToolApprovals && Object.keys(metadata.pendingToolApprovals).length > 0)
@@ -47,7 +48,8 @@ export function extractSuspendedToolsFromMessages(
   if (!suspendedToolsMessage) return [];
 
   const metadata = suspendedToolsMessage.content.metadata as
-    { suspendedTools?: Record<string, unknown>; pendingToolApprovals?: Record<string, unknown> } | undefined;
+    | { suspendedTools?: Record<string, unknown>; pendingToolApprovals?: Record<string, unknown> }
+    | undefined;
   // Merge both metadata buckets — the same assistant turn can declare both
   // a suspended tool and a pending approval, and we should not lose one when
   // the other exists.
@@ -74,7 +76,27 @@ export function extractSuspendedToolsFromMessages(
       );
   }
 
-  return suspendedToolObj ? (Object.values(suspendedToolObj) as Array<Record<string, unknown>>) : [];
+  if (!suspendedToolObj) return [];
+
+  // The auto-resume directive tells the model to pass the entry's `runId` back
+  // as `suspendedToolRunId`, which the resume leg uses to resume the suspended
+  // (inner) run. Persisted metadata stores the OUTER resumable runId with the
+  // inner run as `delegatedRunId`, so surface the inner run under `runId` here.
+  return Object.values(suspendedToolObj).map(entry => {
+    if (!entry || typeof entry !== 'object') return entry as Record<string, unknown>;
+    const { delegatedRunId, parentToolName, parentArgs, ...rest } = entry as Record<string, unknown>;
+    const resumableEntry =
+      typeof parentToolName === 'string'
+        ? {
+            ...rest,
+            approvalToolName: rest.toolName,
+            approvalArgs: rest.args,
+            toolName: parentToolName,
+            args: parentArgs,
+          }
+        : rest;
+    return typeof delegatedRunId === 'string' ? { ...resumableEntry, runId: delegatedRunId } : resumableEntry;
+  });
 }
 
 /**
@@ -86,7 +108,11 @@ export function buildAutoResumeSystemMessageSuffix(
   suspendedTools: ReadonlyArray<Record<string, unknown>>,
 ): string | null {
   if (suspendedTools.length === 0) return null;
-  return `\n\nAnalyse the suspended tools: ${JSON.stringify(suspendedTools)}, using the messages available to you and the resumeSchema of each suspended tool, find the tool whose resumeData you can construct properly.
+  // parentRunId is internal bookkeeping for channel resume routing; the model
+  // only needs runId (as suspendedToolRunId). Omitting it keeps the prompt
+  // byte-identical to existing LLM recordings.
+  const toolsForPrompt = suspendedTools.map(({ parentRunId: _parentRunId, ...rest }) => rest);
+  return `\n\nAnalyse the suspended tools: ${JSON.stringify(toolsForPrompt)}, using the messages available to you and the resumeSchema of each suspended tool, find the tool whose resumeData you can construct properly.
                       resumeData can not be an empty object nor null/undefined.
                       When you find that and call that tool, add the resumeData to the tool call arguments/input.
                       Also, add the runId of the suspended tool as suspendedToolRunId to the tool call arguments/input.

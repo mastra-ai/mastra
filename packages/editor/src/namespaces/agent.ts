@@ -18,10 +18,6 @@ import type {
   StorageToolConfig,
   StorageMCPClientToolsConfig,
   StorageSkillConfig,
-} from '@mastra/core/storage';
-import { convertSchemaToZod } from '@mastra/schema-compat';
-
-import type {
   StorageCreateAgentInput,
   StorageUpdateAgentInput,
   StorageListAgentsInput,
@@ -36,6 +32,8 @@ import type {
   StorageWorkspaceRef,
   StorageBrowserRef,
 } from '@mastra/core/storage';
+import { convertSchemaToZod } from '@mastra/schema-compat';
+
 import type { AgentVersion, CreateVersionInput } from '@mastra/core/storage/domains/agents';
 import type { MastraBrowser } from '@mastra/core/browser';
 

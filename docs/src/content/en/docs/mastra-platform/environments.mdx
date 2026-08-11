@@ -5,7 +5,11 @@ description: Run the same Mastra project across production, staging, and preview
 
 # Environments
 
-Every platform project contains one or more environments. An environment is an isolated deployment target with its own URL, its own environment variables, its own deploy history, and optionally its own [hosted database](/docs/mastra-platform/database). Use environments to run `production`, `staging`, and preview versions of the same codebase inside a single project.
+Every platform project contains one or more environments.
+
+An environment is an isolated deployment target with its own URL, environment variables, and deploy history. It can also have its own [hosted database](/docs/mastra-platform/database).
+
+Use environments to run `production`, `staging`, and preview versions of the same codebase inside a single project.
 
 Your first [`mastra deploy`](/docs/mastra-platform/deploy) creates the `production` environment. Create more with the CLI or by deploying to a name that doesn't exist yet.
 
@@ -57,13 +61,13 @@ Variables are applied when a deploy starts. To apply changed variables to a runn
 mastra env restart staging
 ```
 
-To see the full set an environment's deploys actually run with — environment-scoped and project-scoped values merged, with managed variables listed by name — pull them into a local env file:
+To see the full set an environment's deploys actually run with, environment-scoped and project-scoped values merged, with managed variables listed by name, pull them into a local env file:
 
 ```bash
 mastra env vars pull staging --output .env.staging
 ```
 
-Managed variable values are injected at deploy time and never written to the file; they appear as name-only comments.
+Managed variable values are injected at deploy time and never written to the file. They appear as name-only comments.
 
 :::note
 Environment variables don't override managed database variables. To point an environment at a different database, attach an [environment-scoped database](/docs/mastra-platform/database#attach-with-the-cli) instead.
@@ -91,7 +95,7 @@ mastra env db create staging --kind turso --name my-project-staging-db
 
 If you'd rather share one database across every environment, attach it with `--shared` instead: `mastra env db create --kind turso --shared`.
 
-An environment can only use one database per provider. If the project already has a shared (`--shared`) database of the same provider, attaching an environment-scoped one is rejected with a variable name conflict — delete the shared database with `mastra env db delete` first. Deleting a database destroys it with the provider along with all of its data, so export anything you need to keep. See [Hosted databases](/docs/mastra-platform/database) for the full scoping model.
+An environment can only use one database per provider. If the project already has a shared (`--shared`) database of the same provider, attaching an environment-scoped one is rejected with a variable name conflict, delete the shared database with `mastra env db delete` first. Deleting a database destroys it with the provider along with all of its data, so export anything you need to keep. See [Hosted databases](/docs/mastra-platform/database) for the full scoping model.
 
 ## Delete an environment
 

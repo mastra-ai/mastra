@@ -162,6 +162,13 @@ class MergedWorkspaceSkills implements WorkspaceSkills {
     return (await this.#primary.has(name)) || (await this.#secondary.has(name));
   }
 
+  registerLocationAlias(location: string, skillPath: string): void {
+    // Forward to both sides: resolution validates the target path exists, so
+    // registering on the side that doesn't own the skill is harmless.
+    this.#primary.registerLocationAlias?.(location, skillPath);
+    this.#secondary.registerLocationAlias?.(location, skillPath);
+  }
+
   async refresh() {
     await Promise.all([this.#primary.refresh(), this.#secondary.refresh()]);
   }

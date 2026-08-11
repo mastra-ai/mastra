@@ -1,10 +1,45 @@
 export type PackageManager = 'npm' | 'pnpm' | 'yarn' | 'bun';
 
-/** Detect the package manager that invoked us (`npm create`, `pnpm create`, ...). */
 export function detectPackageManager(): PackageManager {
-  const agent = process.env.npm_config_user_agent ?? '';
-  if (agent.startsWith('pnpm')) return 'pnpm';
-  if (agent.startsWith('yarn')) return 'yarn';
-  if (agent.startsWith('bun')) return 'bun';
-  return 'npm';
+  const userAgent = process.env.npm_config_user_agent || '';
+  const execPath = process.env.npm_execpath || '';
+
+  // Check user agent first
+  if (userAgent.includes('bun')) {
+    return 'bun';
+  }
+  if (userAgent.includes('yarn')) {
+    return 'yarn';
+  }
+  if (userAgent.includes('pnpm')) {
+    return 'pnpm';
+  }
+  if (userAgent.includes('npm')) {
+    return 'npm';
+  }
+
+  // Fallback to execpath check
+  if (execPath.includes('bun')) {
+    return 'bun';
+  }
+  if (execPath.includes('yarn')) {
+    return 'yarn';
+  }
+  if (execPath.includes('pnpm')) {
+    return 'pnpm';
+  }
+  if (execPath.includes('npm')) {
+    return 'npm';
+  }
+
+  return 'npm'; // Default fallback
+}
+
+export function getInstallArgs(packageManager: PackageManager): string[] {
+  switch (packageManager) {
+    case 'npm':
+      return ['install', '--no-audit', '--no-fund'];
+    default:
+      return ['install'];
+  }
 }

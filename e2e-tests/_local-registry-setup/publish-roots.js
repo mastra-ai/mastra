@@ -33,13 +33,18 @@ const SHARED_REGISTRY_SUITES = {
     extraRoots: ['create-mastra'],
     includeCreateMastraBuildRoots: true,
   },
+  'experiment-worker': {
+    tag: 'experiment-worker-e2e-test',
+    manifestGlobs: ['e2e-tests/experiment-worker/fixtures/**/package.json'],
+    extraRoots: ['@mastra/deployer'],
+  },
   softwarefactory: {
     tag: 'softwarefactory-e2e-test',
     manifestGlobs: [],
-    // The Software Factory template is generated from mastracode/web by
-    // create-factory's sync-template.mjs; its roots are whatever the
-    // web project links from the monorepo, so discover them from the manifest
-    // instead of hardcoding a list that can drift.
+    // The Software Factory template is generated from the mastracode/web
+    // server scaffold by create-factory's sync-template.mjs. Discover its
+    // linked package roots from that manifest instead of hardcoding a list
+    // that can drift; the browser app is bundled by the CLI and not copied.
     linkManifests: ['mastracode/web/package.json'],
   },
 };
@@ -118,12 +123,13 @@ async function getFixtureRoots(rootDir, suite) {
   return roots;
 }
 
-/** Collect deps declared with `link:` specs (standalone projects like mastracode/web). */
+/** Collect deps declared with `link:` or `workspace:` specs (standalone projects like mastracode/web and workspace members like mastracode/factory-ui). */
 function collectLinkDependencies(manifest) {
   const roots = [];
   for (const field of DEPENDENCY_FIELDS) {
     for (const [name, version] of Object.entries(manifest[field] || {})) {
-      if (version.startsWith('link:')) {
+      if (version.startsWith('link:') || version.startsWith('workspace:')) {
+        if (name.startsWith('@internal/')) continue; // private package, not published
         roots.push(name);
       }
     }

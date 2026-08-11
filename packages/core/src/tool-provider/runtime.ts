@@ -67,10 +67,15 @@ export function buildConnectionSuffix(label: string | undefined, usedSuffixes: S
  * Provider-agnostic runtime fan-out.
  *
  * For every stored `toolProviders[providerId].connections[toolkit]`
- * entry, calls `provider.resolveToolsVNext` once per connection, then renames
- * the resulting tools with a `__<LABEL>` suffix when more than one
- * connection is bound to the same toolkit. Single-connection toolkits keep
- * the natural slug.
+ * entry, calls `provider.resolveToolsVNext` once per connection. A provider
+ * whose default scope is `caller-supplied` is also called once for each
+ * selected toolkit without a pinned connection, using the request resource id
+ * as its dynamic connection bucket. This lets connection-management and other
+ * connectionless tools bootstrap a caller's first OAuth connection.
+ *
+ * Tools resolved through multiple pinned connections are renamed with a
+ * `__<LABEL>` suffix. Single-connection and unpinned caller-supplied toolkits
+ * keep the natural slug.
  *
  * Each renamed tool also gets a routing hint appended to its description so
  * the LLM can disambiguate between connections.
@@ -110,6 +115,53 @@ export async function resolveStoredToolProviders(
 
     const tools = cfg.tools ?? {};
     const connectionsByToolkit = cfg.connections ?? {};
+
+    // `caller-supplied` providers resolve within the current request's user
+    // bucket, so they do not need a persisted account pin to materialise a
+    // selected toolkit. This is required for bootstrap tools such as
+    // COMPOSIO_MANAGE_CONNECTIONS, whose own toolkit intentionally has no
+    // OAuth connection.
+    if (provider.defaultScope === 'caller-supplied') {
+      const unpinnedSlugsByToolkit = new Map<string, string[]>();
+      for (const [slug, meta] of Object.entries(tools)) {
+        const separatorIndex = slug.indexOf('.');
+        const toolkit = meta?.toolkit ?? (separatorIndex > 0 ? slug.slice(0, separatorIndex) : undefined);
+        if (!toolkit || connectionsByToolkit[toolkit]?.length) continue;
+        const slugs = unpinnedSlugsByToolkit.get(toolkit) ?? [];
+        slugs.push(slug);
+        unpinnedSlugsByToolkit.set(toolkit, slugs);
+      }
+
+      if (unpinnedSlugsByToolkit.size > 0) {
+        const resolvedAuthorId = resolveCallerSuppliedAuthorId(requestContext, logger);
+        for (const [toolkit, toolSlugs] of unpinnedSlugsByToolkit) {
+          logger?.debug(
+            `[resolveStoredToolProviders] resolving unpinned caller-supplied tools for ${providerId}/${toolkit}`,
+            { slugs: toolSlugs },
+          );
+
+          try {
+            const resolved = await provider.resolveToolsVNext({
+              toolSlugs,
+              toolMeta: tools,
+              connectionId: resolvedAuthorId,
+              authorId: resolvedAuthorId,
+              scope: 'caller-supplied',
+              requestContext,
+            });
+
+            for (const [slug, tool] of Object.entries(resolved)) {
+              out[slug] = { ...tool, id: slug } as ToolAction<any, any, any>;
+            }
+          } catch (error) {
+            logger?.warn(
+              `[resolveStoredToolProviders] Failed to resolve unpinned caller-supplied tools for ${providerId}/${toolkit}`,
+              { error },
+            );
+          }
+        }
+      }
+    }
 
     for (const [toolkit, connections] of Object.entries(connectionsByToolkit)) {
       if (!connections || connections.length === 0) {
@@ -224,17 +276,24 @@ function resolveConnectionAuthorId(
   if (connection.kind !== 'author') return undefined;
   if (connection.scope === 'shared') return SHARED_BUCKET_ID;
   if (connection.scope === 'caller-supplied') {
-    const resourceId = requestContext?.[MASTRA_RESOURCE_ID_KEY];
-    if (typeof resourceId === 'string' && resourceId.length > 0) return resourceId;
-    // Match legacy ComposioToolProvider behavior: when the host app has not
-    // wired requestContext[MASTRA_RESOURCE_ID_KEY] (e.g. via
-    // authConfig.mapUserToResourceId), fall back to a shared 'default' bucket
-    // so tools still resolve. Multi-tenant deployments must wire the resource
-    // id explicitly to avoid cross-user bucket sharing.
-    warnDefaultBucketFallback(logger);
-    return 'default';
+    return resolveCallerSuppliedAuthorId(requestContext, logger);
   }
   return callerAuthorId;
+}
+
+function resolveCallerSuppliedAuthorId(
+  requestContext: Record<string, unknown> | undefined,
+  logger: IMastraLogger | undefined,
+): string {
+  const resourceId = requestContext?.[MASTRA_RESOURCE_ID_KEY];
+  if (typeof resourceId === 'string' && resourceId.length > 0) return resourceId;
+  // Match legacy ComposioToolProvider behavior: when the host app has not
+  // wired requestContext[MASTRA_RESOURCE_ID_KEY] (e.g. via
+  // authConfig.mapUserToResourceId), fall back to a shared 'default' bucket
+  // so tools still resolve. Multi-tenant deployments must wire the resource
+  // id explicitly to avoid cross-user bucket sharing.
+  warnDefaultBucketFallback(logger);
+  return 'default';
 }
 
 function appendRoutingHint(description: string, connection: ToolProviderConnection): string {

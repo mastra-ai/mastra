@@ -300,6 +300,64 @@ describe('Supervisor Pattern Integration Tests', () => {
       );
     });
 
+    it('should let onDelegationComplete replace the tool result the parent sees in the same run', async () => {
+      // Sub-agent stops without producing text, which reads to the parent as an empty success.
+      const subAgent = makeSubAgent('silent-agent', '');
+      const promptsSeenByParent: string[] = [];
+
+      const supervisorModel = new MockLanguageModelV2({
+        doGenerate: async ({ prompt }) => {
+          promptsSeenByParent.push(JSON.stringify(prompt));
+          if (promptsSeenByParent.length === 1) {
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'tool-calls' as const,
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              text: '',
+              content: [
+                {
+                  type: 'tool-call' as const,
+                  toolCallId: 'call-1',
+                  toolName: 'agent-silentAgent',
+                  input: JSON.stringify({ prompt: 'do the thing' }),
+                },
+              ],
+              warnings: [],
+            };
+          }
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop' as const,
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            text: 'Done',
+            content: [{ type: 'text' as const, text: 'Done' }],
+            warnings: [],
+          };
+        },
+      });
+
+      const supervisorAgent = new Agent({
+        id: 'supervisor',
+        name: 'supervisor',
+        instructions: 'You orchestrate sub-agents.',
+        model: supervisorModel,
+        agents: { silentAgent: subAgent },
+        memory: new MockMemory(),
+      });
+
+      await supervisorAgent.generate('Do the thing', {
+        maxSteps: 3,
+        delegation: {
+          onDelegationComplete: ({ result }) =>
+            result.text ? undefined : { resultText: 'The sub-agent failed to produce a result.' },
+        },
+      });
+
+      // The second model call carries the tool result, and it must show the replacement.
+      expect(promptsSeenByParent).toHaveLength(2);
+      expect(promptsSeenByParent[1]).toContain('The sub-agent failed to produce a result.');
+    });
+
     it('should skip sub-agent when onDelegationStart returns proceed: false', async () => {
       const subAgentGenerate = vi.fn();
       const subAgent = makeSubAgent('blocked-agent', 'Should not be called');
@@ -1391,6 +1449,120 @@ describe('Supervisor Pattern - IsTaskComplete scorers', () => {
     // isTaskComplete events should have been emitted
     expect(isTaskCompleteEvents.length).toBeGreaterThan(0);
     expect(isTaskCompleteEvents[0].payload.passed).toBe(true);
+  });
+
+  it('should resolve the model answer as final text and not persist the completion report when the check passes', async () => {
+    const answer = 'Both accounts are healthy. Nothing needs attention.';
+    const passingScorer = {
+      id: 'always-complete',
+      name: 'Always Complete',
+      run: vi.fn().mockResolvedValue({ score: 1, reason: 'Task is complete' }),
+    };
+
+    const memory = new MockMemory();
+    const agent = new Agent({
+      id: 'final-text-agent',
+      name: 'Final Text Agent',
+      instructions: 'Do the task.',
+      model: new MockLanguageModelV2({
+        doStream: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: answer },
+            { type: 'text-end', id: 'text-1' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+          ]),
+        }),
+      }),
+      // Memory contributes output processors, which is what re-derives the
+      // final text from the last response message after the stream finishes.
+      memory,
+    });
+
+    const stream = await agent.stream('Do the task.', {
+      maxSteps: 4,
+      isTaskComplete: { scorers: [passingScorer as any] },
+      memory: { resource: 'res-1', thread: 'thread-1' },
+    });
+    for await (const _chunk of stream.fullStream) {
+      // consume
+    }
+
+    // The resolved text and last step text are the model's answer, not the
+    // internal completion-check report.
+    expect(await stream.text).toBe(answer);
+    const steps = await stream.steps;
+    expect(steps.at(-1)?.text).toBe(answer);
+
+    // The answer is persisted to the thread, the report is not.
+    const recalled = await memory.recall({ threadId: 'thread-1' });
+    const persistedTexts = recalled.messages.map(m =>
+      typeof m.content === 'string' ? m.content : (m.content?.parts ?? []).map((p: any) => p.text ?? '').join(''),
+    );
+    expect(persistedTexts.join('\n')).toContain(answer);
+    expect(persistedTexts.join('\n')).not.toContain('Completion Check Results');
+  });
+
+  it('should resolve the last model answer as final text when the check keeps failing until maxSteps', async () => {
+    let call = 0;
+    const answers = ['Attempt one.', 'Attempt two.'];
+    const failingScorer = {
+      id: 'never-complete',
+      name: 'Never Complete',
+      run: vi.fn().mockResolvedValue({ score: 0, reason: 'Not complete' }),
+    };
+
+    const agent = new Agent({
+      id: 'failing-final-text-agent',
+      name: 'Failing Final Text Agent',
+      instructions: 'Do the task.',
+      model: new MockLanguageModelV2({
+        doStream: async () => {
+          const text = answers[Math.min(call++, answers.length - 1)]!;
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              // Distinct timestamps per turn: identical createdAt values make the
+              // message sort order (and adjacent-assistant merging) nondeterministic.
+              {
+                type: 'response-metadata',
+                id: `id-${call}`,
+                modelId: 'mock-model-id',
+                timestamp: new Date(call * 1000),
+              },
+              { type: 'text-start', id: `text-${call}` },
+              { type: 'text-delta', id: `text-${call}`, delta: text },
+              { type: 'text-end', id: `text-${call}` },
+              { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+            ]),
+          };
+        },
+      }),
+      memory: new MockMemory(),
+    });
+
+    const stream = await agent.stream('Do the task.', {
+      maxSteps: 2,
+      isTaskComplete: { scorers: [failingScorer as any] },
+      memory: { resource: 'res-2', thread: 'thread-2' },
+    });
+    for await (const _chunk of stream.fullStream) {
+      // consume
+    }
+
+    // The run ends at maxSteps with the failing feedback as the newest response
+    // message — the resolved text must still be model output, not the report.
+    // Mock timestamps make attempt-message ordering (and adjacent-assistant
+    // merging) nondeterministic, so assert on the tail instead of equality.
+    const finalText = await stream.text;
+    expect(finalText).not.toContain('Completion Check Results');
+    expect(finalText.endsWith('Attempt two.')).toBe(true);
   });
 
   it('should continue iterating when isTaskComplete scorer fails and stop when it passes', async () => {
@@ -4447,5 +4619,148 @@ describe('Delegation maxSteps cap', () => {
 
     expect(generateSpy).toHaveBeenCalledTimes(1);
     expect(generateSpy.mock.calls[0]?.[1]?.maxSteps).toBe(12);
+  });
+});
+
+describe('Delegation request context derivation', () => {
+  it('exposes a delegated-run context on onDelegationStart with inherited entries and without reserved keys', async () => {
+    const subAgent = makeSubAgent('ctx-agent', 'done');
+    let hookContext: RequestContext | undefined;
+    let hookHadMastraMemory: boolean | undefined;
+    let hookHadThreadId: boolean | undefined;
+    let hookHadResourceId: boolean | undefined;
+
+    const supervisor = new Agent({
+      id: 'ctx-supervisor',
+      name: 'ctx-supervisor',
+      instructions: 'You orchestrate sub-agents.',
+      model: makeSupervisorModel('ctxAgent', 'do work'),
+      agents: { ctxAgent: subAgent },
+      memory: new MockMemory(),
+    });
+
+    const parentContext = new RequestContext();
+    parentContext.set('tenantId', 'acme');
+    parentContext.set(MASTRA_THREAD_ID_KEY, 'parent-thread');
+    parentContext.set(MASTRA_RESOURCE_ID_KEY, 'parent-resource');
+
+    await supervisor.generate('go', {
+      maxSteps: 3,
+      requestContext: parentContext,
+      memory: { resource: 'parent-resource', thread: 'parent-thread' },
+      delegation: {
+        onDelegationStart: context => {
+          hookContext = context.requestContext;
+          hookHadMastraMemory = hookContext.has('MastraMemory');
+          hookHadThreadId = hookContext.has(MASTRA_THREAD_ID_KEY);
+          hookHadResourceId = hookContext.has(MASTRA_RESOURCE_ID_KEY);
+          return { proceed: true };
+        },
+      },
+    });
+
+    expect(hookContext).toBeDefined();
+    expect(hookContext!.get('tenantId')).toBe('acme');
+    expect(hookHadMastraMemory).toBe(false);
+    expect(hookHadThreadId).toBe(false);
+    expect(hookHadResourceId).toBe(false);
+    expect(hookContext).not.toBe(parentContext);
+  });
+
+  it('applies hook context mutations to the delegated run (dynamic instructions and tool execute)', async () => {
+    let instructionsSawSpecialty: unknown;
+    let toolSawSpecialty: unknown;
+
+    const contextTool = createTool({
+      id: 'context-tool',
+      description: 'Reads the specialty from request context',
+      inputSchema: z.object({}),
+      execute: async (_input, context) => {
+        toolSawSpecialty = context?.requestContext?.get('specialty');
+        return { ok: true };
+      },
+    });
+
+    const specialistAgent = new Agent({
+      id: 'specialist-agent',
+      name: 'specialist-agent',
+      description: 'Adapts to the configured specialty',
+      instructions: ({ requestContext }) => {
+        instructionsSawSpecialty = requestContext.get('specialty');
+        return 'You are a helpful sub-agent.';
+      },
+      tools: { contextTool },
+      model: makeSubAgentModelWithTool('contextTool', {}),
+    });
+
+    const supervisor = new Agent({
+      id: 'hook-mutation-supervisor',
+      name: 'hook-mutation-supervisor',
+      instructions: 'You orchestrate sub-agents.',
+      model: makeSupervisorModel('specialistAgent', 'do specialized work'),
+      agents: { specialistAgent },
+      memory: new MockMemory(),
+    });
+
+    const parentContext = new RequestContext();
+    parentContext.set('tenantId', 'acme');
+
+    await supervisor.generate('go', {
+      maxSteps: 5,
+      requestContext: parentContext,
+      delegation: {
+        onDelegationStart: context => {
+          context.requestContext.set('specialty', context.primitiveId);
+        },
+      },
+    });
+
+    expect(instructionsSawSpecialty).toBe('specialist-agent');
+    expect(toolSawSpecialty).toBe('specialist-agent');
+    expect(parentContext.has('specialty')).toBe(false);
+  });
+
+  it('does not leak sub-agent context mutations into the parent context', async () => {
+    let toolRan = false;
+    const writerTool = createTool({
+      id: 'writer-tool',
+      description: 'Writes a value into the request context',
+      inputSchema: z.object({}),
+      execute: async (_input, context) => {
+        toolRan = true;
+        context?.requestContext?.set('subAgentWrote', true);
+        return { ok: true };
+      },
+    });
+
+    const subAgent = new Agent({
+      id: 'writer-agent',
+      name: 'writer-agent',
+      description: 'Writes into request context',
+      instructions: 'Call the writer tool.',
+      tools: { writerTool },
+      model: makeSubAgentModelWithTool('writerTool', {}),
+    });
+
+    const supervisor = new Agent({
+      id: 'leak-supervisor',
+      name: 'leak-supervisor',
+      instructions: 'You orchestrate sub-agents.',
+      model: makeSupervisorModel('writerAgent', 'write something'),
+      agents: { writerAgent: subAgent },
+      memory: new MockMemory(),
+    });
+
+    const parentContext = new RequestContext();
+    parentContext.set('tenantId', 'acme');
+
+    await supervisor.generate('go', {
+      maxSteps: 3,
+      requestContext: parentContext,
+    });
+
+    expect(toolRan).toBe(true);
+    expect(parentContext.has('subAgentWrote')).toBe(false);
+    expect(parentContext.get('tenantId')).toBe('acme');
   });
 });

@@ -7,6 +7,12 @@ packages:
 
 # `createInngestAgent()`
 
+:::beta
+
+Breaking changes may occur without a major version bump until the API is stable.
+
+:::
+
 `createInngestAgent()` wraps an existing [`Agent`](/reference/agents/agent) with [Inngest](https://www.inngest.com/docs)-powered durable execution. Like [`createDurableAgent()`](/reference/agents/durable-agent#createdurableagentoptions), it streams events over [PubSub](/docs/server/pubsub) and supports resumable streams, but runs the agentic loop on Inngest's execution engine instead of in-process. Use it when a run must survive process restarts or run in a distributed environment.
 
 For in-process durable execution, use [`createDurableAgent()`](/reference/agents/durable-agent#createdurableagentoptions). For fire-and-forget execution on the built-in workflow engine, use [`createEventedAgent()`](/reference/agents/durable-agent#createeventedagentoptions).
@@ -77,7 +83,7 @@ Returns: [`InngestAgent`](#inngestagent-interface)
     type: 'Agent',
     isOptional: false,
     description:
-      'The Agent to wrap with Inngest durable execution. Agent methods (e.g., `generate()`, `listTools()`, `getMemory()`) delegate to this agent via a Proxy.',
+      'The Agent to wrap with Inngest durable execution. Methods not implemented by `InngestAgent` (e.g., `listTools()` and `getMemory()`) delegate to this agent via a Proxy.',
   },
   {
     name: 'inngest',
@@ -126,7 +132,7 @@ Returns: [`InngestAgent`](#inngestagent-interface)
 
 ## `InngestAgent` interface
 
-The object returned by `createInngestAgent()`. It implements the full `Agent` interface via a Proxy: any property or method not explicitly defined (e.g., `generate()`, `listTools()`, `getMemory()`) is forwarded to the underlying agent.
+The object returned by `createInngestAgent()`. It provides the durable execution methods below. Any property or method not explicitly defined (e.g., `listTools()` and `getMemory()`) is forwarded to the underlying agent via a Proxy.
 
 ### Properties
 
@@ -252,6 +258,35 @@ The third argument accepts `threadId` and `resourceId` in addition to the lifecy
 />
 
 Returns: [`Promise<InngestAgentStreamResult>`](#inngestagentstreamresult)
+
+#### `generate(messages, options?)`
+
+Runs a response on Inngest's durable execution engine and resolves with a single `FullOutput`. If the run suspends, `generate()` resolves with `finishReason: 'suspended'`. The `runId` option is optional. If you omit it, `generate()` creates a run ID and returns it in `result.runId`. Continue the run with [`resumeGenerate()`](#resumegeneraterunid-resumedata-options). Use [`stream()`](#streammessages-options) with `onSuspended` when the caller needs a suspension callback.
+
+```typescript
+const result = await durableAgent.generate('Delete the old records', {
+  requireToolApproval: true,
+})
+
+result.runId // Generated automatically
+result.finishReason // 'suspended' when approval is required
+```
+
+Returns: `Promise<FullOutput<TOutput>>`
+
+#### `resumeGenerate(runId, resumeData, options?)`
+
+Resumes a suspended `generate()` run and resolves with a single `FullOutput`.
+
+```typescript
+if (!result.runId) {
+  throw new Error('Run ID is missing')
+}
+
+const resumedResult = await durableAgent.resumeGenerate(result.runId, { approved: true })
+```
+
+Returns: `Promise<FullOutput<TOutput>>`
 
 #### `observe(runId, options?)`
 
@@ -578,5 +613,5 @@ export const { GET, POST, PUT } = serveNext({ mastra, inngest })
 
 - [DurableAgent reference](/reference/agents/durable-agent)
 - [Agent class](/reference/agents/agent)
-- [Inngest deployment guide](/guides/deployment/inngest)
+- [Inngest deployment guide](/integrations/deploy/inngest)
 - [PubSub](/docs/server/pubsub)

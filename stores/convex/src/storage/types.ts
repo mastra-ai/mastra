@@ -22,7 +22,8 @@ export type EqualityFilter = {
 };
 
 export type IndexHint =
-  { index: 'by_workflow'; workflowName: string } | { index: 'by_workflow_run'; workflowName: string; runId: string };
+  | { index: 'by_workflow'; workflowName: string }
+  | { index: 'by_workflow_run'; workflowName: string; runId: string };
 
 /**
  * A buffered observation chunk in wire/storage format: Date fields are ISO
@@ -87,8 +88,8 @@ export type StorageRequest =
       op: 'updateThread';
       tableName: TABLE_NAMES | string;
       id: string;
-      title: string;
-      metadata: Record<string, any>;
+      title?: string;
+      metadata?: Record<string, any>;
       updatedAt: string;
     }
   | {

@@ -166,7 +166,7 @@ export interface DataListIdCellProps {
 
 export function DataListIdCell({ id }: DataListIdCellProps) {
   return (
-    <DataListCell height="compact" className="font-mono text-ui-smd text-neutral3">
+    <DataListCell height="compact" className="text-ui-smd text-neutral3 font-mono">
       {getShortId(id)}
     </DataListCell>
   );
@@ -180,22 +180,31 @@ export interface DataListSelectCellProps {
    * before `onToggle` runs, so the host row's `onClick` doesn't fire.
    */
   onToggle: (shiftKey: boolean) => void;
+  /** Disable the checkbox, e.g. while a selection mutation is in flight. */
+  disabled?: boolean;
   'aria-label'?: string;
 }
 
-export function DataListSelectCell({ checked, onToggle, ...rest }: DataListSelectCellProps) {
+export function DataListSelectCell({ checked, onToggle, disabled, ...rest }: DataListSelectCellProps) {
   return (
     <DataListCell
       as="label"
       height="compact"
-      className="size-8 cursor-pointer justify-items-center self-center overflow-visible px-0 py-0!"
+      className={cn(
+        'size-8 justify-items-center self-center overflow-visible px-0 py-0!',
+        disabled ? 'cursor-not-allowed' : 'cursor-pointer',
+      )}
       onClick={e => e.stopPropagation()}
     >
       <Checkbox
         checked={checked}
+        disabled={disabled}
         onCheckedChange={() => {}} // no-op: selection handled by onClick to capture shiftKey
         onClick={e => {
           e.stopPropagation();
+          // Base UI's Checkbox.Root is a `<span>`, so clicks still fire while
+          // disabled — guard here instead of relying on `:disabled` semantics.
+          if (disabled) return;
           onToggle(e.shiftKey);
         }}
         aria-label={rest['aria-label']}
@@ -258,7 +267,7 @@ export interface DataListTimeCellProps {
 export function DataListTimeCell({ timestamp }: DataListTimeCellProps) {
   const date = toDate(timestamp);
   return (
-    <DataListCell height="compact" className="flex font-mono text-ui-smd text-neutral3">
+    <DataListCell height="compact" className="text-ui-smd text-neutral3 flex font-mono">
       {date ? (
         <>
           {format(date, 'HH:mm:ss')}

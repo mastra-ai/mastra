@@ -1,26 +1,26 @@
 {
   "name": "create-factory",
-  "version": "0.0.2",
-  "description": "Create a Mastra Software Factory project: an agent-powered software delivery environment built on Mastra. Run `npm create factory` to scaffold and get started.",
+  "version": "0.1.7-alpha.14",
+  "description": "Create a Mastra Factory project: an agent-powered software delivery environment built on Mastra. Run `npm create factory` to scaffold and get started.",
   "type": "module",
   "license": "Apache-2.0",
   "bin": {
-    "create-factory": "./bin/cli.mjs"
+    "create-factory": "./dist/index.js"
   },
   "files": [
-    "bin",
     "dist",
     "CHANGELOG.md"
   ],
   "scripts": {
-    "build": "tsup --silent --config tsup.config.ts",
+    "build": "tsdown --silent --config tsdown.config.ts",
     "prepack": "npm run build",
     "check": "tsc --noEmit",
     "test": "vitest run",
-    "lint": "eslint ."
+    "lint": "oxlint . && eslint .",
+    "lint:fix": "oxlint --fix . && eslint --fix ."
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22.13.0"
   },
   "repository": {
     "type": "git",
@@ -43,14 +43,15 @@
   "dependencies": {
     "@clack/prompts": "^1.7.0",
     "commander": "^14.0.3",
+    "mastra": "workspace:*",
     "picocolors": "^1.1.1",
-    "posthog-node": "^5.37.0"
+    "tinyexec": "^1.2.4"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@types/node": "22.20.1",
     "eslint": "^10.4.1",
-    "tsup": "^8.5.1",
+    "tsdown": "0.22.9",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }

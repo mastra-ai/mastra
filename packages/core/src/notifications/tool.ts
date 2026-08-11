@@ -9,7 +9,7 @@ const notificationActionSchema = z.object({
   action: z.enum(['list', 'read', 'markSeen', 'dismiss', 'archive', 'search']),
   threadId: z.string().optional(),
   id: z.string().optional(),
-  status: z.enum(['pending', 'delivered', 'seen', 'dismissed', 'archived', 'discarded']).optional(),
+  status: z.enum(['pending', 'delivered', 'seen', 'dismissed', 'archived', 'discarded', 'failed']).optional(),
   priority: z.enum(['low', 'medium', 'high', 'urgent']).optional(),
   source: z.string().optional(),
   query: z.string().optional(),

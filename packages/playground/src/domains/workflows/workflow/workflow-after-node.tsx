@@ -29,7 +29,7 @@ export function WorkflowAfterNode({ data }: NodeProps<AfterNode>) {
     >
       <Handle type="target" position={Position.Top} style={{ visibility: 'hidden' }} />
 
-      <CollapsibleTrigger className="flex items-center justify-between w-full">
+      <CollapsibleTrigger className="flex w-full items-center justify-between">
         <Badge icon={<BADGE_ICONS.after className="text-current" style={{ color: BADGE_COLORS.after }} />}>AFTER</Badge>
         <Icon>
           <ChevronDown
@@ -41,8 +41,8 @@ export function WorkflowAfterNode({ data }: NodeProps<AfterNode>) {
       </CollapsibleTrigger>
       <CollapsibleContent className="flex flex-col gap-2">
         {steps.map(step => (
-          <div className="text-sm bg-surface5 flex items-center gap-1.5 rounded-sm  p-2" key={step}>
-            <Footprints className="text-current w-4 h-4" />
+          <div className="bg-surface5 flex items-center gap-1.5 rounded-sm p-2 text-sm" key={step}>
+            <Footprints className="h-4 w-4 text-current" />
             <Txt variant="ui-xs" className="text-neutral6 capitalize">
               {step}
             </Txt>

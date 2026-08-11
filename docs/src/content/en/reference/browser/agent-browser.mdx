@@ -46,8 +46,8 @@ then interact with elements using their refs (e.g., @e5).`,
   },
   {
     name: 'viewport',
-    type: '{ width: number; height: number }',
-    description: 'Browser viewport dimensions.',
+    type: "{ width: number; height: number } | 'window'",
+    description: "Browser viewport dimensions, or 'window' to match the real browser window instead of a fixed size.",
     isOptional: true,
     defaultValue: '{ width: 1280, height: 720 }',
   },
@@ -164,7 +164,7 @@ Navigate to a URL.
 
 | Parameter | Type | Description |
 | - | - | - |
-| `url` | `string` | URL to navigate to |
+| `url` | `string` | URL to open |
 | `waitUntil` | `"load" \| "domcontentloaded" \| "networkidle"` | When to consider navigation complete (optional) |
 | `timeout` | `number` | Navigation timeout in ms (optional) |
 
@@ -415,7 +415,7 @@ Execute JavaScript in the page context. Use as an escape hatch when other tools 
 
 ### `browser_screenshot`
 
-Capture a screenshot of the current page as PNG (viewport by default; set `fullPage: true` for full-page capture). Returns image content that vision-capable models can interpret directly. Use `browser_snapshot` when you only need text or structured data.
+Capture a screenshot of the current page as PNG (viewport by default. Set `fullPage: true` for full-page capture). Returns image content that vision-capable models can interpret directly. Use `browser_snapshot` when you only need text or structured data.
 
 ```text
 // Viewport only (default)
@@ -462,4 +462,4 @@ The `browser_snapshot` tool returns an accessibility tree with element refs like
 - [MastraBrowser](/reference/browser/mastra-browser): Base class reference
 - [StagehandBrowser](/reference/browser/stagehand-browser): AI-powered alternative
 - [Browser overview](/docs/browser/overview): Conceptual guide
-- [agent-browser guide](/docs/browser/agent-browser): Usage guide
+- [agent-browser guide](/integrations/browsers/agent-browser): Usage guide

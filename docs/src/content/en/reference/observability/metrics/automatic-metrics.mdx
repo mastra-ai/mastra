@@ -17,7 +17,7 @@ Metrics are extracted from spans when they end. The observability layer inspects
 
 ### What affects whether a metric is available
 
-Two conditions must be true for a metric to reach storage:
+A metric reaches storage when:
 
 1. `MastraStorageExporter` is configured as an exporter.
 1. The storage backend supports metrics (ClickHouse, DuckDB, or Postgres v-next with the observability domain enabled).
@@ -38,7 +38,7 @@ Duration metrics record execution time in milliseconds, calculated from the span
 
 ## Token usage metrics
 
-Token metrics are emitted only from `MODEL_GENERATION` spans that include `usage` data. If the provider doesn't report usage, no token metrics are emitted for that span.
+Token metrics are emitted only from `MODEL_GENERATION` spans that include `usage` data. Token metrics require usage data from the provider.
 
 ### Input token metrics
 
@@ -69,7 +69,9 @@ The detailed breakdown metrics (everything except `total_input` and `total_outpu
 
 ### When cost context is attached
 
-Cost context is attached to token metrics when the embedded pricing registry has a matching entry for the provider and model. The registry ships with Mastra and covers common providers and models. If no match is found, token metrics are still emitted but without cost fields.
+Cost context is attached to token metrics when the provider reports a valid cost for every completed model step or when the embedded pricing registry has a matching entry for the provider and model. Mastra sums the per-step provider costs into one query total. If any completed step lacks a valid reported cost, Mastra uses the pricing registry instead of reporting a partial total. If neither source is available, token metrics are still emitted without cost fields.
+
+A caller-supplied `costContext` takes precedence over provider-reported costs and pricing registry estimates. Provider-reported totals use `costMetadata.source: 'provider_reported'`, `costMetadata.scope: 'query_total'`, and `costMetadata.reportedStepCount` to identify the source, scope, and number of completed steps included in the total.
 
 ### What cost fields may be included
 
@@ -77,17 +79,17 @@ Cost context is attached to token metrics when the embedded pricing registry has
 | - | - |
 | `provider` | Provider name (e.g. `openai`, `anthropic`) |
 | `model` | Model identifier (e.g. `gpt-4o`, `claude-sonnet-4-20250514`) |
-| `estimatedCost` | Estimated cost for this metric, calculated from token count and pricing tier |
+| `estimatedCost` | Estimated cost from token count and pricing tier, or a total reported by the provider |
 | `costUnit` | Currency unit (e.g. `USD`) |
-| `costMetadata` | Additional pricing context (tier information, error details) |
+| `costMetadata` | Additional pricing context, including tier information, error details, and provider-reported cost source and scope |
 
 ## Correlation with traces
 
 ### How metrics relate to spans and trace context
 
-Each metric carries a `CorrelationContext` snapshot from the span that produced it. This context is stored alongside the metric value and lets you navigate from a metric to the exact span and trace.
+Each metric carries a `CorrelationContext` snapshot from the span that produced it. This context is stored alongside the metric value and links a metric to the exact span and trace.
 
-The correlation fields are grouped into four categories:
+Correlation fields use these categories:
 
 **Trace correlation**
 
@@ -115,7 +117,7 @@ The correlation fields are grouped into four categories:
 
 ### Why correlation helps with debugging
 
-When you spot a spike in latency or token usage on the Metrics dashboard, correlation context lets you drill directly into the trace that produced the metric. From there you can inspect the individual span to find the root cause: a slow tool call, a large prompt, or an unexpected error.
+When you spot a spike in latency or token usage on the Metrics dashboard, correlation context lets you drill directly into the trace that produced the metric. From there you can inspect the individual span. The root cause might be a slow tool call or a large prompt. It might also be an unexpected error.
 
 ## Troubleshooting
 
@@ -134,7 +136,7 @@ When you spot a spike in latency or token usage on the Metrics dashboard, correl
 ### Token metrics are missing
 
 - **Span is a model generation**: Token metrics are only emitted from `MODEL_GENERATION` spans.
-- **Provider reports usage**: The model provider must include `usage` data in its response. If usage is absent, no token metrics are emitted.
+- **Provider reports usage**: The model provider must include `usage` data in its response. Usage data is required to emit token metrics.
 
 ## Related
 

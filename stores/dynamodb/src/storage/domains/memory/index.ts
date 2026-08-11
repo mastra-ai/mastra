@@ -10,6 +10,8 @@ import {
   TABLE_THREADS,
   TABLE_MESSAGES,
   TABLE_RESOURCES,
+  storageMessageMatchesMetadataFilter,
+  validateStorageMetadataFilter,
 } from '@mastra/core/storage';
 import type {
   StorageResourceType,
@@ -212,8 +214,8 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     metadata,
   }: {
     id: string;
-    title: string;
-    metadata: Record<string, unknown>;
+    title?: string;
+    metadata?: Record<string, unknown>;
   }): Promise<StorageThreadType> {
     this.logger.debug('Updating thread', { threadId: id });
 
@@ -354,6 +356,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
 
   public async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
     const { threadId, resourceId, include, filter, perPage: perPageInput, page = 0, orderBy } = args;
+    const metadataFilter = validateStorageMetadataFilter(filter?.metadata);
 
     // Normalize threadId to array
     const threadIds = Array.isArray(threadId) ? threadId : [threadId];
@@ -408,7 +411,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
 
       // When perPage is 0, we only need included messages — skip thread load entirely
       if (perPage === 0 && include && include.length > 0) {
-        const includeMessages = await this._getIncludedMessages({ include });
+        const includeMessages = await this._getIncludedMessages({ include, resourceId });
         const list = new MessageList().add(includeMessages, 'memory');
         return {
           messages: this._sortMessages(list.get.all.db(), field, direction),
@@ -466,26 +469,30 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
 
       let paginatedMessages: MastraDBMessage[] = [];
       let total = 0;
-      // Ids of thread messages matching the active filters (resourceId/dateRange). Used for hasMore:
-      // included context can pull in messages outside the filters, which must not count toward total.
       const filteredMessageIds = new Set<string>();
-
-      if (threadIds.length > 1) {
+      if (threadIds.length > 1 || metadataFilter) {
         // DynamoDB can't query multiple partitions in one request. For multi-thread calls,
         // fall back to per-thread fetch + merge/sort in memory to preserve correctness.
+        // Metadata filters must also use the full candidate set because ElectroDB can't
+        // filter nested JSON content metadata before pagination/counting.
         const threadResults = await Promise.all(
           threadIds.map(async tid => {
             const q = applyQueryFilters(
               this.service.entities.message.query.byThread({ entity: 'message', threadId: tid }),
             );
-            const countResult = await q.go({ pages: 'all', attributes: ['id'] });
             const results = await q.go({ pages: 'all', order });
-            return { ids: countResult.data.map((item: any) => item.id), messages: parseQueryMessages(results.data) };
+            let messages = parseQueryMessages(results.data);
+            if (metadataFilter) {
+              messages = messages.filter(message =>
+                storageMessageMatchesMetadataFilter(message.content, metadataFilter),
+              );
+            }
+            return { ids: messages.map(message => message.id), messages };
           }),
         );
 
-        for (const r of threadResults) {
-          for (const id of r.ids) filteredMessageIds.add(id);
+        for (const result of threadResults) {
+          for (const id of result.ids) filteredMessageIds.add(id);
         }
         total = threadResults.reduce((sum, r) => sum + r.ids.length, 0);
         const merged = threadResults.flatMap(r => r.messages);
@@ -531,7 +538,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
 
       if (include && include.length > 0) {
         // Use the existing _getIncludedMessages helper, but adapt it for listMessages format
-        includeMessages = await this._getIncludedMessages({ include });
+        includeMessages = await this._getIncludedMessages({ include, resourceId });
 
         // Deduplicate: only add messages that aren't already in the paginated results
         for (const includeMsg of includeMessages) {
@@ -549,15 +556,13 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
       // Sort all messages (paginated + included) for final output
       finalMessages = this._sortMessages(finalMessages, field, direction);
 
-      // Calculate hasMore based on pagination window
-      // If all filter-matching thread messages have been returned (through pagination or include),
-      // hasMore = false. Otherwise, check if there are more pages in the pagination window.
-      // Only count messages matching the active filters: include can add messages outside them.
       const returnedFilteredMessageIds = new Set(
-        finalMessages.filter(m => filteredMessageIds.has(m.id)).map(m => m.id),
+        finalMessages.filter(message => filteredMessageIds.has(message.id)).map(message => message.id),
       );
-      const allFilteredMessagesReturned = returnedFilteredMessageIds.size >= total;
-      const hasMore = perPageInput !== false && !allFilteredMessagesReturned && offset + perPage < total;
+      const hasMore =
+        perPageInput !== false &&
+        (metadataFilter || returnedFilteredMessageIds.size < total) &&
+        offset + perPage < total;
 
       return {
         messages: finalMessages,
@@ -567,6 +572,10 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
         hasMore,
       };
     } catch (error: any) {
+      // Re-throw USER errors (validation errors) directly so callers get proper 400 responses
+      if (error instanceof MastraError && error.category === ErrorCategory.USER) {
+        throw error;
+      }
       const mastraError = new MastraError(
         {
           id: createStorageErrorId('DYNAMODB', 'LIST_MESSAGES', 'FAILED'),
@@ -581,13 +590,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
       );
       this.logger?.error?.(mastraError.toString());
       this.logger?.trackException?.(mastraError);
-      return {
-        messages: [],
-        total: 0,
-        page,
-        perPage: perPageForResponse,
-        hasMore: false,
-      };
+      throw mastraError;
     }
   }
 
@@ -770,7 +773,11 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
         hasMore,
       };
     } catch (error) {
-      throw new MastraError(
+      // Re-throw USER errors (validation errors) directly so callers get proper 400 responses
+      if (error instanceof MastraError && error.category === ErrorCategory.USER) {
+        throw error;
+      }
+      const mastraError = new MastraError(
         {
           id: createStorageErrorId('DYNAMODB', 'LIST_THREADS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
@@ -784,6 +791,9 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
         },
         error,
       );
+      this.logger?.error?.(mastraError.toString());
+      this.logger?.trackException?.(mastraError);
+      throw mastraError;
     }
   }
 
@@ -801,10 +811,19 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     });
   }
 
+  /**
+   * Fetches the messages named by `include` together with their surrounding context.
+   *
+   * @param include - Message ids to pin, each with an optional before/after window.
+   * @param resourceId - When set, restricts both the pinned messages and their context
+   * to that resource so an id from another resource returns nothing.
+   */
   private async _getIncludedMessages({
     include,
+    resourceId,
   }: {
     include: StorageListMessagesInput['include'];
+    resourceId?: string;
   }): Promise<MastraDBMessage[]> {
     if (!include?.length) {
       return [];
@@ -824,7 +843,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
 
     const targetMap = new Map<string, { threadId: string; createdAt: string }>();
     for (const { id, data } of targetResults) {
-      if (data) {
+      if (data && (!resourceId || (data as any).resourceId === resourceId)) {
         const createdAt =
           typeof (data as any).createdAt === 'string'
             ? (data as any).createdAt
@@ -841,7 +860,8 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
         .filter(
           (msg: MastraDBMessage | MastraMessageV1): msg is MastraDBMessage =>
             'content' in msg && typeof msg.content === 'object',
-        );
+        )
+        .filter((msg: MastraDBMessage) => !resourceId || msg.resourceId === resourceId);
 
     const includeMessages: MastraDBMessage[] = [];
 

@@ -13,9 +13,12 @@ export type ScenarioName =
   | 'api-key-multi-provider-delete'
   | 'api-key-prompt'
   | 'api-key-reopen-stored'
+  | 'approval-overlay-focus'
   | 'ask-user-advanced-prompts'
   | 'automated-chat'
   | 'browser-active-pending-status'
+  | 'browser-model-picker'
+  | 'browser-viewport'
   | 'browser-profile-provider-mismatch'
   | 'browser-settings-persistence'
   | 'browser-startup-restore'
@@ -49,6 +52,7 @@ export type ScenarioName =
   | 'github-signals-polling-inbox'
   | 'github-signals-unsubscribe-reload'
   | 'goal-api-error-stops-loop'
+  | 'goal-duration-tool-approval'
   | 'goal-judge-om-model-isolation'
   | 'goal-judge-single-render'
   | 'controller-api-config'
@@ -57,6 +61,7 @@ export type ScenarioName =
   | 'plan-approval-goal-handoff'
   | 'plan-approval-handoff'
   | 'plan-approval-request-changes'
+  | 'permission-request-hook'
   | 'persistent-goal-commands'
   | 'persistent-goal-judge-decision'
   | 'persistent-goal-reload'
@@ -67,6 +72,7 @@ export type ScenarioName =
   | 'plugins-github-install-missing-corepack'
   | 'plugins-github-install-invalid-package-manager'
   | 'plugins-github-poll-update'
+  | 'plugins-github-provider-swap'
   | 'plugins-blocked-config'
   | 'plugins-scaffold-install-tool'
   | 'plugins-assets-loading'
@@ -83,10 +89,14 @@ export type ScenarioName =
   | 'lifecycle-hooks-events'
   | 'login-dialog-masked-input'
   | 'login-preserves-model-pack'
+  | 'login-seeds-om-default'
   | 'modal-and-shell'
+  | 'mcp-disable-enable'
   | 'mcp-http-tool-call'
   | 'mcp-long-running-tool'
   | 'mcp-reload-config'
+  | 'mcp-oauth-authenticate'
+  | 'mcp-oauth-cancel'
   | 'mcp-selector-reconnect'
   | 'mcp-server-config'
   | 'mcp-skipped-validation'
@@ -97,13 +107,16 @@ export type ScenarioName =
   | 'notification-inbox-reload'
   | 'notification-inbox-tool-flow'
   | 'notification-signal-rendering'
+  | 'notify-input-request-hook'
   | 'om-settings'
   | 'om-attachment-observation'
   | 'om-global-settings-persistence'
   | 'om-model-override-reload'
   | 'om-pack-startup-restore'
+  | 'om-provider-error-guidance'
   | 'om-status-indicator'
   | 'om-threshold-persistence'
+  | 'onboarding-om-follows-login'
   | 'quiet-settings'
   | 'quiet-streaming-preview-height'
   | 'quiet-tool-history-parity'
@@ -119,6 +132,7 @@ export type ScenarioName =
   | 'setup-nested-model-selector'
   | 'settings-api-keys-navigation'
   | 'settings-startup-model-restore'
+  | 'shell-passthrough-during-run'
   | 'shell-passthrough-configured-settings'
   | 'shell-passthrough-env-override'
   | 'shell-passthrough-long-output'
@@ -174,6 +188,12 @@ export type McE2eScenarioRuntime = {
   waitForOutputText: (pattern: RegExp, terminal: McE2eTerminal, timeoutMs?: number) => Promise<void>;
   waitForScreenText: (pattern: RegExp, terminal: McE2eTerminal, timeoutMs?: number) => Promise<void>;
   waitForScreenTextAbsent: (pattern: RegExp, terminal: McE2eTerminal, timeoutMs?: number) => Promise<void>;
+  /**
+   * Stop the in-process Mastra Code app (TUI + storage close). Idempotent —
+   * safe to call before the runner's own finally-block stop. Scenarios that
+   * need to inspect on-disk database state after shutdown call this first.
+   */
+  stopApp?: () => Promise<void>;
 };
 
 export type McE2ePrepareContext = {
@@ -217,11 +237,11 @@ export type McE2eScenario = {
   useOpenAIModel?: boolean;
   disableMemory?: boolean;
   aimockFixture?: string;
-  env?: (context: McE2ePrepareContext) => Record<string, string>;
+  env?: (context: McE2ePrepareContext) => Record<string, string | null>;
   entrypoint?: (context: McE2ePrepareContext) => string;
   inProcessApp?: (context: McE2eInProcessAppContext) => Promise<McE2eInProcessApp> | McE2eInProcessApp;
   terminalBackend?: 'subprocess';
   prepare?: (context: McE2ePrepareContext) => Promise<void> | void;
-  run: (context: { terminal: McE2eTerminal; runtime: McE2eScenarioRuntime }) => Promise<void>;
+  run: (context: { terminal: McE2eTerminal; runtime: McE2eScenarioRuntime; dbPath: string }) => Promise<void>;
   verifyAimockRequests?: (requests: unknown[]) => void;
 };

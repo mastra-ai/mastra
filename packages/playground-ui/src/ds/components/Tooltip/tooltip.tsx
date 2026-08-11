@@ -136,7 +136,7 @@ function TooltipArrowSvg() {
       <path d="M0 7L4 2Q6 0 8 2L12 7L12 8L0 8Z" className="fill-surface3" />
       <path
         d="M0 7.5L4 2.5Q6 0.5 8 2.5L12 7.5"
-        className="fill-none stroke-border1"
+        className="stroke-border1 fill-none"
         strokeWidth="1"
         strokeLinejoin="round"
         strokeLinecap="round"

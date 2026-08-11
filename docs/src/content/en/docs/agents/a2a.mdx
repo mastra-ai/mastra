@@ -9,7 +9,7 @@ packages:
 
 # A2A (Agent-to-Agent)
 
-Mastra supports the [Agent-to-Agent (A2A) protocol](https://a2a-protocol.org/latest/) for cross-platform multi-agent systems. Use A2A to expose Mastra agents as remote agents, consume remote A2A agents as Mastra subagents, or call A2A endpoints with the JavaScript client SDK.
+Mastra supports version 0.3.0 of the [Agent-to-Agent (A2A) protocol](https://a2a-protocol.org/latest/) for cross-platform multi-agent systems. Use A2A to expose Mastra agents as remote agents, consume remote A2A agents as Mastra subagents, or call A2A endpoints with the JavaScript client SDK.
 
 A2A is an open protocol for delegating work to agents across network, framework, vendor, and language boundaries. A remote agent keeps its own tools, prompts, memory, workflows, and infrastructure private while exposing a protocol endpoint that other systems can discover and call.
 
@@ -60,7 +60,21 @@ An agent card includes fields like the agent name, description, endpoint URL, pr
 }
 ```
 
-A2A represents work as messages and tasks. Messages carry text, file, or structured data parts. Tasks are stateful units of work with IDs and lifecycle states, so clients can follow long-running work, send follow-up turns, cancel work, or resubscribe after a disconnect.
+A2A represents work as messages and tasks. Messages carry text, file, or structured data parts.
+
+Tasks are stateful units of work with IDs and lifecycle states. Clients can follow long-running work and send follow-up turns. They can also cancel work or resubscribe after a disconnect.
+
+## Protocol versions
+
+Mastra supports A2A Protocol v0.3 and v1.0 on the same agent card and execution URLs. The `A2A-Version` request header selects the wire protocol:
+
+- Missing, empty, or `0.3`: Uses the existing v0.3 API.
+- `1.0`: Uses the v1.0 API.
+- Any other value: Returns a `VersionNotSupported` protocol error.
+
+Existing `A2AAgent` and `MastraClient.getA2A()` integrations continue to use v0.3. Use `MastraClient.getA2AV1()` for v1.0 requests. The v1 client sends `A2A-Version: 1.0` automatically and adds the `tasks/list` operation.
+
+Import v1.0 protocol types and codecs from `@mastra/core/a2a/v1`. The existing `@mastra/core/a2a/client` export remains on v0.3.
 
 ## Get started
 
@@ -73,7 +87,7 @@ Use `A2AAgent` when another Mastra agent should delegate work to a remote agent.
 
 ## Consume A2A agents as subagents
 
-Use `A2AAgent` to wrap a remote A2A agent, then add it to a parent agent with the [supervisor agents](/docs/agents/supervisor-agents) pattern. Pass an explicit agent card URL when the remote server hosts multiple agents or uses a custom well-known path.
+Use `A2AAgent` to wrap a remote A2A agent, then add it to a parent agent with the [supervisor agents](/docs/capabilities/subagents) pattern. Pass an explicit agent card URL when the remote server hosts multiple agents or uses a custom well-known path.
 
 ```typescript title="src/mastra/agents/support-agent.ts"
 import { Agent } from '@mastra/core/agent'
@@ -160,6 +174,33 @@ for await (const event of updates) {
 }
 ```
 
+### Use the v1.0 client
+
+Use `getA2AV1()` to opt into the A2A v1.0 wire protocol. The protocol package provides codecs for creating v1 request values from JSON-shaped input:
+
+```typescript title="src/a2a-v1-client.ts"
+import { ListTasksRequest } from '@mastra/core/a2a/v1'
+import { MastraClient } from '@mastra/client-js'
+
+const client = new MastraClient({
+  baseUrl: 'https://agent.example.com',
+})
+
+const a2a = client.getA2AV1('weather-agent')
+const response = await a2a.listTasks(
+  ListTasksRequest.fromJSON({
+    contextId: 'customer-support',
+    pageSize: 20,
+  }),
+)
+
+for (const task of response.tasks) {
+  console.log(task.id, task.status)
+}
+```
+
+The v1.0 client supports `getAgentCard()`, `sendMessage()`, `sendMessageStream()`, `getTask()`, `listTasks()`, `cancelTask()`, and `resubscribeTask()`.
+
 ## Configure subagent calls
 
 `A2AAgent` accepts request options for authenticated or constrained environments:
@@ -181,6 +222,40 @@ const remoteWeatherAgent = new A2AAgent({
 
 You can also pass `credentials`, `fetch`, and `abortSignal` when the runtime needs custom fetch behavior or request cancellation.
 
+## Human-in-the-loop
+
+A2A models human-in-the-loop (HITL) work with the `input-required` task state. When a task pauses for input, the client provides the missing input by sending a follow-up message with the same `taskId`, and the server continues the task.
+
+Mastra maps its agent suspension model to this state in both directions:
+
+- **As a server**: when an exposed agent suspends, the task transitions to `input-required`. This includes suspensions caused by [tool approval](/docs/agents/agent-approval) or a tool that calls `suspend()`. The task status message includes a text prompt and a data part with the structured `suspendPayload` and `resumeSchema`. A follow-up `message/send` or `message/stream` request with the same `taskId` resumes the suspended run with the provided input.
+- **As a client**: when a remote task reaches `input-required` or `auth-required`, `A2AAgent` returns a suspended result with `finishReason: 'suspended'` and a `suspendPayload`. Calling `resumeGenerate()` or `resumeStream()` sends the input or credentials back to the remote task with the original `taskId`.
+
+```typescript title="src/a2a-hitl.ts"
+import { A2AAgent } from '@mastra/core/a2a'
+
+const agent = new A2AAgent({
+  url: 'https://agent.example.com/api/.well-known/booking-agent/agent-card.json',
+})
+
+const result = await agent.generate('Book a flight to Paris', { runId: 'run-1' })
+
+if (result.finishReason === 'suspended') {
+  // Inspect result.suspendPayload, collect input from a human,
+  // then resume the remote task.
+  const resumed = await agent.resumeGenerate({ approved: true }, { runId: 'run-1' })
+  console.log(resumed.text)
+}
+```
+
+Follow-up messages for an `input-required` task can carry the resume data as a structured data part, or as JSON or plain text in a text part.
+
+When a resumed run requires additional input, the task returns to `input-required` and the flow repeats. Resuming a suspended run requires storage configured on the Mastra server so the suspended run state can be restored across requests.
+
+:::note
+A2A task records live in an in-memory store, so a paused task can only be resumed by the same server process that suspended it. A server restart or a horizontally scaled deployment without sticky routing loses the task record, and a follow-up message fails with a task-not-found error.
+:::
+
 ## Push notifications
 
 Mastra supports A2A push notifications for remote agents that advertise `capabilities.pushNotifications`. Use push notifications when a client can't keep a stream open, or when a long-running task should update a callback URL after the original request ends.
@@ -197,7 +272,9 @@ await a2a.setTaskPushNotificationConfig({
 })
 ```
 
-Mastra Server sends the current task snapshot to registered callbacks when the task reaches `completed`, `failed`, `canceled`, or `input-required`. Push notification delivery is best-effort. Protect callback URLs, validate notification tokens, and avoid exposing internal network targets as push notification destinations.
+Mastra Server sends the current task snapshot to registered callbacks when the task reaches `completed`, `failed`, `canceled`, `rejected`, `input-required`, or `auth-required`. Push notification delivery is best-effort. Protect callback URLs, validate notification tokens, and avoid exposing internal network targets as push notification destinations.
+
+Push notification configurations are stored in memory and must be registered again after a server restart.
 
 ## Sign and verify agent cards
 

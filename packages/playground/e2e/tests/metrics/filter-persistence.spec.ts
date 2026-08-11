@@ -31,7 +31,7 @@ test.describe('Observability filter persistence', () => {
       await expect(page).toHaveURL(/filterEnvironment=metrics-env/);
       await expect(page).toHaveURL(/filterEntityName=MetricsAgent/);
 
-      await page.goto('/observability');
+      await page.goto('/traces');
       await expect(page).toHaveURL(/filterEnvironment=traces-env/);
       await expect(page).toHaveURL(/filterEntityName=TracesAgent/);
 

@@ -11,6 +11,8 @@ import {
   TABLE_THREADS,
   TABLE_SCHEMAS,
   createStorageErrorId,
+  storageMessageMatchesMetadataFilter,
+  validateStorageMetadataFilter,
 } from '@mastra/core/storage';
 import type {
   StorageResourceType,
@@ -285,6 +287,10 @@ export class MemoryDSQL extends MemoryStorage {
         hasMore: perPageInput === false ? false : offset + perPage < total,
       };
     } catch (error) {
+      // Re-throw USER errors (validation errors) directly so callers get proper 400 responses
+      if (error instanceof MastraError && error.category === ErrorCategory.USER) {
+        throw error;
+      }
       const mastraError = new MastraError(
         {
           id: createStorageErrorId('DSQL', 'LIST_THREADS', 'FAILED'),
@@ -300,13 +306,7 @@ export class MemoryDSQL extends MemoryStorage {
       );
       this.logger?.error?.(mastraError.toString());
       this.logger?.trackException(mastraError);
-      return {
-        threads: [],
-        total: 0,
-        page,
-        perPage: perPageForResponse,
-        hasMore: false,
-      };
+      throw mastraError;
     }
   }
 
@@ -374,8 +374,8 @@ export class MemoryDSQL extends MemoryStorage {
     metadata,
   }: {
     id: string;
-    title: string;
-    metadata: Record<string, unknown>;
+    title?: string;
+    metadata?: Record<string, unknown>;
   }): Promise<StorageThreadType> {
     const threadTableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
 
@@ -391,7 +391,7 @@ export class MemoryDSQL extends MemoryStorage {
             text: `Thread ${id} not found`,
             details: {
               threadId: id,
-              title,
+              title: title ?? null,
             },
           });
         }
@@ -406,14 +406,14 @@ export class MemoryDSQL extends MemoryStorage {
         const thread = await this.#db.client.one<StorageThreadType & { createdAtZ: Date; updatedAtZ: Date }>(
           `UPDATE ${threadTableName}
                       SET 
-                          title = $1,
+                          title = COALESCE($1, title),
                           metadata = $2,
                           "updatedAt" = $3::timestamp,
                           "updatedAtZ" = $4::timestamptz
                       WHERE id = $5
                       RETURNING *
                   `,
-          [title, JSON.stringify(mergedMetadata), now, now, id],
+          [title ?? null, JSON.stringify(mergedMetadata), now, now, id],
         );
 
         return {
@@ -442,7 +442,7 @@ export class MemoryDSQL extends MemoryStorage {
           category: ErrorCategory.THIRD_PARTY,
           details: {
             threadId: id,
-            title,
+            title: title ?? null,
           },
         },
         error,
@@ -486,7 +486,20 @@ export class MemoryDSQL extends MemoryStorage {
     });
   }
 
-  private async _getIncludedMessages({ include }: { include: StorageListMessagesInput['include'] }) {
+  /**
+   * Fetches the messages named by `include` together with their surrounding context.
+   *
+   * @param include - Message ids to pin, each with an optional before/after window.
+   * @param resourceId - When set, restricts both the pinned messages and their context
+   * to that resource so an id from another resource returns nothing.
+   */
+  private async _getIncludedMessages({
+    include,
+    resourceId,
+  }: {
+    include: StorageListMessagesInput['include'];
+    resourceId?: string;
+  }) {
     if (!include || include.length === 0) return null;
 
     const unionQueries: string[] = [];
@@ -496,18 +509,19 @@ export class MemoryDSQL extends MemoryStorage {
 
     for (const inc of include) {
       const { id, withPreviousMessages = 0, withNextMessages = 0 } = inc;
+      const resourceCondition = resourceId ? ` AND "resourceId" = $${paramIdx + 3}` : '';
       unionQueries.push(
         `
             SELECT * FROM (
               WITH target_thread AS (
-                SELECT thread_id FROM ${tableName} WHERE id = $${paramIdx}
+                SELECT thread_id FROM ${tableName} WHERE id = $${paramIdx}${resourceCondition}
               ),
               ordered_messages AS (
                 SELECT
                   *,
                   ROW_NUMBER() OVER (ORDER BY "createdAt" ASC) as row_num
                 FROM ${tableName}
-                WHERE thread_id = (SELECT thread_id FROM target_thread)
+                WHERE thread_id = (SELECT thread_id FROM target_thread)${resourceCondition}
               )
               SELECT
                 m.id,
@@ -534,6 +548,10 @@ export class MemoryDSQL extends MemoryStorage {
       );
       params.push(id, withPreviousMessages, withNextMessages);
       paramIdx += 3;
+      if (resourceId) {
+        params.push(resourceId);
+        paramIdx += 1;
+      }
     }
     const finalQuery = unionQueries.join(' UNION ALL ') + ' ORDER BY "createdAt" ASC';
     const includedRows = await this.#db.client.manyOrNone<MessageRowFromDB>(finalQuery, params);
@@ -597,7 +615,7 @@ export class MemoryDSQL extends MemoryStorage {
       );
       this.logger?.error?.(mastraError.toString());
       this.logger?.trackException(mastraError);
-      return { messages: [] };
+      throw mastraError;
     }
   }
 
@@ -635,6 +653,7 @@ export class MemoryDSQL extends MemoryStorage {
 
     const perPage = normalizePerPage(perPageInput, 40);
     const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+    const metadataFilter = validateStorageMetadataFilter(filter?.metadata);
 
     try {
       const { field, direction } = this.parseOrderBy(orderBy, 'ASC');
@@ -664,14 +683,31 @@ export class MemoryDSQL extends MemoryStorage {
 
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
-      const countQuery = `SELECT COUNT(*) FROM ${tableName} ${whereClause}`;
-      const countResult = await this.#db.client.one(countQuery, queryParams);
-      const total = parseInt(countResult.count, 10);
-
-      const limitValue = perPageInput === false ? total : perPage;
-      const dataQuery = `${selectStatement} FROM ${tableName} ${whereClause} ${orderByStatement} LIMIT $${paramIndex++} OFFSET $${paramIndex++}`;
-      const rows = await this.#db.client.manyOrNone<MessageRowFromDB>(dataQuery, [...queryParams, limitValue, offset]);
-      const messages: MessageRowFromDB[] = [...(rows || [])];
+      let total: number;
+      let messages: MessageRowFromDB[];
+      if (metadataFilter) {
+        const rows = await this.#db.client.manyOrNone<MessageRowFromDB>(
+          `${selectStatement} FROM ${tableName} ${whereClause} ${orderByStatement}`,
+          queryParams,
+        );
+        const filteredRows = (rows || []).filter(row =>
+          storageMessageMatchesMetadataFilter(row.content, metadataFilter),
+        );
+        total = filteredRows.length;
+        messages = perPageInput === false ? filteredRows : filteredRows.slice(offset, offset + perPage);
+      } else {
+        const countResult = await this.#db.client.one(`SELECT COUNT(*) FROM ${tableName} ${whereClause}`, queryParams);
+        total = parseInt(countResult.count, 10);
+        const limitValue = perPageInput === false ? total : perPage;
+        const dataQuery = `${selectStatement} FROM ${tableName} ${whereClause} ${orderByStatement} LIMIT $${paramIndex++} OFFSET $${paramIndex++}`;
+        const rows = await this.#db.client.manyOrNone<MessageRowFromDB>(dataQuery, [
+          ...queryParams,
+          limitValue,
+          offset,
+        ]);
+        messages = [...(rows || [])];
+      }
+      const primaryPageCount = messages.length;
 
       if (total === 0 && messages.length === 0 && (!include || include.length === 0)) {
         return {
@@ -685,7 +721,7 @@ export class MemoryDSQL extends MemoryStorage {
 
       const messageIds = new Set(messages.map(m => m.id));
       if (include && include.length > 0) {
-        const includeMessages = await this._getIncludedMessages({ include });
+        const includeMessages = await this._getIncludedMessages({ include, resourceId });
         if (includeMessages) {
           for (const includeMsg of includeMessages) {
             if (!messageIds.has(includeMsg.id)) {
@@ -726,7 +762,9 @@ export class MemoryDSQL extends MemoryStorage {
         finalMessages.filter(m => m.threadId && threadIdSet.has(m.threadId)).map(m => m.id),
       );
       const allThreadMessagesReturned = returnedThreadMessageIds.size >= total;
-      const hasMore = perPageInput !== false && !allThreadMessagesReturned && offset + perPage < total;
+      const hasMore = metadataFilter
+        ? perPageInput !== false && offset + primaryPageCount < total
+        : perPageInput !== false && !allThreadMessagesReturned && offset + perPage < total;
 
       return {
         messages: finalMessages,
@@ -736,6 +774,10 @@ export class MemoryDSQL extends MemoryStorage {
         hasMore,
       };
     } catch (error) {
+      // Re-throw USER errors (validation errors) directly so callers get proper 400 responses
+      if (error instanceof MastraError && error.category === ErrorCategory.USER) {
+        throw error;
+      }
       const mastraError = new MastraError(
         {
           id: createStorageErrorId('DSQL', 'LIST_MESSAGES', 'FAILED'),
@@ -750,13 +792,7 @@ export class MemoryDSQL extends MemoryStorage {
       );
       this.logger?.error?.(mastraError.toString());
       this.logger?.trackException(mastraError);
-      return {
-        messages: [],
-        total: 0,
-        page,
-        perPage: perPageForResponse,
-        hasMore: false,
-      };
+      throw mastraError;
     }
   }
 

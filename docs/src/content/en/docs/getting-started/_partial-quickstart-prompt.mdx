@@ -1,21 +1,20 @@
 import { CopyPrompt } from "@site/src/components/copy-prompt";
 
 <CopyPrompt identifier="quickstart">
-  Make new Mastra project. Mastra = framework for AI apps + agents on modern TypeScript stack. Before run command, ask these questions one by one. Wait for answers unless already given:
+  Create a new Mastra project. Mastra is a framework for AI applications and agents on a modern TypeScript stack. Before running the command, ask these questions one at a time and wait for each answer unless it was already provided:
 
   1. Project name? (default: "my-mastra-app")
-  1. Provider? (default: "openai", options: "openai", "anthropic", "groq", "google", "cerebras", "mistral")
+  1. Provider? (required; options: "openai", "anthropic", "google", "xai")
 
-  Provider rules:
+  If the provider isn't supported, ask again and list the supported values.
 
-  - Allowed provider -> use it.
-  - Any other value -> use "openai".
+  Run: `npm create mastra@latest <project-name> -- --llm <provider>`
 
-  Run with answers: `npm create mastra@latest <project-name> --default --llm <provider>`
+  The command creates a default Mastra project, installs Mastra skills for detected coding assistants, and initializes Git when appropriate.
 
-  After project created, go to project dir. Start dev server: `npx bgproc start -n <project-name> -w -- npm run dev`
+  After creation, enter the project directory and start the dev server: `npx bgproc start -n <project-name> -w -- npm run dev`
 
-  Start Mastra Studio at `http://localhost:4111`. Studio = UI for build, test, manage agents, workflows, tools.
+  Open Mastra Studio at `http://localhost:4111`. Studio is the interface for building, testing, and managing agents, workflows, and tools.
 
-  Also tell: Mastra model router give 3000+ models from many providers: [https://mastra.ai/models](https://mastra.ai/models)
+  Also mention that the Mastra model router provides access to thousands of models: [https://mastra.ai/models](https://mastra.ai/models)
 </CopyPrompt>

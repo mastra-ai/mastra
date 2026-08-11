@@ -68,6 +68,93 @@ export interface DeployToSandboxOptions {
   logger?: SandboxDeployLogger;
 }
 
+/** Input staged before a non-HTTP process starts. */
+export type SandboxWorkerInput =
+  | { type: 'stdin'; data: string | Uint8Array }
+  | { type: 'file'; path: string; data: string | Uint8Array };
+
+/** Options for deploying a non-HTTP worker or trusted custom command. */
+export interface DeployWorkerToSandboxOptions {
+  /** The workspace sandbox to deploy into. Only `executeCommand` is required. */
+  sandbox: WorkspaceSandbox;
+  /** Local directory containing the prebuilt worker artifact. */
+  dir: string;
+  /** Caller-owned execution identity used to namespace all runtime state. */
+  executionId: string;
+  /** Process lifecycle. Workers are expected to stay running; jobs may complete. Defaults to `worker`. */
+  mode?: 'worker' | 'job';
+  /** Trusted executable or executable path to launch (not a shell expression). */
+  command: string;
+  /** Trusted arguments passed to the executable. */
+  args?: string[];
+  /** Working directory relative to `remoteDir`. Defaults to the artifact root. */
+  workingDirectory?: string;
+  /** Environment variables injected before worker initialization. */
+  env?: Record<string, string>;
+  /** Bounded stdin or an artifact-relative file staged before launch. */
+  input?: SandboxWorkerInput;
+  /** Maximum accepted input size. Defaults to 16 MiB. */
+  inputLimitBytes?: number;
+  /** Persistent directory inside the sandbox. */
+  remoteDir?: string;
+  /** Trusted dependency installation command. Defaults to `npm install --omit=dev`. */
+  installCommand?: string;
+  /** Dependency installation timeout in milliseconds. */
+  installTimeoutMs?: number;
+  /** Time allowed for launch to report a running or terminal process. Defaults to 10000. */
+  startupTimeoutMs?: number;
+  /** Optional maximum process execution time before graceful and then forced termination. */
+  executionTimeoutMs?: number;
+  /** Grace period before forced termination. Defaults to 5000. */
+  terminationGraceMs?: number;
+}
+
+export type SandboxWorkerStatus =
+  | { state: 'starting'; executionId: string }
+  | { state: 'running'; executionId: string }
+  | { state: 'exited'; executionId: string; exitCode: number; signal?: string }
+  | { state: 'cancelled'; executionId: string; signal?: string }
+  | { state: 'timed_out'; executionId: string; phase: 'startup' | 'execution' }
+  | { state: 'failed'; executionId: string; phase: 'upload' | 'install' | 'launch'; message: string }
+  | { state: 'provider_unavailable'; executionId: string; providerState?: string; message?: string }
+  | { state: 'unknown'; executionId: string };
+
+export interface SandboxWorkerOutput {
+  stream: 'stdout' | 'stderr';
+  /** Raw bytes from the requested offset. */
+  data: Uint8Array;
+  offset: number;
+  nextOffset: number;
+  totalBytes: number;
+  eof: boolean;
+  truncated: boolean;
+  interrupted: boolean;
+}
+
+export type SandboxDestroyResult =
+  | { state: 'destroyed'; attempts: number }
+  | { state: 'unsupported'; attempts: 0 }
+  | { state: 'exhausted'; attempts: number; error: unknown };
+
+/** A deployed non-HTTP process execution. */
+export interface SandboxWorkerDeployment {
+  sandboxId: string;
+  executionId: string;
+  expiresAt?: Date;
+  /** Inspect without waking by default. Pass wake=true only when provider restoration is intentional. */
+  status(options?: { wake?: boolean }): Promise<SandboxWorkerStatus>;
+  readOutput(
+    stream: 'stdout' | 'stderr',
+    options?: { offset?: number; maxBytes?: number },
+  ): Promise<SandboxWorkerOutput>;
+  cancel(): Promise<SandboxWorkerStatus>;
+  /** Snapshot-stop the sandbox. Process preservation is provider-specific and is never assumed. */
+  stop(): Promise<void>;
+  destroy(options?: { attempts?: number; delayMs?: number }): Promise<SandboxDestroyResult>;
+  /** Launch the same recorded command under a new caller-provided execution identity. */
+  relaunch(options: { executionId: string; input?: SandboxWorkerInput }): Promise<SandboxWorkerDeployment>;
+}
+
 /** A live sandbox deployment. */
 export interface SandboxDeployment {
   /** Public URL of the Mastra server. */

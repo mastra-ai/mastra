@@ -1,0 +1,4 @@
+{
+  "temperature": ["gemma4-26b", "gpt-oss-120b", "minimax-m2.5-230b", "mistral4-119b", "qwen3.6-35b"],
+  "structuredOutput": ["gemma4-26b", "gpt-oss-120b", "kimi-k2.7-code-1100b", "qwen3.6-35b"]
+}

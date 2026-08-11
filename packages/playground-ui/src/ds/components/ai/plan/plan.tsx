@@ -231,10 +231,10 @@ export interface PlanFileProps extends Omit<ComponentProps<'div'>, 'children'> {
 export function PlanFile({ children, className, ...props }: PlanFileProps) {
   return (
     <div data-slot="plan-file" className={className} {...props}>
-      <Txt as="p" variant="ui-xs" className="mb-2 text-neutral3">
+      <Txt as="p" variant="ui-xs" className="text-neutral3 mb-2">
         Plan file
       </Txt>
-      <Txt as="p" variant="ui-sm" className="font-mono break-all text-neutral6">
+      <Txt as="p" variant="ui-sm" className="text-neutral6 font-mono break-all">
         {children}
       </Txt>
     </div>

@@ -1,5 +1,5 @@
 import { MastraError } from '../../../error';
-import type { DatasetItemPayload } from '../../types';
+import type { DatasetItemPayload, UpdateDatasetItemInput } from '../../types';
 
 interface SerializationIssue {
   path: string;
@@ -69,7 +69,10 @@ function findSerializationIssue(
   return undefined;
 }
 
-export function validateDatasetItemPayloadSerialization(payload: Partial<DatasetItemPayload>, path: string): void {
+type SerializableDatasetItemPayload = Partial<Omit<DatasetItemPayload, 'scorerIds'>> &
+  Pick<UpdateDatasetItemInput, 'scorerIds'>;
+
+export function validateDatasetItemPayloadSerialization(payload: SerializableDatasetItemPayload, path: string): void {
   const ancestors = new WeakMap<object, string>();
   ancestors.set(payload, path);
 

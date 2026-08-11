@@ -18,7 +18,7 @@ const getStateLabel = (signal: SignalData) => {
 };
 
 const Pill = ({ children }: { children: string }) => (
-  <span className="inline-flex items-center rounded-full border border-border1 px-1.5 py-0.5 text-xs leading-none text-neutral4">
+  <span className="border-border1 text-neutral4 inline-flex items-center rounded-full border px-1.5 py-0.5 text-xs leading-none">
     {children}
   </span>
 );
@@ -63,15 +63,15 @@ export const SignalBadge = ({ signal: value }: SignalBadgeProps) => {
 
     const state = getStateLabel(value);
     return (
-      <div className="my-2 max-w-[80%] rounded-lg border border-border1 bg-surface2 px-4 py-3 text-neutral5">
+      <div className="border-border1 bg-surface2 text-neutral5 my-2 max-w-[80%] rounded-lg border px-4 py-3">
         <div className="flex items-start gap-3">
-          <Database className="mt-0.5 h-4 w-4 shrink-0 text-icon3" />
+          <Database className="text-icon3 mt-0.5 h-4 w-4 shrink-0" />
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
-              <p className="text-ui-sm leading-ui-sm font-medium text-neutral6">{state.id}</p>
+              <p className="text-ui-sm leading-ui-sm text-neutral6 font-medium">{state.id}</p>
               {state.mode ? <Pill>{state.mode}</Pill> : null}
             </div>
-            {text ? <p className="mt-2 whitespace-pre-wrap break-words text-ui-sm leading-ui-md">{text}</p> : null}
+            {text ? <p className="text-ui-sm leading-ui-md mt-2 break-words whitespace-pre-wrap">{text}</p> : null}
           </div>
         </div>
       </div>
@@ -84,12 +84,12 @@ export const SignalBadge = ({ signal: value }: SignalBadgeProps) => {
 
   if (value.type === 'reactive') {
     return (
-      <div className="my-2 max-w-[80%] rounded-lg border border-border1 bg-surface2 px-4 py-3 text-neutral5">
+      <div className="border-border1 bg-surface2 text-neutral5 my-2 max-w-[80%] rounded-lg border px-4 py-3">
         <div className="flex items-start gap-3">
-          <Radio className="mt-0.5 h-4 w-4 shrink-0 text-icon3" />
+          <Radio className="text-icon3 mt-0.5 h-4 w-4 shrink-0" />
           <div className="min-w-0 flex-1">
-            <p className="text-ui-sm leading-ui-sm font-medium text-neutral6">{value.tagName ?? 'Signal'}</p>
-            {text ? <p className="mt-2 whitespace-pre-wrap break-words text-ui-sm leading-ui-md">{text}</p> : null}
+            <p className="text-ui-sm leading-ui-sm text-neutral6 font-medium">{value.tagName ?? 'Signal'}</p>
+            {text ? <p className="text-ui-sm leading-ui-md mt-2 break-words whitespace-pre-wrap">{text}</p> : null}
           </div>
         </div>
       </div>

@@ -32,7 +32,7 @@ export default function AgentBuilderCreate() {
 
   return (
     <>
-      <div className="absolute top-3 left-3 md:top-6 md:left-6 z-10">
+      <div className="absolute top-3 left-3 z-10 md:top-6 md:left-6">
         <Button
           size="icon-sm"
           variant="ghost"

@@ -14,6 +14,7 @@ import type { AgentBackgroundConfig } from '../../background-tasks/types';
 import type { SystemMessage } from '../../llm';
 import type { ProviderOptions } from '../../llm/model/provider-options';
 import type { MastraLanguageModel } from '../../llm/model/shared.types';
+import type { ToolCallConcurrency } from '../../loop/types';
 import type { MastraMemory } from '../../memory/memory';
 import type { MemoryConfig } from '../../memory/types';
 import type { AIModelGenerationSpan, Span, SpanType, TracingContext, TracingOptions } from '../../observability';
@@ -179,8 +180,8 @@ export interface SerializableDurableOptions {
   modelSettings?: SerializableModelSettings;
   /** Whether to require tool approval globally */
   requireToolApproval?: boolean;
-  /** Concurrency limit for parallel tool calls */
-  toolCallConcurrency?: number;
+  /** Concurrency limit / strategy for parallel tool calls (JSON-safe union) */
+  toolCallConcurrency?: ToolCallConcurrency;
   /** Whether to auto-resume suspended tools */
   autoResumeSuspendedTools?: boolean;
   /** Maximum processor retries per generation */
@@ -355,6 +356,8 @@ export interface DurableToolCallInput {
 export interface DurableToolCallOutput extends DurableToolCallInput {
   /** Result from tool execution */
   result?: unknown;
+  /** Whether toModelOutput was evaluated before the result crossed the durable boundary */
+  modelOutputComputed?: boolean;
   /** Error if tool execution failed */
   error?: {
     name: string;
@@ -427,7 +430,14 @@ export interface DurableAgenticLoopOutput {
  * Event types emitted via pubsub for agent streaming
  */
 export type AgentStreamEventType =
-  'chunk' | 'step-start' | 'step-finish' | 'finish' | 'error' | 'suspended' | 'abort' | 'iteration-complete';
+  | 'chunk'
+  | 'step-start'
+  | 'step-finish'
+  | 'finish'
+  | 'error'
+  | 'suspended'
+  | 'abort'
+  | 'iteration-complete';
 
 /**
  * Event emitted via pubsub for agent streaming
@@ -716,6 +726,13 @@ export interface RunRegistryEntry {
    * should call `result.abort()` instead, which routes through here.
    */
   abortController?: AbortController;
+  /**
+   * Whether this process has already subscribed to cross-process abort
+   * requests for the run. Set by `ensureRemoteAbortListener`, which every
+   * durable step calls on entry — the flag is what keeps a run's many steps
+   * from installing duplicate subscriptions.
+   */
+  remoteAbortListenerInstalled?: boolean;
   /**
    * Promise tracking the in-flight workflow execution (or resume) for this
    * run. Resolves once the workflow has fully settled (finished, errored,

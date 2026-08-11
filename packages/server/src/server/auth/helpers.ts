@@ -492,7 +492,8 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
       const studioConfig = mastra.getStudio?.();
       // Use studio RBAC if this is a studio request, otherwise use server RBAC
       const rbacProvider = (authMode === 'studio' ? (studioConfig?.rbac ?? serverConfig?.rbac) : serverConfig?.rbac) as
-        IRBACProvider<EEUser> | undefined;
+        | IRBACProvider<EEUser>
+        | undefined;
 
       if (rbacProvider) {
         if (!user || typeof user !== 'object' || !('id' in user)) {

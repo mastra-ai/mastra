@@ -1,6 +1,8 @@
+import type { AgentExecutionOptions } from '../agent/agent.types';
+
 export type NotificationPriority = 'low' | 'medium' | 'high' | 'urgent';
 
-export type NotificationStatus = 'pending' | 'delivered' | 'seen' | 'dismissed' | 'archived' | 'discarded';
+export type NotificationStatus = 'pending' | 'delivered' | 'seen' | 'dismissed' | 'archived' | 'discarded' | 'failed';
 
 export type NotificationSignalAttributes = Record<string, string | number | boolean | null | undefined>;
 
@@ -138,4 +140,12 @@ export type NotificationDeliveryDecision = {
   deliverAt?: Date;
   summaryAt?: Date;
   reason?: string;
+  /**
+   * Stream options attached to the delivery when it wakes an idle thread.
+   * Resolved by the delivery policy at delivery time, so a deferred or
+   * summarized notification dispatched long after the original send still
+   * carries the request context (e.g. model selection) the woken thread
+   * needs to start a run.
+   */
+  streamOptions?: AgentExecutionOptions<unknown>;
 };

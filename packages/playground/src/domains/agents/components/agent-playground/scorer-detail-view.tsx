@@ -33,7 +33,7 @@ export function ScorerDetailView({
 }: ScorerDetailViewProps) {
   if (!scorerData) {
     return (
-      <div className="flex items-center justify-center h-full">
+      <div className="flex h-full items-center justify-center">
         <Txt variant="ui-sm" className="text-neutral3">
           Scorer not found
         </Txt>
@@ -47,13 +47,13 @@ export function ScorerDetailView({
   const isTrajectory = scorerData.scorer?.config?.type === 'trajectory';
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
+    <div className="flex h-full flex-col overflow-hidden">
       {/* Header */}
-      <div className="p-4 border-b border-border1 space-y-3">
+      <div className="border-border1 space-y-3 border-b p-4">
         <div className="flex items-center justify-between">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <Txt variant="ui-sm" className="text-neutral5 font-medium truncate">
+              <Txt variant="ui-sm" className="text-neutral5 truncate font-medium">
                 {name}
               </Txt>
               {isTrajectory && (
@@ -68,12 +68,12 @@ export function ScorerDetailView({
               )}
             </div>
             {description && (
-              <Txt variant="ui-xs" className="text-neutral3 block mt-1">
+              <Txt variant="ui-xs" className="text-neutral3 mt-1 block">
                 {description}
               </Txt>
             )}
           </div>
-          <div className="flex items-center gap-3 shrink-0">
+          <div className="flex shrink-0 items-center gap-3">
             {!isCode && (
               <Button variant="ghost" size="sm" onClick={onEdit}>
                 <Icon size="sm">
@@ -86,12 +86,12 @@ export function ScorerDetailView({
         </div>
 
         {/* Attach toggle */}
-        <div className="flex items-center justify-between py-2 px-3 bg-surface3 rounded-md">
+        <div className="bg-surface3 flex items-center justify-between rounded-md px-3 py-2">
           <div>
             <Txt variant="ui-xs" className="text-neutral5 block">
               Run in experiments
             </Txt>
-            <Txt variant="ui-xs" className="text-neutral3 block mt-0.5">
+            <Txt variant="ui-xs" className="text-neutral3 mt-0.5 block">
               When enabled, this scorer grades results for this agent
             </Txt>
           </div>
@@ -100,9 +100,9 @@ export function ScorerDetailView({
       </div>
 
       {/* Details */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div className="flex-1 space-y-4 overflow-y-auto p-4">
         <div>
-          <Txt variant="ui-xs" className="text-neutral3 font-medium uppercase tracking-wider block mb-2">
+          <Txt variant="ui-xs" className="text-neutral3 mb-2 block font-medium tracking-wider uppercase">
             Details
           </Txt>
           <div className="space-y-2">
@@ -120,7 +120,7 @@ export function ScorerDetailView({
 
         {linkedDatasets && linkedDatasets.length > 0 && (
           <div>
-            <Txt variant="ui-xs" className="text-neutral3 font-medium uppercase tracking-wider block mb-2">
+            <Txt variant="ui-xs" className="text-neutral3 mb-2 block font-medium tracking-wider uppercase">
               Datasets
             </Txt>
             <div className="space-y-1">
@@ -129,14 +129,14 @@ export function ScorerDetailView({
                   <button
                     key={ds.id}
                     onClick={() => onViewDataset(ds.id)}
-                    className="w-full text-left px-3 py-2 rounded-md bg-surface3 hover:bg-surface4 transition-colors cursor-pointer"
+                    className="bg-surface3 hover:bg-surface4 w-full cursor-pointer rounded-md px-3 py-2 text-left transition-colors"
                   >
                     <Txt variant="ui-xs" className="text-neutral5">
                       {ds.name}
                     </Txt>
                   </button>
                 ) : (
-                  <div key={ds.id} className="px-3 py-2 rounded-md bg-surface3">
+                  <div key={ds.id} className="bg-surface3 rounded-md px-3 py-2">
                     <Txt variant="ui-xs" className="text-neutral5">
                       {ds.name}
                     </Txt>
@@ -148,7 +148,7 @@ export function ScorerDetailView({
         )}
 
         {isCode && (
-          <div className="p-3 bg-surface3 rounded-md">
+          <div className="bg-surface3 rounded-md p-3">
             <Txt variant="ui-xs" className="text-neutral3">
               This scorer is defined in code and cannot be edited in the UI. You can toggle whether it runs in
               experiments for this agent.

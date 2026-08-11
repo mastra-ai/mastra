@@ -30,6 +30,10 @@ class TestFactoryStorage extends FactoryStorage {
     return this.ensureCollectionsSpy(schemas);
   }
 
+  withTransaction<T>(fn: (transactionOps: FactoryStorageOps) => Promise<T>): Promise<T> {
+    return fn(this.ops);
+  }
+
   async close(): Promise<void> {}
 }
 

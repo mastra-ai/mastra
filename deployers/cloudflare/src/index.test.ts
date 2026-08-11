@@ -129,6 +129,28 @@ describe('CloudflareDeployer', () => {
       });
     });
 
+    describe('module stub for Workers compatibility', () => {
+      it('should create module-stub.mjs and configure wrangler aliases', async () => {
+        deployer = new CloudflareDeployer({ name: 'test-worker' });
+        vi.spyOn(deployer, 'loadEnvVars').mockResolvedValue(new Map());
+
+        await deployer.writeFiles(tempDir);
+
+        const stubPath = join(tempDir, 'output', 'module-stub.mjs');
+        const stub = await import(stubPath);
+        const req = stub.createRequire();
+
+        expect(req.resolve('@ast-grep/napi')).toBe('@ast-grep/napi');
+        expect(() => req('@ast-grep/napi')).toThrow('require(@ast-grep/napi) is not available in Cloudflare Workers');
+
+        const wranglerConfigPath = join(tempDir, 'output', 'wrangler.json');
+        const wranglerConfig = JSON.parse(await readFile(wranglerConfigPath, 'utf-8'));
+
+        expect(wranglerConfig.alias.module).toBe('./module-stub.mjs');
+        expect(wranglerConfig.alias['node:module']).toBe('./module-stub.mjs');
+      });
+    });
+
     describe('readable-stream stub for Workers compatibility', () => {
       it('should create readable-stream-stub.mjs that re-exports from node:stream', async () => {
         deployer = new CloudflareDeployer({ name: 'test-worker' });

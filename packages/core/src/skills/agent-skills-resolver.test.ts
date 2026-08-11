@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import { resolveAgentSkills } from './agent-skills-resolver';
+import { mergeWorkspaceSkills, resolveAgentSkills } from './agent-skills-resolver';
 import { createSkill } from './create-skill';
 
 describe('resolveAgentSkills', () => {
@@ -120,5 +120,35 @@ describe('resolveAgentSkills', () => {
     const ws = resolveAgentSkills([]);
     const list = await ws.list();
     expect(list).toHaveLength(0);
+  });
+});
+
+describe('mergeWorkspaceSkills', () => {
+  it('forwards registerLocationAlias so remapped locations resolve on either side', async () => {
+    const agentSkills = resolveAgentSkills([
+      createSkill({
+        name: 'agent-skill',
+        description: 'Agent-level skill.',
+        instructions: 'Do agent things.',
+      }),
+    ]);
+    const workspaceSkills = resolveAgentSkills([
+      createSkill({
+        name: 'workspace-skill',
+        description: 'Workspace-level skill.',
+        instructions: 'Do workspace things.',
+      }),
+    ]);
+
+    const { merged } = await mergeWorkspaceSkills(agentSkills, workspaceSkills);
+
+    merged.registerLocationAlias?.('/mnt/bundle/agent-skill/SKILL.md', 'inline/agent-skill');
+    merged.registerLocationAlias?.('/mnt/bundle/workspace-skill/SKILL.md', 'inline/workspace-skill');
+
+    const fromPrimary = await merged.get('/mnt/bundle/agent-skill/SKILL.md');
+    expect(fromPrimary?.name).toBe('agent-skill');
+
+    const fromSecondary = await merged.get('/mnt/bundle/workspace-skill/SKILL.md');
+    expect(fromSecondary?.name).toBe('workspace-skill');
   });
 });

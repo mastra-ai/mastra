@@ -1,0 +1,344 @@
+name: Experiments E2E
+
+on:
+  workflow_dispatch:
+    inputs:
+      tier:
+        description: Matrix tier
+        type: choice
+        options: [pr, full, gated]
+        default: full
+      scenario:
+        description: Optional single scenario ID
+        type: string
+        required: false
+  schedule:
+    - cron: '0 7 * * 2'
+
+permissions: {}
+
+concurrency:
+  group: experiment-worker-e2e-${{ github.ref }}-${{ inputs.tier || 'scheduled' }}-${{ inputs.scenario || 'all' }}
+  cancel-in-progress: false
+
+env:
+  MASTRA_E2E_REGISTRY_TAG: experiment-worker-ci-${{ github.run_id }}-${{ github.run_attempt }}
+  MASTRA_E2E_REGISTRY_PORT: '4873'
+
+jobs:
+  publish-experiment-worker-registry:
+    name: Publish experiment worker registry
+    runs-on: starsling-ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    outputs:
+      digest: ${{ steps.digest.outputs.digest }}
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 5
+        with:
+          persist-credentials: false
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
+      - name: Build packages
+        run: pnpm build
+      - name: Install registry setup dependencies
+        working-directory: ./e2e-tests/_local-registry-setup
+        run: pnpm install --frozen-lockfile
+      - name: Publish immutable registry
+        working-directory: ./e2e-tests/_local-registry-setup
+        run: pnpm run publish-ci-registry
+        env:
+          MASTRA_E2E_REGISTRY_DIR: ${{ runner.temp }}/experiment-worker-registry
+          MASTRA_E2E_REGISTRY_STORAGE: ${{ runner.temp }}/experiment-worker-registry/storage
+          MASTRA_E2E_REGISTRY_CONFIG: ${{ runner.temp }}/experiment-worker-registry/verdaccio.yaml
+      - name: Create immutable registry snapshot
+        id: digest
+        shell: bash
+        run: |
+          archive="${{ runner.temp }}/experiment-worker-registry/registry-snapshot.tar"
+          tar --exclude='./registry-snapshot.tar' -cf "$archive" -C "${{ runner.temp }}/experiment-worker-registry" .
+          digest="$(node e2e-tests/experiment-worker/scripts/registry-artifact-digest.cjs "$archive")"
+          printf '%s\n' "$digest" > "${{ runner.temp }}/experiment-worker-registry/handoff-digest.txt"
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+      - name: Upload registry artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: experiment-worker-registry
+          path: ${{ runner.temp }}/experiment-worker-registry
+          retention-days: 1
+
+  e2e-experiment-worker-pr:
+    name: Experiment worker PR tier
+    needs: publish-experiment-worker-registry
+    if: github.event_name == 'workflow_dispatch' && inputs.tier == 'pr' && (inputs.scenario == '' || inputs.scenario == null)
+    runs-on: starsling-ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 5
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-pnpm-node
+      - run: pnpm install --frozen-lockfile
+        working-directory: ./e2e-tests/experiment-worker
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: experiment-worker-registry
+          path: ${{ runner.temp }}/experiment-worker-registry
+      - name: Extract immutable registry snapshot
+        shell: bash
+        run: |
+          mkdir -p "${{ runner.temp }}/validated-experiment-worker-registry"
+          tar -xf "${{ runner.temp }}/experiment-worker-registry/registry-snapshot.tar" -C "${{ runner.temp }}/validated-experiment-worker-registry"
+      - name: Run PR tier
+        working-directory: ./e2e-tests/experiment-worker
+        shell: bash
+        run: |
+          mkdir -p "$MASTRA_EXPERIMENT_E2E_REPORT_DIR"
+          set -o pipefail
+          pnpm test:experiment 2>&1 | tee "$MASTRA_EXPERIMENT_E2E_REPORT_DIR/vitest.log"
+        env:
+          MASTRA_E2E_REGISTRY_STORAGE: ${{ runner.temp }}/validated-experiment-worker-registry/storage
+          MASTRA_E2E_REGISTRY_CONFIG: ${{ runner.temp }}/validated-experiment-worker-registry/verdaccio.yaml
+          MASTRA_E2E_REGISTRY_TAG: ${{ env.MASTRA_E2E_REGISTRY_TAG }}
+          MASTRA_E2E_REGISTRY_ARTIFACT_PATH: ${{ runner.temp }}/experiment-worker-registry/registry-snapshot.tar
+          MASTRA_E2E_REGISTRY_ARTIFACT_DIGEST: ${{ needs.publish-experiment-worker-registry.outputs.digest }}
+          MASTRA_E2E_REGISTRY_PORT: ${{ env.MASTRA_E2E_REGISTRY_PORT }}
+          MASTRA_EXPERIMENT_E2E_REQUIRE_PUBLISHED_REGISTRY: '1'
+          MASTRA_EXPERIMENT_E2E_REPORT_DIR: ${{ runner.temp }}/experiment-worker-reports
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: experiment-worker-pr-reports
+          path: ${{ runner.temp }}/experiment-worker-reports
+          if-no-files-found: error
+          retention-days: 14
+
+  e2e-experiment-worker-full:
+    name: Experiment worker full tier
+    needs: publish-experiment-worker-registry
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && ((inputs.tier == 'full' && (inputs.scenario == '' || inputs.scenario == null)) || (inputs.scenario != '' && inputs.scenario != 'workspace-browser' && inputs.scenario != 'remote-sandbox' && inputs.scenario != 'object-store' && inputs.scenario != 'real-model' && inputs.scenario != 'hosted-proxy')))
+    runs-on: starsling-ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 5
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-pnpm-node
+      - run: pnpm install --frozen-lockfile
+        working-directory: ./e2e-tests/experiment-worker
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: experiment-worker-registry
+          path: ${{ runner.temp }}/experiment-worker-registry
+      - name: Extract immutable registry snapshot
+        shell: bash
+        run: |
+          mkdir -p "${{ runner.temp }}/validated-experiment-worker-registry"
+          tar -xf "${{ runner.temp }}/experiment-worker-registry/registry-snapshot.tar" -C "${{ runner.temp }}/validated-experiment-worker-registry"
+      - name: Run full tier
+        working-directory: ./e2e-tests/experiment-worker
+        shell: bash
+        run: |
+          mkdir -p "$MASTRA_EXPERIMENT_E2E_REPORT_DIR"
+          set -o pipefail
+          if [ -n "$SELECTED_SCENARIO" ]; then
+            pnpm test:scenario -- "$SELECTED_SCENARIO" 2>&1 | tee "$MASTRA_EXPERIMENT_E2E_REPORT_DIR/vitest.log"
+          else
+            pnpm test:full:strict 2>&1 | tee "$MASTRA_EXPERIMENT_E2E_REPORT_DIR/vitest.log"
+          fi
+        env:
+          SELECTED_SCENARIO: ${{ inputs.scenario }}
+          MASTRA_E2E_REGISTRY_STORAGE: ${{ runner.temp }}/validated-experiment-worker-registry/storage
+          MASTRA_E2E_REGISTRY_CONFIG: ${{ runner.temp }}/validated-experiment-worker-registry/verdaccio.yaml
+          MASTRA_E2E_REGISTRY_TAG: ${{ env.MASTRA_E2E_REGISTRY_TAG }}
+          MASTRA_E2E_REGISTRY_ARTIFACT_PATH: ${{ runner.temp }}/experiment-worker-registry/registry-snapshot.tar
+          MASTRA_E2E_REGISTRY_ARTIFACT_DIGEST: ${{ needs.publish-experiment-worker-registry.outputs.digest }}
+          MASTRA_E2E_REGISTRY_PORT: ${{ env.MASTRA_E2E_REGISTRY_PORT }}
+          MASTRA_EXPERIMENT_E2E_REQUIRE_PUBLISHED_REGISTRY: '1'
+          MASTRA_EXPERIMENT_E2E_REPORT_DIR: ${{ runner.temp }}/experiment-worker-reports
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: experiment-worker-full-reports
+          path: ${{ runner.temp }}/experiment-worker-reports
+          if-no-files-found: error
+          retention-days: 14
+
+  e2e-experiment-worker-browser:
+    name: Experiment worker browser tier
+    needs: publish-experiment-worker-registry
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && ((inputs.tier == 'full' && (inputs.scenario == '' || inputs.scenario == null)) || inputs.scenario == 'workspace-browser'))
+    runs-on: starsling-ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 5
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-pnpm-node
+      - run: pnpm install --frozen-lockfile
+        working-directory: ./e2e-tests/experiment-worker
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: experiment-worker-registry
+          path: ${{ runner.temp }}/experiment-worker-registry
+      - name: Extract immutable registry snapshot
+        shell: bash
+        run: |
+          mkdir -p "${{ runner.temp }}/validated-experiment-worker-registry"
+          tar -xf "${{ runner.temp }}/experiment-worker-registry/registry-snapshot.tar" -C "${{ runner.temp }}/validated-experiment-worker-registry"
+      - name: Run browser scenario
+        working-directory: ./e2e-tests/experiment-worker
+        shell: bash
+        run: |
+          mkdir -p "$MASTRA_EXPERIMENT_E2E_REPORT_DIR"
+          set -o pipefail
+          pnpm test:scenario -- workspace-browser 2>&1 | tee "$MASTRA_EXPERIMENT_E2E_REPORT_DIR/vitest.log"
+        env:
+          MASTRA_E2E_REGISTRY_STORAGE: ${{ runner.temp }}/validated-experiment-worker-registry/storage
+          MASTRA_E2E_REGISTRY_CONFIG: ${{ runner.temp }}/validated-experiment-worker-registry/verdaccio.yaml
+          MASTRA_E2E_REGISTRY_TAG: ${{ env.MASTRA_E2E_REGISTRY_TAG }}
+          MASTRA_E2E_REGISTRY_ARTIFACT_PATH: ${{ runner.temp }}/experiment-worker-registry/registry-snapshot.tar
+          MASTRA_E2E_REGISTRY_ARTIFACT_DIGEST: ${{ needs.publish-experiment-worker-registry.outputs.digest }}
+          MASTRA_E2E_REGISTRY_PORT: ${{ env.MASTRA_E2E_REGISTRY_PORT }}
+          MASTRA_EXPERIMENT_E2E_REQUIRE_PUBLISHED_REGISTRY: '1'
+          MASTRA_EXPERIMENT_E2E_REPORT_DIR: ${{ runner.temp }}/experiment-worker-reports
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: experiment-worker-browser-reports
+          path: ${{ runner.temp }}/experiment-worker-reports
+          if-no-files-found: error
+          retention-days: 14
+
+  gated-remote-sandbox:
+    name: Experiment worker gated (remote sandbox)
+    needs: publish-experiment-worker-registry
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && ((inputs.tier == 'gated' && (inputs.scenario == '' || inputs.scenario == null)) || inputs.scenario == 'remote-sandbox'))
+    runs-on: starsling-ubuntu-24.04
+    timeout-minutes: 15
+    continue-on-error: true
+    environment: experiment-worker-e2e-gated
+    permissions: { contents: read }
+    steps:
+      - uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 5
+        with:
+          persist-credentials: false
+      - run: node scripts/gated-interface.mjs remote-sandbox
+        working-directory: ./e2e-tests/experiment-worker
+        env:
+          MASTRA_EXPERIMENT_E2E_REPORT_DIR: ${{ runner.temp }}/experiment-worker-reports
+          MASTRA_E2E_REMOTE_SANDBOX_URL: ${{ secrets.EXPERIMENT_WORKER_REMOTE_SANDBOX_URL }}
+          MASTRA_E2E_REMOTE_SANDBOX_API_KEY: ${{ secrets.EXPERIMENT_WORKER_REMOTE_SANDBOX_API_KEY }}
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          {
+            name: experiment-worker-gated-remote-sandbox-reports,
+            path: '${{ runner.temp }}/experiment-worker-reports',
+            if-no-files-found: error,
+            retention-days: 14,
+          }
+
+  gated-object-store:
+    name: Experiment worker gated (object store)
+    needs: publish-experiment-worker-registry
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && ((inputs.tier == 'gated' && (inputs.scenario == '' || inputs.scenario == null)) || inputs.scenario == 'object-store'))
+    runs-on: starsling-ubuntu-24.04
+    timeout-minutes: 15
+    continue-on-error: true
+    environment: experiment-worker-e2e-gated
+    permissions: { contents: read }
+    steps:
+      - uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 5
+        with:
+          persist-credentials: false
+      - run: node scripts/gated-interface.mjs object-store
+        working-directory: ./e2e-tests/experiment-worker
+        env:
+          MASTRA_EXPERIMENT_E2E_REPORT_DIR: ${{ runner.temp }}/experiment-worker-reports
+          MASTRA_E2E_OBJECT_STORE_ENDPOINT: ${{ secrets.EXPERIMENT_WORKER_OBJECT_STORE_ENDPOINT }}
+          MASTRA_E2E_OBJECT_STORE_ACCESS_KEY: ${{ secrets.EXPERIMENT_WORKER_OBJECT_STORE_ACCESS_KEY }}
+          MASTRA_E2E_OBJECT_STORE_SECRET_KEY: ${{ secrets.EXPERIMENT_WORKER_OBJECT_STORE_SECRET_KEY }}
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          {
+            name: experiment-worker-gated-object-store-reports,
+            path: '${{ runner.temp }}/experiment-worker-reports',
+            if-no-files-found: error,
+            retention-days: 14,
+          }
+
+  gated-real-model:
+    name: Experiment worker gated (real model)
+    needs: publish-experiment-worker-registry
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && ((inputs.tier == 'gated' && (inputs.scenario == '' || inputs.scenario == null)) || inputs.scenario == 'real-model'))
+    runs-on: starsling-ubuntu-24.04
+    timeout-minutes: 15
+    continue-on-error: true
+    environment: experiment-worker-e2e-gated
+    permissions: { contents: read }
+    steps:
+      - uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 5
+        with:
+          persist-credentials: false
+      - run: node scripts/gated-interface.mjs real-model
+        working-directory: ./e2e-tests/experiment-worker
+        env:
+          MASTRA_EXPERIMENT_E2E_REPORT_DIR: ${{ runner.temp }}/experiment-worker-reports
+          MASTRA_E2E_MODEL_PROVIDER: ${{ vars.EXPERIMENT_WORKER_MODEL_PROVIDER }}
+          MASTRA_E2E_MODEL_API_KEY: ${{ secrets.EXPERIMENT_WORKER_MODEL_API_KEY }}
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          {
+            name: experiment-worker-gated-real-model-reports,
+            path: '${{ runner.temp }}/experiment-worker-reports',
+            if-no-files-found: error,
+            retention-days: 14,
+          }
+
+  gated-hosted-proxy:
+    name: Experiment worker gated (hosted proxy)
+    needs: publish-experiment-worker-registry
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && ((inputs.tier == 'gated' && (inputs.scenario == '' || inputs.scenario == null)) || inputs.scenario == 'hosted-proxy'))
+    runs-on: starsling-ubuntu-24.04
+    timeout-minutes: 15
+    continue-on-error: true
+    environment: experiment-worker-e2e-gated
+    permissions: { contents: read }
+    steps:
+      - uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 5
+        with:
+          persist-credentials: false
+      - run: node scripts/gated-interface.mjs hosted-proxy
+        working-directory: ./e2e-tests/experiment-worker
+        env:
+          MASTRA_EXPERIMENT_E2E_REPORT_DIR: ${{ runner.temp }}/experiment-worker-reports
+          MASTRA_E2E_HOSTED_PROXY_URL: ${{ secrets.EXPERIMENT_WORKER_HOSTED_PROXY_URL }}
+          MASTRA_E2E_HOSTED_PROXY_TOKEN: ${{ secrets.EXPERIMENT_WORKER_HOSTED_PROXY_TOKEN }}
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          {
+            name: experiment-worker-gated-hosted-proxy-reports,
+            path: '${{ runner.temp }}/experiment-worker-reports',
+            if-no-files-found: error,
+            retention-days: 14,
+          }

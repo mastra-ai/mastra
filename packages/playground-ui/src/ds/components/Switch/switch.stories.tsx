@@ -53,8 +53,8 @@ function RepositoryVisibilitySwitch() {
 
 function SurfaceFrame({ className, label, children }: { className: string; label: string; children: ReactNode }) {
   return (
-    <div className={`rounded-2xl border border-border1/70 p-5 ${className}`}>
-      <p className="mb-4 text-ui-xs tracking-wide text-neutral3 uppercase">{label}</p>
+    <div className={`border-border1/70 rounded-2xl border p-5 ${className}`}>
+      <p className="text-ui-xs text-neutral3 mb-4 tracking-wide uppercase">{label}</p>
       {children}
     </div>
   );
@@ -62,7 +62,7 @@ function SurfaceFrame({ className, label, children }: { className: string; label
 
 function SwitchStateGrid({ idPrefix, icons }: { idPrefix: string; icons?: SwitchIconProps }) {
   return (
-    <div className="grid grid-cols-[5rem_repeat(4,minmax(0,1fr))] items-center gap-x-4 gap-y-3 text-ui-sm text-neutral3">
+    <div className="text-ui-sm text-neutral3 grid grid-cols-[5rem_repeat(4,minmax(0,1fr))] items-center gap-x-4 gap-y-3">
       <span />
       <span>Default</span>
       <span>On</span>
@@ -82,7 +82,7 @@ function RepositoryVisibilitySwitch() {
   const [isPrivate, setIsPrivate] = useState(true);
 
   return (
-    <div className="grid gap-4 rounded-lg bg-surface2 p-4">
+    <div className="bg-surface2 grid gap-4 rounded-lg p-4">
       <div className="flex items-center justify-between gap-4">
         <Label htmlFor="repository-visibility-icons">Repository visibility</Label>
         <span className="inline-flex items-center gap-2">
@@ -184,8 +184,8 @@ export const AllStates: Story = {
     layout: 'centered',
   },
   render: () => (
-    <div className="min-w-108 grid gap-4 rounded-lg bg-surface2 p-4">
-      <div className="grid grid-cols-[9rem_repeat(3,minmax(0,1fr))] items-center gap-x-5 gap-y-3 text-ui-sm text-neutral3">
+    <div className="bg-surface2 grid min-w-108 gap-4 rounded-lg p-4">
+      <div className="text-ui-sm text-neutral3 grid grid-cols-[9rem_repeat(3,minmax(0,1fr))] items-center gap-x-5 gap-y-3">
         <span />
         <span>Default</span>
         <span>On</span>
@@ -198,7 +198,7 @@ export const AllStates: Story = {
           aria-label="focused on"
           checked
           onCheckedChange={() => {}}
-          className="outline-1 outline-offset-2 outline-neutral5/55 outline-solid"
+          className="outline-neutral5/55 outline-1 outline-offset-2 outline-solid"
         />
 
         <span className="text-neutral5">Disabled</span>
@@ -209,7 +209,7 @@ export const AllStates: Story = {
           checked
           disabled
           onCheckedChange={() => {}}
-          className="outline-1 outline-offset-2 outline-neutral5/35 outline-solid"
+          className="outline-neutral5/35 outline-1 outline-offset-2 outline-solid"
         />
       </div>
     </div>
@@ -242,7 +242,7 @@ export const WithLabel: Story = {
 
 export const SettingsList: Story = {
   render: () => (
-    <div className="flex w-dropdown-max-height flex-col gap-4">
+    <div className="w-dropdown-max-height flex flex-col gap-4">
       <div className="flex items-center justify-between">
         <Label htmlFor="email">Email notifications</Label>
         <Switch id="email" defaultChecked />
@@ -264,7 +264,7 @@ export const WithDescription: Story = {
     <div className="flex w-[350px] items-start justify-between gap-4">
       <div className="flex flex-col gap-1">
         <Label htmlFor="dark-mode">Dark mode</Label>
-        <span className="text-xs text-neutral3">Switch to a darker color scheme</span>
+        <span className="text-neutral3 text-xs">Switch to a darker color scheme</span>
       </div>
       <Switch id="dark-mode" />
     </div>

@@ -87,7 +87,7 @@ describe('step durable operation IDs', () => {
       runId,
       entry: {
         type: 'loop' as const,
-        step,
+        step: { type: 'step' as const, step },
         condition: async ({ inputData }: any) => inputData.iteration === 2,
         loopType: 'dountil' as const,
       },
@@ -155,7 +155,7 @@ describe('step durable operation IDs', () => {
     const result = await engine.executeForeach({
       workflowId,
       runId,
-      entry: { type: 'foreach', step, opts: { concurrency: 3 } },
+      entry: { type: 'foreach', step: { type: 'step', step }, opts: { concurrency: 3 } },
       prevStep: { type: 'step', step },
       prevOutput: ['same-value', 'same-value', 'same-value'],
       stepResults: {},

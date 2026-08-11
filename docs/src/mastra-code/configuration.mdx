@@ -237,7 +237,7 @@ Connect to a remote MCP server via URL. Requires a `url` field. The optional `he
 
 #### HTTP OAuth
 
-HTTP servers can also use OAuth when the server supports MCP authorization. Add an `oauth` object with a `redirectUrl`. Mastra Code stores OAuth client data and tokens in the app data directory.
+HTTP servers can also use OAuth when the server supports MCP authorization. Add an `oauth` object, optionally with a `redirectUrl` (it defaults to a stable loopback URL when omitted). Mastra Code stores OAuth client data and tokens in the app data directory.
 
 Mastra Code passes this configuration to `@mastra/mcp` when connecting. The redirect URL must use HTTPS unless it is a loopback HTTP URL, and it must be handled by a callback endpoint that can complete the OAuth flow for that server.
 
@@ -275,6 +275,24 @@ Use `clientId` and `clientSecret` when the MCP server requires a pre-registered 
 
 Do not commit real `clientSecret` values to a repository. Prefer a project-local or global config file that is not shared.
 
+Use `callbackPort` as a shorthand for the redirect URL. It synthesizes `http://localhost:<callbackPort>/callback`, the convention Claude Code and Codex use, so configs written for those clients (such as the one in Slack's official MCP server docs) work verbatim:
+
+```json title=".mastracode/mcp.json"
+{
+  "mcpServers": {
+    "slack": {
+      "url": "https://mcp.slack.com/mcp",
+      "oauth": {
+        "clientId": "1601185624273.8899143856786",
+        "callbackPort": 3118
+      }
+    }
+  }
+}
+```
+
+`callbackPort` and `redirectUrl` are mutually exclusive. Setting both is a configuration error. Pick a port that is normally free on your machine. When the preferred port is busy, the callback server falls back to the next sequential port, and a provider that only registered the original redirect URL will reject the fallback.
+
 #### Startup behavior
 
 On startup, Mastra Code connects to all configured servers and reports the status:
@@ -290,6 +308,10 @@ MCP: Skipped "bad-server": Missing required field: "command" (stdio) or "url" (h
 ```
 
 Tools from MCP servers are namespaced as `serverName_toolName` and appear in the agent's tool list alongside built-in tools. Use `/mcp` to see the status of all servers, including their transport type and any skipped entries.
+
+To turn servers off without editing configuration files, use `/mcp disable <server-name|all>`. Disabled servers stay visible in `/mcp` with a disabled marker, their tools are removed from the agent, and the state persists across restarts for the current project. Re-enable them with `/mcp enable <server-name|all>` or from the interactive `/mcp` selector.
+
+Add `--global` to disable or enable servers across every project instead of just the current one: `/mcp disable <server-name|all> --global`. Global and project scopes are independent — a server disabled globally stays off until you run `/mcp enable <server-name> --global`, even if it is enabled in the current project. `/mcp disable all --global` acts as a kill switch for all MCP servers everywhere.
 
 ## Hooks
 
@@ -339,6 +361,21 @@ Hooks are user-configured shell commands that run at specific lifecycle events. 
 | `SubagentStart` | When a subagent begins a delegated task | No |
 | `SubagentEnd` | When a subagent finishes its delegated task | No |
 
+`SessionStart` and `SessionEnd` also describe the checkout the session is running in. When the project directory is a git worktree, both events include `worktree_path`, and `branch` and `main_repo_path` when git can resolve them. The fields are omitted entirely in a main checkout, so a hook can tell the two apart and provision or tear down per-worktree resources such as a database, a bucket, or a dev server:
+
+```json
+{
+  "session_id": "thread-abc123",
+  "cwd": "/repos/myapp-worktrees/feature",
+  "hook_event_name": "SessionEnd",
+  "worktree_path": "/repos/myapp-worktrees/feature",
+  "branch": "feature/my-branch",
+  "main_repo_path": "/repos/myapp"
+}
+```
+
+These fire on session boundaries, not on worktree creation and removal. Mastra Code detects the worktree it is started in; it does not create or delete worktrees, so a session that ends is not necessarily a worktree that is going away.
+
 `UserPromptSubmit` runs before a non-command prompt is sent to the agent. If a hook blocks, the prompt is not sent.
 
 `PreToolUse` and `PostToolUse` are emitted by the agent tool hook wrapper around tool execution. Run, permission, interrupt, and subagent events are emitted by the TUI lifecycle dispatcher.
@@ -361,7 +398,7 @@ Hook processes receive a JSON payload on stdin with context about the event:
 
 During an active agent run, all hook payloads include a `run_id` that identifies the current run. The same `run_id` appears on `AgentStart`, tool hooks, `PermissionRequest`, `PermissionResult`, `Interrupt`, `SubagentStart`, `SubagentEnd`, `AgentEnd`, and `Stop` for that run, so external integrations can correlate events.
 
-A `PermissionRequest` payload includes the permission kind and call context. `permission_kind` can be `tool_approval`, `sandbox_access`, or `plan_approval`. `tool_name` and `tool_input` describe the gated tool call when the request comes from a tool approval, sandbox access request, or plan approval.
+A `PermissionRequest` payload includes the permission kind and call context. `permission_kind` can be `tool_approval`, `sandbox_access`, or `plan_approval`. `tool_name` and `tool_input` describe the gated tool call when the request comes from a tool approval, sandbox access request, or plan approval. `PermissionRequest` hooks and the agent-finished `Notification` hook fire as soon as the TUI receives the event, even while an earlier prompt is still waiting for an answer. The `agent_done` notification is emitted only for `agent_end` events with reason `complete` or no reason. Runs that end `aborted` or with an `error` never produce it, and runs that end `suspended` on a prompt do not either; the suspension's own prompt notification covers them.
 
 ```json
 {
@@ -571,6 +608,7 @@ Running `/theme` with no arguments shows the current theme. The choice is persis
 | `MASTRA_THEME` | Color theme override (`dark` or `light`) |
 | `MASTRACODE_SHELL` | Direct TUI `!` shell executable override |
 | `MASTRACODE_SHELL_MODE` | Direct TUI `!` shell mode (`default`, `path`, or `login`) |
+| `MASTRACODE_DISPATCH_MAX_IN_FLIGHT` | Maximum concurrent Factory background dispatches per replica; invalid or unset values use the default |
 | `TAVILY_API_KEY` | Enable Tavily-powered web search and extract tools |
 
 ## Resource ID override

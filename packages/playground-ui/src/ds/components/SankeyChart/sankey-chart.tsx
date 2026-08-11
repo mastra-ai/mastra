@@ -1,18 +1,45 @@
 import { useState } from 'react';
 import type { ComponentProps, CSSProperties, KeyboardEvent } from 'react';
 import { ResponsiveContainer, Sankey as RechartsSankey } from 'recharts';
-import { getSankeyChartCurveSelection } from './sankey-chart-utils';
-import type { SankeyChartCurveSelection } from './sankey-chart-utils';
+import {
+  getSankeyChartCurveSelection,
+  getSankeyChartNodeSelection,
+  getSankeyChartNodeWeights,
+  SANKEY_NODE_WIDTH,
+  truncateSankeyLabel,
+} from './sankey-chart-utils';
+import type {
+  SankeyChartColumn,
+  SankeyChartCurveSelection,
+  SankeyChartNodeSelection,
+  SankeyLabelWidths,
+} from './sankey-chart-utils';
 import { useSankeyRenderContext } from './sankey-context';
+import { SankeyPortalTooltip } from './sankey-portal-tooltip';
 import { nodeColor, nodeColorVivid } from './sankeyColor';
+import { useSankeyChartMeasurements } from './use-sankey-chart-measurements';
+import { useSankeyGeometryTransition } from './use-sankey-geometry-transition';
+import { useSankeyHoverTooltip } from './use-sankey-hover-tooltip';
 import { Colors } from '@/ds/tokens';
 import { cn } from '@/lib/utils';
+
+const NODE_LABEL_FONT_SIZE = 11;
+const COLUMN_LABEL_FONT_SIZE = 12;
+// pre-measurement cap, kept so wide charts read unchanged
+const NODE_LABEL_MAX_CHARACTERS = 23;
 
 export type SankeyChartProps = {
   height?: CSSProperties['height'];
   className?: string;
   margin?: ComponentProps<typeof RechartsSankey>['margin'];
   onCurveClick?: (selection: SankeyChartCurveSelection) => void;
+  onNodeClick?: (selection: SankeyChartNodeSelection) => void;
+  isNodeClickable?: (selection: SankeyChartNodeSelection) => boolean;
+  getColumnDescription?: (column: SankeyChartColumn) => string | undefined;
+  /** Suppress the built-in SVG column headers when the caller renders its own header row. */
+  hideColumnLabels?: boolean;
+  /** Animate fixed node and ribbon geometry when this perspective key changes. */
+  geometryTransitionKey?: string;
 };
 
 export function SankeyChart({
@@ -20,26 +47,48 @@ export function SankeyChart({
   className,
   margin = { top: 64, right: 160, bottom: 12, left: 160 },
   onCurveClick,
+  onNodeClick,
+  isNodeClickable,
+  getColumnDescription,
+  hideColumnLabels = false,
+  geometryTransitionKey,
 }: SankeyChartProps) {
-  const { graph, enabledColumns, hueMap } = useSankeyRenderContext();
+  const { graph, enabledColumns, hueMap, usesFixedGeometry } = useSankeyRenderContext();
+  const { chartContainerRef, fixedGeometry, labelWidths } = useSankeyChartMeasurements({
+    graph,
+    height,
+    margin,
+    usesFixedGeometry,
+  });
+  const animatedGeometry = useSankeyGeometryTransition({
+    geometry: fixedGeometry,
+    transitionKey: geometryTransitionKey,
+  });
   const [hoveredSourceName, setHoveredSourceName] = useState<string>();
+  const [focusedSourceName, setFocusedSourceName] = useState<string>();
+  const activeSourceName = hoveredSourceName ?? focusedSourceName;
   const firstColumnId = enabledColumns[0]?.id;
-  const total = graph.links.reduce(
-    (sum, link) => (link.sourceNode.column.id === firstColumnId ? sum + link.value : sum),
-    0,
-  );
+  const lastColumnId = enabledColumns.at(-1)?.id;
+  const nodeWeights = getSankeyChartNodeWeights(graph);
+  // Each node's percentage is its share of its own column, so later columns
+  // with more counted traces than the first column never exceed 100%.
+  const columnTotals = new Map<string, number>();
+  for (const node of graph.nodes) {
+    const nodeValue = node.displayValue ?? nodeWeights.get(node.id) ?? 0;
+    columnTotals.set(node.column.id, (columnTotals.get(node.column.id) ?? 0) + nodeValue);
+  }
 
   return (
     <div className={cn('min-w-0', className)}>
       {graph.links.length === 0 ? (
         <div
-          className="flex items-center justify-center rounded-md border border-border1 text-ui-sm text-neutral3"
+          className="border-border1 text-ui-sm text-neutral3 flex items-center justify-center rounded-md border"
           style={{ height }}
         >
           Select at least two columns with data to display a flow
         </div>
       ) : (
-        <div style={{ height }}>
+        <div ref={chartContainerRef} style={{ height }}>
           <ResponsiveContainer
             width="100%"
             height="100%"
@@ -47,32 +96,67 @@ export function SankeyChart({
           >
             <RechartsSankey
               data={graph}
-              nodeWidth={7}
+              nodeWidth={SANKEY_NODE_WIDTH}
               nodePadding={56}
               margin={margin}
               node={(props: SankeyNodeRendererProps) => {
                 const node = graph.nodes[props.index];
-                const showColumnLabel = node
-                  ? graph.nodes.findIndex(candidate => candidate.column.id === node.column.id) === props.index
-                  : false;
+                const showColumnLabel =
+                  !hideColumnLabels && node
+                    ? graph.nodes.findIndex(candidate => candidate.column.id === node.column.id) === props.index
+                    : false;
+                const nodeGeometry = node ? animatedGeometry?.nodes.get(node.id) : undefined;
+                const selection = node ? getSankeyChartNodeSelection(node) : undefined;
+                const clickable = Boolean(
+                  onNodeClick && selection && (isNodeClickable === undefined || isNodeClickable(selection)),
+                );
                 return (
                   <SankeyNode
                     {...props}
+                    x={nodeGeometry?.x ?? props.x}
+                    y={nodeGeometry?.y ?? props.y}
+                    height={nodeGeometry?.height ?? props.height}
                     hueMap={hueMap}
                     columnLabel={node?.column.label}
-                    total={total}
+                    columnDescription={node ? getColumnDescription?.(node.column) : undefined}
+                    label={node?.label}
+                    nodeValue={node?.displayValue}
+                    layoutValue={nodeGeometry ? undefined : node ? nodeWeights.get(node.id) : undefined}
+                    columnTotal={node ? (columnTotals.get(node.column.id) ?? 0) : 0}
                     showColumnLabel={showColumnLabel}
+                    isFirstColumn={node?.column.id === firstColumnId}
+                    isLastColumn={node?.column.id === lastColumnId}
+                    labelWidths={labelWidths}
+                    onFocusChange={setFocusedSourceName}
                     onHoverChange={setHoveredSourceName}
+                    clickable={clickable}
+                    onSelect={() => {
+                      if (selection && clickable) onNodeClick?.(selection);
+                    }}
                   />
                 );
               }}
               link={(props: SankeyLinkRendererProps) => {
                 const link = graph.links[props.index];
+                const linkGeometry = link ? animatedGeometry?.links.get(link.id) : undefined;
+                const sourceX = linkGeometry?.sourceX ?? props.sourceX;
+                const targetX = linkGeometry?.targetX ?? props.targetX;
+                const fixedControlX = linkGeometry ? (sourceX + targetX) / 2 : undefined;
                 return (
                   <SankeyLink
                     {...props}
+                    sourceX={sourceX}
+                    targetX={targetX}
+                    sourceControlX={fixedControlX ?? props.sourceControlX}
+                    targetControlX={fixedControlX ?? props.targetControlX}
+                    sourceY={linkGeometry?.sourceY ?? props.sourceY}
+                    targetY={linkGeometry?.targetY ?? props.targetY}
+                    sourceWidth={linkGeometry?.sourceWidth}
+                    targetWidth={linkGeometry?.targetWidth}
                     hueMap={hueMap}
-                    highlighted={String(props.payload.source.name ?? '') === hoveredSourceName}
+                    highlighted={String(props.payload.source.name ?? '') === activeSourceName}
+                    displayValue={link?.displayValue}
+                    layoutValue={link?.value}
                     onHoverChange={setHoveredSourceName}
                     clickable={onCurveClick !== undefined}
                     onSelect={() => {
@@ -113,9 +197,19 @@ type SankeyLinkRendererProps = {
 type SankeyNodeProps = SankeyNodeRendererProps & {
   hueMap: Record<string, number>;
   columnLabel?: string;
-  total: number;
+  columnDescription?: string;
+  label?: string;
+  nodeValue?: number;
+  layoutValue?: number;
+  columnTotal: number;
   showColumnLabel: boolean;
+  isFirstColumn: boolean;
+  isLastColumn: boolean;
+  labelWidths: SankeyLabelWidths;
+  clickable: boolean;
+  onFocusChange: (sourceName: string | undefined) => void;
   onHoverChange: (sourceName: string | undefined) => void;
+  onSelect: () => void;
 };
 
 function SankeyNode({
@@ -126,46 +220,188 @@ function SankeyNode({
   payload,
   hueMap,
   columnLabel,
-  total,
+  columnDescription,
+  label,
+  nodeValue,
+  layoutValue,
+  columnTotal,
   showColumnLabel,
+  isFirstColumn,
+  isLastColumn,
+  labelWidths,
+  clickable,
+  onFocusChange,
   onHoverChange,
+  onSelect,
 }: SankeyNodeProps) {
   const name = typeof payload.name === 'string' || typeof payload.name === 'number' ? String(payload.name) : '';
-  const numericValue = typeof payload.value === 'number' ? payload.value : Number(payload.value);
+  const displayLabel = label ?? name;
+  const descriptionIndex = displayLabel.indexOf('\n');
+  const visibleDisplayLabel = descriptionIndex >= 0 ? displayLabel.slice(0, descriptionIndex) : displayLabel;
+  const description = descriptionIndex >= 0 ? displayLabel.slice(descriptionIndex + 1) : undefined;
+  const accessibleLabel = displayLabel.replaceAll('\n', '. ');
+  const nodeLabelWidth = isFirstColumn || isLastColumn ? labelWidths.edge : labelWidths.centered;
+  const visibleLabel = truncateSankeyLabel(visibleDisplayLabel, {
+    fontSize: NODE_LABEL_FONT_SIZE,
+    maxWidth: nodeLabelWidth,
+    maxCharacters: NODE_LABEL_MAX_CHARACTERS,
+  });
+  const visibleColumnLabel = columnLabel
+    ? truncateSankeyLabel(columnLabel, { fontSize: COLUMN_LABEL_FONT_SIZE, maxWidth: nodeLabelWidth })
+    : undefined;
+  const tooltip = useSankeyHoverTooltip(description !== undefined);
+  const numericValue = nodeValue ?? (typeof payload.value === 'number' ? payload.value : Number(payload.value));
   const value = Number.isFinite(numericValue) ? String(numericValue) : '';
-  const percentage = total > 0 && Number.isFinite(numericValue) ? Math.round((numericValue / total) * 100) : 0;
-  const labelX = x + width / 2;
-  const columnLabelX = x + width / 2;
+  const percentage =
+    columnTotal > 0 && Number.isFinite(numericValue) ? Math.round((numericValue / columnTotal) * 100) : 0;
+  const visibleHeight = scaleSankeyDimension(height, numericValue, layoutValue);
+  const visibleY = y + (height - visibleHeight) / 2;
+  const textAnchor = isFirstColumn ? 'start' : isLastColumn ? 'end' : 'middle';
+  const labelX = isFirstColumn ? x : isLastColumn ? x + width : x + width / 2;
   const hue = hueMap[name] ?? 0;
+  const handleKeyDown = (event: KeyboardEvent<SVGGElement>) => {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    onSelect();
+  };
 
   return (
-    <g onMouseEnter={() => onHoverChange(name)} onMouseLeave={() => onHoverChange(undefined)}>
-      {showColumnLabel && columnLabel ? (
-        <text x={columnLabelX} y={18} textAnchor="middle" fill={nodeColor(hue)} fontSize={12} fontWeight={600}>
-          {columnLabel}
-        </text>
+    <>
+      {/* Rendered outside the interactive group so hovering the header never opens a theme tooltip. */}
+      {showColumnLabel && visibleColumnLabel && columnLabel ? (
+        <SankeyColumnHeader
+          x={labelX}
+          textAnchor={textAnchor}
+          fill={nodeColor(hue)}
+          label={visibleColumnLabel}
+          fullLabel={columnLabel}
+          description={columnDescription}
+        />
       ) : null}
-      <rect x={x} y={y} width={width} height={height} rx={3} fill={nodeColor(hue)} />
-      <text
-        x={labelX}
-        y={y - 24}
-        textAnchor="middle"
-        fill={Colors.neutral5}
-        fontSize={11}
-        fontFamily="var(--font-mono)"
+      <g
+        aria-describedby={description ? tooltip.id : undefined}
+        aria-label={`${accessibleLabel}: ${value} ${numericValue === 1 ? 'trace' : 'traces'} (${percentage}%)`}
+        className="focus-visible:[&>rect]:stroke-neutral6 outline-hidden focus-visible:[&>rect]:stroke-2"
+        onClick={clickable ? onSelect : undefined}
+        onKeyDown={clickable ? handleKeyDown : undefined}
+        role={clickable ? 'button' : undefined}
+        onFocus={event => {
+          onFocusChange(name);
+          tooltip.showOnFocus(event.currentTarget);
+        }}
+        onBlur={() => {
+          onFocusChange(undefined);
+          tooltip.hideOnBlur();
+        }}
+        onMouseEnter={event => {
+          onHoverChange(name);
+          tooltip.showOnHover(event.currentTarget);
+        }}
+        onMouseLeave={() => {
+          onHoverChange(undefined);
+          tooltip.hideOnLeave();
+        }}
+        style={{ cursor: clickable ? 'pointer' : undefined }}
+        tabIndex={0}
       >
-        {name}
-      </text>
-      <text x={labelX} y={y - 8} textAnchor="middle" fill={Colors.neutral3} fontSize={9.5}>
-        {value} ({percentage}%)
-      </text>
-    </g>
+        {/* The custom tooltip covers described nodes; a native title there would stack a second popup. */}
+        {description ? null : <title>{displayLabel}</title>}
+        <rect x={x} y={visibleY} width={width} height={visibleHeight} rx={3} fill={nodeColor(hue)} />
+        <text
+          x={labelX}
+          y={y - 24}
+          textAnchor={textAnchor}
+          fill={Colors.neutral5}
+          fontSize={NODE_LABEL_FONT_SIZE}
+          fontFamily="var(--font-mono)"
+        >
+          {visibleLabel}
+        </text>
+        <text x={labelX} y={y - 8} textAnchor={textAnchor} fill={Colors.neutral3} fontSize={9.5}>
+          {value} ({percentage}%)
+        </text>
+      </g>
+      {description ? (
+        <SankeyPortalTooltip
+          id={tooltip.id}
+          title={visibleDisplayLabel}
+          description={description}
+          position={tooltip.position}
+          visible={tooltip.isVisible}
+        />
+      ) : null}
+    </>
   );
+}
+
+/**
+ * Column header text. Inert for node tooltips, but when the caller supplies a
+ * column description it opens its own portal tooltip on hover or focus.
+ */
+function SankeyColumnHeader({
+  x,
+  textAnchor,
+  fill,
+  label,
+  fullLabel,
+  description,
+}: {
+  x: number;
+  textAnchor: 'start' | 'middle' | 'end';
+  fill: string;
+  label: string;
+  fullLabel: string;
+  description?: string;
+}) {
+  const tooltip = useSankeyHoverTooltip(description !== undefined);
+
+  return (
+    <>
+      <text
+        aria-describedby={description ? tooltip.id : undefined}
+        aria-label={description ? fullLabel : undefined}
+        role={description ? 'img' : undefined}
+        x={x}
+        y={18}
+        textAnchor={textAnchor}
+        fill={fill}
+        fontSize={COLUMN_LABEL_FONT_SIZE}
+        fontWeight={600}
+        tabIndex={description ? 0 : undefined}
+        onMouseEnter={description ? event => tooltip.showOnHover(event.currentTarget) : undefined}
+        onMouseLeave={description ? tooltip.hideOnLeave : undefined}
+        onFocus={description ? event => tooltip.showOnFocus(event.currentTarget) : undefined}
+        onBlur={description ? tooltip.hideOnBlur : undefined}
+      >
+        {/* The custom tooltip already names the column; a native title would stack a second popup. */}
+        {label === fullLabel || description ? null : <title>{fullLabel}</title>}
+        {label}
+      </text>
+      {description ? (
+        <SankeyPortalTooltip
+          id={tooltip.id}
+          title={fullLabel}
+          description={description}
+          position={tooltip.position}
+          visible={tooltip.isVisible}
+        />
+      ) : null}
+    </>
+  );
+}
+
+function scaleSankeyDimension(size: number, displayValue: number | undefined, layoutValue: number | undefined) {
+  if (displayValue === undefined || layoutValue === undefined || layoutValue <= 0) return size;
+  return size * Math.min(Math.max(displayValue / layoutValue, 0), 1);
 }
 
 type SankeyLinkProps = SankeyLinkRendererProps & {
   hueMap: Record<string, number>;
   highlighted: boolean;
+  displayValue?: number;
+  layoutValue?: number;
+  sourceWidth?: number;
+  targetWidth?: number;
   clickable: boolean;
   onHoverChange: (sourceName: string | undefined) => void;
   onSelect: () => void;
@@ -183,16 +419,22 @@ function SankeyLink({
   payload,
   hueMap,
   highlighted,
+  displayValue,
+  layoutValue,
+  sourceWidth,
+  targetWidth,
   clickable,
   onHoverChange,
   onSelect,
 }: SankeyLinkProps) {
-  const halfWidth = Math.max(0, linkWidth) / 2;
+  const visibleWidth = scaleSankeyDimension(linkWidth, displayValue, layoutValue);
+  const sourceHalfWidth = Math.max(0, sourceWidth ?? visibleWidth) / 2;
+  const targetHalfWidth = Math.max(0, targetWidth ?? visibleWidth) / 2;
   const path = [
-    `M${sourceX},${sourceY - halfWidth}`,
-    `C${sourceControlX},${sourceY - halfWidth} ${targetControlX},${targetY - halfWidth} ${targetX},${targetY - halfWidth}`,
-    `L${targetX},${targetY + halfWidth}`,
-    `C${targetControlX},${targetY + halfWidth} ${sourceControlX},${sourceY + halfWidth} ${sourceX},${sourceY + halfWidth}`,
+    `M${sourceX},${sourceY - sourceHalfWidth}`,
+    `C${sourceControlX},${sourceY - sourceHalfWidth} ${targetControlX},${targetY - targetHalfWidth} ${targetX},${targetY - targetHalfWidth}`,
+    `L${targetX},${targetY + targetHalfWidth}`,
+    `C${targetControlX},${targetY + targetHalfWidth} ${sourceControlX},${sourceY + sourceHalfWidth} ${sourceX},${sourceY + sourceHalfWidth}`,
     'Z',
   ].join(' ');
   const sourceName = String(payload.source.name ?? '');

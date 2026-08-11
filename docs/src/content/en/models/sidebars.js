@@ -18,12 +18,11 @@ const sidebars = {
       type: 'category',
       label: 'Gateways',
       collapsed: false,
+      link: {
+        type: 'doc',
+        id: 'gateways/index',
+      },
       items: [
-        {
-          type: 'doc',
-          id: 'gateways/index',
-          label: 'Gateways',
-        },
         {
           type: 'doc',
           id: 'gateways/custom-gateways',
@@ -38,6 +37,11 @@ const sidebars = {
           type: 'doc',
           id: 'gateways/mastra',
           label: 'Mastra',
+        },
+        {
+          type: 'doc',
+          id: 'gateways/neon',
+          label: 'Neon',
         },
         {
           type: 'doc',
@@ -60,12 +64,11 @@ const sidebars = {
       type: 'category',
       label: 'Providers',
       collapsed: false,
+      link: {
+        type: 'doc',
+        id: 'providers/index',
+      },
       items: [
-        {
-          type: 'doc',
-          id: 'providers/index',
-          label: 'Providers',
-        },
         {
           type: 'doc',
           id: 'providers/openai',
@@ -123,8 +126,18 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/aiand',
+          label: 'ai&',
+        },
+        {
+          type: 'doc',
           id: 'providers/aihubmix',
           label: 'AIHubMix',
+        },
+        {
+          type: 'doc',
+          id: 'providers/aki-io',
+          label: 'AKI.IO',
         },
         {
           type: 'doc',
@@ -213,6 +226,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/hyper',
+          label: 'Charm Hyper',
+        },
+        {
+          type: 'doc',
           id: 'providers/chutes',
           label: 'Chutes',
         },
@@ -225,6 +243,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/claudinio',
           label: 'Claudinio',
+        },
+        {
+          type: 'doc',
+          id: 'providers/cline-pass',
+          label: 'ClinePass',
         },
         {
           type: 'doc',
@@ -245,6 +268,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/cohere',
           label: 'Cohere',
+        },
+        {
+          type: 'doc',
+          id: 'providers/coralbricks',
+          label: 'CoralBricks',
         },
         {
           type: 'doc',
@@ -333,11 +361,6 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'providers/github-models',
-          label: 'GitHub Models',
-        },
-        {
-          type: 'doc',
           id: 'providers/gmicloud',
           label: 'GMI Cloud',
         },
@@ -348,8 +371,18 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/greenpt',
+          label: 'GreenPT',
+        },
+        {
+          type: 'doc',
           id: 'providers/helicone',
           label: 'Helicone',
+        },
+        {
+          type: 'doc',
+          id: 'providers/hetzner',
+          label: 'Hetzner',
         },
         {
           type: 'doc',
@@ -365,6 +398,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/iflowcn',
           label: 'iFlow',
+        },
+        {
+          type: 'doc',
+          id: 'providers/impossibl',
+          label: 'Impossibl',
         },
         {
           type: 'doc',
@@ -385,6 +423,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/inferx',
           label: 'InferX',
+        },
+        {
+          type: 'doc',
+          id: 'providers/infomaniak',
+          label: 'Infomaniak',
         },
         {
           type: 'doc',
@@ -498,8 +541,18 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/modal',
+          label: 'Modal',
+        },
+        {
+          type: 'doc',
           id: 'providers/model-oracle-ai',
           label: 'Model Oracle AI',
+        },
+        {
+          type: 'doc',
+          id: 'providers/modelis',
+          label: 'Modelis',
         },
         {
           type: 'doc',
@@ -538,11 +591,6 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'providers/neon',
-          label: 'Neon',
-        },
-        {
-          type: 'doc',
           id: 'providers/neuralwatt',
           label: 'Neuralwatt',
         },
@@ -560,6 +608,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/nvidia',
           label: 'Nvidia',
+        },
+        {
+          type: 'doc',
+          id: 'providers/ofox',
+          label: 'Ofox',
         },
         {
           type: 'doc',
@@ -663,6 +716,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/scx',
+          label: 'SCX.ai',
+        },
+        {
+          type: 'doc',
           id: 'providers/siliconflow',
           label: 'SiliconFlow',
         },
@@ -730,6 +788,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/tencent-tokenhub',
           label: 'Tencent TokenHub',
+        },
+        {
+          type: 'doc',
+          id: 'providers/tensorx',
+          label: 'TensorX',
         },
         {
           type: 'doc',

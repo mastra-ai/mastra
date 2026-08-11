@@ -121,7 +121,15 @@ export type StrategyOptions = {
 };
 
 export type ChunkStrategy =
-  'recursive' | 'character' | 'token' | 'markdown' | 'html' | 'json' | 'latex' | 'sentence' | 'semantic-markdown';
+  | 'recursive'
+  | 'character'
+  | 'token'
+  | 'markdown'
+  | 'html'
+  | 'json'
+  | 'latex'
+  | 'sentence'
+  | 'semantic-markdown';
 
 export type ChunkParams =
   | ({ strategy?: 'character' } & CharacterChunkOptions & { extract?: ExtractParams })

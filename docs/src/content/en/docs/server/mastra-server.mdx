@@ -9,7 +9,7 @@ packages:
 
 Mastra runs as an HTTP server that exposes your agents, workflows, and other functionality as API endpoints. The server handles request routing, middleware execution, authentication, and streaming responses.
 
-:::info
+:::note
 
 This page covers the [`server`](/reference/configuration#server-options) configuration options passed to the `Mastra` constructor. For running Mastra with your own HTTP server (Hono, Express, etc.), visit [Server Adapters](/docs/server/server-adapters).
 
@@ -23,7 +23,7 @@ This page covers the [`server`](/reference/configuration#server-options) configu
 - **[Server Adapters](/docs/server/server-adapters)**: Run Mastra with Express, Hono, or your own HTTP server instead of the generated server.
 - **[Custom Adapters](/docs/server/custom-adapters)**: Build adapters for frameworks not officially supported.
 - **[Mastra Client SDK](/docs/server/mastra-client)**: Type-safe client for calling agents, workflows, and tools from browser or server environments.
-- **[A2A](/docs/agents/a2a)**: Expose agents through A2A agent cards, task streams, and push notifications.
+- **[A2A](/docs/agents/a2a)**: Expose agents through A2A agent cards and task streams, plus push notifications.
 - **[Authentication](/docs/server/auth)**: Secure endpoints with JWT, Clerk, Supabase, Firebase, Auth0, or WorkOS.
 
 ## Configuration
@@ -56,7 +56,7 @@ The server provides:
 - API endpoints for all registered agents and workflows
 - Custom API routes and middleware
 - Authentication across providers
-- Request context for dynamic configuration
+- Request context for runtime configuration
 - Stream data redaction for secure responses
 
 ## REST API

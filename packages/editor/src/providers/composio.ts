@@ -12,9 +12,9 @@ import type {
   ToolProviderHealth,
   ToolProviderInfo,
   ToolProviderToolkit,
+  BaseToolProviderOptions,
 } from '@mastra/core/tool-provider';
 import { BaseToolProvider } from '@mastra/core/tool-provider';
-import type { BaseToolProviderOptions } from '@mastra/core/tool-provider';
 import type { ToolAction } from '@mastra/core/tools';
 import { MASTRA_RESOURCE_ID_KEY } from '@mastra/core/request-context';
 
@@ -35,16 +35,17 @@ export interface ComposioToolProviderConfig extends BaseToolProviderOptions {
 
 const COMPOSIO_PROVIDER_ID = 'composio' as const;
 const DEFAULT_INTERNAL_USER_ID = 'default';
+const COMPOSIO_CONNECTION_MANAGEMENT_TOOLS = new Set(['COMPOSIO_MANAGE_CONNECTIONS', 'COMPOSIO_WAIT_FOR_CONNECTIONS']);
 
 /**
  * Composio implementation of the {@link BaseToolProvider} contract.
  *
  * Discovery (`listAllToolkits`, `listAllTools`) uses the raw Composio
  * client. Runtime (`resolveToolsVNext`) uses {@link MastraProvider} so resolved
- * tools are already in `createTool()` shape; each tool gets a
- * `beforeExecute` modifier that injects
- * `connectedAccountId = connectionId`, and `outputSchema` is cleared
- * because Composio returns union schemas that Mastra's runtime rejects.
+ * tools are already in `createTool()` shape. Ordinary tools use Composio's
+ * direct-tools API, while connection-management tools use a caller-scoped
+ * Tool Router session. `outputSchema` is cleared because Composio returns
+ * union schemas that Mastra's runtime rejects.
  *
  * Allowlist filtering is layered by {@link BaseToolProvider}; this class
  * never reads `allowedToolkits` / `allowedTools` directly.
@@ -165,41 +166,73 @@ export class ComposioToolProvider extends BaseToolProvider {
   async resolveToolsVNext(opts: ResolveToolsOpts): Promise<Record<string, ToolAction<any, any, any>>> {
     if (opts.toolSlugs.length === 0) return {};
 
-    // For author-bound connections, the runtime fan-out passes the agent's
-    // author id explicitly. Use it as the Composio user bucket so the pin
-    // resolves for any invoker (not just the original author).
-    const internalUserId =
-      opts.authorId && opts.authorId.length > 0 ? opts.authorId : resolveInternalUserId(opts.requestContext);
+    // Caller-supplied scope is always owned by the authenticated caller's
+    // resource id. Author-bound connections use the agent author's id so the
+    // same pin resolves for every invoker of that agent.
+    const callerPrincipalId =
+      opts.scope === 'caller-supplied'
+        ? resolveInternalUserId(opts.requestContext)
+        : opts.authorId && opts.authorId.length > 0
+          ? opts.authorId
+          : resolveInternalUserId(opts.requestContext);
     const composio = this.getMastraClient();
+    const sessionToolSlugs = opts.toolSlugs.filter(slug => COMPOSIO_CONNECTION_MANAGEMENT_TOOLS.has(slug));
+    const directToolSlugs = opts.toolSlugs.filter(slug => !COMPOSIO_CONNECTION_MANAGEMENT_TOOLS.has(slug));
+    const mastraTools: MastraToolCollection = {};
 
-    const modifiers = {
-      // `connectedAccountId` is not threaded through Composio's `execute`
-      // option bag in @composio/mastra; the only documented per-call hook
-      // is `beforeExecute`, which receives the params object that flows
-      // into the API call. Mutating `params.connectedAccountId` routes
-      // the call to a specific account.
-      beforeExecute: ({ params }: { params: { connectedAccountId?: string; userId?: string } }) => {
-        // Under `caller-supplied` scope the user bucket (`internalUserId`,
-        // resolved from the host app's resourceId) already scopes the call to
-        // the right tenant. Pinning a specific `connectedAccountId` would defeat
-        // Composio's per-user-bucket auto-resolve, so we let Composio pick the
-        // connected account within the bucket instead of forcing one.
-        if (opts.scope !== 'caller-supplied') {
-          params.connectedAccountId = opts.connectionId;
-        }
-        return params;
-      },
-    };
+    if (directToolSlugs.length > 0) {
+      const modifiers = {
+        // `connectedAccountId` is not threaded through Composio's `execute`
+        // option bag in @composio/mastra; the only documented per-call hook
+        // is `beforeExecute`, which receives the params object that flows
+        // into the API call. Mutating `params.connectedAccountId` routes
+        // the call to a specific account.
+        beforeExecute: ({ params }: { params: { connectedAccountId?: string; userId?: string } }) => {
+          // Under `caller-supplied` scope the user bucket (`callerPrincipalId`,
+          // resolved from the host app's resourceId) already scopes the call to
+          // the right tenant. Pinning a specific `connectedAccountId` would defeat
+          // Composio's per-user-bucket auto-resolve, so we let Composio pick the
+          // connected account within the bucket instead of forcing one.
+          if (opts.scope !== 'caller-supplied') {
+            params.connectedAccountId = opts.connectionId;
+          }
+          return params;
+        },
+      };
 
-    const mastraTools = (await composio.tools.get(
-      internalUserId,
-      { tools: opts.toolSlugs },
-      modifiers,
-    )) as MastraToolCollection;
+      Object.assign(
+        mastraTools,
+        (await composio.tools.get(callerPrincipalId, { tools: directToolSlugs }, modifiers)) as MastraToolCollection,
+      );
+    }
+
+    if (sessionToolSlugs.length > 0) {
+      const selectedToolkits = [
+        ...new Set(
+          Object.values(opts.toolMeta)
+            .map(meta => meta.toolkit)
+            .filter(
+              (toolkit): toolkit is string =>
+                typeof toolkit === 'string' && toolkit.toLowerCase() !== COMPOSIO_PROVIDER_ID,
+            ),
+        ),
+      ];
+      const session = await composio.sessions.create(callerPrincipalId, {
+        ...(selectedToolkits.length > 0 ? { toolkits: selectedToolkits } : {}),
+        manageConnections: { enable: true, waitForConnections: true },
+        sandbox: { enable: false },
+      });
+      const sessionTools = (await session.tools()) as MastraToolCollection;
+
+      for (const slug of sessionToolSlugs) {
+        const tool = sessionTools[slug];
+        if (tool) mastraTools[slug] = tool;
+      }
+    }
 
     const result: Record<string, ToolAction<any, any, any>> = {};
 
-    for (const [key, tool] of Object.entries(mastraTools ?? {})) {
+    for (const [key, tool] of Object.entries(mastraTools)) {
       if (!tool) continue;
       const slug = (tool as { id?: string }).id ?? key;
 

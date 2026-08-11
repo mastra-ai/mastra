@@ -1,6 +1,6 @@
 {
   "name": "@internal/ai-sdk-v5",
-  "version": "0.0.61",
+  "version": "0.0.68",
   "description": "",
   "type": "module",
   "private": true,
@@ -29,31 +29,32 @@
     }
   },
   "scripts": {
-    "build": "tsup --silent --config tsup.config.ts",
+    "build": "tsdown --silent --config tsdown.config.ts",
     "test": "vitest run",
-    "lint": "eslint ."
+    "lint": "oxlint . && eslint .",
+    "lint:fix": "oxlint --fix . && eslint --fix ."
   },
   "keywords": [],
   "author": "",
   "license": "Apache-2.0",
   "devDependencies": {
-    "@ai-sdk/gateway": "2.0.115",
+    "@ai-sdk/gateway": "2.0.120",
     "@ai-sdk/provider": "2.0.3",
     "@ai-sdk/provider-utils": "3.0.30",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
-    "@microsoft/api-extractor": "^7.58.9",
+    "@microsoft/api-extractor": "^7.58.12",
     "@opentelemetry/api": "^1.9.1",
     "@types/json-schema": "^7.0.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "ai": "^5.0.216",
+    "ai": "^5.0.221",
     "eslint": "^10.7.0",
     "json-schema": "^0.4.0",
     "msw": "^2.12.11",
     "resolve.exports": "^2.0.3",
     "ts-morph": "^27.0.2",
-    "tsup": "^8.5.1",
+    "tsdown": "0.22.9",
     "typescript": "catalog:",
     "zod": "catalog:"
   },

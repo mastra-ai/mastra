@@ -146,7 +146,7 @@ export function CreateDatasetDialog({
             {targetType && !showCustomSchema ? (
               <button
                 type="button"
-                className="text-xs text-neutral3 hover:text-accent1 transition-colors"
+                className="text-neutral3 hover:text-accent1 text-xs transition-colors"
                 onClick={() => setShowCustomSchema(true)}
               >
                 + Custom schema

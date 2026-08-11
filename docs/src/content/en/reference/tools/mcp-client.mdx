@@ -81,6 +81,14 @@ Each server in the `servers` map is configured using the `MastraMCPServerDefinit
     description: 'For Stdio servers: Environment variables to set for the command.',
   },
   {
+    name: 'inheritDefaultEnv',
+    type: 'boolean',
+    isOptional: true,
+    defaultValue: 'true',
+    description:
+      "For Stdio servers: Whether the subprocess environment starts from the MCP SDK's default inherited environment. The default is a curated whitelist, not the full process environment: on POSIX it inherits HOME, LOGNAME, PATH, SHELL, TERM, and USER; on Windows it inherits APPDATA, HOMEDRIVE, HOMEPATH, LOCALAPPDATA, PATH, PROCESSOR_ARCHITECTURE, SYSTEMDRIVE, SYSTEMROOT, TEMP, USERNAME, and USERPROFILE. When set to `false`, only the variables explicitly listed in `env` are passed to the subprocess. Note that a subprocess without PATH may fail to spawn commands that are not absolute paths.",
+  },
+  {
     name: 'url',
     type: 'URL',
     isOptional: true,
@@ -105,6 +113,13 @@ Each server in the `servers` map is configured using the `MastraMCPServerDefinit
     isOptional: true,
     description:
       'For HTTP servers: Custom fetch implementation used for all network requests. Receives an optional third `requestContext` parameter containing request-scoped data (e.g., authentication cookies, bearer tokens) from the incoming request. When provided, this function will be used for all HTTP requests, allowing you to add dynamic authentication headers, forward request-scoped credentials to the MCP server, customize request behavior per-request, or intercept and modify requests/responses. When `fetch` is provided, `requestInit`, `eventSourceInit`, and `authProvider` become optional, as you can handle these concerns within your custom fetch function.',
+  },
+  {
+    name: 'allowedHosts',
+    type: 'string[]',
+    isOptional: true,
+    description:
+      'For HTTP servers: Opt-in allowlist of hosts the client may contact on behalf of this server. Each entry is matched against the URL host (hostname plus port when the URL carries a non-default port), for example `"api.example.com"` or `"localhost:8080"`. Matching is exact and case-insensitive on the hostname; wildcards are not supported and the URL scheme is not checked. An empty array denies all requests. When unset, no restriction is applied. See the Security section below for enforcement details.',
   },
   {
     name: 'logger',
@@ -227,7 +242,7 @@ const mcp = new MCPClient({
 })
 ```
 
-Per the MCP specification, **clients MUST consider tool annotations to be untrusted unless they come from trusted servers**. Annotations are advisory hints, not a security boundary — a malicious or buggy server can claim a tool is read-only when it isn't. Only use annotations to relax approval requirements for servers you trust.
+Per the MCP specification: **clients MUST consider tool annotations to be untrusted unless they come from trusted servers**. Annotations are advisory hints and provide no security boundary. A malicious or buggy server can claim a tool is read-only when it isn't. Only use annotations to relax approval requirements for servers you trust.
 
 The same annotations are also exposed on the tools returned by `listTools()` and `listToolsets()` under `tool.mcp.annotations`, so you can inspect them when wiring tools into an agent.
 
@@ -261,6 +276,56 @@ When `forwardInstructions` is omitted (the default), instructions are still cach
 
 > **Security note:** server instructions are forwarded verbatim (subject only to length truncation) into the agent's system prompt. A malicious or compromised MCP server can use them to inject instructions the agent will treat as trusted system guidance. Only enable `forwardInstructions` for servers you trust, and prefer reviewing instructions with `getServerInstructions()` before forwarding instructions from third-party servers.
 
+## Security
+
+### Subprocess environment for Stdio servers
+
+Stdio subprocesses don't inherit the full parent process environment. By default the subprocess environment starts from the MCP SDK's curated whitelist (POSIX: `HOME`, `LOGNAME`, `PATH`, `SHELL`, `TERM`, `USER`; Windows: `APPDATA`, `HOMEDRIVE`, `HOMEPATH`, `LOCALAPPDATA`, `PATH`, `PROCESSOR_ARCHITECTURE`, `SYSTEMDRIVE`, `SYSTEMROOT`, `TEMP`, `USERNAME`, `USERPROFILE`), merged with any variables you set in `env`. Sensitive variables such as API keys aren't inherited unless you pass them explicitly.
+
+For stricter isolation, set `inheritDefaultEnv: false` so only your configured `env` entries reach the subprocess:
+
+```typescript
+const mcp = new MCPClient({
+  servers: {
+    myTool: {
+      command: '/usr/local/bin/my-mcp-server',
+      inheritDefaultEnv: false,
+      env: { MY_TOOL_API_KEY: process.env.MY_TOOL_API_KEY! },
+    },
+  },
+})
+```
+
+Variables you place in `env` are forwarded verbatim, so treat server configurations that come from untrusted sources (for example, user-supplied config files) as untrusted input.
+
+### Restricting outbound hosts with `allowedHosts`
+
+When HTTP server URLs come from untrusted configuration, an attacker-controlled URL can point the client at internal services (server-side request forgery). Set `allowedHosts` on such servers to restrict which hosts the client will contact:
+
+```typescript
+const mcp = new MCPClient({
+  servers: {
+    remote: {
+      url: new URL(untrustedConfig.serverUrl),
+      allowedHosts: ['api.example.com'],
+    },
+  },
+})
+```
+
+Enforcement details:
+
+- On the default fetch path, requests to disallowed hosts, including every redirect hop, are blocked **before** they're sent. Redirects are followed manually (up to 5 hops) so each hop is validated, and the `Authorization` header isn't carried across hops to a different origin (any scheme, host, or port change drops it, matching standard fetch behavior).
+- When you supply a custom `fetch` (or a custom `eventSourceInit.fetch`), the initial URL is still checked before the request, but redirect hops are validated **after the fact** using `response.url`: the outbound hop may occur, and the response is discarded when its final URL points at a disallowed host. A hand-built `Response` with an empty `response.url` skips this post-hoc check.
+- OAuth requests made through `authProvider` (authorization server metadata discovery, token exchange, refresh) are also validated. If your authorization server runs on a different host than the MCP server, add that host to `allowedHosts` too.
+- A blocked host fails the connection with a clear error and is never retried by the reconnect logic.
+
+`allowedHosts` is intentionally minimal: it matches exact hosts and doesn't support wildcards or scheme checks. If you need richer policy (scheme checks, IP-range rules), supply a custom `fetch` implementation, which is invoked for every request the client makes.
+
+### Treat tool responses as untrusted input
+
+Tool results returned by MCP servers flow into your agent's context as model input. A malicious or compromised server can use tool output for prompt injection. The transport client doesn't sanitize tool responses: sanitization policy belongs at the agent layer, where Mastra's [input and output processors](/docs/agents/processors) let you inspect, transform, or block content before and after it reaches the model. Combine this with `requireToolApproval` and the `forwardInstructions` security note above when working with third-party servers.
+
 ## Methods
 
 ### `listTools()`
@@ -286,12 +351,63 @@ console.log(errors)
 ### `listToolsets()`
 
 Returns an object mapping namespaced tool names (in the format `serverName.toolName`) to their tool implementations.
-Intended to be passed dynamically into the generate or stream method.
+Intended to be passed at runtime into the generate or stream method.
 
 ```typescript
 const res = await agent.stream(prompt, {
   toolsets: await mcp.listToolsets(),
 })
+```
+
+### `listToolDefinitions()`
+
+Returns every server's tools as plain, serializable definitions, grouped by server name and keyed by the server's own tool name (without the `serverName_toolName` namespacing that `listTools()` applies).
+
+Unlike `listTools()`, the result contains no functions or references to a live client, so it can be passed through `JSON.stringify` and cached in Redis, a database, or a build artifact. Each definition holds the data from the MCP `tools/list` response (name, description, input schema, output schema, annotations, and `_meta`), plus the server name, version, and instructions captured at discovery time.
+
+```typescript
+const definitions = await mcp.listToolDefinitions()
+
+await cache.set('mcp-tools', JSON.stringify(definitions))
+```
+
+### `listToolDefinitionsWithErrors()`
+
+Like `listToolDefinitions()`, but also returns per-server errors for servers that failed to connect. Use this when caching a catalog, so you don't persist a partial manifest that omits a server that was down at discovery time.
+
+```typescript
+const { definitions, errors } = await mcp.listToolDefinitionsWithErrors()
+
+if (Object.keys(errors).length === 0) {
+  await cache.set('mcp-tools', JSON.stringify(definitions))
+}
+```
+
+### `toolFromDefinition()`
+
+Rebuilds a single executable tool from a cached definition. No connection is opened here. The client connects lazily, the first time the tool is executed.
+
+The returned tool behaves exactly like one from `listTools()`, with the same strict-mode metadata, approval policy, structured content handling, tool error handling, and reconnect behavior.
+
+```typescript
+const definitions = JSON.parse(await cache.get('mcp-tools'))
+
+const tool = await mcp.toolFromDefinition({
+  serverName: 'weather',
+  definition: definitions.weather.getForecast,
+})
+```
+
+### `toolsFromDefinitions()`
+
+Rebuilds an entire cached catalog into a namespaced tool map, without connecting. This is the cached counterpart to `listTools()`. It produces the same `serverName_toolName` keys, so you can reconstruct an agent's tool map on a cold start, and connections only open for the servers whose tools are actually called.
+
+Servers present in the catalog but no longer configured on the client are skipped, so a stale cached manifest degrades gracefully.
+
+```typescript
+const definitions = JSON.parse(await cache.get('mcp-tools'))
+
+new Agent({ id: 'agent', tools: await mcp.toolsFromDefinitions({ definitions }) })
 ```
 
 ### `getServerInstructions()`
@@ -331,9 +447,9 @@ getServerAuthState(serverName: string): 'needs-auth' | 'authorized' | undefined
 
 ### `cancelAuthentication()`
 
-Cancels an in-progress `authenticate()` flow for a server, so an abandoned browser authorization does not leave the client waiting indefinitely. It aborts the flow (including its setup phase, before the callback server binds), closes the local callback server if one is listening, and the pending `authenticate()` call rejects. Returns `true` if a flow was cancelled, or `false` when no flow was in progress.
+Cancels an in-progress `authenticate()` flow for a server, so an abandoned browser authorization doesn't leave the client waiting indefinitely. It aborts the flow (including its setup phase, before the callback server binds), closes the local callback server if one is listening, and the pending `authenticate()` call rejects. Returns `true` if a flow was cancelled, or `false` when no flow was in progress.
 
-The resulting `getServerAuthState()` depends on how far the flow had progressed: a flow cancelled after the server rejected the connection with `401` stays at `'needs-auth'` and can be retried immediately, while a flow cancelled during the setup phase — before any connection was attempted — leaves the state unchanged (typically `undefined`).
+The resulting `getServerAuthState()` depends on how far the flow progressed. A flow cancelled after a `401` rejection stays at `'needs-auth'` and can be retried immediately. Cancellation during setup leaves the state unchanged (typically `undefined`) if no connection was attempted.
 
 ```typescript prettier:false
 async cancelAuthentication(serverName: string): Promise<boolean>
@@ -428,7 +544,7 @@ for (const serverName in templatesByServer) {
 
 #### `resources.read(serverName: string, uri: string)`
 
-Reads the content of a specific resource from a named server.
+Reads the content of a specific resource from a server.
 
 ```typescript prettier:false
 async read(serverName: string, uri: string): Promise<ReadResourceResult>
@@ -446,7 +562,7 @@ console.log('Current weather:', content.contents[0].text)
 
 #### `resources.subscribe(serverName: string, uri: string)`
 
-Subscribes to updates for a specific resource on a named server.
+Subscribes to updates for a specific resource on a server.
 
 ```typescript prettier:false
 async subscribe(serverName: string, uri: string): Promise<object>
@@ -460,7 +576,7 @@ await mcpClient.resources.subscribe('myWeatherServer', 'weather://current')
 
 #### `resources.unsubscribe(serverName: string, uri: string)`
 
-Unsubscribes from updates for a specific resource on a named server.
+Unsubscribes from updates for a specific resource on a server.
 
 ```typescript prettier:false
 async unsubscribe(serverName: string, uri: string): Promise<object>
@@ -492,7 +608,7 @@ mcpClient.resources.onUpdated('myWeatherServer', params => {
 
 #### `resources.onListChanged(serverName: string, handler: () => void)`
 
-Sets a notification handler that will be called when the overall list of available resources changes on a specific server.
+Sets a notification handler that will be called when the list of available resources changes on a specific server.
 
 ```typescript prettier:false
 async onListChanged(serverName: string, handler: () => void): Promise<void>
@@ -950,7 +1066,7 @@ Give each server its own `MCPOAuthClientProvider` instance. A provider holds per
 
 ### Interactive browser authentication
 
-When a server rejects a connection because authorization is required, the client records a `'needs-auth'` state instead of failing outright. Calling `authenticate()` then completes the flow end to end: it starts a one-shot callback server on the provider's loopback redirect URL (falling back to the next sequential ports when it is in use), lets the SDK run discovery and dynamic client registration, delivers the authorization URL through `onRedirectToAuthorization` — open it in the user's browser — and finishes the token exchange once the browser returns the authorization code:
+When a server rejects a connection because authorization is required, the client records a `'needs-auth'` state instead of failing outright. Calling `authenticate()` completes the flow. It starts a one-shot callback server on the provider's loopback redirect URL, falling back to the next sequential ports when it's in use. The SDK then performs discovery and client registration at runtime. `onRedirectToAuthorization` receives the authorization URL so your application can open it in the user's browser. The token exchange finishes after the browser returns the authorization code:
 
 ```typescript
 import { MCPClient, MCPOAuthClientProvider } from '@mastra/mcp'
@@ -987,9 +1103,9 @@ try {
 }
 ```
 
-Concurrent `authenticate()` calls for the same server join the pending flow; different servers authenticate independently. With valid stored tokens the call simply reconnects without opening a browser.
+Concurrent `authenticate()` calls for the same server join the pending flow. Different servers authenticate independently. With valid stored tokens the call reconnects without opening a browser.
 
-Hosts that drive the flow themselves can capture the authorization code with the exported `createOAuthCallbackServer` helper, which binds a one-shot loopback server, validates the OAuth `state` parameter, and resolves with the code. It creates a plain HTTP server, so it is only for local loopback redirects. Web applications that use an HTTPS redirect URL must host their own callback endpoint and drive the provider directly rather than using this helper:
+Hosts that drive the flow themselves can capture the authorization code with the exported `createOAuthCallbackServer` helper, which binds a one-shot loopback server, validates the OAuth `state` parameter, and resolves with the code. It creates a plain HTTP server, so it's only for local loopback redirects. Web applications that use an HTTPS redirect URL must host their own callback endpoint and drive the provider directly rather than using this helper:
 
 ```typescript
 import { createOAuthCallbackServer, getCallbackUrlCandidates } from '@mastra/mcp'
@@ -1242,9 +1358,9 @@ MCPClient handles server connections gracefully:
 1. Graceful server shutdown to prevent error messages during development
 1. Proper cleanup of resources when disconnecting
 
-## Using custom fetch for dynamic authentication
+## Using custom fetch for runtime-defined authentication
 
-For HTTP servers, you can provide a custom `fetch` function to handle dynamic authentication, request interception, or other custom behavior. This is particularly useful when you need to refresh tokens on each request or forward user credentials from the incoming request to the MCP server.
+For HTTP servers, you can provide a custom `fetch` function to handle runtime-defined authentication or request interception. It can also handle other custom behavior. This is particularly useful when you need to refresh tokens on each request or forward user credentials from the incoming request to the MCP server.
 
 The custom `fetch` function receives an optional third `requestContext` parameter, which provides access to request-scoped data (e.g., authentication cookies, bearer tokens) set by middleware or passed during agent/tool execution. The `requestContext` is `null` during the initial connection handshake.
 

@@ -97,7 +97,7 @@ Mastra provides access to a logger instance via the `mastra.getLogger()` method,
 
 ### Logging from workflow steps
 
-Within a workflow step, access the logger via the `mastra` parameter inside the `execute` function. This allows you to log messages relevant to the step's execution.
+Within a workflow step, access the logger via the `mastra` parameter inside the `execute` function. You can log messages relevant to the step's execution.
 
 ```typescript {6-7} title="src/mastra/workflows/test-workflow.ts" prettier:false
 import { createWorkflow, createStep } from "@mastra/core/workflows";

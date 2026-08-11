@@ -8,6 +8,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { z } from 'zod';
+import { ScorerRunError } from '../../../evals/base';
 import type { MastraScorer } from '../../../evals/base';
 import type { Trajectory } from '../../../evals/types';
 import type { Mastra } from '../../../mastra';
@@ -263,6 +264,61 @@ describe('steps scorer config — per-step dispatch', () => {
     expect(echoResult?.score).toBe(0.5);
     expect(echoResult?.targetScope).toBe('span');
     expect(echoResult?.stepId).toBe('echo');
+  });
+
+  it('retains completed output from a failed step scorer without persisting its recovered score', async () => {
+    const workflow = buildTwoStepWorkflow();
+    (mastra.getWorkflowById as ReturnType<typeof vi.fn>).mockReturnValue(workflow);
+    (mastra.getWorkflow as ReturnType<typeof vi.fn>).mockReturnValue(workflow);
+
+    const recoveredFailure = new ScorerRunError({
+      scorerId: 'partial-step-scorer',
+      steps: ['generateScore', 'generateReason'],
+      failedStep: 'generateReason',
+      completedSteps: ['generateScore'],
+      result: {
+        output: { upper: 'HELLO' },
+        runId: 'partial-step-run',
+        score: 0,
+        generateScorePrompt: 'score the upper-case output',
+      },
+      cause: new Error('step reason failed'),
+    });
+    const partialScorer = {
+      id: 'partial-step-scorer',
+      name: 'partial-step-scorer',
+      description: '',
+      type: 'agent' as const,
+      run: vi.fn().mockRejectedValue(recoveredFailure),
+    } as unknown as MastraScorer<any, any, any, any>;
+    const workingScorer = createAgentScorer('working-step-scorer');
+
+    const result = await runExperiment(mastra, {
+      datasetId,
+      targetType: 'workflow',
+      targetId: 'two-step-wf',
+      scorers: { steps: { upper: [partialScorer, workingScorer] } } as any,
+    });
+
+    const scores = result.results[0]?.scores ?? [];
+    expect(scores.find(score => score.scorerId === 'partial-step-scorer')).toMatchObject({
+      score: 0,
+      reason: null,
+      error: 'Scorer Run Failed: step reason failed',
+      failedStep: 'generateReason',
+      completedSteps: ['generateScore'],
+      targetScope: 'span',
+      stepId: 'upper',
+    });
+    expect(scores.find(score => score.scorerId === 'working-step-scorer')).toMatchObject({
+      score: 1,
+      error: null,
+      stepId: 'upper',
+    });
+    const scoreStoreLookups = (storage.getStore as ReturnType<typeof vi.fn>).mock.calls.filter(
+      ([domain]) => domain === 'scores',
+    );
+    expect(scoreStoreLookups).toHaveLength(1);
   });
 
   it('skips step scorers for steps that did not run successfully', async () => {

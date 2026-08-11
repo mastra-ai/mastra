@@ -7,7 +7,7 @@ packages:
 
 # MastraBrowser class
 
-The `MastraBrowser` class is the abstract base class for browser automation providers. It defines the common interface for launching browsers, managing thread isolation, streaming screencasts, and handling input events.
+The `MastraBrowser` class is the abstract base class for browser automation providers. Its common interface covers browser launch and thread isolation, plus screencast streaming and input events.
 
 You don't instantiate `MastraBrowser` directly. Instead, use a provider implementation:
 
@@ -49,8 +49,9 @@ export const browserAgent = new Agent({
   },
   {
     name: 'viewport',
-    type: '{ width: number; height: number }',
-    description: 'Browser viewport dimensions. Controls the size of the browser window.',
+    type: "{ width: number; height: number } | 'window'",
+    description:
+      "Browser viewport dimensions. Controls the size of the browser window. Set to 'window' to match the real browser window instead of a fixed size, supported by the agent-browser provider and by Stagehand when connecting over CDP.",
     isOptional: true,
     defaultValue: '{ width: 1280, height: 720 }',
   },
@@ -235,7 +236,7 @@ const hasSession = browser.hasThreadSession('thread-123')
 
 #### `closeThreadSession(threadId)`
 
-Closes a specific thread's browser session. For 'thread' scope, this closes that thread's browser instance. For 'shared' scope, this clears the thread's state.
+Closes a specific thread's browser session. With 'thread' scope, it closes that thread's browser instance. With 'shared' scope, it clears the thread state.
 
 ```typescript
 await browser.closeThreadSession('thread-123')
@@ -245,7 +246,7 @@ await browser.closeThreadSession('thread-123')
 
 #### `getTools()`
 
-Returns the browser tools for use with agents. Each provider returns different tools based on its paradigm.
+Returns the browser tools for use with agents. Each provider returns different tools based on its model.
 
 ```typescript
 const tools = browser.getTools()

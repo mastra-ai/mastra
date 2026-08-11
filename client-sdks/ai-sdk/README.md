@@ -117,6 +117,55 @@ export async function POST(req: Request) {
 }
 ```
 
+### Smooth agent streams
+
+Use the experimental `smoothStream()` transform to pace uneven provider deltas before they are converted to AI SDK UI chunks. The transform only reshapes text and reasoning deltas; tool calls, sources, metadata, and stream control events keep their ordering.
+
+```typescript
+import { handleChatStream, smoothStream } from '@mastra/ai-sdk';
+import { createUIMessageStreamResponse } from 'ai';
+import { mastra } from '@/src/mastra';
+
+export async function POST(req: Request) {
+  const params = await req.json();
+  const stream = await handleChatStream({
+    mastra,
+    agentId: 'weatherAgent',
+    params,
+    experimentalTransform: smoothStream({
+      delayInMs: 20,
+      chunking: 'word',
+    }),
+  });
+
+  return createUIMessageStreamResponse({ stream });
+}
+```
+
+The transform can also be configured once for a registered route:
+
+```typescript
+chatRoute({
+  path: '/chat',
+  agent: 'weatherAgent',
+  experimentalTransform: smoothStream({ delayInMs: 20 }),
+});
+```
+
+`handleChatStream()` also accepts the transform in `defaultOptions`. Transform factories are reusable, so the same route configuration safely creates a fresh `TransformStream` for every request.
+
+Pass the same factory directly to `Agent.stream()` when consuming `fullStream` without the AI SDK route bridge:
+
+```typescript
+const result = await agent.stream('Explain how rainbows form', {
+  experimentalTransform: smoothStream({ delayInMs: 20 }),
+});
+
+for await (const chunk of result.fullStream) {
+  // Text and reasoning deltas are smoothed; other chunks preserve their order.
+}
+```
+
 ### handleWorkflowStream
 
 ```typescript

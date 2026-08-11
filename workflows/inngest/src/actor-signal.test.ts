@@ -387,9 +387,37 @@ describe('@mastra/inngest actor signal threading (hermetic)', () => {
     const engine = new InngestExecutionEngine(mastra, fakeStep, 0, {});
     const pubsub: any = { publish: vi.fn().mockResolvedValue(undefined) };
 
+    // Model a genuinely suspended child: the parent's stepResults carry the
+    // child runId, and the child's snapshot records its suspended step — this
+    // is the state the engine reads to rebuild the nested resume path.
+    const nestedRunId = 'nested-run-1';
+    const store = await mastra.getStorage()!.getStore('workflows');
+    await store!.persistWorkflowSnapshot({
+      workflowName: 'nested-resume-workflow',
+      runId: nestedRunId,
+      snapshot: {
+        runId: nestedRunId,
+        serializedStepGraph: [],
+        status: 'suspended',
+        value: {},
+        context: { input: { value: 'ok' } },
+        activePaths: [],
+        suspendedPaths: { 'nested-step': [0] },
+        activeStepsPath: {},
+        resumeLabels: {},
+        waitingPaths: {},
+        timestamp: Date.now(),
+      } as any,
+    });
+
     const result = await engine.executeWorkflowStep({
       step: nestedWorkflow as any,
-      stepResults: {},
+      stepResults: {
+        'nested-resume-workflow': {
+          status: 'suspended',
+          suspendPayload: { __workflow_meta: { runId: nestedRunId } },
+        },
+      } as any,
       executionContext: {
         workflowId: 'parent',
         runId: 'parent-run',

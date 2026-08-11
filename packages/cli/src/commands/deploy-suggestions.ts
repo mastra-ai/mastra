@@ -22,7 +22,9 @@ export interface DeployDiagnosis {
 }
 
 export type DeployDiagnosisLookup =
-  { state: 'healthy' } | { state: 'missing' } | { state: 'ready'; diagnosis: DeployDiagnosis };
+  | { state: 'healthy' }
+  | { state: 'missing' }
+  | { state: 'ready'; diagnosis: DeployDiagnosis };
 
 export interface PrintSuggestionsOptions {
   logsUrl?: string;

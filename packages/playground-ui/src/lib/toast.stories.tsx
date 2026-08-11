@@ -21,7 +21,7 @@ type Story = StoryObj;
 
 const Section = ({ title, children }: { title: string; children: ReactNode }) => (
   <div className="flex flex-col gap-2">
-    <h3 className="text-xs font-medium tracking-wide text-neutral3 uppercase">{title}</h3>
+    <h3 className="text-neutral3 text-xs font-medium tracking-wide uppercase">{title}</h3>
     <div className="flex flex-wrap items-center gap-2">{children}</div>
   </div>
 );
@@ -33,7 +33,7 @@ const fakeRequest = (shouldFail = false, ms = 1500) =>
 
 export const Showcase: Story = {
   render: () => (
-    <div className="w-105 flex flex-col gap-6">
+    <div className="flex w-105 flex-col gap-6">
       <Section title="Variants">
         <Button variant="outline" onClick={() => toast('Default toast')}>
           Default

@@ -166,26 +166,36 @@ export class ModelsDevGateway extends MastraModelGateway {
       const hasApiAndEnv = providerInfo.api && providerInfo.env && providerInfo.env.length > 0;
 
       if (isOpenAICompatible || hasInstalledPackage || hasApiAndEnv) {
-        // Get model IDs from the models object
-        // Filter out deprecated models before collecting model IDs
-        const activeModels = Object.entries(providerInfo.models).filter(
-          ([, modelInfo]) => modelInfo?.status !== 'deprecated',
-        );
-        const modelIds = activeModels.map(([modelId]) => modelId).sort();
+        // Get model IDs from the models object.
+        //
+        // Deprecated models are retained rather than dropped. On models.dev,
+        // `status: 'deprecated'` means "still served, scheduled for retirement" —
+        // not "removed". Filtering them out here would break existing users: the
+        // generated model-id union would stop type-checking their configured model,
+        // and the model would silently lose its capability flags and per-model
+        // endpoint/shape overrides (i.e. it would route with provider defaults).
+        // They are reported separately via `deprecatedModels` so surfaces that
+        // offer models for *new* selection can hide or mark them.
+        const allModels = Object.entries(providerInfo.models);
+        const modelIds = allModels.map(([modelId]) => modelId).sort();
+        const deprecatedModelIds = allModels
+          .filter(([, modelInfo]) => modelInfo?.status === 'deprecated')
+          .map(([modelId]) => modelId)
+          .sort();
 
         // Collect model IDs that support attachments
-        const attachmentModels = activeModels
+        const attachmentModels = allModels
           .filter(([, modelInfo]) => modelInfo?.attachment === true)
           .map(([modelId]) => modelId)
           .sort();
 
         // Collect model IDs that support temperature sampling
-        const temperatureModels = activeModels
+        const temperatureModels = allModels
           .filter(([, modelInfo]) => modelInfo?.temperature === true)
           .map(([modelId]) => modelId)
           .sort();
 
-        const structuredOutputModels = activeModels
+        const structuredOutputModels = allModels
           .filter(([, modelInfo]) => modelInfo?.structured_output === true)
           .map(([modelId]) => modelId)
           .sort();
@@ -194,7 +204,7 @@ export class ModelsDevGateway extends MastraModelGateway {
         // individual models over a different endpoint or request shape than the
         // provider default (e.g. OpenAI Responses vs chat-completions).
         const modelOverrides: Record<string, ModelProviderOverride> = {};
-        for (const [modelId, modelInfo] of activeModels) {
+        for (const [modelId, modelInfo] of allModels) {
           const ov = modelInfo?.provider;
           if (ov && (ov.api || ov.shape || ov.npm)) {
             modelOverrides[modelId] = { api: ov.api, shape: ov.shape, npm: ov.npm };
@@ -240,6 +250,7 @@ export class ModelsDevGateway extends MastraModelGateway {
               ? providerInfo.npm
               : undefined),
           modelOverrides: Object.keys(modelOverrides).length > 0 ? modelOverrides : undefined,
+          deprecatedModels: deprecatedModelIds.length > 0 ? deprecatedModelIds : undefined,
         };
         if (attachmentModels.length > 0) {
           this.attachmentCapabilities[normalizedId] = attachmentModels;
@@ -357,7 +368,7 @@ export class ModelsDevGateway extends MastraModelGateway {
           modelId,
         ) as unknown as GatewayLanguageModel;
       case 'xai':
-        return createXai({ apiKey, baseURL, headers: mastraHeaders })(modelId);
+        return createXai({ apiKey, baseURL, headers: mastraHeaders }).responses(modelId);
       case 'deepseek':
         return createDeepSeek({ apiKey, baseURL, headers: mastraHeaders })(modelId);
       case 'perplexity':

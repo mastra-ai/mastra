@@ -341,10 +341,14 @@ export class BraintrustExporter extends TrackingExporter<
       return;
     }
 
-    // Handle thread data accumulation for MODEL_STEP and TOOL_CALL spans
+    // Handle thread data accumulation for MODEL_STEP and tool spans.
+    // PROVIDER_TOOL_CALL is excluded: provider results are not merged into the
+    // reconstructed thread output. Since @mastra/core parents these spans under
+    // the delivering MODEL_STEP, findModelGenerationAncestor would now succeed,
+    // so accumulating them is possible as a follow-up.
     if (span.type === SpanType.MODEL_STEP) {
       this.accumulateModelStepData(span, traceData);
-    } else if (span.type === SpanType.TOOL_CALL) {
+    } else if (span.type === SpanType.TOOL_CALL || span.type === SpanType.MCP_TOOL_CALL) {
       this.accumulateToolCallResult(span, traceData);
     }
 
@@ -409,7 +413,8 @@ export class BraintrustExporter extends TrackingExporter<
 
     // Extract step data from MODEL_STEP output and attributes
     const output = span.output as
-      { text?: string; toolCalls?: Array<{ toolCallId: string; toolName: string; args: unknown }> } | undefined;
+      | { text?: string; toolCalls?: Array<{ toolCallId: string; toolName: string; args: unknown }> }
+      | undefined;
     const attributes = span.attributes as { stepIndex?: number } | undefined;
 
     const stepData: ThreadStepData = {
@@ -427,8 +432,8 @@ export class BraintrustExporter extends TrackingExporter<
   }
 
   /**
-   * Store TOOL_CALL result in parent MODEL_GENERATION's pendingToolResults.
-   * Called when a TOOL_CALL span ends.
+   * Store a tool result (TOOL_CALL or MCP_TOOL_CALL) in parent MODEL_GENERATION's pendingToolResults.
+   * Called when the tool span ends.
    * Results are merged into threadData when MODEL_GENERATION ends.
    */
   private accumulateToolCallResult(span: AnyExportedSpan, traceData: BraintrustTraceData): void {
@@ -437,12 +442,7 @@ export class BraintrustExporter extends TrackingExporter<
       return;
     }
 
-    // Extract tool call ID from TOOL_CALL span input
-    const input = span.input as { toolCallId?: string } | undefined;
-    const toolCallId = input?.toolCallId;
-    if (!toolCallId) {
-      return;
-    }
+    const toolCallId = this.resolveToolCallId(span);
 
     // Store the result for later merging
     modelGenSpanData.pendingToolResults.set(toolCallId, {
@@ -550,9 +550,14 @@ export class BraintrustExporter extends TrackingExporter<
     return match?.[1] ?? span.name;
   }
 
-  private getToolCallId(span: AnyExportedSpan): string {
+  private resolveToolCallId(span: AnyExportedSpan): string {
     const attrs = span.attributes as { toolCallId?: string } | undefined;
-    return attrs?.toolCallId ?? (span.input as { toolCallId?: string } | undefined)?.toolCallId ?? span.id;
+    return (
+      attrs?.toolCallId ??
+      span.metadata?.toolCallId ??
+      (span.input as { toolCallId?: string } | undefined)?.toolCallId ??
+      span.id
+    );
   }
 
   private toToolCallInput(span: AnyExportedSpan): OpenAIMessage[] {
@@ -573,7 +578,7 @@ export class BraintrustExporter extends TrackingExporter<
         content: '',
         tool_calls: [
           {
-            id: this.getToolCallId(span),
+            id: this.resolveToolCallId(span),
             type: 'function',
             function: {
               name: this.getToolName(span),
@@ -589,7 +594,7 @@ export class BraintrustExporter extends TrackingExporter<
     return {
       role: 'tool',
       content: serializeToolResult(span.output),
-      tool_call_id: this.getToolCallId(span),
+      tool_call_id: this.resolveToolCallId(span),
     };
   }
 

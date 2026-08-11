@@ -52,33 +52,47 @@ Before submitting a PR, make sure to:
    pnpm run serve
    ```
 
-3. **Check for broken links** - The build process will warn you about broken links.
+3. **Check for broken links**: The build process will warn you about broken links.
 
-4. **Verify code examples** - If you've added code examples, test them if possible to ensure they work.
+4. **Verify code examples**: If you've added code examples, test them if possible to ensure they work.
 
-5. **Run linters**:
+5. **Run linters**: Install Vale and `mdx2vast`, then run the linting and validation commands.
+
+   Download Vale:
+
+   ```bash
+   pnpm run vale:download
+   ```
+
+   Install `mdx2vast` globally:
+
+   ```bash
+   npm install -g mdx2vast
+   ```
+
+   Run the validation scripts:
 
    ```shell
    pnpm run lint:prose && pnpm run validate
    ```
 
-6. **Add redirect** (optional) - If you've renamed or deleted a doc, add a redirect to `vercel.redirects.json` and run `pnpm run generate-vercel-redirects` to update the generated `vercel.json`.
+6. **Add redirect** (optional): If you've renamed or deleted a doc, add a redirect to `vercel.redirects.json` and run `pnpm run generate-vercel-redirects` to update the generated `vercel.json`.
 
 ## Documentation structure
 
 The Mastra documentation is organized into several sections:
 
-- **docs/** - Main documentation (`src/content/en/docs/`)
-- **guides/** - Step-by-step guides (`src/content/en/guides/`)
-- **reference/** - API reference documentation (`src/content/en/reference/`)
-- **models/** - Model provider documentation (`src/content/en/models/`). These docs are auto-generated and should not be edited manually.
-- **course/** - Tutorial and course content (`src/course/`)
+- **docs/**: Main documentation (`src/content/en/docs/`)
+- **guides/**: Step-by-step guides (`src/content/en/guides/`)
+- **reference/**: API reference documentation (`src/content/en/reference/`)
+- **models/**: Model provider documentation (`src/content/en/models/`). These docs are auto-generated and should not be edited manually.
+- **course/**: Tutorial and course content (`src/course/`)
 
-All documentation should be written in English and placed in the appropriate section under `docs/src/content/en/`.
+All documentation should be written in English and placed in the appropriate section under `src/content/en/`. English is the only supported language and there are no plans to support other languages at this time.
 
 ## Editing content
 
-All documentation content is located in `/src`. Mastra's documentation content is written in a variation of Markdown called MDX, which allows embedding React components directly in content. The site also supports GitHub Flavored Markdown, adding support for tables and task lists.
+All documentation content is located in `src/content/en`. Mastra's documentation content is written in a variation of Markdown called MDX, which allows embedding React components directly in content. The site also supports GitHub Flavored Markdown, adding support for tables and task lists.
 
 ### File metadata
 
@@ -149,14 +163,14 @@ function add(a: number, b: number) {
 ```
 ````
 
-#### Prettier formatting
+#### oxfmt-mdx formatting
 
-By default, Prettier will format code blocks in all Markdown/MDX files. If you want to disable Prettier for a specific code block, add `prettier:false` to the code block's metadata.
+By default, oxfmt-mdx will format code blocks in all Markdown/MDX files. If you want to disable oxfmt-mdx for a specific code block, add `oxfmt:false` to the code block's metadata.
 
-**Important:** This is an anti-pattern! This is an escape hatch for edge cases where Prettier's formatting produces undesirable results. In general, you should strive to write code that can be formatted by Prettier to maintain a consistent style across the documentation.
+**Important:** This is an anti-pattern! This is an escape hatch for edge cases where oxfmt-mdx's formatting produces undesirable results. In general, you should strive to write code that can be formatted by oxfmt-mdx to maintain a consistent style across the documentation.
 
 ````md
-```typescript prettier:false
+```typescript oxfmt:false
 function add(a: number, b: number) {
   return a + b
 }
@@ -194,12 +208,6 @@ Some **content** with _Markdown_ `syntax`. Check [this `api`](#).
 
 :::
 
-:::info
-
-Some **content** with _Markdown_ `syntax`. Check [this `api`](#).
-
-:::
-
 :::warning
 
 Some **content** with _Markdown_ `syntax`. Check [this `api`](#).
@@ -211,7 +219,15 @@ Some **content** with _Markdown_ `syntax`. Check [this `api`](#).
 Some **content** with _Markdown_ `syntax`. Check [this `api`](#).
 
 :::
+
+:::beta
+
+Some **content** with _Markdown_ `syntax`. Check [this `api`](#).
+
+:::
 ```
+
+`info` is an alias for `note` and renders identically, so prefer `note`.
 
 ### `<Tabs>`
 

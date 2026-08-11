@@ -54,6 +54,11 @@ export type ScrollAreaProps = React.ComponentPropsWithoutRef<typeof ScrollAreaPr
   /** @deprecated Use `mask` instead. Retained for backward compatibility. */
   showMask?: boolean;
   /**
+   * Reveal the overlay scrollbar when the pointer hovers the area. When `false`,
+   * the scrollbar only appears while actively scrolling. Defaults to `true`.
+   */
+  revealScrollbarOnHover?: boolean;
+  /**
    * Ref to the scrolling viewport element. Use this as the scroll element for a
    * virtualizer (`getScrollElement: () => viewportRef.current`) so the list can
    * virtualize while still using the ScrollArea's overlay scrollbar + masks.
@@ -232,6 +237,7 @@ const ScrollArea = React.forwardRef<HTMLDivElement, ScrollAreaProps>(
       scrollButtons,
       mask,
       showMask,
+      revealScrollbarOnHover = true,
       viewportRef,
       ...props
     },
@@ -291,8 +297,12 @@ const ScrollArea = React.forwardRef<HTMLDivElement, ScrollAreaProps>(
         {scrollButtons && orientation !== 'vertical' && (
           <ScrollButtons areaRef={areaRef} scrollButtons={scrollButtons} />
         )}
-        {(orientation === 'vertical' || orientation === 'both') && <ScrollBar orientation="vertical" />}
-        {(orientation === 'horizontal' || orientation === 'both') && <ScrollBar orientation="horizontal" />}
+        {(orientation === 'vertical' || orientation === 'both') && (
+          <ScrollBar orientation="vertical" revealOnHover={revealScrollbarOnHover} />
+        )}
+        {(orientation === 'horizontal' || orientation === 'both') && (
+          <ScrollBar orientation="horizontal" revealOnHover={revealScrollbarOnHover} />
+        )}
         {orientation === 'both' && <ScrollAreaPrimitive.Corner />}
       </ScrollAreaPrimitive.Root>
     );
@@ -302,21 +312,22 @@ ScrollArea.displayName = 'ScrollArea';
 
 const ScrollBar = React.forwardRef<
   HTMLDivElement,
-  React.ComponentPropsWithoutRef<typeof ScrollAreaPrimitive.Scrollbar>
->(({ className, orientation = 'vertical', ...props }, ref) => (
+  React.ComponentPropsWithoutRef<typeof ScrollAreaPrimitive.Scrollbar> & { revealOnHover?: boolean }
+>(({ className, orientation = 'vertical', revealOnHover = true, ...props }, ref) => (
   <ScrollAreaPrimitive.Scrollbar
     ref={ref}
     orientation={orientation}
     className={cn(
       'duration-normal flex touch-none transition-opacity ease-out-custom select-none',
-      'opacity-0 data-[hovering]:opacity-100 data-[scrolling]:opacity-100 data-[scrolling]:duration-0',
+      'opacity-0 data-[scrolling]:opacity-100 data-[scrolling]:duration-0',
+      revealOnHover && 'data-[hovering]:opacity-100',
       orientation === 'vertical' && 'h-full w-1.5 p-px',
       orientation === 'horizontal' && 'h-1.5 w-full flex-col p-px',
       className,
     )}
     {...props}
   >
-    <ScrollAreaPrimitive.Thumb className="duration-normal relative flex-1 rounded-full bg-neutral4/30 transition-colors hover:bg-neutral4/60" />
+    <ScrollAreaPrimitive.Thumb className="duration-normal bg-neutral4/30 hover:bg-neutral4/60 relative flex-1 rounded-full transition-colors" />
   </ScrollAreaPrimitive.Scrollbar>
 ));
 ScrollBar.displayName = 'ScrollBar';

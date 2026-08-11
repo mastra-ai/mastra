@@ -6,6 +6,7 @@ packages:
   - "@mastra/libsql"
   - "@mastra/memory"
   - "@mastra/mongodb"
+  - "@mastra/oracledb"
   - "@mastra/pg"
 ---
 
@@ -26,7 +27,7 @@ Storage powers:
 
 ## When to configure storage
 
-Configure a persistent storage adapter when state must survive restarts, be shared across processes, or be visible in Studio across sessions. The default in-memory store is useful for tests and short local experiments, but it loses data when the process exits.
+Configure a persistent storage adapter when state must survive restarts or be shared across processes. Persistent storage also keeps state visible in Studio across sessions. The default in-memory store is useful for tests and short local experiments, but it loses data when the process exits.
 
 Use storage when your application needs any of these behaviors:
 
@@ -202,24 +203,26 @@ export const mastra = new Mastra({
 })
 ```
 
-You can also route `observability` to a dedicated analytics backend. See [observability storage](/docs/observability/storage) for an observability-specific example.
+You can also route `observability` to a dedicated analytics backend. See the [observability quickstart](/docs/observability/overview#quickstart) for an observability-specific example.
 
 ## Supported providers
 
 Each provider page includes installation instructions, configuration parameters, and usage examples:
 
-- [libSQL](/reference/storage/libsql)
-- [PostgreSQL](/reference/storage/postgresql)
-- [MongoDB](/reference/storage/mongodb)
-- [Upstash](/reference/storage/upstash)
-- [Redis](/reference/storage/redis)
-- [Cloudflare D1](/reference/storage/cloudflare-d1)
-- [Cloudflare KV & Durable Objects](/reference/storage/cloudflare)
-- [Convex](/reference/storage/convex)
-- [DynamoDB](/reference/storage/dynamodb)
-- [LanceDB](/reference/storage/lance)
-- [Microsoft SQL Server](/reference/storage/mssql)
-- [Google Cloud Spanner](/reference/storage/spanner)
+- [Cloudflare D1](/integrations/databases/cloudflare-d1)
+- [Cloudflare KV & Durable Objects](/integrations/databases/cloudflare-kv)
+- [Convex](/integrations/databases/convex)
+- [DynamoDB](/integrations/databases/dynamodb)
+- [Google Cloud Spanner](/integrations/databases/spanner)
+- [LanceDB](/integrations/databases/lancedb)
+- [libSQL](/integrations/databases/libsql)
+- [Microsoft SQL Server](/integrations/databases/mssql)
+- [MongoDB](/integrations/databases/mongodb)
+- [Neon Postgres](/integrations/databases/neon)
+- [OracleDB](/integrations/databases/oracledb)
+- [PostgreSQL](/integrations/databases/postgresql)
+- [Redis](/integrations/databases/redis)
+- [Upstash](/integrations/databases/upstash)
 
 :::tip
 
@@ -233,4 +236,4 @@ libSQL is the fastest path for local development because it doesn't require runn
 - [Storage retention](/reference/storage/retention)
 - [Storage schemas](/reference/storage/overview)
 - [Memory](/docs/memory/overview)
-- [Observability storage](/docs/observability/storage)
+- [Observability storage](/docs/observability/overview#storage)

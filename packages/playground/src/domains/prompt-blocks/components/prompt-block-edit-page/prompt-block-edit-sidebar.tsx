@@ -31,7 +31,7 @@ function RecursiveFieldRenderer({
     <div className={'py-2'} style={{ paddingLeft: depth * 8 }}>
       <JSONSchemaForm.Field key={field.id} field={field} parentPath={parentPath} depth={depth}>
         <div className="space-y-2 px-2">
-          <div className="flex flex-row gap-4 items-center">
+          <div className="flex flex-row items-center gap-4">
             <JSONSchemaForm.FieldName
               labelIsHidden
               placeholder="Variable name"
@@ -123,14 +123,14 @@ export function PromptBlockEditSidebar({
   }, [blockId, storedAgentsData]);
 
   return (
-    <div className="h-full flex flex-col">
-      <ScrollArea className="flex-1 min-h-0">
+    <div className="flex h-full flex-col">
+      <ScrollArea className="min-h-0 flex-1">
         <div className="flex flex-col gap-6 p-4">
           <SectionHeader title="Configuration" subtitle="Define your prompt block's name and description." />
 
           {/* Name */}
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="prompt-block-name" className="text-xs text-neutral5">
+            <Label htmlFor="prompt-block-name" className="text-neutral5 text-xs">
               Name <span className="text-accent2">*</span>
             </Label>
             <Input
@@ -140,12 +140,12 @@ export function PromptBlockEditSidebar({
               {...register('name')}
               error={!!errors.name}
             />
-            {errors.name && <span className="text-xs text-accent2">{errors.name.message}</span>}
+            {errors.name && <span className="text-accent2 text-xs">{errors.name.message}</span>}
           </div>
 
           {/* Description */}
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="prompt-block-description" className="text-xs text-neutral5">
+            <Label htmlFor="prompt-block-description" className="text-neutral5 text-xs">
               Description
             </Label>
             <Textarea
@@ -155,12 +155,12 @@ export function PromptBlockEditSidebar({
               {...register('description')}
               error={!!errors.description}
             />
-            {errors.description && <span className="text-xs text-accent2">{errors.description.message}</span>}
+            {errors.description && <span className="text-accent2 text-xs">{errors.description.message}</span>}
           </div>
         </div>
 
         {/* Variables */}
-        <div className="flex flex-col gap-4 p-4 border-t border-border1">
+        <div className="border-border1 flex flex-col gap-4 border-t p-4">
           <SectionHeader
             title="Variables"
             subtitle={
@@ -194,7 +194,7 @@ export function PromptBlockEditSidebar({
 
         {/* Used by */}
         {mode === 'edit' && blockId && (
-          <div className="flex flex-col gap-3 p-4 border-t border-border1">
+          <div className="border-border1 flex flex-col gap-3 border-t p-4">
             <SectionHeader title="Used by" subtitle="Agents that reference this prompt block." />
             {usedByAgents.length > 0 ? (
               <div className="flex flex-col gap-1.5">
@@ -203,7 +203,7 @@ export function PromptBlockEditSidebar({
                     key={agent.id}
                     type="button"
                     onClick={() => navigate(paths.agentLink(agent.id))}
-                    className="flex items-center gap-2 px-2 py-1.5 rounded-md text-left hover:bg-surface3 transition-colors"
+                    className="hover:bg-surface3 flex items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors"
                   >
                     <Txt variant="ui-sm" className="text-neutral5 truncate">
                       {agent.name || agent.id}

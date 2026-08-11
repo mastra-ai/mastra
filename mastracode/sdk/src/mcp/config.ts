@@ -17,6 +17,43 @@ import * as path from 'node:path';
 import { DEFAULT_CONFIG_DIR } from '../constants.js';
 import type { McpConfig, McpHttpOAuthConfig, McpServerConfig, McpSkippedServer } from './types.js';
 
+/**
+ * Default OAuth redirect URL for servers that do not configure one.
+ * Port 1458 is stable across sessions so persisted tokens keep the same
+ * storage fingerprint; it sits clear of the ports the Codex login flow
+ * reserves (1455/1457). When 1458 is busy the callback server falls back
+ * to the next sequential port, which stays covered by the client
+ * registration (see `@mastra/mcp`'s `getCallbackUrlCandidates`).
+ */
+export const DEFAULT_OAUTH_REDIRECT_URL = 'http://127.0.0.1:1458/oauth/callback';
+
+// Matches the entire 127.0.0.0/8 range in dotted-quad form. `URL` normalizes
+// IPv4 hosts to four octets (so `127.1` becomes `127.0.0.1`), so anchoring the
+// pattern is enough — and it rejects lookalikes like `127.evil.com` that a
+// `startsWith('127.')` check would wrongly accept.
+const LOOPBACK_IPV4 = /^127\.(?:\d{1,3})\.(?:\d{1,3})\.(?:\d{1,3})$/;
+
+function isLoopbackHostname(hostname: string): boolean {
+  return hostname === 'localhost' || hostname === '[::1]' || hostname === '::1' || LOOPBACK_IPV4.test(hostname);
+}
+
+/**
+ * Resolve the effective OAuth redirect URL for a server config.
+ *
+ * `callbackPort` (the Claude Code / Codex convention) takes precedence and
+ * synthesizes `http://localhost:<port>/callback`. Config-file entries are
+ * normalized by `parseOAuthConfig` (which also enforces that `callbackPort`
+ * and `redirectUrl` are mutually exclusive), but programmatically registered
+ * servers bypass the parser, so every consumer of the redirect URL must
+ * resolve it through this helper rather than reading `redirectUrl` directly.
+ */
+export function resolveOAuthRedirectUrl(oauth: McpHttpOAuthConfig | undefined): string {
+  if (oauth?.callbackPort !== undefined) {
+    return `http://localhost:${oauth.callbackPort}/callback`;
+  }
+  return oauth?.redirectUrl ?? DEFAULT_OAUTH_REDIRECT_URL;
+}
+
 export function loadMcpConfig(projectDir: string, configDirName = DEFAULT_CONFIG_DIR): McpConfig {
   const claudeConfig = loadClaudeSettings(projectDir);
   const globalConfig = loadSingleConfig(getGlobalMcpPath(configDirName));
@@ -202,20 +239,40 @@ function parseOAuthConfig(raw: unknown): { config?: McpHttpOAuthConfig; reason?:
   }
 
   const obj = raw as Record<string, unknown>;
-  if (typeof obj.redirectUrl !== 'string') {
-    return { reason: 'Invalid OAuth config: missing required field "redirectUrl"' };
+  if (obj.redirectUrl !== undefined && typeof obj.redirectUrl !== 'string') {
+    return { reason: 'Invalid OAuth config: "redirectUrl" must be a string' };
   }
+  // `callbackPort` is a shorthand for a loopback redirect URL. It synthesizes
+  // `http://localhost:<port>/callback` — the convention Claude Code and Codex
+  // emit — so those clients' config (e.g. Slack's official MCP plugin config)
+  // can be pasted verbatim. `redirectUrl` stays as the full-control escape
+  // hatch (any loopback host/path). The two are mutually exclusive to avoid
+  // an ambiguous redirect.
+  let callbackPortRedirectUrl: string | undefined;
+  if (obj.callbackPort !== undefined) {
+    if (obj.redirectUrl !== undefined) {
+      return { reason: 'Invalid OAuth config: set either "redirectUrl" or "callbackPort", not both' };
+    }
+    if (
+      typeof obj.callbackPort !== 'number' ||
+      !Number.isInteger(obj.callbackPort) ||
+      obj.callbackPort < 1 ||
+      obj.callbackPort > 65535
+    ) {
+      return { reason: 'Invalid OAuth config: "callbackPort" must be an integer between 1 and 65535' };
+    }
+    callbackPortRedirectUrl = resolveOAuthRedirectUrl({ callbackPort: obj.callbackPort });
+  }
+
+  const rawRedirectUrl = callbackPortRedirectUrl ?? obj.redirectUrl ?? DEFAULT_OAUTH_REDIRECT_URL;
   try {
-    const redirectUrl = new URL(obj.redirectUrl);
-    const isLoopback =
-      redirectUrl.hostname === 'localhost' ||
-      redirectUrl.hostname.startsWith('127.') ||
-      redirectUrl.hostname === '[::1]';
+    const redirectUrl = new URL(rawRedirectUrl);
+    const isLoopback = isLoopbackHostname(redirectUrl.hostname);
     if (redirectUrl.protocol !== 'https:' && !(redirectUrl.protocol === 'http:' && isLoopback)) {
       return { reason: 'Invalid OAuth redirectUrl: must use HTTPS unless it is a loopback HTTP URL' };
     }
   } catch {
-    return { reason: `Invalid OAuth redirectUrl: "${obj.redirectUrl}"` };
+    return { reason: `Invalid OAuth redirectUrl: "${rawRedirectUrl}"` };
   }
 
   if (obj.scopes !== undefined && (!Array.isArray(obj.scopes) || obj.scopes.some(scope => typeof scope !== 'string'))) {
@@ -224,7 +281,7 @@ function parseOAuthConfig(raw: unknown): { config?: McpHttpOAuthConfig; reason?:
 
   return {
     config: {
-      redirectUrl: obj.redirectUrl,
+      redirectUrl: rawRedirectUrl,
       clientName: typeof obj.clientName === 'string' ? obj.clientName : undefined,
       scopes: obj.scopes as string[] | undefined,
       clientId: typeof obj.clientId === 'string' ? obj.clientId : undefined,

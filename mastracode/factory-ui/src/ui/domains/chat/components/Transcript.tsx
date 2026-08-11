@@ -1,0 +1,1110 @@
+import type { PlanResume } from '@mastra/client-js';
+import { mastraDBMessageToSignal } from '@mastra/core/signals';
+import { Badge } from '@mastra/playground-ui/components/Badge';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
+import { Input } from '@mastra/playground-ui/components/Input';
+import { MessageScrollerItem } from '@mastra/playground-ui/components/MessageScroller';
+import { Notice } from '@mastra/playground-ui/components/Notice';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { cn } from '@mastra/playground-ui/utils/cn';
+import { MessageFactory } from '@mastra/react/ui';
+import type { FilePart, MessageRoleRenderers, ReasoningPart, TextPart, ToolInvocationPart } from '@mastra/react/ui';
+import { Bell, ChevronDown, CircleDot, ExternalLink, Info, Layers, Slack } from 'lucide-react';
+import type { ReactNode } from 'react';
+import { useState } from 'react';
+
+import { PullRequestStatusIcon } from '../../factory/components/PullRequestStatusIcon';
+import { useChatSessionContext } from '../context/useChatSessionContext';
+import { useChatTranscript } from '../context/useChatTranscript';
+import {
+  useApproveAgentControllerToolMutation,
+  useRespondAgentControllerSuspensionMutation,
+} from '../../../../hooks/useAgentControllerRunMutations';
+import { AGENT_CONTROLLER_ID } from '../services/constants';
+import { isTerminalInvocationState } from '../services/transcript';
+import { ToolCard } from './tool/ToolCard';
+import { ToolGroup, TOOL_GROUP_MIN } from './tool/ToolGroup';
+import { isTranscriptToolVisible, ToolFactory } from './ToolFactory';
+import { Markdown } from '../../../ui/Markdown';
+
+import type {
+  ApprovalPrompt,
+  MessageEntry,
+  NoticeEntry,
+  NotificationEntry,
+  NotificationSummaryEntry,
+  SubagentEntry,
+  SuspensionPrompt,
+  TimelineEntry,
+  ToolCall,
+} from '../services/transcript';
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+// Monospace, scrollable container for serialized args/results/file dumps.
+const resultBlock =
+  'm-0 mt-1 max-h-72 max-w-full overflow-auto whitespace-pre rounded-sm bg-surface1 p-2 font-mono text-xs leading-normal text-icon5';
+
+// Prompt cards (approval / suspension) — an elevated card with a colored left rail.
+const promptCardBase = 'my-2 rounded-lg border border-border1 bg-surface3 px-4 py-3 shadow-md';
+const promptCardApproval = `${promptCardBase} border-l-4 border-l-warning1`;
+const promptCardSuspension = `${promptCardBase} border-l-4 border-l-accent2`;
+const promptTitle = 'mb-1.5 text-sm font-semibold text-icon6';
+const promptActions = 'mt-2 flex gap-2';
+
+function truncate(s: string, max: number): string {
+  return s.length > max ? s.slice(0, max) + '…' : s;
+}
+
+function stringify(v: unknown): string {
+  if (typeof v === 'string') return v;
+  try {
+    return JSON.stringify(v, null, 2);
+  } catch {
+    return String(v);
+  }
+}
+
+function lastSegment(id: string): string {
+  const parts = id.split('/');
+  return parts[parts.length - 1] ?? id;
+}
+
+import { parseSkillActivation, SkillMessage } from './SkillMessage';
+
+function hasProperty<K extends string>(value: object, key: K): value is object & Record<K, unknown> {
+  return key in value;
+}
+
+function stringProperty(value: unknown, key: string): string | undefined {
+  if (!value || typeof value !== 'object' || !hasProperty(value, key)) return undefined;
+  return typeof value[key] === 'string' ? value[key] : undefined;
+}
+
+// ---------------------------------------------------------------------------
+// Approval prompt (tool_approval_required)
+// ---------------------------------------------------------------------------
+
+function ApprovalCard({
+  prompt,
+  isSubmitting,
+  onApprove,
+}: {
+  prompt: ApprovalPrompt;
+  isSubmitting: boolean;
+  onApprove: (toolCallId: string, approved: boolean, promptId: string) => void;
+}) {
+  return (
+    <div className={promptCardApproval} role="group" aria-label={`Tool approval for ${prompt.toolName}`}>
+      <div className={promptTitle}>
+        Approve <code className="bg-surface5 rounded px-1.5 py-px font-mono text-xs">{prompt.toolName}</code>?
+      </div>
+      <pre className={resultBlock}>{truncate(stringify(prompt.args), 400)}</pre>
+      <div className={promptActions}>
+        <Button
+          variant="primary"
+          size="sm"
+          aria-label={`Approve ${prompt.toolName}`}
+          autoFocus
+          disabled={isSubmitting}
+          onClick={() => onApprove(prompt.toolCallId, true, prompt.id)}
+        >
+          Approve
+        </Button>
+        <Button
+          size="sm"
+          aria-label={`Decline ${prompt.toolName}`}
+          disabled={isSubmitting}
+          onClick={() => onApprove(prompt.toolCallId, false, prompt.id)}
+        >
+          Decline
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Suspension prompt (ask_user / request_access / submit_plan)
+// ---------------------------------------------------------------------------
+
+interface SuspendPayloadShape {
+  question?: string;
+  options?: { label: string; description?: string }[];
+  requestedPath?: string;
+  reason?: string;
+  plan?: { title?: string; summary?: string };
+  title?: string;
+}
+
+function suspensionPayloadShape(payload: unknown): SuspendPayloadShape {
+  const planValue = payload && typeof payload === 'object' && hasProperty(payload, 'plan') ? payload.plan : undefined;
+  const plan =
+    planValue && typeof planValue === 'object'
+      ? {
+          title: stringProperty(planValue, 'title'),
+          summary: stringProperty(planValue, 'summary'),
+        }
+      : undefined;
+
+  const optionsValue =
+    payload && typeof payload === 'object' && hasProperty(payload, 'options') ? payload.options : undefined;
+  const options = Array.isArray(optionsValue)
+    ? optionsValue.flatMap(option => {
+        const label = stringProperty(option, 'label');
+        if (!label) return [];
+        return [{ label, description: stringProperty(option, 'description') }];
+      })
+    : undefined;
+
+  return {
+    question: stringProperty(payload, 'question'),
+    options,
+    requestedPath: stringProperty(payload, 'requestedPath') ?? stringProperty(payload, 'path'),
+    reason: stringProperty(payload, 'reason'),
+    title: stringProperty(payload, 'title'),
+    plan,
+  };
+}
+
+function SuspensionCard({
+  prompt,
+  isSubmitting,
+  onRespond,
+}: {
+  prompt: SuspensionPrompt;
+  isSubmitting: boolean;
+  onRespond: (toolCallId: string, resumeData: string | string[] | PlanResume, promptId: string) => void;
+}) {
+  const payload = suspensionPayloadShape(prompt.suspendPayload);
+
+  if (prompt.toolName === 'submit_plan') {
+    return (
+      <div className={promptCardSuspension} role="group" aria-label="Plan approval">
+        <div className={promptTitle}>Plan: {payload.plan?.title ?? payload.title ?? 'Proposed plan'}</div>
+        {payload.plan?.summary && (
+          <div className="text-ui-smd text-icon5 font-mono leading-relaxed break-words whitespace-pre-wrap">
+            {payload.plan.summary}
+          </div>
+        )}
+        <div className={promptActions}>
+          <Button
+            variant="primary"
+            size="sm"
+            aria-label="Approve the plan and switch to build"
+            autoFocus
+            disabled={isSubmitting}
+            onClick={() => onRespond(prompt.toolCallId, { action: 'approved' }, prompt.id)}
+          >
+            Approve &amp; build
+          </Button>
+          <Button
+            size="sm"
+            aria-label="Reject the plan"
+            disabled={isSubmitting}
+            onClick={() => onRespond(prompt.toolCallId, { action: 'rejected' }, prompt.id)}
+          >
+            Reject
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  if (prompt.toolName === 'request_access') {
+    return (
+      <div className={promptCardSuspension} role="group" aria-label="Access request">
+        <div className={promptTitle}>Grant access to {payload.requestedPath ?? 'a path'}?</div>
+        {payload.reason && <div className="text-icon3 mt-0.5 text-xs">Reason: {payload.reason}</div>}
+        <div className={promptActions}>
+          <Button
+            variant="primary"
+            size="sm"
+            aria-label={`Allow access to ${payload.requestedPath ?? 'the requested path'}`}
+            autoFocus
+            disabled={isSubmitting}
+            onClick={() => onRespond(prompt.toolCallId, 'Yes', prompt.id)}
+          >
+            Allow
+          </Button>
+          <Button
+            size="sm"
+            aria-label={`Deny access to ${payload.requestedPath ?? 'the requested path'}`}
+            disabled={isSubmitting}
+            onClick={() => onRespond(prompt.toolCallId, 'No', prompt.id)}
+          >
+            Deny
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  return <AskUserCard prompt={prompt} payload={payload} isSubmitting={isSubmitting} onRespond={onRespond} />;
+}
+
+function AskUserCard({
+  prompt,
+  payload,
+  isSubmitting,
+  onRespond,
+}: {
+  prompt: SuspensionPrompt;
+  payload: SuspendPayloadShape;
+  isSubmitting: boolean;
+  onRespond: (toolCallId: string, resumeData: string | string[], promptId: string) => void;
+}) {
+  const [draft, setDraft] = useState('');
+  const options = payload.options ?? [];
+  const question = payload.question ?? 'The agent has a question';
+  return (
+    <div className={promptCardSuspension} role="group" aria-label="Question from the agent">
+      <div className={promptTitle}>{question}</div>
+      {options.length > 0 ? (
+        <div className="mt-2 flex flex-col gap-1.5" role="group" aria-label="Answer options">
+          {options.map(opt => (
+            <Button
+              key={opt.label}
+              variant="outline"
+              size="sm"
+              className="justify-start"
+              aria-label={opt.description ? `${opt.label}: ${opt.description}` : opt.label}
+              disabled={isSubmitting}
+              onClick={() => onRespond(prompt.toolCallId, opt.label, prompt.id)}
+            >
+              <strong>{opt.label}</strong>
+              {opt.description && <span className="text-icon3"> — {opt.description}</span>}
+            </Button>
+          ))}
+        </div>
+      ) : (
+        <form
+          className="mt-2 flex gap-2"
+          onSubmit={e => {
+            e.preventDefault();
+            if (draft.trim()) onRespond(prompt.toolCallId, draft.trim(), prompt.id);
+          }}
+        >
+          <Input
+            value={draft}
+            onChange={e => setDraft(e.target.value)}
+            placeholder="Your answer…"
+            aria-label={question}
+            disabled={isSubmitting}
+            autoFocus
+          />
+          <Button variant="primary" size="sm" type="submit" disabled={isSubmitting}>
+            Reply
+          </Button>
+        </form>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Subagent card
+// ---------------------------------------------------------------------------
+
+function SubagentCard({ entry }: { entry: SubagentEntry }) {
+  return (
+    <div className="border-border1 border-l-accent5 bg-surface2 my-2 rounded-lg border border-l-4 px-3 py-2 shadow-sm">
+      <div className="flex items-center gap-2">
+        <Badge variant={entry.done ? 'success' : 'info'}>subagent: {entry.agentType}</Badge>
+        <Txt variant="ui-xs" className="text-icon3">
+          {lastSegment(entry.modelId)}
+        </Txt>
+      </div>
+      <Txt variant="ui-sm" className="py-1">
+        {entry.task}
+      </Txt>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Notification cards
+// ---------------------------------------------------------------------------
+
+function notificationUrl(entry: NotificationEntry): string | undefined {
+  const targetUrl = entry.metadata?.targetUrl;
+  if (typeof targetUrl === 'string' && /^https:\/\/github\.com\//.test(targetUrl)) return targetUrl;
+
+  const repository = entry.metadata?.repository;
+  if (typeof repository !== 'string' || !/^[^/]+\/[^/]+$/.test(repository)) return undefined;
+  const pullRequestNumber = entry.metadata?.pullRequestNumber;
+  if (typeof pullRequestNumber === 'number') return `https://github.com/${repository}/pull/${pullRequestNumber}`;
+  const issueNumber = entry.metadata?.issueNumber;
+  if (typeof issueNumber === 'number') return `https://github.com/${repository}/issues/${issueNumber}`;
+  return undefined;
+}
+
+function notificationPresentation(entry: NotificationEntry): { state: string; icon: ReactNode; className?: string } {
+  const action = entry.metadata?.action;
+  if (entry.notifKind === 'pull-request-merged') {
+    return { state: 'merged', icon: <PullRequestStatusIcon status="merged" size={13} decorative /> };
+  }
+  if (entry.notifKind === 'pull-request-closed') {
+    return { state: 'closed', icon: <PullRequestStatusIcon status="closed" size={13} decorative /> };
+  }
+  if (action === 'opened' || action === 'reopened') {
+    return { state: 'open', icon: <CircleDot size={13} />, className: 'text-accent1' };
+  }
+  return { state: 'notification', icon: <Bell size={13} />, className: 'text-warning1' };
+}
+
+/** Collapsible row mirroring the ToolCard shape: chevron + label + preview + state icon. */
+function NotificationRow({
+  state,
+  label,
+  message,
+  icon,
+  url,
+}: {
+  state: string;
+  label: string;
+  message: string;
+  icon: ReactNode;
+  url?: string;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <Collapsible
+      open={expanded}
+      onOpenChange={setExpanded}
+      className="max-w-full min-w-0"
+      data-notification-state={state}
+      role="group"
+      aria-label={`Notification: ${label}`}
+    >
+      <CollapsibleTrigger className="hover:bg-surface2 active:bg-surface4 w-full rounded-lg text-left transition-colors">
+        <span className="flex w-full items-center gap-2 px-2 py-1.5">
+          <ChevronDown
+            size={13}
+            className={cn(
+              'shrink-0 text-icon3 transition-transform duration-150',
+              expanded ? 'rotate-0' : '-rotate-90',
+            )}
+          />
+          <span className="flex shrink-0 items-center">{icon}</span>
+          <Txt as="span" variant="ui-smd" className="text-icon5 shrink-0">
+            {label}
+          </Txt>
+          <Txt as="span" variant="ui-xs" font="mono" className="text-icon3 truncate">
+            {truncate(message, 72)}
+          </Txt>
+        </span>
+      </CollapsibleTrigger>
+      <CollapsibleContent className="max-w-full min-w-0">
+        <div className="border-border1 bg-surface2 mt-1 flex max-w-full min-w-0 flex-col gap-2 rounded-2xl border p-2">
+          <Txt variant="ui-sm">{message}</Txt>
+          {url && (
+            <a
+              href={url}
+              target="_blank"
+              rel="noreferrer"
+              aria-label={`Open notification target: ${message}`}
+              className="text-ui-xs text-icon3 hover:text-icon5 flex w-fit items-center gap-1"
+            >
+              Open on GitHub
+              <ExternalLink size={12} aria-hidden />
+            </a>
+          )}
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
+function NotificationCard({ entry }: { entry: NotificationEntry }) {
+  const presentation = notificationPresentation(entry);
+  return (
+    <NotificationRow
+      state={presentation.state}
+      label={entry.source ?? 'notification'}
+      message={entry.message}
+      icon={<span className={cn('flex items-center', presentation.className)}>{presentation.icon}</span>}
+      url={notificationUrl(entry)}
+    />
+  );
+}
+
+function NotificationSummaryCard({ entry }: { entry: NotificationSummaryEntry }) {
+  return (
+    <NotificationRow
+      state="summary"
+      label="Notification summary"
+      message={entry.message}
+      icon={<Bell size={13} className="text-warning1" />}
+    />
+  );
+}
+
+/** Compact row for state/reminder/reactive signals, collapsible when it has details. */
+function SignalRow({ kind, label, message }: { kind: string; label: string; message: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const icon =
+    kind === 'state' ? (
+      <Layers size={13} className="text-purple-400" />
+    ) : kind === 'reminder' ? (
+      <Info size={13} className="text-accent3" />
+    ) : (
+      <Info size={13} className="text-icon3" />
+    );
+
+  if (!message) {
+    return (
+      <div className="max-w-full min-w-0" data-signal-kind={kind} role="group" aria-label={`Signal: ${label}`}>
+        <span className="flex w-full items-center gap-2 px-2 py-1.5">
+          <span className="flex shrink-0 items-center">{icon}</span>
+          <Txt as="span" variant="ui-smd" className="text-icon5 shrink-0">
+            {label}
+          </Txt>
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <Collapsible
+      open={expanded}
+      onOpenChange={setExpanded}
+      className="max-w-full min-w-0"
+      data-signal-kind={kind}
+      role="group"
+      aria-label={`Signal: ${label}`}
+    >
+      <CollapsibleTrigger className="hover:bg-surface2 active:bg-surface4 w-full rounded-lg text-left transition-colors">
+        <span className="flex w-full items-center gap-2 px-2 py-1.5">
+          <ChevronDown
+            size={13}
+            className={cn(
+              'shrink-0 text-icon3 transition-transform duration-150',
+              expanded ? 'rotate-0' : '-rotate-90',
+            )}
+          />
+          <span className="flex shrink-0 items-center">{icon}</span>
+          <Txt as="span" variant="ui-smd" className="text-icon5 shrink-0">
+            {label}
+          </Txt>
+          <Txt as="span" variant="ui-xs" font="mono" className="text-icon3 truncate">
+            {truncate(message, 72)}
+          </Txt>
+        </span>
+      </CollapsibleTrigger>
+      <CollapsibleContent className="max-w-full min-w-0">
+        <div className="border-border1 bg-surface2 mt-1 max-w-full min-w-0 rounded-2xl border p-2">
+          <Txt variant="ui-sm" className="break-words whitespace-pre-wrap">
+            {message}
+          </Txt>
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Transcript
+// ---------------------------------------------------------------------------
+
+export function Transcript() {
+  const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
+  const { transcript, resolvePrompt } = useChatTranscript();
+  const hookArgs = {
+    agentControllerId: AGENT_CONTROLLER_ID,
+    resourceId,
+    scope: projectPath,
+    baseUrl,
+    enabled: sessionEnabled,
+  };
+  const approveMutation = useApproveAgentControllerToolMutation(hookArgs);
+  const respondMutation = useRespondAgentControllerSuspensionMutation(hookArgs);
+
+  const onApprove = async (toolCallId: string, approved: boolean, promptId: string) => {
+    await approveMutation.mutateAsync({ toolCallId, approved });
+    resolvePrompt(promptId);
+  };
+  const onRespond = async (toolCallId: string, resumeData: string | string[] | PlanResume, promptId: string) => {
+    await respondMutation.mutateAsync({ toolCallId, resumeData });
+    resolvePrompt(promptId);
+  };
+
+  return (
+    <TranscriptEntries
+      entries={transcript.entries}
+      isSubmitting={approveMutation.isPending || respondMutation.isPending}
+      onApprove={onApprove}
+      onRespond={onRespond}
+    />
+  );
+}
+
+export function TranscriptEntries({
+  entries,
+  isSubmitting = false,
+  onApprove,
+  onRespond,
+}: {
+  entries: TimelineEntry[];
+  isSubmitting?: boolean;
+  onApprove: (toolCallId: string, approved: boolean, promptId: string) => void;
+  onRespond: (toolCallId: string, resumeData: string | string[] | PlanResume, promptId: string) => void;
+}) {
+  const suspensions = new Map(
+    entries.flatMap(entry => (entry.kind === 'suspension' ? [[entry.toolCallId, entry] as const] : [])),
+  );
+  const canonicalToolCallIds = new Set(
+    entries.flatMap(entry =>
+      entry.kind === 'message'
+        ? entry.message.content.parts.flatMap(part =>
+            part.type === 'tool-invocation' ? [part.toolInvocation.toolCallId] : [],
+          )
+        : [],
+    ),
+  );
+
+  const renderEntry = (entry: TimelineEntry): ReactNode => {
+    switch (entry.kind) {
+      case 'message':
+        return (
+          <MessageBubble entry={entry} suspensions={suspensions} isSubmitting={isSubmitting} onRespond={onRespond} />
+        );
+      case 'notice':
+        return <NoticeCard entry={entry} />;
+      case 'approval':
+        return <ApprovalCard prompt={entry} isSubmitting={isSubmitting} onApprove={onApprove} />;
+      case 'notification':
+        return <NotificationCard entry={entry} />;
+      case 'notification_summary':
+        return <NotificationSummaryCard entry={entry} />;
+      case 'suspension':
+        return entry.toolName === 'request_access' || !canonicalToolCallIds.has(entry.toolCallId) ? (
+          <SuspensionCard prompt={entry} isSubmitting={isSubmitting} onRespond={onRespond} />
+        ) : null;
+      case 'subagent':
+        return <SubagentCard entry={entry} />;
+      default:
+        return null;
+    }
+  };
+
+  return (
+    <>
+      {entries.map(entry => {
+        const rendered = renderEntry(entry);
+        if (!rendered) return null;
+
+        return (
+          <MessageScrollerItem
+            key={entry.id}
+            messageId={entry.id}
+            scrollAnchor={entry.kind === 'message' && entry.message.role === 'user'}
+            // Estimated off-screen heights would make the prepend anchor restore
+            // the wrong offset — measure the real thing.
+            className="[content-visibility:visible]"
+          >
+            {rendered}
+          </MessageScrollerItem>
+        );
+      })}
+    </>
+  );
+}
+
+const CHANNEL_PLATFORM_LABEL: Record<string, string> = {
+  slack: 'Slack',
+};
+
+/**
+ * Channel provenance for a message that arrived via a channel adapter.
+ * `agent-channels` stamps `content.providerMetadata.mastra.channels.<platform>`
+ * with author facts on inbound messages exactly so UIs can show origin
+ * without unpacking the signal envelope.
+ */
+export function channelOrigin(entry: MessageEntry): { platform: string; authorName?: string } | undefined {
+  const mastra = entry.message.content.providerMetadata?.mastra;
+  const channels = isRecord(mastra) ? mastra.channels : undefined;
+  if (!isRecord(channels)) return undefined;
+  const platform = Object.keys(channels)[0];
+  if (!platform) return undefined;
+  const info = channels[platform];
+  const author = isRecord(info) && isRecord(info.author) ? info.author : undefined;
+  const authorName =
+    typeof author?.fullName === 'string'
+      ? author.fullName
+      : typeof author?.userName === 'string'
+        ? author.userName
+        : undefined;
+  return { platform, authorName };
+}
+
+export function ChannelOriginBadge({ origin }: { origin: { platform: string; authorName?: string } }) {
+  const label = CHANNEL_PLATFORM_LABEL[origin.platform] ?? origin.platform;
+  return (
+    <div className="text-ui-xs text-icon3 mt-1 flex items-center gap-1" aria-label={`Sent from ${label}`}>
+      {origin.platform === 'slack' && <Slack className="size-3" aria-hidden="true" />}
+      <span>
+        via {label}
+        {origin.authorName ? ` · ${origin.authorName}` : ''}
+      </span>
+    </div>
+  );
+}
+
+function MessageBubble({
+  entry,
+  suspensions,
+  isSubmitting,
+  onRespond,
+}: {
+  entry: MessageEntry;
+  suspensions: ReadonlyMap<string, SuspensionPrompt>;
+  isSubmitting: boolean;
+  onRespond: (toolCallId: string, resumeData: string | string[] | PlanResume, promptId: string) => void;
+}) {
+  const messageParts = entry.message.content.parts ?? [];
+  const parts = messageParts.filter(
+    part => part.type !== 'tool-invocation' || isTranscriptToolVisible(part.toolInvocation.toolName),
+  );
+  const message =
+    parts.length === messageParts.length
+      ? entry.message
+      : { ...entry.message, content: { ...entry.message.content, parts } };
+  const hasRenderablePart = parts.some(
+    part =>
+      (part.type === 'text' && part.text.trim().length > 0) ||
+      (part.type === 'reasoning' && part.reasoning.trim().length > 0) ||
+      part.type === 'tool-invocation' ||
+      part.type === 'file',
+  );
+
+  const lastTextPart = (() => {
+    for (let i = parts.length - 1; i >= 0; i--) {
+      if (parts[i].type === 'text') return parts[i];
+    }
+    return undefined;
+  })();
+
+  const toolGroups = collectToolGroups(parts, suspensions, entry.runtimeTools);
+  const origin = channelOrigin(entry);
+  const roles: MessageRoleRenderers = {
+    User: ({ children }) => (
+      <div className="my-3 flex w-full flex-col items-end">
+        <div
+          className={`text-text1 max-w-[70%] rounded-xl px-4 py-2 break-words ${
+            entry.steer ? 'bg-warning1/10' : 'bg-surface3'
+          }`}
+        >
+          {children}
+        </div>
+        {origin && <ChannelOriginBadge origin={origin} />}
+      </div>
+    ),
+    Assistant: ({ children }) => <div className="max-w-full">{children}</div>,
+    System: ({ children }) => <div className="text-ui-sm text-icon3">{children}</div>,
+    Signal: ({ children }) => <div className="text-ui-sm text-icon3">{children}</div>,
+  };
+
+  const renderers = {
+    Text: (part: TextPart) => {
+      if (entry.message.role === 'user') {
+        const activation = parseSkillActivation(part.text);
+        return activation ? (
+          <SkillMessage activation={activation} />
+        ) : (
+          <div className="prose">
+            <Markdown>{part.text}</Markdown>
+          </div>
+        );
+      }
+
+      const showCursor = entry.streaming && part === lastTextPart;
+      return (
+        <div className="prose my-3">
+          <Markdown
+            className={
+              showCursor
+                ? "[&>:last-child]:after:bg-accent1 [&>:last-child]:after:ml-0.5 [&>:last-child]:after:inline-block [&>:last-child]:after:h-[1em] [&>:last-child]:after:w-0.5 [&>:last-child]:after:animate-pulse [&>:last-child]:after:align-text-bottom [&>:last-child]:after:content-['']"
+                : undefined
+            }
+          >
+            {part.text}
+          </Markdown>
+        </div>
+      );
+    },
+    Reasoning: (part: ReasoningPart) => (
+      <div className="border-border1 text-ui-sm text-icon3 my-1.5 border-l-2 pl-2.5 italic [&_p]:my-0.5">
+        <Markdown>{part.reasoning}</Markdown>
+      </div>
+    ),
+    ToolInvocation: (part: ToolInvocationPart) => {
+      const toolCallId = part.toolInvocation.toolCallId;
+      const group = toolGroups.byFirstId.get(toolCallId);
+      if (group) return <ToolGroup tools={group} />;
+      if (toolGroups.memberIds.has(toolCallId)) return null;
+
+      const runtime = entry.runtimeTools?.[toolCallId];
+      const tool = toolFromInvocationPart(part, runtime);
+      const suspension = suspensions.get(tool.toolCallId);
+      if (tool.toolName === 'ask_user' && tool.status === 'running' && !suspension) return null;
+      return (
+        <ToolFactory
+          toolName={tool.toolName}
+          toolCallId={tool.toolCallId}
+          input={suspension?.suspendPayload ?? tool.args}
+          output={tool.result}
+          status={suspension ? 'running' : tool.status}
+          isSubmitting={isSubmitting}
+          onRespond={suspension ? response => onRespond(tool.toolCallId, response, suspension.id) : undefined}
+          fallback={() => <ToolCard tool={tool} />}
+        />
+      );
+    },
+    File: (part: FilePart) => <FileAttachment part={part} />,
+  };
+
+  const skillActivation =
+    entry.message.role === 'user' && parts.length === 1 && parts[0].type === 'text'
+      ? parseSkillActivation(parts[0].text)
+      : undefined;
+  if (skillActivation) return <SkillMessage activation={skillActivation} />;
+  if (isSkillNotificationSignal(entry)) return null;
+
+  const notifications = notificationMetadata(entry);
+  if (notifications.length > 0) {
+    return (
+      <div className="flex flex-col">
+        {notifications.map(notification =>
+          notification.kind === 'notification' ? (
+            <NotificationCard key={notification.id} entry={notification} />
+          ) : (
+            <NotificationSummaryCard key={notification.id} entry={notification} />
+          ),
+        )}
+        {hasRenderablePart && entry.message.role !== 'signal' && (
+          <MessageFactory message={message} roles={roles} {...renderers} fallback={() => null} />
+        )}
+      </div>
+    );
+  }
+
+  const signalRow = signalRowView(entry);
+  if (signalRow) {
+    if (signalRow.kind === 'state') {
+      if (SUPPRESSED_STATE_SIGNAL_IDS.has(signalRow.stateId)) return null;
+      return (
+        <SignalRow kind="state" label={`State ${signalRow.mode}: ${signalRow.stateId}`} message={signalRow.text} />
+      );
+    }
+    if (signalRow.kind === 'reminder') {
+      return <SignalRow kind="reminder" label="System reminder" message={signalRow.text} />;
+    }
+    if (!signalRow.tagName || HIDDEN_REACTIVE_SIGNAL_TAGS.has(signalRow.tagName)) return null;
+    return <SignalRow kind="reactive" label={signalRow.tagName} message={signalRow.text} />;
+  }
+
+  const status = statusMetadata(entry);
+  // Some harness status parts (e.g. om_* markers) carry no text. Ignore the
+  // marker while preserving any ordinary assistant content in the message.
+  if (status?.text.trim()) return <StatusMetadataCard status={status} />;
+  if (!hasRenderablePart) return null;
+
+  return <MessageFactory message={message} roles={roles} {...renderers} fallback={() => null} />;
+}
+
+function FileAttachment({ part }: { part: FilePart }) {
+  if (part.mimeType?.startsWith('image/')) {
+    const src = part.data.startsWith('data:') ? part.data : `data:${part.mimeType};base64,${part.data}`;
+    return (
+      <img src={src} alt="Attached image" className="border-border1 my-1.5 max-h-80 max-w-full rounded-md border" />
+    );
+  }
+  return <pre className={resultBlock}>{stringify(part)}</pre>;
+}
+
+/** Terminal status carried by the persisted part, if it reached one. */
+function terminalInvocationStatus(invocation: ToolInvocationPart['toolInvocation']): 'done' | 'error' | undefined {
+  if (!isTerminalInvocationState(invocation.state)) return undefined;
+  if (invocation.state !== 'result') return 'error';
+  return 'isError' in invocation && invocation.isError === true ? 'error' : 'done';
+}
+
+/**
+ * Collapse runs of {@link TOOL_GROUP_MIN}+ consecutive plain tool calls into
+ * groups keyed by their first toolCallId. Interactive tools (ask_user,
+ * submit_plan, suspended calls) break a run — their prompt cards must render
+ * inline, never swallowed by a group.
+ */
+function collectToolGroups(
+  parts: MessageEntry['message']['content']['parts'],
+  suspensions: ReadonlyMap<string, SuspensionPrompt>,
+  runtimeTools: MessageEntry['runtimeTools'],
+): { byFirstId: Map<string, ToolCall[]>; memberIds: Set<string> } {
+  const byFirstId = new Map<string, ToolCall[]>();
+  const memberIds = new Set<string>();
+  let run: ToolCall[] = [];
+
+  const flush = () => {
+    if (run.length >= TOOL_GROUP_MIN) {
+      byFirstId.set(run[0].toolCallId, run);
+      for (const tool of run.slice(1)) memberIds.add(tool.toolCallId);
+    }
+    run = [];
+  };
+
+  for (const part of parts) {
+    const groupable =
+      part.type === 'tool-invocation' &&
+      part.toolInvocation.toolName !== 'ask_user' &&
+      part.toolInvocation.toolName !== 'submit_plan' &&
+      !suspensions.has(part.toolInvocation.toolCallId);
+    if (groupable) {
+      run.push(toolFromInvocationPart(part, runtimeTools?.[part.toolInvocation.toolCallId]));
+    } else {
+      flush();
+    }
+  }
+  flush();
+
+  return { byFirstId, memberIds };
+}
+
+function toolFromInvocationPart(part: ToolInvocationPart, runtime?: ToolCall): ToolCall {
+  const invocation = part.toolInvocation;
+  const persistedResult = 'result' in invocation ? invocation.result : undefined;
+  // Persisted terminal state beats the live overlay: `tool_end` can be lost in
+  // an SSE gap (no server replay), and a terminal part never regresses — the
+  // overlay's 'running' would otherwise spin forever.
+  const terminalStatus = terminalInvocationStatus(invocation);
+  const result = terminalStatus
+    ? (persistedResult ?? invocation.errorText ?? runtime?.result)
+    : (runtime?.result ?? persistedResult ?? invocation.errorText);
+  return {
+    toolCallId: invocation.toolCallId,
+    toolName: invocation.toolName,
+    argsText: runtime?.argsText ?? '',
+    args: runtime?.args ?? ('args' in invocation ? invocation.args : undefined),
+    status: terminalStatus ?? runtime?.status ?? 'running',
+    result,
+    output: runtime?.output ?? '',
+  };
+}
+
+function notificationMetadata(entry: MessageEntry): Array<NotificationEntry | NotificationSummaryEntry> {
+  if (entry.message.role === 'signal') return signalNotifications(entry);
+
+  const harnessContent = entry.message.content.metadata?.harnessContent;
+  if (!Array.isArray(harnessContent)) return [];
+
+  const notifications: Array<NotificationEntry | NotificationSummaryEntry> = [];
+  for (const [index, part] of harnessContent.entries()) {
+    if (typeof part !== 'object' || part === null || !('type' in part)) continue;
+    if (!('message' in part) || typeof part.message !== 'string') continue;
+
+    if (part.type === 'notification') {
+      notifications.push({
+        kind: 'notification',
+        id: `${entry.id}-notification-${index}`,
+        notificationId:
+          'notificationId' in part && typeof part.notificationId === 'string' ? part.notificationId : undefined,
+        message: part.message,
+        source: 'source' in part && typeof part.source === 'string' ? part.source : undefined,
+        notifKind: 'kind' in part && typeof part.kind === 'string' ? part.kind : undefined,
+        priority: 'priority' in part && typeof part.priority === 'string' ? part.priority : undefined,
+        metadata: 'metadata' in part && isRecord(part.metadata) ? part.metadata : undefined,
+      });
+      continue;
+    }
+
+    if (part.type !== 'notification_summary') continue;
+    const pending = 'pending' in part && typeof part.pending === 'number' ? part.pending : 0;
+    const bySource = 'bySource' in part && isNumberRecord(part.bySource) ? part.bySource : {};
+    const byPriority = 'byPriority' in part && isNumberRecord(part.byPriority) ? part.byPriority : {};
+    const notificationIds =
+      'notificationIds' in part && Array.isArray(part.notificationIds)
+        ? part.notificationIds.filter((id: unknown): id is string => typeof id === 'string')
+        : [];
+    notifications.push({
+      kind: 'notification_summary',
+      id: `${entry.id}-notification-summary-${index}`,
+      message: part.message,
+      pending,
+      bySource,
+      byPriority,
+      notificationIds,
+    });
+  }
+  return notifications;
+}
+
+/**
+ * Persisted notification signals are DB-native `role: 'signal'` rows whose
+ * original signal payload lives under `content.metadata.signal` (see
+ * `signalToDBMessage` in @mastra/core). Rebuild notification cards from it so
+ * they survive transcript hydration.
+ */
+function isSkillNotificationSignal(entry: MessageEntry): boolean {
+  if (entry.message.role !== 'signal') return false;
+  const signal = entry.message.content.metadata?.signal;
+  return isRecord(signal) && signal.type === 'notification' && Boolean(parseSkillActivation(signalPartsText(entry)));
+}
+
+function signalNotifications(entry: MessageEntry): Array<NotificationEntry | NotificationSummaryEntry> {
+  const signal = entry.message.content.metadata?.signal;
+  if (!isRecord(signal) || signal.type !== 'notification') return [];
+  if (isSkillNotificationSignal(entry)) return [];
+
+  const text = signalPartsText(entry);
+  const attributes = isRecord(signal.attributes) ? signal.attributes : {};
+  const metadata = isRecord(signal.metadata) ? signal.metadata : {};
+
+  if (signal.tagName === 'notification-summary') {
+    const summary = isRecord(metadata.notificationSummary) ? metadata.notificationSummary : {};
+    return [
+      {
+        kind: 'notification_summary',
+        id: `${entry.id}-signal-summary`,
+        message: text,
+        pending: typeof summary.pending === 'number' ? summary.pending : 0,
+        bySource: isNumberRecord(summary.bySource) ? summary.bySource : {},
+        byPriority: isNumberRecord(summary.byPriority) ? summary.byPriority : {},
+        notificationIds: Array.isArray(summary.notificationIds)
+          ? summary.notificationIds.filter((id: unknown): id is string => typeof id === 'string')
+          : [],
+      },
+    ];
+  }
+
+  return [
+    {
+      kind: 'notification',
+      id: `${entry.id}-signal-notification`,
+      notificationId: typeof attributes.id === 'string' ? attributes.id : undefined,
+      message: text,
+      source: typeof attributes.source === 'string' ? attributes.source : undefined,
+      notifKind: typeof attributes.kind === 'string' ? attributes.kind : undefined,
+      priority: typeof attributes.priority === 'string' ? attributes.priority : undefined,
+      metadata,
+    },
+  ];
+}
+
+function signalPartsText(entry: MessageEntry): string {
+  const { contents } = mastraDBMessageToSignal(entry.message);
+  if (typeof contents === 'string') return contents.trim();
+
+  return contents
+    .flatMap(part => (part.type === 'text' && part.text ? [part.text] : []))
+    .join('\n')
+    .trim();
+}
+
+// Internal control-plane signals handled by GithubSignals; the user-visible
+// result is rendered elsewhere, so showing these would duplicate the UI.
+const HIDDEN_REACTIVE_SIGNAL_TAGS = new Set(['github-subscribe-pr', 'github-unsubscribe-pr']);
+// State snapshots already surfaced by the pinned task list and GoalPanel.
+const SUPPRESSED_STATE_SIGNAL_IDS = new Set(['tasks', 'goal']);
+
+type SignalRowView =
+  | { kind: 'state'; stateId: string; mode: 'snapshot' | 'delta'; text: string }
+  | { kind: 'reminder'; text: string }
+  | { kind: 'reactive'; tagName?: string; text: string };
+
+/**
+ * Classify non-notification `role: 'signal'` messages into the row they drive,
+ * mirroring the TUI's `getSignalKind` dispatch (state -> reminder -> reactive).
+ * Notification signals are rebuilt by `signalNotifications`, and user signals
+ * are reclassified to `role: 'user'` in the reducer, so both return undefined.
+ */
+function signalRowView(entry: MessageEntry): SignalRowView | undefined {
+  if (entry.message.role !== 'signal') return undefined;
+  const signal = entry.message.content.metadata?.signal;
+  if (!isRecord(signal)) return undefined;
+
+  const tagName = typeof signal.tagName === 'string' ? signal.tagName : undefined;
+  const text = signalPartsText(entry);
+
+  if (signal.type === 'state') {
+    const metadata = isRecord(signal.metadata) ? signal.metadata : {};
+    const stateMeta = isRecord(metadata.state) ? metadata.state : {};
+    return {
+      kind: 'state',
+      stateId: (typeof stateMeta.id === 'string' ? stateMeta.id : undefined) ?? tagName ?? 'state',
+      mode: stateMeta.mode === 'delta' ? 'delta' : 'snapshot',
+      text,
+    };
+  }
+  // `normalizeSignal` maps `system-reminder` to `reactive` + `system-reminder`
+  // tag before persistence, but live pre-normalized signals may carry the raw type.
+  if (signal.type === 'system-reminder') return { kind: 'reminder', text };
+  if (signal.type === 'reactive' && tagName === 'system-reminder') return { kind: 'reminder', text };
+  if (signal.type === 'reactive') return { kind: 'reactive', tagName, text };
+  return undefined;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isNumberRecord(value: unknown): value is Record<string, number> {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    Object.values(value).every(candidate => typeof candidate === 'number')
+  );
+}
+
+interface StatusMetadata {
+  id: string;
+  text: string;
+  level: 'info' | 'error';
+}
+
+function statusMetadata(entry: MessageEntry): StatusMetadata | undefined {
+  const harnessContent = entry.message.content.metadata?.harnessContent;
+  if (!Array.isArray(harnessContent)) return undefined;
+
+  const statusPart = harnessContent.find(
+    part =>
+      typeof part === 'object' &&
+      part !== null &&
+      'type' in part &&
+      typeof part.type === 'string' &&
+      (part.type === 'notification_summary' || part.type.startsWith('om_') || part.type === 'harness-error'),
+  );
+  if (!statusPart || typeof statusPart !== 'object' || !('type' in statusPart)) return undefined;
+
+  const text =
+    'text' in statusPart && typeof statusPart.text === 'string'
+      ? statusPart.text
+      : 'message' in statusPart && typeof statusPart.message === 'string'
+        ? statusPart.message
+        : '';
+  return {
+    id: `${entry.id}-${String(statusPart.type)}`,
+    text,
+    level: statusPart.type === 'harness-error' ? 'error' : 'info',
+  };
+}
+
+function StatusMetadataCard({ status }: { status: StatusMetadata }) {
+  return (
+    <Notice className="my-2" variant={status.level === 'error' ? 'destructive' : 'info'}>
+      {status.text}
+    </Notice>
+  );
+}
+
+function NoticeCard({ entry }: { entry: NoticeEntry }) {
+  return (
+    <Notice className="my-2" variant={entry.level === 'error' ? 'destructive' : 'info'}>
+      <div className="prose">
+        <Markdown>{entry.text}</Markdown>
+      </div>
+    </Notice>
+  );
+}

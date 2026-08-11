@@ -97,8 +97,15 @@ export interface SandboxCloneOptions {
   sandboxId?: string;
   /** Environment variables baked into the sandbox clone. */
   env?: Record<string, string>;
+  /** Provider working directory for the sandbox clone. */
+  workingDirectory?: string;
   /** Idle teardown window (minutes) for the sandbox clone. */
   idleTimeoutMinutes?: number;
+  /**
+   * Provider checkpoint used to seed and preserve the sandbox clone.
+   * Providers without checkpoint support may ignore this option.
+   */
+  checkpointName?: string;
 }
 
 // =============================================================================
@@ -130,6 +137,12 @@ export interface WorkspaceSandbox extends SandboxLifecycle<SandboxInfo> {
 
   /** Provider type identifier */
   readonly provider: string;
+
+  /**
+   * Persist the sandbox's current state when the provider supports snapshots.
+   * Providers without snapshot support resolve without performing work.
+   */
+  snapshot(): Promise<void>;
 
   /**
    * Get instructions describing how this sandbox works.

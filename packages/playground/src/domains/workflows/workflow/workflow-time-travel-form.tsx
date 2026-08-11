@@ -7,7 +7,6 @@ import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clip
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { formatJSON, isValidJson } from '@mastra/playground-ui/utils/formatting';
-import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
 import CodeMirror from '@uiw/react-codemirror';
 import { Braces, ChevronDown, CopyIcon, EyeIcon, EyeOffIcon } from 'lucide-react';
 import { useContext, useMemo, useState } from 'react';
@@ -16,7 +15,7 @@ import { z } from 'zod';
 import { WorkflowRunContext } from '../context/workflow-run-context';
 import { WorkflowInputData } from './workflow-input-data';
 import { useMergedRequestContext } from '@/domains/request-context/context/schema-request-context';
-import { resolveSerializedZodOutput } from '@/lib/form/utils';
+import { jsonSchemaToZodRuntime } from '@/lib/form/json-schema-to-zod-runtime';
 
 const buttonClass = 'text-neutral3 hover:text-neutral6';
 
@@ -82,7 +81,7 @@ const JsonField = ({
   return (
     <>
       {isExampleOpen && (
-        <div className="border border-border1 rounded-lg bg-surface3 p-3 space-y-2">
+        <div className="border-border1 bg-surface3 space-y-2 rounded-lg border p-3">
           <div className="flex items-center gap-2">
             <Txt as="p" variant="ui-sm" className="text-neutral3">
               Example {label}
@@ -107,12 +106,12 @@ const JsonField = ({
             value={exampleCode}
             theme={theme}
             extensions={[jsonLanguage]}
-            className="h-[150px] w-full overflow-y-scroll bg-surface3 rounded-lg overflow-scroll p-3"
+            className="bg-surface3 h-[150px] w-full overflow-scroll overflow-y-scroll rounded-lg p-3"
           />
         </div>
       )}
-      <Collapsible className="border border-border1 rounded-lg bg-surface3" open={isOpen} onOpenChange={setIsOpen}>
-        <div className="flex items-center justify-between w-full px-3">
+      <Collapsible className="border-border1 bg-surface3 rounded-lg border" open={isOpen} onOpenChange={setIsOpen}>
+        <div className="flex w-full items-center justify-between px-3">
           <div>
             <Txt as="label" variant="ui-md" className="text-neutral3">
               {label}
@@ -179,7 +178,7 @@ const JsonField = ({
             onChange={onChange}
             theme={theme}
             extensions={[jsonLanguage]}
-            className="h-[260px] overflow-y-scroll bg-surface3 rounded-lg overflow-hidden p-3"
+            className="bg-surface3 h-[260px] overflow-hidden overflow-y-scroll rounded-lg p-3"
           />
 
           {fieldError && (
@@ -227,11 +226,9 @@ export const WorkflowTimeTravelForm = ({
 
     try {
       const parsed = parse(stepDefinition.inputSchema);
-      const zodStateSchema = workflow?.stateSchema
-        ? resolveSerializedZodOutput(jsonSchemaToZod(parse(workflow.stateSchema)))
-        : null;
+      const zodStateSchema = workflow?.stateSchema ? jsonSchemaToZodRuntime(parse(workflow.stateSchema)) : null;
 
-      const zodStepSchema = resolveSerializedZodOutput(jsonSchemaToZod(parsed as any));
+      const zodStepSchema = jsonSchemaToZodRuntime(parsed as any);
 
       const schemaToUse = zodStateSchema
         ? z.object({

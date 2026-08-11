@@ -60,14 +60,23 @@ export abstract class MemoryStorage extends StorageDomain {
 
   abstract saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType>;
 
+  /**
+   * Update a thread's title and/or metadata.
+   *
+   * `title` and `metadata` are each optional and independent: omitting one
+   * leaves that column untouched rather than blanking it. Callers that only
+   * need to change metadata (working memory, for example) must omit `title`
+   * instead of reading the thread and passing its title back, because a title
+   * generated between that read and this write would be silently overwritten.
+   */
   abstract updateThread({
     id,
     title,
     metadata,
   }: {
     id: string;
-    title: string;
-    metadata: Record<string, unknown>;
+    title?: string;
+    metadata?: Record<string, unknown>;
   }): Promise<StorageThreadType>;
 
   abstract deleteThread({ threadId }: { threadId: string }): Promise<void>;

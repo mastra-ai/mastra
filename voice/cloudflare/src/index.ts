@@ -14,7 +14,9 @@ interface CloudflareListenOptions {
 }
 
 type CloudflareListenOutput =
-  Ai_Cf_Openai_Whisper_Tiny_En_Output | Ai_Cf_Openai_Whisper_Large_V3_Turbo_Output | Ai_Cf_Openai_Whisper_Output;
+  | Ai_Cf_Openai_Whisper_Tiny_En_Output
+  | Ai_Cf_Openai_Whisper_Large_V3_Turbo_Output
+  | Ai_Cf_Openai_Whisper_Output;
 
 const defaultListeningModel = {
   model: '@cf/openai/whisper-large-v3-turbo' as const,

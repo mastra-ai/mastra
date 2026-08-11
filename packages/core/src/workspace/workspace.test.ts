@@ -11,6 +11,7 @@ import {
   FilesystemNotAvailableError,
   SandboxNotAvailableError,
   SearchNotAvailableError,
+  WorkspaceNotReadyError,
 } from './errors';
 import { CompositeFilesystem, LocalFilesystem } from './filesystem';
 import { LSPManager } from './lsp';
@@ -504,6 +505,93 @@ Line 3 conclusion`;
       // All special chars should be replaced with underscores
       expect(capturedIndexName).toBe('my_workspace_123_search');
       expect(capturedIndexName).toMatch(SQL_IDENTIFIER_PATTERN);
+    });
+
+    it('should release the search index on destroy', async () => {
+      const filesystem = new LocalFilesystem({ basePath: tempDir });
+      const workspace = new Workspace({
+        filesystem,
+        bm25: true,
+      });
+
+      await workspace.index('/doc1.txt', 'The quick brown fox jumps over the lazy dog');
+      expect((await workspace.search('lazy')).length).toBeGreaterThan(0);
+
+      await workspace.destroy();
+
+      // The indexed document text must not survive destroy(): otherwise the
+      // whole index stays reachable for the lifetime of the process.
+      expect(await workspace.search('lazy')).toEqual([]);
+    });
+
+    it('should release the search index even when a resource fails to destroy', async () => {
+      const filesystem = new LocalFilesystem({ basePath: tempDir });
+      const workspace = new Workspace({
+        filesystem,
+        bm25: true,
+      });
+
+      await workspace.index('/doc1.txt', 'The quick brown fox jumps over the lazy dog');
+
+      // `callLifecycle` prefers the `_destroy` wrapper over `destroy`
+      vi.spyOn(filesystem as any, '_destroy').mockRejectedValueOnce(new Error('fs teardown failed'));
+      await expect(workspace.destroy()).rejects.toThrow('fs teardown failed');
+
+      expect(await workspace.search('lazy')).toEqual([]);
+    });
+
+    it('should release loaded skills and reject skill access after destroy', async () => {
+      await createSkillFixtures(tempDir);
+
+      const filesystem = new LocalFilesystem({ basePath: tempDir });
+      const workspace = new Workspace({ filesystem, skills: ['skills'], bm25: true });
+      const skills = workspace.skills!;
+
+      await skills.list();
+      expect((await workspace.search('travel')).length).toBeGreaterThan(0);
+
+      await workspace.destroy();
+
+      // The loaded skill sources must not stay reachable through the workspace,
+      // and neither a fresh getter access nor a retained handle may reload them.
+      expect((workspace as any)._skills).toBeUndefined();
+      expect(() => workspace.skills).toThrow(WorkspaceNotReadyError);
+      await expect(skills.list()).rejects.toThrow(WorkspaceNotReadyError);
+      expect(await workspace.search('travel')).toEqual([]);
+    });
+
+    it('should reject search writes once the workspace is destroyed', async () => {
+      const filesystem = new LocalFilesystem({ basePath: tempDir });
+      const workspace = new Workspace({
+        filesystem,
+        bm25: true,
+      });
+
+      await workspace.index('/doc1.txt', 'The quick brown fox jumps over the lazy dog');
+      await workspace.destroy();
+
+      // Without this guard a late caller could repopulate the index that
+      // destroy() just released.
+      await expect(workspace.index('/doc2.txt', 'a lazy cat sleeps all day')).rejects.toThrow(WorkspaceNotReadyError);
+      expect(await workspace.search('lazy')).toEqual([]);
+    });
+
+    it('should keep rejecting search writes after a failed destroy', async () => {
+      const filesystem = new LocalFilesystem({ basePath: tempDir });
+      const workspace = new Workspace({
+        filesystem,
+        bm25: true,
+      });
+
+      await workspace.index('/doc1.txt', 'The quick brown fox jumps over the lazy dog');
+
+      vi.spyOn(filesystem as any, '_destroy').mockRejectedValueOnce(new Error('fs teardown failed'));
+      await expect(workspace.destroy()).rejects.toThrow('fs teardown failed');
+
+      // A failed teardown leaves status 'error', but the index has already been
+      // released — writes must stay blocked rather than repopulating it.
+      await expect(workspace.index('/doc2.txt', 'a lazy cat sleeps all day')).rejects.toThrow(WorkspaceNotReadyError);
+      expect(await workspace.search('lazy')).toEqual([]);
     });
   });
 

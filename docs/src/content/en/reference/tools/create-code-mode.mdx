@@ -9,6 +9,12 @@ packages:
 
 **Added in:** `@mastra/core@1.38.0`
 
+:::beta
+
+Breaking changes may occur without a major version bump until the API is stable.
+
+:::
+
 The `createCodeMode()` function returns a tool and generated instructions that let an agent run multi-tool computations as one TypeScript function. The generated code runs in a workspace sandbox, and each `external_*` call runs the real tool on the host with validation, request context, and tracing.
 
 For a conceptual overview, see [Code mode](/docs/agents/code-mode).
@@ -77,7 +83,7 @@ export const shopAgent = new Agent({
             name: 'sandbox',
             type: 'WorkspaceSandbox',
             description:
-              'Sandbox used to execute the generated code. Required unless the agent runs in a workspace that provides a sandbox. Pass `new LocalSandbox()` to run on the host explicitly.',
+              'Sandbox used to execute the generated code. Required unless the agent runs in a workspace that provides a sandbox, or the transport provides its own execution boundary (such as `IsolatedVmCodeModeTransport`). Pass `new LocalSandbox()` to run on the host explicitly.',
             isOptional: true,
           },
           {
@@ -102,7 +108,7 @@ export const shopAgent = new Agent({
     name: 'transport',
     type: 'CodeModeTransport',
     description:
-      'Optional transport implementation used to run the generated code in the sandbox. The default transport uses stdio JSON-RPC over the workspace sandbox process API.',
+      'Optional transport implementation used to run the generated code in the sandbox. The default transport uses stdio JSON-RPC over the workspace sandbox process API. Transports that declare `requiresSandbox: false` (such as [IsolatedVmCodeModeTransport](/reference/tools/isolated-vm-transport) and [QuickJsCodeModeTransport](/reference/tools/quickjs-transport)) run without a sandbox.',
     isOptional: true,
   },
 ]}

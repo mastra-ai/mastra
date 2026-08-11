@@ -7,6 +7,7 @@ import { getErrorFromUnknown } from '../error/utils.js';
 import type { PubSub } from '../events/pubsub';
 import type { ObservabilityContext, Span, SpanType, TracingPolicy } from '../observability';
 import { createObservabilityContext } from '../observability';
+import { deepEqual } from '../utils/deep-equal';
 import type { ExecutionGraph } from './execution-engine';
 import { ExecutionEngine } from './execution-engine';
 import type {
@@ -28,6 +29,7 @@ import { executeSleep as executeSleepHandler, executeSleepUntil as executeSleepU
 import type { ExecuteStepParams } from './handlers/step';
 import { executeStep as executeStepHandler } from './handlers/step';
 import type { ConditionFunction, ConditionFunctionParams, Step } from './step';
+import { createMappingStep, createStepFromAgent, createStepFromTool } from './step-factories';
 import type {
   FormattedWorkflowResult,
   DefaultEngineType,
@@ -37,6 +39,7 @@ import type {
   OutputWriter,
   RestartExecutionParams,
   SerializedStepFlowEntry,
+  SingleStepEntry,
   StepExecutionResult,
   StepFailure,
   StepFlowEntry,
@@ -45,9 +48,22 @@ import type {
   TimeTravelExecutionParams,
   WorkflowRunStatus,
 } from './types';
+// Used by the per-type execute methods (executeAgent/executeTool/executeMapping)
+// to build a runnable step from a declarative entry.
+import { getSingleStepEntryId } from './utils';
 
 // Re-export ExecutionContext for backwards compatibility
 export type { ExecutionContext } from './types';
+
+/** Params for the per-type execute methods: the same context `executeStep` takes,
+ * with the declarative graph entry instead of a pre-built `step`. */
+export type ExecuteAgentParams = Omit<ExecuteStepParams, 'step'> & {
+  entry: Extract<SingleStepEntry, { type: 'agent' }>;
+};
+export type ExecuteToolParams = Omit<ExecuteStepParams, 'step'> & { entry: Extract<SingleStepEntry, { type: 'tool' }> };
+export type ExecuteMappingParams = Omit<ExecuteStepParams, 'step'> & {
+  entry: Extract<SingleStepEntry, { type: 'mapping' }>;
+};
 
 /**
  * Default implementation of the ExecutionEngine
@@ -444,6 +460,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           status: 'failed';
           error: Error;
           endedAt: number;
+          nonRetryable?: true;
           tripwire?: StepTripwireInfo;
         };
       }
@@ -582,10 +599,9 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         if (hasPreviousOutput) {
           try {
             payloadMatchesPrevious =
-              optimizedStep.payload === previousOutput ||
-              JSON.stringify(optimizedStep.payload) === JSON.stringify(previousOutput);
+              optimizedStep.payload === previousOutput || deepEqual(optimizedStep.payload, previousOutput);
           } catch {
-            // non-serializable payload — treat as not matching
+            // Values that cannot be structurally compared are treated as not matching.
           }
         }
         if (payloadMatchesPrevious) {
@@ -1029,7 +1045,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           resourceId,
           stepResults: lastOutput.stepResults,
           serializedStepGraph: params.serializedStepGraph,
-          executionContext: lastExecutionContext!,
+          executionContext: lastExecutionContext,
           workflowStatus: 'paused',
           requestContext: currentRequestContext,
         });
@@ -1120,20 +1136,23 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       return stepResults.input;
     } else if (step.type === 'step') {
       return stepResults[step.step.id]?.output;
+    } else if (step.type === 'agent' || step.type === 'tool' || step.type === 'mapping') {
+      return stepResults[step.id]?.output;
     } else if (step.type === 'sleep' || step.type === 'sleepUntil') {
       return stepResults[step.id]?.output;
     } else if (step.type === 'parallel' || step.type === 'conditional') {
       return step.steps.reduce(
         (acc, entry) => {
-          acc[entry.step.id] = stepResults[entry.step.id]?.output;
+          const id = entry.type === 'step' ? entry.step.id : entry.id;
+          acc[id] = stepResults[id]?.output;
           return acc;
         },
         {} as Record<string, any>,
       );
     } else if (step.type === 'loop') {
-      return stepResults[step.step.id]?.output;
+      return stepResults[getSingleStepEntryId(step.step)]?.output;
     } else if (step.type === 'foreach') {
-      return stepResults[step.step.id]?.output;
+      return stepResults[getSingleStepEntryId(step.step)]?.output;
     }
   }
 
@@ -1147,6 +1166,47 @@ export class DefaultExecutionEngine extends ExecutionEngine {
 
   async executeStep(params: ExecuteStepParams): Promise<StepExecutionResult> {
     return executeStepHandler(this, params);
+  }
+
+  /**
+   * Executes a declarative `agent` step: resolves the agent (live ref, else
+   * `mastra.getAgentById(agentId)`), builds its runnable step, and runs it through
+   * the shared step runner.
+   */
+  async executeAgent(params: ExecuteAgentParams): Promise<StepExecutionResult> {
+    const { entry, ...rest } = params;
+    const agent = entry.agent ?? this.mastra?.getAgentById(entry.agentId);
+    if (!agent) {
+      throw new Error(
+        `Agent '${entry.agentId}' not found for workflow step '${entry.id}'. Register the agent on the Mastra instance or pass the agent instance directly.`,
+      );
+    }
+    return this.executeStep({ ...rest, step: { ...createStepFromAgent(agent as any, entry.options), id: entry.id } });
+  }
+
+  /**
+   * Executes a declarative `tool` step: resolves the tool (live ref, else
+   * `mastra.getTool(toolId)`), builds its runnable step, and runs it through the
+   * shared step runner.
+   */
+  async executeTool(params: ExecuteToolParams): Promise<StepExecutionResult> {
+    const { entry, ...rest } = params;
+    const tool = entry.tool ?? this.mastra?.getTool(entry.toolId);
+    if (!tool) {
+      throw new Error(
+        `Tool '${entry.toolId}' not found for workflow step '${entry.id}'. Pass the tool instance directly.`,
+      );
+    }
+    return this.executeStep({ ...rest, step: { ...createStepFromTool(tool as any, entry.options), id: entry.id } });
+  }
+
+  /**
+   * Executes a declarative `mapping` step: builds the mapping step from the
+   * declarative config/fn and runs it through the shared step runner.
+   */
+  async executeMapping(params: ExecuteMappingParams): Promise<StepExecutionResult> {
+    const { entry, ...rest } = params;
+    return this.executeStep({ ...rest, step: createMappingStep(entry.id, entry.mapConfig) });
   }
 
   async executeParallel(params: ExecuteParallelParams): Promise<StepResult<any, any, any, any>> {

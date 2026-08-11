@@ -11,9 +11,9 @@ packages:
 
 # Memory processors
 
-Memory processors transform and filter messages as they pass through an agent with memory enabled. They manage context window limits, remove unnecessary content, and optimize the information sent to the language model.
+Memory processors transform and filter messages as they pass through an agent with memory enabled. They manage context window limits and remove unnecessary content, plus optimize the information sent to the language model.
 
-When memory is enabled on an agent, Mastra adds memory processors to the agent's processor pipeline. These processors retrieve message history, working memory, and semantically relevant messages, then persist new messages after the model responds.
+When memory is enabled on an agent, Mastra adds memory processors to the agent's processor pipeline. These processors retrieve message history and working memory, plus semantically relevant messages, then persist new messages after the model responds.
 
 Memory processors are [processors](/docs/agents/processors) that operate specifically on memory-related messages and state.
 
@@ -216,7 +216,7 @@ Understanding the execution order is important when combining guardrails with me
 1. **Memory processors run FIRST**: `WorkingMemory`, `MessageHistory`, `SemanticRecall`
 1. **Your input processors run AFTER**: guardrails, filters, validators
 
-This means memory loads message history before your processors can validate or filter the input.
+As a result, memory loads message history before your processors can validate or filter the input.
 
 ### Output Processors
 
@@ -324,9 +324,9 @@ Some storage providers enforce record size limits that base64-encoded file attac
 
 | Provider | Record size limit |
 | - | - |
-| [DynamoDB](/reference/storage/dynamodb) | 400 KB |
-| [Convex](/reference/storage/convex) | 1 MiB |
-| [Cloudflare D1](/reference/storage/cloudflare-d1) | 1 MiB |
+| [DynamoDB](/integrations/databases/dynamodb) | 400 KB |
+| [Convex](/integrations/databases/convex) | 1 MiB |
+| [Cloudflare D1](/integrations/databases/cloudflare-d1) | 1 MiB |
 
 PostgreSQL, MongoDB, and libSQL have higher limits and are usually unaffected.
 

@@ -1,8 +1,8 @@
 import type { MastraDBMessage } from '@mastra/core/agent-controller';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-import { transcriptReducer, initialTranscript } from '../../src/web/ui/domains/chat/services/transcript';
-import type { TranscriptState } from '../../src/web/ui/domains/chat/services/transcript';
+import { transcriptReducer, initialTranscript } from '../../../factory-ui/src/ui/domains/chat/services/transcript';
+import type { TranscriptState } from '../../../factory-ui/src/ui/domains/chat/services/transcript';
 
 /**
  * Tokens/sec computation — tested by driving the transcript reducer directly

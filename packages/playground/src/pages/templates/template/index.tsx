@@ -328,7 +328,7 @@ export default function Template() {
   return (
     <MainContentLayout>
       <div className={cn('w-full lg:px-12 h-full overflow-y-scroll')}>
-        <div className="p-6 w-full max-w-[80rem] mx-auto grid gap-y-4">
+        <div className="mx-auto grid w-full max-w-[80rem] gap-y-4 p-6">
           <TemplateInfo
             isLoading={isLoadingTemplate}
             title={template?.title}

@@ -98,6 +98,113 @@ describe('TokenLimiterProcessor', () => {
       expect(result2).toBeNull();
     });
 
+    it('should not count lifecycle or reasoning chunks against the limit', async () => {
+      processor = new TokenLimiterProcessor({ limit: 180 });
+      const state: Record<string, any> = {};
+
+      const stepStart: ChunkType = {
+        type: 'step-start',
+        runId: 'test-run-id',
+        from: ChunkFrom.AGENT,
+        payload: {
+          request: {
+            body: JSON.stringify({ messages: Array(30).fill({ role: 'user', content: 'x'.repeat(200) }) }),
+          },
+        },
+      } as any;
+      expect(
+        await processor.processOutputStream({ part: stepStart, streamParts: [], state, abort: mockAbort }),
+      ).toEqual(stepStart);
+
+      const reasoning: ChunkType = {
+        type: 'reasoning-delta',
+        runId: 'test-run-id',
+        from: ChunkFrom.AGENT,
+        payload: { id: 'r1', text: 'thinking about the layout and metrics '.repeat(12) },
+      } as any;
+      expect(
+        await processor.processOutputStream({ part: reasoning, streamParts: [], state, abort: mockAbort }),
+      ).toEqual(reasoning);
+
+      expect(state.currentTokens ?? 0).toBe(0);
+
+      // The full answer still fits within the limit
+      let emitted = 0;
+      for (let i = 0; i < 12; i++) {
+        const part: ChunkType = {
+          type: 'text-delta',
+          payload: { text: 'Yesterday: 3 posts, 1.2K views. ', id: 'test-id' },
+          runId: 'test-run-id',
+          from: ChunkFrom.AGENT,
+        };
+        if (await processor.processOutputStream({ part, streamParts: [], state, abort: mockAbort })) emitted++;
+      }
+      expect(emitted).toBe(12);
+    });
+
+    it('should never withhold tool-call or tool-result chunks once the limit is reached', async () => {
+      processor = new TokenLimiterProcessor({ limit: 5 });
+      const state: Record<string, any> = {};
+
+      const text: ChunkType = {
+        type: 'text-delta',
+        payload: { text: 'a very long answer that blows right past the configured token limit', id: 'test-id' },
+        runId: 'test-run-id',
+        from: ChunkFrom.AGENT,
+      };
+      expect(await processor.processOutputStream({ part: text, streamParts: [], state, abort: mockAbort })).toBeNull();
+
+      const toolCall: ChunkType = {
+        type: 'tool-call',
+        payload: { toolCallId: 'call_1', toolName: 'getStats', args: { range: 'yesterday' } },
+        runId: 'test-run-id',
+        from: ChunkFrom.AGENT,
+      } as any;
+      expect(await processor.processOutputStream({ part: toolCall, streamParts: [], state, abort: mockAbort })).toEqual(
+        toolCall,
+      );
+
+      const toolResult: ChunkType = {
+        type: 'tool-result',
+        payload: { toolCallId: 'call_1', toolName: 'getStats', result: { posts: 3, views: 1200 } },
+        runId: 'test-run-id',
+        from: ChunkFrom.AGENT,
+      } as any;
+      expect(
+        await processor.processOutputStream({ part: toolResult, streamParts: [], state, abort: mockAbort }),
+      ).toEqual(toolResult);
+    });
+
+    it('should emit a single data-token-limit-reached chunk when output is withheld', async () => {
+      processor = new TokenLimiterProcessor({ limit: 5 });
+      const state: Record<string, any> = {};
+      const custom = vi.fn(async () => {});
+
+      for (let i = 0; i < 3; i++) {
+        const part: ChunkType = {
+          type: 'text-delta',
+          payload: { text: 'a very long answer that blows past the configured token limit', id: 'test-id' },
+          runId: 'test-run-id',
+          from: ChunkFrom.AGENT,
+        };
+        await processor.processOutputStream({
+          part,
+          streamParts: [],
+          state,
+          abort: mockAbort,
+          writer: { custom },
+        });
+      }
+
+      expect(custom).toHaveBeenCalledTimes(1);
+      expect(custom.mock.calls[0]![0]).toMatchObject({
+        type: 'data-token-limit-reached',
+        data: { processorId: 'token-limiter', limit: 5 },
+        // transient keeps the notification off the persisted message history
+        transient: true,
+      });
+    });
+
     it('should accept simple number constructor', async () => {
       processor = new TokenLimiterProcessor(10);
 

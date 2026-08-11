@@ -17,7 +17,7 @@ import type {
   ScoreInput,
   ScoreEvent,
 } from '@mastra/core/observability';
-import type { ObservabilityStorage } from '@mastra/core/storage';
+import type { GetTraceResponse, ObservabilityStorage } from '@mastra/core/storage';
 import { routeToHandler } from './bus/route-event';
 import { createClientObservabilityProxy } from './client';
 import { SamplingStrategyType, observabilityRegistryConfigSchema, observabilityConfigValueSchema } from './config';
@@ -43,6 +43,17 @@ function isInstance(
 ): obj is ObservabilityInstance {
   return obj instanceof BaseObservabilityInstance;
 }
+
+/**
+ * Delays (ms) between attempts to rehydrate a trace from storage when an
+ * annotation (score/feedback) targets a span that has not been flushed by
+ * the configured exporters yet. Exporters buffer and flush asynchronously:
+ * by default they flush at 1000 spans or after a 5000ms wait
+ * (`maxBatchWaitMs`), so an annotation emitted right after a span ends can
+ * race the flush and be silently dropped. The schedule below sums to
+ * ~5.85s, covering the default flush interval with margin.
+ */
+const RECORDED_TRACE_LOOKUP_RETRY_DELAYS_MS = [100, 250, 500, 1000, 2000, 2000];
 
 /**
  * Top-level observability entrypoint. Manages a registry of ObservabilityInstance
@@ -219,13 +230,17 @@ export class Observability extends MastraBase implements ObservabilityEntrypoint
       exporters.forEach(exporter => {
         // Initialize exporter if it has an init method
         if ('init' in exporter && typeof exporter.init === 'function') {
-          try {
-            exporter.init({ mastra, config, emitDropEvent });
-          } catch (error) {
+          const handleInitError = (error: unknown) => {
             this.logger?.warn('Failed to initialize observability exporter', {
               exporterName: exporter.name,
               error: error instanceof Error ? error.message : String(error),
             });
+          };
+
+          try {
+            void Promise.resolve(exporter.init({ mastra, config, emitDropEvent })).catch(handleInitError);
+          } catch (error) {
+            handleInitError(error);
           }
         }
       });
@@ -299,18 +314,14 @@ export class Observability extends MastraBase implements ObservabilityEntrypoint
       return;
     }
 
-    const trace = await this.#getStoredTrace(args.traceId);
-    if (!trace) {
-      return;
-    }
-
-    const event = buildRecordedScoreEventFromTrace({
-      trace,
-      spanId: args.spanId,
-      score: args.score,
-    });
+    const event = await this.#buildRecordedEventWithRetry(args.traceId, trace =>
+      buildRecordedScoreEventFromTrace({ trace, spanId: args.spanId, score: args.score }),
+    );
 
     if (!event) {
+      this.logger?.warn(
+        `Score event was dropped because the target trace/span was not found in observability storage (traceId: ${args.traceId}, spanId: ${args.spanId})`,
+      );
       return;
     }
 
@@ -342,18 +353,14 @@ export class Observability extends MastraBase implements ObservabilityEntrypoint
       return;
     }
 
-    const trace = await this.#getStoredTrace(args.traceId);
-    if (!trace) {
-      return;
-    }
-
-    const event = buildRecordedFeedbackEventFromTrace({
-      trace,
-      spanId: args.spanId,
-      feedback: args.feedback,
-    });
+    const event = await this.#buildRecordedEventWithRetry(args.traceId, trace =>
+      buildRecordedFeedbackEventFromTrace({ trace, spanId: args.spanId, feedback: args.feedback }),
+    );
 
     if (!event) {
+      this.logger?.warn(
+        `Feedback event was dropped because the target trace/span was not found in observability storage (traceId: ${args.traceId}, spanId: ${args.spanId})`,
+      );
       return;
     }
 
@@ -443,6 +450,30 @@ export class Observability extends MastraBase implements ObservabilityEntrypoint
     }
 
     return (await storage.getStore('observability')) ?? null;
+  }
+
+  /**
+   * Build a recorded score/feedback event from storage, retrying briefly to
+   * ride out the async exporter flush: annotations emitted right after a
+   * span ends can otherwise race the flush and be silently dropped.
+   */
+  async #buildRecordedEventWithRetry<TEvent>(
+    traceId: string,
+    build: (trace: GetTraceResponse) => TEvent | null,
+  ): Promise<TEvent | null> {
+    for (const delayMs of [0, ...RECORDED_TRACE_LOOKUP_RETRY_DELAYS_MS]) {
+      if (delayMs > 0) {
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+      }
+
+      const trace = await this.#getStoredTrace(traceId);
+      const event = trace ? build(trace) : null;
+      if (event) {
+        return event;
+      }
+    }
+
+    return null;
   }
 
   async #getStoredTrace(traceId: string) {

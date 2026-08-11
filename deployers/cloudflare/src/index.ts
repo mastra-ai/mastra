@@ -166,6 +166,21 @@ export default stream;
 `;
     await writeFile(join(outputDirectory, this.outputDir, readableStreamStubPath), readableStreamStub);
 
+    // Write module stub — Wrangler runs Workers with an undefined import.meta.url,
+    // so eager createRequire(import.meta.url) interop helpers must not call Node's implementation.
+    const moduleStubPath = 'module-stub.mjs';
+    const moduleStub = `// Stub for module.createRequire in Cloudflare Workers
+export function createRequire() {
+  const req = specifier => {
+    throw new Error(\`require(\${specifier}) is not available in Cloudflare Workers\`);
+  };
+  req.resolve = specifier => specifier;
+  return req;
+}
+export default { createRequire };
+`;
+    await writeFile(join(outputDirectory, this.outputDir, moduleStubPath), moduleStub);
+
     const wranglerConfig: Unstable_RawConfig = {
       name: 'mastra',
       compatibility_date: '2025-04-01',
@@ -183,6 +198,8 @@ export default stream;
         typescript: `./${typescriptStubPath}`,
         execa: `./${execaStubPath}`,
         'readable-stream': `./${readableStreamStubPath}`,
+        module: `./${moduleStubPath}`,
+        'node:module': `./${moduleStubPath}`,
         ...userAlias,
       },
     };
@@ -194,6 +211,7 @@ export default stream;
     const jsoncFilePath = join(projectRoot, 'wrangler.jsonc');
     const mainFilePath = join(outputDirectory, this.outputDir, 'index.mjs');
     const tsStubFilePath = join(outputDirectory, this.outputDir, typescriptStubPath);
+    const moduleStubFilePath = join(outputDirectory, this.outputDir, moduleStubPath);
 
     const wranglerJsoncConfig: Unstable_RawConfig & { placeholder: string } = {
       placeholder: 'PLACEHOLDER',
@@ -203,6 +221,8 @@ export default stream;
       alias: {
         ...wranglerConfig.alias,
         typescript: `./${relative(projectRoot, tsStubFilePath)}`,
+        module: `./${relative(projectRoot, moduleStubFilePath)}`,
+        'node:module': `./${relative(projectRoot, moduleStubFilePath)}`,
       },
     };
 
@@ -229,7 +249,7 @@ export default stream;
           _mastra.__registerInternalWorkflow(scoreTracesWorkflow);
         }
 
-        const app = await createHonoServer(_mastra, { tools: getToolExports(tools) });
+        const app = await createHonoServer(_mastra, { tools: getToolExports(tools), browserStream: false });
         return app.fetch(request, env, context);
       }
     }
@@ -259,8 +279,14 @@ export default stream;
         nodeBuiltinsExternal(),
         virtual({
           '#polyfills': `
-process.versions = process.versions || {};
-process.versions.node = '${process.versions.node}';
+try {
+  if (!process.versions) {
+    Object.defineProperty(process, 'versions', { value: {}, configurable: true });
+  }
+  if (!process.versions.node) {
+    Object.defineProperty(process.versions, 'node', { value: '${process.versions.node}', configurable: true });
+  }
+} catch {}
       `,
         }),
         ...inputOptions.plugins,

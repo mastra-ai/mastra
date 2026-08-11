@@ -108,6 +108,19 @@ const includeSchema = z
   )
   .optional();
 
+const metadataFilterValueSchema = z.union([z.string(), z.number().finite(), z.boolean(), z.null()]);
+const metadataFilterKeySchema = z
+  .string()
+  .max(128)
+  .regex(/^[a-zA-Z_][a-zA-Z0-9_]*$/)
+  .refine(key => !['__proto__', 'prototype', 'constructor'].includes(key));
+
+/**
+ * Metadata filters are deliberately shallow scalar maps so storage adapters can
+ * apply exact-match AND semantics consistently.
+ */
+const metadataFilterSchema = z.record(metadataFilterKeySchema, metadataFilterValueSchema);
+
 /**
  * Filter schema for message listing - handles JSON parsing from query strings
  */
@@ -135,6 +148,7 @@ const filterSchema = z
         })
         .optional(),
       roles: z.array(z.string()).optional(),
+      metadata: metadataFilterSchema.optional(),
     }),
   )
   .optional();

@@ -18,7 +18,8 @@ services:
       retries: 15
       start_period: 3s
   mongodb-vector:
-    image: mongodb/mongodb-atlas-local
+    # Pinned to 8.2: $rankFusion (used by hybridQuery) requires MongoDB >= 8.1.
+    image: mongodb/mongodb-atlas-local:8.2
     container_name: 'mongodb-vector-test-db'
     environment:
       MONGODB_INITDB_ROOT_USERNAME: mongodb

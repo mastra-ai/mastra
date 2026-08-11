@@ -177,7 +177,9 @@ export class MemoryThread extends BaseResource {
  */
 function normalizeWriteOpts(
   opts:
-    { agentId?: string; requestContext?: RequestContext | Record<string, any> } | RequestContext | Record<string, any>,
+    | { agentId?: string; requestContext?: RequestContext | Record<string, any> }
+    | RequestContext
+    | Record<string, any>,
 ): { agentId?: string; requestContext?: RequestContext | Record<string, any> } {
   if (!opts || typeof opts !== 'object') return {};
   if ('agentId' in opts || 'requestContext' in opts) {

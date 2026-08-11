@@ -27,7 +27,7 @@ If you host your Mastra application on your own infrastructure (not on Mastra pl
 
 ## Version compatibility
 
-- `MastraPlatformExporter` is available starting in `@mastra/observability@1.12.0`. In `1.8.0` through `1.11.x` the same exporter ships only as `CloudExporter`; the constructor signature and environment variables are identical.
+- `MastraPlatformExporter` is available starting in `@mastra/observability@1.12.0`. In `1.8.0` through `1.11.x` the same exporter includes only as `CloudExporter`. The constructor signature and environment variables are identical.
 - In `@mastra/observability@1.8.0` through `1.9.1`, set `MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT=https://observability.mastra.ai` in addition to `MASTRA_PLATFORM_ACCESS_TOKEN` and `MASTRA_PROJECT_ID`.
 - Starting in `@mastra/observability@1.9.2`, the exporter defaults to `https://observability.mastra.ai`, so `MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT` is only required when you want to send telemetry to a different collector.
 
@@ -199,7 +199,7 @@ When you deploy with Mastra Studio, set **Deployment → Service Name** to a sta
 
 ## Performance
 
-:::info
+:::note
 
 MastraPlatformExporter uses batching to optimize network usage. Events are buffered and sent in batches, reducing overhead while maintaining near real-time visibility.
 

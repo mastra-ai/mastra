@@ -4,7 +4,7 @@ import { checkConfigExport } from './check-config-export';
 
 describe('checkConfigExport Babel plugin', () => {
   function runPlugin(code: string) {
-    const result = { hasValidConfig: false };
+    const result: { hasValidConfig: boolean; projectType?: string } = { hasValidConfig: false };
     transformSync(code, {
       filename: 'testfile.ts',
       presets: ['@babel/preset-typescript'],
@@ -12,62 +12,62 @@ describe('checkConfigExport Babel plugin', () => {
       configFile: false,
       babelrc: false,
     });
-    return result.hasValidConfig;
+    return result;
   }
 
   it('matches export const mastra = new Mastra()', () => {
     const code = 'export const mastra = new Mastra()';
-    expect(runPlugin(code)).toBe(true);
+    expect(runPlugin(code).hasValidConfig).toBe(true);
   });
 
   it('matches const mastra = new Mastra(); export { mastra }', () => {
     const code = 'const mastra = new Mastra(); export { mastra }';
-    expect(runPlugin(code)).toBe(true);
+    expect(runPlugin(code).hasValidConfig).toBe(true);
   });
 
   it('matches const foo = new Mastra(); export { foo as mastra }', () => {
     const code = 'const foo = new Mastra(); export { foo as mastra }';
-    expect(runPlugin(code)).toBe(true);
+    expect(runPlugin(code).hasValidConfig).toBe(true);
   });
 
   it('matches const foo = new Mastra(); const bar = 1; export { foo as mastra, bar }', () => {
     const code = 'const foo = new Mastra(); const bar = 1; export { foo as mastra, bar }';
-    expect(runPlugin(code)).toBe(true);
+    expect(runPlugin(code).hasValidConfig).toBe(true);
   });
 
   it('does not match export const mastra = 123', () => {
     const code = 'export const mastra = 123';
-    expect(runPlugin(code)).toBe(false);
+    expect(runPlugin(code).hasValidConfig).toBe(false);
   });
 
   it('does not match export const mastra = getMastra()', () => {
     const code = 'export const mastra = getMastra()';
-    expect(runPlugin(code)).toBe(false);
+    expect(runPlugin(code).hasValidConfig).toBe(false);
   });
 
   it('does not match export { mastra } if mastra is not new Mastra()', () => {
     const code = 'const mastra = 123; export { mastra }';
-    expect(runPlugin(code)).toBe(false);
+    expect(runPlugin(code).hasValidConfig).toBe(false);
   });
 
   it('does not match export { foo as mastra } if foo is not new Mastra()', () => {
     const code = 'const foo = 123; export { foo as mastra }';
-    expect(runPlugin(code)).toBe(false);
+    expect(runPlugin(code).hasValidConfig).toBe(false);
   });
 
   it('does not match unrelated exports', () => {
     const code = 'const foo = new Mastra(); export { foo }';
-    expect(runPlugin(code)).toBe(false);
+    expect(runPlugin(code).hasValidConfig).toBe(false);
   });
 
   it('does not match export default new Mastra()', () => {
     const code = 'export default new Mastra()';
-    expect(runPlugin(code)).toBe(false);
+    expect(runPlugin(code).hasValidConfig).toBe(false);
   });
 
   it('works with the babel-typescript preset', () => {
     const code = 'type A = any; const foo: A = 123; export const mastra = new Mastra()';
-    expect(runPlugin(code)).toBe(true);
+    expect(runPlugin(code).hasValidConfig).toBe(true);
   });
 
   it('matches export const mastra = new Mastra({ ...config })', () => {
@@ -75,7 +75,7 @@ describe('checkConfigExport Babel plugin', () => {
       const config = { server: { port: 3000 } };
       export const mastra = new Mastra({ ...config });
     `;
-    expect(runPlugin(code)).toBe(true);
+    expect(runPlugin(code).hasValidConfig).toBe(true);
   });
 
   it('matches export const mastra = new Mastra({ ...config, agents: {} })', () => {
@@ -83,7 +83,7 @@ describe('checkConfigExport Babel plugin', () => {
       const config = { server: { port: 3000 } };
       export const mastra = new Mastra({ ...config, agents: {} });
     `;
-    expect(runPlugin(code)).toBe(true);
+    expect(runPlugin(code).hasValidConfig).toBe(true);
   });
 
   it('matches export const mastra = new Mastra({ agents: {}, ...config })', () => {
@@ -91,6 +91,65 @@ describe('checkConfigExport Babel plugin', () => {
       const config = { server: { port: 3000 } };
       export const mastra = new Mastra({ agents: {}, ...config });
     `;
-    expect(runPlugin(code)).toBe(true);
+    expect(runPlugin(code).hasValidConfig).toBe(true);
+  });
+
+  // --- MastraFactory (factory) detection ---
+
+  it('detects factory for import { MastraFactory } + new MastraFactory()', () => {
+    const code = `import { MastraFactory } from './factory'; const f = new MastraFactory()`;
+    expect(runPlugin(code).projectType).toBe('factory');
+  });
+
+  it('detects factory for aliased import { MastraFactory as Factory } + new Factory()', () => {
+    const code = `import { MastraFactory as Factory } from './factory'; const f = new Factory()`;
+    expect(runPlugin(code).projectType).toBe('factory');
+  });
+
+  it('detects factory for new MastraFactory() in export declaration', () => {
+    const code = `import { MastraFactory } from './factory'; export const f = new MastraFactory()`;
+    expect(runPlugin(code).projectType).toBe('factory');
+  });
+
+  it('detects factory alongside valid Mastra config export', () => {
+    const code = `import { MastraFactory } from './factory'; export const mastra = new Mastra(); const f = new MastraFactory()`;
+    const result = runPlugin(code);
+    expect(result.hasValidConfig).toBe(true);
+    expect(result.projectType).toBe('factory');
+  });
+
+  it('does not detect factory for unused MastraFactory import', () => {
+    const code = `import { MastraFactory } from './factory'; export const mastra = new Mastra()`;
+    expect(runPlugin(code).projectType).toBeUndefined();
+  });
+
+  it('does not detect factory for local class named MastraFactory (not imported)', () => {
+    const code = `class MastraFactory {}; const f = new MastraFactory()`;
+    expect(runPlugin(code).projectType).toBeUndefined();
+  });
+
+  it('does not detect factory for non-imported identifier named MastraFactory', () => {
+    const code = `const MastraFactory = class {}; const f = new MastraFactory()`;
+    expect(runPlugin(code).projectType).toBeUndefined();
+  });
+
+  it('does not detect factory when a local parameter shadows the imported binding', () => {
+    const code = `
+      import { MastraFactory } from './factory';
+      function create(MastraFactory: new () => unknown) {
+        return new MastraFactory();
+      }
+    `;
+    expect(runPlugin(code).projectType).toBeUndefined();
+  });
+
+  it('detects factory when the import declaration appears after construction', () => {
+    const code = `const f = new MastraFactory(); import { MastraFactory } from './factory'`;
+    expect(runPlugin(code).projectType).toBe('factory');
+  });
+
+  it('does not detect factory for non-constructor usage of imported MastraFactory', () => {
+    const code = `import { MastraFactory } from './factory'; const f = MastraFactory()`;
+    expect(runPlugin(code).projectType).toBeUndefined();
   });
 });

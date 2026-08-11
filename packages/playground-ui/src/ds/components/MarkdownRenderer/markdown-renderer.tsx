@@ -7,15 +7,19 @@ import { Code } from '@/ds/components/Code';
 import { CopyButton } from '@/ds/components/CopyButton';
 import { cn } from '@/lib/utils';
 
+export type MarkdownExternalLinkTarget = 'tab' | 'window';
+
 export type MarkdownRendererProps = {
   children: string;
+  externalLinkTarget?: MarkdownExternalLinkTarget;
 };
 
-export function MarkdownRenderer({ children }: MarkdownRendererProps) {
+export function MarkdownRenderer({ children, externalLinkTarget = 'tab' }: MarkdownRendererProps) {
   const processedText = children.replace(/\\n/g, '\n');
+  const components = externalLinkTarget === 'window' ? WINDOW_COMPONENTS : COMPONENTS;
 
   return (
-    <Markdown remarkPlugins={[remarkGfm]} components={COMPONENTS} className="space-y-3">
+    <Markdown remarkPlugins={[remarkGfm]} components={components} className="space-y-3">
       {processedText}
     </Markdown>
   );
@@ -31,7 +35,7 @@ const CodeBlock = ({ children, className, language, ...restProps }: CodeBlockPro
   const code = typeof children === 'string' ? children : childrenTakeAllStringContents(children);
 
   const preClass = cn(
-    'overflow-x-scroll rounded-md border bg-surface1/50 p-4 font-mono text-sm [scrollbar-width:none]',
+    '[scrollbar-width:none] overflow-x-scroll rounded-md border bg-surface1/50 p-4 font-mono text-sm',
     className,
   );
 
@@ -63,6 +67,48 @@ function childrenTakeAllStringContents(element: any): string {
 
   return '';
 }
+
+const POPUP_WINDOW_FEATURES = 'popup=yes,width=720,height=800,resizable=yes,scrollbars=yes';
+
+const createMarkdownLink =
+  (externalLinkTarget: MarkdownExternalLinkTarget): NonNullable<Components['a']> =>
+  ({ children, href, onClick, ...props }) => {
+    const isExternal = /^https?:\/\//i.test(href ?? '');
+    const handleClick: React.MouseEventHandler<HTMLAnchorElement> = event => {
+      onClick?.(event);
+      if (
+        event.defaultPrevented ||
+        !isExternal ||
+        externalLinkTarget !== 'window' ||
+        event.button !== 0 ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.shiftKey ||
+        event.altKey
+      ) {
+        return;
+      }
+
+      const popup = window.open(href, '_blank', POPUP_WINDOW_FEATURES);
+      if (!popup) return;
+
+      popup.opener = null;
+      event.preventDefault();
+    };
+
+    return (
+      <a
+        className="underline underline-offset-2"
+        href={href}
+        {...props}
+        target={isExternal ? '_blank' : undefined}
+        rel={isExternal ? 'noopener noreferrer' : undefined}
+        onClick={handleClick}
+      >
+        {children}
+      </a>
+    );
+  };
 
 // Create component wrappers with className
 const COMPONENTS: Components = {
@@ -96,13 +142,9 @@ const COMPONENTS: Components = {
       {children}
     </strong>
   ),
-  a: ({ children, ...props }) => (
-    <a className="underline underline-offset-2" {...props}>
-      {children}
-    </a>
-  ),
+  a: createMarkdownLink('tab'),
   blockquote: ({ children, ...props }) => (
-    <blockquote className="border-l-2 border-neutral6 pl-4" {...props}>
+    <blockquote className="border-neutral6 border-l-2 pl-4" {...props}>
       {children}
     </blockquote>
   ),
@@ -140,13 +182,13 @@ const COMPONENTS: Components = {
     </li>
   ),
   table: ({ children, ...props }) => (
-    <table className="w-full border-collapse overflow-y-auto rounded-md border border-neutral6/20" {...props}>
+    <table className="border-neutral6/20 w-full border-collapse overflow-y-auto rounded-md border" {...props}>
       {children}
     </table>
   ),
   th: ({ children, ...props }) => (
     <th
-      className="border border-neutral6/20 px-4 py-2 text-left font-bold [[align=center]]:text-center [[align=right]]:text-right"
+      className="border-neutral6/20 border px-4 py-2 text-left font-bold [[align=center]]:text-center [[align=right]]:text-right"
       {...props}
     >
       {children}
@@ -154,14 +196,14 @@ const COMPONENTS: Components = {
   ),
   td: ({ children, ...props }) => (
     <td
-      className="border border-neutral6/20 px-4 py-2 text-left [[align=center]]:text-center [[align=right]]:text-right"
+      className="border-neutral6/20 border px-4 py-2 text-left [[align=center]]:text-center [[align=right]]:text-right"
       {...props}
     >
       {children}
     </td>
   ),
   tr: ({ children, ...props }) => (
-    <tr className="m-0 border-t p-0 even:bg-surface4" {...props}>
+    <tr className="even:bg-surface4 m-0 border-t p-0" {...props}>
       {children}
     </tr>
   ),
@@ -171,6 +213,11 @@ const COMPONENTS: Components = {
     </p>
   ),
   hr: ({ ...props }) => <hr className="border-neutral6/20" {...props} />,
+};
+
+const WINDOW_COMPONENTS: Components = {
+  ...COMPONENTS,
+  a: createMarkdownLink('window'),
 };
 
 export default MarkdownRenderer;

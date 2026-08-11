@@ -340,7 +340,7 @@ export function DatasetItemPanel({ datasetId, item, items, onItemChange, onClose
                 )}
               </DataKeysAndValues>
 
-              <div className="grid gap-3 mt-3">
+              <div className="mt-3 grid gap-3">
                 <DataPanel.CodeSection
                   title="Input"
                   icon={<FileInputIcon />}

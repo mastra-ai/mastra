@@ -210,7 +210,7 @@ export function generateTypesContent(models: Record<string, string[]>): string {
       const needsQuotes = !/^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(provider);
       const providerKey = needsQuotes ? `'${provider}'` : provider;
 
-      // Format array based on length (prettier printWidth: 120)
+      // Format array based on the repository printWidth of 120.
       const singleLine = `  readonly ${providerKey}: readonly [${modelsList.join(', ')}];`;
 
       // If single line exceeds 120 chars, format as multi-line
@@ -223,6 +223,11 @@ export function generateTypesContent(models: Record<string, string[]>): string {
     })
     .join('\n');
 
+  // The Provider / ModelForProvider / ModelRouterModelId types emitted below cover
+  // the built-in providers only. The public, augmentable versions live in
+  // `src/llm/index.ts`, which re-derives them from the `ProviderModelsMap`
+  // interface so custom gateways can extend them. Keep the two in sync, and
+  // import from `@mastra/core/llm` rather than from the generated file.
   return `/**
  * THIS FILE IS AUTO-GENERATED - DO NOT EDIT
  * Generated from model gateway providers

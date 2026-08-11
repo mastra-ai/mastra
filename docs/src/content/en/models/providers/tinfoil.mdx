@@ -35,7 +35,7 @@ for await (const chunk of stream) {
 }
 ```
 
-:::info
+:::note
 
 Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-specific features may not be available. Check the [Tinfoil documentation](https://docs.tinfoil.sh) for details.
 
@@ -94,16 +94,16 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.6
   },
   {
-    "model": "tinfoil/kimi-k2-6",
+    "model": "tinfoil/kimi-k3",
     "imageInput": true,
     "audioInput": false,
     "videoInput": true,
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 256000,
-    "maxOutput": 262144,
-    "inputCost": 1.5,
-    "outputCost": 5.25
+    "maxOutput": 131072,
+    "inputCost": 2,
+    "outputCost": 6
   },
   {
     "model": "tinfoil/llama3-3-70b",

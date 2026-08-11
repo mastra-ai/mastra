@@ -420,7 +420,7 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
           });
           await this.storage.updateThread({
             id: update.threadId,
-            title: shouldUpdateThreadTitle ? newTitle : (thread.title ?? ''),
+            ...(shouldUpdateThreadTitle ? { title: newTitle } : {}),
             metadata: newMetadata,
           });
 

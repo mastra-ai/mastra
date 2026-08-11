@@ -7,7 +7,7 @@ packages:
 
 # Agent.getDefaultOptions()
 
-Agents can be configured with default options for memory usage, output format, and iteration steps. The `.getDefaultOptions()` method returns these defaults, resolving them if they're functions. These options apply to all `stream()` and `generate()` calls unless overridden and are useful for inspecting an agent’s unknown defaults.
+Agents can be configured with default options for memory usage and output format. Iteration steps can also be configured. The `.getDefaultOptions()` method returns these defaults, resolving them if they're functions. These options apply to all `stream()` and `generate()` calls unless overridden and are useful for inspecting an agent’s unknown defaults.
 
 ## Usage example
 
@@ -66,5 +66,5 @@ await agent.getDefaultOptions({
 
 ## Related
 
-- [Streaming with agents](/guides/concepts/streaming#streaming-with-agents)
+- [Streaming with agents](/docs/guides/streaming#streaming-with-agents)
 - [Request Context](/docs/server/request-context)

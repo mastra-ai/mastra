@@ -7,6 +7,12 @@ packages:
 
 # Workspace
 
+:::beta
+
+Breaking changes may occur without a major version bump until the API is stable.
+
+:::
+
 A [workspace](/docs/workspace/overview) gives an agent filesystem access and command execution. File-based agents get a default workspace automatically when discovered through `mastra dev` or `mastra build`, so they can read and write files and run shell commands without extra configuration.
 
 Use this page for the file-based convention. For workspace providers, tools, search, lifecycle, and sandbox details, see [Workspaces](/docs/workspace/overview).
@@ -61,7 +67,7 @@ The workspace filesystem controls what file tools can read and write. The sandbo
 
 ## Seed files
 
-Add a `workspace/` directory to ship starting files with the agent. Mastra mirrors files under `workspace/` into the agent's default runtime workspace at build time, so the agent starts with those files on disk.
+Add a `workspace/` directory to include starting files with the agent. Mastra mirrors files under `workspace/` into the agent's default runtime workspace at build time, so the agent starts with those files on disk.
 
 ```text title="Seed files"
 src/mastra/agents/weather/

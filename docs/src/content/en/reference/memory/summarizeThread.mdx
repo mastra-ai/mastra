@@ -7,13 +7,13 @@ packages:
 
 # Memory.summarizeThread()
 
-The `.summarizeThread()` method summarizes a thread's conversation in one shot. It loads the thread's messages from storage and distills them with the same Observer plumbing that powers [Observational Memory](/reference/memory/observational-memory) — as a standalone call, without Observational Memory attached to an agent.
+The `.summarizeThread()` method summarizes a thread's conversation in one shot. It loads the thread's messages from storage and distills them with the same Observer plumbing that powers [Observational Memory](/reference/memory/observational-memory): as a standalone call, without Observational Memory attached to an agent.
 
 Messages load page-by-page starting from the newest, bounded by `lastMessages` and `maxInputTokens`, so summarizing a long thread doesn't read its entire history from storage.
 
-Nothing is written back to memory. The summary and extracted values are returned to you (and to each extractor's `onExtracted` hook), so you decide where they go — for example your own database.
+Nothing is written back to memory. The summary and extracted values are returned to you (and to each extractor's `onExtracted` hook), so you decide where they go: for example your own database.
 
-Use this when a session ends and you want a summary or structured extraction of the whole conversation, such as a voice call at hang-up. To summarize messages you already have in hand (without loading them from a thread), use the standalone [`summarizeConversation()`](/reference/memory/summarizeConversation) function instead — it takes the same options with `messages` in place of `threadId`.
+Use this when a session ends and you want a summary or structured extraction of the whole conversation, such as a voice call at hang-up. For messages you already have in hand (without loading them from a thread), use the standalone [`summarizeConversation()`](/reference/memory/summarizeConversation) function instead. It takes the same options with `messages` in place of `threadId`.
 
 ## Usage example
 

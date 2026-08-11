@@ -8,13 +8,19 @@ packages:
 
 # Storage
 
+:::beta
+
+Breaking changes may occur without a major version bump until the API is stable.
+
+:::
+
 Mastra sets the project's default [storage](/docs/storage/overview) from a `storage.ts` file directly under `src/mastra/`. The file default-exports a store, which replaces the built-in in-memory store used for memory, workflows, observability, and other storage domains.
 
 Use this page for the file-based convention. For backend choice, storage domains, retention, and provider details, see [storage overview](/docs/storage/overview).
 
 ## Quickstart
 
-Use [`LibSQLStore`](/reference/storage/libsql) for a local file-backed store:
+Use [`LibSQLStore`](/integrations/databases/libsql) for a local file-backed store:
 
 ```typescript title="src/mastra/storage.ts"
 import { LibSQLStore } from '@mastra/libsql'
@@ -29,8 +35,8 @@ Mastra registers the store before file-based agents and workflows, so storage-de
 
 ## Production backends
 
-`storage.ts` can export any Mastra storage adapter, such as LibSQL, PostgreSQL, or MongoDB. For setup patterns, provider support, and schema details, see [storage overview](/docs/storage/overview), [observability storage](/docs/observability/storage), and the [storage reference](/reference/storage/overview).
+`storage.ts` can export any Mastra storage adapter, such as LibSQL, PostgreSQL, or MongoDB. For setup patterns, provider support, and schema details, see [storage overview](/docs/storage/overview), [observability signal support](/docs/observability/overview#signal-support), and the [storage reference](/reference/storage/overview).
 
 ## Precedence with code
 
-Code-registered storage wins over `storage.ts`. Use `storage.ts` when one project-wide store is enough; use code registration when setup depends on runtime wiring in `src/mastra/index.ts`.
+Code-registered storage wins over `storage.ts`. Use `storage.ts` when one project-wide store is enough. Use code registration when setup depends on runtime wiring in `src/mastra/index.ts`.

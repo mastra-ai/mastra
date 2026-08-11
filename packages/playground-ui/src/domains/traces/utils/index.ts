@@ -1,1 +1,1 @@
-export { getInputPreview, isTokenLimitExceeded, getTokenLimitMessage } from './span-utils';
+export { formatSpanDuration, getInputPreview, isTokenLimitExceeded, getTokenLimitMessage } from './span-utils';

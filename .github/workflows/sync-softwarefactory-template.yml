@@ -3,7 +3,8 @@ name: Sync Software Factory Template
 # Mirrors the templates/* process (sync-templates.yml): a one-way overwrite
 # push to the external template repo whenever its monorepo source changes.
 # The only difference is a generation step — the Software Factory template is
-# derived from mastracode/web by sync-template.mjs rather than checked in.
+# derived from the mastracode/web server scaffold by sync-template.mjs rather
+# than checked in. Its Factory UI is bundled by the Mastra CLI.
 on:
   push:
     branches:
@@ -25,6 +26,7 @@ jobs:
     steps:
       - name: Initial checkout
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 5
         with:
           # Use default GITHUB_TOKEN for initial checkout
           # This is needed to access the .github/actions/app-auth action
@@ -58,31 +60,43 @@ jobs:
       # (workflow_dispatch) after the next release train catches up.
       # PR-time validation against the LOCAL package set lives in the
       # e2e-softwarefactory job of e2e-tests.yml.
+      # Runs in a throwaway copy: `npm install`/`npm run build` write
+      # package-lock.json, node_modules and .mastra into the working tree, and
+      # the sync step below copies template-out verbatim — validating in-place
+      # previously leaked package-lock.json into the template repo.
       - name: Validate template against published packages
-        working-directory: ${{ runner.temp }}/template-out
         env:
           MASTRA_TELEMETRY_DISABLED: '1'
         run: |
           set -euo pipefail
+          cp -R "$RUNNER_TEMP/template-out" "$RUNNER_TEMP/template-validate"
+          cd "$RUNNER_TEMP/template-validate"
           npm install --no-audit --no-fund
           npm run check
           npm run build
 
-      - name: Push to template repository
-        env:
-          GITHUB_TOKEN: ${{ steps.app-auth.outputs.token }}
-          USERNAME: '${{ steps.app-auth.outputs.app-slug }}[bot]'
-          EMAIL: '${{ steps.app-auth.outputs.user-id }}+${{ steps.app-auth.outputs.app-slug }}[bot]@users.noreply.github.com'
+      - name: Checkout template repository
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 5
+        with:
+          repository: mastra-ai/softwarefactory-template
+          token: ${{ steps.app-auth.outputs.token }}
+          ref: main
+          path: softwarefactory-template
+
+      - name: Sync generated template
+        working-directory: softwarefactory-template
         run: |
           set -euo pipefail
-          git config --global user.name "$USERNAME"
-          git config --global user.email "$EMAIL"
-          git clone "https://x-access-token:${GITHUB_TOKEN}@github.com/mastra-ai/softwarefactory-template.git" "$RUNNER_TEMP/template-repo"
-          cd "$RUNNER_TEMP/template-repo"
           # One-way overwrite: remove everything except .git, then copy the
           # generated tree in. Downstream commits are intentionally clobbered.
           find . -mindepth 1 -maxdepth 1 -not -name .git -exec rm -rf {} +
           cp -R "$RUNNER_TEMP/template-out/." .
+
+      - name: Commit and push template
+        working-directory: softwarefactory-template
+        run: |
+          set -euo pipefail
           git add -A
           if git diff --cached --quiet; then
             echo "No changes to sync"

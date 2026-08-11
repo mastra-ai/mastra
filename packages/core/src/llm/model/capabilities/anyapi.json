@@ -41,6 +41,7 @@
     "google/gemini-2.5-pro",
     "google/gemini-3-flash-preview",
     "google/gemini-3-pro-preview",
+    "mistralai/devstral-2512",
     "mistralai/mistral-large-2512",
     "openai/gpt-4.1",
     "openai/gpt-4.1-mini",

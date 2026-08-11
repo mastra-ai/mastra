@@ -23,10 +23,11 @@
     "./package.json": "./package.json"
   },
   "scripts": {
-    "build": "tsup --silent --config tsup.config.ts",
-    "build:watch": "tsup --watch --silent --config tsup.config.ts",
+    "build": "tsdown --silent --config tsdown.config.ts",
+    "build:watch": "tsdown --watch --silent --config tsdown.config.ts",
     "test": "vitest run --bail=1",
-    "lint": "eslint ."
+    "lint": "oxlint . && eslint .",
+    "lint:fix": "oxlint --fix . && eslint --fix ."
   },
   "dependencies": {
     "@google-cloud/pubsub": "^5.3.1",
@@ -36,7 +37,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@ai-sdk/openai-v5": "npm:@ai-sdk/openai@2.0.114",
+    "@ai-sdk/openai-v5": "npm:@ai-sdk/openai@2.0.115",
     "@copilotkit/aimock": "^1.29.0",
     "@internal/ai-sdk-v5": "workspace:*",
     "@internal/lint": "workspace:*",
@@ -49,7 +50,7 @@
     "@vitest/ui": "catalog:",
     "ai": "^4.3.19",
     "eslint": "^10.7.0",
-    "tsup": "^8.5.1",
+    "tsdown": "0.22.9",
     "typescript": "catalog:",
     "vitest": "catalog:"
   },

@@ -786,8 +786,6 @@ export function fullStreamTests({
           tool1: tool({
             inputSchema: z.object({ value: z.string() }),
             execute: async (inputData, options) => {
-              // console.info('TOOL 1', inputData, options);
-
               expect(inputData).toStrictEqual({ value: 'value' });
               expectPromptWithoutMastraCreatedAt(options.messages, [
                 { role: 'user', content: [{ type: 'text', text: 'test-input' }] },

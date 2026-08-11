@@ -7,19 +7,22 @@ import type { PubSub } from '../../events/pubsub';
 import type { Mastra } from '../../mastra';
 import { createObservabilityContext, getOrCreateSpan, SpanType, EntityType } from '../../observability';
 import { RequestContext } from '../../request-context';
+import type { DeclaredAgentSchedule } from '../../schedules/define';
 import type { FullOutput, MastraModelOutput } from '../../stream/base/output';
-import type { ChunkType, MastraOnFinishCallback } from '../../stream/types';
+import type { ChunkType, MastraOnFinishCallback, MastraStreamTransformOptions } from '../../stream/types';
 import { ChunkFrom } from '../../stream/types';
 import { deepMerge } from '../../utils';
 import type { WorkflowRunState, WorkflowRunStatus } from '../../workflows/types';
 import { Agent } from '../agent';
 import type { AgentExecutionOptions } from '../agent.types';
+import { beginGoalActivity, stopGoalActivity } from '../goal';
 import { MessageList } from '../message-list';
 import type { MessageListInput } from '../message-list';
 import { SaveQueueManager } from '../save-queue';
 import { agentThreadStreamRuntime } from '../thread-stream-runtime';
 import type { ToolsInput } from '../types';
 
+import { publishAbortRequest } from './abort-transport';
 import { AGENT_STREAM_TOPIC, DurableStepIds } from './constants';
 import { runDurableStreamUntilIdle, runResumeDurableStreamUntilIdle } from './durable-stream-until-idle';
 import { prepareForDurableExecution } from './preparation';
@@ -76,10 +79,12 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   requireToolApproval?: AgentExecutionOptions<OUTPUT>['requireToolApproval'];
   /** Automatically resume suspended tools */
   autoResumeSuspendedTools?: boolean;
-  /** Maximum number of tool calls to execute concurrently */
-  toolCallConcurrency?: number;
+  /** Maximum number of tool calls to execute concurrently, or an object with `limit`/`strategy` */
+  toolCallConcurrency?: AgentExecutionOptions<OUTPUT>['toolCallConcurrency'];
   /** Whether to include raw chunks in the stream output */
   includeRawChunks?: boolean;
+  /** Experimental transforms applied whenever `fullStream` is consumed. */
+  experimentalTransform?: MastraStreamTransformOptions<OUTPUT>;
   /** Maximum processor retries */
   maxProcessorRetries?: number;
   /** Structured output configuration */
@@ -195,8 +200,16 @@ export interface DurableAgentStreamResult<OUTPUT = undefined> {
    *
    * Safe to call after the run has already finished — it's a no-op in that
    * case.
+   *
+   * Also publishes an abort request over pubsub so the abort reaches the
+   * process executing the run, which in a load-balanced deployment is usually
+   * not this one. That process flips its own controller and unwinds normally;
+   * the workflow run is never hard-cancelled, so the terminal `finish` event
+   * still reaches stream consumers. Await the returned promise to know the
+   * request has been dispatched; ignoring it keeps the previous
+   * fire-and-forget behaviour.
    */
-  abort: (reason?: unknown) => void;
+  abort: (reason?: unknown) => Promise<void>;
 }
 
 /**
@@ -392,6 +405,8 @@ export interface DurableAgentRecoverActiveRunsResult {
 export interface DurableAgentRecoverOptions<OUTPUT = undefined> {
   /** Callback when chunk is received */
   onChunk?: (chunk: ChunkType<OUTPUT>) => void | Promise<void>;
+  /** Experimental transforms applied whenever `fullStream` is consumed. */
+  experimentalTransform?: MastraStreamTransformOptions<OUTPUT>;
   /** Callback when a step finishes */
   onStepFinish?: (result: AgentStepFinishEventData) => void | Promise<void>;
   /** Callback when the recovered run finishes */
@@ -538,6 +553,25 @@ export class DurableAgent<
    */
   get agent(): Agent<TAgentId, TTools, TOutput> {
     return this.#wrappedAgent;
+  }
+
+  /**
+   * File-based schedules live on the wrapped agent: `assembleAgentFromFsEntry`
+   * attaches them to the inner `Agent` before it is wrapped for durable
+   * execution, and `#declaredSchedules` is private to each instance. Without
+   * this delegate the wrapper would report none of its own and Mastra would
+   * never sync a durable agent's `schedules/` directory.
+   */
+  public override getDeclaredSchedules(): DeclaredAgentSchedule[] {
+    return this.#wrappedAgent.getDeclaredSchedules();
+  }
+
+  /**
+   * Mirrors {@link getDeclaredSchedules} so attaching schedules to an
+   * already-wrapped agent lands on the instance the getter reads from.
+   */
+  public override __setDeclaredSchedules(schedules: DeclaredAgentSchedule[]): void {
+    this.#wrappedAgent.__setDeclaredSchedules(schedules);
   }
 
   /**
@@ -989,6 +1023,41 @@ export class DurableAgent<
   }
 
   /**
+   * Abort a durable run, in this process and in whichever process is executing it.
+   *
+   * A durable run's work happens inside a workflow run that may be executing on
+   * a different pod (load-balanced deployment) or a different machine entirely
+   * (Inngest step worker). The local `AbortController` only reaches steps that
+   * happen to run in *this* process, so on its own `abort()` silently does
+   * nothing for exactly the deployments durable agents exist to serve.
+   *
+   * Publishing an abort *request* over pubsub closes that gap: the executing
+   * process flips its own controller and unwinds the run the same way an
+   * in-process abort does, emitting the usual terminal `finish` event with
+   * reason `abort`. Hard-cancelling the workflow run would also stop the work,
+   * but it tears execution down before that terminal event is published — and
+   * a stream consumer that never receives a terminal event waits forever.
+   *
+   * Best-effort by design. The local abort has already happened by the time
+   * this is called, and a caller asking to stop a run should not be handed a
+   * rejection because a pubsub publish failed. A request nobody hears is a
+   * no-op, exactly like aborting a run that already finished.
+   *
+   * @internal
+   */
+  protected async requestRemoteAbort(runId: string): Promise<void> {
+    try {
+      await publishAbortRequest(this.pubsub, runId);
+    } catch (error) {
+      this.#mastra?.getLogger?.()?.warn?.('Failed to publish durable agent abort request', {
+        agentId: this.id,
+        runId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  /**
    * Delete the persisted workflow snapshot rows for a completed durable run.
    *
    * A durable agent write two rows per run: one for the outer `AGENTIC_LOOP`
@@ -1144,6 +1213,7 @@ export class DurableAgent<
       threadId,
       resourceId,
       onChunk: options?.onChunk,
+      experimentalTransform: options?.experimentalTransform,
       onStepFinish: options?.onStepFinish,
       onFinish: options?.onFinish,
       onStreamFinished: scheduleAutoCleanup,
@@ -1181,7 +1251,20 @@ export class DurableAgent<
           from: ChunkFrom.AGENT,
           payload: { id: workflowInput.agentId, messageId },
         });
-        return this.executeWorkflow(runId, workflowInput);
+        if (this.__getGoalConfig()) {
+          await beginGoalActivity({
+            mastra: this.#mastra,
+            agentId: workflowInput.agentId,
+            threadId,
+            runId,
+            requestContext: globalRunRegistry.get(runId)?.requestContext,
+          });
+        }
+        try {
+          return await this.executeWorkflow(runId, workflowInput);
+        } finally {
+          await stopGoalActivity({ agentId: workflowInput.agentId, runId });
+        }
       })
       .catch(error => {
         void this.emitError(runId, error);
@@ -1217,10 +1300,14 @@ export class DurableAgent<
       }
     };
 
-    const abort = (reason?: unknown) => {
+    const abort = async (reason?: unknown) => {
       if (!abortController.signal.aborted) {
         abortController.abort(reason);
       }
+      // Also stop the run wherever it is actually executing — see
+      // `requestRemoteAbort`. The local controller above only reaches steps
+      // running in this process.
+      await this.requestRemoteAbort(runId);
     };
 
     return {
@@ -1431,6 +1518,7 @@ export class DurableAgent<
       resourceId: memoryInfo?.resourceId,
       offset: resumeOffset,
       onChunk: resolvedOptions.onChunk,
+      experimentalTransform: resolvedOptions.experimentalTransform,
       onStepFinish: resolvedOptions.onStepFinish,
       onFinish: resolvedOptions.onFinish,
       onStreamFinished: scheduleAutoCleanup,
@@ -1521,13 +1609,27 @@ export class DurableAgent<
         }
 
         const run = await workflow.createRun({ runId, pubsub: this.pubsub });
-        const result = await run.resume({
-          resumeData,
-          label: resolvedOptions.toolCallId,
-          requestContext,
-          actor: resolvedOptions.actor,
-          ...createObservabilityContext({ currentSpan: entry.resumeAgentSpan ?? entry.agentSpan }),
-        });
+        if (this.__getGoalConfig()) {
+          await beginGoalActivity({
+            mastra: this.#mastra,
+            agentId: this.id,
+            threadId: memoryInfo?.threadId,
+            runId,
+            requestContext,
+          });
+        }
+        let result;
+        try {
+          result = await run.resume({
+            resumeData,
+            label: resolvedOptions.toolCallId,
+            requestContext,
+            actor: resolvedOptions.actor,
+            ...createObservabilityContext({ currentSpan: entry.resumeAgentSpan ?? entry.agentSpan }),
+          });
+        } finally {
+          await stopGoalActivity({ agentId: this.id, runId });
+        }
         if (result?.status === 'failed') {
           const error = new Error((result as any).error?.message || 'Workflow resume failed');
           void this.emitError(runId, error);
@@ -1575,10 +1677,14 @@ export class DurableAgent<
       }
     };
 
-    const abort = (reason?: unknown) => {
+    const abort = async (reason?: unknown) => {
       if (!abortController.signal.aborted) {
         abortController.abort(reason);
       }
+      // Also stop the run wherever it is actually executing — see
+      // `requestRemoteAbort`. The local controller above only reaches steps
+      // running in this process.
+      await this.requestRemoteAbort(runId);
     };
 
     return {
@@ -1887,6 +1993,7 @@ export class DurableAgent<
       resourceId,
       offset: recoverOffset,
       onChunk: options?.onChunk,
+      experimentalTransform: options?.experimentalTransform,
       onStepFinish: options?.onStepFinish,
       onFinish: options?.onFinish,
       onStreamFinished: scheduleAutoCleanup,
@@ -1956,10 +2063,14 @@ export class DurableAgent<
       }
     };
 
-    const abort = (reason?: unknown) => {
+    const abort = async (reason?: unknown) => {
       if (!abortController.signal.aborted) {
         abortController.abort(reason);
       }
+      // Also stop the run wherever it is actually executing — see
+      // `requestRemoteAbort`. The local controller above only reaches steps
+      // running in this process.
+      await this.requestRemoteAbort(runId);
     };
 
     return {
@@ -2015,9 +2126,10 @@ export class DurableAgent<
    * `resume()` path.
    */
   override async declineToolCall(
-    options: { runId: string; toolCallId?: string } & Record<string, any>,
+    options: { runId: string; toolCallId?: string; reason?: string } & Record<string, any>,
   ): Promise<MastraModelOutput<any>> {
-    return this.resumeStream({ approved: false }, options);
+    const { reason, ...resumeOptions } = options;
+    return this.resumeStream({ approved: false, ...(reason !== undefined ? { reason } : {}) }, resumeOptions);
   }
 
   override async approveToolCallGenerate<OUTPUT = undefined>(
@@ -2028,10 +2140,14 @@ export class DurableAgent<
   }
 
   override async declineToolCallGenerate<OUTPUT = undefined>(
-    options: AgentExecutionOptions<OUTPUT> & { runId: string; toolCallId?: string },
+    options: AgentExecutionOptions<OUTPUT> & { runId: string; toolCallId?: string; reason?: string },
   ): Promise<Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>> {
-    const { runId, ...resumeOptions } = options;
-    return this.resumeGenerate(runId, { approved: false }, resumeOptions as any) as any;
+    const { runId, reason, ...resumeOptions } = options;
+    return this.resumeGenerate(
+      runId,
+      { approved: false, ...(reason !== undefined ? { reason } : {}) },
+      resumeOptions as any,
+    ) as any;
   }
 
   /**
@@ -2153,6 +2269,7 @@ export class DurableAgent<
       threadId,
       resourceId,
       onChunk: options?.onChunk,
+      experimentalTransform: options?.experimentalTransform,
       onStepFinish: options?.onStepFinish,
       onFinish: options?.onFinish,
       onStreamFinished: scheduleAutoCleanup,
@@ -2190,7 +2307,20 @@ export class DurableAgent<
           from: ChunkFrom.AGENT,
           payload: { id: workflowInput.agentId, messageId },
         });
-        return this.executeWorkflow(runId, workflowInput);
+        if (this.__getGoalConfig()) {
+          await beginGoalActivity({
+            mastra: this.#mastra,
+            agentId: workflowInput.agentId,
+            threadId,
+            runId,
+            requestContext: globalRunRegistry.get(runId)?.requestContext,
+          });
+        }
+        try {
+          return await this.executeWorkflow(runId, workflowInput);
+        } finally {
+          await stopGoalActivity({ agentId: workflowInput.agentId, runId });
+        }
       })
       .catch(error => {
         void this.emitError(runId, error);
@@ -2501,12 +2631,24 @@ export class DurableAgent<
    * run entirely. If the workflow is suspended and you intend to resume later,
    * do not call cleanup — let the auto-cleanup timer handle it after
    * FINISH/ERROR. Auto-cleanup does not fire on SUSPENDED events.
+   *
+   * Pass `idleTimeoutMs` to bound how long the stream waits on a silent topic:
+   * a durable run whose driving process crashed stops emitting chunks but never
+   * publishes a terminal event, so without this `observe()` hangs forever on a
+   * producerless topic. When the idle timeout fires, the optional `isAlive`
+   * probe is consulted first — returning true (e.g. a live run-liveness
+   * heartbeat, or a suspended HITL gate) re-arms the timer and keeps waiting,
+   * while false/absent terminates the stream with an error chunk. Both options
+   * are opt-in; omit them for the current unbounded behavior.
    */
   async observe(
     runId: string,
     options?: {
       offset?: number;
+      idleTimeoutMs?: number;
+      isAlive?: () => boolean | Promise<boolean>;
       onChunk?: (chunk: ChunkType<TOutput>) => void | Promise<void>;
+      experimentalTransform?: MastraStreamTransformOptions<TOutput>;
       onStepFinish?: (result: AgentStepFinishEventData) => void | Promise<void>;
       onFinish?: MastraOnFinishCallback<TOutput>;
       onError?: ({ error }: { error: Error | string }) => void | Promise<void>;
@@ -2547,7 +2689,10 @@ export class DurableAgent<
       threadId: memoryInfo?.threadId,
       resourceId: memoryInfo?.resourceId,
       offset: options?.offset,
+      idleTimeoutMs: options?.idleTimeoutMs,
+      isAlive: options?.isAlive,
       onChunk: options?.onChunk,
+      experimentalTransform: options?.experimentalTransform,
       onStepFinish: options?.onStepFinish,
       onFinish: options?.onFinish,
       onStreamFinished: scheduleAutoCleanup,
@@ -2578,15 +2723,17 @@ export class DurableAgent<
       }
     };
 
-    // observe() doesn't own the run's lifecycle, but for API symmetry the
-    // returned `abort` flips the in-process controller currently installed
-    // on the registry. If the run already ended (or is running in a
-    // different process), this is a best-effort no-op.
-    const abort = (reason?: unknown) => {
+    // observe() doesn't own the run's lifecycle, but the returned `abort` can
+    // still stop it. Flip the in-process controller if one happens to be
+    // installed here, then cancel the workflow run so the abort also reaches
+    // the process actually executing it — the common case for observe(), which
+    // exists precisely to watch runs this process did not start.
+    const abort = async (reason?: unknown) => {
       const controller = (globalRunRegistry.get(runId) ?? this.#runRegistry.get(runId))?.abortController;
       if (controller && !controller.signal.aborted) {
         controller.abort(reason);
       }
+      await this.requestRemoteAbort(runId);
     };
 
     return {
@@ -2603,9 +2750,14 @@ export class DurableAgent<
   }
 
   /**
-   * Clear retained pubsub state for a run's topic (cached history and, for
+   * Clear retained pubsub state for a run's topics (cached history and, for
    * persistent transports, the underlying stream). Fire-and-forget: the
    * `clearTopic` contract is best-effort and non-throwing.
+   *
+   * Clears both the agent stream topic and `workflow.events.v2.<runId>`. The
+   * durable agentic loop runs on the default workflow engine, so the evented
+   * engine's terminal topic cleanup never runs for these runs — without this,
+   * CachingPubSub permanently orphans a no-TTL counter key per completed run.
    *
    * Unlike the evented workflow engine's per-run topic cleanup, this needs no
    * restart guard: cleanup timers arm only on terminal outcomes
@@ -2616,6 +2768,7 @@ export class DurableAgent<
    */
   #clearPubsubTopic(runId: string): void {
     void this.pubsub.clearTopic(AGENT_STREAM_TOPIC(runId));
+    void this.pubsub.clearTopic(`workflow.events.v2.${runId}`);
   }
 
   /**

@@ -370,18 +370,18 @@ function ThreadRailPreviewContent({
 }: React.HTMLAttributes<HTMLDivElement> & { turn: ThreadRailTurn }) {
   return (
     <div className={className} {...props}>
-      <div className="truncate text-ui-md leading-ui-md font-medium text-neutral6">{turn.prompt}</div>
-      {turn.reply && <p className="mt-1.5 line-clamp-3 text-ui-sm leading-ui-sm text-neutral4">{turn.reply}</p>}
+      <div className="text-ui-md leading-ui-md text-neutral6 truncate font-medium">{turn.prompt}</div>
+      {turn.reply && <p className="text-ui-sm leading-ui-sm text-neutral4 mt-1.5 line-clamp-3">{turn.reply}</p>}
       {(turn.files.length > 0 || turn.hiddenFileCount > 0) && (
-        <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border1/60 pt-2.5">
+        <div className="border-border1/60 mt-3 flex flex-wrap items-center gap-2 border-t pt-2.5">
           {turn.files.map(file => (
-            <span key={file} className="inline-flex max-w-44 items-center gap-1.5 truncate text-ui-sm text-neutral4">
+            <span key={file} className="text-ui-sm text-neutral4 inline-flex max-w-44 items-center gap-1.5 truncate">
               <FileText className="size-3.5 shrink-0 opacity-70" aria-hidden />
               {file}
             </span>
           ))}
           {turn.hiddenFileCount > 0 && (
-            <span className="text-ui-sm font-medium text-neutral4">+{turn.hiddenFileCount}</span>
+            <span className="text-ui-sm text-neutral4 font-medium">+{turn.hiddenFileCount}</span>
           )}
         </div>
       )}

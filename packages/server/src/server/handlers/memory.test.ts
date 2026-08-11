@@ -1287,6 +1287,42 @@ describe('Memory Handlers', () => {
       });
     });
 
+    it('should reject metadata filters for gateway agents', async () => {
+      vi.stubEnv('MASTRA_GATEWAY_API_KEY', 'test-gateway-key');
+      vi.stubEnv('MASTRA_GATEWAY_URL', 'https://gateway.example.test');
+
+      const gatewayAgent = new Agent({
+        id: 'gateway-agent',
+        name: 'gateway-agent',
+        instructions: 'test-instructions',
+        model: 'mastra/openai/gpt-5-mini' as any,
+      });
+      const mastra = new Mastra({
+        logger: false,
+        agents: { 'gateway-agent': gatewayAgent },
+      });
+      const fetchMock = vi.spyOn(globalThis, 'fetch');
+
+      try {
+        await expect(
+          LIST_MESSAGES_ROUTE.handler({
+            ...createTestServerContext({ mastra }),
+            threadId: 'gateway-thread',
+            resourceId: 'resource-1',
+            agentId: 'gateway-agent',
+            page: 0,
+            perPage: 10,
+            include: undefined,
+            filter: { metadata: { category: 'billing' } },
+          }),
+        ).rejects.toThrow('Gateway memory message metadata filters are not supported by this gateway endpoint');
+        expect(fetchMock).not.toHaveBeenCalled();
+      } finally {
+        fetchMock.mockRestore();
+        vi.unstubAllEnvs();
+      }
+    });
+
     it('should preserve custom metadata in messages when loading messages with metadata', async () => {
       const mastra = new Mastra({
         logger: false,

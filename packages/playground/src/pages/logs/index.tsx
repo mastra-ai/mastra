@@ -1,3 +1,4 @@
+import type { EntityType } from '@mastra/core/observability';
 import { DateTimeRangePicker } from '@mastra/playground-ui/components/DateTimeRangePicker';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PropertyFilterCreator } from '@mastra/playground-ui/components/PropertyFilter';
@@ -37,7 +38,7 @@ export default function LogsPage() {
 
   const { data: availableTags = [], isPending: isTagsLoading } = useTags();
   const { data: rootEntityNameSuggestions = [], isPending: isEntityNamesLoading } = useEntityNames({
-    entityType: url.selectedEntityOption?.entityType,
+    entityType: url.selectedEntityOption?.entityType as EntityType | undefined,
     rootOnly: true,
   });
   const { data: discoveredEnvironments = [], isPending: isEnvironmentsLoading } = useEnvironments();
@@ -72,7 +73,7 @@ export default function LogsPage() {
   const logsFilters = useMemo(
     () =>
       buildLogsListFilters({
-        rootEntityType: url.selectedEntityOption?.entityType,
+        rootEntityType: url.selectedEntityOption?.entityType as EntityType | undefined,
         dateFrom: url.selectedDateFrom,
         dateTo: url.selectedDateTo,
         tokens: url.filterTokens,

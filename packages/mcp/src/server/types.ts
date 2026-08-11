@@ -1,13 +1,14 @@
+import type { MCPServerContext } from '@mastra/core/tools';
 import type { McpUiResourceMeta } from '@modelcontextprotocol/ext-apps';
-import type { RequestHandlerExtra, RequestOptions } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import type {
+  RequestOptions,
   ElicitRequest,
   ElicitResult,
   Prompt,
   PromptMessage,
   Resource,
-  ResourceTemplate,
-} from '@modelcontextprotocol/sdk/types.js';
+  ResourceTemplateType,
+} from '@modelcontextprotocol/server';
 
 /**
  * Callback function to retrieve content for a specific resource.
@@ -41,11 +42,11 @@ export type MCPServerResources = {
   /** Function to get content for a specific resource */
   getResourceContent: MCPServerResourceContentCallback;
   /** Optional function to list resource templates */
-  resourceTemplates?: ({ extra }: { extra: MCPRequestHandlerExtra }) => Promise<ResourceTemplate[]>;
+  resourceTemplates?: ({ extra }: { extra: MCPRequestHandlerExtra }) => Promise<ResourceTemplateType[]>;
 };
 
 /**
- * Extends the MCP SDK Prompt type with an optional version field.
+ * Extends the MCP Prompt type with an optional version field.
  *
  * The MCP protocol does not include `version` on prompts, so this field is
  * only used server-side for internal prompt lookup and is not sent over the wire.
@@ -116,16 +117,16 @@ export type ElicitationActions = {
 /**
  * Extra context passed to MCP request handlers.
  */
-export type MCPRequestHandlerExtra = RequestHandlerExtra<any, any>;
+export type MCPRequestHandlerExtra = MCPServerContext;
 
 /**
- * Re-exported MCP SDK types for resource handling.
+ * Re-exported MCP types for resource handling.
  *
  * - `Resource`: Represents a data resource exposed by the server
  * - `ResourceTemplate`: URI template for dynamic resource generation
  * - `RequestOptions`: Options for MCP requests (timeout, signal, etc.)
  */
-export type { Resource, ResourceTemplate, RequestOptions };
+export type { Resource, ResourceTemplateType as ResourceTemplate, RequestOptions };
 
 /**
  * Configuration for a single MCP App resource.

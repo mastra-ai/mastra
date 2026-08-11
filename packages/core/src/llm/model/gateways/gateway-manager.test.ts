@@ -35,14 +35,16 @@ function createFakeGateway(options?: {
     id,
     name: 'Test Gateway',
     shouldEnable: () => options?.enabled ?? true,
-    fetchProviders: vi.fn(async (): Promise<Record<string, ProviderConfig>> => ({
-      [provider]: {
-        name: 'Acme',
-        models,
-        apiKeyEnvVar,
-        gateway: id,
-      },
-    })),
+    fetchProviders: vi.fn(
+      async (): Promise<Record<string, ProviderConfig>> => ({
+        [provider]: {
+          name: 'Acme',
+          models,
+          apiKeyEnvVar,
+          gateway: id,
+        },
+      }),
+    ),
     buildUrl: () => 'https://example.com/v1',
     getApiKey: vi.fn(async () => {
       if (typeof options?.apiKey === 'function') return options.apiKey();
@@ -441,10 +443,12 @@ describe('GatewayManager', () => {
     });
 
     it('resolveAuth calls the gateway with the two-part router id', async () => {
-      const resolveAuth = vi.fn((_req: GatewayAuthRequest): GatewayAuthResult => ({
-        apiKey: 'aws-credential-chain',
-        source: 'gateway',
-      }));
+      const resolveAuth = vi.fn(
+        (_req: GatewayAuthRequest): GatewayAuthResult => ({
+          apiKey: 'aws-credential-chain',
+          source: 'gateway',
+        }),
+      );
       const gateway = createFakeGateway({
         id: 'amazon-bedrock',
         provider: 'amazon-bedrock',

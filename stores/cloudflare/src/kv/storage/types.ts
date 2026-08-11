@@ -180,6 +180,7 @@ export type RecordTypes = {
   mastra_channel_config: Record<string, any>;
   [TABLE_NOTIFICATIONS]: Record<string, any>;
   mastra_thread_state: Record<string, any>;
+  mastra_workflow_definitions: Record<string, any>;
 };
 
 export type ListOptions = {
@@ -194,7 +195,9 @@ export type ListOptions = {
  * 2. Config to create a new client internally
  */
 export type CloudflareDomainConfig =
-  CloudflareDomainClientConfig | CloudflareDomainBindingsConfig | CloudflareDomainRestConfig;
+  | CloudflareDomainClientConfig
+  | CloudflareDomainBindingsConfig
+  | CloudflareDomainRestConfig;
 
 /**
  * Pass an existing Cloudflare SDK client (REST API)

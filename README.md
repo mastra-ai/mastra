@@ -3,7 +3,7 @@
 [![npm version](https://badge.fury.io/js/@mastra%2Fcore.svg)](https://www.npmjs.com/package/@mastra/core)
 [![CodeQl](https://github.com/mastra-ai/mastra/actions/workflows/github-code-scanning/codeql/badge.svg)](https://github.com/mastra-ai/mastra/actions/workflows/github-code-scanning/codeql)
 [![GitHub Repo stars](https://img.shields.io/github/stars/mastra-ai/mastra)](https://github.com/mastra-ai/mastra/stargazers)
-[![Discord](https://img.shields.io/discord/1309558646228779139?logo=discord&label=Discord&labelColor=white&color=7289DA)](https://discord.gg/BTYqqHKUrf)
+[![Discord](https://img.shields.io/discord/1309558646228779139?logo=discord&label=Discord&labelColor=white&color=7289DA)](https://discord.gg/mastra-ai)
 [![Twitter Follow](https://img.shields.io/twitter/follow/mastra?style=social)](https://x.com/mastra)
 [![NPM Downloads](https://img.shields.io/npm/dm/%40mastra%252Fcore)](https://www.npmjs.com/package/@mastra/core)
 [![Static Badge](https://img.shields.io/badge/Y%20Combinator-W25-orange)](https://www.ycombinator.com/companies?batch=W25)
@@ -42,7 +42,7 @@ The **recommended** way to get started with Mastra is by running the command bel
 npm create mastra@latest
 ```
 
-Follow the [Installation guide](https://mastra.ai/docs/getting-started/installation) for step-by-step setup with the CLI or a manual install.
+Follow the [Installation guide](https://mastra.ai/guides/getting-started/quickstart) for step-by-step setup with the CLI or a manual install.
 
 If you're new to AI agents, check out our [templates](https://mastra.ai/docs/getting-started/templates), [course](https://mastra.ai/course), and [YouTube videos](https://youtube.com/@mastra-ai) to start building with Mastra today.
 
@@ -51,21 +51,22 @@ If you're new to AI agents, check out our [templates](https://mastra.ai/docs/get
 <summary><strong>Alternative:</strong> Use this pre-built prompt to get started</summary>
 
 ```md
-Make new Mastra project. Mastra = framework for AI apps + agents on modern TypeScript stack. Before run command, ask these questions one by one. Wait for answers unless already given:
+Create a new Mastra project. Mastra is a framework for AI applications and agents on a modern TypeScript stack. Before running the command, ask these questions one at a time and wait for each answer unless it was already provided:
 
 Project name? (default: "my-mastra-app")
-Provider? (default: "openai", options: "openai", "anthropic", "groq", "google", "cerebras", "mistral")
-Provider rules:
+Provider? (required; options: "openai", "anthropic", "google", "xai")
 
-Allowed provider -> use it.
-Any other value -> use "openai".
-Run with answers: npm create mastra@latest <project-name> -- --default --llm <provider>
+If the provider isn't supported, ask again and list the supported values.
 
-After project created, go to project dir. Start dev server: npx bgproc start -n <project-name> -w -- npm run dev
+Run: npm create mastra@latest <project-name> -- --llm <provider>
 
-Start Mastra Studio at http://localhost:4111. Studio = UI for build, test, manage agents, workflows, tools.
+The command creates a default Mastra project, installs Mastra skills for detected coding assistants, and initializes Git when appropriate.
 
-Also tell: Mastra model router give 3000+ models from many providers: https://mastra.ai/models
+After creation, enter the project directory and start the dev server: npx bgproc start -n <project-name> -w -- npm run dev
+
+Open Mastra Studio at http://localhost:4111. Studio is the interface for building, testing, and managing agents, workflows, and tools.
+
+Also mention that the Mastra model router provides access to thousands of models: https://mastra.ai/models
 ```
 
 </details>
@@ -76,7 +77,7 @@ Visit our [official documentation](https://mastra.ai/docs).
 
 ## Build with AI
 
-Learn how to make your agent a Mastra expert by following the [Build with AI guide](https://mastra.ai/docs/getting-started/build-with-ai).
+Learn how to make your agent a Mastra expert by following the [Build with AI guide](https://mastra.ai/reference/build-with-ai).
 
 ## Contributing
 
@@ -88,7 +89,7 @@ Information about the project setup can be found in the [development documentati
 
 ## Support
 
-We have an [open community Discord](https://discord.gg/BTYqqHKUrf). Come and say hello and let us know if you have any questions or need any help getting things running.
+We have an [open community Discord](https://discord.gg/mastra-ai). Come and say hello and let us know if you have any questions or need any help getting things running.
 
 It's also super helpful if you leave the project a star here, at the [top of the page](https://github.com/mastra-ai/mastra)
 

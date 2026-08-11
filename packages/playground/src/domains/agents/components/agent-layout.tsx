@@ -102,7 +102,7 @@ export const AgentLayout = ({
         )}
 
         {leftSlot && <PanelSeparator />}
-        <Panel id="main-slot" className="grid min-w-0 overflow-y-auto relative">
+        <Panel id="main-slot" className="relative grid min-w-0 overflow-y-auto">
           {children}
         </Panel>
         {rightSlot && (

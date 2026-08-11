@@ -13,11 +13,14 @@ import {
   TABLE_SCHEMAS,
   normalizePerPage,
   calculatePagination,
+  validateStorageMetadataFilter,
 } from '@mastra/core/storage';
 import type {
   StorageResourceType,
   StorageListMessagesInput,
   StorageListMessagesOutput,
+  StorageMetadataFilter,
+  StorageMetadataFilterValue,
   StorageListThreadsInput,
   StorageListThreadsOutput,
 } from '@mastra/core/storage';
@@ -25,6 +28,55 @@ import { D1DB, resolveD1Config } from '../../db';
 import type { D1DomainConfig } from '../../db';
 import { createSqlBuilder } from '../../sql-builder';
 import { deserializeValue, isArrayOfRecords } from '../utils';
+
+function addSqliteMetadataFilter(
+  conditions: string[],
+  params: unknown[],
+  metadataFilter: StorageMetadataFilter | undefined,
+): void {
+  if (!metadataFilter) return;
+
+  for (const [key, value] of Object.entries(metadataFilter)) {
+    const path = `$.metadata.${key}`;
+    conditions.push(`CASE WHEN json_valid(content) THEN json_type(content, ?) IS NOT NULL ELSE 0 END`);
+    params.push(path);
+    addSqliteMetadataValuePredicate(conditions, params, path, value);
+  }
+}
+
+function addSqliteMetadataValuePredicate(
+  conditions: string[],
+  params: unknown[],
+  path: string,
+  value: StorageMetadataFilterValue,
+): void {
+  if (value === null) {
+    conditions.push(`CASE WHEN json_valid(content) THEN json_type(content, ?) = 'null' ELSE 0 END`);
+    params.push(path);
+    return;
+  }
+
+  if (typeof value === 'string') {
+    conditions.push(
+      `CASE WHEN json_valid(content) THEN json_type(content, ?) = 'text' AND json_extract(content, ?) = ? ELSE 0 END`,
+    );
+    params.push(path, path, value);
+    return;
+  }
+
+  if (typeof value === 'number') {
+    conditions.push(
+      `CASE WHEN json_valid(content) THEN json_type(content, ?) IN ('integer', 'real') AND json_extract(content, ?) = ? ELSE 0 END`,
+    );
+    params.push(path, path, value);
+    return;
+  }
+
+  conditions.push(
+    `CASE WHEN json_valid(content) THEN json_type(content, ?) = ? AND json_extract(content, ?) = ? ELSE 0 END`,
+  );
+  params.push(path, value ? 'true' : 'false', path, value ? 1 : 0);
+}
 
 export class MemoryStorageD1 extends MemoryStorage {
   #db: D1DB;
@@ -380,13 +432,7 @@ export class MemoryStorageD1 extends MemoryStorage {
       );
       this.logger?.error(mastraError.toString());
       this.logger?.trackException(mastraError);
-      return {
-        threads: [],
-        total: 0,
-        page,
-        perPage: perPageForResponse,
-        hasMore: false,
-      };
+      throw mastraError;
     }
   }
 
@@ -446,8 +492,8 @@ export class MemoryStorageD1 extends MemoryStorage {
     metadata,
   }: {
     id: string;
-    title: string;
-    metadata: Record<string, unknown>;
+    title?: string;
+    metadata?: Record<string, unknown>;
   }): Promise<StorageThreadType> {
     const thread = await this.getThreadById({ threadId: id });
     try {
@@ -463,7 +509,7 @@ export class MemoryStorageD1 extends MemoryStorage {
 
       const updatedAt = new Date();
       const columns = ['title', 'metadata', 'updatedAt'];
-      const values = [title, JSON.stringify(mergedMetadata), updatedAt.toISOString()];
+      const values = [title ?? thread.title, JSON.stringify(mergedMetadata), updatedAt.toISOString()];
 
       const query = createSqlBuilder().update(fullTableName, columns, values).where('id = ?', id);
 
@@ -473,7 +519,7 @@ export class MemoryStorageD1 extends MemoryStorage {
 
       return {
         ...thread,
-        title,
+        title: title ?? thread.title,
         metadata: {
           ...(typeof thread.metadata === 'string' ? JSON.parse(thread.metadata) : thread.metadata),
           ...(metadata as Record<string, any>),
@@ -615,10 +661,18 @@ export class MemoryStorageD1 extends MemoryStorage {
     });
   }
 
-  private async _getIncludedMessages(include: StorageListMessagesInput['include']) {
+  /**
+   * Fetches the messages named by `include` together with their surrounding context.
+   *
+   * @param include - Message ids to pin, each with an optional before/after window.
+   * @param resourceId - When set, restricts both the pinned messages and their context
+   * to that resource so an id from another resource returns nothing.
+   */
+  private async _getIncludedMessages(include: StorageListMessagesInput['include'], resourceId?: string) {
     if (!include || include.length === 0) return null;
 
     const tableName = this.#db.getTableName(TABLE_MESSAGES);
+    const resourceCondition = resourceId ? ` AND resourceId = ?` : '';
 
     // Phase 1: Batch-fetch metadata for all target messages in a single query.
     // This eliminates the correlated subselects that previously ran per-subquery.
@@ -627,8 +681,8 @@ export class MemoryStorageD1 extends MemoryStorage {
 
     const idPlaceholders = targetIds.map(() => '?').join(', ');
     const targetResult = await this.#db.executeQuery({
-      sql: `SELECT id, thread_id, createdAt FROM ${tableName} WHERE id IN (${idPlaceholders})`,
-      params: targetIds,
+      sql: `SELECT id, thread_id, createdAt FROM ${tableName} WHERE id IN (${idPlaceholders})${resourceCondition}`,
+      params: resourceId ? [...targetIds, resourceId] : targetIds,
     });
 
     if (!Array.isArray(targetResult) || targetResult.length === 0) return null;
@@ -675,22 +729,26 @@ export class MemoryStorageD1 extends MemoryStorage {
         SELECT id, content, role, type, createdAt, thread_id AS threadId, resourceId
         FROM ${tableName}
         WHERE thread_id = ?
-          AND createdAt <= ?
+          AND createdAt <= ?${resourceCondition}
         ORDER BY createdAt DESC, id DESC
         LIMIT ?
       )`);
-      unionParams.push(target.threadId, target.createdAt, withPreviousMessages + 1);
+      unionParams.push(target.threadId, target.createdAt);
+      if (resourceId) unionParams.push(resourceId);
+      unionParams.push(withPreviousMessages + 1);
 
       if (withNextMessages > 0) {
         unionQueries.push(`SELECT * FROM (
           SELECT id, content, role, type, createdAt, thread_id AS threadId, resourceId
           FROM ${tableName}
           WHERE thread_id = ?
-            AND createdAt > ?
+            AND createdAt > ?${resourceCondition}
           ORDER BY createdAt ASC, id ASC
           LIMIT ?
         )`);
-        unionParams.push(target.threadId, target.createdAt, withNextMessages);
+        unionParams.push(target.threadId, target.createdAt);
+        if (resourceId) unionParams.push(resourceId);
+        unionParams.push(withNextMessages);
       }
     }
 
@@ -799,17 +857,19 @@ export class MemoryStorageD1 extends MemoryStorage {
 
     const perPage = normalizePerPage(perPageInput, 40);
     const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+    const metadataFilter = validateStorageMetadataFilter(filter?.metadata);
 
     try {
       const fullTableName = this.#db.getTableName(TABLE_MESSAGES);
 
       // Step 1: Get paginated messages from the thread first (without excluding included ones)
+      const threadPlaceholders = threadIds.map(() => '?').join(', ');
       let query = `
         SELECT id, content, role, type, createdAt, thread_id AS threadId, resourceId
         FROM ${fullTableName}
-        WHERE thread_id = ?
+        WHERE thread_id IN (${threadPlaceholders})
       `;
-      const queryParams: any[] = [threadId];
+      const queryParams: any[] = [...threadIds];
 
       if (resourceId) {
         query += ` AND resourceId = ?`;
@@ -833,6 +893,12 @@ export class MemoryStorageD1 extends MemoryStorage {
         queryParams.push(endDate);
       }
 
+      const metadataConditions: string[] = [];
+      addSqliteMetadataFilter(metadataConditions, queryParams, metadataFilter);
+      if (metadataConditions.length > 0) {
+        query += ` AND ${metadataConditions.join(' AND ')}`;
+      }
+
       // Build ORDER BY clause
       const { field, direction } = this.parseOrderBy(orderBy, 'ASC');
 
@@ -844,7 +910,7 @@ export class MemoryStorageD1 extends MemoryStorage {
       // When perPage is 0 and we have include targets, skip COUNT and data queries.
       // This is the semantic recall path where we only need the included messages.
       if (perPage === 0 && include && include.length > 0) {
-        const includeResult = await this._getIncludedMessages(include);
+        const includeResult = await this._getIncludedMessages(include, resourceId);
         if (!Array.isArray(includeResult) || includeResult.length === 0) {
           return { messages: [], total: 0, page, perPage: perPageForResponse, hasMore: false };
         }
@@ -881,8 +947,8 @@ export class MemoryStorageD1 extends MemoryStorage {
       const paginatedCount = paginatedMessages.length;
 
       // Get total count
-      let countQuery = `SELECT count() as count FROM ${fullTableName} WHERE thread_id = ?`;
-      const countParams: any[] = [threadId];
+      let countQuery = `SELECT count() as count FROM ${fullTableName} WHERE thread_id IN (${threadPlaceholders})`;
+      const countParams: any[] = [...threadIds];
 
       if (resourceId) {
         countQuery += ` AND resourceId = ?`;
@@ -903,6 +969,12 @@ export class MemoryStorageD1 extends MemoryStorage {
         const endOp = dateRange.endExclusive ? '<' : '<=';
         countQuery += ` AND createdAt ${endOp} ?`;
         countParams.push(endDate);
+      }
+
+      const countMetadataConditions: string[] = [];
+      addSqliteMetadataFilter(countMetadataConditions, countParams, metadataFilter);
+      if (countMetadataConditions.length > 0) {
+        countQuery += ` AND ${countMetadataConditions.join(' AND ')}`;
       }
 
       const countResult = (await this.#db.executeQuery({ sql: countQuery, params: countParams })) as {
@@ -927,7 +999,7 @@ export class MemoryStorageD1 extends MemoryStorage {
 
       if (include && include.length > 0) {
         // Use the existing _getIncludedMessages helper, but adapt it for listMessages format
-        const includeResult = (await this._getIncludedMessages(include)) as MastraDBMessage[];
+        const includeResult = (await this._getIncludedMessages(include, resourceId)) as MastraDBMessage[];
         if (Array.isArray(includeResult)) {
           includeMessages = includeResult;
 
@@ -948,10 +1020,14 @@ export class MemoryStorageD1 extends MemoryStorage {
       // Calculate hasMore based on pagination window
       // If all thread messages have been returned (through pagination or include), hasMore = false
       // Otherwise, check if there are more pages in the pagination window
-      const returnedThreadMessageIds = new Set(finalMessages.filter(m => m.threadId === threadId).map(m => m.id));
+      const threadIdSet = new Set(threadIds);
+      const returnedThreadMessageIds = new Set(
+        finalMessages.filter(m => m.threadId && threadIdSet.has(m.threadId)).map(m => m.id),
+      );
       const allThreadMessagesReturned = returnedThreadMessageIds.size >= total;
-      const hasMore =
-        perPageInput === false ? false : allThreadMessagesReturned ? false : offset + paginatedCount < total;
+      const hasMore = metadataFilter
+        ? perPageInput !== false && offset + paginatedCount < total
+        : perPageInput !== false && !allThreadMessagesReturned && offset + perPage < total;
 
       return {
         messages: finalMessages,
@@ -961,6 +1037,10 @@ export class MemoryStorageD1 extends MemoryStorage {
         hasMore,
       };
     } catch (error: any) {
+      // Re-throw USER errors (validation errors) directly so callers get proper 400 responses
+      if (error instanceof MastraError && error.category === ErrorCategory.USER) {
+        throw error;
+      }
       const mastraError = new MastraError(
         {
           id: createStorageErrorId('CLOUDFLARE_D1', 'LIST_MESSAGES', 'FAILED'),
@@ -978,13 +1058,7 @@ export class MemoryStorageD1 extends MemoryStorage {
       );
       this.logger?.error?.(mastraError.toString());
       this.logger?.trackException?.(mastraError);
-      return {
-        messages: [],
-        total: 0,
-        page,
-        perPage: perPageForResponse,
-        hasMore: false,
-      };
+      throw mastraError;
     }
   }
 

@@ -1589,6 +1589,32 @@ export function createObservationalMemoryTest({ storage }: { storage: MastraStor
         expect(updated?.isObserving).toBe(true);
         expect(updated?.bufferedObservationChunks?.length ?? 0).toBe(1);
       });
+
+      it('preserves every chunk under concurrent buffered-observation appends', async () => {
+        const input = createSampleOMInput();
+        const record = await memoryStorage.initializeObservationalMemory(input);
+
+        const CONCURRENT_CHUNKS = 8;
+        const labels = Array.from({ length: CONCURRENT_CHUNKS }, (_, i) => `concurrent-chunk-${i}`);
+
+        await Promise.all(
+          labels.map(label =>
+            memoryStorage.updateBufferedObservations({
+              id: record.id,
+              chunk: createChunk({ observations: label, messageTokens: 100 }),
+            }),
+          ),
+        );
+
+        const updated = await memoryStorage.getObservationalMemory(input.threadId, input.resourceId);
+        const chunks = updated?.bufferedObservationChunks ?? [];
+        expect(chunks.length).toBe(CONCURRENT_CHUNKS);
+
+        // Every uniquely identified chunk must be present — no lost writes.
+        const observations = chunks.map(c => c.observations).sort();
+        const expected = [...labels].sort();
+        expect(observations).toEqual(expected);
+      });
     });
   });
 }

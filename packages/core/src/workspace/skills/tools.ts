@@ -236,8 +236,25 @@ function createSkillReadTool(skills: WorkspaceSkills) {
         content = textContent;
 
         const result = extractLines(content, startLine, endLine);
+
+        // An empty range is indistinguishable from a failed read, so the model keeps paginating
+        if (result.lines.start === 0 && result.lines.end === 0) {
+          const reason =
+            (startLine ?? 1) > result.totalLines
+              ? `Requested startLine ${startLine} is past the end of the file. The file has been fully read; stop paginating.`
+              : `Requested range ${startLine}-${endLine} is empty because startLine is greater than endLine.`;
+          span.end({ success: true }, { bytesTransferred: 0 });
+          return `File "${path}" has ${result.totalLines} lines (valid range 1-${result.totalLines}). ${reason}`;
+        }
+
+        // Header ranged reads so the model sees EOF coming instead of overshooting to find it
+        const output =
+          startLine !== undefined || endLine !== undefined
+            ? `${path} (lines ${result.lines.start}-${result.lines.end} of ${result.totalLines})\n${result.content}`
+            : result.content;
+
         span.end({ success: true }, { bytesTransferred: Buffer.byteLength(result.content, 'utf-8') });
-        return result.content;
+        return output;
       } catch (err) {
         span.error(err);
         throw err;

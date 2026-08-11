@@ -1,6 +1,6 @@
 {
   "name": "@mastra/editor",
-  "version": "0.13.8-alpha.1",
+  "version": "0.13.12-alpha.7",
   "description": "Mastra Editor for agent management and instantiation",
   "main": "dist/index.cjs",
   "module": "dist/index.js",
@@ -63,8 +63,8 @@
     "CHANGELOG.md"
   ],
   "scripts": {
-    "build": "tsup",
-    "dev": "tsup --watch",
+    "build": "tsdown",
+    "dev": "tsdown --watch",
     "clean": "rm -rf dist",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
@@ -81,13 +81,13 @@
   },
   "dependencies": {
     "@arcadeai/arcadejs": "^2.4.1",
-    "@composio/core": "^0.6.5",
-    "@composio/mastra": "^0.6.5",
+    "@composio/core": "^0.14.0",
+    "@composio/mastra": "^0.10.2",
     "@mastra/memory": "workspace:*",
     "@mastra/schema-compat": "workspace:*"
   },
   "devDependencies": {
-    "@hono/node-server": "^1.19.14",
+    "@hono/node-server": "^2.0.0",
     "@internal/ai-sdk-v4": "workspace:*",
     "@internal/ai-sdk-v5": "workspace:*",
     "@internal/ai-v6": "workspace:*",
@@ -97,7 +97,7 @@
     "@mastra/mcp": "workspace:*",
     "@types/node": "22.20.1",
     "hono": "^4.12.8",
-    "tsup": "^8.5.1",
+    "tsdown": "0.22.9",
     "typescript": "catalog:",
     "vitest": "catalog:",
     "zod": "^3.25.76"

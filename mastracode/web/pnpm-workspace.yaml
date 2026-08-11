@@ -26,3 +26,4 @@ allowBuilds:
   msw: false
   onnxruntime-node: false
   protobufjs: true
+  utf-8-validate: true

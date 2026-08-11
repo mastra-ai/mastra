@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual, createCipheriv, createDecipheriv, randomBytes, hkdfSync } from 'crypto';
+import { createHmac, timingSafeEqual, createCipheriv, createDecipheriv, randomBytes, hkdfSync } from 'node:crypto';
 
 /**
  * Verify a Slack request signature.

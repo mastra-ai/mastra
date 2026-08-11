@@ -133,7 +133,9 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
         },
       };
     case 'text-delta':
-      if (value.delta) {
+      // Keep empty deltas that carry provider metadata (e.g. Gemini thought signatures),
+      // otherwise that metadata is dropped before it reaches the consumer.
+      if (value.delta || value.providerMetadata != null) {
         return {
           type: 'text-delta',
           runId: ctx.runId,
@@ -321,6 +323,7 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
 
     case 'finish':
       const { finishReason, usage, providerMetadata, messages, ...rest } = value;
+      const rawFinishReason = extractRawFinishReason(finishReason);
       return {
         type: 'finish',
         runId: ctx.runId,
@@ -329,6 +332,7 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
           providerMetadata: value.providerMetadata,
           stepResult: {
             reason: normalizeFinishReason(value.finishReason),
+            ...(rawFinishReason !== undefined && { rawReason: rawFinishReason }),
           },
           output: {
             // Normalize usage to handle both V2 (flat) and V3 (nested) formats
@@ -365,7 +369,9 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
 }
 
 export type OutputChunkType<OUTPUT = undefined> =
-  TextStreamPart<ToolSet> | ObjectStreamPart<Partial<OUTPUT>> | undefined;
+  | TextStreamPart<ToolSet>
+  | ObjectStreamPart<Partial<OUTPUT>>
+  | undefined;
 
 export function convertMastraChunkToAISDKv5<OUTPUT = undefined>({
   chunk,
@@ -691,4 +697,20 @@ function normalizeFinishReason(
 
   // V2/V5 format - already a string, but normalize 'unknown' to 'other' for consistency with V6
   return finishReason === 'unknown' ? 'other' : finishReason;
+}
+
+/**
+ * Extract the provider's raw finish reason, when the provider supplies one.
+ *
+ * V3/V6 providers report both a unified reason and the provider's own string
+ * (e.g. Google sends `raw: 'MALFORMED_FUNCTION_CALL'` alongside `unified: 'error'`).
+ * The unified value alone collapses distinct provider outcomes into one bucket,
+ * so we keep the raw value next to it — mirroring how `normalizeUsage` retains `raw`.
+ *
+ * V2/V5 providers only ever send a string, so there is no raw value to preserve.
+ */
+function extractRawFinishReason(
+  finishReason: LanguageModelV2FinishReason | LanguageModelV3FinishReason | 'tripwire' | 'retry' | undefined,
+): string | undefined {
+  return isV3FinishReason(finishReason) ? finishReason.raw : undefined;
 }

@@ -28,9 +28,9 @@ describe('docsTool', () => {
     });
 
     it('should handle directory listings when no index.md exists', async () => {
-      // When there's no index.md in a directory, it should list subdirectories
-      const result = await callTool(tools.mastra_mastraDocs, { paths: ['docs/rag'] });
-      // The rag folder has subdirectories with index.md files
+      // When there's no index.md in a directory, it should list its files and subdirectories
+      const result = await callTool(tools.mastra_mastraDocs, { paths: ['docs/observability'] });
+      // The observability folder has both .md files and subdirectories, so it lists them
       expect(result).toContain('Available documentation paths');
     });
 

@@ -14,7 +14,7 @@ export interface WorkflowRunStatusInlineProps {
 export function WorkflowRunStatusInline({ status }: WorkflowRunStatusInlineProps) {
   const { icon, color } = getStatusVisual(status);
   return (
-    <span className={`inline-flex items-center gap-1.5 whitespace-nowrap text-ui-sm ${color}`}>
+    <span className={`text-ui-sm inline-flex items-center gap-1.5 whitespace-nowrap ${color}`}>
       <span className="inline-flex shrink-0 items-center" aria-hidden>
         {icon}
       </span>

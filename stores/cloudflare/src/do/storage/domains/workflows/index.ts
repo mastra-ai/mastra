@@ -41,34 +41,30 @@ export class WorkflowsStorageDO extends WorkflowsStorage {
     await this.#db.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
   }
 
-  updateWorkflowResults(
-    {
-      // workflowName,
-      // runId,
-      // stepId,
-      // result,
-      // requestContext,
-    }: {
-      workflowName: string;
-      runId: string;
-      stepId: string;
-      result: StepResult<unknown, unknown, unknown, unknown>;
-      requestContext: Record<string, unknown>;
-    },
-  ): Promise<Record<string, StepResult<unknown, unknown, unknown, unknown>>> {
+  updateWorkflowResults({
+    // workflowName,
+    // runId,
+    // stepId,
+    // result,
+    // requestContext,
+  }: {
+    workflowName: string;
+    runId: string;
+    stepId: string;
+    result: StepResult<unknown, unknown, unknown, unknown>;
+    requestContext: Record<string, unknown>;
+  }): Promise<Record<string, StepResult<unknown, unknown, unknown, unknown>>> {
     throw new Error('Method not implemented.');
   }
-  updateWorkflowState(
-    {
-      // workflowName,
-      // runId,
-      // opts,
-    }: {
-      workflowName: string;
-      runId: string;
-      opts: UpdateWorkflowStateOptions;
-    },
-  ): Promise<WorkflowRunState | undefined> {
+  updateWorkflowState({
+    // workflowName,
+    // runId,
+    // opts,
+  }: {
+    workflowName: string;
+    runId: string;
+    opts: UpdateWorkflowStateOptions;
+  }): Promise<WorkflowRunState | undefined> {
     throw new Error('Method not implemented.');
   }
 

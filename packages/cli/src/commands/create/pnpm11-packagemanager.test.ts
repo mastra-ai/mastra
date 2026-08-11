@@ -1,210 +1,55 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+
+import { afterEach, describe, expect, it } from 'vitest';
+
+import { PNPM_WORKSPACE, writeEmptyScaffold } from './utils';
 
 /**
- * Verifies that `createMastraProject` normalizes the packageManager /
- * devEngines.packageManager fields that pnpm v11 writes with a semver range.
+ * Verifies that the direct pnpm scaffold avoids packageManager metadata that
+ * Corepack versions bundled with supported Node releases may reject.
  */
-
-const mocks = vi.hoisted(() => {
-  const mockExec = vi.fn();
-  const mockChildProcess = {
-    exec: (cmd: string, opts: any, cb: any) => {
-      mockExec(cmd);
-      if (cb) cb(null, { stdout: '' }, { stderr: '' });
-      return {
-        on: (event: string, callback: any) => {
-          if (event === 'exit') callback(0);
-        },
-        stdout: { on: vi.fn() },
-        stderr: { on: vi.fn() },
-      };
-    },
-  };
-  const mockRm = vi.fn().mockResolvedValue(undefined);
-  const mockExistsSync = vi.fn().mockReturnValue(false);
-  const mockWriteFile = vi.fn().mockResolvedValue(undefined);
-  // Holds the package.json content returned by readFile for each test
-  let readFileContent = '{}';
-
-  return {
-    mockExec,
-    mockChildProcess,
-    mockRm,
-    mockExistsSync,
-    mockWriteFile,
-    get readFileContent() {
-      return readFileContent;
-    },
-    set readFileContent(value: string) {
-      readFileContent = value;
-    },
-  };
-});
-
-vi.mock('node:child_process', () => ({
-  default: mocks.mockChildProcess,
-  ...mocks.mockChildProcess,
-}));
-
-vi.mock('node:util', () => ({
-  default: {
-    promisify: (_fn: any) => mocks.mockExec,
-  },
-  promisify: (_fn: any) => mocks.mockExec,
-}));
-
-vi.mock('fs/promises', () => ({
-  default: {
-    mkdir: vi.fn().mockResolvedValue(undefined),
-    readFile: vi.fn().mockImplementation(() => Promise.resolve(mocks.readFileContent)),
-    writeFile: mocks.mockWriteFile,
-    rm: mocks.mockRm,
-  },
-}));
-
-vi.mock('fs', () => ({
-  default: {
-    existsSync: mocks.mockExistsSync,
-  },
-}));
-
-vi.mock('@clack/prompts', () => ({
-  intro: vi.fn(),
-  text: vi.fn().mockResolvedValue('test-project'),
-  isCancel: vi.fn().mockReturnValue(false),
-  spinner: vi.fn(() => ({
-    start: vi.fn(),
-    stop: vi.fn(),
-    message: vi.fn(),
-  })),
-  outro: vi.fn(),
-  cancel: vi.fn(),
-}));
-
-vi.mock('../../services/service.deps.js', () => ({
-  DepsService: class {
-    addScriptsToPackageJson = vi.fn().mockResolvedValue(undefined);
-  },
-}));
-
 describe('pnpm v11 packageManager normalization', () => {
-  const originalEnv = process.env;
-  const originalChdir = process.chdir;
-  const originalCwd = process.cwd;
-  const originalExit = process.exit;
-  const mockChdir = vi.fn();
-  const mockCwd = vi.fn().mockReturnValue('/tmp');
-  const mockExit = vi.fn() as unknown as typeof process.exit;
+  const temporaryDirectories: string[] = [];
 
-  beforeEach(() => {
-    vi.resetModules();
-    process.env = { ...originalEnv, npm_config_user_agent: 'pnpm/11.3.0' };
-    process.chdir = mockChdir;
-    process.cwd = mockCwd;
-    process.exit = mockExit;
-    mocks.mockExec.mockReset();
-    mocks.mockExec.mockResolvedValue({ stdout: '' });
-    mocks.mockRm.mockClear();
-    mocks.mockWriteFile.mockClear();
-    mocks.mockExistsSync.mockReturnValue(false);
+  afterEach(async () => {
+    await Promise.all(
+      temporaryDirectories.splice(0).map(directory => fs.rm(directory, { recursive: true, force: true })),
+    );
   });
 
-  afterEach(() => {
-    process.env = originalEnv;
-    process.chdir = originalChdir;
-    process.cwd = originalCwd;
-    process.exit = originalExit;
+  async function createPnpmProject(versionTag = 'latest') {
+    const projectPath = await fs.mkdtemp(path.join(os.tmpdir(), 'mastra-pnpm11-'));
+    temporaryDirectories.push(projectPath);
+    await writeEmptyScaffold({
+      projectPath,
+      projectName: 'pnpm-project',
+      versionTag,
+      packageManager: 'pnpm',
+    });
+    return projectPath;
+  }
+
+  it('omits packageManager and devEngines from the authored manifest', async () => {
+    const projectPath = await createPnpmProject();
+    const manifest = JSON.parse(await fs.readFile(path.join(projectPath, 'package.json'), 'utf8'));
+
+    expect(manifest.packageManager).toBeUndefined();
+    expect(manifest.devEngines).toBeUndefined();
   });
 
-  it('should remove devEngines.packageManager from pnpm v11 init output', async () => {
-    // Simulate pnpm v11 init output
-    mocks.readFileContent = JSON.stringify({
-      name: 'test-project',
-      scripts: {},
-      devEngines: {
-        packageManager: {
-          name: 'pnpm',
-          version: '^11.3.0',
-          onFail: 'download',
-        },
-      },
-    });
+  it('uses the same bare release-channel tag for independently versioned Mastra packages', async () => {
+    const projectPath = await createPnpmProject('snapshot-channel');
+    const manifest = JSON.parse(await fs.readFile(path.join(projectPath, 'package.json'), 'utf8'));
 
-    const { createMastraProject } = await import('./utils');
-
-    await createMastraProject({
-      projectName: 'test-pnpm11-project',
-      needsInteractive: false,
-    });
-
-    // Find the writeFile call that writes package.json content
-    const writeFileCalls = mocks.mockWriteFile.mock.calls;
-    const packageJsonWrite = writeFileCalls.find(
-      (call: any[]) => typeof call[1] === 'string' && call[1].includes('"type"'),
-    );
-
-    expect(packageJsonWrite).toBeDefined();
-    const written = JSON.parse(packageJsonWrite![1]);
-    // Both packageManager and devEngines.packageManager should be removed
-    // because corepack ≤0.35.0 rejects ranges in both fields
-    expect(written.packageManager).toBeUndefined();
-    expect(written.devEngines).toBeUndefined();
-
-    // Verify that the pnpm-workspace.yaml configuration is correctly generated and includes excludes
-    const workspaceWrite = writeFileCalls.find(
-      (call: any[]) => typeof call[0] === 'string' && call[0] === 'pnpm-workspace.yaml',
-    );
-    expect(workspaceWrite).toBeDefined();
-    expect(workspaceWrite![1]).toContain('minimumReleaseAgeExclude:');
-    expect(workspaceWrite![1]).toContain('- mastra');
-    expect(workspaceWrite![1]).toContain('- "@mastra/*"');
+    expect(manifest.dependencies['@mastra/core']).toBe('snapshot-channel');
+    expect(manifest.devDependencies.mastra).toBe('snapshot-channel');
   });
 
-  it('should remove legacy packageManager field with range', async () => {
-    mocks.readFileContent = JSON.stringify({
-      name: 'test-project',
-      scripts: {},
-      packageManager: 'pnpm@^11.3.0',
-    });
+  it('writes the complete pnpm 11 workspace and build-policy configuration', async () => {
+    const projectPath = await createPnpmProject();
 
-    const { createMastraProject } = await import('./utils');
-
-    await createMastraProject({
-      projectName: 'test-legacy-pm-project',
-      needsInteractive: false,
-    });
-
-    const writeFileCalls = mocks.mockWriteFile.mock.calls;
-    const packageJsonWrite = writeFileCalls.find(
-      (call: any[]) => typeof call[1] === 'string' && call[1].includes('"type"'),
-    );
-
-    expect(packageJsonWrite).toBeDefined();
-    const written = JSON.parse(packageJsonWrite![1]);
-    expect(written.packageManager).toBeUndefined();
-  });
-
-  it('should remove exact packageManager field too', async () => {
-    mocks.readFileContent = JSON.stringify({
-      name: 'test-project',
-      scripts: {},
-      packageManager: 'pnpm@10.29.3',
-    });
-
-    const { createMastraProject } = await import('./utils');
-
-    await createMastraProject({
-      projectName: 'test-exact-pm-project',
-      needsInteractive: false,
-    });
-
-    const writeFileCalls = mocks.mockWriteFile.mock.calls;
-    const packageJsonWrite = writeFileCalls.find(
-      (call: any[]) => typeof call[1] === 'string' && call[1].includes('"type"'),
-    );
-
-    expect(packageJsonWrite).toBeDefined();
-    const written = JSON.parse(packageJsonWrite![1]);
-    expect(written.packageManager).toBeUndefined();
+    expect(await fs.readFile(path.join(projectPath, 'pnpm-workspace.yaml'), 'utf8')).toBe(PNPM_WORKSPACE);
   });
 });

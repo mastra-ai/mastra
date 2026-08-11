@@ -10,9 +10,9 @@ packages:
 
 **Added in:** `@mastra/core@1.45.0`
 
-:::warning
+:::beta
 
-Durable agents are currently in **beta**. APIs may change in future releases.
+Breaking changes may occur without a major version bump until the API is stable.
 
 :::
 
@@ -25,7 +25,7 @@ Use a durable agent when any of the following apply:
 - The client may drop and reconnect mid-stream (mobile, spotty networks, long-running calls).
 - The agentic loop may outlive a single HTTP request (background research, multi-step tool use).
 - You need an observe/reconnect API where a second client picks up a stream that a first client started.
-- You want [Inngest-powered execution](/guides/deployment/inngest) with step memoization, retries, and monitoring.
+- You want [Inngest-powered execution](/integrations/deploy/inngest) with step memoization, retries, and monitoring.
 
 For short-lived, request-scoped calls where the client stays connected, a regular `Agent` with `stream()` or `generate()` is simpler.
 
@@ -233,10 +233,55 @@ Resume the suspended run after approval:
 await durableAgent.resume(runId, { approved: true })
 ```
 
+## Crash recovery
+
+If the server process crashes while a durable agent run is in progress, that run remains in `running` status in storage with no automatic retry. On the next server start you can re-drive these orphaned runs so they pick up where they left off.
+
+### Automatic recovery
+
+Set `recovery.durableAgents` to `'auto'` in the Mastra config. The deployer calls `recoverAllDurableAgents()` on boot, right after restarting active workflow runs:
+
+```typescript title="src/mastra/index.ts" {4}
+export const mastra = new Mastra({
+  agents: { myAgent: durableAgent },
+  storage: new PostgresStore({ connectionString: process.env.DATABASE_URL! }),
+  recovery: { durableAgents: 'auto' },
+})
+```
+
+On startup, this discovers every registered durable agent with runs stuck in `running` status and re-drives them from the last persisted snapshot.
+
+:::warning
+
+Recovery re-runs the agentic loop from the last snapshot, which re-issues LLM calls (real cost) and re-executes tool calls. Make sure your tools are idempotent before enabling automatic recovery.
+
+:::
+
+### Manual recovery
+
+If you need finer control, such as gating recovery behind a leader election or running it on a schedule, call the methods directly:
+
+```typescript
+// Recover all durable agents
+const result = await mastra.recoverAllDurableAgents()
+console.log(`Recovered ${result.recovered} runs (${result.succeeded} ok, ${result.failed} failed)`)
+
+// Recover a specific agent
+const agentResult = await durableAgent.recoverActiveRuns()
+
+// Recover a single known run
+await durableAgent.recoverActiveRuns({ runId: 'run-abc-123' })
+```
+
+### Multi-instance deployments
+
+Mastra doesn't provide a distributed lease or lock yet. In multi-replica deployments, every replica that starts with `recovery.durableAgents: 'auto'` will race to recover the same runs. For now, either gate recovery behind your own leader election or run it from a single replica.
+
 ## Related
 
 - [DurableAgent reference](/reference/agents/durable-agent)
 - [`createInngestAgent()` reference](/reference/agents/inngest-agent)
 - [Background tasks](/docs/long-running-agents/background-tasks)
-- [Inngest deployment guide](/guides/deployment/inngest)
+- [Inngest deployment guide](/integrations/deploy/inngest)
 - [Agent overview](/docs/agents/overview)
+- [Worker overview](/docs/deployment/workers)

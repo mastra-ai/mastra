@@ -571,6 +571,94 @@ describe('isProviderConnected', () => {
       delete (global as any).__MOCK_PROVIDER_REGISTRY__;
     });
   });
+
+  describe('Issue #19811 - Google alias OR semantics and Vertex misidentification', () => {
+    afterEach(() => {
+      delete process.env.GOOGLE_API_KEY;
+      delete process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+      delete process.env.GOOGLE_APPLICATION_CREDENTIALS;
+      delete process.env.GOOGLE_VERTEX_PROJECT;
+      delete process.env.GOOGLE_VERTEX_LOCATION;
+    });
+
+    it('treats GOOGLE_API_KEY and GOOGLE_GENERATIVE_AI_API_KEY as aliases (any one connects)', () => {
+      process.env.GOOGLE_GENERATIVE_AI_API_KEY = 'test-key';
+      expect(isProviderConnected('google')).toBe(true);
+
+      delete process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+      process.env.GOOGLE_API_KEY = 'test-key';
+      expect(isProviderConnected('google')).toBe(true);
+
+      process.env.GOOGLE_GENERATIVE_AI_API_KEY = 'test-key';
+      expect(isProviderConnected('google')).toBe(true);
+    });
+
+    it('returns false for google when neither alias is set', () => {
+      expect(isProviderConnected('google')).toBe(false);
+    });
+
+    it('does not apply alias OR semantics to unrelated multi-key providers', () => {
+      (global as any).__MOCK_PROVIDER_REGISTRY__ = {
+        'multi-key-provider': {
+          name: 'Multi Key Provider',
+          models: ['model-1'],
+          apiKeyEnvVar: ['API_KEY_1', 'API_KEY_2'],
+          gateway: 'test',
+        },
+      };
+      process.env.API_KEY_1 = 'key1';
+      delete process.env.API_KEY_2;
+      // Only Google is treated as aliased; every other multi-key provider still requires all entries.
+      expect(isProviderConnected('multi-key-provider')).toBe(false);
+      delete (global as any).__MOCK_PROVIDER_REGISTRY__;
+      delete process.env.API_KEY_1;
+    });
+
+    it('treats google.vertex.chat as a distinct provider from google AI Studio', () => {
+      // No AI Studio keys, proper Vertex env vars set. Both GOOGLE_VERTEX_PROJECT and
+      // GOOGLE_VERTEX_LOCATION are required by @ai-sdk/google-vertex's createVertex() (no
+      // defaults) — GOOGLE_APPLICATION_CREDENTIALS is deliberately not required, since
+      // Application Default Credentials can also come from gcloud CLI login or a GCE/Cloud
+      // Run metadata server with no env var present at all.
+      process.env.GOOGLE_VERTEX_PROJECT = 'my-project';
+      process.env.GOOGLE_VERTEX_LOCATION = 'us-central1';
+      expect(isProviderConnected('google.vertex.chat')).toBe(true);
+    });
+
+    it('treats the bare google-vertex id as connected when Vertex env vars are set', () => {
+      process.env.GOOGLE_VERTEX_PROJECT = 'my-project';
+      process.env.GOOGLE_VERTEX_LOCATION = 'us-central1';
+      expect(isProviderConnected('google-vertex')).toBe(true);
+    });
+
+    it('does not treat Vertex as connected from GOOGLE_VERTEX_PROJECT alone', () => {
+      // GOOGLE_VERTEX_LOCATION is also a hard requirement — createVertex() throws without it.
+      process.env.GOOGLE_VERTEX_PROJECT = 'my-project';
+      expect(isProviderConnected('google.vertex.chat')).toBe(false);
+    });
+
+    it('does not treat Vertex as connected from GOOGLE_APPLICATION_CREDENTIALS alone', () => {
+      // Credentials without a project id still can't build a request — GOOGLE_VERTEX_PROJECT
+      // has no fallback.
+      process.env.GOOGLE_APPLICATION_CREDENTIALS = '/path/to/creds.json';
+      expect(isProviderConnected('google.vertex.chat')).toBe(false);
+    });
+
+    it('does not treat google.vertex.chat as connected via AI Studio keys alone', () => {
+      process.env.GOOGLE_GENERATIVE_AI_API_KEY = 'test-key';
+      expect(isProviderConnected('google.vertex.chat')).toBe(false);
+    });
+
+    it('does not treat google as connected via Vertex env vars alone', () => {
+      process.env.GOOGLE_VERTEX_PROJECT = 'my-project';
+      process.env.GOOGLE_VERTEX_LOCATION = 'us-central1';
+      expect(isProviderConnected('google')).toBe(false);
+    });
+
+    it('returns false for google.vertex.chat when no Vertex env vars are set', () => {
+      expect(isProviderConnected('google.vertex.chat')).toBe(false);
+    });
+  });
 });
 
 // ============================================================================
@@ -1704,6 +1792,48 @@ describe('Agent Routes Authorization', () => {
           signal: { type: 'user-message', contents: 'pause here' },
           runId: 'run-123',
           ifActive: { behavior: 'persist' },
+        }).success,
+      ).toBe(true);
+    });
+
+    it('should preserve transient on non-state signals', () => {
+      for (const transient of [true, false]) {
+        const result = sendAgentSignalBodySchema.safeParse({
+          signal: { type: 'system-reminder', contents: 'steer once, do not retain', transient },
+          resourceId: 'user-a',
+          threadId: 'thread-a',
+        });
+
+        expect(result.success).toBe(true);
+        expect(result.success && result.data.signal.transient).toBe(transient);
+      }
+    });
+
+    it('should reject any supplied transient value on state signals', () => {
+      for (const transient of [true, false]) {
+        expect(
+          sendAgentSignalBodySchema.safeParse({
+            signal: { type: 'state', contents: 'full state snapshot', transient },
+            resourceId: 'user-a',
+            threadId: 'thread-a',
+          }).success,
+        ).toBe(false);
+      }
+
+      expect(
+        sendAgentSignalBodySchema.safeParse({
+          signal: { type: 'state', contents: 'full state snapshot' },
+          resourceId: 'user-a',
+          threadId: 'thread-a',
+        }).success,
+      ).toBe(true);
+
+      // JSON cannot carry undefined, so an in-process undefined value is equivalent to omission.
+      expect(
+        sendAgentSignalBodySchema.safeParse({
+          signal: { type: 'state', contents: 'full state snapshot', transient: undefined },
+          resourceId: 'user-a',
+          threadId: 'thread-a',
         }).success,
       ).toBe(true);
     });

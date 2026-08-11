@@ -4,7 +4,12 @@ import { describe, expect, it, vi } from 'vitest';
 import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory/mock';
 import { InMemoryStore } from '../../storage/mock';
-import { DEFAULT_GOAL_JUDGE_PROMPT, DEFAULT_GOAL_MAX_RUNS, resolveEffectiveGoalSettings } from '../goal';
+import {
+  DEFAULT_GOAL_JUDGE_PROMPT,
+  DEFAULT_GOAL_MAX_RUNS,
+  GOAL_STATE_TYPE,
+  resolveEffectiveGoalSettings,
+} from '../goal';
 import { Agent } from '../index';
 import type { GoalConfig } from '../types';
 
@@ -13,11 +18,12 @@ const THREAD = 'thread-1';
 
 // A model that always answers in a single step (so the loop reaches a candidate
 // final answer and the goal step scores it).
-function singleStepModel(text = 'Working on it.') {
+function singleStepModel(text = 'Working on it.', delayMs = 0) {
   let call = 0;
   return new MockLanguageModelV2({
     doStream: async () => {
       call++;
+      if (delayMs > 0) await new Promise(resolve => setTimeout(resolve, delayMs));
       return {
         rawCall: { rawPrompt: null, rawSettings: {} },
         warnings: [],
@@ -61,12 +67,12 @@ function goalJudgeModel(
   });
 }
 
-function makeAgent(goal?: GoalConfig) {
+function makeAgent(goal?: GoalConfig, model = singleStepModel()) {
   const agent = new Agent({
     id: 'goal-agent',
     name: 'goal-agent',
     instructions: 'You work toward goals.',
-    model: singleStepModel(),
+    model,
     memory: new MockMemory(),
     ...(goal ? { goal } : {}),
   });
@@ -149,6 +155,7 @@ describe('Agent objective methods', () => {
       runsUsed: 0,
       judgeModelId: 'judge-1',
       maxRuns: 5,
+      activeDurationMs: 0,
     });
     // Unprovided optional fields are left unset so they fall back to agent config.
     expect(record?.prompt).toBeUndefined();
@@ -162,7 +169,12 @@ describe('Agent objective methods', () => {
 
     expect(await agent.updateObjectiveOptions({ threadId: THREAD, judgeModelId: 'j' })).toBeUndefined();
 
-    await agent.setObjective('Goal', { threadId: THREAD, resourceId: RESOURCE });
+    const created = await agent.setObjective('Goal', {
+      threadId: THREAD,
+      resourceId: RESOURCE,
+      activeDurationMs: 2_500,
+    });
+    expect(created?.activeDurationMs).toBe(2_500);
     const updated = await agent.updateObjectiveOptions({
       threadId: THREAD,
       judgeModelId: 'new-judge',
@@ -172,7 +184,66 @@ describe('Agent objective methods', () => {
       judgeModelId: 'new-judge',
       maxRuns: 12,
       objective: 'Goal',
+      activeDurationMs: 2_500,
     });
+
+    const preserved = await agent.updateObjectiveOptions({ threadId: THREAD, prompt: 'Keep going.' });
+    expect(preserved).toMatchObject({ activeDurationMs: 2_500, prompt: 'Keep going.' });
+  });
+
+  it.each([-1, Number.NaN, Number.POSITIVE_INFINITY])(
+    'normalizes invalid initial active duration %s to zero',
+    async invalidDuration => {
+      const agent = makeAgent();
+
+      const created = await agent.setObjective('Goal', {
+        threadId: THREAD,
+        resourceId: RESOURCE,
+        activeDurationMs: invalidDuration,
+      });
+      expect(created?.activeDurationMs).toBe(0);
+      expect((await agent.getObjective({ threadId: THREAD }))?.activeDurationMs).toBe(0);
+    },
+  );
+
+  it('checkpoints active duration when a raw Agent stream completes', async () => {
+    const agent = makeAgent({}, singleStepModel('Finished.', 20));
+    await agent.setObjective('Finish the task', { threadId: THREAD, resourceId: RESOURCE });
+
+    const stream = await agent.stream('go', {
+      memory: { resource: RESOURCE, thread: { id: THREAD } },
+      maxSteps: 1,
+    });
+    for await (const _chunk of stream.fullStream) {
+      // Drain the stream through its terminal lifecycle boundary.
+    }
+
+    expect((await agent.getObjective({ threadId: THREAD }))?.activeDurationMs).toBeGreaterThan(0);
+  });
+
+  it('does not read goal state when the agent has no goal configuration', async () => {
+    const storage = new InMemoryStore();
+    const agent = new Agent({
+      id: 'ordinary-agent',
+      name: 'ordinary-agent',
+      instructions: 'Answer once.',
+      model: singleStepModel('Finished.'),
+      memory: new MockMemory(),
+    });
+    new Mastra({ agents: { 'ordinary-agent': agent }, storage, logger: false });
+    const threadState = await storage.getStore('threadState');
+    const getState = vi.spyOn(threadState!, 'getState');
+
+    const stream = await agent.stream('go', {
+      memory: { resource: RESOURCE, thread: { id: THREAD } },
+      maxSteps: 1,
+    });
+    for await (const _chunk of stream.fullStream) {
+      // Drain the stream through its terminal lifecycle boundary.
+    }
+
+    const goalReads = getState.mock.calls.filter(([options]) => options.type === GOAL_STATE_TYPE);
+    expect(goalReads).toHaveLength(0);
   });
 
   it('no-ops without storage', async () => {

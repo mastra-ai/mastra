@@ -8,7 +8,8 @@ import type { MemoryStorage } from '../../storage';
 import { generateEmptyFromSchema } from '../../utils';
 
 export type WorkingMemoryTemplate =
-  { format: 'markdown'; content: string } | { format: 'json'; content: string | Record<string, unknown> };
+  | { format: 'markdown'; content: string }
+  | { format: 'json'; content: string | Record<string, unknown> };
 
 export interface WorkingMemoryConfig {
   template?: WorkingMemoryTemplate;

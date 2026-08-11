@@ -37,7 +37,7 @@ Read about [monorepo deployment](/docs/deployment/monorepo).
 The [Mastra platform](/docs/mastra-platform/overview) provides three products for deploying, monitoring, and managing AI applications built with the Mastra framework:
 
 - [**Observability**](/docs/mastra-platform/observability): A standalone hosted product for searchable traces, logs, and metrics across Mastra projects and deploys
-- [**Studio**](/docs/mastra-platform/studio): A hosted visual environment for testing agents, running workflows, and inspecting traces
+- [**Studio**](/docs/mastra-platform/studio): A hosted visual environment for testing agents and running workflows, plus inspecting traces
 - [**Server**](/docs/mastra-platform/server): A production deployment target that runs your Mastra application as an API server
 
 Learn more in the [Mastra platform overview](/docs/mastra-platform/overview).
@@ -48,13 +48,14 @@ Mastra applications can be deployed to cloud providers and serverless platforms.
 
 Use this option for auto-scaling, minimal infrastructure management, or when you're already using one of these platforms.
 
-- [Amazon EC2](/guides/deployment/amazon-ec2)
-- [AWS Lambda](/guides/deployment/aws-lambda)
-- [Azure App Services](/guides/deployment/azure-app-services)
-- [Cloudflare](/guides/deployment/cloudflare)
-- [Digital Ocean](/guides/deployment/digital-ocean)
-- [Netlify](/guides/deployment/netlify)
-- [Vercel](/guides/deployment/vercel)
+- [Amazon EC2](/integrations/deploy/amazon-ec2)
+- [AWS Lambda](/integrations/deploy/aws-lambda)
+- [Azure App Services](/integrations/deploy/azure-app-services)
+- [Cloudflare](/integrations/deploy/cloudflare)
+- [Digital Ocean](/integrations/deploy/digital-ocean)
+- [Kubernetes](/integrations/deploy/kubernetes)
+- [Netlify](/integrations/deploy/netlify)
+- [Vercel](/integrations/deploy/vercel)
 
 ### Sandbox
 
@@ -76,4 +77,8 @@ Use these guides when adding Mastra to an existing Next.js or Astro application.
 
 Mastra workflows run using the built-in execution engine by default. For production workloads requiring managed infrastructure, workflows can also be deployed to specialized platforms like [Inngest](https://www.inngest.com) that provide step memoization, automatic retries, and real-time monitoring.
 
-Visit the [Workflow Runners guide](/docs/deployment/workflow-runners) for execution options and the [Inngest deployment guide](/guides/deployment/inngest) for setup instructions.
+Visit the [Workflow Runners guide](/docs/deployment/workflow-runners) for execution options and the [Inngest deployment guide](/integrations/deploy/inngest) for setup instructions.
+
+## Workers
+
+For production deployments, Mastra can run workflow orchestration, cron scheduling, and background tool execution in dedicated worker processes separate from the API server. This lets you scale each concern independently and isolate failures. See [Workers](/docs/deployment/workers) for details.

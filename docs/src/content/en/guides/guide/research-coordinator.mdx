@@ -1,6 +1,6 @@
 ---
 title: "Guide: Build a research coordinator with supervisor agents"
-description: Build a research coordinator that orchestrates multiple specialized agents to research topics and produce comprehensive reports.
+description: Build a research coordinator that orchestrates multiple specialized agents to research topics and produce detailed reports.
 ---
 
 import Steps from "@site/src/components/Steps";
@@ -8,9 +8,9 @@ import StepItem from "@site/src/components/StepItem";
 
 # Build a research coordinator with supervisor agents
 
-In this guide, you'll build a research coordinator that orchestrates multiple specialized agents using supervisor agents. The coordinator will delegate research tasks to a research agent and writing tasks to a writing agent, then synthesize the results into a comprehensive report.
+In this guide, you'll build a research coordinator that orchestrates multiple specialized agents using supervisor agents. The coordinator will delegate research tasks to a research agent and writing tasks to a writing agent, then synthesize the results into a detailed report.
 
-You'll learn how to set up subagents with clear roles, configure a supervisor agent to coordinate them, use delegation hooks to control execution, and validate task completion with scorers.
+You'll set up subagents with clear roles and configure a supervisor agent to coordinate them. You'll also use delegation hooks to control execution and scorers to validate task completion.
 
 ## Prerequisites
 
@@ -180,7 +180,7 @@ export const mastra = new Mastra({
 The `defaultOptions` on the supervisor agent configure delegation hooks and iteration monitoring:
 
 - `onDelegationStart` modifies the research agent's prompt to request recent data
-- `onDelegationComplete` logs completion, bails on errors, and provides feedback
+- `onDelegationComplete` logs completion and stops on errors, then provides feedback
 - `messageFilter` limits context to the last 10 messages for efficiency
 - `onIterationComplete` monitors progress after each iteration
 
@@ -405,5 +405,5 @@ You can extend this research coordinator to:
 
 Learn more:
 
-- [Supervisor Agents](/docs/agents/supervisor-agents)
+- [Supervisor Agents](/docs/capabilities/subagents)
 - [Agent.stream() Reference](/reference/streaming/agents/stream)

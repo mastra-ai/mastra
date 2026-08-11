@@ -2212,6 +2212,55 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
         expect(code!.costUnit).toBe('usd');
       });
 
+      describe('when a batch of trace IDs is filtered', () => {
+        it('aggregates only metrics from the selected traces', async () => {
+          await storage.batchCreateMetrics({
+            metrics: [
+              {
+                metricId: 'metric-trace-a',
+                timestamp: new Date('2026-01-01T02:00:00Z'),
+                name: 'mastra_trace_filter_test',
+                value: 10,
+                traceId: 'trace-a',
+                labels: {},
+              },
+              {
+                metricId: 'metric-trace-b',
+                timestamp: new Date('2026-01-01T02:00:01Z'),
+                name: 'mastra_trace_filter_test',
+                value: 20,
+                traceId: 'trace-b',
+                labels: {},
+              },
+              {
+                metricId: 'metric-trace-c',
+                timestamp: new Date('2026-01-01T02:00:02Z'),
+                name: 'mastra_trace_filter_test',
+                value: 30,
+                traceId: 'trace-c',
+                labels: {},
+              },
+            ],
+          });
+
+          const result = await storage.getMetricBreakdown({
+            name: ['mastra_trace_filter_test'],
+            groupBy: ['traceId'],
+            aggregation: 'sum',
+            filters: { traceIds: ['trace-a', 'trace-c'] },
+          });
+
+          expect(
+            result.groups
+              .map(group => [group.dimensions.traceId, group.value])
+              .sort(([left], [right]) => String(left).localeCompare(String(right))),
+          ).toEqual([
+            ['trace-a', 10],
+            ['trace-c', 30],
+          ]);
+        });
+      });
+
       it('getMetricBreakdown honors limit and ascending order direction', async () => {
         const result = await storage.getMetricBreakdown({
           name: ['mastra_agent_duration_ms'],

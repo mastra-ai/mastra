@@ -139,6 +139,40 @@ export function describeFactoryStorageContract(
           /no_such_column/,
         );
       });
+
+      it('relaxes NOT NULL when a column becomes nullable in the schema', async () => {
+        const v1: CollectionSchema = {
+          name: 'contract_relax',
+          columns: {
+            id: { type: 'uuid-pk' },
+            org_id: { type: 'text' },
+            note: { type: 'text' },
+          },
+          uniqueIndexes: [{ name: 'contract_relax_org_unique', columns: ['org_id'] }],
+        };
+        await storage.ensureCollections([v1]);
+        await storage.ops.deleteMany(v1.name, {});
+        await storage.ops.insertOne(v1.name, { org_id: 'org-1', note: 'kept' });
+
+        const v2: CollectionSchema = {
+          ...v1,
+          columns: { ...v1.columns, note: { type: 'text', nullable: true } },
+        };
+        await storage.ensureCollections([v2]);
+
+        const inserted = await storage.ops.insertOne<Record<string, unknown>>(v2.name, {
+          org_id: 'org-2',
+          note: null,
+        });
+        expect(inserted.note).toBeNull();
+        // Pre-existing rows survive the relaxation.
+        const prior = await storage.ops.findOne<Record<string, unknown>>(v2.name, { org_id: 'org-1' });
+        expect(prior?.note).toBe('kept');
+        // Unique indexes are still enforced afterwards.
+        await expect(storage.ops.insertOne(v2.name, { org_id: 'org-1', note: 'dup' })).rejects.toThrow(
+          UniqueViolationError,
+        );
+      });
     });
 
     describe('insertOne', () => {
@@ -198,6 +232,15 @@ export function describeFactoryStorageContract(
           .catch((e: unknown) => e);
         expect(err).toBeInstanceOf(UniqueViolationError);
         expect((err as UniqueViolationError).collection).toBe(CONTRACT_ITEMS.name);
+      });
+
+      it('does not map NOT NULL violations to UniqueViolationError', async () => {
+        const err = await storage.ops
+          .insertOne(CONTRACT_ITEMS.name, baseItem({ name: null as unknown as string }))
+          .then(() => null)
+          .catch((e: unknown) => e);
+        expect(err).toBeTruthy();
+        expect(err).not.toBeInstanceOf(UniqueViolationError);
       });
 
       it('enforces partial unique only where the column is NOT NULL', async () => {

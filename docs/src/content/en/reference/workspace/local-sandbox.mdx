@@ -127,7 +127,7 @@ Configuration options for native OS sandboxing (used with `isolation: 'seatbelt'
     name: 'seatbeltProfilePath',
     type: 'string',
     description:
-      "Path to a custom seatbelt profile file (macOS only). If the file exists, it's used; if not, a default profile is generated and written to this path.",
+      "Path to a custom seatbelt profile file (macOS only). If you wrote the file, it's used exactly as written: Mastra doesn't add mounted paths to it, so the profile must already allow every path you mount. If the file doesn't exist, a default profile is generated and written to this path, and that generated profile allows mounted paths. Mastra marks the profiles it generates, so a later run regenerates them instead of reading them back as your own. To edit a generated profile and keep your edits, delete its marker comment: the file then counts as yours, and mounted paths are no longer added to it.",
     isOptional: true,
   },
   {
@@ -188,7 +188,7 @@ Configuration options for native OS sandboxing (used with `isolation: 'seatbelt'
 
 ### Relative paths and execution context
 
-When you use a relative path for `workingDirectory`, it resolves from `process.cwd()`. In Mastra projects, cwd varies depending on how you run your code:
+When you use a relative path for `workingDirectory`, it resolves from `process.cwd()`. In Mastra projects, the cwd changes based on how you run your code:
 
 | Context | Working directory | `./workspace` resolves to |
 | - | - | - |
@@ -210,7 +210,7 @@ const sandbox = new LocalSandbox({
 })
 ```
 
-Set `WORKSPACE_PATH` in your environment to an absolute path like `/home/user/my-project/workspace`. This ensures commands run from a consistent directory regardless of how you run your code.
+Set `WORKSPACE_PATH` in your environment to an absolute path like `/home/user/my-project/workspace`. It ensures commands run from a consistent directory regardless of how you run your code.
 
 ## Background processes
 

@@ -1,6 +1,16 @@
 import { describe, it, expect } from 'vitest';
 
-import { stripTrailingSlash } from './provider';
+import { SlackProvider, stripTrailingSlash, resolveSlackAdapterConfig } from './provider';
+
+describe('connect object form', () => {
+  it('requires a name when connecting without an agent id', async () => {
+    const provider = new SlackProvider();
+    await expect(
+      // @ts-expect-error deliberately omitting the required name to exercise the runtime guard
+      provider.connect({ id: 'controller-1' }),
+    ).rejects.toThrow(/"name" is required/);
+  });
+});
 
 describe('stripTrailingSlash', () => {
   it('removes a single trailing slash', () => {
@@ -22,5 +32,17 @@ describe('stripTrailingSlash', () => {
   it('produces a clean OAuth callback URL when joined', () => {
     const baseUrl = stripTrailingSlash('https://mastra-demo.calebbarnes.ca/');
     expect(`${baseUrl}/slack/oauth/callback`).toBe('https://mastra-demo.calebbarnes.ca/slack/oauth/callback');
+  });
+});
+
+describe('resolveSlackAdapterConfig', () => {
+  it('carries textFormat through to the resolved adapter config', () => {
+    const resolved = resolveSlackAdapterConfig({ textFormat: 'plain' });
+    expect(resolved.textFormat).toBe('plain');
+  });
+
+  it('omits textFormat when unset so the core default governs', () => {
+    const resolved = resolveSlackAdapterConfig({});
+    expect('textFormat' in resolved).toBe(false);
   });
 });

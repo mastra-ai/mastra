@@ -12,6 +12,8 @@ import {
   createStorageErrorId,
   normalizePerPage,
   safelyParseJSON,
+  storageMessageMatchesMetadataFilter,
+  validateStorageMetadataFilter,
 } from '@mastra/core/storage';
 import type {
   BufferedObservationChunk,
@@ -247,8 +249,8 @@ export class MemoryConvex extends MemoryStorage {
     metadata,
   }: {
     id: string;
-    title: string;
-    metadata: Record<string, unknown>;
+    title?: string;
+    metadata?: Record<string, unknown>;
   }): Promise<StorageThreadType> {
     const updated = await this.#db.updateThread({
       id,
@@ -359,6 +361,7 @@ export class MemoryConvex extends MemoryStorage {
 
   async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
     const { threadId, resourceId, include, filter, perPage: perPageInput, page = 0, orderBy } = args;
+    const metadataFilter = validateStorageMetadataFilter(filter?.metadata);
 
     // Normalize threadId to array
     const threadIds = Array.isArray(threadId) ? threadId : [threadId];
@@ -386,7 +389,7 @@ export class MemoryConvex extends MemoryStorage {
 
     // When perPage is 0, we only need included messages — skip full thread load
     if (perPage === 0 && include && include.length > 0) {
-      const messages = await this._getIncludedMessages(include);
+      const messages = await this._getIncludedMessages(include, undefined, resourceId);
       const list = new MessageList().add(messages, 'memory');
       return {
         messages: this._sortMessages(list.get.all.db(), field, direction),
@@ -410,6 +413,7 @@ export class MemoryConvex extends MemoryStorage {
 
     // Apply date range filter
     rows = filterByDateRange(rows, row => new Date(row.createdAt), filter?.dateRange);
+    rows = rows.filter(row => storageMessageMatchesMetadataFilter(row.content, metadataFilter));
 
     rows.sort((a, b) => {
       const aValue =
@@ -439,7 +443,7 @@ export class MemoryConvex extends MemoryStorage {
       // dateRange filters are active, the rows are a subset and would cause
       // addContextMessages() to compute neighbors from a truncated snapshot.
       const preloadedThreads = new Map<string, StoredMessage[]>();
-      if (!resourceId && !filter?.dateRange) {
+      if (!resourceId && !filter?.dateRange && !metadataFilter) {
         for (const tid of threadIds) {
           preloadedThreads.set(
             tid,
@@ -448,7 +452,7 @@ export class MemoryConvex extends MemoryStorage {
         }
       }
 
-      const includedMessages = await this._getIncludedMessages(include, preloadedThreads);
+      const includedMessages = await this._getIncludedMessages(include, preloadedThreads, resourceId);
       for (const msg of includedMessages) {
         if (!messageIds.has(msg.id)) {
           messages.push(msg);
@@ -459,8 +463,9 @@ export class MemoryConvex extends MemoryStorage {
 
     messages = this._sortMessages(messages, field, direction);
 
-    const hasMore =
-      include && include.length > 0
+    const hasMore = metadataFilter
+      ? perPageInput !== false && offset + perPage < totalThreadMessages
+      : include && include.length > 0
         ? new Set(messages.filter(m => m.threadId === threadId).map(m => m.id)).size < totalThreadMessages
         : perPageInput === false
           ? false
@@ -477,6 +482,7 @@ export class MemoryConvex extends MemoryStorage {
 
   async listMessagesByResourceId(args: StorageListMessagesByResourceIdInput): Promise<StorageListMessagesOutput> {
     const { resourceId, filter, perPage: perPageInput, page = 0, orderBy } = args;
+    const metadataFilter = validateStorageMetadataFilter(filter?.metadata);
     const { field, direction } = this.parseOrderBy(orderBy, 'ASC');
 
     // Normalize perPage for query (false → MAX_SAFE_INTEGER, 0 → 0, undefined → 40)
@@ -515,6 +521,7 @@ export class MemoryConvex extends MemoryStorage {
 
     // Apply date range filter
     rows = filterByDateRange(rows, row => new Date(row.createdAt), filter?.dateRange);
+    rows = rows.filter(row => storageMessageMatchesMetadataFilter(row.content, metadataFilter));
 
     rows = this._sortStoredMessages(rows, field, direction);
 
@@ -744,11 +751,22 @@ export class MemoryConvex extends MemoryStorage {
     });
   }
 
+  /**
+   * Fetches the messages named by `include` together with their surrounding context.
+   *
+   * @param include - Message ids to pin, each with an optional before/after window.
+   * @param preloadedThreads - Thread snapshots already loaded by the caller, reused instead of re-querying.
+   * @param resourceId - When set, restricts both the pinned messages and their context
+   * to that resource so an id from another resource returns nothing.
+   */
   private async _getIncludedMessages(
     include: NonNullable<StorageListMessagesInput['include']>,
     preloadedThreads?: Map<string, StoredMessage[]>,
+    resourceId?: string,
   ): Promise<MastraDBMessage[]> {
     if (include.length === 0) return [];
+
+    const resourceFilters = resourceId ? [{ field: 'resourceId', value: resourceId }] : [];
 
     const messages: MastraDBMessage[] = [];
     const messageIds = new Set<string>();
@@ -775,6 +793,7 @@ export class MemoryConvex extends MemoryStorage {
       if (!target) {
         const messageRows = await this.#db.queryTable<StoredMessage>(TABLE_MESSAGES, [
           { field: 'id', value: includeItem.id },
+          ...resourceFilters,
         ]);
         if (messageRows.length > 0) {
           target = messageRows[0];
@@ -783,6 +802,7 @@ export class MemoryConvex extends MemoryStorage {
           if (targetThreadId && !threadMessagesCache.has(targetThreadId)) {
             const otherThreadRows = await this.#db.queryTable<StoredMessage>(TABLE_MESSAGES, [
               { field: 'thread_id', value: targetThreadId },
+              ...resourceFilters,
             ]);
             threadMessagesCache.set(targetThreadId, otherThreadRows);
             for (const row of otherThreadRows) {

@@ -2,12 +2,18 @@ import { convertToCoreMessages as convertToCoreMessagesV4 } from '@internal/ai-s
 import type { CoreMessage as CoreMessageV4, UIMessage as UIMessageV4 } from '@internal/ai-sdk-v4';
 import * as AIV5 from '@internal/ai-sdk-v5';
 
+import { deepEqual } from '../../../utils/deep-equal';
 import { AIV4Adapter, AIV5Adapter, AIV6Adapter } from '../adapters';
 import type { AdapterContext } from '../adapters';
 import { TypeDetector } from '../detection/TypeDetector';
+import { categorizeFileData } from '../prompt/image-utils';
 import type { MastraDBMessage, MessageSource } from '../state/types';
 import type { AIV5Type, AIV6Type } from '../types';
-import { ensureAnthropicCompatibleMessages, sanitizeOrphanedToolPairs } from '../utils/provider-compat';
+import {
+  ensureAnthropicCompatibleMessages,
+  pairOrphanedToolCalls,
+  sanitizeOrphanedToolPairs,
+} from '../utils/provider-compat';
 import { getResponseProviderItemKey } from '../utils/response-item-metadata';
 
 /**
@@ -122,7 +128,7 @@ export function sanitizeAIV4UIMessages(messages: UIMessageV4[]): UIMessageV4[] {
  */
 export function sanitizeV5UIMessages(
   messages: AIV5Type.UIMessage[],
-  filterIncompleteToolCalls = false,
+  mode: ToolCallConversionMode = 'response',
 ): AIV5Type.UIMessage[] {
   // Precompute the index of the last user message. A deferred provider-executed
   // tool call (e.g. Anthropic non-deterministically defers web_search across
@@ -170,16 +176,23 @@ export function sanitizeV5UIMessages(
       // When sending messages TO the LLM: keep completed tool calls and provider-executed tools.
       // Filter out incomplete client-side tool calls (input-available without providerExecuted)
       // and input-streaming states.
-      if (filterIncompleteToolCalls) {
+      if (mode !== 'response') {
         // Completed tools (client or provider) — keep them
         if (p.state === 'output-available' || p.state === 'output-error') return true;
-        // Provider-executed tools may be deferred by the provider (e.g. Anthropic non-deterministically
-        // defers web_search when mixed with client tool calls). Keep these so the provider API sees
-        // the server_tool_use block on the next request — but ONLY on the most recent surviving
-        // assistant message. On any earlier assistant turn an unresolved provider-executed call is
-        // an orphan (provider dropped the result chunk, or the run aborted mid-stream) and must be
-        // dropped to keep the tool-call/tool-result invariant required by provider APIs. See #15668, #14148.
-        if (p.state === 'input-available' && p.providerExecuted && assistantTurnStillOpen) return true;
+        if (p.state === 'input-available') {
+          // Provider-executed tools may be deferred by the provider (e.g. Anthropic non-deterministically
+          // defers web_search when mixed with client tool calls). Keep these so the provider API sees
+          // the server_tool_use block on the next request — but ONLY on the most recent surviving
+          // assistant message. On any earlier assistant turn an unresolved provider-executed call is
+          // an orphan (provider dropped the result chunk, or the run aborted mid-stream) and must be
+          // dropped to keep the tool-call/tool-result invariant required by provider APIs. See #15668, #14148.
+          // This holds whichever way the caller configured suspended tool calls — the provider decides
+          // when it resumes its own call, not the caller.
+          if (p.providerExecuted) return assistantTurnStillOpen;
+          // Client-side suspended calls are kept only when the caller asked to see them. They are
+          // paired with a pending result downstream so the prompt stays valid.
+          return mode === 'prompt-with-suspended';
+        }
         return false;
       }
 
@@ -289,9 +302,65 @@ export function addStartStepPartsForAIV5(messages: AIV5Type.UIMessage[]): AIV5Ty
 
 /**
  * Converts AIV4 UI messages to AIV4 Core messages.
+ *
+ * Provider file IDs (e.g. OpenAI Files API "file-...") stored in
+ * `experimental_attachments` would make AI SDK v4's internal `attachmentsToParts`
+ * throw `Invalid URL: file-...` inside `convertToCoreMessages`. Strip them before
+ * conversion and re-append them as file parts on the resulting user core message
+ * so the IDs survive untouched.
  */
 export function aiV4UIMessagesToAIV4CoreMessages(messages: UIMessageV4[]): CoreMessageV4[] {
-  return convertToCoreMessagesV4(sanitizeAIV4UIMessages(messages));
+  const sanitized = sanitizeAIV4UIMessages(messages);
+
+  type AttachmentV4 = NonNullable<UIMessageV4['experimental_attachments']>[number];
+  // Keyed by the user message's position among user messages: each user UI message
+  // converts to exactly one user core message, in order.
+  const fileIdAttachmentsByUserIndex = new Map<number, AttachmentV4[]>();
+  let userIndex = 0;
+
+  const prepared = sanitized.map(m => {
+    if (m.role !== 'user') return m;
+    const currentUserIndex = userIndex++;
+
+    if (!m.experimental_attachments?.length) return m;
+
+    const fileIdAttachments = m.experimental_attachments.filter(
+      a => categorizeFileData(a.url, a.contentType).type === 'providerFileId',
+    );
+    if (!fileIdAttachments.length) return m;
+
+    fileIdAttachmentsByUserIndex.set(currentUserIndex, fileIdAttachments);
+    const remaining = m.experimental_attachments.filter(a => !fileIdAttachments.includes(a));
+    return {
+      ...m,
+      experimental_attachments: remaining.length ? remaining : undefined,
+    };
+  });
+
+  const coreMessages = convertToCoreMessagesV4(prepared);
+  if (!fileIdAttachmentsByUserIndex.size) return coreMessages;
+
+  let coreUserIndex = 0;
+  return coreMessages.map(coreMessage => {
+    if (coreMessage.role !== 'user') return coreMessage;
+    const fileIdAttachments = fileIdAttachmentsByUserIndex.get(coreUserIndex++);
+    if (!fileIdAttachments) return coreMessage;
+
+    const fileParts = fileIdAttachments.map(a => ({
+      type: 'file' as const,
+      data: a.url,
+      mimeType: a.contentType || 'application/octet-stream',
+    }));
+    const existingContent =
+      typeof coreMessage.content === 'string'
+        ? [{ type: 'text' as const, text: coreMessage.content }]
+        : coreMessage.content;
+
+    return {
+      ...coreMessage,
+      content: [...existingContent, ...fileParts],
+    };
+  });
 }
 
 /**
@@ -342,6 +411,8 @@ function collectRawToolResultOutputs(dbMessages: MastraDBMessage[]): Map<string,
 
     for (const part of message.content.parts) {
       if (part.type !== 'tool-invocation' || part.toolInvocation?.state !== 'result') continue;
+      const mastraMetadata = part.providerMetadata?.mastra;
+      if (mastraMetadata && typeof mastraMetadata === 'object' && 'modelOutput' in mastraMetadata) continue;
       outputs.set(part.toolInvocation.toolCallId, part.toolInvocation.result);
     }
   }
@@ -352,7 +423,7 @@ function isDefaultToolResultOutput(output: unknown, rawOutput: unknown): boolean
   if (!output || typeof output !== 'object') return false;
   const typedOutput = output as Record<string, unknown>;
   if (typedOutput.type !== 'json') return false;
-  return JSON.stringify(typedOutput.value) === JSON.stringify(rawOutput);
+  return typedOutput.value === rawOutput || deepEqual(typedOutput.value, rawOutput);
 }
 
 function applyMcpContentToolResultOutputs(
@@ -368,10 +439,18 @@ function applyMcpContentToolResultOutputs(
     let modified = false;
     const content = message.content.map(part => {
       if (part.type !== 'tool-result' || !rawOutputs.has(part.toolCallId)) return part;
+      if (part.output?.type !== 'json') return part;
       const rawOutput = rawOutputs.get(part.toolCallId);
-      if (!isDefaultToolResultOutput(part.output, rawOutput)) return part;
-      const converted = convertMcpContentToolResultOutput(rawOutput);
-      if (!converted) return part;
+      let converted: ReturnType<typeof convertMcpContentToolResultOutput>;
+      try {
+        converted = convertMcpContentToolResultOutput(rawOutput);
+        if (!converted) return part;
+        if (!isDefaultToolResultOutput(part.output, rawOutput)) return part;
+      } catch {
+        // MCP content may contain values that cannot be serialized or structurally compared.
+        // Preserve the original JSON output when the optional conversion cannot complete.
+        return part;
+      }
       modified = true;
       return { ...part, output: converted } as typeof part;
     });
@@ -430,19 +509,33 @@ function restoreAssistantFileProviderMetadata(
 }
 
 /**
+ * How suspended (result-less) tool calls are handled when converting to model messages.
+ *
+ * - `response`: messages coming FROM the LLM. Suspended calls are kept so they stay in
+ *   message history, and no pairing is enforced — nothing here is sent to a provider.
+ * - `prompt`: messages going TO the LLM. Suspended calls are dropped.
+ * - `prompt-with-suspended`: messages going TO the LLM with suspended calls kept visible to
+ *   the agent. Each is paired with a pending result so the prompt stays valid.
+ *
+ * The last two both submit to a provider, so both enforce tool-call/tool-result pairing.
+ * That requirement belongs to the provider protocol, not to the caller's preference.
+ */
+export type ToolCallConversionMode = 'response' | 'prompt' | 'prompt-with-suspended';
+
+/**
  * Converts AIV5 UI messages to AIV5 Model messages.
  * Handles sanitization, step-start insertion, provider options restoration, and Anthropic compatibility.
  *
  * @param messages - AIV5 UI messages to convert
  * @param dbMessages - MastraDB messages used to look up tool call args for Anthropic compatibility
- * @param filterIncompleteToolCalls - Whether to filter out incomplete tool calls
+ * @param mode - How to handle suspended tool calls
  */
 export function aiV5UIMessagesToAIV5ModelMessages(
   messages: AIV5Type.UIMessage[],
   dbMessages: MastraDBMessage[],
-  filterIncompleteToolCalls = false,
+  mode: ToolCallConversionMode = 'response',
 ): AIV5Type.ModelMessage[] {
-  const sanitized = sanitizeV5UIMessages(messages, filterIncompleteToolCalls);
+  const sanitized = sanitizeV5UIMessages(messages, mode);
   const preprocessed = addStartStepPartsForAIV5(sanitized);
 
   // Convert per UI message: an assistant turn with a tool call splits into
@@ -480,7 +573,14 @@ export function aiV5UIMessagesToAIV5ModelMessages(
   // Add input field to tool-result parts for Anthropic API compatibility (fixes issue #11376)
   const anthropicCompat = ensureAnthropicCompatibleMessages(withMcpContentOutputs, dbMessages);
 
-  return filterIncompleteToolCalls ? sanitizeOrphanedToolPairs(anthropicCompat) : anthropicCompat;
+  switch (mode) {
+    case 'prompt':
+      return sanitizeOrphanedToolPairs(anthropicCompat);
+    case 'prompt-with-suspended':
+      return pairOrphanedToolCalls(anthropicCompat);
+    default:
+      return anthropicCompat;
+  }
 }
 
 /**

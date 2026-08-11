@@ -1,4 +1,4 @@
-# Mastra Software Factory
+# Mastra Factory
 
 An open source, agent-powered software delivery environment built on [Mastra](https://mastra.ai). Connect GitHub and Linear, pull issues into an intake board, hand them to coding agents, and ship pull requests — from a web app you own and can deploy anywhere.
 
@@ -15,15 +15,16 @@ npm run db:up
 npm run dev
 ```
 
-- **Factory UI** → http://localhost:5173
-- **Mastra Studio** → http://localhost:4111
+- **Factory UI** → http://localhost:4111
 - **API** → http://localhost:4111/api
+
+One server serves both the UI and the API.
 
 With zero configuration the app runs in local, auth-less mode (agents + local storage, no integrations). Open the Factory UI to finish setup — model provider keys are added there (Settings › Models). Deployment-level features enable themselves as you add environment variables — see below.
 
 ### Ports
 
-The UI port is **strict**: if 5173 is taken, `npm run dev` fails instead of moving to a free port, because OAuth callback URLs (WorkOS/GitHub/Linear) are registered against the configured origin and would silently break. To run on a different port, change both together — run with `MASTRACODE_UI_PORT=<port>` and set `MASTRACODE_PUBLIC_URL=http://localhost:<port>` in `.env` (then update the callback URLs on your OAuth apps). The API server port is overridable with `PORT`.
+The server port is overridable with `PORT`. OAuth callback URLs (WorkOS/GitHub/Linear) are registered against the configured origin, so if you change the port, also set `MASTRACODE_PUBLIC_URL=http://localhost:<port>` in `.env` (then update the callback URLs on your OAuth apps).
 
 ## Configuration
 
@@ -35,8 +36,9 @@ Day-to-day configuration (model providers, integrations) happens in the web UI. 
 | Sign-in (WorkOS)         | `WORKOS_API_KEY`, `WORKOS_CLIENT_ID`                                                                                                                |
 | GitHub projects & intake | WorkOS + `GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY`, `GITHUB_APP_CLIENT_ID`, `GITHUB_APP_CLIENT_SECRET`, `GITHUB_APP_SLUG` + `APP_DATABASE_URL`      |
 | Linear intake            | WorkOS + `LINEAR_CLIENT_ID`, `LINEAR_CLIENT_SECRET` + `APP_DATABASE_URL` + a state secret (`GITHUB_APP_WEBHOOK_SECRET` or `WORKOS_COOKIE_PASSWORD`) |
+| Slack channels           | `SLACK_APP_SIGNING_SECRET`, `SLACK_APP_BOT_TOKEN`, `SLACK_APP_CLIENT_ID`, `SLACK_APP_CLIENT_SECRET` + WorkOS + a state secret (see above)           |
 | Distributed event bus    | `REDIS_URL` (only needed for multi-process deployments)                                                                                             |
-| Cloud sandboxes          | `RAILWAY_API_TOKEN` (defaults to a local git sandbox otherwise)                                                                                     |
+| Cloud sandboxes          | `MASTRA_PLATFORM_SECRET_KEY`, `MASTRA_PROJECT_ID`, `MASTRA_ENVIRONMENT_ID` (defaults to a local git sandbox otherwise)                              |
 
 ### Database
 
@@ -52,7 +54,7 @@ Without `APP_DATABASE_URL`, agent state falls back to a local libSQL file and in
 Integrations are per-organization, so they require sign-in, powered by [WorkOS](https://workos.com) (free tier is fine):
 
 1. Create a WorkOS project → copy the **API key** and **Client ID** into `.env`.
-2. In WorkOS → Redirects, add `http://localhost:5173/auth/callback`.
+2. In WorkOS → Redirects, add `http://localhost:4111/auth/callback`.
 3. Set `WORKOS_COOKIE_PASSWORD` to a random 32+ character string.
 
 ### GitHub
@@ -67,16 +69,29 @@ Webhooks (optional — powers auto-triage and PR notifications, requires a publi
 
 Create a Linear OAuth app (Linear → Settings → API → OAuth applications → New) with callback URL `<your app origin>/auth/linear/callback`, then set `LINEAR_CLIENT_ID` / `LINEAR_CLIENT_SECRET` in `.env`.
 
+### Slack (optional)
+
+Talk to the Factory from Slack threads. Create a Slack app at [api.slack.com/apps](https://api.slack.com/apps) with:
+
+- **Event Subscriptions** request URL: `<your app origin>/api/agent-controllers/mastra-code/channels/slack/webhook` (subscribe to bot events for messages and mentions)
+- **OpenID Connect** redirect URL: `<your app origin>/connect/slack/oidc/callback` (used to link Slack users to their Factory accounts)
+
+Install it to your workspace, then copy the credentials into `.env`: `SLACK_APP_SIGNING_SECRET` and the client ID/secret from **Basic Information**, and `SLACK_APP_BOT_TOKEN` from **OAuth & Permissions**.
+
+Slack only delivers events to public HTTPS origins, so local development needs a tunnel (e.g. `cloudflared tunnel --url http://127.0.0.1:4111`); set `MASTRACODE_CHANNELS_PUBLIC_URL` to the tunnel origin.
+
 ## Scripts
 
-| Script                      | What it does                                                                                   |
-| --------------------------- | ---------------------------------------------------------------------------------------------- |
-| `npm run dev`               | API server (:4111) + Factory UI (:5173) with live reload                                       |
-| `npm run db:up` / `db:down` | Start/stop local Postgres + Redis (Docker)                                                     |
-| `npm run build`             | Build the SPA and bundle the server to `.mastra/output`                                        |
-| `npm run start`             | Run the production build                                                                       |
-| `npm run deploy`            | Build, validate, and deploy to [Mastra Cloud](https://mastra.ai/docs/mastra-platform/overview) |
-| `npm run check`             | Typecheck server and UI                                                                        |
+| Script                      | What it does                                                                        |
+| --------------------------- | ----------------------------------------------------------------------------------- |
+| `npm run dev`               | Factory server (:4111) serving the UI and the API                                   |
+| `npm run db:up` / `db:down` | Start/stop local Postgres + Redis (Docker)                                          |
+| `npm run build`             | Bundle the server and copy the CLI-bundled Factory UI to `.mastra/output`           |
+| `npm run start`             | Run the production build                                                            |
+| `npm run deploy`            | Build and deploy to [Mastra Cloud](https://mastra.ai/docs/mastra-platform/overview) |
+| `npm run check`             | Typecheck the Factory server                                                        |
+
+`mastra build` and `mastra deploy` detect the Factory entry automatically and copy the versioned Factory UI bundled with the Mastra CLI while bundling the server. The SPA is written to `.mastra/output/factory/` and a `mastra-project.json` manifest is emitted alongside it.
 
 ## Requirements
 
@@ -86,7 +101,7 @@ Create a Linear OAuth app (Linear → Settings → API → OAuth applications �
 
 ## Versions
 
-The Mastra packages use caret ranges (currently anchored on `@mastra/core@{{@mastra/core}}` and `@mastra/code-sdk@{{@mastra/code-sdk}}`). Upgrade them together when updating.
+The Mastra packages are pinned to `latest`, so `npm install` pulls the current published set. Upgrade them together by re-running `npm install` (or by rescaffolding).
 
 ## License
 

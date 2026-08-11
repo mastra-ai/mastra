@@ -61,7 +61,28 @@ export const WORKFLOW_SCHEDULE_PREFIX = 'schedule_';
  * dispatch results); this describes what the agent-schedule tick itself did.
  */
 export type ScheduleRunStatus =
-  'fired' | 'signal-accepted' | 'skipped-thread-blocked' | 'thread-missing' | 'agent-missing' | 'invalid-input';
+  | 'fired'
+  | 'signal-accepted'
+  | 'skipped-thread-blocked'
+  | 'thread-missing'
+  | 'agent-missing'
+  | 'invalid-input';
+
+/**
+ * Signal categories a schedule fire may use. Single runtime source for the zod
+ * enum below and for schedule-definition validation, so the two can't drift.
+ */
+export const SCHEDULE_SIGNAL_TYPES = [
+  'user',
+  'state',
+  'reactive',
+  'notification',
+  'user-message',
+  'system-reminder',
+] as const satisfies readonly AgentSignalType[];
+
+/** Lifecycle statuses a schedule row may be created with. */
+export const SCHEDULE_STATUSES = ['active', 'paused'] as const;
 
 /** Shared zod for {@link AgentSignalAttributes} (XML tag attribute values). */
 const ScheduleAttributesSchema = z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()]));
@@ -94,7 +115,7 @@ export const ScheduleInputSchema = z.object({
   prompt: z.string(),
   threadId: z.string().optional(),
   resourceId: z.string().optional(),
-  signalType: z.enum(['user', 'state', 'reactive', 'notification', 'user-message', 'system-reminder']).optional(),
+  signalType: z.enum(SCHEDULE_SIGNAL_TYPES).optional(),
   /**
    * XML tag name the signal renders as. Defaults to `schedule`, so a fire
    * surfaces to the agent as `<schedule>…</schedule>`. Override to render a

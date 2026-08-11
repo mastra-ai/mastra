@@ -242,6 +242,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
       maxSteps: result.maxSteps,
       providerOptions: result.providerOptions,
       includeRawChunks: options.includeRawChunks,
+      experimentalTransform: options.experimentalTransform,
       options: {
         ...(options.prepareStep && { prepareStep: options.prepareStep }),
         onFinish: async (payload: any) => {
@@ -343,6 +344,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
                 structuredOutput: !!options.structuredOutput?.schema,
                 overrideScorers: options.scorers,
                 onTitleGenerated: options.memory?.onTitleGenerated,
+                waitUntil: options.serverless?.waitUntil,
               });
             } catch (e) {
               capabilities.logger.error('Error saving memory on finish', {

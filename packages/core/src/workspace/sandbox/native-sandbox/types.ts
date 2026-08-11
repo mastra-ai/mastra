@@ -47,6 +47,12 @@ export interface NativeSandboxConfig {
    * If the file exists, its contents are used as the sandbox profile.
    * If the file doesn't exist, a default profile is generated and written to this path.
    * Must contain valid SBPL (Sandbox Profile Language) if provided.
+   * A profile you wrote is used exactly as written: mounted filesystem paths are not added
+   * to it, so the profile must already allow access to the paths you mount. A generated
+   * profile does allow mounted paths. Generated profiles carry a marker comment, so a later
+   * run regenerates them instead of reading them back as user-authored SBPL. To edit a
+   * generated profile and keep the edits, delete that marker comment: the file then counts
+   * as yours, and mounted paths are no longer added to it.
    */
   seatbeltProfilePath?: string;
 
@@ -56,6 +62,19 @@ export interface NativeSandboxConfig {
    * The command and its args are appended after these.
    */
   bwrapArgs?: string[];
+
+  /**
+   * Restrict the sandbox's working directory to read-only access.
+   * Spawned processes can read but not write files in the working directory.
+   * Enforced at the OS level (seatbelt profile / bwrap --ro-bind); ignored when isolation is 'none'.
+   * Exceptions:
+   * - Paths listed in `readWritePaths` and mounted filesystem targets remain writable.
+   * - Providing custom `bwrapArgs` or `seatbeltProfilePath` replaces the generated
+   *   sandbox policy and may bypass this read-only restriction entirely.
+   *
+   * @default false
+   */
+  readOnly?: boolean;
 }
 
 /**

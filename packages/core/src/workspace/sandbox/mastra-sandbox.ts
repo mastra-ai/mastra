@@ -166,6 +166,13 @@ export abstract class MastraSandbox extends MastraBase implements WorkspaceSandb
   /** Get sandbox status and metadata */
   getInfo?(): SandboxInfo | Promise<SandboxInfo>;
 
+  /**
+   * Persist the sandbox's current state when supported.
+   *
+   * The default implementation is a no-op for providers without snapshot support.
+   */
+  async snapshot(): Promise<void> {}
+
   // ---------------------------------------------------------------------------
   // Lifecycle Promise Tracking (prevents race conditions)
   // ---------------------------------------------------------------------------

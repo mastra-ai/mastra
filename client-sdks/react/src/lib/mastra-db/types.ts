@@ -183,4 +183,8 @@ export type StreamingDataPart = {
  * listed explicitly as a first-class member of the runtime union.
  */
 export type AccumulatorPart =
-  MastraMessagePart | MastraTextPart | MastraReasoningPart | StreamingDataPart | AIV5Type.SourceUrlUIPart;
+  | MastraMessagePart
+  | MastraTextPart
+  | MastraReasoningPart
+  | StreamingDataPart
+  | AIV5Type.SourceUrlUIPart;

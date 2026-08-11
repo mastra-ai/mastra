@@ -55,7 +55,7 @@ function createQueueState(overrides: Partial<TUIState> = {}): TUIState {
   return {
     session,
     controller: { session, ...(agentControllerOverride ?? {}) },
-    goalManager: { stopActiveTimer: vi.fn() },
+    goalManager: {},
     gradientAnimator: undefined,
     projectInfo: { rootPath: '.', gitBranch: 'main' } as TUIState['projectInfo'],
     streamingComponent: undefined,
@@ -163,6 +163,10 @@ describe('MastraTUI queueing', () => {
     tui.queueFollowUpMessage = vi.fn();
     tui.signalMessage = vi.fn();
 
+    // Object.create bypasses field initializers; getUserInput reads the queue.
+
+    (tui as any).queuedUserInput = [];
+
     const pendingInput = tui.getUserInput();
     editor.onSubmit?.('queued follow-up');
 
@@ -208,6 +212,10 @@ describe('MastraTUI queueing', () => {
     tui.signalMessage = vi.fn();
     tui.handleSlashCommand = vi.fn().mockResolvedValue(true);
 
+    // Object.create bypasses field initializers; getUserInput reads the queue.
+
+    (tui as any).queuedUserInput = [];
+
     tui.getUserInput();
     editor.onSubmit?.('/help');
 
@@ -244,6 +252,10 @@ describe('MastraTUI queueing', () => {
     };
     tui.state = state;
     tui.queueFollowUpMessage = vi.fn();
+
+    // Object.create bypasses field initializers; getUserInput reads the queue.
+
+    (tui as any).queuedUserInput = [];
 
     const pendingInput = tui.getUserInput();
     editor.onSubmit?.('wait for judge');
@@ -519,6 +531,17 @@ describe('MastraTUI queueing', () => {
     expect(tui.state.pendingSignalMessageComponentsById.size).toBe(1);
     expect(tui.state.chatContainer.children).toHaveLength(1);
     expect(tui.state.ui.requestRender).toHaveBeenCalledTimes(3);
+  });
+
+  it('does not notify agent_done from the queued handler (#20860 — moved to receipt-time tap)', () => {
+    const state = createQueueState();
+    const ctx = createQueueContext(state);
+
+    handleAgentEnd(ctx);
+
+    // The agent_done ping fires at event receipt in notifyForInputRequest;
+    // a second notify here would double-ping every completion.
+    expect(ctx.notify).not.toHaveBeenCalledWith('agent_done');
   });
 
   it('removes the grey pending slash command when the queued command drains', () => {
@@ -867,7 +890,6 @@ describe('MastraTUI queueing', () => {
       isActive: vi.fn(() => true),
       pause: vi.fn(),
       saveToThread: vi.fn(),
-      stopActiveTimer: vi.fn(),
     };
     const state = createQueueState({
       userInitiatedAbort: true,
@@ -877,7 +899,6 @@ describe('MastraTUI queueing', () => {
 
     handleAgentAborted(ctx);
 
-    expect(goalManager.stopActiveTimer).toHaveBeenCalled();
     expect(goalManager.pause).not.toHaveBeenCalled();
     expect(goalManager.saveToThread).not.toHaveBeenCalled();
     expect(state.userInitiatedAbort).toBe(false);
