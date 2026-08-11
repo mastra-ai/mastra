@@ -1265,6 +1265,164 @@ describe('MessageHistory', () => {
       saveSpy.mockRestore();
     });
 
+    it('should persist the original input and output when the stored-record lookup fails', async () => {
+      processor = new MessageHistory({ storage: mockStorage });
+      vi.spyOn(mockStorage, 'listMessagesById').mockRejectedValueOnce(new Error('lookup unavailable'));
+      const saveSpy = vi.spyOn(mockStorage, 'saveMessages');
+
+      const input = assistantMessage({
+        id: 'msg-input',
+        role: 'user',
+        content: { format: 2, parts: [{ type: 'text', text: 'Next turn' }] },
+      });
+      const output = assistantMessage({
+        id: 'msg-output',
+        content: { format: 2, parts: [{ type: 'text', text: 'Next answer' }] },
+      });
+      const messageList = new MessageList().add([input], 'input').add([output], 'response');
+
+      await processor.processOutputResult({
+        messageList,
+        messages: [],
+        abort: mockAbort,
+        requestContext: createRuntimeContextWithMemory('thread-1'),
+      });
+
+      expect(saveSpy).toHaveBeenCalledWith({ messages: [input, output] });
+
+      saveSpy.mockRestore();
+    });
+
+    it('should preserve a v4 client-authored error result without accepting other client fields', async () => {
+      const stored = assistantMessage({
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'call',
+                toolCallId: 'call-1',
+                toolName: 'search',
+                args: { query: 'mastra' },
+              },
+            },
+          ],
+        },
+      });
+      mockStorage.setMessages([stored]);
+
+      processor = new MessageHistory({ storage: mockStorage });
+      const saveSpy = vi.spyOn(mockStorage, 'saveMessages');
+      const echoWithError = assistantMessage({
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'call-1',
+                toolName: 'client-tool-name',
+                args: { query: 'client-modified', injected: true },
+                result: 'Search failed',
+                isError: true,
+                errorText: 'Search failed',
+                rawInput: { injected: true },
+              },
+            },
+          ],
+        },
+      });
+
+      await processor.processOutputResult({
+        messageList: new MessageList().add([echoWithError], 'input'),
+        messages: [],
+        abort: mockAbort,
+        requestContext: createRuntimeContextWithMemory('thread-1'),
+      });
+
+      const savedMessages = (saveSpy.mock.calls[0]![0] as any).messages as MastraDBMessage[];
+      const toolPart = savedMessages[0]!.content.parts.find(part => part.type === 'tool-invocation');
+      expect(toolPart?.type).toBe('tool-invocation');
+      if (toolPart?.type !== 'tool-invocation') throw new Error('Expected a tool-invocation part');
+      expect(toolPart.toolInvocation).toEqual({
+        state: 'result',
+        toolCallId: 'call-1',
+        toolName: 'search',
+        args: { query: 'mastra' },
+        result: 'Search failed',
+        isError: true,
+        errorText: 'Search failed',
+      });
+
+      saveSpy.mockRestore();
+    });
+
+    it('should preserve a v6 client-authored output error without accepting other client fields', async () => {
+      const stored = assistantMessage({
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'call',
+                toolCallId: 'call-1',
+                toolName: 'search',
+                args: { query: 'mastra' },
+              },
+            },
+          ],
+        },
+      });
+      mockStorage.setMessages([stored]);
+
+      processor = new MessageHistory({ storage: mockStorage });
+      const saveSpy = vi.spyOn(mockStorage, 'saveMessages');
+      const echoWithError = assistantMessage({
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'output-error',
+                toolCallId: 'call-1',
+                toolName: 'client-tool-name',
+                args: { query: 'client-modified', injected: true },
+                errorText: 'Search failed',
+                result: 'client-result',
+                isError: false,
+                rawInput: { injected: true },
+              },
+            },
+          ],
+        },
+      });
+
+      await processor.processOutputResult({
+        messageList: new MessageList().add([echoWithError], 'input'),
+        messages: [],
+        abort: mockAbort,
+        requestContext: createRuntimeContextWithMemory('thread-1'),
+      });
+
+      const savedMessages = (saveSpy.mock.calls[0]![0] as any).messages as MastraDBMessage[];
+      const toolPart = savedMessages[0]!.content.parts.find(part => part.type === 'tool-invocation');
+      expect(toolPart?.type).toBe('tool-invocation');
+      if (toolPart?.type !== 'tool-invocation') throw new Error('Expected a tool-invocation part');
+      expect(toolPart.toolInvocation).toEqual({
+        state: 'output-error',
+        toolCallId: 'call-1',
+        toolName: 'search',
+        args: { query: 'mastra' },
+        errorText: 'Search failed',
+      });
+
+      saveSpy.mockRestore();
+    });
+
     it('should never adopt client-supplied toolName or client-injected args keys', async () => {
       const stored = assistantMessage({
         content: {
@@ -1324,8 +1482,9 @@ describe('MessageHistory', () => {
       const savedMsg1 = savedMessages.find(m => m.id === 'msg-1');
       const toolPart = savedMsg1!.content.parts.find((p: any) => p.type === 'tool-invocation')!;
 
-      // Only `state` and `result` are taken from the client: the server-authored
-      // toolName and args (exactly, without injected keys) survive.
+      // Only fields from a supported terminal transition are taken from the
+      // client. The server-authored toolName and args (exactly, without injected
+      // keys) survive.
       expect(toolPart.toolInvocation).toEqual({
         state: 'result',
         toolCallId: 'call-1',
@@ -1565,6 +1724,28 @@ describe('MessageHistory', () => {
       // as an "unchanged echo" nor merged under the foreign thread's IDs.
       expect(saveSpy).toHaveBeenCalledWith({
         messages: [expect.objectContaining({ id: 'msg-1', threadId: 'thread-1' })],
+      });
+
+      saveSpy.mockRestore();
+    });
+
+    it('should treat an echoed ID from another resource in the same thread as a fresh message', async () => {
+      const foreign = assistantMessage({ resourceId: 'resource-2' });
+      mockStorage.setMessages([foreign]);
+
+      processor = new MessageHistory({ storage: mockStorage });
+      const saveSpy = vi.spyOn(mockStorage, 'saveMessages');
+      const echo = assistantMessage({ resourceId: 'resource-1' });
+
+      await processor.processOutputResult({
+        messageList: new MessageList().add([echo], 'input'),
+        messages: [],
+        abort: mockAbort,
+        requestContext: createRuntimeContextWithMemory('thread-1', 'resource-1'),
+      });
+
+      expect(saveSpy).toHaveBeenCalledWith({
+        messages: [expect.objectContaining({ id: 'msg-1', threadId: 'thread-1', resourceId: 'resource-1' })],
       });
 
       saveSpy.mockRestore();
