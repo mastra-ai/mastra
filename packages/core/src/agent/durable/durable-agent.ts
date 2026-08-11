@@ -7,7 +7,7 @@ import { isLeaseProvider, NoopLeaseProvider } from '../../events/pubsub';
 import type { LeaseProvider, PubSub } from '../../events/pubsub';
 import {
   isAgentApprovalCheckpoint,
-  materializeAgentApprovalCheckpoint,
+  materializePersistedAgentApprovalCheckpoints,
 } from '../../loop/workflows/agent-approval-checkpoint';
 import type { Mastra } from '../../mastra';
 import { createObservabilityContext, getOrCreateSpan, SpanType, EntityType } from '../../observability';
@@ -719,10 +719,21 @@ export class DurableAgent<
       });
     }
 
-    const snapshot =
+    let snapshot =
       typeof persisted.snapshot === 'string'
         ? (JSON.parse(persisted.snapshot) as WorkflowRunState)
         : persisted.snapshot;
+
+    if (isAgentApprovalCheckpoint(snapshot)) {
+      snapshot =
+        (await materializePersistedAgentApprovalCheckpoints({
+          workflowsStore,
+          workflowNames: [DurableStepIds.AGENTIC_LOOP, DurableStepIds.AGENTIC_EXECUTION],
+          outerWorkflowName: DurableStepIds.AGENTIC_LOOP,
+          runId,
+        })) ?? snapshot;
+    }
+
     const workflowInput = snapshot?.context?.input as DurableAgenticWorkflowInput | undefined;
     if (!workflowInput || workflowInput.__workflowKind !== 'durable-agent') {
       throw new MastraError({
@@ -1870,20 +1881,13 @@ export class DurableAgent<
           ? (JSON.parse(persisted.snapshot) as WorkflowRunState)
           : persisted.snapshot;
       if (isAgentApprovalCheckpoint(snapshot)) {
-        for (const workflowName of [DurableStepIds.AGENTIC_LOOP, DurableStepIds.AGENTIC_EXECUTION]) {
-          const storedRun = await workflowsStore?.getWorkflowRunById({ runId, workflowName });
-          const storedSnapshot = storedRun?.snapshot;
-          if (!storedRun || typeof storedSnapshot === 'string' || !isAgentApprovalCheckpoint(storedSnapshot)) continue;
-          const materialized = materializeAgentApprovalCheckpoint(storedSnapshot, { workflowId: workflowName, runId });
-          await workflowsStore?.persistWorkflowSnapshot({
-            workflowName,
+        snapshot =
+          (await materializePersistedAgentApprovalCheckpoints({
+            workflowsStore: workflowsStore!,
+            workflowNames: [DurableStepIds.AGENTIC_LOOP, DurableStepIds.AGENTIC_EXECUTION],
+            outerWorkflowName: DurableStepIds.AGENTIC_LOOP,
             runId,
-            resourceId: storedRun.resourceId,
-            snapshot: materialized,
-            createdAt: storedRun.createdAt,
-          });
-          if (workflowName === DurableStepIds.AGENTIC_LOOP) snapshot = materialized;
-        }
+          })) ?? snapshot;
       }
       if (snapshot?.status !== 'suspended') {
         throw new Error('This workflow run was not suspended');

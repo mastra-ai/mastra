@@ -1,10 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { WorkflowRunState } from '../../workflows/types';
 import {
   AGENT_APPROVAL_CHECKPOINT_KIND,
   AGENT_APPROVAL_CHECKPOINT_VERSION,
   buildAgentApprovalCheckpoint,
   materializeAgentApprovalCheckpoint,
+  materializePersistedAgentApprovalCheckpoints,
   parseAgentApprovalCheckpoint,
 } from './agent-approval-checkpoint';
 
@@ -48,9 +49,9 @@ function createSuspendedSnapshot(): WorkflowRunState {
           __streamState: { messageList: { messages: [{ role: 'user', content: 'Look up customer' }] } },
           __workflow_meta: {
             nestedRunId: 'nested-1',
-            foreachOutput: {
-              0: { status: 'success', output: LARGE_RESULT },
-              1: {
+            foreachOutput: [
+              { status: 'success', output: LARGE_RESULT },
+              {
                 status: 'suspended',
                 suspendPayload: {
                   requireToolApproval: {
@@ -63,7 +64,7 @@ function createSuspendedSnapshot(): WorkflowRunState {
                   __workflow_meta: { nestedRunId: 'nested-2' },
                 },
               },
-            },
+            ],
           },
         },
       } as any,
@@ -220,7 +221,7 @@ describe('materializeAgentApprovalCheckpoint', () => {
       payload: [null, { toolCallId: 'call-2', toolName: 'email' }],
       suspendPayload: {
         __workflow_meta: {
-          foreachOutput: [null, { status: 'suspended' }],
+          foreachOutput: [{ status: 'success' }, { status: 'suspended' }],
         },
       },
     });
@@ -229,6 +230,47 @@ describe('materializeAgentApprovalCheckpoint', () => {
       output: { output: { steps: [] } },
     });
     expect(JSON.stringify(materialized.context['llm-execution'])).not.toContain(LARGE_RESULT);
+  });
+
+  it('materializes and re-persists checkpoints returned as JSON strings', async () => {
+    const snapshot = createSuspendedSnapshot();
+    const workflowNames = ['agentic-loop', 'executionWorkflow'];
+    const checkpoints = Object.fromEntries(
+      workflowNames.map(workflowId => [
+        workflowId,
+        JSON.stringify(buildAgentApprovalCheckpoint({ workflowId, snapshot })),
+      ]),
+    );
+    const persistWorkflowSnapshot = vi.fn();
+    const workflowsStore = {
+      getWorkflowRunById: vi.fn(async ({ workflowName }: { workflowName: string }) => ({
+        workflowName,
+        runId: snapshot.runId,
+        snapshot: checkpoints[workflowName],
+        resourceId: 'resource-1',
+        createdAt: new Date(0),
+      })),
+      persistWorkflowSnapshot,
+    } as any;
+
+    const outer = await materializePersistedAgentApprovalCheckpoints({
+      workflowsStore,
+      workflowNames,
+      outerWorkflowName: 'agentic-loop',
+      runId: snapshot.runId,
+    });
+
+    expect(outer?.context.input).toMatchObject({ __workflowKind: 'durable-agent', agentId: 'agent-1' });
+    expect(persistWorkflowSnapshot).toHaveBeenCalledTimes(2);
+    expect(persistWorkflowSnapshot).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workflowName: 'agentic-loop',
+        runId: snapshot.runId,
+        resourceId: 'resource-1',
+        createdAt: new Date(0),
+        snapshot: expect.objectContaining({ status: 'suspended', context: expect.any(Object) }),
+      }),
+    );
   });
 
   it('rejects a checkpoint stored under the wrong workflow or run', () => {

@@ -184,7 +184,7 @@ export interface SerializableDurableOptions {
   /** Whether to require tool approval globally */
   requireToolApproval?: boolean;
   /** Persistence contract selected for approval suspensions. */
-  approvalPersistence: ApprovalPersistenceMode;
+  approvalPersistence?: ApprovalPersistenceMode;
   /** Concurrency limit / strategy for parallel tool calls (JSON-safe union) */
   toolCallConcurrency?: ToolCallConcurrency;
   /** Whether to auto-resume suspended tools */

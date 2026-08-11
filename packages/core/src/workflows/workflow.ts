@@ -3389,6 +3389,10 @@ export class Run<
    * This aborts any running execution and updates the workflow status to 'canceled' in storage.
    */
   async cancel() {
+    const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
+    const snapshot = await workflowsStore?.loadWorkflowSnapshot({ workflowName: this.workflowId, runId: this.runId });
+    rejectApprovalCheckpointOperation(snapshot, 'cancel');
+
     // Abort any running execution and update in-memory status
     this.abortController.abort();
     this.workflowRunStatus = 'canceled';
@@ -3396,7 +3400,6 @@ export class Run<
     // Update workflow status in storage to 'canceled'
     // This is necessary for suspended/waiting workflows where the abort signal won't be checked
     try {
-      const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
       await workflowsStore?.updateWorkflowState({
         workflowName: this.workflowId,
         runId: this.runId,

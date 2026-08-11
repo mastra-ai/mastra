@@ -442,6 +442,8 @@ export interface AgentApprovalCheckpoint {
     suspendedPaths: Record<string, number[]>;
     resumeLabels: Record<string, WorkflowResumeLabel>;
     waitingPaths: Record<string, number[]>;
+    /** Completed foreach indices retained as status-only markers to prevent replay. */
+    completedForeachIndices?: Record<string, number[]>;
     stepExecutionPath?: string[];
   };
   rehydration: {
