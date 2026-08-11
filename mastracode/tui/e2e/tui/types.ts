@@ -53,6 +53,7 @@ export type ScenarioName =
   | 'github-signals-unsubscribe-reload'
   | 'goal-api-error-stops-loop'
   | 'goal-duration-tool-approval'
+  | 'goal-fresh-thread-persistence'
   | 'goal-judge-om-model-isolation'
   | 'goal-judge-single-render'
   | 'controller-api-config'

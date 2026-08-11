@@ -1,0 +1,10 @@
+{
+  "fixtures": [
+    {
+      "match": {},
+      "response": {
+        "content": "Fresh thread goal e2e acknowledged."
+      }
+    }
+  ]
+}
