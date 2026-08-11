@@ -18,7 +18,7 @@ The `SimpleAuth` class provides token-based authentication using a basic token-t
 
 ## Installation
 
-`SimpleAuth` is included in `@mastra/core`, no additional packages required.
+`SimpleAuth` is included in `@mastra/core` and requires no additional packages.
 
 ```typescript
 import { SimpleAuth } from '@mastra/core/server'
@@ -176,4 +176,4 @@ SimpleAuth is designed for simplicity, not production security:
 - No cryptographic verification
 - All tokens must be known at startup
 
-For production applications, consider using [JWT](/docs/server/auth/jwt), [Clerk](/docs/server/auth/clerk), [Auth0](/docs/server/auth/auth0), or another identity provider.
+For production applications, consider using [JWT](/docs/server/auth/jwt), [Clerk](/integrations/auth/clerk), [Auth0](/integrations/auth/auth0), or another identity provider.

@@ -21,6 +21,19 @@ describe.each([
     });
   });
 
+  describe('given page content raises its own stacking order', () => {
+    // no layout in jsdom — paint order only assertable through the class
+    it('isolates the content surface into its own stacking context', () => {
+      render(
+        <Layout sidebar={<div>sidebar-slot</div>} header={<div>header-slot</div>}>
+          <div>content-slot</div>
+        </Layout>,
+      );
+
+      expect(screen.getByRole('main').className).toContain('isolate');
+    });
+  });
+
   describe('given the header slot is omitted', () => {
     it('renders an unlabelled full-height content surface', () => {
       render(

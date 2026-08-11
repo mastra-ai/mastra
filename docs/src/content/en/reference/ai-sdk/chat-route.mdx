@@ -44,7 +44,7 @@ export const mastra = new Mastra({
 })
 ```
 
-You can also use dynamic agent routing based on an `agentId`. The URL `/chat/weatherAgent` will resolve to the agent with the ID `weatherAgent`.
+You can also use runtime-defined agent routing based on an `agentId`. The URL `/chat/weatherAgent` will resolve to the agent with the ID `weatherAgent`.
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
@@ -127,6 +127,13 @@ export const mastra = new Mastra({
     description: 'Whether to include source citations in the stream.',
     isOptional: true,
     defaultValue: 'false',
+  },
+  {
+    name: 'heartbeatMs',
+    type: 'number',
+    description:
+      'Interval in milliseconds for SSE heartbeats that keep connections active through infrastructure with idle timeouts.',
+    isOptional: true,
   },
 ]}
 />

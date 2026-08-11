@@ -162,7 +162,7 @@ const approvalStep = createStep({
 })
 ```
 
-The `suspendData` parameter is automatically populated when a step is resumed and contains the exact data that was passed to the `suspend()` function during the original suspension. This allows you to maintain context about why the workflow was suspended and use that information during the resume process.
+The `suspendData` parameter is automatically populated when a step is resumed and contains the exact data that was passed to the `suspend()` function during the original suspension. You can maintain context about why the workflow was suspended and use that information during the resume process.
 
 ## Identifying suspended executions
 

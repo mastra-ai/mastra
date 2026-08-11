@@ -83,10 +83,10 @@ resourceMapping: {
 
 `deriveId()` receives:
 
-- `user` — the authenticated user
-- `resourceId` — the owning Mastra resource ID when available (for example, a thread's `resourceId`)
-- `requestContext` — the current request context for advanced tenant resolution
-- `metadata` — provider-specific metadata for the attempted action
+- `user`: the authenticated user
+- `resourceId`: the owning Mastra resource ID when available (for example, a thread's `resourceId`)
+- `requestContext`: the current request context for advanced tenant resolution
+- `metadata`: provider-specific metadata for the attempted action
 
 Return `undefined` from `deriveId()` to fall back to the original Mastra resource ID.
 
@@ -274,7 +274,7 @@ Autonomous and scheduled agents run without an end user. Mark these calls with a
 - `true` or `{ actorKind: 'system' }` identifies an anonymous system actor.
 - The object form can also carry `agentId`, `permissions`, and `scope` to identify and constrain the acting agent.
 
-By default, a trusted actor skips the user-centric `require()` check after a tenant-scope check. To enforce per-agent least privilege, implement the optional `requireActor` method on your provider. It receives the actor and the same `FGACheckParams` as `require`, and throws `FGADeniedError` to deny. When your provider doesn't implement `requireActor`, the trusted-actor bypass is preserved, so adding it is backward compatible.
+By default, a trusted actor skips the user-centric `require()` check after a tenant-scope check. To enforce per-agent least privilege, implement the optional `requireActor` method on your provider. It receives the actor and the same `FGACheckParams` as `require`, and throws `FGADeniedError` to deny. When your provider doesn't implement `requireActor`, the trusted-actor bypass is preserved, so adding it's backward compatible.
 
 ```typescript
 import { FGADeniedError } from '@mastra/core/auth/ee'
@@ -304,11 +304,11 @@ The actor signal is trusted input, so construct it server-side:
 - Establish tenant scope server-side. Built-in agent HTTP routes ignore a client-supplied `organizationId` in the request context, and the trusted-actor path requires an `organizationId` to be set.
 - Durable resume keeps its existing request-context recovery and merge behavior. This doesn't make a persisted actor trusted for a later workflow segment.
 - The tenant-scope check confirms that a trusted `organizationId` exists. It doesn't verify that `actor.agentId` belongs to that organization. When that relationship matters, verify it in `requireActor` using authoritative provider data.
-- Treat `actor.permissions` as a claim, not a grant. A provider that enforces least privilege resolves the agent's authoritative permissions from a trusted source, for example a manifest or your FGA backend keyed by `agentId`, rather than trusting the inline values.
+- Treat `actor.permissions` as an unverified claim. Resolve authoritative grants from a trusted source. A provider that enforces least privilege resolves the agent's authoritative permissions from a trusted source, for example a manifest or your FGA backend keyed by `agentId`, rather than trusting the inline values.
 - Once a provider implements `requireActor`, errors from that method stop execution. Mastra doesn't fall back to organization-only authorization.
 
 ## Related
 
 - [`IFGAProvider` reference](/reference/auth/fga)
 - [Authentication overview](/docs/server/auth)
-- [WorkOS authentication](/docs/server/auth/workos)
+- [WorkOS authentication](/integrations/auth/workos)

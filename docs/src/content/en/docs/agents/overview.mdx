@@ -11,7 +11,9 @@ import AgentQuickstart from "@site/src/content/en/docs/getting-started/_partial-
 
 # Agents overview
 
-Agents use LLMs and tools to solve open-ended tasks. They reason about goals, decide which tools to use, retain conversation memory, and iterate internally until the model emits a final answer or an optional stop condition is met. Agents produce structured responses you can render in your UI or process programmatically. Use agents directly or compose them into workflows or multi-agent systems.
+Agents use LLMs and tools to solve open-ended tasks. They reason about goals and decide which tools to use. They retain conversation memory and continue iterating until the model emits a final answer or an optional stop condition is met.
+
+Agents produce structured responses you can render in your UI or process programmatically. Use agents directly or compose them into workflows or multi-agent systems.
 
 <Inject>
   <AgentQuickstart />
@@ -61,7 +63,7 @@ Visit the [agent reference](/reference/agents/agent) for more information on ava
 
 :::tip
 
-Use [Studio](/docs/studio/overview) to test your agent with different messages, inspect tool calls and responses, and debug agent behavior.
+Use [Studio](/docs/studio/overview) to test your agent with different messages and inspect tool calls and responses, plus debug agent behavior.
 
 :::
 
@@ -110,17 +112,17 @@ Once your agent is running, use this table to find the right page for what you w
 | Keep context and preferences across conversations | [Memory](/docs/memory/overview) |
 | Get typed objects back instead of plain text | [Structured output](/docs/agents/structured-output) |
 | Human-in-the-loop: Pause execution and wait for human approval | [Approval](/docs/agents/agent-approval) |
-| Build a multi-agent network | [Supervisor agents](/docs/agents/supervisor-agents) |
+| Build a multi-agent network | [Supervisor agents](/docs/capabilities/subagents) |
 | Register subagents | [Tools](/docs/agents/using-tools#agents-as-tools) |
 | Intercept or transform messages before and after generation | [Processors](/docs/agents/processors) |
 | Keep your agent safe | [Guardrails](/docs/agents/guardrails) |
-| Build agents that correct their work | [Rubric scorer](/docs/agents/supervisor-agents#rubric-scorer) |
+| Build agents that correct their work | [Rubric scorer](/docs/capabilities/subagents#rubric-scorer) |
 | Swap instructions or models based on request context | [Dynamic configuration](/docs/server/request-context) |
-| Add speech-to-text or text-to-speech | [Voice](/docs/voice/overview) |
-| Connect to Slack, Discord, or Telegram | [Channels](/docs/capabilities/channels/overview) |
+| Add speech-to-text or text-to-speech | [Voice](/guides/voice/overview) |
+| Connect to Slack, Discord, or Telegram | [Channels](/docs/capabilities/channels) |
 
 ## Multi-agent systems
 
 A multi-agent system uses multiple agents to solve a task that's too broad or too specialized for a single agent. Instead of building one agent with dozens of tools and a long instruction set, you split responsibilities across focused agents and let a coordinator bring results together.
 
-Read the [conceptual overview of multi-agent systems](/guides/concepts/multi-agent-systems) to learn how you can apply different patterns with Mastra.
+Read the [conceptual overview of multi-agent systems](/docs/guides/multi-agent-systems) to learn how you can apply different patterns with Mastra.

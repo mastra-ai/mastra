@@ -123,7 +123,7 @@ const myScorer = createScorer({
 
 ### preprocess Step (Optional)
 
-Prepares input/output data when you need to extract specific elements, filter content, or transform complex data structures.
+Prepares input/output data when you need to extract specific elements or filter content, or alternatively transform complex data structures.
 
 **Functions:** `({ run, results }) => any`
 
@@ -278,7 +278,7 @@ const glutenCheckerScorer = createScorer({...})
 
 ## Input filtering
 
-Agent conversations can contain hundreds of messages with tool calls, data parts, and system metadata. Most scorers only need a subset of this data. The `prepareRun` option transforms the run data before the scorer pipeline executes, reducing noise and keeping scorers focused.
+Agent conversations can contain hundreds of messages with tool calls and data parts, plus system metadata. Most scorers only need a subset of this data. The `prepareRun` option transforms the run data before the scorer pipeline executes, reducing noise and keeping scorers focused.
 
 ### Declarative filtering with `filterRun()`
 
@@ -471,7 +471,7 @@ The analysis step uses a prompt object to:
 
 - Provide a clear description of the analysis task
 - Define expected output structure with a Standard JSON Schema (both boolean result and list of gluten sources)
-- Generate dynamic prompts based on the input content
+- Generate runtime prompts based on the input content
 
 ### Score Generation
 
@@ -501,7 +501,7 @@ Provides human-readable explanations for the score using another LLM call.
 })
 ```
 
-The reason generation step creates explanations that help users understand why a particular score was assigned, using both the boolean result and the specific gluten sources identified by the analysis step.
+The reason generation step creates explanations that help users understand why a score was assigned, using both the boolean result and the specific gluten sources identified by the analysis step.
 
 ## High gluten-free example
 

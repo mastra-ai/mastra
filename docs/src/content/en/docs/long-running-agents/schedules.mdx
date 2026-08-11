@@ -10,9 +10,9 @@ packages:
 
 **Added in:** `@mastra/core@1.50.0`
 
-:::experimental
+:::beta
 
-This feature is in beta. Breaking changes may occur without a major version bump until the API is stable.
+Breaking changes may occur without a major version bump until the API is stable.
 
 :::
 
@@ -150,7 +150,7 @@ await mastra.schedules.create({
 })
 ```
 
-Workflow schedules created this way are independent of the declarative `schedule` field on `createWorkflow` — see [scheduled workflows](/docs/workflows/scheduled-workflows) for the declarative form and Studio views.
+Workflow schedules created this way are independent of the declarative `schedule` field on `createWorkflow`, see [scheduled workflows](/docs/workflows/scheduled-workflows) for the declarative form and Studio views.
 
 ### Custom IDs
 
@@ -201,7 +201,7 @@ The hooks are:
 
 - `prepare`: runs before the fire. Return an object to override fire-time parameters such as `prompt` or `threadId`, `null` to skip the fire, or `undefined` to use the stored defaults.
 - `onFinish`: runs once per trigger that reached a non-error, non-abort terminal state.
-- `onError`: runs when `prepare`, the signal, or the agent run threw.
+- `onError`: runs after a failure in `prepare` or the signal. It also runs when the agent run fails.
 - `onAbort`: runs when the run was aborted mid-stream.
 
 Every hook context includes `agentId` (the agent the schedule fired for) alongside `schedule` and `trigger`.

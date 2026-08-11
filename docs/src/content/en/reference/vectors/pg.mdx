@@ -11,7 +11,7 @@ packages:
 # PG vector store
 
 The PgVector class provides vector search using [PostgreSQL](https://www.postgresql.org/) with [pgvector](https://github.com/pgvector/pgvector) extension.
-It provides robust vector similarity search capabilities within your existing PostgreSQL database.
+It provides reliable vector similarity search capabilities within your existing PostgreSQL database.
 
 ## Constructor options
 
@@ -266,13 +266,13 @@ const vectorStore = new PgVector({
 
 #### Memory Requirements
 
-HNSW indexes require significant shared memory during construction. For 100K vectors:
+HNSW indexes require substantial shared memory during construction. For 100K vectors:
 
 - Small dimensions (64d): \~60MB with default settings
 - Medium dimensions (256d): \~180MB with default settings
 - Large dimensions (384d+): \~250MB+ with default settings
 
-Higher M values or efConstruction values will increase memory requirements significantly. Adjust your system's shared memory limits if needed.
+Higher M values or efConstruction values will increase memory requirements substantially. Adjust your system's shared memory limits if needed.
 
 ### `upsert()`
 
@@ -639,7 +639,7 @@ The system automatically detects configuration changes and only rebuilds indexes
 - Regularly evaluate your index configuration to ensure optimal performance.
 - Adjust parameters like `lists` and `m` based on dataset size and query requirements.
 - **Monitor index performance** using `describeIndex()` to track usage
-- Rebuild indexes periodically to maintain efficiency, especially after significant data changes
+- Rebuild indexes periodically to maintain efficiency, especially after substantial data changes
 
 ## Direct pool access
 

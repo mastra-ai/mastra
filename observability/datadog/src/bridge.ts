@@ -497,6 +497,19 @@ export class DatadogBridge extends BaseExporter implements ObservabilityBridge {
     }
   }
 
+  /**
+   * Release the dd span held for a Mastra span that ended without being exported.
+   *
+   * The dd span is deliberately not finished: finishing it would send a span the
+   * user's filtering just removed. The per-trace context is released too, since
+   * createSpan() counted this span as open.
+   */
+  releaseSpan(spanId: string, traceId: string): void {
+    if (this.ddSpanMap.delete(spanId)) {
+      this.releaseTraceContext(traceId);
+    }
+  }
+
   private captureTraceContext(traceId: string, options: CreateSpanOptions<SpanType>): void {
     const existing = this.traceContext.get(traceId);
     const next: TraceContext = {

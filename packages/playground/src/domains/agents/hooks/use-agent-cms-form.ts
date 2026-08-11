@@ -1,4 +1,4 @@
-import type { CreateStoredAgentParams } from '@mastra/client-js';
+import { MastraClientError, type CreateStoredAgentParams } from '@mastra/client-js';
 import type { AgentEditorConfig } from '@mastra/core/agent';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useMastraClient } from '@mastra/react';
@@ -17,7 +17,17 @@ import {
 import { collectMCPClientIds } from '../utils/collect-mcp-client-ids';
 import { computeAgentInitialValues } from '../utils/compute-agent-initial-values';
 import type { AgentDataSource } from '../utils/compute-agent-initial-values';
+import {
+  EMPTY_RUNTIME_INSTRUCTIONS_MESSAGE,
+  formatUnpublishedPromptBlocksMessage,
+  formatUnknownPromptBlocksMessage,
+  formatUnresolvedPromptBlocksMessage,
+  instructionsResolveEmptyDueToDrafts,
+  type PromptBlockPublicationStatus,
+  type UnresolvedPromptBlock,
+} from '../utils/instruction-blocks-runtime';
 import { useStoredAgentMutations } from './use-stored-agents';
+import { usePlaygroundStore } from '@/store/playground-store';
 
 type CreateOptions = {
   mode: 'create';
@@ -43,6 +53,7 @@ export type UseAgentCmsFormOptions = CreateOptions | EditOptions;
 export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
   const client = useMastraClient();
   const queryClient = useQueryClient();
+  const { requestContext } = usePlaygroundStore();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSavingDraft, setIsSavingDraft] = useState(false);
 
@@ -269,6 +280,71 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
     };
   }, []);
 
+  const blocksWouldPreventSave = useCallback(
+    async (values: AgentFormValues): Promise<boolean> => {
+      if (isCodeAgentOverride && !ownsInstructions) return false;
+
+      const refIds = Array.from(
+        new Set(
+          (values.instructionBlocks ?? [])
+            .filter(block => block.type === 'prompt_block_ref')
+            .map(block => block.promptBlockId.trim())
+            .filter(Boolean),
+        ),
+      );
+      if (refIds.length === 0) return false;
+
+      const publicationStatuses = new Map<string, PromptBlockPublicationStatus>();
+      const unresolvedBlocks: UnresolvedPromptBlock[] = [];
+
+      await Promise.all(
+        refIds.map(async id => {
+          try {
+            const details = await client.getStoredPromptBlock(id).details(requestContext);
+            if (!details) {
+              publicationStatuses.set(id, 'unknown');
+              unresolvedBlocks.push({ id, reason: 'not_found' });
+              return;
+            }
+            publicationStatuses.set(id, details.activeVersionId ? 'published' : 'unpublished');
+          } catch (error) {
+            const status = error instanceof MastraClientError ? error.status : undefined;
+            publicationStatuses.set(id, 'unknown');
+            unresolvedBlocks.push({
+              id,
+              reason: status === 404 ? 'not_found' : status === 403 ? 'forbidden' : 'request_failed',
+            });
+          }
+        }),
+      );
+
+      if (unresolvedBlocks.length > 0) {
+        toast.error(formatUnresolvedPromptBlocksMessage(unresolvedBlocks));
+        return true;
+      }
+
+      const unpublishedIds = refIds.filter(id => publicationStatuses.get(id) === 'unpublished');
+      if (unpublishedIds.length > 0) {
+        toast.error(formatUnpublishedPromptBlocksMessage(unpublishedIds));
+        return true;
+      }
+
+      const runtimeResult = instructionsResolveEmptyDueToDrafts(values.instructionBlocks, publicationStatuses);
+      if (runtimeResult.type === 'unknown') {
+        toast.error(formatUnknownPromptBlocksMessage(runtimeResult.ids));
+        return true;
+      }
+
+      if (runtimeResult.type === 'empty') {
+        toast.error(EMPTY_RUNTIME_INSTRUCTIONS_MESSAGE);
+        return true;
+      }
+
+      return false;
+    },
+    [client, isCodeAgentOverride, ownsInstructions, requestContext],
+  );
+
   const handleSaveDraft = useCallback(
     async (changeMessage?: string) => {
       if (!isEdit) return;
@@ -283,15 +359,24 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
       setIsSavingDraft(true);
 
       try {
+        if (await blocksWouldPreventSave(values)) return;
+
         const sharedParams = await buildSharedParams(values);
         const editMemory = isCodeAgentOverride ? undefined : buildMemoryParams(values);
 
         if (needsCreate) {
-          // First save for a code agent — create the stored override
+          // First save for a code agent — create the stored override.
+          //
+          // The override is staged as an unpublished draft so the code definition keeps
+          // serving traffic until the user explicitly publishes, matching what every
+          // later save does. Code-source editors have no publish step; the server
+          // publishes there regardless, because the save's whole purpose is the
+          // filesystem write and only published entities reach disk.
           const createParams: CreateStoredAgentParams = {
             id: options.agentId,
             ...sharedParams,
             memory: editMemory,
+            autoPublish: false,
           };
           await createStoredAgent.mutateAsync(createParams);
           setOverrideCreated(true);
@@ -307,13 +392,16 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
         // Pass keepDefaultValues so currently rendered field state (e.g. open tabs,
         // focused inputs) is preserved — only the dirty flag is cleared.
         form.reset(values, { keepValues: true });
+        // The version list drives the version dropdown and the published/unpublished
+        // badges, and it is not part of the form dataSource — always refresh it so the
+        // saved version shows up with the right publication state.
+        void queryClient.invalidateQueries({ queryKey: ['agent-versions', agentId] });
         // For code-mode overrides we intentionally skip stored-agent / agent query
         // invalidation: the dataSource reload would cascade through the
         // resetFormWithData effect and remount the System Prompt tab, which
         // is jarring. The filesystem write is authoritative for code mode and
         // the in-memory form already reflects the saved state.
         if (!isCodeAgentOverride) {
-          void queryClient.invalidateQueries({ queryKey: ['agent-versions', agentId] });
           void queryClient.invalidateQueries({ queryKey: ['stored-agent', agentId] });
           void queryClient.invalidateQueries({ queryKey: ['agent', agentId] });
         }
@@ -338,6 +426,7 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
       createStoredAgent,
       updateStoredAgent,
       queryClient,
+      blocksWouldPreventSave,
     ],
   );
 
@@ -356,6 +445,8 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
       setIsSubmitting(true);
 
       try {
+        if (!publishVersionId && (await blocksWouldPreventSave(values))) return;
+
         if (isEdit) {
           if (publishVersionId) {
             // Publishing a specific version (e.g. an older read-only version)
@@ -448,6 +539,7 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
       buildSharedParams,
       buildMemoryParams,
       queryClient,
+      blocksWouldPreventSave,
     ],
   );
 

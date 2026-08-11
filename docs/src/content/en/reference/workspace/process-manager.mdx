@@ -11,7 +11,7 @@ packages:
 
 Abstract base class for managing background processes in sandboxes. Provides methods to spawn processes, list them, get handles by PID, and kill them.
 
-[`BlaxelSandbox`](/reference/workspace/blaxel-sandbox), [`DaytonaSandbox`](/reference/workspace/daytona-sandbox), [`E2BSandbox`](/reference/workspace/e2b-sandbox), [`ModalSandbox`](/reference/workspace/modal-sandbox), and [`LocalSandbox`](/reference/workspace/local-sandbox) all include built-in process managers. You don't need to instantiate this class directly unless you're building a custom sandbox provider.
+[`BlaxelSandbox`](/integrations/sandboxes/blaxel), [`DaytonaSandbox`](/integrations/sandboxes/daytona), [`E2BSandbox`](/integrations/sandboxes/e2b), [`ModalSandbox`](/integrations/sandboxes/modal), and [`LocalSandbox`](/reference/workspace/local-sandbox) all include built-in process managers. You don't need to instantiate this class directly unless you're building a custom sandbox provider.
 
 ## Usage example
 
@@ -190,7 +190,7 @@ Information about a tracked process, returned by `list()`.
 
 Handle to a spawned background process. Provides methods to read output, send stdin, wait for completion, and kill the process.
 
-You don't create `ProcessHandle` instances directly — they're returned by `spawn()` and `get()`.
+You don't create `ProcessHandle` instances directly. They're returned by `spawn()` and `get()`.
 
 ### Usage example
 
@@ -439,5 +439,5 @@ When a process manager is provided, `MastraSandbox` automatically creates a defa
 - [Sandbox](/docs/workspace/sandbox)
 - [WorkspaceSandbox interface](/reference/workspace/sandbox)
 - [LocalSandbox reference](/reference/workspace/local-sandbox)
-- [E2BSandbox reference](/reference/workspace/e2b-sandbox)
-- [DaytonaSandbox reference](/reference/workspace/daytona-sandbox)
+- [E2BSandbox reference](/integrations/sandboxes/e2b)
+- [DaytonaSandbox reference](/integrations/sandboxes/daytona)

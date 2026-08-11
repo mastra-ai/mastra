@@ -1,8 +1,7 @@
 import { Command } from 'commander';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { API_ROUTE_METADATA } from './route-metadata.generated';
 import type { ApiCommandDescriptor } from './types';
-import { API_COMMANDS, registerApiCommand } from './index';
+import { API_COMMANDS, CLI_ROUTE_METADATA, registerApiCommand } from './index';
 
 interface CommandLeaf {
   path: string;
@@ -39,8 +38,8 @@ function commandKey(name: string): string {
   return name.replace(/ ([a-z])/g, (_, letter: string) => letter.toUpperCase());
 }
 
-function routeKey(descriptor: ApiCommandDescriptor): keyof typeof API_ROUTE_METADATA {
-  return `${descriptor.method} ${descriptor.path}` as keyof typeof API_ROUTE_METADATA;
+function routeKey(descriptor: ApiCommandDescriptor): keyof typeof CLI_ROUTE_METADATA {
+  return `${descriptor.method} ${descriptor.path}` as keyof typeof CLI_ROUTE_METADATA;
 }
 
 function pathParams(path: string): string[] {
@@ -80,7 +79,7 @@ describe('api command descriptors', () => {
     expect(new Set(names).size).toBe(names.length);
 
     for (const descriptor of Object.values(API_COMMANDS)) {
-      const metadata = API_ROUTE_METADATA[routeKey(descriptor)];
+      const metadata = CLI_ROUTE_METADATA[routeKey(descriptor)];
       expect(metadata, descriptor.key).toBeDefined();
       expect(descriptor.method, descriptor.key).toBe(metadata.method);
       expect(descriptor.path, descriptor.key).toBe(metadata.path);

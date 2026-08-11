@@ -1,6 +1,24 @@
-import type { ThemeEntitiesResponse, ThemeFlowResponse, ThemeNode, ThemeSnapshotsResponse } from '@mastra/client-js';
+import type {
+  EntityLearningProgressResponse,
+  ThemeEntitiesResponse,
+  ThemeFlowResponse,
+  ThemeNode,
+  ThemeSnapshotsResponse,
+} from '@mastra/client-js';
 
 export const emptyThemeEntitiesResponse: ThemeEntitiesResponse = { entities: [] };
+
+export const processingProgressResponse: EntityLearningProgressResponse = {
+  status: 'processing',
+  traceCount: 87,
+  signals: {
+    goal: { generated: 87, embedded: 84 },
+    outcome: { generated: 87, embedded: 40 },
+    behavior: { generated: 52, embedded: 12 },
+    sentiment: { generated: 0, embedded: 0 },
+  },
+  availableSignals: ['goal'],
+};
 
 export const populatedThemeEntitiesResponse: ThemeEntitiesResponse = {
   entities: [
@@ -136,6 +154,83 @@ export const reorderedMultiThemeSnapshotsResponse: ThemeSnapshotsResponse = {
 };
 
 export const emptyThemeSnapshotsResponse: ThemeSnapshotsResponse = { snapshots: [] };
+
+export const landmarkThemeSnapshotsResponse: ThemeSnapshotsResponse = {
+  snapshots: [
+    {
+      snapshotId: 'landmark-1',
+      ordinal: 1,
+      total: 230,
+      cutoffAt: '2026-07-01T04:00:00.000Z',
+      startedAt: '2026-06-10T00:00:00.000Z',
+      endedAt: '2026-07-01T04:00:00.000Z',
+      traceCount: 30,
+      availableSignals: ['goal', 'outcome', 'behavior', 'sentiment'],
+      reason: 'range_start',
+    },
+    {
+      snapshotId: 'landmark-2',
+      ordinal: 58,
+      total: 230,
+      cutoffAt: '2026-07-02T18:00:00.000Z',
+      startedAt: '2026-06-12T00:00:00.000Z',
+      endedAt: '2026-07-02T18:00:00.000Z',
+      traceCount: 34,
+      availableSignals: ['goal', 'outcome', 'behavior', 'sentiment'],
+      reason: 'time_sample',
+    },
+    {
+      snapshotId: 'landmark-3',
+      ordinal: 117,
+      total: 230,
+      cutoffAt: '2026-07-04T09:00:00.000Z',
+      startedAt: '2026-06-14T00:00:00.000Z',
+      endedAt: '2026-07-04T09:00:00.000Z',
+      traceCount: 41,
+      availableSignals: ['goal', 'outcome', 'behavior', 'sentiment'],
+      reason: 'time_sample',
+    },
+    {
+      snapshotId: 'landmark-4',
+      ordinal: 171,
+      total: 230,
+      // Bursty cutoffs: landmarks 4 and 5 arrive close together after a gap.
+      cutoffAt: '2026-07-07T18:00:00.000Z',
+      startedAt: '2026-06-16T00:00:00.000Z',
+      endedAt: '2026-07-06T15:00:00.000Z',
+      traceCount: 46,
+      availableSignals: ['goal', 'outcome', 'behavior', 'sentiment'],
+      reason: 'time_sample',
+    },
+    {
+      snapshotId: 'landmark-5',
+      ordinal: 230,
+      total: 230,
+      cutoffAt: '2026-07-08T00:00:00.000Z',
+      startedAt: '2026-06-18T00:00:00.000Z',
+      endedAt: '2026-07-08T00:00:00.000Z',
+      traceCount: 50,
+      availableSignals: ['goal', 'outcome', 'behavior', 'sentiment'],
+      reason: 'range_end',
+    },
+  ],
+  totalSnapshots: 230,
+};
+
+export const rangeScopedThemeSnapshotsResponse: ThemeSnapshotsResponse = {
+  snapshots: [
+    {
+      snapshotId: 'snapshot-range-scoped',
+      ordinal: 273,
+      total: 303,
+      startedAt: '2026-07-01T00:00:00.000Z',
+      endedAt: '2026-07-08T00:00:00.000Z',
+      traceCount: 50,
+      availableSignals: ['goal', 'outcome', 'behavior', 'sentiment'],
+    },
+  ],
+  totalSnapshots: 303,
+};
 
 export const themeFlowResponse: ThemeFlowResponse = {
   snapshot: themeSnapshotsResponse.snapshots[0],
@@ -498,6 +593,17 @@ export const reorderedFourStageThemeFlowResponse: ThemeFlowResponse = {
       targetShare: 8 / 21,
     },
   ],
+};
+
+/**
+ * Mirrors prod frames where the goal stage has themes but no goal→outcome
+ * links exist yet: only outcome→behavior→sentiment connect.
+ */
+export const unlinkedGoalStageThemeFlowResponse: ThemeFlowResponse = {
+  ...fourStageThemeFlowResponse,
+  links: fourStageThemeFlowResponse.links.filter(
+    link => !link.sourceNodeId.startsWith('goal-') && !link.targetNodeId.startsWith('goal-'),
+  ),
 };
 
 const metadataOnlyGoalNode: ThemeNode = {

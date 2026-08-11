@@ -3,6 +3,7 @@ import { Lock } from 'lucide-react';
 import { useAuthCapabilities } from '../hooks/use-auth-capabilities';
 import { isAuthenticated } from '../types';
 import { LoginButton } from './login-button';
+import { withStudioBasePath } from '@/lib/studio-base-path';
 
 export type AuthRequiredProps = {
   children: React.ReactNode;
@@ -71,7 +72,7 @@ export function AuthRequired({ children, loginUrl = '/login', signupUrl = '/sign
 
   // Login capability available - show sign in prompt
   const handleSignUp = () => {
-    const url = new URL(signupUrl, window.location.origin);
+    const url = new URL(withStudioBasePath(signupUrl), window.location.origin);
     if (redirectUri) {
       url.searchParams.set('redirect', redirectUri);
     }

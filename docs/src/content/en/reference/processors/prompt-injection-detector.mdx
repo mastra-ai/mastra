@@ -7,7 +7,7 @@ packages:
 
 # PromptInjectionDetector
 
-The `PromptInjectionDetector` is an **input processor** that detects and prevents prompt injection attacks, jailbreaks, and system manipulation attempts before messages are sent to the language model. This processor helps maintain security by identifying various types of injection attempts and providing flexible strategies for handling them, including content rewriting to neutralize attacks while preserving legitimate user intent.
+The `PromptInjectionDetector` is an **input processor** that detects and prevents prompt injection attacks, jailbreaks, and system manipulation attempts before messages are sent to the language model. This processor helps maintain security by identifying types of injection attempts and providing flexible strategies for handling them, including content rewriting to neutralize attacks while preserving legitimate user intent.
 
 ## Usage example
 
@@ -94,6 +94,14 @@ const processor = new PromptInjectionDetector({
             type: 'ProviderOptions',
             description:
               "Provider-specific options passed to the internal detection agent. Use this to control model behavior like reasoning effort for thinking models (e.g., `{ openai: { reasoningEffort: 'low' } }`)",
+            isOptional: true,
+            default: 'undefined',
+          },
+          {
+            name: 'onDetection',
+            type: '(event: PromptInjectionDetectionEvent) => void | Promise<void>',
+            description:
+              'Called for every analyzed message with `detectionResult`, the analyzed `input`, whether it was `flagged`, and the `strategyApplied` (the configured strategy when flagged, otherwise `none`). Use it to emit custom metrics. Errors thrown by the callback are logged and ignored',
             isOptional: true,
             default: 'undefined',
           },

@@ -10,7 +10,7 @@ import StepItem from "@site/src/components/StepItem";
 
 In this guide, you'll create an AI research assistant that can analyze academic papers and answer specific questions about their content using Retrieval Augmented Generation (RAG).
 
-You'll use the foundational Transformer paper ["Attention Is All You Need"](https://arxiv.org/html/1706.03762) as your example. As a database you'll use a local libSQL database.
+You'll use the original Transformer paper ["Attention Is All You Need"](https://arxiv.org/html/1706.03762) as your example. As a database you'll use a local libSQL database.
 
 ## Prerequisites
 
@@ -157,7 +157,7 @@ Let's define the agent's behavior, connect it to your Mastra project, and create
 
 ## Processing documents
 
-In the following steps you'll fetch the research paper, split it into smaller chunks, generate embeddings for them, and store these chunks of information into the vector database.
+In the following steps, you'll fetch the research paper and split it into smaller chunks. You'll then generate embeddings and store the chunks in the vector database.
 
 <Steps>
   <StepItem title="Load and Process the Paper">
@@ -212,7 +212,7 @@ In the following steps you'll fetch the research paper, split it into smaller ch
 
     :::
 
-    This allows the agent to efficiently search and retrieve relevant information.
+    The agent uses the vector index to search for and retrieve relevant information.
 
     Open the `src/store.ts` file and add the following:
 

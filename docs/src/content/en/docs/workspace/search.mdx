@@ -37,7 +37,7 @@ When you search:
 1. Documents are scored based on relevance to the query
 1. Results are ranked by score and returned with the matching content
 
-Workspaces support three search modes: BM25 keyword search, vector semantic search, and hybrid search that combines both.
+Workspaces support three search modes: BM25 keyword search and vector semantic search, plus hybrid search that combines both.
 
 ## BM25 keyword search
 
@@ -97,7 +97,7 @@ The embedder above takes one text at a time. Indexing a workspace with hundreds 
 
 When the provider supports batching (for example, OpenAI's `embedMany`), pass an embedder that takes an array of texts and accepts many embeddings back in one call. To opt in, set a `batch: true` property on the function. Mastra checks for that property at runtime and switches to the batched path.
 
-The following example replaces the single-text embedder with a batched one. The embedder function takes an array, returns an array of embeddings in the same order, and carries two extra properties:
+The following example replaces the single-text embedder with a batched one. The embedder function takes an array and returns an array of embeddings in the same order, plus carries two extra properties:
 
 - `batch: true`: marks the function as batch-capable. Without this property, Mastra calls it one text at a time.
 - `maxBatchSize`: the largest array the provider accepts in one call. Mastra splits larger requests into chunks of this size and sends them in parallel. Set this to your provider's documented limit (for example, 2048 for OpenAI, 96 for Cohere, 128 for Voyage). Omit it to send every pending text in one request.
@@ -156,7 +156,7 @@ const workspace = new Workspace({
 })
 ```
 
-The index name must be a valid SQL identifier: start with a letter or underscore, contain only letters, numbers, or underscores, and be at most 63 characters long.
+The index name must be a valid SQL identifier: start with a letter or underscore, contain only letters, numbers, or shows, and be at most 63 characters long.
 
 ## Indexing content
 
@@ -288,5 +288,5 @@ When you configure search on a workspace, agents receive tools for searching and
 ## Related
 
 - [Workspace overview](/docs/workspace/overview)
-- [RAG overview](/docs/rag/overview)
+- [RAG overview](/reference/rag/overview)
 - [Workspace class reference](/reference/workspace/workspace-class)

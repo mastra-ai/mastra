@@ -1,6 +1,7 @@
 import { lstat, readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { MAX_FS_SUBAGENT_DEPTH } from '@mastra/core/agent';
+import type { AgentSchedulePromptDefinition } from '@mastra/core/schedules';
 import matter from 'gray-matter';
 import { slash } from '../utils';
 
@@ -18,6 +19,13 @@ export interface DiscoveredFsAgent {
   configPath?: string;
   /** Absolute path to `instructions.md`, if present. */
   instructionsPath?: string;
+  /**
+   * Absolute path to `instructions.ts`/`instructions.js`, if present. Unlike
+   * `instructions.md` (whose contents are inlined at build time), this module is
+   * imported by the generated wrapper, so it can compute its prompt or export a
+   * runtime-resolved function.
+   */
+  instructionsModulePath?: string;
   /** Absolute path to `workspace.ts`/`workspace.js`, if present. */
   workspacePath?: string;
   /** Absolute path to `memory.ts`/`memory.js`, if present. */
@@ -38,6 +46,12 @@ export interface DiscoveredFsAgent {
   scorers: { key: string; path: string }[];
   /** Skills discovered under `skills/`, in stable (sorted) order. */
   skills: DiscoveredFsSkill[];
+  /**
+   * Schedules discovered under `schedules/`, in stable (path-sorted) order.
+   * Nested files keep their relative path in `key` (`billing/sweep.ts` →
+   * `billing/sweep`) so a schedule's identity is stable across builds.
+   */
+  schedules: DiscoveredFsSchedule[];
   /**
    * Declared subagents discovered under `subagents/`, in stable (sorted) order.
    * Subagents may declare their own `subagents/`, up to `MAX_FS_SUBAGENT_DEPTH`
@@ -72,18 +86,87 @@ export type DiscoveredFsSkill =
       references: Record<string, string>;
     };
 
+/**
+ * A schedule discovered under `agents/<name>/schedules/`.
+ *
+ * - `kind: 'module'` — a `.ts`/`.js` file whose default export is a
+ *   `defineSchedule(...)` result. Codegen imports it directly, which is what
+ *   makes handler mode possible: the handler is a live function, not data.
+ * - `kind: 'markdown'` — a `.md` file with cron frontmatter and the document
+ *   body as the prompt. Codegen inlines it so the bundle carries no filesystem
+ *   dependency.
+ */
+export type DiscoveredFsSchedule =
+  | {
+      kind: 'module';
+      /** Path-derived identity relative to `schedules/`, extension stripped. */
+      key: string;
+      /** Absolute, slash-normalized path to the `.ts`/`.js` schedule module. */
+      path: string;
+    }
+  | {
+      kind: 'markdown';
+      key: string;
+      /**
+       * Absolute, slash-normalized path to the `.md` file. Its contents are
+       * inlined at build time, so the dev watcher has to watch this path
+       * explicitly — nothing imports it.
+       */
+      path: string;
+      /** Parsed frontmatter fields plus the body as `prompt`. */
+      definition: MarkdownScheduleDefinition;
+    };
+
+/**
+ * A markdown schedule is always prompt mode — the document body is the prompt
+ * and handler mode needs a function, so it needs a `.ts`/`.js` module. Reuses core's
+ * definition type so the two can't drift; core validates the parsed result
+ * during agent assembly.
+ */
+export type MarkdownScheduleDefinition = AgentSchedulePromptDefinition;
+
+/**
+ * Frontmatter keys a markdown schedule may set, in the order they are copied
+ * onto the definition. Anything outside this list fails the build rather than
+ * being silently dropped — a schedule that quietly ignores half its config is
+ * worse than one that refuses to build.
+ *
+ * The `satisfies` binds this list to core's definition type, so renaming or
+ * removing a field there breaks the build here instead of silently rejecting
+ * frontmatter that used to be valid. (`prompt` is excluded because the document
+ * body supplies it, `handler` because markdown can't carry a function.)
+ */
+const MARKDOWN_SCHEDULE_KEYS = [
+  'cron',
+  'timezone',
+  'name',
+  'threadId',
+  'resourceId',
+  'signalType',
+  'tagName',
+  'attributes',
+  'providerOptions',
+  'ifActive',
+  'ifIdle',
+  'status',
+  'metadata',
+] as const satisfies readonly (keyof Omit<AgentSchedulePromptDefinition, 'prompt' | 'handler'>)[];
+
 const CONFIG_BASENAMES = ['config.ts', 'config.js'];
 const WORKSPACE_BASENAMES = ['workspace.ts', 'workspace.js'];
 const MEMORY_BASENAMES = ['memory.ts', 'memory.js'];
 const INSTRUCTIONS_BASENAME = 'instructions.md';
+const INSTRUCTIONS_MODULE_BASENAMES = ['instructions.ts', 'instructions.js'];
 const TOOL_EXTENSIONS = ['.ts', '.js'];
+const SCHEDULE_MODULE_EXTENSIONS = ['.ts', '.js'];
 const SKILL_MODULE_EXTENSIONS = ['.ts', '.js'];
 const SKILL_MD_BASENAME = 'SKILL.md';
 
 /**
  * Presence check that does NOT follow symlinks. Returns `false` for symlinks
- * (and broken links) so a symlinked `config.ts`/`instructions.md`/`workspace.ts`/
- * `memory.ts` is never inlined or imported into the generated bundle.
+ * (and broken links) so a symlinked `config.ts`/`instructions.md`/
+ * `instructions.ts`/`workspace.ts`/`memory.ts` is never inlined or imported
+ * into the generated bundle.
  */
 async function exists(path: string): Promise<boolean> {
   try {
@@ -320,10 +403,142 @@ async function discoverSkills(skillsDir: string): Promise<DiscoveredFsSkill[]> {
 }
 
 /**
+ * Parse a markdown schedule: YAML frontmatter for the cron (and other JSON-safe
+ * options), document body for the prompt.
+ *
+ * Throws a build error naming the file when `cron` is missing or the body is
+ * empty — a schedule that can't fire is never what the author meant.
+ */
+async function parseMarkdownSchedule(path: string, key: string): Promise<MarkdownScheduleDefinition> {
+  const raw = await readFile(path, 'utf-8');
+
+  let parsed: ReturnType<typeof matter>;
+  try {
+    parsed = matter(raw);
+  } catch (error) {
+    // The most common cron form starts with `*`, which YAML reads as an alias
+    // indicator, so `cron: */5 * * * *` fails with an opaque parser error.
+    // Name the actual fix instead of surfacing that raw.
+    const detail = error instanceof Error ? error.message.split('\n')[0] : String(error);
+    throw new Error(
+      `Schedule "${key}" in ${path} has invalid YAML frontmatter: ${detail}. ` +
+        `Cron expressions must be quoted (cron: "*/5 * * * *"), because a leading "*" is a YAML alias.`,
+    );
+  }
+
+  const frontmatter = (parsed.data ?? {}) as Record<string, unknown>;
+  const prompt = parsed.content.trim();
+
+  const unknown = Object.keys(frontmatter).filter(
+    field => !(MARKDOWN_SCHEDULE_KEYS as readonly string[]).includes(field),
+  );
+  if (unknown.length > 0) {
+    const hint = unknown.includes('prompt')
+      ? ` The document body is used as the prompt, so "prompt" cannot be set in frontmatter.`
+      : ` Supported fields: ${MARKDOWN_SCHEDULE_KEYS.join(', ')}. Handler mode requires a .ts or .js schedule.`;
+    throw new Error(`Schedule "${key}" in ${path} has unknown frontmatter field(s): ${unknown.join(', ')}.${hint}`);
+  }
+
+  if (!frontmatter.cron || typeof frontmatter.cron !== 'string') {
+    throw new Error(
+      `Schedule "${key}" in ${path} is missing a required "cron". ` +
+        `Add a YAML frontmatter block with a "cron:" field (e.g. cron: "0 9 * * *").`,
+    );
+  }
+
+  if (!prompt) {
+    throw new Error(
+      `Schedule "${key}" in ${path} has an empty body. ` +
+        `The document body is used as the prompt, so it cannot be blank.`,
+    );
+  }
+
+  const definition: Record<string, unknown> = { cron: frontmatter.cron, prompt };
+  for (const field of MARKDOWN_SCHEDULE_KEYS) {
+    if (field === 'cron') continue;
+    if (frontmatter[field] !== undefined) {
+      definition[field] = frontmatter[field];
+    }
+  }
+  return definition as unknown as MarkdownScheduleDefinition;
+}
+
+/**
+ * Discover schedules under `agents/<name>/schedules/`, recursing into
+ * subdirectories so a schedule's identity is its path relative to `schedules/`
+ * with the extension stripped (`billing/sweep.ts` → `billing/sweep`).
+ *
+ * Test files and symlinks (files and directories alike) are skipped for the
+ * same reason as the other scanners: a symlink could point anywhere on the
+ * build machine and be embedded into generated import code.
+ */
+async function discoverSchedules(schedulesDir: string, prefix = ''): Promise<DiscoveredFsSchedule[]> {
+  if (!(await exists(schedulesDir))) {
+    return [];
+  }
+
+  let entries: string[];
+  try {
+    entries = await readdir(schedulesDir);
+  } catch {
+    return [];
+  }
+
+  const schedules: DiscoveredFsSchedule[] = [];
+  for (const basename of entries.sort()) {
+    const path = join(schedulesDir, basename);
+
+    let stats;
+    try {
+      stats = await lstat(path);
+    } catch {
+      continue;
+    }
+    if (stats.isSymbolicLink()) {
+      continue;
+    }
+
+    if (stats.isDirectory()) {
+      schedules.push(...(await discoverSchedules(path, `${prefix}${basename}/`)));
+      continue;
+    }
+
+    if (isTestFile(basename)) {
+      continue;
+    }
+
+    if (SCHEDULE_MODULE_EXTENSIONS.some(ext => basename.endsWith(ext))) {
+      schedules.push({
+        kind: 'module',
+        key: `${prefix}${basename.replace(/\.(ts|js)$/, '')}`,
+        path: slash(path),
+      });
+      continue;
+    }
+
+    if (basename.endsWith('.md')) {
+      const key = `${prefix}${basename.replace(/\.md$/, '')}`;
+      schedules.push({
+        kind: 'markdown',
+        key,
+        path: slash(path),
+        definition: await parseMarkdownSchedule(path, key),
+      });
+    }
+  }
+
+  // Sort by key, not by traversal order. Sorting basenames only orders each
+  // directory: given `a.ts` alongside a directory `a/`, `a` sorts before
+  // `a.ts`, so recursion emits `a/job` before `a`. Codegen order follows this
+  // list, so a global sort is what actually makes it path-sorted and stable.
+  return schedules.sort((left, right) => (left.key < right.key ? -1 : left.key > right.key ? 1 : 0));
+}
+
+/**
  * Discover a single agent directory: its `config`/`instructions`/`workspace`
  * files plus `tools/`, `skills/`, and declared `subagents/`. Returns
- * `undefined` when `dir` is not an agent directory (no `config.(ts|js)` and no
- * `instructions.md`).
+ * `undefined` when `dir` is not an agent directory (no `config.(ts|js)`, no
+ * `instructions.md`, and no `instructions.(ts|js)`).
  *
  * `depth` is the subagent nesting level (`0` for top-level agents). Discovery
  * recurses into `subagents/` until `MAX_FS_SUBAGENT_DEPTH`; deeper directories
@@ -339,9 +554,10 @@ async function discoverAgentDir(
   const instructionsPath = (await exists(join(dir, INSTRUCTIONS_BASENAME)))
     ? slash(join(dir, INSTRUCTIONS_BASENAME))
     : undefined;
+  const instructionsModulePath = await firstExisting(dir, INSTRUCTIONS_MODULE_BASENAMES);
 
   // Not an agent directory unless it has a config or instructions file.
-  if (!configPath && !instructionsPath) {
+  if (!configPath && !instructionsPath && !instructionsModulePath) {
     return undefined;
   }
 
@@ -352,6 +568,7 @@ async function discoverAgentDir(
   const processors = await discoverProcessors(join(dir, 'processors'));
   const scorers = await discoverModuleDir(join(dir, 'scorers'));
   const skills = await discoverSkills(join(dir, 'skills'));
+  const schedules = await discoverSchedules(join(dir, 'schedules'));
   const subagents = await discoverSubagents(dir, depth, onWarn);
 
   return {
@@ -359,6 +576,7 @@ async function discoverAgentDir(
     dir: slash(dir),
     configPath,
     instructionsPath,
+    instructionsModulePath,
     workspacePath,
     memoryPath,
     workspaceSeedDir,
@@ -367,6 +585,7 @@ async function discoverAgentDir(
     outputProcessors: processors.output,
     scorers,
     skills,
+    schedules,
     subagents,
   };
 }
@@ -418,11 +637,11 @@ async function discoverSubagents(
 
 /**
  * Scan `<mastraDir>/agents/*` for file-system routed agents. A directory is
- * treated as an agent only when it contains a `config.(ts|js)` or an
- * `instructions.md`; other directories are ignored. Each agent may declare
- * `subagents/` up to `MAX_FS_SUBAGENT_DEPTH` levels deep. Returns descriptors
- * with absolute, slash-normalized paths ready for codegen. Performs no module
- * evaluation — only filesystem inspection.
+ * treated as an agent only when it contains a `config.(ts|js)`, an
+ * `instructions.md`, or an `instructions.(ts|js)`; other directories are
+ * ignored. Each agent may declare `subagents/` up to `MAX_FS_SUBAGENT_DEPTH`
+ * levels deep. Returns descriptors with absolute, slash-normalized paths ready
+ * for codegen. Performs no module evaluation — only filesystem inspection.
  */
 export async function discoverFsAgents(
   mastraDir: string,

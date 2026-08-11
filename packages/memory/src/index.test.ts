@@ -1,4 +1,8 @@
-import { MessageList } from '@mastra/core/agent';
+import {
+  createSignal,
+  isTransientSignalMessage as coreIsTransientSignalMessage,
+  MessageList,
+} from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
 import type { MemoryConfig } from '@mastra/core/memory';
 import { RequestContext } from '@mastra/core/request-context';
@@ -461,6 +465,138 @@ describe('Memory', () => {
 
       expect(stored.messages).toHaveLength(1);
       expect(stored.messages[0]?.id).toBe('raw-user-msg');
+    });
+
+    it('should not save transient signals through saveMessages', async () => {
+      const threadId = 'thread-transient-save-test';
+      const resourceId = 'resource-transient-save-test';
+
+      await memory.createThread({ threadId, resourceId });
+
+      const transientSignal = createSignal({
+        id: 'transient-sig',
+        type: 'reactive',
+        contents: 'Steering reminder — not retained',
+        transient: true,
+      }).toDBMessage({ threadId, resourceId });
+      const persistedSignal = createSignal({
+        id: 'persisted-sig',
+        type: 'reactive',
+        contents: 'Regular signal — stored',
+      }).toDBMessage({ threadId, resourceId });
+
+      const result = await memory.saveMessages({ messages: [transientSignal, persistedSignal] });
+
+      expect(result.messages.map(m => m.id)).toEqual(['persisted-sig']);
+
+      const recalled = await memory.recall({ threadId, resourceId, perPage: false, includeSystemReminders: true });
+      expect(recalled.messages.map(m => m.id)).toEqual(['persisted-sig']);
+    });
+
+    it('should not persist transient signals through raw persistMessages', async () => {
+      const storage = new InMemoryStore();
+      const memory = new Memory({ storage });
+      const threadId = 'thread-transient-raw-persist-test';
+      const resourceId = 'resource-transient-raw-persist-test';
+
+      await memory.createThread({ threadId, resourceId });
+
+      await memory.persistMessages([
+        createSignal({
+          id: 'raw-transient-sig',
+          type: 'reactive',
+          contents: 'not retained',
+          transient: true,
+        }).toDBMessage({ threadId, resourceId }),
+        {
+          id: 'raw-user-msg-2',
+          threadId,
+          resourceId,
+          role: 'user',
+          createdAt: new Date('2024-01-01T10:01:00Z'),
+          content: { format: 2, parts: [{ type: 'text', text: 'Hello' }] },
+        },
+      ]);
+
+      const memoryStore = await storage.getStore('memory');
+      const stored = await memoryStore!.listMessages({ threadId, resourceId, perPage: false });
+
+      expect(stored.messages).toHaveLength(1);
+      expect(stored.messages[0]?.id).toBe('raw-user-msg-2');
+    });
+  });
+
+  describe('transient signal classification agreement with @mastra/core', () => {
+    it('drops exactly the messages the core classifier flags as transient signals', async () => {
+      const storage = new InMemoryStore();
+      const memory = new Memory({ storage });
+      const threadId = 'thread-transient-agreement-test';
+      const resourceId = 'resource-transient-agreement-test';
+
+      await memory.createThread({ threadId, resourceId });
+
+      const base = {
+        threadId,
+        resourceId,
+        role: 'signal' as const,
+        createdAt: new Date('2024-01-01T10:00:00Z'),
+      };
+      const signalMessage = (id: string, signal: unknown): MastraDBMessage =>
+        ({
+          ...base,
+          id,
+          content: { format: 2, parts: [{ type: 'text', text: id }], metadata: { signal } },
+        }) as MastraDBMessage;
+
+      const cases: Array<{ message: MastraDBMessage; expectStored: boolean }> = [
+        { message: signalMessage('transient-true', { transient: true }), expectStored: false },
+        { message: signalMessage('transient-false', { transient: false }), expectStored: true },
+        { message: signalMessage('transient-truthy-non-boolean', { transient: 1 }), expectStored: true },
+        { message: signalMessage('no-transient-key', {}), expectStored: true },
+        { message: signalMessage('null-signal', null), expectStored: true },
+        { message: signalMessage('string-signal', 'reactive'), expectStored: true },
+        { message: signalMessage('array-signal', []), expectStored: true },
+        {
+          message: signalMessage('array-signal-with-transient', Object.assign([], { transient: true })),
+          expectStored: true,
+        },
+        {
+          message: {
+            ...base,
+            id: 'no-metadata',
+            content: { format: 2, parts: [{ type: 'text', text: 'no-metadata' }] },
+          } as MastraDBMessage,
+          expectStored: true,
+        },
+        {
+          message: {
+            ...base,
+            id: 'plain-user-message',
+            role: 'user',
+            content: { format: 2, parts: [{ type: 'text', text: 'plain-user-message' }] },
+          } as MastraDBMessage,
+          expectStored: true,
+        },
+      ];
+
+      // The core classifier must agree with the expectation table…
+      for (const { message, expectStored } of cases) {
+        expect(coreIsTransientSignalMessage(message)).toBe(!expectStored);
+      }
+
+      await memory.persistMessages(cases.map(c => c.message));
+
+      // …and memory's local copy must agree with the core classifier.
+      const memoryStore = await storage.getStore('memory');
+      const stored = await memoryStore!.listMessages({ threadId, resourceId, perPage: false });
+      const storedIds = stored.messages.map(m => m.id).sort();
+
+      expect(storedIds).toEqual(
+        cases
+          .filter(c => c.expectStored)
+          .map(c => c.message.id)
+          .sort(),
+      );
     });
   });
 
@@ -2403,11 +2539,59 @@ describe('Memory', () => {
     });
   });
 
+  describe('thread-scoped processors attach without thread context', () => {
+    // Processor attachment must be permissive: `MastraMemory` may not be
+    // populated on requestContext at discovery time (agent processor discovery
+    // can run before thread preparation), and direct `getInputProcessors()`
+    // calls pass no context at all. Threadless safety lives at runtime instead:
+    // observational-memory no-ops when `getThreadContext` resolves no thread,
+    // and the processor runner skips `computeStateSignal` when no
+    // threadId/resourceId resolves (e.g. ephemeral workflow agent steps).
+
+    function memoryWithOMAndWMState() {
+      return new Memory({
+        storage: new InMemoryStore(),
+        options: {
+          workingMemory: { enabled: true, useStateSignals: true },
+          observationalMemory: { enabled: true, observation: { manageWorkingMemory: true } },
+        },
+      });
+    }
+
+    it('attaches observational-memory input processor when requestContext has no MastraMemory', async () => {
+      const memory = memoryWithOMAndWMState();
+      const rc = new RequestContext();
+      const processors = await memory.getInputProcessors([], rc);
+      expect(processors.find(p => p.id === 'observational-memory')).toBeDefined();
+    });
+
+    it('attaches observational-memory output processor when requestContext has no MastraMemory', async () => {
+      const memory = memoryWithOMAndWMState();
+      const rc = new RequestContext();
+      const processors = await memory.getOutputProcessors([], rc);
+      expect(processors.find(p => p.id === 'observational-memory')).toBeDefined();
+    });
+
+    it('attaches working-memory-state processor when requestContext has no MastraMemory', async () => {
+      const memory = memoryWithOMAndWMState();
+      const rc = new RequestContext();
+      const inputs = await memory.getInputProcessors([], rc);
+      expect(inputs.find(p => p.id === 'working-memory-state')).toBeDefined();
+    });
+
+    it('attaches both processors when no requestContext is passed at all', async () => {
+      const memory = memoryWithOMAndWMState();
+      const processors = await memory.getInputProcessors();
+      expect(processors.find(p => p.id === 'observational-memory')).toBeDefined();
+      expect(processors.find(p => p.id === 'working-memory-state')).toBeDefined();
+    });
+  });
+
   describe('Vector Deletion', () => {
-    function createMemoryWithMockVector(indexSeparator = '_') {
+    function createMemoryWithMockVector(indexSeparator = '_', indexes = [`memory${indexSeparator}messages`]) {
       const mockVector = {
         deleteVectors: vi.fn(),
-        listIndexes: vi.fn().mockResolvedValue([`memory${indexSeparator}messages`]),
+        listIndexes: vi.fn().mockResolvedValue(indexes),
         query: vi.fn(),
         upsert: vi.fn(),
         createIndex: vi.fn(),
@@ -2422,10 +2606,23 @@ describe('Memory', () => {
       class MemoryWithMockVector extends Memory {
         public mockVector = mockVector;
 
+        /** Warnings that the background vector cleanup reported. */
+        public warnSpy = vi.spyOn(this.logger, 'warn').mockImplementation(() => {});
+
         constructor() {
           super({ storage: new InMemoryStore() });
           // @ts-expect-error - injecting mock vector
           this.vector = this.mockVector;
+        }
+
+        /** Waits for the background vector cleanup that deleteThread or deleteMessages started. */
+        public flushVectorCleanup(): Promise<void> {
+          return (this as unknown as { pendingVectorCleanup: Promise<void> }).pendingVectorCleanup;
+        }
+
+        /** Names of the indexes that received a delete, in call order. */
+        public deletedIndexNames(): string[] {
+          return this.mockVector.deleteVectors.mock.calls.map(([args]) => args.indexName);
         }
       }
 
@@ -2437,12 +2634,11 @@ describe('Memory', () => {
       const messageId = 'msg-123';
 
       await memory.deleteMessages([messageId]);
+      await memory.flushVectorCleanup();
 
-      await vi.waitFor(() => {
-        expect(memory.mockVector.deleteVectors).toHaveBeenCalledWith({
-          indexName: 'memory_messages',
-          filter: { message_id: { $in: [messageId] } },
-        });
+      expect(memory.mockVector.deleteVectors).toHaveBeenCalledWith({
+        indexName: 'memory_messages',
+        filter: { message_id: { $in: [messageId] } },
       });
     });
 
@@ -2451,12 +2647,11 @@ describe('Memory', () => {
       const threadId = 'thread-123';
 
       await memory.deleteThread(threadId);
+      await memory.flushVectorCleanup();
 
-      await vi.waitFor(() => {
-        expect(memory.mockVector.deleteVectors).toHaveBeenCalledWith({
-          indexName: 'memory_messages',
-          filter: { thread_id: threadId },
-        });
+      expect(memory.mockVector.deleteVectors).toHaveBeenCalledWith({
+        indexName: 'memory_messages',
+        filter: { thread_id: threadId },
       });
     });
 
@@ -2465,12 +2660,11 @@ describe('Memory', () => {
       const messageId = 'msg-456';
 
       await memory.deleteMessages([messageId]);
+      await memory.flushVectorCleanup();
 
-      await vi.waitFor(() => {
-        expect(memory.mockVector.deleteVectors).toHaveBeenCalledWith({
-          indexName: 'memory-messages',
-          filter: { message_id: { $in: [messageId] } },
-        });
+      expect(memory.mockVector.deleteVectors).toHaveBeenCalledWith({
+        indexName: 'memory-messages',
+        filter: { message_id: { $in: [messageId] } },
       });
     });
 
@@ -2479,13 +2673,115 @@ describe('Memory', () => {
       const threadId = 'thread-456';
 
       await memory.deleteThread(threadId);
+      await memory.flushVectorCleanup();
 
-      await vi.waitFor(() => {
-        expect(memory.mockVector.deleteVectors).toHaveBeenCalledWith({
-          indexName: 'memory-messages',
-          filter: { thread_id: threadId },
-        });
+      expect(memory.mockVector.deleteVectors).toHaveBeenCalledWith({
+        indexName: 'memory-messages',
+        filter: { thread_id: threadId },
       });
+    });
+
+    it('should delete observation vectors when deleting a thread', async () => {
+      const memory = createMemoryWithMockVector('_', ['memory_messages', 'memory_observations_384']);
+      const threadId = 'thread-with-observations';
+
+      await memory.deleteThread(threadId);
+      await memory.flushVectorCleanup();
+
+      expect(memory.mockVector.deleteVectors).toHaveBeenCalledWith({
+        indexName: 'memory_observations_384',
+        filter: { thread_id: threadId },
+      });
+      expect(memory.mockVector.deleteVectors).toHaveBeenCalledWith({
+        indexName: 'memory_messages',
+        filter: { thread_id: threadId },
+      });
+    });
+
+    it('should delete observation vectors with dash separator (Pinecone/Vectorize)', async () => {
+      const memory = createMemoryWithMockVector('-', ['memory-messages', 'memory-observations-1536']);
+      const threadId = 'thread-with-observations';
+
+      await memory.deleteThread(threadId);
+      await memory.flushVectorCleanup();
+
+      expect(memory.mockVector.deleteVectors).toHaveBeenCalledWith({
+        indexName: 'memory-observations-1536',
+        filter: { thread_id: threadId },
+      });
+    });
+
+    it('should not touch observation vectors when deleting a single message', async () => {
+      const memory = createMemoryWithMockVector('_', ['memory_messages', 'memory_observations_384']);
+      const messageId = 'msg-123';
+
+      await memory.deleteMessages([messageId]);
+      await memory.flushVectorCleanup();
+
+      expect(memory.mockVector.deleteVectors).toHaveBeenCalledWith({
+        indexName: 'memory_messages',
+        filter: { message_id: { $in: [messageId] } },
+      });
+      expect(memory.deletedIndexNames()).toEqual(['memory_messages']);
+    });
+
+    it('should not throw when the observation index does not exist', async () => {
+      const memory = createMemoryWithMockVector('_', ['memory_messages']);
+
+      await expect(memory.deleteThread('thread-without-observations')).resolves.not.toThrow();
+      await memory.flushVectorCleanup();
+
+      expect(memory.deletedIndexNames()).toEqual(['memory_messages']);
+    });
+
+    it('should keep deleting other indexes when one index delete fails', async () => {
+      const memory = createMemoryWithMockVector('_', ['memory_messages', 'memory_observations_384']);
+      const threadId = 'thread-with-failing-index';
+      memory.mockVector.deleteVectors.mockImplementation(({ indexName }: { indexName: string }) =>
+        indexName === 'memory_observations_384' ? Promise.reject(new Error('index unavailable')) : Promise.resolve(),
+      );
+
+      await expect(memory.deleteThread(threadId)).resolves.not.toThrow();
+      await expect(memory.flushVectorCleanup()).resolves.toBeUndefined();
+
+      expect(memory.mockVector.deleteVectors).toHaveBeenCalledWith({
+        indexName: 'memory_messages',
+        filter: { thread_id: threadId },
+      });
+      expect(memory.warnSpy).toHaveBeenCalledWith('Failed to delete vectors of the deleted thread from index', {
+        threadId,
+        indexName: 'memory_observations_384',
+      });
+    });
+
+    it('should wait for an earlier cleanup that a later delete overlaps', async () => {
+      const memory = createMemoryWithMockVector('_', ['memory_messages']);
+      let releaseFirstDelete: () => void = () => {};
+      const firstDeleteStarted = new Promise<void>(resolveStarted => {
+        memory.mockVector.deleteVectors.mockImplementationOnce(
+          () =>
+            new Promise<void>(resolveDelete => {
+              releaseFirstDelete = resolveDelete;
+              resolveStarted();
+            }),
+        );
+      });
+
+      await memory.deleteThread('thread-slow');
+      await firstDeleteStarted;
+      await memory.deleteMessages(['msg-fast']);
+
+      let flushed = false;
+      const flush = memory.flushVectorCleanup().then(() => {
+        flushed = true;
+      });
+      await new Promise(resolve => setTimeout(resolve, 0));
+      expect(flushed).toBe(false);
+
+      releaseFirstDelete();
+      await flush;
+
+      expect(memory.deletedIndexNames()).toEqual(['memory_messages', 'memory_messages']);
     });
 
     it('should not throw when no vector store is configured', async () => {

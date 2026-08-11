@@ -1,6 +1,6 @@
 ---
 title: "Background tasks | Long-running agents"
-description: Learn how to dispatch long-running tool calls in the background, keep the stream open until they complete, and orchestrate subagents asynchronously.
+description: Learn how to dispatch long-running tool calls in the background and keep the stream open until they complete, plus orchestrate subagents asynchronously.
 packages:
   - "@mastra/core"
   - "@mastra/memory"
@@ -86,7 +86,7 @@ export const researchTool = createTool({
 
 ### Agent-level
 
-Use `backgroundTasks.tools` on the agent to opt in specific tools, override timeouts for individual tools, or run all background-eligible tools in the background. Use `disabled: true` to short-circuit background dispatch for the agent entirely.
+Use `backgroundTasks.tools` on the agent to opt in specific tools or override timeouts for individual tools, or alternatively run all background-eligible tools in the background. Use `disabled: true` to short-circuit background dispatch for the agent entirely.
 
 ```typescript title="src/mastra/agents/researcher.ts"
 import { Agent } from '@mastra/core/agent'
@@ -120,7 +120,7 @@ When a tool is registered on an agent that has background tasks enabled, the mod
 }
 ```
 
-The `_background` override is a _modifier_ on tools the developer has already opted in at the tool or agent layer — it's not a standalone opt-in. If a tool hasn't been opted in, `_background.enabled: true` from the model is ignored and the tool runs in the foreground. This keeps deterministic, foreground-only tools (calculators, lookups, schema validators) from being silently dispatched as tasks.
+The `_background` override is a _modifier_ on tools the developer has already opted in at the tool or agent layer, it's not a standalone opt-in. If a tool hasn't been opted in, `_background.enabled: true` from the model is ignored and the tool runs in the foreground. This keeps deterministic, foreground-only tools (calculators, lookups, schema validators) from being silently dispatched as tasks.
 
 ### Resolution order
 
@@ -186,7 +186,7 @@ Visit [`Agent.stream()`](/reference/streaming/agents/stream) for the full API.
 
 ### Aggregate properties
 
-`stream()` with `untilIdle` returns a `MastraModelOutput` that looks like the one from a regular `stream()` call, but only `fullStream` spans the initial turn **and** any auto-continuations. Aggregate properties (`text`, `toolCalls`, `toolResults`, `finishReason`, `messageList`, `getFullOutput()`) still resolve against the **first turn's** internal buffer. If you need an aggregate view across continuations, consume `fullStream` yourself and accumulate.
+`stream()` with `untilIdle` returns a `MastraModelOutput` that looks like the one from a regular `stream()` call, but `fullStream` alone spans the initial turn and any auto-continuations. Aggregate properties (`text`, `toolCalls`, `toolResults`, `finishReason`, `messageList`, `getFullOutput()`) still resolve against the **first turn's** internal buffer. If you need an aggregate view across continuations, consume `fullStream` yourself and accumulate.
 
 ## Subagents in the background
 
@@ -278,7 +278,7 @@ export const reviewTool = createTool({
 })
 ```
 
-The first invocation of `execute` sees `resumeData === undefined` and calls `suspend`. After the task is resumed, the runtime restarts the tool with `resumeData` populated; the `if` branch falls through and the tool returns its real result.
+The first invocation of `execute` sees `resumeData === undefined` and calls `suspend`. After the task is resumed, the runtime restarts the tool with `resumeData` populated. The `if` condition is false, so the tool returns its real result.
 
 To resume the task once an approval arrives:
 
@@ -291,19 +291,19 @@ await mastra.backgroundTaskManager?.resume(taskId, {
 
 ### What happens to the agent loop
 
-When a task suspends mid-`stream()` with `untilIdle`, the wrapper treats it as terminal for the current iteration and closes. To continue the agent immediately when the resume payload is in hand, call `agent.resumeStream(resumeData, { runId, toolCallId, memory, untilIdle: true })`: the resumed bg task runs to completion, its result lands in the message list, and the agent runs a follow-up turn — all on the same SSE connection. If you'd rather drive the resume out-of-band, call `mastra.backgroundTaskManager.resume(taskId, resumeData)` directly and the result still writes into the thread for the next user turn to pick up.
+When a task suspends mid-`stream()` with `untilIdle`, the wrapper treats it as terminal for the current iteration and closes. To continue the agent immediately when the resume payload is in hand, call `agent.resumeStream(resumeData, { runId, toolCallId, memory, untilIdle: true })`: the resumed bg task runs to completion, its result is added to the message list, and the agent runs a follow-up turn, all on the same SSE connection. If you'd rather drive the resume out-of-band, call `mastra.backgroundTaskManager.resume(taskId, resumeData)` directly and the result still writes into the thread for the next user turn to pick up.
 
 ### Re-registering the executor on resume
 
-The manager keeps tool executors in process memory. If the process restarts while a task is suspended, the executor closure is gone — the caller of `resume()` must re-register it first via `manager.registerTaskContext(taskId, ...)`. Tasks dispatched and resumed inside the same process don't need this.
+The manager keeps tool executors in process memory. If the process restarts while a task is suspended, the executor closure is gone, the caller of `resume()` must re-register it first via `manager.registerTaskContext(taskId, ...)`. Tasks dispatched and resumed inside the same process don't need this.
 
 ### Cancelling a suspended task
 
-`manager.cancel(taskId)` works against suspended tasks the same way it works for running ones: the row flips to `cancelled`, the workflow snapshot is cleaned up, and a `task.cancelled` event fires.
+`manager.cancel(taskId)` works against suspended tasks the same way it works for running ones. The row changes to `cancelled` and the workflow snapshot is cleaned up. A `task.cancelled` event then fires.
 
 ## Lifecycle callbacks
 
-Each layer can register terminal-state callbacks. They don't replace one another, and success/failure hooks fire for their respective outcomes:
+Each layer can register terminal-state callbacks. They don't replace one another, and success/failure hooks fire for their outcomes:
 
 - Tool-level `background.onComplete` / `onFailed`: scoped to one tool.
 - Agent-level `backgroundTasks.onTaskComplete` / `onTaskFailed`: scoped to all tasks dispatched by this agent.
@@ -395,6 +395,6 @@ These read from storage rather than the pubsub stream, so they're suitable for p
 - [`Agent.stream()` reference](/reference/streaming/agents/stream)
 - [backgroundTasks configuration reference](/reference/configuration#backgroundtasks)
 - [Durable agents](./durable-agents)
-- [Supervisor agents](/docs/agents/supervisor-agents)
+- [Supervisor agents](/docs/capabilities/subagents)
 - [Stream chunk types](/reference/streaming/ChunkType)
 - [Storage](/docs/storage/overview)

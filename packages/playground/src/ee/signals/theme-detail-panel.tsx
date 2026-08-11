@@ -1,4 +1,3 @@
-import { Button } from '@mastra/playground-ui/components/Button';
 import {
   Drawer,
   DrawerBody,
@@ -7,10 +6,18 @@ import {
   DrawerHeader,
   DrawerTitle,
 } from '@mastra/playground-ui/components/Drawer';
+import { nodeColor } from '@mastra/playground-ui/components/SankeyChart';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { getSignalHue } from '@mastra/playground-ui/ee/signals';
 import { useState } from 'react';
 
+import { EXAMPLES_PAGE_SIZE, ExamplesPager } from './examples-pager';
 import { useThemeDetail, useThemeExamples, useThemeHistory } from './hooks';
+import { formatSnapshotDate, shareSentence, SIGNAL_DESCRIPTIONS } from './signal-formatting';
 import type { ThemeSelection } from './theme-drilldown-data';
+import { ThemeTrendChart } from './theme-trend-chart';
+import { TraceInsightView } from './trace-insight-view';
+import { chronologicalHistoryPoints, themeTrendDirection } from '@/domains/traces/theme-trend';
 
 interface ThemeDetailPanelProps {
   entityId: string;
@@ -29,7 +36,10 @@ export function ThemeDetailPanel({
   selection,
   onClose,
 }: ThemeDetailPanelProps) {
-  const [examplesOffset, setExamplesOffset] = useState(0);
+  const examplesContextKey = `${snapshotId}:${selection?.signalName ?? ''}:${selection?.themeId ?? ''}`;
+  const [examplesPage, setExamplesPage] = useState(() => ({ contextKey: examplesContextKey, offset: 0 }));
+  const examplesOffset = examplesPage.contextKey === examplesContextKey ? examplesPage.offset : 0;
+  const [insightTraceId, setInsightTraceId] = useState<string>();
   const detailQuery = useThemeDetail(
     entityId,
     entityType,
@@ -43,7 +53,7 @@ export function ThemeDetailPanel({
     selection?.signalName ?? 'goal',
     snapshotId,
     selection?.themeId,
-    5,
+    EXAMPLES_PAGE_SIZE,
     examplesOffset,
   );
   const historyQuery = useThemeHistory(
@@ -53,11 +63,17 @@ export function ThemeDetailPanel({
     snapshotTotal > 1 ? selection?.themeId : undefined,
   );
   const title = detailQuery.data?.theme?.label ?? selection?.label ?? 'Theme details';
+  const signalName = selection?.signalName;
+  const historyPoints = historyQuery.data ? chronologicalHistoryPoints(historyQuery.data.points) : [];
 
   return (
     <Drawer
       onOpenChange={open => {
-        if (!open) onClose();
+        if (!open) {
+          setExamplesPage({ contextKey: '', offset: 0 });
+          setInsightTraceId(undefined);
+          onClose();
+        }
       }}
       open={selection !== undefined}
       overlay="none"
@@ -66,97 +82,116 @@ export function ThemeDetailPanel({
     >
       <DrawerContent>
         <DrawerHeader className="border-border1 border-b">
+          {signalName !== undefined && (
+            <span
+              className="font-mono text-xs font-semibold tracking-widest"
+              style={{ color: nodeColor(getSignalHue(signalName)) }}
+            >
+              <Tooltip>
+                <TooltipTrigger className="cursor-default uppercase">{signalName}</TooltipTrigger>
+                <TooltipContent>{SIGNAL_DESCRIPTIONS[signalName]}</TooltipContent>
+              </Tooltip>
+            </span>
+          )}
           <DrawerTitle>{title}</DrawerTitle>
-          <DrawerDescription className="sr-only">Details for {title}</DrawerDescription>
+          <DrawerDescription className="sr-only">
+            Details for the {signalName ?? 'selected'} theme {title}
+          </DrawerDescription>
         </DrawerHeader>
         <DrawerBody className="grid content-start gap-6 overflow-y-auto p-6">
-          {detailQuery.isPending && <p className="text-neutral3 text-sm">Loading theme details…</p>}
-          {detailQuery.isError && <p className="text-sm text-red-500">Unable to load theme details.</p>}
-          {detailQuery.data && !detailQuery.data.theme && (
-            <section>
-              <h2 className="text-neutral6 text-sm font-semibold">Not present in this snapshot</h2>
-              <p className="text-neutral3 mt-2 text-sm">This theme has no data in the selected snapshot.</p>
-            </section>
+          {insightTraceId !== undefined && (
+            <TraceInsightView traceId={insightTraceId} onBack={() => setInsightTraceId(undefined)} />
           )}
-          {detailQuery.data?.theme && (
+          {insightTraceId === undefined && (
             <>
-              <section aria-labelledby="theme-summary-heading">
-                <h2 id="theme-summary-heading" className="text-neutral3 font-mono text-xs tracking-wider uppercase">
-                  Summary
-                </h2>
-                <p className="text-neutral5 mt-3 text-sm">
-                  {detailQuery.data.theme.description ?? 'No description available.'}
-                </p>
-                <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
-                  <div>
-                    <dt className="text-neutral3">Traces</dt>
-                    <dd className="text-neutral5 mt-1 font-mono">{detailQuery.data.theme.traceCount}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-neutral3">Stage share</dt>
-                    <dd className="text-neutral5 mt-1 font-mono">
-                      {Math.round(detailQuery.data.theme.coverage * 100)}%
-                    </dd>
-                  </div>
-                </dl>
-              </section>
-
-              <section aria-labelledby="theme-examples-heading">
-                <h2 id="theme-examples-heading" className="text-neutral3 font-mono text-xs tracking-wider uppercase">
-                  Examples
-                </h2>
-                {examplesQuery.isPending && <p className="text-neutral3 mt-3 text-sm">Loading examples…</p>}
-                {examplesQuery.isError && <p className="mt-3 text-sm text-red-500">Unable to load examples.</p>}
-                {examplesQuery.data && (
-                  <>
-                    {examplesQuery.data.examples.length === 0 ? (
-                      <p className="text-neutral3 mt-3 text-sm">No examples in this snapshot.</p>
-                    ) : (
-                      <ul className="mt-3 space-y-3">
-                        {examplesQuery.data.examples.map(example => (
-                          <li
-                            key={example.traceId}
-                            className="border-border1 bg-surface3 text-neutral5 rounded-md border p-3 text-sm"
-                          >
-                            {example.signalText}
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                    {examplesQuery.data.nextOffset !== undefined && (
-                      <Button
-                        className="mt-3"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setExamplesOffset(examplesQuery.data.nextOffset ?? 0)}
-                      >
-                        Next examples
-                      </Button>
-                    )}
-                  </>
-                )}
-              </section>
-
-              {snapshotTotal > 1 && (
-                <section aria-labelledby="theme-history-heading">
-                  <h2 id="theme-history-heading" className="text-neutral3 font-mono text-xs tracking-wider uppercase">
-                    History
-                  </h2>
-                  {historyQuery.isPending && <p className="text-neutral3 mt-3 text-sm">Loading history…</p>}
-                  {historyQuery.isError && <p className="mt-3 text-sm text-red-500">Unable to load history.</p>}
-                  {historyQuery.data && (
-                    <ol className="mt-3 space-y-3">
-                      {historyQuery.data.points.map(point => (
-                        <li key={point.snapshotId} className="border-border2 border-l pl-3 text-sm">
-                          <p className="text-neutral5 font-medium capitalize">{point.state}</p>
-                          <p className="text-neutral3 mt-1 font-mono text-xs">
-                            {point.traceCount} traces · {Math.round(point.coverage * 100)}%
-                          </p>
-                        </li>
-                      ))}
-                    </ol>
-                  )}
+              {detailQuery.isPending && <p className="text-neutral3 text-sm">Loading theme details…</p>}
+              {detailQuery.isError && <p className="text-sm text-red-500">Unable to load theme details.</p>}
+              {detailQuery.data && !detailQuery.data.theme && (
+                <section>
+                  <h2 className="text-neutral6 text-sm font-semibold">Not present in this snapshot</h2>
+                  <p className="text-neutral3 mt-2 text-sm">This theme has no data in the selected snapshot.</p>
                 </section>
+              )}
+              {detailQuery.data?.theme && (
+                <>
+                  <section aria-labelledby="theme-summary-heading">
+                    <h2 id="theme-summary-heading" className="text-neutral3 font-mono text-xs tracking-wider uppercase">
+                      Summary
+                    </h2>
+                    <p className="text-neutral5 mt-3 text-sm">
+                      {detailQuery.data.theme.description ?? 'No description available.'}
+                    </p>
+                    <p className="text-neutral5 mt-3 font-mono text-sm tabular-nums">
+                      {shareSentence(detailQuery.data.theme.traceCount, detailQuery.data.theme.coverage)}
+                    </p>
+                  </section>
+
+                  <section aria-labelledby="theme-examples-heading">
+                    <h2
+                      id="theme-examples-heading"
+                      className="text-neutral3 font-mono text-xs tracking-wider uppercase"
+                    >
+                      Examples
+                    </h2>
+                    {examplesQuery.isPending && <p className="text-neutral3 mt-3 text-sm">Loading examples…</p>}
+                    {examplesQuery.isError && <p className="mt-3 text-sm text-red-500">Unable to load examples.</p>}
+                    {examplesQuery.data && (
+                      <>
+                        {examplesQuery.data.examples.length === 0 ? (
+                          <p className="text-neutral3 mt-3 text-sm">No examples in this snapshot.</p>
+                        ) : (
+                          <ul className="mt-3 space-y-3">
+                            {examplesQuery.data.examples.map(example => (
+                              <li key={example.traceId}>
+                                <button
+                                  type="button"
+                                  aria-label={`View trace insight for ${example.signalText}`}
+                                  className="border-border1 bg-surface3 text-neutral5 hover:bg-surface5 w-full cursor-pointer rounded-md border p-3 text-left text-sm"
+                                  onClick={() => setInsightTraceId(example.traceId)}
+                                >
+                                  {example.signalText}
+                                </button>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                        <ExamplesPager
+                          traceCount={detailQuery.data.theme.traceCount}
+                          offset={examplesOffset}
+                          onOffsetChange={offset => setExamplesPage({ contextKey: examplesContextKey, offset })}
+                        />
+                      </>
+                    )}
+                  </section>
+
+                  {snapshotTotal > 1 && (
+                    <section aria-labelledby="theme-trend-heading">
+                      <h2 id="theme-trend-heading" className="text-neutral3 font-mono text-xs tracking-wider uppercase">
+                        Trend
+                      </h2>
+                      {historyQuery.isPending && <p className="text-neutral3 mt-3 text-sm">Loading trend…</p>}
+                      {historyQuery.isError && <p className="mt-3 text-sm text-red-500">Unable to load the trend.</p>}
+                      {historyPoints.length > 0 && (
+                        <>
+                          <p className="text-neutral5 mt-3 text-sm">
+                            {/* A nextCursor means older points exist beyond the fetched window,
+                                so the oldest loaded point is a lower bound, not the true origin. */}
+                            {historyQuery.data?.nextCursor
+                              ? `Active since at least ${formatSnapshotDate(historyPoints[0].startedAt)} · in ${historyPoints.length}+ snapshots`
+                              : `First seen ${formatSnapshotDate(historyPoints[0].startedAt)} · in ${historyPoints.length} ${historyPoints.length === 1 ? 'snapshot' : 'snapshots'}`}{' '}
+                            · {themeTrendDirection(historyPoints)}
+                          </p>
+                          {historyPoints.length >= 2 && (
+                            <ThemeTrendChart
+                              points={historyPoints}
+                              color={nodeColor(getSignalHue(signalName ?? 'goal'))}
+                            />
+                          )}
+                        </>
+                      )}
+                    </section>
+                  )}
+                </>
               )}
             </>
           )}

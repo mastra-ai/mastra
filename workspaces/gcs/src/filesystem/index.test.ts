@@ -485,6 +485,13 @@ describe('GCSFilesystem SDK Operations', () => {
       await expect(fs.readFile('/test.txt')).rejects.toThrow('Forbidden');
     });
 
+    it('throws FileNotFoundError for a trailing-slash directory path', async () => {
+      configureMockFile({ download: [Buffer.alloc(0)] });
+
+      await expect(fs.readFile('/logs/', { encoding: 'utf-8' })).rejects.toThrow(/logs/);
+      expect(mockFile.download).not.toHaveBeenCalled();
+    });
+
     it('applies prefix to key', async () => {
       const prefixMockFile = {
         download: vi.fn().mockResolvedValue([Buffer.from('data')]),
@@ -701,20 +708,105 @@ describe('GCSFilesystem SDK Operations', () => {
   });
 
   describe('mkdir()', () => {
-    it('is a no-op (GCS has no real directories)', async () => {
+    it('writes a zero-byte directory marker so empty directories are visible', async () => {
+      mockFile.exists.mockResolvedValueOnce([false]);
+
       await fs.mkdir('/new-dir');
 
-      // No SDK calls should be made
+      expect(mockBucket.file).toHaveBeenCalledWith('new-dir/');
+      const [body, options] = mockFile.save.mock.calls[0];
+      expect(body.length).toBe(0);
+      expect(options).toEqual({ resumable: false });
+    });
+
+    it('normalizes trailing slashes in the marker key', async () => {
+      mockFile.exists.mockResolvedValueOnce([false]);
+
+      await fs.mkdir('/nested/dir//');
+
+      expect(mockBucket.file).toHaveBeenCalledWith('nested/dir/');
+    });
+
+    it('does nothing for the root path', async () => {
+      await fs.mkdir('/');
+
       expect(mockBucket.file).not.toHaveBeenCalled();
+    });
+
+    it('throws FileExistsError when a file occupies the path', async () => {
+      mockFile.exists.mockResolvedValueOnce([true]);
+
+      await expect(fs.mkdir('/thing')).rejects.toThrow(/thing/);
+      expect(mockFile.save).not.toHaveBeenCalled();
+    });
+
+    it('writes one marker for a nested path', async () => {
+      mockFile.exists.mockResolvedValueOnce([false]);
+
+      await fs.mkdir('/a/b');
+
+      expect(mockBucket.file.mock.calls.map((call: unknown[]) => call[0])).toEqual(['a/b', 'a/b/']);
+      expect(mockFile.save).toHaveBeenCalledTimes(1);
+    });
+
+    it('still writes the marker when the existence probe is denied', async () => {
+      mockFile.exists.mockRejectedValueOnce(Object.assign(new Error('Access denied'), { code: 403 }));
+
+      await fs.mkdir('/write-only');
+
+      expect(mockBucket.file).toHaveBeenCalledWith('write-only/');
+      expect(mockFile.save).toHaveBeenCalledTimes(1);
+      expect(fs.status).toBe('ready');
+    });
+
+    it('does nothing for the root path of a configured prefix', async () => {
+      const prefixFs = new GCSFilesystem({
+        bucket: 'test-bucket',
+        prefix: 'base',
+        credentials: { type: 'service_account', project_id: 'test' },
+      });
+      (prefixFs as any)._storage = {};
+      (prefixFs as any)._bucket = mockBucket;
+      (prefixFs as any).status = 'ready';
+
+      await prefixFs.mkdir('/');
+
+      expect(mockBucket.file).not.toHaveBeenCalled();
+      expect(mockFile.save).not.toHaveBeenCalled();
     });
   });
 
   describe('rmdir()', () => {
     it('throws if non-recursive and directory is not empty', async () => {
-      // getFiles with maxResults:1 returns a file → not empty
+      // getFiles returns a file → not empty
       mockBucket.getFiles.mockResolvedValueOnce([[{ name: 'dir/file.txt' }]]);
 
       await expect(fs.rmdir('/dir')).rejects.toThrow('Directory not empty');
+    });
+
+    it('deletes the directory marker of an empty directory', async () => {
+      mockBucket.getFiles.mockResolvedValueOnce([[{ name: 'dir/' }]]);
+
+      await fs.rmdir('/dir');
+
+      expect(mockBucket.file).toHaveBeenCalledWith('dir/');
+      expect(mockFile.delete).toHaveBeenCalledWith({ ignoreNotFound: true });
+    });
+
+    it('does nothing for the root path of a configured prefix', async () => {
+      const prefixFs = new GCSFilesystem({
+        bucket: 'test-bucket',
+        prefix: 'base',
+        credentials: { type: 'service_account', project_id: 'test' },
+      });
+      (prefixFs as any)._storage = {};
+      (prefixFs as any)._bucket = mockBucket;
+      (prefixFs as any).status = 'ready';
+      mockBucket.getFiles.mockResolvedValueOnce([[{ name: 'base/' }]]);
+
+      await prefixFs.rmdir('/');
+
+      expect(mockFile.delete).not.toHaveBeenCalled();
     });
 
     it('recursive calls bucket.deleteFiles with prefix', async () => {
@@ -771,6 +863,23 @@ describe('GCSFilesystem SDK Operations', () => {
       expect(entries).toContainEqual({ name: 'file.txt', type: 'file', size: 50 });
     });
 
+    it('rolls a nested directory marker up to its first segment', async () => {
+      // mkdir('/a/b') writes the single key 'a/b/'
+      mockBucket.getFiles.mockResolvedValueOnce([[{ name: 'a/b/', metadata: { size: 0 } }]]);
+
+      const entries = await fs.readdir('/');
+
+      expect(entries).toEqual([{ name: 'a', type: 'directory' }]);
+    });
+
+    it('reports the full path of a nested directory marker when recursive', async () => {
+      mockBucket.getFiles.mockResolvedValueOnce([[{ name: 'a/b/', metadata: { size: 0 } }]]);
+
+      const entries = await fs.readdir('/', { recursive: true });
+
+      expect(entries).toEqual([{ name: 'a/b', type: 'directory' }]);
+    });
+
     it('filters by extension', async () => {
       mockBucket.getFiles.mockResolvedValueOnce([
         [
@@ -783,6 +892,19 @@ describe('GCSFilesystem SDK Operations', () => {
 
       expect(entries).toHaveLength(1);
       expect(entries[0]!.name).toBe('b.ts');
+    });
+
+    it('excludes directory markers from a recursive listing filtered by extension', async () => {
+      mockBucket.getFiles.mockResolvedValueOnce([
+        [
+          { name: 'notes/', metadata: { size: 0 } },
+          { name: 'notes/a.md', metadata: { size: 1 } },
+        ],
+      ]);
+
+      const entries = await fs.readdir('/', { recursive: true, extension: '.md' });
+
+      expect(entries).toEqual([{ name: 'notes/a.md', type: 'file', size: 1 }]);
     });
 
     it('deduplicates directory entries', async () => {
@@ -966,6 +1088,20 @@ describe('GCSFilesystem SDK Operations', () => {
       expect(stat.type).toBe('directory');
       expect(stat.name).toBe('mydir');
       expect(stat.size).toBe(0);
+    });
+
+    it('treats a trailing slash as a directory even when a file has the same name', async () => {
+      const mockFile = mockBucket.file();
+      mockFile.exists.mockResolvedValue([true]);
+      // isDirectory: has contents
+      mockBucket.getFiles.mockResolvedValueOnce([[{ name: 'report/file.txt' }]]);
+
+      const stat = await fs.stat('/report/');
+
+      expect(stat.type).toBe('directory');
+      expect(stat.name).toBe('report');
+      expect(mockFile.getMetadata).not.toHaveBeenCalled();
+      expect(await fs.isFile('/report/')).toBe(false);
     });
 
     it('throws FileNotFoundError when nothing exists', async () => {

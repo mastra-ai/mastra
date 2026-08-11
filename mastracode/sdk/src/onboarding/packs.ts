@@ -67,7 +67,7 @@ export function getAvailableModePacks(
 ): ModePack[] {
   const packs: ModePack[] = [];
 
-  const openaiCodex = 'openai/gpt-5.6';
+  const openaiCodex = 'openai/gpt-5.6-sol';
   const openaiFast = 'openai/gpt-5.4-mini';
   const anthropicBuild = 'anthropic/claude-fable-5';
 

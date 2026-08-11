@@ -2,6 +2,24 @@ import type { SpanRecord } from '@mastra/core/storage';
 
 type MessageLike = { role?: string; content?: unknown };
 
+function toTimestamp(value: Date | string | null | undefined): number | undefined {
+  if (value == null) return undefined;
+  const timestamp = value instanceof Date ? value.getTime() : new Date(value).getTime();
+  return Number.isFinite(timestamp) ? timestamp : undefined;
+}
+
+export function formatSpanDuration(
+  startedAt: Date | string | null | undefined,
+  endedAt: Date | string | null | undefined,
+): string | undefined {
+  const startedAtMs = toTimestamp(startedAt);
+  const endedAtMs = toTimestamp(endedAt);
+  if (startedAtMs === undefined || endedAtMs === undefined || endedAtMs < startedAtMs) return undefined;
+
+  const durationMs = endedAtMs - startedAtMs;
+  return durationMs < 1000 ? `${durationMs}ms` : `${(durationMs / 1000).toFixed(2)}s`;
+}
+
 /**
  * Extract a truncated text preview from a span's input field.
  * Agent traces store `input` as an array of message objects.

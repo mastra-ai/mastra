@@ -9,7 +9,7 @@ packages:
 
 **Added in:** `@mastra/core@1.1.0`
 
-A Mastra workspace gives agents a persistent environment for storing files and executing commands. Agents use workspace tools to read and write files, run shell commands, and search indexed content.
+A Mastra workspace gives agents a persistent environment for storing files and executing commands. Agents use workspace tools to read and write files and run shell commands, plus search indexed content.
 
 A workspace supports the following features:
 
@@ -93,11 +93,11 @@ Mastra registers global and agent workspaces so they can be listed and retrieved
 
 For manual cleanup, use [`mastra.removeWorkspace()`](/reference/core/removeWorkspace). Pass `{ destroy: true }` when the workspace should be destroyed before it's removed from the registry.
 
-Static providers are owned by the workspace. Resolver-backed providers are owned by your application because the workspace creates them at request time. See [dynamic sandbox lifecycle ownership](/docs/workspace/sandbox#lifecycle-ownership) for the resolver cleanup model.
+Static providers are owned by the workspace. Resolver-backed providers are owned by your application because the workspace creates them at request time. See [runtime sandbox lifecycle ownership](/docs/workspace/sandbox#lifecycle-ownership) for the resolver cleanup model.
 
 ## Configuration patterns
 
-Workspaces support several configuration patterns depending on what capabilities your agent needs. The two main building blocks are `filesystem` (file tools) and `sandbox` (command execution), with `mounts` as the way to bridge cloud storage into sandboxes.
+Workspaces support several configuration patterns depending on what capabilities your agent needs. The main building blocks are `filesystem` (file tools) and `sandbox` (command execution), with `mounts` as the way to bridge cloud storage into sandboxes.
 
 ### Filesystem + sandbox (local)
 
@@ -139,7 +139,7 @@ You can mount multiple providers at different paths. Each mount path must be uni
 
 :::note
 
-`filesystem` and `mounts` are mutually exclusive — you can't use both in the same workspace. Use `filesystem` for a single provider without a sandbox, or `mounts` when you need to combine cloud storage with a sandbox.
+`filesystem` and `mounts` are mutually exclusive, you can't use both in the same workspace. Use `filesystem` for a single provider without a sandbox, or `mounts` when you need to combine cloud storage with a sandbox.
 
 :::
 
@@ -261,7 +261,7 @@ const workspace = new Workspace({
 
 ### Dynamic tool configuration
 
-Tool options that accept functions receive a context object and return a boolean. This enables context-aware tool behavior.
+Tool options that accept functions receive a context object and return a boolean. It enables context-aware tool behavior.
 
 ```typescript title="src/mastra/workspaces.ts"
 const workspace = new Workspace({
@@ -289,7 +289,7 @@ Functions for `enabled` receive `{ requestContext, workspace }`. Functions for `
 
 ### Tool name remapping
 
-Rename workspace tools to match the conventions your agent expects. The config key remains the original `WORKSPACE_TOOLS` constant — only the exposed name changes.
+Rename workspace tools to match the conventions your agent expects. The config key remains the original `WORKSPACE_TOOLS` constant, only the exposed name changes.
 
 ```typescript title="src/mastra/workspaces.ts"
 import { Workspace, LocalFilesystem, LocalSandbox, WORKSPACE_TOOLS } from '@mastra/core/workspace'
@@ -308,7 +308,7 @@ const workspace = new Workspace({
 })
 ```
 
-The agent sees `view`, `search_content`, `find_files`, `execute_command`, and `lsp_inspect` instead of the default `mastra_workspace_*` names. Tool names must be unique — duplicate names or conflicts with other default names throw an error.
+The agent sees `view`, `search_content`, `find_files`, `execute_command`, and `lsp_inspect` instead of the default `mastra_workspace_*` names. Tool names must be unique, duplicate names or conflicts with other default names throw an error.
 
 ### Tool hooks
 
@@ -334,17 +334,17 @@ const workspace = new Workspace({
 
 Return `{ proceed: false, output }` from `beforeToolCall` to skip the tool call and use `output` as its result.
 
-If the owning agent also defines [tool hooks](/docs/agents/using-tools#run-logic-around-tool-calls), workspace hooks run inside the agent hook wrapper: agent `beforeToolCall` first, then workspace `beforeToolCall`, then the tool, then workspace `afterToolCall`, then agent `afterToolCall`.
+If the owning agent also defines [tool hooks](/docs/agents/using-tools#run-logic-around-tool-calls), workspace hooks run inside the agent hook wrapper. The order is agent `beforeToolCall`, workspace `beforeToolCall`, the tool, workspace `afterToolCall`, and agent `afterToolCall`.
 
 ## LSP inspection
 
-Enable `lsp` on a workspace to add semantic code inspection through language servers. This adds the `mastra_workspace_lsp_inspect` tool by default, which can return hover information, definition locations, and implementations for a symbol at a specific cursor position.
+Enable `lsp` on a workspace to add semantic code inspection through language servers. This adds the `mastra_workspace_lsp_inspect` tool by default, which can return hover information and definition locations, plus implementations for a symbol at a specific cursor position.
 
 See [LSP inspection](/docs/workspace/lsp) for configuration, examples, and tool name remapping.
 
 ### Output truncation
 
-Workspace tools automatically truncate large outputs to avoid exceeding LLM context limits. Two layers of truncation apply:
+Workspace tools automatically truncate large outputs to avoid exceeding LLM context limits. These layers of truncation apply:
 
 1. **Line-based tail**: Command output is limited to the last 200 lines by default (configurable per-command via the `tail` parameter)
 1. **Token-based limit**: Tool output is capped at 2000 tokens by default
@@ -389,7 +389,7 @@ await filesystem.writeFile('/docs/file.md', newContent, {
 
 ## Initialization
 
-Calling `init()` is optional in most cases—some providers initialize on first operation. Call `init()` manually when using a workspace outside of Mastra (standalone scripts, tests) or when you need to pre-provision resources before the first agent interaction.
+Calling `init()` is optional in most cases, some providers initialize on first operation. Call `init()` manually when using a workspace outside of Mastra (standalone scripts, tests) or when you need to pre-provision resources before the first agent interaction.
 
 ```typescript title="src/mastra/workspaces.ts"
 import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace'

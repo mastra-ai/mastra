@@ -41,9 +41,9 @@ for await (const chunk of stream.fullStream) {
 }
 ```
 
-:::info
+:::note
 
-`streamUntilIdle()` requires both a [`BackgroundTaskManager`](/reference/configuration#backgroundtasks) and a [memory](/docs/memory/overview) backend. Without either, it falls through to a plain `agent.stream()` call.
+`streamUntilIdle()` requires both a [`BackgroundTaskManager`](/reference/configuration#backgroundtasks) and a [memory](/docs/memory/overview) backend. Without either, it uses a plain `agent.stream()` call.
 
 :::
 
@@ -112,7 +112,7 @@ For every other option (`maxSteps`, `modelSettings`, `toolChoice`, `outputProces
 
 ### Aggregate properties caveat
 
-`streamUntilIdle()` returns a proxy over the first turn's `MastraModelOutput`. Only `fullStream` is replaced with a combined stream that spans every continuation. Every other property — `text`, `toolCalls`, `toolResults`, `finishReason`, `messageList`, `getFullOutput()` — resolves against the **first turn's** internal buffer.
+`streamUntilIdle()` returns a proxy over the first turn's `MastraModelOutput`. Only `fullStream` is replaced with a combined stream that spans every continuation. Every other property (`text`, `toolCalls`, `toolResults`, `finishReason`, `messageList`, and `getFullOutput()`) resolves against the **first turn's** internal buffer.
 
 If you need an aggregate view across all continuations, consume `fullStream` yourself and accumulate.
 

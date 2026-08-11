@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { UniqueViolationError } from '@mastra/core/storage';
 
 import type {
   ConfiguredExternalRepositoryKey,
@@ -6,9 +7,11 @@ import type {
   CreateSourceControlSessionInput,
   ExternalRepositoryProjectTarget,
   LinkProjectRepositoryInput,
+  PooledSandbox,
   ProjectRepository,
   ProjectRepositorySandbox,
   ProjectSourceControlConnection,
+  ReleasePooledSandboxInput,
   SourceControlInstallation,
   SourceControlRepository,
   SourceControlSession,
@@ -28,6 +31,7 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
   connectionsRows: ProjectSourceControlConnection[] = [];
   projectRepositoriesRows: ProjectRepository[] = [];
   sandboxesRows: ProjectRepositorySandbox[] = [];
+  sandboxPoolRows: PooledSandbox[] = [];
   worktreesRows: SourceControlWorktree[] = [];
   sessionsRows: SourceControlSession[] = [];
 
@@ -144,6 +148,41 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
       };
       this.repositoriesRows.push(created);
       return created;
+    },
+    migrateInstallation: async ({
+      orgId,
+      id,
+      newInstallationId,
+    }: {
+      orgId: string;
+      id: string;
+      newInstallationId: string;
+    }) => {
+      const existing = await this.repositories.get({ orgId, id });
+      if (!existing) {
+        throw new Error(`Repository ${id} not found in organization ${orgId}`);
+      }
+      if (!(await this.installations.get({ orgId, id: newInstallationId }))) {
+        throw new Error('Source-control installation not found');
+      }
+      // Check if a repository with the same external_id exists under the new installation
+      const conflict = this.repositoriesRows.find(
+        row => row.installationId === newInstallationId && row.externalId === existing.externalId,
+      );
+      if (conflict) {
+        // Return the existing repository under the new installation
+        return conflict;
+      }
+      // Update the repository's installation
+      existing.installationId = newInstallationId;
+      existing.updatedAt = new Date();
+      // Migrate dependent connections to the new installation
+      for (const conn of this.connectionsRows) {
+        if (conn.installationId === existing.installationId) {
+          conn.installationId = newInstallationId;
+        }
+      }
+      return existing;
     },
   };
 
@@ -337,6 +376,25 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
     },
   };
 
+  readonly sandboxPool = {
+    release: async (input: ReleasePooledSandboxInput): Promise<void> => {
+      // Mirror the SQL implementation: a missing project-repository link
+      // makes the release a silent no-op.
+      if (!this.projectRepositoriesRows.some(row => row.id === input.projectRepositoryId)) return;
+      if (this.sandboxPoolRows.some(row => row.sandboxId === input.sandboxId)) return;
+      this.sandboxPoolRows.push({ id: randomUUID(), releasedAt: new Date(), ...input });
+    },
+    claim: async ({ projectRepositoryId }: { projectRepositoryId: string }): Promise<PooledSandbox | null> => {
+      const candidates = this.sandboxPoolRows
+        .filter(row => row.projectRepositoryId === projectRepositoryId)
+        .sort((left, right) => right.releasedAt.getTime() - left.releasedAt.getTime());
+      const claimed = candidates[0];
+      if (!claimed) return null;
+      this.sandboxPoolRows.splice(this.sandboxPoolRows.indexOf(claimed), 1);
+      return claimed;
+    },
+  };
+
   readonly worktrees = {
     upsert: async (input: UpsertSourceControlWorktreeInput): Promise<void> => {
       const existing = this.worktreesRows.find(
@@ -424,13 +482,19 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
     create: async (input: CreateSourceControlSessionInput): Promise<SourceControlSession> => {
       const existing = await this.sessions.getForBranch(input);
       if (existing) return existing;
+      if (this.sessionsRows.some(row => row.sessionId === input.sessionId)) {
+        throw new UniqueViolationError('Source-control session ID already exists');
+      }
       const now = new Date();
       const session: SourceControlSession = {
         id: randomUUID(),
         ...input,
+        title: input.title ?? null,
         sandboxId: null,
         sandboxWorkdir: null,
         materializedAt: null,
+        firstMessageAt: null,
+        firstMeaningfulExecAt: null,
         createdAt: now,
         updatedAt: now,
       };
@@ -452,6 +516,16 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
     markMaterialized: async ({ id }: { id: string }) => {
       const row = this.sessionsRows.find(candidate => candidate.id === id);
       if (row) Object.assign(row, { materializedAt: new Date(), updatedAt: new Date() });
+    },
+    markFirstMessage: async ({ sessionId }: { sessionId: string }) => {
+      const row = this.sessionsRows.find(candidate => candidate.sessionId === sessionId);
+      if (row && row.firstMessageAt === null) Object.assign(row, { firstMessageAt: new Date(), updatedAt: new Date() });
+    },
+    markFirstMeaningfulExec: async ({ sessionId }: { sessionId: string }) => {
+      const row = this.sessionsRows.find(candidate => candidate.sessionId === sessionId);
+      if (row && row.firstMeaningfulExecAt === null) {
+        Object.assign(row, { firstMeaningfulExecAt: new Date(), updatedAt: new Date() });
+      }
     },
     delete: async (id: string) => {
       this.sessionsRows.splice(0, this.sessionsRows.length, ...this.sessionsRows.filter(row => row.id !== id));

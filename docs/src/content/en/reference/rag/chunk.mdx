@@ -7,7 +7,7 @@ packages:
 
 # .chunk()
 
-The `.chunk()` function splits documents into smaller segments using various strategies and options.
+The `.chunk()` function splits documents into smaller segments using strategies and options.
 
 ## Example
 
@@ -45,7 +45,7 @@ const chunksWithMetadata = await doc.chunk({
 ## Parameters
 
 The following parameters are available for all chunking strategies.
-**Important:** Each strategy will only utilize a subset of these parameters relevant to its specific use case.
+Each strategy will only utilize a subset of these parameters relevant to its specific use case.
 
 <PropertiesTable
   content={[
@@ -62,7 +62,7 @@ The following parameters are available for all chunking strategies.
     isOptional: true,
     defaultValue: '4000',
     description:
-      'Maximum size of each chunk. **Note:** Some strategy configurations (markdown with headers, HTML with headers) ignore this parameter.',
+      'Maximum size of each chunk. Some strategy configurations (markdown with headers, HTML with headers) ignore this parameter.',
   },
   {
     name: 'overlap',
@@ -297,7 +297,7 @@ The options documented below are passed directly at the top level of the configu
 ]}
 />
 
-**Important:** When using the HTML strategy, all general options are ignored. Use `headers` for header-based splitting or `sections` for section-based splitting. If used together, `sections` will be ignored.
+When using the HTML strategy, all general options are ignored. Use `headers` for header-based splitting or `sections` for section-based splitting. If used together, `sections` will be ignored.
 
 ### Markdown
 
@@ -324,7 +324,7 @@ The options documented below are passed directly at the top level of the configu
 ]}
 />
 
-**Important:** When using the `headers` option, the markdown strategy ignores all general options and content is split based on the markdown header structure. To use size-based chunking with markdown, omit the `headers` parameter.
+When using the `headers` option, the markdown strategy ignores all general options and content is split based on the markdown header structure. To use size-based chunking with markdown, omit the `headers` parameter.
 
 ### Semantic Markdown
 

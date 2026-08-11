@@ -1,14 +1,14 @@
 import { useParams } from 'react-router';
 
 import { useFactoryQuery } from '../../../../../hooks/useFactories';
+import { useWorkItemsQuery } from '../../../../../hooks/useWorkItems';
 import { useChatSessionContext } from '../../context/useChatSessionContext';
-import { useChatTranscript } from '../../context/useChatTranscript';
+import { PullRequestLinks } from '../PullRequestLinks';
 import { ActiveModel } from './ActiveModel';
 import { ConnectionActivity } from './ConnectionActivity';
 import { GoalStatus } from './GoalStatus';
 import { ModesSelection } from './ModesSelection';
 import { OperationalMemoryStatus } from './OperationalMemoryStatus';
-import { PullRequestLinks } from './PullRequestLinks';
 import { QueuedFollowUps } from './QueuedFollowUps';
 import { RuntimeActivity } from './RuntimeActivity';
 
@@ -18,14 +18,20 @@ import { RuntimeActivity } from './RuntimeActivity';
  */
 export function StatusLine() {
   const { factoryId, threadId } = useParams<{ factoryId: string; threadId: string }>();
-  const { baseUrl, resourceId, projectPath, factorySessionState } = useChatSessionContext();
+  const { projectPath, factorySessionState } = useChatSessionContext();
   const { data: factory } = useFactoryQuery(factoryId);
-  const { transcript, busy } = useChatTranscript();
   const repository = factory?.repositories.find(
     repo => repo.projectRepositoryId === factorySessionState?.projectRepositoryId,
   );
-  const projectRepositoryId = repository?.projectRepositoryId;
   const factoryProjectId = factorySessionState?.factoryProjectId;
+  const factoryProjectKey = typeof factoryProjectId === 'string' ? factoryProjectId : undefined;
+  const workItems = useWorkItemsQuery(factoryProjectKey);
+  const currentItem = workItems.data?.find(item =>
+    Object.values(item.sessions).some(
+      session => session.threadId === threadId && (!projectPath || session.sessionId === projectPath),
+    ),
+  );
+  const workItemsPending = Boolean(factoryProjectKey) && workItems.isPending;
 
   return (
     <div
@@ -39,17 +45,9 @@ export function StatusLine() {
       <ConnectionActivity />
       <QueuedFollowUps />
       <GoalStatus />
-      <PullRequestLinks
-        baseUrl={baseUrl}
-        resourceId={resourceId}
-        projectPath={projectPath}
-        projectRepositoryId={projectRepositoryId}
-        factoryProjectId={factoryProjectId}
-        repositorySlug={repository?.slug}
-        threadId={threadId}
-        transcriptEntries={transcript.entries}
-        busy={busy}
-      />
+      {!workItemsPending && currentItem?.source !== 'github-pr' ? (
+        <PullRequestLinks repository={repository} threadId={threadId} />
+      ) : null}
     </div>
   );
 }

@@ -7,7 +7,9 @@ import { describe, it, expect } from 'vitest';
 import { z } from 'zod';
 // @ts-ignore
 import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
+import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
+import { createTextStreamModel } from '../mock-models';
 import type { WorkflowTestContext, WorkflowRegistry, WorkflowCreatorContext } from '../types';
 
 /**
@@ -379,6 +381,65 @@ export function createAgentStepWorkflows(ctx: WorkflowCreatorContext) {
       resetReceivedOptions: () => {
         receivedOptions = null;
       },
+    };
+  }
+
+  const writer = new Agent({
+    id: 'writer',
+    name: 'writer',
+    instructions: 'echo',
+    model: createTextStreamModel('hello world'),
+  });
+
+  // Test: declarative .agent() builder
+  {
+    const workflow = createWorkflow({
+      id: 'declarative-agent',
+      inputSchema: z.object({ prompt: z.string() }),
+      outputSchema: z.object({ text: z.string() }),
+    });
+    workflow.agent(writer).commit();
+    workflows['declarative-agent'] = { workflow, mocks: {} };
+  }
+
+  // Test: same agent twice under distinct step ids
+  {
+    const workflow = createWorkflow({
+      id: 'declarative-agent-twice',
+      inputSchema: z.object({ prompt: z.string() }),
+      outputSchema: z.object({ text: z.string() }),
+    });
+    workflow
+      .agent(writer, undefined, { id: 'first' })
+      .map(async () => ({ prompt: 'again' }))
+      .agent(writer, undefined, { id: 'second' })
+      .commit();
+    workflows['declarative-agent-twice'] = { workflow, mocks: {} };
+  }
+
+  // Test: option B — .then(createStep(agent))
+  {
+    const workflow = createWorkflow({
+      id: 'declarative-agent-option-b',
+      inputSchema: z.object({ prompt: z.string() }),
+      outputSchema: z.object({ text: z.string() }),
+    });
+    workflow.then(createStep(writer)).commit();
+    workflows['declarative-agent-option-b'] = { workflow, mocks: {} };
+  }
+
+  // Test: declarative .agent('id') resolves from the Mastra registry at run time
+  {
+    const workflow = createWorkflow({
+      id: 'declarative-agent-by-id',
+      inputSchema: z.object({ prompt: z.string() }),
+      outputSchema: z.object({ text: z.string() }),
+    });
+    workflow.agent('writer').commit();
+    workflows['declarative-agent-by-id'] = {
+      workflow,
+      mocks: {},
+      mastraAgents: { writer },
     };
   }
 
@@ -787,5 +848,60 @@ export function createAgentStepTests(ctx: WorkflowTestContext, registry?: Workfl
         });
       },
     );
+
+    describe('Declarative .agent() builder', () => {
+      it('should execute an agent via the .agent() builder', async () => {
+        const { workflow } = registry!['declarative-agent']!;
+
+        const result = await execute(workflow, { prompt: 'say hi' });
+
+        expect(result.status).toBe('success');
+        expect(result.steps['writer']).toMatchObject({
+          status: 'success',
+          output: { text: 'hello world' },
+        });
+        expect(workflow.steps['writer']?.component).toBe('AGENT');
+      });
+
+      it('should run the same agent twice under distinct step ids', async () => {
+        const { workflow } = registry!['declarative-agent-twice']!;
+
+        const result = await execute(workflow, { prompt: 'hi' });
+
+        expect(result.status).toBe('success');
+        expect(result.steps['first']).toMatchObject({
+          status: 'success',
+          output: { text: 'hello world' },
+        });
+        expect(result.steps['second']).toMatchObject({
+          status: 'success',
+          output: { text: 'hello world' },
+        });
+      });
+
+      it('should execute an agent via .then(createStep(agent))', async () => {
+        const { workflow } = registry!['declarative-agent-option-b']!;
+
+        const result = await execute(workflow, { prompt: 'say hi' });
+
+        expect(result.status).toBe('success');
+        expect(result.steps['writer']).toMatchObject({
+          status: 'success',
+          output: { text: 'hello world' },
+        });
+      });
+
+      it('should resolve a string-id agent from the Mastra registry at execution', async () => {
+        const { workflow } = registry!['declarative-agent-by-id']!;
+
+        const result = await execute(workflow, { prompt: 'say hi' });
+
+        expect(result.status).toBe('success');
+        expect(result.steps['writer']).toMatchObject({
+          status: 'success',
+          output: { text: 'hello world' },
+        });
+      });
+    });
   });
 }

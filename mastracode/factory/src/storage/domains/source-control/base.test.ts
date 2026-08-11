@@ -255,6 +255,100 @@ describe('SourceControlStorage', () => {
     ).toBeNull();
   });
 
+  it('releases and claims pooled sandboxes scoped to the project-repository link', async () => {
+    const project = await createProject();
+    const link = await linkRepository({ factoryProjectId: project.id });
+
+    expect(await github.sandboxPool.claim({ projectRepositoryId: link.id })).toBeNull();
+
+    await github.sandboxPool.release({
+      orgId: 'org-1',
+      projectRepositoryId: link.id,
+      userId: 'user-1',
+      sandboxId: 'sandbox-a',
+      sandboxWorkdir: '/workspace/mastra',
+    });
+    await github.sandboxPool.release({
+      orgId: 'org-1',
+      projectRepositoryId: link.id,
+      userId: 'user-1',
+      sandboxId: 'sandbox-b',
+      sandboxWorkdir: '/workspace/mastra',
+    });
+    // Releasing the same provider sandbox twice keeps one pool row.
+    await github.sandboxPool.release({
+      orgId: 'org-1',
+      projectRepositoryId: link.id,
+      userId: 'user-1',
+      sandboxId: 'sandbox-a',
+      sandboxWorkdir: '/workspace/mastra',
+    });
+
+    expect(await github.sandboxPool.claim({ projectRepositoryId: 'missing' })).toBeNull();
+
+    // The pool is per-repository, not per-user: a different user's session
+    // may claim a VM released by user-1 (tokens are never stored in the VM).
+    const first = await github.sandboxPool.claim({ projectRepositoryId: link.id });
+    const second = await github.sandboxPool.claim({ projectRepositoryId: link.id });
+    expect([first?.sandboxId, second?.sandboxId].sort()).toEqual(['sandbox-a', 'sandbox-b']);
+    expect([first, second].find(claimed => claimed?.sandboxId === 'sandbox-a')).toMatchObject({
+      orgId: 'org-1',
+      projectRepositoryId: link.id,
+      userId: 'user-1',
+      sandboxWorkdir: '/workspace/mastra',
+    });
+    expect(await github.sandboxPool.claim({ projectRepositoryId: link.id })).toBeNull();
+  });
+
+  it('hands one pooled sandbox to exactly one concurrent claimer', async () => {
+    const project = await createProject();
+    const link = await linkRepository({ factoryProjectId: project.id });
+    await github.sandboxPool.release({
+      orgId: 'org-1',
+      projectRepositoryId: link.id,
+      userId: 'user-1',
+      sandboxId: 'sandbox-a',
+      sandboxWorkdir: '/workspace/mastra',
+    });
+
+    const claims = await Promise.all([
+      github.sandboxPool.claim({ projectRepositoryId: link.id }),
+      github.sandboxPool.claim({ projectRepositoryId: link.id }),
+    ]);
+    expect(claims.filter(claimed => claimed !== null)).toHaveLength(1);
+  });
+
+  it('treats releasing into a missing project repository as a silent no-op', async () => {
+    // Best-effort contract: a concurrently unlinked repository must not turn
+    // a background release into a thrown error.
+    await expect(
+      github.sandboxPool.release({
+        orgId: 'org-1',
+        projectRepositoryId: 'missing',
+        userId: 'user-1',
+        sandboxId: 'sandbox-a',
+        sandboxWorkdir: '/workspace/mastra',
+      }),
+    ).resolves.toBeUndefined();
+    expect(await github.sandboxPool.claim({ projectRepositoryId: 'missing' })).toBeNull();
+  });
+
+  it('drops pooled sandboxes when the project repository is unlinked', async () => {
+    const project = await createProject();
+    const link = await linkRepository({ factoryProjectId: project.id });
+    await github.sandboxPool.release({
+      orgId: 'org-1',
+      projectRepositoryId: link.id,
+      userId: 'user-1',
+      sandboxId: 'sandbox-a',
+      sandboxWorkdir: '/workspace/mastra',
+    });
+
+    await github.projectRepositories.unlink({ orgId: 'org-1', id: link.id });
+
+    expect(await github.sandboxPool.claim({ projectRepositoryId: link.id })).toBeNull();
+  });
+
   it('re-points a sandbox binding workdir and clears its materialization', async () => {
     const project = await createProject();
     const link = await linkRepository({ factoryProjectId: project.id });
@@ -308,6 +402,96 @@ describe('SourceControlStorage', () => {
         ...projectRepositoryInput,
       }),
     ).rejects.toThrow(/does not belong to the connection installation/);
+  });
+
+  it('round-trips nullable session titles', async () => {
+    const project = await createProject();
+    const link = await linkRepository({ factoryProjectId: project.id });
+    const titled = await github.sessions.create({
+      sessionId: '00000000-0000-4000-8000-000000000001',
+      projectRepositoryId: link.id,
+      orgId: 'org-1',
+      userId: 'user-1',
+      branch: 'user/session-00000000-0000-4000-8000-000000000001',
+      baseBranch: 'main',
+      title: 'Fix login flow',
+    });
+    const untitled = await github.sessions.create({
+      sessionId: '00000000-0000-4000-8000-000000000002',
+      projectRepositoryId: link.id,
+      orgId: 'org-1',
+      userId: 'user-1',
+      branch: 'user/session-00000000-0000-4000-8000-000000000002',
+      baseBranch: 'main',
+    });
+
+    expect(titled.title).toBe('Fix login flow');
+    expect(untitled.title).toBeNull();
+    await expect(github.sessions.getBySessionId(titled.sessionId)).resolves.toMatchObject({
+      title: 'Fix login flow',
+    });
+    await expect(github.sessions.list({ projectRepositoryId: link.id, userId: 'user-1' })).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ sessionId: titled.sessionId, title: 'Fix login flow' }),
+        expect.objectContaining({ sessionId: untitled.sessionId, title: null }),
+      ]),
+    );
+  });
+
+  it('records first_message_at write-once via markFirstMessage', async () => {
+    const project = await createProject();
+    const link = await linkRepository({ factoryProjectId: project.id });
+    const session = await github.sessions.create({
+      sessionId: '00000000-0000-4000-8000-000000000003',
+      projectRepositoryId: link.id,
+      orgId: 'org-1',
+      userId: 'user-1',
+      branch: 'user/session-00000000-0000-4000-8000-000000000003',
+      baseBranch: 'main',
+    });
+    expect(session.firstMessageAt).toBeNull();
+
+    await github.sessions.markFirstMessage({ sessionId: session.sessionId });
+    const marked = await github.sessions.getBySessionId(session.sessionId);
+    expect(marked?.firstMessageAt).toBeInstanceOf(Date);
+
+    // A later call must not move the timestamp: the guarded update only
+    // matches rows where the column is still NULL.
+    await new Promise(resolve => setTimeout(resolve, 5));
+    await github.sessions.markFirstMessage({ sessionId: session.sessionId });
+    const again = await github.sessions.getBySessionId(session.sessionId);
+    expect(again?.firstMessageAt?.getTime()).toBe(marked!.firstMessageAt!.getTime());
+
+    // Sessions without a source-control row are a zero-row no-op.
+    await expect(github.sessions.markFirstMessage({ sessionId: 'missing-session' })).resolves.toBeUndefined();
+  });
+
+  it('records first_meaningful_exec_at write-once via markFirstMeaningfulExec', async () => {
+    const project = await createProject();
+    const link = await linkRepository({ factoryProjectId: project.id });
+    const session = await github.sessions.create({
+      sessionId: '00000000-0000-4000-8000-000000000004',
+      projectRepositoryId: link.id,
+      orgId: 'org-1',
+      userId: 'user-1',
+      branch: 'user/session-00000000-0000-4000-8000-000000000004',
+      baseBranch: 'main',
+    });
+    expect(session.firstMeaningfulExecAt).toBeNull();
+
+    await github.sessions.markFirstMeaningfulExec({ sessionId: session.sessionId });
+    const marked = await github.sessions.getBySessionId(session.sessionId);
+    expect(marked?.firstMeaningfulExecAt).toBeInstanceOf(Date);
+
+    // A later call must not move the timestamp: the guarded update only
+    // matches rows where the column is still NULL.
+    await new Promise(resolve => setTimeout(resolve, 5));
+    await github.sessions.markFirstMeaningfulExec({ sessionId: session.sessionId });
+    const again = await github.sessions.getBySessionId(session.sessionId);
+    expect(again?.firstMeaningfulExecAt?.getTime()).toBe(marked!.firstMeaningfulExecAt!.getTime());
+
+    // Sessions without a source-control row are a zero-row no-op.
+    await expect(github.sessions.markFirstMeaningfulExec({ sessionId: 'missing-session' })).resolves.toBeUndefined();
   });
 
   it('clears every owned source-control collection', async () => {

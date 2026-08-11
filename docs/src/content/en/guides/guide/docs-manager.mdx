@@ -8,7 +8,7 @@ import StepItem from "@site/src/components/StepItem";
 
 # Building a docs manager
 
-In this guide, you'll build a documentation manager that maintains your project's docs. It creates well-structured markdown files, keeps documentation organized, and prevents accidental overwrites. You'll learn how to set up a workspace filesystem, create an agent with document management instructions, and use it to generate and update documentation through conversational prompts.
+In this guide, you'll build a documentation manager that maintains your project's docs. It creates well-structured markdown files and keeps documentation organized while preventing accidental overwrites. You'll set up a workspace filesystem and create an agent with document management instructions. Then you'll use conversational prompts to generate and update documentation.
 
 ## Prerequisites
 
@@ -51,7 +51,7 @@ Inside the `workspace` directory, create the following folders:
 - `docs/api/`: For API reference documentation
 - `docs/tutorials/`: For step-by-step tutorials
 
-Create a `workspace/docs/README.md` file that serves as the documentation index:
+Create `workspace/docs/README.md` as the documentation index:
 
 ```markdown title="workspace/docs/README.md"
 # Project Documentation
@@ -210,7 +210,7 @@ Try updating an existing document:
 Update the getting started guide to include a section on configuration after the Quick Example
 ```
 
-The agent should read the existing `getting-started.md` file, find the right insertion point, and add the new section without disrupting existing content.
+The agent should read the existing `getting-started.md` file and find the right insertion point. It should add the new section without disrupting existing content.
 
 ### Organize documentation
 

@@ -13,8 +13,20 @@ export function attachmentsToParts(attachments: Attachment[]): ContentPart[] {
   const parts: ContentPart[] = [];
 
   for (const attachment of attachments) {
-    // Categorize the attachment URL to determine if it's a URL, data URI, or raw base64
+    // Categorize the attachment URL to determine if it's a URL, data URI, raw base64,
+    // or a provider file ID (e.g. OpenAI "file-...")
     const categorized = categorizeFileData(attachment.url, attachment.contentType);
+
+    // Provider file IDs are not parseable URLs — pass them through as file parts
+    // untouched so providers can forward them by reference (e.g. { file_id: "file-..." }).
+    if (categorized.type === 'providerFileId') {
+      parts.push({
+        type: 'file',
+        data: attachment.url,
+        mimeType: attachment.contentType || 'application/octet-stream',
+      });
+      continue;
+    }
 
     // If it's raw data (base64), convert it to a data URI
     let urlString = attachment.url;

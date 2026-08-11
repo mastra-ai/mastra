@@ -142,6 +142,48 @@ describe('MemoryStorageMongoDB — index definitions and metadata storage', () =
     expect(String(err.id)).toContain('CREATE_DEFAULT_INDEXES');
   });
 
+  test('createDefaultIndexes emits migration steps on IndexOptionsConflict (code 85)', async () => {
+    const conflict = Object.assign(new Error('index conflict'), { code: 85 });
+    const throwingMemory = new MemoryStorageMongoDB({
+      connectorHandler: {
+        getCollection: async () =>
+          ({
+            createIndex: async () => {
+              throw conflict;
+            },
+          }) as any,
+        close: async () => {},
+      },
+    });
+
+    const err = await throwingMemory.createDefaultIndexes().catch(e => e);
+    expect(err).toBeInstanceOf(MastraError);
+    expect(err.message).toContain('non-unique');
+    expect(err.message).toContain('dropIndex');
+    expect(err.message).toContain('createIndex');
+    expect(err.message).toContain('skipDefaultIndexes');
+  });
+
+  test('createDefaultIndexes emits generic message for non-conflict errors', async () => {
+    const otherError = Object.assign(new Error('disk full'), { code: 28 });
+    const throwingMemory = new MemoryStorageMongoDB({
+      connectorHandler: {
+        getCollection: async () =>
+          ({
+            createIndex: async () => {
+              throw otherError;
+            },
+          }) as any,
+        close: async () => {},
+      },
+    });
+
+    const err = await throwingMemory.createDefaultIndexes().catch(e => e);
+    expect(err).toBeInstanceOf(MastraError);
+    expect(err.message).not.toContain('non-unique');
+    expect(err.message).toContain('skipDefaultIndexes');
+  });
+
   test('createDefaultIndexes resolves when index creation succeeds', async () => {
     const okMemory = new MemoryStorageMongoDB({
       connectorHandler: {

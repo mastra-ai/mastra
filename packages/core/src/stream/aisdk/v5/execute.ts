@@ -8,6 +8,7 @@ import type { ModelMethodType } from '../../../llm/model/model.loop.types';
 import { modelSupportsStructuredOutput } from '../../../llm/model/provider-registry';
 import type { MastraLanguageModel, SharedProviderOptions } from '../../../llm/model/shared.types';
 import type { LoopOptions } from '../../../loop/types';
+import { DEFAULT_MAX_RETRY_AFTER_MS, getRetryAfterMs, waitDelay } from '../../../utils/retry-after';
 import { getResponseFormat } from '../../base/schema';
 import type { LanguageModelV2StreamResult, OnResult } from '../../types';
 import { prepareToolsAndToolChoice } from './compat';
@@ -16,6 +17,24 @@ import { AISDKV5InputStream } from './input';
 
 type JsonPromptInjection = StructuredOutputOptions<unknown>['jsonPromptInjection'];
 type ResolvedJsonPromptInjection = Exclude<JsonPromptInjection, 'auto'>;
+
+/**
+ * p-retry's own defaults, pinned explicitly so the delay it schedules between
+ * model-call attempts can be computed when honoring a provider `Retry-After`.
+ */
+const RETRY_MIN_TIMEOUT_MS = 1_000;
+const RETRY_BACKOFF_FACTOR = 2;
+
+/**
+ * Whether a failed model call will be retried. Used by both `onFailedAttempt` and
+ * `shouldRetry` so a terminal error never waits out a provider delay it will not use.
+ */
+function isRetryableModelError(error: unknown): boolean {
+  if (APICallError.isInstance(error)) {
+    return error.isRetryable;
+  }
+  return true;
+}
 
 export function resolveJsonPromptInjection(
   value: JsonPromptInjection,
@@ -239,11 +258,29 @@ export function execute<OUTPUT = undefined>({
           {
             retries: modelSettings?.maxRetries ?? 2,
             signal: abortSignal,
+            // Pinned to p-retry's own defaults so the backoff it schedules stays
+            // unchanged while remaining computable in onFailedAttempt below.
+            minTimeout: RETRY_MIN_TIMEOUT_MS,
+            factor: RETRY_BACKOFF_FACTOR,
+            async onFailedAttempt(context) {
+              // Runs before shouldRetry, so bail on anything that will not be retried:
+              // a terminal error must not wait out a provider delay it will never use.
+              if (context.retriesLeft <= 0 || !isRetryableModelError(context.error)) return;
+
+              const retryAfterMs = getRetryAfterMs(context.error);
+              if (retryAfterMs === undefined) return;
+
+              // p-retry applies its own exponential delay after this hook resolves, so
+              // wait only the remainder. Total wait lands on
+              // max(backoff, min(Retry-After, cap)), the same rule
+              // StreamErrorRetryProcessor applies, keeping a hostile or very large
+              // Retry-After from wedging the run.
+              const boundedRetryAfterMs = Math.min(retryAfterMs, DEFAULT_MAX_RETRY_AFTER_MS);
+              const scheduledBackoffMs = RETRY_MIN_TIMEOUT_MS * RETRY_BACKOFF_FACTOR ** (context.attemptNumber - 1);
+              await waitDelay(boundedRetryAfterMs - scheduledBackoffMs, abortSignal);
+            },
             shouldRetry(context) {
-              if (APICallError.isInstance(context.error)) {
-                return context.error.isRetryable;
-              }
-              return true;
+              return isRetryableModelError(context.error);
             },
           },
         );

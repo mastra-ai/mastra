@@ -8,8 +8,8 @@ import { SignalsOverviewPage } from '../signals-overview-page';
 afterEach(() => cleanup());
 
 describe('SignalsOverviewPage', () => {
-  describe('when trace intelligence has not launched yet', () => {
-    it('explains the purpose of trace intelligence', () => {
+  describe('when Trace Intelligence has not launched yet', () => {
+    it('explains the purpose of Trace Intelligence', () => {
       render(<SignalsOverviewPage />);
 
       expect(screen.getByRole('heading', { name: 'Understand what drives every agent interaction' })).not.toBeNull();
@@ -18,79 +18,96 @@ describe('SignalsOverviewPage', () => {
     it('shows the ordered trace analysis pipeline', () => {
       render(<SignalsOverviewPage />);
 
-      const pipeline = screen.getByRole('list', { name: 'Trace intelligence pipeline' });
+      const pipeline = screen.getByRole('list', { name: 'Trace Intelligence analysis pipeline' });
       const stageHeadings = within(pipeline)
         .getAllByRole('heading')
         .map(heading => heading.textContent);
 
-      expect(stageHeadings).toEqual(['Traces', 'Mastra Engine', 'Trace signals']);
+      expect(stageHeadings).toEqual(['Traces', 'Trace Intelligence', 'Theme analysis']);
     });
 
     it('shows representative trace inputs', () => {
       render(<SignalsOverviewPage />);
 
-      const pipeline = screen.getByRole('list', { name: 'Trace intelligence pipeline' });
+      const pipeline = screen.getByRole('list', { name: 'Trace Intelligence analysis pipeline' });
       expect(within(pipeline).getByText('chat.completion')).not.toBeNull();
       expect(within(pipeline).getByText('tool.search_docs')).not.toBeNull();
       expect(within(pipeline).getByText('workflow.support')).not.toBeNull();
     });
 
-    it('shows the four supported signal dimensions', () => {
+    it('shows the four supported trace signal dimensions', () => {
       render(<SignalsOverviewPage />);
 
-      const pipeline = screen.getByRole('list', { name: 'Trace intelligence pipeline' });
+      const pipeline = screen.getByRole('list', { name: 'Trace Intelligence analysis pipeline' });
       for (const signal of ['Outcome', 'Goal', 'Behavior', 'Sentiment']) {
         expect(within(pipeline).getByText(signal)).not.toBeNull();
       }
     });
 
-    it('defines each supported signal in plain language', () => {
+    it('defines each supported trace signal in plain language', () => {
       render(<SignalsOverviewPage />);
 
       const definitions = screen.getByRole('list', { name: 'Trace signal definitions' });
-      expect(within(definitions).getByText(/what the user is trying to achieve or have completed/i)).not.toBeNull();
-      expect(within(definitions).getByText(/the user's emotional state or attitude/i)).not.toBeNull();
+      expect(within(definitions).getByText(/what the user is trying to achieve/i)).not.toBeNull();
+      expect(
+        within(definitions).getByText(/whether the interaction was completed, unresolved, or blocked/i),
+      ).not.toBeNull();
       expect(
         within(definitions).getByText(
-          /observable actions and patterns, including tool use, omissions, retries, failures, and recovery/i,
+          /observable actions and patterns in the trace, including tool use, retries, failures, and recovery/i,
         ),
       ).not.toBeNull();
-      expect(within(definitions).getByText(/the final completed, unresolved, or blocked state/i)).not.toBeNull();
+      expect(within(definitions).getByText(/the user's emotional state or attitude/i)).not.toBeNull();
     });
 
-    it('previews where grouped trace relationships will appear', () => {
+    it('shows that Trace Intelligence is collecting traces', () => {
       render(<SignalsOverviewPage />);
 
-      expect(
-        screen.getByText(
-          /grouped trace relationships will appear after traces contain at least two trace signal types/i,
-        ),
-      ).not.toBeNull();
+      expect(screen.getByText('Collecting traces for Trace Intelligence.')).not.toBeNull();
     });
 
-    it('shows that the analysis is waiting for traces', () => {
+    it('links to the Trace Intelligence documentation', () => {
       render(<SignalsOverviewPage />);
 
-      expect(screen.getByText('Waiting for traces.')).not.toBeNull();
-    });
-
-    it('links to the tracing documentation', () => {
-      render(<SignalsOverviewPage />);
-
-      expect(screen.getByRole('link', { name: 'Read the docs' }).getAttribute('href')).toBe(
-        'https://mastra.ai/en/docs/observability/tracing/overview',
+      expect(screen.getByRole('link', { name: /Read the docs/ }).getAttribute('href')).toBe(
+        'https://mastra.ai/en/docs/mastra-platform/trace-intelligence',
       );
     });
 
     it('links to incoming traces', () => {
       render(<SignalsOverviewPage />);
 
-      expect(screen.getByRole('link', { name: 'View incoming traces' }).getAttribute('href')).toBe('/observability');
+      expect(screen.getByRole('link', { name: 'View incoming traces' }).getAttribute('href')).toBe('/traces');
     });
   });
 });
 
 describe('SignalsEmptyState', () => {
+  describe('when progress is available', () => {
+    it('shows trace and trace signal processing progress', () => {
+      render(
+        <SignalsEmptyState
+          progress={{
+            status: 'processing',
+            traceCount: 87,
+            signals: {
+              goal: { generated: 87, embedded: 84 },
+              outcome: { generated: 87, embedded: 40 },
+              behavior: { generated: 52, embedded: 12 },
+              sentiment: { generated: 0, embedded: 0 },
+            },
+            availableSignals: ['goal'],
+          }}
+        />,
+      );
+
+      expect(screen.getByText('Analyzing traces for Trace Intelligence.')).not.toBeNull();
+      expect(screen.getByText('87')).not.toBeNull();
+      expect(screen.getByText('1 of 4')).not.toBeNull();
+      expect(screen.getByText('87 generated · 84 embedded')).not.toBeNull();
+    });
+  });
+
   describe('when a custom action is supplied', () => {
     it('renders the custom action', () => {
       render(<SignalsEmptyState actionSlot={<button type="button">Choose an agent</button>} />);

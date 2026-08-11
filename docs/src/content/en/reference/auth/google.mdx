@@ -32,7 +32,7 @@ export const mastra = new Mastra({
 
 :::note
 
-You can omit the constructor parameters if you have the appropriately named environment variables set. In that case, use `new MastraAuthGoogle()` without any arguments.
+You can omit the constructor parameters if the required environment variables are set. In that case, use `new MastraAuthGoogle()` without any arguments.
 
 :::
 
@@ -184,7 +184,7 @@ The following environment variables are automatically used when constructor opti
 
 `MastraAuthGoogle` authenticates requests in the following order:
 
-1. **Session cookie**: When SSO is enabled, reads the encrypted session cookie and decrypts it. If the session is valid and not expired, the user is authenticated.
+1. **Session cookie.** With SSO enabled, the provider reads and decrypts the encrypted session cookie. A valid, unexpired session authenticates the user.
 1. **Google ID token fallback**: If no valid session cookie is present, verifies the `Authorization` header token against Google's JWKS endpoint.
 
 After authentication, `authorizeUser` checks that the user has a valid Google user ID, the token-derived expiration hasn't passed, and the user's verified `hd` claim matches `allowedDomains` when domains are configured.
@@ -586,4 +586,4 @@ If `user.groups` is already an array, `MastraRBACGoogle` uses that value and doe
 
 ## Related
 
-[Google auth docs](/docs/server/auth/google)
+[Google auth docs](/integrations/auth/google)

@@ -35,7 +35,7 @@ function renderCallback(initialEntry: string) {
 describe('GitHubAppCallbackHandler', () => {
   it('given a GitHub App approval-request callback, when the settings page renders, then it explains the install is pending and cleans callback params', async () => {
     const router = renderCallback(
-      '/factories/fp-1/settings/source-control?github_app_requested=true&installation_id=123&setup_action=request&keep=1',
+      '/factories/fp-1/settings/repositories?github_app_requested=true&installation_id=123&setup_action=request&keep=1',
     );
 
     expect(

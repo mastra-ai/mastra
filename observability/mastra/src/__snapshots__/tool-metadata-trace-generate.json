@@ -33,9 +33,7 @@
         },
         "input": "Use metadata tool to process some data",
         "output": {
-          "text": {
-            "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-          },
+          "text": "Mock V2 generate response",
           "files": []
         }
       },
@@ -57,6 +55,24 @@
               "provider": "mock-provider",
               "streaming": true,
               "parameters": {},
+              "tools": [
+                {
+                  "type": "function",
+                  "name": "metadataTool",
+                  "description": "A tool that adds custom metadata",
+                  "parameters": {
+                    "$schema": "http://json-schema.org/draft-07/schema#",
+                    "type": "object",
+                    "properties": {
+                      "input": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["input"],
+                    "additionalProperties": false
+                  }
+                }
+              ],
               "finishReason": "stop",
               "responseId": "<responseId-1>",
               "responseModel": "mock-model-id",
@@ -97,9 +113,7 @@
               "files": [],
               "reasoning": [],
               "sources": [],
-              "text": {
-                "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-              },
+              "text": "Mock V2 generate response",
               "warnings": []
             }
           },
@@ -198,7 +212,8 @@
                       },
                       "finishReason": "tool-calls",
                       "warnings": [],
-                      "completionStartTime": "<date>"
+                      "completionStartTime": "<date>",
+                      "responseModel": "mock-model-id"
                     },
                     "metadata": {
                       "runId": "<runId-1>",
@@ -288,6 +303,7 @@
                     "attributes": {
                       "toolDescription": "A tool that adds custom metadata",
                       "toolType": "tool",
+                      "toolCallId": "call-metadata-1",
                       "success": true
                     },
                     "metadata": {
@@ -365,9 +381,7 @@
                   }
                 ],
                 "output": {
-                  "text": {
-                    "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-                  },
+                  "text": "Mock V2 generate response",
                   "toolCalls": []
                 }
               },
@@ -404,16 +418,15 @@
                       },
                       "finishReason": "stop",
                       "warnings": [],
-                      "completionStartTime": "<date>"
+                      "completionStartTime": "<date>",
+                      "responseModel": "mock-model-id"
                     },
                     "metadata": {
                       "runId": "<runId-1>",
                       "environment": "test"
                     },
                     "output": {
-                      "text": {
-                        "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-                      },
+                      "text": "Mock V2 generate response",
                       "toolCalls": []
                     }
                   },
@@ -439,9 +452,7 @@
                           "environment": "test"
                         },
                         "output": {
-                          "text": {
-                            "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-                          }
+                          "text": "Mock V2 generate response"
                         }
                       }
                     }

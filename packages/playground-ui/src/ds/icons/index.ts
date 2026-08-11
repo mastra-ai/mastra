@@ -60,3 +60,5 @@ export * from './ScorersIcon';
 export * from './DatasetsIcon';
 export * from './ExperimentsIcon';
 export * from './MetricsIcon';
+export * from './LinearIcon';
+export * from './SlackIcon';

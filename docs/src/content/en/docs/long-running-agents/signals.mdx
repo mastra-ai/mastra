@@ -10,13 +10,13 @@ packages:
 
 **Added in:** `@mastra/core@1.39.0`
 
-:::experimental
+:::beta
 
-This feature is in beta. Breaking changes may occur without a major version bump until the API is stable.
+Breaking changes may occur without a major version bump until the API is stable.
 
 :::
 
-Signals are a way to interact with an agent through a thread. Instead of starting every interaction with `agent.stream()`, subscribe to a thread and send messages or signals. Mastra either wakes the agent when the thread is idle, drops input into the running agent loop, or queues input for the next turn.
+Signals are a way to interact with an agent through a thread. Instead of starting every interaction with `agent.stream()`, subscribe to a thread and send messages or signals. Mastra either wakes the agent when the thread is idle or drops input into the running agent loop, or alternatively queues input for the next turn.
 
 Use message APIs for user-authored input. Use `sendSignal()` for lower-level system context, such as background task notifications, policy reminders, or processor-generated context.
 
@@ -157,11 +157,11 @@ The model receives the signal as context like this:
 <notification source="github" pr="123">PR #123 has a new review comment from User X about the API surface.</notification>
 ```
 
-Use XML-safe `tagName` and attribute names. They can contain letters, numbers, underscores, periods, and hyphens. They must start with a letter or underscore.
+Use XML-safe `tagName` and attribute names. They can contain letters, numbers, shows, periods, and hyphens. They must start with a letter or underscore.
 
 #### Storage support
 
-Notification inbox storage is available in the storage adapters that support richer memory and signal workflows: [libSQL](/reference/storage/libsql), [PostgreSQL](/reference/storage/postgresql), and [MongoDB](/reference/storage/mongodb). These adapters expose notification records through `getStore('notifications')`.
+Notification inbox storage is available in the storage adapters that support richer memory and signal workflows: [libSQL](/integrations/databases/libsql), [PostgreSQL](/integrations/databases/postgresql), and [MongoDB](/integrations/databases/mongodb). These adapters expose notification records through `getStore('notifications')`.
 
 ### Send processor context
 
@@ -334,7 +334,9 @@ Use `createNotificationInboxTool()` to give agents one tool for inbox actions in
 
 Signals coordinate runs through a pub/sub backend. When a signal arrives on a backend that implements `LeaseProvider`, Mastra acquires a lease on the target thread so a single process owns the conversation at a time, then either wakes the agent or routes the input into the running loop. Backends without leasing fall back to a no-op that always grants ownership, which is fine in a single process but not across instances.
 
-The default in-memory pub/sub can't cross instance boundaries. On serverless platforms like Vercel, or any multi-instance deployment, a follow-up signal can land on a different instance than the one running the agent. Without a shared pub/sub, that instance can't reach the active run and starts its own, leaving the original run untouched and the thread processed twice.
+The default in-memory pub/sub can't cross instance boundaries. On serverless platforms like Vercel, or any multi-instance deployment, a follow-up signal can be routed to a different instance than the one running the agent.
+
+Without a shared pub/sub, that instance can't reach the active run and starts its own, leaving the original run untouched and the thread processed twice.
 
 Configure a shared pub/sub backed by Redis Streams on the `Mastra` instance so leases and signals coordinate across instances:
 
@@ -374,7 +376,9 @@ If you call Mastra over HTTP directly, use `POST /api/agents/:agentId/send-messa
 
 ### Use the client SDK
 
-The JavaScript client exposes thread signal APIs. Use `subscribeToThread()` before sending thread input so the client can render the stream that wakes from, or receives, the input.
+The JavaScript client exposes thread signal APIs.
+
+Use `subscribeToThread()` before sending thread input so the client can render the stream that receives the input or wakes in response to it.
 
 ```typescript title="src/app/chat.ts"
 const agent = client.getAgent('supportAgent')

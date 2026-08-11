@@ -7,9 +7,9 @@ packages:
 
 # LeaseProvider
 
-`LeaseProvider` is the distributed leasing contract, separate from event delivery ([`PubSub`](/reference/pubsub/base)). Mastra's [signals layer](/docs/long-running-agents/signals) uses it to elect a single owner across multiple processes (for example, serverless invocations) for a given resource, most commonly a thread key. The owner is the process that wakes and runs the agent stream, so other processes route follow-up work to it instead of starting a competing run.
+`LeaseProvider` is the distributed leasing contract, separate from event delivery ([`PubSub`](/reference/pubsub/base)). Mastra's [signals layer](/docs/long-running-agents/signals) uses it to elect a single owner across multiple processes (for example, serverless invocations) for a resource, most commonly a thread key. The owner is the process that wakes and runs the agent stream, so other processes route follow-up work to it instead of starting a competing run.
 
-Leasing is a distinct concern from pub/sub. A backend implements `LeaseProvider` only when it can genuinely coordinate a lock, such as Redis via atomic `SET`/Lua, or an in-memory map for single-process. Backends that can't lease omit it; the signals runtime feature-detects the capability and falls back to a no-op provider, preserving single-process behavior.
+Leasing is a distinct concern from pub/sub. A backend implements `LeaseProvider` only when it can actually coordinate a lock, such as Redis via atomic `SET`/Lua, or an in-memory map for single-process. Backends that can't lease omit it; the signals runtime feature-detects the capability and falls back to a no-op provider, preserving single-process behavior.
 
 The built-in [`RedisStreamsPubSub`](/reference/pubsub/redis-streams) implements `LeaseProvider`, which is what enables signals to coordinate across instances in distributed and serverless deployments.
 
@@ -122,7 +122,7 @@ Returns: `Promise<boolean>`
 
 #### `transferLease(key, fromOwner, toOwner, ttlMs)`
 
-Atomically hands a held lease from `fromOwner` to `toOwner`, refreshing its TTL, without releasing the key in between. This is the gap-free primitive used when one owner finishes but a follow-up owner must take over the same key immediately, for example when a thread run completes and a queued follow-up run drains on the same thread. A naive release-then-acquire would briefly leave the key empty, letting a racing process win the freed lease and start a competing run.
+Atomically transfers a held lease from `fromOwner` to `toOwner` and refreshes its TTL without releasing the key in between. This gap-free primitive lets a follow-up owner take over the same key immediately after the current owner finishes. For example, a queued follow-up run can take over when a thread run completes. A naive release-then-acquire briefly leaves the key empty. A racing process could then win the freed lease and start a competing run.
 
 Returns `true` if `fromOwner` still held the lease and ownership moved to `toOwner`, or `false` if the lease was already lost, in which case the caller should fall back to a fresh `acquireLease`.
 
@@ -151,5 +151,5 @@ When the configured pub/sub backend doesn't implement `LeaseProvider`, the runti
 
 - [PubSub](/reference/pubsub/base): The event delivery contract, separate from leasing
 - [RedisStreamsPubSub](/reference/pubsub/redis-streams): The built-in backend that implements `LeaseProvider`
-- [Signals](/docs/long-running-agents/signals): The runtime that uses leasing to coordinate thread runs across processes
-- [Channels](/docs/capabilities/channels/overview): Uses leasing to coordinate agent runs in serverless and multi-instance deployments
+- [Signals](/docs/long-running-agents/signals): The runtime that uses leasing to coordinate thread execution across processes
+- [Channels](/docs/capabilities/channels): Uses leasing to coordinate agent runs in serverless and multi-instance deployments

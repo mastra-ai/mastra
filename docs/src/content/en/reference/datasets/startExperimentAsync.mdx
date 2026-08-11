@@ -1,8 +1,8 @@
 ---
-title: "Reference: dataset.startExperimentAsync() | Datasets"
-description: "Documentation for the `dataset.startExperimentAsync()` method, which starts an experiment asynchronously."
+title: 'Reference: dataset.startExperimentAsync() | Datasets'
+description: 'Documentation for the `dataset.startExperimentAsync()` method, which starts an experiment asynchronously.'
 packages:
-  - "@mastra/core"
+  - '@mastra/core'
 ---
 
 # dataset.startExperimentAsync()
@@ -37,6 +37,10 @@ console.log(`Current status: ${experiment.status}`)
 ## Parameters
 
 Takes the same `StartExperimentConfig` as [`dataset.startExperiment()`](/reference/datasets/startExperiment).
+
+When `persistence.experiments` is set to `'none'`, `startExperimentAsync()` doesn't persist an experiment record, progress updates, or item results. Score persistence remains controlled separately by `persistence.scores`. Without an experiment event observer, the run is fire-and-forget, and the experiment API can't report whether it completed or failed.
+
+Use synchronous [`startExperiment()`](/reference/datasets/startExperiment) when the caller needs the returned summary. An experiment event observer can receive lifecycle events and the terminal summary.
 
 ## Returns
 

@@ -164,6 +164,14 @@ export class MastraTUI {
   private cleanupPluginReloadListener?: () => void;
   private cleanupPluginUpdateListener?: () => void;
   private lastStreamError: string | null = null;
+  /**
+   * Text submitted while the main loop was busy (running a slash command or a
+   * shell passthrough) and so was not waiting on `getUserInput`. The editor's
+   * submit handler stays installed across loop iterations, so without this the
+   * submission would resolve an already-settled promise and be silently lost.
+   */
+  private queuedUserInput: string[] = [];
+  private pendingUserInputResolve: ((text: string) => void) | undefined;
 
   private static readonly DOUBLE_CTRL_C_MS = 500;
 
@@ -1018,27 +1026,22 @@ export class MastraTUI {
   private beginLifecycleRun(): void {
     const hookMgr = this.state.hookManager;
     if (!hookMgr) return;
-    const runId = randomUUID();
-    hookMgr.setRunId(runId);
+    // Reuse a run id set at receipt time (runPermissionHooksForEvent) so the
+    // PermissionRequest hook fired before the queued agent_start carries the
+    // same id as subsequent hooks in this run.
+    if (!hookMgr.getRunId()) {
+      hookMgr.setRunId(randomUUID());
+    }
     hookMgr.runAgentStart().catch(() => {});
   }
 
   private fireLifecycleHooksForEvent(event: AgentControllerEvent): void {
     const hookMgr = this.state.hookManager;
     if (!hookMgr) return;
+    // PermissionRequest dispatch moved to the receipt-time tap in display.ts
+    // (runPermissionHooksForEvent, #20861): firing it here, inside the queued
+    // task, starved the hook behind any pending prompt.
     switch (event.type) {
-      case 'tool_approval_required':
-        hookMgr.runPermissionRequest('tool_approval', event.toolCallId, event.toolName, event.args).catch(() => {});
-        break;
-      case 'tool_suspended': {
-        const payload = (event.suspendPayload ?? {}) as Record<string, unknown>;
-        if (event.toolName === 'request_access' || payload.kind === 'sandbox_access_request') {
-          hookMgr.runPermissionRequest('sandbox_access', event.toolCallId, event.toolName, payload).catch(() => {});
-        } else if (event.toolName === 'submit_plan') {
-          hookMgr.runPermissionRequest('plan_approval', event.toolCallId, event.toolName, payload).catch(() => {});
-        }
-        break;
-      }
       case 'subagent_start':
         hookMgr
           .runSubagentStart(event.toolCallId, event.agentType, event.task, event.modelId, event.forked)
@@ -1131,7 +1134,12 @@ export class MastraTUI {
   // ===========================================================================
 
   private getUserInput(): Promise<string> {
+    const queued = this.queuedUserInput.shift();
+    if (queued !== undefined) {
+      return Promise.resolve(queued);
+    }
     return new Promise(resolve => {
+      this.pendingUserInputResolve = resolve;
       this.state.editor.onSubmit = (text: string) => {
         if (isGoalJudgeInputLocked(this.state)) {
           this.state.editor.setText(text);
@@ -1177,7 +1185,14 @@ export class MastraTUI {
           return;
         }
 
-        resolve(text);
+        const pending = this.pendingUserInputResolve;
+        if (!pending) {
+          // The loop is busy elsewhere; hand the text over on its next turn.
+          this.queuedUserInput.push(text);
+          return;
+        }
+        this.pendingUserInputResolve = undefined;
+        pending(text);
       };
     });
   }

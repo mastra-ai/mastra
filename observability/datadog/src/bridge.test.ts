@@ -739,6 +739,68 @@ describe('DatadogBridge', () => {
     });
   });
 
+  describe('releaseSpan', () => {
+    it('drops the span map entry and trace state without finishing the dd span', () => {
+      const bridge = new DatadogBridge({ mlApp: 'test', agentless: false });
+      const spanResult = bridge.createSpan(createMockSpanOptions({ metadata: { userId: 'user-123' } }))!;
+      const apmSpan = capturedApmSpans[0];
+
+      bridge.releaseSpan(spanResult.spanId, spanResult.traceId);
+
+      expect(apmSpan.finish).not.toHaveBeenCalled();
+      expect(bridge['ddSpanMap'].size).toBe(0);
+      expect(bridge['openSpanCounts'].size).toBe(0);
+      expect(bridge['traceContext'].size).toBe(0);
+    });
+
+    it('keeps trace state while other spans in the trace remain open', () => {
+      const bridge = new DatadogBridge({ mlApp: 'test', agentless: false });
+      const rootResult = bridge.createSpan(createMockSpanOptions({ name: 'root', metadata: { userId: 'user-123' } }))!;
+      const childResult = bridge.createSpan(
+        createMockSpanOptions({
+          name: 'child',
+          parent: {
+            id: rootResult.spanId,
+            traceId: rootResult.traceId,
+            isInternal: false,
+            metadata: {},
+            getParentSpanId: () => undefined,
+          } as any,
+        }),
+      )!;
+
+      bridge.releaseSpan(childResult.spanId, childResult.traceId);
+
+      expect(bridge['ddSpanMap'].size).toBe(1);
+      expect(bridge['openSpanCounts'].get(rootResult.traceId)).toBe(1);
+      expect(bridge['traceContext'].size).toBe(1);
+    });
+
+    it('does not double-decrement the open-span count on repeated release', () => {
+      const bridge = new DatadogBridge({ mlApp: 'test', agentless: false });
+      const rootResult = bridge.createSpan(createMockSpanOptions({ name: 'root', metadata: { userId: 'user-123' } }))!;
+      const childResult = bridge.createSpan(
+        createMockSpanOptions({
+          name: 'child',
+          parent: {
+            id: rootResult.spanId,
+            traceId: rootResult.traceId,
+            isInternal: false,
+            metadata: {},
+            getParentSpanId: () => undefined,
+          } as any,
+        }),
+      )!;
+
+      bridge.releaseSpan(childResult.spanId, childResult.traceId);
+      bridge.releaseSpan(childResult.spanId, childResult.traceId);
+      bridge.releaseSpan('ffffffffffffffff', childResult.traceId);
+
+      expect(bridge['openSpanCounts'].get(rootResult.traceId)).toBe(1);
+      expect(bridge['traceContext'].size).toBe(1);
+    });
+  });
+
   describe('shutdown', () => {
     it('force-finishes remaining spans on shutdown', async () => {
       const bridge = new DatadogBridge({ mlApp: 'test', agentless: false });

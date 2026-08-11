@@ -14,7 +14,7 @@ export function useNoiseExamples(
   return useQuery({
     queryKey: ['entity-learning', entityType, entityId, 'noise-examples', signalName, snapshotId, limit, offset],
     queryFn: () => {
-      if (!signalName || !snapshotId) throw new Error('Noise example queries require a signal and snapshot');
+      if (!signalName || !snapshotId) throw new Error('Noise example queries require a trace signal and snapshot');
       return fetchNoiseExamples(entityId, entityType, signalName, snapshotId, limit, offset);
     },
     enabled: signalName !== undefined && snapshotId !== undefined,

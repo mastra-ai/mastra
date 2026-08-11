@@ -89,6 +89,7 @@ type MemoryObservationalMemoryOptions = Omit<ObservationalMemoryOptions, 'model'
   activateAfterIdle?: ObservationalMemoryConfig['activateAfterIdle'];
   activateOnProviderChange?: ObservationalMemoryConfig['activateOnProviderChange'];
   temporalMarkers?: boolean;
+  hooks?: ObservationalMemoryConfig['hooks'];
 };
 
 type MemoryOptions = Omit<MemoryConfigInternal, 'observationalMemory'> & {
@@ -104,7 +105,7 @@ type RuntimeMemoryConfig = Omit<MemoryConfig, 'observationalMemory'> & {
 };
 
 type NormalizedObservationalMemoryConfig = MemoryObservationalMemoryOptions & {
-  retrieval?: boolean | { vector?: boolean; scope?: 'thread' | 'resource' };
+  retrieval?: boolean | { vector?: boolean; scope?: 'thread' | 'resource'; instructions?: string };
 };
 
 /*
@@ -115,8 +116,9 @@ type NormalizedObservationalMemoryConfig = MemoryObservationalMemoryOptions & {
  * published memory build during ESM instantiation before user code runs.
  *
  * Until v2 can tighten the peer contract, keep these copies manually in sync
- * with packages/core/src/memory/working-memory-utils.ts and
- * packages/core/src/memory/system-reminders.ts. Those source files also carry
+ * with packages/core/src/memory/working-memory-utils.ts,
+ * packages/core/src/memory/system-reminders.ts, and
+ * packages/core/src/agent/signals.ts. Those source files also carry
  * compatibility notes that point back here.
  */
 const WORKING_MEMORY_START_TAG = '<working_memory>';
@@ -218,6 +220,21 @@ function filterSystemReminderMessages(
   return messages.filter(message => !isSystemReminderMessage(message));
 }
 
+// Local copy for compatibility with core versions that predate this export. Keep in sync with
+// packages/core/src/agent/signals.ts until the peer range can be tightened.
+function isTransientSignalMessage(message: MastraDBMessage): boolean {
+  if (message.role !== 'signal' || !isRecord(message.content)) {
+    return false;
+  }
+  const metadata = message.content.metadata;
+  return (
+    isRecord(metadata) &&
+    isRecord(metadata.signal) &&
+    !Array.isArray(metadata.signal) &&
+    metadata.signal.transient === true
+  );
+}
+
 function normalizeObservationalMemoryConfig(
   config: boolean | MemoryObservationalMemoryOptions | undefined,
 ): NormalizedObservationalMemoryConfig | undefined {
@@ -257,6 +274,20 @@ export class Memory extends MastraMemory {
   private _omEngine: Promise<ObservationalMemory | null> | undefined;
   private _omEngineInstance: ObservationalMemory | null | undefined;
   private _mastraInstance: Mastra | undefined;
+
+  /**
+   * Every vector cleanup that deleteThread or deleteMessages started in the background.
+   * Callers do not wait for the cleanup, so this handle is the only join point.
+   */
+  private pendingVectorCleanup: Promise<void> = Promise.resolve();
+
+  /**
+   * Adds a background vector cleanup to the join handle.
+   * The handle keeps the earlier cleanups, so it settles only after all of them end.
+   */
+  private trackVectorCleanup(cleanup: Promise<void>): void {
+    this.pendingVectorCleanup = Promise.allSettled([this.pendingVectorCleanup, cleanup]).then(() => undefined);
+  }
 
   /** The shared ObservationalMemory engine. Lazily created on first access. */
   get omEngine(): Promise<ObservationalMemory | null> {
@@ -689,8 +720,8 @@ export class Memory extends MastraMemory {
     memoryConfig,
   }: {
     id: string;
-    title: string;
-    metadata: Record<string, unknown>;
+    title?: string;
+    metadata?: Record<string, unknown>;
     memoryConfig?: MemoryConfigInternal;
   }): Promise<StorageThreadType> {
     const memoryStore = await this.getMemoryStore();
@@ -720,31 +751,47 @@ export class Memory extends MastraMemory {
       await memoryStore.clearObservationalMemory(threadId, thread.resourceId);
     }
     if (this.vector) {
-      void this.deleteThreadVectors(threadId);
+      this.trackVectorCleanup(this.deleteThreadVectors(threadId));
     }
   }
 
   /**
-   * Lists all vector indexes that match the memory messages prefix.
-   * Handles separator differences across vector store backends (e.g. '_' vs '-').
+   * Prefix shared by every message index. The index for the default embedding
+   * dimension is named with the bare prefix; other dimensions add a suffix.
    */
-  private async getMemoryVectorIndexes(): Promise<string[]> {
+  private get messageIndexPrefix(): string {
+    return this.getEmbeddingIndexName();
+  }
+
+  /**
+   * Prefix shared by every observation index. Each observation index adds a dimension suffix.
+   */
+  private get observationIndexPrefix(): string {
+    const separator = this.vector?.indexSeparator ?? '_';
+    return `memory${separator}observations`;
+  }
+
+  /**
+   * Lists the vector indexes whose name starts with one of the given prefixes.
+   * Index names can carry a dimension suffix, so discovery matches on the prefix.
+   */
+  private async getMemoryVectorIndexes(prefixes: string[]): Promise<string[]> {
     if (!this.vector) return [];
-    const separator = this.vector.indexSeparator ?? '_';
-    const prefix = `memory${separator}messages`;
     const indexes = await this.vector.listIndexes();
-    return indexes.filter(name => name.startsWith(prefix));
+    return indexes.filter(name => prefixes.some(prefix => name.startsWith(prefix)));
   }
 
   /**
    * Deletes all vector embeddings associated with a thread.
    * This is called internally by deleteThread to clean up orphaned vectors.
+   * Both message and observation vectors are removed, so no text of the deleted
+   * thread stays reachable through resource-scoped retrieval.
    *
    * @param threadId - The ID of the thread whose vectors should be deleted
    */
   private async deleteThreadVectors(threadId: string): Promise<void> {
     try {
-      const memoryIndexes = await this.getMemoryVectorIndexes();
+      const memoryIndexes = await this.getMemoryVectorIndexes([this.messageIndexPrefix, this.observationIndexPrefix]);
 
       await Promise.all(
         memoryIndexes.map(async (indexName: string) => {
@@ -754,12 +801,13 @@ export class Memory extends MastraMemory {
               filter: { thread_id: threadId },
             });
           } catch {
-            this.logger.debug('Failed to delete vectors for thread, skipping', { threadId, indexName });
+            // The index keeps the vectors of the deleted thread, so report which one.
+            this.logger.warn('Failed to delete vectors of the deleted thread from index', { threadId, indexName });
           }
         }),
       );
     } catch {
-      this.logger.debug('Failed to clean up vectors for thread', { threadId });
+      this.logger.warn('Failed to clean up vectors of the deleted thread', { threadId });
     }
   }
 
@@ -825,7 +873,6 @@ export class Memory extends MastraMemory {
 
           await memoryStore.updateThread({
             id: threadId,
-            title: thread.title || '',
             metadata: {
               ...thread.metadata,
               workingMemory,
@@ -977,7 +1024,6 @@ ${workingMemory}`;
 
         await memoryStore.updateThread({
           id: threadId,
-          title: thread.title || '',
           metadata: {
             ...thread.metadata,
             workingMemory,
@@ -1133,9 +1179,10 @@ ${workingMemory}`;
 
     try {
       // System messages are runtime instructions and should never be stored in memory.
+      // Transient signals (`transient: true`) are delivery-only and must never be stored.
       // Then strip working memory tags from all persistable messages.
       const updatedMessages = messages
-        .filter(m => m.role !== 'system')
+        .filter(m => m.role !== 'system' && !isTransientSignalMessage(m))
         .map(m => {
           return this.updateMessageToHideWorkingMemoryV2(m);
         })
@@ -1640,7 +1687,7 @@ ${workingMemory}`;
   async persistMessages(messages: MastraDBMessage[]): Promise<void> {
     if (messages.length === 0) return;
 
-    const persistableMessages = messages.filter(m => m.role !== 'system');
+    const persistableMessages = messages.filter(m => m.role !== 'system' && !isTransientSignalMessage(m));
     if (persistableMessages.length === 0) return;
 
     const memoryStore = await this.getMemoryStore();
@@ -1706,6 +1753,7 @@ ${workingMemory}`;
       model: omConfig.model,
       mastra: this._mastraInstance,
       onIndexObservations,
+      hooks: omConfig.hooks,
       observation: omConfig.observation
         ? {
             model: omConfig.observation.model,
@@ -1893,7 +1941,7 @@ Notes:
     const defaultDimensions = 384;
     const usedDimensions = dimensions ?? defaultDimensions;
     const separator = this.vector?.indexSeparator ?? '_';
-    return `memory${separator}observations${separator}${usedDimensions}`;
+    return `${this.observationIndexPrefix}${separator}${usedDimensions}`;
   }
 
   private async createObservationEmbeddingIndex(dimensions?: number): Promise<{ indexName: string }> {
@@ -2326,7 +2374,10 @@ Notes:
     if (omConfig?.retrieval) {
       const retrievalScope =
         typeof omConfig.retrieval === 'object' ? (omConfig.retrieval.scope ?? 'resource') : 'resource';
-      tools.recall = recallTool(mergedConfig, { retrievalScope });
+      tools.recall = recallTool(mergedConfig, {
+        retrievalScope,
+        searchEnabled: this.hasRetrievalSearch(omConfig.retrieval),
+      });
     }
 
     return tools;
@@ -2449,7 +2500,7 @@ Notes:
 
         if (messageIdsNeedingDeletion.size > 0) {
           try {
-            const memoryIndexes = await this.getMemoryVectorIndexes();
+            const memoryIndexes = await this.getMemoryVectorIndexes([this.messageIndexPrefix]);
             const idsToDelete = [...messageIdsNeedingDeletion];
 
             await Promise.all(
@@ -2549,7 +2600,7 @@ Notes:
 
       await memoryStore.deleteMessages(messageIds);
       if (this.vector) {
-        void this.deleteMessageVectors(messageIds);
+        this.trackVectorCleanup(this.deleteMessageVectors(messageIds));
       }
 
       span?.end({ output: { success: true }, attributes: { messageCount: messageIds.length } });
@@ -2562,12 +2613,14 @@ Notes:
   /**
    * Deletes vector embeddings for specific messages.
    * This is called internally by deleteMessages to clean up orphaned vectors.
+   * Only the message indexes are touched, because observation vectors can hold
+   * text of other messages of the thread.
    *
    * @param messageIds - The IDs of the messages whose vectors should be deleted
    */
   private async deleteMessageVectors(messageIds: string[]): Promise<void> {
     try {
-      const memoryIndexes = await this.getMemoryVectorIndexes();
+      const memoryIndexes = await this.getMemoryVectorIndexes([this.messageIndexPrefix]);
 
       await Promise.all(
         memoryIndexes.map(async (indexName: string) => {
@@ -3118,6 +3171,11 @@ Notes:
     );
     if (hasObservationalMemory) return null;
 
+    // Note: attachment is intentionally permissive — `MastraMemory` may not be
+    // populated in the request context at discovery time (or at all, for direct
+    // `getInputProcessors()` calls). Ephemeral invocations without a thread
+    // (e.g. workflow agent steps) are handled at runtime: the processor no-ops
+    // when `getThreadContext` resolves no thread.
     const runtimeMemory = context?.get('MastraMemory') as { memoryConfig?: RuntimeMemoryConfig } | undefined;
     const runtimeObservationalMemory = normalizeObservationalMemoryConfig(
       runtimeMemory?.memoryConfig?.observationalMemory,
@@ -3150,6 +3208,11 @@ Notes:
     configuredProcessors: InputProcessorOrWorkflow[] = [],
     context?: RequestContext,
   ): Promise<InputProcessor | null> {
+    // Note: attachment is intentionally permissive — `MastraMemory` may not be
+    // populated in the request context at discovery time (or at all, for direct
+    // `getInputProcessors()` calls). Ephemeral invocations without a thread
+    // (e.g. workflow agent steps) are handled at runtime: the processor runner
+    // skips `computeStateSignal` when no thread/resource resolves.
     const runtimeMemory = context?.get('MastraMemory') as { memoryConfig?: MemoryConfigInternal } | undefined;
     const mergedConfig = this.getMergedThreadConfig(runtimeMemory?.memoryConfig);
     this.assertWorkingMemoryStateSignalsCompatibility(mergedConfig);

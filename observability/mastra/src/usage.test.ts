@@ -1,6 +1,58 @@
 import type { LanguageModelUsage, ProviderMetadata } from '@mastra/core/stream';
 import { describe, it, expect } from 'vitest';
-import { addUsageStats, extractUsageMetrics } from './usage';
+import { addUsageStats, extractOpenRouterCostContext, extractUsageMetrics } from './usage';
+
+describe('extractOpenRouterCostContext', () => {
+  it('prefers OpenRouter usage.cost over the upstream cost breakdown', () => {
+    expect(
+      extractOpenRouterCostContext(
+        {
+          openrouter: {
+            usage: {
+              cost: 0.0123,
+              costDetails: { upstreamInferenceCost: 0.01 },
+            },
+          },
+        },
+        'anthropic/claude-sonnet-4',
+      ),
+    ).toEqual({
+      provider: 'openrouter',
+      model: 'anthropic/claude-sonnet-4',
+      estimatedCost: 0.0123,
+      costUnit: 'USD',
+      costMetadata: {
+        source: 'provider_reported',
+        providerCostField: 'usage.cost',
+      },
+    });
+  });
+
+  it('falls back to upstreamInferenceCost when usage.cost is absent', () => {
+    expect(
+      extractOpenRouterCostContext({
+        openrouter: {
+          usage: {
+            costDetails: { upstreamInferenceCost: 0.0042 },
+          },
+        },
+      }),
+    ).toMatchObject({
+      estimatedCost: 0.0042,
+      costMetadata: {
+        providerCostField: 'usage.costDetails.upstreamInferenceCost',
+      },
+    });
+  });
+
+  it.each([NaN, Infinity, -0.0042, '0.0042'])('rejects invalid reported cost %p', cost => {
+    expect(
+      extractOpenRouterCostContext({
+        openrouter: { usage: { cost } },
+      }),
+    ).toBeUndefined();
+  });
+});
 
 describe('extractUsageMetrics', () => {
   describe('basic usage extraction', () => {

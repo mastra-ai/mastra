@@ -671,6 +671,22 @@ export interface ObservabilityBridge extends ObservabilityEvents {
   createSpan(options: CreateSpanOptions<SpanType>): SpanIds | undefined;
 
   /**
+   * Release any state the bridge holds for a span that ended but will not be
+   * exported. Bridges keep per-span state from `createSpan()` until the span
+   * ends; span-end events are only emitted for spans that survive export
+   * filtering, so without this the state for a span dropped by
+   * `excludeSpanTypes`, a `spanFilter`, or a span output processor is never
+   * freed.
+   *
+   * The bridge should only drop its bookkeeping here. It must not end/finish
+   * the underlying span, which would export data the user filtered out.
+   *
+   * @param spanId - The ID of the Mastra span whose bridge state can be dropped
+   * @param traceId - The trace the span belonged to, for per-trace bridge state
+   */
+  releaseSpan?(spanId: string, traceId: string): void;
+
+  /**
    * Force flush any buffered/queued spans without shutting down the bridge.
    * This is useful in serverless environments where you need to ensure spans
    * are exported before the runtime instance is terminated, while keeping

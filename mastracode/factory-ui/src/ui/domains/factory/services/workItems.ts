@@ -6,7 +6,7 @@
  * org-wide, so every member of the org reads and moves the same cards.
  */
 
-export type WorkItemSource = 'github-issue' | 'github-pr' | 'linear-issue' | 'manual';
+export type WorkItemSource = 'github-issue' | 'github-pr' | 'linear-issue' | 'slack-thread' | 'manual';
 
 export interface WorkItemSessionRef {
   sessionId: string;
@@ -21,6 +21,7 @@ export interface WorkItemStageEntry {
   enteredAt: string;
   exitedAt?: string;
   by: string;
+  exitedBy?: string;
 }
 
 export interface WorkItem {
@@ -82,20 +83,30 @@ function sourceFromExternalSource(source: ExternalWorkItemSource | null): WorkIt
   if (source.integrationId === 'github' && source.type === 'issue') return 'github-issue';
   if (source.integrationId === 'github' && source.type === 'pull-request') return 'github-pr';
   if (source.integrationId === 'linear' && source.type === 'issue') return 'linear-issue';
+  if (source.integrationId === 'slack' && source.type === 'slack-thread') return 'slack-thread';
   return 'manual';
 }
 
+function externalSourceTarget(
+  source: Exclude<WorkItemSource, 'manual'>,
+): Pick<ExternalWorkItemSource, 'integrationId' | 'type'> {
+  switch (source) {
+    case 'github-issue':
+      return { integrationId: 'github', type: 'issue' };
+    case 'github-pr':
+      return { integrationId: 'github', type: 'pull-request' };
+    case 'linear-issue':
+      return { integrationId: 'linear', type: 'issue' };
+    case 'slack-thread':
+      return { integrationId: 'slack', type: 'slack-thread' };
+  }
+}
+
 function toExternalSource(input: CreateWorkItemInput): ExternalWorkItemSource | undefined {
-  if (input.source === 'manual' || !input.sourceKey) return undefined;
-  const [integrationId, type] =
-    input.source === 'github-issue'
-      ? ['github', 'issue']
-      : input.source === 'github-pr'
-        ? ['github', 'pull-request']
-        : ['linear', 'issue'];
+  const source = input.source;
+  if (source === 'manual' || !input.sourceKey) return undefined;
   return {
-    integrationId,
-    type,
+    ...externalSourceTarget(source),
     externalId: input.sourceKey,
     ...(input.url ? { url: input.url } : {}),
   };
@@ -161,9 +172,14 @@ async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 /** List the org's work items for a Factory project. */
-export async function listWorkItems(baseUrl: string, factoryProjectId: string): Promise<WorkItem[]> {
+export async function listWorkItems(
+  baseUrl: string,
+  factoryProjectId: string,
+  signal?: AbortSignal,
+): Promise<WorkItem[]> {
   const data = await requestJson<{ workItems: WireWorkItem[] }>(
     `${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/work-items`,
+    { signal },
   );
   return data.workItems.map(fromWireWorkItem);
 }

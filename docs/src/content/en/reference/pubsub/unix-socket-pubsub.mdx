@@ -96,4 +96,4 @@ await pubsub.close()
 
 ## Broker election
 
-The first process to bind the socket becomes the broker and routes events between all connected clients. Other processes connect as clients. When the broker exits, an exclusive lock file serializes the next election so exactly one client becomes the new broker, and the remaining clients resubscribe to it. This avoids a split-brain state where two processes both act as broker.
+The first process to bind the socket becomes the broker and routes events between all connected clients. Other processes connect as clients. When the broker exits, an exclusive lock file serializes the next election. Exactly one client becomes the new broker. The remaining clients resubscribe to it. This avoids a split-brain state where two processes both act as broker.

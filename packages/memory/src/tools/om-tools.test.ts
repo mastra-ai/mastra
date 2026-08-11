@@ -1,4 +1,5 @@
 import type { MastraDBMessage } from '@mastra/core/agent';
+import { standardSchemaToJSONSchema } from '@mastra/core/schema';
 import { InMemoryStore } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
@@ -2785,6 +2786,125 @@ describe('om-tools', () => {
 
       // recall tool should still be registered
       expect(memory.listTools()).toHaveProperty('recall');
+    });
+  });
+
+  describe('recall search mode without a vector store (#20775)', () => {
+    const getInputJSONSchema = (tool: ReturnType<typeof recallTool>) =>
+      standardSchemaToJSONSchema(tool.inputSchema as any) as {
+        properties: Record<string, { enum?: string[]; description?: string }>;
+      };
+
+    it('omits "search" from the mode enum and descriptions when search is not enabled', () => {
+      for (const retrievalScope of ['thread', 'resource'] as const) {
+        const tool = recallTool(undefined, { retrievalScope, searchEnabled: false });
+        const schema = getInputJSONSchema(tool);
+
+        expect(schema.properties.mode.enum).toEqual(['messages', 'threads']);
+        expect(tool.description).not.toContain('mode="search"');
+        expect(schema.properties.mode.description).not.toContain('"search"');
+        expect(schema.properties).not.toHaveProperty('query');
+      }
+    });
+
+    it('keeps "search" advertised by default for direct callers', () => {
+      const tool = recallTool(undefined, { retrievalScope: 'resource' });
+      const schema = getInputJSONSchema(tool);
+
+      expect(schema.properties.mode.enum).toContain('search');
+      expect(tool.description).toContain('mode="search"');
+    });
+
+    it('rejects a stray search call with an informative validation error instead of throwing', async () => {
+      const memory = new Memory({ storage: new InMemoryStore() });
+      const tool = recallTool(undefined, { retrievalScope: 'resource', searchEnabled: false });
+
+      const result = await tool.execute?.({ mode: 'search', query: 'that diagram from last time' }, {
+        memory,
+        agent: { threadId: 'thread-1', resourceId: 'resource-1' },
+      } as any);
+
+      // Schema validation catches it: the model gets a correctable error, not
+      // the "searchMessages requires a vector store" throw.
+      expect((result as any).error).toBe(true);
+      expect((result as any).message).toContain('must be equal to one of the allowed values');
+    });
+
+    it('returns the "Search is not configured" guidance when a resumed run carries a stale search call', async () => {
+      const memory = new Memory({ storage: new InMemoryStore() });
+      const tool = recallTool(undefined, { retrievalScope: 'resource', searchEnabled: false });
+
+      // resumeData skips input validation (see Tool.execute), so without the
+      // in-execute guard this would reach Memory.searchMessages and throw.
+      const result = await tool.execute?.({ mode: 'search', query: 'that diagram from last time' }, {
+        memory,
+        resumeData: { stale: true },
+        agent: { threadId: 'thread-1', resourceId: 'resource-1' },
+      } as any);
+
+      expect(result).toMatchObject({ count: 0 });
+      expect((result as any).results).toContain('Search is not configured');
+    });
+
+    it('does not advertise search from Memory.listTools when no vector store is configured', () => {
+      const memory = new Memory({
+        storage: new InMemoryStore(),
+        options: {
+          observationalMemory: {
+            model: 'test-model',
+            scope: 'thread',
+            retrieval: { scope: 'resource' },
+          },
+        } as any,
+      });
+
+      const recall = memory.listTools().recall;
+      const schema = getInputJSONSchema(recall);
+      expect(schema.properties.mode.enum).toEqual(['messages', 'threads']);
+      expect(recall.description).not.toContain('mode="search"');
+    });
+
+    it('does not advertise search when a vector store exists but retrieval search is disabled', () => {
+      const memory = new Memory({
+        storage: new InMemoryStore(),
+        vector: { id: 'test' } as any,
+        options: {
+          observationalMemory: {
+            model: 'test-model',
+            scope: 'thread',
+            retrieval: true,
+          },
+        } as any,
+      });
+
+      const recall = memory.listTools().recall;
+      const schema = getInputJSONSchema(recall);
+      expect(schema.properties.mode.enum).toEqual(['messages', 'threads']);
+      expect(recall.description).not.toContain('mode="search"');
+    });
+
+    it('advertises search when retrieval search, a vector store, and an embedder are configured', () => {
+      const memory = new Memory({
+        storage: new InMemoryStore(),
+        vector: { id: 'test' } as any,
+        embedder: {
+          specificationVersion: 'v3',
+          modelId: 'test',
+          doEmbed: async () => ({ embeddings: [] }),
+        } as any,
+        options: {
+          observationalMemory: {
+            model: 'test-model',
+            scope: 'thread',
+            retrieval: { vector: true, scope: 'resource' },
+          },
+        } as any,
+      });
+
+      const recall = memory.listTools().recall;
+      const schema = getInputJSONSchema(recall);
+      expect(schema.properties.mode.enum).toEqual(['messages', 'threads', 'search']);
+      expect(recall.description).toContain('mode="search"');
     });
   });
 });

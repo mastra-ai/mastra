@@ -4,6 +4,7 @@ import { RequestContext } from '../request-context';
 import { toStandardSchema } from '../schema';
 import type { PublicSchema, StandardSchemaWithJSON, InferPublicSchema } from '../schema';
 import type { SuspendOptions } from '../workflows';
+import { consumeBuilderValidatedInput } from './builder-validation-context';
 import type {
   McpMetadata,
   MCPToolProperties,
@@ -316,9 +317,11 @@ export class Tool<
         // execution, and during resume the tool's execute function checks resumeData
         // and returns early without using the input args.
         const isResuming = !!(context?.resumeData || context?.agent?.resumeData);
+        const wasBuilderValidated = consumeBuilderValidatedInput(context);
+        const skipInputValidation = isResuming || wasBuilderValidated;
 
         let data: any = inputData;
-        if (!isResuming) {
+        if (!skipInputValidation) {
           // Validate input if schema exists
           const validationResult = validateToolInput(this.inputSchema, inputData, this.id);
           if (validationResult.error) {

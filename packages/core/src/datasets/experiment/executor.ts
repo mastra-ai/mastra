@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import type { Agent } from '../../agent';
 import { isSupportedLanguageModel } from '../../agent';
 import type { MessageListInput } from '../../agent/message-list';
@@ -6,11 +7,11 @@ import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../eval
 import type { ScoringData } from '../../llm/model/base.types';
 import type { VersionOverrides } from '../../mastra/types';
 import { resolveObservabilityContext } from '../../observability';
-import { RequestContext } from '../../request-context';
+import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '../../request-context';
 import type { TargetType } from '../../storage/types';
 import type { ToolHooks } from '../../tools/types';
 import type { StepResult, Workflow } from '../../workflows';
-import type { ItemToolMock, ToolMockReport } from './tool-mocks';
+import type { ItemToolMock, ToolMockReport, UnmockedToolPolicy } from './tool-mocks';
 import { ToolMockMatcher } from './tool-mocks';
 
 /**
@@ -113,6 +114,7 @@ export async function executeTarget(
   target: Target,
   targetType: TargetType,
   item: {
+    id?: string;
     input: unknown;
     groundTruth?: unknown;
     metadata?: Record<string, unknown>;
@@ -126,6 +128,8 @@ export async function executeTarget(
     versions?: VersionOverrides;
     /** Item-level static tool mocks (agent targets only). */
     toolMocks?: ItemToolMock[];
+    /** Handling for agent tool calls not declared in `toolMocks`. */
+    unmockedToolPolicy?: UnmockedToolPolicy;
   },
 ): Promise<ExecutionResult> {
   try {
@@ -147,6 +151,7 @@ export async function executeTarget(
           options?.experimentId,
           options?.versions,
           options?.toolMocks,
+          options?.unmockedToolPolicy,
         );
         break;
       case 'workflow':
@@ -214,12 +219,13 @@ function raceWithSignal<T>(promise: Promise<T>, signal: AbortSignal): Promise<T>
  */
 async function executeAgent(
   agent: Agent,
-  item: { input: unknown; groundTruth?: unknown },
+  item: { id?: string; input: unknown; groundTruth?: unknown },
   signal?: AbortSignal,
   requestContext?: Record<string, unknown>,
   experimentId?: string,
   versions?: VersionOverrides,
   toolMocks?: ItemToolMock[],
+  unmockedToolPolicy?: UnmockedToolPolicy,
 ): Promise<ExecutionResult> {
   const model = await agent.getModel();
 
@@ -234,22 +240,65 @@ async function executeAgent(
   // Pass experimentId as tracing metadata so it appears on the AGENT_RUN span
   const tracingOptions = experimentId ? { metadata: { experimentId } } : undefined;
 
+  // A memory-enabled agent given a resourceId (e.g. via MASTRA_RESOURCE_ID_KEY set by
+  // auth middleware or the Studio "Run Experiment" field) but no threadId would throw
+  // AGENT_MEMORY_MISSING_RESOURCE_ID downstream — the runner owns no conversation, so
+  // it injects a fresh thread per item, mirroring the multi-turn evals precedent
+  // (runAgentTurns). When an explicit MASTRA_THREAD_ID_KEY is present we decline to
+  // inject and let the context key resolve downstream; memory-less agents are left
+  // untouched. Truthiness (not null-ness) checks match the downstream `||` resolution
+  // in prepare-memory-step: an empty-string resourceId skipped memory before this fix
+  // and must keep doing so.
+  const contextResourceId = requestContext?.[MASTRA_RESOURCE_ID_KEY];
+  const shouldInjectThread =
+    Boolean(contextResourceId) &&
+    !requestContext?.[MASTRA_THREAD_ID_KEY] &&
+    typeof agent.hasOwnMemory === 'function' &&
+    agent.hasOwnMemory();
+  const memoryOption = shouldInjectThread
+    ? {
+        memory: {
+          thread: {
+            id: randomUUID(),
+            // Tag experimentId (and the item id when known) so a large run's threads
+            // map back to their items without matching transcripts.
+            ...(experimentId || item.id
+              ? {
+                  metadata: {
+                    ...(experimentId ? { experimentId } : {}),
+                    ...(item.id ? { experimentItemId: item.id } : {}),
+                  },
+                }
+              : {}),
+          },
+          resource: String(contextResourceId),
+          // Suppress title generation: these threads are runner bookkeeping, so an
+          // extra title LLM call per item (and per retry) is pure waste (precedent:
+          // ephemeral subagent-delegation threads, issue #18738). lastMessages is
+          // deliberately NOT disabled — it also gates the MessageHistory output
+          // processor, and disabling it would persist every injected thread empty.
+          options: { generateTitle: false },
+        },
+      }
+    : undefined;
+
   // Build a fresh matcher per item run so ordered consumption is deterministic and
   // not leaked across retries. Compose with the agent's configured hooks.
-  const matcher = new ToolMockMatcher(toolMocks);
+  const matcher = new ToolMockMatcher(toolMocks, unmockedToolPolicy);
+  const shouldInterceptTools = matcher.hasMocks || matcher.unmockedToolPolicy === 'deny';
 
-  // When the item declares mocks, abort the whole run the instant a mocked tool is
+  // When tool calls are intercepted, abort the whole run the instant a tool is
   // mis-called so the model cannot go on to invoke later (possibly side-effecting,
   // unmocked) tools live. The mock-abort signal is combined with the outer signal.
-  const mockAbort = matcher.hasMocks ? new AbortController() : undefined;
-  const mockHooks = matcher.hasMocks ? buildToolMockHooks(agent, matcher, mockAbort!) : undefined;
+  const mockAbort = shouldInterceptTools ? new AbortController() : undefined;
+  const mockHooks = shouldInterceptTools ? buildToolMockHooks(agent, matcher, mockAbort!) : undefined;
   const generateSignal =
     mockAbort && signal ? AbortSignal.any([signal, mockAbort.signal]) : (mockAbort?.signal ?? signal);
 
   // Force sequential tool execution when mocks exist so the provider's tool-call
   // order equals the execution (and consumption) order — deterministic ordered
   // consumption of repeated (toolName, args) mocks. No cost for mock-free runs.
-  const mockConcurrency = matcher.hasMocks ? { toolCallConcurrency: 1 } : undefined;
+  const mockConcurrency = shouldInterceptTools ? { toolCallConcurrency: 1 } : undefined;
 
   let rawResult: unknown;
   try {
@@ -258,6 +307,7 @@ async function executeAgent(
           scorers: {},
           returnScorerData: true,
           abortSignal: generateSignal,
+          ...memoryOption,
           ...(reqCtx ? { requestContext: reqCtx } : {}),
           ...(tracingOptions ? { tracingOptions } : {}),
           ...(versions ? { versions } : {}),
@@ -268,6 +318,7 @@ async function executeAgent(
           scorers: {},
           returnScorerData: true,
           abortSignal: generateSignal,
+          ...memoryOption,
           ...(reqCtx ? { requestContext: reqCtx } : {}),
           ...(tracingOptions ? { tracingOptions } : {}),
           ...(mockHooks ? { hooks: mockHooks } : {}),
@@ -276,7 +327,7 @@ async function executeAgent(
   } catch (error) {
     // A mock failure aborts the run mid-flight: surface the deterministic coded
     // error instead of the raw abort. Any other error rethrows unchanged.
-    const mockReport = matcher.hasMocks ? matcher.report() : undefined;
+    const mockReport = shouldInterceptTools ? matcher.report() : undefined;
     if (mockReport?.failure) {
       return toolMockFailureResult(mockReport, null);
     }
@@ -289,7 +340,7 @@ async function executeAgent(
   const traceId = result.traceId ?? null;
   const scoringData = result.scoringData;
 
-  const toolMockReport = matcher.hasMocks ? matcher.report() : undefined;
+  const toolMockReport = shouldInterceptTools ? matcher.report() : undefined;
 
   // Fallback for the race where the model finishes a step before the abort
   // propagates: the matcher still recorded the first failure, so fail the item
@@ -329,7 +380,10 @@ function toolMockFailureResult(report: ToolMockReport, traceId: string | null): 
   return {
     output: null,
     error: {
-      message: `Mocked tool "${failure.toolName}" was called with arguments that did not match an available mock (${failure.code}).`,
+      message:
+        failure.code === 'TOOL_MOCK_NOT_DECLARED'
+          ? `Tool "${failure.toolName}" was called without a declared mock (${failure.code}).`
+          : `Mocked tool "${failure.toolName}" was called with arguments that did not match an available mock (${failure.code}).`,
       code: failure.code,
     },
     traceId,

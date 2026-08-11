@@ -1,5 +1,5 @@
 {
-  "attachment": ["muse-spark-1.1"],
-  "temperature": ["muse-spark-1.1"],
-  "structuredOutput": ["muse-spark-1.1"]
+  "attachment": ["muse-spark-1.1", "muse-spark-1.2", "muse-spark-1.2-contributor"],
+  "temperature": ["muse-spark-1.1", "muse-spark-1.2", "muse-spark-1.2-contributor"],
+  "structuredOutput": ["muse-spark-1.1", "muse-spark-1.2", "muse-spark-1.2-contributor"]
 }

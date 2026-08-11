@@ -18,7 +18,7 @@ The `CompositeAuth` class allows you to combine multiple authentication provider
 
 ## Installation
 
-CompositeAuth is included in `@mastra/core`, no additional packages required.
+CompositeAuth is included in `@mastra/core` and requires no additional packages.
 
 ```typescript
 import { CompositeAuth } from '@mastra/core/server'
@@ -88,7 +88,7 @@ async authenticateToken(token, request) {
 
 ## Provider order
 
-The order of providers matters. Place the most common authentication method first for better performance:
+Place the most common authentication method first because provider order affects performance:
 
 ```typescript
 // If most requests use Clerk, put it first

@@ -92,7 +92,7 @@ Creates a new vector index in Couchbase.
 
 :::note
 
-Index creation is asynchronous. After calling `createIndex`, allow time (typically 1–5 seconds for small datasets, longer for large ones) before querying. For production, implement polling to check index status rather than using fixed delays.
+Index creation is asynchronous. After calling `createIndex`, allow time (typically 1 to 5 seconds for small datasets, longer for large ones) before querying. For production, implement polling to check index status rather than using fixed delays.
 
 :::
 
@@ -253,7 +253,7 @@ Returns: `Promise<string[]>`
 
 ### `updateVector()`
 
-Updates a specific vector entry by its ID with new vector data and/or metadata. **Note:** Filter-based updates aren't yet implemented for Couchbase.
+Updates a specific vector entry by its ID with new vector data and/or metadata. Filter-based updates aren't yet implemented for Couchbase.
 
 <PropertiesTable
   content={[
@@ -296,7 +296,7 @@ Deletes a single vector by its ID from the index.
 
 ### `deleteVectors()`
 
-Deletes multiple vectors by their IDs. **Note:** Filter-based deletion isn't yet implemented for Couchbase.
+Deletes multiple vectors by their IDs. Filter-based deletion isn't yet implemented for Couchbase.
 
 <PropertiesTable
   content={[
@@ -365,7 +365,7 @@ try {
 
 - Index creation delays may impact immediate querying after creation.
 - No hard enforcement of vector dimension at ingest time (dimension mismatches will error at query time).
-- Vector insertion and index updates are eventually consistent; strong consistency isn't guaranteed immediately after writes.
+- Vector insertion and index updates are eventually consistent. Strong consistency isn't guaranteed immediately after writes.
 
 ## Related
 

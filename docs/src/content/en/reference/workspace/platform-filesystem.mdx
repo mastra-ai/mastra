@@ -12,9 +12,9 @@ import TabItem from "@theme/TabItem";
 
 Stores files in a Mastra Platform workspace bucket. Each Mastra Platform environment can have one bucket, and `PlatformFilesystem` gives agents `read`, `write`, `list`, `delete`, and `move` operations against it.
 
-Use `PlatformFilesystem` when your agent runs on a Mastra Platform deployment and you want the filesystem to be backed by the platform-provisioned bucket. For direct S3 access, see [`S3Filesystem`](/reference/workspace/s3-filesystem). For a local directory during development, see [`LocalFilesystem`](/reference/workspace/local-filesystem).
+Related providers: [`S3Filesystem`](/integrations/file-storage/amazon-s3) for direct S3 access, [`LocalFilesystem`](/reference/workspace/local-filesystem) for local directories.
 
-:::info
+:::note
 
 For interface details, see [WorkspaceFilesystem interface](/reference/workspace/filesystem).
 
@@ -31,7 +31,7 @@ Configure the platform credentials. The access token, project ID, and bucket nam
 <Tabs>
   <TabItem value="env-file" label=".env file">
     ```bash
-    MASTRA_PLATFORM_SECRET_KEY=your-platform-secret-key
+    MASTRA_PLATFORM_ACCESS_TOKEN=your-platform-access-token
     MASTRA_PROJECT_ID=your-project-id
     MASTRA_PLATFORM_BUCKET_NAME=your-bucket-name
     ```
@@ -48,7 +48,7 @@ Configure the platform credentials. The access token, project ID, and bucket nam
   </TabItem>
 </Tabs>
 
-On a Mastra Platform deployment these variables are injected automatically, so the constructor can be called with no options.
+On a Mastra Platform deployment, `MASTRA_PLATFORM_ACCESS_TOKEN`, `MASTRA_PROJECT_ID`, and `MASTRA_PLATFORM_BUCKET_NAME` are injected automatically, so the constructor can be called with no options. For local development, `MASTRA_PLATFORM_ACCESS_TOKEN` can contain an `sk_` API token from your organization's settings page under **API Tokens**.
 
 ## Usage
 
@@ -106,7 +106,7 @@ await fs.writeFile('/analyses/repo.md', 'x') // throws WorkspaceReadOnlyError
 
 ### Appending files
 
-`appendFile` is a read-modify-write and is not atomic. Concurrent appends to the same path can overwrite each other. For concurrent writers, use `writeFile` with distinct keys.
+`appendFile` is a read-modify-write and isn't atomic. Concurrent appends to the same path can overwrite each other. For concurrent writers, use `writeFile` with distinct keys.
 
 ## Constructor parameters
 
@@ -115,8 +115,7 @@ await fs.writeFile('/analyses/repo.md', 'x') // throws WorkspaceReadOnlyError
   {
     name: 'accessToken',
     type: 'string',
-    description:
-      'Platform secret key. Falls back to the MASTRA_PLATFORM_SECRET_KEY environment variable (MASTRA_PLATFORM_ACCESS_TOKEN is a deprecated fallback).',
+    description: 'Platform access token. Falls back to the MASTRA_PLATFORM_ACCESS_TOKEN environment variable.',
     isOptional: true,
   },
   {
@@ -211,14 +210,15 @@ await fs.writeFile('/analyses/repo.md', 'x') // throws WorkspaceReadOnlyError
 
 Filesystem-specific errors match the standard workspace error types:
 
-- `FileNotFoundError`: The path does not exist. Thrown by `readFile`, `stat`, and `deleteFile` (unless `force: true` is set).
+- `FileNotFoundError`: The path doesn't exist. Thrown by `readFile`, `stat`, and `deleteFile` (unless `force: true` is set).
 - `FileExistsError`: `writeFile` was called with `overwrite: false` and the destination already exists.
 - `WorkspaceReadOnlyError`: A mutating call was made on a read-only filesystem.
 
 Other Platform API failures raise `PlatformApiError`. Structured `{ error: { message, type } }` responses are parsed into `.code` (machine-readable kind) and `.proxyMessage` (human string):
 
 ```typescript
-import { FileNotFoundError, PlatformApiError } from '@mastra/platform-workspace'
+import { FileNotFoundError } from '@mastra/core/workspace'
+import { PlatformApiError } from '@mastra/platform-workspace'
 
 try {
   await fs.readFile('/missing.txt')
@@ -234,10 +234,12 @@ try {
 }
 ```
 
-`code` and `proxyMessage` are `undefined` when the response body is not JSON, for example an HTML 502 from a load balancer.
+`FileNotFoundError`, `FileExistsError`, and `WorkspaceReadOnlyError` are re-exports of the standard workspace error types from `@mastra/core/workspace`. `PlatformApiError` is specific to `@mastra/platform-workspace`.
+
+`code` and `proxyMessage` are `undefined` when the response body isn't JSON, for example an HTML 502 from a load balancer.
 
 ## Related
 
 - [PlatformSandbox reference](/reference/workspace/platform-sandbox)
-- [S3Filesystem reference](/reference/workspace/s3-filesystem)
+- [S3Filesystem reference](/integrations/file-storage/amazon-s3)
 - [WorkspaceFilesystem interface](/reference/workspace/filesystem)

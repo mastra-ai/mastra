@@ -93,7 +93,7 @@ The scorer evaluates relevancy through query-answer alignment, considering compl
 ### Scoring Process
 
 1. **Statement Preprocess:**
-   - Breaks output into meaningful statements while preserving context.
+   - Breaks output into useful statements while preserving context.
 1. **Relevance Analysis:**
    - Each statement is evaluated as:
      - "yes": Full weight for direct matches
@@ -107,9 +107,9 @@ The scorer evaluates relevancy through query-answer alignment, considering compl
 A relevancy score between 0 and 1:
 
 - **1.0**: The response fully answers the query with relevant and focused information.
-- **0.7–0.9**: The response mostly answers the query but may include minor unrelated content.
-- **0.4–0.6**: The response partially answers the query, mixing relevant and unrelated information.
-- **0.1–0.3**: The response includes minimal relevant content and largely misses the intent of the query.
+- **0.7 to 0.9**: The response mostly answers the query but may include minor unrelated content.
+- **0.4 to 0.6**: The response partially answers the query, mixing relevant and unrelated information.
+- **0.1 to 0.3**: The response includes minimal relevant content and largely misses the intent of the query.
 - **0.0**: The response is entirely unrelated and doesn't answer the query.
 
 ## Example

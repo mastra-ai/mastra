@@ -5,13 +5,13 @@
   "type": "module",
   "description": "Browser application for MastraCode: React SPA, client data layer, Vite config, and UI tests. Produces the Factory SPA bundled by the Mastra CLI.",
   "scripts": {
-    "dev": "vite --config src/vite.config.ts",
-    "web": "MASTRACODE_ENV_DIR=../web MASTRACODE_API_TARGET=${MASTRACODE_API_TARGET:-http://localhost:4111} MASTRACODE_UI_PORT=${MASTRACODE_UI_PORT:-5173} vite --config src/vite.config.ts",
+    "dev": "MASTRACODE_ENV_DIR=../web vite --config src/vite.config.ts",
+    "dev:api": "pnpm --dir ../web api",
     "build": "vite --config src/vite.config.ts build",
     "typecheck": "tsc --noEmit -p src/ui/tsconfig.json",
-    "test": "vitest run && vitest run --config e2e/ui/vitest.config.ts",
-    "test:unit": "vitest run",
-    "test:msw": "vitest run --config e2e/ui/vitest.config.ts"
+    "test": "vitest run",
+    "test:unit": "vitest run --project unit:factory-ui",
+    "test:msw": "vitest run --project msw:factory-ui"
   },
   "dependencies": {
     "@fontsource-variable/mona-sans": "5.3.0",
@@ -26,8 +26,7 @@
     "marked": "^15.0.0",
     "react": "catalog:",
     "react-dom": "catalog:",
-    "react-resizable-panels": "^4.11.0",
-    "react-router": "^7.13.1",
+    "react-router": "^8.0.0",
     "shiki": "^1.29.2"
   },
   "devDependencies": {

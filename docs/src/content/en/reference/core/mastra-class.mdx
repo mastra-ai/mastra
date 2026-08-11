@@ -239,7 +239,7 @@ Visit the [Configuration reference](/reference/configuration) for detailed docum
     name: 'versions',
     type: 'VersionOverrides',
     description:
-      'Global version overrides for sub-agent delegation. When a supervisor agent delegates to a sub-agent, these overrides determine which stored version of that sub-agent to use instead of the code-defined default. Requires the editor package to be configured. See [Sub-agent versioning](/docs/editor/overview#sub-agent-versioning) for details.',
+      'Global version overrides for sub-agent delegation. When a supervisor agent delegates to a sub-agent, these overrides determine which stored version of that sub-agent to use instead of the code-defined default. Requires the editor package to be configured. See [Editor versioning](/docs/editor/overview#versioning) for details.',
     isOptional: true,
     properties: [
       {
@@ -278,6 +278,151 @@ Visit the [Configuration reference](/reference/configuration) for detailed docum
         ],
       },
     ],
+  },
+  {
+    name: 'workers',
+    type: 'MastraWorker[] | false',
+    description:
+      'Configure which [workers](/docs/deployment/workers) run in this Mastra instance. When omitted, Mastra auto-creates default workers based on your PubSub and config. Pass `false` to disable all event processing (useful when running standalone workers separately). Pass a `MastraWorker[]` to add custom workers — they are merged with the auto-created defaults, and a custom worker with the same `name` as a default replaces it.',
+    isOptional: true,
+  },
+  {
+    name: 'backgroundTasks',
+    type: 'BackgroundTaskManagerConfig',
+    description:
+      'Configure [background task](/docs/long-running-agents/background-tasks) execution for agents. See [background tasks configuration reference](/reference/configuration#backgroundtasks) for all options.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'BackgroundTaskManagerConfig',
+        parameters: [
+          {
+            name: 'enabled',
+            type: 'boolean',
+            isOptional: true,
+            defaultValue: 'false',
+            description: 'Enable background task dispatch.',
+          },
+          {
+            name: 'globalConcurrency',
+            type: 'number',
+            isOptional: true,
+            defaultValue: '10',
+            description: 'Max concurrent tasks across all agents.',
+          },
+          {
+            name: 'perAgentConcurrency',
+            type: 'number',
+            isOptional: true,
+            defaultValue: '5',
+            description: 'Max concurrent tasks per agent.',
+          },
+          {
+            name: 'backpressure',
+            type: "'queue' | 'reject' | 'fallback-sync'",
+            isOptional: true,
+            defaultValue: "'queue'",
+            description: 'Behavior when concurrency limit is reached.',
+          },
+          {
+            name: 'defaultTimeoutMs',
+            type: 'number',
+            isOptional: true,
+            defaultValue: '300000',
+            description: 'Default task timeout in milliseconds.',
+          },
+          {
+            name: 'defaultRetries',
+            type: 'RetryConfig',
+            isOptional: true,
+            description: 'Default retry configuration.',
+          },
+        ],
+      },
+    ],
+  },
+  {
+    name: 'scheduler',
+    type: 'object',
+    description:
+      'Configure the [scheduler worker](/docs/deployment/workers#scheduler-worker) for cron-driven workflow triggers. Auto-enables when any workflow declares a `schedule`. See [Scheduled workflows](/docs/workflows/scheduled-workflows).',
+    isOptional: true,
+    properties: [
+      {
+        type: 'object',
+        parameters: [
+          {
+            name: 'enabled',
+            type: 'boolean',
+            isOptional: true,
+            description: 'Explicitly enable or disable the scheduler.',
+          },
+        ],
+      },
+    ],
+  },
+  {
+    name: 'recovery',
+    type: 'MastraRecoveryConfig',
+    description:
+      'Boot-time recovery behavior for orphaned agent and workflow runs. See [Crash recovery](/docs/long-running-agents/durable-agents#crash-recovery).',
+    isOptional: true,
+    defaultValue: "{ durableAgents: 'off' }",
+    properties: [
+      {
+        type: 'object',
+        parameters: [
+          {
+            name: 'durableAgents',
+            type: "'auto' | 'off'",
+            isOptional: true,
+            defaultValue: "'off'",
+            description:
+              "Set to `'auto'` to automatically re-drive orphaned RUNNING durable agent runs on server boot. Recovery re-issues LLM calls and re-executes tool calls, so tools must be idempotent. See [Crash recovery](/docs/long-running-agents/durable-agents#crash-recovery).",
+          },
+        ],
+      },
+    ],
+  },
+]}
+/>
+
+## Methods
+
+### `recoverAllDurableAgents()`
+
+Re-drives every orphaned `running` durable-agent run across all registered durable agents. Called automatically on boot when `recovery.durableAgents` is `'auto'`. You can also call it directly for manual recovery or from a scheduled task.
+
+Requires persistent storage. With an in-memory store, there's nothing to recover after a process restart.
+
+```typescript
+const result = await mastra.recoverAllDurableAgents()
+// { agents: 2, recovered: 3, succeeded: 3, failed: 0 }
+```
+
+Returns:
+
+<PropertiesTable
+  content={[
+  {
+    name: 'agents',
+    type: 'number',
+    description: 'Number of durable agents scanned.',
+  },
+  {
+    name: 'recovered',
+    type: 'number',
+    description: 'Total number of runs that were re-driven.',
+  },
+  {
+    name: 'succeeded',
+    type: 'number',
+    description: 'Runs that restarted successfully.',
+  },
+  {
+    name: 'failed',
+    type: 'number',
+    description: 'Runs whose restart threw an error.',
   },
 ]}
 />

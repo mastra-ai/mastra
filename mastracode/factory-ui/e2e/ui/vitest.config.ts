@@ -26,6 +26,8 @@ export default defineConfig({
     dedupe: ['react', 'react-dom', '@tanstack/react-query'],
   },
   test: {
+    name: 'msw:factory-ui',
+    root: pkgRoot,
     environment: 'jsdom',
     globals: true,
     // playground-ui ships `.css` imports in its ESM dist; when installed from

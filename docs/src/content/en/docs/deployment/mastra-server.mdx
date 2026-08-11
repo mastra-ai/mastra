@@ -89,7 +89,7 @@ export const mastra = new Mastra({
 })
 ```
 
-The value of each option can come from a variable, import, or function call. The option itself must remain a direct property. Do not hide build-time options behind a factory call or an object spread:
+The value of each option can come from a variable, import, or function call. The option itself must remain a direct property. Don't hide build-time options behind a factory call or an object spread:
 
 ```typescript title="src/mastra/index.ts"
 const options = {

@@ -198,20 +198,20 @@ A powerful feature of `MCPServer` is its ability to automatically expose your Ma
 - **Tool Functionality**:
   - **Description**: The generated tool's description will be in the format: "Ask agent `<AgentName>` a question. Original agent instructions: `<agent description>`".
   - **Input**: The tool expects a single object argument with a `message` property (string): `{ message: "Your question for the agent" }`.
-  - **Execution**: When this tool is called, it invokes the `generate()` method of the corresponding agent, passing the provided `query`.
+  - **Execution**: When this tool is called, it invokes the corresponding agent's `generate()` method with the provided `query`.
   - **Output**: The direct result from the agent's `generate()` method is returned as the output of the tool.
 
-- **Name Collisions**: If an explicit tool defined in the `tools` configuration has the same name as an agent-derived tool (e.g., you have a tool named `ask_myAgentKey` and also an agent with the key `myAgentKey`), the _explicitly defined tool will take precedence_. The agent won't be converted into a tool in this conflicting case, and a warning will be logged.
+- **Name collisions.** If an explicit tool defined in the `tools` configuration has the same name as an agent-derived tool (e.g., a tool named `ask_myAgentKey` alongside an agent keyed as `myAgentKey`), the _explicitly defined tool will take precedence_. The agent won't be converted into a tool in this conflicting case, and a warning will be logged.
 
 This makes it straightforward to allow MCP clients to interact with your agents using natural language queries, like any other tool.
 
 ### Agent-to-Tool Conversion
 
-When you provide agents in the `agents` configuration property, `MCPServer` will automatically create a corresponding tool for each agent. The tool will be named `ask_<agentIdentifier>`, where `<agentIdentifier>` is the key you used in the `agents` object.
+When you provide agents in the `agents` configuration property, `MCPServer` will automatically create a corresponding tool for each agent. The tool will be `ask_<agentIdentifier>`, where `<agentIdentifier>` is the key you used in the `agents` object.
 
 The description for this generated tool will be: "Ask agent `<agent.name>` a question. Agent description: `<agent.description>`".
 
-**Important**: For an agent to be converted into a tool, it **must** have a non-empty `description` string property set in its configuration when it was instantiated (e.g., `new Agent({ id: 'my-agent', name: 'myAgent', description: 'This agent does X.', ... })`). If an agent is passed to `MCPServer` with a missing or empty `description`, an error will be thrown when the `MCPServer` is instantiated, and server setup will fail.
+For an agent to be converted into a tool, it **must** have a non-empty `description` string property set in its configuration when it was instantiated (e.g., `new Agent({ id: 'my-agent', name: 'myAgent', description: 'This agent does X.', ... })`). If an agent is passed to `MCPServer` with a missing or empty `description`, an error will be thrown when the `MCPServer` is instantiated, and server setup will fail.
 
 This allows you to quickly expose the generative capabilities of your agents through the MCP, enabling clients to "ask" your agents questions directly.
 
@@ -515,7 +515,7 @@ serve(async req => {
 })
 ```
 
-:::info[When to use serverless: true]
+:::note[When to use serverless: true]
 
 Use `serverless: true` when deploying to environments where each request runs in a fresh, stateless execution context:
 
@@ -551,7 +551,7 @@ await server.startHTTP({
 
 This is still stateless: no `mcp-session-id` is required or persisted. It only enables notifications scoped to the current request (such as progress). The session-dependent features below remain unavailable.
 
-**Note:** The following MCP features require session state or persistent connections and **won't work** in serverless mode (including with `serverlessStreaming: true`):
+The following MCP features require session state or persistent connections and **won't work** in serverless mode (including with `serverlessStreaming: true`):
 
 - **Elicitation** - Interactive user input requests during tool execution require session management to route responses back to the correct client
 - **Resource subscriptions** - `resources/subscribe` and `resources/unsubscribe` need persistent connections to maintain subscription state
@@ -612,7 +612,7 @@ The `StreamableHTTPServerTransportOptions` object allows you to customize the be
     name: 'serverlessStreaming',
     type: 'boolean',
     description:
-      'If `true`, serverless requests use request-scoped SSE streaming instead of a buffered JSON response, allowing in-request `notifications/progress` to reach the client before the final result. Only takes effect together with `serverless: true`. Defaults to `false` (buffered JSON responses), which preserves backward-compatible behavior. This enables only request-scoped notifications such as progress; elicitation, subscriptions, and out-of-request notifications still require session state.',
+      'If `true`, serverless requests use request-scoped SSE streaming instead of a buffered JSON response, allowing in-request `notifications/progress` to reach the client before the final result. Only takes effect together with `serverless: true`. Defaults to `false` (buffered JSON responses), which preserves backward-compatible behavior. It enables only request-scoped notifications such as progress; elicitation, subscriptions, and out-of-request notifications still require session state.',
     optional: true,
   },
   {
@@ -655,7 +655,7 @@ async close(): Promise<void>
 
 ### `getServerInfo()`
 
-This method gives you a look at the server's basic information.
+The method returns the server's basic information.
 
 ```typescript prettier:false
 getServerInfo(): ServerInfo
@@ -663,7 +663,7 @@ getServerInfo(): ServerInfo
 
 ### `getServerDetail()`
 
-This method gives you a detailed look at the server's information.
+The method returns details about the server's information.
 
 ```typescript prettier:false
 getServerDetail(): ServerDetail
@@ -671,7 +671,7 @@ getServerDetail(): ServerDetail
 
 ### `getToolListInfo()`
 
-This method gives you a look at the tools that were set up when you created the server. It's a read-only list, useful for debugging purposes.
+The method returns the tools that were set up when you created the server. It's a read-only list, useful for debugging purposes.
 
 ```typescript prettier:false
 getToolListInfo(): ToolListInfo
@@ -679,7 +679,7 @@ getToolListInfo(): ToolListInfo
 
 ### `getToolInfo()`
 
-This method gives you detailed information about a specific tool.
+The method returns details about a specific tool.
 
 ```typescript prettier:false
 getToolInfo(toolName: string): ToolInfo
@@ -776,7 +776,7 @@ Resources are identified by unique URIs (e.g., `file:///home/user/documents/repo
 Clients can discover resources through:
 
 1. **Direct resources**: Servers expose a list of concrete resources via a `resources/list` endpoint.
-1. **Resource templates**: For dynamic resources, servers can expose URI templates (RFC 6570) that clients use to construct resource URIs.
+1. **Resource templates**: For runtime-defined resources, servers can expose URI templates (RFC 6570) that clients use to construct resource URIs.
 
 To read a resource, clients make a `resources/read` request with the URI. Servers can also notify clients about changes to the resource list (`notifications/resources/list_changed`) or updates to specific resource content (`notifications/resources/updated`) if a client has subscribed to that resource.
 
@@ -870,7 +870,7 @@ await serverWithResources.resources.notifyUpdated({ uri: 'file://data.txt' })
 
 #### `server.resources.notifyListChanged()`
 
-Call this method when the overall list of available resources has changed (e.g., a resource was added or removed). This will send a `notifications/resources/list_changed` message to clients, prompting them to re-fetch the list of resources.
+Call this method when the list of available resources has changed (e.g., a resource was added or removed). This will send a `notifications/resources/list_changed` message to clients, prompting them to re-fetch the list of resources.
 
 ```typescript prettier:false
 async server.resources.notifyListChanged(): Promise<void>
@@ -887,9 +887,9 @@ await serverWithResources.resources.notifyListChanged()
 
 ### What are MCP Prompts?
 
-Prompts are reusable templates or workflows that MCP servers expose to clients. They can accept arguments, include resource context, support versioning, and be used to standardize LLM interactions.
+Prompts are reusable templates or workflows that MCP servers expose to clients. They can accept arguments and include resource context. They also support versioning and standardize LLM interactions.
 
-Prompts are identified by a unique name (and optional version) and can be dynamic or static.
+Prompts are identified by a unique name (and optional version) and can be runtime-defined or static.
 
 ### `MCPServerPrompts` Type
 
@@ -984,7 +984,7 @@ If the available prompts change, your server can notify connected clients:
 
 #### `server.prompts.notifyListChanged()`
 
-Call this method when the overall list of available prompts has changed (e.g., a prompt was added or removed). This will send a `notifications/prompts/list_changed` message to clients, prompting them to re-fetch the list of prompts.
+Call this method when the list of available prompts has changed (e.g., a prompt was added or removed). This will send a `notifications/prompts/list_changed` message to clients, prompting them to re-fetch the list of prompts.
 
 ```typescript
 await serverWithPrompts.prompts.notifyListChanged()
@@ -1004,7 +1004,7 @@ await serverWithPrompts.prompts.notifyListChanged()
 
 Tools are usually provided when constructing the `MCPServer`, but you can also add or remove tools while the server is running. The server exposes these operations through the `toolActions` property. When the tool list changes, connected clients receive a `notifications/tools/list_changed` message prompting them to re-fetch the tool list.
 
-The property is named `toolActions` because `tools()` is the method that returns the registered tool registry.
+The property is `toolActions` because `tools()` is the method that returns the registered tool registry.
 
 ### `toolActions.add(tools)`
 
@@ -1032,7 +1032,7 @@ await server.toolActions.add({ searchTool })
 
 ### `toolActions.remove(toolIds)`
 
-Removes tools from the running server by tool ID and notifies connected clients. Unknown tool IDs are ignored. If no tools were removed, no notification is sent.
+Removes tools from the running server by tool ID and notifies connected clients. Unknown tool IDs are ignored. A notification is sent only when at least one tool is removed.
 
 ```typescript prettier:false
 async server.toolActions.remove(toolIds: string[]): Promise<void>
@@ -1058,7 +1058,7 @@ When the server is registered with a Mastra instance, `toolActions.add()` and `t
 
 ## Logging
 
-MCP servers can send structured log messages to clients using `notifications/message`. Clients control verbosity by sending a `logging/setLevel` request; the server drops messages below the requested minimum level (following RFC 5424 severity ordering). The level is tracked per session, so different clients can request different verbosity.
+MCP servers can send structured log messages to clients using `notifications/message`. Clients control verbosity by sending a `logging/setLevel` request. The server drops messages below the requested minimum level (following RFC 5424 severity ordering). The level is tracked per session, so different clients can request different verbosity.
 
 ### `sendLoggingMessage()`
 
@@ -1140,7 +1140,7 @@ Notification methods (`resources.notifyListChanged()`, `prompts.notifyListChange
 
 ## Examples
 
-For practical examples of setting up and deploying an MCPServer, see the [Publishing an MCP Server guide](/guides/guide/publishing-mcp-server).
+For a practical example of packaging a stdio server, see [Publish a stdio server package](/docs/mcp/overview#publish-a-stdio-server-package).
 
 The example at the beginning of this page also demonstrates how to instantiate `MCPServer` with both tools and agents.
 
@@ -1148,7 +1148,7 @@ The example at the beginning of this page also demonstrates how to instantiate `
 
 ### What's Elicitation?
 
-Elicitation is a feature in the Model Context Protocol (MCP) that allows servers to request structured information from users. This enables interactive workflows where servers can collect additional data dynamically.
+Elicitation is a feature in the Model Context Protocol (MCP) that allows servers to request structured information from users. It supports interactive workflows where servers can collect additional data at runtime.
 
 The `MCPServer` class automatically includes elicitation capabilities. Tools receive a `context.mcp` object in their `execute` function that includes an `elicitation.sendRequest()` method for requesting user input.
 
@@ -1337,7 +1337,7 @@ execute: async (inputData, context) => {
 }
 ```
 
-Note that elicitation is **session-aware** when using HTTP-based transports (SSE or HTTP). This means that when multiple clients are connected to the same server, elicitation requests are routed to the correct client session that initiated the tool execution.
+Elicitation is **session-aware** when using HTTP-based transports (SSE or HTTP). When multiple clients are connected to the same server, elicitation requests are routed to the client session that initiated the tool execution.
 
 The `ElicitResult` type:
 
@@ -1914,7 +1914,7 @@ const server = new MCPServer({
 })
 ```
 
-Link a tool to its app resource by setting `_meta.ui.resourceUri` on the tool to the matching `ui://` URI. The server auto-normalizes this metadata when registering tools. Visit [MCP Apps](/docs/mcp/mcp-apps) for the full app bridge API and usage patterns.
+Link a tool to its app resource by setting `_meta.ui.resourceUri` on the tool to the matching `ui://` URI. The server auto-normalizes this metadata when registering tools. Visit [MCP Apps](/docs/mcp/overview) for the full app bridge API and usage patterns.
 
 ## Related information
 

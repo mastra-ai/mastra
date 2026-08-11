@@ -435,11 +435,11 @@ export interface SerializedAgentWithId extends SerializedAgent {
 }
 
 export async function getSerializedAgentTools(
-  tools: Record<string, SerializedToolInput>,
+  tools: Record<string, SerializedToolInput | object>,
   partial: boolean = false,
 ): Promise<Record<string, SerializedTool>> {
   return Object.entries(tools || {}).reduce<Record<string, SerializedTool>>((acc, [key, tool]) => {
-    const toolId = tool.id ?? `tool-${key}`;
+    const toolId = 'id' in tool && typeof tool.id === 'string' && tool.id.length > 0 ? tool.id : `tool-${key}`;
 
     let inputSchemaForReturn: string | undefined = undefined;
     let outputSchemaForReturn: string | undefined = undefined;
@@ -449,28 +449,32 @@ export async function getSerializedAgentTools(
     if (!partial) {
       try {
         const inputSchema = schemaToJsonSchema(
-          resolveLazySchema(tool.inputSchema) as PublicSchema<unknown> | undefined,
+          resolveLazySchema('inputSchema' in tool ? tool.inputSchema : undefined) as PublicSchema<unknown> | undefined,
         );
         if (inputSchema !== undefined) {
           inputSchemaForReturn = stringify(inputSchema);
         }
 
         const outputSchema = schemaToJsonSchema(
-          resolveLazySchema(tool.outputSchema) as PublicSchema<unknown> | undefined,
+          resolveLazySchema('outputSchema' in tool ? tool.outputSchema : undefined) as
+            | PublicSchema<unknown>
+            | undefined,
         );
         if (outputSchema !== undefined) {
           outputSchemaForReturn = stringify(outputSchema);
         }
 
         const requestContextSchema = schemaToJsonSchema(
-          resolveLazySchema(tool.requestContextSchema) as PublicSchema<unknown> | undefined,
+          resolveLazySchema('requestContextSchema' in tool ? tool.requestContextSchema : undefined) as
+            | PublicSchema<unknown>
+            | undefined,
         );
         if (requestContextSchema !== undefined) {
           requestContextSchemaForReturn = stringify(requestContextSchema);
         }
       } catch (error) {
         console.error(`Error getting serialized tool`, {
-          toolId: tool.id,
+          toolId,
           error,
         });
       }
@@ -714,7 +718,7 @@ async function formatAgentList({
     logger.warn('Error getting instructions for agent', { agentName: agent.name, error });
   }
 
-  let tools: Record<string, SerializedToolInput> = {};
+  let tools: Record<string, SerializedToolInput | object> = {};
   try {
     tools = await agent.listTools({ requestContext });
   } catch (error) {

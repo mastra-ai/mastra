@@ -7,7 +7,7 @@ packages:
 
 # Workflow state reader
 
-Workflow state reader helpers inspect the public `WorkflowState` returned by `workflow.getWorkflowRunById()`. Use them to recover suspended runs, inspect resume labels, and read step payloads or outputs without parsing raw workflow snapshots.
+Workflow state reader helpers inspect the public `WorkflowState` returned by `workflow.getWorkflowRunById()`. Use them to recover suspended runs and inspect resume labels. They also read step payloads or outputs without parsing raw workflow snapshots.
 
 ## Usage example
 
@@ -41,7 +41,7 @@ const suspendedStep = reader.getSuspendedStep()
 
 ### `getWorkflowStepOutput(state, stepId)`
 
-Returns the output for a step ID, including nested workflow dot paths such as `parent.child`. For `foreach` steps, returns one entry per iteration; suspended iterations can have `undefined` output entries.
+Returns the output for a step ID, including nested workflow dot paths such as `parent.child`. For `foreach` steps, returns one entry per iteration. Suspended iterations can have `undefined` output entries.
 
 ```typescript
 const output = getWorkflowStepOutput(state, 'extract-data')

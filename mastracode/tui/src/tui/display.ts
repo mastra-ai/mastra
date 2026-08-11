@@ -1,9 +1,12 @@
 /**
  * Display helpers for the TUI: error messages, info messages, notifications.
  */
+import { randomUUID } from 'node:crypto';
+
 import { Container, Text } from '@earendil-works/pi-tui';
 
 import { parseError } from '@mastra/code-sdk/utils/errors';
+import type { AgentControllerEvent } from '@mastra/core/agent-controller';
 import { insertChatComponentWithBoundarySpacing } from './chat-boundary-reconciliation.js';
 import type { ChatSpacingKind } from './components/chat-spacing.js';
 import type { NotificationMode, NotificationReason } from './notify.js';
@@ -44,6 +47,8 @@ export function showFormattedError(
         errorType?: string;
         retryable?: boolean;
         retryDelay?: number;
+        retryAttempt?: number;
+        maxRetries?: number;
       }
     | Error,
 ): void {
@@ -59,12 +64,15 @@ export function showFormattedError(
     errorText += theme.fg('muted', ` [url: ${parsed.requestUrl}]`);
   }
 
-  // Add retry info if applicable
-  const retryable = 'retryable' in event ? event.retryable : parsed.retryable;
-  const retryDelay = 'retryDelay' in event ? event.retryDelay : parsed.retryDelay;
+  // Retry timing is only shown when the controller explicitly scheduled a retry.
+  const retryable = 'error' in event && event.retryable === true;
+  const retryDelay = 'error' in event ? event.retryDelay : undefined;
   if (retryable && retryDelay) {
-    const seconds = Math.ceil(retryDelay / 1000);
-    errorText += theme.fg('muted', ` (retry in ${seconds}s)`);
+    const seconds = retryDelay / 1000;
+    const retryAttempt = 'retryAttempt' in event ? event.retryAttempt : undefined;
+    const maxRetries = 'maxRetries' in event ? event.maxRetries : undefined;
+    const retryProgress = retryAttempt && maxRetries ? ` ${retryAttempt}/${maxRetries}` : '';
+    errorText += theme.fg('muted', ` (retry${retryProgress} in ${seconds}s)`);
   }
 
   const lines: Text[] = [new Text(theme.fg('error', errorText), 1, 0)];
@@ -112,4 +120,113 @@ export function notify(state: TUIState, reason: NotificationReason, message?: st
     message,
     hookManager: state.hookManager,
   });
+}
+
+/**
+ * Fire the user-facing notification for an event the moment it is received,
+ * before the event enters the TUI's serialized dispatch queue. A pending prompt
+ * blocks that queue until the user answers, so any notify call living inside a
+ * queued handler is starved exactly when the user has walked away. This helper
+ * runs synchronously in the controller subscription listener instead.
+ *
+ * Covers two kinds of pings: input-request events (prompts that need the
+ * user's answer, #20398) and the agent_done lifecycle ping when a run
+ * finishes (#20860). The name predates the agent_end mapping and is kept for
+ * continuity with the #20857 call sites and tests.
+ *
+ * All other events are a no-op. Never throws: a notification failure must not
+ * break event delivery.
+ */
+export function notifyForInputRequest(state: TUIState, event: AgentControllerEvent): void {
+  try {
+    if (event.type === 'tool_approval_required') {
+      notify(state, 'tool_approval', `Approve ${event.toolName}?`);
+      return;
+    }
+    if (event.type === 'agent_end') {
+      // A receipt-time agent_done means the run FINISHED, not that the TUI's
+      // rendered state has caught up — the queued handler still does the
+      // state work afterwards. Only 'complete' (or an absent reason) pings:
+      // 'aborted'/'error' mirror the queued handlers, which never notified,
+      // and 'suspended' must not ping because core emits tool_suspended
+      // (which already pings above) followed by agent_end 'suspended' — the
+      // old queued notify produced a spurious post-answer ping for it, which
+      // this mapping deliberately removes.
+      if (event.reason === 'complete' || event.reason === undefined) {
+        notify(state, 'agent_done');
+      }
+      return;
+    }
+    if (event.type === 'tool_suspended') {
+      const payload = (event.suspendPayload ?? {}) as Record<string, unknown>;
+      // Sandbox check first, mirroring the dispatch routing order.
+      if (event.toolName === 'request_access' || payload.kind === 'sandbox_access_request') {
+        notify(state, 'sandbox_access', `Sandbox access requested: ${String(payload.path ?? '')}`);
+      } else if (event.toolName === 'ask_user') {
+        notify(state, 'ask_question', String(payload.question ?? ''));
+      } else if (event.toolName === 'submit_plan') {
+        const planPath = String(payload.path ?? '');
+        notify(
+          state,
+          'plan_approval',
+          planPath ? `Plan "${planPath}" requires approval` : 'Plan requires your approval',
+        );
+      }
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    process.stderr.write(`[notify error] ${msg}\n`);
+  }
+}
+
+/**
+ * Dispatch PermissionRequest hooks for a permission-prompt event the moment it
+ * is received, before the event enters the TUI's serialized dispatch queue.
+ * A pending prompt blocks that queue until the user answers, so a hook
+ * dispatched from inside a queued handler is starved exactly when its external
+ * integration needs to hear about the new prompt (#20861). This helper runs
+ * synchronously in the controller subscription listener instead — the sibling
+ * of notifyForInputRequest for hook dispatch rather than user pings.
+ *
+ * runId semantics: HookManager.runPermissionRequest silently bails when no run
+ * id is set, and setRunId/clearRunId both run inside the QUEUED agent_start/
+ * agent_end handling. To close the receipt-time gap — a permission event
+ * arriving before its run's queued agent_start has been processed — agent_start
+ * is handled here by setting the run id immediately (before the queued handler
+ * runs). beginLifecycleRun() in the queued handler reuses an existing run id
+ * instead of overwriting it, so the receipt-time id propagates to AgentStart
+ * hooks and beyond.
+ *
+ * Never throws: a hook failure must not break event delivery.
+ */
+export function runPermissionHooksForEvent(state: TUIState, event: AgentControllerEvent): void {
+  try {
+    const hookMgr = state.hookManager;
+    if (!hookMgr) return;
+    if (event.type === 'agent_start') {
+      // Set the run id at receipt time so subsequent permission events (e.g.
+      // a tool_suspended for request_access arriving in the same synchronous
+      // batch) have it available. beginLifecycleRun() reuses this id.
+      if (!hookMgr.getRunId()) {
+        hookMgr.setRunId(randomUUID());
+      }
+      return;
+    }
+    if (event.type === 'tool_approval_required') {
+      hookMgr.runPermissionRequest('tool_approval', event.toolCallId, event.toolName, event.args).catch(() => {});
+      return;
+    }
+    if (event.type === 'tool_suspended') {
+      const payload = (event.suspendPayload ?? {}) as Record<string, unknown>;
+      // Sandbox check first, mirroring the dispatch routing order.
+      if (event.toolName === 'request_access' || payload.kind === 'sandbox_access_request') {
+        hookMgr.runPermissionRequest('sandbox_access', event.toolCallId, event.toolName, payload).catch(() => {});
+      } else if (event.toolName === 'submit_plan') {
+        hookMgr.runPermissionRequest('plan_approval', event.toolCallId, event.toolName, payload).catch(() => {});
+      }
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    process.stderr.write(`[permission hook error] ${msg}\n`);
+  }
 }

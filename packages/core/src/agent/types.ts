@@ -10,6 +10,7 @@ import type { MastraBrowser } from '../browser';
 import type { MastraServerCache } from '../cache/base';
 import type { AgentChannels } from '../channels/agent-channels';
 import type { ChannelConfig } from '../channels/types';
+import type { WaitUntilFn } from '../channels/wait-until';
 import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../evals';
 import type { PubSub } from '../events/pubsub';
 import type {
@@ -55,6 +56,7 @@ import type { AgentSkillsInput } from '../skills/types';
 import type { MastraModelOutput } from '../stream/base/output';
 import type { AgentChunkType, MastraOnFinishCallbackArgs, ModelManagerModelConfig } from '../stream/types';
 import type { ToolAction, ToolHooks, VercelTool, VercelToolV5 } from '../tools';
+import type { WebSearchToolPlaceholder } from '../tools/builtin/web-search';
 import type { ToolPayloadTransformPolicy } from '../tools/types';
 import type { DynamicArgument } from '../types';
 import type { MastraVoice } from '../voice';
@@ -105,7 +107,7 @@ export type ZodSchema = ZodSchemaV3 | ZodTypev4;
  */
 export type ToolsInput = Record<
   string,
-  ToolAction<any, any, any, any, any> | VercelTool | VercelToolV5 | ProviderDefinedTool
+  ToolAction<any, any, any, any, any> | VercelTool | VercelToolV5 | ProviderDefinedTool | WebSearchToolPlaceholder
 >;
 
 export type AgentInstructions = SystemMessage;
@@ -350,6 +352,8 @@ export interface AgentSubscribeToThreadOptions {
 export interface AgentThreadSubscription<OUTPUT = unknown> {
   stream: AsyncIterable<AgentChunkType<OUTPUT>>;
   activeRunId: () => string | null;
+  /** @internal */
+  __getCurrentRunRequestContext?: () => RequestContext | undefined;
   abort: () => boolean;
   unsubscribe: () => void;
 }
@@ -1167,6 +1171,11 @@ export type AgentExecuteOnFinishOptions = {
   structuredOutput?: boolean;
   overrideScorers?: MastraScorers | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>;
   onTitleGenerated?: (title: string) => void | Promise<void>;
+  /**
+   * Optional platform `waitUntil` so detached title generation survives
+   * serverless freeze-after-response without blocking `generate()`/`stream()`.
+   */
+  waitUntil?: WaitUntilFn;
 };
 
 export type AgentMethodType = 'generate' | 'stream' | 'generateLegacy' | 'streamLegacy';

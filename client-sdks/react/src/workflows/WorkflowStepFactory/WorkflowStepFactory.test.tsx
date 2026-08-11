@@ -42,6 +42,22 @@ const makeVariantStep = (kind: ResolvedWorkflowStep['kind']): ResolvedWorkflowSt
         result: successResult,
         workflowStatus: 'success',
       };
+    case 'agent-step':
+      return {
+        kind,
+        id: kind,
+        flow: { type: 'agent', id: kind, agentId: 'writer-agent' },
+        result: successResult,
+        workflowStatus: 'success',
+      };
+    case 'tool-step':
+      return {
+        kind,
+        id: kind,
+        flow: { type: 'tool', id: kind, toolId: 'double-tool' },
+        result: successResult,
+        workflowStatus: 'success',
+      };
     case 'foreach-step':
       return {
         kind,
@@ -151,6 +167,8 @@ describe('WorkflowStepFactory', () => {
 
   it.each([
     ['map-step', 'MapStep'],
+    ['agent-step', 'AgentStep'],
+    ['tool-step', 'ToolStep'],
     ['foreach-step', 'ForEachStep'],
     ['parallel-step', 'ParallelStep'],
     ['conditional', 'Conditional'],
@@ -164,6 +182,8 @@ describe('WorkflowStepFactory', () => {
     const calls = {
       Step: vi.fn<(props: ResolvedWorkflowStep) => void>(),
       MapStep: vi.fn<(props: ResolvedWorkflowStep) => void>(),
+      AgentStep: vi.fn<(props: ResolvedWorkflowStep) => void>(),
+      ToolStep: vi.fn<(props: ResolvedWorkflowStep) => void>(),
       ForEachStep: vi.fn<(props: ResolvedWorkflowStep) => void>(),
       ParallelStep: vi.fn<(props: ResolvedWorkflowStep) => void>(),
       Conditional: vi.fn<(props: ResolvedWorkflowStep) => void>(),
@@ -184,6 +204,14 @@ describe('WorkflowStepFactory', () => {
         MapStep={props => {
           calls.MapStep(props);
           return <div data-testid="MapStep">{props.kind}</div>;
+        }}
+        AgentStep={props => {
+          calls.AgentStep(props);
+          return <div data-testid="AgentStep">{props.kind}</div>;
+        }}
+        ToolStep={props => {
+          calls.ToolStep(props);
+          return <div data-testid="ToolStep">{props.kind}</div>;
         }}
         ForEachStep={props => {
           calls.ForEachStep(props);

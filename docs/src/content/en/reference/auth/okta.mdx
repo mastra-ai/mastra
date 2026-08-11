@@ -32,7 +32,7 @@ export const mastra = new Mastra({
 
 :::note
 
-You can omit the constructor parameters if you have the appropriately named environment variables set. In that case, use `new MastraAuthOkta()` without any arguments.
+You can omit the constructor parameters if the required environment variables are set. In that case, use `new MastraAuthOkta()` without any arguments.
 
 :::
 
@@ -75,6 +75,14 @@ You can omit the constructor parameters if you have the appropriately named envi
       'The OAuth redirect URI for the SSO callback. Must match the redirect URI configured in your Okta application.',
     isOptional: true,
     defaultValue: 'process.env.OKTA_REDIRECT_URI',
+  },
+  {
+    name: 'audience',
+    type: 'string | string[]',
+    description:
+      "Expected `aud` claim for Bearer tokens. Defaults to the client ID, which matches Okta ID tokens. Set it to the authorization server's audience to accept access tokens, or pass an array to accept several. Does not affect the ID token verified during the SSO login flow, which always uses the client ID.",
+    isOptional: true,
+    defaultValue: 'process.env.OKTA_AUDIENCE ?? clientId',
   },
   {
     name: 'scopes',
@@ -171,6 +179,12 @@ The following environment variables are automatically used when constructor opti
     isOptional: true,
   },
   {
+    name: 'OKTA_AUDIENCE',
+    type: 'string',
+    description: 'Expected `aud` claim for Bearer tokens. Defaults to the client ID if not set.',
+    isOptional: true,
+  },
+  {
     name: 'OKTA_REDIRECT_URI',
     type: 'string',
     description: 'OAuth redirect URI for the SSO callback.',
@@ -195,7 +209,7 @@ The following environment variables are automatically used when constructor opti
 `MastraAuthOkta` authenticates requests in the following order:
 
 1. **Session cookie**: Reads the encrypted session cookie and decrypts it. If the session is valid and not expired, the user is authenticated.
-1. **JWT fallback**: If no session cookie is present, verifies the `Authorization` header token against Okta's JWKS endpoint.
+1. **JWT fallback**: If no session cookie is present, verifies the `Authorization` header token against Okta's JWKS endpoint. The token's `iss` claim is checked against `issuer` and its `aud` claim against `audience`.
 
 After authentication, `authorizeUser` checks that the user has a valid `oktaId`. Provide a custom `authorizeUser` function to implement additional logic.
 

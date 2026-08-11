@@ -29,17 +29,17 @@ Watch [Mastra remote sandboxes overview](https://www.youtube.com/watch?v=Ix2X-sj
 ## Supported providers
 
 - [`LocalSandbox`](/reference/workspace/local-sandbox): Executes commands on the local machine
-- [`AgentCoreRuntimeSandbox`](/reference/workspace/agentcore-runtime-sandbox): Executes commands in AWS Bedrock AgentCore Runtime sessions
-- [`AppleContainerSandbox`](/reference/workspace/apple-container-sandbox): Executes commands in local OCI Linux containers using Apple's `container` CLI
-- [`BlaxelSandbox`](/reference/workspace/blaxel-sandbox): Executes commands in isolated Blaxel cloud sandboxes
-- [`DaytonaSandbox`](/reference/workspace/daytona-sandbox): Executes commands in isolated Daytona cloud sandboxes
-- [`DockerSandbox`](/reference/workspace/docker-sandbox): Executes commands in long-lived Docker containers on the local machine
-- [`E2BSandbox`](/reference/workspace/e2b-sandbox): Executes commands in isolated E2B cloud sandboxes
-- [`ModalSandbox`](/reference/workspace/modal-sandbox): Executes commands in isolated Modal cloud sandboxes
+- [`AgentCoreRuntimeSandbox`](/integrations/sandboxes/agentcore): Executes commands in AWS Bedrock AgentCore Runtime sessions
+- [`AppleContainerSandbox`](/integrations/sandboxes/apple-container): Executes commands in local OCI Linux containers using Apple's `container` CLI
+- [`BlaxelSandbox`](/integrations/sandboxes/blaxel): Executes commands in isolated Blaxel cloud sandboxes
+- [`DaytonaSandbox`](/integrations/sandboxes/daytona): Executes commands in isolated Daytona cloud sandboxes
+- [`DockerSandbox`](/integrations/sandboxes/docker): Executes commands in long-lived Docker containers on the local machine
+- [`E2BSandbox`](/integrations/sandboxes/e2b): Executes commands in isolated E2B cloud sandboxes
+- [`ModalSandbox`](/integrations/sandboxes/modal): Executes commands in isolated Modal cloud sandboxes
 - [`PlatformSandbox`](/reference/workspace/platform-sandbox): Executes commands in a sandbox tied to a Mastra Platform environment
-- [`RailwaySandbox`](/reference/workspace/railway-sandbox): Executes commands in ephemeral, isolated Railway cloud sandboxes
-- [`VercelSandbox`](/reference/workspace/vercel-sandbox): Executes commands in an ephemeral Vercel Sandbox Firecracker MicroVM
-- [`VercelServerlessSandbox`](/reference/workspace/vercel-serverless): Executes commands as stateless Vercel serverless functions
+- [`RailwaySandbox`](/integrations/sandboxes/railway): Executes commands in ephemeral, isolated Railway cloud sandboxes
+- [`VercelSandbox`](/integrations/sandboxes/vercel#vercel-sandbox): Executes commands in an ephemeral Vercel Sandbox Firecracker MicroVM
+- [`VercelServerlessSandbox`](/integrations/sandboxes/vercel#vercel-serverless-sandbox): Executes commands as stateless Vercel serverless functions
 
 ## Basic usage
 
@@ -111,9 +111,9 @@ const bobCtx = new RequestContext([['user-id', 'bob']])
 await agent.generate('List files in cwd', { requestContext: bobCtx })
 ```
 
-By default, workspace instructions describe the dynamic sandbox with stable placeholder text. See [Workspace instructions](#workspace-instructions) to include concrete per-request details.
+By default, workspace instructions describe the runtime sandbox with stable placeholder text. See [Workspace instructions](#workspace-instructions) to include concrete per-request details.
 
-The resolver can also be asynchronous — for example to look up tenant configuration from a database:
+The resolver can also be asynchronous, for example to look up tenant configuration from a database:
 
 ```typescript
 const workspace = new Workspace({
@@ -126,9 +126,11 @@ const workspace = new Workspace({
 
 ### Lifecycle ownership
 
-When the sandbox is a static instance, `workspace.init()` calls its `start()` method and `workspace.destroy()` calls its `destroy()` method. With a resolver, the workspace has no instance to manage at construction time — the caller owns the returned sandbox's lifecycle.
+When the sandbox is a static instance, `workspace.init()` calls its `start()` method and `workspace.destroy()` calls its `destroy()` method. With a resolver, the workspace has no instance to manage at construction time, the caller owns the returned sandbox's lifecycle.
 
-The resolver must return a sandbox that's ready to use, either already started or able to handle calls without explicit startup. The caller also owns cleanup timing for returned sandboxes. Cleanup might happen per request, per tenant, per user, or as part of a long-lived sandbox pool; `workspace.destroy()` doesn't destroy resolver-returned sandboxes.
+The resolver must return a sandbox that's ready to use, either already started or able to handle calls without explicit startup. The caller also owns cleanup timing for returned sandboxes.
+
+Cleanup can happen per request, tenant, or user. It can also be part of a long-lived sandbox pool. `workspace.destroy()` doesn't destroy resolver-returned sandboxes.
 
 :::note
 
@@ -223,7 +225,7 @@ By default, background processes inherit the agent's abort signal and are killed
 
 - **`undefined`** (default): Uses the agent's abort signal
 - **`AbortSignal`**: Uses a custom signal
-- **`null` or `false`**: Disables abort — processes persist after agent shutdown
+- **`null` or `false`**: Disables abort: processes persist after agent shutdown
 
 ```typescript title="src/mastra/workspaces.ts"
 import { Workspace, LocalSandbox, WORKSPACE_TOOLS } from '@mastra/core/workspace'
@@ -243,19 +245,19 @@ const workspace = new Workspace({
 Use `null` or `false` for cloud sandboxes (for example, E2B, Daytona, or Modal) where processes should outlive the agent.
 
 :::note
-For the full `SandboxProcessManager` API (spawning processes programmatically, reading output, sending stdin), see the [`SandboxProcessManager` reference](/reference/workspace/process-manager).
+For the full `SandboxProcessManager` API (spawning processes programmatically and reading output, plus sending stdin), see the [`SandboxProcessManager` reference](/reference/workspace/process-manager).
 :::
 
 ## Related
 
 - [`SandboxProcessManager` reference](/reference/workspace/process-manager)
-- [`AgentCoreRuntimeSandbox` reference](/reference/workspace/agentcore-runtime-sandbox)
-- [`AppleContainerSandbox` reference](/reference/workspace/apple-container-sandbox)
-- [`DaytonaSandbox` reference](/reference/workspace/daytona-sandbox)
-- [`E2BSandbox` reference](/reference/workspace/e2b-sandbox)
+- [`AgentCoreRuntimeSandbox` reference](/integrations/sandboxes/agentcore)
+- [`AppleContainerSandbox` reference](/integrations/sandboxes/apple-container)
+- [`DaytonaSandbox` reference](/integrations/sandboxes/daytona)
+- [`E2BSandbox` reference](/integrations/sandboxes/e2b)
 - [`LocalSandbox` reference](/reference/workspace/local-sandbox)
-- [`ModalSandbox` reference](/reference/workspace/modal-sandbox)
-- [`VercelSandbox` reference](/reference/workspace/vercel-sandbox)
-- [`VercelServerlessSandbox` reference](/reference/workspace/vercel-serverless)
+- [`ModalSandbox` reference](/integrations/sandboxes/modal)
+- [`VercelSandbox` reference](/integrations/sandboxes/vercel#vercel-sandbox)
+- [`VercelServerlessSandbox` reference](/integrations/sandboxes/vercel#vercel-serverless-sandbox)
 - [Workspace overview](/docs/workspace/overview)
 - [Filesystem](/docs/workspace/filesystem)

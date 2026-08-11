@@ -108,12 +108,21 @@ export type CodeModeToolDispatcher = (tool: string, args: unknown) => Promise<un
  */
 export interface CodeModeTransport {
   /**
+   * Whether this transport executes programs in a WorkspaceSandbox. Defaults
+   * to `true`. In-process transports (e.g. V8 isolates) that provide their own
+   * execution boundary set this to `false`, which lets `createCodeMode` run
+   * without a sandbox configured.
+   */
+  readonly requiresSandbox?: boolean;
+
+  /**
    * Run the runner (with the already-stripped JS program) in the sandbox,
    * dispatching `external_*` calls through `dispatch`, and resolve once the
    * program finishes.
    */
   run(opts: {
-    sandbox: WorkspaceSandbox;
+    /** Present unless the transport declares `requiresSandbox: false`. */
+    sandbox?: WorkspaceSandbox;
     /** Plain JS (TypeScript already stripped) program body. */
     program: string;
     /** Allow-listed tool ids exposed as `external_<id>`. */

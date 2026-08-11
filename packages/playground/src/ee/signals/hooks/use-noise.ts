@@ -12,7 +12,7 @@ export function useNoise(
   return useQuery({
     queryKey: ['entity-learning', entityType, entityId, 'noise', signalName, snapshotId],
     queryFn: () => {
-      if (!signalName || !snapshotId) throw new Error('Noise queries require a signal and snapshot');
+      if (!signalName || !snapshotId) throw new Error('Noise queries require a trace signal and snapshot');
       return fetchNoise(entityId, entityType, signalName, snapshotId);
     },
     enabled: signalName !== undefined && snapshotId !== undefined,

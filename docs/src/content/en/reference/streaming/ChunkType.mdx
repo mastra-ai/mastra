@@ -905,7 +905,8 @@ Signals the completion of a processing step.
           {
             name: 'stepResult',
             type: 'object',
-            description: 'Step execution result with reason, warnings, and continuation info',
+            description:
+              "Step execution result with reason, warnings, and continuation info. `rawReason` holds the provider's own finish reason when it reports one.",
           },
           {
             name: 'output',
@@ -975,7 +976,7 @@ Contains raw data from the provider.
 
 ### finish
 
-Stream has completed successfully.
+Stream has completed.
 
 <PropertiesTable
   content={[
@@ -995,7 +996,8 @@ Stream has completed successfully.
           {
             name: 'stepResult',
             type: 'object',
-            description: 'Step execution result',
+            description:
+              'Step execution result. `reason` holds the normalized finish reason, and `rawReason` holds the provider\'s own finish reason when it reports one. A `reason` of `"error"` means the run failed.',
           },
           {
             name: 'output',
@@ -1504,9 +1506,9 @@ Emitted when the task throws or times out. Triggers a continuation turn when con
 
 ### background-task-suspended
 
-Emitted when a tool calls `suspend()` from inside its background execution. Pauses the task's workflow run with its snapshot persisted; resume with `mastra.backgroundTaskManager.resume(taskId, resumeData)`.
+Emitted when a tool calls `suspend()` from inside its background execution. Pauses the task's workflow run with its snapshot persisted. Resume with `mastra.backgroundTaskManager.resume(taskId, resumeData)`.
 
-When consumed by [`Agent.streamUntilIdle()`](/reference/streaming/agents/streamUntilIdle), this chunk drops the task from the loop's wait set without queuing a continuation — the agent's response ends, and the resumed task's eventual completion injects into the message list for the next user turn.
+When consumed by [`Agent.streamUntilIdle()`](/reference/streaming/agents/streamUntilIdle), this chunk drops the task from the loop's wait set without queuing a continuation. The agent's response ends, and the resumed task's eventual completion injects into the message list for the next user turn.
 
 <PropertiesTable
   content={[

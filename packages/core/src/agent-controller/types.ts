@@ -13,6 +13,7 @@ import type { MastraCompositeStore } from '../storage/base';
 import type { GoalEvaluationPayload } from '../stream/types';
 import type { DynamicArgument } from '../types';
 import type { Workspace, WorkspaceStatus } from '../workspace';
+import type { Session } from './session';
 import type { TaskItemSnapshot } from './tools';
 
 // =============================================================================
@@ -220,6 +221,12 @@ export type BuiltinToolId =
   | 'task_complete'
   | 'task_check'
   | 'subagent';
+
+/** Process-local listener notified after AgentController materializes a live session. */
+export type AgentControllerSessionCreatedListener<TState = {}> = (session: Session<TState>) => void | Promise<void>;
+
+/** Process-local listener notified after AgentController tears down a live session. */
+export type AgentControllerSessionDeletedListener<TState = {}> = (session: Session<TState>) => void | Promise<void>;
 
 export interface AgentControllerConfig<TState = {}> {
   /** Unique identifier for this controller instance */
@@ -781,9 +788,18 @@ export type AgentControllerEvent =
   | { type: 'tool_input_delta'; toolCallId: string; argsTextDelta: unknown; toolName?: string }
   | { type: 'tool_input_end'; toolCallId: string }
   | { type: 'shell_output'; toolCallId: string; output: string; stream: 'stdout' | 'stderr' }
+  | { type: 'command_exit'; toolCallId: string; exitCode: number; success: boolean }
   | { type: 'usage_update'; usage: TokenUsage }
   | { type: 'info'; message: string }
-  | { type: 'error'; error: Error; errorType?: string; retryable?: boolean; retryDelay?: number }
+  | {
+      type: 'error';
+      error: Error;
+      errorType?: string;
+      retryable?: boolean;
+      retryDelay?: number;
+      retryAttempt?: number;
+      maxRetries?: number;
+    }
   | { type: 'follow_up_queued'; count: number; runId?: string }
   | { type: 'workspace_status_changed'; status: WorkspaceStatus; error?: Error }
   | { type: 'workspace_ready'; workspaceId: string; workspaceName: string }

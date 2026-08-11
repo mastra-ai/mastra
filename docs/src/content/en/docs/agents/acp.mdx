@@ -17,7 +17,7 @@ ACP is useful for coding agents such as Claude Code, Amp, Codex, or any other ex
 - A Mastra agent should delegate code inspection, editing, or repository tasks to an external coding agent.
 - An ACP-compatible agent process should stay alive across calls so it can keep session context.
 - A parent agent needs real-time output from a coding agent while the task runs.
-- An ACP-compatible agent needs permission prompts before it reads files, writes files, or runs actions.
+- An ACP-compatible agent needs permission prompts before it reads files or writes files, or alternatively runs actions.
 - File access should go through Mastra's workspace abstraction instead of direct process-only file access.
 
 ## How ACP works
@@ -31,8 +31,8 @@ The flow is:
 1. The client sends ACP `initialize` and `session/new` requests.
 1. Mastra sends the user task to the ACP agent with `session/prompt`.
 1. The ACP agent streams session updates and message chunks back to Mastra.
-1. Mastra returns the buffered output, emits streaming chunks, or handles permission input.
-1. The ACP connection stops the process after the prompt when `persistSession` is `false`; `AcpAgent` can keep a reusable process alive across calls by default.
+1. Mastra returns the buffered output or emits streaming chunks, or alternatively handles permission input.
+1. The ACP connection stops the process after the prompt when `persistSession` is `false`. `AcpAgent` can keep a reusable process alive across calls by default.
 
 During execution, the ACP client also handles permission requests and file operations. File reads and writes go through Mastra's `Workspace`, so the ACP agent operates inside the workspace you provide.
 
@@ -137,6 +137,6 @@ See the [AcpAgent workspace integration](/reference/acp/acp-agent#workspace-inte
 - [AcpAgent reference](/reference/acp/acp-agent)
 - [createACPTool() reference](/reference/acp/create-acp-tool)
 - [Agent reference](/reference/agents/agent)
-- [Subagents](/docs/agents/supervisor-agents)
+- [Subagents](/docs/capabilities/subagents)
 - [Agent Client Protocol introduction](https://agentclientprotocol.com/overview/introduction)
 - [Agent Client Protocol schema](https://agentclientprotocol.com/protocol/schema)

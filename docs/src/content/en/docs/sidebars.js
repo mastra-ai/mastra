@@ -21,66 +21,33 @@ const sidebars = {
       label: 'Get Started',
     },
     {
-      type: 'category',
-      label: 'Essentials',
-      collapsible: false,
-      collapsed: false,
-      customProps: {
-        displayAsGroup: true,
-      },
-      items: [
-        {
-          type: 'doc',
-          id: 'getting-started/manual-install',
-          label: 'Manual Install',
-        },
-        {
-          type: 'doc',
-          id: 'getting-started/build-with-ai',
-          label: 'Build with AI',
-        },
-        {
-          type: 'doc',
-          id: 'storage/overview',
-          label: 'Storage',
-        },
-        {
-          type: 'doc',
-          id: 'getting-started/file-based-agents',
-          label: 'File-based Agents',
-          customProps: {
-            tags: ['beta'],
-          },
-        },
-      ],
+      type: 'doc',
+      id: 'getting-started/develop',
+      label: 'Develop',
     },
     {
       type: 'category',
-      label: 'Core',
+      label: 'Build',
       collapsed: false,
       collapsible: false,
-      customProps: {
-        displayAsGroup: true,
-      },
+      className: 'sidebar-group-name',
       items: [
         {
           type: 'category',
           label: 'Agents',
+          link: {
+            type: 'doc',
+            id: 'agents/overview',
+          },
+          collapsed: true,
+          customProps: {
+            contextualSidebar: true,
+          },
           items: [
-            {
-              type: 'doc',
-              id: 'agents/overview',
-              label: 'Overview',
-            },
             {
               type: 'doc',
               id: 'agents/using-tools',
               label: 'Tools',
-            },
-            {
-              type: 'doc',
-              id: 'agents/skills',
-              label: 'Skills',
             },
             {
               type: 'doc',
@@ -90,12 +57,7 @@ const sidebars = {
             {
               type: 'doc',
               id: 'agents/agent-approval',
-              label: 'Agent Approval',
-            },
-            {
-              type: 'doc',
-              id: 'agents/supervisor-agents',
-              label: 'Supervisor Agents',
+              label: 'Human-in-the-Loop',
             },
             {
               type: 'doc',
@@ -112,58 +74,22 @@ const sidebars = {
               id: 'agents/code-mode',
               label: 'Code Mode',
               customProps: {
-                tags: ['beta'],
+                tags: ['new'],
               },
-            },
-            {
-              type: 'category',
-              label: 'Connections',
-              items: [
-                {
-                  type: 'doc',
-                  id: 'agents/a2a',
-                  label: 'A2A',
-                },
-                {
-                  type: 'doc',
-                  id: 'agents/acp',
-                  label: 'ACP',
-                },
-                {
-                  type: 'doc',
-                  id: 'agents/sdk-agents',
-                  label: 'SDK Agents',
-                },
-                {
-                  type: 'category',
-                  label: 'MCP',
-                  collapsed: true,
-                  items: [
-                    {
-                      type: 'doc',
-                      id: 'mcp/overview',
-                      label: 'Overview',
-                    },
-                    {
-                      type: 'doc',
-                      id: 'mcp/mcp-apps',
-                      label: 'MCP Apps',
-                    },
-                  ],
-                },
-              ],
             },
           ],
         },
         {
           type: 'category',
           label: 'Workflows',
+          link: {
+            type: 'doc',
+            id: 'workflows/overview',
+          },
+          customProps: {
+            contextualSidebar: true,
+          },
           items: [
-            {
-              type: 'doc',
-              id: 'workflows/overview',
-              label: 'Overview',
-            },
             {
               type: 'doc',
               id: 'workflows/workflow-state',
@@ -181,6 +107,14 @@ const sidebars = {
             },
             {
               type: 'doc',
+              id: 'workflows/dynamic-workflows',
+              label: 'Dynamic Workflows',
+              customProps: {
+                tags: ['new'],
+              },
+            },
+            {
+              type: 'doc',
               id: 'workflows/snapshots',
               label: 'Snapshots',
             },
@@ -192,7 +126,7 @@ const sidebars = {
             {
               type: 'doc',
               id: 'workflows/human-in-the-loop',
-              label: 'Human-in-the-loop',
+              label: 'Human-in-the-Loop',
             },
             {
               type: 'doc',
@@ -213,14 +147,63 @@ const sidebars = {
         },
         {
           type: 'category',
-          label: 'Memory',
-          collapsed: true,
+          label: 'Harness',
+          link: {
+            type: 'doc',
+            id: 'harness/overview',
+          },
+          customProps: {
+            contextualSidebar: true,
+          },
           items: [
             {
               type: 'doc',
-              id: 'memory/overview',
-              label: 'Overview',
+              id: 'long-running-agents/durable-agents',
+              label: 'Durable Agents',
             },
+            {
+              type: 'doc',
+              id: 'long-running-agents/background-tasks',
+              label: 'Background Tasks',
+            },
+            {
+              type: 'doc',
+              id: 'long-running-agents/goals',
+              label: 'Goals',
+            },
+            {
+              type: 'doc',
+              id: 'long-running-agents/schedules',
+              label: 'Schedules',
+            },
+            {
+              type: 'doc',
+              id: 'long-running-agents/signals',
+              label: 'Signals',
+            },
+            {
+              type: 'doc',
+              id: 'long-running-agents/signal-providers',
+              label: 'Signal Providers',
+            },
+            {
+              type: 'doc',
+              id: 'harness/agent-controller',
+              label: 'Agent Controller',
+            },
+          ],
+        },
+        {
+          type: 'category',
+          label: 'Memory',
+          link: {
+            type: 'doc',
+            id: 'memory/overview',
+          },
+          customProps: {
+            contextualSidebar: true,
+          },
+          items: [
             {
               type: 'doc',
               id: 'memory/message-history',
@@ -249,74 +232,7 @@ const sidebars = {
             {
               type: 'doc',
               id: 'memory/multi-user-threads',
-              label: 'Multi-user Threads',
-            },
-          ],
-        },
-        {
-          type: 'category',
-          label: 'Studio',
-          items: [
-            {
-              type: 'doc',
-              id: 'studio/overview',
-              label: 'Overview',
-            },
-            {
-              type: 'doc',
-              id: 'studio/deployment',
-              label: 'Deployment',
-            },
-            {
-              type: 'doc',
-              id: 'studio/auth',
-              label: 'Auth',
-            },
-            {
-              type: 'doc',
-              id: 'studio/observability',
-              label: 'Observability',
-            },
-            {
-              type: 'category',
-              label: 'Agent Builder',
-              customProps: {
-                tags: ['new'],
-              },
-              items: [
-                { type: 'doc', id: 'agent-builder/overview', label: 'Overview' },
-                { type: 'doc', id: 'agent-builder/configuration', label: 'Configuration' },
-                { type: 'doc', id: 'agent-builder/access-control', label: 'Access control' },
-                { type: 'doc', id: 'agent-builder/model-policy', label: 'Model policy' },
-                { type: 'doc', id: 'agent-builder/memory', label: 'Memory' },
-                { type: 'doc', id: 'agent-builder/workspace', label: 'Workspace' },
-                { type: 'doc', id: 'agent-builder/browser', label: 'Browser' },
-                { type: 'doc', id: 'agent-builder/channels', label: 'Channels' },
-                { type: 'doc', id: 'agent-builder/integrations', label: 'Tool providers' },
-                { type: 'doc', id: 'agent-builder/skill-registries', label: 'Skill registries' },
-                { type: 'doc', id: 'agent-builder/deploying', label: 'Deploying' },
-              ],
-            },
-            {
-              type: 'category',
-              label: 'Editor',
-              items: [
-                {
-                  type: 'doc',
-                  id: 'editor/overview',
-                  label: 'Overview',
-                },
-                {
-                  type: 'doc',
-                  id: 'editor/tools',
-                  label: 'Tools',
-                },
-                {
-                  type: 'doc',
-                  id: 'editor/prompts',
-                  label: 'Prompts',
-                },
-              ],
+              label: 'Multi-User Threads',
             },
           ],
         },
@@ -324,22 +240,37 @@ const sidebars = {
     },
     {
       type: 'category',
-      label: 'Capabilities',
+      label: 'Extend',
       collapsible: false,
       collapsed: false,
-      customProps: {
-        displayAsGroup: true,
-      },
+      className: 'sidebar-group-name',
       items: [
         {
+          type: 'doc',
+          id: 'capabilities/subagents',
+          label: 'Subagents',
+        },
+        {
+          type: 'doc',
+          id: 'agents/skills',
+          label: 'Skills',
+        },
+        {
+          type: 'doc',
+          id: 'capabilities/channels',
+          label: 'Channels',
+        },
+        {
           type: 'category',
-          label: 'Workspaces',
+          label: 'Sandbox',
+          link: {
+            type: 'doc',
+            id: 'workspace/overview',
+          },
+          customProps: {
+            contextualSidebar: true,
+          },
           items: [
-            {
-              type: 'doc',
-              id: 'workspace/overview',
-              label: 'Overview',
-            },
             {
               type: 'doc',
               id: 'workspace/filesystem',
@@ -370,142 +301,54 @@ const sidebars = {
         {
           type: 'category',
           label: 'Browser',
+          link: {
+            type: 'doc',
+            id: 'browser/overview',
+          },
+          customProps: {
+            contextualSidebar: true,
+          },
           items: [
-            {
-              type: 'doc',
-              id: 'browser/overview',
-              label: 'Overview',
-            },
-            {
-              type: 'doc',
-              id: 'browser/agent-browser',
-              label: 'AgentBrowser',
-            },
-            {
-              type: 'doc',
-              id: 'browser/stagehand',
-              label: 'Stagehand',
-            },
-            {
-              type: 'doc',
-              id: 'browser/firecrawl',
-              label: 'Firecrawl',
-            },
             {
               type: 'doc',
               id: 'browser/recording',
               label: 'Recording',
               customProps: {
-                tags: ['beta'],
+                tags: ['new'],
               },
             },
-            {
-              type: 'doc',
-              id: 'browser/browser-viewer',
-              label: 'BrowserViewer',
-            },
           ],
         },
         {
           type: 'category',
-          label: 'Channels',
+          label: 'Connections',
+          link: {
+            type: 'doc',
+            id: 'connections/overview',
+          },
+          customProps: {
+            contextualSidebar: true,
+          },
           items: [
             {
               type: 'doc',
-              id: 'capabilities/channels/overview',
-              label: 'Overview',
+              id: 'agents/a2a',
+              label: 'A2A',
             },
             {
               type: 'doc',
-              id: 'capabilities/channels/slack',
-              label: 'Slack',
+              id: 'agents/acp',
+              label: 'ACP',
             },
             {
               type: 'doc',
-              id: 'capabilities/channels/teams',
-              label: 'Microsoft Teams',
+              id: 'agents/sdk-agents',
+              label: 'SDK Agents',
             },
             {
               type: 'doc',
-              id: 'capabilities/channels/discord',
-              label: 'Discord',
-            },
-            {
-              type: 'doc',
-              id: 'capabilities/channels/telegram',
-              label: 'Telegram',
-            },
-            {
-              type: 'doc',
-              id: 'capabilities/channels/whatsapp',
-              label: 'WhatsApp',
-            },
-            {
-              type: 'doc',
-              id: 'capabilities/channels/other-adapters',
-              label: 'More',
-            },
-          ],
-        },
-        {
-          type: 'category',
-          label: 'RAG',
-          items: [
-            {
-              type: 'doc',
-              id: 'rag/overview',
-              label: 'Overview',
-            },
-            {
-              type: 'doc',
-              id: 'rag/chunking-and-embedding',
-              label: 'Chunking and Embedding',
-            },
-            {
-              type: 'doc',
-              id: 'rag/vector-databases',
-              label: 'Vector Databases',
-            },
-            {
-              type: 'doc',
-              id: 'rag/retrieval',
-              label: 'Retrieval',
-            },
-            {
-              type: 'doc',
-              id: 'rag/graph-rag',
-              label: 'GraphRAG',
-            },
-          ],
-        },
-        {
-          type: 'category',
-          label: 'Voice',
-          items: [
-            {
-              type: 'doc',
-              id: 'voice/overview',
-              label: 'Overview',
-            },
-            {
-              type: 'doc',
-              id: 'voice/text-to-speech',
-              label: 'Text to Speech',
-            },
-            {
-              type: 'doc',
-              id: 'voice/speech-to-text',
-              label: 'Speech to Text',
-            },
-            {
-              type: 'doc',
-              id: 'voice/speech-to-speech',
-              label: 'Speech to Speech',
-            },
-            {
-              type: 'doc',
-              id: 'voice/realtime-voice',
-              label: 'Realtime Voice',
+              id: 'mcp/overview',
+              label: 'MCP',
             },
           ],
         },
@@ -513,122 +356,27 @@ const sidebars = {
     },
     {
       type: 'category',
-      label: 'Long-running Agents',
+      label: 'Develop / Deploy',
       collapsible: false,
       collapsed: false,
-      customProps: {
-        displayAsGroup: true,
-      },
+      className: 'sidebar-group-name',
       items: [
         {
           type: 'doc',
-          id: 'long-running-agents/durable-agents',
-          label: 'Durable Agents',
-          customProps: {
-            tags: ['beta'],
-          },
+          id: 'storage/overview',
+          label: 'Storage',
         },
-        {
-          type: 'doc',
-          id: 'long-running-agents/background-tasks',
-          label: 'Background Tasks',
-        },
-        {
-          type: 'doc',
-          id: 'long-running-agents/goals',
-          label: 'Goals',
-          customProps: {
-            tags: ['beta'],
-          },
-        },
-        {
-          type: 'doc',
-          id: 'long-running-agents/schedules',
-          label: 'Schedules',
-          customProps: {
-            tags: ['beta'],
-          },
-        },
-        {
-          type: 'doc',
-          id: 'long-running-agents/signals',
-          label: 'Signals',
-          customProps: {
-            tags: ['beta'],
-          },
-        },
-        {
-          type: 'doc',
-          id: 'long-running-agents/signal-providers',
-          label: 'Signal Providers',
-          customProps: {
-            tags: ['beta'],
-          },
-        },
-        {
-          type: 'category',
-          label: 'Agent Controller',
-          customProps: {
-            tags: ['beta'],
-          },
-          items: [
-            {
-              type: 'doc',
-              id: 'agent-controller/overview',
-              label: 'Overview',
-            },
-            {
-              type: 'doc',
-              id: 'agent-controller/session',
-              label: 'Session',
-            },
-            {
-              type: 'doc',
-              id: 'agent-controller/modes',
-              label: 'Modes',
-            },
-            {
-              type: 'doc',
-              id: 'agent-controller/threads-and-state',
-              label: 'Threads and State',
-            },
-            {
-              type: 'doc',
-              id: 'agent-controller/subagents',
-              label: 'Subagents',
-            },
-            {
-              type: 'doc',
-              id: 'agent-controller/tool-approvals',
-              label: 'Tool Approvals',
-            },
-            {
-              type: 'doc',
-              id: 'agent-controller/channels',
-              label: 'Channels',
-            },
-          ],
-        },
-      ],
-    },
-    {
-      type: 'category',
-      label: 'Production',
-      collapsible: false,
-      collapsed: false,
-      customProps: {
-        displayAsGroup: true,
-      },
-      items: [
         {
           type: 'category',
           label: 'Server',
+          link: {
+            type: 'doc',
+            id: 'server/mastra-server',
+          },
+          customProps: {
+            contextualSidebar: true,
+          },
           items: [
-            {
-              type: 'doc',
-              id: 'server/mastra-server',
-              label: 'Overview',
-            },
             {
               type: 'doc',
               id: 'server/server-adapters',
@@ -664,103 +412,162 @@ const sidebars = {
               id: 'server/mastra-client',
               label: 'Mastra Client',
             },
+          ],
+        },
+        {
+          type: 'category',
+          label: 'Studio',
+          link: {
+            type: 'doc',
+            id: 'studio/overview',
+          },
+          customProps: {
+            contextualSidebar: true,
+          },
+          items: [
             {
-              type: 'category',
+              type: 'doc',
+              id: 'studio/deployment',
+              label: 'Deployment',
+            },
+            {
+              type: 'doc',
+              id: 'studio/auth',
               label: 'Auth',
-              items: [
-                {
-                  type: 'doc',
-                  id: 'server/auth/index',
-                  label: 'Overview',
-                },
-                {
-                  type: 'doc',
-                  id: 'server/auth/auth0',
-                  label: 'Auth0',
-                },
-                {
-                  type: 'doc',
-                  id: 'server/auth/better-auth',
-                  label: 'Better Auth',
-                },
-                {
-                  type: 'doc',
-                  id: 'server/auth/clerk',
-                  label: 'Clerk',
-                },
-                {
-                  type: 'doc',
-                  id: 'server/auth/composite-auth',
-                  label: 'Composite Auth',
-                },
-                {
-                  type: 'doc',
-                  id: 'server/auth/custom-auth-provider',
-                  label: 'Custom Auth Provider',
-                },
-                {
-                  type: 'doc',
-                  id: 'server/auth/firebase',
-                  label: 'Firebase',
-                },
-                {
-                  type: 'doc',
-                  id: 'server/auth/fga',
-                  label: 'Fine-Grained Authorization',
-                },
-                {
-                  type: 'doc',
-                  id: 'server/auth/google',
-                  label: 'Google',
-                },
-                {
-                  type: 'doc',
-                  id: 'server/auth/jwt',
-                  label: 'JSON Web Token',
-                },
-                {
-                  type: 'doc',
-                  id: 'server/auth/okta',
-                  label: 'Okta',
-                },
-                {
-                  type: 'doc',
-                  id: 'server/auth/simple-auth',
-                  label: 'Simple Auth',
-                },
-                {
-                  type: 'doc',
-                  id: 'server/auth/supabase',
-                  label: 'Supabase',
-                },
-                {
-                  type: 'doc',
-                  id: 'server/auth/workos',
-                  label: 'WorkOS',
-                },
-              ],
+            },
+            {
+              type: 'doc',
+              id: 'studio/observability',
+              label: 'Observability',
+            },
+            {
+              type: 'doc',
+              id: 'editor/overview',
+              label: 'Editor',
             },
           ],
         },
         {
           type: 'category',
-          label: 'Observability',
+          label: 'Auth',
+          link: {
+            type: 'doc',
+            id: 'server/auth/index',
+          },
+          customProps: {
+            contextualSidebar: true,
+          },
           items: [
             {
               type: 'doc',
-              id: 'observability/overview',
-              key: 'observability.overview',
-              label: 'Overview',
+              id: 'server/auth/composite-auth',
+              label: 'Composite Auth',
             },
             {
               type: 'doc',
-              id: 'observability/config',
-              label: 'Config',
+              id: 'server/auth/custom-auth-provider',
+              label: 'Custom Auth Provider',
             },
             {
               type: 'doc',
-              id: 'observability/storage',
-              label: 'Storage',
+              id: 'server/auth/fga',
+              label: 'Fine-Grained Authorization',
+            },
+            {
+              type: 'doc',
+              id: 'server/auth/jwt',
+              label: 'JSON Web Token',
+            },
+            {
+              type: 'doc',
+              id: 'server/auth/simple-auth',
+              label: 'Simple Auth',
+            },
+            {
+              type: 'doc',
+              id: 'server/auth/workers',
+              label: 'Workers',
+              customProps: {
+                tags: ['new'],
+              },
+            },
+          ],
+        },
+        {
+          type: 'category',
+          label: 'Deploy',
+          link: {
+            type: 'doc',
+            id: 'deployment/overview',
+          },
+          customProps: {
+            contextualSidebar: true,
+          },
+          items: [
+            {
+              type: 'doc',
+              id: 'deployment/mastra-server',
+              label: 'Mastra Server',
+            },
+            {
+              type: 'doc',
+              id: 'deployment/monorepo',
+              label: 'Monorepo',
+            },
+            {
+              type: 'doc',
+              id: 'deployment/cloud-providers',
+              label: 'Cloud Providers',
+            },
+            {
+              type: 'doc',
+              id: 'deployment/sandbox',
+              label: 'Sandbox',
+            },
+            {
+              type: 'doc',
+              id: 'deployment/web-framework',
+              label: 'Web Framework',
+            },
+            {
+              type: 'doc',
+              id: 'deployment/workflow-runners',
+              label: 'Workflow Runners',
+            },
+            {
+              type: 'doc',
+              id: 'deployment/workers',
+              label: 'Workers',
+              customProps: {
+                tags: ['new'],
+              },
+            },
+          ],
+        },
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Observe',
+      collapsible: false,
+      collapsed: false,
+      className: 'sidebar-group-name',
+      items: [
+        {
+          type: 'category',
+          label: 'Traces',
+          link: {
+            type: 'doc',
+            id: 'observability/overview',
+          },
+          customProps: {
+            contextualSidebar: true,
+          },
+          items: [
+            {
+              type: 'doc',
+              id: 'observability/tracing/overview',
+              label: 'Traces',
             },
             {
               type: 'doc',
@@ -774,56 +581,12 @@ const sidebars = {
             },
             {
               type: 'category',
-              label: 'Metrics',
-              items: [
-                {
-                  type: 'doc',
-                  id: 'observability/metrics/overview',
-                  label: 'Overview',
-                },
-                {
-                  type: 'doc',
-                  id: 'observability/metrics/querying',
-                  label: 'Querying metrics',
-                },
-              ],
-            },
-            {
-              type: 'category',
-              label: 'Tracing',
-              items: [
-                {
-                  type: 'doc',
-                  id: 'observability/tracing/overview',
-                  key: 'observability.tracing.overview',
-                  label: 'Overview',
-                },
-              ],
-            },
-            {
-              type: 'category',
               label: 'Integrations',
               items: [
                 {
                   type: 'doc',
                   id: 'observability/integrations/overview',
                   label: 'Overview',
-                },
-                {
-                  type: 'category',
-                  label: 'Bridges',
-                  items: [
-                    {
-                      type: 'doc',
-                      id: 'observability/integrations/bridges/datadog',
-                      label: 'Datadog',
-                    },
-                    {
-                      type: 'doc',
-                      id: 'observability/integrations/bridges/otel',
-                      label: 'OpenTelemetry',
-                    },
-                  ],
                 },
                 {
                   type: 'category',
@@ -837,57 +600,7 @@ const sidebars = {
                     {
                       type: 'doc',
                       id: 'observability/integrations/exporters/mastra-platform',
-                      label: 'Mastra platform',
-                    },
-                    {
-                      type: 'doc',
-                      id: 'observability/integrations/exporters/arize',
-                      label: 'Arize',
-                    },
-                    {
-                      type: 'doc',
-                      id: 'observability/integrations/exporters/arthur',
-                      label: 'Arthur',
-                    },
-                    {
-                      type: 'doc',
-                      id: 'observability/integrations/exporters/braintrust',
-                      label: 'Braintrust',
-                    },
-                    {
-                      type: 'doc',
-                      id: 'observability/integrations/exporters/datadog',
-                      label: 'Datadog',
-                    },
-                    {
-                      type: 'doc',
-                      id: 'observability/integrations/exporters/laminar',
-                      label: 'Laminar',
-                    },
-                    {
-                      type: 'doc',
-                      id: 'observability/integrations/exporters/langfuse',
-                      label: 'Langfuse',
-                    },
-                    {
-                      type: 'doc',
-                      id: 'observability/integrations/exporters/langsmith',
-                      label: 'LangSmith',
-                    },
-                    {
-                      type: 'doc',
-                      id: 'observability/integrations/exporters/otel',
-                      label: 'OpenTelemetry',
-                    },
-                    {
-                      type: 'doc',
-                      id: 'observability/integrations/exporters/posthog',
-                      label: 'PostHog',
-                    },
-                    {
-                      type: 'doc',
-                      id: 'observability/integrations/exporters/sentry',
-                      label: 'Sentry',
+                      label: 'Mastra Platform',
                     },
                   ],
                 },
@@ -908,13 +621,33 @@ const sidebars = {
         },
         {
           type: 'category',
-          label: 'Evals',
+          label: 'Metrics',
+          link: {
+            type: 'doc',
+            id: 'observability/metrics/overview',
+          },
+          customProps: {
+            contextualSidebar: true,
+          },
           items: [
             {
               type: 'doc',
-              id: 'evals/overview',
-              label: 'Overview',
+              id: 'observability/metrics/querying',
+              label: 'Querying Metrics',
             },
+          ],
+        },
+        {
+          type: 'category',
+          label: 'Evals',
+          link: {
+            type: 'doc',
+            id: 'evals/overview',
+          },
+          customProps: {
+            contextualSidebar: true,
+          },
+          items: [
             {
               type: 'doc',
               id: 'evals/built-in-scorers',
@@ -950,62 +683,52 @@ const sidebars = {
               id: 'evals/evals-with-memory',
               label: 'Evals with Memory',
             },
-            {
-              type: 'category',
-              label: 'Datasets',
-              items: [
-                {
-                  type: 'doc',
-                  id: 'evals/datasets/overview',
-                  label: 'Overview',
-                },
-                {
-                  type: 'doc',
-                  id: 'evals/datasets/running-experiments',
-                  label: 'Running Experiments',
-                },
-              ],
-            },
           ],
         },
         {
           type: 'category',
-          label: 'Deployment',
+          label: 'Datasets',
+          link: {
+            type: 'doc',
+            id: 'datasets/overview',
+          },
+          customProps: {
+            contextualSidebar: true,
+          },
           items: [
             {
               type: 'doc',
-              id: 'deployment/overview',
-              label: 'Overview',
+              id: 'datasets/running-experiments',
+              label: 'Experiments',
             },
+          ],
+        },
+      ],
+    },
+    {
+      type: 'category',
+      label: 'More',
+      collapsed: false,
+      collapsible: false,
+      className: 'sidebar-group-name',
+      items: [
+        {
+          type: 'category',
+          label: 'Guides',
+          link: {
+            type: 'doc',
+            id: 'guides/multi-agent-systems',
+          },
+          collapsed: true,
+          customProps: {
+            contextualSidebar: true,
+            contextualSidebarLabel: 'Multi-agent systems',
+          },
+          items: [
             {
               type: 'doc',
-              id: 'deployment/mastra-server',
-              label: 'Mastra Server',
-            },
-            {
-              type: 'doc',
-              id: 'deployment/monorepo',
-              label: 'Monorepo',
-            },
-            {
-              type: 'doc',
-              id: 'deployment/cloud-providers',
-              label: 'Cloud Providers',
-            },
-            {
-              type: 'doc',
-              id: 'deployment/sandbox',
-              label: 'Sandbox',
-            },
-            {
-              type: 'doc',
-              id: 'deployment/web-framework',
-              label: 'Web Framework',
-            },
-            {
-              type: 'doc',
-              id: 'deployment/workflow-runners',
-              label: 'Workflow Runners',
+              id: 'guides/streaming',
+              label: 'Streaming',
             },
           ],
         },
@@ -1015,7 +738,7 @@ const sidebars = {
   platformSidebar: [
     {
       type: 'category',
-      label: 'Mastra platform',
+      label: 'Mastra Platform',
       items: [
         {
           type: 'doc',
@@ -1056,7 +779,7 @@ const sidebars = {
           id: 'mastra-platform/trace-intelligence',
           label: 'Trace Intelligence',
           customProps: {
-            tags: ['beta'],
+            tags: ['new'],
           },
         },
         {
@@ -1073,9 +796,6 @@ const sidebars = {
           type: 'doc',
           id: 'mastra-platform/github',
           label: 'GitHub integration',
-          customProps: {
-            tags: ['new'],
-          },
         },
         {
           type: 'doc',
@@ -1084,8 +804,8 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'mastra-platform/workspace',
-          label: 'Workspace',
+          id: 'mastra-platform/workspaces',
+          label: 'Workspaces',
           customProps: {
             tags: ['new'],
           },

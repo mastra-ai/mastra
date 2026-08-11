@@ -141,9 +141,9 @@ const { messages } = await memory.recall({
 })
 ```
 
-All metadata entries are combined with AND semantics. A message must match every key and value with exact type equality. `null` matches metadata that is explicitly set to `null`; it doesn't match a missing key.
+All metadata entries are combined with AND semantics. A message must match every key and value with exact type equality. `null` matches metadata that's explicitly set to `null`. It doesn't match a missing key.
 
-Metadata filters only support shallow scalar values: `string`, finite `number`, `boolean`, and `null`. Nested objects, arrays, `NaN`, and infinities are not supported. Metadata keys must start with a letter or underscore, may contain only alphanumeric characters and underscores, must be 128 characters or fewer, and can't use reserved prototype keys such as `__proto__`, `constructor`, or `prototype`. Performance depends on the storage backend. Arbitrary metadata filters may require scanning candidate messages, so narrow the query with `threadId`, `resourceId`, or `dateRange` when possible.
+Metadata filters only support shallow scalar values: `string`, finite `number`, `boolean`, and `null`. Nested objects, arrays, `NaN`, and infinities aren't supported. Metadata keys must start with a letter or underscore and contain only alphanumeric or underscore characters. The limit is 128 characters. Reserved prototype keys such as `__proto__`, `constructor`, and `prototype` aren't allowed. Performance depends on the storage backend. Arbitrary metadata filters may require scanning candidate messages, so narrow the query with `threadId`, `resourceId`, or `dateRange` when possible.
 
 ## Returns
 

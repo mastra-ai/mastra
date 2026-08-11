@@ -4,18 +4,16 @@ import type { CoreMessage } from '@internal/ai-sdk-v4';
 import { z } from 'zod/v4';
 import type { MastraPrimitives } from '../action';
 import type { Agent } from '../agent/agent';
-import type { AgentExecutionOptions } from '../agent/agent.types';
 import { MessageList, messagesAreEqual } from '../agent/message-list';
 import type { MastraDBMessage, MessageInput } from '../agent/message-list';
 import { isAgentCompatible } from '../agent/subagent';
 import type { SubAgent } from '../agent/subagent';
 import { TripWire } from '../agent/trip-wire';
-import type { AgentStreamOptions } from '../agent/types';
 import { MastraFGAPermissions } from '../auth/ee';
 import type { ActorSignal } from '../auth/ee';
 import { MastraBase } from '../base';
 import { RequestContext } from '../di';
-import { ErrorCategory, ErrorDomain, MastraError } from '../error';
+import { ErrorCategory, ErrorDomain, MastraError, getErrorFromUnknown } from '../error';
 import type { MastraScorers } from '../evals';
 import { EventEmitterPubSub } from '../events/event-emitter';
 import type { PubSub } from '../events/pubsub';
@@ -32,7 +30,7 @@ import {
   resolveObservabilityContext,
 } from '../observability';
 import { executeWithContext } from '../observability/utils';
-import type { OutputResult, Processor, ProcessorStreamWriter } from '../processors';
+import type { OutputResult, Processor, ProcessorStreamWriter, ProcessorStreamWriterOptions } from '../processors';
 import { ProcessorRunner, ProcessorState } from '../processors/runner';
 import { createProcessorSendSignal } from '../processors/send-signal';
 import {
@@ -44,7 +42,7 @@ import {
 } from '../processors/span-payload';
 import { ProcessorStepOutputSchema, ProcessorStepInputSchema } from '../processors/step-schema';
 import type { ProcessorStepInput, ProcessorStepOutput } from '../processors/step-schema';
-import { toStandardSchema } from '../schema';
+import { standardSchemaToJSONSchema, toStandardSchema } from '../schema';
 import type { InferPublicSchema, InferStandardSchemaOutput, PublicSchema, StandardSchemaWithJSON } from '../schema';
 import type { StorageListWorkflowRunsInput } from '../storage';
 import { WorkflowRunOutput } from '../stream/RunOutput';
@@ -53,9 +51,12 @@ import { ChunkFrom } from '../stream/types';
 import { Tool } from '../tools/tool';
 import type { ToolExecutionContext } from '../tools/types';
 import type { DynamicArgument } from '../types';
-import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from './constants';
+import { PUBSUB_SYMBOL } from './constants';
 import { DefaultExecutionEngine } from './default';
 import type { ExecutionEngine, ExecutionGraph } from './execution-engine';
+import { validateTemplate } from './mapping-template';
+import { derivePredicateLabel, evaluatePredicate } from './predicate';
+import type { Predicate } from './predicate';
 import type {
   ConditionFunction,
   ExecuteFunction,
@@ -64,15 +65,19 @@ import type {
   Step,
   SuspendOptions,
 } from './step';
-import { forwardAgentStreamChunk } from './stream-utils';
+import { createMappingStep, createStepFromAgent, createStepFromTool } from './step-factories';
+import type { AgentStepOptions } from './step-factories';
 import type {
   DefaultEngineType,
   DynamicMapping,
   ExtractSchemaFromStep,
   ExtractSchemaType,
+  MappingConfig,
   PathsToStringProps,
+  SerializedSingleStepEntry,
   SerializedStep,
   SerializedStepFlowEntry,
+  SingleStepEntry,
   StepFlowEntry,
   StepResult,
   StepsRecord,
@@ -97,24 +102,84 @@ import type {
   WorkflowRunStartOptions,
   ForeachOptions,
 } from './types';
-import { cleanStepResult, createRestartExecutionParams, createTimeTravelExecutionParams } from './utils';
+import {
+  cleanStepResult,
+  createRestartExecutionParams,
+  createTimeTravelExecutionParams,
+  hydrateSerializedStepErrors,
+} from './utils';
 
-// Options that can be passed when wrapping an agent with createStep
-// These work for both stream() (v2) and streamLegacy() (v1) methods
-export type AgentStepOptions<TOUTPUT> = Omit<
-  AgentExecutionOptions<TOUTPUT> & AgentStreamOptions,
-  | 'format'
-  | 'tracingContext'
-  | 'requestContext'
-  | 'abortSignal'
-  | 'context'
-  | 'onStepFinish'
-  | 'output'
-  | 'experimental_output'
-  | 'resourceId'
-  | 'threadId'
-  | 'scorers'
->;
+// Re-exported so the public `@mastra/core/workflows` surface (and existing
+// `./workflow` imports) are unchanged; the factories live in `step-factories.ts`
+// so the execution engines can use them without importing this module.
+export { createMappingStep, createStepFromAgent, createStepFromTool } from './step-factories';
+export type { AgentStepOptions } from './step-factories';
+
+/**
+ * Extract the JSON-safe subset of an agent-step options bag for the in-process
+ * `serializedStepFlow` (which feeds `WorkflowInfo.stepGraph` for dashboards
+ * and client-side rendering). Kept intentionally best-effort: this path is
+ * write-only and can't throw — the strict throwing round-trip serialization
+ * lives in `toStorableGraph` / `serializeSingleEntry`.
+ */
+function serializeAgentStepFields(options: any): {
+  outputSchema?: Record<string, any>;
+  options?: { retries?: number; metadata?: StepMetadata };
+} {
+  const out: { outputSchema?: Record<string, any>; options?: { retries?: number; metadata?: StepMetadata } } = {};
+  const raw = options?.structuredOutput?.schema;
+  if (raw !== undefined && raw !== null) {
+    try {
+      out.outputSchema = standardSchemaToJSONSchema(toStandardSchema(raw)) as Record<string, any>;
+    } catch {
+      // best-effort; toStorableGraph will surface the real error at persist time
+    }
+  }
+  const opts: { retries?: number; metadata?: StepMetadata } = {};
+  if (typeof options?.retries === 'number') opts.retries = options.retries;
+  if (options?.metadata && typeof options.metadata === 'object') opts.metadata = options.metadata;
+  if (Object.keys(opts).length > 0) out.options = opts;
+  return out;
+}
+
+/**
+ * Type guard for the opt-in declarative-predicate arg accepted by
+ * `.branch()`, `.dowhile()`, and `.dountil()`.
+ */
+function isDeclarativePredicateArg(value: unknown): value is { predicate: Predicate } {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    typeof (value as { predicate?: unknown }).predicate === 'object' &&
+    (value as { predicate?: unknown }).predicate !== null
+  );
+}
+
+/**
+ * Wrap a declarative `Predicate` as a runtime condition callback so the
+ * existing execution engine (which only knows how to call `condition(params)`)
+ * can execute stored / declarative predicates unchanged.
+ *
+ * Exported for the rehydration path (workflows/dynamic), which rebuilds
+ * conditional/loop entries from stored predicates.
+ */
+export function predicateToCondition(predicate: Predicate): (params: any) => Promise<boolean> {
+  return async (params: any) => {
+    return evaluatePredicate(predicate, {
+      initData: params?.getInitData ? params.getInitData() : undefined,
+      inputData: params?.inputData,
+      state: params?.state,
+      getStepResult: typeof params?.getStepResult === 'function' ? (id: string) => params.getStepResult(id) : undefined,
+    });
+  };
+}
+
+function serializeToolStepFields(options: any): { options?: { retries?: number; metadata?: StepMetadata } } {
+  const opts: { retries?: number; metadata?: StepMetadata } = {};
+  if (typeof options?.retries === 'number') opts.retries = options.retries;
+  if (options?.metadata && typeof options.metadata === 'object') opts.metadata = options.metadata;
+  return Object.keys(opts).length > 0 ? { options: opts } : {};
+}
 
 export function mapVariable<TStep extends Step<string, any, any, any, any, any>>({
   step,
@@ -181,7 +246,19 @@ function areProcessorMessageArraysEqual(before: unknown[] | undefined, after: un
 
 function findStepInGraph(graph: SerializedStepFlowEntry[], stepId: string): SerializedStepFlowEntry | undefined {
   for (const entry of graph) {
-    if ('step' in entry && entry.step?.id === stepId) return entry;
+    if (entry.type === 'loop') {
+      const inner = entry.step;
+      const innerId = inner.type === 'step' ? inner.step.id : inner.id;
+      if (innerId === stepId) return entry;
+    }
+    if (entry.type === 'foreach') {
+      const inner = entry.step;
+      const innerId = inner.type === 'step' ? inner.step.id : inner.id;
+      if (innerId === stepId) return entry;
+    }
+    if (entry.type === 'step' && entry.step?.id === stepId) return entry;
+    if (entry.type === 'workflow' && entry.id === stepId) return entry;
+    if ('id' in entry && typeof entry.id === 'string' && entry.id === stepId) return entry;
     if ((entry.type === 'conditional' || entry.type === 'parallel') && 'steps' in entry) {
       const found = findStepInGraph(entry.steps as SerializedStepFlowEntry[], stepId);
       if (found) return found;
@@ -286,6 +363,7 @@ export function createStep<TProcessorId extends string>(
     | (Processor<TProcessorId> & { processOutputStream: Function })
     | (Processor<TProcessorId> & { processOutputResult: Function })
     | (Processor<TProcessorId> & { processOutputStep: Function })
+    | (Processor<TProcessorId> & { processToolResult: Function })
     | (Processor<TProcessorId> & { computeStateSignal: Function }),
 ): Step<
   `processor:${TProcessorId}`,
@@ -435,228 +513,87 @@ function createStepFromParams<
   return step;
 }
 
-function createStepFromAgent<TStepId extends string, TStepOutput>(
-  params: SubAgent<TStepId, any> | Agent<TStepId, any, any>,
-  agentOrToolOptions?: AgentStepOptions<TStepOutput> & {
-    structuredOutput?: { schema: StandardSchemaWithJSON<TStepOutput> };
-    retries?: number;
-    scorers?: DynamicArgument<MastraScorers>;
-    metadata?: StepMetadata;
-  },
-): Step<TStepId, unknown, any, TStepOutput, unknown, unknown, DefaultEngineType> {
-  const options = (agentOrToolOptions ?? {}) as
-    | (AgentStepOptions<TStepOutput> & {
-        retries?: number;
-        scorers?: DynamicArgument<MastraScorers>;
-        metadata?: StepMetadata;
-      })
-    | undefined;
-  // Determine output schema based on structuredOutput option
-  const outputSchema = toStandardSchema(
-    (options?.structuredOutput?.schema ?? z.object({ text: z.string() })) as PublicSchema<TStepOutput>,
-  ) as StandardSchemaWithJSON<TStepOutput>;
-  const { retries, scorers, metadata, ...agentOptions } =
-    options ??
-    ({} as AgentStepOptions<TStepOutput> & {
-      retries?: number;
-      scorers?: DynamicArgument<MastraScorers>;
-      metadata?: StepMetadata;
-    });
+/**
+ * Steps produced by {@link createStepFromAgent} / {@link createStepFromTool}
+ * smuggle the original agent/tool ref and options on non-public fields so we
+ * can rebuild a declarative graph entry when they land in `.then()` etc.
+ * The intersection with the widest `Step` generic keeps the return-side
+ * assignment to {@link SingleStepEntry} typed while the optional metadata
+ * fields carry the smuggled agent/tool refs.
+ */
+type StepWithRefMetadata = Step<string, any, any, any, any, any, any, any> & {
+  __agentRef?: { id: string };
+  __agentOptions?: unknown;
+  __toolRef?: { id: string };
+  __toolOptions?: unknown;
+};
 
-  return {
-    id: params.id,
-    description: params.getDescription(),
-    inputSchema: toStandardSchema(
-      z.object({
-        prompt: z.string(),
-      }),
-    ),
-    outputSchema: toStandardSchema(outputSchema),
-    retries,
-    scorers,
-    metadata,
-    execute: async ({
-      inputData,
-      runId,
-      [PUBSUB_SYMBOL]: pubsub,
-      [STREAM_FORMAT_SYMBOL]: streamFormat,
-      requestContext,
-      abortSignal,
-      abort,
-      writer,
-      ...rest
-    }) => {
-      const observabilityContext = resolveObservabilityContext(rest);
-      let streamPromise = {} as {
-        promise: Promise<string>;
-        resolve: (value: string) => void;
-        reject: (reason?: any) => void;
-      };
-
-      streamPromise.promise = new Promise((resolve, reject) => {
-        streamPromise.resolve = resolve;
-        streamPromise.reject = reject;
-      });
-
-      // Track structured output result
-      let structuredResult: any = null;
-
-      const toolData = {
-        name: params.name,
-        args: inputData,
-      };
-
-      let stream: ReadableStream<any>;
-
-      const handleFinish = (result: any) => {
-        const resultWithObject = result as typeof result & { object?: unknown };
-        if (agentOptions?.structuredOutput?.schema && resultWithObject.object) {
-          structuredResult = resultWithObject.object;
-        }
-        streamPromise.resolve(result.text);
-        void agentOptions?.onFinish?.(result);
-      };
-
-      if ((await params.getModel()).specificationVersion === 'v1' && typeof params.streamLegacy === 'function') {
-        const { fullStream } = await params.streamLegacy((inputData as { prompt: string }).prompt, {
-          ...agentOptions,
-          requestContext,
-          ...observabilityContext,
-          onFinish: handleFinish,
-          abortSignal,
-        });
-        stream = fullStream as any;
-      } else {
-        const modelOutput = await params.stream((inputData as { prompt: string }).prompt, {
-          ...agentOptions,
-          requestContext,
-          ...observabilityContext,
-          onFinish: handleFinish,
-          abortSignal,
-        });
-
-        void modelOutput.text.then(streamPromise.resolve, streamPromise.reject);
-        stream = modelOutput.fullStream as ReadableStream<ChunkType>;
-      }
-
-      let tripwireChunk: any = null;
-
-      if (streamFormat === 'legacy') {
-        await pubsub.publish(`workflow.events.v2.${runId}`, {
-          type: 'watch',
-          runId,
-          data: { type: 'tool-call-streaming-start', ...(toolData ?? {}) },
-        });
-        for await (const chunk of stream) {
-          if (chunk.type === 'tripwire') {
-            tripwireChunk = chunk;
-            break;
-          }
-          if (chunk.type === 'text-delta') {
-            await pubsub.publish(`workflow.events.v2.${runId}`, {
-              type: 'watch',
-              runId,
-              data: { type: 'tool-call-delta', ...(toolData ?? {}), argsTextDelta: chunk.textDelta },
-            });
-          }
-        }
-        await pubsub.publish(`workflow.events.v2.${runId}`, {
-          type: 'watch',
-          runId,
-          data: { type: 'tool-call-streaming-finish', ...(toolData ?? {}) },
-        });
-      } else {
-        for await (const chunk of stream) {
-          await forwardAgentStreamChunk({ writer, chunk });
-          if (chunk.type === 'tripwire') {
-            tripwireChunk = chunk;
-            break;
-          }
-        }
-      }
-
-      // If a tripwire was detected, throw TripWire to abort the workflow step
-      if (tripwireChunk) {
-        throw new TripWire(
-          tripwireChunk.payload?.reason || 'Agent tripwire triggered',
-          {
-            retry: tripwireChunk.payload?.retry,
-            metadata: tripwireChunk.payload?.metadata,
-          },
-          tripwireChunk.payload?.processorId,
-        );
-      }
-
-      if (abortSignal.aborted) {
-        return abort();
-      }
-
-      // Return structured output if available, otherwise default text
-      if (structuredResult !== null) {
-        return structuredResult satisfies TStepOutput;
-      }
-      return {
-        text: await streamPromise.promise,
-      } satisfies {
-        text: string;
-      };
-    },
-    component: 'AGENT',
-  };
+/**
+ * Converts a step passed to `.then()` / `.parallel()` / `.branch()` into the
+ * appropriate declarative live graph entry based on its `component` discriminator.
+ * Agent/tool steps (built via `createStep`) carry their original ref + options on
+ * `__agentRef`/`__toolRef`, allowing us to emit a declarative entry.
+ */
+function toSingleStepEntry(step: StepWithRefMetadata): SingleStepEntry {
+  if (step?.component === 'AGENT' && step.__agentRef) {
+    return {
+      type: 'agent',
+      id: step.id,
+      agentId: step.__agentRef.id,
+      agent: step.__agentRef,
+      options: step.__agentOptions,
+    };
+  }
+  if (step?.component === 'TOOL' && step.__toolRef) {
+    return { type: 'tool', id: step.id, toolId: step.__toolRef.id, tool: step.__toolRef, options: step.__toolOptions };
+  }
+  return { type: 'step', step: step as unknown as Step };
 }
 
-function createStepFromTool<TStepInput, TSuspend, TResume, TStepOutput>(
-  params: ToolStep<TStepInput, TSuspend, TResume, TStepOutput, any>,
-  toolOpts?: { retries?: number; scorers?: DynamicArgument<MastraScorers>; metadata?: StepMetadata },
-): Step<string, any, TStepInput, TStepOutput, TResume, TSuspend, DefaultEngineType> {
-  if (!params.inputSchema || !params.outputSchema) {
-    throw new Error('Tool must have input and output schemas defined');
+/** JSON-safe mirror of {@link toSingleStepEntry}. */
+function toSerializedSingleStepEntry(step: StepWithRefMetadata): SerializedSingleStepEntry {
+  if (step?.component === 'AGENT' && step.__agentRef) {
+    return {
+      type: 'agent',
+      id: step.id,
+      agentId: step.__agentRef.id,
+      description: step.description,
+      ...serializeAgentStepFields(step.__agentOptions),
+    };
   }
-
+  if (step?.component === 'TOOL' && step.__toolRef) {
+    return {
+      type: 'tool',
+      id: step.id,
+      toolId: step.__toolRef.id,
+      description: step.description,
+      ...serializeToolStepFields(step.__toolOptions),
+    };
+  }
+  if ((step as any)?.component === 'WORKFLOW') {
+    // Prefer the public getter; fall back to the protected field / legacy
+    // SerializedStep shape for any partial mock consumers.
+    const nestedFlow =
+      (step as { serializedStepGraph?: SerializedStepFlowEntry[] }).serializedStepGraph ??
+      (step as SerializedStep).serializedStepFlow;
+    return {
+      type: 'workflow',
+      id: step.id,
+      workflowId: step.id,
+      description: step.description,
+      ...(nestedFlow ? { serializedStepFlow: nestedFlow } : {}),
+    };
+  }
   return {
-    id: params.id,
-    description: params.description,
-    inputSchema: params.inputSchema,
-    outputSchema: params.outputSchema,
-    resumeSchema: params.resumeSchema,
-    suspendSchema: params.suspendSchema,
-    retries: toolOpts?.retries,
-    scorers: toolOpts?.scorers,
-    metadata: toolOpts?.metadata,
-    execute: async ({
-      inputData,
-      mastra,
-      requestContext,
-      suspend,
-      resumeData,
-      runId,
-      workflowId,
-      state,
-      setState,
-      abortSignal,
-      ...rest
-    }) => {
-      // BREAKING CHANGE v1.0: Pass raw input as first arg, context as second
-      const observabilityContext = resolveObservabilityContext(rest);
-      const toolContext = {
-        mastra,
-        requestContext,
-        ...observabilityContext,
-        abortSignal,
-        resumeData,
-        workflow: {
-          runId,
-          suspend,
-          resumeData,
-          workflowId,
-          state,
-          setState,
-        },
-      };
-
-      return params.execute(inputData, toolContext) as TStepOutput;
+    type: 'step',
+    step: {
+      id: step.id,
+      description: step.description,
+      metadata: step.metadata,
+      component: (step as SerializedStep).component,
+      serializedStepFlow: (step as SerializedStep).serializedStepFlow,
+      canSuspend: Boolean(step.suspendSchema || step.resumeSchema),
     },
-    component: 'TOOL',
   };
 }
 
@@ -687,6 +624,8 @@ function createStepFromProcessor<TProcessorId extends string>(
         return EntityType.OUTPUT_PROCESSOR;
       case 'outputStep':
         return EntityType.OUTPUT_STEP_PROCESSOR;
+      case 'toolResult':
+        return EntityType.TOOL_RESULT_PROCESSOR;
       default:
         return EntityType.OUTPUT_PROCESSOR;
     }
@@ -705,6 +644,8 @@ function createStepFromProcessor<TProcessorId extends string>(
         return 'output processor';
       case 'outputStep':
         return 'output step processor';
+      case 'toolResult':
+        return 'tool result processor';
       default:
         return 'processor';
     }
@@ -723,6 +664,8 @@ function createStepFromProcessor<TProcessorId extends string>(
         return !!processor.processOutputResult;
       case 'outputStep':
         return !!processor.processOutputStep;
+      case 'toolResult':
+        return !!processor.processToolResult;
       default:
         return false;
     }
@@ -744,6 +687,7 @@ function createStepFromProcessor<TProcessorId extends string>(
       const input = inputData as ProcessorStepOutput & {
         processorStates?: Map<string, ProcessorState>;
         abortSignal?: AbortSignal;
+        agent?: Agent;
       };
       const {
         phase,
@@ -772,10 +716,18 @@ function createStepFromProcessor<TProcessorId extends string>(
         usage,
         messageId,
         rotateResponseMessageId,
+        // toolResult phase fields
+        toolName,
+        toolCallId,
+        args: toolCallArgs,
+        toolResultValue,
+        providerExecuted,
         // Shared processor states map for accessing persisted state
         processorStates,
         // Abort signal for cancelling in-flight processor work (e.g. OM observations)
         abortSignal,
+        // Agent reference so processors can access the running agent (e.g. on signal/schedule wake)
+        agent,
       } = input;
 
       // Create a minimal abort function that throws TripWire
@@ -840,6 +792,14 @@ function createStepFromProcessor<TProcessorId extends string>(
               ...(finishReason !== undefined ? { finishReason } : {}),
               ...(text !== undefined ? { text } : {}),
               ...(toolCalls !== undefined ? { toolCalls } : {}),
+              ...(retryCount !== undefined ? { retryCount } : {}),
+            };
+          case 'toolResult':
+            return {
+              ...(stepNumber !== undefined ? { stepNumber } : {}),
+              ...(toolName !== undefined ? { toolName } : {}),
+              ...(toolCallId !== undefined ? { toolCallId } : {}),
+              ...(providerExecuted !== undefined ? { providerExecuted } : {}),
               ...(retryCount !== undefined ? { retryCount } : {}),
             };
           default:
@@ -922,6 +882,7 @@ function createStepFromProcessor<TProcessorId extends string>(
           }
           case 'outputResult':
           case 'outputStep':
+          case 'toolResult':
             return {
               ...(Array.isArray(payload.messages) &&
               !areProcessorMessageArraysEqual(messages as unknown[] | undefined, payload.messages)
@@ -949,10 +910,10 @@ function createStepFromProcessor<TProcessorId extends string>(
 
       // Find appropriate parent span:
       // - For input/outputResult: find AGENT_RUN (processor runs once at start/end)
-      // - For inputStep/outputStep: find MODEL_STEP (processor runs per LLM call)
+      // - For inputStep/outputStep/toolResult: find MODEL_STEP (processor runs per LLM call / tool round-trip)
       // When workflow is executed, currentSpan is WORKFLOW_STEP, so we walk up the parent chain
       const parentSpan =
-        phase === 'inputStep' || phase === 'outputStep'
+        phase === 'inputStep' || phase === 'outputStep' || phase === 'toolResult'
           ? currentSpan?.findParent(SpanType.MODEL_STEP) || currentSpan
           : currentSpan?.findParent(SpanType.AGENT_RUN) || currentSpan;
 
@@ -982,8 +943,8 @@ function createStepFromProcessor<TProcessorId extends string>(
       // This enables processors to stream data-* parts to the UI in real-time
       const processorWriter: ProcessorStreamWriter | undefined = outputWriter
         ? {
-            custom: async <T extends { type: string }>(data: T) => {
-              await outputWriter(data as any);
+            custom: async <T extends { type: string }>(data: T, options?: ProcessorStreamWriterOptions) => {
+              await outputWriter(data as any, { messageId: options?.messageId ?? currentMessageId });
             },
           }
         : undefined;
@@ -1018,6 +979,7 @@ function createStepFromProcessor<TProcessorId extends string>(
 
       const baseContext = {
         abort,
+        agent,
         retryCount: retryCount ?? 0,
         requestContext,
         ...processorObservabilityContext,
@@ -1067,6 +1029,12 @@ function createStepFromProcessor<TProcessorId extends string>(
         usage,
         messageId: currentMessageId,
         rotateResponseMessageId: rotateCurrentResponseMessageId,
+        // toolResult phase fields — passed through so chained processor steps can read them
+        toolName,
+        toolCallId,
+        args: toolCallArgs,
+        toolResultValue,
+        providerExecuted,
       };
 
       // Helper to execute phase with proper span lifecycle management
@@ -1465,6 +1433,79 @@ function createStepFromProcessor<TProcessorId extends string>(
             return { ...passThrough, messages };
           }
 
+          case 'toolResult': {
+            if (processor.processToolResult) {
+              if (!passThrough.messageList) {
+                throw new MastraError({
+                  category: ErrorCategory.USER,
+                  domain: ErrorDomain.MASTRA_WORKFLOW,
+                  id: 'PROCESSOR_MISSING_MESSAGE_LIST',
+                  text: `Processor ${processor.id} requires messageList or messages for processToolResult phase`,
+                });
+              }
+
+              const checkedMessageList = passThrough.messageList;
+              const idsBeforeProcessing = (messages as MastraDBMessage[]).map(m => m.id);
+              const check = checkedMessageList.makeMessageSourceChecker();
+
+              const result = await processor.processToolResult({
+                ...baseContext,
+                messages: messages as MastraDBMessage[],
+                messageList: checkedMessageList,
+                stepNumber: stepNumber ?? 0,
+                toolName: toolName ?? '',
+                toolCallId: toolCallId ?? '',
+                args: toolCallArgs,
+                result: toolResultValue,
+                providerExecuted,
+                systemMessages: (systemMessages ?? []) as CoreMessage[],
+                steps: steps ?? [],
+              });
+
+              if (result instanceof MessageList) {
+                if (result !== checkedMessageList) {
+                  throw new MastraError({
+                    category: ErrorCategory.USER,
+                    domain: ErrorDomain.MASTRA_WORKFLOW,
+                    id: 'PROCESSOR_RETURNED_EXTERNAL_MESSAGE_LIST',
+                    text: `Processor ${processor.id} returned a MessageList instance other than the one passed in. Use the messageList argument instead.`,
+                  });
+                }
+                return {
+                  ...passThrough,
+                  messages: result.get.all.db(),
+                  systemMessages: result.getAllSystemMessages(),
+                };
+              } else if (Array.isArray(result)) {
+                ProcessorRunner.applyMessagesToMessageList(
+                  result as MastraDBMessage[],
+                  checkedMessageList,
+                  idsBeforeProcessing,
+                  check,
+                  'response',
+                );
+                return { ...passThrough, messages: result };
+              } else if (result && 'messages' in result && 'systemMessages' in result) {
+                const typedResult = result as { messages: MastraDBMessage[]; systemMessages: CoreMessage[] };
+                ProcessorRunner.applyMessagesToMessageList(
+                  typedResult.messages,
+                  checkedMessageList,
+                  idsBeforeProcessing,
+                  check,
+                  'response',
+                );
+                checkedMessageList.replaceAllSystemMessages(typedResult.systemMessages);
+                return {
+                  ...passThrough,
+                  messages: typedResult.messages,
+                  systemMessages: typedResult.systemMessages,
+                };
+              }
+              return { ...passThrough, messages };
+            }
+            return { ...passThrough, messages };
+          }
+
           default:
             return { ...passThrough, messages };
         }
@@ -1531,6 +1572,7 @@ export function isProcessor(obj: unknown): obj is Processor {
     typeof rec.processOutputStream === 'function' ||
     typeof rec.processOutputResult === 'function' ||
     typeof rec.processOutputStep === 'function' ||
+    typeof rec.processToolResult === 'function' ||
     typeof rec.processAPIError === 'function' ||
     typeof rec.computeStateSignal === 'function'
   );
@@ -1542,6 +1584,25 @@ export function isProcessor(obj: unknown): obj is Processor {
  * adding or removing type parameters only requires updating one place.
  */
 export type AnyWorkflow = Workflow<any, any, any, any, any, any, any, any>;
+
+/**
+ * Compile-time guard for the declarative `.agent()` builder. Agent steps require a
+ * `{ prompt: string }` input. When the previous step output `TPrev` is assignable to
+ * that, this resolves to `unknown` (a no-op intersection); otherwise it resolves to a
+ * branded object the passed agent can't satisfy, surfacing a readable error on the
+ * argument that names the expected input.
+ *
+ * `[any] extends [...]` is `true` => `unknown`, so a `.map()` returning `any` stays a
+ * deliberate escape hatch. A `unknown`/mismatched prev output errors. The tuple wrap
+ * prevents distribution over union prev-output types.
+ */
+type RequireAgentInput<TPrev> = [TPrev] extends [{ prompt: string }]
+  ? unknown
+  : {
+      readonly __chainError: 'Previous step output must be assignable to { prompt: string }';
+      readonly expectedInput: { prompt: string };
+      readonly receivedPrevOutput: TPrev;
+    };
 
 export class Workflow<
   TEngineType = DefaultEngineType,
@@ -1576,6 +1637,8 @@ export class Workflow<
   public engineType: WorkflowEngineType = 'default';
   /** Type of workflow - 'processor' for processor workflows, 'default' otherwise */
   public type: WorkflowType = 'default';
+  /** Where this workflow came from: 'code' for statically registered workflows, 'dynamic' for workflows rehydrated from storage. Set by rehydrateWorkflow; defaults to 'code'. */
+  public origin: 'code' | 'dynamic' = 'code';
   #nestedWorkflowInput?: TInput;
   public committed: boolean = false;
   protected stepFlow: StepFlowEntry<TEngineType>[];
@@ -1629,6 +1692,7 @@ export class Workflow<
       shouldPersistSnapshot: options.shouldPersistSnapshot ?? (() => true),
       pruneSnapshot: options.pruneSnapshot,
       tracingPolicy: options.tracingPolicy,
+      onStart: options.onStart,
       onFinish: options.onFinish,
       onError: options.onError,
       sharePubsub: options.sharePubsub,
@@ -1682,6 +1746,66 @@ export class Workflow<
   }
 
   /**
+   * @internal Rehydration-only (workflows/dynamic). Appends a fully-built
+   * graph entry without laundering it through the live-`Step` builder
+   * overloads: rehydration already holds the declarative entry it parsed from
+   * storage, so wrapping it in a fake `Step` just so the builder can sniff it
+   * back into the same entry would lose data (options, ids) and lie to the
+   * type system. Mirrors the bookkeeping the public builder methods do:
+   * pushes the live + serialized entries and registers inner steps in
+   * `this.steps`.
+   */
+  __pushStepFlowEntry(live: StepFlowEntry<TEngineType>, serialized: SerializedStepFlowEntry): void {
+    this.stepFlow.push(live);
+    this.serializedStepFlow.push(serialized);
+    const register = (entry: SingleStepEntry<TEngineType>) => {
+      switch (entry.type) {
+        case 'step':
+          this.steps[entry.step.id] = entry.step as any;
+          return;
+        case 'agent':
+          // Same lightweight handle the by-id `.agent()` builder registers.
+          this.steps[entry.id] = { id: entry.id, component: 'AGENT' } as any;
+          return;
+        case 'tool':
+          this.steps[entry.id] = { id: entry.id, component: 'TOOL' } as any;
+          return;
+        case 'mapping':
+          this.steps[entry.id] = createMappingStep(entry.id, entry.mapConfig as MappingConfig) as any;
+          return;
+      }
+    };
+    switch (live.type) {
+      case 'parallel':
+      case 'conditional':
+        live.steps.forEach(register);
+        return;
+      case 'loop':
+      case 'foreach':
+        register(live.step);
+        return;
+      case 'step':
+      case 'agent':
+      case 'tool':
+      case 'mapping':
+        register(live);
+        return;
+      case 'sleep':
+      case 'sleepUntil':
+        // Same no-op placeholder the sleep/sleepUntil builder methods register.
+        this.steps[live.id] = createStep({
+          id: live.id,
+          inputSchema: z.object({}),
+          outputSchema: z.object({}),
+          execute: async () => ({}),
+        });
+        return;
+      default:
+        return;
+    }
+  }
+
+  /**
    * Adds a step to the workflow
    * @param step The step to add to the workflow
    * @returns The workflow instance for chaining
@@ -1704,18 +1828,8 @@ export class Workflow<
       any
     >,
   ) {
-    this.stepFlow.push({ type: 'step', step: step as any });
-    this.serializedStepFlow.push({
-      type: 'step',
-      step: {
-        id: step.id,
-        description: step.description,
-        metadata: step.metadata,
-        component: (step as SerializedStep).component,
-        serializedStepFlow: (step as SerializedStep).serializedStepFlow,
-        canSuspend: Boolean(step.suspendSchema || step.resumeSchema),
-      },
-    });
+    this.stepFlow.push(toSingleStepEntry(step as StepWithRefMetadata));
+    this.serializedStepFlow.push(toSerializedSingleStepEntry(step as StepWithRefMetadata));
     this.steps[step.id] = step;
     return this as unknown as Workflow<
       TEngineType,
@@ -1727,6 +1841,114 @@ export class Workflow<
       TSchemaOut,
       TRequestContext
     >;
+  }
+
+  /**
+   * Adds an agent as a declarative `{ type: 'agent' }` step to the workflow.
+   *
+   * The step output is the agent's structured output (when `structuredOutput` is
+   * provided) or `{ text: string }` otherwise.
+   */
+  agent<TStepId extends string>(
+    // The previous step output (TPrevSchema) must satisfy the agent step input
+    // `{ prompt: string }`; otherwise the guard makes this argument unsatisfiable.
+    agent: (SubAgent<TStepId, any> | Agent<TStepId, any>) & RequireAgentInput<TPrevSchema>,
+    options?: Omit<AgentStepOptions<{ text: string }>, 'structuredOutput'> & {
+      structuredOutput?: never;
+      retries?: number;
+      scorers?: DynamicArgument<MastraScorers>;
+      metadata?: StepMetadata;
+    },
+    stepOptions?: { id?: string },
+  ): Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, { text: string }, TRequestContext>;
+  agent<TStepId extends string, TStepOutput>(
+    agent: (SubAgent<TStepId, any> | Agent<TStepId, any>) & RequireAgentInput<TPrevSchema>,
+    options: Omit<AgentStepOptions<TStepOutput>, 'structuredOutput'> & {
+      structuredOutput: { schema: StandardSchemaWithJSON<TStepOutput> };
+      retries?: number;
+      scorers?: DynamicArgument<MastraScorers>;
+      metadata?: StepMetadata;
+    },
+    stepOptions?: { id?: string },
+  ): Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TStepOutput, TRequestContext>;
+  agent(
+    agentId: string,
+    options?: AgentStepOptions<any> & {
+      retries?: number;
+      scorers?: DynamicArgument<MastraScorers>;
+      metadata?: StepMetadata;
+    },
+    stepOptions?: { id?: string },
+  ): Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, { text: string }, TRequestContext>;
+  agent(agentOrId: any, options?: any, stepOptions?: { id?: string }): any {
+    const isId = typeof agentOrId === 'string';
+    const agentId = isId ? agentOrId : agentOrId.id;
+    const id = stepOptions?.id || agentId;
+    this.stepFlow.push({ type: 'agent', id, agentId, agent: isId ? undefined : agentOrId, options });
+    this.serializedStepFlow.push({
+      type: 'agent',
+      id,
+      agentId,
+      description: isId ? undefined : agentOrId.getDescription?.(),
+      ...serializeAgentStepFields(options),
+    });
+    this.steps[id] = isId
+      ? ({ id, component: 'AGENT' } as any)
+      : ({ ...createStepFromAgent(agentOrId, options), id } as any);
+    return this as any;
+  }
+
+  /**
+   * Adds a tool as a declarative `{ type: 'tool' }` step to the workflow.
+   *
+   * The step output type is the tool's `outputSchema` type; the input it accepts
+   * is the tool's `inputSchema` type.
+   */
+  tool<
+    TSchemaIn,
+    TSchemaOut,
+    TSuspend,
+    TResume,
+    TContext extends ToolExecutionContext<TSuspend, TResume, any>,
+    TId extends string,
+    TToolRC extends Record<string, any> | unknown = unknown,
+  >(
+    // The previous step output (TPrevSchema) must satisfy the tool's input (TSchemaIn).
+    // On a mismatch the input slot resolves to TPrevSchema, making the passed tool
+    // unassignable so the call errors — same mechanics as `.then`.
+    tool: Tool<
+      TPrevSchema extends TSchemaIn ? TSchemaIn : TPrevSchema,
+      TSchemaOut,
+      TSuspend,
+      TResume,
+      TContext,
+      TId,
+      TToolRC
+    >,
+    options?: { retries?: number; scorers?: DynamicArgument<MastraScorers>; metadata?: StepMetadata },
+    stepOptions?: { id?: string },
+  ): Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TSchemaOut, TRequestContext>;
+  tool(
+    toolId: string,
+    options?: { retries?: number; scorers?: DynamicArgument<MastraScorers>; metadata?: StepMetadata },
+    stepOptions?: { id?: string },
+  ): Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, unknown, TRequestContext>;
+  tool(toolOrId: any, options?: any, stepOptions?: { id?: string }): any {
+    const isId = typeof toolOrId === 'string';
+    const toolId = isId ? toolOrId : toolOrId.id;
+    const id = stepOptions?.id || toolId;
+    this.stepFlow.push({ type: 'tool', id, toolId, tool: isId ? undefined : toolOrId, options });
+    this.serializedStepFlow.push({
+      type: 'tool',
+      id,
+      toolId,
+      description: isId ? undefined : toolOrId.description,
+      ...serializeToolStepFields(options),
+    });
+    this.steps[id] = isId
+      ? ({ id, component: 'TOOL' } as any)
+      : ({ ...createStepFromTool(toolOrId, options), id } as any);
+    return this as any;
   }
 
   /**
@@ -1843,33 +2065,65 @@ export class Workflow<
                 requestContextPath: string;
                 schema: PublicSchema<any>;
               }
+            /**
+             * String template with `${<scope>.<path>}` placeholders. Resolved at
+             * run time against the step's execution context.
+             *
+             * Scopes: `inputData`, `initData`, `state`, `requestContext`,
+             * `stepResults.<stepId>`. Paths are dotted (`a.b.c`). Whitespace
+             * inside placeholders is not allowed (`${ inputData.x }` errors at
+             * workflow-definition time). Renders `null`/`undefined` as `''`;
+             * throws on objects/arrays.
+             */
+            | { template: string }
             | DynamicMapping<TPrevSchema, any>;
         }
       | ExecuteFunction<TState, TPrevSchema, any, any, any, TEngineType>,
     stepOptions?: { id?: string | null },
   ): Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, any, TRequestContext> {
-    // Create an implicit step that handles the mapping
-    if (typeof mappingConfig === 'function') {
-      const mappingStep: any = createStep({
-        id:
-          stepOptions?.id ||
-          `mapping_${this.#mastra?.generateId({ idType: 'step', source: 'workflow', entityId: this.id, stepType: 'mapping' }) || randomUUID()}`,
-        inputSchema: z.any(),
-        outputSchema: z.any(),
-        execute: mappingConfig as any,
-      });
+    // Build a declarative `{ type: 'mapping' }` graph entry; the mapping logic is
+    // interpreted at execution time by `createMappingStep`, not baked in here.
+    // Mapping ids must be stable across process restarts: they are recorded in
+    // workflow snapshots, and `timeTravel()` matches the live graph against those
+    // recorded ids. Only defer to `generateId` when a CUSTOM id generator is
+    // configured (the built-in default is `randomUUID()`, which would mint a
+    // different id per build and break time travel across restarts). Otherwise
+    // mint a deterministic id from the workflow id plus the ordinal of this
+    // mapping entry within the step flow.
+    // Skip ordinals whose id is already taken (an explicit `stepOptions.id` may
+    // have claimed a `mapping_<workflowId>_<n>` name) so the fallback never
+    // collides with an existing step.
+    let mappingOrdinal = this.stepFlow.filter(entry => entry.type === 'mapping').length;
+    while (`mapping_${this.id}_${mappingOrdinal}` in this.steps) {
+      mappingOrdinal++;
+    }
+    const mappingId =
+      stepOptions?.id ||
+      (this.#mastra?.getIdGenerator()
+        ? `mapping_${this.#mastra.generateId({ idType: 'step', source: 'workflow', entityId: this.id, stepType: 'mapping' })}`
+        : `mapping_${this.id}_${mappingOrdinal}`);
 
-      this.stepFlow.push({ type: 'step', step: mappingStep as any });
+    const truncate = (s: string) => (s.length > 1000 ? s.slice(0, 1000) + '...\n}' : s);
+
+    // Fail-fast: validate every `{ template }` source at definition time so
+    // malformed placeholders surface here, not at run time.
+    if (typeof mappingConfig === 'object' && mappingConfig !== null) {
+      for (const mapping of Object.values(mappingConfig)) {
+        const m: any = mapping;
+        if (m && typeof m.template === 'string') {
+          validateTemplate(m.template);
+        }
+      }
+    }
+
+    if (typeof mappingConfig === 'function') {
+      this.stepFlow.push({ type: 'mapping', id: mappingId, mapConfig: mappingConfig as any });
       this.serializedStepFlow.push({
-        type: 'step',
-        step: {
-          id: mappingStep.id,
-          mapConfig:
-            mappingConfig.toString()?.length > 1000
-              ? mappingConfig.toString().slice(0, 1000) + '...\n}'
-              : mappingConfig.toString(),
-        },
+        type: 'mapping',
+        id: mappingId,
+        mapConfig: truncate(mappingConfig.toString()),
       });
+      this.steps[mappingId] = createMappingStep(mappingId, mappingConfig as any) as any;
       return this as unknown as Workflow<
         TEngineType,
         TSteps,
@@ -1897,6 +2151,8 @@ export class Workflow<
             requestContextPath: m.requestContextPath,
             schema: m.schema,
           };
+        } else if (typeof m.template === 'string') {
+          a[key] = { template: m.template };
         } else if (m.initData !== undefined) {
           // `mapVariable({ initData: <workflow> })` keeps a live Workflow instance
           // by reference. Serializing it here would deep-walk the whole workflow
@@ -1904,9 +2160,19 @@ export class Workflow<
           // string that OOMs at .commit() before the length guard below can trim
           // it (#19018). The execute path only reads `m.initData` for truthiness
           // (it calls getInitData()), so a slim id reference is behaviourally
-          // identical at runtime.
+          // identical at runtime. Fall back to `true` so callers using the
+          // sentinel form still round-trip successfully.
           a[key] = {
             initData: m.initData?.id ?? true,
+            path: m.path,
+          };
+        } else if (m.step) {
+          // Serialize step references as ids (single or array). The live entry
+          // (this.stepFlow) keeps the real reference for execution; stringifying
+          // the Step object here would walk back into the workflow graph and
+          // form a circular structure.
+          a[key] = {
+            step: Array.isArray(m.step) ? m.step.map((s: any) => s?.id) : m.step?.id,
             path: m.path,
           };
         } else {
@@ -1916,82 +2182,16 @@ export class Workflow<
       },
       {} as Record<string, any>,
     );
-    const mappingStep: any = createStep({
-      id:
-        stepOptions?.id ||
-        `mapping_${this.#mastra?.generateId({ idType: 'step', source: 'workflow', entityId: this.id, stepType: 'mapping' }) || randomUUID()}`,
-      inputSchema: z.any(),
-      outputSchema: z.any(),
-      execute: async ctx => {
-        const { getStepResult, getInitData, requestContext } = ctx;
-
-        const result: Record<string, any> = {};
-        for (const [key, mapping] of Object.entries(mappingConfig)) {
-          const m: any = mapping;
-
-          if (m.value !== undefined) {
-            result[key] = m.value;
-            continue;
-          }
-
-          if (m.fn !== undefined) {
-            result[key] = await m.fn(ctx);
-            continue;
-          }
-
-          if (m.requestContextPath) {
-            result[key] = requestContext.get(m.requestContextPath);
-            continue;
-          }
-
-          const stepResult = m.initData
-            ? getInitData()
-            : getStepResult(
-                Array.isArray(m.step)
-                  ? m.step.find((s: any) => {
-                      const result = getStepResult(s);
-                      if (typeof result === 'object' && result !== null) {
-                        return Object.keys(result).length > 0;
-                      }
-                      return result;
-                    })
-                  : m.step,
-              );
-
-          if (m.path === '.') {
-            result[key] = stepResult;
-            continue;
-          }
-
-          const pathParts = m.path.split('.');
-          let value: any = stepResult;
-          for (const part of pathParts) {
-            if (typeof value === 'object' && value !== null) {
-              value = value[part];
-            } else {
-              throw new Error(`Invalid path ${m.path} in step ${m?.step?.id ?? 'initData'}`);
-            }
-          }
-
-          result[key] = value;
-        }
-        return result;
-      },
-    });
 
     type MappedOutputSchema = any;
 
-    this.stepFlow.push({ type: 'step', step: mappingStep as any });
+    this.stepFlow.push({ type: 'mapping', id: mappingId, mapConfig: mappingConfig as MappingConfig });
     this.serializedStepFlow.push({
-      type: 'step',
-      step: {
-        id: mappingStep.id,
-        mapConfig:
-          JSON.stringify(newMappingConfig, null, 2)?.length > 1000
-            ? JSON.stringify(newMappingConfig, null, 2).slice(0, 1000) + '...\n}'
-            : JSON.stringify(newMappingConfig, null, 2),
-      },
+      type: 'mapping',
+      id: mappingId,
+      mapConfig: truncate(JSON.stringify(newMappingConfig, null, 2)),
     });
+    this.steps[mappingId] = createMappingStep(mappingId, mappingConfig as MappingConfig) as any;
     return this as unknown as Workflow<
       TEngineType,
       TSteps,
@@ -2032,22 +2232,15 @@ export class Workflow<
         : `Error: Expected Step with state schema that is a subset of workflow state`;
     },
   ) {
-    this.stepFlow.push({ type: 'parallel', steps: steps.map(step => ({ type: 'step', step: step as any })) });
+    this.stepFlow.push({
+      type: 'parallel',
+      steps: steps.map(step => toSingleStepEntry(step as StepWithRefMetadata)),
+    });
     this.serializedStepFlow.push({
       type: 'parallel',
-      steps: steps.map((step: any) => ({
-        type: 'step',
-        step: {
-          id: step.id,
-          description: step.description,
-          metadata: step.metadata,
-          component: (step as SerializedStep).component,
-          serializedStepFlow: (step as SerializedStep).serializedStepFlow,
-          canSuspend: Boolean(step.suspendSchema || step.resumeSchema),
-        },
-      })),
+      steps: steps.map(step => toSerializedSingleStepEntry(step as StepWithRefMetadata)),
     });
-    steps.forEach((step: any) => {
+    steps.forEach(step => {
       this.steps[step.id] = step;
     });
     return this as unknown as Workflow<
@@ -2071,33 +2264,38 @@ export class Workflow<
   branch<
     TBranchSteps extends Array<
       [
-        ConditionFunction<TState, TPrevSchema, any, any, any, TEngineType>,
+        ConditionFunction<TState, TPrevSchema, any, any, any, TEngineType> | { predicate: Predicate },
         Step<string, any, TPrevSchema, any, any, any, TEngineType, any>,
       ]
     >,
   >(steps: TBranchSteps) {
+    const resolved = steps.map(([condOrPred, step]) => {
+      const isDeclarative = isDeclarativePredicateArg(condOrPred);
+      const predicate = isDeclarative ? (condOrPred as { predicate: Predicate }).predicate : undefined;
+      const condition = isDeclarative
+        ? (predicateToCondition(predicate!) as ConditionFunction<TState, TPrevSchema, any, any, any, TEngineType>)
+        : (condOrPred as ConditionFunction<TState, TPrevSchema, any, any, any, TEngineType>);
+      const label = predicate ? derivePredicateLabel(predicate) : condition.toString();
+      return { step, condition, predicate, label };
+    });
     this.stepFlow.push({
       type: 'conditional',
-      steps: steps.map(([_cond, step]) => ({ type: 'step', step: step as any })),
-      conditions: steps.map(([cond]) => cond),
-      serializedConditions: steps.map(([cond, _step]) => ({ id: `${_step.id}-condition`, fn: cond.toString() })),
-    });
+      steps: resolved.map(({ step }) => toSingleStepEntry(step as StepWithRefMetadata)),
+      conditions: resolved.map(({ condition }) => condition),
+      serializedConditions: resolved.map(({ step, label }) => ({ id: `${step.id}-condition`, fn: label })),
+      ...(resolved.some(({ predicate }) => predicate)
+        ? { predicates: resolved.map(({ predicate }) => predicate ?? null) }
+        : {}),
+    } as StepFlowEntry<TEngineType>);
     this.serializedStepFlow.push({
       type: 'conditional',
-      steps: steps.map(([_cond, step]) => ({
-        type: 'step',
-        step: {
-          id: step.id,
-          description: step.description,
-          metadata: step.metadata,
-          component: (step as SerializedStep).component,
-          serializedStepFlow: (step as SerializedStep).serializedStepFlow,
-          canSuspend: Boolean(step.suspendSchema || step.resumeSchema),
-        },
-      })),
-      serializedConditions: steps.map(([cond, _step]) => ({ id: `${_step.id}-condition`, fn: cond.toString() })),
-    });
-    steps.forEach(([_, step]) => {
+      steps: resolved.map(({ step }) => toSerializedSingleStepEntry(step as StepWithRefMetadata)),
+      serializedConditions: resolved.map(({ step, label }) => ({ id: `${step.id}-condition`, fn: label })),
+      ...(resolved.some(({ predicate }) => predicate)
+        ? { predicates: resolved.map(({ predicate }) => predicate ?? null) }
+        : {}),
+    } as SerializedStepFlowEntry);
+    resolved.forEach(({ step }) => {
       this.steps[step.id] = step;
     });
 
@@ -2137,27 +2335,28 @@ export class Workflow<
       // declare one matching the workflow's TRequestContext. Mismatched schemas error.
       unknown extends TStepRC ? unknown : TRequestContext
     >,
-    condition: LoopConditionFunction<TState, TSchemaOut, any, any, any, TEngineType>,
+    condition: LoopConditionFunction<TState, TSchemaOut, any, any, any, TEngineType> | { predicate: Predicate },
   ) {
+    const isDeclarative = isDeclarativePredicateArg(condition);
+    const predicate = isDeclarative ? (condition as { predicate: Predicate }).predicate : undefined;
+    const runtimeCondition = isDeclarative
+      ? (predicateToCondition(predicate!) as LoopConditionFunction<TState, TSchemaOut, any, any, any, TEngineType>)
+      : (condition as LoopConditionFunction<TState, TSchemaOut, any, any, any, TEngineType>);
+    const label = predicate ? derivePredicateLabel(predicate) : runtimeCondition.toString();
     this.stepFlow.push({
       type: 'loop',
-      step: step as any,
-      condition,
+      step: toSingleStepEntry(step),
+      condition: runtimeCondition,
       loopType: 'dowhile',
-      serializedCondition: { id: `${step.id}-condition`, fn: condition.toString() },
-    });
+      serializedCondition: { id: `${step.id}-condition`, fn: label },
+      ...(predicate ? { predicate } : {}),
+    } as StepFlowEntry<TEngineType>);
     this.serializedStepFlow.push({
       type: 'loop',
-      step: {
-        id: step.id,
-        description: step.description,
-        metadata: step.metadata,
-        component: (step as SerializedStep).component,
-        serializedStepFlow: (step as SerializedStep).serializedStepFlow,
-        canSuspend: Boolean(step.suspendSchema || step.resumeSchema),
-      },
-      serializedCondition: { id: `${step.id}-condition`, fn: condition.toString() },
+      step: toSerializedSingleStepEntry(step as StepWithRefMetadata),
+      serializedCondition: { id: `${step.id}-condition`, fn: label },
       loopType: 'dowhile',
+      ...(predicate ? { predicate } : {}),
     });
     this.steps[step.id] = step as any;
     return this as unknown as Workflow<
@@ -2185,27 +2384,28 @@ export class Workflow<
       // declare one matching the workflow's TRequestContext. Mismatched schemas error.
       unknown extends TStepRC ? unknown : TRequestContext
     >,
-    condition: LoopConditionFunction<TState, TSchemaOut, any, any, any, TEngineType>,
+    condition: LoopConditionFunction<TState, TSchemaOut, any, any, any, TEngineType> | { predicate: Predicate },
   ) {
+    const isDeclarative = isDeclarativePredicateArg(condition);
+    const predicate = isDeclarative ? (condition as { predicate: Predicate }).predicate : undefined;
+    const runtimeCondition = isDeclarative
+      ? (predicateToCondition(predicate!) as LoopConditionFunction<TState, TSchemaOut, any, any, any, TEngineType>)
+      : (condition as LoopConditionFunction<TState, TSchemaOut, any, any, any, TEngineType>);
+    const label = predicate ? derivePredicateLabel(predicate) : runtimeCondition.toString();
     this.stepFlow.push({
       type: 'loop',
-      step: step as any,
-      condition,
+      step: toSingleStepEntry(step),
+      condition: runtimeCondition,
       loopType: 'dountil',
-      serializedCondition: { id: `${step.id}-condition`, fn: condition.toString() },
-    });
+      serializedCondition: { id: `${step.id}-condition`, fn: label },
+      ...(predicate ? { predicate } : {}),
+    } as StepFlowEntry<TEngineType>);
     this.serializedStepFlow.push({
       type: 'loop',
-      step: {
-        id: step.id,
-        description: step.description,
-        metadata: step.metadata,
-        component: (step as SerializedStep).component,
-        serializedStepFlow: (step as SerializedStep).serializedStepFlow,
-        canSuspend: Boolean(step.suspendSchema || step.resumeSchema),
-      },
-      serializedCondition: { id: `${step.id}-condition`, fn: condition.toString() },
+      step: toSerializedSingleStepEntry(step as StepWithRefMetadata),
+      serializedCondition: { id: `${step.id}-condition`, fn: label },
       loopType: 'dountil',
+      ...(predicate ? { predicate } : {}),
     });
     this.steps[step.id] = step as any;
     return this as unknown as Workflow<
@@ -2244,22 +2444,20 @@ export class Workflow<
       : 'Previous step must return an array type',
     opts?: ForeachOptions,
   ) {
-    const actualStep = step as Step<any, any, any, any, any, any>;
     const concurrency = opts?.concurrency ?? 1;
-    this.stepFlow.push({ type: 'foreach', step: step as any, opts: opts ?? { concurrency: 1 } });
+    const serializedOpts = typeof concurrency === 'function' ? { fn: concurrency.toString() } : { concurrency };
+    const foreachStep = step as StepWithRefMetadata;
+    this.stepFlow.push({
+      type: 'foreach',
+      step: toSingleStepEntry(foreachStep),
+      opts: opts ?? { concurrency: 1 },
+    });
     this.serializedStepFlow.push({
       type: 'foreach',
-      step: {
-        id: (step as SerializedStep).id,
-        description: (step as SerializedStep).description,
-        metadata: (step as SerializedStep).metadata,
-        component: (step as SerializedStep).component,
-        serializedStepFlow: (step as SerializedStep).serializedStepFlow,
-        canSuspend: Boolean(actualStep.suspendSchema || actualStep.resumeSchema),
-      },
-      opts: typeof concurrency === 'function' ? { fn: concurrency.toString() } : { concurrency },
+      step: toSerializedSingleStepEntry(foreachStep),
+      opts: serializedOpts,
     });
-    this.steps[(step as any).id] = step as any;
+    this.steps[foreachStep.id] = foreachStep;
     return this as unknown as Workflow<
       TEngineType,
       TSteps,
@@ -2819,13 +3017,17 @@ export class Workflow<
     for (const step of Object.keys(steps)) {
       const stepGraph = findStepInGraph(serializedStepGraph, step);
       finalSteps[step] = steps[step] as StepResult<any, any, any, any>;
-      if (stepGraph && (stepGraph as any)?.step?.component === 'WORKFLOW') {
+      const isNestedWorkflowEntry =
+        !!stepGraph && (stepGraph.type === 'workflow' || (stepGraph as any)?.step?.component === 'WORKFLOW');
+      if (isNestedWorkflowEntry) {
+        const nestedWorkflowId =
+          stepGraph!.type === 'workflow' ? (stepGraph as { type: 'workflow'; workflowId: string }).workflowId : step;
         // Evented runtime stores nested workflow's runId in metadata.nestedRunId (set by step-executor).
         // Default runtime uses the parent runId directly to look up nested workflow steps.
         const stepResult = steps[step] as any;
         const nestedRunId = stepResult?.metadata?.nestedRunId ?? runId;
 
-        const nestedSteps = await this.getWorkflowRunSteps({ runId: nestedRunId, workflowId: step });
+        const nestedSteps = await this.getWorkflowRunSteps({ runId: nestedRunId, workflowId: nestedWorkflowId });
         if (nestedSteps) {
           const updatedNestedSteps = Object.entries(nestedSteps).reduce(
             (acc, [key, value]) => {
@@ -3182,9 +3384,14 @@ export class Run<
     const validatedInputData = await schema['~standard'].validate(data);
 
     if (validatedInputData.issues) {
-      throw new Error(
-        `Invalid ${type}: \n` + validatedInputData.issues.map(e => `- ${e.path?.join('.')}: ${e.message}`).join('\n'),
-      );
+      throw new MastraError({
+        category: ErrorCategory.USER,
+        domain: ErrorDomain.MASTRA_WORKFLOW,
+        id: 'WORKFLOW_SCHEMA_VALIDATION_FAILED',
+        text:
+          `Invalid ${type}: \n` + validatedInputData.issues.map(e => `- ${e.path?.join('.')}: ${e.message}`).join('\n'),
+        details: { type },
+      });
     }
 
     return validatedInputData.value;
@@ -3307,9 +3514,30 @@ export class Run<
 
     const traceId = workflowSpan?.externalTraceId;
     const spanId = workflowSpan?.id;
-    const inputDataToUse = await this._validateInput(inputData);
-    const initialStateToUse = await this._validateInitialState(initialState ?? ({} as TState));
-    await this._validateRequestContext(requestContext as RequestContext);
+
+    // execute() ends the span, so anything that rejects before we reach it has to end the
+    // span itself or it stays open for the life of the trace. onStart makes that reachable
+    // from user code, not just from a malformed input.
+    const { inputDataToUse, initialStateToUse } = await (async () => {
+      const validatedInput = await this._validateInput(inputData);
+      const validatedState = await this._validateInitialState(initialState ?? ({} as TState));
+      await this._validateRequestContext(requestContext as RequestContext);
+
+      // Pre-flight gate: runs before the run executes, and rejects the caller if it throws.
+      await this.executionEngine.invokeStartCallback({
+        runId: this.runId,
+        workflowId: this.workflowId,
+        resourceId: this.resourceId,
+        getInitData: () => validatedInput,
+        requestContext: (requestContext ?? new RequestContext()) as RequestContext,
+        state: validatedState as Record<string, any>,
+      });
+
+      return { inputDataToUse: validatedInput, initialStateToUse: validatedState };
+    })().catch(error => {
+      workflowSpan?.error({ error: error as Error });
+      throw error;
+    });
 
     const result = await this.executionEngine.execute<TState, TInput, WorkflowResult<TState, TInput, TOutput, TSteps>>({
       workflowId: this.workflowId,
@@ -3464,17 +3692,17 @@ export class Run<
       } catch {}
     });
 
-    this.closeStreamAction = async () => {
+    const closeStreamAction = async () => {
       await this.pubsub.publish(`workflow.events.v2.${this.runId}`, {
         type: 'watch',
         runId: this.runId,
         data: { type: 'workflow-finish', payload: { runId: this.runId } },
       });
       unwatch();
-      await Promise.all(this.#observerHandlers.map(handler => handler()));
-      this.#observerHandlers = [];
 
       try {
+        await Promise.allSettled(this.#observerHandlers.map(handler => handler()));
+        this.#observerHandlers = [];
         await writer.close();
       } catch (err) {
         this.mastra?.getLogger()?.error('Error closing stream:', err);
@@ -3482,6 +3710,7 @@ export class Run<
         writer.releaseLock();
       }
     };
+    this.closeStreamAction = closeStreamAction;
 
     void this.pubsub.publish(`workflow.events.v2.${this.runId}`, {
       type: 'watch',
@@ -3498,7 +3727,7 @@ export class Run<
       tracingOptions,
     } as any).then(result => {
       if (result.status !== 'suspended') {
-        this.closeStreamAction?.().catch(() => {});
+        closeStreamAction().catch(() => {});
       }
 
       return result;
@@ -3531,15 +3760,12 @@ export class Run<
       } catch {}
     });
 
-    this.#observerHandlers.push(async () => {
+    this.#observerHandlers.push(() => {
       unwatch();
-      try {
-        await writer.close();
-      } catch (err) {
+      void writer.close().catch(err => {
         this.mastra?.getLogger()?.error('Error closing stream:', err);
-      } finally {
-        writer.releaseLock();
-      }
+      });
+      writer.releaseLock();
     });
 
     return {
@@ -3641,7 +3867,11 @@ export class Run<
           }
         });
 
-        self.closeStreamAction = async () => {
+        // Captured per invocation: `closeStreamAction` is a field on the run, and
+        // `createRun({ runId })` returns the cached run, so concurrent calls would
+        // otherwise each close the most recently created stream and strand the rest.
+        // The field is still assigned for external consumers (observeStreamLegacy).
+        const closeStreamAction = async () => {
           unwatch();
 
           try {
@@ -3653,6 +3883,7 @@ export class Run<
             self.mastra?.getLogger()?.error('Error closing stream:', err);
           }
         };
+        self.closeStreamAction = closeStreamAction;
 
         const executionResultsPromise = self._start({
           inputData,
@@ -3675,21 +3906,22 @@ export class Run<
         try {
           executionResults = await executionResultsPromise;
 
-          if (closeOnSuspend) {
-            // always close stream, even if the workflow is suspended
-            // this will trigger a finish event with workflow status set to suspended
-            self.closeStreamAction?.().catch(() => {});
-          } else if (executionResults.status !== 'suspended') {
-            self.closeStreamAction?.().catch(() => {});
-          }
           if (self.streamOutput) {
             self.streamOutput.updateResults(
               executionResults as unknown as WorkflowResult<TState, TInput, TOutput, TSteps>,
             );
           }
+
+          if (closeOnSuspend) {
+            // always close stream, even if the workflow is suspended
+            // this will trigger a finish event with workflow status set to suspended
+            closeStreamAction().catch(() => {});
+          } else if (executionResults.status !== 'suspended') {
+            closeStreamAction().catch(() => {});
+          }
         } catch (err) {
           self.streamOutput?.rejectResults(err as unknown as Error);
-          self.closeStreamAction?.().catch(() => {});
+          closeStreamAction().catch(() => {});
         }
       },
     });
@@ -3770,7 +4002,10 @@ export class Run<
           }
         });
 
-        self.closeStreamAction = async () => {
+        // Captured per invocation — see the note in the stream() path. Two concurrent
+        // resumes of one suspended run are reachable in normal use (double-clicked
+        // approval, client retry, two tabs) and each returned stream must terminate.
+        const closeStreamAction = async () => {
           unwatch();
 
           try {
@@ -3782,6 +4017,8 @@ export class Run<
             self.mastra?.getLogger()?.error('Error closing stream:', err);
           }
         };
+        self.closeStreamAction = closeStreamAction;
+
         const executionResultsPromise = self._resume({
           resumeData,
           step,
@@ -3803,14 +4040,14 @@ export class Run<
         let executionResults;
         try {
           executionResults = await executionResultsPromise;
-          self.closeStreamAction?.().catch(() => {});
-
           if (self.streamOutput) {
             self.streamOutput.updateResults(executionResults);
           }
+
+          closeStreamAction().catch(() => {});
         } catch (err) {
           self.streamOutput?.rejectResults(err as unknown as Error);
-          self.closeStreamAction?.().catch(() => {});
+          closeStreamAction().catch(() => {});
         }
       },
     });
@@ -3827,14 +4064,22 @@ export class Run<
   /**
    * @internal
    */
-  watch(cb: (event: WorkflowStreamEvent) => void): () => void {
-    const wrappedCb = (event: Event) => {
+  watch(cb: (event: WorkflowStreamEvent) => void | Promise<void>): () => void {
+    // Both callbacks acknowledge every delivery, including events for other
+    // runs. `nested-watch` is a shared topic, so a watcher sees every nested
+    // workflow's events; leaving the ones it filters out unacknowledged grows
+    // the subscription's pending list on a durable transport for as long as
+    // the watcher is attached. The ack is the last thing each callback does so
+    // a failure in the consumer or in the nested republish leaves the delivery
+    // unacknowledged and redeliverable.
+    const wrappedCb = async (event: Event, ack?: () => Promise<void>) => {
       if (event.runId === this.runId) {
-        cb(event.data as WorkflowStreamEvent);
+        await cb(event.data as WorkflowStreamEvent);
       }
+      await ack?.();
     };
 
-    const nestedWatchCb = (event: Event) => {
+    const nestedWatchCb = async (event: Event, ack?: () => Promise<void>) => {
       if (event.runId === this.runId) {
         const { event: nestedEvent, workflowId } = event.data as {
           event: { type: string; payload?: { id: string } & Record<string, unknown>; data?: any };
@@ -3845,14 +4090,14 @@ export class Run<
         // These are events with type starting with 'data-' and have a 'data' property
         if (nestedEvent.type.startsWith('data-') && nestedEvent.data !== undefined) {
           // Bubble up custom data events directly to preserve their structure
-          void this.pubsub.publish(`workflow.events.v2.${this.runId}`, {
+          await this.pubsub.publish(`workflow.events.v2.${this.runId}`, {
             type: 'watch',
             runId: this.runId,
             data: nestedEvent,
           });
         } else {
           // Regular workflow events get prefixed with nested workflow ID
-          void this.pubsub.publish(`workflow.events.v2.${this.runId}`, {
+          await this.pubsub.publish(`workflow.events.v2.${this.runId}`, {
             type: 'watch',
             runId: this.runId,
             data: {
@@ -3864,6 +4109,7 @@ export class Run<
           });
         }
       }
+      await ack?.();
     };
 
     void this.pubsub.subscribe(`workflow.events.v2.${this.runId}`, wrappedCb);
@@ -3878,7 +4124,7 @@ export class Run<
   /**
    * @internal
    */
-  async watchAsync(cb: (event: WorkflowStreamEvent) => void): Promise<() => void> {
+  async watchAsync(cb: (event: WorkflowStreamEvent) => void | Promise<void>): Promise<() => void> {
     return this.watch(cb);
   }
 
@@ -4223,6 +4469,57 @@ export class Run<
       throw new Error(`Snapshot not found for run ${this.runId}`);
     }
 
+    // Parent parallel activeStepsPath can lag behind nested child completion after a crash:
+    // children may already be terminal while the parent still lists them as active and
+    // re-invokes restart(). Treat terminal snapshots as authoritative and reuse them.
+    // See https://github.com/mastra-ai/mastra/issues/20225
+    //
+    // Only statuses already represented on WorkflowResult are reconstructed here.
+    // Other terminal statuses (canceled/bailed) keep the existing createRestartExecutionParams
+    // "was not active" behavior — expanding WorkflowResult is out of scope for this fix.
+    if (snapshot.status === 'success' || snapshot.status === 'failed' || snapshot.status === 'tripwire') {
+      this.cleanup?.();
+      // Match fmtReturnValue: context keeps `input` alongside step results, and `input`
+      // is also surfaced as a top-level field on the returned WorkflowResult.
+      const hydratedSteps = hydrateSerializedStepErrors({ ...(snapshot.context ?? {}) }) ?? {};
+      // Strip internal bookkeeping (__state, metadata.nestedRunId) from step results so the
+      // reconstructed result matches what a live run would have returned via fmtReturnValue.
+      const steps = Object.fromEntries(
+        Object.entries(hydratedSteps).map(([stepId, stepResult]) => [stepId, cleanStepResult(stepResult)]),
+      ) as typeof hydratedSteps;
+      const input = (snapshot.context as { input?: TInput } | undefined)?.input as TInput;
+      const base = {
+        steps,
+        input,
+        runId: this.runId,
+        ...(snapshot.value && Object.keys(snapshot.value).length > 0 ? { state: snapshot.value as TState } : {}),
+        ...(snapshot.stepExecutionPath ? { stepExecutionPath: snapshot.stepExecutionPath } : {}),
+        ...(snapshot.resumeLabels ? { resumeLabels: snapshot.resumeLabels } : {}),
+      };
+
+      if (snapshot.status === 'success') {
+        return { ...base, status: 'success', result: snapshot.result as TOutput } as WorkflowResult<
+          TState,
+          TInput,
+          TOutput,
+          TSteps
+        >;
+      }
+      if (snapshot.status === 'failed') {
+        return {
+          ...base,
+          status: 'failed',
+          error: getErrorFromUnknown(snapshot.error, { serializeStack: false }),
+        } as WorkflowResult<TState, TInput, TOutput, TSteps>;
+      }
+      return { ...base, status: 'tripwire', tripwire: snapshot.tripwire } as WorkflowResult<
+        TState,
+        TInput,
+        TOutput,
+        TSteps
+      >;
+    }
+
     const restartData = createRestartExecutionParams({ snapshot, graph: this.executionGraph });
 
     const requestContextToUse = requestContext ?? new RequestContext();
@@ -4501,7 +4798,8 @@ export class Run<
           } as WorkflowStreamEvent);
         });
 
-        self.closeStreamAction = async () => {
+        // Captured per invocation — see the note in the stream() path.
+        const closeStreamAction = async () => {
           unwatch();
 
           try {
@@ -4513,6 +4811,8 @@ export class Run<
             self.mastra?.getLogger()?.error('Error closing stream:', err);
           }
         };
+        self.closeStreamAction = closeStreamAction;
+
         const executionResultsPromise = self._timeTravel({
           inputData,
           step,
@@ -4536,14 +4836,14 @@ export class Run<
         let executionResults;
         try {
           executionResults = await executionResultsPromise;
-          self.closeStreamAction?.().catch(() => {});
-
           if (self.streamOutput) {
             self.streamOutput.updateResults(executionResults);
           }
+
+          closeStreamAction().catch(() => {});
         } catch (err) {
           self.streamOutput?.rejectResults(err as unknown as Error);
-          self.closeStreamAction?.().catch(() => {});
+          closeStreamAction().catch(() => {});
         }
       },
     });

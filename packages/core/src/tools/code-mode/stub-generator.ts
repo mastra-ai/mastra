@@ -139,8 +139,13 @@ function schemaToTs(schema: unknown, io: 'input' | 'output'): string {
   }
 }
 
-/** Strip non-identifier characters so a tool id is a legal function-name suffix. */
-function sanitizeId(id: string): string {
+/**
+ * Strip non-identifier characters so a tool id is a legal function-name suffix.
+ *
+ * Transports that map `external_*` names back to tool ids must use this same
+ * sanitizer so their naming stays identical to the generated stubs.
+ */
+export function sanitizeToolId(id: string): string {
   const cleaned = id.replace(/[^A-Za-z0-9_$]/g, '_');
   return SAFE_IDENT.test(cleaned) ? cleaned : `_${cleaned}`;
 }
@@ -166,7 +171,7 @@ export function generateStubs(tools: ToolsInput): CodeModeStub[] {
     const description = (tool as { description?: string }).description;
     const inputType = schemaToTs((tool as { inputSchema?: unknown }).inputSchema, 'input');
     const outputType = schemaToTs((tool as { outputSchema?: unknown }).outputSchema, 'output');
-    const externalName = sanitizeId(toolId);
+    const externalName = sanitizeToolId(toolId);
 
     const prior = seen.get(externalName);
     if (prior !== undefined && prior !== toolId) {
@@ -192,8 +197,10 @@ Rules:
 - Batch independent calls with \`Promise.all\`. Do arithmetic and data shaping in
   JavaScript, not in your head.
 - End the program by \`return\`-ing the final value (objects/arrays are fine).
-- The program runs in a sandbox: no access to the host filesystem, network, or
-  process. The only capabilities are the \`external_*\` functions.
+- The only supported capabilities are the \`external_*\` functions. Do not rely
+  on filesystem, network, or process access — depending on the configured
+  sandbox and transport, the program may run fully isolated with none of those
+  available.
 - Use \`console.log\` for debugging; logs are captured and returned.
 
 Available functions:`;

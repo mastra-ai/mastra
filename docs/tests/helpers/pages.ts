@@ -17,22 +17,24 @@ export const pages: PageConfig[] = [
   { path: '/docs/agents/overview', name: 'Docs – Agents' },
   { path: '/docs/workflows/overview', name: 'Docs – Workflows' },
   { path: '/docs/memory/overview', name: 'Docs – Memory' },
-  { path: '/docs/rag/overview', name: 'Docs – RAG' },
   { path: '/docs/mcp/overview', name: 'Docs – MCP' },
   { path: '/docs/server/mastra-server', name: 'Docs – Server' },
   { path: '/docs/observability/overview', name: 'Docs – Observability' },
   { path: '/docs/evals/running-in-ci', name: 'Docs – Evals CI' },
-  { path: '/docs/voice/overview', name: 'Docs – Voice' },
   { path: '/docs/deployment/overview', name: 'Docs – Deployment' },
 
   // --- Models ---
   { path: '/models', name: 'Models – Index' },
   { path: '/models/providers/openai', name: 'Models – OpenAI' },
 
+  // --- Integrations ---
+  { path: '/integrations', name: 'Integrations – Index' },
+  { path: '/integrations/channels/slack', name: 'Integrations – Slack' },
+
   // --- Guides ---
   { path: '/guides/getting-started/quickstart', name: 'Guides – Quickstart' },
-  { path: '/guides/build-your-ui/ai-sdk-ui', name: 'Guides – AI SDK UI' },
-  { path: '/guides/getting-started/next-js', name: 'Guides – Next.js' },
+  { path: '/integrations/agentic-ui/ai-sdk-ui', name: 'Integrations – AI SDK UI' },
+  { path: '/integrations/frameworks/next-js', name: 'Integrations – Next.js' },
 
   // --- Reference ---
   { path: '/reference/configuration', name: 'Reference – Configuration' },

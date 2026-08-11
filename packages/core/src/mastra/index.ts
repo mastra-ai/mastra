@@ -48,6 +48,8 @@ import type {
 import { NoOpObservability, noOpLoggerContext, noOpMetricsContext } from '../observability';
 import { initContextStorage } from '../observability/context-storage';
 import type { Processor } from '../processors';
+import type { AgentScheduleHandler } from '../schedules/define';
+import { metadataEqual, targetsEqual } from '../schedules/row-diff';
 import { Schedules } from '../schedules/schedules';
 import type { SchedulesConfig, ScheduleHooks } from '../schedules/types';
 import type { MastraServerBase } from '../server/base';
@@ -66,14 +68,29 @@ import type { ToolAction, ToolPayloadTransformPolicy } from '../tools';
 import { normalizeToolPayloadTransformPolicy } from '../tools/payload-transform';
 import type { MastraTTS } from '../tts';
 import type { MastraIdGenerator, IdGeneratorContext } from '../types';
+import { readPositiveIntEnv } from '../utils';
 import type { MastraVector } from '../vector';
 import { OrchestrationWorker, SchedulerWorker, BackgroundTaskWorker } from '../worker';
 import type { MastraWorker, WorkerDeps } from '../worker';
 import type { AnyWorkflow, Workflow } from '../workflows';
+import { normalizeWorkflowBuilderDefinition } from '../workflows/builder';
+import type { DynamicWorkflowGraph, WorkflowRegistryIndex, WorkflowRegistrySchemas } from '../workflows/dynamic';
+import {
+  assertValidDynamicWorkflow,
+  collectNestedWorkflowIds,
+  rehydrateWorkflow,
+  toJsonSchemaOrUndefined,
+} from '../workflows/dynamic';
 import { WorkflowEventProcessor } from '../workflows/evented/workflow-event-processor';
 import { computeNextFireAt } from '../workflows/scheduler';
 import type { WorkflowScheduleConfig, SchedulerConfig, Scheduler } from '../workflows/scheduler';
 import type { AnyWorkspace, RegisteredWorkspace, Workspace } from '../workspace';
+import {
+  declaredSchedulesOf,
+  findFsAgentScheduleHandler,
+  hasFsAgentSchedule,
+  syncFsAgentSchedules,
+} from './fs-agent-schedules';
 import { createOnScorerHook } from './hooks';
 import { __registerMastraCtor } from './mastra-ctor-holder';
 import type { RunScope } from './run-scope';
@@ -109,19 +126,6 @@ function createUndefinedPrimitiveError(
     text: `Cannot add ${typeLabel}: ${typeLabel} is ${value === null ? 'null' : 'undefined'}. This may occur if config was spread ({ ...config }) and the original object had getters or non-enumerable properties.`,
     details: { status: 400, ...(key && { key }) },
   });
-}
-
-/**
- * Stable JSON-shape comparison for two `Schedule.target` values. Uses
- * JSON.stringify because targets are plain JSON-serializable objects (the
- * storage layer round-trips them through the same encoding). Covers the
- * `inputData` / `initialState` / `requestContext` payload fields that we
- * want to detect changes on across redeploys.
- */
-function targetsEqual(a: Schedule['target'] | undefined, b: Schedule['target']): boolean {
-  if (a === b) return true;
-  if (!a) return false;
-  return JSON.stringify(a) === JSON.stringify(b);
 }
 
 /**
@@ -191,15 +195,6 @@ function ownerWorkflowIdFromRowId(rowId: string): string | undefined {
   } catch {
     return undefined;
   }
-}
-
-/** See {@link targetsEqual}. Same approach for free-form metadata. */
-function metadataEqual(a: Record<string, unknown> | null | undefined, b: Record<string, unknown> | undefined): boolean {
-  const aNorm = a ?? undefined;
-  const bNorm = b ?? undefined;
-  if (aNorm === bNorm) return true;
-  if (!aNorm || !bNorm) return false;
-  return JSON.stringify(aNorm) === JSON.stringify(bNorm);
 }
 
 /**
@@ -450,10 +445,9 @@ export interface Config<
    * Maps event topics to handler functions for event-driven architectures.
    */
   events?: {
-    [topic: string]: (
-      event: Event,
-      cb?: () => Promise<void>,
-    ) => Promise<void> | ((event: Event, cb?: () => Promise<void>) => Promise<void>)[];
+    // Listeners receive only the event. Acknowledgement is handled for them:
+    // the delivery is acked once the listener resolves and nacked if it throws.
+    [topic: string]: ((event: Event) => Promise<void> | void) | ((event: Event) => Promise<void> | void)[];
   };
 
   /**
@@ -690,6 +684,7 @@ export class Mastra<
 
   #storage?: MastraCompositeStore;
   #storageExplicit = false;
+  #storageFallbackWarningPending = false;
   #recoveryConfig: MastraRecoveryConfig = { durableAgents: 'off' };
   #scorers?: TScorers;
   #tools?: TTools;
@@ -718,6 +713,17 @@ export class Mastra<
    * zero cost beyond a boolean check.
    */
   #hasScheduledWorkflow = false;
+  /**
+   * Set while a file-based agent schedule sync is queued, so registering a
+   * batch of agents after startup triggers one sweep rather than one per agent.
+   */
+  #fsScheduleSyncPending = false;
+  /**
+   * Set when an agent registers while a sweep is already in flight. That sweep
+   * may have read the agent map before the agent landed, so it runs one more
+   * pass instead of dropping the registration.
+   */
+  #fsScheduleSyncRerun = false;
   #gateways?: Record<string, MastraModelGatewayInterface>;
   #channels?: TChannels;
   #schedules?: Schedules;
@@ -787,11 +793,11 @@ export class Mastra<
   // must not double-subscribe the same listener.
   #userEventSubscriptions: Array<{
     topic: string;
-    cb: (event: Event, ack?: () => Promise<void>) => Promise<void>;
+    cb: EventCallback;
   }> = [];
 
   #events: {
-    [topic: string]: ((event: Event, cb?: () => Promise<void>) => Promise<void>)[];
+    [topic: string]: ((event: Event) => Promise<void> | void)[];
   } = {};
   #internalMastraWorkflows: Record<string, AnyWorkflow> = {};
   // Tracks registration timestamps for run-scoped internal workflows so a lazy
@@ -807,9 +813,12 @@ export class Mastra<
   // last unregisters. See `./run-scope.ts`.
   #runScopes: Map<string, RunScope> = new Map();
   #runScopeRefcounts: Map<string, number> = new Map();
-  // Run-scoped internal workflows older than this TTL (ms) are evicted during
-  // the lazy sweep that runs on each new registration.
-  static readonly INTERNAL_WORKFLOW_TTL_MS = 30 * 60 * 1000; // 30 minutes
+  // Run-scoped internal workflows older than this TTL (ms) are evicted during the
+  // lazy sweep that runs on each new registration. Reads the shared
+  // `MASTRA_SUSPENDED_RUN_TTL_MS` so this registry and the agent thread-stream
+  // runtime expire a suspended run's state on one bound; production keeps the 30
+  // minute default.
+  static readonly INTERNAL_WORKFLOW_TTL_MS = readPositiveIntEnv('MASTRA_SUSPENDED_RUN_TTL_MS', 30 * 60 * 1000);
   // Per-run tracing context for evented workflow runs. `currentSpan` is a
   // non-serializable AISpan, so it cannot ride the engine's pubsub events —
   // the event processor reads it from here, keyed by runId, instead.
@@ -1403,11 +1412,19 @@ export class Mastra<
       this.#storageExplicit = true;
     } else {
       storage = new InMemoryStore();
-      this.#logger?.warn(
-        'No `storage` configured on Mastra — falling back to an in-memory store. ' +
-          'In-memory storage is not durable: all data is lost on restart, and it is not safe for production. ' +
-          'Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare).',
-      );
+      this.#storageFallbackWarningPending = true;
+      queueMicrotask(() => {
+        if (!this.#storageFallbackWarningPending) {
+          return;
+        }
+
+        this.#storageFallbackWarningPending = false;
+        this.#logger?.warn(
+          'No `storage` configured on Mastra — falling back to an in-memory store. ' +
+            'In-memory storage is not durable: all data is lost on restart, and it is not safe for production. ' +
+            'Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare).',
+        );
+      });
     }
     storage = augmentWithInit(storage);
 
@@ -1821,16 +1838,40 @@ export class Mastra<
     return out;
   }
 
+  /**
+   * Resolve the handler for a handler-mode file-based schedule. Handlers are
+   * functions and therefore cannot be persisted on the JSON schedule row, so
+   * the agent-schedule worker looks them up in-process by row id at fire time.
+   *
+   * @internal — public so the agent-schedule worker can call it.
+   */
+  __getFsAgentScheduleHandler(scheduleId: string): AgentScheduleHandler<Mastra> | undefined {
+    return findFsAgentScheduleHandler<Mastra>(this.#agents as Record<string, Agent<any>>, scheduleId);
+  }
+
+  /**
+   * True when the app opted out of the scheduler for the whole instance,
+   * either with `workers: false` or with `scheduler: { enabled: false }`.
+   *
+   * `workers: false` disables all event processing in this instance, so never
+   * auto-inject scheduler / agent-schedule workers (even when a schedule is
+   * created at runtime). Standalone workers run the scheduler separately.
+   *
+   * Nothing can start the scheduler while this is true, so callers must also
+   * skip the storage reads that only exist to request it (see #20550).
+   */
+  #schedulerDisabled(): boolean {
+    return this.#workersDisabled || this.#schedulerConfig?.enabled === false;
+  }
+
   #shouldEnableScheduler(): boolean {
-    // Honour an explicit `workers: false` opt-out — the user disabled all
-    // event processing in this instance, so never auto-inject scheduler /
-    // agent-schedule workers (even when scheduler.enabled is true or a
-    // schedule is created at runtime). Standalone workers are expected to
-    // run the scheduler separately.
-    if (this.#workersDisabled) return false;
-    if (this.#schedulerConfig?.enabled === false) return false;
+    if (this.#schedulerDisabled()) return false;
     if (this.#schedulerConfig?.enabled === true) return true;
-    return this.#hasScheduledWorkflow || this.#schedulerRequested;
+    return (
+      this.#hasScheduledWorkflow ||
+      this.#schedulerRequested ||
+      hasFsAgentSchedule(this.#agents as Record<string, Agent<any>>)
+    );
   }
 
   /**
@@ -1951,6 +1992,27 @@ export class Mastra<
         });
       }
     }
+
+    await this.#registerFsAgentSchedules(schedulesStore, allRows);
+  }
+
+  /**
+   * Sync schedules declared by file-based agents' `schedules/` directories into
+   * schedule storage. Runs as part of {@link registerDeclarativeSchedules}, so
+   * it happens on scheduler init and on late agent registration.
+   *
+   * The sync itself lives in `mastra/fs-agent-schedules.ts` — it needs only the
+   * agent map, the store and a logger, so keeping it out of this file keeps the
+   * upsert/diff/sweep policy readable on its own. Row equality goes through the
+   * same `schedules/row-diff` comparators as the workflow sync above.
+   */
+  async #registerFsAgentSchedules(schedulesStore: SchedulesStorage, knownRows?: Schedule[]): Promise<void> {
+    await syncFsAgentSchedules({
+      agents: this.#agents as Record<string, Agent<any>>,
+      store: schedulesStore,
+      logger: this.#logger as IMastraLogger | undefined,
+      knownRows,
+    });
   }
 
   /**
@@ -2464,6 +2526,8 @@ export class Mastra<
         });
       }
 
+      this.#syncLateRegisteredAgentSchedules(underlyingAgent);
+
       return;
     }
 
@@ -2581,6 +2645,60 @@ export class Mastra<
         this.#logger?.error(`Failed to initialize channels for agent ${agentKey}:`, err);
       });
     }
+
+    this.#syncLateRegisteredAgentSchedules(mastraAgent);
+  }
+
+  /**
+   * Push an agent's declared schedules into an already-running scheduler.
+   *
+   * Agents registered before `startWorkers()` are picked up by
+   * `SchedulerWorker.init()`, which calls {@link registerDeclarativeSchedules}.
+   * An agent added afterwards would otherwise never have its rows written, so
+   * mirror what `addWorkflow` does for declarative workflow schedules.
+   *
+   * The sync covers every registered agent, so registering a batch (e.g.
+   * `__registerFsAgents`) coalesces into a single sweep instead of one full
+   * `listSchedules()` pass per agent.
+   */
+  #syncLateRegisteredAgentSchedules(agent: Agent<any>): void {
+    if (declaredSchedulesOf(agent).length === 0) return;
+
+    const worker = this.#findSchedulerWorker();
+    // Workers not started yet — SchedulerWorker.init() will sync these.
+    if (!worker?.scheduler) return;
+
+    // A sweep is already in flight. It may already have read the agent map, so
+    // ask it to run once more rather than dropping this registration — but do
+    // not start a second sweep, which would race the first on `createSchedule`
+    // for the same row.
+    if (this.#fsScheduleSyncPending) {
+      this.#fsScheduleSyncRerun = true;
+      return;
+    }
+    this.#fsScheduleSyncPending = true;
+
+    void (async () => {
+      try {
+        do {
+          this.#fsScheduleSyncRerun = false;
+          // Yield first so agents registered in the same synchronous batch are
+          // all present before the sweep computes what is declared.
+          await Promise.resolve();
+          const schedulesStore = await this.#storage?.getStore('schedules');
+          if (!schedulesStore) return;
+          await this.registerDeclarativeSchedules(schedulesStore);
+        } while (this.#fsScheduleSyncRerun);
+      } catch (error) {
+        this.#logger?.error('Failed to register schedules for late-registered agent', {
+          agentId: agent.id,
+          error,
+        });
+      } finally {
+        this.#fsScheduleSyncPending = false;
+        this.#fsScheduleSyncRerun = false;
+      }
+    })();
   }
 
   /**
@@ -4478,6 +4596,62 @@ export class Mastra<
   }
 
   /**
+   * Removes a workflow from the Mastra instance by its key or ID.
+   * Used when dynamic workflows are updated/deleted so subsequent saves can
+   * re-register the same id cleanly.
+   *
+   * Note: this only clears the live in-process registration. In-flight runs
+   * are unaffected (they capture stepFlow at start time). Static workflow
+   * scorers stay registered (matching removeAgent/removeTool behavior).
+   *
+   * @param keyOrId - The workflow key or ID to remove
+   * @returns true if a workflow was removed, false if no workflow was found
+   *
+   * @example
+   * ```typescript
+   * // Remove by key
+   * mastra.removeWorkflow('myWorkflow');
+   *
+   * // Remove by ID
+   * mastra.removeWorkflow('workflow-123');
+   * ```
+   */
+  public removeWorkflow(keyOrId: string): boolean {
+    const workflows = this.#workflows as Record<string, AnyWorkflow>;
+
+    if (workflows[keyOrId]) {
+      delete workflows[keyOrId];
+      this.#hiddenWorkflowKeys.delete(keyOrId);
+      return true;
+    }
+
+    const key = Object.keys(workflows).find(k => workflows[k]?.id === keyOrId);
+    if (key) {
+      delete workflows[key];
+      this.#hiddenWorkflowKeys.delete(key);
+      return true;
+    }
+
+    return false;
+  }
+
+  /**
+   * Returns how a workflow was registered — `'code'` for statically declared
+   * or `addWorkflow()`-added workflows, `'dynamic'` for anything added via
+   * `addDynamicWorkflow()` (either at boot or through the HTTP/SDK surface).
+   * Returns `undefined` if no workflow is registered under that key/id.
+   *
+   * Reads `workflow.origin`, which is set to `'dynamic'` by `rehydrateWorkflow`
+   * at construction time and defaults to `'code'` otherwise. Used by the HTTP
+   * layer to surface a visual distinction (e.g. a "Dynamic" badge in Studio).
+   */
+  public getWorkflowOrigin(keyOrId: string): 'code' | 'dynamic' | undefined {
+    const workflows = this.#workflows as Record<string, AnyWorkflow>;
+    const workflow = workflows[keyOrId] ?? Object.values(workflows).find(wf => wf?.id === keyOrId);
+    return workflow?.origin;
+  }
+
+  /**
    * Adds a new workflow to the Mastra instance.
    *
    * This method allows dynamic registration of workflows after the Mastra instance
@@ -4552,6 +4726,293 @@ export class Mastra<
     }
   }
 
+  #replaceDynamicWorkflow(workflow: AnyWorkflow, key: string): void {
+    workflow.__registerMastra(this);
+    workflow.__registerPrimitives({
+      logger: this.getLogger(),
+      storage: this.getStorage(),
+    });
+    if (!workflow.committed) {
+      workflow.commit();
+    }
+
+    (this.#workflows as Record<string, AnyWorkflow>)[key] = workflow;
+    this.#hiddenWorkflowKeys.delete(key);
+    this.registerStaticWorkflowScorers(workflow);
+  }
+
+  /**
+   * Flattens this instance's registries into the index the dynamic-workflow
+   * validation core resolves references and schemas against. Registered keys
+   * and canonical ids both count as valid references. Schemas are converted
+   * best-effort — an unconvertible schema degrades to "unknown", never to a
+   * false incompatibility. Agents stay presence-only: their `{ prompt }`
+   * input default lives in schema-flow itself.
+   */
+  #buildWorkflowRegistryIndex(): WorkflowRegistryIndex {
+    const agents: Record<string, WorkflowRegistrySchemas> = {};
+    for (const [key, agent] of Object.entries(this.listAgents() ?? {})) {
+      agents[key] = {};
+      agents[agent.id] = {};
+    }
+    const tools: Record<string, WorkflowRegistrySchemas> = {};
+    for (const [key, tool] of Object.entries(this.listTools() ?? {})) {
+      const schemas: WorkflowRegistrySchemas = {
+        inputSchema: toJsonSchemaOrUndefined(tool.inputSchema),
+        outputSchema: toJsonSchemaOrUndefined(tool.outputSchema),
+      };
+      tools[key] = schemas;
+      tools[tool.id] = schemas;
+    }
+    const workflows: Record<string, WorkflowRegistrySchemas> = {};
+    for (const [key, workflow] of Object.entries(this.#workflows as Record<string, AnyWorkflow>)) {
+      const schemas: WorkflowRegistrySchemas = {
+        inputSchema: toJsonSchemaOrUndefined(workflow.inputSchema),
+        outputSchema: toJsonSchemaOrUndefined(workflow.outputSchema),
+      };
+      workflows[key] = schemas;
+      workflows[workflow.id] = schemas;
+    }
+    return { agents, tools, workflows };
+  }
+
+  /**
+   * Persist a static workflow definition to storage and live-register it on
+   * this Mastra instance so it becomes immediately runnable. The same path is
+   * used by `loadDynamicWorkflows()` at boot to re-materialize previously saved
+   * workflows.
+   *
+   * @example
+   * ```typescript
+   * await mastra.addDynamicWorkflow({
+   *   id: 'cli-weather-v1',
+   *   inputSchema:  { type: 'object', properties: { location: { type: 'string' } }, required: ['location'] },
+   *   outputSchema: { type: 'object', properties: { report:   { type: 'string' } }, required: ['report'] },
+   *   graph: [...],
+   * });
+   *
+   * const run = await mastra.getWorkflow('cli-weather-v1').createRun();
+   * await run.start({ inputData: { location: 'Helsinki' } });
+   * ```
+   */
+  public async addDynamicWorkflow(def: DynamicWorkflowGraph): Promise<void> {
+    await this.addDynamicWorkflows([def]);
+  }
+
+  /**
+   * Persist and live-register a set of dynamic workflow definitions that depend
+   * on each other — typically a root workflow plus the helper workflows it
+   * nests, none of which exist yet.
+   *
+   * The bundle is validated as a unit: references resolve against this
+   * instance's registries UNION the bundle's own ids, so a root may nest a
+   * helper being introduced in the same call. Members are then hydrated in
+   * dependency order, since hydration resolves nested workflows through the
+   * live registry.
+   *
+   * Failure semantics — a rejected bundle registers nothing:
+   * - Duplicate ids, invalid members, and dependency cycles are all detected
+   *   before anything is mutated.
+   * - If hydration or persistence fails partway, the in-memory registry is
+   *   restored to its prior state.
+   * - Storage writes happen last. A storage-level failure mid-bundle is the
+   *   one residual window where rows can be partially written; the registry is
+   *   still rolled back, and the orphaned rows are inert until the next boot.
+   *
+   * `addDynamicWorkflow()` is the single-member case.
+   *
+   * @example
+   * ```typescript
+   * await mastra.addDynamicWorkflows([
+   *   { id: 'lookup-first-customer', ... },  // helper — order is derived, not assumed
+   *   { id: 'parallel-customer-lookup', ... }, // root, nests the helper above
+   * ]);
+   * ```
+   */
+  public async addDynamicWorkflows(defs: readonly DynamicWorkflowGraph[]): Promise<void> {
+    if (defs.length === 0) return;
+
+    const seen = new Set<string>();
+    for (const def of defs) {
+      if (seen.has(def.id)) {
+        throw new Error(
+          `Dynamic workflow bundle contains more than one definition with id "${def.id}". Ids must be unique within a bundle.`,
+        );
+      }
+      seen.add(def.id);
+    }
+
+    // Save-path is strict (boot-time load is lenient — see #loadDynamicWorkflows).
+    // Normalization coerces the wire shape; one validation call per member
+    // covers structure, JSON-Schema keywords, references, and schema-flow.
+    const members = defs.map(def => ({
+      def,
+      normalized: normalizeWorkflowBuilderDefinition({
+        id: def.id,
+        description: def.description,
+        inputSchema: def.inputSchema,
+        outputSchema: def.outputSchema,
+        stateSchema: def.stateSchema,
+        requestContextSchema: def.requestContextSchema,
+        graph: def.graph,
+      }),
+    }));
+
+    // Members may nest each other, so the index every member validates against
+    // is the live registries plus the bundle itself — not the registry alone.
+    const index = this.#buildWorkflowRegistryIndex();
+    const bundleIds = new Set(members.map(member => member.def.id));
+    for (const { normalized } of members) {
+      (index.workflows ??= {})[normalized.id] = {
+        inputSchema: normalized.inputSchema,
+        outputSchema: normalized.outputSchema,
+      } as WorkflowRegistrySchemas;
+    }
+    for (const { normalized } of members) {
+      assertValidDynamicWorkflow(normalized, index);
+    }
+
+    // Hydration resolves nested workflows through the live registry, so a
+    // member cannot be hydrated before the bundle members it nests.
+    const ordered: typeof members = [];
+    const remaining = new Map(members.map(member => [member.def.id, member] as const));
+    const hydrated = new Set<string>();
+    let progress = true;
+    while (remaining.size > 0 && progress) {
+      progress = false;
+      for (const [id, member] of Array.from(remaining)) {
+        const pending = Array.from(collectNestedWorkflowIds(member.def.graph)).filter(
+          dependency => dependency !== id && bundleIds.has(dependency) && !hydrated.has(dependency),
+        );
+        if (pending.length > 0) continue;
+        remaining.delete(id);
+        hydrated.add(id);
+        ordered.push(member);
+        progress = true;
+      }
+    }
+    if (remaining.size > 0) {
+      throw new Error(
+        `Dynamic workflow bundle has a circular nested-workflow dependency among: ${Array.from(remaining.keys())
+          .sort()
+          .join(', ')}.`,
+      );
+    }
+
+    // Snapshot the registry slots this bundle will overwrite so a failure
+    // anywhere below leaves the instance exactly as it was found.
+    const registry = this.#workflows as Record<string, AnyWorkflow>;
+    const priorWorkflows = new Map<string, AnyWorkflow | undefined>();
+    const priorHiddenKeys = new Set<string>();
+    for (const { def } of ordered) {
+      priorWorkflows.set(def.id, registry[def.id]);
+      if (this.#hiddenWorkflowKeys.has(def.id)) priorHiddenKeys.add(def.id);
+    }
+    const restoreRegistry = () => {
+      for (const [id, prior] of priorWorkflows) {
+        if (prior) registry[id] = prior;
+        else delete registry[id];
+        if (priorHiddenKeys.has(id)) this.#hiddenWorkflowKeys.add(id);
+      }
+    };
+
+    try {
+      for (const { def } of ordered) {
+        const { workflow } = await rehydrateWorkflow(def, this);
+        this.#replaceDynamicWorkflow(workflow as AnyWorkflow, def.id);
+      }
+
+      const store = await this.#storage?.getStore('workflowDefinitions');
+      if (store) {
+        for (const { def } of ordered) {
+          await store.upsert({
+            id: def.id,
+            description: def.description,
+            metadata: def.metadata,
+            inputSchema: def.inputSchema,
+            outputSchema: def.outputSchema,
+            stateSchema: def.stateSchema,
+            requestContextSchema: def.requestContextSchema,
+            graph: def.graph,
+          });
+        }
+      }
+    } catch (error) {
+      restoreRegistry();
+      throw error;
+    }
+  }
+
+  /**
+   * Load any previously persisted workflow definitions from storage and
+   * live-register each one. Called by `startWorkers()` after storage init.
+   * Bad rows are logged and skipped — one corrupt definition shouldn't sink
+   * the rest.
+   * @internal
+   */
+  async #loadDynamicWorkflows(): Promise<void> {
+    const store = await this.#storage?.getStore('workflowDefinitions');
+    if (!store) return;
+
+    const { definitions } = await store.list({ status: 'active' });
+
+    // Code-registered workflows win; storage is additive.
+    const pending = definitions.filter(d => !(this.#workflows as Record<string, AnyWorkflow>)[d.id]);
+
+    const pendingIds = new Set(pending.map(d => d.id));
+    const deps = new Map<string, Set<string>>();
+    for (const def of pending) {
+      const all = collectNestedWorkflowIds(def.graph);
+      const pendingDeps = new Set<string>();
+      for (const id of all) if (pendingIds.has(id) && id !== def.id) pendingDeps.add(id);
+      deps.set(def.id, pendingDeps);
+    }
+
+    // Hydrate in dependency order; anything left after the loop is a cycle.
+    const remaining = new Map(pending.map(d => [d.id, d] as const));
+    const loaded = new Set<string>();
+    let progress = true;
+    while (remaining.size > 0 && progress) {
+      progress = false;
+      for (const [id, def] of Array.from(remaining)) {
+        const unresolved = Array.from(deps.get(id) ?? []).filter(d => !loaded.has(d));
+        if (unresolved.length > 0) continue;
+        remaining.delete(id);
+        progress = true;
+        try {
+          const { workflow } = await rehydrateWorkflow(
+            {
+              id: def.id,
+              description: def.description,
+              metadata: def.metadata,
+              inputSchema: def.inputSchema as Record<string, any>,
+              outputSchema: def.outputSchema as Record<string, any>,
+              stateSchema: def.stateSchema as Record<string, any> | undefined,
+              requestContextSchema: def.requestContextSchema as Record<string, any> | undefined,
+              graph: def.graph,
+            },
+            this,
+            // Lenient at boot (save path is strict): degrade to z.any() + warn.
+            {
+              onUnsupportedSchema: 'warn',
+              onUnsupported: message => this.#logger?.warn?.(`Dynamic workflow "${def.id}": ${message}`),
+            },
+          );
+          this.addWorkflow(workflow as AnyWorkflow, def.id);
+          loaded.add(def.id);
+        } catch (error) {
+          this.#logger?.error?.(`Failed to load dynamic workflow "${def.id}"`, { error });
+        }
+      }
+    }
+    if (remaining.size > 0) {
+      const stuck = Array.from(remaining.keys()).join(', ');
+      this.#logger?.error?.(
+        `Failed to load dynamic workflows (cycle or unresolved nested-workflow reference): ${stuck}`,
+      );
+    }
+  }
+
   /**
    * Signal that a schedule has been registered imperatively at runtime
    * (e.g. `mastra.schedules.create()` after `startWorkers()`). Flips the
@@ -4579,8 +5040,7 @@ export class Mastra<
   async __ensureNotificationDispatchReady(): Promise<void> {
     if (this.#notificationDispatchReady) return;
     if (this.#notificationDispatchConfig?.enabled === false) return;
-    if (this.#workersDisabled) return;
-    if (this.#schedulerConfig?.enabled === false) return;
+    if (this.#schedulerDisabled()) return;
     if (!this.#storage) return;
 
     try {
@@ -4675,49 +5135,38 @@ export class Mastra<
   }
 
   /**
-   * Detect agent-schedule rows in storage on boot. Used by
-   * `#shouldEnableScheduler` to flip the scheduler-requested flag when
-   * imperative agent schedules persisted from a previous process exist —
-   * without this, a fresh boot with only DB-side agent schedules would skip
-   * starting the scheduler and agent-schedule workers entirely.
+   * Detect schedule rows that a previous process persisted, and flip the
+   * scheduler-requested flag that `#shouldEnableScheduler` reads. Without
+   * this, a fresh boot with only DB-side work would skip injecting the
+   * scheduler and agent-schedule workers entirely. Two rows count:
+   *
+   * - agent-schedule rows created imperatively through `schedules.create()`;
+   * - the notification dispatcher row that `__ensureNotificationDispatchReady()`
+   *   upserts when a deferred notification is created, so pending deferred
+   *   notifications still get dispatched after a restart.
+   *
+   * Callers must skip this probe when the scheduler can never start; see
+   * `#schedulerDisabled()`.
    *
    * @internal
    */
-  async #detectExistingAgentSchedules(): Promise<void> {
-    if (this.#schedulerRequested) return;
+  async #detectPersistedSchedulerWork(): Promise<void> {
     if (!this.#storage) return;
     try {
       const schedulesStore = await this.#storage.getStore('schedules');
       if (!schedulesStore) return;
-      const existing = await schedulesStore.listSchedules({ ownerType: 'agent' });
-      if (existing.length === 0) return;
-      this.#schedulerRequested = true;
-    } catch (err) {
-      this.#logger?.warn?.('Failed to detect existing agent schedules on boot', err as any);
-    }
-  }
 
-  /**
-   * Detect the lazily-created notification dispatcher schedule row on boot.
-   * A previous process upserts the row via `__ensureNotificationDispatchReady()`
-   * when a deferred notification is created; a fresh boot must then start the
-   * scheduler so pending deferred notifications still get dispatched.
-   * Mirrors `#detectExistingAgentSchedules`.
-   *
-   * @internal
-   */
-  async #detectExistingNotificationDispatch(): Promise<void> {
-    if (this.#schedulerRequested) return;
-    if (this.#notificationDispatchConfig?.enabled === false) return;
-    if (!this.#storage) return;
-    try {
-      const schedulesStore = await this.#storage.getStore('schedules');
-      if (!schedulesStore) return;
-      const existing = await schedulesStore.getSchedule(NOTIFICATION_DISPATCH_SCHEDULE_ROW_ID);
-      if (!existing) return;
-      this.#schedulerRequested = true;
+      const agentSchedules = await schedulesStore.listSchedules({ ownerType: 'agent' });
+      if (agentSchedules.length > 0) {
+        this.#schedulerRequested = true;
+        return;
+      }
+
+      if (this.#notificationDispatchConfig?.enabled === false) return;
+      const dispatchRow = await schedulesStore.getSchedule(NOTIFICATION_DISPATCH_SCHEDULE_ROW_ID);
+      if (dispatchRow) this.#schedulerRequested = true;
     } catch (err) {
-      this.#logger?.warn?.('Failed to detect existing notification dispatch schedule on boot', err as any);
+      this.#logger?.warn?.('Failed to detect persisted scheduler work on boot', err as any);
     }
   }
 
@@ -4755,6 +5204,7 @@ export class Mastra<
    * ```
    */
   public setStorage(storage: MastraCompositeStore) {
+    this.#storageFallbackWarningPending = false;
     this.#storage = augmentWithInit(storage);
     this.#storage?.__registerMastra?.(this as unknown as Parameters<NonNullable<typeof storage.__registerMastra>>[0]);
     this.#ensureBackgroundTaskManager();
@@ -5350,12 +5800,45 @@ export class Mastra<
     }
   }
 
+  /**
+   * Wrap a user-provided topic listener so the delivery is acknowledged once
+   * the listener resolves. User listeners take only the event, so nothing
+   * would ever call `ack` for them — and on a durable transport (Redis
+   * consumer groups) an unacknowledged delivery stays pending for the life of
+   * the subscription. A throwing listener nacks instead so the transport can
+   * redeliver rather than assume success.
+   *
+   * The wrapper is memoized per listener so `removeTopicListener` can
+   * unsubscribe the exact callback `addTopicListener` registered.
+   */
+  #ackingTopicListeners = new WeakMap<(event: any) => Promise<void> | void, EventCallback>();
+
+  #ackingTopicListener(listener: (event: any) => Promise<void> | void): EventCallback {
+    const existing = this.#ackingTopicListeners.get(listener);
+    if (existing) return existing;
+    const wrapped: EventCallback = async (event, ack, nack) => {
+      try {
+        await listener(event);
+      } catch (err) {
+        this.#logger?.error?.('Error in topic listener; nacking event', {
+          eventType: event.type,
+          err: err instanceof Error ? err.message : err,
+        });
+        await nack?.();
+        return;
+      }
+      await ack?.();
+    };
+    this.#ackingTopicListeners.set(listener, wrapped);
+    return wrapped;
+  }
+
   public async addTopicListener(topic: string, listener: (event: any) => Promise<void>) {
-    await this.#pubsub.subscribe(topic, listener);
+    await this.#pubsub.subscribe(topic, this.#ackingTopicListener(listener));
   }
 
   public async removeTopicListener(topic: string, listener: (event: any) => Promise<void>) {
-    await this.#pubsub.unsubscribe(topic, listener);
+    await this.#pubsub.unsubscribe(topic, this.#ackingTopicListener(listener));
   }
 
   /**
@@ -5390,18 +5873,21 @@ export class Mastra<
       await this.#storage.init();
     }
 
-    // Flip the scheduler-requested flag if any agent-schedule rows
-    // exist in storage from a previous boot. Without this, a process
-    // that boots with only DB-side agent schedules (no in-code declarative
-    // schedules and no imperative `schedules.create()` calls yet) would
-    // skip injecting the scheduler + agent-schedule workers entirely. This
-    // reads the schedules store, so it must run after storage.init() above.
-    if (!name) {
-      await this.#detectExistingAgentSchedules();
-      // Same idea for the notification dispatcher: a previous process may
-      // have lazily created the dispatcher schedule row because deferred
-      // notifications were in play.
-      await this.#detectExistingNotificationDispatch();
+    // Flip the scheduler-requested flag if schedule rows exist in storage from
+    // a previous boot. Without this, a process that boots with only DB-side
+    // work (no in-code declarative schedules and no imperative
+    // `schedules.create()` calls yet) would skip injecting the scheduler +
+    // agent-schedule workers entirely. This reads the schedules store, so it
+    // must run after storage.init() above.
+    //
+    // Skip the read when the flag cannot change the outcome: it is already
+    // set, the app opted out of the scheduler and nothing may start it, or an
+    // explicit worker filter already forces injection (see below). Reading the
+    // store anyway is a useless boot-time query, and storage adapters that
+    // need request/tenant context warn on it (see #20550).
+    const schedulerExplicitlyRequested = (this.#workerFilter?.has('scheduler') ?? false) && !this.#schedulerDisabled();
+    if (!name && !this.#schedulerRequested && !schedulerExplicitlyRequested && !this.#schedulerDisabled()) {
+      await this.#detectPersistedSchedulerWork();
     }
 
     // Lazily inject the SchedulerWorker + AgentScheduleWorker if the
@@ -5409,7 +5895,14 @@ export class Mastra<
     // This runs after all workflows have been registered (unlike the
     // constructor's default-workers block), so #hasScheduledWorkflow is
     // accurate.
-    if (!name && this.#shouldEnableScheduler() && this.#storage) {
+    //
+    // An explicit worker filter naming the scheduler role (e.g.
+    // `MASTRA_WORKERS=scheduler` on a dedicated scheduler deployment) always
+    // injects it: a standalone scheduler process polls storage for rows
+    // created by *other* processes, so boot-time heuristics like
+    // #hasScheduledWorkflow or persisted-row probes can't see the work it
+    // exists to serve. Only `#schedulerDisabled()` overrides the request.
+    if (!name && (this.#shouldEnableScheduler() || schedulerExplicitlyRequested) && this.#storage) {
       if (!this.#findSchedulerWorker()) {
         const sw = new SchedulerWorker(this.#schedulerConfig);
         sw.__registerMastra(this);
@@ -5445,6 +5938,11 @@ export class Mastra<
       }
     } else {
       targets = this.#workers;
+    }
+
+    // Rehydrate persisted workflow definitions (after storage.init() above).
+    if (this.#storage) {
+      await this.#loadDynamicWorkflows();
     }
 
     // When explicitly starting the backgroundTasks worker (e.g.
@@ -5486,12 +5984,11 @@ export class Mastra<
 
         const listeners = Array.isArray(this.#events[topic]) ? this.#events[topic] : [this.#events[topic]];
         for (const listener of listeners) {
-          const alreadySubscribed = this.#userEventSubscriptions.some(
-            sub => sub.topic === topic && sub.cb === listener,
-          );
+          const cb = this.#ackingTopicListener(listener);
+          const alreadySubscribed = this.#userEventSubscriptions.some(sub => sub.topic === topic && sub.cb === cb);
           if (alreadySubscribed) continue;
-          await this.#pubsub.subscribe(topic, listener);
-          this.#userEventSubscriptions.push({ topic, cb: listener });
+          await this.#pubsub.subscribe(topic, cb);
+          this.#userEventSubscriptions.push({ topic, cb });
         }
       }
     }
@@ -5983,6 +6480,19 @@ export class Mastra<
    * ```
    */
   async shutdown(): Promise<void> {
+    // The scorer hook lives on a process-global emitter. Release it before any
+    // awaited teardown so even a later cleanup failure cannot retain this
+    // Mastra instance and its full component graph.
+    this.__unregisterHooks();
+
+    // The shared BackgroundTaskWorker deliberately delegates manager ownership
+    // to Mastra. Stop the manager while workers, pubsub, and storage are still
+    // available so it can abort active tasks, preserve retry recovery, and
+    // remove its subscriptions.
+    if (this.#backgroundTaskManager) {
+      await this.#backgroundTaskManager.shutdown();
+    }
+
     // SchedulerWorker is stopped as part of stopWorkers().
     await this.stopWorkers();
 

@@ -10,6 +10,7 @@ export {
   type PromptInjectionOptions,
   type PromptInjectionResult,
   type PromptInjectionCategoryScores,
+  type PromptInjectionDetectionEvent,
 } from './prompt-injection-detector';
 export {
   PIIDetector,
@@ -18,6 +19,7 @@ export {
   type PIICategories,
   type PIICategoryScores,
   type PIIDetection,
+  type PIIDetectionEvent,
 } from './pii-detector';
 export {
   LanguageDetector,
@@ -58,10 +60,12 @@ export {
   type RegexMatch,
   type RegexPreset,
   type RegexFilterTripwireMetadata,
+  type RegexRedaction,
+  type RegexRedactionDetail,
 } from './regex-filter';
 export { ToolCallFilter } from './tool-call-filter';
 
-export { AgentsMDInjector, type ToolResultReminderOptions } from '../tool-result-reminder';
+export { AgentsMDInjector, type ToolResultReminderOptions, type ReminderFileReader } from '../tool-result-reminder';
 
 export {
   ToolSearchProcessor,

@@ -350,9 +350,6 @@ export function handleToolApprovalRequired(
   const category = getToolCategory(toolName);
   const categoryLabel = category ? TOOL_CATEGORIES[category]?.label : undefined;
 
-  // Send notification to alert the user
-  ctx.notify('tool_approval', `Approve ${toolName}?`);
-
   const firePermissionResult = (decision: 'approved' | 'declined' | 'dismissed' | 'auto_approved') => {
     state.hookManager?.runPermissionResult('tool_approval', toolCallId, toolName, decision, args).catch(() => {});
   };

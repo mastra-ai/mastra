@@ -7,36 +7,120 @@ packages:
 
 # ToolProvider
 
-The `ToolProvider` interface defines how the editor discovers and resolves integration tools from external platforms. Mastra ships with two built-in implementations: `ComposioToolProvider` and `ArcadeToolProvider`.
+The `ToolProvider` interface defines how the editor discovers and resolves integration tools from external platforms. Mastra includes two built-in implementations: `ComposioToolProvider` and `ArcadeToolProvider`.
 
-See [Tools](/docs/editor/tools) for a guide on setting up tool providers.
+See [Editor tools](/docs/editor/overview#tools) for provider setup and the Studio workflow. See [tool configuration](/reference/editor/tools) for stored selections and resolution behavior.
 
 ## ToolProvider interface
 
-Tool providers implement these methods:
+Providers expose metadata and the legacy discovery and resolution methods. Agent Builder integrations can also implement the optional VNext catalog, connection, authorization, and health methods.
 
 <PropertiesTable
   content={[
   {
+    name: 'info',
+    type: 'ToolProviderInfo',
+    description: 'Provider ID, name, and description.',
+  },
+  {
+    name: 'displayName',
+    type: 'string',
+    description: 'Optional name shown in the tool picker. Defaults to info.name.',
+    isOptional: true,
+  },
+  {
+    name: 'capabilities',
+    type: 'ToolProviderCapabilities',
+    description: 'Static connection and revocation capabilities. Required for VNext providers.',
+    isOptional: true,
+  },
+  {
+    name: 'defaultScope',
+    type: "'per-author' | 'caller-supplied'",
+    description: "Default connection identity scope. Defaults to 'per-author' when omitted.",
+    isOptional: true,
+  },
+  {
     name: 'listToolkits()',
-    type: '() => Promise<Toolkit[]>',
-    description: 'Returns a list of available toolkits (tool categories) from the provider.',
+    type: '() => Promise<ToolProviderListResult<ToolProviderToolkit>>',
+    description: 'Lists available toolkits through the legacy interface.',
+    isOptional: true,
   },
   {
     name: 'listTools(params?)',
-    type: '(params?) => Promise<Tool[]>',
-    description: 'Returns a list of available tools. Accepts optional filtering by toolkit, search query, and limit.',
+    type: '(params?: ListToolProviderToolsOptions) => Promise<ToolProviderListResult<ToolProviderToolInfo>>',
+    description: 'Lists tools with optional toolkit, search, and pagination filters.',
   },
   {
     name: 'getToolSchema(slug)',
-    type: '(slug: string) => Promise<JSONSchema>',
-    description: 'Returns the JSON schema for a specific tool identified by its slug.',
+    type: '(slug: string) => Promise<Record<string, unknown> | null>',
+    description: 'Returns a tool input schema through the legacy interface.',
+    isOptional: true,
   },
   {
-    name: 'resolveTools(slugs, options?)',
-    type: '(slugs: string[], options?) => Promise<Record<string, ToolAction>>',
-    description:
-      'Resolves tool slugs into executable Mastra tool actions. Built-in providers use resourceId from request context for per-user authentication.',
+    name: 'resolveTools(slugs, configs?, options?)',
+    type: '(slugs: string[], configs?: Record<string, StorageToolConfig>, options?: ResolveToolProviderToolsOptions) => Promise<Record<string, ToolAction>>',
+    description: 'Resolves legacy tool selections into executable Mastra tools.',
+  },
+  {
+    name: 'listToolkitsVNext()',
+    type: '() => Promise<ListToolkitsResult>',
+    description: 'Lists allowed toolkits for Agent Builder and Editor.',
+    isOptional: true,
+  },
+  {
+    name: 'listToolsVNext(options?)',
+    type: '(options?: ListToolsOpts) => Promise<ListToolsResult>',
+    description: 'Lists allowed tools with toolkit, search, and pagination options.',
+    isOptional: true,
+  },
+  {
+    name: 'resolveToolsVNext(options)',
+    type: '(options: ResolveToolsOpts) => Promise<Record<string, ToolAction>>',
+    description: 'Resolves tools for one set of slugs and one authorized connection.',
+    isOptional: true,
+  },
+  {
+    name: 'authorize(options)',
+    type: '(options: AuthorizeOpts) => Promise<{ url: string; authId: string }>',
+    description: 'Starts an authorization flow.',
+    isOptional: true,
+  },
+  {
+    name: 'listConnectionFields(options)',
+    type: '(options: { toolkit: string }) => Promise<ConnectionField[]>',
+    description: 'Lists provider-specific values required to authorize a toolkit.',
+    isOptional: true,
+  },
+  {
+    name: 'getAuthStatus(authId)',
+    type: '(authId: string) => Promise<AuthFlowStatus>',
+    description: 'Returns the state of an authorization flow.',
+    isOptional: true,
+  },
+  {
+    name: 'getConnectionStatus(options)',
+    type: '(options: { items: Array<{ connectionId: string; toolkit: string }> }) => Promise<Record<string, { connected: boolean }>>',
+    description: 'Checks whether a batch of connections is still active.',
+    isOptional: true,
+  },
+  {
+    name: 'listConnections(options)',
+    type: '(options: ListConnectionsOpts) => Promise<ListConnectionsResult>',
+    description: 'Lists existing provider connections for a user and toolkit.',
+    isOptional: true,
+  },
+  {
+    name: 'getHealth()',
+    type: '() => Promise<ToolProviderHealth>',
+    description: 'Returns provider configuration and reachability health.',
+    isOptional: true,
+  },
+  {
+    name: 'revokeConnection(connectionId)',
+    type: '(connectionId: string) => Promise<void>',
+    description: 'Revokes a provider connection.',
+    isOptional: true,
   },
 ]}
 />
@@ -51,7 +135,7 @@ Connects to [Composio](https://composio.dev) for access to hundreds of integrati
 
 ```typescript title="src/mastra/index.ts"
 import { MastraEditor } from '@mastra/editor'
-import { ComposioToolProvider } from '@mastra/editor/providers/composio'
+import { ComposioToolProvider } from '@mastra/editor/composio'
 
 const editor = new MastraEditor({
   toolProviders: {
@@ -71,6 +155,25 @@ const editor = new MastraEditor({
     type: 'string',
     description: 'Your Composio API key.',
   },
+  {
+    name: 'allowedToolkits',
+    type: 'readonly string[]',
+    description: 'Toolkit slug allowlist. Supports exact matches and suffix wildcards.',
+    isOptional: true,
+  },
+  {
+    name: 'allowedTools',
+    type: 'Readonly<Record<string, readonly string[]>>',
+    description: 'Per-toolkit tool slug allowlists. Supports exact matches and prefix wildcards.',
+    isOptional: true,
+  },
+  {
+    name: 'defaultScope',
+    type: "'per-author' | 'caller-supplied'",
+    description: 'Connection identity scope. Defaults to per-author.',
+    isOptional: true,
+    defaultValue: "'per-author'",
+  },
 ]}
 />
 
@@ -80,7 +183,32 @@ Composio tools use uppercase slug format: `GITHUB_CREATE_ISSUE`, `SLACK_SEND_MES
 
 ### Authentication
 
-Tool execution is scoped to the `resourceId` passed through request context. The provider maps that value to the user identity required by Composio's auth flow.
+Connections use per-author scope by default. Set `defaultScope: 'caller-supplied'` to bucket authorization by the caller identity resolved from `MASTRA_RESOURCE_ID_KEY` in request context. Ensure each authenticated request provides a stable, unique resource ID. When using `MastraAuthWorkos`, configure `mapUserToResourceId` to set this value from the authenticated user.
+
+### Connection management tools
+
+Composio provides tools for starting and monitoring authorization from an agent chat. When `allowedToolkits` is set, include `composio` to make these tools available:
+
+```typescript title="src/mastra/index.ts"
+const editor = new MastraEditor({
+  toolProviders: {
+    composio: new ComposioToolProvider({
+      apiKey: process.env.COMPOSIO_API_KEY!,
+      allowedToolkits: ['composio', 'gmail'],
+      defaultScope: 'caller-supplied',
+    }),
+  },
+})
+```
+
+Add only the connection management tools that the agent needs:
+
+| Tool | Behavior |
+| - | - |
+| `COMPOSIO_MANAGE_CONNECTIONS` | Creates an authorization link in chat through a session owned by the caller. |
+| `COMPOSIO_WAIT_FOR_CONNECTIONS` | Waits for the caller to finish authorization before the agent continues. |
+
+`COMPOSIO_WAIT_FOR_CONNECTIONS` is optional. Without it, complete authorization and return to the chat. Then ask the agent to continue. The connected account remains associated with the caller resource ID for later requests.
 
 ---
 
@@ -92,7 +220,7 @@ Connects to [Arcade](https://arcade.dev) for a curated tool catalog with built-i
 
 ```typescript title="src/mastra/index.ts"
 import { MastraEditor } from '@mastra/editor'
-import { ArcadeToolProvider } from '@mastra/editor/providers/arcade'
+import { ArcadeToolProvider } from '@mastra/editor/arcade'
 
 const editor = new MastraEditor({
   toolProviders: {
@@ -127,4 +255,4 @@ Arcade tools use `Toolkit.ToolName` format: `Github.GetRepository`, `Slack.SendM
 
 ### Authentication
 
-Like Composio, tool execution uses `resourceId` from request context for per-user authorization. The provider maps that value to the user identity required by Arcade's auth flow.
+The legacy Arcade resolver uses `resourceId` from request context when available. It otherwise falls back to the supplied `userId`, then to a shared `default` identity. Use `default` only for intentionally shared integrations. In tenant-isolated deployments, provide a trusted, stable `resourceId` or explicit `userId`. Omitting both doesn't isolate callers.

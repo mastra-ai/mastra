@@ -427,10 +427,124 @@ export function extractBranchSpans<
 // Lightweight Span & Trace Schemas (for timeline rendering)
 // ============================================================================
 
+/** Maximum length of the rendered `inputPreview` text. */
+export const INPUT_PREVIEW_MAX_LENGTH = 100;
+
+const inputPreviewField = z.string().describe('Short text preview of the span input');
+
+type PreviewMessage = { role?: string; content?: unknown };
+
+function truncatePreview(text: string, maxLength: number): string | undefined {
+  if (!text) return undefined;
+  return text.length > maxLength ? `${text.slice(0, maxLength)}…` : text;
+}
+
+function previewTextFromContent(content: unknown): string {
+  if (typeof content === 'string') return content;
+  if (!Array.isArray(content)) return '';
+  return content
+    .map(part => {
+      if (typeof part === 'string') return part;
+      if (part && typeof part === 'object' && (part as { type?: unknown }).type === 'text') {
+        const text = (part as { text?: unknown }).text;
+        return typeof text === 'string' ? text : '';
+      }
+      return '';
+    })
+    .filter(Boolean)
+    .join(' ');
+}
+
 /**
- * Lightweight span record containing only the fields needed for timeline rendering.
- * Excludes heavy fields: input, output, attributes, metadata, tags, links.
- * This reduces per-span payload from ~17KB to ~370 bytes (~97% reduction).
+ * Builds the short text shown in a trace list's input column, mirroring what the
+ * full-payload list previously derived client-side. Stores call this at read time,
+ * from their lightweight list row mappers, so the raw `input` blob never reaches
+ * the caller.
+ *
+ * Accepts a parsed `input` value or its JSON string. An unparseable JSON document
+ * previews as empty, mirroring how store read paths treat an unparseable column.
+ */
+export function buildInputPreview(input: unknown, maxLength = INPUT_PREVIEW_MAX_LENGTH): string | undefined {
+  if (input == null) return undefined;
+
+  let value = input;
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return undefined;
+    if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+      try {
+        value = JSON.parse(trimmed);
+      } catch {
+        // Malformed JSON previews as empty. Writers keep stored JSON valid (truncation
+        // replaces values inside the structure, never slices the document), and message
+        // property order is caller-controlled — a best-effort scan of broken JSON can
+        // surface assistant text, so empty is the safe answer, matching `parseJson`.
+        return undefined;
+      }
+    } else if (trimmed.startsWith('"')) {
+      // A JSON-encoded scalar string ('"hello"') — unwrap it so the preview drops the
+      // quotes; a truncated one falls through and previews as plain text.
+      try {
+        value = JSON.parse(trimmed);
+      } catch {
+        // Not valid JSON — treat as plain text below.
+      }
+    }
+  }
+
+  const messages = Array.isArray(value)
+    ? value
+    : value && typeof value === 'object' && Array.isArray((value as { messages?: unknown }).messages)
+      ? (value as { messages: unknown[] }).messages
+      : null;
+
+  if (messages) {
+    const text = (messages as PreviewMessage[])
+      .filter(m => m?.role === 'user')
+      .map(m => previewTextFromContent(m.content))
+      .filter(Boolean)
+      .join(' | ');
+    return truncatePreview(text, maxLength);
+  }
+
+  if (typeof value === 'string') return truncatePreview(value, maxLength);
+  return truncatePreview(JSON.stringify(value) ?? '', maxLength);
+}
+
+/**
+ * Projects a full span record down to the lightweight row a trace list renders,
+ * deriving `inputPreview` from `input`.
+ *
+ * This is the read-time fallback. Backends that can project inside the query should
+ * do so instead — that is what keeps the blob columns off the read path — but every
+ * backend can serve a correct lightweight list through this.
+ */
+export function toLightSpanRecord(span: SpanRecord): LightSpanRecord {
+  return {
+    traceId: span.traceId,
+    spanId: span.spanId,
+    parentSpanId: span.parentSpanId,
+    name: span.name,
+    spanType: span.spanType,
+    isEvent: span.isEvent,
+    startedAt: span.startedAt,
+    endedAt: span.endedAt,
+    error: span.error,
+    status: computeTraceStatus(span),
+    entityType: span.entityType,
+    entityId: span.entityId,
+    entityName: span.entityName,
+    metadata: span.metadata,
+    inputPreview: buildInputPreview(span.input),
+    createdAt: span.createdAt,
+    updatedAt: span.updatedAt,
+  };
+}
+
+/**
+ * Lightweight span record containing only the fields trace lists and timelines render.
+ * Excludes heavy fields: input, output, attributes, tags, links.
+ * This keeps the per-span payload a small fraction of a full span record's.
  */
 export const lightSpanRecordSchema = z
   .object({
@@ -446,17 +560,29 @@ export const lightSpanRecordSchema = z
     endedAt: endedAtField.nullish(),
     error: errorField.nullish(),
 
+    // Computed status, so trace lists can render their status column.
+    // Nullable AND optional: rows from stores/APIs that predate the field
+    // may omit it entirely, and they must still validate.
+    status: traceStatusField.nullable().optional(),
+
     // Entity context (needed by TraceKeysAndValues on root span)
     entityType: spanContextFields.entityType,
     entityId: spanContextFields.entityId,
     entityName: spanContextFields.entityName,
 
+    // Span metadata, so user-configured metadata columns can render on the light list.
+    // Nullable and optional for rows that predate the field.
+    metadata: metadataField.nullable().optional(),
+
+    // Short text preview of `input`, so trace lists can render their preview column
+    // without transferring the whole prompt. See `buildInputPreview`. Nullable and
+    // optional for rows that predate the field.
+    inputPreview: inputPreviewField.nullable().optional(),
+
     // Database timestamps
     ...dbTimestamps,
   })
-  .describe(
-    'Lightweight span record for timeline rendering (excludes input, output, attributes, metadata, tags, links)',
-  );
+  .describe('Lightweight span record for trace lists and timelines (excludes input, output, attributes, tags, links)');
 
 /** Lightweight span record for timeline rendering */
 export type LightSpanRecord = z.infer<typeof lightSpanRecordSchema>;
@@ -556,11 +682,13 @@ export type ListTracesResponse = z.infer<typeof listTracesResponseSchema>;
 
 /** Schema for listTracesLight operation response */
 export const listTracesLightResponseSchema = z.object({
-  pagination: paginationInfoSchema,
+  pagination: paginationInfoSchema.optional(),
+  delta: deltaInfoSchema.optional(),
+  deltaCursor: deltaCursorSchema.optional(),
   spans: z.array(lightSpanRecordSchema),
 });
 
-/** Response containing paginated lightweight root spans */
+/** Response containing paginated lightweight root spans. Delta mode returns only new trace rows. */
 export type ListTracesLightResponse = z.infer<typeof listTracesLightResponseSchema>;
 
 // ============================================================================
