@@ -164,22 +164,28 @@ Extracting is not the same as wrapping. A ternary that picks between two values 
 
 ### Hook Calls Are Sources, Not Terms
 
-A hook call declares where a value comes from and what the component re-renders on. Buried inside the expression that consumes it, the line reads as a computation and the subscription has to be spotted inside a condition, a template, or an argument list. Bind it first.
+A hook call declares where a value comes from. Buried inside the expression that consumes it, the line reads as a computation and the source has to be spotted inside a condition, a template, or an argument list. Bind it first.
 
 **Incorrect:**
 
 ```tsx
-const Heading = useContext(HeadingLevelContext) === 2 ? 'h2' : 'h3';
+function SectionTitle({ children }: SectionTitleProps) {
+  const Heading = useContext(HeadingLevelContext) === 2 ? 'h2' : 'h3';
+  return <Heading>{children}</Heading>;
+}
 ```
 
 **Correct:**
 
 ```tsx
-const headingLevel = useContext(HeadingLevelContext);
-const Heading = headingLevel === 2 ? 'h2' : 'h3';
+function SectionTitle({ children }: SectionTitleProps) {
+  const headingLevel = useContext(HeadingLevelContext);
+  const Heading = headingLevel === 2 ? 'h2' : 'h3';
+  return <Heading>{children}</Heading>;
+}
 ```
 
-The extra line pays for itself twice: the subscription is visible on its own line, and the value gets the name the expression was already using it under.
+The extra line pays for itself twice: the hook call is visible on its own line, and the value gets the name the expression was already using it under.
 
 ### Fallback and Operator Soup
 

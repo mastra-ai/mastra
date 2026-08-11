@@ -61,15 +61,23 @@ One form does break. A tag read off a context trips `react-hooks/static-componen
 
 ```tsx
 const HeadingTagContext = createContext<'h2' | 'h3'>('h3');
-const Heading = useContext(HeadingTagContext); // a tag name, read as a component
+
+function SectionTitle({ children }: SectionTitleProps) {
+  const Heading = useContext(HeadingTagContext); // a tag name, read as a component
+  return <Heading>{children}</Heading>;
+}
 ```
 
 **Correct:**
 
 ```tsx
 const HeadingLevelContext = createContext<2 | 3>(3);
-const headingLevel = useContext(HeadingLevelContext);
-const Heading = headingLevel === 2 ? 'h2' : 'h3';
+
+function SectionTitle({ children }: SectionTitleProps) {
+  const headingLevel = useContext(HeadingLevelContext);
+  const Heading = headingLevel === 2 ? 'h2' : 'h3';
+  return <Heading>{children}</Heading>;
+}
 ```
 
 Carry the level and let the component pick the tag. The ternary is what proves the value is a host tag, and the context now describes the document outline instead of naming an element on the consumer's behalf.
