@@ -4,6 +4,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { RequestContext } from '../../../request-context';
+import { createSkill } from '../../../skills/create-skill';
 import { createTool } from '../../../tools';
 import { LocalSandbox, Workspace } from '../../../workspace';
 import { Agent } from '../../agent';
@@ -83,6 +84,37 @@ describe('DurableAgent', () => {
       await durableAgent.prepare('Hello');
       expect(durableAgent.agent).toBeDefined();
       expect(durableAgent.agent.id).toBe('test-agent');
+    });
+
+    it('delegates execution-time tool assembly to the wrapped agent', async () => {
+      const ping = createTool({
+        id: 'ping',
+        description: 'Ping',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ ok: z.boolean() }),
+        execute: async () => ({ ok: true }),
+      });
+      const baseAgent = new Agent({
+        id: 'tool-assembly-agent',
+        instructions: 'Use your tools and skills.',
+        model: 'openai/gpt-4o',
+        tools: { ping },
+        skills: () => [
+          createSkill({
+            name: 'dynamic-skill',
+            description: 'Resolved for each execution.',
+            instructions: 'Use this skill when asked.',
+          }),
+        ],
+      });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+      const requestContext = new RequestContext();
+
+      const baseTools = await baseAgent.getToolsForExecution({ requestContext });
+      const durableTools = await durableAgent.getToolsForExecution({ requestContext });
+
+      expect(Object.keys(durableTools).sort()).toEqual(Object.keys(baseTools).sort());
+      expect(Object.keys(durableTools)).toEqual(expect.arrayContaining(['ping', 'skill']));
     });
 
     it('should use agent id as name when name is not provided', () => {

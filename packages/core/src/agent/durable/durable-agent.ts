@@ -690,6 +690,10 @@ export class DurableAgent<
     return this.#wrappedAgent.listTools(options);
   }
 
+  override getToolsForExecution(options: Parameters<Agent['getToolsForExecution']>[0]) {
+    return this.#wrappedAgent.getToolsForExecution(options);
+  }
+
   override getConfiguredToolHooks() {
     return this.#wrappedAgent.getConfiguredToolHooks();
   }
