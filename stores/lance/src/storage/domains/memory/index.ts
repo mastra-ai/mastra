@@ -27,6 +27,7 @@ import type { LanceDomainConfig } from '../../db';
 import { getTableSchema, processResultWithTypeConversion } from '../../db/utils';
 
 export class StoreMemoryLance extends MemoryStorage {
+  override readonly supportsPartialThreadUpdate = true;
   private client: Connection;
   #db: LanceDB;
 
