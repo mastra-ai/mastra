@@ -174,10 +174,16 @@ export function snapshotSummaryLabel(snapshot: ThemeSnapshot, flow: ThemeFlowRes
     : formatSnapshotWindow(snapshot.startedAt, snapshot.endedAt);
   if (!flow) return date;
 
-  const traceCount = flow.stages[0]?.traceCount ?? flow.snapshot.traceCount;
-  const themeCount = flow.stages.reduce(
-    (total, stage) => total + stage.nodes.filter(node => node.kind === 'theme').length,
-    0,
-  );
+  const { traceCount, themeCount } = flowCounts(flow);
   return `${date} · ${traceLabel(traceCount)} · ${themeLabel(themeCount)}`;
+}
+
+function flowCounts(flow: ThemeFlowResponse) {
+  return {
+    traceCount: flow.stages[0]?.traceCount ?? flow.snapshot.traceCount,
+    themeCount: flow.stages.reduce(
+      (total, stage) => total + stage.nodes.filter(node => node.kind === 'theme').length,
+      0,
+    ),
+  };
 }

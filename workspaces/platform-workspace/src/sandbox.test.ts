@@ -1712,6 +1712,45 @@ describe('PlatformSandbox', () => {
         expect(privateNetFetch).toHaveBeenCalledTimes(3);
       });
 
+      it('logs one probe-ok line with duration and attempt count on first 200', async () => {
+        vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+        const fetchMock = vi.fn().mockResolvedValueOnce(
+          json({
+            id: 'sbx_probe_log',
+            createdAt: '2026-06-26T00:00:00.000Z',
+            instanceUrl: 'http://[fd12::1]:47000',
+          }),
+        );
+        const privateNetFetch = vi
+          .fn()
+          .mockRejectedValueOnce(new Error('ECONNREFUSED'))
+          .mockResolvedValueOnce(new Response('ok', { status: 200 }));
+        const { registry, sets } = fakeAddressRegistry();
+
+        const sandbox = new PlatformSandbox({
+          accessToken: 'sk_test',
+          projectId: 'proj_123',
+          environmentId: 'env_123',
+          sessionId: 'sess_42',
+          fetch: fetchMock,
+          privateNetFetch,
+          addressRegistry: registry,
+        });
+        const loggerInfoSpy = vi.spyOn((sandbox as any).logger, 'info');
+        await sandbox._start();
+        await vi.waitFor(() => expect(sets.length).toBeGreaterThan(0));
+
+        expect(loggerInfoSpy).toHaveBeenCalledWith(
+          'platform-workspace probe ok',
+          expect.objectContaining({
+            sandboxId: 'sbx_probe_log',
+            sessionId: 'sess_42',
+            probeDurationMs: expect.any(Number),
+            attempts: 2,
+          }),
+        );
+      });
+
       it('leaves the registry empty when the probe times out', async () => {
         vi.useFakeTimers();
         vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
@@ -1730,10 +1769,12 @@ describe('PlatformSandbox', () => {
           accessToken: 'sk_test',
           projectId: 'proj_123',
           environmentId: 'env_123',
+          sessionId: 'sess_42',
           fetch: fetchMock,
           privateNetFetch,
           addressRegistry: registry,
         });
+        const loggerWarnSpy = vi.spyOn((sandbox as any).logger, 'warn');
         await sandbox._start();
 
         // Advance past the probe timeout (30s).
@@ -1742,6 +1783,16 @@ describe('PlatformSandbox', () => {
         // Registry was never populated.
         expect(sets).toEqual([]);
         expect(entries.size).toBe(0);
+        // Timeout is logged once, with enough context to join back to the session.
+        expect(loggerWarnSpy).toHaveBeenCalledWith(
+          'platform-workspace probe timed out',
+          expect.objectContaining({
+            sandboxId: 'sbx_timeout',
+            sessionId: 'sess_42',
+            timeoutMs: 30_000,
+            attempts: expect.any(Number),
+          }),
+        );
         vi.useRealTimers();
       });
 
@@ -2081,6 +2132,26 @@ describe('PlatformSandbox', () => {
       });
     });
 
+    it('inherits session/thread correlation ids so clone requests carry the headers', async () => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi.fn().mockResolvedValueOnce(json({ id: 'sbx_child', createdAt: '2026-06-26T00:00:00.000Z' }));
+      const template = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        sessionId: 'sess_42',
+        threadId: 'thread_7',
+        fetch: fetchMock,
+      });
+
+      const child = template.clone({ id: 'mc-project-1' });
+      await child._start();
+
+      const headers = fetchMock.mock.calls[0]![1].headers as Headers;
+      expect(headers.get('x-mastra-session-id')).toBe('sess_42');
+      expect(headers.get('x-mastra-thread-id')).toBe('thread_7');
+    });
+
     it('reattaches to a provider sandbox when sandboxId is passed', async () => {
       vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
       const fetchMock = vi
@@ -2170,6 +2241,63 @@ describe('PlatformSandbox', () => {
 
       const body = JSON.parse(fetchMock.mock.calls[0]![1].body as string);
       expect(body.id).toBe('explicit-id');
+    });
+  });
+
+  describe('boot timing log', () => {
+    it('logs one start-complete summary on fresh provision', async () => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(json({ id: 'sbx_timing', createdAt: '2026-06-26T00:00:00.000Z' }));
+      const sandbox = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        sessionId: 'sess_42',
+        fetch: fetchMock,
+      });
+      const loggerInfoSpy = vi.spyOn((sandbox as any).logger, 'info');
+
+      await sandbox._start();
+
+      expect(loggerInfoSpy).toHaveBeenCalledWith(
+        'platform-workspace start complete',
+        expect.objectContaining({
+          sandboxId: 'sbx_timing',
+          sessionId: 'sess_42',
+          mode: 'provision',
+          totalMs: expect.any(Number),
+          requestMs: expect.any(Number),
+        }),
+      );
+    });
+
+    it('logs one start-complete summary on reattach', async () => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(json({ id: 'sbx_reattach', createdAt: '2026-06-26T00:00:00.000Z' }));
+      const sandbox = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        sandboxId: 'sbx_reattach',
+        fetch: fetchMock,
+      });
+      const loggerInfoSpy = vi.spyOn((sandbox as any).logger, 'info');
+
+      await sandbox._start();
+
+      expect(loggerInfoSpy).toHaveBeenCalledWith(
+        'platform-workspace start complete',
+        expect.objectContaining({
+          sandboxId: 'sbx_reattach',
+          mode: 'reattach',
+          totalMs: expect.any(Number),
+          requestMs: expect.any(Number),
+        }),
+      );
     });
   });
 
@@ -2443,6 +2571,27 @@ describe('PlatformSandbox', () => {
   });
 
   describe('captureCheckpoint (public, on-demand)', () => {
+    it('delegates snapshot to captureCheckpoint', async () => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi.fn().mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }));
+      const sandbox = new PlatformSandbox({
+        id: 'mc-session-42',
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        fetch: fetchMock,
+      });
+      await sandbox._start();
+      const captureCheckpoint = vi.spyOn(sandbox, 'captureCheckpoint').mockResolvedValue({
+        status: 'captured',
+        checkpointName: 'mastra-checkpoint-abc123',
+      });
+
+      await expect(sandbox.snapshot()).resolves.toBeUndefined();
+
+      expect(captureCheckpoint).toHaveBeenCalledOnce();
+    });
+
     it('POSTs to /checkpoint with the recovery key and returns the captured name', async () => {
       vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
       const fetchMock = vi
