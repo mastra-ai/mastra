@@ -18,6 +18,8 @@ describe('zipOutput', () => {
     writeFileSync(join(outputDir, '.npmrc'), '//npm.pkg.github.com/:_authToken=${NPM_TOKEN}');
     mkdirSync(join(outputDir, 'node_modules', 'somedep'), { recursive: true });
     writeFileSync(join(outputDir, 'node_modules', 'somedep', 'index.js'), 'x');
+    mkdirSync(join(outputDir, 'node_modules', '.bin'), { recursive: true });
+    writeFileSync(join(outputDir, 'node_modules', '.bin', 'tool'), '#!/bin/sh');
   });
 
   afterEach(() => {
@@ -34,5 +36,6 @@ describe('zipOutput', () => {
     expect(zip).toContain('output/package.json');
     expect(zip).toContain('output/index.mjs');
     expect(zip).not.toContain('node_modules');
+    expect(zip).not.toContain('.bin');
   });
 });
