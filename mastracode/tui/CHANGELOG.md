@@ -1,5 +1,16 @@
 # mastracode
 
+## 0.33.0-alpha.16
+
+### Patch Changes
+
+- Updated dependencies [[`dc4a25d`](https://github.com/mastra-ai/mastra/commit/dc4a25d41af4e2fe97a816070eaec6aa963ab53b), [`dc4a25d`](https://github.com/mastra-ai/mastra/commit/dc4a25d41af4e2fe97a816070eaec6aa963ab53b)]:
+  - @mastra/memory@1.26.1-alpha.7
+  - @mastra/core@1.58.0-alpha.15
+  - @mastra/libsql@1.20.0-alpha.3
+  - @mastra/pg@1.20.0-alpha.4
+  - @mastra/code-sdk@1.2.0-alpha.17
+
 ## 0.33.0-alpha.15
 
 ### Patch Changes

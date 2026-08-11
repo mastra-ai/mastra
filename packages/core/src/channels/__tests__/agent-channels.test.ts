@@ -425,6 +425,71 @@ describe('AgentChannels', () => {
       );
     });
 
+    it('skips messages with no text and no attachments', async () => {
+      const db = new InMemoryDB();
+      const memoryStore = new InMemoryMemory({ db });
+      const mockMastra = {
+        getStorage: () => ({ getStore: () => memoryStore }),
+        getServer: () => null,
+      } as any;
+
+      await agentChannels.initialize(mockMastra);
+
+      const chatThread = {
+        id: 'channel-1:thread-1',
+        channelId: 'channel-1',
+        isDM: true,
+        adapter: agentChannels.adapters.discord,
+        isSubscribed: vi.fn().mockResolvedValue(true),
+        subscribe: vi.fn().mockResolvedValue(undefined),
+        mentionUser: vi.fn((userId: string) => `<@${userId}>`),
+        messages: (async function* () {})(),
+      } as any;
+      // Shape of a read receipt lifted into a Message by the iMessage adapter.
+      const message = {
+        id: 'spc-msg-abc:read:1004514015',
+        text: '',
+        author: { userId: 'user-1', userName: 'tyler', fullName: 'Tyler Barnes' },
+        attachments: [],
+      } as any;
+
+      await (agentChannels as any).processChatMessage(chatThread, message, mockMastra, new RequestContext());
+
+      expect(mockAgent.sendMessage).not.toHaveBeenCalled();
+    });
+
+    it('runs on an attachment-only message with no text', async () => {
+      const db = new InMemoryDB();
+      const memoryStore = new InMemoryMemory({ db });
+      const mockMastra = {
+        getStorage: () => ({ getStore: () => memoryStore }),
+        getServer: () => null,
+      } as any;
+
+      await agentChannels.initialize(mockMastra);
+
+      const chatThread = {
+        id: 'channel-1:thread-1',
+        channelId: 'channel-1',
+        isDM: true,
+        adapter: agentChannels.adapters.discord,
+        isSubscribed: vi.fn().mockResolvedValue(true),
+        subscribe: vi.fn().mockResolvedValue(undefined),
+        mentionUser: vi.fn((userId: string) => `<@${userId}>`),
+        messages: (async function* () {})(),
+      } as any;
+      const message = {
+        id: 'message-1',
+        text: '',
+        author: { userId: 'user-1', userName: 'tyler', fullName: 'Tyler Barnes' },
+        attachments: [{ type: 'image', mimeType: 'image/png', url: 'https://cdn.example.com/a.png' }],
+      } as any;
+
+      await (agentChannels as any).processChatMessage(chatThread, message, mockMastra, new RequestContext());
+
+      expect(mockAgent.sendMessage).toHaveBeenCalledTimes(1);
+    });
+
     it('consumes the run stream when the signal outcome is `wake`', async () => {
       const db = new InMemoryDB();
       const memoryStore = new InMemoryMemory({ db });

@@ -1052,6 +1052,20 @@ export class AgentChannels {
   ): Promise<void> {
     const platform = chatThread.adapter.name;
 
+    // Some adapters lift platform side-channel events (read receipts, delivery
+    // acks) into inbound messages carrying no text and no attachments. Running
+    // the agent on nothing still produces a reply, which produces another
+    // receipt, which wakes the agent again — a self-sustaining loop. There is
+    // nothing to answer here, so drop it before any thread, memory, or run
+    // work happens. Custom handlers run ahead of this and still see the
+    // message if they want it.
+    if (this.isContentlessMessage(message)) {
+      this.log('debug', `[${platform}] Skipping message with no text and no attachments`, {
+        messageId: message.id,
+      });
+      return;
+    }
+
     // Map to a Mastra thread for memory/history.
     // chatThread.id encodes channel + threadTs, so it's stable per conversation:
     // each Slack thread (including top-level DM, DM thread reply, channel mention, and
@@ -1271,6 +1285,14 @@ export class AgentChannels {
       },
       autoResumeSuspendedTools: canRenderApprovalButtons ? undefined : true,
     });
+  }
+
+  /** A message with neither text nor attachments gives the agent nothing to run on. */
+  private isContentlessMessage(message: Message): boolean {
+    if (message.attachments?.length) return false;
+    if (message.text?.trim()) return false;
+    const richText = message.formatted ? chatModule().stringifyMarkdown(message.formatted).trim() : '';
+    return !richText;
   }
 
   /**

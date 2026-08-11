@@ -4479,6 +4479,7 @@ export class Agent<
     const assignedTools = await this.listTools({ requestContext, resolveWebSearch: false });
 
     const assignedToolEntries = Object.entries(assignedTools || {});
+    const model = activeModel ?? (assignedToolEntries.length > 0 ? await this.getModel({ requestContext }) : undefined);
 
     const assignedCoreToolEntries = await Promise.all(
       assignedToolEntries.map(async ([k, tool]) => {
@@ -4486,7 +4487,6 @@ export class Agent<
           return;
         }
 
-        const model = activeModel ?? (await this.getModel({ requestContext }));
         const toolToConvert = isWebSearchTool(tool)
           ? createWebSearchProviderTool(normalizeWebSearchProvider(model))
           : tool;

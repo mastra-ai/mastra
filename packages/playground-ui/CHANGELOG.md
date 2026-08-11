@@ -1,5 +1,31 @@
 # @mastra/playground-ui
 
+## 48.0.0-alpha.16
+
+### Minor Changes
+
+- Export the Trace Intelligence experience with injectable request and navigation adapters so product hosts can render it outside OSS Studio. ([#21272](https://github.com/mastra-ai/mastra/pull/21272))
+
+  ```tsx
+  import { SankeySignals, TraceIntelligenceProvider } from '@mastra/playground-ui/ee/signals';
+
+  <TraceIntelligenceProvider
+    cacheScope={`${organizationId}:${projectId}`}
+    request={request}
+    getTraceHref={traceId => `/traces/${traceId}`}
+  >
+    <SankeySignals entityId={agentId} signalNames={signalNames} />
+  </TraceIntelligenceProvider>;
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`dc4a25d`](https://github.com/mastra-ai/mastra/commit/dc4a25d41af4e2fe97a816070eaec6aa963ab53b), [`dc4a25d`](https://github.com/mastra-ai/mastra/commit/dc4a25d41af4e2fe97a816070eaec6aa963ab53b)]:
+  - @mastra/memory@1.26.1-alpha.7
+  - @mastra/core@1.58.0-alpha.15
+  - @mastra/client-js@1.39.0-alpha.15
+  - @mastra/react@1.4.2-alpha.15
+
 ## 48.0.0-alpha.15
 
 ### Patch Changes

@@ -117,7 +117,7 @@ First, compose the **review handoff** — don't send it to the conversation yet;
 
 - **Findings** — correctness assessment, test assessment, scope assessment, pattern-consistency notes, each grounded in the history you traced. Distill — this is a handoff, not a transcript.
 - **Verification** — every command you executed (tests, typecheck, repros) with its outcome, or an explicit statement that nothing was executed and why.
-- **Existing review disposition** — every substantive finding from prior reviewers (bots included) with its classification: confirmed, addressed, or refuted with evidence. A major bot comment must never be silently dropped.
+- **Existing review disposition** — every substantive finding from prior reviewers (bots included, your own earlier passes included) with its classification: confirmed, addressed, or refuted with evidence. A major bot comment must never be silently dropped. Name each by subject and `file:line`, and remember the body lands as GitHub markdown — `#1` publishes as a link to issue 1.
 - **Adversarial check** (approve only) — the one-line record of why the strongest request-changes case fails.
 - **Requested changes** — one entry per change, concrete enough to act on (for a request-changes verdict).
 - **Assumptions** — every recorded judgment call from the run.
