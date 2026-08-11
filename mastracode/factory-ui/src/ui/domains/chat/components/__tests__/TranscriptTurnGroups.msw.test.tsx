@@ -25,11 +25,10 @@ const entries = [
 ];
 
 describe('TranscriptEntries turn groups', () => {
-  it('reserves room under the live turn only while a reply is coming', () => {
+  it('keeps the reserved room on the live turn and hands it to the next turn', () => {
     const { rerender } = renderWithProviders(
       <TranscriptEntries
         entries={entries}
-        awaitingReply
         onApprove={() => {}}
         onRespond={() => {}}
         tail={<div data-testid="tail" />}
@@ -44,24 +43,35 @@ describe('TranscriptEntries turn groups', () => {
 
     rerender(
       <TranscriptEntries
-        entries={entries}
+        entries={[
+          ...entries,
+          textEntry('assistant-2', 'assistant', 'second answer'),
+          textEntry('user-3', 'user', 'third question'),
+        ]}
         onApprove={() => {}}
         onRespond={() => {}}
         tail={<div data-testid="tail" />}
       />,
     );
-    expect(screen.getByTestId('tail').parentElement).not.toHaveClass('min-h-[50cqh]');
+    expect(screen.getByTestId('tail').parentElement).toHaveClass('min-h-[50cqh]');
+    expect(screen.getByText('second question').closest('.min-h-\\[50cqh\\]')).toBeNull();
+  });
+
+  it('gives no room to a group no user turn opens', () => {
+    renderWithProviders(
+      <TranscriptEntries
+        entries={[textEntry('assistant-only', 'assistant', 'orphan answer')]}
+        onApprove={() => {}}
+        onRespond={() => {}}
+      />,
+    );
+
+    expect(screen.getByText('orphan answer').closest('.min-h-\\[50cqh\\]')).toBeNull();
   });
 
   it('still shows the tail while the transcript is empty', () => {
     renderWithProviders(
-      <TranscriptEntries
-        entries={[]}
-        awaitingReply
-        onApprove={() => {}}
-        onRespond={() => {}}
-        tail={<div data-testid="tail" />}
-      />,
+      <TranscriptEntries entries={[]} onApprove={() => {}} onRespond={() => {}} tail={<div data-testid="tail" />} />,
     );
 
     expect(screen.getByTestId('tail')).toBeInTheDocument();

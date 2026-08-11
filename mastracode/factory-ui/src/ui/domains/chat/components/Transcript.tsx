@@ -493,7 +493,7 @@ function SignalRow({ kind, label, message }: { kind: string; label: string; mess
 
 export function Transcript({ tail }: { tail?: ReactNode }) {
   const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
-  const { busy, transcript, resolvePrompt } = useChatTranscript();
+  const { transcript, resolvePrompt } = useChatTranscript();
   const hookArgs = {
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
@@ -516,7 +516,6 @@ export function Transcript({ tail }: { tail?: ReactNode }) {
   return (
     <TranscriptEntries
       entries={transcript.entries}
-      awaitingReply={busy}
       isSubmitting={approveMutation.isPending || respondMutation.isPending}
       onApprove={onApprove}
       onRespond={onRespond}
@@ -527,15 +526,12 @@ export function Transcript({ tail }: { tail?: ReactNode }) {
 
 export function TranscriptEntries({
   entries,
-  awaitingReply = false,
   isSubmitting = false,
   onApprove,
   onRespond,
   tail,
 }: {
   entries: TimelineEntry[];
-  /** A reply is on its way, so the live turn is worth room it has not filled yet. */
-  awaitingReply?: boolean;
   isSubmitting?: boolean;
   onApprove: (toolCallId: string, approved: boolean, promptId: string) => void;
   onRespond: (toolCallId: string, resumeData: string | string[] | PlanResume, promptId: string) => void;
@@ -580,10 +576,10 @@ export function TranscriptEntries({
     }
   };
 
-  const turnGroups: { key: string; entries: TimelineEntry[] }[] = [];
+  const turnGroups: { key: string; entries: TimelineEntry[]; opensTurn: boolean }[] = [];
   for (const entry of entries) {
     const opensTurn = entry.kind === 'message' && startsUserTurn(entry.message);
-    if (opensTurn || turnGroups.length === 0) turnGroups.push({ key: entry.id, entries: [] });
+    if (opensTurn || turnGroups.length === 0) turnGroups.push({ key: entry.id, entries: [], opensTurn });
     turnGroups.at(-1)?.entries.push(entry);
   }
 
@@ -593,8 +589,9 @@ export function TranscriptEntries({
         const isLiveTurn = index === turnGroups.length - 1;
         return (
           // The room a fresh turn scrolls up into is this min-height: pure layout,
-          // filled by the streaming reply, gone with the flag — nothing measures it.
-          <div key={group.key} className={cn('flex flex-col', awaitingReply && isLiveTurn && 'min-h-[50cqh]')}>
+          // filled by the streaming reply. It stays after the run — collapsing it
+          // would shift the reader — and moves to the next turn with the anchor scroll.
+          <div key={group.key} className={cn('flex flex-col', isLiveTurn && group.opensTurn && 'min-h-[50cqh]')}>
             {group.entries.map(entry => {
               const rendered = renderEntry(entry);
               if (!rendered) return null;

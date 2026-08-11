@@ -148,16 +148,17 @@ export const Thread = ({
   // Keyed by the opening message's client key: `data-user-message` reconciliation
   // swaps `message.id` to the server signal id, and a changing key would remount
   // the whole turn.
-  const turnGroups = useMemo(() => {
-    const groups: { key: string; messages: MastraDBMessage[] }[] = [];
-    for (const message of messages) {
-      if (threadRailAnchorIds.has(message.id) || groups.length === 0) {
-        groups.push({ key: getClientMessageKey(message), messages: [] });
-      }
-      groups.at(-1)?.messages.push(message);
+  const turnGroups: { key: string; messages: MastraDBMessage[]; opensTurn: boolean }[] = [];
+  for (const message of messages) {
+    if (threadRailAnchorIds.has(message.id) || turnGroups.length === 0) {
+      turnGroups.push({
+        key: getClientMessageKey(message),
+        messages: [],
+        opensTurn: threadRailAnchorIds.has(message.id),
+      });
     }
-    return groups;
-  }, [messages, threadRailAnchorIds]);
+    turnGroups.at(-1)?.messages.push(message);
+  }
 
   return (
     <ComposerAttachmentsProvider>
@@ -181,10 +182,12 @@ export const Thread = ({
                         const isLiveTurn = index === turnGroups.length - 1;
                         return (
                           // The room a fresh turn scrolls up into is this min-height: pure
-                          // layout, filled by the streaming reply, gone with the run.
+                          // layout, filled by the streaming reply. It stays after the run —
+                          // collapsing it would shift the reader — and moves to the next
+                          // turn with the anchor scroll.
                           <div
                             key={group.key}
-                            className={cn('flex flex-col gap-6', isRunning && isLiveTurn && 'min-h-[50cqh]')}
+                            className={cn('flex flex-col gap-6', isLiveTurn && group.opensTurn && 'min-h-[50cqh]')}
                           >
                             {group.messages.map(message => (
                               <MessageScrollerItem
