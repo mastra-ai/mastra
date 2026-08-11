@@ -1,7 +1,11 @@
 /** @type {import('@docusaurus/plugin-content-docs').SidebarsConfig} */
 const sidebars = {
   integrationsSidebar: [
-    'index',
+    {
+      type: 'doc',
+      id: 'index',
+      label: 'Overview',
+    },
     {
       type: 'category',
       label: 'Channels',
