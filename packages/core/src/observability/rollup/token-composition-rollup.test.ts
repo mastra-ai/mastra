@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
+import { SpanType } from '../types';
 import {
   CACHE_HIT_RATE_FORMULA,
   formatTokenCompositionRollup,
@@ -55,6 +56,32 @@ describe('rollupTokenComposition', () => {
     expect(rollup.estimateDelta.samples).toBe(5);
     expect(rollup.estimateDelta.meanSigned).toBeCloseTo(-13 / 5, 10);
     expect(rollup.estimateDelta.meanAbsolute).toBeCloseTo(17 / 5, 10);
+  });
+
+  it('computes estimator bias only over steps carrying both an estimate and a provider total', () => {
+    const withEstimate = (id: string, totalEstimated: number, inputTokens?: number) => ({
+      id,
+      traceId: 't',
+      spanId: id,
+      parentSpanId: 'gen-bias',
+      type: SpanType.MODEL_STEP,
+      attributes: {
+        promptRegions: { method: 'tokenx-estimate', totalEstimated, regions: { system: totalEstimated } },
+        ...(inputTokens === undefined ? {} : { usage: { inputTokens } }),
+      },
+    });
+
+    // 110 estimated against 100 reported is a 10% bias. The second span carries
+    // a large estimate but no provider total, so it must not enter the ratio.
+    const rollup = rollupTokenComposition([withEstimate('a', 110, 100), withEstimate('b', 9000)] as any);
+
+    expect(rollup.estimateDelta.samples).toBe(1);
+    expect(rollup.estimateDelta.biasFraction).toBeCloseTo(0.1, 10);
+    expect(rollup.regions.totalEstimated).toBe(9110);
+  });
+
+  it('reports no bias when no step carries a provider total', () => {
+    expect(rollupTokenComposition([]).estimateDelta.biasFraction).toBeUndefined();
   });
 
   it('counts prefix-change observations without inventing a value for the first step', () => {

@@ -1573,7 +1573,9 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             stepSpanForRegions.update({
               attributes: {
                 promptRegions: attributePromptRegions({ messageList, inputMessages }),
-                promptPrefixChangedFromPreviousStep: prefixChanged,
+                // Omitted rather than set undefined on the first step: consumers
+                // distinguish "first step" from "instrumented" by absence.
+                ...(prefixChanged === undefined ? {} : { promptPrefixChangedFromPreviousStep: prefixChanged }),
               },
             });
           } catch (error) {

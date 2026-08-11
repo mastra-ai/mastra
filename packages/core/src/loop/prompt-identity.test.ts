@@ -26,6 +26,11 @@ import { createTestMastra, mockDate } from './test-utils/utils';
  *   CAPTURE_PROMPT_IDENTITY_BASELINE=1 vitest run src/loop/prompt-identity.test.ts
  *
  * and state the intentional prompt-assembly change in the commit message.
+ *
+ * Scope: this guards prompt BYTES, not the instrumentation. It passes whether
+ * or not the region-attribution seam fires — that is covered by
+ * agent/message-list/region-attribution.test.ts and by the span snapshots in
+ * observability/mastra.
  */
 
 const FIXTURE_PATH = join(__dirname, '__fixtures__', 'prompt-identity-baseline.json');

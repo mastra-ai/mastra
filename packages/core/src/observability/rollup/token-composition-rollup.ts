@@ -64,6 +64,13 @@ export interface TokenCompositionRollup {
     samples: number;
     meanAbsolute?: number;
     meanSigned?: number;
+    /**
+     * Signed relative bias of the estimator, computed ONLY over the steps that
+     * carried both an estimate and a provider total. Undefined when no step
+     * qualifies — never inferred from population totals, which include
+     * instrumented steps whose usage never landed.
+     */
+    biasFraction?: number;
   };
   /** Steps whose prompt prefix changed from the previous step (cache-invalidating). */
   prefixChanges: {
@@ -107,6 +114,8 @@ export function rollupTokenComposition(spans: AnyExportedSpan[]): TokenCompositi
   let totalEstimated = 0;
 
   const deltas: number[] = [];
+  let estimatedOverSampled = 0;
+  let providerOverSampled = 0;
   let prefixObserved = 0;
   let prefixChanged = 0;
 
@@ -152,6 +161,12 @@ export function rollupTokenComposition(spans: AnyExportedSpan[]): TokenCompositi
       const providerTotal = attributes.usage?.inputTokens;
       if (providerTotal !== undefined) {
         deltas.push(regions.totalEstimated - providerTotal);
+        // Bias is a ratio, so it may only be computed over the spans that
+        // contributed BOTH an estimate and a provider total. Summing the
+        // estimate over a larger population than the delta samples silently
+        // understates the bias.
+        estimatedOverSampled += regions.totalEstimated;
+        providerOverSampled += providerTotal;
       }
     }
 
@@ -188,6 +203,8 @@ export function rollupTokenComposition(spans: AnyExportedSpan[]): TokenCompositi
       samples: deltas.length,
       meanAbsolute: deltas.length ? deltas.reduce((sum, d) => sum + Math.abs(d), 0) / deltas.length : undefined,
       meanSigned: deltas.length ? deltas.reduce((sum, d) => sum + d, 0) / deltas.length : undefined,
+      biasFraction:
+        providerOverSampled > 0 ? (estimatedOverSampled - providerOverSampled) / providerOverSampled : undefined,
     },
     prefixChanges: { observed: prefixObserved, changed: prefixChanged },
   };
@@ -201,7 +218,9 @@ export function formatTokenCompositionRollup(rollup: TokenCompositionRollup): st
   lines.push('Token composition rollup (tokens by type; no pricing by design)');
   lines.push(`cache-hit rate formula: ${rollup.formula}`);
   lines.push(`  computed over steps whose provider reported cache fields`);
-  lines.push(`  (\`text\` is the provider's non-cached input total; no provider breaks out audio/image today)`);
+  lines.push(`  (\`text\` is the provider's non-cached input total; the Mastra usage`);
+  lines.push(`   extractor does not populate inputDetails.audio/image, so both land in \`text\`)`);
+  lines.push(`  replayed steps from the LLM response cache are counted as steps and are not distinguishable here`);
   lines.push('');
   lines.push(`steps: ${rollup.steps.total} total`);
   lines.push(`  reported ${rollup.steps.reported} | unreported ${rollup.steps.unreported}`);
@@ -223,12 +242,10 @@ export function formatTokenCompositionRollup(rollup: TokenCompositionRollup): st
   lines.push(`  ${'TOTAL'.padEnd(32)} ${rollup.regions.totalEstimated}`);
   // Region shares are estimates. The bias belongs in the same glance as the
   // table it distorts, not eight lines below it.
-  if (rollup.estimateDelta.meanSigned !== undefined && rollup.regions.totalEstimated > 0) {
-    const estimatedPerSample = rollup.regions.totalEstimated / Math.max(1, rollup.estimateDelta.samples);
-    const providerPerSample = estimatedPerSample - rollup.estimateDelta.meanSigned;
-    const bias = providerPerSample > 0 ? rollup.estimateDelta.meanSigned / providerPerSample : undefined;
-    lines.push(`  (estimate bias vs provider-reported input: ${bias === undefined ? 'n/a' : pct(bias)})`);
-  }
+  lines.push(
+    `  (estimate bias vs provider-reported input: ${pct(rollup.estimateDelta.biasFraction)}` +
+      `, over ${rollup.estimateDelta.samples}/${rollup.steps.total - rollup.steps.uninstrumented} instrumented steps)`,
+  );
   lines.push('');
   const spt = rollup.stepsPerTurn;
   lines.push(

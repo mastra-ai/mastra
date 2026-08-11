@@ -39,6 +39,13 @@ function main() {
     );
     process.exit(2);
   }
+
+  if (rollup.steps.uninstrumented === rollup.steps.total) {
+    // Every span predates the instrumentation: the region table above is an
+    // all-zero table, which reads like a finding rather than a stale capture.
+    console.error(`\nno MODEL_STEP span in ${file} carries promptRegions — these spans predate the instrumentation`);
+    process.exit(2);
+  }
 }
 
 main();

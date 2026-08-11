@@ -336,6 +336,9 @@ export interface ModelStepAttributes extends AIBaseAttributes {
    * Whether this step's prompt prefix changed relative to the previous step in
    * the same run (a changed prefix invalidates provider prompt caches).
    * Undefined on the first step. Emitted on MODEL_STEP only.
+   *
+   * Comparison granularity is per-message, so an append INSIDE the trailing
+   * message reads as a change. The bias is toward over-reporting invalidation.
    */
   promptPrefixChangedFromPreviousStep?: boolean;
   /** Reason this step finished (stop, tool-calls, length, etc.) */
