@@ -120,6 +120,104 @@ describe('NestJS Adapter - Auth and Rate Limiting', () => {
     expect(response.status).toBe(200);
   });
 
+  it('passes a Web Request with readable headers to authorizeUser', async () => {
+    let receivedRequest: unknown;
+
+    vi.spyOn(context.mastra, 'getServer').mockReturnValue({
+      auth: {
+        protected: ['/*'],
+        public: [],
+        authenticateToken: async (token: string) => {
+          if (token === 'valid') {
+            return { id: 'user-1' };
+          }
+          return null;
+        },
+        authorizeUser: async (_user: unknown, request: unknown) => {
+          receivedRequest = request;
+          if (!(request instanceof Request)) {
+            return false;
+          }
+          return request.headers.get('cookie')?.includes('session=abc') === true;
+        },
+      },
+    } as any);
+
+    const moduleRef = await Test.createTestingModule({
+      imports: [
+        MastraModule.register({
+          mastra: context.mastra,
+        }),
+      ],
+    }).compile();
+
+    app = moduleRef.createNestApplication();
+    expressApp = app.getHttpAdapter().getInstance() as Application;
+    await app.init();
+
+    const response = await executeExpressRequest(expressApp, {
+      method: 'GET',
+      path: '/api/agents',
+      headers: {
+        authorization: 'Bearer valid',
+        cookie: 'session=abc',
+      },
+    });
+
+    expect(receivedRequest).toBeInstanceOf(Request);
+    expect((receivedRequest as Request).headers.get('cookie')).toBe('session=abc');
+    expect(response.status).toBe(200);
+  });
+
+  it('passes a Web Request with readable headers to authorize context.req', async () => {
+    let receivedRequest: unknown;
+
+    vi.spyOn(context.mastra, 'getServer').mockReturnValue({
+      auth: {
+        protected: ['/*'],
+        public: [],
+        authenticateToken: async (token: string) => {
+          if (token === 'valid') {
+            return { id: 'user-1' };
+          }
+          return null;
+        },
+        authorize: async (_path: string, _method: string, _user: unknown, authContext: { req?: unknown }) => {
+          receivedRequest = authContext.req;
+          if (!(authContext.req instanceof Request)) {
+            return false;
+          }
+          return authContext.req.headers.get('cookie')?.includes('session=abc') === true;
+        },
+      },
+    } as any);
+
+    const moduleRef = await Test.createTestingModule({
+      imports: [
+        MastraModule.register({
+          mastra: context.mastra,
+        }),
+      ],
+    }).compile();
+
+    app = moduleRef.createNestApplication();
+    expressApp = app.getHttpAdapter().getInstance() as Application;
+    await app.init();
+
+    const response = await executeExpressRequest(expressApp, {
+      method: 'GET',
+      path: '/api/agents',
+      headers: {
+        authorization: 'Bearer valid',
+        cookie: 'session=abc',
+      },
+    });
+
+    expect(receivedRequest).toBeInstanceOf(Request);
+    expect((receivedRequest as Request).headers.get('cookie')).toBe('session=abc');
+    expect(response.status).toBe(200);
+  });
+
   it('should only allow query apiKey auth when explicitly enabled', async () => {
     vi.spyOn(context.mastra, 'getServer').mockReturnValue({
       auth: {
