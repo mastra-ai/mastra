@@ -314,13 +314,13 @@ describe('MastraStateAdapter', () => {
       expect(thread?.metadata).toMatchObject({
         ...legacyMetadata(),
         channel_subscribed: 'true',
-        channel_agentId: 'bot-a',
+        channel_ownerId: 'bot-a',
       });
     });
 
     it('resolves only the thread scoped to its own agent id', async () => {
-      await seedThread('thread-a', { ...legacyMetadata(), channel_agentId: 'bot-a', channel_subscribed: 'true' });
-      await seedThread('thread-b', { ...legacyMetadata(), channel_agentId: 'bot-b' });
+      await seedThread('thread-a', { ...legacyMetadata(), channel_ownerId: 'bot-a', channel_subscribed: 'true' });
+      await seedThread('thread-b', { ...legacyMetadata(), channel_ownerId: 'bot-b' });
 
       const botAAdapter = new MastraStateAdapter(memoryStore, () => 'bot-a');
       const botBAdapter = new MastraStateAdapter(memoryStore, () => 'bot-b');
@@ -335,13 +335,13 @@ describe('MastraStateAdapter', () => {
       const threadA = await memoryStore.getThreadById({ threadId: 'thread-a' });
       const threadB = await memoryStore.getThreadById({ threadId: 'thread-b' });
       expect((threadB?.metadata as Record<string, unknown>)?.channel_subscribed).toBe('true');
-      expect(threadA?.metadata).toMatchObject({ channel_agentId: 'bot-a', channel_subscribed: 'true' });
+      expect(threadA?.metadata).toMatchObject({ channel_ownerId: 'bot-a', channel_subscribed: 'true' });
     });
 
     it('keeps unscoped behavior for adapters constructed without an owner getter', async () => {
       await seedThread('claimed-by-someone', {
         ...legacyMetadata(),
-        channel_agentId: 'bot-a',
+        channel_ownerId: 'bot-a',
         channel_subscribed: 'true',
       });
 
@@ -355,7 +355,7 @@ describe('MastraStateAdapter', () => {
     it('keeps unscoped behavior when the owner getter returns null', async () => {
       await seedThread('claimed-by-someone', {
         ...legacyMetadata(),
-        channel_agentId: 'bot-a',
+        channel_ownerId: 'bot-a',
         channel_subscribed: 'true',
       });
 

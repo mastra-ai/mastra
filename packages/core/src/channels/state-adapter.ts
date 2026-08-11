@@ -240,14 +240,14 @@ export class MastraStateAdapter implements StateAdapter {
 
   /**
    * Claim stamp for write paths: when an owner id is known and the thread has
-   * not been claimed yet, include `channel_agentId` so the write adopts the
+   * not been claimed yet, include `channel_ownerId` so the write adopts the
    * legacy thread. Read paths (`isSubscribed`) never claim.
    */
   private ownerStamp(metadata: Record<string, unknown> | undefined): Record<string, unknown> {
     const ownerId = this.getOwnerId?.() ?? null;
     if (ownerId === null) return {};
-    if (metadata && 'channel_agentId' in metadata) return {};
-    return { channel_agentId: ownerId };
+    if (metadata && 'channel_ownerId' in metadata) return {};
+    return { channel_ownerId: ownerId };
   }
 
   /**
@@ -255,7 +255,7 @@ export class MastraStateAdapter implements StateAdapter {
    * External thread IDs are stored in `channel_externalThreadId` metadata.
    *
    * When an owner id is available, the lookup is scoped per agent via the
-   * `channel_agentId` metadata key, with a legacy fallback that matches only
+   * `channel_ownerId` metadata key, with a legacy fallback that matches only
    * threads no agent has claimed yet. Threads claimed by a different agent
    * are never returned. Without an owner id the old unscoped behavior is
    * preserved.
@@ -273,7 +273,7 @@ export class MastraStateAdapter implements StateAdapter {
 
     // Primary lookup: the thread scoped to this agent.
     const { threads: scoped } = await this.memoryStore.listThreads({
-      filter: { metadata: { channel_externalThreadId: externalThreadId, channel_agentId: ownerId } },
+      filter: { metadata: { channel_externalThreadId: externalThreadId, channel_ownerId: ownerId } },
       perPage: 1,
     });
     if (scoped[0]) return scoped[0];
@@ -288,7 +288,7 @@ export class MastraStateAdapter implements StateAdapter {
     return (
       candidates.find(candidate => {
         const metadata = (candidate.metadata ?? {}) as Record<string, unknown>;
-        return !('channel_agentId' in metadata);
+        return !('channel_ownerId' in metadata);
       }) ?? null
     );
   }

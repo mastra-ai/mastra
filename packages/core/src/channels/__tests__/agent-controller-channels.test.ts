@@ -277,7 +277,7 @@ describe('AgentControllerChannels', () => {
     });
   }, 30_000);
 
-  it('stamps newly mapped threads with the controller id as channel_agentId', async () => {
+  it('stamps newly mapped threads with the controller id as channel_ownerId', async () => {
     const { adapter, mastra, channels } = await createSetup();
     const chatThread = createChatThread(adapter, 'chan-agent:t-1');
 
@@ -294,7 +294,7 @@ describe('AgentControllerChannels', () => {
       channel_platform: 'discord',
       channel_externalThreadId: 'chan-agent:t-1',
       channel_externalChannelId: 'chan-agent',
-      channel_agentId: 'ctrl-1',
+      channel_ownerId: 'ctrl-1',
     });
   }, 30_000);
 

@@ -832,7 +832,7 @@ describe('AgentChannels', () => {
       expect(threads).toHaveLength(1);
       expect(threads[0]!.metadata).toMatchObject({
         ...legacyFilter,
-        channel_agentId: 'test-agent',
+        channel_ownerId: 'test-agent',
       });
     });
 
@@ -840,7 +840,7 @@ describe('AgentChannels', () => {
       const mockMastra = makeMastra();
       await agentChannels.initialize(mockMastra);
 
-      // Pre-upgrade thread: the three legacy metadata keys, no channel_agentId.
+      // Pre-upgrade thread: the three legacy metadata keys, no channel_ownerId.
       const memoryStore = await mockMastra.getStorage().getStore('memory');
       await memoryStore.saveThread({
         thread: {
@@ -867,7 +867,7 @@ describe('AgentChannels', () => {
       expect(threads[0]!.resourceId).toBe('original-owner');
       expect(threads[0]!.metadata).toMatchObject({
         ...legacyFilter,
-        channel_agentId: 'test-agent',
+        channel_ownerId: 'test-agent',
       });
     });
 
@@ -883,7 +883,7 @@ describe('AgentChannels', () => {
           resourceId: 'other-owner',
           createdAt: new Date(),
           updatedAt: new Date(),
-          metadata: { ...legacyFilter, channel_agentId: 'other-agent' },
+          metadata: { ...legacyFilter, channel_ownerId: 'other-agent' },
         },
       });
 
@@ -899,11 +899,11 @@ describe('AgentChannels', () => {
       // The other agent's thread is untouched.
       const otherThread = threads.find(t => t.id === 'other-agents-thread')!;
       expect(otherThread.resourceId).toBe('other-owner');
-      expect(otherThread.metadata).toMatchObject({ ...legacyFilter, channel_agentId: 'other-agent' });
+      expect(otherThread.metadata).toMatchObject({ ...legacyFilter, channel_ownerId: 'other-agent' });
 
       // A fresh thread was created for this agent, stamped with its own id.
       const ownThread = threads.find(t => t.id !== 'other-agents-thread')!;
-      expect(ownThread.metadata).toMatchObject({ ...legacyFilter, channel_agentId: 'test-agent' });
+      expect(ownThread.metadata).toMatchObject({ ...legacyFilter, channel_ownerId: 'test-agent' });
     });
 
     it('gives two agents their own threads for the same external conversation', async () => {
@@ -938,7 +938,7 @@ describe('AgentChannels', () => {
         perPage: 10,
       });
       expect(threads).toHaveLength(2);
-      const agentIds = threads.map(t => (t.metadata as any).channel_agentId).sort();
+      const agentIds = threads.map(t => (t.metadata as any).channel_ownerId).sort();
       expect(agentIds).toEqual(['agent-a', 'agent-b']);
     });
   });

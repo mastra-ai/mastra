@@ -1521,10 +1521,10 @@ export class AgentChannels {
       channel_externalChannelId: channelId,
     };
 
-    const agentId = this.getOwnerId();
-    if (agentId === null) {
+    const ownerId = this.getOwnerId();
+    if (ownerId === null) {
       // No owner bound yet — scoping is impossible; behave exactly as before
-      // and never stamp a null agent id.
+      // and never stamp a null owner id.
       const { threads } = await memoryStore.listThreads({
         filter: { metadata: legacyMetadata },
         perPage: 1,
@@ -1532,7 +1532,7 @@ export class AgentChannels {
       return { thread: threads[0], memoryStore, metadata: legacyMetadata };
     }
 
-    const metadata = { ...legacyMetadata, channel_agentId: agentId };
+    const metadata = { ...legacyMetadata, channel_ownerId: ownerId };
 
     // Primary lookup: threads already scoped to this agent.
     const { threads: scoped } = await memoryStore.listThreads({
@@ -1541,7 +1541,7 @@ export class AgentChannels {
     });
     if (scoped[0]) return { thread: scoped[0], memoryStore, metadata };
 
-    // Legacy fallback: pre-upgrade threads carry no channel_agentId. Metadata
+    // Legacy fallback: pre-upgrade threads carry no channel_ownerId. Metadata
     // filters match subsets, so this query also returns threads claimed by
     // OTHER agents — post-filter to unclaimed rows only, oldest first so
     // adoption deterministically picks the original thread. If a conversation
@@ -1555,14 +1555,14 @@ export class AgentChannels {
     });
     const unclaimed = candidates.find(candidate => {
       const candidateMeta = (candidate.metadata ?? {}) as Record<string, unknown>;
-      return !('channel_agentId' in candidateMeta);
+      return !('channel_ownerId' in candidateMeta);
     });
     if (unclaimed) {
       // Lazily adopt the legacy thread: the first agent to touch it claims it
       // by stamping its own id, preserving all existing metadata.
       const claimed = await memoryStore.patchThread({
         id: unclaimed.id,
-        metadata: { ...((unclaimed.metadata ?? {}) as Record<string, unknown>), channel_agentId: agentId },
+        metadata: { ...((unclaimed.metadata ?? {}) as Record<string, unknown>), channel_ownerId: ownerId },
       });
       return { thread: claimed, memoryStore, metadata };
     }
