@@ -18,6 +18,19 @@ function assistantMessage(parts: MastraDBMessage['content']['parts']): TimelineE
   };
 }
 
+function userMessage(text: string): TimelineEntry {
+  return {
+    kind: 'message',
+    id: 'msg-0',
+    message: {
+      id: 'msg-0',
+      role: 'user',
+      createdAt: CREATED_AT,
+      content: { format: 2, parts: [{ type: 'text', text }] },
+    },
+  };
+}
+
 function renderLine(busy: boolean, entries: TimelineEntry[]) {
   const value: ChatTranscriptApi = {
     transcript: { ...initialTranscript, entries },
@@ -37,14 +50,15 @@ function renderLine(busy: boolean, entries: TimelineEntry[]) {
 }
 
 describe('ActivityLine', () => {
-  it('fills the gap while a run has nothing else to show', () => {
-    renderLine(true, []);
+  it('covers the silence between sending and the first output', () => {
+    renderLine(true, [userMessage('go on then')]);
 
     expect(screen.getByText('Thinking')).toBeInTheDocument();
   });
 
-  it('steps aside once a running tool row carries the activity', () => {
+  it('steps aside as soon as the run reaches for a tool', () => {
     renderLine(true, [
+      userMessage('go on then'),
       assistantMessage([
         {
           type: 'tool-invocation',
@@ -56,21 +70,23 @@ describe('ActivityLine', () => {
     expect(screen.queryByText('Thinking')).not.toBeInTheDocument();
   });
 
-  it('returns after that tool finishes, while the run keeps going', () => {
+  it('stays away between two tool calls, where the streamed answer already shows the run is alive', () => {
     renderLine(true, [
+      userMessage('go on then'),
       assistantMessage([
         {
           type: 'tool-invocation',
           toolInvocation: { state: 'result', toolCallId: 'call-1', toolName: 'view', args: {}, result: 'ok' },
         },
+        { type: 'text', text: 'Here is what the file holds' },
       ]),
     ]);
 
-    expect(screen.getByText('Thinking')).toBeInTheDocument();
+    expect(screen.queryByText('Thinking')).not.toBeInTheDocument();
   });
 
   it('says nothing when the run is idle', () => {
-    renderLine(false, []);
+    renderLine(false, [userMessage('go on then')]);
 
     expect(screen.queryByText('Thinking')).not.toBeInTheDocument();
   });

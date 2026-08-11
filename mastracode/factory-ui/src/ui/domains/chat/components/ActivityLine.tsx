@@ -2,23 +2,22 @@ import { Shimmer } from '@mastra/playground-ui/components/Shimmer';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
 import { useChatTranscript } from '../context/useChatTranscript';
-import { isTerminalInvocationState } from '../services/transcript';
 import type { TimelineEntry } from '../services/transcript';
 
-/** Whether the transcript already shows the run is alive: a running tool row, or a card waiting on the user. */
-function hasVisibleActivity(entries: TimelineEntry[]): boolean {
+/** The run has yet to put anything of its own on screen: nothing at all, or only the message that started it. */
+function awaitingFirstOutput(entries: TimelineEntry[]): boolean {
   const last = entries.at(-1);
-  if (!last) return false;
-  if (last.kind !== 'message') return true;
-  return (last.message.content.parts ?? []).some(
-    part => part.type === 'tool-invocation' && !isTerminalInvocationState(part.toolInvocation.state),
-  );
+  if (!last) return true;
+  return last.kind === 'message' && last.message.role === 'user';
 }
 
-/** Fills the gaps in a run: before the first token, between tool calls. The status line already announces the state. */
+/**
+ * Covers the silence between sending and the run's first output. Everything after that says its own state:
+ * a running tool sweeps its label, text arrives as it streams, and the composer ring carries the rest.
+ */
 export function ActivityLine() {
   const { busy, transcript } = useChatTranscript();
-  if (!busy || hasVisibleActivity(transcript.entries)) return null;
+  if (!busy || !awaitingFirstOutput(transcript.entries)) return null;
 
   return (
     <Txt as="p" variant="ui-sm" aria-hidden className="text-icon3 px-1.5 py-1">
