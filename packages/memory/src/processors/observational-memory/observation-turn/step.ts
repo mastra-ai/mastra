@@ -435,11 +435,34 @@ export class ObservationStep {
           reflectionHooks: om.composeHooks(undefined, { threadId, resourceId, trigger: 'turn-sync' }),
         });
 
-        return {
-          succeeded: true,
-          record: activation.record,
-          activatedMessageIds: activation.activatedMessageIds,
-        };
+        // blockAfter safety net: when pending tokens exceed blockAfter but activation
+        // doesn't bring them back below it, fall through to synchronous observation.
+        const blockAfter = om.getObservationConfig().blockAfter;
+        if (blockAfter) {
+          const postStatus = await om.getStatus({
+            threadId,
+            resourceId,
+            messages: observableMessages,
+          });
+          if (postStatus.pendingTokens >= blockAfter) {
+            omDebug(
+              `[OM:runThresholdObs] blockAfter exceeded post-activation (${postStatus.pendingTokens} >= ${blockAfter}), falling through to sync observation`,
+            );
+            // fall through to sync observation below
+          } else {
+            return {
+              succeeded: true,
+              record: activation.record,
+              activatedMessageIds: activation.activatedMessageIds,
+            };
+          }
+        } else {
+          return {
+            succeeded: true,
+            record: activation.record,
+            activatedMessageIds: activation.activatedMessageIds,
+          };
+        }
       }
     }
 
