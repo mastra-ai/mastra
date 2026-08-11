@@ -236,14 +236,17 @@ export function formatTokenCompositionRollup(rollup: TokenCompositionRollup): st
   );
   lines.push('');
   lines.push(`prompt regions (estimated, method: ${rollup.regions.methods.join(', ') || 'n/a'})`);
-  for (const [region, tokens] of Object.entries(rollup.regions.totals).sort((a, b) => b[1] - a[1])) {
-    lines.push(`  ${region.padEnd(32)} ${tokens}`);
+  const regionEntries = Object.entries(rollup.regions.totals).sort((a, b) => b[1] - a[1]);
+  // Width from the longest key: dynamic `tagged-system:<tag>` names overflow any fixed pad.
+  const width = Math.max(5, ...regionEntries.map(([region]) => region.length)) + 2;
+  for (const [region, tokens] of regionEntries) {
+    lines.push(`  ${region.padEnd(width)} ${tokens}`);
   }
-  lines.push(`  ${'TOTAL'.padEnd(32)} ${rollup.regions.totalEstimated}`);
+  lines.push(`  ${'TOTAL'.padEnd(width)} ${rollup.regions.totalEstimated}`);
   // Region shares are estimates. The bias belongs in the same glance as the
   // table it distorts, not eight lines below it.
   lines.push(
-    `  (estimate bias vs provider-reported input: ${pct(rollup.estimateDelta.biasFraction)}` +
+    `  (token-weighted estimate bias vs provider-reported input: ${pct(rollup.estimateDelta.biasFraction)}` +
       `, over ${rollup.estimateDelta.samples}/${rollup.steps.total - rollup.steps.uninstrumented} instrumented steps)`,
   );
   lines.push('');
