@@ -5,7 +5,6 @@
     "claude-fable-5",
     "claude-haiku-4-5",
     "claude-haiku-4-5-20251001",
-    "claude-haiku-4-5-free",
     "claude-opus-4-1-20250805",
     "claude-opus-4-5-20251101",
     "claude-opus-4-6",
@@ -127,7 +126,6 @@
     "claude-3-opus",
     "claude-haiku-4-5",
     "claude-haiku-4-5-20251001",
-    "claude-haiku-4-5-free",
     "claude-opus-4-1-20250805",
     "claude-opus-4-5-20251101",
     "claude-opus-4-6",
@@ -279,7 +277,6 @@
   ],
   "structuredOutput": [
     "auto",
-    "claude-haiku-4-5-free",
     "claude-sonnet-5",
     "codestral-2508",
     "custom",

@@ -1,5 +1,30 @@
 # @mastra/playground-ui
 
+## 48.0.0-alpha.14
+
+### Patch Changes
+
+- Button icons now fade with the rest of the button on hover instead of snapping to full opacity. ([#21208](https://github.com/mastra-ai/mastra/pull/21208))
+
+  The `duration-normal` and `duration-slow` classes now apply the durations they name. Tailwind generates no utility for a `--duration-*` token, so both classes matched nothing and every transition using them silently ran at the 150ms default. They now run at 200ms and 300ms.
+
+- Sidebar nav rows now place their trailing action in the layout flow instead of overlaying the row. A row with an `action` renders as a flex pair — label then action — so the action can never sit on top of the label, and hover/active backgrounds paint the whole row including the action. ([#21202](https://github.com/mastra-ai/mastra/pull/21202))
+
+- Fixed deep links to nested spans in the trace timeline. Selecting a nested span from a URL now expands its ancestors and scrolls the span into view. ([#20969](https://github.com/mastra-ai/mastra/pull/20969))
+
+- Dropdown menus and hover cards no longer jump to the top-left corner or drift across the screen when their trigger is hidden or resized while the popup is open. Positioners now honour Floating UI's hidden-anchor state, and `MainSidebar.NavLink` accepts a `ref` so callers can anchor popups to the stable row box instead of a control that comes and goes on hover. ([#21202](https://github.com/mastra-ai/mastra/pull/21202))
+
+- Improved the Sankey chart for callers that build interactive column controls. ([#21181](https://github.com/mastra-ai/mastra/pull/21181))
+
+  - Column headers can show descriptions on hover or keyboard focus.
+  - Callers can suppress built-in column labels and render a custom header row.
+  - Nodes and ribbons animate continuously into their new positions when column order changes.
+
+- Updated dependencies [[`9571e3a`](https://github.com/mastra-ai/mastra/commit/9571e3a06ed2c5220196460bf82a2129255c3a8b), [`d6c56f9`](https://github.com/mastra-ai/mastra/commit/d6c56f951db3213330b98b0abafa9778c8770e58), [`9571e3a`](https://github.com/mastra-ai/mastra/commit/9571e3a06ed2c5220196460bf82a2129255c3a8b), [`acc3513`](https://github.com/mastra-ai/mastra/commit/acc3513b19f79bf0a7ec2998694580edca54086c), [`94e7ae9`](https://github.com/mastra-ai/mastra/commit/94e7ae970b37c888cd1244ef013292639a2fe6d1), [`6a667b4`](https://github.com/mastra-ai/mastra/commit/6a667b4b7cd6a93fe41fcdd357b08c5a8c09b9ab), [`2440e09`](https://github.com/mastra-ai/mastra/commit/2440e096ea6c2def1ccc1eb2d0f3f5b88c4af940), [`a59049b`](https://github.com/mastra-ai/mastra/commit/a59049b1652a13efff66ac826326b5ed9a550342)]:
+  - @mastra/core@1.58.0-alpha.13
+  - @mastra/client-js@1.39.0-alpha.13
+  - @mastra/react@1.4.2-alpha.13
+
 ## 48.0.0-alpha.13
 
 ### Patch Changes

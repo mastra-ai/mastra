@@ -1,5 +1,21 @@
 # @mastra/gcs
 
+## 0.3.2-alpha.0
+
+### Patch Changes
+
+- Fixed `mkdir()` on Google Cloud Storage and S3 workspaces. An empty directory is now created and stays visible to `readdir()`, `exists()` and `stat()` until you remove it with `rmdir()`. ([#21212](https://github.com/mastra-ai/mastra/pull/21212))
+
+  **Related fixes**
+
+  - `readdir()` reports a nested directory as its first path segment. After `mkdir('/a/b')`, `readdir('/')` returns one entry named `a`.
+  - A listing with `recursive` and `extension` returns files only. Directories no longer pass the extension filter.
+  - A path with a trailing slash always means a directory. `stat('/x/')` and `isFile('/x/')` no longer match a file named `x`, and `readFile('/x/')` throws `FileNotFoundError` instead of returning empty content.
+  - `mkdir()` works with a credential that can write but not read.
+
+- Updated dependencies [[`9571e3a`](https://github.com/mastra-ai/mastra/commit/9571e3a06ed2c5220196460bf82a2129255c3a8b), [`d6c56f9`](https://github.com/mastra-ai/mastra/commit/d6c56f951db3213330b98b0abafa9778c8770e58), [`9571e3a`](https://github.com/mastra-ai/mastra/commit/9571e3a06ed2c5220196460bf82a2129255c3a8b), [`acc3513`](https://github.com/mastra-ai/mastra/commit/acc3513b19f79bf0a7ec2998694580edca54086c), [`94e7ae9`](https://github.com/mastra-ai/mastra/commit/94e7ae970b37c888cd1244ef013292639a2fe6d1), [`6a667b4`](https://github.com/mastra-ai/mastra/commit/6a667b4b7cd6a93fe41fcdd357b08c5a8c09b9ab), [`2440e09`](https://github.com/mastra-ai/mastra/commit/2440e096ea6c2def1ccc1eb2d0f3f5b88c4af940), [`a59049b`](https://github.com/mastra-ai/mastra/commit/a59049b1652a13efff66ac826326b5ed9a550342)]:
+  - @mastra/core@1.58.0-alpha.13
+
 ## 0.3.1
 
 ### Patch Changes

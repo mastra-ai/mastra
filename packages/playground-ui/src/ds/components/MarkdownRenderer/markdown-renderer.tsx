@@ -7,15 +7,19 @@ import { Code } from '@/ds/components/Code';
 import { CopyButton } from '@/ds/components/CopyButton';
 import { cn } from '@/lib/utils';
 
+export type MarkdownExternalLinkTarget = 'tab' | 'window';
+
 export type MarkdownRendererProps = {
   children: string;
+  externalLinkTarget?: MarkdownExternalLinkTarget;
 };
 
-export function MarkdownRenderer({ children }: MarkdownRendererProps) {
+export function MarkdownRenderer({ children, externalLinkTarget = 'tab' }: MarkdownRendererProps) {
   const processedText = children.replace(/\\n/g, '\n');
+  const components = externalLinkTarget === 'window' ? WINDOW_COMPONENTS : COMPONENTS;
 
   return (
-    <Markdown remarkPlugins={[remarkGfm]} components={COMPONENTS} className="space-y-3">
+    <Markdown remarkPlugins={[remarkGfm]} components={components} className="space-y-3">
       {processedText}
     </Markdown>
   );
@@ -64,6 +68,48 @@ function childrenTakeAllStringContents(element: any): string {
   return '';
 }
 
+const POPUP_WINDOW_FEATURES = 'popup=yes,width=720,height=800,resizable=yes,scrollbars=yes';
+
+const createMarkdownLink =
+  (externalLinkTarget: MarkdownExternalLinkTarget): NonNullable<Components['a']> =>
+  ({ children, href, onClick, ...props }) => {
+    const isExternal = /^https?:\/\//i.test(href ?? '');
+    const handleClick: React.MouseEventHandler<HTMLAnchorElement> = event => {
+      onClick?.(event);
+      if (
+        event.defaultPrevented ||
+        !isExternal ||
+        externalLinkTarget !== 'window' ||
+        event.button !== 0 ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.shiftKey ||
+        event.altKey
+      ) {
+        return;
+      }
+
+      const popup = window.open(href, '_blank', POPUP_WINDOW_FEATURES);
+      if (!popup) return;
+
+      popup.opener = null;
+      event.preventDefault();
+    };
+
+    return (
+      <a
+        className="underline underline-offset-2"
+        href={href}
+        {...props}
+        target={isExternal ? '_blank' : undefined}
+        rel={isExternal ? 'noopener noreferrer' : undefined}
+        onClick={handleClick}
+      >
+        {children}
+      </a>
+    );
+  };
+
 // Create component wrappers with className
 const COMPONENTS: Components = {
   h1: ({ children, ...props }) => (
@@ -96,21 +142,7 @@ const COMPONENTS: Components = {
       {children}
     </strong>
   ),
-  a: ({ children, href, ...props }) => {
-    const isExternal = /^https?:\/\//i.test(href ?? '');
-
-    return (
-      <a
-        className="underline underline-offset-2"
-        href={href}
-        {...props}
-        target={isExternal ? '_blank' : undefined}
-        rel={isExternal ? 'noopener noreferrer' : undefined}
-      >
-        {children}
-      </a>
-    );
-  },
+  a: createMarkdownLink('tab'),
   blockquote: ({ children, ...props }) => (
     <blockquote className="border-neutral6 border-l-2 pl-4" {...props}>
       {children}
@@ -181,6 +213,11 @@ const COMPONENTS: Components = {
     </p>
   ),
   hr: ({ ...props }) => <hr className="border-neutral6/20" {...props} />,
+};
+
+const WINDOW_COMPONENTS: Components = {
+  ...COMPONENTS,
+  a: createMarkdownLink('window'),
 };
 
 export default MarkdownRenderer;

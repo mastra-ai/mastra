@@ -458,6 +458,8 @@ export class PlatformSandbox extends MastraSandbox {
       ...(id !== undefined && { id }),
       accessToken: this._client.accessToken,
       projectId: this._client.projectId,
+      ...(this._client.sessionId !== undefined && { sessionId: this._client.sessionId }),
+      ...(this._client.threadId !== undefined && { threadId: this._client.threadId }),
       fetch: this._client.fetch,
       environmentId: this._environmentId,
       ...(options.sandboxId !== undefined && { sandboxId: options.sandboxId }),
@@ -501,9 +503,12 @@ export class PlatformSandbox extends MastraSandbox {
    * awaiter.
    */
   private async _doStart(): Promise<void> {
+    const startedAt = Date.now();
     if (this._sandboxId) {
       try {
+        const requestStartedAt = Date.now();
         const response = await this._client.request(`/sandbox/${encodeURIComponent(this._sandboxId)}`);
+        const requestMs = Date.now() - requestStartedAt;
         const json = (await response.json()) as CreateSandboxResponse;
         // A destroyed record (idle GC, manual delete) is not reattachable —
         // treat it like a missing sandbox so we fall through to a fresh
@@ -511,6 +516,7 @@ export class PlatformSandbox extends MastraSandbox {
         if (!json.destroyedAt) {
           this._createdAt = json.createdAt ? new Date(json.createdAt) : new Date();
           this._populateAddressFromResponse(json);
+          this._logStartComplete(json.id, startedAt, requestMs, 'reattach');
           return;
         }
         this._sandboxId = undefined;
@@ -539,6 +545,7 @@ export class PlatformSandbox extends MastraSandbox {
     // 5xx responses with a short backoff is safe and keeps a single flaky
     // window from killing the caller's whole workflow.
     let response: Response | undefined;
+    const requestStartedAt = Date.now();
     for (let attempt = 1; ; attempt++) {
       try {
         response = await this._client.request('/sandbox', {
@@ -553,10 +560,33 @@ export class PlatformSandbox extends MastraSandbox {
         await new Promise(resolve => setTimeout(resolve, CREATE_RETRY_BASE_DELAY_MS * attempt));
       }
     }
+    const requestMs = Date.now() - requestStartedAt;
     const json = (await response.json()) as CreateSandboxResponse;
     this._sandboxId = json.id;
     this._createdAt = json.createdAt ? new Date(json.createdAt) : new Date();
     this._populateAddressFromResponse(json);
+    this._logStartComplete(json.id, startedAt, requestMs, 'provision');
+  }
+
+  /**
+   * One timing summary per completed `start()` — the whole
+   * `PlatformSandbox`-visible boot in a single greppable line.
+   *
+   * `requestMs` is the proxy round-trip (`GET /sandbox/:id` on reattach,
+   * `POST /sandbox` including transient-5xx retries on provision) — a black
+   * box from this side that rolls up Railway RPC, sidecar launch, and the
+   * proxy's discovery exec. Sidecar probe cost is intentionally NOT here: the
+   * probe is fire-and-forget and outlives `start()` by design, so its
+   * duration lands on the `platform-workspace probe ok` line instead.
+   */
+  private _logStartComplete(sandboxId: string, startedAt: number, requestMs: number, mode: string): void {
+    this.logger.info('platform-workspace start complete', {
+      sandboxId,
+      sessionId: this._client.sessionId,
+      mode,
+      totalMs: Date.now() - startedAt,
+      requestMs,
+    });
   }
 
   /**
@@ -604,11 +634,14 @@ export class PlatformSandbox extends MastraSandbox {
    *   was superseded by a teardown or a new `start()`, so we skip the `set()`.
    */
   private async _probeSidecarThenRegister(sandboxId: string, instanceUrl: string, generation: number): Promise<void> {
-    const deadline = Date.now() + SIDECAR_PROBE_TIMEOUT_MS;
+    const probeStartedAt = Date.now();
+    const deadline = probeStartedAt + SIDECAR_PROBE_TIMEOUT_MS;
     const fetchFn = this._privateNetFetch ?? fetch;
+    let attempts = 0;
     while (Date.now() < deadline) {
       // Teardown or new start() superseded this probe — bail out early.
       if (generation !== this._probeGeneration) return;
+      attempts++;
       try {
         const res = await fetchFn(`${instanceUrl}/health`, {
           method: 'GET',
@@ -618,6 +651,15 @@ export class PlatformSandbox extends MastraSandbox {
         // Release the response body so the connection returns to the pool.
         await res.body?.cancel().catch(() => {});
         if (ok) {
+          // A ~1-attempt probe means the sidecar was ready when the proxy
+          // returned; hundreds of ms means it was still booting — the exact
+          // window that used to silently fall back to the lease path.
+          this.logger.info('platform-workspace probe ok', {
+            sandboxId,
+            sessionId: this._client.sessionId,
+            probeDurationMs: Date.now() - probeStartedAt,
+            attempts,
+          });
           // Sidecar is listening. Only populate if this probe is still current.
           if (generation === this._probeGeneration && this._sandboxId === sandboxId) {
             this._addressRegistry?.set(sandboxId, instanceUrl);
@@ -630,7 +672,12 @@ export class PlatformSandbox extends MastraSandbox {
       await new Promise(r => setTimeout(r, SIDECAR_PROBE_INTERVAL_MS));
     }
     // Sidecar never came up. Leave registry entry unset — every exec goes lease.
-    this.logger.warn('Sidecar never answered /health within probe window', { sandboxId });
+    this.logger.warn('platform-workspace probe timed out', {
+      sandboxId,
+      sessionId: this._client.sessionId,
+      timeoutMs: SIDECAR_PROBE_TIMEOUT_MS,
+      attempts,
+    });
   }
 
   /**
@@ -767,6 +814,11 @@ export class PlatformSandbox extends MastraSandbox {
     // or reattach) will re-populate the entry from the workspace-proxy's
     // response.
     this._addressRegistry?.delete(destroyedSandboxId);
+  }
+
+  /** Persist the configured recovery checkpoint when available. */
+  async snapshot(): Promise<void> {
+    await this.captureCheckpoint();
   }
 
   /**

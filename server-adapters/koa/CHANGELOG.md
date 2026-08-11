@@ -1,5 +1,31 @@
 # @mastra/koa
 
+## 1.7.0-alpha.13
+
+### Minor Changes
+
+- Added support for `createRoute()` routes configured through `server.apiRoutes`. ([#21184](https://github.com/mastra-ai/mastra/pull/21184))
+
+  ```ts
+  const route = createRoute({
+    method: 'POST',
+    path: '/items',
+    responseType: 'json',
+    bodySchema: z.object({ name: z.string() }),
+    handler: async ({ name }) => ({ name }),
+  });
+
+  const mastra = new Mastra({
+    server: { apiRoutes: [route] },
+  });
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`9571e3a`](https://github.com/mastra-ai/mastra/commit/9571e3a06ed2c5220196460bf82a2129255c3a8b), [`d6c56f9`](https://github.com/mastra-ai/mastra/commit/d6c56f951db3213330b98b0abafa9778c8770e58), [`9571e3a`](https://github.com/mastra-ai/mastra/commit/9571e3a06ed2c5220196460bf82a2129255c3a8b), [`acc3513`](https://github.com/mastra-ai/mastra/commit/acc3513b19f79bf0a7ec2998694580edca54086c), [`94e7ae9`](https://github.com/mastra-ai/mastra/commit/94e7ae970b37c888cd1244ef013292639a2fe6d1), [`6a667b4`](https://github.com/mastra-ai/mastra/commit/6a667b4b7cd6a93fe41fcdd357b08c5a8c09b9ab), [`2440e09`](https://github.com/mastra-ai/mastra/commit/2440e096ea6c2def1ccc1eb2d0f3f5b88c4af940), [`d6c56f9`](https://github.com/mastra-ai/mastra/commit/d6c56f951db3213330b98b0abafa9778c8770e58), [`a59049b`](https://github.com/mastra-ai/mastra/commit/a59049b1652a13efff66ac826326b5ed9a550342)]:
+  - @mastra/core@1.58.0-alpha.13
+  - @mastra/server@1.58.0-alpha.13
+
 ## 1.6.15-alpha.12
 
 ### Patch Changes

@@ -181,6 +181,8 @@ export const SOURCE_CONTROL_SCHEMAS: CollectionSchema[] = [
       sandbox_id: { type: 'text', nullable: true },
       sandbox_workdir: { type: 'text', nullable: true },
       materialized_at: { type: 'timestamp', nullable: true },
+      first_message_at: { type: 'timestamp', nullable: true },
+      first_meaningful_exec_at: { type: 'timestamp', nullable: true },
       created_at: { type: 'timestamp' },
       updated_at: { type: 'timestamp' },
     },
@@ -362,6 +364,10 @@ export interface SourceControlSession {
   sandboxId: string | null;
   sandboxWorkdir: string | null;
   materializedAt: Date | null;
+  /** When the first user message reached the session's agent. Write-once. */
+  firstMessageAt: Date | null;
+  /** When the agent's first successful sandbox exec finished. Write-once. */
+  firstMeaningfulExecAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -474,6 +480,21 @@ export interface SourceControlStorageHandle {
     create(input: CreateSourceControlSessionInput): Promise<SourceControlSession>;
     setSandbox(args: { id: string; sandboxId: string | null; sandboxWorkdir: string }): Promise<void>;
     markMaterialized(args: { id: string }): Promise<void>;
+    /**
+     * Record when the session's agent received its first user message.
+     * Write-once: the guarded update only lands while the column is still
+     * NULL, so retries and process restarts are no-ops. Keyed by the
+     * controller-facing `sessionId` (not the row id) because the caller —
+     * the session observer — only knows the controller resourceId.
+     */
+    markFirstMessage(args: { sessionId: string }): Promise<void>;
+    /**
+     * Record when the session's agent completed its first successful sandbox
+     * exec (TTFME anchor). Same write-once contract as `markFirstMessage`:
+     * guarded on the column being NULL, keyed by the controller-facing
+     * `sessionId`.
+     */
+    markFirstMeaningfulExec(args: { sessionId: string }): Promise<void>;
     delete(id: string): Promise<void>;
   };
 }
@@ -565,6 +586,8 @@ interface SessionDbRow extends Record<string, unknown> {
   sandbox_id: string | null;
   sandbox_workdir: string | null;
   materialized_at: Date | null;
+  first_message_at: Date | null;
+  first_meaningful_exec_at: Date | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -671,6 +694,8 @@ function toSession(row: SessionDbRow): SourceControlSession {
     sandboxId: row.sandbox_id,
     sandboxWorkdir: row.sandbox_workdir,
     materializedAt: row.materialized_at,
+    firstMessageAt: row.first_message_at,
+    firstMeaningfulExecAt: row.first_meaningful_exec_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -1227,6 +1252,7 @@ export class SourceControlStorage extends FactoryStorageDomain {
               sandbox_id: null,
               sandbox_workdir: null,
               materialized_at: null,
+              first_message_at: null,
               created_at: now,
               updated_at: now,
             });
@@ -1251,6 +1277,26 @@ export class SourceControlStorage extends FactoryStorageDomain {
         },
         markMaterialized: async ({ id }) => {
           await db().updateMany(SESSIONS, { id }, { materialized_at: new Date(), updated_at: new Date() });
+        },
+        markFirstMessage: async ({ sessionId }) => {
+          // `first_message_at: null` in the filter compiles to `IS NULL`, making
+          // this an atomic one-shot: concurrent callers and later messages
+          // match zero rows. Sessions without a source-control row (chat-only
+          // channels) are a zero-row no-op too.
+          await db().updateMany(
+            SESSIONS,
+            { session_id: sessionId, first_message_at: null },
+            { first_message_at: new Date(), updated_at: new Date() },
+          );
+        },
+        markFirstMeaningfulExec: async ({ sessionId }) => {
+          // Same atomic one-shot shape as markFirstMessage: the NULL filter
+          // makes concurrent callers and later execs zero-row no-ops.
+          await db().updateMany(
+            SESSIONS,
+            { session_id: sessionId, first_meaningful_exec_at: null },
+            { first_meaningful_exec_at: new Date(), updated_at: new Date() },
+          );
         },
         delete: async id => {
           await db().deleteMany(SESSIONS, { id });

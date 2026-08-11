@@ -409,6 +409,129 @@ const sidebars = {
     },
     {
       type: 'category',
+      label: 'Migrations',
+      collapsed: true,
+      items: [
+        {
+          type: 'doc',
+          id: 'migrations/agentnetwork',
+          label: 'AgentNetwork to .network()',
+        },
+        {
+          type: 'doc',
+          id: 'migrations/ai-sdk-v4-to-v5',
+          label: 'AI SDK v4 to v5',
+        },
+        {
+          type: 'doc',
+          id: 'migrations/mastra-cloud',
+          label: 'Mastra Cloud to Mastra platform',
+        },
+        {
+          type: 'doc',
+          id: 'migrations/vnext-to-standard-apis',
+          label: 'VNext to Standard APIs',
+        },
+        {
+          type: 'doc',
+          id: 'migrations/network-to-supervisor',
+          label: '.network() to Supervisor Agents',
+        },
+        {
+          type: 'category',
+          label: 'v1.0',
+          items: [
+            {
+              id: 'migrations/upgrade-to-v1/overview',
+              type: 'doc',
+              label: 'Overview',
+            },
+            {
+              id: 'migrations/upgrade-to-v1/agent',
+              type: 'doc',
+              label: 'Agents',
+            },
+            {
+              id: 'migrations/upgrade-to-v1/cli',
+              type: 'doc',
+              label: 'CLI',
+            },
+            {
+              id: 'migrations/upgrade-to-v1/client',
+              type: 'doc',
+              label: 'Client SDK',
+            },
+            {
+              id: 'migrations/upgrade-to-v1/deployment',
+              type: 'doc',
+              label: 'Deployment',
+            },
+            {
+              id: 'migrations/upgrade-to-v1/evals',
+              type: 'doc',
+              label: 'Evals',
+            },
+            {
+              id: 'migrations/upgrade-to-v1/mastra',
+              type: 'doc',
+              label: 'Mastra',
+            },
+            {
+              id: 'migrations/upgrade-to-v1/mcp',
+              type: 'doc',
+              label: 'MCP',
+            },
+            {
+              id: 'migrations/upgrade-to-v1/memory',
+              type: 'doc',
+              label: 'Memory',
+            },
+            {
+              id: 'migrations/upgrade-to-v1/processors',
+              type: 'doc',
+              label: 'Processors',
+            },
+            {
+              id: 'migrations/upgrade-to-v1/rag',
+              type: 'doc',
+              label: 'RAG',
+            },
+            {
+              id: 'migrations/upgrade-to-v1/storage',
+              type: 'doc',
+              label: 'Storage',
+            },
+            {
+              id: 'migrations/upgrade-to-v1/tools',
+              type: 'doc',
+              label: 'Tools',
+            },
+            {
+              id: 'migrations/upgrade-to-v1/tracing',
+              type: 'doc',
+              label: 'Tracing',
+            },
+            {
+              id: 'migrations/upgrade-to-v1/vectors',
+              type: 'doc',
+              label: 'Vectors',
+            },
+            {
+              id: 'migrations/upgrade-to-v1/voice',
+              type: 'doc',
+              label: 'Voice',
+            },
+            {
+              id: 'migrations/upgrade-to-v1/workflows',
+              type: 'doc',
+              label: 'Workflows',
+            },
+          ],
+        },
+      ],
+    },
+    {
+      type: 'category',
       label: 'Observability',
       collapsed: true,
       items: [
@@ -657,6 +780,7 @@ const sidebars = {
         { type: 'doc', id: 'storage/libsql', label: 'libSQL Storage' },
         { type: 'doc', id: 'storage/mongodb', label: 'MongoDB Storage' },
         { type: 'doc', id: 'storage/mssql', label: 'MSSQL Storage' },
+        { type: 'doc', id: 'storage/neon', label: 'Neon Storage' },
         { type: 'doc', id: 'storage/oracledb', label: 'OracleDB Storage' },
         { type: 'doc', id: 'storage/postgresql', label: 'PostgreSQL Storage' },
         { type: 'doc', id: 'storage/redis', label: 'Redis Storage' },
