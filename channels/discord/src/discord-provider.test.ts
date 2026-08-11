@@ -575,6 +575,47 @@ describe('DiscordProvider — storage resolution', () => {
     await provider.connect('agent-2');
     const records = await shared.listInstallations('discord');
     expect(records.map(r => r.agentId)).toContain('agent-2');
+
+    // …and the fallback's contents must come with it. Dropping the store would
+    // lose the install connect() already returned to the caller, so its route
+    // would answer "Unknown webhook" in the very process that created it.
+    expect(records.map(r => r.agentId)).toContain('agent-1');
+    expect(await provider.getInstallation('agent-1')).not.toBeNull();
+    // The app config too — without it nothing can verify an interaction.
+    expect(await shared.getConfig('discord')).not.toBeNull();
+  });
+
+  it('keeps what real storage already holds when the fallback disagrees', async () => {
+    const shared = new InMemoryChannelsStorage();
+    const persisted = new DiscordInstallStore(shared, process.env.MASTRA_ENCRYPTION_KEY);
+    await persisted.save({
+      id: 'i-persisted',
+      agentId: 'agent-1',
+      webhookId: 'w-persisted',
+      status: 'active',
+      guildIds: [GUILD],
+      installedAt: new Date('2026-01-01T00:00:00Z'),
+    });
+
+    // A pre-registration connect() writes a competing row for the same agent.
+    const provider = new DiscordProvider({ app: APP });
+    stubValidateApp();
+    await provider.connect('agent-1');
+
+    const mastra = {
+      getAgentById: () => undefined,
+      getServer: () => undefined,
+      getStorage: () => ({ init: async () => {}, getStore: async () => shared }),
+    };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (provider as any).__attach(mastra);
+
+    // The durable row wins — a migration that clobbered it would revoke a live
+    // webhook id on nothing more than the ordering of a process restart.
+    const install = await provider.getInstallation('agent-1');
+    expect(install?.webhookId).toBe('w-persisted');
+    const records = await shared.listInstallations('discord');
+    expect(records.filter(r => r.agentId === 'agent-1')).toHaveLength(1);
   });
 });
 

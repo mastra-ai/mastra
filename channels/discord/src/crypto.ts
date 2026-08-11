@@ -50,9 +50,11 @@ export function decrypt(value: string, passphrase: string): string {
   } catch (cause) {
     // GCM authentication failed. Node's own message ("Unsupported state or unable
     // to authenticate data") gives an operator nothing to act on, and this runs on
-    // the credential-load path — name the likely cause.
+    // the credential-load path — name both causes. A wrong key is the common one,
+    // but a corrupt stored value fails identically, and an operator who assumes
+    // the key would rotate a perfectly good one and lose the rest of the secrets.
     throw new Error(
-      'Failed to decrypt a stored Discord secret — the configured encryption key does not match the one it was encrypted with. Check `encryptionKey` on DiscordProvider or MASTRA_ENCRYPTION_KEY.',
+      'Failed to decrypt a stored Discord secret — either the configured encryption key does not match the one it was encrypted with, or the stored value is corrupt. Check `encryptionKey` on DiscordProvider or MASTRA_ENCRYPTION_KEY.',
       { cause },
     );
   }

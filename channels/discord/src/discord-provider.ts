@@ -91,6 +91,12 @@ export class DiscordProvider implements ChannelProvider {
    * storage — i.e. it was resolved before a `Mastra` instance was available.
    */
   #storeIsFallback = false;
+  /**
+   * A fallback store dropped by {@link __attach}, held until the next store
+   * access so its contents can be carried into the real storage. See
+   * {@link #migrateFallback}.
+   */
+  #pendingMigration?: DiscordInstallStore;
 
   constructor(config: DiscordProviderConfig = {}) {
     this.#config = config;
@@ -104,24 +110,27 @@ export class DiscordProvider implements ChannelProvider {
    * @internal
    */
   __attach(mastra: Mastra): void {
-    if (this.#mastra && this.#mastra !== mastra) {
+    const isNewInstance = this.#mastra != null && this.#mastra !== mastra;
+    // Drop the cached store when it belongs to a superseded Mastra, and when a
+    // public method (connect(), initialize(), …) ran before registration and
+    // pinned the provider to the in-memory fallback — otherwise installs keep
+    // going to memory and are lost on restart even though real storage is
+    // configured. Whatever that fallback holds was written before real storage
+    // was reachable, so hand it to the next store access to carry across rather
+    // than discarding it: a pre-registration connect() would otherwise return an
+    // installation that no longer exists by the time its route is hit.
+    if (isNewInstance || this.#storeIsFallback) {
+      if (this.#storeIsFallback) this.#pendingMigration = this.#store;
       this.#initPromise = null;
       this.#store = undefined;
       this.#storeIsFallback = false;
+    }
+    if (isNewInstance) {
       this.#adapters.clear();
       // The store-derived half of #configured belongs to the old instance; only
       // credentials supplied via config/env survive a re-attach. Without this,
       // getInfo() can report a stale isConfigured before initialize() re-runs.
       this.#configured = this.#suppliedAppConfig() != null;
-    } else if (this.#storeIsFallback) {
-      // A public method (connect(), initialize(), …) ran before registration and
-      // pinned the provider to the in-memory fallback. Drop it on this first
-      // attach so the next access re-resolves against the Mastra storage that is
-      // now available — otherwise installs keep going to memory and are lost on
-      // restart even though real storage is configured.
-      this.#initPromise = null;
-      this.#store = undefined;
-      this.#storeIsFallback = false;
     }
     this.#mastra = mastra;
   }
@@ -626,15 +635,56 @@ export class DiscordProvider implements ChannelProvider {
     if (this.#store) return this.#store;
     const encryptionKey = this.#config.encryptionKey ?? process.env.MASTRA_ENCRYPTION_KEY;
     const { storage, isFallback } = await this.#resolveStorage();
+    // Claim the pending fallback before the first await below so two concurrent
+    // callers can't both migrate it.
+    const pending = this.#pendingMigration;
+    this.#pendingMigration = undefined;
+    // Storage is still unavailable, so a new fallback would be an empty one —
+    // keep the store we already have instead of dropping its contents.
+    if (pending && isFallback) {
+      this.#storeIsFallback = true;
+      this.#store = pending;
+      return pending;
+    }
+    const store = new DiscordInstallStore(storage, encryptionKey);
+    if (pending) await this.#migrateFallback(pending, store);
     this.#storeIsFallback = isFallback;
-    this.#store = new DiscordInstallStore(storage, encryptionKey);
-    return this.#store;
+    this.#store = store;
+    return store;
+  }
+
+  /**
+   * Copy what a pre-registration store wrote into the real storage that has
+   * since become available. Anything already persisted wins — the real store is
+   * the durable record, and a stale in-memory row must not overwrite it. Both
+   * stores share an encryption key, so this round-trips through plaintext.
+   *
+   * Best-effort: a failure here must not take down `__attach`'s caller or the
+   * request that triggered the resolution. The provider still works against the
+   * real storage; only the pre-registration writes are missing, which is the
+   * behaviour before this migration existed.
+   */
+  async #migrateFallback(from: DiscordInstallStore, to: DiscordInstallStore): Promise<void> {
+    try {
+      const app = await from.getAppConfig();
+      if (app && !(await to.getAppConfig())) await to.saveAppConfig(app);
+      for (const install of await from.list()) {
+        if (await to.getByAgent(install.agentId)) continue;
+        await to.save(install);
+      }
+    } catch (error) {
+      console.warn(
+        '[Discord] Failed to carry pre-registration installations into Mastra storage; ' +
+          'connect() again to re-create them.',
+        error,
+      );
+    }
   }
 
   /**
    * Resolve the backing storage, reporting whether it is the in-memory fallback
-   * so {@link __attach} can drop a store that was built before Mastra was
-   * available.
+   * so {@link __attach} can re-resolve a store that was built before Mastra was
+   * available, carrying its contents across.
    */
   async #resolveStorage(): Promise<{ storage: ChannelsStorage; isFallback: boolean }> {
     if (this.#config.storage) return { storage: this.#config.storage, isFallback: false };
