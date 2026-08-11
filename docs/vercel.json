@@ -852,17 +852,17 @@
     },
     {
       "source": "/docs/streaming",
-      "destination": "/guides/concepts/streaming",
+      "destination": "/docs/guides/streaming",
       "permanent": true
     },
     {
       "source": "/docs/streaming/overview",
-      "destination": "/guides/concepts/streaming",
+      "destination": "/docs/guides/streaming",
       "permanent": true
     },
     {
       "source": "/docs/streaming/events",
-      "destination": "/guides/concepts/streaming",
+      "destination": "/docs/guides/streaming",
       "permanent": true
     },
     {
@@ -1233,6 +1233,11 @@
     {
       "source": "/guides/migrations/:path*",
       "destination": "/reference/migrations/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/guides/concepts/:path*",
+      "destination": "/docs/guides/:path*",
       "permanent": true
     },
     {
@@ -1817,17 +1822,17 @@
     },
     {
       "source": "/docs/streaming/llms.txt",
-      "destination": "/guides/concepts/streaming/llms.txt",
+      "destination": "/docs/guides/streaming/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/streaming/overview/llms.txt",
-      "destination": "/guides/concepts/streaming/llms.txt",
+      "destination": "/docs/guides/streaming/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/streaming/events/llms.txt",
-      "destination": "/guides/concepts/streaming/llms.txt",
+      "destination": "/docs/guides/streaming/llms.txt",
       "permanent": true
     },
     {
@@ -2113,6 +2118,11 @@
     {
       "source": "/guides/migrations/:path*/llms.txt",
       "destination": "/reference/migrations/:path*/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/guides/concepts/:path*/llms.txt",
+      "destination": "/docs/guides/:path*/llms.txt",
       "permanent": true
     }
   ]

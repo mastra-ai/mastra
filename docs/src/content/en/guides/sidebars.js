@@ -72,23 +72,6 @@ const sidebars = {
     },
     {
       type: 'category',
-      label: 'Concepts',
-      collapsed: false,
-      items: [
-        {
-          type: 'doc',
-          id: 'concepts/multi-agent-systems',
-          label: 'Multi-agent systems',
-        },
-        {
-          type: 'doc',
-          id: 'concepts/streaming',
-          label: 'Streaming',
-        },
-      ],
-    },
-    {
-      type: 'category',
       label: 'Capabilities',
       collapsed: false,
       items: [
