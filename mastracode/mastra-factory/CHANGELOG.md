@@ -1,5 +1,12 @@
 # create-factory
 
+## 0.1.7-alpha.16
+
+### Patch Changes
+
+- Updated dependencies:
+  - mastra@1.24.0-alpha.16
+
 ## 0.1.7-alpha.15
 
 ### Patch Changes
