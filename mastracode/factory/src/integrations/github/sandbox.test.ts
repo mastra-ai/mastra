@@ -698,6 +698,71 @@ describe('checkoutSessionBranch', () => {
     expect(err).toBeInstanceOf(MaterializeError);
     expect(err.code).toBe('clone-failed');
   });
+
+  it('adopts a branch created concurrently between the show-ref probe and checkout -b', async () => {
+    // Two materializations of the same session raced: the other one created
+    // the branch after this one's probe missed it. Adopt it instead of 500ing.
+    const sandbox = new FakeSandbox(script => {
+      if (script.includes('branch --show-current')) return { exitCode: 0, stdout: 'main\n', stderr: '' };
+      if (script.includes('show-ref')) return { exitCode: 1, stdout: '', stderr: '' };
+      if (script.includes('checkout -b') && script.includes('fetch origin')) {
+        return { exitCode: 1, stdout: '', stderr: "fatal: a branch named 'factory/pr-1' already exists\n" };
+      }
+      return OK;
+    });
+
+    await expect(checkoutSessionBranch(sandbox, '/workspace/repo', opts)).resolves.toBeUndefined();
+
+    const joined = sandbox.calls.join('\n');
+    expect(joined).toContain("checkout 'factory/pr-1'");
+    // The healthy branch is adopted as-is — no ref surgery.
+    expect(joined).not.toContain('update-ref -d');
+  });
+
+  it('replaces a broken loose ref and retries the branch create', async () => {
+    // A reused pooled sandbox carries a corrupt loose ref: show-ref cannot
+    // resolve it, checkout -b refuses "already exists", and plain checkout
+    // fails too. Drop the wedged ref and recreate the branch from FETCH_HEAD.
+    const sandbox = new FakeSandbox(script => {
+      if (script.includes('branch --show-current')) return { exitCode: 0, stdout: 'main\n', stderr: '' };
+      if (script.includes('show-ref')) return { exitCode: 1, stdout: '', stderr: '' };
+      if (script.includes('fetch origin')) {
+        return { exitCode: 1, stdout: '', stderr: "fatal: a branch named 'factory/pr-1' already exists\n" };
+      }
+      if (script.includes("checkout 'factory/pr-1'")) {
+        return { exitCode: 1, stdout: '', stderr: "fatal: unable to resolve reference 'refs/heads/factory/pr-1'\n" };
+      }
+      return OK;
+    });
+
+    await expect(checkoutSessionBranch(sandbox, '/workspace/repo', opts)).resolves.toBeUndefined();
+
+    const joined = sandbox.calls.join('\n');
+    expect(joined).toContain("update-ref -d refs/heads/'factory/pr-1'");
+    expect(sandbox.calls).toContain("git -C '/workspace/repo' checkout -b 'factory/pr-1' FETCH_HEAD");
+    // Token still scrubbed back to the clean URL in the finally.
+    const scrub = sandbox.calls.filter(c => c.includes('remote set-url origin')).at(-1);
+    expect(scrub).toContain('https://github.com/octocat/hello.git');
+    expect(scrub).not.toContain('tok-secret');
+  });
+
+  it('surfaces the collision when the wedged ref cannot be dropped', async () => {
+    const sandbox = new FakeSandbox(script => {
+      if (script.includes('branch --show-current')) return { exitCode: 0, stdout: 'main\n', stderr: '' };
+      if (script.includes('show-ref')) return { exitCode: 1, stdout: '', stderr: '' };
+      if (script.includes('fetch origin')) {
+        return { exitCode: 1, stdout: '', stderr: "fatal: a branch named 'factory/pr-1' already exists\n" };
+      }
+      if (script.includes("checkout 'factory/pr-1'") || script.includes('update-ref -d')) {
+        return { exitCode: 1, stdout: '', stderr: 'fatal: cannot lock ref\n' };
+      }
+      return OK;
+    });
+
+    const err = await checkoutSessionBranch(sandbox, '/workspace/repo', opts).catch(e => e);
+    expect(err).toBeInstanceOf(MaterializeError);
+    expect(err.code).toBe('clone-failed');
+  });
 });
 
 describe('recycleClaimedWorkdir', () => {
@@ -723,6 +788,28 @@ describe('recycleClaimedWorkdir', () => {
     // `-x` included: gitignored files (.env, caches) must not leak between sessions.
     expect(recycle).toContain('clean -fdx');
     expect(sandbox.calls.some(call => call.startsWith('rm -rf'))).toBe(false);
+  });
+
+  it('deletes every non-default local branch left by the previous session', async () => {
+    const sandbox = new FakeSandbox();
+
+    await recycleClaimedWorkdir(sandbox, '/workspace/hello', 'main');
+
+    const sweep = sandbox.calls[2]!;
+    expect(sweep).toContain('for-each-ref');
+    expect(sweep).toContain('update-ref -d');
+    // The default branch itself survives the sweep.
+    expect(sweep).toContain("'refs/heads/main'");
+  });
+
+  it('wipes the workdir when the branch sweep fails', async () => {
+    const sandbox = new FakeSandbox(script =>
+      script.includes('for-each-ref') ? { exitCode: 1, stdout: '', stderr: 'cannot lock ref' } : OK,
+    );
+
+    await recycleClaimedWorkdir(sandbox, '/workspace/hello', 'main');
+
+    expect(sandbox.calls.at(-1)).toBe("rm -rf '/workspace/hello'");
   });
 
   it('wipes a wedged checkout so materialization re-clones inside the same VM', async () => {
