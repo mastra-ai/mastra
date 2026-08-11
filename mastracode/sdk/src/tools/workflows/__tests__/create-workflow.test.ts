@@ -1,4 +1,5 @@
-import { describe, it, expect } from 'vitest';
+import { RequestContext } from '@mastra/core/request-context';
+import { describe, it, expect, vi } from 'vitest';
 import { createWorkflowTool } from '../create-workflow';
 
 type StreamEvent = {
@@ -26,10 +27,10 @@ function makeMastraStub(agent: unknown) {
   };
 }
 
-async function invoke(mastra: unknown) {
+async function invoke(mastra: unknown, requestContext?: RequestContext) {
   // `execute` is a function on the tool — call it directly to avoid the
   // input-validation wrapper and get raw throw semantics.
-  return await (createWorkflowTool as any).execute({ request: 'do a thing' }, { mastra, requestContext: undefined });
+  return await (createWorkflowTool as any).execute({ request: 'do a thing' }, { mastra, requestContext });
 }
 
 describe('create-workflow tool surfaces sub-agent failures', () => {
@@ -43,6 +44,36 @@ describe('create-workflow tool surfaces sub-agent failures', () => {
     );
     const result = await invoke(makeMastraStub(agent));
     expect(result).toEqual({ summary: 'Built the workflow.', workflowId: 'my-wf' });
+  });
+
+  it('forwards the caller requestContext to the workflow-builder agent', async () => {
+    const requestContext = new RequestContext();
+    requestContext.set('controller', { session: { modelId: 'mock-model' } });
+    const stream = vi.fn().mockResolvedValue(makeStreamingAgent([], '').stream());
+
+    await expect(invoke(makeMastraStub({ stream }), requestContext)).rejects.toThrow(/never called save-workflow/);
+
+    expect(stream).toHaveBeenCalledWith('do a thing', { requestContext });
+  });
+
+  it('cancels and releases the stream reader when reading fails', async () => {
+    const cancel = vi.fn().mockResolvedValue(undefined);
+    const releaseLock = vi.fn();
+    const reader = {
+      read: vi.fn().mockRejectedValue(new Error('stream failed')),
+      cancel,
+      releaseLock,
+    };
+    const agent = {
+      stream: vi.fn().mockResolvedValue({
+        fullStream: { getReader: () => reader },
+        text: Promise.resolve(''),
+      }),
+    };
+
+    await expect(invoke(makeMastraStub(agent))).rejects.toThrow('stream failed');
+    expect(cancel).toHaveBeenCalledTimes(1);
+    expect(releaseLock).toHaveBeenCalledTimes(1);
   });
 
   it('throws when the sub-agent never calls save-workflow (hallucinated success)', async () => {

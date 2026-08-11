@@ -67,7 +67,12 @@ Use the workflow service to manage saved workflows from a custom SDK surface:
 import { deleteWorkflow, getWorkflow, listWorkflows, runWorkflow } from '@mastra/code-sdk/workflows/service';
 
 const { workflows } = await listWorkflows(mastra);
-const definition = await getWorkflow(mastra, workflows[0].id);
+const firstWorkflow = workflows[0];
+if (!firstWorkflow) throw new Error('No Dynamic Workflows are available.');
+
+const definition = await getWorkflow(mastra, firstWorkflow.id);
+if (!definition) throw new Error(`Workflow "${firstWorkflow.id}" was not found.`);
+
 const result = await runWorkflow(mastra, definition.id, { topic: 'dynamic workflows' }, requestContext);
 await deleteWorkflow(mastra, definition.id);
 ```

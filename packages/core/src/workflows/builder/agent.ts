@@ -1,6 +1,6 @@
 import { Agent, type AgentConfig } from '../../agent';
 
-import { WORKFLOW_BUILDER_AUTHORING_PLAYBOOK } from './index.js';
+import { WORKFLOW_BUILDER_AUTHORING_PLAYBOOK } from './authoring-playbook.js';
 
 export interface WorkflowBuilderAgentOptions<TAgentId extends string> extends Omit<
   AgentConfig<TAgentId>,

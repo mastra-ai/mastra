@@ -7,22 +7,20 @@
  *   - contend with the parent turn's memory-dependent processors
  *     (observational-memory, task-state, working-memory-state).
  *
- * `withEphemeralMemory` swaps a fresh MastraMemory (new random threadId,
- * inherited resourceId) onto the caller's requestContext AND stamps the
- * reserved MASTRA_THREAD_ID_KEY / MASTRA_RESOURCE_ID_KEY context values to the
- * same ephemeral ids for the duration of `fn`, then restores everything in
- * `finally`. Isolation is achieved by writing the ephemeral ids into the
- * context, not by scrubbing them — inner agent invocations (e.g. workflow
- * agent steps) resolve their thread/resource via those reserved keys, so
- * leaving them unset causes downstream storage saves to throw
+ * `withEphemeralMemory` copies the caller's request context into a child,
+ * replaces its MastraMemory with a fresh thread id and inherited resource id,
+ * then passes that isolated child to `fn`. The parent context is never mutated,
+ * so concurrent sub-invocations cannot overwrite or restore each other's
+ * memory values. Isolation writes the ephemeral ids instead of scrubbing them:
+ * inner agent invocations resolve their thread/resource via those reserved
+ * keys, and leaving them unset causes downstream storage saves to throw
  * "Thread ID is required".
  *
  * Callers can override the ephemeral thread id (e.g. for tests) via
  * `options.threadId`.
  */
 import { randomUUID } from 'node:crypto';
-import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '@mastra/core/request-context';
-import type { RequestContext } from '@mastra/core/request-context';
+import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '@mastra/core/request-context';
 
 interface EphemeralMemoryOptions {
   threadId?: string;
@@ -30,21 +28,20 @@ interface EphemeralMemoryOptions {
 
 export async function withEphemeralMemory<T>(
   requestContext: RequestContext | undefined,
-  fn: () => Promise<T>,
+  fn: (requestContext: RequestContext | undefined) => Promise<T>,
   options: EphemeralMemoryOptions = {},
 ): Promise<T> {
-  if (!requestContext) return fn();
+  if (!requestContext) return fn(undefined);
 
-  const savedMastraMemory = requestContext.get('MastraMemory') as
+  const childRequestContext = new RequestContext(requestContext.entries());
+  const mastraMemory = requestContext.get('MastraMemory') as
     | { thread?: { id?: string }; resourceId?: string; memoryConfig?: unknown }
     | undefined;
-  const savedThreadIdKey = requestContext.get(MASTRA_THREAD_ID_KEY) as string | undefined;
-  const savedResourceIdKey = requestContext.get(MASTRA_RESOURCE_ID_KEY) as string | undefined;
-
+  const resourceId = requestContext.get(MASTRA_RESOURCE_ID_KEY) as string | undefined;
   const ephemeralThreadId = options.threadId ?? randomUUID();
-  const parentResourceId = savedMastraMemory?.resourceId ?? savedResourceIdKey ?? '';
+  const parentResourceId = mastraMemory?.resourceId ?? resourceId ?? '';
 
-  requestContext.set('MastraMemory', {
+  childRequestContext.set('MastraMemory', {
     thread: { id: ephemeralThreadId },
     resourceId: parentResourceId,
     memoryConfig: undefined,
@@ -54,29 +51,12 @@ export async function withEphemeralMemory<T>(
   // tool calls) read these keys to resolve their runtime thread; leaving
   // MASTRA_THREAD_ID_KEY unset causes prepare-memory-step to build a
   // MessageList without a threadId, which storage rejects downstream.
-  requestContext.set(MASTRA_THREAD_ID_KEY, ephemeralThreadId);
+  childRequestContext.set(MASTRA_THREAD_ID_KEY, ephemeralThreadId);
   if (parentResourceId) {
-    requestContext.set(MASTRA_RESOURCE_ID_KEY, parentResourceId);
+    childRequestContext.set(MASTRA_RESOURCE_ID_KEY, parentResourceId);
+  } else {
+    childRequestContext.delete(MASTRA_RESOURCE_ID_KEY);
   }
 
-  try {
-    return await fn();
-  } finally {
-    if (savedMastraMemory !== undefined) {
-      requestContext.set('MastraMemory', savedMastraMemory);
-    } else {
-      requestContext.delete('MastraMemory');
-    }
-    if (savedThreadIdKey !== undefined) {
-      requestContext.set(MASTRA_THREAD_ID_KEY, savedThreadIdKey);
-    } else {
-      requestContext.delete(MASTRA_THREAD_ID_KEY);
-    }
-    if (savedResourceIdKey !== undefined) {
-      requestContext.set(MASTRA_RESOURCE_ID_KEY, savedResourceIdKey);
-    } else if (parentResourceId) {
-      // We wrote a resource-id key that wasn't there before — clean it up.
-      requestContext.delete(MASTRA_RESOURCE_ID_KEY);
-    }
-  }
+  return fn(childRequestContext);
 }

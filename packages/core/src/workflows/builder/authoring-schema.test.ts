@@ -57,11 +57,6 @@ describe('shared workflow builder authoring schema', () => {
     expect(workflowBuilderDefinitionInputSchema.shape.graph.description).toContain(
       'The workflow result is exactly the final top-level entry output',
     );
-    const serialized = JSON.stringify(
-      workflowBuilderDefinitionInputSchema.shape.graph.description +
-        String(workflowBuilderAgentEntrySchema.description),
-    );
-    expect(serialized).toBeTruthy();
   });
 
   describe('stored workflow API contract', () => {
@@ -132,6 +127,20 @@ describe('shared workflow builder authoring schema', () => {
       });
       expect(result.success).toBe(false);
     });
+
+    it('rejects removed aliases in the canonical schema too', () => {
+      const agentAlias = workflowBuilderDefinitionSchema.safeParse({
+        ...normalizeWorkflowBuilderDefinition(authoringDefinition),
+        graph: [{ type: 'agent', id: 'answer', agent: 'supportAgent' }],
+      });
+      const mappingAlias = workflowBuilderDefinitionSchema.safeParse({
+        ...normalizeWorkflowBuilderDefinition(authoringDefinition),
+        graph: [{ type: 'mapping', id: 'shape', mapConfig: '{}', output: { text: { value: 'hi' } } }],
+      });
+
+      expect(agentAlias.success).toBe(false);
+      expect(mappingAlias.success).toBe(false);
+    });
   });
 
   // OpenAI strict compatibility makes optional properties required+nullable, so
@@ -187,6 +196,28 @@ describe('shared workflow builder authoring schema', () => {
       // Emptied containers are dropped: canonical foreach opts requires concurrency.
       expect(foreach.step.options).toBeUndefined();
       expect(foreach.opts).toBeUndefined();
+    });
+  });
+
+  describe('when a canonical entry carries fields the contract does not support', () => {
+    it.each([
+      ['a mapping alias', { type: 'mapping', id: 'shape', mapConfig: '{}', output: { text: { value: 'hi' } } }],
+      ['an extra sleep field', { type: 'sleep', id: 'pause', duration: 100, until: 'tomorrow' }],
+      ['an extra sleepUntil field', { type: 'sleepUntil', id: 'pause', date: '2026-08-12', duration: 100 }],
+      [
+        'an extra predicate field',
+        {
+          type: 'conditional',
+          steps: [{ type: 'tool', id: 'lookup', toolId: 'lookupCustomer' }],
+          predicates: [{ op: 'exists', path: 'inputData.email', extra: true }],
+        },
+      ],
+    ])('rejects %s', (_label, entry) => {
+      const result = workflowBuilderDefinitionSchema.safeParse({
+        ...normalizeWorkflowBuilderDefinition(authoringDefinition),
+        graph: [entry],
+      });
+      expect(result.success).toBe(false);
     });
   });
 

@@ -300,7 +300,11 @@ function help(ctx: SlashCommandContext): void {
   );
 }
 
-export async function handleWorkflowsCommand(ctx: SlashCommandContext, args: string[]): Promise<void> {
+export async function handleWorkflowsCommand(
+  ctx: SlashCommandContext,
+  args: string[],
+  rawArgsText?: string,
+): Promise<void> {
   const sub = args[0]?.toLowerCase() ?? 'list';
   const mastra = ctx.controller.getMastra();
   if (!mastra) {
@@ -340,7 +344,8 @@ export async function handleWorkflowsCommand(ctx: SlashCommandContext, args: str
       }
       case 'run': {
         const id = args[1];
-        const rawInput = args.slice(2).join(' ').trim() || '{}';
+        const preservedRawInput = rawArgsText?.match(/^\S+\s+\S+(?:\s+([\s\S]*))?$/)?.[1];
+        const rawInput = (preservedRawInput ?? args.slice(2).join(' ')).trim() || '{}';
         if (!id) {
           ctx.showError('Usage: /workflows run <id> <json-input>');
           return;

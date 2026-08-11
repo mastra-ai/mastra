@@ -28,8 +28,8 @@ export const runWorkflowTool = createTool({
     // memory scope for a fresh isolated one for the duration of the run so
     // the workflow's agent step doesn't write into (or read from) the parent
     // chat thread. See ephemeral-memory.ts.
-    return withEphemeralMemory(requestContext, async () => {
-      const result = await runWorkflow(mastra as Mastra, workflowId, inputData, requestContext);
+    return withEphemeralMemory(requestContext, async ephemeralRequestContext => {
+      const result = await runWorkflow(mastra as Mastra, workflowId, inputData, ephemeralRequestContext);
       if (result.status === 'tripwire' && result.tripwire) {
         return {
           status: result.status,
@@ -40,7 +40,13 @@ export const runWorkflowTool = createTool({
       if (result.error instanceof Error) {
         errorText = `${result.error.name}: ${result.error.message}`;
         const cause = (result.error as { cause?: unknown }).cause;
-        if (cause) errorText += ` | cause: ${JSON.stringify(cause, Object.getOwnPropertyNames(cause))}`;
+        if (cause) {
+          try {
+            errorText += ` | cause: ${JSON.stringify(cause, Object.getOwnPropertyNames(cause))}`;
+          } catch {
+            errorText += ` | cause: ${String(cause)}`;
+          }
+        }
         if (result.error.stack) errorText += `\nstack: ${result.error.stack}`;
       } else if (result.error) {
         try {

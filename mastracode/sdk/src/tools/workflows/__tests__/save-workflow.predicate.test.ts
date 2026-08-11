@@ -5,15 +5,15 @@
  * 1. Input schema — the discriminated-union graph must accept `conditional`
  *    and `loop` entries with a valid `predicate` payload and reject invalid
  *    ones (unknown operator, legacy `serializedConditions` payload).
- * 2. `execute` — must call `mastra.addStoredWorkflow` with the same shape it
- *    received, so the SDK schema and the server-side schema agree end-to-end.
+ * 2. `execute` — must call `mastra.addDynamicWorkflow` with the normalized
+ *    canonical shape, so the SDK and Core schemas agree end-to-end.
  */
 import { describe, it, expect, vi } from 'vitest';
 import { saveWorkflowTool } from '../save-workflow';
 
 function invoke(input: unknown, mastra: unknown) {
   // Call the raw execute; callers of the tool are responsible for schema
-  // validation, but we assert the shape gets handed to `addStoredWorkflow`
+  // validation, but we assert the shape gets handed to `addDynamicWorkflow`
   // unmodified so the server schema receives the same payload the SDK schema
   // accepted.
   return (saveWorkflowTool as any).execute(input, { mastra, requestContext: undefined });
@@ -108,31 +108,31 @@ describe('save-workflow — input schema', () => {
 
 describe('save-workflow — execute', () => {
   describe('when given a conditional graph with predicates', () => {
-    it('forwards the whole definition to mastra.addStoredWorkflow', async () => {
-      const addStoredWorkflow = vi.fn().mockResolvedValue(undefined);
-      const mastra = { addStoredWorkflow } as unknown;
+    it('forwards the whole definition to mastra.addDynamicWorkflow', async () => {
+      const addDynamicWorkflow = vi.fn().mockResolvedValue(undefined);
+      const mastra = { addDynamicWorkflow } as unknown;
       const result = await invoke(conditionalGraphWithPredicates, mastra);
       expect(result).toEqual({ ok: true, id: 'wf-cond' });
-      expect(addStoredWorkflow).toHaveBeenCalledTimes(1);
-      expect(addStoredWorkflow.mock.calls[0][0]).toStrictEqual(conditionalGraphWithPredicates);
+      expect(addDynamicWorkflow).toHaveBeenCalledTimes(1);
+      expect(addDynamicWorkflow.mock.calls[0][0]).toStrictEqual(conditionalGraphWithPredicates);
     });
   });
 
   describe('when given a loop graph with a predicate', () => {
-    it('forwards the whole definition to mastra.addStoredWorkflow', async () => {
-      const addStoredWorkflow = vi.fn().mockResolvedValue(undefined);
-      const mastra = { addStoredWorkflow } as unknown;
+    it('forwards the whole definition to mastra.addDynamicWorkflow', async () => {
+      const addDynamicWorkflow = vi.fn().mockResolvedValue(undefined);
+      const mastra = { addDynamicWorkflow } as unknown;
       const result = await invoke(loopGraphWithPredicate, mastra);
       expect(result).toEqual({ ok: true, id: 'wf-loop' });
-      expect(addStoredWorkflow).toHaveBeenCalledTimes(1);
-      expect(addStoredWorkflow.mock.calls[0][0]).toStrictEqual(loopGraphWithPredicate);
+      expect(addDynamicWorkflow).toHaveBeenCalledTimes(1);
+      expect(addDynamicWorkflow.mock.calls[0][0]).toStrictEqual(loopGraphWithPredicate);
     });
   });
 
-  describe('when mastra.addStoredWorkflow rejects (registry pre-flight failure)', () => {
+  describe('when mastra.addDynamicWorkflow rejects (registry pre-flight failure)', () => {
     it('propagates the underlying error unchanged', async () => {
-      const addStoredWorkflow = vi.fn().mockRejectedValue(new Error('unresolved reference to tool "inc-tool"'));
-      const mastra = { addStoredWorkflow } as unknown;
+      const addDynamicWorkflow = vi.fn().mockRejectedValue(new Error('unresolved reference to tool "inc-tool"'));
+      const mastra = { addDynamicWorkflow } as unknown;
       await expect(invoke(loopGraphWithPredicate, mastra)).rejects.toThrow(/unresolved reference to tool "inc-tool"/);
     });
   });

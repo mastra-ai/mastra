@@ -174,7 +174,7 @@ export async function dispatchSlashCommand(
       return true;
     case 'workflows':
     case 'workflow':
-      await handleWorkflowsCommand(ctx, args);
+      await handleWorkflowsCommand(ctx, args, rawArgsText);
       return true;
     case 'mode':
       await handleModeCommand(ctx, args);

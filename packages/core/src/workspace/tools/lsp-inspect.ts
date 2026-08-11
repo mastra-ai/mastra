@@ -258,7 +258,9 @@ export const lspInspectTool = createTool({
                     : diagnostic.severity === 3
                       ? 'info'
                       : 'hint'
-                : diagnostic.severity,
+                : typeof diagnostic.severity === 'string'
+                  ? diagnostic.severity
+                  : 'error',
             message: diagnostic.message,
             source: diagnostic.source ?? null,
           }))

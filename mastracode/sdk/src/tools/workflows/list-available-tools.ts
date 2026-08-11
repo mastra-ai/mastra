@@ -1,29 +1,15 @@
 /**
  * Sub-agent tool: list tools the workflow-builder can reference in tool-step
- * entries of the static workflow graph. Returns JSON Schema for inputs/outputs
+ * entries of a Dynamic Workflow graph. Returns JSON Schema for inputs/outputs
  * so the LLM has ground truth instead of guessing.
  */
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { extractJsonSchema } from './extract-json-schema.js';
+import { WORKFLOW_BUILDER_NOISE_TOOL_IDS } from './tool-ids.js';
 
-/**
- * Tools the workflow-builder shouldn't try to compose:
- *  - its own three authoring tools (recursive composition is nonsensical)
- *  - the five parent-mode workflow management tools (they manage stored
- *    workflows; they're not building blocks inside a workflow)
- */
-const WORKFLOW_BUILDER_NOISE_TOOLS = new Set([
-  'list-available-agents',
-  'list-available-tools',
-  'list-available-workflows',
-  'save-workflow',
-  'create-workflow',
-  'list-workflows',
-  'get-workflow',
-  'run-workflow',
-  'delete-workflow',
-]);
+/** Authoring and management tools are not valid workflow building blocks. */
+const WORKFLOW_BUILDER_NOISE_TOOLS = new Set<string>(WORKFLOW_BUILDER_NOISE_TOOL_IDS);
 
 export const listAvailableToolsTool = createTool({
   id: 'list-available-tools',

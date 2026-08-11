@@ -10,10 +10,7 @@ export const workflowsCommandScenario: McE2eScenario = {
       async onCreated(result) {
         const mastra = result.controller.getMastra();
         if (!mastra) throw new Error('Mastra instance unavailable');
-        const dynamicMastra = mastra as typeof mastra & {
-          addDynamicWorkflow: (definition: unknown) => Promise<void>;
-        };
-        await dynamicMastra.addDynamicWorkflow({
+        await mastra.addDynamicWorkflow({
           id: 'e2e-greeting',
           description: 'Create a greeting for a name.',
           inputSchema: {
@@ -58,9 +55,9 @@ export const workflowsCommandScenario: McE2eScenario = {
     await runtime.waitForScreenText(/"id": "e2e-greeting"/i, terminal);
     await runtime.waitForScreenText(/format-greeting/i, terminal);
 
-    terminal.submit('/workflows run e2e-greeting {"name":"Ada"}');
+    terminal.submit('/workflows run e2e-greeting {"name":"Ada  Lovelace"}');
     await runtime.waitForScreenText(/Running "e2e-greeting"/i, terminal);
-    await runtime.waitForScreenText(/Hello, Ada!/i, terminal);
+    await runtime.waitForScreenText(/Hello, Ada  Lovelace!/i, terminal);
 
     terminal.submit('/workflows delete e2e-greeting');
     await runtime.waitForScreenText(/Deleted workflow "e2e-greeting"\./i, terminal);

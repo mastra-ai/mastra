@@ -20,7 +20,7 @@ function stringifyError(err: unknown): string {
   if (err instanceof Error) return err.message;
   if (typeof err === 'string') return err;
   try {
-    return JSON.stringify(err);
+    return JSON.stringify(err) ?? String(err);
   } catch {
     return String(err);
   }
@@ -29,7 +29,7 @@ function stringifyError(err: unknown): string {
 export const createWorkflowTool = createTool({
   id: 'create-workflow',
   description:
-    'Build and save a static workflow on behalf of the user. Pass the user request verbatim — a focused sub-agent handles discovery, construction, and persistence, then returns a summary. Use this whenever the user asks to "build a workflow", "compose a workflow", or similar. Do NOT try to construct workflows inline yourself.',
+    'Build and save a Dynamic Workflow on behalf of the user. Pass the user request verbatim — a focused sub-agent handles discovery, construction, and persistence, then returns a summary. Use this whenever the user asks to "build a workflow", "compose a workflow", or similar. Do NOT try to construct workflows inline yourself.',
   inputSchema: z.object({
     request: z.string().describe('The user request, verbatim — do not paraphrase or summarise.'),
   }),
@@ -63,22 +63,33 @@ export const createWorkflowTool = createTool({
     const toolErrors: Array<{ toolName: string; error: string }> = [];
 
     const reader = stream.fullStream.getReader();
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      if (value?.type === 'tool-call' && value.payload?.toolName === 'save-workflow') {
-        saveAttempted = true;
-      }
-      if (value?.type === 'tool-result' && value.payload?.toolName === 'save-workflow') {
-        const result = value.payload.result as { id?: string; ok?: boolean } | undefined;
-        if (result && result.ok === true && typeof result.id === 'string') {
-          workflowId = result.id;
-          saveSucceeded = true;
+    let streamCompleted = false;
+    try {
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) {
+          streamCompleted = true;
+          break;
+        }
+        if (value?.type === 'tool-call' && value.payload?.toolName === 'save-workflow') {
+          saveAttempted = true;
+        }
+        if (value?.type === 'tool-result' && value.payload?.toolName === 'save-workflow') {
+          const result = value.payload.result as { id?: string; ok?: boolean } | undefined;
+          if (result && result.ok === true && typeof result.id === 'string') {
+            workflowId = result.id;
+            saveSucceeded = true;
+          }
+        }
+        if (value?.type === 'tool-error' && typeof value.payload?.toolName === 'string') {
+          toolErrors.push({ toolName: value.payload.toolName, error: stringifyError(value.payload.error) });
         }
       }
-      if (value?.type === 'tool-error' && typeof value.payload?.toolName === 'string') {
-        toolErrors.push({ toolName: value.payload.toolName, error: stringifyError(value.payload.error) });
+    } finally {
+      if (!streamCompleted) {
+        await reader.cancel().catch(() => undefined);
       }
+      reader.releaseLock();
     }
 
     const summary = await stream.text;

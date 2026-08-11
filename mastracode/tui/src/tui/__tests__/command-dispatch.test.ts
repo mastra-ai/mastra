@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   handleModelsPackCommand: vi.fn().mockResolvedValue(undefined),
   handleCustomProvidersCommand: vi.fn().mockResolvedValue(undefined),
   handleGoalCommand: vi.fn().mockResolvedValue(undefined),
+  handleWorkflowsCommand: vi.fn().mockResolvedValue(undefined),
   handleSkillCommand: vi.fn().mockResolvedValue(undefined),
   handleJudgeCommand: vi.fn().mockResolvedValue(undefined),
   handleGithubCommand: vi.fn().mockResolvedValue(undefined),
@@ -60,6 +61,7 @@ vi.mock('../commands/index.js', () => ({
   handleObservabilityCommand: vi.fn(),
   handleGithubCommand: mocks.handleGithubCommand,
   handleGoalCommand: mocks.handleGoalCommand,
+  handleWorkflowsCommand: mocks.handleWorkflowsCommand,
   handleJudgeCommand: mocks.handleJudgeCommand,
 }));
 
@@ -87,6 +89,7 @@ describe('dispatchSlashCommand models routing', () => {
     mocks.handleModelsPackCommand.mockClear();
     mocks.handleCustomProvidersCommand.mockClear();
     mocks.handleGoalCommand.mockClear();
+    mocks.handleWorkflowsCommand.mockClear();
     mocks.handleSkillCommand.mockClear();
     mocks.handleJudgeCommand.mockClear();
     mocks.handleGithubCommand.mockClear();
@@ -262,6 +265,21 @@ describe('dispatchSlashCommand models routing', () => {
     expect(mocks.handleSkillCommand).toHaveBeenCalledTimes(1);
     expect(mocks.handleSkillCommand).toHaveBeenCalledWith(ctx, 'github-triage', ['focus', 'tests']);
     expect(mocks.showError).not.toHaveBeenCalled();
+  });
+
+  it('preserves whitespace in /workflows run JSON input', async () => {
+    const state = { customSlashCommands: [] } as any;
+    const ctx = {} as any;
+    const command = '/workflows run greeting {"name":"Ada  Lovelace"}';
+
+    const handled = await dispatchSlashCommand(command, state, () => ctx);
+
+    expect(handled).toBe(true);
+    expect(mocks.handleWorkflowsCommand).toHaveBeenCalledWith(
+      ctx,
+      ['run', 'greeting', '{"name":"Ada', 'Lovelace"}'],
+      'run greeting {"name":"Ada  Lovelace"}',
+    );
   });
 
   it('routes multiline /goal objectives as a single goal argument', async () => {

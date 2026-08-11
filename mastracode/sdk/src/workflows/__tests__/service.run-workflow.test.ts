@@ -1,21 +1,6 @@
 /**
- * Repro test for `/workflows run <id> <json>` failing with:
- *   "No model selected. Use /models to select a model first."
- *
- * The slash handler builds a synthetic `RequestContext` with
- * `controller.session.modelId` set from the current session, then calls
- * `runWorkflow(mastra, id, inputData, requestContext)` in
- * `mastracode/src/workflows/service.ts`. Three fix attempts have been made
- * but the runtime error persists.
- *
- * Rather than theorising further, this test builds an isolated Mastra
- * that mirrors mastracode's runtime for the code-agent path and asserts
- * `runWorkflow` behavior under three request-context shapes.
- *
- * If the "populated modelId" case passes here, my previous fixes work in
- * theory and the user's persistent runtime error is a deployment / stale
- * build issue. If it fails, the propagation chain has a break the earlier
- * audit missed and we go find it.
+ * Verifies that Dynamic Workflow runs propagate the session model and isolate
+ * workflow memory from the parent Mastra Code conversation.
  */
 import { randomUUID } from 'node:crypto';
 import { Agent } from '@mastra/core/agent';
@@ -120,7 +105,7 @@ async function buildMastra(): Promise<Mastra> {
     storage: new InMemoryStore({ id: 'test-store' }),
   });
 
-  await (mastra as any).addStoredWorkflow({
+  await (mastra as any).addDynamicWorkflow({
     id: WORKFLOW_ID,
     description: 'Says hi to a name using the code-agent.',
     inputSchema,
@@ -229,7 +214,7 @@ async function buildMastraWithMemoryProcessor(): Promise<Mastra> {
     storage: new InMemoryStore({ id: 'test-store-memory' }),
   });
 
-  await (mastra as any).addStoredWorkflow({
+  await (mastra as any).addDynamicWorkflow({
     id: WORKFLOW_ID,
     description: 'Says hi to a name using the code-agent (memory-processor variant).',
     inputSchema,
@@ -432,7 +417,7 @@ async function buildMastraWithCaptureProcessor(): Promise<{ mastra: Mastra; capt
     storage: new InMemoryStore({ id: 'test-store-scrub' }),
   });
 
-  await (mastra as any).addStoredWorkflow({
+  await (mastra as any).addDynamicWorkflow({
     id: WORKFLOW_ID,
     description: 'Says hi to a name using the code-agent (capture variant).',
     inputSchema,
@@ -444,7 +429,7 @@ async function buildMastraWithCaptureProcessor(): Promise<{ mastra: Mastra; capt
 }
 
 describe('run-workflow chat tool — isolates workflow-step memory from parent chat thread', () => {
-  it('replaces parent MastraMemory with a fresh thread id (keeping parent resourceId), scrubs MASTRA_THREAD_ID_KEY, and restores outer context', async () => {
+  it('uses an isolated child context with fresh memory while leaving the parent context unchanged', async () => {
     const { mastra, capture } = await buildMastraWithCaptureProcessor();
 
     const rc = new RequestContext();
@@ -484,8 +469,7 @@ describe('run-workflow chat tool — isolates workflow-step memory from parent c
     // Controller must still be forwarded so getDynamicModel resolves.
     expect(capture.captured?.controller).toBeDefined();
 
-    // After the tool returns, the outer requestContext still holds the
-    // parent's memory identity — the scrub was undone via `finally`.
+    // The parent requestContext was never mutated by the workflow run.
     expect(rc.get('MastraMemory')).toEqual({
       thread: { id: 'parent-chat-thread' },
       resourceId: 'user-1',
