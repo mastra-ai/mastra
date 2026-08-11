@@ -1,3 +1,4 @@
+import { Shimmer } from '@mastra/playground-ui/components/Shimmer';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
@@ -59,12 +60,8 @@ export function ToolRow({ icon: Icon, label, detail, status, expanded, rule, tra
           <Chevron expanded={expanded} className="text-icon3 group-hover/tool:text-icon5" />
         )}
       </span>
-      <Txt
-        as="span"
-        variant="ui-sm"
-        className={cn('max-w-[55%] shrink-0 truncate', status === 'running' ? 'text-shimmer text-icon4' : 'text-icon5')}
-      >
-        {label}
+      <Txt as="span" variant="ui-sm" className="text-icon5 max-w-[55%] shrink-0 truncate">
+        {status === 'running' ? <Shimmer>{label}</Shimmer> : label}
       </Txt>
       {detail && (
         <Txt as="span" variant="ui-xs" font="mono" className="text-icon3 min-w-0 truncate">
