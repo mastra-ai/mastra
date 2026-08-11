@@ -138,4 +138,27 @@ describe('AgentController.deleteSession', () => {
     // The returned session should have an active thread (not cleared by abort).
     expect(reused.thread.getId()).toBe(threadId);
   });
+
+  it('drops the session from all registry keys when deletion interleaves with setResourceId', async () => {
+    const controller = createController(new InMemoryStore());
+    await controller.init();
+    const session = await controller.createSession({ resourceId: 'resource-1' });
+
+    // Fire deletion and re-key concurrently. Without the synchronization,
+    // setResourceId would re-register the aborted session under the new key,
+    // and the deletion would only drop the old key.
+    await Promise.all([
+      controller.deleteSession({ resourceId: 'resource-1' }),
+      controller.setResourceId(session, { resourceId: 'resource-2' }),
+    ]);
+
+    // The aborted session must not be registered under either key.
+    await expect(controller.getSessionByResource('resource-1')).resolves.toBeUndefined();
+    await expect(controller.getSessionByResource('resource-2')).resolves.toBeUndefined();
+
+    // A fresh session can be created for the new resource — it must not be
+    // the original (aborted) session.
+    const fresh = await controller.createSession({ resourceId: 'resource-2' });
+    expect(fresh).not.toBe(session);
+  });
 });
