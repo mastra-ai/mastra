@@ -46,8 +46,13 @@ export function extractOpenRouterCostContext(
     usage.costDetails && typeof usage.costDetails === 'object' && !Array.isArray(usage.costDetails)
       ? usage.costDetails
       : undefined;
+  const hasReportedCost = Object.prototype.hasOwnProperty.call(usage, 'cost');
   const reportedCost =
     typeof usage.cost === 'number' && Number.isFinite(usage.cost) && usage.cost >= 0 ? usage.cost : undefined;
+  if (hasReportedCost && reportedCost === undefined) {
+    return undefined;
+  }
+
   const upstreamInferenceCost =
     costDetails &&
     typeof costDetails.upstreamInferenceCost === 'number' &&
@@ -56,7 +61,7 @@ export function extractOpenRouterCostContext(
       ? costDetails.upstreamInferenceCost
       : undefined;
 
-  const totalCost = reportedCost ?? upstreamInferenceCost;
+  const totalCost = hasReportedCost ? reportedCost : upstreamInferenceCost;
   if (totalCost === undefined) {
     return undefined;
   }
@@ -68,7 +73,7 @@ export function extractOpenRouterCostContext(
     costUnit: 'USD',
     costMetadata: {
       source: 'provider_reported',
-      providerCostField: reportedCost !== undefined ? 'usage.cost' : 'usage.costDetails.upstreamInferenceCost',
+      providerCostField: hasReportedCost ? 'usage.cost' : 'usage.costDetails.upstreamInferenceCost',
     },
   };
 }

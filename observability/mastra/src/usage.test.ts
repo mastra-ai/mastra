@@ -48,7 +48,12 @@ describe('extractOpenRouterCostContext', () => {
   it.each([NaN, Infinity, -0.0042, '0.0042'])('rejects invalid reported cost %p', cost => {
     expect(
       extractOpenRouterCostContext({
-        openrouter: { usage: { cost } },
+        openrouter: {
+          usage: {
+            cost,
+            costDetails: { upstreamInferenceCost: 0.0042 },
+          },
+        },
       }),
     ).toBeUndefined();
   });
