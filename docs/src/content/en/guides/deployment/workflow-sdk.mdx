@@ -1,0 +1,277 @@
+---
+title: 'Workflow SDK | Deployment'
+description: 'Deploy Mastra workflows with the Vercel Workflow SDK'
+---
+
+# Workflow SDK
+
+The [Workflow SDK](https://workflow-sdk.dev/) is Vercel's durable execution framework for JavaScript and TypeScript, published as the `workflow` package. The `@mastra/workflow` package lets you author workflows with the standard Mastra API and run them as durable Workflow SDK runs inside your existing app, with no separate workflow server or worker process.
+
+:::warning
+`@mastra/workflow` is experimental and not ready for production use. The API may change between releases. See the [package README](https://github.com/mastra-ai/mastra/tree/main/workflows/workflow) for the current state.
+:::
+
+## How the Workflow SDK works with Mastra
+
+Mastra workflows authored with `createWorkflow()` and `createStep()` run as Workflow SDK runs. Instead of compiling each workflow into Workflow SDK code, `@mastra/workflow` ships a single generic runner marked `"use workflow"`. The runner walks your workflow's serialized step graph inside the deterministic sandbox and delegates all real work to `"use step"` functions:
+
+- Each step `execute`, branch condition, and loop predicate runs in a step function with full Node.js access, automatic retries, and journal-based memoization. Completed steps are skipped when a run is retried or resumed.
+- Suspend and resume map to [hooks](https://workflow-sdk.dev/v5/docs/foundations/hooks). A suspended step creates a hook token that external code resumes with `resumeHook()`.
+- `sleep()` and `sleepUntil()` map to the durable [`sleep()`](https://workflow-sdk.dev/v5/docs/api-reference/workflow/sleep), which holds no compute while the run waits.
+- Watching a run and streaming step output map to the run's namespaced [streams](https://workflow-sdk.dev/v5/docs/foundations/streaming).
+- Cancelling a Mastra run cancels the underlying Workflow SDK run.
+
+Because the runner is shipped by the library, you don't write Workflow SDK code yourself. You author standard Mastra workflows, and the Workflow SDK provides durability.
+
+## Setup
+
+Install the required packages:
+
+```bash npm2yarn
+npm install @mastra/workflow@latest workflow
+```
+
+:::note
+`@mastra/workflow` declares peer dependencies on `@mastra/core` (`>=1.50.0-0 <2.0.0-0`), `workflow` (`>=5.0.0-beta.36 <6.0.0`), and `zod` (`^3.25.0 || ^4.0.0`). Install a `workflow` version in that range. Version 4 doesn't work.
+:::
+
+### Configuring your framework
+
+The Workflow SDK compiler processes the `"use workflow"` and `"use step"` directives at build time, so it needs to be wired into your bundler. This guide uses Next.js. Wrap your Next.js config with `withWorkflow()`:
+
+```ts title="next.config.ts"
+import { withWorkflow } from 'workflow/next'
+import type { NextConfig } from 'next'
+
+const nextConfig: NextConfig = {
+  // rest of your Next.js config
+}
+
+export default withWorkflow(nextConfig)
+```
+
+Other frameworks work the same way, including Nitro, Hono, Express, Fastify, SvelteKit, Nuxt, and Astro. See the [Workflow SDK getting started guides](https://workflow-sdk.dev/v5/docs/getting-started) for the integration that matches your app.
+
+## Building a workflow
+
+This guide walks through creating a workflow with the Workflow SDK and Mastra, demonstrating a counter application that increments a value.
+
+### Workflow SDK initialization
+
+Initialize the integration to obtain Mastra-compatible workflow helpers. The `createWorkflow()` and `createStep()` functions are bound to `mastraRunner`, the library-provided runner that executes the workflow inside the Workflow SDK.
+
+```ts title="src/mastra/workflows/index.ts"
+import { z } from 'zod'
+import { init } from '@mastra/workflow'
+import { mastraRunner } from '@mastra/workflow/workflows'
+
+const { createWorkflow, createStep } = init({ runner: mastraRunner })
+```
+
+### Creating steps
+
+Define the individual steps that will compose your workflow. Each step's `execute` function runs as a durable step with its own retry policy.
+
+```ts title="src/mastra/workflows/index.ts"
+const incrementStep = createStep({
+  id: 'increment',
+  inputSchema: z.object({
+    value: z.number(),
+  }),
+  outputSchema: z.object({
+    value: z.number(),
+  }),
+  execute: async ({ inputData }) => {
+    return { value: inputData.value + 1 }
+  },
+})
+```
+
+### Creating the workflow
+
+Compose the steps into a workflow and commit it.
+
+```ts title="src/mastra/workflows/index.ts"
+const workflow = createWorkflow({
+  id: 'increment-workflow',
+  inputSchema: z.object({
+    value: z.number(),
+  }),
+  outputSchema: z.object({
+    value: z.number(),
+  }),
+}).then(incrementStep)
+
+workflow.commit()
+
+export { workflow as incrementWorkflow }
+```
+
+### Configuring the Mastra instance
+
+Register the workflow with Mastra as you would for any other workflow.
+
+```ts title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { PinoLogger } from '@mastra/loggers'
+import { incrementWorkflow } from './workflows'
+
+export const mastra = new Mastra({
+  workflows: { incrementWorkflow },
+  logger: new PinoLogger({ name: 'Mastra', level: 'info' }),
+})
+```
+
+### Registering the runner
+
+Add a `workflows/mastra.ts` file at the root of your project. This file is required, not optional.
+
+```ts title="workflows/mastra.ts"
+export * from '@mastra/workflow/workflows'
+import '../src/mastra'
+```
+
+It does two things:
+
+- The `export *` makes the library's `"use workflow"` runner and its `"use step"` functions reachable from your own application code. The [compiler](https://workflow-sdk.dev/v5/docs/how-it-works/code-transform) discovers directive files by following imports out of your source tree, so without this file the runner and its steps are never compiled or registered.
+- The side-effect `import '../src/mastra'` loads your Mastra instance in the process that handles workflow execution. Steps resolve the live workflow object from a registry by id, so if your definitions never load in that process, every step fails with an error naming this import as the fix.
+
+A `workflows/` directory at the project root is the convention used in the Workflow SDK's own guides. Adjust the relative import if your Mastra entry file lives elsewhere. For more on how libraries ship workflows, see [Publishing libraries](https://workflow-sdk.dev/v5/cookbook/advanced/publishing-libraries).
+
+## Running workflows
+
+### Running locally
+
+Local development needs no extra infrastructure. The embedded local backend persists runs to disk in your project, under `.next/workflow-data` for Next.js apps and `.workflow-data` elsewhere.
+
+1. Start your dev server:
+
+   ```bash
+   npm run dev
+   ```
+
+1. Trigger a run from a route handler, a server action, or a script:
+
+   ```ts title="scripts/run.ts"
+   import { mastra } from '../src/mastra'
+
+   const run = await mastra.getWorkflow('incrementWorkflow').createRun()
+   const result = await run.start({ inputData: { value: 5 } })
+
+   console.log(result)
+   ```
+
+1. Inspect runs in the Workflow SDK web UI, which shows each run's steps, inputs, outputs, and retries:
+
+   ```bash
+   npx workflow web
+   ```
+
+   For a terminal interface, use the CLI instead:
+
+   ```bash
+   npx workflow inspect runs
+   ```
+
+### Running in production
+
+The runner executes inside your app's own compute, so there's no separate worker process to deploy or scale. What changes between environments is the backend that stores run state and drives the queue.
+
+#### Vercel
+
+Deploying to Vercel switches the Workflow SDK to its managed, queue-backed backend with no code or configuration changes. Runs appear in the Vercel dashboard alongside your deployment.
+
+```bash
+vercel deploy
+```
+
+:::warning
+Enable [Fluid compute](https://vercel.com/docs/functions/fluid-compute) on the project before deploying. The Workflow SDK relies on it for efficient suspension and resumption. Without it, every resume pays a separate function cold start, which raises cost.
+:::
+
+#### Self-hosting
+
+To run on your own infrastructure, point the Workflow SDK at a different backend with the `WORKFLOW_TARGET_WORLD` environment variable. The Postgres backend keeps run state in a database you control:
+
+```bash title=".env"
+WORKFLOW_TARGET_WORLD=@workflow/world-postgres
+DATABASE_URL=postgres://user:password@host:5432/database
+```
+
+See the [Workflow SDK deploying guide](https://workflow-sdk.dev/v5/docs/deploying) for the full list of backends and their configuration.
+
+### Resuming a suspended run
+
+A suspended step parks on a hook whose token is derived from the Mastra run and step ids, so both ways of resuming work from any process.
+
+Use `resumeHook()` to release the hook and return right away, or when the process has no Mastra instance to hand. It resolves as soon as the hook is released, which suits a route handler that acknowledges the request and lets the client poll for the outcome.
+
+```ts title="app/api/approve/route.ts"
+import { resumeHook } from 'workflow/api'
+
+export async function POST(request: Request) {
+  const { runId, stepId, data } = await request.json()
+  await resumeHook(`mastra:${runId}:${stepId}`, data)
+  return new Response(null, { status: 202 })
+}
+```
+
+For a step suspended inside a `.foreach()`, append the item index to the token, as in `mastra:${runId}:${stepId}:${index}`. The index counts from zero across the whole input array, so `:2` is the third item no matter what concurrency you set.
+
+Use `run.resume()` to wait for the run's next stopping point and get the `WorkflowResult` back. It requires `step`, because that's what the token is built from.
+
+```ts
+const result = await run.resume({
+  step: 'approval',
+  resumeData: { approved: true },
+})
+```
+
+Awaiting the outcome means Mastra has to map its own run id to the Workflow SDK one, and that mapping lives in storage. Give the Mastra instance storage if you resume, watch, or cancel from anywhere other than the process that started the run, which on serverless is the usual case:
+
+```ts title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { LibSQLStore } from '@mastra/libsql'
+import { incrementWorkflow } from './workflows'
+
+export const mastra = new Mastra({
+  workflows: { incrementWorkflow },
+  storage: new LibSQLStore({
+    id: 'libsql-storage',
+    url: process.env.DATABASE_URL!,
+    authToken: process.env.DATABASE_AUTH_TOKEN,
+  }),
+})
+```
+
+Point storage at a hosted database rather than a file URL. Serverless filesystems are ephemeral, so a local file leaves each invocation with its own empty copy of the mapping. Any [storage adapter](/reference/storage/libsql) works.
+
+Without storage, `resume()`, `watch()`, and `cancel()` throw from any process that didn't start the run, with an error naming storage and the `resumeHook()` fallback above.
+
+## Constraints and notes
+
+`@mastra/workflow` is experimental and covers most, but not all, of the Mastra workflow API.
+
+Supported today:
+
+- `.then()`, `.parallel()`, `.branch()`, `.dountil()`, `.dowhile()`, and `.foreach()`
+- `.sleep()` and `.sleepUntil()`
+- Workflow state, suspend and resume, and event streaming
+
+Not supported yet:
+
+- Nested workflows, which throw at run time when a workflow is used as a step
+- Time travel, through `timeTravel()` and `timeTravelStream()`
+- `streamLegacy()` and the `perStep` streaming option
+
+Flow control options available on Inngest workflows, such as `concurrency`, `rateLimit`, `throttle`, `debounce`, and `priority`, aren't available. Use your platform's concurrency controls instead.
+
+`.map()` data mapping isn't blocked, but it's untested. Treat it as unverified.
+
+The `workflows/mastra.ts` file is required, both to compile the runner and to register your workflows at run time. See [Registering the runner](#registering-the-runner).
+
+## Related
+
+- [Workflow runners](/docs/deployment/workflow-runners)
+- [Workflows overview](/docs/workflows/overview)
+- [Workflow SDK documentation](https://workflow-sdk.dev/)
