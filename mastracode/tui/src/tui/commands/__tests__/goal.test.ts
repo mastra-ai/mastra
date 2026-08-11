@@ -460,6 +460,36 @@ describe('handleGoalCommand', () => {
     expect(goalManager.consumePersistOnNextThreadCreate).toHaveBeenCalledTimes(1);
   });
 
+  // The flag is shared, so a failed start on a thread that already exists must
+  // not consume a flag armed by a concurrent fresh-thread start — that would
+  // hand the other goal's thread_created back to the wiping branch.
+  it('leaves the persist-on-thread-create flag alone when a goal fails on an existing thread', async () => {
+    const goalManager = {
+      setGoal: vi.fn().mockResolvedValue(undefined),
+      persistOnNextThreadCreate: vi.fn(),
+      consumePersistOnNextThreadCreate: vi.fn(),
+      saveToThread: vi.fn().mockResolvedValue(undefined),
+    };
+    const ctx = {
+      state: createMockState({
+        threadId: 'thread-1',
+        session: {
+          sendSignal: vi.fn(() => ({ accepted: Promise.resolve({ accepted: true, runId: 'run-1' }) })),
+        },
+        extra: { pendingNewThread: false, goalManager },
+      }),
+      addUserMessage: vi.fn(),
+      showError: vi.fn(),
+      updateStatusLine: vi.fn(),
+    } as any;
+
+    await handleGoalCommand(ctx, ['finish', 'the', 'task']);
+
+    expect(ctx.showError).toHaveBeenCalledWith('Failed to set goal.');
+    expect(goalManager.persistOnNextThreadCreate).not.toHaveBeenCalled();
+    expect(goalManager.consumePersistOnNextThreadCreate).not.toHaveBeenCalled();
+  });
+
   it('starts a goal from a plan-approval-style title+plan with only the goal reminder XML', async () => {
     // Regression: plan approval "Use as /goal" must enter the same goal
     // lifecycle as `/goal <text>` and send only the goal reminder. Sending an

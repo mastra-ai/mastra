@@ -1,7 +1,7 @@
 {
   "fixtures": [
     {
-      "match": {},
+      "match": { "model": "gpt-5.4-mini" },
       "response": {
         "content": "Fresh thread goal e2e acknowledged."
       }

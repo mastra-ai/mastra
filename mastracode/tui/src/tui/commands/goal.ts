@@ -341,7 +341,8 @@ async function startGoal(
 
   // Arming the flag ahead of the create means any failure between here and a
   // successful start would otherwise leave it armed for an unrelated later
-  // thread to consume. Disarm on every exit that isn't a started goal.
+  // thread to consume. Disarm on every exit that isn't a started goal — but
+  // only when this call is the one that armed it.
   let goal: Awaited<ReturnType<typeof goalManager.setGoal>>;
   try {
     if (state.pendingNewThread) {
@@ -351,12 +352,16 @@ async function startGoal(
 
     goal = await goalManager.setGoal(state, objective, judgeModelId, maxTurns);
   } catch (error) {
-    goalManager.consumePersistOnNextThreadCreate();
+    if (shouldPersistToCreatedThread) {
+      goalManager.consumePersistOnNextThreadCreate();
+    }
     throw error;
   }
 
   if (!goal) {
-    goalManager.consumePersistOnNextThreadCreate();
+    if (shouldPersistToCreatedThread) {
+      goalManager.consumePersistOnNextThreadCreate();
+    }
     ctx.showError('Failed to set goal.');
     return;
   }
