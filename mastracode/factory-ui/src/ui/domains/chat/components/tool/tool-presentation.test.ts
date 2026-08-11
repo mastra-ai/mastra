@@ -22,6 +22,11 @@ describe('presentTool', () => {
     expect(presentTool('execute_command', { command: cd })).toMatchObject({ detail: 'pnpm build', command: cd });
   });
 
+  it('strips an unquoted cd preamble too', () => {
+    const cd = 'cd packages/core && pnpm build';
+    expect(presentTool('execute_command', { command: cd })).toMatchObject({ detail: 'pnpm build', command: cd });
+  });
+
   it('leaves a bare cd alone — it is the whole command', () => {
     expect(presentTool('execute_command', { command: 'cd packages/core' })).toMatchObject({
       detail: 'cd packages/core',
