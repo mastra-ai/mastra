@@ -66,7 +66,7 @@ export function SankeySignals({
   dateRangePicker,
 }: SankeySignalsProps) {
   const queryClient = useQueryClient();
-  const { request, LinkComponent } = useTraceIntelligence();
+  const { cacheScope, request, LinkComponent } = useTraceIntelligence();
   const [signalNames, setSignalNames] = useState(() => initialSignalNames);
   const [pendingSignalNames, setPendingSignalNames] = useState<TraceSignalName[]>();
   const snapshotsQuery = useThemeSnapshots(entityId, entityType, signalNames, dateFrom, dateTo);
@@ -160,6 +160,7 @@ export function SankeySignals({
       const nextSnapshots = await queryClient.fetchQuery({
         queryKey: [
           'entity-learning',
+          cacheScope,
           entityType,
           entityId,
           'theme-snapshots',
@@ -176,14 +177,22 @@ export function SankeySignals({
       await Promise.all(
         selectFlowSnapshotIds(sortedNextSnapshots, nextSelectedIndex).map(snapshotId =>
           queryClient.fetchQuery({
-            queryKey: ['entity-learning', entityType, entityId, 'theme-flow', nextSignalNames, snapshotId],
+            queryKey: ['entity-learning', cacheScope, entityType, entityId, 'theme-flow', nextSignalNames, snapshotId],
             queryFn: () => fetchThemeFlow(request, entityId, entityType, nextSignalNames, snapshotId),
           }),
         ),
       );
       if (drillIn && nextSnapshot && nextSnapshot.traceCount <= DRILL_IN_TRACE_LIMIT) {
         await queryClient.fetchQuery({
-          queryKey: ['entity-learning', entityType, entityId, 'theme-paths', nextSignalNames, nextSnapshot.snapshotId],
+          queryKey: [
+            'entity-learning',
+            cacheScope,
+            entityType,
+            entityId,
+            'theme-paths',
+            nextSignalNames,
+            nextSnapshot.snapshotId,
+          ],
           queryFn: () => fetchThemePaths(request, entityId, entityType, nextSignalNames, nextSnapshot.snapshotId),
         });
       }

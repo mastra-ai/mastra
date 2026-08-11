@@ -15,7 +15,7 @@ import { useSignalsDateUrlState } from './use-signals-date-url-state';
 
 export function SignalsOverviewPage() {
   return (
-    <TraceIntelligenceProvider LinkComponent={Link}>
+    <TraceIntelligenceProvider cacheScope="oss-studio" LinkComponent={Link}>
       <SignalsOverviewContent />
     </TraceIntelligenceProvider>
   );

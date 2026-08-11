@@ -10,9 +10,9 @@ export function useThemeFlow(
   signalNames: TraceSignalName[],
   snapshotId: string | undefined,
 ) {
-  const { request } = useTraceIntelligence();
+  const { cacheScope, request } = useTraceIntelligence();
   return useQuery({
-    queryKey: ['entity-learning', entityType, entityId, 'theme-flow', signalNames, snapshotId],
+    queryKey: ['entity-learning', cacheScope, entityType, entityId, 'theme-flow', signalNames, snapshotId],
     queryFn: () => fetchThemeFlow(request, entityId, entityType, signalNames, requireSnapshot(snapshotId)),
     enabled: signalNames.length >= 2 && snapshotId !== undefined,
   });

@@ -13,12 +13,14 @@ async function defaultRequest<Response>(path: string): Promise<Response> {
 }
 
 export interface TraceIntelligenceContextValue {
+  cacheScope: string;
   request: TraceIntelligenceRequest;
   LinkComponent: LinkComponent;
   getTraceHref: (traceId: string) => string;
 }
 
 export const defaultTraceIntelligenceContextValue: TraceIntelligenceContextValue = {
+  cacheScope: 'oss-studio',
   request: defaultRequest,
   LinkComponent: 'a',
   getTraceHref: traceId => `/traces/${encodeURIComponent(traceId)}`,

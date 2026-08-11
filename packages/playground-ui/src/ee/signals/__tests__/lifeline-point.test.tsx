@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
 import { LifelinePoint } from '../lifeline-point';
@@ -18,9 +18,25 @@ describe('LifelinePoint', () => {
         />,
       );
 
-      fireEvent.focus(screen.getByRole('img', { name: /Unlinked theme/ }));
+      const point = screen.getByRole('img', { name: /Unlinked theme/ });
+      act(() => point.focus());
 
+      expect(document.activeElement).toBe(point);
       expect(screen.getByRole('tooltip').textContent).toContain('Unlinked theme');
+    });
+
+    it('does not render without a timeline position', () => {
+      render(
+        <LifelinePoint
+          title="Unlinked theme"
+          positionPercent={undefined}
+          height={12}
+          color="green"
+          onSelect={undefined}
+        />,
+      );
+
+      expect(screen.queryByRole('img', { name: 'Unlinked theme' })).toBeNull();
     });
   });
 });

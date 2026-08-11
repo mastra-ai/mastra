@@ -12,9 +12,19 @@ export function useNoiseExamples(
   limit = 20,
   offset = 0,
 ) {
-  const { request } = useTraceIntelligence();
+  const { cacheScope, request } = useTraceIntelligence();
   return useQuery({
-    queryKey: ['entity-learning', entityType, entityId, 'noise-examples', signalName, snapshotId, limit, offset],
+    queryKey: [
+      'entity-learning',
+      cacheScope,
+      entityType,
+      entityId,
+      'noise-examples',
+      signalName,
+      snapshotId,
+      limit,
+      offset,
+    ],
     queryFn: () => {
       if (!signalName || !snapshotId) throw new Error('Noise example queries require a trace signal and snapshot');
       return fetchNoiseExamples(request, entityId, entityType, signalName, snapshotId, limit, offset);

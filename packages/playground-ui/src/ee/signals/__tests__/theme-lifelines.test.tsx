@@ -201,6 +201,32 @@ describe('SankeySignals lifelines mode', () => {
       }
     });
 
+    it('shows a retryable error when one landmark flow fails', async () => {
+      renderSankeySignals();
+      await screen.findByRole('region', { name: 'Trace signal theme flow' });
+
+      let failedLandmarkAttempts = 0;
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-flow`, ({ request }) => {
+          const snapshotId = new URL(request.url).searchParams.get('snapshotId');
+          if (snapshotId === 'landmark-3' && failedLandmarkAttempts === 0) {
+            failedLandmarkAttempts += 1;
+            return new HttpResponse(undefined, { status: 500 });
+          }
+          const isEarly = snapshotId === 'landmark-1' || snapshotId === 'landmark-2';
+          return HttpResponse.json(isEarly ? earlierThemeFlowResponse : fourStageThemeFlowResponse);
+        }),
+      );
+
+      fireEvent.click(screen.getByRole('tab', { name: 'Lifelines' }));
+
+      const error = await screen.findByRole('alert');
+      expect(error.textContent).toContain('Unable to load theme lifelines.');
+      fireEvent.click(within(error).getByRole('button', { name: 'Retry' }));
+
+      expect(await screen.findByRole('region', { name: 'Theme lifelines' })).not.toBeNull();
+    });
+
     it('shows each theme with how many landmarks it appears in', async () => {
       renderSankeySignals();
       await screen.findByRole('region', { name: 'Trace signal theme flow' });

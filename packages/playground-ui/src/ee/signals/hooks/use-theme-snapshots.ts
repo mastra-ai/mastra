@@ -11,11 +11,11 @@ export function useThemeSnapshots(
   dateFrom?: Date,
   dateTo?: Date,
 ) {
-  const { request } = useTraceIntelligence();
+  const { cacheScope, request } = useTraceIntelligence();
   const from = dateFrom?.toISOString();
   const to = dateTo?.toISOString();
   return useQuery({
-    queryKey: ['entity-learning', entityType, entityId, 'theme-snapshots', signalNames, from, to],
+    queryKey: ['entity-learning', cacheScope, entityType, entityId, 'theme-snapshots', signalNames, from, to],
     queryFn: () => fetchThemeSnapshots(request, entityId, entityType, signalNames, dateFrom, dateTo),
     enabled: signalNames.length >= 2,
     staleTime: 30_000,

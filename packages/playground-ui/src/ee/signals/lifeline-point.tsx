@@ -18,6 +18,9 @@ export function LifelinePoint({
 }) {
   const tooltipId = useId();
   const [tooltipPosition, setTooltipPosition] = useState<{ left: number; top: number }>();
+
+  if (positionPercent === undefined) return null;
+
   const style = { left: `${positionPercent}%`, height: `${height}px`, backgroundColor: color };
 
   function showTooltipAt(target: HTMLElement) {

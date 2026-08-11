@@ -1,6 +1,7 @@
 import { useThemeFlows } from './hooks/use-theme-flows';
 import { snapshotSummaryLabel } from './sankey-signals-data';
 import { SignalLifelines } from './signal-lifelines';
+import { SignalsErrorState } from './signals-error-state';
 import { SignalsFrameLoadingSkeleton } from './signals-loading-skeleton';
 import { TimelineTrack } from './snapshot-timeline';
 import type { TimelineMarkerKind } from './snapshot-timeline';
@@ -39,7 +40,17 @@ export function ThemeLifelines({
     snapshots.map(snapshot => snapshot.snapshotId),
   );
   const flows = flowQueries.map(query => query.data);
+  const failedFlowQueries = flowQueries.filter(query => query.isError);
   const positions = timelineTickPositions(snapshots);
+
+  if (failedFlowQueries.length > 0) {
+    return (
+      <SignalsErrorState
+        message="Unable to load theme lifelines."
+        onRetry={() => void Promise.all(failedFlowQueries.map(query => query.refetch()))}
+      />
+    );
+  }
 
   if (!flows.some(flow => flow !== undefined)) {
     return (

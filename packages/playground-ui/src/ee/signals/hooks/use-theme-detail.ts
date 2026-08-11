@@ -12,9 +12,9 @@ export function useThemeDetail(
   snapshotId: string | undefined,
   themeId: string | undefined,
 ) {
-  const { request } = useTraceIntelligence();
+  const { cacheScope, request } = useTraceIntelligence();
   return useQuery({
-    queryKey: ['entity-learning', entityType, entityId, 'theme-detail', signalName, snapshotId, themeId],
+    queryKey: ['entity-learning', cacheScope, entityType, entityId, 'theme-detail', signalName, snapshotId, themeId],
     queryFn: () =>
       fetchThemeDetail(
         request,

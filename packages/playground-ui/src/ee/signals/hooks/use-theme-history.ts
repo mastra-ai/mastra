@@ -12,9 +12,9 @@ export function useThemeHistory(
   themeId: string | undefined,
   limit = 100,
 ) {
-  const { request } = useTraceIntelligence();
+  const { cacheScope, request } = useTraceIntelligence();
   return useQuery({
-    queryKey: ['entity-learning', entityType, entityId, 'theme-history', signalName, themeId, limit],
+    queryKey: ['entity-learning', cacheScope, entityType, entityId, 'theme-history', signalName, themeId, limit],
     queryFn: () => fetchThemeHistory(request, entityId, entityType, signalName, requireNumericThemeId(themeId), limit),
     enabled: isNumericThemeId(themeId),
   });

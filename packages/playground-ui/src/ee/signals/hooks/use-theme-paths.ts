@@ -12,9 +12,9 @@ export function useThemePaths(
   snapshotId: string | undefined,
   themeId: string | undefined,
 ) {
-  const { request } = useTraceIntelligence();
+  const { cacheScope, request } = useTraceIntelligence();
   return useQuery({
-    queryKey: ['entity-learning', entityType, entityId, 'theme-paths', signalNames, snapshotId],
+    queryKey: ['entity-learning', cacheScope, entityType, entityId, 'theme-paths', signalNames, snapshotId],
     queryFn: () => fetchThemePaths(request, entityId, entityType, signalNames, requireSnapshotId(snapshotId)),
     enabled: snapshotId !== undefined && isNumericThemeId(themeId),
     staleTime: 30_000,

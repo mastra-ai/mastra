@@ -14,10 +14,11 @@ export function useThemeExamples(
   limit = 20,
   offset = 0,
 ) {
-  const { request } = useTraceIntelligence();
+  const { cacheScope, request } = useTraceIntelligence();
   return useQuery({
     queryKey: [
       'entity-learning',
+      cacheScope,
       entityType,
       entityId,
       'theme-examples',

@@ -10,9 +10,9 @@ export function useNoise(
   signalName: TraceSignalName | undefined,
   snapshotId: string | undefined,
 ) {
-  const { request } = useTraceIntelligence();
+  const { cacheScope, request } = useTraceIntelligence();
   return useQuery({
-    queryKey: ['entity-learning', entityType, entityId, 'noise', signalName, snapshotId],
+    queryKey: ['entity-learning', cacheScope, entityType, entityId, 'noise', signalName, snapshotId],
     queryFn: () => {
       if (!signalName || !snapshotId) throw new Error('Noise queries require a trace signal and snapshot');
       return fetchNoise(request, entityId, entityType, signalName, snapshotId);
