@@ -1906,6 +1906,11 @@
       "permanent": true
     },
     {
+      "source": "/reference/storage/neon",
+      "destination": "/integrations/databases/neon",
+      "permanent": true
+    },
+    {
       "source": "/docs/editor/prompts/llms.txt",
       "destination": "/docs/editor/overview/llms.txt",
       "permanent": true
@@ -3453,6 +3458,11 @@
     {
       "source": "/guides/migrations/:path*/llms.txt",
       "destination": "/reference/migrations/:path*/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/reference/storage/neon/llms.txt",
+      "destination": "/integrations/databases/neon/llms.txt",
       "permanent": true
     }
   ]

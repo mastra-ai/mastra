@@ -1889,6 +1889,11 @@
       "source": "/guides/migrations/:path*",
       "destination": "/reference/migrations/:path*",
       "permanent": true
+    },
+    {
+      "source": "/reference/storage/neon",
+      "destination": "/integrations/databases/neon",
+      "permanent": true
     }
   ]
 }
