@@ -120,6 +120,14 @@ Set `threadContext: { maxMessages: 0 }` to disable this behavior. This only appl
 
 Mastra also adds a short system message that tells the agent which channel and platform the request came from, such as whether the message came from a direct message or public channel. Set `threadContext: { addSystemMessage: false }` to skip it.
 
+## Per-agent thread identity
+
+Each agent gets its own Mastra thread for every external conversation. Threads created by channels carry a `channel_agentId` metadata key with the id of the agent that owns them, and thread lookups only match threads owned by the same agent. Two agents that share one storage instance and talk in the same Slack channel or Telegram chat keep separate threads with separate history and subscription state.
+
+Threads created before this key existed are adopted lazily. When an agent finds a matching thread without a `channel_agentId` key, it claims the thread by stamping its own id onto it and keeps using it. Single-agent deployments keep their history and subscription state without any migration step. Threads claimed by another agent are never reused. The agent starts a fresh thread instead.
+
+In multi-agent deployments that were already sharing a thread, the shared thread goes to whichever agent handles the next message in that conversation. Other agents start fresh threads. An adopted thread keeps its existing `channel_subscribed` value, so an agent that adopts a thread another agent subscribed starts out subscribed to it.
+
 ## Tool approval
 
 Tools with `requireApproval: true` render as interactive cards with Approve and Deny buttons:

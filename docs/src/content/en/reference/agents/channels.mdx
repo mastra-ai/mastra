@@ -566,6 +566,14 @@ The `ResolveThreadIdContext` passed to the function:
 ]}
 />
 
+## Per-agent thread identity
+
+Channel threads belong to the agent that created them. New threads get a `channel_agentId` metadata key set to the owning agent's id, and thread lookups are scoped by `(platform, external thread id, channel id, agent id)`. Agent controllers stamp the controller id instead. Agents that share one storage instance never resolve to each other's threads or subscriptions.
+
+Threads created before `channel_agentId` existed match through a legacy fallback that only considers threads without the key. The first agent that touches such a thread claims it by writing its own id into the metadata. The claim keeps the thread id and stored `resourceId` and preserves all other metadata keys. A thread claimed by a different agent never matches, so the agent creates a fresh thread for that conversation instead.
+
+An adopted thread carries its stored `channel_subscribed` value forward. In a multi-agent deployment where agents previously shared one thread, the agent that adopts it inherits that subscription state.
+
 ## Inline media
 
 Controls which attachment types (images, video, PDFs, etc.) are sent as file parts to the model. Types that don't match are described as text summaries so the agent knows about the file without crashing models that reject unsupported types.
