@@ -262,4 +262,107 @@ describe('MastraStateAdapter', () => {
       expect(entry2?.message.text).toBe('b');
     });
   });
+
+  describe('per-agent subscription scoping', () => {
+    // Telegram private chats use the user's own id as the chat id, so two
+    // bots DMing the same user share the exact same external thread id.
+    const externalThreadId = 'telegram:12345678';
+
+    function legacyMetadata() {
+      return {
+        channel_platform: 'telegram',
+        channel_externalThreadId: externalThreadId,
+        channel_externalChannelId: 'telegram:12345678',
+      };
+    }
+
+    async function seedThread(id: string, metadata: Record<string, unknown>) {
+      await memoryStore.saveThread({
+        thread: {
+          id,
+          title: 'Test thread',
+          resourceId: `telegram:user-${id}`,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          metadata,
+        },
+      });
+    }
+
+    it('does not leak a subscription from one bot to another sharing the same storage (#17037)', async () => {
+      await seedThread('shared-legacy', legacyMetadata());
+
+      const botAAdapter = new MastraStateAdapter(memoryStore, () => 'bot-a');
+      const botBAdapter = new MastraStateAdapter(memoryStore, () => 'bot-b');
+      await botAAdapter.connect();
+      await botBAdapter.connect();
+
+      await botAAdapter.subscribe(externalThreadId);
+
+      expect(await botAAdapter.isSubscribed(externalThreadId)).toBe(true);
+      expect(await botBAdapter.isSubscribed(externalThreadId)).toBe(false);
+    });
+
+    it('subscribe claims an unclaimed legacy thread by stamping the owner id', async () => {
+      await seedThread('unclaimed-legacy', legacyMetadata());
+
+      const botAAdapter = new MastraStateAdapter(memoryStore, () => 'bot-a');
+      await botAAdapter.connect();
+      await botAAdapter.subscribe(externalThreadId);
+
+      const thread = await memoryStore.getThreadById({ threadId: 'unclaimed-legacy' });
+      expect(thread?.metadata).toMatchObject({
+        ...legacyMetadata(),
+        channel_subscribed: 'true',
+        channel_agentId: 'bot-a',
+      });
+    });
+
+    it('resolves only the thread scoped to its own agent id', async () => {
+      await seedThread('thread-a', { ...legacyMetadata(), channel_agentId: 'bot-a', channel_subscribed: 'true' });
+      await seedThread('thread-b', { ...legacyMetadata(), channel_agentId: 'bot-b' });
+
+      const botAAdapter = new MastraStateAdapter(memoryStore, () => 'bot-a');
+      const botBAdapter = new MastraStateAdapter(memoryStore, () => 'bot-b');
+      await botAAdapter.connect();
+      await botBAdapter.connect();
+
+      expect(await botAAdapter.isSubscribed(externalThreadId)).toBe(true);
+      expect(await botBAdapter.isSubscribed(externalThreadId)).toBe(false);
+
+      // Bot B subscribing touches only its own thread.
+      await botBAdapter.subscribe(externalThreadId);
+      const threadA = await memoryStore.getThreadById({ threadId: 'thread-a' });
+      const threadB = await memoryStore.getThreadById({ threadId: 'thread-b' });
+      expect((threadB?.metadata as Record<string, unknown>)?.channel_subscribed).toBe('true');
+      expect(threadA?.metadata).toMatchObject({ channel_agentId: 'bot-a', channel_subscribed: 'true' });
+    });
+
+    it('keeps unscoped behavior for adapters constructed without an owner getter', async () => {
+      await seedThread('claimed-by-someone', {
+        ...legacyMetadata(),
+        channel_agentId: 'bot-a',
+        channel_subscribed: 'true',
+      });
+
+      const legacyAdapter = new MastraStateAdapter(memoryStore);
+      await legacyAdapter.connect();
+
+      // Old behavior: any thread with the external id matches, claimed or not.
+      expect(await legacyAdapter.isSubscribed(externalThreadId)).toBe(true);
+    });
+
+    it('keeps unscoped behavior when the owner getter returns null', async () => {
+      await seedThread('claimed-by-someone', {
+        ...legacyMetadata(),
+        channel_agentId: 'bot-a',
+        channel_subscribed: 'true',
+      });
+
+      const unboundAdapter = new MastraStateAdapter(memoryStore, () => null);
+      await unboundAdapter.connect();
+
+      expect(await unboundAdapter.isSubscribed(externalThreadId)).toBe(true);
+    });
+  });
 });
