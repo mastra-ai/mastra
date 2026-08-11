@@ -276,10 +276,20 @@ export class MessageHistory implements Processor {
     if (newInput.length > 0 && typeof this.storage.listMessagesById === 'function') {
       const inputIds = newInput.map(m => m.id).filter((id): id is string => Boolean(id));
       if (inputIds.length > 0) {
+        const lookupSpan = this.createMemorySpan(
+          'recall',
+          observabilityContext,
+          { messageIds: inputIds },
+          {
+            messageCount: inputIds.length,
+          },
+        );
         let storedInput: MastraDBMessage[] | undefined;
         try {
           ({ messages: storedInput } = await this.storage.listMessagesById({ messageIds: inputIds }));
-        } catch {
+          lookupSpan?.end({ output: { success: true } });
+        } catch (error) {
+          lookupSpan?.error({ error: error as Error, endSpan: true });
           // Reconciliation is best effort. If the optional lookup fails, preserve
           // the pre-existing persistence behavior and save the original input and
           // output instead of aborting the whole turn.

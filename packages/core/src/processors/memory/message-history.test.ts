@@ -1265,10 +1265,16 @@ describe('MessageHistory', () => {
       saveSpy.mockRestore();
     });
 
-    it('should persist the original input and output when the stored-record lookup fails', async () => {
+    it('should record a stored-record lookup failure and persist the original input and output', async () => {
       processor = new MessageHistory({ storage: mockStorage });
-      vi.spyOn(mockStorage, 'listMessagesById').mockRejectedValueOnce(new Error('lookup unavailable'));
+      const lookupError = new Error('lookup unavailable');
+      vi.spyOn(mockStorage, 'listMessagesById').mockRejectedValueOnce(lookupError);
       const saveSpy = vi.spyOn(mockStorage, 'saveMessages');
+      const lookupSpan = { end: vi.fn(), error: vi.fn() };
+      const saveSpan = { end: vi.fn(), error: vi.fn() };
+      const currentSpan = {
+        createChildSpan: vi.fn().mockReturnValueOnce(lookupSpan).mockReturnValueOnce(saveSpan),
+      };
 
       const input = assistantMessage({
         id: 'msg-input',
@@ -1286,9 +1292,20 @@ describe('MessageHistory', () => {
         messages: [],
         abort: mockAbort,
         requestContext: createRuntimeContextWithMemory('thread-1'),
+        tracingContext: { currentSpan } as any,
       });
 
+      expect(currentSpan.createChildSpan).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({
+          name: 'memory: recall',
+          input: { messageIds: ['msg-input'] },
+          attributes: { operationType: 'recall', messageCount: 1 },
+        }),
+      );
+      expect(lookupSpan.error).toHaveBeenCalledWith({ error: lookupError, endSpan: true });
       expect(saveSpy).toHaveBeenCalledWith({ messages: [input, output] });
+      expect(saveSpan.end).toHaveBeenCalledWith({ output: { success: true } });
 
       saveSpy.mockRestore();
     });
