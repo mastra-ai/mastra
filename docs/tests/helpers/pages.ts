@@ -38,7 +38,6 @@ export const pages: PageConfig[] = [
   { path: '/reference/agents/agent', name: 'Reference – Agent' },
   { path: '/reference/tools/create-tool', name: 'Reference – Create Tool' },
   { path: '/reference/workflows/workflow', name: 'Reference – Workflow' },
-  { path: '/reference/storage/neon', name: 'Reference – Neon Storage' },
 
   // --- Learn ---
   { path: '/learn', name: 'Learn – Landing Page' },
