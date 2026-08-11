@@ -15,8 +15,8 @@ export const TOOL_ROW_TRIGGER =
 export const TOOL_RAIL_OFFSET = 'ml-[14px]';
 
 export function ToolStatusIcon({ status }: { status: ToolCall['status'] }) {
-  if (status === 'running') return <Spinner size="sm" aria-label="Running" className="text-icon3 size-3" />;
-  if (status === 'error') return <X size={13} role="img" aria-label="Failed" className="text-error" />;
+  if (status === 'running') return <Spinner size="sm" aria-label="Running" className="text-icon3 size-3 shrink-0" />;
+  if (status === 'error') return <X size={13} role="img" aria-label="Failed" className="text-error shrink-0" />;
   return null;
 }
 
@@ -62,7 +62,7 @@ export function ToolRow({ icon: Icon, label, detail, status, expanded, rule, tra
       <Txt
         as="span"
         variant="ui-sm"
-        className={cn('shrink-0', status === 'running' ? 'text-shimmer text-icon4' : 'text-icon5')}
+        className={cn('max-w-[55%] shrink-0 truncate', status === 'running' ? 'text-shimmer text-icon4' : 'text-icon5')}
       >
         {label}
       </Txt>
