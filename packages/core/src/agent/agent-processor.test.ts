@@ -1,4 +1,4 @@
-import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
+import type { LanguageModelV2, LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -949,6 +949,45 @@ describe('Input and Output Processors', () => {
   });
 
   describe('Output Processors with stream', () => {
+    it('should run output processors when the provider throws', async () => {
+      let outputPassRan = false;
+      const throwingModel = {
+        specificationVersion: 'v2',
+        provider: 'probe',
+        modelId: 'throws-503',
+        supportedUrls: {},
+        async doStream() {
+          throw new Error('probe request failed with HTTP 503');
+        },
+      } as LanguageModelV2;
+
+      const agent = new Agent({
+        id: 'output-processor-provider-error-agent',
+        name: 'Output Processor Provider Error Agent',
+        instructions: 'You are a test agent.',
+        model: throwingModel,
+        outputProcessors: [
+          {
+            id: 'provider-error-marker',
+            processOutputResult: async ({ messages, result }) => {
+              outputPassRan = true;
+              expect(result.finishReason).toBe('error');
+              return messages;
+            },
+          },
+        ],
+      });
+
+      const stream = await agent.stream('Hello');
+      const chunks = [];
+      for await (const chunk of stream.fullStream) {
+        chunks.push(chunk);
+      }
+
+      expect(chunks.some(chunk => chunk.type === 'error')).toBe(true);
+      expect(outputPassRan).toBe(true);
+    });
+
     it('should let an output processor clear the final text to an empty string', async () => {
       const agent = new Agent({
         id: 'redacting-output-processor-stream-agent',

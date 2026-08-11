@@ -460,6 +460,45 @@ describe('MessageHistory', () => {
   });
 
   describe('processOutputResult', () => {
+    it('should not persist an input-only failed run', async () => {
+      const mockStorage = {
+        saveMessages: vi.fn().mockResolvedValue(undefined),
+        getThreadById: vi.fn().mockResolvedValue({
+          id: 'thread-1',
+          title: 'Test Thread',
+          metadata: {},
+        }),
+        listMessages: vi.fn().mockResolvedValue({ messages: [], total: 0 }),
+        updateThread: vi.fn().mockResolvedValue(undefined),
+      } as unknown as MemoryStorage;
+
+      const processor = new MessageHistory({
+        storage: mockStorage,
+      });
+      const inputMessage: MastraDBMessage = {
+        role: 'user',
+        content: { format: 2, parts: [{ type: 'text', text: 'Hello' }] },
+        id: 'msg-1',
+        createdAt: new Date('2024-01-01T00:00:01Z'),
+      };
+      const messageList = new MessageList().add([inputMessage], 'input');
+
+      await processor.processOutputResult({
+        messageList,
+        messages: [inputMessage],
+        abort: mockAbort,
+        requestContext: createRuntimeContextWithMemory('thread-1'),
+        result: {
+          text: '',
+          usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+          finishReason: 'error',
+          steps: [],
+        },
+      });
+
+      expect(mockStorage.saveMessages).not.toHaveBeenCalled();
+    });
+
     it('should save user, assistant, and tool messages', async () => {
       const mockStorage = {
         saveMessages: vi.fn().mockResolvedValue(undefined),

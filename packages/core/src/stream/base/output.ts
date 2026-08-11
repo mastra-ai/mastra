@@ -1012,7 +1012,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                     steps: [...self.#bufferedSteps] as LLMStepResult[],
                   };
 
-                  if (self.#status !== 'failed' && self.#status !== 'canceled') {
+                  if (self.#status !== 'canceled') {
                     self.messageList = await self.processorRunner.runOutputProcessors(
                       self.messageList,
                       resolveObservabilityContext(options),

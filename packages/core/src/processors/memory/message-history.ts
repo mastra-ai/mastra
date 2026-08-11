@@ -1,4 +1,4 @@
-import type { Processor } from '..';
+import type { OutputResult, Processor } from '..';
 import type { MastraDBMessage, MessageList } from '../../agent';
 import { isTransientSignalMessage } from '../../agent/signals';
 import { parseMemoryRequestContext } from '../../memory';
@@ -232,9 +232,10 @@ export class MessageHistory implements Processor {
       messageList: MessageList;
       abort: (reason?: string) => never;
       requestContext?: RequestContext;
+      result?: OutputResult;
     } & Partial<ObservabilityContext>,
   ): Promise<MessageList> {
-    const { messageList, requestContext, ...observabilityContext } = args;
+    const { messageList, requestContext, result, ...observabilityContext } = args;
 
     // Get memory context from RequestContext or MessageList
     const context = this.getMemoryContext(requestContext, messageList);
@@ -251,6 +252,14 @@ export class MessageHistory implements Processor {
 
     const newInput = messageList.get.input.db();
     const newOutput = messageList.get.response.db();
+
+    // A failed run can still reach the output-processor pass so that custom
+    // processors can observe the terminal error. Do not turn an input-only
+    // failed run into an orphaned history record, though.
+    if (result?.finishReason === 'error' && newOutput.length === 0) {
+      return messageList;
+    }
+
     const messagesToSave = [...newInput, ...newOutput];
 
     if (messagesToSave.length === 0) {
