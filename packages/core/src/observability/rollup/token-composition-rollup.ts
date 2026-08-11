@@ -25,11 +25,20 @@ export interface TokenCompositionRollup {
   steps: {
     /** MODEL_STEP spans seen. */
     total: number;
-    /** Steps whose provider reported cache fields — the hit-rate population. */
+    /** Steps whose provider reported cache fields. The hit-rate population is `reported - multimodalExcluded`. */
     reported: number;
     /** Steps with no provider-reported cache fields. Excluded from the hit rate. */
     unreported: number;
-    /** Reported steps carrying audio/image input tokens. Excluded from the hit rate. */
+    /**
+     * Reported steps carrying broken-out audio/image input tokens. Excluded from
+     * the hit rate because `text` would then exclude them and under-count the
+     * denominator. Forward-compatibility guard: no provider path populates
+     * `inputDetails.audio`/`image` today (they are derived-but-never-assigned in
+     * observability/mastra's usage extractor), so this is expected to be 0 —
+     * today's `text` is `inputTokens - cacheRead - cacheWrite`, which means
+     * image tokens land inside `text` and the denominator is the full provider
+     * input total.
+     */
     multimodalExcluded: number;
     /** MODEL_STEP spans with no `promptRegions` attribute (pre-instrumentation spans). */
     uninstrumented: number;
@@ -191,7 +200,8 @@ export function formatTokenCompositionRollup(rollup: TokenCompositionRollup): st
 
   lines.push('Token composition rollup (tokens by type; no pricing by design)');
   lines.push(`cache-hit rate formula: ${rollup.formula}`);
-  lines.push(`  computed over reported, text-only steps`);
+  lines.push(`  computed over steps whose provider reported cache fields`);
+  lines.push(`  (\`text\` is the provider's non-cached input total; no provider breaks out audio/image today)`);
   lines.push('');
   lines.push(`steps: ${rollup.steps.total} total`);
   lines.push(`  reported ${rollup.steps.reported} | unreported ${rollup.steps.unreported}`);
@@ -211,6 +221,14 @@ export function formatTokenCompositionRollup(rollup: TokenCompositionRollup): st
     lines.push(`  ${region.padEnd(32)} ${tokens}`);
   }
   lines.push(`  ${'TOTAL'.padEnd(32)} ${rollup.regions.totalEstimated}`);
+  // Region shares are estimates. The bias belongs in the same glance as the
+  // table it distorts, not eight lines below it.
+  if (rollup.estimateDelta.meanSigned !== undefined && rollup.regions.totalEstimated > 0) {
+    const estimatedPerSample = rollup.regions.totalEstimated / Math.max(1, rollup.estimateDelta.samples);
+    const providerPerSample = estimatedPerSample - rollup.estimateDelta.meanSigned;
+    const bias = providerPerSample > 0 ? rollup.estimateDelta.meanSigned / providerPerSample : undefined;
+    lines.push(`  (estimate bias vs provider-reported input: ${bias === undefined ? 'n/a' : pct(bias)})`);
+  }
   lines.push('');
   const spt = rollup.stepsPerTurn;
   lines.push(

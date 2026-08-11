@@ -16,8 +16,16 @@ import { createTestMastra, mockDate } from './test-utils/utils';
  * running this file on the pristine base commit (upstream/main, before any
  * instrumentation changes) with CAPTURE_PROMPT_IDENTITY_BASELINE=1. The test
  * asserts the serialized prompt sent to the model is byte-identical to that
- * baseline. Regenerating the fixture is permitted ONLY when an upstream commit
- * changed prompt assembly; name that commit in the plan's progress file.
+ * baseline.
+ *
+ * If this test fails, the default conclusion is that a change altered the bytes
+ * sent to models — investigate before touching the fixture. Regenerating it is
+ * legitimate ONLY when an upstream change intentionally altered prompt
+ * assembly, in which case regenerate with:
+ *
+ *   CAPTURE_PROMPT_IDENTITY_BASELINE=1 vitest run src/loop/prompt-identity.test.ts
+ *
+ * and state the intentional prompt-assembly change in the commit message.
  */
 
 const FIXTURE_PATH = join(__dirname, '__fixtures__', 'prompt-identity-baseline.json');

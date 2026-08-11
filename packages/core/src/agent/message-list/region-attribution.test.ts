@@ -18,6 +18,31 @@ describe('attributePromptRegions', () => {
     expect(sumRegions(result.regions)).toBe(result.totalEstimated);
   });
 
+  it('does not let a binary content part dominate the estimate', () => {
+    const messageList = new MessageList();
+    const hugeBase64 = 'A'.repeat(200_000);
+
+    const withImage = attributePromptRegions({
+      messageList,
+      inputMessages: [
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: 'What is in this picture?' },
+            { type: 'image', image: `data:image/png;base64,${hugeBase64}` },
+          ],
+        },
+      ],
+    });
+    const textOnly = attributePromptRegions({
+      messageList,
+      inputMessages: [{ role: 'user', content: [{ type: 'text', text: 'What is in this picture?' }] }],
+    });
+
+    // The image part contributes a bounded placeholder, not its payload.
+    expect(withImage.totalEstimated).toBeLessThan(textOnly.totalEstimated + 20);
+  });
+
   it('attributes tagged system messages to per-tag regions', () => {
     const messageList = new MessageList();
     messageList.addSystem('Base instructions.');
@@ -119,6 +144,15 @@ describe('didPromptPrefixChange', () => {
         { role: 'user', content: 'b' },
       ]),
     ).toBe(true);
+  });
+
+  it('returns true when the prompt shrinks', () => {
+    const key = {};
+    didPromptPrefixChange(key, [
+      { role: 'system', content: 'a' },
+      { role: 'user', content: 'b' },
+    ]);
+    expect(didPromptPrefixChange(key, [{ role: 'system', content: 'a' }])).toBe(true);
   });
 
   it('tracks keys independently', () => {

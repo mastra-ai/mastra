@@ -1566,10 +1566,14 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         const stepSpanForRegions = modelSpanTracker?.getTracingContext()?.currentSpan;
         if (stepSpanForRegions?.type === SpanType.MODEL_STEP) {
           try {
+            // Prefix baseline first: it is stateful, and skipping it because
+            // attribution threw would silently compare the NEXT step against a
+            // stale prompt.
+            const prefixChanged = didPromptPrefixChange(messageList, inputMessages);
             stepSpanForRegions.update({
               attributes: {
                 promptRegions: attributePromptRegions({ messageList, inputMessages }),
-                promptPrefixChangedFromPreviousStep: didPromptPrefixChange(messageList, inputMessages),
+                promptPrefixChangedFromPreviousStep: prefixChanged,
               },
             });
           } catch (error) {

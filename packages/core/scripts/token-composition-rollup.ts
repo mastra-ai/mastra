@@ -30,6 +30,15 @@ function main() {
   const rollup = rollupTokenComposition(spans);
 
   console.log(asJson ? JSON.stringify(rollup, null, 2) : formatTokenCompositionRollup(rollup));
+
+  if (rollup.steps.total === 0) {
+    // An all-zero report from a mis-exported session reads exactly like a real
+    // finding. Fail loudly instead.
+    console.error(
+      `\nno MODEL_STEP spans found in ${file} — check the exporter is wired and MODEL_STEP is not in excludeSpanTypes`,
+    );
+    process.exit(2);
+  }
 }
 
 main();
