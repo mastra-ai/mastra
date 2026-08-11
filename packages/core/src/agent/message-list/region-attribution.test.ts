@@ -43,6 +43,47 @@ describe('attributePromptRegions', () => {
     expect(withImage.totalEstimated).toBeLessThan(textOnly.totalEstimated + 20);
   });
 
+  it('counts tool-call arguments and tool results, which the provider also charges for', () => {
+    const messageList = new MessageList();
+    const args = { query: 'quarterly revenue by region', limit: 50, includeProjections: true };
+
+    const withToolCall = attributePromptRegions({
+      messageList,
+      inputMessages: [
+        {
+          role: 'assistant',
+          content: [{ type: 'tool-call', toolCallId: 'call_1', toolName: 'searchReports', input: args }],
+        },
+      ],
+    });
+    const bare = attributePromptRegions({
+      messageList,
+      inputMessages: [{ role: 'assistant', content: [{ type: 'text', text: '' }] }],
+    });
+
+    // A tool payload is text the provider serializes and bills. Collapsing it to
+    // a placeholder would understate the messages region in exactly the
+    // tool-calling loops this instrumentation exists to measure.
+    expect(withToolCall.regions.messages).toBeGreaterThan(bare.regions.messages + 10);
+  });
+
+  it('replaces a base64 payload buried inside a structured part', () => {
+    const messageList = new MessageList();
+    const blob = 'QUJDREVG'.repeat(500);
+
+    const result = attributePromptRegions({
+      messageList,
+      inputMessages: [
+        {
+          role: 'tool',
+          content: [{ type: 'tool-result', toolCallId: 'call_1', output: { screenshot: blob, status: 'ok' } }],
+        },
+      ],
+    });
+
+    expect(result.regions.messages).toBeLessThan(40);
+  });
+
   it('attributes tagged system messages to per-tag regions', () => {
     const messageList = new MessageList();
     messageList.addSystem('Base instructions.');

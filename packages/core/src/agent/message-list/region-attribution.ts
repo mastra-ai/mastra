@@ -30,12 +30,15 @@ interface PromptLikeMessage {
 /**
  * Deterministic text projection of a message's content for token estimation.
  *
- * Non-text parts (images, files, tool payloads) are projected to a bounded
- * placeholder rather than serialized: a base64 data URL would otherwise be fed
- * whole into the estimator and dominate every region total it touches. The
- * placeholder means binary parts contribute a small constant instead of a real
- * token count — one more reason the estimate is reported alongside the
- * provider-reported total rather than in place of it.
+ * Structured text payloads (tool-call arguments, tool results) ARE serialized,
+ * because the provider serializes them too and charges tokens for them. In a
+ * tool-calling loop they are most of the `messages` region, so collapsing them
+ * would understate exactly the region a caller is usually trying to measure.
+ *
+ * Binary payloads are the exception: an image or file part, or any long
+ * base64/data-URL string inside a part, projects to a bounded placeholder. Fed
+ * whole to the estimator it would dominate every region total it touches, and
+ * its real token cost is not a function of its serialized length anyway.
  */
 function contentToText(content: unknown): string {
   if (typeof content === 'string') return content;
@@ -47,13 +50,34 @@ function contentToText(content: unknown): string {
   return String(content);
 }
 
+/** Part types whose payload is bytes, not tokens-worth-of-text. */
+const BINARY_PART_TYPES = new Set(['image', 'file']);
+
+/** A data URL, or a long unbroken base64-ish run: too big to estimate, not text anyway. */
+function looksBinary(value: string): boolean {
+  if (value.startsWith('data:')) return true;
+  return value.length > 512 && /^[A-Za-z0-9+/=_-]+$/.test(value);
+}
+
+function placeholder(label: string): string {
+  return `\u0002${label}\u0002`;
+}
+
 function projectPart(part: unknown): string {
-  if (typeof part === 'string') return part;
+  if (typeof part === 'string') return looksBinary(part) ? placeholder('binary') : part;
   if (!part || typeof part !== 'object') return String(part ?? '');
   const text = (part as { text?: unknown }).text;
   if (typeof text === 'string') return text;
   const type = (part as { type?: unknown }).type;
-  return `\u0002${typeof type === 'string' ? type : 'part'}\u0002`;
+  if (typeof type === 'string' && BINARY_PART_TYPES.has(type)) return placeholder(type);
+  try {
+    return JSON.stringify(part, (_key, value) =>
+      typeof value === 'string' && looksBinary(value) ? placeholder('binary') : value,
+    );
+  } catch {
+    // Cyclic or otherwise unserializable: fall back to the type name.
+    return placeholder(typeof type === 'string' ? type : 'part');
+  }
 }
 
 /**
