@@ -38,7 +38,7 @@ export function ChatShellRoot({ className, scroller, ...props }: ChatShellProps)
         className={cn(
           '@container relative isolate flex min-h-0 min-w-0 flex-col bg-(--chat-surface)',
           '[--chat-column:48rem] [--chat-fade:1.5rem] [--chat-gutter:0.75rem] [--chat-inset-end:0px]',
-          '[--chat-surface:var(--color-surface2)] [--chat-veil:30%]',
+          '[--chat-surface:var(--color-surface2)] [--chat-veil:70%]',
           className,
         )}
         {...props}

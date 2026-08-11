@@ -7,7 +7,7 @@ Improved how the chat transcript meets the composer in `ChatShell`. The dock use
 Two new custom properties tune it, alongside the existing `--chat-column` and `--chat-surface`:
 
 ```tsx
-<ChatShell className="[--chat-fade:1.5rem] [--chat-veil:30%]">
+<ChatShell className="[--chat-fade:1.5rem] [--chat-veil:70%]">
 ```
 
 `--chat-fade` is the band of air above the composer the veil ramps in across, and `--chat-veil` is the strongest it ever gets. `--chat-gutter` now means the room below the composer only — the room above belongs to the fade band, so `ChatShell.Content` no longer carries its own bottom padding.

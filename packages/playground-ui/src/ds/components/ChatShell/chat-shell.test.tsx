@@ -120,7 +120,7 @@ describe('ChatShell', () => {
     expect(dock.className).toContain('pb-(--chat-gutter)');
     expect(screen.getByTestId('content').className).not.toContain('pb-');
     expect(screen.getByTestId('shell').className).toContain('[--chat-fade:1.5rem]');
-    expect(screen.getByTestId('shell').className).toContain('[--chat-veil:30%]');
+    expect(screen.getByTestId('shell').className).toContain('[--chat-veil:70%]');
   });
 
   it('anchors the scroll button on the dock, not the page', () => {
