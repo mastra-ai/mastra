@@ -58,6 +58,25 @@ describe('timeTravel divergence guard', () => {
       ).toThrow(/mapping_old/); // recorded ids listed in the error
     });
 
+    it('treats a null or undefined recorded value as not recorded', () => {
+      const graph = graphOf(stepEntry('s1'), stepEntry('s2'), stepEntry('s3'));
+      const snapshot = snapshotWith({
+        input: { v: 1 },
+        s1: recordedStep({ v: 2 }),
+        s2: undefined, // key present, value unusable: reconstruction would fall back to {}
+        s3: recordedStep({ v: 4 }),
+      });
+
+      expect(() =>
+        createTimeTravelExecutionParams({
+          steps: ['s3'],
+          snapshot,
+          graph,
+          context: { s2: undefined } as any, // caller context with an undefined value must not count either
+        }),
+      ).toThrow(/'s2'/);
+    });
+
     it('throws when the target step id does not exist in the live graph (renamed step)', () => {
       const graph = graphOf(stepEntry('s1'), stepEntry('s2-renamed'));
       const snapshot = snapshotWith({

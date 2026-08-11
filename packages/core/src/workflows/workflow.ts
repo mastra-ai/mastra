@@ -2090,7 +2090,13 @@ export class Workflow<
     // different id per build and break time travel across restarts). Otherwise
     // mint a deterministic id from the workflow id plus the ordinal of this
     // mapping entry within the step flow.
-    const mappingOrdinal = this.stepFlow.filter(entry => entry.type === 'mapping').length;
+    // Skip ordinals whose id is already taken (an explicit `stepOptions.id` may
+    // have claimed a `mapping_<workflowId>_<n>` name) so the fallback never
+    // collides with an existing step.
+    let mappingOrdinal = this.stepFlow.filter(entry => entry.type === 'mapping').length;
+    while (`mapping_${this.id}_${mappingOrdinal}` in this.steps) {
+      mappingOrdinal++;
+    }
     const mappingId =
       stepOptions?.id ||
       (this.#mastra?.getIdGenerator()

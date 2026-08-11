@@ -355,7 +355,7 @@ export const assertTimeTravelGraphMatchesSnapshot = (params: {
     );
   }
 
-  const hasRecordedEntry = (stepId: string) => stepId in snapshotContext || (context != null && stepId in context);
+  const hasRecordedEntry = (stepId: string) => snapshotContext[stepId] != null || context?.[stepId] != null;
 
   const missingStepIds: string[] = [];
   for (const [index, entry] of graph.steps.entries()) {

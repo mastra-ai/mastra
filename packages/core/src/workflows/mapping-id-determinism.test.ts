@@ -96,33 +96,56 @@ describe('deterministic mapping ids for unnamed .map()', () => {
       .then(s2)
       .commit();
 
-    const outerS1 = createStep({
-      id: 'outer-s1',
-      inputSchema: z.object({ v: z.number() }),
-      outputSchema: z.object({ v: z.number() }),
-      execute: async ({ inputData }) => ({ v: inputData.v }),
-    });
     const outerFinal = createStep({
       id: 'outer-final',
       inputSchema: z.object({ doubled: z.number() }),
       outputSchema: z.object({ out: z.number() }),
       execute: async ({ inputData }) => ({ out: inputData.doubled }),
     });
-    const parent = createWorkflow({
-      id: 'mapping-nested-outer-wf',
-      inputSchema: z.object({ v: z.number() }),
-      outputSchema: z.object({ out: z.number() }),
-    })
-      .then(outerS1)
-      .map({ doubled: { step: outerS1, path: 'v' } })
-      .then(outerFinal)
-      .commit();
+    const buildParent = () =>
+      createWorkflow({
+        id: 'mapping-nested-outer-wf',
+        inputSchema: z.object({ v: z.number() }),
+        outputSchema: z.object({ out: z.number() }),
+      })
+        .then(nested)
+        .map({ doubled: { step: nested, path: 'out' } })
+        .then(outerFinal)
+        .commit();
 
+    const parent = buildParent();
     const parentIds = mappingIdsOf(parent as any);
     const nestedIds = mappingIdsOf(nested as any);
     expect(parentIds).toEqual(['mapping_mapping-nested-outer-wf_0']);
     expect(nestedIds).toEqual(['mapping_mapping-nested-inner-wf_0']);
     expect(parentIds[0]).not.toBe(nestedIds[0]);
+    // Rebuilding the parent (nested workflow still in the graph) yields the same ids.
+    expect(mappingIdsOf(buildParent() as any)).toEqual(parentIds);
+  });
+
+  it('never collides an unnamed fallback id with an explicit id in the fallback namespace', () => {
+    const { s1 } = makeSteps();
+    const s3 = createStep({
+      id: 's3',
+      inputSchema: z.object({ tripled: z.number() }),
+      outputSchema: z.object({ out: z.number() }),
+      execute: async ({ inputData }) => ({ out: inputData.tripled }),
+    });
+    const wf = createWorkflow({
+      id: 'mapping-collide-wf',
+      inputSchema: z.object({ v: z.number() }),
+      outputSchema: z.object({ out: z.number() }),
+    })
+      .then(s1)
+      // Explicit id claims the name the SECOND (unnamed) mapping's ordinal would produce.
+      .map({ doubled: { step: s1, path: 'v' } }, { id: 'mapping_mapping-collide-wf_1' })
+      .map(async ({ inputData }: any) => ({ tripled: inputData.doubled }))
+      .then(s3)
+      .commit();
+    const ids = mappingIdsOf(wf as any).sort();
+    // The unnamed mapping must skip the taken ordinal and land on _2, not overwrite _1.
+    expect(ids).toEqual(['mapping_mapping-collide-wf_1', 'mapping_mapping-collide-wf_2']);
+    expect(Object.keys((wf as any).steps).filter(id => id.startsWith('mapping_'))).toHaveLength(2);
   });
 
   it('end-to-end: timeTravel succeeds across a simulated restart and keeps the recorded outputs', async () => {
