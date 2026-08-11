@@ -13,11 +13,16 @@ export const ROW_RAIL = 'border-border1 ml-[14px] max-w-full min-w-0 border-l py
 function Chevron({ expanded, className }: { expanded: boolean; className: string }) {
   // Nested, not a direct trigger child — the DS trigger rotates direct-child <svg> on open.
   return (
-    <ChevronRight
-      size={13}
+    <span
       aria-hidden
-      className={cn('shrink-0 transition-[transform,color] duration-150', expanded && 'rotate-90', className)}
-    />
+      className={cn(
+        'flex shrink-0 items-center transition-[transform,color] duration-150',
+        expanded && 'rotate-90',
+        className,
+      )}
+    >
+      <ChevronRight size={13} />
+    </span>
   );
 }
 
@@ -53,7 +58,7 @@ export function TranscriptRow({ icon, label, detail, running, expanded, rule, tr
       {icon && expanded !== undefined && (
         <Chevron expanded={expanded} className="text-icon2 group-hover/row:text-icon4" />
       )}
-      {rule ? <span aria-hidden className="bg-border1 h-px min-w-2 flex-1" /> : <span className="flex-1" />}
+      <span aria-hidden className={cn('min-w-2 flex-1', rule && 'bg-border1 h-px')} />
       {trailing}
     </span>
   );
