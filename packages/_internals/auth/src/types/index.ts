@@ -1,7 +1,7 @@
 export interface HonoRequestLike {
   raw?: Request;
-  headers?: Headers;
-  header(name: string): string | undefined;
+  headers?: Headers | Record<string, string | string[] | undefined>;
+  header?(name: string): string | undefined;
 }
 
 export type MastraAuthRequest = Request | HonoRequestLike;
@@ -14,12 +14,41 @@ export type AuthorizeUserFn<TUser, TResult = Promise<boolean> | boolean> = {
   bivarianceHack(user: TUser, request: MastraAuthRequest): TResult;
 }['bivarianceHack'];
 
+function headerFromPlainObject(
+  headers: Record<string, string | string[] | undefined>,
+  name: string,
+): string | null {
+  const value = headers[name.toLowerCase()] ?? headers[name];
+  return Array.isArray(value) ? (value[0] ?? null) : (value ?? null);
+}
+
+/**
+ * Read a request header across fetch, Hono, and Express-style request shapes.
+ * Must not throw when `headers` is a plain object (Express `IncomingHttpHeaders`).
+ */
 export function getRequestHeader(request: MastraAuthRequest, name: string): string | null {
   if (request instanceof Request) {
     return request.headers.get(name);
   }
 
-  return request.raw?.headers.get(name) ?? request.headers?.get(name) ?? request.header(name) ?? null;
+  if (request.raw instanceof Request) {
+    return request.raw.headers.get(name);
+  }
+
+  const headers = request.headers;
+  if (headers instanceof Headers) {
+    return headers.get(name);
+  }
+
+  if (typeof request.header === 'function') {
+    return request.header(name) ?? null;
+  }
+
+  if (headers && typeof headers === 'object') {
+    return headerFromPlainObject(headers, name);
+  }
+
+  return null;
 }
 
 export function getWebRequest(request: MastraAuthRequest): Request | undefined {
