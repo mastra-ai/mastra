@@ -1,9 +1,9 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 
 import { getErrorFromUnknown } from '../error';
 import { EventEmitterPubSub } from '../events/event-emitter';
-import { isLeaseProvider, NoopLeaseProvider } from '../events/pubsub';
-import type { LeaseProvider, PubSub } from '../events/pubsub';
+import { isLeaseProvider, isLeaseRecordProvider, NoopLeaseProvider } from '../events/pubsub';
+import type { LeaseProvider, LeaseRecord, PubSub } from '../events/pubsub';
 import type { EventCallback } from '../events/types';
 import { parseMemoryRequestContext } from '../memory/types';
 import type { RequestContext } from '../request-context';
@@ -33,9 +33,7 @@ import type {
 
 const AGENT_THREAD_KEY_SEPARATOR = '\u0000';
 const AGENT_THREAD_STREAM_TOPIC_PREFIX = 'agent.thread-stream';
-const AGENT_THREAD_LEASE_OWNER_PREFIX = 'mastra:agent-thread:v1:';
-const AGENT_THREAD_LEASE_SOURCE_ID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const AGENT_THREAD_LEASE_OWNER_PREFIX = 'mastra:agent-thread:v2:';
 /**
  * Lease TTL for the cross-process thread lease acquired in the idle-wake
  * path. Kept short so a crashed owner process frees the thread quickly; a
@@ -227,10 +225,12 @@ export class AgentThreadStreamRuntime {
   async #hasLiveThreadLease(pubsub: PubSub, key: string, runId: string): Promise<boolean> {
     const { provider, isFallback } = this.#resolveLeaseProvider(pubsub);
     if (isFallback) return true;
-    return provider
-      .getLeaseOwner(key)
-      .then(owner => this.#getRunIdFromLeaseOwner(owner) === runId)
-      .catch(() => false);
+    try {
+      const record = await this.#readLeaseRecord(provider, key);
+      return this.#leaseRecordBelongsToRun(provider, record, runId);
+    } catch {
+      return false;
+    }
   }
 
   #getSourceId(): string {
@@ -239,38 +239,41 @@ export class AgentThreadStreamRuntime {
   }
 
   /**
-   * Lease providers treat the owner as an opaque token. Include this runtime's
-   * source id so a cross-instance resume of the same durable run rotates the
-   * token instead of making both holders indistinguishable by bare `runId`.
-   * The run-id length makes the format unambiguous without URI-encoding
-   * user-supplied strings (which can throw for otherwise valid JS strings).
+   * Metadata-capable providers treat the owner as an opaque token and store the
+   * logical run id in the same atomic lease record. Providers without that
+   * capability retain the legacy bare-run-id behavior for compatibility.
    */
-  #getLeaseOwner(runId: string): string {
-    return `${AGENT_THREAD_LEASE_OWNER_PREFIX}${runId.length}:${runId}:${this.#getSourceId()}`;
+  #getLeaseOwner(provider: LeaseProvider, runId: string): string {
+    if (!isLeaseRecordProvider(provider)) return runId;
+    const runIdDigest = createHash('sha256').update(runId, 'utf16le').digest('base64url');
+    return `${AGENT_THREAD_LEASE_OWNER_PREFIX}${this.#getSourceId()}:${runIdDigest}`;
   }
 
   /**
-   * Events and public results still route by logical run id. Parse only the
-   * canonical scoped-token shape at that boundary; anything malformed (or a
-   * legacy bare run id that merely shares the prefix) remains opaque.
+   * Read one coherent owner record when the provider supports atomic metadata.
+   * Legacy providers expose their old bare owner through the same shape.
    */
-  #getRunIdFromLeaseOwner(owner: string | undefined): string | undefined {
-    if (!owner?.startsWith(AGENT_THREAD_LEASE_OWNER_PREFIX)) return owner;
-    const payload = owner.slice(AGENT_THREAD_LEASE_OWNER_PREFIX.length);
-    const lengthSeparator = payload.indexOf(':');
-    if (lengthSeparator <= 0) return owner;
+  async #readLeaseRecord(provider: LeaseProvider, key: string): Promise<LeaseRecord | undefined> {
+    if (isLeaseRecordProvider(provider)) return provider.getLeaseRecord(key);
+    const owner = await provider.getLeaseOwner(key);
+    return owner === undefined ? undefined : { owner };
+  }
 
-    const encodedLength = payload.slice(0, lengthSeparator);
-    if (!/^(?:0|[1-9]\d*)$/.test(encodedLength)) return owner;
-    const runIdLength = Number(encodedLength);
-    if (!Number.isSafeInteger(runIdLength)) return owner;
+  #leaseRecordBelongsToRun(provider: LeaseProvider, record: LeaseRecord | undefined, runId: string): boolean {
+    if (!record) return false;
+    if (isLeaseRecordProvider(provider)) {
+      return record.metadata === runId || (record.metadata === undefined && record.owner === runId);
+    }
+    return record.owner === runId;
+  }
 
-    const runIdStart = lengthSeparator + 1;
-    const sourceSeparator = runIdStart + runIdLength;
-    if (payload[sourceSeparator] !== ':') return owner;
-    const sourceId = payload.slice(sourceSeparator + 1);
-    if (!AGENT_THREAD_LEASE_SOURCE_ID_PATTERN.test(sourceId)) return owner;
-    return payload.slice(runIdStart, sourceSeparator);
+  #logicalRunIdFromLeaseRecord(provider: LeaseProvider, record: LeaseRecord | undefined): string | undefined {
+    if (!record) return undefined;
+    if (isLeaseRecordProvider(provider)) {
+      if (record.metadata !== undefined) return record.metadata;
+      if (record.owner.startsWith(AGENT_THREAD_LEASE_OWNER_PREFIX)) return undefined;
+    }
+    return record.owner;
   }
 
   /**
@@ -283,24 +286,39 @@ export class AgentThreadStreamRuntime {
     runId: string,
   ): Promise<{ acquired: boolean; owner?: string }> {
     const leaseProvider = this.#getLeaseProvider(pubsub);
-    const owner = this.#getLeaseOwner(runId);
-    const lease = await leaseProvider.acquireLease(key, owner, AGENT_THREAD_LEASE_TTL_MS);
+    const owner = this.#getLeaseOwner(leaseProvider, runId);
+    const metadata = isLeaseRecordProvider(leaseProvider) ? runId : undefined;
+    const lease = await (metadata === undefined
+      ? leaseProvider.acquireLease(key, owner, AGENT_THREAD_LEASE_TTL_MS)
+      : leaseProvider.acquireLease(key, owner, AGENT_THREAD_LEASE_TTL_MS, metadata));
     if (lease.acquired) return { acquired: true, owner: runId };
 
-    // A resume reuses its durable runId. Rotate the exact token returned by the
-    // provider so the former holder can no longer renew or release this lease.
-    if (lease.owner && this.#getRunIdFromLeaseOwner(lease.owner) === runId) {
-      const transferred = await leaseProvider.transferLease(key, lease.owner, owner, AGENT_THREAD_LEASE_TTL_MS);
+    // A resume reuses its durable runId. Transfer only when the provider's
+    // coherent record proves that the current holder belongs to this run.
+    const current: LeaseRecord | undefined = await this.#readLeaseRecord(leaseProvider, key).catch(
+      (): LeaseRecord | undefined => (lease.owner === undefined ? undefined : { owner: lease.owner }),
+    );
+    if (this.#leaseRecordBelongsToRun(leaseProvider, current, runId)) {
+      const transferred = await leaseProvider.transferLease(
+        key,
+        current!.owner,
+        owner,
+        AGENT_THREAD_LEASE_TTL_MS,
+        current!.metadata,
+        metadata,
+      );
       if (transferred) return { acquired: true, owner: runId };
 
       // The old token can expire between acquire and transfer. Claim a key that
       // became empty instead of treating that race as a lost wake.
-      const retried = await leaseProvider.acquireLease(key, owner, AGENT_THREAD_LEASE_TTL_MS);
+      const retried = await (metadata === undefined
+        ? leaseProvider.acquireLease(key, owner, AGENT_THREAD_LEASE_TTL_MS)
+        : leaseProvider.acquireLease(key, owner, AGENT_THREAD_LEASE_TTL_MS, metadata));
       if (retried.acquired) return { acquired: true, owner: runId };
     }
 
-    const currentOwner = await leaseProvider.getLeaseOwner(key).catch(() => lease.owner);
-    return { acquired: false, owner: this.#getRunIdFromLeaseOwner(currentOwner) };
+    const currentRecord = await this.#readLeaseRecord(leaseProvider, key).catch(() => current);
+    return { acquired: false, owner: this.#logicalRunIdFromLeaseRecord(leaseProvider, currentRecord) };
   }
 
   /**
@@ -313,10 +331,12 @@ export class AgentThreadStreamRuntime {
    */
   #releaseThreadLease(pubsub: PubSub | undefined, key: string, runId: string): void {
     const resolved = this.#getPubSub(pubsub);
+    const provider = this.#getLeaseProvider(resolved);
     this.#stopLeaseRenewal(resolved, runId);
-    void this.#getLeaseProvider(resolved)
-      .releaseLease(key, this.#getLeaseOwner(runId))
-      .catch(() => {});
+    const owner = this.#getLeaseOwner(provider, runId);
+    void (
+      isLeaseRecordProvider(provider) ? provider.releaseLease(key, owner, runId) : provider.releaseLease(key, owner)
+    ).catch(() => {});
   }
 
   /**
@@ -331,10 +351,14 @@ export class AgentThreadStreamRuntime {
     const state = this.#getState(pubsub);
     if (state.leaseRenewalTimers.has(runId)) return;
     const leaseProvider = this.#getLeaseProvider(pubsub);
-    const owner = this.#getLeaseOwner(runId);
+    const owner = this.#getLeaseOwner(leaseProvider, runId);
+    const metadata = isLeaseRecordProvider(leaseProvider) ? runId : undefined;
     const timer = setInterval(() => {
-      void leaseProvider
-        .renewLease(key, owner, AGENT_THREAD_LEASE_TTL_MS)
+      void (
+        metadata === undefined
+          ? leaseProvider.renewLease(key, owner, AGENT_THREAD_LEASE_TTL_MS)
+          : leaseProvider.renewLease(key, owner, AGENT_THREAD_LEASE_TTL_MS, metadata)
+      )
         .then(renewed => {
           if (!renewed) {
             // If renewLease reports the lease is gone, stop renewing; the current stream may still finish,
@@ -379,14 +403,18 @@ export class AgentThreadStreamRuntime {
   ): Promise<boolean> {
     const resolved = this.#getPubSub(pubsub);
     const leaseProvider = this.#getLeaseProvider(resolved);
-    const fromOwner = this.#getLeaseOwner(fromRunId);
-    const toOwner = this.#getLeaseOwner(toRunId);
+    const fromOwner = this.#getLeaseOwner(leaseProvider, fromRunId);
+    const toOwner = this.#getLeaseOwner(leaseProvider, toRunId);
+    const fromMetadata = isLeaseRecordProvider(leaseProvider) ? fromRunId : undefined;
+    const toMetadata = isLeaseRecordProvider(leaseProvider) ? toRunId : undefined;
     // `transferLease` is a required `LeaseProvider` method. Atomic backends
     // (Redis, in-memory) swap the key gap-free; backends that can't be atomic
     // implement it as release+acquire internally and own that race cost.
-    const held = await leaseProvider
-      .transferLease(key, fromOwner, toOwner, AGENT_THREAD_LEASE_TTL_MS)
-      .catch(() => false);
+    const held = await (
+      fromMetadata === undefined
+        ? leaseProvider.transferLease(key, fromOwner, toOwner, AGENT_THREAD_LEASE_TTL_MS)
+        : leaseProvider.transferLease(key, fromOwner, toOwner, AGENT_THREAD_LEASE_TTL_MS, fromMetadata, toMetadata)
+    ).catch(() => false);
     // Move the renewal timer to the new owner regardless: the old timer is
     // owner-guarded and would only no-op now, and the new owner needs its
     // own keep-alive for long drains.
@@ -421,6 +449,17 @@ export class AgentThreadStreamRuntime {
     if (fromRunId) {
       const transferred = await this.#transferThreadLease(pubsub, key, fromRunId, toRunId);
       if (transferred) return { acquired: true, owner: toRunId };
+      // A just-finished run can race its own registration's lease acquire: the
+      // first transfer may observe the key empty, then that acquire can restore
+      // the same `fromRunId` lease before the fallback below reads it. Retry the
+      // owner-guarded handoff once when the coherent record proves it is still
+      // our logical predecessor; never transfer a different holder's lease.
+      const provider = this.#getLeaseProvider(resolved);
+      const current = await this.#readLeaseRecord(provider, key).catch(() => undefined);
+      if (this.#leaseRecordBelongsToRun(provider, current, fromRunId)) {
+        const retried = await this.#transferThreadLease(pubsub, key, fromRunId, toRunId);
+        if (retried) return { acquired: true, owner: toRunId };
+      }
       // Old owner lost the lease before the handoff — fall through to acquire.
     }
     const result = await this.#acquireThreadLease(resolved, key, toRunId).catch(() => ({
@@ -1046,7 +1085,8 @@ export class AgentThreadStreamRuntime {
   ): Promise<void> {
     const resolved = this.#getPubSub(pubsub);
     const { provider, isFallback } = this.#resolveLeaseProvider(resolved);
-    const owner = this.#getLeaseOwner(record.runId);
+    const owner = this.#getLeaseOwner(provider, record.runId);
+    const metadata = isLeaseRecordProvider(provider) ? record.runId : undefined;
     this.#stopLeaseRenewal(resolved, record.runId);
 
     // The in-process fallback has no competing holder to protect. A real lease
@@ -1054,12 +1094,15 @@ export class AgentThreadStreamRuntime {
     // can perform either destructive cross-process action. A resume elsewhere
     // rotates the token, so the origin safely limits cleanup to local memory.
     if (!isFallback) {
-      const currentOwner = await provider.getLeaseOwner(key).catch(() => undefined);
-      if (currentOwner !== owner) return;
+      const current = await this.#readLeaseRecord(provider, key).catch(() => undefined);
+      if (!current || current.owner !== owner) return;
+      // Legacy records have no logical identity. Let them expire rather than
+      // destructively releasing a lease that may belong to another run.
+      if (isLeaseRecordProvider(provider) && current.metadata !== metadata) return;
     }
 
     try {
-      await provider.releaseLease(key, owner);
+      await (metadata === undefined ? provider.releaseLease(key, owner) : provider.releaseLease(key, owner, metadata));
     } catch {
       return;
     }
@@ -1686,9 +1729,9 @@ export class AgentThreadStreamRuntime {
     const checkLease = async () => {
       if (settled) return;
       if (isFallback) return;
-      const owner = await provider.getLeaseOwner(key).catch(() => undefined);
+      const record = await this.#readLeaseRecord(provider, key).catch(() => undefined);
       if (settled) return;
-      if (this.#getRunIdFromLeaseOwner(owner) !== runId) {
+      if (!this.#leaseRecordBelongsToRun(provider, record, runId)) {
         clearRemoteActive();
         finish();
         return;

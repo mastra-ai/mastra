@@ -1,6 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import { PubSub } from '@mastra/core/events';
-import type { Event, EventCallback, LeaseProvider, PubSubDeliveryMode, SubscribeOptions } from '@mastra/core/events';
+import type {
+  Event,
+  EventCallback,
+  LeaseRecord,
+  LeaseRecordProvider,
+  PubSubDeliveryMode,
+  SubscribeOptions,
+} from '@mastra/core/events';
 import { createClient } from 'redis';
 import type { RedisClientOptions, RedisClientType } from 'redis';
 
@@ -17,6 +24,134 @@ function errorText(err: unknown): string {
   }
   return parts.join('; ');
 }
+
+function parseLeaseOperationResult(value: unknown): { succeeded: boolean; owner?: string } {
+  if (!Array.isArray(value)) return { succeeded: false };
+  const [status, owner] = value;
+  return {
+    succeeded: status === 1,
+    ...(typeof owner === 'string' ? { owner } : {}),
+  };
+}
+
+function parseLeaseRecord(value: unknown): LeaseRecord | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const [owner, hasMetadata, metadata] = value;
+  if (typeof owner !== 'string') return undefined;
+  return {
+    owner,
+    ...(hasMetadata === '1' && typeof metadata === 'string' ? { metadata } : {}),
+  };
+}
+
+// Keep the owner value backwards-compatible with pre-metadata providers and
+// store metadata in a companion key. Every operation touches both keys in one
+// Lua script, so callers always observe a coherent owner/metadata pair. This
+// also means an arbitrary legacy owner string can never be mistaken for a
+// structured record.
+const ACQUIRE_LEASE_SCRIPT = `
+  local currentOwner = redis.call("GET", KEYS[1])
+  local currentMetadata = redis.call("GET", KEYS[2])
+  local currentHasMetadata = currentMetadata ~= false
+  local expectedHasMetadata = ARGV[4] == "1"
+
+  if not currentOwner then
+    redis.call("SET", KEYS[1], ARGV[1], "PX", ARGV[3])
+    if expectedHasMetadata then
+      redis.call("SET", KEYS[2], ARGV[2], "PX", ARGV[3])
+    else
+      redis.call("DEL", KEYS[2])
+    end
+    return { 1, ARGV[1] }
+  end
+
+  if currentOwner == ARGV[1] and currentHasMetadata == expectedHasMetadata and
+      (not expectedHasMetadata or currentMetadata == ARGV[2]) then
+    redis.call("PEXPIRE", KEYS[1], ARGV[3])
+    if currentHasMetadata then
+      redis.call("PEXPIRE", KEYS[2], ARGV[3])
+    end
+    return { 1, currentOwner }
+  end
+
+  return { 0, currentOwner }
+`;
+
+const GET_LEASE_RECORD_SCRIPT = `
+  local owner = redis.call("GET", KEYS[1])
+  if not owner then
+    redis.call("DEL", KEYS[2])
+    return {}
+  end
+
+  local metadata = redis.call("GET", KEYS[2])
+  if metadata then
+    return { owner, "1", metadata }
+  end
+  return { owner, "0", "" }
+`;
+
+const RELEASE_LEASE_SCRIPT = `
+  local currentOwner = redis.call("GET", KEYS[1])
+  if not currentOwner then
+    redis.call("DEL", KEYS[2])
+    return 0
+  end
+
+  local currentMetadata = redis.call("GET", KEYS[2])
+  local currentHasMetadata = currentMetadata ~= false
+  local expectedHasMetadata = ARGV[3] == "1"
+  if currentOwner == ARGV[1] and currentHasMetadata == expectedHasMetadata and
+      (not expectedHasMetadata or currentMetadata == ARGV[2]) then
+    return redis.call("DEL", KEYS[1], KEYS[2])
+  end
+  return 0
+`;
+
+const RENEW_LEASE_SCRIPT = `
+  local currentOwner = redis.call("GET", KEYS[1])
+  if not currentOwner then
+    redis.call("DEL", KEYS[2])
+    return 0
+  end
+
+  local currentMetadata = redis.call("GET", KEYS[2])
+  local currentHasMetadata = currentMetadata ~= false
+  local expectedHasMetadata = ARGV[4] == "1"
+  if currentOwner == ARGV[1] and currentHasMetadata == expectedHasMetadata and
+      (not expectedHasMetadata or currentMetadata == ARGV[2]) then
+    redis.call("PEXPIRE", KEYS[1], ARGV[3])
+    if currentHasMetadata then
+      redis.call("PEXPIRE", KEYS[2], ARGV[3])
+    end
+    return 1
+  end
+  return 0
+`;
+
+const TRANSFER_LEASE_SCRIPT = `
+  local currentOwner = redis.call("GET", KEYS[1])
+  if not currentOwner then
+    redis.call("DEL", KEYS[2])
+    return 0
+  end
+
+  local currentMetadata = redis.call("GET", KEYS[2])
+  local currentHasMetadata = currentMetadata ~= false
+  local expectedHasMetadata = ARGV[3] == "1"
+  if currentOwner ~= ARGV[1] or currentHasMetadata ~= expectedHasMetadata or
+      (expectedHasMetadata and currentMetadata ~= ARGV[2]) then
+    return 0
+  end
+
+  redis.call("SET", KEYS[1], ARGV[4], "PX", ARGV[7])
+  if ARGV[6] == "1" then
+    redis.call("SET", KEYS[2], ARGV[5], "PX", ARGV[7])
+  else
+    redis.call("DEL", KEYS[2])
+  end
+  return 1
+`;
 
 /**
  * Mastra PubSub backed by Redis Streams.
@@ -85,7 +220,7 @@ export interface RedisStreamsPubSubConfig {
   logger?: { debug?: (...args: unknown[]) => void; warn?: (...args: unknown[]) => void };
 }
 
-export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
+export class RedisStreamsPubSub extends PubSub implements LeaseRecordProvider {
   // Redis Streams is a pull transport: consumers issue XREADGROUP to read
   // events. Mastra reads this to know an OrchestrationWorker is required.
   override get supportedModes(): ReadonlyArray<PubSubDeliveryMode> {
@@ -473,61 +608,60 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
     return `${this.#keyPrefix}:lease:${key}`;
   }
 
+  #leaseMetadataKey(key: string): string {
+    return `${this.#keyPrefix}:lease-metadata:${key}`;
+  }
+
   /**
-   * Atomic claim via SET NX PX. Idempotent for the same owner: if the
-   * current value is already this owner, we refresh the TTL instead of
-   * failing. Cross-process callers race here; Redis serializes them.
+   * Atomic claim across the owner and metadata keys. Idempotent for the same
+   * owner/metadata pair: a re-acquire refreshes both TTLs. Cross-process
+   * callers race here; Redis serializes the Lua script.
    */
-  async acquireLease(key: string, owner: string, ttlMs: number): Promise<{ acquired: boolean; owner?: string }> {
+  async acquireLease(
+    key: string,
+    owner: string,
+    ttlMs: number,
+    metadata?: string,
+  ): Promise<{ acquired: boolean; owner?: string }> {
     if (this.#closed) return { acquired: false };
     await this.#ensureWriterConnected();
-    const redisKey = this.#leaseKey(key);
-    const result = await this.#writeClient.set(redisKey, owner, { NX: true, PX: ttlMs });
-    if (result === 'OK') return { acquired: true, owner };
-    // Someone holds the key. Re-claim only if we still own it, refreshing the
-    // TTL atomically: a bare GET+PEXPIRE would let us extend a *new* owner's
-    // lease if the key expired and was re-acquired between the two calls.
-    const script = `
-      local current = redis.call("GET", KEYS[1])
-      if current == ARGV[1] then
-        redis.call("PEXPIRE", KEYS[1], ARGV[2])
-        return 1
-      end
-      return 0
-    `;
-    const refreshed = await this.#writeClient.eval(script, {
-      keys: [redisKey],
-      arguments: [owner, String(ttlMs)],
-    });
-    if (refreshed === 1) return { acquired: true, owner };
-    return { acquired: false, owner: (await this.#writeClient.get(redisKey)) ?? undefined };
+    const result = parseLeaseOperationResult(
+      await this.#writeClient.eval(ACQUIRE_LEASE_SCRIPT, {
+        keys: [this.#leaseKey(key), this.#leaseMetadataKey(key)],
+        arguments: [owner, metadata ?? '', String(ttlMs), metadata === undefined ? '0' : '1'],
+      }),
+    );
+    return {
+      acquired: result.succeeded,
+      ...(result.owner === undefined ? {} : { owner: result.owner }),
+    };
+  }
+
+  async getLeaseRecord(key: string): Promise<LeaseRecord | undefined> {
+    if (this.#closed) return undefined;
+    await this.#ensureWriterConnected();
+    return parseLeaseRecord(
+      await this.#writeClient.eval(GET_LEASE_RECORD_SCRIPT, {
+        keys: [this.#leaseKey(key), this.#leaseMetadataKey(key)],
+        arguments: [],
+      }),
+    );
   }
 
   async getLeaseOwner(key: string): Promise<string | undefined> {
-    if (this.#closed) return undefined;
-    await this.#ensureWriterConnected();
-    const current = await this.#writeClient.get(this.#leaseKey(key));
-    return current ?? undefined;
+    return (await this.getLeaseRecord(key))?.owner;
   }
 
   /**
-   * Release only if we still own it. Implemented as GET+DEL with a Lua
-   * script so the check-and-delete is atomic against concurrent renewals
-   * from other processes.
+   * Release only if the coherent owner/metadata pair still matches. The Lua
+   * script makes the check-and-delete atomic against concurrent renewals.
    */
-  async releaseLease(key: string, owner: string): Promise<void> {
+  async releaseLease(key: string, owner: string, metadata?: string): Promise<void> {
     if (this.#closed) return;
     await this.#ensureWriterConnected();
-    const script = `
-      if redis.call("GET", KEYS[1]) == ARGV[1] then
-        return redis.call("DEL", KEYS[1])
-      else
-        return 0
-      end
-    `;
-    await this.#writeClient.eval(script, {
-      keys: [this.#leaseKey(key)],
-      arguments: [owner],
+    await this.#writeClient.eval(RELEASE_LEASE_SCRIPT, {
+      keys: [this.#leaseKey(key), this.#leaseMetadataKey(key)],
+      arguments: [owner, metadata ?? '', metadata === undefined ? '0' : '1'],
     });
   }
 
@@ -535,19 +669,12 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
    * Extend the TTL only if we still own the lease. Returns false if the
    * lease was lost (expired or another owner took it).
    */
-  async renewLease(key: string, owner: string, ttlMs: number): Promise<boolean> {
+  async renewLease(key: string, owner: string, ttlMs: number, metadata?: string): Promise<boolean> {
     if (this.#closed) return false;
     await this.#ensureWriterConnected();
-    const script = `
-      if redis.call("GET", KEYS[1]) == ARGV[1] then
-        return redis.call("PEXPIRE", KEYS[1], ARGV[2])
-      else
-        return 0
-      end
-    `;
-    const result = await this.#writeClient.eval(script, {
-      keys: [this.#leaseKey(key)],
-      arguments: [owner, String(ttlMs)],
+    const result = await this.#writeClient.eval(RENEW_LEASE_SCRIPT, {
+      keys: [this.#leaseKey(key), this.#leaseMetadataKey(key)],
+      arguments: [owner, metadata ?? '', String(ttlMs), metadata === undefined ? '0' : '1'],
     });
     return result === 1;
   }
@@ -556,25 +683,32 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
    * Atomically hand the lease from `fromOwner` to `toOwner`, refreshing the
    * TTL to the full `ttlMs`, without the key ever going empty.
    *
-   * Implemented as a single Lua script (GET == fromOwner -> SET toOwner PX)
-   * so a racing process cannot win the key between a release and a re-acquire.
+   * Implemented as a single Lua script so a racing process cannot win the key
+   * between a release and a re-acquire, or observe mismatched metadata.
    * Returns false if `fromOwner` no longer holds the lease (expired or taken),
    * in which case the caller should fall back to a fresh `acquireLease`.
    */
-  async transferLease(key: string, fromOwner: string, toOwner: string, ttlMs: number): Promise<boolean> {
+  async transferLease(
+    key: string,
+    fromOwner: string,
+    toOwner: string,
+    ttlMs: number,
+    fromMetadata?: string,
+    toMetadata?: string,
+  ): Promise<boolean> {
     if (this.#closed) return false;
     await this.#ensureWriterConnected();
-    const script = `
-      if redis.call("GET", KEYS[1]) == ARGV[1] then
-        redis.call("SET", KEYS[1], ARGV[2], "PX", ARGV[3])
-        return 1
-      else
-        return 0
-      end
-    `;
-    const result = await this.#writeClient.eval(script, {
-      keys: [this.#leaseKey(key)],
-      arguments: [fromOwner, toOwner, String(ttlMs)],
+    const result = await this.#writeClient.eval(TRANSFER_LEASE_SCRIPT, {
+      keys: [this.#leaseKey(key), this.#leaseMetadataKey(key)],
+      arguments: [
+        fromOwner,
+        fromMetadata ?? '',
+        fromMetadata === undefined ? '0' : '1',
+        toOwner,
+        toMetadata ?? '',
+        toMetadata === undefined ? '0' : '1',
+        String(ttlMs),
+      ],
     });
     return result === 1;
   }

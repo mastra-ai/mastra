@@ -213,7 +213,7 @@ describe('suspended run in-memory TTL', () => {
 
     // Without releasing, the run's lease-renewal timer would keep this instance
     // owning the thread forever as far as every other instance can tell.
-    expect(releaseLease).toHaveBeenCalledWith(threadKey(RESOURCE_ID, 'thread-1'), owner);
+    expect(releaseLease).toHaveBeenCalledWith(threadKey(RESOURCE_ID, 'thread-1'), owner, 'run-1');
     // `run-completed` has to land on the *suspended* run's thread topic — remote
     // subscribers watch that topic to learn the thread is no longer blocked.
     await watcher.waitFor('run-completed', 'run-1');
@@ -363,8 +363,8 @@ describe('suspended run in-memory TTL', () => {
     const getLeaseOwner = pubsub.getLeaseOwner.bind(pubsub);
     const releaseLeaseOriginal = EventEmitterPubSub.prototype.releaseLease.bind(pubsub);
 
-    vi.spyOn(pubsub, 'releaseLease').mockImplementation(async (leaseKey, owner) => {
-      await releaseLeaseOriginal(leaseKey, owner);
+    vi.spyOn(pubsub, 'releaseLease').mockImplementation(async (leaseKey, owner, metadata) => {
+      await releaseLeaseOriginal(leaseKey, owner, metadata);
       if (leaseKey === key && owner === originOwner) injectResume = true;
     });
     vi.spyOn(pubsub, 'getLeaseOwner').mockImplementation(async leaseKey => {

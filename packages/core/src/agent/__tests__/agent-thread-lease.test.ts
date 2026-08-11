@@ -12,7 +12,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { PubSub } from '../../events/pubsub';
-import type { LeaseProvider } from '../../events/pubsub';
+import type { LeaseRecord, LeaseRecordProvider } from '../../events/pubsub';
 import type { EventCallback } from '../../events/types';
 import type { Agent } from '../agent';
 import { AgentThreadStreamRuntime } from '../thread-stream-runtime';
@@ -66,8 +66,9 @@ function createRun(runId: string) {
  * ControlledLeasePubSub in agent-signals.test.ts (copied, not imported, to
  * keep that file untouched).
  */
-class ControlledLeasePubSub extends PubSub implements LeaseProvider {
+class ControlledLeasePubSub extends PubSub implements LeaseRecordProvider {
   owners = new Map<string, string>();
+  records = new Map<string, LeaseRecord>();
   #subscribers = new Map<string, Set<EventCallback>>();
   #pending = new Set<Promise<void>>();
   #index = 0;
@@ -99,28 +100,56 @@ class ControlledLeasePubSub extends PubSub implements LeaseProvider {
     await Promise.all([...this.#pending]);
   }
 
-  async acquireLease(key: string, owner: string): Promise<{ acquired: boolean; owner?: string }> {
+  async acquireLease(
+    key: string,
+    owner: string,
+    _ttlMs?: number,
+    metadata?: string,
+  ): Promise<{ acquired: boolean; owner?: string }> {
     const current = this.owners.get(key);
-    if (current && current !== owner) return { acquired: false, owner: current };
+    const currentRecord = this.records.get(key);
+    if (current && (current !== owner || currentRecord?.metadata !== metadata)) {
+      return { acquired: false, owner: current };
+    }
     this.owners.set(key, owner);
+    this.records.set(key, { owner, ...(metadata === undefined ? {} : { metadata }) });
     return { acquired: true, owner };
+  }
+
+  async getLeaseRecord(key: string): Promise<LeaseRecord | undefined> {
+    const record = this.records.get(key);
+    return record ? { ...record } : this.owners.get(key) ? { owner: this.owners.get(key)! } : undefined;
   }
 
   async getLeaseOwner(key: string): Promise<string | undefined> {
     return this.owners.get(key);
   }
 
-  async releaseLease(key: string, owner: string): Promise<void> {
-    if (this.owners.get(key) === owner) this.owners.delete(key);
+  async releaseLease(key: string, owner: string, metadata?: string): Promise<void> {
+    const record = await this.getLeaseRecord(key);
+    if (record?.owner === owner && record.metadata === metadata) {
+      this.owners.delete(key);
+      this.records.delete(key);
+    }
   }
 
-  async renewLease(key: string, owner: string): Promise<boolean> {
-    return this.owners.get(key) === owner;
+  async renewLease(key: string, owner: string, _ttlMs?: number, metadata?: string): Promise<boolean> {
+    const record = await this.getLeaseRecord(key);
+    return record?.owner === owner && record.metadata === metadata;
   }
 
-  async transferLease(key: string, fromOwner: string, toOwner: string): Promise<boolean> {
-    if (this.owners.get(key) !== fromOwner) return false;
+  async transferLease(
+    key: string,
+    fromOwner: string,
+    toOwner: string,
+    _ttlMs?: number,
+    fromMetadata?: string,
+    toMetadata?: string,
+  ): Promise<boolean> {
+    const record = await this.getLeaseRecord(key);
+    if (record?.owner !== fromOwner || record.metadata !== fromMetadata) return false;
     this.owners.set(key, toOwner);
+    this.records.set(key, { owner: toOwner, ...(toMetadata === undefined ? {} : { metadata: toMetadata }) });
     return true;
   }
 }
@@ -146,10 +175,11 @@ describe('registerRun thread lease', () => {
     await registered;
 
     // A plain (non-signal) run must own the cross-process thread lease once
-    // registration settles. The opaque owner includes both the logical run id
-    // and this runtime's identity so another holder can rotate it on resume.
-    expect(pubsub.owners.get(key)).toEqual(expect.stringContaining(runId));
+    // registration settles. The owner is opaque; the logical run id is stored
+    // as atomic metadata beside it.
+    expect(pubsub.owners.get(key)).toMatch(/^mastra:agent-thread:v2:/);
     expect(pubsub.owners.get(key)).not.toBe(runId);
+    expect(pubsub.records.get(key)?.metadata).toBe(runId);
 
     run.finish();
     // Release is fire-and-forget inside the completion watcher's finally —
@@ -179,11 +209,12 @@ describe('registerRun thread lease', () => {
       pubsub,
     );
     const firstOwner = pubsub.owners.get(key);
-    expect(firstOwner).toMatch(/^mastra:agent-thread:v1:\d+:/);
+    expect(firstOwner).toMatch(/^mastra:agent-thread:v2:/);
     expect(firstOwner).not.toBe(runId);
+    expect(pubsub.records.get(key)?.metadata).toBe(runId);
 
-    // A second runtime must parse the canonical token back to the exact logical
-    // id, including the lone surrogate, and rotate it to its own holder token.
+    // A second runtime uses the atomic metadata to identify the exact logical
+    // id, including the lone surrogate, and rotates it to its own holder token.
     await resumedRuntime.registerRun(
       agent,
       resumedRun.output,
@@ -191,7 +222,7 @@ describe('registerRun thread lease', () => {
       pubsub,
     );
     const resumedOwner = pubsub.owners.get(key);
-    expect(resumedOwner).toMatch(/^mastra:agent-thread:v1:\d+:/);
+    expect(resumedOwner).toMatch(/^mastra:agent-thread:v2:/);
     expect(resumedOwner).not.toBe(firstOwner);
 
     // Completion by the former holder cannot release the resumed holder's token.
@@ -202,5 +233,27 @@ describe('registerRun thread lease', () => {
     expect(pubsub.owners.get(key)).toBe(resumedOwner);
     resumedRun.finish();
     await waitForCondition(() => pubsub.owners.get(key) === undefined);
+  });
+
+  it('does not claim a canonical-looking legacy owner for its embedded run id', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new ControlledLeasePubSub();
+    const agent = { id: 'legacy-collision-agent' } as Agent<any, any, any, any>;
+    const threadId = 'legacy-collision-thread';
+    const resourceId = 'legacy-collision-user';
+    const key = [resourceId, threadId].join(AGENT_THREAD_KEY_SEPARATOR);
+    const legacyRunId = 'mastra:agent-thread:v1:4:test:123e4567-e89b-42d3-a456-426614174000';
+    const run = createRun('test');
+
+    // A pre-upgrade process may have stored any arbitrary bare run id. The
+    // canonical-looking prefix is not proof that it belongs to logical runId
+    // `test`, so the new runtime must leave it untouched.
+    pubsub.owners.set(key, legacyRunId);
+    await runtime.registerRun(agent, run.output, { memory: { thread: threadId, resource: resourceId } } as any, pubsub);
+    expect(pubsub.owners.get(key)).toBe(legacyRunId);
+    expect(pubsub.records.get(key)?.metadata).toBeUndefined();
+    run.finish();
+    await nextTick();
+    expect(pubsub.owners.get(key)).toBe(legacyRunId);
   });
 });

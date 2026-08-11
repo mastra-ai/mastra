@@ -148,11 +148,18 @@ export interface LeaseProvider {
    * `undefined` if the holder could not be read (rare).
    *
    * @param key - The lease key (e.g. thread key)
-   * @param owner - Identifier for the owner (e.g. runId) — used so the
-   *   same owner can call `acquireLease` idempotently and renew/release.
+   * @param owner - Provider owner token used so the same holder can call
+   *   `acquireLease` idempotently and renew/release.
    * @param ttlMs - Time-to-live in milliseconds for the lease
+   * @param metadata - Optional logical owner metadata stored atomically with
+   *   the opaque owner token by metadata-capable providers.
    */
-  acquireLease(key: string, owner: string, ttlMs: number): Promise<{ acquired: boolean; owner?: string }>;
+  acquireLease(
+    key: string,
+    owner: string,
+    ttlMs: number,
+    metadata?: string,
+  ): Promise<{ acquired: boolean; owner?: string }>;
 
   /**
    * Read the current owner of a lease, or `undefined` if no lease is held.
@@ -164,7 +171,7 @@ export interface LeaseProvider {
    * (implementations should atomically check ownership before releasing
    * to avoid clobbering a renewal that happened concurrently).
    */
-  releaseLease(key: string, owner: string): Promise<void>;
+  releaseLease(key: string, owner: string, metadata?: string): Promise<void>;
 
   /**
    * Renew an existing lease owned by `owner`, extending its TTL.
@@ -172,7 +179,7 @@ export interface LeaseProvider {
    * Returns `true` if the renewal succeeded (caller still owns it),
    * `false` if the lease was lost (TTL expired or another owner took it).
    */
-  renewLease(key: string, owner: string, ttlMs: number): Promise<boolean>;
+  renewLease(key: string, owner: string, ttlMs: number, metadata?: string): Promise<boolean>;
 
   /**
    * Atomically hand a held lease from `fromOwner` to `toOwner`, refreshing
@@ -196,7 +203,33 @@ export interface LeaseProvider {
    * atomicity guarantee is an explicit per-backend decision rather than a
    * silent caller-side fallback.
    */
-  transferLease(key: string, fromOwner: string, toOwner: string, ttlMs: number): Promise<boolean>;
+  transferLease(
+    key: string,
+    fromOwner: string,
+    toOwner: string,
+    ttlMs: number,
+    fromMetadata?: string,
+    toMetadata?: string,
+  ): Promise<boolean>;
+}
+
+export interface LeaseRecord {
+  /** Opaque token used by the provider's owner guard. */
+  owner: string;
+  /** Logical run id associated with a scoped owner; absent for legacy leases. */
+  metadata?: string;
+}
+
+export interface LeaseRecordProvider extends LeaseProvider {
+  /**
+   * Read the owner and its atomically stored metadata. Implementations must
+   * return a legacy record with no metadata when reading a pre-upgrade lease.
+   */
+  getLeaseRecord(key: string): Promise<LeaseRecord | undefined>;
+}
+
+export function isLeaseRecordProvider(value: unknown): value is LeaseRecordProvider {
+  return isLeaseProvider(value) && typeof (value as Partial<LeaseRecordProvider>).getLeaseRecord === 'function';
 }
 
 /**

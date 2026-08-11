@@ -249,6 +249,21 @@ describe('EventEmitterPubSub', () => {
       expect(result).toEqual({ acquired: true, owner: 'owner-a' });
     });
 
+    it('stores metadata atomically and guards every lease operation with it', async () => {
+      await pubsub.acquireLease('thread-1', 'owner-a', 1000, 'run-a');
+      expect(await pubsub.getLeaseRecord('thread-1')).toEqual({ owner: 'owner-a', metadata: 'run-a' });
+      expect(await pubsub.acquireLease('thread-1', 'owner-a', 1000, 'run-b')).toEqual({
+        acquired: false,
+        owner: 'owner-a',
+      });
+      await pubsub.releaseLease('thread-1', 'owner-a', 'run-b');
+      expect(await pubsub.getLeaseRecord('thread-1')).toEqual({ owner: 'owner-a', metadata: 'run-a' });
+      expect(await pubsub.renewLease('thread-1', 'owner-a', 1000, 'run-b')).toBe(false);
+      expect(await pubsub.transferLease('thread-1', 'owner-a', 'owner-b', 1000, 'run-b', 'run-b')).toBe(false);
+      expect(await pubsub.transferLease('thread-1', 'owner-a', 'owner-b', 1000, 'run-a', 'run-b')).toBe(true);
+      expect(await pubsub.getLeaseRecord('thread-1')).toEqual({ owner: 'owner-b', metadata: 'run-b' });
+    });
+
     it('expires the lease after TTL and lets a new owner acquire it', async () => {
       await pubsub.acquireLease('thread-1', 'owner-a', 1000);
       vi.advanceTimersByTime(1001);
