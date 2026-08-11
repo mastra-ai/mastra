@@ -80,7 +80,8 @@ in separate terminals.
 ### Slack channels (optional)
 
 Slack sends events to public HTTPS origins only, so a local server needs a
-tunnel. Install [`cloudflared`](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/)
+tunnel. The steps below assume integrated mode, where the server listens on
+`5873`. Install [`cloudflared`](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/)
 (`brew install cloudflared`).
 
 #### 1. Start a tunnel
