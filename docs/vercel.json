@@ -252,7 +252,7 @@
     },
     {
       "source": "/examples/agents/whatsapp-chat-bot",
-      "destination": "/guides/guide/whatsapp-chat-bot",
+      "destination": "/docs/capabilities/channels/whatsapp",
       "permanent": true
     },
     {
@@ -832,7 +832,7 @@
     },
     {
       "source": "/docs/mcp/publishing-mcp-server",
-      "destination": "/guides/guide/publishing-mcp-server",
+      "destination": "/docs/mcp/overview",
       "permanent": true
     },
     {
@@ -1228,6 +1228,36 @@
     {
       "source": "/reference/core/addStoredWorkflows",
       "destination": "/reference/core/addDynamicWorkflows",
+      "permanent": true
+    },
+    {
+      "source": "/guides/guide/slack-assistant",
+      "destination": "/docs/capabilities/channels/slack",
+      "permanent": true
+    },
+    {
+      "source": "/guides/guide/whatsapp-chat-bot",
+      "destination": "/docs/capabilities/channels/whatsapp",
+      "permanent": true
+    },
+    {
+      "source": "/guides/guide/web-search",
+      "destination": "/docs/agents/using-tools",
+      "permanent": true
+    },
+    {
+      "source": "/guides/guide/publishing-mcp-server",
+      "destination": "/docs/mcp/overview",
+      "permanent": true
+    },
+    {
+      "source": "/guides/guide/chef-michel",
+      "destination": "/docs/agents/overview",
+      "permanent": true
+    },
+    {
+      "source": "/guides/guide/stock-agent",
+      "destination": "/docs/agents/using-tools",
       "permanent": true
     },
     {
@@ -1802,7 +1832,7 @@
     },
     {
       "source": "/docs/mcp/publishing-mcp-server/llms.txt",
-      "destination": "/guides/guide/publishing-mcp-server/llms.txt",
+      "destination": "/docs/mcp/overview/llms.txt",
       "permanent": true
     },
     {
@@ -2113,6 +2143,36 @@
     {
       "source": "/reference/core/addStoredWorkflows/llms.txt",
       "destination": "/reference/core/addDynamicWorkflows/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/guides/guide/slack-assistant/llms.txt",
+      "destination": "/docs/capabilities/channels/slack/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/guides/guide/whatsapp-chat-bot/llms.txt",
+      "destination": "/docs/capabilities/channels/whatsapp/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/guides/guide/web-search/llms.txt",
+      "destination": "/docs/agents/using-tools/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/guides/guide/publishing-mcp-server/llms.txt",
+      "destination": "/docs/mcp/overview/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/guides/guide/chef-michel/llms.txt",
+      "destination": "/docs/agents/overview/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/guides/guide/stock-agent/llms.txt",
+      "destination": "/docs/agents/using-tools/llms.txt",
       "permanent": true
     },
     {
