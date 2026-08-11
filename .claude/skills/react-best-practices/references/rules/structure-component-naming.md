@@ -53,7 +53,7 @@ Smell to catch in reviews: `renderSomething(...)` returning JSX, especially when
 
 ## Dynamic Tags: Put the Level in Context, Not the Tag
 
-The mirror case is a PascalCase binding that is _not_ a component. Choosing the tag at runtime is a normal pattern and stays one: an `as` prop, a ternary between literal tags, a lookup in a const map, and a template literal all render fine and keep their state.
+The mirror case is a PascalCase binding that is _not_ a component. Choosing the tag at runtime is a normal pattern and stays one: an `as` prop, a ternary between literal tags, a lookup in a const map, and a template literal all render fine, and none of them creates a component during render.
 
 One form does break. A tag read off a context trips `react-hooks/static-components` with `Cannot create components during render`, because passing a component through context is itself a real pattern, so the rule cannot tell a tag name from a component. Naming the value first does not help — the rule follows the assignment.
 
