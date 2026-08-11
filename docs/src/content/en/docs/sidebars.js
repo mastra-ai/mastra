@@ -705,6 +705,35 @@ const sidebars = {
         },
       ],
     },
+    {
+      type: 'category',
+      label: 'More',
+      collapsed: false,
+      collapsible: false,
+      className: 'sidebar-group-name',
+      items: [
+        {
+          type: 'category',
+          label: 'Guides',
+          link: {
+            type: 'doc',
+            id: 'guides/multi-agent-systems',
+          },
+          collapsed: true,
+          customProps: {
+            contextualSidebar: true,
+            contextualSidebarLabel: 'Multi-agent systems',
+          },
+          items: [
+            {
+              type: 'doc',
+              id: 'guides/streaming',
+              label: 'Streaming',
+            },
+          ],
+        },
+      ],
+    },
   ],
   platformSidebar: [
     {
