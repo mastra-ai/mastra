@@ -3,6 +3,7 @@ title: Chunking and embedding documents | RAG
 description: Guide on chunking and embedding documents in Mastra for efficient processing and retrieval.
 packages:
   - "@mastra/core"
+  - "@mastra/pg"
   - "@mastra/rag"
 ---
 
@@ -11,7 +12,9 @@ packages:
 Before processing, create a MDocument instance from your content. You can initialize it from different formats:
 
 ```ts
-const docFromText = MDocument.fromText('Your plain text content...')
+import { MDocument } from '@mastra/rag'
+
+const doc = MDocument.fromText('Your plain text content...')
 const docFromHTML = MDocument.fromHTML('<html>Your HTML content...</html>')
 const docFromMarkdown = MDocument.fromMarkdown('# Your Markdown content...')
 const docFromJSON = MDocument.fromJSON(`{ "key": "value" }`)
@@ -67,7 +70,7 @@ For markdown documents where preserving the semantic relationships between secti
 const chunks = await doc.chunk({
   strategy: 'semantic-markdown',
   joinThreshold: 500,
-  modelName: 'gpt-3.5-turbo',
+  modelName: '__AI_SDK_OPENAI_MODEL_BASE__',
 })
 ```
 
@@ -90,7 +93,7 @@ import { ModelRouterEmbeddingModel } from '@mastra/core/llm'
 import { embedMany } from 'ai'
 
 const { embeddings } = await embedMany({
-  model: new ModelRouterEmbeddingModel('openai/text-embedding-3-small'),
+  model: new ModelRouterEmbeddingModel('__GATEWAY_OPENAI_EMBEDDING_MODEL__'),
   values: chunks.map(chunk => chunk.text),
 })
 ```
@@ -103,7 +106,7 @@ The embedding functions return vectors, arrays of numbers representing the seman
 
 ### Configuring Embedding Dimensions
 
-Embedding models typically output vectors with a fixed number of dimensions (e.g., 1536 for OpenAI's `text-embedding-3-small`).
+Embedding models typically output vectors with a fixed number of dimensions (e.g., 1536 for OpenAI's `__AI_SDK_OPENAI_EMBEDDING_MODEL__`).
 Some models support reducing this dimensionality, which can help:
 
 - Decrease storage requirements in vector databases
@@ -117,7 +120,7 @@ OpenAI (text-embedding-3 models):
 import { ModelRouterEmbeddingModel } from '@mastra/core/llm'
 
 const { embeddings } = await embedMany({
-  model: new ModelRouterEmbeddingModel('openai/text-embedding-3-small'),
+  model: new ModelRouterEmbeddingModel('__GATEWAY_OPENAI_EMBEDDING_MODEL__'),
   options: {
     dimensions: 256, // Only supported in text-embedding-3 and later
   },
@@ -142,50 +145,45 @@ When storing embeddings, the vector database index must be configured to match t
 
 ## Example: Complete pipeline
 
-Here's an example showing document processing and embedding generation with both providers:
+Here's an example showing document processing, embedding generation, and vector storage:
 
 ```ts
+import { ModelRouterEmbeddingModel } from '@mastra/core/llm'
+import { PgVector } from '@mastra/pg'
+import { MDocument } from '@mastra/rag'
 import { embedMany } from 'ai'
 
-import { MDocument } from '@mastra/rag'
-
-// Initialize document
 const doc = MDocument.fromText(`
   Climate change poses significant challenges to global agriculture.
   Rising temperatures and changing precipitation patterns affect crop yields.
 `)
 
-// Create chunks
 const chunks = await doc.chunk({
   strategy: 'recursive',
   maxSize: 256,
   overlap: 50,
 })
 
-// Generate embeddings with OpenAI
-import { ModelRouterEmbeddingModel } from '@mastra/core/llm'
-
 const { embeddings } = await embedMany({
-  model: new ModelRouterEmbeddingModel('openai/text-embedding-3-small'),
+  model: new ModelRouterEmbeddingModel('__GATEWAY_OPENAI_EMBEDDING_MODEL__'),
   values: chunks.map(chunk => chunk.text),
 })
 
-// OR
-
-// Generate embeddings with Cohere
-const { embeddings } = await embedMany({
-  model: 'cohere/embed-english-v3.0',
-  values: chunks.map(chunk => chunk.text),
+const vectorStore = new PgVector({
+  id: 'pg-vector',
+  connectionString: process.env.POSTGRES_CONNECTION_STRING,
 })
 
-// Store embeddings in your vector database
+await vectorStore.createIndex({
+  indexName: 'embeddings',
+  dimension: 1536,
+})
+
 await vectorStore.upsert({
   indexName: 'embeddings',
   vectors: embeddings,
 })
 ```
-
-##
 
 For more examples of different chunking strategies and embedding configurations, see:
 
