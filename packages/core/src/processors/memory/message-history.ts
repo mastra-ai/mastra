@@ -282,19 +282,29 @@ export class MessageHistory implements Processor {
     if (newInput.length > 0 && typeof this.storage.listMessagesById === 'function') {
       const inputIds = newInput.map(m => m.id).filter((id): id is string => Boolean(id));
       if (inputIds.length > 0) {
-        const { messages: storedInput } = await this.storage.listMessagesById({ messageIds: inputIds });
-        // Only records that actually belong to this thread (and resource) may act
-        // as the canonical version of an echoed ID. An ID that resolves to a
-        // foreign thread — or to another resource's thread — is treated as having
-        // no stored record, so the echo can neither suppress this thread's write
-        // nor drag a foreign threadId/resourceId into it.
-        const storedById = new Map(
-          storedInput
-            .filter(m => m.threadId === threadId && (!resourceId || m.resourceId === resourceId))
-            .map(m => [m.id, m]),
-        );
-        const reconciledInput = reconcileClientEchoes(newInput, storedById);
-        messagesToSave = [...reconciledInput, ...newOutput];
+        let storedInput: MastraDBMessage[] | undefined;
+        try {
+          ({ messages: storedInput } = await this.storage.listMessagesById({ messageIds: inputIds }));
+        } catch {
+          // Reconciliation is best effort. If the optional lookup fails, preserve
+          // the pre-existing persistence behavior and save the original input and
+          // output instead of aborting the whole turn.
+        }
+
+        if (storedInput) {
+          // Only records that actually belong to this thread (and resource) may act
+          // as the canonical version of an echoed ID. An ID that resolves to a
+          // foreign thread — or to another resource's thread — is treated as having
+          // no stored record, so the echo can neither suppress this thread's write
+          // nor drag a foreign threadId/resourceId into it.
+          const storedById = new Map(
+            storedInput
+              .filter(m => m.threadId === threadId && (!resourceId || m.resourceId === resourceId))
+              .map(m => [m.id, m]),
+          );
+          const reconciledInput = reconcileClientEchoes(newInput, storedById);
+          messagesToSave = [...reconciledInput, ...newOutput];
+        }
       }
     }
 
