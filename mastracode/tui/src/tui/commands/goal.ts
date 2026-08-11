@@ -329,12 +329,21 @@ async function startGoal(
   const { state } = ctx;
   const goalManager = state.goalManager;
 
+  // `thread_created` is dispatched through a serial async queue, so its handler
+  // runs later — during the `setGoal` await below. Without this flag already set
+  // it takes the `loadFromThreadMetadata` branch and nulls the goal we are about
+  // to set, and the save below then clears the stored objective. Must be decided
+  // before the create: afterwards `getId()` always returns the new thread.
+  const shouldPersistToCreatedThread = state.pendingNewThread || !state.session.thread.getId();
+  if (shouldPersistToCreatedThread) {
+    goalManager.persistOnNextThreadCreate();
+  }
+
   if (state.pendingNewThread) {
     await state.session.thread.create();
     state.pendingNewThread = false;
   }
 
-  const shouldPersistToCreatedThread = !state.session.thread.getId();
   const goal = await goalManager.setGoal(state, objective, judgeModelId, maxTurns);
   if (!goal) {
     ctx.showError('Failed to set goal.');
@@ -342,9 +351,6 @@ async function startGoal(
   }
 
   state.planStartedGoalId = undefined;
-  if (shouldPersistToCreatedThread) {
-    goalManager.persistOnNextThreadCreate();
-  }
   await goalManager.saveToThread(state);
   ctx.updateStatusLine();
 

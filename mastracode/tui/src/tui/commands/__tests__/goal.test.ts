@@ -296,13 +296,60 @@ describe('handleGoalCommand', () => {
     expect(ctx.state.pendingNewThread).toBe(false);
     expect(goalManager.saveToThread).toHaveBeenCalledTimes(1);
     expect(createThread.mock.invocationCallOrder[0]).toBeLessThan(goalManager.saveToThread.mock.invocationCallOrder[0]);
-    expect(goalManager.persistOnNextThreadCreate).not.toHaveBeenCalled();
+    // Inverted deliberately: this previously asserted the flag was NOT set on the
+    // pendingNewThread path, which is what let the deferred `thread_created`
+    // handler wipe the just-set goal. See the call-order regression test below.
+    expect(goalManager.persistOnNextThreadCreate).toHaveBeenCalledTimes(1);
     expect(sendSignal).toHaveBeenCalledWith({
       type: 'system-reminder',
       contents: 'finish the task',
       attributes: { type: 'goal' },
       metadata: { goalId: 'goal-1', maxTurns: 50, judgeModelId: '__GATEWAY_OPENAI_MODEL__' },
     });
+  });
+
+  // Regression: `thread.create()` emits `thread_created` synchronously, but the
+  // TUI dispatches events through a serial async queue, so the handler runs
+  // later — during `setGoal`. Without the persist flag set BEFORE the thread is
+  // created, that handler takes the `loadFromThreadMetadata` branch and nulls
+  // the just-set in-memory goal, and the next save clears the stored objective.
+  it('sets the persist-on-thread-create flag before creating the thread', async () => {
+    let currentThreadId: string | null = null;
+    const goalManager = {
+      setGoal: vi.fn().mockResolvedValue({
+        id: 'goal-1',
+        objective: 'finish the task',
+        status: 'active',
+        turnsUsed: 0,
+        maxTurns: 50,
+        judgeModelId: '__GATEWAY_OPENAI_MODEL__',
+      }),
+      persistOnNextThreadCreate: vi.fn(),
+      saveToThread: vi.fn().mockResolvedValue(undefined),
+    };
+    const createThread = vi.fn(async () => {
+      currentThreadId = 'new-thread';
+      return { id: 'new-thread', resourceId: 'r', title: '', createdAt: new Date(), updatedAt: new Date() };
+    });
+    const ctx = {
+      state: createMockState({
+        session: {
+          thread: { getId: vi.fn(() => currentThreadId), create: createThread },
+          sendSignal: vi.fn(() => ({ accepted: Promise.resolve({ accepted: true, runId: 'run-1' }) })),
+        },
+        extra: { pendingNewThread: true, goalManager },
+      }),
+      addUserMessage: vi.fn(),
+      showError: vi.fn(),
+      updateStatusLine: vi.fn(),
+    } as any;
+
+    await handleGoalCommand(ctx, ['finish', 'the', 'task']);
+
+    expect(goalManager.persistOnNextThreadCreate).toHaveBeenCalledTimes(1);
+    expect(goalManager.persistOnNextThreadCreate.mock.invocationCallOrder[0]).toBeLessThan(
+      createThread.mock.invocationCallOrder[0]!,
+    );
   });
 
   it('starts a goal from a plan-approval-style title+plan with only the goal reminder XML', async () => {
