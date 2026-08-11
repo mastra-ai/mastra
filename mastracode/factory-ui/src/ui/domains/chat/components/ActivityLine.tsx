@@ -29,7 +29,10 @@ function partIsDrawn(part: MastraMessagePart): boolean {
   }
 }
 
-/** Output the run produced itself: injected signals and the user's own message do not count. */
+/**
+ * Output the run produced itself. Every non-message entry — notice, approval, suspension,
+ * notification, subagent — draws its own card, so only a message can be silent.
+ */
 function isRunOutput(entry: TimelineEntry): boolean {
   if (entry.kind !== 'message') return true;
   if (entry.message.role !== 'assistant') return false;
