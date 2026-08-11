@@ -64,8 +64,8 @@ export const navRowSurfaceClasses = ({ isActive, isFeatured }: NavRowSurfaceOpti
 export const navItemLayoutClasses = ({ isCollapsed, level = 0, size }: NavItemLayoutOptions) =>
   cn(
     navItemVariants({ size }),
-    'duration-normal transition-all ease-out-custom motion-reduce:transition-none',
-    '[&_svg]:duration-normal [&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:transition-colors motion-reduce:[&_svg]:transition-none',
+    'transition-all duration-normal ease-out-custom motion-reduce:transition-none',
+    '[&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:transition-colors [&_svg]:duration-normal motion-reduce:[&_svg]:transition-none',
     'focus-visible:shadow-focus-ring focus-visible:ring-1 focus-visible:ring-accent1 focus-visible:outline-hidden',
     !isCollapsed && nestedExpandedItemClasses(level),
     isCollapsed && 'w-full justify-center p-0',

@@ -21,7 +21,7 @@ const TEXT_MODE_ADORNMENTS = cn(
 export const buttonVariants = cva(
   cn(
     'inline-flex cursor-pointer items-center justify-center leading-0',
-    'duration-normal transition-all ease-out-custom',
+    'transition-all duration-normal ease-out-custom',
     sharedFormElementDisabledStyle,
     controlFocusBorderVisible,
   ),

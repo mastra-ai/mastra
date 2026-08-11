@@ -1,0 +1,34 @@
+/* Sweeping highlight for text that is still being produced.
+ * The gradient period is a fixed pixel width and the animation travels exactly
+ * one period, so the loop never jumps and a short label sweeps at the same
+ * speed as a long one. */
+.shimmer-text {
+  --shimmer-period: 180px;
+
+  background-image: linear-gradient(90deg, var(--neutral3) 0%, var(--neutral6) 50%, var(--neutral3) 100%);
+  background-size: var(--shimmer-period) 100%;
+  background-repeat: repeat;
+  /* stylelint-disable-next-line property-no-vendor-prefix -- Chrome < 120 and Safari < 14 only clip to text prefixed. */
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: shimmer-text 1.6s linear infinite;
+}
+
+@keyframes shimmer-text {
+  from {
+    background-position: calc(-1 * var(--shimmer-period)) 0;
+  }
+
+  to {
+    background-position: 0 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shimmer-text {
+    background-image: none;
+    color: inherit;
+    animation: none;
+  }
+}

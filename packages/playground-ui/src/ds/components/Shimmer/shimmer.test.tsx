@@ -20,13 +20,6 @@ describe('Shimmer', () => {
 
     const el = screen.getByText('Loading');
     expect(el.className).toContain('custom-class');
-    expect(el.className).toContain('text-transparent');
-  });
-
-  it('drives the shimmer-text keyframe animation', () => {
-    render(<Shimmer>Animate</Shimmer>);
-
-    const el = screen.getByText('Animate');
-    expect(el.style.animation).toContain('shimmer-text');
+    expect(el.className).toContain('shimmer-text');
   });
 });

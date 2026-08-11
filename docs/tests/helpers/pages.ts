@@ -27,10 +27,14 @@ export const pages: PageConfig[] = [
   { path: '/models', name: 'Models – Index' },
   { path: '/models/providers/openai', name: 'Models – OpenAI' },
 
+  // --- Integrations ---
+  { path: '/integrations', name: 'Integrations – Index' },
+  { path: '/integrations/channels/slack', name: 'Integrations – Slack' },
+
   // --- Guides ---
   { path: '/guides/getting-started/quickstart', name: 'Guides – Quickstart' },
-  { path: '/guides/build-your-ui/ai-sdk-ui', name: 'Guides – AI SDK UI' },
-  { path: '/guides/getting-started/next-js', name: 'Guides – Next.js' },
+  { path: '/integrations/agentic-ui/ai-sdk-ui', name: 'Integrations – AI SDK UI' },
+  { path: '/integrations/frameworks/next-js', name: 'Integrations – Next.js' },
 
   // --- Reference ---
   { path: '/reference/configuration', name: 'Reference – Configuration' },

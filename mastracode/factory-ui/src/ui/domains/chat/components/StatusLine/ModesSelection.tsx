@@ -31,19 +31,15 @@ function ModeLabel({ modeId, name }: { modeId: string; name: string }) {
   );
 }
 
-/**
- * Session mode selector; switches modes through the agent controller. Only
- * shown for personal (user) sessions — factory sessions are driven by the
- * factory's own run prompts, so mode switching is hidden there.
- */
 export function ModesSelection() {
-  const { kind } = useChatSessionContext();
+  const { kind, sessionEnabled, draftSessionId } = useChatSessionContext();
   const { modes, activeModeId, setMode } = useChatModes();
   const [pendingModeId, setPendingModeId] = useState<string>();
   const selectedModeId = pendingModeId ?? activeModeId ?? modes[0]?.id;
   const selectedMode = modes.find(mode => mode.id === selectedModeId) ?? modes[0];
 
   if (kind === 'factory') return null;
+  if (!sessionEnabled && !draftSessionId) return null;
   if (!selectedMode) return null;
 
   return (
