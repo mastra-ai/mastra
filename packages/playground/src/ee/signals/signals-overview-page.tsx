@@ -1,16 +1,27 @@
 import { DateTimeRangePicker } from '@mastra/playground-ui/components/DateTimeRangePicker';
-import { SignalsOverviewPage as SignalsEmptyState } from '@mastra/playground-ui/ee/signals';
+import {
+  SankeySignals,
+  SignalsErrorState,
+  SignalsLoadingSkeleton,
+  SignalsOverviewPage as SignalsEmptyState,
+  SIGNAL_PROCESSING_ORDER,
+  TraceIntelligenceProvider,
+  useEntityLearningProgress,
+} from '@mastra/playground-ui/ee/signals';
 
 import { Link } from '../../lib/link';
-import { useEntityLearningProgress } from './hooks';
-import { SankeySignals } from './sankey-signals';
-import { SIGNAL_PROCESSING_ORDER } from './signal-formatting';
-import { SignalsErrorState } from './signals-error-state';
-import { SignalsLoadingSkeleton } from './signals-loading-skeleton';
 import { useSelectedThemeEntity } from './use-selected-theme-entity';
 import { useSignalsDateUrlState } from './use-signals-date-url-state';
 
 export function SignalsOverviewPage() {
+  return (
+    <TraceIntelligenceProvider LinkComponent={Link}>
+      <SignalsOverviewContent />
+    </TraceIntelligenceProvider>
+  );
+}
+
+function SignalsOverviewContent() {
   const { entitiesQuery, entity } = useSelectedThemeEntity();
   const url = useSignalsDateUrlState();
   const signalNames = entity
