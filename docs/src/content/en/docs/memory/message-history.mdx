@@ -29,7 +29,7 @@ For an AI SDK example, see [Using Mastra Memory](/integrations/agentic-ui/ai-sdk
 :::info
 If your client does echo the full transcript back, Mastra reconciles those messages against the stored records by ID before saving them.
 
-An unchanged echo isn't persisted again, and a lossy client copy can't replace server-authored content such as output-processor transformations or completed tool history. Only supported client-authored transitions are merged into the stored message, for example a client-side tool result that advances a stored tool call from `call` to `result`.
+An unchanged echo isn't persisted again, and a lossy client copy can't replace server-authored content such as output-processor transformations or completed tool history. The only client-authored change that merges into a stored message is a tool result advancing a stored tool call from `call` to `result`; the tool name, call id, and args always come from the stored record, and echo-only metadata keys are dropped. User messages stay client-authored: an edited re-send replaces the stored copy.
 :::
 
 ## Threads and resources

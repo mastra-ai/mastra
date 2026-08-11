@@ -1,7 +1,33 @@
-import type { MastraDBMessage, MastraMessageContentV2 } from '../../agent/message-list';
+import type { MastraDBMessage, MastraMessageContentV2, MastraToolInvocation } from '../../agent/message-list';
 
 type V2Part = MastraMessageContentV2['parts'][number];
 type ToolInvocationPart = Extract<V2Part, { type: 'tool-invocation' }>;
+
+/**
+ * The only fields a client echo may contribute to a stored tool invocation.
+ * Everything else (`toolName`, `toolCallId`, `args`, ...) is server-authored
+ * and must never be taken from the client copy: letting the client spread its
+ * invocation over the stored one would reopen the clobber vector this module
+ * exists to close. Kept as a single constant so the doc comments and the merge
+ * behavior cannot drift apart.
+ */
+const CLIENT_CONTRIBUTABLE_TOOL_INVOCATION_FIELDS = ['state', 'result'] as const;
+
+/**
+ * Pick only the whitelisted fields from a tool invocation. Used to apply a
+ * client-authored transition (e.g. `call` → `result`) without adopting any
+ * other client-supplied value.
+ */
+function pickClientContributable(invocation: MastraToolInvocation): Partial<MastraToolInvocation> {
+  const picked: Partial<MastraToolInvocation> = {};
+  for (const field of CLIENT_CONTRIBUTABLE_TOOL_INVOCATION_FIELDS) {
+    const value = (invocation as Record<string, unknown>)[field];
+    if (value !== undefined) {
+      (picked as Record<string, unknown>)[field] = value;
+    }
+  }
+  return picked;
+}
 
 /**
  * Canonicalize a value for deep comparison: sorts object keys and normalizes
@@ -42,13 +68,18 @@ function getToolCallId(part: ToolInvocationPart): string | undefined {
  * Rules (stored = canonical server state, incoming = client echo):
  * - Tool-invocation parts are matched by `toolCallId`. A client-authored
  *   transition (stored `call` → incoming `result`, e.g. a client-side tool
- *   result) is applied to the stored part, preserving the stored args/name.
+ *   result) is applied to the stored part, but the client may only contribute
+ *   `state` and `result`; `toolName`, `toolCallId` and `args` always come from
+ *   the stored (server-authored) invocation.
  * - Any other same-position conflict is resolved in favor of the stored part
  *   (server-authored text wins over a raw client copy).
- * - Parts that only exist on the echo and extend the stored message (e.g.
- *   observation markers) are appended.
- * - The stored `content` string and `metadata` win on conflicts; the `sealed`
- *   flag therefore survives an echo.
+ * - Incoming-only parts are never accepted: a client echo cannot introduce
+ *   tool history, text, or other parts the server never stored. Client-side
+ *   presentation parts (e.g. observation markers) are re-created by the client
+ *   on each render and do not belong in the persisted record.
+ * - The stored `content` string and `metadata` win in full; echo-only keys are
+ *   never carried over, so a client cannot pre-seed keys the server hasn't set
+ *   yet (e.g. `sealed`).
  */
 export function mergeEchoWithStored(incoming: MastraDBMessage, stored: MastraDBMessage): MastraDBMessage {
   return {
@@ -71,12 +102,6 @@ function mergeEchoContent(stored: MastraMessageContentV2, incoming: MastraMessag
     merged.content = incoming.content;
   }
 
-  // Metadata: stored wins on conflicts (e.g. keeps the `sealed` flag); keys only
-  // present on the echo are carried over.
-  if (incoming.metadata) {
-    merged.metadata = { ...incoming.metadata, ...(stored.metadata ?? {}) };
-  }
-
   return merged;
 }
 
@@ -93,10 +118,7 @@ function mergeEchoParts(storedParts: V2Part[], incomingParts: V2Part[]): V2Part[
     }
   });
 
-  const incomingUsed = new Set<number>();
-
-  for (let i = 0; i < storedParts.length; i++) {
-    const storedPart = storedParts[i]!;
+  for (const storedPart of storedParts) {
     if (!isToolInvocationPart(storedPart)) {
       merged.push(storedPart);
       continue;
@@ -109,7 +131,6 @@ function mergeEchoParts(storedParts: V2Part[], incomingParts: V2Part[]): V2Part[
       continue;
     }
 
-    incomingUsed.add(incomingIndex);
     const incomingPart = incomingParts[incomingIndex]!;
     if (
       isToolInvocationPart(incomingPart) &&
@@ -117,15 +138,15 @@ function mergeEchoParts(storedParts: V2Part[], incomingParts: V2Part[]): V2Part[
       storedPart.toolInvocation.state !== 'result'
     ) {
       // Legitimate client-authored transition: advance the stored call with the
-      // client's result while preserving the stored args/name.
+      // client's result. Only `state` + `result` are taken from the client — the
+      // tool call's identity (name, call id, args) is server-authored and stays
+      // as stored.
       const transitioned: ToolInvocationPart = {
         ...storedPart,
         toolInvocation: {
           ...storedPart.toolInvocation,
-          ...incomingPart.toolInvocation,
-          // The tool call's identity (name + args) is server-authored: the
-          // stored args win over the client copy, which only adds the result.
-          args: { ...incomingPart.toolInvocation.args, ...storedPart.toolInvocation.args },
+          ...pickClientContributable(incomingPart.toolInvocation),
+          args: storedPart.toolInvocation.args,
         },
       };
       merged.push(transitioned);
@@ -134,43 +155,39 @@ function mergeEchoParts(storedParts: V2Part[], incomingParts: V2Part[]): V2Part[
     }
   }
 
-  // Pass 2: append incoming-only parts that extend the stored message (e.g.
-  // observation markers). Same-position conflicts were already resolved in favor
-  // of the stored part; unmatched incoming tool parts are dropped as stale echoes
-  // of parts the server never stored.
-  for (let i = 0; i < incomingParts.length; i++) {
-    if (incomingUsed.has(i)) continue;
-    const incomingPart = incomingParts[i]!;
-    if (isToolInvocationPart(incomingPart)) continue;
-    const storedAtPosition = storedParts[i];
-    if (storedAtPosition === undefined) {
-      merged.push(incomingPart);
-    }
-  }
-
   return merged;
 }
 
 /**
  * Reconcile the legacy parallel `toolInvocations` array for client-authored
- * transitions, mirroring the part-level merge.
+ * transitions, mirroring the part-level merge:
+ *
+ * - The stored array is canonical; a client copy can never introduce tool
+ *   history (names, args, results) the server never stored, so when the stored
+ *   message has no array the incoming one is dropped entirely.
+ * - For matched entries the client may only advance `call` → `result`,
+ *   contributing `state`/`result` while the stored `args` (and everything else)
+ *   survive.
  */
 function mergeLegacyToolInvocations(
   stored: MastraMessageContentV2,
   incoming: MastraMessageContentV2,
 ): MastraMessageContentV2['toolInvocations'] | undefined {
-  if (!stored.toolInvocations) return incoming.toolInvocations;
+  if (!stored.toolInvocations) return undefined;
   if (!incoming.toolInvocations) return stored.toolInvocations;
 
   const incomingById = new Map(incoming.toolInvocations.map(t => [t.toolCallId, t]));
   return stored.toolInvocations.map(t => {
     const incomingEntry = incomingById.get(t.toolCallId);
     if (incomingEntry && incomingEntry.state === 'result' && t.state !== 'result') {
+      // The client may only advance the invocation: take its `state`/`result`
+      // (narrowed to `result` by the guard) while keeping the server-authored
+      // args — and everything else — from the stored entry.
       return {
         ...t,
-        ...incomingEntry,
-        // Keep the server-authored args of the stored call.
-        args: { ...(incomingEntry.args ?? {}), ...(t.args ?? {}) },
+        state: incomingEntry.state,
+        result: incomingEntry.result,
+        args: t.args,
       };
     }
     return t;
@@ -209,8 +226,13 @@ export function messagesContentEqual(a: MastraDBMessage, b: MastraDBMessage): bo
  * - Messages with no stored record are returned untouched (genuinely new).
  * - Identical echoes of stored messages are dropped — re-persisting them would
  *   overwrite the canonical record with a copy.
- * - Lossy or transitional echoes are merged into the stored canonical version
- *   so only supported client-authored changes (e.g. tool results) survive.
+ * - For assistant (and system) messages, lossy or transitional echoes are
+ *   merged into the stored canonical version so only supported client-authored
+ *   changes (e.g. tool results) survive.
+ * - For user messages the client IS the author, so reconciliation is restricted
+ *   to skipping unchanged echoes: an edit-and-resend that reuses the message ID
+ *   is kept as-is (last-write-wins), never silently discarded by a
+ *   server-wins merge.
  */
 export function reconcileClientEchoes(
   messages: MastraDBMessage[],
@@ -225,6 +247,10 @@ export function reconcileClientEchoes(
     }
     if (messagesContentEqual(message, stored)) {
       continue; // stale echo — already persisted, nothing to write
+    }
+    if (stored.role === 'user') {
+      reconciled.push(message); // client-authored edit, last-write-wins
+      continue;
     }
     reconciled.push(mergeEchoWithStored(message, stored));
   }
