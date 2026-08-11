@@ -126,11 +126,13 @@ describe('AgentController.deleteSession', () => {
     // Fire create and delete concurrently for the same resource. Without the
     // race guard, createSession would await the same cached promise as
     // deleteSession and could return the session being torn down.
-    const [reused] = await Promise.all([
+    const [reused, deleted] = await Promise.all([
       controller.createSession({ resourceId: 'resource-1' }),
       controller.deleteSession({ resourceId: 'resource-1' }),
     ]);
 
+    // deleteSession must report that it removed the original session.
+    expect(deleted).toBe(true);
     // createSession must not return the original (now torn-down) session.
     expect(reused).not.toBe(original);
     // The returned session should have an active thread (not cleared by abort).
