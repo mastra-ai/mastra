@@ -86,12 +86,13 @@ function toPosixPath(candidatePath: string): string {
   return candidatePath.replaceAll('\\', '/');
 }
 
-function isUncPath(candidatePath: string): boolean {
-  return toPosixPath(candidatePath).startsWith('//');
+function usesWindowsPathSemantics(candidatePath: string): boolean {
+  const normalizedPath = toPosixPath(candidatePath);
+  return normalizedPath.startsWith('//') || (/^[a-zA-Z]:\//.test(normalizedPath) && win32.isAbsolute(normalizedPath));
 }
 
 function toAbsolutePath(candidatePath: string): string {
-  if (isUncPath(candidatePath)) {
+  if (usesWindowsPathSemantics(candidatePath)) {
     return toPosixPath(win32.normalize(candidatePath));
   }
 
@@ -99,12 +100,16 @@ function toAbsolutePath(candidatePath: string): string {
   return toPosixPath(absolutePath);
 }
 
-function dirnamePreservingUnc(candidatePath: string): string {
-  return isUncPath(candidatePath) ? toPosixPath(win32.dirname(candidatePath)) : posix.dirname(candidatePath);
+function dirnamePreservingWindowsRoot(candidatePath: string): string {
+  return usesWindowsPathSemantics(candidatePath)
+    ? toPosixPath(win32.dirname(candidatePath))
+    : posix.dirname(candidatePath);
 }
 
-function joinPreservingUnc(basePath: string, childPath: string): string {
-  return isUncPath(basePath) ? toPosixPath(win32.join(basePath, childPath)) : posix.join(basePath, childPath);
+function joinPreservingWindowsRoot(basePath: string, childPath: string): string {
+  return usesWindowsPathSemantics(basePath)
+    ? toPosixPath(win32.join(basePath, childPath))
+    : posix.join(basePath, childPath);
 }
 
 function findInstructionFileForPath(
@@ -120,24 +125,24 @@ function findInstructionFileForPath(
   }
 
   // Ordinary paths use POSIX operations so the walk is deterministic on every
-  // platform. UNC paths use win32 operations to preserve their authority, then
-  // convert the result back to forward slashes.
+  // platform. UNC and drive-rooted paths use win32 operations to preserve their
+  // roots, then convert the result back to forward slashes.
   let currentDir = absoluteCandidatePath;
   if (!pathExists(currentDir) || !isDirectory(currentDir)) {
-    currentDir = dirnamePreservingUnc(currentDir);
+    currentDir = dirnamePreservingWindowsRoot(currentDir);
   }
 
   let previousDir: string | undefined;
   while (currentDir && currentDir !== previousDir) {
     for (const instructionFileName of INSTRUCTION_FILE_NAMES) {
-      const instructionFilePath = joinPreservingUnc(currentDir, instructionFileName);
+      const instructionFilePath = joinPreservingWindowsRoot(currentDir, instructionFileName);
       if (pathExists(instructionFilePath)) {
         return instructionFilePath;
       }
     }
 
     previousDir = currentDir;
-    currentDir = dirnamePreservingUnc(currentDir);
+    currentDir = dirnamePreservingWindowsRoot(currentDir);
   }
 
   return undefined;

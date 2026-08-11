@@ -171,7 +171,8 @@ function extractReminderMarkup(messageList: TestMessageList): string[] {
   return messageList.get.all.db().flatMap(message => {
     if (message.role === 'signal') {
       const signalMetadata = message.content.metadata?.signal as
-        { attributes?: { type?: string }; metadata?: { path?: unknown } } | undefined;
+        | { attributes?: { type?: string }; metadata?: { path?: unknown } }
+        | undefined;
       if (signalMetadata?.attributes?.type === 'dynamic-agents-md') {
         const path = signalMetadata.metadata?.path;
         return typeof path === 'string'
@@ -824,6 +825,46 @@ describe('AgentsMDInjector', () => {
       const reminderPath = (injectedReminder!.content.metadata?.signal as any)?.metadata?.path as string;
       expect(reminderPath.endsWith('/components/AGENTS.md')).toBe(true);
       expect(reminderPath).not.toContain('\\');
+    });
+
+    it('stops drive-rooted Windows walks at the drive root', async () => {
+      const messageList = new TestMessageList();
+      const toolCallId = 'call-drive-root-walk';
+      const windowsCandidatePath = 'C:/repo/src/components/Button.tsx';
+      const driveRootInstructionPath = 'C:/AGENTS.md';
+      const probedPaths: string[] = [];
+      const readFile = vi.fn(() => FILE_CONTENT);
+      messageList.pushResponse(
+        createAssistantMessage({
+          format: 2,
+          parts: [
+            createToolInvocationPart(toolCallId, { path: 'C:\\repo\\src\\components\\Button.tsx' }, 'result', {
+              ok: true,
+            }),
+          ],
+        }),
+      );
+
+      const testProcessor = new AgentsMDInjector({
+        pathExists: path => {
+          const normalizedPath = String(path);
+          probedPaths.push(normalizedPath);
+          return normalizedPath === windowsCandidatePath || normalizedPath === 'AGENTS.md';
+        },
+        isDirectory: () => false,
+        readFile,
+      });
+
+      await testProcessor.processInputStep(
+        createProcessInputStepArgs(messageList, [
+          createToolCall({ path: 'C:\\repo\\src\\components\\Button.tsx' }, 'view', toolCallId),
+        ]),
+      );
+
+      expect(probedPaths).toContain(driveRootInstructionPath);
+      expect(probedPaths).not.toContain('AGENTS.md');
+      expect(readFile).not.toHaveBeenCalled();
+      expect(extractReminderMarkup(messageList)).toEqual([]);
     });
 
     it('preserves the authority in direct Windows UNC instruction-file references', async () => {
