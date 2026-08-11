@@ -9,6 +9,7 @@ import type {
   ScoreEvent,
   FeedbackEvent,
 } from '@mastra/core/observability';
+import { fetchWithRetry } from '@mastra/core/utils';
 import { AuthFailureCooldown, fetchWithAuthFailureHandling, isAuthFailureError } from './auth-failure-cooldown';
 import { BaseExporter } from './base';
 import type { BaseExporterConfig } from './base';
@@ -39,6 +40,41 @@ const SIGNAL_PUBLISH_SUFFIXES: Record<PlatformSignal, string> = {
 };
 
 const DEFAULT_PLATFORM_SPAN_FILTER = (span: AnyExportedSpan): boolean => span.type !== SpanType.MODEL_CHUNK;
+
+// Stop-signal contract: when the org's observability quota is exhausted, the
+// collector rejects every publish route with 402 Payment Required plus the
+// headers below. 402 is deliberately non-retryable: the exporter must drop the
+// batch (no auto-retry), pause, and probe until the collector stops sending it.
+const QUOTA_EXCEEDED_STATUS = 402;
+const OBSERVABILITY_STATUS_HEADER = 'x-mastra-observability';
+const OBSERVABILITY_DISABLED_VALUE = 'disabled';
+const OBSERVABILITY_RETRY_AFTER_HEADER = 'x-mastra-observability-retry-after';
+const DEFAULT_QUOTA_PROBE_INTERVAL_SECONDS = 300;
+// Node.js timers overflow above 2^31 - 1 ms and fire after ~1ms instead.
+const MAX_QUOTA_PROBE_INTERVAL_SECONDS = Math.floor(0x7fffffff / 1000);
+
+function isObservabilityDisabled(response: Response): boolean {
+  return response.headers.get(OBSERVABILITY_STATUS_HEADER) === OBSERVABILITY_DISABLED_VALUE;
+}
+
+// The contract says either signal means pause; check both for robustness.
+function isQuotaExceededResponse(response: Response): boolean {
+  return response.status === QUOTA_EXCEEDED_STATUS || isObservabilityDisabled(response);
+}
+
+function parseQuotaRetryAfterSeconds(response: Response): number {
+  const raw = response.headers.get(OBSERVABILITY_RETRY_AFTER_HEADER);
+  if (!raw || !/^\d+$/.test(raw.trim())) {
+    return DEFAULT_QUOTA_PROBE_INTERVAL_SECONDS;
+  }
+
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return DEFAULT_QUOTA_PROBE_INTERVAL_SECONDS;
+  }
+
+  return Math.min(parsed, MAX_QUOTA_PROBE_INTERVAL_SECONDS);
+}
 
 const SIGNAL_PUBLISH_SEGMENTS: Record<PlatformSignal, string> = {
   traces: 'spans',
@@ -225,6 +261,10 @@ export class MastraPlatformExporter extends BaseExporter {
   private buffer: MastraPlatformBuffer;
   private flushTimer: NodeJS.Timeout | null = null;
   private inFlightFlushes = new Set<Promise<void>>();
+  private quotaPaused = false;
+  private quotaProbeTimer: NodeJS.Timeout | null = null;
+  private quotaProbeIntervalSeconds = DEFAULT_QUOTA_PROBE_INTERVAL_SECONDS;
+  private shuttingDown = false;
 
   constructor(config: MastraPlatformExporterConfig = {}) {
     super(config);
@@ -308,7 +348,7 @@ export class MastraPlatformExporter extends BaseExporter {
       return;
     }
 
-    if (this.authFailureCooldown.dropEventIfCoolingDown()) {
+    if (this.quotaPaused || this.authFailureCooldown.dropEventIfCoolingDown()) {
       return;
     }
 
@@ -322,7 +362,7 @@ export class MastraPlatformExporter extends BaseExporter {
       return;
     }
 
-    if (this.authFailureCooldown.dropEventIfCoolingDown()) {
+    if (this.quotaPaused || this.authFailureCooldown.dropEventIfCoolingDown()) {
       return;
     }
 
@@ -335,7 +375,7 @@ export class MastraPlatformExporter extends BaseExporter {
       return;
     }
 
-    if (this.authFailureCooldown.dropEventIfCoolingDown()) {
+    if (this.quotaPaused || this.authFailureCooldown.dropEventIfCoolingDown()) {
       return;
     }
 
@@ -348,7 +388,7 @@ export class MastraPlatformExporter extends BaseExporter {
       return;
     }
 
-    if (this.authFailureCooldown.dropEventIfCoolingDown()) {
+    if (this.quotaPaused || this.authFailureCooldown.dropEventIfCoolingDown()) {
       return;
     }
 
@@ -361,7 +401,7 @@ export class MastraPlatformExporter extends BaseExporter {
       return;
     }
 
-    if (this.authFailureCooldown.dropEventIfCoolingDown()) {
+    if (this.quotaPaused || this.authFailureCooldown.dropEventIfCoolingDown()) {
       return;
     }
 
@@ -507,6 +547,11 @@ export class MastraPlatformExporter extends BaseExporter {
       return;
     }
 
+    if (this.quotaPaused) {
+      this.resetBuffer();
+      return;
+    }
+
     if (this.authFailureCooldown.dropEventsIfCoolingDown(this.buffer.totalSize)) {
       this.resetBuffer();
       return;
@@ -571,12 +616,18 @@ export class MastraPlatformExporter extends BaseExporter {
   /**
    * Uploads a signal batch to the configured Mastra Observability API using fetchWithRetry.
    */
-  private async batchUpload<T>(signal: PlatformSignal, records: T[]): Promise<void> {
-    const headers = {
+  private buildPublishHeaders(): Record<string, string> {
+    return {
       Authorization: `Bearer ${this.platformConfig.accessToken}`,
       'Content-Type': 'application/json',
     };
+  }
 
+  private buildPublishBody<T>(signal: PlatformSignal, records: T[]): string {
+    return JSON.stringify({ [SIGNAL_PUBLISH_SEGMENTS[signal]]: records });
+  }
+
+  private async batchUpload<T>(signal: PlatformSignal, records: T[]): Promise<void> {
     const endpointMap: Record<PlatformSignal, string> = {
       traces: this.platformConfig.tracesEndpoint,
       logs: this.platformConfig.logsEndpoint,
@@ -587,11 +638,149 @@ export class MastraPlatformExporter extends BaseExporter {
 
     const options: RequestInit = {
       method: 'POST',
-      headers,
-      body: JSON.stringify({ [SIGNAL_PUBLISH_SEGMENTS[signal]]: records }),
+      headers: this.buildPublishHeaders(),
+      body: this.buildPublishBody(signal, records),
     };
 
-    await fetchWithAuthFailureHandling(endpointMap[signal], options, this.platformConfig.maxRetries);
+    // Capture a quota-exceeded response in the retry predicate: returning
+    // false makes fetchWithRetry throw without retrying (the 402'd batch must
+    // never be re-sent), but the thrown error loses the Response and its
+    // retry-after header, so we keep a reference here.
+    let quotaResponse: Response | undefined;
+    let response: Response;
+
+    try {
+      response = await fetchWithAuthFailureHandling(
+        endpointMap[signal],
+        options,
+        this.platformConfig.maxRetries,
+        res => {
+          if (isQuotaExceededResponse(res)) {
+            quotaResponse = res;
+            return false;
+          }
+
+          return true;
+        },
+      );
+    } catch (error) {
+      if (quotaResponse) {
+        // Quota exhaustion is the pause signal, not an upload failure: drop
+        // the batch silently (the pause transition logs once) and pause.
+        this.enterQuotaPause(parseQuotaRetryAfterSeconds(quotaResponse));
+        return;
+      }
+
+      throw error;
+    }
+
+    if (isObservabilityDisabled(response)) {
+      this.enterQuotaPause(parseQuotaRetryAfterSeconds(response));
+    }
+  }
+
+  /**
+   * Enter the quota-exhausted paused state: drop buffered events, stop the
+   * flush timer, and start probing until the collector stops rejecting with
+   * 402. The gate is per-org, so a signal on any publish route pauses all
+   * five signal types.
+   */
+  private enterQuotaPause(retryAfterSeconds: number): void {
+    this.quotaProbeIntervalSeconds = retryAfterSeconds;
+
+    if (this.quotaPaused) {
+      return;
+    }
+
+    this.quotaPaused = true;
+
+    if (this.flushTimer) {
+      clearTimeout(this.flushTimer);
+      this.flushTimer = null;
+    }
+    this.resetBuffer();
+
+    this.logger.warn(
+      `Mastra observability paused: quota exhausted, dropping telemetry and probing every ${retryAfterSeconds}s`,
+    );
+
+    this.scheduleQuotaProbe();
+  }
+
+  private scheduleQuotaProbe(): void {
+    if (this.shuttingDown) {
+      return;
+    }
+
+    if (this.quotaProbeTimer) {
+      clearTimeout(this.quotaProbeTimer);
+    }
+
+    this.quotaProbeTimer = setTimeout(() => {
+      this.quotaProbeTimer = null;
+      void this.probeQuotaStatus();
+    }, this.quotaProbeIntervalSeconds * 1000);
+
+    // Don't keep the process alive just to probe; no activity means no egress burn either.
+    this.quotaProbeTimer.unref?.();
+  }
+
+  /**
+   * Send an empty spans batch as a free probe. The collector treats an empty
+   * batch as a no-op, and an exhausted org still gets the 402 on it. A 402
+   * throws out of fetchWithRetry without the Response, so the retry predicate
+   * captures it to keep the retry-after hint.
+   */
+  private async probeQuotaStatus(): Promise<void> {
+    if (this.shuttingDown || !this.quotaPaused) {
+      return;
+    }
+
+    let quotaResponse: Response | undefined;
+
+    try {
+      const response = await fetchWithRetry(
+        this.platformConfig.tracesEndpoint,
+        {
+          method: 'POST',
+          headers: this.buildPublishHeaders(),
+          body: this.buildPublishBody('traces', []),
+        },
+        1,
+        {
+          shouldRetryResponse: res => {
+            if (isQuotaExceededResponse(res)) {
+              quotaResponse = res;
+            }
+
+            // Probes are best-effort; never retry them.
+            return false;
+          },
+        },
+      );
+
+      if (this.shuttingDown) {
+        return;
+      }
+
+      if (!isObservabilityDisabled(response)) {
+        this.quotaPaused = false;
+        this.quotaProbeIntervalSeconds = DEFAULT_QUOTA_PROBE_INTERVAL_SECONDS;
+        this.logger.warn('Mastra observability resumed: quota restored, exports re-enabled');
+        return;
+      }
+
+      this.quotaProbeIntervalSeconds = parseQuotaRetryAfterSeconds(response);
+    } catch {
+      if (quotaResponse) {
+        // Still exhausted (402); honor the collector's updated probe hint.
+        this.quotaProbeIntervalSeconds = parseQuotaRetryAfterSeconds(quotaResponse);
+      }
+      // Otherwise the probe failed (network error or non-402 failure); stay
+      // paused and try again later.
+    }
+
+    this.scheduleQuotaProbe();
   }
 
   private async flushSignalBatch<T>(
@@ -672,6 +861,8 @@ export class MastraPlatformExporter extends BaseExporter {
   }
 
   async shutdown(): Promise<void> {
+    this.shuttingDown = true;
+
     if (this.isDisabled) {
       return;
     }
@@ -679,6 +870,11 @@ export class MastraPlatformExporter extends BaseExporter {
     if (this.flushTimer) {
       clearTimeout(this.flushTimer);
       this.flushTimer = null;
+    }
+
+    if (this.quotaProbeTimer) {
+      clearTimeout(this.quotaProbeTimer);
+      this.quotaProbeTimer = null;
     }
 
     try {

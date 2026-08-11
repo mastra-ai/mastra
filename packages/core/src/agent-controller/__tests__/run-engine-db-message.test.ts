@@ -310,6 +310,56 @@ describe('SessionRunEngine — MastraDBMessage contract', () => {
     expect(callPart.toolInvocation).not.toHaveProperty('result');
   });
 
+  it('Given a step-start carrying the response message id, When the turn streams, Then emitted messages adopt that id', async () => {
+    const { engine, events } = createHarness();
+    const state = engine.createStreamState();
+    const ctx = requestContext();
+
+    await engine.processStreamChunk(state, chunk({ type: 'step-start', payload: { messageId: 'response-1' } }), ctx);
+    await engine.processStreamChunk(state, chunk({ type: 'text-start', payload: { id: 't1' } }), ctx);
+    await engine.processStreamChunk(state, chunk({ type: 'text-delta', payload: { id: 't1', text: 'Hello' } }), ctx);
+
+    expect(lastMessageEvent(events).id).toBe('response-1');
+  });
+
+  it('Given a steer rotation, When the next step starts with a rotated id, Then the new message adopts it', async () => {
+    const { engine, events } = createHarness();
+    const state = engine.createStreamState();
+    const ctx = requestContext();
+
+    await engine.processStreamChunk(state, chunk({ type: 'step-start', payload: { messageId: 'response-1' } }), ctx);
+    await engine.processStreamChunk(state, chunk({ type: 'text-start', payload: { id: 't1' } }), ctx);
+    await engine.processStreamChunk(state, chunk({ type: 'text-delta', payload: { id: 't1', text: 'first' } }), ctx);
+    await engine.processStreamChunk(state, chunk({ type: 'data-user-message', data: { id: 'sig-1' } }), ctx);
+    await engine.processStreamChunk(state, chunk({ type: 'step-start', payload: { messageId: 'response-2' } }), ctx);
+    await engine.processStreamChunk(state, chunk({ type: 'text-start', payload: { id: 't2' } }), ctx);
+    await engine.processStreamChunk(state, chunk({ type: 'text-delta', payload: { id: 't2', text: 'second' } }), ctx);
+
+    const assistantEnds = events.filter(event => event.type === 'message_end' && event.message.role === 'assistant');
+    expect(assistantEnds[0]?.message.id).toBe('response-1');
+    expect(lastMessageEvent(events).id).toBe('response-2');
+  });
+
+  it('Given an id already emitted or content already streamed, When step-start arrives, Then the engine keeps its own id', async () => {
+    const { engine, events } = createHarness();
+    const state = engine.createStreamState();
+    const ctx = requestContext();
+
+    // Content before step-start: the id was already observable, must not change.
+    await engine.processStreamChunk(state, chunk({ type: 'text-start', payload: { id: 't1' } }), ctx);
+    const mintedId = lastMessageEvent(events).id;
+    await engine.processStreamChunk(state, chunk({ type: 'step-start', payload: { messageId: 'response-1' } }), ctx);
+    await engine.processStreamChunk(state, chunk({ type: 'text-delta', payload: { id: 't1', text: 'first' } }), ctx);
+    expect(lastMessageEvent(events).id).toBe(mintedId);
+
+    // A reused id after rotation would collapse two display messages into one.
+    await engine.processStreamChunk(state, chunk({ type: 'data-user-message', data: { id: 'sig-1' } }), ctx);
+    await engine.processStreamChunk(state, chunk({ type: 'step-start', payload: { messageId: 'response-1' } }), ctx);
+    await engine.processStreamChunk(state, chunk({ type: 'text-start', payload: { id: 't2' } }), ctx);
+    expect(lastMessageEvent(events).id).not.toBe('response-1');
+    expect(lastMessageEvent(events).id).not.toBe(mintedId);
+  });
+
   it('Given a non-success finish reason, When the stream finishes, Then terminal state lives on message metadata', async () => {
     const { engine, events } = createHarness();
 

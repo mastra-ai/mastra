@@ -161,7 +161,7 @@ export function resolveModel(
   return gateway.resolveLanguageModel({
     providerId,
     modelId: bareModelId,
-    apiKey: auth?.apiKey ?? mgApiKey ?? '',
+    apiKey: auth?.apiKey ?? '',
     headers,
   });
 }

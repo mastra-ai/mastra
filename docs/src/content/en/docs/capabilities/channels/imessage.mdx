@@ -95,6 +95,14 @@ https://your-app.example.com/api/agents/imessage-agent/channels/imessage/webhook
 
 Register this URL in the [Photon dashboard](https://app.photon.codes), then set the signing secret it returns as `IMESSAGE_WEBHOOK_SECRET`. The secret is shown once at registration. The adapter verifies the signature on every delivery and rejects requests that don't match. Webhooks are available in hosted mode only.
 
+:::note
+
+Photon delivers to public HTTPS endpoints only. It won't deliver to `http://`, to private addresses like `localhost`, or through a redirect. For local development, use a tunnel as described in the [Channels overview](/docs/capabilities/channels/overview#webhook-routes).
+
+:::
+
+## Duplicate deliveries
+
 Photon retries failed deliveries with backoff and delivers at least once, so the same message can arrive twice. Chat SDK drops the repeat using the channel state adapter, and Mastra's default keeps those dedup keys in memory. That covers a single long-running server.
 
 A repeat can still reach the agent after a restart, or on serverless where the retry is routed to a different instance. Pass a shared state adapter on `channels.state` so dedup keys are visible everywhere. Install one alongside the adapter:
@@ -121,12 +129,6 @@ channels: {
 ```
 
 This matters most for tools with side effects, where handling the same message twice is visible to the user.
-
-:::note
-
-Photon delivers to public HTTPS endpoints only. It won't deliver to `http://`, to private addresses like `localhost`, or through a redirect. For local development, use a tunnel as described in the [Channels overview](/docs/capabilities/channels/overview#webhook-routes).
-
-:::
 
 ## Gateway listener
 

@@ -7,10 +7,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { SankeySignals } from '../sankey-signals';
 import {
+  allThemePathsResponse,
   drilldownThemeFlowResponse,
   drilldownThemeSnapshotsResponse,
   firstThemeExamplesResponse,
-  firstThemePathsResponse,
   noiseExamplesResponse,
   noiseResponse,
   noSummaryTraceInsightResponse,
@@ -63,14 +63,14 @@ function registerThemeDrilldownHandlers() {
       HttpResponse.json(drilldownThemeFlowResponse),
     ),
     http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-paths`, () =>
-      HttpResponse.json(firstThemePathsResponse),
+      HttpResponse.json(allThemePathsResponse),
     ),
     http.get(`${BASE_URL}/api/learning/entities/support-agent/themes/101`, () =>
       HttpResponse.json(themeDetailResponse),
     ),
     http.get(`${BASE_URL}/api/learning/entities/support-agent/themes/101/examples`, ({ request }) => {
       const offset = new URL(request.url).searchParams.get('offset');
-      return HttpResponse.json(offset === '1' ? secondThemeExamplesResponse : firstThemeExamplesResponse);
+      return HttpResponse.json(offset === '5' ? secondThemeExamplesResponse : firstThemeExamplesResponse);
     }),
     http.get(`${BASE_URL}/api/learning/entities/support-agent/themes/101/history`, () =>
       HttpResponse.json(themeHistoryResponse),
@@ -78,9 +78,14 @@ function registerThemeDrilldownHandlers() {
   );
 }
 
-async function openThemeExampleInsight() {
+async function openThemeDetails() {
+  fireEvent.click(await screen.findByRole('button', { name: /Add transcript.+2 traces \(67%\)/ }));
   fireEvent.click(await screen.findByRole('button', { name: 'View theme details for Add transcript' }));
   await screen.findByRole('dialog', { name: 'Add transcript' });
+}
+
+async function openThemeExampleInsight() {
+  await openThemeDetails();
   fireEvent.click(
     await screen.findByRole('button', { name: 'View trace insight for Add this transcript to my workspace.' }),
   );
@@ -168,8 +173,7 @@ describe('Trace signals trace insight', () => {
       );
       renderSignals();
 
-      fireEvent.click(await screen.findByRole('button', { name: 'View theme details for Add transcript' }));
-      await screen.findByRole('dialog', { name: 'Add transcript' });
+      await openThemeDetails();
       await screen.findByRole('button', { name: 'View trace insight for Add this transcript to my workspace.' });
 
       expect(onInsightRequest).not.toHaveBeenCalled();
@@ -186,9 +190,8 @@ describe('Trace signals trace insight', () => {
       );
       renderSignals();
 
-      fireEvent.click(await screen.findByRole('button', { name: 'View theme details for Add transcript' }));
-      await screen.findByRole('dialog', { name: 'Add transcript' });
-      fireEvent.click(await screen.findByRole('button', { name: 'Next examples' }));
+      await openThemeDetails();
+      fireEvent.click(await screen.findByRole('button', { name: 'Next' }));
       fireEvent.click(
         await screen.findByRole('button', { name: 'View trace insight for Save the transcript with the project.' }),
       );
@@ -272,7 +275,7 @@ describe('Trace signals trace insight', () => {
       );
       renderSignals();
 
-      fireEvent.click(await screen.findByRole('button', { name: 'View Noise details for Behavior' }));
+      fireEvent.click(await screen.findByLabelText(/^Noise.+2 traces \(67%\)/));
       await screen.findByRole('dialog', { name: 'Noise' });
       fireEvent.click(
         await screen.findByRole('button', {
