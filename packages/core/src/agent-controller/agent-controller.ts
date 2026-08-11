@@ -706,7 +706,16 @@ export class AgentController<TState = {}> {
       }
       this.#notifySessionDeleted(session);
     })();
-    this.#deletionsInProgress.set(registryKey, deletionPromise);
+    // Waiters only need to know when teardown finished, not why it failed.
+    // Without this, a clearAndReleaseLock rejection would propagate to every
+    // createSession caller that happened to await the in-progress deletion.
+    this.#deletionsInProgress.set(
+      registryKey,
+      deletionPromise.then(
+        () => undefined,
+        () => undefined,
+      ),
+    );
     try {
       await deletionPromise;
       return true;
