@@ -360,7 +360,7 @@ const sidebars = {
         {
           type: 'doc',
           id: 'databases/neon',
-          label: 'Neon',
+          label: 'Neon Postgres',
           customProps: { icon: 'https://cdn.simpleicons.org/neon?viewbox=auto&size=28' },
         },
         {
