@@ -140,68 +140,42 @@ function extractModelTextFromToolContent(content: unknown): string | undefined {
  * `toModelOutput` can read MCP `content` without changing the execute return shape.
  */
 export const MCP_CALL_TOOL_CONTENT = Symbol.for('mastra.mcp.callToolContent');
-export const MCP_CALL_TOOL_RESULT_METADATA = Symbol.for('mastra.mcp.callToolResultMetadata');
+export const MCP_CALL_TOOL_RESULT = Symbol.for('mastra.mcp.callToolResult');
 
-export type MCPCallToolResultMetadata = {
+export type MCPCallToolResult = {
   content: unknown;
   _meta?: Record<string, unknown>;
-};
-
-export type MCPClientTool = Tool<any, any, any, any> & {
-  /** Read the MCP result envelope without changing the structured tool output. */
-  getMcpCallToolResultMetadata: (output: unknown) => MCPCallToolResultMetadata | undefined;
 };
 
 type ScalarMcpContentReservation = {
   output?: unknown;
   content?: unknown;
-  meta?: Record<string, unknown>;
   ready: boolean;
 };
 
-function reserveScalarMcpContent(
-  modelOutputQueue: ScalarMcpContentReservation[],
-  resultMetadataQueue: ScalarMcpContentReservation[],
-): ScalarMcpContentReservation {
+function reserveScalarMcpContent(queue: ScalarMcpContentReservation[]): ScalarMcpContentReservation {
   const reservation = { ready: false };
-  modelOutputQueue.push(reservation);
-  resultMetadataQueue.push(reservation);
+  queue.push(reservation);
   return reservation;
 }
 
 function removeScalarMcpContentReservation(
-  queues: ScalarMcpContentReservation[][],
+  queue: ScalarMcpContentReservation[],
   reservation: ScalarMcpContentReservation | undefined,
 ): void {
   if (!reservation) return;
-  for (const queue of queues) {
-    const index = queue.indexOf(reservation);
-    if (index !== -1) {
-      queue.splice(index, 1);
-    }
+  const index = queue.indexOf(reservation);
+  if (index !== -1) {
+    queue.splice(index, 1);
   }
 }
 
-function getMcpCallToolResultMetadata(
-  output: unknown,
-  resultMetadataQueue: ScalarMcpContentReservation[],
-): MCPCallToolResultMetadata | undefined {
+/** Returns the MCP result envelope attached to a structured tool output. */
+export function getMcpCallToolResult(output: unknown): MCPCallToolResult | undefined {
   if (output !== null && typeof output === 'object') {
-    const metadata = (output as Record<PropertyKey, unknown>)[MCP_CALL_TOOL_RESULT_METADATA] as
-      | MCPCallToolResultMetadata
-      | undefined;
-    if (metadata) return metadata;
-  }
-
-  const index = resultMetadataQueue.findIndex(entry => entry.ready && Object.is(entry.output, output));
-  if (index !== -1) {
-    const reservation = resultMetadataQueue.splice(index, 1)[0];
-    if (!reservation) return undefined;
-
-    return {
-      content: reservation.content,
-      ...(reservation.meta !== undefined ? { _meta: reservation.meta } : {}),
-    };
+    const result = output as Record<PropertyKey, unknown>;
+    const attached = result[MCP_CALL_TOOL_RESULT] as MCPCallToolResult | undefined;
+    if (attached) return attached;
   }
 
   return undefined;
@@ -211,17 +185,17 @@ function attachMcpCallToolResult(
   structuredContent: unknown,
   content: unknown,
   meta: Record<string, unknown> | undefined,
-  scalarMcpContentQueues: ScalarMcpContentReservation[][],
+  scalarMcpContentQueue: ScalarMcpContentReservation[],
   reservation: ScalarMcpContentReservation | undefined,
 ): unknown {
   if (structuredContent !== null && typeof structuredContent === 'object') {
-    removeScalarMcpContentReservation(scalarMcpContentQueues, reservation);
-    const metadata: MCPCallToolResultMetadata = {
+    removeScalarMcpContentReservation(scalarMcpContentQueue, reservation);
+    const result: MCPCallToolResult = {
       content,
       ...(meta !== undefined ? { _meta: meta } : {}),
     };
-    Object.defineProperty(structuredContent, MCP_CALL_TOOL_RESULT_METADATA, {
-      value: metadata,
+    Object.defineProperty(structuredContent, MCP_CALL_TOOL_RESULT, {
+      value: result,
       enumerable: false,
       configurable: true,
     });
@@ -250,7 +224,6 @@ function attachMcpCallToolResult(
   if (reservation) {
     reservation.output = structuredContent;
     reservation.content = content;
-    reservation.meta = meta;
     reservation.ready = true;
   }
   return structuredContent;
@@ -1380,7 +1353,7 @@ export class InternalMastraMCPClient extends MastraBase {
    * No connection is opened here. The client connects lazily, the first time the returned tool
    * is actually executed, which is what makes a cached catalog useful for cold starts.
    */
-  toolFromDefinition({ definition }: { definition: SerializableMCPToolDefinition }): MCPClientTool {
+  toolFromDefinition({ definition }: { definition: SerializableMCPToolDefinition }): Tool<any, any, any, any> {
     const tool = {
       name: definition.name,
       description: definition.description,
@@ -1409,10 +1382,10 @@ export class InternalMastraMCPClient extends MastraBase {
     return built;
   }
 
-  async tools(): Promise<Record<string, MCPClientTool>> {
+  async tools(): Promise<Record<string, Tool<any, any, any, any>>> {
     this.log('debug', `Requesting tools from MCP server`);
     const { tools } = await this.client.listTools({}, { timeout: this.timeout });
-    const toolsRes: Record<string, MCPClientTool> = {};
+    const toolsRes: Record<string, Tool<any, any, any, any>> = {};
     for (const tool of tools) {
       this.log('debug', `Processing tool: ${tool.name}`);
       const mastraTool = this.buildToolFromListEntry(tool, {
@@ -1439,7 +1412,7 @@ export class InternalMastraMCPClient extends MastraBase {
   private buildToolFromListEntry(
     tool: MCPToolListEntry,
     serverMeta: { version?: string; instructions?: string; connectFirst?: boolean },
-  ): MCPClientTool | undefined {
+  ): Tool<any, any, any, any> | undefined {
     {
       try {
         // Resolve requireToolApproval for this tool
@@ -1486,7 +1459,6 @@ export class InternalMastraMCPClient extends MastraBase {
               }
             : {};
         const scalarMcpContentQueue: ScalarMcpContentReservation[] = [];
-        const scalarMcpResultMetadataQueue: ScalarMcpContentReservation[] = [];
         const mastraTool = createTool({
           id: `${this.name}_${tool.name}`,
           description: tool.description || '',
@@ -1525,7 +1497,7 @@ export class InternalMastraMCPClient extends MastraBase {
 
             const operationContext = context?.requestContext ?? null;
             const scalarMcpContentReservation = tool.outputSchema
-              ? reserveScalarMcpContent(scalarMcpContentQueue, scalarMcpResultMetadataQueue)
+              ? reserveScalarMcpContent(scalarMcpContentQueue)
               : undefined;
 
             return this.operationContextStore.run(operationContext, async () => {
@@ -1575,15 +1547,12 @@ export class InternalMastraMCPClient extends MastraBase {
                     res.structuredContent,
                     res.content,
                     res._meta,
-                    [scalarMcpContentQueue, scalarMcpResultMetadataQueue],
+                    scalarMcpContentQueue,
                     scalarMcpContentReservation,
                   );
                 }
 
-                removeScalarMcpContentReservation(
-                  [scalarMcpContentQueue, scalarMcpResultMetadataQueue],
-                  scalarMcpContentReservation,
-                );
+                removeScalarMcpContentReservation(scalarMcpContentQueue, scalarMcpContentReservation);
                 return res;
               };
 
@@ -1616,10 +1585,7 @@ export class InternalMastraMCPClient extends MastraBase {
                       reconnectError: reconnectError instanceof Error ? reconnectError.stack : String(reconnectError),
                       toolArgs: input,
                     });
-                    removeScalarMcpContentReservation(
-                      [scalarMcpContentQueue, scalarMcpResultMetadataQueue],
-                      scalarMcpContentReservation,
-                    );
+                    removeScalarMcpContentReservation(scalarMcpContentQueue, scalarMcpContentReservation);
                     throw reconnectError;
                   }
                 }
@@ -1629,18 +1595,12 @@ export class InternalMastraMCPClient extends MastraBase {
                   error: e instanceof Error ? e.stack : JSON.stringify(e, null, 2),
                   toolArgs: input,
                 });
-                removeScalarMcpContentReservation(
-                  [scalarMcpContentQueue, scalarMcpResultMetadataQueue],
-                  scalarMcpContentReservation,
-                );
+                removeScalarMcpContentReservation(scalarMcpContentQueue, scalarMcpContentReservation);
                 throw e;
               }
             });
           },
-        }) as MCPClientTool;
-
-        mastraTool.getMcpCallToolResultMetadata = (output: unknown) =>
-          getMcpCallToolResultMetadata(output, scalarMcpResultMetadataQueue);
+        });
 
         // Set needsApprovalFn directly on the tool instance (same pattern as tool-builder).
         // The agent runtime reads it back via the typed `getNeedsApprovalFn` helper.
