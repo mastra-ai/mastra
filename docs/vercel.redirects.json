@@ -1567,7 +1567,7 @@
     },
     {
       "source": "/reference/voice/playai",
-      "destination": "/integrations/voice/playai",
+      "destination": "/integrations",
       "permanent": true
     },
     {
