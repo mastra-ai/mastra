@@ -195,6 +195,48 @@ Protect HTTP MCP servers with OAuth middleware. Visit [OAuth protection](/refere
 
 Visit the [`MCPServer` reference](/reference/tools/mcp-server) for prompts, resources, transports, and other server options.
 
+### Publish a stdio server package
+
+Package a server that uses the standard input/output (stdio) transport when you want clients to run it locally through a command such as `npx`. Create a separate executable entry point that starts the server:
+
+```typescript title="src/mastra/mcp/stdio.ts"
+#!/usr/bin/env node
+import { mcpServer } from './server'
+
+mcpServer.startStdio().catch(error => {
+  console.error('Failed to start MCP server:', error)
+  process.exit(1)
+})
+```
+
+Build the entry point as an executable Node.js file, then point the package's `bin` field to that output. Include the built file in the published package and keep the shebang as its first line:
+
+```json title="package.json"
+{
+  "bin": {
+    "my-mcp-server": "dist/stdio.js"
+  },
+  "files": ["dist"]
+}
+```
+
+After publishing the package, configure clients to run it by package name:
+
+```typescript title="src/mastra/mcp/client.ts"
+import { MCPClient } from '@mastra/mcp'
+
+const mcpClient = new MCPClient({
+  servers: {
+    myServer: {
+      command: 'npx',
+      args: ['-y', '@your-org/my-mcp-server@latest'],
+    },
+  },
+})
+```
+
+Visit the [npm package publishing documentation](https://docs.npmjs.com/creating-and-publishing-scoped-public-packages) for package naming, authentication, and publication commands.
+
 ## Build MCP Apps
 
 The [MCP Apps extension](https://github.com/modelcontextprotocol/ext-apps) lets MCP tools serve interactive HTML interfaces through `ui://` resources. Mastra Studio renders these apps in sandboxed iframes on tool pages and in agent chat.

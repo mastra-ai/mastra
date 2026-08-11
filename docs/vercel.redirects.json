@@ -237,7 +237,7 @@
     },
     {
       "source": "/examples/agents/whatsapp-chat-bot",
-      "destination": "/guides/guide/whatsapp-chat-bot",
+      "destination": "/docs/capabilities/channels/whatsapp",
       "permanent": true
     },
     {
@@ -817,7 +817,7 @@
     },
     {
       "source": "/docs/mcp/publishing-mcp-server",
-      "destination": "/guides/guide/publishing-mcp-server",
+      "destination": "/docs/mcp/overview#publish-a-stdio-server-package",
       "permanent": true
     },
     {
@@ -1213,6 +1213,51 @@
     {
       "source": "/reference/core/addStoredWorkflows",
       "destination": "/reference/core/addDynamicWorkflows",
+      "permanent": true
+    },
+    {
+      "source": "/guides/guide/slack-assistant",
+      "destination": "/docs/capabilities/channels/slack",
+      "permanent": true
+    },
+    {
+      "source": "/guides/guide/whatsapp-chat-bot",
+      "destination": "/docs/capabilities/channels/whatsapp",
+      "permanent": true
+    },
+    {
+      "source": "/guides/guide/web-search",
+      "destination": "/docs/agents/using-tools#use-provider-web-search",
+      "permanent": true
+    },
+    {
+      "source": "/guides/guide/publishing-mcp-server",
+      "destination": "/docs/mcp/overview#publish-a-stdio-server-package",
+      "permanent": true
+    },
+    {
+      "source": "/guides/guide/chef-michel",
+      "destination": "/docs/agents/overview#quickstart",
+      "permanent": true
+    },
+    {
+      "source": "/guides/guide/stock-agent",
+      "destination": "/docs/agents/using-tools#quickstart",
+      "permanent": true
+    },
+    {
+      "source": "/guides/guide/research-assistant",
+      "destination": "/guides/rag/overview",
+      "permanent": true
+    },
+    {
+      "source": "/guides/guide/code-review-bot",
+      "destination": "/docs/workspace/skills#skillmd-format",
+      "permanent": true
+    },
+    {
+      "source": "/guides/guide/docs-manager",
+      "destination": "/docs/workspace/filesystem#basic-usage",
       "permanent": true
     }
   ]

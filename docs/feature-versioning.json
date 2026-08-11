@@ -16,7 +16,6 @@
   "/guides/getting-started/quickstart": "v1",
   "/guides/getting-started/sveltekit": "v1",
   "/guides/getting-started/vite-react": "v1",
-  "/guides/guide/whatsapp-chat-bot": "v1",
   "/guides/migrations/ai-sdk-v4-to-v5": "v1",
   "/models/gateways/azure-openai": "v1",
   "/models/providers/agentrouter": "v1",
