@@ -171,8 +171,7 @@ function extractReminderMarkup(messageList: TestMessageList): string[] {
   return messageList.get.all.db().flatMap(message => {
     if (message.role === 'signal') {
       const signalMetadata = message.content.metadata?.signal as
-        | { attributes?: { type?: string }; metadata?: { path?: unknown } }
-        | undefined;
+        { attributes?: { type?: string }; metadata?: { path?: unknown } } | undefined;
       if (signalMetadata?.attributes?.type === 'dynamic-agents-md') {
         const path = signalMetadata.metadata?.path;
         return typeof path === 'string'
@@ -825,6 +824,86 @@ describe('AgentsMDInjector', () => {
       const reminderPath = (injectedReminder!.content.metadata?.signal as any)?.metadata?.path as string;
       expect(reminderPath.endsWith('/components/AGENTS.md')).toBe(true);
       expect(reminderPath).not.toContain('\\');
+    });
+
+    it('preserves the authority in direct Windows UNC instruction-file references', async () => {
+      const messageList = new TestMessageList();
+      const toolCallId = 'call-unc-direct';
+      const uncInstructionPath = '//server/share/src/AGENTS.md';
+      const readFile = vi.fn((path: string) => (path === uncInstructionPath ? FILE_CONTENT : ''));
+      messageList.pushResponse(
+        createAssistantMessage({
+          format: 2,
+          parts: [
+            createToolInvocationPart(toolCallId, { path: '\\\\server\\share\\src\\AGENTS.md' }, 'result', {
+              ok: true,
+            }),
+          ],
+        }),
+      );
+
+      const testProcessor = new AgentsMDInjector({
+        reminderText: REMINDER_TEXT,
+        pathExists: () => false,
+        isDirectory: () => false,
+        readFile,
+      });
+
+      await testProcessor.processInputStep(
+        createProcessInputStepArgs(messageList, [
+          createToolCall({ path: '\\\\server\\share\\src\\AGENTS.md' }, 'view', toolCallId),
+        ]),
+      );
+
+      expect(readFile).toHaveBeenCalledWith(uncInstructionPath);
+      expect(extractReminderMarkup(messageList)).toEqual([
+        `<system-reminder type="dynamic-agents-md" path="${uncInstructionPath}">${FILE_CONTENT}</system-reminder>`,
+      ]);
+    });
+
+    it('preserves the Windows UNC authority while walking to the share root', async () => {
+      const messageList = new TestMessageList();
+      const toolCallId = 'call-unc-walk';
+      const uncCandidatePath = '//server/share/src/components/Button.tsx';
+      const uncInstructionPath = '//server/share/AGENTS.md';
+      const probedPaths: string[] = [];
+      const readFile = vi.fn((path: string) => (path === uncInstructionPath ? FILE_CONTENT : ''));
+      messageList.pushResponse(
+        createAssistantMessage({
+          format: 2,
+          parts: [
+            createToolInvocationPart(toolCallId, { path: '\\\\server\\share\\src\\components\\Button.tsx' }, 'result', {
+              ok: true,
+            }),
+          ],
+        }),
+      );
+
+      const testProcessor = new AgentsMDInjector({
+        reminderText: REMINDER_TEXT,
+        pathExists: path => {
+          const normalizedPath = String(path);
+          probedPaths.push(normalizedPath);
+          return normalizedPath === uncCandidatePath || normalizedPath === uncInstructionPath;
+        },
+        isDirectory: () => false,
+        readFile,
+      });
+
+      await testProcessor.processInputStep(
+        createProcessInputStepArgs(messageList, [
+          createToolCall({ path: '\\\\server\\share\\src\\components\\Button.tsx' }, 'view', toolCallId),
+        ]),
+      );
+
+      expect(probedPaths).toContain('//server/share/src/components/AGENTS.md');
+      expect(probedPaths).toContain('//server/share/src/AGENTS.md');
+      expect(probedPaths).toContain(uncInstructionPath);
+      expect(probedPaths.every(path => path.startsWith('//server/share'))).toBe(true);
+      expect(readFile).toHaveBeenCalledWith(uncInstructionPath);
+      expect(extractReminderMarkup(messageList)).toEqual([
+        `<system-reminder type="dynamic-agents-md" path="${uncInstructionPath}">${FILE_CONTENT}</system-reminder>`,
+      ]);
     });
   });
 });

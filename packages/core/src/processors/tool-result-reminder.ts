@@ -1,5 +1,5 @@
 import { existsSync, readFileSync, statSync } from 'node:fs';
-import { isAbsolute, normalize, posix, resolve } from 'node:path';
+import { isAbsolute, normalize, posix, resolve, win32 } from 'node:path';
 import { estimateTokenCount } from 'tokenx';
 import type { MessageList, MastraDBMessage } from '../agent/message-list';
 import { signalToXmlMarkup } from '../agent/signals';
@@ -86,9 +86,25 @@ function toPosixPath(candidatePath: string): string {
   return candidatePath.replaceAll('\\', '/');
 }
 
+function isUncPath(candidatePath: string): boolean {
+  return toPosixPath(candidatePath).startsWith('//');
+}
+
 function toAbsolutePath(candidatePath: string): string {
+  if (isUncPath(candidatePath)) {
+    return toPosixPath(win32.normalize(candidatePath));
+  }
+
   const absolutePath = normalize(isAbsolute(candidatePath) ? candidatePath : resolve(process.cwd(), candidatePath));
   return toPosixPath(absolutePath);
+}
+
+function dirnamePreservingUnc(candidatePath: string): string {
+  return isUncPath(candidatePath) ? toPosixPath(win32.dirname(candidatePath)) : posix.dirname(candidatePath);
+}
+
+function joinPreservingUnc(basePath: string, childPath: string): string {
+  return isUncPath(basePath) ? toPosixPath(win32.join(basePath, childPath)) : posix.join(basePath, childPath);
 }
 
 function findInstructionFileForPath(
@@ -103,25 +119,25 @@ function findInstructionFileForPath(
     return absoluteCandidatePath;
   }
 
-  // Walk the directory ancestry with POSIX operations. `toAbsolutePath` already
-  // returned a forward-slash path, and `path.posix` keeps it that way on every
-  // platform, so the walk (and the reminder path it produces) is deterministic.
+  // Ordinary paths use POSIX operations so the walk is deterministic on every
+  // platform. UNC paths use win32 operations to preserve their authority, then
+  // convert the result back to forward slashes.
   let currentDir = absoluteCandidatePath;
   if (!pathExists(currentDir) || !isDirectory(currentDir)) {
-    currentDir = posix.dirname(currentDir);
+    currentDir = dirnamePreservingUnc(currentDir);
   }
 
   let previousDir: string | undefined;
   while (currentDir && currentDir !== previousDir) {
     for (const instructionFileName of INSTRUCTION_FILE_NAMES) {
-      const instructionFilePath = posix.join(currentDir, instructionFileName);
+      const instructionFilePath = joinPreservingUnc(currentDir, instructionFileName);
       if (pathExists(instructionFilePath)) {
         return instructionFilePath;
       }
     }
 
     previousDir = currentDir;
-    currentDir = posix.dirname(currentDir);
+    currentDir = dirnamePreservingUnc(currentDir);
   }
 
   return undefined;
