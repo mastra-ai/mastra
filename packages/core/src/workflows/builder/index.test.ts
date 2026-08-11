@@ -79,6 +79,9 @@ describe('workflow builder authoring contract', () => {
       '"mapConfig": "{\\"response\\":{\\"step\\":[\\"urgent-support\\",\\"normal-support\\"],\\"path\\":\\"text\\"}}"',
     );
     expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).toContain('❌ Concatenating `conditional` branches in a template');
+    expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).toContain('declarative agent inputs are always `{ prompt: string }`');
+    expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).toContain('"id": "build-extraction-prompt"');
+    expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).toContain('"id": "build-triage-prompt"');
     expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).toContain('Human-in-the-loop **suspend / resume**');
     expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).toContain('State is **read-only** to the graph you author');
     expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).toContain('# Out of scope — do NOT emit these');

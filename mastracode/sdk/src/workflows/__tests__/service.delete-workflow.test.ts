@@ -1,7 +1,7 @@
 /**
  * Regression test for the "delete → save serves stale graph" bug:
  * `deleteWorkflow` must remove the row from storage AND unregister the live
- * in-process Workflow instance, so a subsequent `addStoredWorkflow` with the
+ * in-process Workflow instance, so a subsequent `addDynamicWorkflow` with the
  * same id re-registers cleanly instead of being no-op'd by addWorkflow's
  * first-write-wins guard.
  */
@@ -10,9 +10,9 @@ import { InMemoryStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
 import { createWorkflow, toStorableGraph } from '@mastra/core/workflows';
 import { describe, expect, it } from 'vitest';
-import { z } from 'zod/v4';
+import { z } from 'zod';
 
-import { deleteWorkflow } from '../service.js';
+import { deleteWorkflow, getWorkflow } from '../service.js';
 
 const doubleTool = createTool({
   id: 'double-tool',
@@ -42,7 +42,7 @@ describe('deleteWorkflow service', () => {
       storage: new InMemoryStore({ id: 'delete-svc' }),
     });
 
-    await mastra.addStoredWorkflow({
+    await mastra.addDynamicWorkflow({
       id: 'shared-id',
       inputSchema: { type: 'object', properties: { value: { type: 'number' } }, required: ['value'] },
       outputSchema: { type: 'object', properties: { message: { type: 'string' } }, required: ['message'] },
@@ -53,7 +53,7 @@ describe('deleteWorkflow service', () => {
 
     await deleteWorkflow(mastra, 'shared-id');
 
-    // Live instance is gone
+    expect(await getWorkflow(mastra, 'shared-id')).toBeNull();
     expect(() => mastra.getWorkflow('shared-id')).toThrow();
   });
 
@@ -64,7 +64,7 @@ describe('deleteWorkflow service', () => {
       storage: new InMemoryStore({ id: 'delete-then-add' }),
     });
 
-    await mastra.addStoredWorkflow({
+    await mastra.addDynamicWorkflow({
       id: 'shared-id',
       inputSchema: { type: 'object', properties: { value: { type: 'number' } }, required: ['value'] },
       outputSchema: { type: 'object', properties: { message: { type: 'string' } }, required: ['message'] },
@@ -73,7 +73,7 @@ describe('deleteWorkflow service', () => {
 
     await deleteWorkflow(mastra, 'shared-id');
 
-    await mastra.addStoredWorkflow({
+    await mastra.addDynamicWorkflow({
       id: 'shared-id',
       inputSchema: { type: 'object', properties: { value: { type: 'number' } }, required: ['value'] },
       outputSchema: { type: 'object', properties: { message: { type: 'string' } }, required: ['message'] },

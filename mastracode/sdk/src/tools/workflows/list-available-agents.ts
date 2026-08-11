@@ -1,6 +1,6 @@
 /**
  * Sub-agent tool: list agents the workflow-builder can reference in agent-step
- * entries of the static workflow graph. Read-only.
+ * entries of a Dynamic Workflow graph. Read-only.
  */
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
@@ -11,7 +11,7 @@ const WORKFLOW_BUILDER_NOISE_AGENTS = new Set(['workflow-builder']);
 export const listAvailableAgentsTool = createTool({
   id: 'list-available-agents',
   description:
-    'Returns the agents currently registered on the Mastra instance. The agent ids returned here are the only valid values you can put in `{ type: "agent", agentId }` graph entries. Each row includes `outputShape` so you know what fields the agent step will produce — read it instead of guessing.',
+    'Returns the agents currently registered on the Mastra instance. The agent ids returned here are the only valid values you can put in `{ type: "agent", agentId }` graph entries. `outputShape` describes the default text output; an entry-level `outputSchema` replaces that default with structured output.',
   inputSchema: z.object({}),
   outputSchema: z.object({
     agents: z.array(
@@ -34,7 +34,7 @@ export const listAvailableAgentsTool = createTool({
         .map(([id, a]) => ({
           id,
           description: (a as { description?: string } | undefined)?.description,
-          outputShape: '{ text: string }',
+          outputShape: 'Default: { text: string }. An entry-level outputSchema produces that schema instead.',
         })),
     };
   },

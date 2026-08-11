@@ -1,5 +1,84 @@
 # @mastra/factory
 
+## 0.6.0-alpha.18
+
+### Minor Changes
+
+- Fixed the Factory metrics so the same date range always reports the same numbers, and dropped the response fields that nothing displayed. ([#21256](https://github.com/mastra-ai/mastra/pull/21256))
+
+  **Completions are events, not the board's current state.** Throughput and lead time now count entries into `done` in the stage history, so reopening a card no longer erases the day it shipped and a card that shipped twice counts twice. The per-day rate divides by the days the board actually existed, so a 12-month range on a two-week-old board no longer reads as ~0 per day.
+
+  **Automation numbers stop counting the wrong things.** A card landing on the board when it is created is no longer counted as an automated stage move, which used to credit every webhook-synced card. Automation coverage measures the first pass through each stage only — a redo used to add a second entry to the denominator alone, capping a fully automated stage at 50% — and each pass's outcome is now frozen at the end of the window instead of reflecting where the card sits today.
+
+  **Response shape.** `stageDurations`, `wip`, `agingWip` and `earliestItemAt` are gone: nothing rendered them, and live in-flight work is already covered by the queue-health chart. `windowDays` is now `daysCovered` (the window clipped to the board's life) and `cycleTime` is `leadTime`, which is what it always measured — card creation through to `done`.
+
+  The metrics endpoint (`GET /web/factory/projects/:id/metrics`) renames two fields:
+
+  ```jsonc
+  // before
+  { "metrics": { "windowDays": 30, "cycleTime": { "medianMs": 7200000 } } }
+  // after
+  { "metrics": { "daysCovered": 30, "leadTime": { "medianMs": 7200000 } } }
+  ```
+
+  A corrupt stage-history timestamp now throws instead of being read as 1970.
+
+### Patch Changes
+
+- Updated dependencies [[`dc4a25d`](https://github.com/mastra-ai/mastra/commit/dc4a25d41af4e2fe97a816070eaec6aa963ab53b), [`dc4a25d`](https://github.com/mastra-ai/mastra/commit/dc4a25d41af4e2fe97a816070eaec6aa963ab53b)]:
+  - @mastra/core@1.58.0-alpha.15
+  - @mastra/code-sdk@1.2.0-alpha.17
+
+## 0.6.0-alpha.17
+
+### Patch Changes
+
+- Fixed sandbox checkpoints only being captured at session teardown. Factory sessions now snapshot the workspace sandbox at the end of every agent turn, so sandboxes that are reclaimed while idle can be restored from a checkpoint that includes the last completed turn's changes. ([#21227](https://github.com/mastra-ai/mastra/pull/21227))
+
+- Improved Factory workspace deletion by terminating matching live controller sessions before sandbox reclamation. ([#21174](https://github.com/mastra-ai/mastra/pull/21174))
+
+- Fixed new Factory sessions stalling for minutes when the background decision queue was deep. The dispatcher now claims pending session starts before deferred decisions, so a new session always starts on the next tick. ([#21265](https://github.com/mastra-ai/mastra/pull/21265))
+
+- Updated dependencies [[`210cb7a`](https://github.com/mastra-ai/mastra/commit/210cb7a167998c7bbf72cb3b93e6eb0563330239), [`5f798b3`](https://github.com/mastra-ai/mastra/commit/5f798b3362e9bdf4d690f85245606e146eef60b9), [`01a2943`](https://github.com/mastra-ai/mastra/commit/01a2943a7d886edefdff072bfa51f055bab54437), [`01a2943`](https://github.com/mastra-ai/mastra/commit/01a2943a7d886edefdff072bfa51f055bab54437), [`25ca73d`](https://github.com/mastra-ai/mastra/commit/25ca73d25dee7ce9f0ca72939e3a505c4db7257e), [`e1cead1`](https://github.com/mastra-ai/mastra/commit/e1cead17b5f3653cf00d2f90cc19b113119c02ba), [`01a2943`](https://github.com/mastra-ai/mastra/commit/01a2943a7d886edefdff072bfa51f055bab54437)]:
+  - @mastra/core@1.58.0-alpha.14
+  - @mastra/code-sdk@1.2.0-alpha.16
+
+## 0.6.0-alpha.16
+
+### Minor Changes
+
+- Added a `firstMeaningfulExecAt` timestamp to source-control sessions, recording when the session's agent completed its first successful sandbox command. Together with `firstMessageAt` this measures time-to-first-meaningful-exec: how long a user waits between sending their first message and the agent actually doing work in a live sandbox. The value is written once per session and is available on all session read APIs; setup commands run by the platform itself (skill loading, repo checkout) do not count. ([#21211](https://github.com/mastra-ai/mastra/pull/21211))
+
+- Added a `firstMessageAt` timestamp to Factory source-control sessions. The session's first agent run now records when the first message reached the agent, so session listings and latency reporting can measure time-to-first-response from the real conversation start instead of the session's creation time (which can be long before the user sends anything). The value is returned on session objects from the source-control sessions API and is write-once: later messages never move it. ([#21206](https://github.com/mastra-ai/mastra/pull/21206))
+
+### Patch Changes
+
+- Fixed Slack threads on cloud factory deployments falling back to chat-only sessions or erroring instead of getting a repo-backed workspace. ([#21217](https://github.com/mastra-ai/mastra/pull/21217))
+
+  - Fixed repository resolution failing when a factory project carries a stale source-control connection (for example after a GitHub App reinstall deleted the old installation but left its connection behind). Resolution now tries every connection and skips the ones that no longer resolve.
+  - Fixed chat-only sessions on deployments configured with a remote sandbox replying with "A Factory session ID is required to create a remote sandbox workspace" on every message. These sessions now run without a workspace, so workspace tools are simply not registered and the server host never executes commands for them.
+  - Fixed top-level DM and channel conversations (threads with no thread timestamp) failing their clone with the invalid git ref `slack/`. Their session branch now derives from the channel id.
+
+- Fixed the sign-in callback redirecting straight back to the identity provider in a loop when it denies access (for example access_denied for an account that is not part of the organization). The denial now lands on the sign-in page with the error shown. ([#21166](https://github.com/mastra-ai/mastra/pull/21166))
+
+- Slow workspace opens can now be diagnosed directly from server logs. Added `[factory:timing]` log lines for each phase of the sandbox session-open path — `sandbox.reattach`, `sandbox.provision`, `workspace.materialize`, and `workspace.checkout` — so you can see exactly which phase is slow instead of reconstructing timings by hand. ([#21194](https://github.com/mastra-ai/mastra/pull/21194))
+
+- Added a `command_exit` session event to the agent controller. Subscribers now receive the exit code and success flag of each foreground `execute_command` tool call, alongside the existing `shell_output` stream: ([#21211](https://github.com/mastra-ai/mastra/pull/21211))
+
+  ```typescript
+  session.subscribe(event => {
+    if (event.type === 'command_exit') {
+      console.log(event.toolCallId, event.exitCode, event.success);
+    }
+  });
+  ```
+
+  Previously the exit outcome was only visible inside the tool result text, so observers could stream a command's output but never tell whether it succeeded.
+
+- Updated dependencies [[`9571e3a`](https://github.com/mastra-ai/mastra/commit/9571e3a06ed2c5220196460bf82a2129255c3a8b), [`d6c56f9`](https://github.com/mastra-ai/mastra/commit/d6c56f951db3213330b98b0abafa9778c8770e58), [`9571e3a`](https://github.com/mastra-ai/mastra/commit/9571e3a06ed2c5220196460bf82a2129255c3a8b), [`a04d1a6`](https://github.com/mastra-ai/mastra/commit/a04d1a642ccae3ea3b28be37067480d49bcb1b7d), [`acc3513`](https://github.com/mastra-ai/mastra/commit/acc3513b19f79bf0a7ec2998694580edca54086c), [`94e7ae9`](https://github.com/mastra-ai/mastra/commit/94e7ae970b37c888cd1244ef013292639a2fe6d1), [`6a667b4`](https://github.com/mastra-ai/mastra/commit/6a667b4b7cd6a93fe41fcdd357b08c5a8c09b9ab), [`2440e09`](https://github.com/mastra-ai/mastra/commit/2440e096ea6c2def1ccc1eb2d0f3f5b88c4af940), [`a59049b`](https://github.com/mastra-ai/mastra/commit/a59049b1652a13efff66ac826326b5ed9a550342)]:
+  - @mastra/core@1.58.0-alpha.13
+  - @mastra/code-sdk@1.2.0-alpha.15
+
 ## 0.6.0-alpha.15
 
 ### Patch Changes

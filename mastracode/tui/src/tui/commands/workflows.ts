@@ -282,10 +282,18 @@ function renderWorkflowDefinition(def: StoredWorkflowRow): string {
   return lines.join('\n');
 }
 
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'object' && error !== null && 'message' in error && typeof error.message === 'string') {
+    return error.message;
+  }
+  return String(error);
+}
+
 function help(ctx: SlashCommandContext): void {
   ctx.showInfo(
     [
-      'Workflows — manage chat-built static workflows.',
+      'Dynamic Workflows — manage chat-built workflows.',
       '',
       '  /workflows [list]         List saved workflows.',
       '  /workflows show <id>      Pretty-print the full graph + schemas.',
@@ -300,8 +308,17 @@ function help(ctx: SlashCommandContext): void {
   );
 }
 
-export async function handleWorkflowsCommand(ctx: SlashCommandContext, args: string[]): Promise<void> {
+export async function handleWorkflowsCommand(
+  ctx: SlashCommandContext,
+  args: string[],
+  rawArgsText?: string,
+): Promise<void> {
   const sub = args[0]?.toLowerCase() ?? 'list';
+  if (sub === 'help' || sub === '?' || sub === '--help') {
+    help(ctx);
+    return;
+  }
+
   const mastra = ctx.controller.getMastra();
   if (!mastra) {
     ctx.showError('Workflows: no Mastra instance attached to this controller.');
@@ -340,7 +357,8 @@ export async function handleWorkflowsCommand(ctx: SlashCommandContext, args: str
       }
       case 'run': {
         const id = args[1];
-        const rawInput = args.slice(2).join(' ').trim() || '{}';
+        const preservedRawInput = rawArgsText?.match(/^\S+\s+\S+(?:\s+([\s\S]*))?$/)?.[1];
+        const rawInput = (preservedRawInput ?? args.slice(2).join(' ')).trim() || '{}';
         if (!id) {
           ctx.showError('Usage: /workflows run <id> <json-input>');
           return;
@@ -349,7 +367,7 @@ export async function handleWorkflowsCommand(ctx: SlashCommandContext, args: str
         try {
           inputData = JSON.parse(rawInput);
         } catch (e) {
-          ctx.showError(`Invalid JSON input: ${(e as Error).message}`);
+          ctx.showError(`Invalid JSON input: ${getErrorMessage(e)}`);
           return;
         }
         // Pass a session-derived request context so any `code-agent` agent steps
@@ -403,18 +421,13 @@ export async function handleWorkflowsCommand(ctx: SlashCommandContext, args: str
           return;
         }
         await deleteWorkflow(mastra, id);
-        ctx.showInfo(`Deleted workflow "${id}". (In-process Workflow instance stays until next restart.)`);
+        ctx.showInfo(`Deleted workflow "${id}".`);
         return;
       }
-      case 'help':
-      case '?':
-      case '--help':
-        help(ctx);
-        return;
       default:
         ctx.showError(`Unknown /workflows subcommand: "${sub}". Try /workflows help.`);
     }
   } catch (e) {
-    ctx.showError(`Workflow command failed: ${(e as Error).message}`);
+    ctx.showError(`Workflow command failed: ${getErrorMessage(e)}`);
   }
 }

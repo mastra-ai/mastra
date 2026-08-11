@@ -35,6 +35,7 @@ import type { RedisClient } from '../../types';
 import { getKey, processRecord } from '../utils';
 
 export class StoreMemoryRedis extends MemoryStorage {
+  override readonly supportsPartialThreadUpdate = true;
   private client: RedisClient;
   private db: RedisDB;
 

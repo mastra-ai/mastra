@@ -8,7 +8,7 @@ import { listWorkflows } from '../../workflows/service.js';
 
 export const listWorkflowsTool = createTool({
   id: 'list-workflows',
-  description: 'List static workflows persisted to storage. Returns id + description + status for each.',
+  description: 'List active Dynamic Workflows persisted to storage. Returns id + description + status for each.',
   inputSchema: z.object({}),
   outputSchema: z.object({
     workflows: z.array(

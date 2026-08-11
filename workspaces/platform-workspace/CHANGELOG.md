@@ -1,5 +1,35 @@
 # @mastra/platform
 
+## 1.2.0-alpha.2
+
+### Minor Changes
+
+- Added startup observability to `PlatformSandbox`. New optional `sessionId` and `threadId` options let you correlate all sandbox startup activity with the session that triggered it, and the sandbox now logs how long startup took and whether it became reachable. ([#21189](https://github.com/mastra-ai/mastra/pull/21189))
+
+  ```ts
+  import { PlatformSandbox } from '@mastra/platform-workspace';
+
+  const sandbox = new PlatformSandbox({
+    projectId: 'proj_123',
+    environmentId: 'env_123',
+    sessionId: 'session_abc', // correlate startup logs with your session
+    threadId: 'thread_xyz', // optional finer-grained correlation
+  });
+  ```
+
+- Added `PlatformSandbox.snapshot()` to capture the configured recovery checkpoint. ([#21221](https://github.com/mastra-ai/mastra/pull/21221))
+
+  ```ts
+  await sandbox.snapshot();
+  ```
+
+### Patch Changes
+
+- Fixed Platform Sandbox startup so commands use a reliable connection while a new sandbox is starting. ([#21028](https://github.com/mastra-ai/mastra/pull/21028))
+
+- Updated dependencies [[`9571e3a`](https://github.com/mastra-ai/mastra/commit/9571e3a06ed2c5220196460bf82a2129255c3a8b), [`d6c56f9`](https://github.com/mastra-ai/mastra/commit/d6c56f951db3213330b98b0abafa9778c8770e58), [`9571e3a`](https://github.com/mastra-ai/mastra/commit/9571e3a06ed2c5220196460bf82a2129255c3a8b), [`acc3513`](https://github.com/mastra-ai/mastra/commit/acc3513b19f79bf0a7ec2998694580edca54086c), [`94e7ae9`](https://github.com/mastra-ai/mastra/commit/94e7ae970b37c888cd1244ef013292639a2fe6d1), [`6a667b4`](https://github.com/mastra-ai/mastra/commit/6a667b4b7cd6a93fe41fcdd357b08c5a8c09b9ab), [`2440e09`](https://github.com/mastra-ai/mastra/commit/2440e096ea6c2def1ccc1eb2d0f3f5b88c4af940), [`a59049b`](https://github.com/mastra-ai/mastra/commit/a59049b1652a13efff66ac826326b5ed9a550342)]:
+  - @mastra/core@1.58.0-alpha.13
+
 ## 1.2.0-alpha.1
 
 ### Minor Changes

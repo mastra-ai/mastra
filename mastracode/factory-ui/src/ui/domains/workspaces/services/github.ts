@@ -613,6 +613,7 @@ export interface FactoryUserSession {
   projectRepositoryId: string;
   orgId: string;
   userId: string;
+  title?: string;
   branch: string;
   baseBranch: string;
   sandboxId: string | null;
@@ -620,6 +621,12 @@ export interface FactoryUserSession {
   materializedAt: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+type FactoryUserSessionPayload = Omit<FactoryUserSession, 'title'> & { title?: string | null };
+
+function normalizeUserSession({ title, ...session }: FactoryUserSessionPayload): FactoryUserSession {
+  return { ...session, title: title ?? undefined };
 }
 
 export async function listUserSessions(
@@ -632,21 +639,26 @@ export async function listUserSessions(
     credentials: 'include',
     signal,
   });
-  const body = await readJsonOrThrow<{ sessions: FactoryUserSession[] }>(res, 'Failed to list sessions');
-  return body.sessions;
+  const body = await readJsonOrThrow<{ sessions: FactoryUserSessionPayload[] }>(res, 'Failed to list sessions');
+  return body.sessions.map(normalizeUserSession);
 }
+
+export type CreateUserSessionOptions =
+  | { branch: string; baseBranch?: string; sessionId?: never; title?: never }
+  | { sessionId: string; title: string; branch?: never; baseBranch?: never };
 
 export async function createUserSession(
   baseUrl: string,
   projectRepositoryId: string,
-  branch: string,
-  baseBranch?: string,
+  options: CreateUserSessionOptions,
 ): Promise<FactoryUserSession> {
-  const result = await postRepositoryGitOp<{ session: FactoryUserSession }>(baseUrl, projectRepositoryId, 'sessions', {
-    branch,
-    baseBranch,
-  });
-  return result.session;
+  const result = await postRepositoryGitOp<{ session: FactoryUserSessionPayload }>(
+    baseUrl,
+    projectRepositoryId,
+    'sessions',
+    options,
+  );
+  return normalizeUserSession(result.session);
 }
 
 export async function getUserSession(baseUrl: string, sessionId: string): Promise<FactoryUserSession> {
@@ -654,8 +666,8 @@ export async function getUserSession(baseUrl: string, sessionId: string): Promis
     headers: { Accept: 'application/json' },
     credentials: 'include',
   });
-  if (!res.ok) throw new Error(`Failed to load session (${res.status})`);
-  return ((await res.json()) as { session: FactoryUserSession }).session;
+  const body = await readJsonOrThrow<{ session: FactoryUserSessionPayload }>(res, 'Failed to load session');
+  return normalizeUserSession(body.session);
 }
 
 export async function deleteUserSession(baseUrl: string, sessionId: string): Promise<void> {
@@ -663,7 +675,7 @@ export async function deleteUserSession(baseUrl: string, sessionId: string): Pro
     method: 'DELETE',
     credentials: 'include',
   });
-  if (!res.ok) throw new Error(`Failed to delete session (${res.status})`);
+  if (!res.ok && res.status !== 404) throw new Error(`Failed to delete session (${res.status})`);
 }
 
 export interface CommitResult {

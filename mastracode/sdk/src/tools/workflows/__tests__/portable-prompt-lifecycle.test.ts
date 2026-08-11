@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { createWorkflowTool } from '../create-workflow.js';
 import { runWorkflowTool } from '../run-workflow.js';
 import { saveWorkflowTool } from '../save-workflow.js';
+import { createWorkflowBuilderAgentStub } from './workflow-builder-agent-stub.js';
 
 const objectSchema = (properties: Record<string, unknown>, required: string[] = []) => ({
   type: 'object',
@@ -15,28 +16,6 @@ const objectSchema = (properties: Record<string, unknown>, required: string[] = 
 
 const stringSchema = { type: 'string' };
 const numberSchema = { type: 'number' };
-
-function createWorkflowBuilderAgent(mastra: Mastra, definition: unknown) {
-  return {
-    stream: async () => {
-      const saved = await (saveWorkflowTool as any).execute(definition, {
-        mastra,
-        requestContext: new RequestContext(),
-      });
-
-      return {
-        fullStream: new ReadableStream({
-          start(controller) {
-            controller.enqueue({ type: 'tool-call', payload: { toolName: 'save-workflow', args: definition } });
-            controller.enqueue({ type: 'tool-result', payload: { toolName: 'save-workflow', result: saved } });
-            controller.close();
-          },
-        }),
-        text: Promise.resolve(`Built ${saved.id}.`),
-      };
-    },
-  };
-}
 
 const scenarios = [
   {
@@ -176,7 +155,7 @@ describe('Mastra Code portable Workflow Builder prompt lifecycle', () => {
           storage: new InMemoryStore({ id: `portable-prompt-${id}` }),
         });
         const parsedDefinition = (saveWorkflowTool as any).inputSchema.parse(definition);
-        const workflowBuilder = createWorkflowBuilderAgent(mastra, parsedDefinition);
+        const workflowBuilder = createWorkflowBuilderAgentStub(mastra, parsedDefinition);
         const createResult = await (createWorkflowTool as any).execute(
           { request: `Create ${id}.` },
           {

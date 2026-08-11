@@ -4,46 +4,45 @@ import { describe, it, expect } from 'vitest';
 import { withEphemeralMemory } from '../ephemeral-memory';
 
 describe('withEphemeralMemory', () => {
-  it('is a no-op when no requestContext is provided', async () => {
-    const result = await withEphemeralMemory(undefined, async () => 42);
+  it('passes undefined through when no requestContext is provided', async () => {
+    const result = await withEphemeralMemory(undefined, async requestContext => requestContext ?? 42);
     expect(result).toBe(42);
   });
 
-  it('swaps in a fresh MastraMemory that inherits the caller resourceId', async () => {
+  it('creates an isolated child context that inherits caller values and resourceId', async () => {
     const rc = new RequestContext();
+    rc.set('controller', { session: { modelId: 'mock-model' } });
     rc.set('MastraMemory', {
       thread: { id: 'parent-thread' },
       resourceId: 'parent-resource',
       memoryConfig: { any: 'thing' },
     });
 
-    let seenInside: any;
-    await withEphemeralMemory(rc, async () => {
-      seenInside = rc.get('MastraMemory');
+    await withEphemeralMemory(rc, async childRequestContext => {
+      expect(childRequestContext).not.toBe(rc);
+      expect(childRequestContext?.get('controller')).toEqual({ session: { modelId: 'mock-model' } });
+      expect((childRequestContext?.get('MastraMemory') as any)?.thread?.id).toBeDefined();
+      expect((childRequestContext?.get('MastraMemory') as any)?.thread?.id).not.toBe('parent-thread');
+      expect((childRequestContext?.get('MastraMemory') as any)?.resourceId).toBe('parent-resource');
+      expect((childRequestContext?.get('MastraMemory') as any)?.memoryConfig).toBeUndefined();
     });
 
-    expect(seenInside?.thread?.id).toBeDefined();
-    expect(seenInside?.thread?.id).not.toBe('parent-thread');
-    expect(seenInside?.resourceId).toBe('parent-resource');
-    // Ephemeral scope must not carry the parent's memoryConfig — the fresh
-    // thread has no observation history to look up.
-    expect(seenInside?.memoryConfig).toBeUndefined();
+    expect((rc.get('MastraMemory') as any)?.thread?.id).toBe('parent-thread');
   });
 
-  it('honors an explicit threadId override (deterministic for tests)', async () => {
+  it('honors an explicit threadId override', async () => {
     const rc = new RequestContext();
-    let seenInside: any;
+
     await withEphemeralMemory(
       rc,
-      async () => {
-        seenInside = rc.get('MastraMemory');
+      async childRequestContext => {
+        expect((childRequestContext?.get('MastraMemory') as any)?.thread?.id).toBe('fixed-uuid');
       },
       { threadId: 'fixed-uuid' },
     );
-    expect(seenInside?.thread?.id).toBe('fixed-uuid');
   });
 
-  it('stamps the reserved thread/resource keys with the ephemeral ids inside fn', async () => {
+  it('stamps the child reserved thread/resource keys with the ephemeral ids', async () => {
     const rc = new RequestContext();
     rc.set('MastraMemory', { thread: { id: 'parent-thread' }, resourceId: 'parent-resource' });
     rc.set(MASTRA_THREAD_ID_KEY, 'parent-thread');
@@ -51,30 +50,26 @@ describe('withEphemeralMemory', () => {
 
     await withEphemeralMemory(
       rc,
-      async () => {
-        // MASTRA_THREAD_ID_KEY must equal the ephemeral thread id so inner
-        // agent invocations resolve to it (resolveThreadIdFromArgs reads this
-        // key, not MastraMemory). Downstream storage writes rely on message
-        // rows having this threadId stamped.
-        expect(rc.get(MASTRA_THREAD_ID_KEY)).toBe('ephemeral-uuid');
-        expect(rc.get(MASTRA_RESOURCE_ID_KEY)).toBe('parent-resource');
-        expect((rc.get('MastraMemory') as any)?.thread?.id).toBe('ephemeral-uuid');
+      async childRequestContext => {
+        expect(childRequestContext?.get(MASTRA_THREAD_ID_KEY)).toBe('ephemeral-uuid');
+        expect(childRequestContext?.get(MASTRA_RESOURCE_ID_KEY)).toBe('parent-resource');
+        expect((childRequestContext?.get('MastraMemory') as any)?.thread?.id).toBe('ephemeral-uuid');
       },
       { threadId: 'ephemeral-uuid' },
     );
 
-    expect((rc.get('MastraMemory') as any)?.thread?.id).toBe('parent-thread');
     expect(rc.get(MASTRA_THREAD_ID_KEY)).toBe('parent-thread');
     expect(rc.get(MASTRA_RESOURCE_ID_KEY)).toBe('parent-resource');
   });
 
-  it('deletes reserved thread/resource keys on restore when the caller never set them', async () => {
+  it('does not add reserved keys to the parent when the caller never set them', async () => {
     const rc = new RequestContext();
-    // No MastraMemory, no reserved keys.
+
     await withEphemeralMemory(
       rc,
-      async () => {
-        expect(rc.get(MASTRA_THREAD_ID_KEY)).toBe('ephemeral-uuid');
+      async childRequestContext => {
+        expect(childRequestContext?.get(MASTRA_THREAD_ID_KEY)).toBe('ephemeral-uuid');
+        expect(childRequestContext?.get(MASTRA_RESOURCE_ID_KEY)).toBeUndefined();
       },
       { threadId: 'ephemeral-uuid' },
     );
@@ -84,9 +79,21 @@ describe('withEphemeralMemory', () => {
     expect(rc.get(MASTRA_RESOURCE_ID_KEY)).toBeUndefined();
   });
 
-  it('restores the caller memory scope even when fn throws', async () => {
+  it('inherits MastraMemory.resourceId without adding the reserved resource key to the parent', async () => {
     const rc = new RequestContext();
-    rc.set('MastraMemory', { thread: { id: 'parent-thread' }, resourceId: 'parent-resource' });
+    rc.set('MastraMemory', { thread: { id: 'parent-thread' }, resourceId: 'memory-resource' });
+
+    await withEphemeralMemory(rc, async childRequestContext => {
+      expect(childRequestContext?.get(MASTRA_RESOURCE_ID_KEY)).toBe('memory-resource');
+    });
+
+    expect(rc.get(MASTRA_RESOURCE_ID_KEY)).toBeUndefined();
+  });
+
+  it('leaves the parent unchanged when fn throws', async () => {
+    const rc = new RequestContext();
+    const parentMemory = { thread: { id: 'parent-thread' }, resourceId: 'parent-resource' };
+    rc.set('MastraMemory', parentMemory);
 
     await expect(
       withEphemeralMemory(rc, async () => {
@@ -94,14 +101,28 @@ describe('withEphemeralMemory', () => {
       }),
     ).rejects.toThrow('boom');
 
-    expect((rc.get('MastraMemory') as any)?.thread?.id).toBe('parent-thread');
+    expect(rc.get('MastraMemory')).toBe(parentMemory);
   });
 
-  it('clears MastraMemory if the caller never set it', async () => {
+  it('isolates concurrent child contexts from each other and the parent', async () => {
     const rc = new RequestContext();
-    await withEphemeralMemory(rc, async () => {
-      expect((rc.get('MastraMemory') as any)?.thread?.id).toBeDefined();
-    });
-    expect(rc.get('MastraMemory')).toBeUndefined();
+    rc.set(MASTRA_THREAD_ID_KEY, 'parent-thread');
+
+    const seen = await Promise.all([
+      withEphemeralMemory(
+        rc,
+        async childRequestContext => {
+          await Promise.resolve();
+          return childRequestContext?.get(MASTRA_THREAD_ID_KEY);
+        },
+        { threadId: 'child-one' },
+      ),
+      withEphemeralMemory(rc, async childRequestContext => childRequestContext?.get(MASTRA_THREAD_ID_KEY), {
+        threadId: 'child-two',
+      }),
+    ]);
+
+    expect(seen).toEqual(['child-one', 'child-two']);
+    expect(rc.get(MASTRA_THREAD_ID_KEY)).toBe('parent-thread');
   });
 });

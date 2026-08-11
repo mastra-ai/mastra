@@ -24,6 +24,8 @@
  */
 import { z } from 'zod';
 
+import type { Predicate } from '../predicate';
+
 export const WORKFLOW_BUILDER_MAPPING_CONFIG_DESCRIPTION =
   'An object whose top-level keys become the mapping output fields. Each value must use exactly one canonical source form: { "template": "<text with ${placeholders}>" }, { "value": <constant> }, { "step": "<stepId>", "path": "<field.path>" }, { "initData": true, "path": "<workflow-input-field.path>" }, or { "requestContextPath": "<field.path>" }. IMPORTANT: initData is the boolean true, never a field name string; put the workflow input field name in path. Template placeholders use JavaScript-style ${initData.<field>}, ${inputData.<field>}, ${stepResults.<stepId>.<field>}, ${state.<field>}, or ${requestContext.<field>} — never Handlebars {{...}} and never separate sources/data bindings. May also be provided as a JSON-encoded string of the same object.';
 
@@ -128,7 +130,7 @@ export const workflowBuilderMappingDescriptorSchema = z
 export const workflowBuilderMappingConfigSchema = z.record(z.string(), workflowBuilderMappingDescriptorSchema);
 
 export const workflowBuilderMappingEntrySchema = z
-  .object({
+  .strictObject({
     type: z.literal('mapping'),
     id: z.string().min(1).describe('Step id — kebab-case, unique within the workflow.'),
     mapConfig: z.string().min(1).describe(`A JSON-ENCODED STRING of ${WORKFLOW_BUILDER_MAPPING_CONFIG_DESCRIPTION}`),
@@ -194,25 +196,25 @@ const predicatePathSchema = z
     'Declarative path: initData.<field> for workflow input, inputData.<field> for the previous step output, stepResults.<stepId>.<field> for another step output, or state.<field>.',
   );
 const pathOrLiteralSchema = z.union([
-  z.object({ path: predicatePathSchema }),
-  z.object({ literal: literalScalarSchema }),
+  z.strictObject({ path: predicatePathSchema }),
+  z.strictObject({ literal: literalScalarSchema }),
 ]);
-export const workflowBuilderPredicateSchema: z.ZodType<unknown> = z.lazy(() =>
+export const workflowBuilderPredicateSchema: z.ZodType<Predicate> = z.lazy(() =>
   z.union([
-    z.object({
+    z.strictObject({
       op: z.enum(['eq', 'ne', 'lt', 'lte', 'gt', 'gte']),
       left: pathOrLiteralSchema,
       right: pathOrLiteralSchema,
     }),
-    z.object({
+    z.strictObject({
       op: z.enum(['in', 'notIn']),
       value: pathOrLiteralSchema,
       set: z.array(literalScalarSchema).min(1),
     }),
-    z.object({ op: z.enum(['exists', 'notExists']), path: predicatePathSchema }),
-    z.object({ op: z.enum(['truthy', 'falsy']), value: pathOrLiteralSchema }),
-    z.object({ op: z.enum(['and', 'or']), args: z.array(workflowBuilderPredicateSchema).min(1) }),
-    z.object({ op: z.literal('not'), arg: workflowBuilderPredicateSchema }),
+    z.strictObject({ op: z.enum(['exists', 'notExists']), path: predicatePathSchema }),
+    z.strictObject({ op: z.enum(['truthy', 'falsy']), value: pathOrLiteralSchema }),
+    z.strictObject({ op: z.enum(['and', 'or']), args: z.array(workflowBuilderPredicateSchema).min(1) }),
+    z.strictObject({ op: z.literal('not'), arg: workflowBuilderPredicateSchema }),
   ]),
 );
 
@@ -240,12 +242,12 @@ export const workflowBuilderForeachEntrySchema = z
   })
   .describe(FOREACH_DESCRIPTION);
 
-export const workflowBuilderSleepEntrySchema = z.object({
+export const workflowBuilderSleepEntrySchema = z.strictObject({
   type: z.literal('sleep'),
   id: z.string().min(1),
   duration: z.number().nonnegative().describe('Milliseconds to wait. Static number only.'),
 });
-export const workflowBuilderSleepUntilEntrySchema = z.object({
+export const workflowBuilderSleepUntilEntrySchema = z.strictObject({
   type: z.literal('sleepUntil'),
   id: z.string().min(1),
   date: z.string().min(1).describe('ISO 8601 wall-clock date to wait until. Static string only.'),
@@ -337,7 +339,7 @@ export const workflowBuilderGraphEntryInputSchema = z.discriminatedUnion('type',
 const GRAPH_DESCRIPTION =
   'The complete ordered top-level graph covering all ten persisted graph families: agent, tool, mapping, nested workflow, parallel, foreach, sleep, sleepUntil, conditional, and loop. Every adjacent pair must compose: the previous output shape must satisfy the next input schema — insert a mapping step whenever shapes differ. The workflow result is exactly the final top-level entry output, so add an explicit final mapping whenever that output does not match outputSchema.';
 
-export const workflowBuilderDefinitionSchema = z.object({
+export const workflowBuilderDefinitionSchema = z.strictObject({
   id: z.string().min(1).describe('Workflow id — kebab-case. Preserve the exact requested workflow ID.'),
   description: z.string().optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
@@ -349,7 +351,7 @@ export const workflowBuilderDefinitionSchema = z.object({
 });
 
 export const workflowBuilderDefinitionInputSchema = z
-  .object({
+  .strictObject({
     id: z
       .string()
       .min(1)
@@ -390,6 +392,7 @@ export const deleteStoredWorkflowResponseSchema = z.object({
   message: z.string(),
 });
 
+export type WorkflowBuilderDefinitionInput = z.input<typeof workflowBuilderDefinitionInputSchema>;
 export type StoredWorkflowDefinition = z.infer<typeof storedWorkflowDefinitionSchema>;
 export type ListStoredWorkflowsResponse = z.infer<typeof listStoredWorkflowsResponseSchema>;
 export type UpsertStoredWorkflowResponse = z.infer<typeof upsertStoredWorkflowResponseSchema>;

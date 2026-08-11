@@ -15,6 +15,7 @@ import { listAvailableAgentsTool } from '../tools/workflows/list-available-agent
 import { listAvailableToolsTool } from '../tools/workflows/list-available-tools.js';
 import { listAvailableWorkflowsTool } from '../tools/workflows/list-available-workflows.js';
 import { saveWorkflowTool } from '../tools/workflows/save-workflow.js';
+import { WORKFLOW_AUTHORING_TOOL_IDS } from '../tools/workflows/tool-ids.js';
 import { getDynamicModel } from './model.js';
 
 export const workflowBuilderAgent = createWorkflowBuilderAgent({
@@ -22,16 +23,16 @@ export const workflowBuilderAgent = createWorkflowBuilderAgent({
   name: 'Workflow Builder',
   description: 'Turns plain-language workflow descriptions into runnable, persisted workflow definitions.',
   tools: {
-    'list-available-agents': listAvailableAgentsTool,
-    'list-available-tools': listAvailableToolsTool,
-    'list-available-workflows': listAvailableWorkflowsTool,
-    'save-workflow': saveWorkflowTool,
+    [WORKFLOW_AUTHORING_TOOL_IDS.listAgents]: listAvailableAgentsTool,
+    [WORKFLOW_AUTHORING_TOOL_IDS.listTools]: listAvailableToolsTool,
+    [WORKFLOW_AUTHORING_TOOL_IDS.listWorkflows]: listAvailableWorkflowsTool,
+    [WORKFLOW_AUTHORING_TOOL_IDS.saveWorkflow]: saveWorkflowTool,
   },
   surfaceInstructions: `# Mastra Code authoring policy
 
-Your job: turn the user's verbatim plain-language request into a complete static workflow definition and persist it with save-workflow. Success means save-workflow returned \`{ ok: true, id }\` for the workflow the user asked for; do not claim success before that result.
+Your job: turn the user's verbatim plain-language request into a complete Dynamic Workflow definition and persist it with save-workflow. Success means save-workflow returned \`{ ok: true, id }\` for the workflow the user asked for; do not claim success before that result.
 
-Save each definition **exactly once**: one save per distinct workflow, never a second save of the same workflow. The workflow the user asked for is always saved LAST. You may save other workflows before it **only** when they are helper workflows the requested workflow references as \`{ type: "workflow" }\` entries — never to retry, probe the schema, or split one workflow into pieces the user did not ask for.
+Save each definition successfully **exactly once**: after \`save-workflow\` returns \`{ ok: true, id }\`, never save that workflow again. The workflow the user asked for is always saved LAST. You may save other workflows before it **only** when they are helper workflows the requested workflow references as \`{ type: "workflow" }\` entries — never to probe the schema or split one workflow into pieces the user did not ask for. A rejected save is not a successful save; correct the reported issues and make the one sequential corrected attempt permitted by the protocol below.
 
 # \`code-agent\` — when to use it as an agent step
 
@@ -46,8 +47,8 @@ When the workflow needs a **specific, deterministic** operation (like \`execute_
 The workspace tools you are most likely to compose with return **strings, not objects**, and the shared bridge-agent and \`initData\` re-threading guidance applies to them directly:
 
 - \`find_files\` returns a formatted \`string\` listing, and the entries are **bare basenames with no path prefix** (e.g. \`app-tools.ts\\nserver.ts\`). A downstream step told only "summarise each file" therefore has no idea which folder they live in.
-- \`mastra_workspace_list_files\` — inputSchema \`{ path: string, ... }\`, outputSchema tree-formatted text (string).
-- \`mastra_workspace_read_file\` — inputSchema \`{ path: string, ... }\`, outputSchema string (file contents).
+- \`find_files\` — inputSchema \`{ path?: string, ... }\`, outputSchema tree-formatted text (string).
+- \`view\` — inputSchema \`{ path: string, ... }\`, outputSchema \`string | { __workspaceMedia: true, text: string, mediaType: string, data: string }\`.
 
 Two consequences, both covered by the shared playbook's worked examples:
 
@@ -58,7 +59,7 @@ Always confirm these shapes against \`list-available-tools\` rather than trustin
 
 # Mastra Code discovery notes
 
-The three shared listing tools behave here exactly as the shared playbook describes; each row's \`id\` is the value you copy into \`agentId\` / \`toolId\` / \`workflowId\`. \`list-available-workflows\` includes both code-defined and stored workflows, and its catalog is always available on this surface.
+The three shared listing tools behave here exactly as the shared playbook describes; each row's \`id\` is the value you copy into \`agentId\` / \`toolId\` / \`workflowId\`. \`list-available-workflows\` includes both code-defined and Dynamic Workflows, and its catalog is always available on this surface.
 
 Your fourth tool is \`save-workflow\`, which persists and live-registers a definition. Make one sequential complete call per attempt, only after composition and the shared pre-action check.
 

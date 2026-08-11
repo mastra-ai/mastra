@@ -1,16 +1,16 @@
 /**
- * Compatibility wrapper over the one stored-workflow validation domain
- * (`workflows/stored/validate/`). Kept so authoring frontends (Studio,
+ * Compatibility wrapper over the one dynamic-workflow validation domain
+ * (`workflows/dynamic/validate/`). Kept so authoring frontends (Studio,
  * mastracode) can keep importing preflight names from
  * `@mastra/core/workflows/builder`; all rules live in the shared core.
  */
-import { validateStoredWorkflow } from '../stored/validate/index';
+import { validateDynamicWorkflow } from '../dynamic/validate/index';
 import type {
   WorkflowRegistryIndex,
   WorkflowRegistrySchemas,
   WorkflowValidationIssue,
   WorkflowValidationIssueCode,
-} from '../stored/validate/index';
+} from '../dynamic/validate/index';
 import type { WorkflowBuilderDefinition } from './index';
 
 export type WorkflowDefinitionPreflightIssueCode = WorkflowValidationIssueCode;
@@ -32,6 +32,6 @@ export function preflightWorkflowDefinition(
   definition: WorkflowBuilderDefinition,
   context: WorkflowDefinitionPreflightContext = {},
 ): WorkflowDefinitionPreflightResult {
-  const issues = validateStoredWorkflow(definition, context);
+  const issues = validateDynamicWorkflow(definition, context);
   return issues.length === 0 ? { ok: true } : { ok: false, issues };
 }

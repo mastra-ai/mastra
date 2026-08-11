@@ -1,7 +1,7 @@
 /**
- * Sub-agent tool: persist the static workflow definition and live-register it.
- * Calls `mastra.addStoredWorkflow()` — the same path `POST /api/stored/workflows`
- * takes. After this returns the workflow is immediately runnable.
+ * Sub-agent tool: persist the Dynamic Workflow definition and live-register it.
+ * Calls `mastra.addDynamicWorkflow()`. After this returns the workflow is
+ * immediately runnable.
  *
  * The complete-definition authoring contract (graph families, mapping sources,
  * predicate DSL, and all model-facing guidance) is shared with Studio's
@@ -22,7 +22,7 @@ export const workflowDefinitionInputSchema = z.preprocess(
 export const saveWorkflowTool = createTool({
   id: 'save-workflow',
   description:
-    'Persist a static workflow definition and live-register it on the running Mastra instance. Supports all ten persisted graph families: agent, tool, mapping, nested workflow, parallel, foreach, sleep, sleepUntil, conditional, and loop. Conditional and loop entries require declarative predicates; JS closures cannot round-trip through storage. After this returns, the workflow is immediately runnable. Call it exactly once with the complete definition; there is no incremental save API.',
+    'Persist a Dynamic Workflow definition and live-register it on the running Mastra instance. Supports all ten persisted graph families: agent, tool, mapping, nested workflow, parallel, foreach, sleep, sleepUntil, conditional, and loop. Conditional and loop entries require declarative predicates; JS closures cannot round-trip through storage. After this returns, the workflow is immediately runnable. Call it exactly once with the complete definition; there is no incremental save API.',
   inputSchema: workflowDefinitionInputSchema,
   outputSchema: z.object({
     ok: z.literal(true),
@@ -33,12 +33,12 @@ export const saveWorkflowTool = createTool({
     const m = mastra as Mastra;
     const normalizedDefinition = normalizeWorkflowBuilderDefinition(def);
 
-    // `mastra.addStoredWorkflow` performs registry pre-flight — a mis-classified
+    // `mastra.addDynamicWorkflow` performs registry pre-flight — a mis-classified
     // agentId/toolId or unregistered id throws before rehydration with an
     // actionable message listing every offender. It also rejects JSON Schemas
     // that use keywords the storage-side converter can't rehydrate
     // (oneOf/anyOf/allOf/not/$ref/patternProperties/discriminator).
-    await m.addStoredWorkflow(normalizedDefinition as Parameters<Mastra['addStoredWorkflow']>[0]);
+    await m.addDynamicWorkflow(normalizedDefinition as Parameters<Mastra['addDynamicWorkflow']>[0]);
     return { ok: true as const, id: normalizedDefinition.id };
   },
 });

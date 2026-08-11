@@ -1,9 +1,8 @@
 /**
  * Sub-agent tool: list workflows the workflow-builder can reference in
  * `{ type: "workflow", workflowId }` graph entries. Includes both code-defined
- * and stored workflows, so the builder can nest one workflow inside another.
- * Excludes the workflow currently being authored to prevent self-reference at
- * discovery time (the pre-flight validator will still reject cycles).
+ * and Dynamic Workflows, so the builder can nest one workflow inside another.
+ * The pre-flight validator rejects self-references and dependency cycles.
  */
 import type { Mastra } from '@mastra/core/mastra';
 import { createTool } from '@mastra/core/tools';
@@ -13,7 +12,7 @@ import { extractJsonSchema } from './extract-json-schema.js';
 export const listAvailableWorkflowsTool = createTool({
   id: 'list-available-workflows',
   description:
-    'Returns the workflows currently registered on the Mastra instance (both code-defined and stored). The ids returned here are the only valid values you can put in `{ type: "workflow", workflowId }` graph entries. Each row includes `inputSchema` and `outputSchema` as JSON Schema — read them to know what shape the nested workflow expects and produces; never invent field names.',
+    'Returns the workflows currently registered on the Mastra instance (both code-defined and dynamic). The ids returned here are the only valid values you can put in `{ type: "workflow", workflowId }` graph entries. Each row includes `inputSchema` and `outputSchema` as JSON Schema — read them to know what shape the nested workflow expects and produces; never invent field names.',
   inputSchema: z.object({}),
   outputSchema: z.object({
     workflows: z.array(

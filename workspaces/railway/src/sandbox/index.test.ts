@@ -261,6 +261,16 @@ describe('RailwaySandbox', () => {
     });
 
     describe('captureCheckpoint (public, on-demand)', () => {
+      it('delegates snapshot to captureCheckpoint', async () => {
+        const sandbox = new RailwaySandbox({ token: 'tok', checkpointName: 'mastracode-repo-abc123' });
+        await sandbox._start();
+        const captureCheckpoint = vi.spyOn(sandbox, 'captureCheckpoint');
+
+        await expect(sandbox.snapshot()).resolves.toBeUndefined();
+
+        expect(captureCheckpoint).toHaveBeenCalledOnce();
+      });
+
       it('captures the checkpoint synchronously and returns the captured name', async () => {
         mockCheckpoints.mockResolvedValueOnce([
           { id: 'checkpoint-id', key: 'mastracode-repo-abc123', environmentId: 'env-1' },

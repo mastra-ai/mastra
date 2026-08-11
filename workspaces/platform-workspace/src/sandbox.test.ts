@@ -2571,6 +2571,27 @@ describe('PlatformSandbox', () => {
   });
 
   describe('captureCheckpoint (public, on-demand)', () => {
+    it('delegates snapshot to captureCheckpoint', async () => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi.fn().mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }));
+      const sandbox = new PlatformSandbox({
+        id: 'mc-session-42',
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        fetch: fetchMock,
+      });
+      await sandbox._start();
+      const captureCheckpoint = vi.spyOn(sandbox, 'captureCheckpoint').mockResolvedValue({
+        status: 'captured',
+        checkpointName: 'mastra-checkpoint-abc123',
+      });
+
+      await expect(sandbox.snapshot()).resolves.toBeUndefined();
+
+      expect(captureCheckpoint).toHaveBeenCalledOnce();
+    });
+
     it('POSTs to /checkpoint with the recovery key and returns the captured name', async () => {
       vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
       const fetchMock = vi

@@ -1474,7 +1474,8 @@ type Shared_Type_70 =
   | 'rag_vector_operation'
   | 'rag_action'
   | 'graph_action'
-  | 'mapping';
+  | 'mapping'
+  | 'skill_resolution';
 
 type Shared_Type_71 =
   | 'agent'
@@ -8818,6 +8819,7 @@ export type GetObservabilityTracesTraceIdSpanIdScores_Response = {
           | 'rag_action'
           | 'graph_action'
           | 'mapping'
+          | 'skill_resolution'
         )
       | undefined;
     structuredOutput?: boolean | undefined;

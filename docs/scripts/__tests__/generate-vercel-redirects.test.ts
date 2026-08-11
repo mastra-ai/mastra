@@ -61,6 +61,24 @@ describe('generateRedirects', () => {
     expect(generateRedirects([redirect])).toEqual([redirect])
   })
 
+  test('rejects redirect chains', () => {
+    expect(() =>
+      generateRedirects([
+        { source: '/guides/old', destination: '/docs/channels/slack', permanent: true },
+        { source: '/docs/channels/slack', destination: '/integrations/channels/slack', permanent: true },
+      ]),
+    ).toThrow('Redirect chain detected: /guides/old -> /docs/channels/slack -> /integrations/channels/slack')
+  })
+
+  test('detects redirect chains when the intermediate destination has a fragment', () => {
+    expect(() =>
+      generateRedirects([
+        { source: '/guides/old', destination: '/docs/new#section', permanent: true },
+        { source: '/docs/new', destination: '/integrations/new', permanent: true },
+      ]),
+    ).toThrow('Redirect chain detected: /guides/old -> /docs/new#section -> /integrations/new')
+  })
+
   test('rejects duplicate authored sources', () => {
     expect(() =>
       generateRedirects([

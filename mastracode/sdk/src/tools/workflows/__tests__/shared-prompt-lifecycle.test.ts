@@ -12,6 +12,7 @@ import { runWorkflow } from '../../../workflows/service.js';
 import { createWorkflowTool } from '../create-workflow.js';
 import { runWorkflowTool } from '../run-workflow.js';
 import { saveWorkflowTool } from '../save-workflow.js';
+import { createWorkflowBuilderAgentStub } from './workflow-builder-agent-stub.js';
 
 const objectSchema = (properties: Record<string, unknown>, required: string[]) => ({
   type: 'object',
@@ -203,28 +204,6 @@ const greetingWorkflow = createWorkflow({
 })
   .then(buildGreeting)
   .commit();
-
-function createWorkflowBuilderAgent(mastra: Mastra, definition: unknown) {
-  return {
-    stream: async () => {
-      const saved = await (saveWorkflowTool as any).execute(definition, {
-        mastra,
-        requestContext: new RequestContext(),
-      });
-
-      return {
-        fullStream: new ReadableStream({
-          start(controller) {
-            controller.enqueue({ type: 'tool-call', payload: { toolName: 'save-workflow', args: definition } });
-            controller.enqueue({ type: 'tool-result', payload: { toolName: 'save-workflow', result: saved } });
-            controller.close();
-          },
-        }),
-        text: Promise.resolve(`Built ${saved.id}.`),
-      };
-    },
-  };
-}
 
 // Both branches call support-agent, per the prompt. support-agent replies with a
 // fixed string, so the workflow output cannot reveal which branch ran — the
@@ -707,7 +686,7 @@ describe('Mastra Code registry-backed Workflow Builder prompt lifecycle', () => 
       }
 
       const parsedDefinition = (saveWorkflowTool as any).inputSchema.parse(definition);
-      const workflowBuilder = createWorkflowBuilderAgent(mastra, parsedDefinition);
+      const workflowBuilder = createWorkflowBuilderAgentStub(mastra, parsedDefinition);
       const createResult = await (createWorkflowTool as any).execute(
         { request: `Create ${id}.` },
         {
