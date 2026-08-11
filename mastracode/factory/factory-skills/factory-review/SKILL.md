@@ -117,13 +117,11 @@ First, compose the **review handoff** — don't send it to the conversation yet;
 
 - **Findings** — correctness assessment, test assessment, scope assessment, pattern-consistency notes, each grounded in the history you traced. Distill — this is a handoff, not a transcript.
 - **Verification** — every command you executed (tests, typecheck, repros) with its outcome, or an explicit statement that nothing was executed and why.
-- **Existing review disposition** — every substantive finding from prior reviewers (bots included, your own earlier passes included) with its classification: confirmed, addressed, or refuted with evidence. A major bot comment must never be silently dropped. Identify each one by its subject and `file:line`, never by an ordinal: a finding is only findable again through what it was about.
+- **Existing review disposition** — every substantive finding from prior reviewers (bots included, your own earlier passes included) with its classification: confirmed, addressed, or refuted with evidence. A major bot comment must never be silently dropped. Name each by subject and `file:line`: an ordinal is no handle, and GitHub publishes `#1` as a link to issue 1.
 - **Adversarial check** (approve only) — the one-line record of why the strongest request-changes case fails.
 - **Requested changes** — one entry per change, concrete enough to act on (for a request-changes verdict).
 - **Assumptions** — every recorded judgment call from the run.
 - **Open questions** — any decision that genuinely needs a human.
-
-The body is published verbatim as GitHub markdown: `#2` links to issue 2 and `@name` pings an account, so keep `#` and `@` for references you mean.
 
 Next, publish the review on the PR itself — this is part of every pass, not something to wait to be asked for. Write the handoff body to a temp file (avoids shell-quoting breakage) and submit a PR review matching the verdict:
 
