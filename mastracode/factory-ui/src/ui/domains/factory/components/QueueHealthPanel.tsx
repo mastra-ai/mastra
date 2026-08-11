@@ -80,13 +80,24 @@ export function QueueHealthPanel({ factoryProjectId }: { factoryProjectId: strin
         }}
       >
         {drillDown ? (
-          <PopoverContent anchor={drillDown.anchor} side="bottom" className="w-80 p-0">
+          <PopoverContent
+            anchor={drillDown.anchor}
+            side="bottom"
+            aria-label={`${cohortLabel(drillDown.selection)} tasks`}
+            className="w-80 p-0"
+          >
             <CohortTasks selection={drillDown.selection} entries={cohortEntries(health, drillDown.selection)} />
           </PopoverContent>
         ) : null}
       </Popover>
     </>
   );
+}
+
+function cohortLabel(selection: QueueHealthSelection): string {
+  return selection.stage === null
+    ? BUCKET_LABEL[selection.bucket]
+    : `${stageLabel(selection.stage)} · ${BUCKET_LABEL[selection.bucket]}`;
 }
 
 function cohortEntries(health: QueueHealth, selection: QueueHealthSelection): QueueHealthEntry[] {
@@ -117,15 +128,10 @@ function useActivePaths(): ReadonlySet<string> {
 }
 
 function CohortTasks({ selection, entries }: { selection: QueueHealthSelection; entries: QueueHealthEntry[] }) {
-  const cohort =
-    selection.stage === null
-      ? BUCKET_LABEL[selection.bucket]
-      : `${stageLabel(selection.stage)} · ${BUCKET_LABEL[selection.bucket]}`;
-
   return (
     <div className="flex max-h-80 flex-col">
       <Txt as="p" variant="ui-sm" className="text-icon5 m-0 px-3 pt-3 pb-1 font-medium">
-        {cohort}
+        {cohortLabel(selection)}
         <Txt as="span" variant="ui-xs" className="text-icon3 ml-2 font-normal">
           {entries.length} {entries.length === 1 ? 'task' : 'tasks'}
         </Txt>
