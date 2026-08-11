@@ -2,6 +2,9 @@ import type { MastraDBMessage, MastraMessageContentV2, MastraToolInvocation } fr
 
 type V2Part = MastraMessageContentV2['parts'][number];
 type ToolInvocationPart = Extract<V2Part, { type: 'tool-invocation' }>;
+type ClientTerminalTransition =
+  | { state: 'result'; result: unknown; isError?: boolean; errorText?: string }
+  | { state: 'output-error'; errorText: string };
 
 /**
  * Pick the fields for a supported client-authored terminal transition.
@@ -17,13 +20,13 @@ type ToolInvocationPart = Extract<V2Part, { type: 'tool-invocation' }>;
 function pickClientTerminalTransition(
   stored: MastraToolInvocation,
   incoming: MastraToolInvocation,
-): Partial<MastraToolInvocation> | undefined {
+): ClientTerminalTransition | undefined {
   if (stored.state !== 'call') return undefined;
 
   if (incoming.state === 'result') {
     return {
       state: 'result',
-      ...(incoming.result !== undefined ? { result: incoming.result } : {}),
+      result: incoming.result,
       ...(incoming.isError !== undefined ? { isError: incoming.isError } : {}),
       ...(incoming.errorText !== undefined ? { errorText: incoming.errorText } : {}),
     };
@@ -170,9 +173,9 @@ function mergeEchoParts(storedParts: V2Part[], incomingParts: V2Part[]): V2Part[
  * - The stored array is canonical; a client copy can never introduce tool
  *   history (names, args, results) the server never stored, so when the stored
  *   message has no array the incoming one is dropped entirely.
- * - For matched entries the client may only advance `call` → `result`,
- *   contributing `state`/`result` while the stored `args` (and everything else)
- *   survive.
+ * - For matched entries the client may only advance `call` → `result`, using
+ *   the shared result-transition fields while the stored `args` (and everything
+ *   else) survive. Legacy invocations cannot represent `output-error`.
  */
 function mergeLegacyToolInvocations(
   stored: MastraMessageContentV2,
@@ -184,14 +187,13 @@ function mergeLegacyToolInvocations(
   const incomingById = new Map(incoming.toolInvocations.map(t => [t.toolCallId, t]));
   return stored.toolInvocations.map(t => {
     const incomingEntry = incomingById.get(t.toolCallId);
-    if (incomingEntry && incomingEntry.state === 'result' && t.state === 'call') {
-      // The client may only advance the invocation: take its `state`/`result`
-      // (narrowed to `result` by the guard) while keeping the server-authored
-      // args — and everything else — from the stored entry.
+    const transition = incomingEntry ? pickClientTerminalTransition(t, incomingEntry) : undefined;
+    if (transition?.state === 'result') {
+      // Reuse the same result-field policy as content.parts while keeping the
+      // server-authored args — and everything else — from the stored entry.
       return {
         ...t,
-        state: incomingEntry.state,
-        result: incomingEntry.result,
+        ...transition,
         args: t.args,
       };
     }
