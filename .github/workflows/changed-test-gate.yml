@@ -48,9 +48,10 @@ jobs:
           # Deployer changes must include monorepo E2E coverage. This rule runs
           # before the no-test exemptions below so it applies to all contributors.
           # Keep this list separate from /tmp/changed-files so deleted tests are
-          # not restored from FETCH_HEAD.
+          # not restored from FETCH_HEAD. The package instructions are exempt.
           if grep -q '^packages/deployer/' /tmp/changed-coverage-files \
-            && ! grep -q '^e2e-tests/monorepo/' /tmp/changed-coverage-files; then
+            && ! grep -q '^e2e-tests/monorepo/' /tmp/changed-coverage-files \
+            && grep '^packages/deployer/' /tmp/changed-coverage-files | grep -qv '^packages/deployer/AGENTS\.md$'; then
             first_deployer_file="$(grep -m1 '^packages/deployer/' /tmp/changed-files || true)"
             echo "::error file=${first_deployer_file},title=Monorepo E2E coverage required::This PR changes packages/deployer/ but has no corresponding changes under e2e-tests/monorepo/. Deployer unit tests alone do not validate generated monorepo applications — add or update a monorepo E2E test. See packages/deployer/AGENTS.md for commands."
             exit 1
