@@ -1333,6 +1333,10 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                     if (typeof payload?.error?.stack === 'string') {
                       errorObj.stack = payload.error.stack;
                     }
+                    // Retain the producer's error name so classification (e.g. AbortError) survives transport.
+                    if (typeof payload?.error?.name === 'string' && payload.error.name) {
+                      errorObj.name = payload.error.name;
+                    }
                     // DON'T emit error event here - we might have fallback models to try
                     // Error event will be emitted after all models are exhausted
                     throw errorObj;

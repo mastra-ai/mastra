@@ -230,6 +230,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
   // surface it in onError when the FINISH event arrives with reason 'error'.
   let lastErrorMessage: string | undefined;
   let lastErrorStack: string | undefined;
+  let lastErrorName: string | undefined;
   let lastErrorCause: unknown;
 
   // Idle/liveness watchdog. A durable run whose driving process crashed stops
@@ -336,6 +337,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
             const errPayload = (chunk as any).payload;
             lastErrorMessage = errPayload?.error?.message || errPayload?.message || 'LLM execution error';
             lastErrorStack = typeof errPayload?.error?.stack === 'string' ? errPayload.error.stack : undefined;
+            lastErrorName = typeof errPayload?.error?.name === 'string' ? errPayload.error.name : undefined;
             lastErrorCause = errPayload?.error ?? errPayload;
           }
           safeEnqueue(controller, chunk as ChunkType<OUTPUT>);
@@ -427,8 +429,9 @@ export function createDurableAgentStream<OUTPUT = undefined>(
           if (onError && data.stepResult?.reason === 'error') {
             try {
               const error = new Error(lastErrorMessage || 'LLM execution error', { cause: lastErrorCause });
-              // Preserve the producer's stack so the failure stays attributable to its real throw site.
+              // Preserve the producer's stack and name so the failure stays attributable and classifiable.
               if (lastErrorStack) error.stack = lastErrorStack;
+              if (lastErrorName) error.name = lastErrorName;
               await onError({ error });
             } catch (callbackError) {
               logError(`[DurableAgentStream] onError (from FINISH) callback error:`, callbackError);
