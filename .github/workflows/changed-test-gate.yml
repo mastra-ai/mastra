@@ -53,7 +53,10 @@ jobs:
             && ! grep -q '^e2e-tests/monorepo/' /tmp/changed-coverage-files \
             && awk '$0 ~ /^packages\/deployer\// && $0 != "packages/deployer/AGENTS.md" { found=1; exit } END { exit(found ? 0 : 1) }' \
               /tmp/changed-coverage-files; then
-            first_deployer_file="$(grep -m1 '^packages/deployer/' /tmp/changed-files || true)"
+            first_deployer_file="$(
+              awk '$0 ~ /^packages\/deployer\// && $0 != "packages/deployer/AGENTS.md" { print; exit }' \
+                /tmp/changed-coverage-files
+            )"
             escaped_deployer_file="${first_deployer_file//%/%25}"
             escaped_deployer_file="${escaped_deployer_file//$'\r'/%0D}"
             escaped_deployer_file="${escaped_deployer_file//$'\n'/%0A}"
