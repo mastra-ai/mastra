@@ -41,8 +41,18 @@ jobs:
 
           git fetch "${HEAD_REPO}" "${HEAD_SHA}" --depth=1
           git diff --name-only --diff-filter=ACMRT "${BASE_SHA}" FETCH_HEAD \
-            | grep -E '(^|/)(test|tests|__tests__)/|\.(test|spec)\.(ts|tsx|js|jsx|mjs|cjs)$|\.test-d\.ts$' \
-            | sort > /tmp/changed-test-files || true
+            | sort > /tmp/changed-files || true
+
+          # Deployer changes must include monorepo E2E coverage. This rule runs
+          # before the no-test exemptions below so it applies to all contributors.
+          if grep -q '^packages/deployer/' /tmp/changed-files \
+            && ! grep -q '^e2e-tests/monorepo/' /tmp/changed-files; then
+            echo "::error::Changes under packages/deployer/ must include corresponding coverage under e2e-tests/monorepo/. The deployer build pipeline is not validated by package unit tests alone; add or update a monorepo E2E test."
+            exit 1
+          fi
+
+          grep -E '(^|/)(test|tests|__tests__)/|\.(test|spec)\.(ts|tsx|js|jsx|mjs|cjs)$|\.test-d\.ts$' \
+            /tmp/changed-files | sort > /tmp/changed-test-files || true
 
           if [ ! -s /tmp/changed-test-files ]; then
             echo "has_tests=false" >> "$GITHUB_OUTPUT"
