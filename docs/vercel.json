@@ -287,7 +287,7 @@
     },
     {
       "source": "/guides/guide/manual-install",
-      "destination": "/guides/getting-started/manual-install",
+      "destination": "/reference/manual-install",
       "permanent": true
     },
     {
@@ -347,82 +347,82 @@
     },
     {
       "source": "/examples/rag/chunking/chunk-text",
-      "destination": "/guides/rag/chunking-and-embedding",
+      "destination": "/reference/rag/chunking-and-embedding",
       "permanent": true
     },
     {
       "source": "/examples/rag/chunking/chunk-html",
-      "destination": "/guides/rag/chunking-and-embedding",
+      "destination": "/reference/rag/chunking-and-embedding",
       "permanent": true
     },
     {
       "source": "/examples/rag/chunking/chunk-json",
-      "destination": "/guides/rag/chunking-and-embedding",
+      "destination": "/reference/rag/chunking-and-embedding",
       "permanent": true
     },
     {
       "source": "/examples/rag/chunking/chunk-markdown",
-      "destination": "/guides/rag/chunking-and-embedding",
+      "destination": "/reference/rag/chunking-and-embedding",
       "permanent": true
     },
     {
       "source": "/examples/rag/chunking/adjust-chunk-size",
-      "destination": "/guides/rag/chunking-and-embedding",
+      "destination": "/reference/rag/chunking-and-embedding",
       "permanent": true
     },
     {
       "source": "/examples/rag/chunking/adjust-chunk-delimiters",
-      "destination": "/guides/rag/chunking-and-embedding",
+      "destination": "/reference/rag/chunking-and-embedding",
       "permanent": true
     },
     {
       "source": "/examples/rag/embedding/embed-text-chunk",
-      "destination": "/guides/rag/chunking-and-embedding",
+      "destination": "/reference/rag/chunking-and-embedding",
       "permanent": true
     },
     {
       "source": "/examples/rag/embedding/embed-chunk-array",
-      "destination": "/guides/rag/chunking-and-embedding",
+      "destination": "/reference/rag/chunking-and-embedding",
       "permanent": true
     },
     {
       "source": "/examples/rag/embedding/embed-text-with-cohere",
-      "destination": "/guides/rag/chunking-and-embedding",
+      "destination": "/reference/rag/chunking-and-embedding",
       "permanent": true
     },
     {
       "source": "/examples/rag/upsert/upsert-embeddings",
-      "destination": "/guides/rag/vector-databases",
+      "destination": "/reference/rag/vector-databases",
       "permanent": true
     },
     {
       "source": "/examples/rag/query/retrieve-results",
-      "destination": "/guides/rag/retrieval",
+      "destination": "/reference/rag/retrieval",
       "permanent": true
     },
     {
       "source": "/examples/rag/rerank/rerank",
-      "destination": "/guides/rag/retrieval",
+      "destination": "/reference/rag/retrieval",
       "permanent": true
     },
     {
       "source": "/examples/rag/rerank/rerank-rag",
-      "destination": "/guides/rag/retrieval",
+      "destination": "/reference/rag/retrieval",
       "permanent": true
     },
     {
       "source": "/examples/rag/rerank/reranking-with-cohere",
-      "destination": "/guides/rag/retrieval",
+      "destination": "/reference/rag/retrieval",
       "permanent": true
     },
     {
       "source": "/examples/rag/rerank/reranking-with-zeroentropy",
-      "destination": "/guides/rag/retrieval",
+      "destination": "/reference/rag/retrieval",
       "permanent": true
     },
     {
       "source": "/examples/rag/usage/basic-rag",
-      "destination": "/guides/rag/retrieval",
+      "destination": "/reference/rag/retrieval",
       "permanent": true
     },
     {
@@ -562,12 +562,12 @@
     },
     {
       "source": "/examples/rag/query/hybrid-vector-search",
-      "destination": "/guides/rag/retrieval",
+      "destination": "/reference/rag/retrieval",
       "permanent": true
     },
     {
       "source": "/examples/rag/usage/graph-rag",
-      "destination": "/guides/rag/graph-rag",
+      "destination": "/reference/rag/graph-rag-guide",
       "permanent": true
     },
     {
@@ -1107,7 +1107,7 @@
     },
     {
       "source": "/docs/getting-started/manual-install",
-      "destination": "/guides/getting-started/manual-install",
+      "destination": "/reference/manual-install",
       "permanent": true
     },
     {
@@ -1916,6 +1916,36 @@
       "permanent": true
     },
     {
+      "source": "/guides/rag/chunking-and-embedding",
+      "destination": "/reference/rag/chunking-and-embedding",
+      "permanent": true
+    },
+    {
+      "source": "/guides/rag/graph-rag",
+      "destination": "/reference/rag/graph-rag-guide",
+      "permanent": true
+    },
+    {
+      "source": "/guides/rag/overview",
+      "destination": "/reference/rag/overview",
+      "permanent": true
+    },
+    {
+      "source": "/guides/rag/retrieval",
+      "destination": "/reference/rag/retrieval",
+      "permanent": true
+    },
+    {
+      "source": "/guides/rag/vector-databases",
+      "destination": "/reference/rag/vector-databases",
+      "permanent": true
+    },
+    {
+      "source": "/guides/getting-started/manual-install",
+      "destination": "/reference/manual-install",
+      "permanent": true
+    },
+    {
       "source": "/docs/editor/prompts/llms.txt",
       "destination": "/docs/editor/overview/llms.txt",
       "permanent": true
@@ -2157,7 +2187,7 @@
     },
     {
       "source": "/guides/guide/manual-install/llms.txt",
-      "destination": "/guides/getting-started/manual-install/llms.txt",
+      "destination": "/reference/manual-install/llms.txt",
       "permanent": true
     },
     {
@@ -2742,7 +2772,7 @@
     },
     {
       "source": "/docs/getting-started/manual-install/llms.txt",
-      "destination": "/guides/getting-started/manual-install/llms.txt",
+      "destination": "/reference/manual-install/llms.txt",
       "permanent": true
     },
     {
@@ -3473,6 +3503,36 @@
     {
       "source": "/guides/concepts/:path*/llms.txt",
       "destination": "/docs/guides/:path*/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/guides/rag/chunking-and-embedding/llms.txt",
+      "destination": "/reference/rag/chunking-and-embedding/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/guides/rag/graph-rag/llms.txt",
+      "destination": "/reference/rag/graph-rag-guide/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/guides/rag/overview/llms.txt",
+      "destination": "/reference/rag/overview/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/guides/rag/retrieval/llms.txt",
+      "destination": "/reference/rag/retrieval/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/guides/rag/vector-databases/llms.txt",
+      "destination": "/reference/rag/vector-databases/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/guides/getting-started/manual-install/llms.txt",
+      "destination": "/reference/manual-install/llms.txt",
       "permanent": true
     }
   ]

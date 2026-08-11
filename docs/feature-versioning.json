@@ -11,7 +11,7 @@
   "/guides/deployment/inngest": "v1",
   "/guides/getting-started/astro": "v1",
   "/guides/getting-started/express": "v1",
-  "/guides/getting-started/manual-install": "v1",
+  "/reference/manual-install": "v1",
   "/guides/getting-started/next-js": "v1",
   "/guides/getting-started/quickstart": "v1",
   "/guides/getting-started/sveltekit": "v1",
