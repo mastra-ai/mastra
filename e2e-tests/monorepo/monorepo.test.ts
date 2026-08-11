@@ -319,6 +319,17 @@ describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
       expect(hasWorkspaceMappedPath).toBeFalsy();
     });
 
+    it('should pin exports-gated dependencies to the version installed for the app', async () => {
+      const packageJsonPath = join(fixturePath, 'apps', 'custom', '.mastra', 'output', 'package.json');
+      const packageJson = JSON.parse(await readFile(packageJsonPath, 'utf-8'));
+
+      // `unicorn-magic` does not expose `./package.json` through its exports map, and the
+      // workspace root installs a different version (0.2.0) than the app (0.4.0). The
+      // pinned version must come from the copy installed for the app, not from another
+      // copy in the tree (#18849).
+      expect(packageJson.dependencies['unicorn-magic']).toBe('0.4.0');
+    });
+
     afterAll(async () => {
       if (proc) {
         try {
@@ -491,6 +502,11 @@ describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
           expect(dependencies[pkg]).toMatch(/^[\d^~>=<]/);
         }
       }
+
+      // `unicorn-magic` does not expose `./package.json` through its exports map. The
+      // automatic version resolution must still read the version from the copy installed
+      // for the app (0.4.0), not from the workspace root copy (0.2.0) (#18849).
+      expect(dependencies['unicorn-magic']).toBe('0.4.0');
     });
   });
 
