@@ -437,8 +437,28 @@ describe('LSPManager', () => {
       await restrictedManager.shutdownAll();
     });
 
-    it('rejects invalid maxOpenClients values', () => {
-      expect(() => new LSPManager(mockProcessManager, '/project', { maxOpenClients: 0 })).toThrow(
+    it('stops waiting for capacity when a prepared query is never released', async () => {
+      const restrictedManager = new LSPManager(mockProcessManager, '/project', { maxOpenClients: 1 });
+      const query = await restrictedManager.prepareQuery('/project/src/app.ts');
+      expect(query).not.toBeNull();
+
+      vi.useFakeTimers();
+      try {
+        const otherDiagnostics = restrictedManager.getDiagnostics('/other-project/src/app.ts', 'const second = 2');
+        await vi.advanceTimersByTimeAsync(5000);
+
+        await expect(otherDiagnostics).resolves.toBeNull();
+        expect(mockShutdown).not.toHaveBeenCalled();
+      } finally {
+        query!.client.notifyClose('/project/src/app.ts');
+        query!.release();
+        vi.useRealTimers();
+        await restrictedManager.shutdownAll();
+      }
+    });
+
+    it.each([0, -1, 1.5])('rejects invalid maxOpenClients value %s', maxOpenClients => {
+      expect(() => new LSPManager(mockProcessManager, '/project', { maxOpenClients })).toThrow(
         'maxOpenClients must be a positive integer',
       );
     });

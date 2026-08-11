@@ -18,6 +18,7 @@ import { getLanguageId } from './language';
 import { buildCustomExtensions, buildServerDefs, getServersForFile, walkUp, walkUpAsync } from './servers';
 import type { DiagnosticSeverity, LSPConfig, LSPDiagnostic, LSPServerDef } from './types';
 
+const CLIENT_LEASE_ACQUIRE_TIMEOUT_MS = 5000;
 const CLIENT_LEASE_SHUTDOWN_TIMEOUT_MS = 5000;
 
 /** Map LSP DiagnosticSeverity (numeric) to our string severity */
@@ -112,7 +113,7 @@ export class LSPManager {
 
       const oldestIdle = Array.from(this.clients.entries()).find(([, client]) => !this.activeClientLeases.has(client));
       if (!oldestIdle) {
-        await new Promise<void>(resolve => this.clientLeaseWaiters.add(resolve));
+        if (!(await this.waitForClientLeaseRelease(CLIENT_LEASE_ACQUIRE_TIMEOUT_MS))) return false;
         continue;
       }
 
@@ -184,6 +185,25 @@ export class LSPManager {
     const waiters = Array.from(this.clientLeaseWaiters);
     this.clientLeaseWaiters.clear();
     waiters.forEach(resolve => resolve());
+  }
+
+  /** Wait for a lease release without allowing leaked leases to block new clients indefinitely. */
+  private async waitForClientLeaseRelease(timeoutMs: number): Promise<boolean> {
+    return new Promise<boolean>(resolve => {
+      let settled = false;
+      let timeout: ReturnType<typeof setTimeout>;
+      const finish = (released: boolean): void => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        this.clientLeaseWaiters.delete(onRelease);
+        resolve(released);
+      };
+      const onRelease = (): void => finish(true);
+
+      timeout = setTimeout(() => finish(false), timeoutMs);
+      this.clientLeaseWaiters.add(onRelease);
+    });
   }
 
   /** Wait for active operations to release their clients, then force teardown after a bounded delay. */

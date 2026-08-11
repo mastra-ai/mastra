@@ -54,30 +54,38 @@ afterEach(() => {
 describe('mastracode workspace LSP configuration', () => {
   it('limits retained language server clients to four by default', async () => {
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'mastracode-workspace-lsp-'));
+    let workspace: { destroy(): Promise<void>; lsp?: object } | undefined;
 
     try {
       const { getDynamicWorkspace } = await import('../workspace.js');
-      const workspace = await getDynamicWorkspace({ requestContext: createRequestContext(tempDir) as any });
+      workspace = await getDynamicWorkspace({ requestContext: createRequestContext(tempDir) as any });
 
       expect(Reflect.get(workspace.lsp!, 'config')).toMatchObject({ maxOpenClients: 4 });
-      await workspace.destroy();
     } finally {
-      await fs.rm(tempDir, { recursive: true, force: true });
+      try {
+        await workspace?.destroy();
+      } finally {
+        await fs.rm(tempDir, { recursive: true, force: true });
+      }
     }
   });
 
   it('allows user settings to override the default client limit', async () => {
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'mastracode-workspace-lsp-'));
     settingsMock.value = { lsp: { maxOpenClients: 2 } };
+    let workspace: { destroy(): Promise<void>; lsp?: object } | undefined;
 
     try {
       const { getDynamicWorkspace } = await import('../workspace.js');
-      const workspace = await getDynamicWorkspace({ requestContext: createRequestContext(tempDir) as any });
+      workspace = await getDynamicWorkspace({ requestContext: createRequestContext(tempDir) as any });
 
       expect(Reflect.get(workspace.lsp!, 'config')).toMatchObject({ maxOpenClients: 2 });
-      await workspace.destroy();
     } finally {
-      await fs.rm(tempDir, { recursive: true, force: true });
+      try {
+        await workspace?.destroy();
+      } finally {
+        await fs.rm(tempDir, { recursive: true, force: true });
+      }
     }
   });
 });
