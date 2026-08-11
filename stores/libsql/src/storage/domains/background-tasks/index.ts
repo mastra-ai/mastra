@@ -13,9 +13,8 @@ import type { LibSQLDomainConfig } from '../../db';
 import { buildSelectColumns } from '../../db/utils';
 import { runPrune, resolveTargets } from '../../retention';
 
-function serializeJson(v: unknown): any {
-  if (typeof v === 'object' && v != null) return JSON.stringify(v);
-  return v ?? null;
+function serializeJson(v: unknown): string {
+  return JSON.stringify(v ?? null);
 }
 
 function parseJson(val: unknown): any {
