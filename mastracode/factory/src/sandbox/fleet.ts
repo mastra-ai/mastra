@@ -21,6 +21,8 @@ import path from 'node:path';
 
 import type { WorkspaceSandbox } from '@mastra/core/workspace';
 
+import { timedPhase } from '../timing.js';
+
 /** Minimal command result shape sandbox consumers depend on. */
 export interface SandboxCommandResult {
   exitCode: number;
@@ -447,7 +449,7 @@ export class SandboxFleet {
         ...(options.workingDirectory ? { workingDirectory: options.workingDirectory } : {}),
       });
       try {
-        await reattached.start();
+        await timedPhase('sandbox.reattach', () => reattached.start());
         return reattached;
       } catch {
         await store.setSandboxId(null);
@@ -468,7 +470,7 @@ export class SandboxFleet {
       ...(env ? { env } : {}),
       ...(options.workingDirectory ? { workingDirectory: options.workingDirectory } : {}),
     });
-    await sandbox.start();
+    await timedPhase('sandbox.provision', () => sandbox.start());
     this.#liveCount += 1;
 
     const providerSandboxId = await readProviderSandboxId(sandbox);

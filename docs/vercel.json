@@ -1582,7 +1582,7 @@
     },
     {
       "source": "/reference/voice/playai",
-      "destination": "/integrations/voice/playai",
+      "destination": "/integrations",
       "permanent": true
     },
     {
@@ -1868,6 +1868,11 @@
     {
       "source": "/reference/storage/oracledb",
       "destination": "/integrations/databases/oracledb",
+      "permanent": true
+    },
+    {
+      "source": "/guides/migrations/:path*",
+      "destination": "/reference/migrations/:path*",
       "permanent": true
     },
     {
@@ -3097,7 +3102,7 @@
     },
     {
       "source": "/reference/voice/playai/llms.txt",
-      "destination": "/integrations/voice/playai/llms.txt",
+      "destination": "/integrations/llms.txt",
       "permanent": true
     },
     {
@@ -3383,6 +3388,11 @@
     {
       "source": "/reference/storage/oracledb/llms.txt",
       "destination": "/integrations/databases/oracledb/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/guides/migrations/:path*/llms.txt",
+      "destination": "/reference/migrations/:path*/llms.txt",
       "permanent": true
     }
   ]

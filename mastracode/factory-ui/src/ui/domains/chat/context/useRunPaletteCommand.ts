@@ -151,13 +151,17 @@ export function useRunPaletteCommand(prefillComposer: (draft: string) => void) {
         if (arg) await setGoalMutation.mutateAsync(arg);
         return true;
       case 'follow-up':
-      case 'followup':
         if (arg) {
           localUser(arg);
           await followUpMutation.mutateAsync(arg);
         }
         return true;
       default:
+        if (!SLASH_COMMANDS.some(command => command.name === name)) {
+          prefillComposer(text);
+          pushNotice(`Unknown command: /${name}`, 'error');
+          return true;
+        }
         if (name === 'permissions' && permissionsLoading) return true;
         await runNoArg(name);
         return true;

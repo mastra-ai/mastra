@@ -2083,9 +2083,25 @@ export class Workflow<
   ): Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, any, TRequestContext> {
     // Build a declarative `{ type: 'mapping' }` graph entry; the mapping logic is
     // interpreted at execution time by `createMappingStep`, not baked in here.
+    // Mapping ids must be stable across process restarts: they are recorded in
+    // workflow snapshots, and `timeTravel()` matches the live graph against those
+    // recorded ids. Only defer to `generateId` when a CUSTOM id generator is
+    // configured (the built-in default is `randomUUID()`, which would mint a
+    // different id per build and break time travel across restarts). Otherwise
+    // mint a deterministic id from the workflow id plus the ordinal of this
+    // mapping entry within the step flow.
+    // Skip ordinals whose id is already taken (an explicit `stepOptions.id` may
+    // have claimed a `mapping_<workflowId>_<n>` name) so the fallback never
+    // collides with an existing step.
+    let mappingOrdinal = this.stepFlow.filter(entry => entry.type === 'mapping').length;
+    while (`mapping_${this.id}_${mappingOrdinal}` in this.steps) {
+      mappingOrdinal++;
+    }
     const mappingId =
       stepOptions?.id ||
-      `mapping_${this.#mastra?.generateId({ idType: 'step', source: 'workflow', entityId: this.id, stepType: 'mapping' }) || randomUUID()}`;
+      (this.#mastra?.getIdGenerator()
+        ? `mapping_${this.#mastra.generateId({ idType: 'step', source: 'workflow', entityId: this.id, stepType: 'mapping' })}`
+        : `mapping_${this.id}_${mappingOrdinal}`);
 
     const truncate = (s: string) => (s.length > 1000 ? s.slice(0, 1000) + '...\n}' : s);
 
@@ -3676,7 +3692,7 @@ export class Run<
       } catch {}
     });
 
-    this.closeStreamAction = async () => {
+    const closeStreamAction = async () => {
       await this.pubsub.publish(`workflow.events.v2.${this.runId}`, {
         type: 'watch',
         runId: this.runId,
@@ -3694,6 +3710,7 @@ export class Run<
         writer.releaseLock();
       }
     };
+    this.closeStreamAction = closeStreamAction;
 
     void this.pubsub.publish(`workflow.events.v2.${this.runId}`, {
       type: 'watch',
@@ -3710,7 +3727,7 @@ export class Run<
       tracingOptions,
     } as any).then(result => {
       if (result.status !== 'suspended') {
-        this.closeStreamAction?.().catch(() => {});
+        closeStreamAction().catch(() => {});
       }
 
       return result;
@@ -3850,7 +3867,11 @@ export class Run<
           }
         });
 
-        self.closeStreamAction = async () => {
+        // Captured per invocation: `closeStreamAction` is a field on the run, and
+        // `createRun({ runId })` returns the cached run, so concurrent calls would
+        // otherwise each close the most recently created stream and strand the rest.
+        // The field is still assigned for external consumers (observeStreamLegacy).
+        const closeStreamAction = async () => {
           unwatch();
 
           try {
@@ -3862,6 +3883,7 @@ export class Run<
             self.mastra?.getLogger()?.error('Error closing stream:', err);
           }
         };
+        self.closeStreamAction = closeStreamAction;
 
         const executionResultsPromise = self._start({
           inputData,
@@ -3893,13 +3915,13 @@ export class Run<
           if (closeOnSuspend) {
             // always close stream, even if the workflow is suspended
             // this will trigger a finish event with workflow status set to suspended
-            self.closeStreamAction?.().catch(() => {});
+            closeStreamAction().catch(() => {});
           } else if (executionResults.status !== 'suspended') {
-            self.closeStreamAction?.().catch(() => {});
+            closeStreamAction().catch(() => {});
           }
         } catch (err) {
           self.streamOutput?.rejectResults(err as unknown as Error);
-          self.closeStreamAction?.().catch(() => {});
+          closeStreamAction().catch(() => {});
         }
       },
     });
@@ -3980,7 +4002,10 @@ export class Run<
           }
         });
 
-        self.closeStreamAction = async () => {
+        // Captured per invocation — see the note in the stream() path. Two concurrent
+        // resumes of one suspended run are reachable in normal use (double-clicked
+        // approval, client retry, two tabs) and each returned stream must terminate.
+        const closeStreamAction = async () => {
           unwatch();
 
           try {
@@ -3992,6 +4017,8 @@ export class Run<
             self.mastra?.getLogger()?.error('Error closing stream:', err);
           }
         };
+        self.closeStreamAction = closeStreamAction;
+
         const executionResultsPromise = self._resume({
           resumeData,
           step,
@@ -4017,10 +4044,10 @@ export class Run<
             self.streamOutput.updateResults(executionResults);
           }
 
-          self.closeStreamAction?.().catch(() => {});
+          closeStreamAction().catch(() => {});
         } catch (err) {
           self.streamOutput?.rejectResults(err as unknown as Error);
-          self.closeStreamAction?.().catch(() => {});
+          closeStreamAction().catch(() => {});
         }
       },
     });
@@ -4771,7 +4798,8 @@ export class Run<
           } as WorkflowStreamEvent);
         });
 
-        self.closeStreamAction = async () => {
+        // Captured per invocation — see the note in the stream() path.
+        const closeStreamAction = async () => {
           unwatch();
 
           try {
@@ -4783,6 +4811,8 @@ export class Run<
             self.mastra?.getLogger()?.error('Error closing stream:', err);
           }
         };
+        self.closeStreamAction = closeStreamAction;
+
         const executionResultsPromise = self._timeTravel({
           inputData,
           step,
@@ -4810,10 +4840,10 @@ export class Run<
             self.streamOutput.updateResults(executionResults);
           }
 
-          self.closeStreamAction?.().catch(() => {});
+          closeStreamAction().catch(() => {});
         } catch (err) {
           self.streamOutput?.rejectResults(err as unknown as Error);
-          self.closeStreamAction?.().catch(() => {});
+          closeStreamAction().catch(() => {});
         }
       },
     });

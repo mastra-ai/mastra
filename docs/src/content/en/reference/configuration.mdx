@@ -636,35 +636,6 @@ const mastra = new Mastra({
 
 ## Bundler options
 
-### bundler.entries
-
-**Type:** `Record<string, string>`\
-**Default:** `{}`
-
-Additional process entries to emit alongside the server bundle, as a map of output name to source path relative to your Mastra directory. Each entry becomes its own `<name>.mjs` in `.mastra/output`.
-
-Use this for long-running processes that run beside your Mastra server rather than inside it, such as a [LiveKit voice worker](/integrations/voice/livekit). The entry shares the output directory, `package.json`, and installed dependencies with the server, so one `mastra build` produces one deployable artifact you can start with different commands.
-
-```typescript title="src/mastra/index.ts"
-import { Mastra } from '@mastra/core'
-
-export const mastra = new Mastra({
-  bundler: {
-    entries: { 'voice-worker': './voice-worker.ts' },
-  },
-})
-```
-
-This emits `.mastra/output/voice-worker.mjs` next to `.mastra/output/index.mjs`. Dependencies imported only by the extra entry are analyzed too, so they're installed into the output.
-
-Entry names can contain `/` to nest the output. They can't be `index`, which is the server bundle, `tools`, which is the tool aggregator, or start with `tools/`, which is reserved for tool bundles.
-
-:::note
-
-`mastra build` applies the [`bundler.externals`](#bundlerexternals) default of `true` only when you set no bundler options at all. Once you set `entries`, set `externals` explicitly as well if your extra entry depends on packages that can't be bundled, such as native modules.
-
-:::
-
 ### bundler.externals
 
 **Type:** `boolean | string[]`\

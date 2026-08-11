@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
-import { http, HttpResponse } from 'msw';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { delay, http, HttpResponse } from 'msw';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -47,6 +47,12 @@ function renderSankeySignals() {
       </QueryClientProvider>
     </MemoryRouter>,
   );
+}
+
+function requiredElementAt(elements: HTMLElement[], index: number) {
+  const element = elements[index];
+  if (!element) throw new Error(`Expected an element at index ${index}`);
+  return element;
 }
 
 beforeEach(() => {
@@ -180,7 +186,7 @@ describe('SankeySignals compare mode', () => {
       const goalColumn = await screen.findByRole('region', { name: 'Goal changes' });
       const legacyRow = within(goalColumn).getByTitle('Legacy support request').closest('li');
       if (!legacyRow) throw new Error('Legacy support request row was not rendered');
-      expect(within(legacyRow).getByText('-8pp')).not.toBeNull();
+      expect(within(legacyRow).getByText('-8%')).not.toBeNull();
       expect(within(legacyRow).getByText('8% → 0%')).not.toBeNull();
       expect(within(legacyRow).queryByText('GONE')).toBeNull();
       expect(within(goalColumn).queryByText('NEW')).toBeNull();
@@ -201,38 +207,55 @@ describe('SankeySignals compare mode', () => {
       expect(await screen.findByRole('dialog', { name: 'Legacy support request' })).not.toBeNull();
     });
 
-    it('moves point B by default even when the clicked tick is nearer to point A', async () => {
+    it('renders two identical compare points without A/B chips or badges', async () => {
+      renderSankeySignals();
+      await screen.findByRole('region', { name: 'Trace signal theme flow' });
+
+      fireEvent.click(screen.getByRole('tab', { name: 'Compare' }));
+
+      const comparison = await screen.findByRole('region', { name: 'Snapshot comparison' });
+      const track = within(comparison).getByRole('group', { name: 'Snapshot landmarks' });
+      const markedTicks = within(track)
+        .getAllByRole('button', { name: /Snapshot \d+ of/ })
+        .filter(tick => tick.getAttribute('data-marker'));
+      expect(markedTicks.map(tick => tick.getAttribute('data-marker'))).toEqual(['compare-point', 'compare-point']);
+      expect(within(comparison).queryByRole('button', { name: /Point A/ })).toBeNull();
+      expect(within(comparison).queryByRole('button', { name: /Point B/ })).toBeNull();
+      expect(within(track).queryByText('A')).toBeNull();
+      expect(within(track).queryByText('B')).toBeNull();
+      // Snapshot summaries stay visible as plain text, not buttons.
+      const summary = await within(comparison).findByText('Jun 24–Jul 1, 2026 · 50 traces · 10 themes');
+      expect(summary.closest('button')).toBeNull();
+    });
+
+    it('shows the pick-two message after dropping a grabbed point on the other point', async () => {
       renderSankeySignals();
       await screen.findByRole('region', { name: 'Trace signal theme flow' });
       fireEvent.click(screen.getByRole('tab', { name: 'Compare' }));
       const comparison = await screen.findByRole('region', { name: 'Snapshot comparison' });
 
       const track = within(comparison).getByRole('group', { name: 'Snapshot landmarks' });
-      const firstTick = within(track).getAllByRole('button', { name: /Snapshot \d+ of/ })[0]!;
+      const ticks = within(track).getAllByRole('button', { name: /Snapshot \d+ of/ });
+      // Grab the first point, then drop it on the second point's landmark.
+      const firstTick = requiredElementAt(ticks, 0);
       fireEvent.click(firstTick);
+      expect(firstTick.getAttribute('aria-pressed')).toBe('true');
+      fireEvent.click(requiredElementAt(ticks, ticks.length - 1));
 
       expect(
         await within(comparison).findByText('Pick two different landmarks on the timeline to compare them.'),
       ).not.toBeNull();
     });
 
-    it('moves point A after the user arms it', async () => {
+    it('describes the goal signal from its column heading', async () => {
       renderSankeySignals();
       await screen.findByRole('region', { name: 'Trace signal theme flow' });
+
       fireEvent.click(screen.getByRole('tab', { name: 'Compare' }));
-      const comparison = await screen.findByRole('region', { name: 'Snapshot comparison' });
+      const goalColumn = await screen.findByRole('region', { name: 'Goal changes' });
+      fireEvent.focus(within(goalColumn).getByRole('button', { name: 'goal' }));
 
-      const pointA = within(comparison).getByRole('button', { name: /Point A/ });
-      fireEvent.click(pointA);
-      expect(pointA.getAttribute('aria-pressed')).toBe('true');
-
-      const track = within(comparison).getByRole('group', { name: 'Snapshot landmarks' });
-      const ticks = within(track).getAllByRole('button', { name: /Snapshot \d+ of/ });
-      fireEvent.click(ticks[ticks.length - 1]!);
-
-      expect(
-        await within(comparison).findByText('Pick two different landmarks on the timeline to compare them.'),
-      ).not.toBeNull();
+      expect((await screen.findByRole('tooltip')).textContent).toContain('What the user wanted');
     });
 
     it('returns to the flow chart when the user switches back', async () => {
@@ -245,6 +268,83 @@ describe('SankeySignals compare mode', () => {
 
       expect(await screen.findByRole('region', { name: 'Trace signal theme flow' })).not.toBeNull();
       expect(screen.queryByRole('region', { name: 'Snapshot comparison' })).toBeNull();
+    });
+  });
+
+  describe('when an intermediate landmark flow is still loading', () => {
+    beforeEach(() => {
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, () =>
+          HttpResponse.json(landmarkThemeSnapshotsResponse),
+        ),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-flow`, async ({ request }) => {
+          const snapshotId = new URL(request.url).searchParams.get('snapshotId');
+          if (snapshotId === 'landmark-3') await delay('infinite');
+          return HttpResponse.json(fourStageThemeFlowResponse);
+        }),
+      );
+    });
+
+    it('does not connect the sparkline across the unloaded snapshot', async () => {
+      renderSankeySignals();
+      await screen.findByRole('region', { name: 'Trace signal theme flow' });
+      fireEvent.click(screen.getByRole('tab', { name: 'Compare' }));
+
+      const goalColumn = await screen.findByRole('region', { name: 'Goal changes' });
+      const themeRow = within(goalColumn).getByTitle('Resolve support request').closest('li');
+      if (!themeRow) throw new Error('Resolve support request row was not rendered');
+
+      await waitFor(() => expect(themeRow.querySelectorAll('polyline')).toHaveLength(2));
+    });
+  });
+
+  describe('when compare spans bursty landmark snapshots', () => {
+    beforeEach(() => {
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, () =>
+          HttpResponse.json(landmarkThemeSnapshotsResponse),
+        ),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-flow`, () =>
+          HttpResponse.json(fourStageThemeFlowResponse),
+        ),
+      );
+    });
+
+    it('moves the nearest point when an unmarked landmark is clicked', async () => {
+      renderSankeySignals();
+      await screen.findByRole('region', { name: 'Trace signal theme flow' });
+      fireEvent.click(screen.getByRole('tab', { name: 'Compare' }));
+      const comparison = await screen.findByRole('region', { name: 'Snapshot comparison' });
+      expect(await within(comparison).findByText(/^Jul 8, 2026, 00:00/)).not.toBeNull();
+
+      const track = within(comparison).getByRole('group', { name: 'Snapshot landmarks' });
+      const ticks = within(track).getAllByRole('button', { name: /Snapshot \d+ of/ });
+      // Landmark 4 sits in the final burst (>90% along the track), so the
+      // later point is nearest and moves; the earlier point stays put.
+      fireEvent.click(requiredElementAt(ticks, 3));
+
+      expect(await within(comparison).findByText(/^Jul 7, 2026, 18:00/)).not.toBeNull();
+      expect(within(comparison).getByText(/^Jul 1, 2026, 04:00/)).not.toBeNull();
+      expect(within(comparison).queryByText(/^Jul 8, 2026, 00:00/)).toBeNull();
+    });
+
+    it('moves the grabbed point even when the other point is nearer', async () => {
+      renderSankeySignals();
+      await screen.findByRole('region', { name: 'Trace signal theme flow' });
+      fireEvent.click(screen.getByRole('tab', { name: 'Compare' }));
+      const comparison = await screen.findByRole('region', { name: 'Snapshot comparison' });
+      await within(comparison).findByText(/^Jul 8, 2026, 00:00/);
+
+      const track = within(comparison).getByRole('group', { name: 'Snapshot landmarks' });
+      const ticks = within(track).getAllByRole('button', { name: /Snapshot \d+ of/ });
+      // Grab the first point, then click a landmark nearest to the *other*
+      // point — the grab wins and the first point jumps past the midpoint.
+      fireEvent.click(requiredElementAt(ticks, 0));
+      fireEvent.click(requiredElementAt(ticks, 3));
+
+      expect(await within(comparison).findByText(/^Jul 7, 2026, 18:00/)).not.toBeNull();
+      expect(within(comparison).getByText(/^Jul 8, 2026, 00:00/)).not.toBeNull();
+      expect(within(comparison).queryByText(/^Jul 1, 2026, 04:00/)).toBeNull();
     });
   });
 });

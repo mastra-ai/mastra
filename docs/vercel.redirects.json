@@ -1854,6 +1854,11 @@
       "source": "/reference/storage/oracledb",
       "destination": "/integrations/databases/oracledb",
       "permanent": true
+    },
+    {
+      "source": "/guides/migrations/:path*",
+      "destination": "/reference/migrations/:path*",
+      "permanent": true
     }
   ]
 }

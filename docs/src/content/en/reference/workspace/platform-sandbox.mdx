@@ -16,7 +16,7 @@ Sandboxes boot from a pre-built recipe checkpoint with Python 3, Node 22, TypeSc
 
 Related providers: [`RailwaySandbox`](/integrations/sandboxes/railway) for self-hosted Railway sandboxes, [`LocalSandbox`](/reference/workspace/local-sandbox) for local sandboxes.
 
-:::info
+:::note
 
 For interface details, see [WorkspaceSandbox interface](/reference/workspace/sandbox).
 
@@ -129,6 +129,12 @@ await sandbox.start() // Boots from the most recent checkpoint for this id, or f
 ```
 
 Checkpoint recovery is coarser than `sandboxId` reattachment. Reattaching (via `sandboxId`) rejoins the exact live sandbox and its running processes. Checkpoint recovery constructs a brand new sandbox and restores its filesystem from the latest checkpoint the platform captured for the previous sandbox with that `id`. Running processes and any filesystem writes made after the last checkpoint aren't restored.
+
+Call `snapshot()` after a filesystem update to capture the configured recovery checkpoint immediately. It resolves without capturing when the sandbox has no caller-provided `id` or isn't running.
+
+```typescript
+await sandbox.snapshot()
+```
 
 Each `id` maps to one independent filesystem. Reusing the same `id` across unrelated sandboxes causes the platform to boot them from each other's checkpoint.
 
@@ -316,6 +322,12 @@ The `command` argument is a shell string and is concatenated verbatim into the r
     type: '(options?: SandboxCloneOptions) => PlatformSandbox',
     description:
       'Construct an unstarted sibling PlatformSandbox that inherits credentials and defaults with per-instance overrides (id, sandboxId, env, idleTimeoutMinutes). Performs no I/O. Use to build a fleet of independent sandboxes from one configured template.',
+  },
+  {
+    name: 'snapshot',
+    type: '() => Promise<void>',
+    description:
+      'Capture the configured recovery checkpoint immediately. Resolves without work when no caller-provided id exists or the sandbox is not running.',
   },
   {
     name: 'getInfo',
