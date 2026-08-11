@@ -832,7 +832,7 @@
     },
     {
       "source": "/docs/mcp/publishing-mcp-server",
-      "destination": "/docs/mcp/overview#publish-a-stdio-server-package",
+      "destination": "/docs/mcp/overview",
       "permanent": true
     },
     {
@@ -1242,22 +1242,22 @@
     },
     {
       "source": "/guides/guide/web-search",
-      "destination": "/docs/agents/using-tools#use-provider-web-search",
+      "destination": "/docs/agents/using-tools",
       "permanent": true
     },
     {
       "source": "/guides/guide/publishing-mcp-server",
-      "destination": "/docs/mcp/overview#publish-a-stdio-server-package",
+      "destination": "/docs/mcp/overview",
       "permanent": true
     },
     {
       "source": "/guides/guide/chef-michel",
-      "destination": "/docs/agents/overview#quickstart",
+      "destination": "/docs/agents/overview",
       "permanent": true
     },
     {
       "source": "/guides/guide/stock-agent",
-      "destination": "/docs/agents/using-tools#quickstart",
+      "destination": "/docs/agents/using-tools",
       "permanent": true
     },
     {
