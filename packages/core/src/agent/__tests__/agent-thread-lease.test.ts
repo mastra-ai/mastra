@@ -253,6 +253,8 @@ describe('registerRun thread lease', () => {
     expect(pubsub.owners.get(key)).toBe(legacyRunId);
     expect(pubsub.records.get(key)?.metadata).toBeUndefined();
     run.finish();
+    await run.output._waitUntilFinished();
+    await pubsub.flush();
     await nextTick();
     expect(pubsub.owners.get(key)).toBe(legacyRunId);
   });

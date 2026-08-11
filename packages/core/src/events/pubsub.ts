@@ -224,6 +224,11 @@ export interface LeaseRecordProvider extends LeaseProvider {
   /**
    * Read the owner and its atomically stored metadata. Implementations must
    * return a legacy record with no metadata when reading a pre-upgrade lease.
+   *
+   * Implementing this method also declares that `acquireLease`,
+   * `releaseLease`, `renewLease`, and `transferLease` atomically guard the full
+   * owner/metadata pair. Providers with owner-only guards must not implement
+   * `getLeaseRecord`, because callers use this capability to pass metadata.
    */
   getLeaseRecord(key: string): Promise<LeaseRecord | undefined>;
 }

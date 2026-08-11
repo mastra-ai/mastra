@@ -25,19 +25,29 @@ import type { MastraModelOutput } from '../../stream/base/output';
 import type { Agent } from '../agent';
 import { AgentThreadStreamRuntime } from '../thread-stream-runtime';
 
-const { SUSPENDED_RUN_TTL_MS } = vi.hoisted(() => {
+const { SUSPENDED_RUN_TTL_MS, originalSuspendedRunTtlMs, originalAgentThreadLeaseTtlMs } = vi.hoisted(() => {
+  const originalSuspendedRunTtlMs = process.env.MASTRA_SUSPENDED_RUN_TTL_MS;
+  const originalAgentThreadLeaseTtlMs = process.env.MASTRA_AGENT_THREAD_LEASE_TTL_MS;
   const ttlMs = 60_000;
   process.env.MASTRA_SUSPENDED_RUN_TTL_MS = String(ttlMs);
   // A real suspended holder renews its thread lease while parked. Keep the
   // in-memory test lease live across fake wall-clock jumps for the same reason.
   process.env.MASTRA_AGENT_THREAD_LEASE_TTL_MS = String(ttlMs * 2);
-  return { SUSPENDED_RUN_TTL_MS: ttlMs };
+  return { SUSPENDED_RUN_TTL_MS: ttlMs, originalSuspendedRunTtlMs, originalAgentThreadLeaseTtlMs };
 });
-// Vitest reuses a worker process across test files, so leave the default TTLs in
-// place for whichever file this worker picks up next.
+// Vitest reuses a worker process across test files, so restore the worker's
+// original TTL configuration for whichever file it picks up next.
 afterAll(() => {
-  delete process.env.MASTRA_SUSPENDED_RUN_TTL_MS;
-  delete process.env.MASTRA_AGENT_THREAD_LEASE_TTL_MS;
+  if (originalSuspendedRunTtlMs === undefined) {
+    delete process.env.MASTRA_SUSPENDED_RUN_TTL_MS;
+  } else {
+    process.env.MASTRA_SUSPENDED_RUN_TTL_MS = originalSuspendedRunTtlMs;
+  }
+  if (originalAgentThreadLeaseTtlMs === undefined) {
+    delete process.env.MASTRA_AGENT_THREAD_LEASE_TTL_MS;
+  } else {
+    process.env.MASTRA_AGENT_THREAD_LEASE_TTL_MS = originalAgentThreadLeaseTtlMs;
+  }
 });
 
 // Mirrors the runtime's thread key + topic encoding: how a subscriber on another

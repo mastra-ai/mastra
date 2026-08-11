@@ -1156,7 +1156,7 @@ export class AgentThreadStreamRuntime {
       }
       teardowns.push(this.#teardownStaleSuspendedRecord(pubsub, staleKey, record));
     }
-    return Promise.all(teardowns).then(() => undefined);
+    return Promise.allSettled(teardowns).then(() => undefined);
   }
 
   registerRun<OUTPUT>(

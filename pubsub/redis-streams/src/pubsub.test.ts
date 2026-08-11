@@ -555,10 +555,12 @@ describe('RedisStreamsPubSub', () => {
     });
 
     it('never interprets a JSON-looking legacy owner as lease metadata', async () => {
-      const ps = createPubSub();
+      const keyPrefix = `mastra:test:${randomUUID()}`;
+      const ps = new RedisStreamsPubSub({ url: REDIS_URL, blockMs: 200, keyPrefix });
+      pubsubs.push(ps);
       const key = `lease-${randomUUID()}`;
-      const ownerKey = `mastra:topic:lease:${key}`;
-      const metadataKey = `mastra:topic:lease-metadata:${key}`;
+      const ownerKey = `${keyPrefix}:lease:${key}`;
+      const metadataKey = `${keyPrefix}:lease-metadata:${key}`;
       const legacyOwner = JSON.stringify({ owner: 'parsed-owner', metadata: 'parsed-run' });
       const direct = createClient({ url: REDIS_URL });
       await direct.connect();
