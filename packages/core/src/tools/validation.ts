@@ -11,10 +11,10 @@ import { getZodTypeName, isZodArray, isZodObject, unwrapZodType } from '../utils
  * @param data The data to validate
  * @returns The validation result or throws with a descriptive error
  */
-function safeValidate<T>(
-  schema: StandardSchemaWithJSON<T>,
+function safeValidate<TInput, TOutput = TInput>(
+  schema: StandardSchemaWithJSON<TInput, TOutput>,
   data: unknown,
-): { value: T } | { issues: readonly StandardSchemaIssue[] } {
+): { value: TOutput } | { issues: readonly StandardSchemaIssue[] } {
   try {
     const result = schema['~standard'].validate(data);
     if (result instanceof Promise) {
@@ -24,7 +24,7 @@ function safeValidate<T>(
     if ('issues' in result && Array.isArray(result.issues) && result.issues.length > 0) {
       return { issues: result.issues as readonly StandardSchemaIssue[] };
     }
-    return result as { value: T } | { issues: readonly StandardSchemaIssue[] };
+    return result as { value: TOutput } | { issues: readonly StandardSchemaIssue[] };
   } catch (err) {
     // Catch Zod internal errors like "Cannot read properties of undefined (reading 'run')"
     // This happens when a union schema has undefined options
@@ -587,15 +587,15 @@ export function validateToolInput<T = unknown>(
  * @param toolId Optional tool ID for better error messages
  * @returns The validated data or a validation error
  */
-export function validateToolOutput<T = unknown>(
-  schema: StandardSchemaWithJSON<T> | undefined,
+export function validateToolOutput<TInput = unknown, TOutput = TInput>(
+  schema: StandardSchemaWithJSON<TInput, TOutput> | undefined,
   output: unknown,
   toolId?: string,
   suspendCalled?: boolean,
-): { data: T; error?: undefined } | { data?: undefined; error: ValidationError<T> } {
+): { data: TOutput; error?: undefined } | { data?: undefined; error: ValidationError<TOutput> } {
   // If no schema, not a Standard Schema, or suspend was called, return output as-is
   if (!schema || !('~standard' in schema) || suspendCalled) {
-    return { data: output as T };
+    return { data: output as TOutput };
   }
 
   // Validate the output using standard schema interface
@@ -610,10 +610,10 @@ export function validateToolOutput<T = unknown>(
     .map(e => `- ${e.path?.map(p => getPathKey(p)).join('.') || 'root'}: ${e.message}`)
     .join('\n');
 
-  const error: ValidationError<T> = {
+  const error: ValidationError<TOutput> = {
     error: true,
     message: `Tool output validation failed${toolId ? ` for ${toolId}` : ''}. The tool returned invalid output:\n${errorMessages}\n\nReturned output: ${truncateForLogging(output)}`,
-    validationErrors: buildFormattedErrors<T>(validation.issues),
+    validationErrors: buildFormattedErrors<TOutput>(validation.issues),
   };
 
   return { error };
