@@ -1,6 +1,9 @@
 ---
 title: "Memory | v1 Migration Guide"
 description: "Learn how to migrate memory-related changes when upgrading to v1."
+packages:
+  - "@mastra/memory"
+  - "@mastra/core"
 ---
 
 # Memory
@@ -302,6 +305,6 @@ To migrate, move processor configuration from Memory to Agent using `inputProces
   });
 ```
 
-Additionally, the `@mastra/memory/processors` import path has been removed. Import processors from `@mastra/core/processors` instead. See the [processors migration guide](/guides/migrations/upgrade-to-v1/processors#memory-processor-exports-moved-to-core) for details.
+Additionally, the `@mastra/memory/processors` import path has been removed. Import processors from `@mastra/core/processors` instead. See the [processors migration guide](/reference/migrations/upgrade-to-v1/processors#memory-processor-exports-moved-to-core) for details.
 
 For more information on using processors with agents, see the [Processors docs](/docs/agents/processors). For a complete example with memory, see the [TokenLimiter reference](/reference/processors/token-limiter-processor#extended-usage-example).

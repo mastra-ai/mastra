@@ -1,6 +1,8 @@
 ---
 title: "Tools | v1 Migration Guide"
 description: "Learn how to migrate tool-related changes when upgrading to v1."
+packages:
+  - "@mastra/core"
 ---
 
 # Tools
@@ -89,7 +91,7 @@ Also, when the tool is resumed, the `resumeData` gets validated against the `res
 To skip the `suspendSchema` or `resumeSchema` validation, don't define `suspendSchema` or `resumeSchema` in the tool creation.
 
 :::note
-For MCP-specific tool context changes, see the [MCP migration guide](/guides/migrations/upgrade-to-v1/mcp).
+For MCP-specific tool context changes, see the [MCP migration guide](/reference/migrations/upgrade-to-v1/mcp).
 :::
 
 ### `RuntimeContext` to `RequestContext`
