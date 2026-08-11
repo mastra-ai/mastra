@@ -2,4 +2,6 @@
 '@mastra/core': patch
 ---
 
-Fix client-echoed message history silently overwriting canonical stored messages. When a client submits its visible transcript back on a later turn, previously-persisted messages are now reconciled against the stored record by ID (instead of the recall window): unchanged echoes are no longer re-persisted, and only supported client-authored transitions — such as a client-side tool result advancing a stored `call` to `result` — are merged into the stored version, preserving output-processor transformations, tool history, and server-authored metadata. Fixes [#20836](https://github.com/mastra-ai/mastra/issues/20836).
+Reconcile client-echoed messages by stored record ID before persisting.
+
+Unchanged echoes are not persisted again. Lossy client copies can no longer replace server content. Output-processor transformations, tool history, and metadata are retained. Only supported client-authored transitions are merged, such as a tool call advancing from `call` to `result`. Fixes [#20836](https://github.com/mastra-ai/mastra/issues/20836).

@@ -277,7 +277,16 @@ export class MessageHistory implements Processor {
       const inputIds = newInput.map(m => m.id).filter((id): id is string => Boolean(id));
       if (inputIds.length > 0) {
         const { messages: storedInput } = await this.storage.listMessagesById({ messageIds: inputIds });
-        const storedById = new Map(storedInput.map(m => [m.id, m]));
+        // Only records that actually belong to this thread (and resource) may act
+        // as the canonical version of an echoed ID. An ID that resolves to a
+        // foreign thread — or to another resource's thread — is treated as having
+        // no stored record, so the echo can neither suppress this thread's write
+        // nor drag a foreign threadId/resourceId into it.
+        const storedById = new Map(
+          storedInput
+            .filter(m => m.threadId === threadId && (!resourceId || m.resourceId === resourceId))
+            .map(m => [m.id, m]),
+        );
         const reconciledInput = reconcileClientEchoes(newInput, storedById);
         messagesToSave = [...reconciledInput, ...newOutput];
       }
