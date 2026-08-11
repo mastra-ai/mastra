@@ -20,51 +20,6 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'getting-started/next-js',
-          label: 'Next.js',
-        },
-        {
-          type: 'doc',
-          id: 'getting-started/vite-react',
-          label: 'React',
-        },
-        {
-          type: 'doc',
-          id: 'getting-started/astro',
-          label: 'Astro',
-        },
-        {
-          type: 'doc',
-          id: 'getting-started/sveltekit',
-          label: 'SvelteKit',
-        },
-        {
-          type: 'doc',
-          id: 'getting-started/nuxt',
-          label: 'Nuxt',
-        },
-        {
-          type: 'doc',
-          id: 'getting-started/express',
-          label: 'Express',
-        },
-        {
-          type: 'doc',
-          id: 'getting-started/nestjs',
-          label: 'NestJS',
-        },
-        {
-          type: 'doc',
-          id: 'getting-started/hono',
-          label: 'Hono',
-        },
-        {
-          type: 'doc',
-          id: 'getting-started/electron',
-          label: 'Electron',
-        },
-        {
-          type: 'doc',
           id: 'getting-started/manual-install',
           label: 'Manual Install',
         },
@@ -130,54 +85,6 @@ const sidebars = {
               id: 'voice/speech-to-speech',
               label: 'Speech to Speech',
             },
-            {
-              type: 'doc',
-              id: 'voice/realtime-voice',
-              label: 'Realtime Voice',
-            },
-          ],
-        },
-      ],
-    },
-    {
-      type: 'category',
-      label: 'Agentic UIs',
-      collapsed: false,
-      items: [
-        {
-          type: 'doc',
-          id: 'build-your-ui/ai-sdk-ui',
-          label: 'AI SDK UI',
-        },
-        {
-          type: 'doc',
-          id: 'build-your-ui/assistant-ui',
-          label: 'Assistant UI',
-        },
-        {
-          type: 'doc',
-          id: 'build-your-ui/openui',
-          label: 'OpenUI',
-        },
-        {
-          type: 'category',
-          label: 'CopilotKit',
-          items: [
-            {
-              type: 'doc',
-              id: 'build-your-ui/copilotkit/overview',
-              label: 'Overview',
-            },
-            {
-              type: 'doc',
-              id: 'build-your-ui/copilotkit/generative-ui',
-              label: 'Generative UI',
-            },
-            {
-              type: 'doc',
-              id: 'build-your-ui/copilotkit/channels',
-              label: 'Channels',
-            },
           ],
         },
       ],
@@ -200,48 +107,8 @@ const sidebars = {
       collapsed: true,
       items: [
         {
-          type: 'doc',
-          id: 'deployment/aws-bedrock-agentcore',
-          label: 'Amazon Bedrock AgentCore',
-        },
-        {
-          type: 'doc',
-          id: 'deployment/amazon-ec2',
-          label: 'Amazon EC2',
-        },
-        {
-          type: 'doc',
-          id: 'deployment/aws-lambda',
-          label: 'AWS Lambda',
-        },
-        {
-          type: 'doc',
-          id: 'deployment/azure-app-services',
-          label: 'Azure App Services',
-        },
-        {
-          type: 'doc',
-          id: 'deployment/cloudflare',
-          label: 'Cloudflare',
-        },
-        {
-          type: 'doc',
-          id: 'deployment/digital-ocean',
-          label: 'Digital Ocean',
-        },
-        {
-          type: 'doc',
-          id: 'deployment/inngest',
-          label: 'Inngest',
-        },
-        {
           type: 'html',
           value: '<a class="menu__link" href="/docs/mastra-platform/server"><span>Mastra platform</span></a>',
-        },
-        {
-          type: 'doc',
-          id: 'deployment/kubernetes',
-          label: 'Kubernetes',
         },
         {
           type: 'doc',
@@ -250,21 +117,6 @@ const sidebars = {
           customProps: {
             tags: ['new'],
           },
-        },
-        {
-          type: 'doc',
-          id: 'deployment/netlify',
-          label: 'Netlify',
-        },
-        {
-          type: 'doc',
-          id: 'deployment/temporal',
-          label: 'Temporal',
-        },
-        {
-          type: 'doc',
-          id: 'deployment/vercel',
-          label: 'Vercel',
         },
       ],
     },
@@ -277,11 +129,6 @@ const sidebars = {
           type: 'category',
           label: 'Fundamentals',
           items: [
-            {
-              type: 'doc',
-              id: 'guide/firecrawl',
-              label: 'Tools: Firecrawl',
-            },
             {
               type: 'doc',
               id: 'guide/ai-recruiter',
