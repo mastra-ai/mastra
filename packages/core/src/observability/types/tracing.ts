@@ -304,6 +304,22 @@ export interface ModelGenerationAttributes extends AIBaseAttributes {
 }
 
 /**
+ * Prompt token-composition estimate by MessageList region, computed over the
+ * final prompt actually sent to the model on a step. Region keys are dynamic
+ * (`system`, `tagged-system:<tag>`, `messages`, `unattributed`); a missing key
+ * means not-present, never zero. Estimates are local heuristics — compare
+ * against provider-reported usage for accuracy, using `method` to interpret.
+ */
+export interface PromptRegionAttribution {
+  /** Token-estimation method used (e.g. 'tokenx-estimate'). */
+  method: string;
+  /** Sum of all region estimates over the final prompt. */
+  totalEstimated: number;
+  /** Estimated tokens per region. */
+  regions: Record<string, number>;
+}
+
+/**
  * Model Step attributes - for a single model execution within a generation
  */
 export interface ModelStepAttributes extends AIBaseAttributes {
@@ -311,6 +327,11 @@ export interface ModelStepAttributes extends AIBaseAttributes {
   stepIndex?: number;
   /** Token usage statistics */
   usage?: UsageStats;
+  /**
+   * Estimated prompt token composition by MessageList region for this step's
+   * final prompt. Emitted on MODEL_STEP only (not mirrored to MODEL_INFERENCE).
+   */
+  promptRegions?: PromptRegionAttribution;
   /** Reason this step finished (stop, tool-calls, length, etc.) */
   finishReason?: string;
   /** Should execution continue */

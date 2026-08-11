@@ -1,0 +1,24 @@
+[
+  {
+    "role": "system",
+    "content": "You are a test agent. Answer briefly."
+  },
+  {
+    "role": "system",
+    "content": "Remembered fact: the sky is blue."
+  },
+  {
+    "role": "user",
+    "content": [
+      {
+        "type": "text",
+        "text": "What color is the sky?",
+        "providerOptions": {
+          "mastra": {
+            "createdAt": 1704067200000
+          }
+        }
+      }
+    ]
+  }
+]

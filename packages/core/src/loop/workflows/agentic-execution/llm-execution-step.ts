@@ -5,6 +5,7 @@ import { APICallError, generateId } from '@internal/ai-sdk-v5';
 import type { CallSettings, StepResult, ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
 import type { StructuredOutputOptions } from '../../../agent';
 import type { MessageList } from '../../../agent/message-list';
+import { attributePromptRegions } from '../../../agent/message-list/region-attribution';
 import { TripWire } from '../../../agent/trip-wire';
 import { isSupportedLanguageModel, supportedLanguageModelSpecifications } from '../../../agent/utils';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
@@ -1557,6 +1558,22 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           }
           logger?.error('Error in processLLMRequest processors:', error);
           throw error;
+        }
+
+        // Instrumentation only: attribute the FINAL prompt's estimated token
+        // composition by MessageList region onto the current MODEL_STEP span.
+        // Attribute-only — never alters inputMessages, ordering, or control flow.
+        const stepSpanForRegions = modelSpanTracker?.getTracingContext()?.currentSpan;
+        if (stepSpanForRegions?.type === SpanType.MODEL_STEP) {
+          try {
+            stepSpanForRegions.update({
+              attributes: {
+                promptRegions: attributePromptRegions({ messageList, inputMessages }),
+              },
+            });
+          } catch (error) {
+            logger?.debug('Failed to attach prompt region attribution', { error });
+          }
         }
 
         if (cachedResponse) {
