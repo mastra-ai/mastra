@@ -232,6 +232,14 @@ describe('MastraSandbox Base Class', () => {
     });
   });
 
+  describe('Snapshot', () => {
+    it('resolves as a no-op by default', async () => {
+      const sandbox = new MountableSandbox();
+
+      await expect(sandbox.snapshot()).resolves.toBeUndefined();
+    });
+  });
+
   describe('Lifecycle Methods', () => {
     it('_start() sets status to running', async () => {
       const sandbox = new MountableSandbox();

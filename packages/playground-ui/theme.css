@@ -411,3 +411,11 @@ html.light {
     }
   }
 }
+
+@utility duration-normal {
+  transition-duration: var(--duration-normal);
+}
+
+@utility duration-slow {
+  transition-duration: var(--duration-slow);
+}

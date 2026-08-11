@@ -155,6 +155,41 @@ mastra deploy --env staging --env-file .env.staging
 
 To change variables on a running service without a redeploy, update them in the dashboard and run [`mastra env restart`](/reference/cli/mastra#mastra-env-restart).
 
+## Private npm packages
+
+Projects that depend on packages from a private registry install them during the deploy using the standard `NPM_TOKEN` contract.
+
+<Steps>
+  <StepItem>
+    Store a read-only registry token as `NPM_TOKEN` on the project or environment through the dashboard.
+  </StepItem>
+
+  <StepItem>
+    Commit a token-free `.npmrc` that points your scope at the registry and reads the token from the environment:
+
+    ```ini title=".npmrc"
+    @your-org:registry=https://npm.pkg.github.com
+    //npm.pkg.github.com/:_authToken=${NPM_TOKEN}
+    ```
+
+    Keep the `${NPM_TOKEN}` reference literal. The package manager resolves it at install time, so the token itself never lands in your repository.
+  </StepItem>
+
+  <StepItem>
+    Deploy as usual:
+
+    ```bash
+    mastra deploy
+    ```
+  </StepItem>
+</Steps>
+
+In a monorepo, a `.npmrc` in your project directory takes precedence over one at the repository root.
+
+`NPM_TOKEN` is available during dependency installation. Mastra redacts its value from the Mastra source-build logs that it streams. The generated Dockerfile receives it as a build argument, so the runtime image stays free of the token. `NPM_TOKEN` is also injected into the running service as a regular environment variable, so treat it as a secret your application can read.
+
+Projects without a private-registry `.npmrc` need no changes. When your `.npmrc` references `${NPM_TOKEN}`, set the variable or the dependency install fails.
+
 ## Project resolution
 
 Every deploy resolves its target project in this order:

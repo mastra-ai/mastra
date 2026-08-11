@@ -12,8 +12,45 @@ import { useChatSessionContext } from './useChatSessionContext';
 interface ChatModesProviderProps {
   children: ReactNode;
 }
+const EMPTY_MODES: ChatModesApi['modes'] = [];
 
 export function ChatModesProvider({ children }: ChatModesProviderProps) {
+  const { draftSessionId } = useChatSessionContext();
+  return draftSessionId ? (
+    <DraftChatModesProvider>{children}</DraftChatModesProvider>
+  ) : (
+    <LiveChatModesProvider>{children}</LiveChatModesProvider>
+  );
+}
+
+function DraftChatModesProvider({ children }: ChatModesProviderProps) {
+  const { resourceId, projectPath, baseUrl } = useChatSessionContext();
+  const modesQuery = useAgentControllerModes({
+    agentControllerId: AGENT_CONTROLLER_ID,
+    resourceId,
+    scope: projectPath,
+    baseUrl,
+    enabled: true,
+  });
+  const modes = modesQuery.data ?? EMPTY_MODES;
+  const [draftModeId, setDraftModeId] = useState<string>();
+  const activeModeId = draftModeId ?? modes[0]?.id;
+  const value: ChatModesApi = {
+    modes,
+    activeModeId,
+    activeMode: modes.find(mode => mode.id === activeModeId),
+    isLoading: modesQuery.isPending,
+    error: modesQuery.error ?? undefined,
+    setMode: modeId => {
+      setDraftModeId(modeId);
+      return Promise.resolve();
+    },
+  };
+
+  return <ChatModesContext.Provider value={value}>{children}</ChatModesContext.Provider>;
+}
+
+function LiveChatModesProvider({ children }: ChatModesProviderProps) {
   const { resourceId, projectPath, baseUrl, sessionEnabled } = useChatSessionContext();
   const { state } = useChatConnection();
   const modesQuery = useAgentControllerModes({
@@ -23,14 +60,14 @@ export function ChatModesProvider({ children }: ChatModesProviderProps) {
     baseUrl,
     enabled: sessionEnabled,
   });
-  const switchModeMutation = useSwitchAgentControllerModeMutation({
+  const { mutateAsync: switchMode } = useSwitchAgentControllerModeMutation({
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
     scope: projectPath,
     baseUrl,
     enabled: sessionEnabled,
   });
-  const modes = modesQuery.data ?? [];
+  const modes = modesQuery.data ?? EMPTY_MODES;
   const [activeModeId, setActiveModeId] = useState(state?.modeId);
 
   useEffect(() => {
@@ -41,11 +78,13 @@ export function ChatModesProvider({ children }: ChatModesProviderProps) {
     modes,
     activeModeId,
     activeMode: modes.find(mode => mode.id === activeModeId),
+    isLoading: modesQuery.isPending,
+    error: modesQuery.error ?? undefined,
     setMode: async modeId => {
       const previousModeId = activeModeId;
       setActiveModeId(modeId);
       try {
-        await switchModeMutation.mutateAsync(modeId);
+        await switchMode(modeId);
       } catch (error) {
         setActiveModeId(currentModeId => (currentModeId === modeId ? previousModeId : currentModeId));
         throw error;

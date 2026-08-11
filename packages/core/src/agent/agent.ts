@@ -1355,9 +1355,9 @@ export class Agent<
 
     const parentSpan = tracingContext?.currentSpan ?? resolveCurrentSpan();
     const skillsSpan = parentSpan?.createChildSpan({
-      type: SpanType.GENERIC,
+      type: SpanType.SKILL_RESOLUTION,
       name: 'resolve-skills',
-      metadata: { agentId: this.id },
+      attributes: { agentId: this.id },
     });
 
     const resolution = executeWithContext({
@@ -1365,7 +1365,7 @@ export class Agent<
       fn: async () => resolver({ requestContext, tracingContext: { currentSpan: skillsSpan } }),
     })
       .then(skills => {
-        skillsSpan?.end({ metadata: { skillCount: skills.length } });
+        skillsSpan?.end({ attributes: { skillCount: skills.length } });
         return skills;
       })
       .catch(error => {

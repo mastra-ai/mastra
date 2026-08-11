@@ -32,14 +32,17 @@ export function ChatSessionConfigProvider({
   children,
   threadId,
   userScoped = false,
+  draftSessionId,
 }: {
   children: ReactNode;
   threadId?: string;
   userScoped?: boolean;
+  draftSessionId?: string;
 }) {
   const { factoryId, sessionId } = useParams<{ factoryId: string; sessionId: string }>();
   const { baseUrl } = useApiConfig();
   const factoryQuery = useFactoryQuery(factoryId);
+  const isUserDraft = userScoped && Boolean(draftSessionId);
   const sessionQuery = useUserSessionQuery(userScoped ? threadId : sessionId);
   const factory = factoryQuery.data;
   const storedSession = sessionQuery.data;
@@ -59,12 +62,7 @@ export function ChatSessionConfigProvider({
   // memory resourceId and no scope (see FactoryStartCoordinator.prepare and
   // UserSessionsSection), so the chat surface must address the same
   // (resourceId, no scope) session to read threads and share the live run.
-  // On user routes the :threadId param IS the sessionId. Factory routes with
-  // no workspace session (e.g. /settings/*) fall back to the factory-level
-  // session address — which is the factory project id, the same value /ensure
-  // returns — so resource-scoped surfaces (behavior settings, tool permissions)
-  // stay functional without provisioning a sandbox.
-  const resourceId = userScoped ? threadId : (storedSession?.sessionId ?? sessionId ?? factory?.id);
+  const resourceId = userScoped ? (draftSessionId ?? threadId) : (storedSession?.sessionId ?? sessionId ?? factory?.id);
   const projectPath = undefined;
   // A `?resourceId=` query param overrides the resolved factory resource so the
   // whole chat session (transcript, messages, connection, thread switch) binds
@@ -88,8 +86,9 @@ export function ChatSessionConfigProvider({
   // Outside a session the factory resource is addressable straight away (its id
   // is the factory project id); inside one we keep the original ordering and
   // wait for the workspace so resource reads follow materialization.
-  const resourceEnabled =
+  const resourceAddressable =
     userScoped || !inSession ? Boolean(resourceId) : Boolean(resourceOverride) || ensureQuery.isSuccess;
+  const resourceEnabled = !isUserDraft && resourceAddressable;
   const value = {
     resourceId: resourceOverride ?? resourceId ?? '',
     sessionEnabled,
@@ -99,6 +98,7 @@ export function ChatSessionConfigProvider({
     projectPath,
     sessionThreadId: storedSession?.sessionId,
     workspacePending: storedSession !== undefined && !storedSession.materializedAt,
+    draftSessionId: isUserDraft ? draftSessionId : undefined,
     factorySessionState:
       factory && repository
         ? {
@@ -141,7 +141,7 @@ export function ChatSessionBoundary({
   const messages = {
     threadId,
     isPending: Boolean(threadId) && messagesQuery.isPending,
-    error: messagesQuery.error,
+    error: messagesQuery.data ? undefined : messagesQuery.error,
   };
 
   if (deferUntilMessagesReady && threadId && (messages.isPending || messages.error)) {

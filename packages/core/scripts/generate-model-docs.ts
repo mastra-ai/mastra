@@ -355,7 +355,7 @@ ${
   !PROVIDERS_WITH_INSTALLED_PACKAGES.includes(provider.id)
     ? // if it's not a directly supported provider then it's openai compatible, so warn about it
       `
-:::info
+:::note
 
 Mastra uses the OpenAI-compatible \`/chat/completions\` endpoint. Some provider-specific features may not be available. Check the [${provider.name} documentation](${docUrl || '#'}) for details.
 
@@ -573,7 +573,7 @@ const agent = new Agent({
 });
 \`\`\`
 
-:::info
+:::note
 
 Mastra uses the OpenAI-compatible \`/chat/completions\` endpoint. Some provider-specific features may not be available. ${docUrl ? `Check the [${displayName} documentation](${docUrl}) for details.` : `Check the ${displayName} documentation for details.`}
 
@@ -856,7 +856,7 @@ You can also discover models directly in your editor. Mastra provides full autoc
 
 Alternatively, browse and test models in [Studio](/docs/studio/overview) UI.
 
-:::info
+:::note
 
 In development, we auto-refresh your local model list every hour, ensuring your TypeScript autocomplete and Studio stay up-to-date with the latest models. To disable, set \`MASTRA_AUTO_REFRESH_PROVIDERS=false\`. Auto-refresh is disabled by default in production.
 
@@ -960,7 +960,7 @@ const agent = new Agent({
 });
 \`\`\`
 
-:::info
+:::note
 
 Configuration differs by provider. See the provider pages in the left navigation for details on custom headers.
 

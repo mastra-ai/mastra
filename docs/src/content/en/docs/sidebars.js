@@ -74,7 +74,7 @@ const sidebars = {
               id: 'agents/code-mode',
               label: 'Code Mode',
               customProps: {
-                tags: ['beta'],
+                tags: ['new'],
               },
             },
           ],
@@ -110,7 +110,7 @@ const sidebars = {
               id: 'workflows/dynamic-workflows',
               label: 'Dynamic Workflows',
               customProps: {
-                tags: ['beta'],
+                tags: ['new'],
               },
             },
             {
@@ -160,9 +160,6 @@ const sidebars = {
               type: 'doc',
               id: 'long-running-agents/durable-agents',
               label: 'Durable Agents',
-              customProps: {
-                tags: ['beta'],
-              },
             },
             {
               type: 'doc',
@@ -173,41 +170,26 @@ const sidebars = {
               type: 'doc',
               id: 'long-running-agents/goals',
               label: 'Goals',
-              customProps: {
-                tags: ['beta'],
-              },
             },
             {
               type: 'doc',
               id: 'long-running-agents/schedules',
               label: 'Schedules',
-              customProps: {
-                tags: ['beta'],
-              },
             },
             {
               type: 'doc',
               id: 'long-running-agents/signals',
               label: 'Signals',
-              customProps: {
-                tags: ['beta'],
-              },
             },
             {
               type: 'doc',
               id: 'long-running-agents/signal-providers',
               label: 'Signal Providers',
-              customProps: {
-                tags: ['beta'],
-              },
             },
             {
               type: 'doc',
               id: 'harness/agent-controller',
               label: 'Agent Controller',
-              customProps: {
-                tags: ['beta'],
-              },
             },
           ],
         },
@@ -390,7 +372,7 @@ const sidebars = {
               id: 'browser/recording',
               label: 'Recording',
               customProps: {
-                tags: ['beta'],
+                tags: ['new'],
               },
             },
             {
@@ -609,7 +591,7 @@ const sidebars = {
               id: 'server/auth/workers',
               label: 'Workers',
               customProps: {
-                tags: ['beta'],
+                tags: ['new'],
               },
             },
           ],
@@ -660,7 +642,7 @@ const sidebars = {
               id: 'deployment/workers',
               label: 'Workers',
               customProps: {
-                tags: ['beta'],
+                tags: ['new'],
               },
             },
           ],
@@ -942,7 +924,7 @@ const sidebars = {
           id: 'mastra-platform/trace-intelligence',
           label: 'Trace Intelligence',
           customProps: {
-            tags: ['beta'],
+            tags: ['new'],
           },
         },
         {
