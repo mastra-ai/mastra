@@ -1261,21 +1261,6 @@
       "permanent": true
     },
     {
-      "source": "/guides/guide/research-assistant",
-      "destination": "/guides/rag/overview",
-      "permanent": true
-    },
-    {
-      "source": "/guides/guide/code-review-bot",
-      "destination": "/docs/workspace/skills#skillmd-format",
-      "permanent": true
-    },
-    {
-      "source": "/guides/guide/docs-manager",
-      "destination": "/docs/workspace/filesystem#basic-usage",
-      "permanent": true
-    },
-    {
       "source": "/docs/editor/prompts/llms.txt",
       "destination": "/docs/editor/overview/llms.txt",
       "permanent": true
@@ -2178,21 +2163,6 @@
     {
       "source": "/guides/guide/stock-agent/llms.txt",
       "destination": "/docs/agents/using-tools/llms.txt#quickstart",
-      "permanent": true
-    },
-    {
-      "source": "/guides/guide/research-assistant/llms.txt",
-      "destination": "/guides/rag/overview/llms.txt",
-      "permanent": true
-    },
-    {
-      "source": "/guides/guide/code-review-bot/llms.txt",
-      "destination": "/docs/workspace/skills/llms.txt#skillmd-format",
-      "permanent": true
-    },
-    {
-      "source": "/guides/guide/docs-manager/llms.txt",
-      "destination": "/docs/workspace/filesystem/llms.txt#basic-usage",
       "permanent": true
     }
   ]

@@ -306,6 +306,11 @@ const sidebars = {
             },
             {
               type: 'doc',
+              id: 'guide/research-assistant',
+              label: 'RAG: Research Assistant',
+            },
+            {
+              type: 'doc',
               id: 'guide/notes-mcp-server',
               label: 'MCP Server: Notes MCP Server',
             },
@@ -335,6 +340,16 @@ const sidebars = {
               type: 'doc',
               id: 'guide/dev-assistant',
               label: 'Workspace: Dev Assistant',
+            },
+            {
+              type: 'doc',
+              id: 'guide/code-review-bot',
+              label: 'Skills: Code Review Bot',
+            },
+            {
+              type: 'doc',
+              id: 'guide/docs-manager',
+              label: 'Filesystem: Docs Manager',
             },
           ],
         },
