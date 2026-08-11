@@ -1827,7 +1827,7 @@
     },
     {
       "source": "/docs/mcp/publishing-mcp-server/llms.txt",
-      "destination": "/docs/mcp/overview/llms.txt#publish-a-stdio-server-package",
+      "destination": "/docs/mcp/overview/llms.txt",
       "permanent": true
     },
     {
@@ -2152,22 +2152,22 @@
     },
     {
       "source": "/guides/guide/web-search/llms.txt",
-      "destination": "/docs/agents/using-tools/llms.txt#use-provider-web-search",
+      "destination": "/docs/agents/using-tools/llms.txt",
       "permanent": true
     },
     {
       "source": "/guides/guide/publishing-mcp-server/llms.txt",
-      "destination": "/docs/mcp/overview/llms.txt#publish-a-stdio-server-package",
+      "destination": "/docs/mcp/overview/llms.txt",
       "permanent": true
     },
     {
       "source": "/guides/guide/chef-michel/llms.txt",
-      "destination": "/docs/agents/overview/llms.txt#quickstart",
+      "destination": "/docs/agents/overview/llms.txt",
       "permanent": true
     },
     {
       "source": "/guides/guide/stock-agent/llms.txt",
-      "destination": "/docs/agents/using-tools/llms.txt#quickstart",
+      "destination": "/docs/agents/using-tools/llms.txt",
       "permanent": true
     },
     {
