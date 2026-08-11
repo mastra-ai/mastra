@@ -1,23 +1,11 @@
 import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
 import { Lock } from 'lucide-react';
-import { Link, useLocation } from 'react-router';
 import { useAuthCapabilities } from '../hooks/use-auth-capabilities';
 import { isAuthenticated } from '../types';
+import { AuthHeadersForm } from './auth-headers-form';
 import { LoginButton } from './login-button';
 import { useMastraPlatform } from '@/lib/mastra-platform/hooks/use-mastra-platform';
 import { withStudioBasePath } from '@/lib/studio-base-path';
-
-/**
- * The Studio settings route. It is the only route that stays reachable when
- * auth is enabled but the provider exposes no login method (for example a JWT
- * provider), because it is where the user saves the Authorization header that
- * every other request needs. The page renders from local state only, so it
- * makes no authenticated API call.
- *
- * The match is exact. A future settings subroute must be added here on purpose,
- * and only after it is proven to read no server data.
- */
-const SETTINGS_ROUTE = '/settings';
 
 export type AuthRequiredProps = {
   children: React.ReactNode;
@@ -48,7 +36,6 @@ export type AuthRequiredProps = {
  */
 export function AuthRequired({ children, loginUrl = '/login', signupUrl = '/signup' }: AuthRequiredProps) {
   const { data: capabilities, isLoading } = useAuthCapabilities();
-  const { pathname } = useLocation();
   const { isMastraPlatform } = useMastraPlatform();
 
   // While loading, show nothing (or could show a skeleton)
@@ -69,15 +56,10 @@ export function AuthRequired({ children, loginUrl = '/login', signupUrl = '/sign
   // User is not authenticated - show login prompt
   const redirectUri = typeof window !== 'undefined' ? window.location.href : undefined;
 
-  // No login capability available - show auth required message without login option
+  // No login capability available - show auth required message without login
+  // option. Every route stays blocked; the blocked screen itself collects the
+  // authorization header (except on Mastra platform, which manages headers).
   if (!capabilities.login) {
-    // Settings has no login method to offer, but it is where the user saves the
-    // Authorization header that unlocks the rest of Studio, so keep it open.
-    const settingsAvailable = !isMastraPlatform;
-    if (settingsAvailable && pathname === SETTINGS_ROUTE) {
-      return <>{children}</>;
-    }
-
     return (
       <div className="flex h-full w-full items-center justify-center">
         <div className="flex flex-col items-center space-y-6 text-center">
@@ -85,16 +67,12 @@ export function AuthRequired({ children, loginUrl = '/login', signupUrl = '/sign
           <div className="space-y-2">
             <h2 className="text-neutral6 text-xl font-semibold">Authentication Required</h2>
             <p className="text-neutral3 max-w-sm">
-              {settingsAvailable
-                ? 'Studio needs an authorization header to open this page.'
-                : 'No login method is configured. Please contact your administrator.'}
+              {isMastraPlatform
+                ? 'No login method is configured. Please contact your administrator.'
+                : 'Add the authorization header that Studio needs to reach your Mastra server.'}
             </p>
           </div>
-          {settingsAvailable && (
-            <Link to={SETTINGS_ROUTE} className="text-neutral6 text-sm hover:underline">
-              Add an authorization header in Settings
-            </Link>
-          )}
+          {!isMastraPlatform && <AuthHeadersForm />}
         </div>
       </div>
     );
