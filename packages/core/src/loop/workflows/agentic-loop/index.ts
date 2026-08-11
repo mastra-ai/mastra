@@ -16,6 +16,9 @@ import { createAgenticExecutionWorkflow } from '../agentic-execution';
 import { pruneAgentLoopSnapshot } from '../prune-snapshot';
 import { llmIterationOutputSchema } from '../schema';
 import type { LLMIterationData } from '../schema';
+import { AGENTIC_LOOP_WORKFLOW_ID } from './constants';
+
+export { AGENTIC_LOOP_WORKFLOW_ID } from './constants';
 
 interface AgenticLoopParams<Tools extends ToolSet = ToolSet, OUTPUT = undefined> extends LoopRun<Tools, OUTPUT> {
   controller: ReadableStreamDefaultController<ChunkType<OUTPUT>>;
@@ -66,7 +69,7 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
   });
 
   return createWorkflow({
-    id: 'agentic-loop',
+    id: AGENTIC_LOOP_WORKFLOW_ID,
     inputSchema: llmIterationOutputSchema,
     outputSchema: llmIterationOutputSchema,
     options: {
@@ -91,7 +94,7 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
       // arrays, AI SDK step history) before persisting.
       pruneSnapshot: pruneAgentLoopSnapshot,
       prepareSnapshotForPersistence: createAgentApprovalSnapshotPersistence({
-        workflowId: 'agentic-loop',
+        workflowId: AGENTIC_LOOP_WORKFLOW_ID,
         approvalPersistence: rest.approvalPersistence ?? 'full',
       }),
       validateInputs: false,

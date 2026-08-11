@@ -1,5 +1,6 @@
 import type { ApprovalPersistenceMode } from '../../agent/approval-persistence';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
+import type { WorkflowsStorage } from '../../storage/domains/workflows/base';
 import type {
   AgentApprovalCheckpoint,
   AgentApprovalCheckpointApproval,
@@ -169,7 +170,7 @@ function approvalFromPayload(params: {
 
   const label = params.snapshot.resumeLabels[approval.toolCallId];
   const stepId = label?.stepId ?? params.stepId;
-  const foreachIndex = label?.foreachIndex ?? params.foreachIndex;
+  const foreachIndex = label ? label.foreachIndex : params.foreachIndex;
 
   return {
     toolCallId: approval.toolCallId,
@@ -183,33 +184,93 @@ function approvalFromPayload(params: {
   };
 }
 
-function collectApprovals(snapshot: WorkflowRunState): AgentApprovalCheckpointApproval[] {
+function collectApprovalState(snapshot: WorkflowRunState): {
+  approvals: AgentApprovalCheckpointApproval[];
+  completedForeachIndices: Record<string, number[]>;
+} {
   const approvals: AgentApprovalCheckpointApproval[] = [];
+  const completedForeachIndices: Record<string, number[]> = {};
 
   for (const [stepId, result] of Object.entries(snapshot.context)) {
     if (stepId === 'input' || !isRecord(result) || result.status !== 'suspended') continue;
 
     const direct = approvalFromPayload({ payload: result.suspendPayload, stepId, snapshot });
-    if (direct) approvals.push(direct);
 
     const suspendPayload = result.suspendPayload;
     const metadata = isRecord(suspendPayload) ? suspendPayload.__workflow_meta : undefined;
     const foreachOutput = isRecord(metadata) ? metadata.foreachOutput : undefined;
-    if (!isRecord(foreachOutput)) continue;
+    if (!isRecord(foreachOutput) && !Array.isArray(foreachOutput)) {
+      if (direct) approvals.push(direct);
+      continue;
+    }
 
+    const nestedApprovals: AgentApprovalCheckpointApproval[] = [];
     for (const [index, entry] of Object.entries(foreachOutput)) {
-      if (!isRecord(entry) || entry.status !== 'suspended') continue;
+      if (!isRecord(entry)) continue;
+      if (entry.status === 'success') {
+        (completedForeachIndices[stepId] ??= []).push(Number(index));
+        continue;
+      }
+      if (entry.status !== 'suspended') continue;
       const nested = approvalFromPayload({
         payload: entry.suspendPayload,
         stepId,
         foreachIndex: Number(index),
         snapshot,
       });
-      if (nested) approvals.push(nested);
+      if (nested) nestedApprovals.push(nested);
     }
+    if (direct) {
+      const duplicate = nestedApprovals.find(approval => approval.toolCallId === direct.toolCallId);
+      if (!duplicate || duplicate.foreachIndex === undefined) {
+        approvals.push(direct);
+      }
+    }
+    approvals.push(
+      ...nestedApprovals.filter(
+        approval => approval.toolCallId !== direct?.toolCallId || approval.foreachIndex !== undefined,
+      ),
+    );
   }
 
-  return approvals;
+  return { approvals, completedForeachIndices };
+}
+
+function buildAgentApprovalCheckpointFromState(params: {
+  workflowId: string;
+  snapshot: WorkflowRunState;
+  approvals: AgentApprovalCheckpointApproval[];
+  completedForeachIndices: Record<string, number[]>;
+}): AgentApprovalCheckpoint {
+  const input = selectRehydrationInput(params.snapshot.context.input);
+  const continuationSteps = selectContinuationSteps(params.snapshot);
+  return {
+    kind: AGENT_APPROVAL_CHECKPOINT_KIND,
+    version: AGENT_APPROVAL_CHECKPOINT_VERSION,
+    workflowId: params.workflowId,
+    runId: params.snapshot.runId,
+    status: 'suspended',
+    timestamp: params.snapshot.timestamp,
+    approvals: params.approvals,
+    routing: toJsonValue<AgentApprovalCheckpoint['routing']>(
+      {
+        activePaths: params.snapshot.activePaths,
+        activeStepsPath: params.snapshot.activeStepsPath,
+        suspendedPaths: params.snapshot.suspendedPaths,
+        resumeLabels: params.snapshot.resumeLabels,
+        waitingPaths: params.snapshot.waitingPaths,
+        ...(Object.keys(params.completedForeachIndices).length > 0
+          ? { completedForeachIndices: params.completedForeachIndices }
+          : {}),
+        ...(params.snapshot.stepExecutionPath ? { stepExecutionPath: params.snapshot.stepExecutionPath } : {}),
+      },
+      'workflow routing state',
+    ),
+    rehydration: {
+      ...(input ? { input } : {}),
+      ...(continuationSteps ? { steps: continuationSteps } : {}),
+    },
+  };
 }
 
 /**
@@ -228,7 +289,7 @@ export function buildAgentApprovalCheckpoint(params: {
     );
   }
 
-  const approvals = collectApprovals(params.snapshot);
+  const { approvals, completedForeachIndices } = collectApprovalState(params.snapshot);
   if (approvals.length === 0) {
     throw checkpointError(
       'AGENT_APPROVAL_CHECKPOINT_APPROVAL_NOT_FOUND',
@@ -236,32 +297,7 @@ export function buildAgentApprovalCheckpoint(params: {
     );
   }
 
-  const input = selectRehydrationInput(params.snapshot.context.input);
-  const continuationSteps = selectContinuationSteps(params.snapshot);
-  return {
-    kind: AGENT_APPROVAL_CHECKPOINT_KIND,
-    version: AGENT_APPROVAL_CHECKPOINT_VERSION,
-    workflowId: params.workflowId,
-    runId: params.snapshot.runId,
-    status: 'suspended',
-    timestamp: params.snapshot.timestamp,
-    approvals,
-    routing: toJsonValue<AgentApprovalCheckpoint['routing']>(
-      {
-        activePaths: params.snapshot.activePaths,
-        activeStepsPath: params.snapshot.activeStepsPath,
-        suspendedPaths: params.snapshot.suspendedPaths,
-        resumeLabels: params.snapshot.resumeLabels,
-        waitingPaths: params.snapshot.waitingPaths,
-        ...(params.snapshot.stepExecutionPath ? { stepExecutionPath: params.snapshot.stepExecutionPath } : {}),
-      },
-      'workflow routing state',
-    ),
-    rehydration: {
-      ...(input ? { input } : {}),
-      ...(continuationSteps ? { steps: continuationSteps } : {}),
-    },
-  };
+  return buildAgentApprovalCheckpointFromState({ ...params, approvals, completedForeachIndices });
 }
 
 /** Validates and detaches a persisted version-1 approval checkpoint. */
@@ -317,6 +353,9 @@ export function parseAgentApprovalCheckpoint(value: unknown): AgentApprovalCheck
     ) &&
     isRecord(value.routing.waitingPaths) &&
     Object.values(value.routing.waitingPaths).every(isNumberArray) &&
+    (value.routing.completedForeachIndices === undefined ||
+      (isRecord(value.routing.completedForeachIndices) &&
+        Object.values(value.routing.completedForeachIndices).every(isNumberArray))) &&
     (value.routing.stepExecutionPath === undefined ||
       (Array.isArray(value.routing.stepExecutionPath) &&
         value.routing.stepExecutionPath.every(entry => typeof entry === 'string'))) &&
@@ -418,9 +457,13 @@ export function materializeAgentApprovalCheckpoint(
     let payload: unknown = approvalInput(first);
 
     if (indexed.length > 0) {
-      const maxIndex = Math.max(...indexed.map(approval => approval.foreachIndex!));
+      const completedIndices = checkpoint.routing.completedForeachIndices?.[stepId] ?? [];
+      const maxIndex = Math.max(...indexed.map(approval => approval.foreachIndex!), ...completedIndices);
       const foreachOutput = Array.from({ length: maxIndex + 1 }, () => null) as any[];
       const foreachInput = Array.from({ length: maxIndex + 1 }, () => null) as unknown[];
+      for (const index of completedIndices) {
+        foreachOutput[index] = { status: 'success' };
+      }
       for (const approval of indexed) {
         const index = approval.foreachIndex!;
         const input = approvalInput(approval);
@@ -484,11 +527,43 @@ export function createAgentApprovalSnapshotPersistence(params: {
       typeof params.approvalPersistence === 'function'
         ? params.approvalPersistence(snapshot)
         : params.approvalPersistence;
-    if (mode !== 'minimal' || workflowStatus !== 'suspended' || collectApprovals(snapshot).length === 0) {
+    if (mode !== 'minimal' || workflowStatus !== 'suspended') {
       return snapshot;
     }
-    return buildAgentApprovalCheckpoint({ workflowId: params.workflowId, snapshot });
+    const approvalState = collectApprovalState(snapshot);
+    if (approvalState.approvals.length === 0) return snapshot;
+    return buildAgentApprovalCheckpointFromState({ workflowId: params.workflowId, snapshot, ...approvalState });
   };
+}
+
+/** Materializes approval checkpoints for related workflow rows, including stores that return JSON strings. */
+export async function materializePersistedAgentApprovalCheckpoints(params: {
+  workflowsStore: WorkflowsStorage;
+  workflowNames: readonly string[];
+  outerWorkflowName: string;
+  runId: string;
+}): Promise<WorkflowRunState | undefined> {
+  let outerSnapshot: WorkflowRunState | undefined;
+  for (const workflowName of params.workflowNames) {
+    const run = await params.workflowsStore.getWorkflowRunById({ workflowName, runId: params.runId });
+    if (!run?.snapshot) continue;
+    const persisted = typeof run.snapshot === 'string' ? JSON.parse(run.snapshot) : run.snapshot;
+    if (!isAgentApprovalCheckpoint(persisted)) continue;
+
+    const materialized = materializeAgentApprovalCheckpoint(persisted, {
+      workflowId: workflowName,
+      runId: params.runId,
+    });
+    await params.workflowsStore.persistWorkflowSnapshot({
+      workflowName,
+      runId: params.runId,
+      resourceId: run.resourceId,
+      snapshot: materialized,
+      createdAt: run.createdAt,
+    });
+    if (workflowName === params.outerWorkflowName) outerSnapshot = materialized;
+  }
+  return outerSnapshot;
 }
 
 /** Reads the serialized per-run option used by reusable durable workflows. */
