@@ -271,6 +271,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/coralbricks',
+          label: 'CoralBricks',
+        },
+        {
+          type: 'doc',
           id: 'providers/cortecs',
           label: 'Cortecs',
         },

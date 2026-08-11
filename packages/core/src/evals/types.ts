@@ -768,6 +768,7 @@ const SKIPPED_SPAN_TYPES = new Set([
   SpanType.SCORER_RUN,
   SpanType.SCORER_STEP,
   SpanType.GENERIC,
+  SpanType.SKILL_RESOLUTION,
   SpanType.MODEL_STEP,
   SpanType.MODEL_INFERENCE,
   SpanType.MODEL_CHUNK,

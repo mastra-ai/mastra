@@ -7,6 +7,12 @@ packages:
 
 # Schedules
 
+:::beta
+
+Breaking changes may occur without a major version bump until the API is stable.
+
+:::
+
 A file-based agent discovers **schedules** from its `schedules/` directory. Each file declares one recurring task: a cron expression plus what the agent should do when it fires. Mastra registers them into schedule storage at startup, so a scheduled agent needs no runtime registration code.
 
 Use this page for the file-based convention. To create schedules at runtime instead, see [Schedules](/reference/schedules/overview).

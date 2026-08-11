@@ -362,37 +362,11 @@ Tracing is on by default. Pass `observability: false` to `createLiveKitWorker` t
 
 ## Deployment
 
-The worker is a separate process from your Mastra server, so `mastra build` needs to emit it as its own entry. Add it to [`bundler.entries`](/reference/configuration#bundlerentries):
-
-```typescript title="src/mastra/index.ts"
-import { Mastra } from '@mastra/core'
-
-export const mastra = new Mastra({
-  bundler: {
-    entries: { 'voice-worker': './voice-worker.ts' },
-    // Keep LiveKit's native modules out of the bundle. `mastra build` only applies
-    // this default when you set no other bundler options, so set it explicitly here.
-    externals: true,
-  },
-})
-```
-
-`mastra build` now writes both processes into `.mastra/output`, sharing one `package.json` and one dependency install:
-
-```
-.mastra/output/
-  index.mjs         # Mastra server
-  voice-worker.mjs  # LiveKit worker
-```
-
-Deploy that directory as a single artifact and start each process with its own command:
+The worker is a separate process from your Mastra server. Deploy it as a long-running Node service with the production command:
 
 ```bash
-node .mastra/output/index.mjs             # server
-node .mastra/output/voice-worker.mjs start # worker
+node dist/voice-worker.js start
 ```
-
-The worker needs the same environment variables as the server, plus `LIVEKIT_URL`, `LIVEKIT_API_KEY`, and `LIVEKIT_API_SECRET`.
 
 LiveKit's guidance on sizing, graceful shutdown, and hosting applies unchanged. See [Deploying agents](https://docs.livekit.io/agents/ops/deployment/). Workers connect outbound to LiveKit, so they don't need inbound ports.
 

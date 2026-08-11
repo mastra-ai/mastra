@@ -12,6 +12,8 @@
  * actually carry, and the legacy `projectPath` shape personal worktree sessions
  * still use.
  */
+import assert from 'node:assert';
+
 import { screen, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
@@ -95,7 +97,10 @@ describe('Workspace activity indicators', () => {
 
     renderSection();
 
-    expect(await screen.findByRole('status', { name: `Agent working in ${workName}` })).toBeInTheDocument();
+    const dot = await screen.findByRole('status', { name: `Agent working in ${workName}` });
+    const actions = screen.getByRole('button', { name: `Session actions for ${workName}` });
+    // Same trailing slot: the menu takes the dot's place on hover instead of covering the label.
+    expect(dot.parentElement).toBe(actions.parentElement);
   });
 
   it('leaves an idle factory thread without a running dot', async () => {
@@ -107,7 +112,8 @@ describe('Workspace activity indicators', () => {
     renderSection();
 
     // The row must exist before the absence of its dot means anything.
-    const row = await screen.findByRole('button', { name: workName });
+    const row = (await screen.findByRole('button', { name: workName })).closest('li');
+    assert(row);
     expect(within(row).queryByRole('status', { name: `Agent working in ${workName}` })).not.toBeInTheDocument();
   });
 

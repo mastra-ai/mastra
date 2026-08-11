@@ -515,6 +515,11 @@ export class S3Filesystem extends MastraFilesystem {
   // ---------------------------------------------------------------------------
 
   async readFile(path: string, options?: ReadOptions): Promise<string | Buffer> {
+    // A trailing slash means a directory: never return the empty body of a directory marker
+    if (path.endsWith('/')) {
+      throw new FileNotFoundError(path);
+    }
+
     const client = await this.getReadyClient();
 
     try {
@@ -605,6 +610,11 @@ export class S3Filesystem extends MastraFilesystem {
   }
 
   async copyFile(src: string, dest: string, options?: CopyOptions): Promise<void> {
+    // A trailing slash means a directory: never copy a directory marker as a file
+    if (src.endsWith('/')) {
+      throw new FileNotFoundError(src);
+    }
+
     const client = await this.getReadyClient();
 
     if (options?.overwrite === false && (await this.exists(dest))) {
@@ -636,17 +646,53 @@ export class S3Filesystem extends MastraFilesystem {
   // Directory Operations
   // ---------------------------------------------------------------------------
 
-  async mkdir(_path: string, _options?: { recursive?: boolean }): Promise<void> {
-    // S3 doesn't have real directories - they're just key prefixes
-    // No-op, directories are created implicitly when files are written
+  async mkdir(path: string, _options?: { recursive?: boolean }): Promise<void> {
+    // S3 doesn't have real directories - they're just key prefixes.
+    // Write a zero-byte marker object at "<key>/" (the convention the S3 console uses)
+    // so an empty directory is visible to readdir(), exists() and stat().
+    // Parent directories need no marker of their own: the marker key already
+    // matches every parent prefix, so nested paths work without `recursive`.
+    const key = trimSlashes(this.toKey(path));
+    if (!key || key + '/' === this.prefix) return; // Root always exists
+
+    const client = await this.getReadyClient();
+
+    // A file already occupies this path. A credential that can write but not read
+    // cannot probe, so treat a failed probe as "no file there" and let the write below
+    // report a real problem.
+    try {
+      await client.send(new HeadObjectCommand({ Bucket: this.bucket, Key: key }));
+      throw new FileExistsError(path);
+    } catch (error: unknown) {
+      if (error instanceof FileExistsError) throw error;
+    }
+
+    await client.send(
+      new PutObjectCommand({
+        Bucket: this.bucket,
+        Key: key + '/',
+        Body: new Uint8Array(0),
+      }),
+    );
   }
 
   async rmdir(path: string, options?: RemoveOptions): Promise<void> {
     if (!options?.recursive) {
-      // Check if directory is empty
+      // Check if directory is empty (the directory marker is not listed as an entry)
       const entries = await this.readdir(path);
       if (entries.length > 0) {
         throw new Error(`Directory not empty: ${path}`);
+      }
+      // Remove the directory marker so the empty directory disappears
+      const key = trimSlashes(this.toKey(path));
+      if (key && key + '/' !== this.prefix) {
+        const client = await this.getReadyClient();
+        await client.send(
+          new DeleteObjectCommand({
+            Bucket: this.bucket,
+            Key: key + '/',
+          }),
+        );
       }
       return;
     }
@@ -717,7 +763,13 @@ export class S3Filesystem extends MastraFilesystem {
 
           // Skip if this looks like a directory marker
           if (relativePath.endsWith('/')) {
-            const dirName = relativePath.slice(0, -1);
+            // A directory is not a file, so an extension filter must exclude it. Only a
+            // recursive listing reaches this branch for a nested marker.
+            if (options?.recursive && options.extension) continue;
+            // A nested marker such as "a/b/" belongs to the directory "a" in a
+            // non-recursive listing; only a recursive listing reports the full path.
+            const dirName = options?.recursive ? relativePath.slice(0, -1) : relativePath.split('/')[0]!;
+            if (!dirName) continue;
             if (!seenDirs.has(dirName)) {
               seenDirs.add(dirName);
               entries.push({ name: dirName, type: 'directory' });
@@ -801,7 +853,10 @@ export class S3Filesystem extends MastraFilesystem {
   }
 
   async stat(path: string): Promise<FileStat> {
-    const key = this.toKey(path);
+    // The key never keeps a trailing slash, so a lookup never matches a directory marker
+    const key = trimSlashes(this.toKey(path));
+    // A trailing slash always means a directory, so never look for a file
+    const directoryOnly = path.endsWith('/');
 
     // Root is always a directory
     if (!key) {
@@ -815,46 +870,53 @@ export class S3Filesystem extends MastraFilesystem {
       };
     }
 
-    const client = await this.getReadyClient();
+    const name = key.split('/').pop() ?? '';
 
-    try {
-      const response: { ContentLength?: number; LastModified?: Date } = await client.send(
-        new HeadObjectCommand({
-          Bucket: this.bucket,
-          Key: key,
-        }),
-      );
+    if (!directoryOnly) {
+      const client = await this.getReadyClient();
 
-      const name = path.split('/').pop() ?? '';
-      return {
-        name,
-        path,
-        type: 'file',
-        size: response.ContentLength ?? 0,
-        createdAt: response.LastModified ?? new Date(),
-        modifiedAt: response.LastModified ?? new Date(),
-      };
-    } catch (error: unknown) {
-      if (!isNotFoundError(error)) throw this.handleError(error);
-      // Check if it's a directory
-      const isDir = await this.isDirectory(path);
-      if (isDir) {
-        const name = path.split('/').filter(Boolean).pop() ?? '';
+      try {
+        const response: { ContentLength?: number; LastModified?: Date } = await client.send(
+          new HeadObjectCommand({
+            Bucket: this.bucket,
+            Key: key,
+          }),
+        );
+
         return {
           name,
           path,
-          type: 'directory',
-          size: 0,
-          createdAt: new Date(),
-          modifiedAt: new Date(),
+          type: 'file',
+          size: response.ContentLength ?? 0,
+          createdAt: response.LastModified ?? new Date(),
+          modifiedAt: response.LastModified ?? new Date(),
         };
+      } catch (error: unknown) {
+        if (!isNotFoundError(error)) throw this.handleError(error);
       }
-      throw new FileNotFoundError(path);
     }
+
+    // Check if it's a directory
+    const isDir = await this.isDirectory(path);
+    if (isDir) {
+      return {
+        name,
+        path,
+        type: 'directory',
+        size: 0,
+        createdAt: new Date(),
+        modifiedAt: new Date(),
+      };
+    }
+    throw new FileNotFoundError(path);
   }
 
   async isFile(path: string): Promise<boolean> {
-    const key = this.toKey(path);
+    // A trailing slash always means a directory
+    if (path.endsWith('/')) return false;
+
+    // The key never keeps a trailing slash, so a lookup never matches a directory marker
+    const key = trimSlashes(this.toKey(path));
     if (!key) return false; // Root is a directory, not a file
 
     const client = await this.getReadyClient();

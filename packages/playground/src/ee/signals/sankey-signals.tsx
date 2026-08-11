@@ -1,20 +1,12 @@
-import { Button } from '@mastra/playground-ui/components/Button';
-import { Card, CardContent, CardFooter } from '@mastra/playground-ui/components/Card';
-import { nodeColor, Sankey, SankeyChart } from '@mastra/playground-ui/components/SankeyChart';
-import type {
-  SankeyChartColumn,
-  SankeyChartNodeSelection,
-  SankeyChartRecord,
-} from '@mastra/playground-ui/components/SankeyChart';
-import { Tab, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
-import { Txt } from '@mastra/playground-ui/components/Txt';
-import { getSignalHue, SignalsOverviewPage as SignalsEmptyState } from '@mastra/playground-ui/ee/signals';
-import { Icon } from '@mastra/playground-ui/icons/Icon';
+import type { SankeyChartNodeSelection } from '@mastra/playground-ui/components/SankeyChart';
+import { TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
+import { SignalsOverviewPage as SignalsEmptyState } from '@mastra/playground-ui/ee/signals';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeftRight, ChartNoAxesGantt, Waypoints, X } from 'lucide-react';
+import { ArrowLeftRight, ChartNoAxesGantt, Waypoints } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
 import { fetchThemeFlow, fetchThemePaths, fetchThemeSnapshots } from './entity-learning-api';
+import { FlowCard } from './flow-card';
 import { useEntityLearningProgress } from './hooks/use-entity-learning-progress';
 import { useSnapshotPlayback } from './hooks/use-snapshot-playback';
 import { useThemeFlows } from './hooks/use-theme-flows';
@@ -23,15 +15,11 @@ import { useThemeSnapshots } from './hooks/use-theme-snapshots';
 import { NoiseDetailPanel } from './noise-detail-panel';
 import {
   buildSignalGraphSummary,
-  getSignalRecordNodeId,
-  getSignalRecordNodeLabel,
-  getSignalRecordNodeValue,
   selectFlowSnapshotIds,
   snapshotSummaryLabel,
   stabilizeThemeFlow,
 } from './sankey-signals-data';
-import { SignalDistributions } from './signal-distributions';
-import { formatSignalName } from './signal-formatting';
+import { SIGNAL_PROCESSING_ORDER } from './signal-formatting';
 import { SignalsErrorState } from './signals-error-state';
 import { SignalsFrameLoadingSkeleton, SignalsLoadingSkeleton } from './signals-loading-skeleton';
 import { SnapshotTimeline } from './snapshot-timeline';
@@ -39,8 +27,12 @@ import { ThemeCompare } from './theme-compare';
 import { ThemeDetailPanel } from './theme-detail-panel';
 import { buildDrilledThemeFlow, findNoiseSelection, findThemeSelection } from './theme-drilldown-data';
 import type { ThemeSelection } from './theme-drilldown-data';
+import { ThemeFilterBanner } from './theme-filter-banner';
 import { ThemeLifelines } from './theme-lifelines';
-import type { ThemeFlowResponse, TraceSignalName } from './types';
+import { TraceIntelligenceExplainer } from './trace-intelligence-explainer';
+import type { TraceSignalName } from './types';
+import { ViewModeTab } from './view-mode-tab';
+import type { SignalsViewMode } from './view-mode-tab';
 import { Link } from '@/lib/link';
 
 export interface SankeySignalsProps {
@@ -55,156 +47,14 @@ export interface SankeySignalsProps {
 }
 
 const DRILL_IN_TRACE_LIMIT = 2000;
+const FLOW_SIGNAL_LIST = `${SIGNAL_PROCESSING_ORDER.slice(0, -1).join(', ')}, and ${SIGNAL_PROCESSING_ORDER[SIGNAL_PROCESSING_ORDER.length - 1]}`;
 
-type SignalsViewMode = 'flow' | 'compare' | 'lifelines';
-
-function ViewModeTab({ value, icon, label }: { value: SignalsViewMode; icon: React.ReactNode; label: string }) {
-  return (
-    <Tab value={value} className="px-3 py-2">
-      <Icon size="sm">{icon}</Icon>
-      <Txt variant="ui-sm" className="text-inherit">
-        {label}
-      </Txt>
-    </Tab>
-  );
-}
-
-/**
- * Active drill-in state banner: a dismissible filter chip in the theme's
- * signal hue plus a plain-language description of the filtered subset, so the
- * chart below clearly reads as "traces flowing through this theme" rather
- * than a full snapshot.
- */
-function ThemeFilterBanner({
-  selection,
-  filteredTraceCount,
-  totalTraceCount,
-  onViewDetails,
-  onClear,
-}: {
-  selection: ThemeSelection;
-  filteredTraceCount?: number;
-  totalTraceCount: number;
-  onViewDetails: () => void;
-  onClear: () => void;
-}) {
-  const color = nodeColor(getSignalHue(selection.signalName));
-
-  return (
-    <section
-      aria-label="Active theme drill-in"
-      className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border px-3 py-2"
-      style={{
-        borderColor: `color-mix(in srgb, ${color} 35%, transparent)`,
-        backgroundColor: `color-mix(in srgb, ${color} 8%, transparent)`,
-      }}
-    >
-      <button
-        aria-label="Clear theme filter"
-        className="border-border1 bg-surface2 text-neutral6 hover:bg-surface4 flex items-center gap-1.5 rounded-full border py-1 pr-2 pl-2.5 text-xs font-medium transition-colors"
-        onClick={onClear}
-        type="button"
-      >
-        <span aria-hidden="true" className="size-2 rounded-[2px]" style={{ backgroundColor: color }} />
-        {formatSignalName(selection.signalName)} · {selection.label}
-        <X aria-hidden="true" className="size-3.5" />
-      </button>
-      <span className="text-neutral4 text-xs">
-        {filteredTraceCount === undefined
-          ? 'Loading theme traces…'
-          : `Showing the ${filteredTraceCount} of ${totalTraceCount} traces that flow through this theme`}
-      </span>
-      <Button
-        aria-label={`View theme details for ${selection.label}`}
-        onClick={onViewDetails}
-        size="sm"
-        type="button"
-        variant="ghost"
-      >
-        Details →
-      </Button>
-    </section>
-  );
-}
-
-function FlowCard({
-  columns,
-  records,
-  stages,
-  height,
-  onNodeClick,
-  isNodeClickable,
-  drillInDisabledReason,
-}: {
-  columns: SankeyChartColumn[];
-  records: SankeyChartRecord[];
-  stages: ThemeFlowResponse['stages'];
-  height?: number;
-  onNodeClick?: (selection: SankeyChartNodeSelection) => void;
-  isNodeClickable?: (selection: SankeyChartNodeSelection) => boolean;
-  drillInDisabledReason?: string;
-}) {
-  const chartColumns = columns.map(column => ({ ...column, label: column.label.toUpperCase() }));
-
-  return (
-    <Card
-      aria-label="Trace signal theme flow"
-      as="section"
-      className="min-w-0 overflow-hidden"
-      elevation="elevated"
-      title={drillInDisabledReason}
-    >
-      <CardContent className="px-0 py-2 sm:py-3">
-        <Sankey
-          data={records}
-          columns={chartColumns}
-          columnOrder={chartColumns.map(column => column.id)}
-          getColumnHue={column => getSignalHue(column.id)}
-          getRecordNodeId={getSignalRecordNodeId}
-          getRecordNodeLabel={getSignalRecordNodeLabel}
-          getRecordNodeValue={getSignalRecordNodeValue}
-          getRecordWeight={record => Number(record.traceCount)}
-          getRecordLayoutWeight={record => Number(record.layoutTraceCount)}
-        >
-          <SankeyChart
-            height={height ?? 'clamp(340px, 42vw, 460px)'}
-            margin={{ top: 64, right: 32, bottom: 24, left: 32 }}
-            onNodeClick={onNodeClick}
-            isNodeClickable={isNodeClickable}
-          />
-        </Sankey>
-      </CardContent>
-      <CardFooter className="border-border1 bg-surface2 flex flex-wrap justify-between gap-3 border-t px-4 py-3">
-        <div className="text-neutral3 flex flex-wrap items-center gap-x-5 gap-y-1 font-mono text-[10px] tracking-wider">
-          <span>RIBBON WIDTH = TRACE COUNT</span>
-          <span>CLICK TO ISOLATE THEME</span>
-        </div>
-        <ul
-          aria-label="Trace signal stage legend"
-          className="text-neutral3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs"
-          data-alignment="right"
-        >
-          {stages.map(stage => (
-            <li key={stage.signalName} className="flex items-center gap-1.5">
-              <span
-                aria-hidden="true"
-                className="size-2 rounded-[2px]"
-                data-testid="signal-legend-swatch"
-                style={{ backgroundColor: nodeColor(getSignalHue(stage.signalName)) }}
-              />
-              {formatSignalName(stage.signalName)}
-            </li>
-          ))}
-        </ul>
-      </CardFooter>
-    </Card>
-  );
-}
-
-/** Right-aligned control row shown when the view tabs are unavailable. */
-function DateRangeRow({ children }: { children: React.ReactNode }) {
-  return <div className="flex justify-end px-4 pt-4 lg:px-6 lg:pt-6">{children}</div>;
-}
+/** One-line answer to "what am I looking at?" for each view, shown under the tabs. */
+const VIEW_DESCRIPTIONS: Record<SignalsViewMode, string> = {
+  flow: `How this agent's traces distribute across ${FLOW_SIGNAL_LIST} themes at this point in time.`,
+  compare: 'Which themes grew, shrank, appeared, or disappeared between two points in time.',
+  lifelines: "Each theme's share of traces across the whole selected range.",
+};
 
 export function SankeySignals({
   entityId,
@@ -217,6 +67,7 @@ export function SankeySignals({
 }: SankeySignalsProps) {
   const queryClient = useQueryClient();
   const [signalNames, setSignalNames] = useState(() => initialSignalNames);
+  const [pendingSignalNames, setPendingSignalNames] = useState<TraceSignalName[]>();
   const snapshotsQuery = useThemeSnapshots(entityId, entityType, signalNames, dateFrom, dateTo);
   const snapshots = [...(snapshotsQuery.data?.snapshots ?? [])].sort((left, right) => left.ordinal - right.ordinal);
   const [selectedSnapshotOrdinal, setSelectedSnapshotOrdinal] = useState<number>();
@@ -226,7 +77,7 @@ export function SankeySignals({
   const [detailSelection, setDetailSelection] = useState<ThemeSelection>();
   const [noiseSignalName, setNoiseSignalName] = useState<TraceSignalName>();
   const matchedSnapshotIndex = snapshots.findIndex(snapshot => snapshot.ordinal === selectedSnapshotOrdinal);
-  const selectedSnapshotIndex = matchedSnapshotIndex >= 0 ? matchedSnapshotIndex : snapshots.length - 1;
+  const selectedSnapshotIndex = matchedSnapshotIndex >= 0 ? matchedSnapshotIndex : 0;
   const snapshot = snapshots[selectedSnapshotIndex];
   const totalSnapshots = snapshotsQuery.data?.totalSnapshots ?? snapshot?.total ?? 0;
   const selectSnapshot = (index: number) => setSelectedSnapshotOrdinal(snapshots[index]?.ordinal);
@@ -319,7 +170,7 @@ export function SankeySignals({
       });
       const sortedNextSnapshots = [...nextSnapshots.snapshots].sort((left, right) => left.ordinal - right.ordinal);
       const matchedNextIndex = sortedNextSnapshots.findIndex(candidate => candidate.ordinal === snapshot?.ordinal);
-      const nextSelectedIndex = matchedNextIndex >= 0 ? matchedNextIndex : sortedNextSnapshots.length - 1;
+      const nextSelectedIndex = matchedNextIndex >= 0 ? matchedNextIndex : 0;
       const nextSnapshot = sortedNextSnapshots[nextSelectedIndex];
       await Promise.all(
         selectFlowSnapshotIds(sortedNextSnapshots, nextSelectedIndex).map(snapshotId =>
@@ -337,13 +188,17 @@ export function SankeySignals({
       }
       return nextSignalNames;
     },
-    onSuccess: setSignalNames,
+    onSuccess: nextSignalNames => {
+      setSignalNames(nextSignalNames);
+      setPendingSignalNames(undefined);
+    },
+    onError: () => setPendingSignalNames(undefined),
   });
 
   if (snapshotsQuery.isPending) {
     return (
       <>
-        {dateRangePicker && <DateRangeRow>{dateRangePicker}</DateRangeRow>}
+        {dateRangePicker && <div className="flex justify-end px-4 pt-4 lg:px-6 lg:pt-6">{dateRangePicker}</div>}
         <SignalsLoadingSkeleton />
       </>
     );
@@ -352,7 +207,7 @@ export function SankeySignals({
   if (snapshotsQuery.isError || hasFlowError || hasActivePathsError) {
     return (
       <>
-        {dateRangePicker && <DateRangeRow>{dateRangePicker}</DateRangeRow>}
+        {dateRangePicker && <div className="flex justify-end px-4 pt-4 lg:px-6 lg:pt-6">{dateRangePicker}</div>}
         <SignalsErrorState
           message="Unable to load trace signal flow."
           onRetry={() => {
@@ -370,7 +225,7 @@ export function SankeySignals({
   if (!snapshot) {
     return (
       <>
-        {dateRangePicker && <DateRangeRow>{dateRangePicker}</DateRangeRow>}
+        {dateRangePicker && <div className="flex justify-end px-4 pt-4 lg:px-6 lg:pt-6">{dateRangePicker}</div>}
         <SignalsEmptyState LinkComponent={Link} progress={progressQuery.data} isRangeEmpty />
       </>
     );
@@ -384,13 +239,11 @@ export function SankeySignals({
           snapshots={snapshots}
           selectedIndex={selectedSnapshotIndex}
           totalSnapshots={totalSnapshots}
+          summary={snapshot ? snapshotSummaryLabel(snapshot, undefined) : ''}
           isPlaying={isPlaying}
           onPlayingChange={handlePlayingChange}
           onSnapshotChange={selectSnapshot}
         />
-        <p className="text-neutral4 px-3 font-mono text-xs sm:px-4" data-testid="snapshot-summary">
-          {snapshotSummaryLabel(snapshot, undefined)}
-        </p>
         <SignalsFrameLoadingSkeleton />
       </main>
     );
@@ -399,25 +252,19 @@ export function SankeySignals({
   if (!currentFlow || !flow || !graphSummary || populatedStageCount < 2) {
     return (
       <>
-        {dateRangePicker && <DateRangeRow>{dateRangePicker}</DateRangeRow>}
+        {dateRangePicker && <div className="flex justify-end px-4 pt-4 lg:px-6 lg:pt-6">{dateRangePicker}</div>}
         <SignalsEmptyState LinkComponent={Link} progress={progressQuery.data} />
       </>
     );
   }
 
   const stages = flow.stages;
-  const distributionSignalNames = perspectiveMutation.isPending ? perspectiveMutation.variables : signalNames;
-  const distributionPositions = new Map(distributionSignalNames.map((signalName, index) => [signalName, index]));
-  const distributionStages = [...stages].sort(
-    (left, right) =>
-      (distributionPositions.get(left.signalName) ?? stages.length) -
-      (distributionPositions.get(right.signalName) ?? stages.length),
-  );
   // Noise nodes open the noise details panel (noise has no themeId, so it
-  // cannot drill in) and stay clickable even when drill-in is unavailable.
+  // cannot drill in). Theme nodes always open details; they additionally
+  // isolate the flow when the snapshot is under the drill-in limit.
   const isNodeClickable = (selection: SankeyChartNodeSelection) =>
     findNoiseSelection(flow, selection.column.id, selection.value) !== undefined ||
-    (drillInAvailable && findThemeSelection(flow, selection.column.id, selection.value) !== undefined);
+    findThemeSelection(flow, selection.column.id, selection.value) !== undefined;
   const handleNodeClick = (selection: SankeyChartNodeSelection) => {
     const noiseSignal = findNoiseSelection(flow, selection.column.id, selection.value);
     if (noiseSignal) {
@@ -425,9 +272,11 @@ export function SankeySignals({
       setNoiseSignalName(noiseSignal);
       return;
     }
-    if (!drillInAvailable) return;
     const nextSelection = findThemeSelection(flow, selection.column.id, selection.value);
-    if (nextSelection) setDrillIn(nextSelection);
+    if (!nextSelection) return;
+    setNoiseSignalName(undefined);
+    setDetailSelection(nextSelection);
+    if (drillInAvailable) setDrillIn(nextSelection);
   };
   const drillInDisabledReason = drillInAvailable
     ? undefined
@@ -438,26 +287,31 @@ export function SankeySignals({
     setIsPlaying(false);
     setDetailSelection(undefined);
     setNoiseSignalName(undefined);
+    setPendingSignalNames(nextSignalNames);
     perspectiveMutation.mutate(nextSignalNames);
   };
 
   return (
     <main className="min-w-0 space-y-5 p-4 lg:p-6">
       <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
-        <Tabs<SignalsViewMode>
-          value={viewMode}
-          defaultTab="flow"
-          onValueChange={handleViewModeChange}
-          className="w-fit"
-        >
-          <TabList variant="pill-ghost">
-            <ViewModeTab value="flow" icon={<Waypoints />} label="Flow" />
-            <ViewModeTab value="compare" icon={<ArrowLeftRight />} label="Compare" />
-            <ViewModeTab value="lifelines" icon={<ChartNoAxesGantt />} label="Lifelines" />
-          </TabList>
-        </Tabs>
+        <div className="flex min-w-0 flex-wrap items-center gap-4">
+          <Tabs<SignalsViewMode>
+            value={viewMode}
+            defaultTab="flow"
+            onValueChange={handleViewModeChange}
+            className="w-fit"
+          >
+            <TabList variant="pill-ghost">
+              <ViewModeTab value="flow" icon={<Waypoints />} label="Flow" />
+              <ViewModeTab value="compare" icon={<ArrowLeftRight />} label="Compare" />
+              <ViewModeTab value="lifelines" icon={<ChartNoAxesGantt />} label="Lifelines" />
+            </TabList>
+          </Tabs>
+          <TraceIntelligenceExplainer />
+        </div>
         {dateRangePicker}
       </div>
+      <p className="text-neutral3 text-xs">{VIEW_DESCRIPTIONS[viewMode]}</p>
       {viewMode === 'compare' ? (
         <ThemeCompare
           entityId={entityId}
@@ -484,13 +338,11 @@ export function SankeySignals({
             snapshots={snapshots}
             selectedIndex={selectedSnapshotIndex}
             totalSnapshots={totalSnapshots}
+            summary={`${drillIn ? 'Filtered · ' : ''}${snapshotSummaryLabel(snapshot, flow)}`}
             isPlaying={isPlaying}
             onPlayingChange={handlePlayingChange}
             onSnapshotChange={selectSnapshot}
           />
-          <p className="text-neutral4 px-3 font-mono text-xs sm:px-4" data-testid="snapshot-summary">
-            {drillIn ? `Filtered · ${snapshotSummaryLabel(snapshot, flow)}` : snapshotSummaryLabel(snapshot, flow)}
-          </p>
           {drillIn ? (
             <ThemeFilterBanner
               selection={drillIn}
@@ -529,35 +381,21 @@ export function SankeySignals({
               onNodeClick={handleNodeClick}
               isNodeClickable={isNodeClickable}
               drillInDisabledReason={drillInDisabledReason}
+              onOrderChange={handleSignalOrderChange}
+              signalOrder={pendingSignalNames ?? signalNames}
+              reorderDisabled={perspectiveMutation.isPending}
             />
           )}
-          {drillIn && (!drillInAvailable || pathsQuery.isPending || isDrilledEmpty) ? null : (
-            <>
-              {perspectiveMutation.isPending ? (
-                <p className="text-neutral3 font-mono text-xs" role="status">
-                  Reloading snapshots for new trace signal perspective…
-                </p>
-              ) : null}
-              {perspectiveMutation.isError ? (
-                <p className="text-xs text-red-500" role="alert">
-                  Unable to load that trace signal perspective. Try reordering the columns again.
-                </p>
-              ) : null}
-              <SignalDistributions
-                disabled={perspectiveMutation.isPending}
-                stages={distributionStages}
-                onOrderChange={handleSignalOrderChange}
-                onViewThemeDetails={selection => {
-                  setNoiseSignalName(undefined);
-                  setDetailSelection(selection);
-                }}
-                onViewNoiseDetails={signalName => {
-                  setDetailSelection(undefined);
-                  setNoiseSignalName(signalName);
-                }}
-              />
-            </>
-          )}
+          {perspectiveMutation.isPending ? (
+            <p className="text-neutral3 font-mono text-xs" role="status">
+              Reloading snapshots for new trace signal perspective…
+            </p>
+          ) : null}
+          {perspectiveMutation.isError ? (
+            <p className="text-xs text-red-500" role="alert">
+              Unable to load that trace signal perspective. Try reordering the columns again.
+            </p>
+          ) : null}
         </>
       )}
       <ThemeDetailPanel

@@ -10,7 +10,6 @@ export function getFactorySessionKind(session: FactoryUserSession, workItem: Wor
   return 'work';
 }
 
-/** `#900` from a `factory/pr-900` branch — the only identifier left when work items fail to load. */
 export function getReviewBranchIdentifier(branch: string): string | undefined {
   if (!branch.startsWith(REVIEW_BRANCH_PREFIX)) return undefined;
   const number = branch.slice(REVIEW_BRANCH_PREFIX.length);
@@ -18,7 +17,18 @@ export function getReviewBranchIdentifier(branch: string): string | undefined {
   return `#${number}`;
 }
 
+export function isAutomaticUserSessionBranch(session: FactoryUserSession): boolean {
+  return session.branch === `${USER_SESSION_BRANCH_PREFIX}session-${session.sessionId}`;
+}
+
 export function getUserSessionLabel(session: FactoryUserSession): string {
+  const title = session.title?.trim();
+  if (title) return title;
   if (!session.branch.startsWith(USER_SESSION_BRANCH_PREFIX)) return session.branch;
+  if (isAutomaticUserSessionBranch(session)) return 'New session';
   return session.branch.slice(USER_SESSION_BRANCH_PREFIX.length);
+}
+
+export function getUserSessionTooltip(session: FactoryUserSession): string {
+  return isAutomaticUserSessionBranch(session) ? getUserSessionLabel(session) : session.branch;
 }

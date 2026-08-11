@@ -1,5 +1,82 @@
 # @mastra/core
 
+## 1.58.0-alpha.13
+
+### Minor Changes
+
+- Added support for schema-aware routes created with `createRoute()` in `server.apiRoutes`. ([#21184](https://github.com/mastra-ai/mastra/pull/21184))
+
+  ```ts
+  const route = createRoute({
+    method: 'POST',
+    path: '/items',
+    responseType: 'json',
+    bodySchema: z.object({ name: z.string() }),
+    handler: async ({ name }) => ({ name }),
+  });
+
+  const mastra = new Mastra({
+    server: { apiRoutes: [route] },
+  });
+  ```
+
+- Added a `command_exit` session event to the agent controller. Subscribers now receive the exit code and success flag of each foreground `execute_command` tool call, alongside the existing `shell_output` stream: ([#21211](https://github.com/mastra-ai/mastra/pull/21211))
+
+  ```typescript
+  session.subscribe(event => {
+    if (event.type === 'command_exit') {
+      console.log(event.toolCallId, event.exitCode, event.success);
+    }
+  });
+  ```
+
+  Previously the exit outcome was only visible inside the tool result text, so observers could stream a command's output but never tell whether it succeeded.
+
+- Added `WorkspaceSandbox.snapshot()` for persisting sandbox state when supported. ([#21221](https://github.com/mastra-ai/mastra/pull/21221))
+
+  ```ts
+  await sandbox.snapshot();
+  ```
+
+### Patch Changes
+
+- Added a `firstMeaningfulExecAt` timestamp to source-control sessions, recording when the session's agent completed its first successful sandbox command. Together with `firstMessageAt` this measures time-to-first-meaningful-exec: how long a user waits between sending their first message and the agent actually doing work in a live sandbox. The value is written once per session and is available on all session read APIs; setup commands run by the platform itself (skill loading, repo checkout) do not count. ([#21211](https://github.com/mastra-ai/mastra/pull/21211))
+
+- Fixed model configuration validation to safely reject null values. ([#21192](https://github.com/mastra-ai/mastra/pull/21192))
+
+- Fixed streamed assistant messages carrying a different id than their persisted copy. Chat UIs that reconcile a live stream with refetched history could show the same assistant reply twice (for example after returning to a hidden tab); with a shared id, deduplication by message id now works for every turn, including text-only replies without tool calls. ([#21185](https://github.com/mastra-ai/mastra/pull/21185))
+
+- Stop timeTravel from destroying recorded workflow snapshots. Two changes: ([#21222](https://github.com/mastra-ai/mastra/pull/21222))
+
+  1. timeTravel now fails with a descriptive error and leaves the recorded snapshot unchanged when the workflow graph has changed since the run was recorded. Steps inside preceding foreach or loop entries are not inspected by this check.
+
+  2. Unnamed .map() steps now get deterministic ids, so timeTravel works across process restarts for unchanged workflow code. Removing a .map() call is not detected, so re-run rather than time travel after deleting a mapping step.
+
+- Exported the `RunEvalsResult` type so the return type of `runEvals` can be imported from `@mastra/core/evals`. This also fixes a type error introduced in #21143 where the type-level tests imported a type that was not exported. ([#21196](https://github.com/mastra-ai/mastra/pull/21196))
+
+## 1.58.0-alpha.12
+
+### Patch Changes
+
+- Fixed `AgentController.resolveWorkspace` handing one session's workspace to every session created after it. On a controller configured with a dynamic workspace factory, the first call cached its result over the factory itself, so later sessions skipped resolution and ran against the first session's workspace instead of their own. ([#21144](https://github.com/mastra-ai/mastra/pull/21144))
+
+  `resolveWorkspace` now returns the workspace a session already resolved at creation, and caches nothing on the controller. Two smaller fixes come with it: `isWorkspaceReady()` no longer flips to `false` for factory configs, and slash commands read the same workspace instance the session's runs use.
+
+- Fix `deepEqual` returning `true` for values of mismatched shapes. A `Date` compared against a plain object (e.g. `deepEqual(new Date(), {})`) fell through to the generic object-key comparison — and since a `Date` has no own enumerable keys, it matched `{}`. Likewise an array compared against an object with matching index keys (e.g. `deepEqual([1, 2], { '0': 1, '1': 2 })`) returned `true`. Added guards so an array only equals an array and a `Date` only equals a `Date`; the checks apply recursively to nested values. ([#21146](https://github.com/mastra-ai/mastra/pull/21146))
+
+- Fixed a hang when two streams were started for the same workflow run at once. Resuming or time-traveling a suspended run twice concurrently (a double-clicked approval, a client retry, or two open tabs) left one of the two streams open forever, so the matching resume-stream or time-travel-stream HTTP request never ended. Each stream now closes itself independently. ([#21126](https://github.com/mastra-ai/mastra/pull/21126))
+
+- `runEvals` now accepts `gates` together with a categorized scorer config (`AgentScorerConfig` / `WorkflowScorerConfig`) without a TypeScript error. Previously a call like `runEvals({ target, data, gates, scorers: { trajectory: [...] } })` failed to compile with TS2769 because the categorized-config overloads didn't declare `gates`, even though the runtime already ran gates independently of the scorer shape. The optional `gates` property was added to both the agent and workflow categorized-config overloads. ([#21143](https://github.com/mastra-ai/mastra/pull/21143))
+
+- Messages sent while an agent run is active are no longer silently lost when the run fails. ([#21128](https://github.com/mastra-ai/mastra/pull/21128))
+
+  **Failed runs now finish cleanly.** A run that dies on a provider error previously never settled its completion watcher, so queued messages were never delivered, the thread stayed locked, and no error surfaced.
+
+  **Queued messages survive delivery failures.** If starting the follow-up run for a queued message fails, the message is put back at the head of the queue and the failure renders as an error. The message delivers on the next turn.
+
+- Updated dependencies [[`5dba2a4`](https://github.com/mastra-ai/mastra/commit/5dba2a41600385751f5aace79878904e1972609d)]:
+  - @mastra/schema-compat@1.3.6-alpha.3
+
 ## 1.58.0-alpha.11
 
 ### Minor Changes

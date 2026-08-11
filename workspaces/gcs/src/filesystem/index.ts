@@ -368,6 +368,11 @@ export class GCSFilesystem extends MastraFilesystem {
   // ---------------------------------------------------------------------------
 
   async readFile(path: string, options?: ReadOptions): Promise<string | Buffer> {
+    // A trailing slash means a directory: never return the empty body of a directory marker
+    if (path.endsWith('/')) {
+      throw new FileNotFoundError(path);
+    }
+
     const bucket = await this.getReadyBucket();
     const file = bucket.file(this.toKey(path));
 
@@ -444,6 +449,11 @@ export class GCSFilesystem extends MastraFilesystem {
   }
 
   async copyFile(src: string, dest: string, options?: CopyOptions): Promise<void> {
+    // A trailing slash means a directory: never copy a directory marker as a file
+    if (src.endsWith('/')) {
+      throw new FileNotFoundError(src);
+    }
+
     const bucket = await this.getReadyBucket();
     const srcFile = bucket.file(this.toKey(src));
     const destFile = bucket.file(this.toKey(dest));
@@ -471,19 +481,46 @@ export class GCSFilesystem extends MastraFilesystem {
   // Directory Operations
   // ---------------------------------------------------------------------------
 
-  async mkdir(_path: string, _options?: { recursive?: boolean }): Promise<void> {
-    // GCS doesn't have real directories - they're just key prefixes
-    // No-op, directories are created implicitly when files are written
+  async mkdir(path: string, _options?: { recursive?: boolean }): Promise<void> {
+    // GCS doesn't have real directories - they're just key prefixes.
+    // Write a zero-byte marker object at "<key>/" (the convention the GCS console uses)
+    // so an empty directory is visible to readdir(), exists() and stat().
+    // Parent directories need no marker of their own: the marker key already
+    // matches every parent prefix, so nested paths work without `recursive`.
+    const key = trimSlashes(this.toKey(path));
+    if (!key || key + '/' === this.prefix) return; // Root always exists
+
+    const bucket = await this.getReadyBucket();
+
+    // A file already occupies this path. A credential that can write but not read
+    // cannot probe, so treat a failed probe as "no file there" and let the write below
+    // report a real problem.
+    let fileExists = false;
+    try {
+      [fileExists] = await bucket.file(key).exists();
+    } catch {
+      fileExists = false;
+    }
+    if (fileExists) {
+      throw new FileExistsError(path);
+    }
+
+    await bucket.file(key + '/').save(Buffer.alloc(0), { resumable: false });
   }
 
   async rmdir(path: string, options?: RemoveOptions): Promise<void> {
     if (!options?.recursive) {
-      // Quick emptiness check — only fetch one object instead of full readdir
+      // Quick emptiness check — only the directory marker itself may remain
       const bucket = await this.getReadyBucket();
-      const prefix = this.toKey(path).replace(/\/$/, '') + '/';
-      const [files] = await bucket.getFiles({ prefix, maxResults: 1 });
-      if (files.length > 0) {
+      const key = trimSlashes(this.toKey(path));
+      const prefix = key + '/';
+      const [files] = await bucket.getFiles({ prefix, maxResults: 2 });
+      if (files.some(file => file.name !== prefix)) {
         throw new Error(`Directory not empty: ${path}`);
+      }
+      // Remove the directory marker so the empty directory disappears
+      if (key && prefix !== this.prefix) {
+        await bucket.file(prefix).delete({ ignoreNotFound: true });
       }
       return;
     }
@@ -518,7 +555,13 @@ export class GCSFilesystem extends MastraFilesystem {
 
       // Skip if this looks like a directory marker
       if (relativePath.endsWith('/')) {
-        const dirName = relativePath.slice(0, -1);
+        // A directory is not a file, so an extension filter must exclude it. Only a
+        // recursive listing reaches this branch for a nested marker.
+        if (options?.recursive && options.extension) continue;
+        // A nested marker such as "a/b/" belongs to the directory "a" in a
+        // non-recursive listing; only a recursive listing reports the full path.
+        const dirName = options?.recursive ? relativePath.slice(0, -1) : relativePath.split('/')[0]!;
+        if (!dirName) continue;
         if (!seenDirs.has(dirName)) {
           seenDirs.add(dirName);
           entries.push({ name: dirName, type: 'directory' });
@@ -585,7 +628,10 @@ export class GCSFilesystem extends MastraFilesystem {
   }
 
   async stat(path: string): Promise<FileStat> {
-    const key = this.toKey(path);
+    // The key never keeps a trailing slash, so a lookup never matches a directory marker
+    const key = trimSlashes(this.toKey(path));
+    // A trailing slash always means a directory, so never look for a file
+    const directoryOnly = path.endsWith('/');
 
     // Root path is always a directory
     if (!key) {
@@ -601,11 +647,11 @@ export class GCSFilesystem extends MastraFilesystem {
 
     const bucket = await this.getReadyBucket();
     const file = bucket.file(key);
+    const name = key.split('/').pop() ?? '';
 
-    const [exists] = await file.exists();
+    const [exists] = directoryOnly ? [false] : await file.exists();
     if (exists) {
       const [metadata] = await file.getMetadata();
-      const name = path.split('/').pop() ?? '';
 
       return {
         name,
@@ -622,7 +668,6 @@ export class GCSFilesystem extends MastraFilesystem {
     // Check if it's a directory
     const isDir = await this.isDirectory(path);
     if (isDir) {
-      const name = path.split('/').filter(Boolean).pop() ?? '';
       return {
         name,
         path,
@@ -637,7 +682,11 @@ export class GCSFilesystem extends MastraFilesystem {
   }
 
   async isFile(path: string): Promise<boolean> {
-    const key = this.toKey(path);
+    // A trailing slash always means a directory
+    if (path.endsWith('/')) return false;
+
+    // The key never keeps a trailing slash, so a lookup never matches a directory marker
+    const key = trimSlashes(this.toKey(path));
     if (!key) return false; // Root is a directory, not a file
 
     const bucket = await this.getReadyBucket();
