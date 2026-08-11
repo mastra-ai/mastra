@@ -17,7 +17,10 @@ import type { JsonSchema, JsonSchemaToZodOptions } from './json-schema-to-zod';
 import { parseMapConfig } from './mapping-config';
 import type { ValidatableStepFlowEntry } from './validate/types';
 
-/** JSON shape persisted to WorkflowDefinitionsStorage. */
+/**
+ * JSON shape persisted to WorkflowDefinitionsStorage, and the same shape
+ * `addDynamicWorkflows` hydrates from before it writes the row.
+ */
 export interface DynamicWorkflowGraph {
   id: string;
   description?: string;

@@ -3,7 +3,8 @@
  * needs "all the leaf entries in this graph" (schema validation, reference
  * validation, nested-workflow dependency collection) goes through this one
  * function, so recursion into container entries lives in exactly one place
- * and is exhaustiveness-checked against `SerializedStepFlowEntry`.
+ * and is exhaustiveness-checked against `ValidatableStepFlowEntry`, which
+ * covers both persisted rows and wire-shaped authoring submissions.
  */
 import type { SerializedSingleStepEntry } from '../types';
 import type { ValidatableStepFlowEntry } from './validate/types';
