@@ -359,6 +359,12 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'databases/neon',
+          label: 'Neon',
+          customProps: { icon: 'https://cdn.simpleicons.org/neon?viewbox=auto&size=28' },
+        },
+        {
+          type: 'doc',
           id: 'databases/oracledb',
           label: 'OracleDB',
           customProps: { icon: '/img/integrations/oracle.svg' },

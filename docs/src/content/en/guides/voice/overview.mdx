@@ -14,7 +14,6 @@ packages:
   - "@mastra/voice-murf"
   - "@mastra/voice-openai"
   - "@mastra/voice-openai-realtime"
-  - "@mastra/voice-playai"
   - "@mastra/voice-sarvam"
   - "@mastra/voice-speechify"
   - "@mastra/voice-inworld"
@@ -139,33 +138,6 @@ For detailed configuration options and advanced features, check out our [Text-to
     ```
 
     Visit the [ElevenLabs Voice Reference](/integrations/voice/elevenlabs) for more information on the ElevenLabs voice provider.
-  </TabItem>
-
-  <TabItem value="playai" label="PlayAI">
-    ```typescript
-    import { Agent } from '@mastra/core/agent'
-    import { PlayAIVoice } from '@mastra/voice-playai'
-    import { playAudio } from '@mastra/node-audio'
-
-    const voiceAgent = new Agent({
-      id: 'voice-agent',
-      name: 'Voice Agent',
-      instructions: 'You are a voice assistant that can help users with their tasks.',
-      model: '__GATEWAY_OPENAI_MODEL__',
-      voice: new PlayAIVoice(),
-    })
-
-    const { text } = await voiceAgent.generate('What color is the sky?')
-
-    // Convert text to speech to an Audio Stream
-    const audioStream = await voiceAgent.voice.speak(text, {
-      speaker: 'default', // Optional: specify a speaker
-    })
-
-    playAudio(audioStream)
-    ```
-
-    Visit the [PlayAI Voice Reference](/integrations/voice/playai) for more information on the PlayAI voice provider.
   </TabItem>
 
   <TabItem value="google" label="Google">
@@ -884,24 +856,6 @@ Each voice provider can be configured with different models and options. Below a
     Visit the [ElevenLabs Voice Reference](/integrations/voice/elevenlabs) for more information on the ElevenLabs voice provider.
   </TabItem>
 
-  <TabItem value="playai" label="PlayAI">
-    ```typescript
-    // PlayAI Voice Configuration
-    const voice = new PlayAIVoice({
-      speechModel: {
-        name: 'playai-voice', // Example model name
-        speaker: 'emma', // Example speaker name
-        apiKey: process.env.PLAYAI_API_KEY,
-        language: 'en-US', // Language code
-        speed: 1.0, // Speech speed
-      },
-      // PlayAI may not have a separate listening model
-    })
-    ```
-
-    Visit the [PlayAI Voice Reference](/integrations/voice/playai) for more information on the PlayAI voice provider.
-  </TabItem>
-
   <TabItem value="google" label="Google">
     ```typescript
     // Google Voice Configuration
@@ -1183,13 +1137,13 @@ Each voice provider can be configured with different models and options. Below a
 
 ### Using multiple voice providers
 
-This example demonstrates how to create and use two different voice providers in Mastra: OpenAI for speech-to-text (STT) and PlayAI for text-to-speech (TTS).
+This example demonstrates how to create and use two different voice providers in Mastra: OpenAI for speech-to-text (STT) and ElevenLabs for text-to-speech (TTS).
 
 Start by creating instances of the voice providers with any necessary configuration.
 
 ```typescript
 import { OpenAIVoice } from '@mastra/voice-openai'
-import { PlayAIVoice } from '@mastra/voice-playai'
+import { ElevenLabsVoice } from '@mastra/voice-elevenlabs'
 import { CompositeVoice } from '@mastra/core/voice'
 import { playAudio, getMicrophoneStream } from '@mastra/node-audio'
 
@@ -1201,13 +1155,8 @@ const input = new OpenAIVoice({
   },
 })
 
-// Initialize PlayAI voice for TTS
-const output = new PlayAIVoice({
-  speechModel: {
-    name: 'playai-voice',
-    apiKey: process.env.PLAYAI_API_KEY,
-  },
-})
+// Initialize ElevenLabs voice for TTS
+const output = new ElevenLabsVoice()
 
 // Combine the providers using CompositeVoice
 const voice = new CompositeVoice({
@@ -1266,12 +1215,12 @@ You can also mix AI SDK models with Mastra providers:
 
 ```typescript
 import { CompositeVoice } from '@mastra/core/voice'
-import { PlayAIVoice } from '@mastra/voice-playai'
+import { ElevenLabsVoice } from '@mastra/voice-elevenlabs'
 import { groq } from '@ai-sdk/groq'
 
 const voice = new CompositeVoice({
   input: groq.transcription('whisper-large-v3'), // AI SDK for STT
-  output: new PlayAIVoice(), // Mastra provider for TTS
+  output: new ElevenLabsVoice(), // Mastra provider for TTS
 })
 ```
 
@@ -1291,5 +1240,4 @@ For more information on the CompositeVoice, refer to the [CompositeVoice Referen
 - [Deepgram Voice](/integrations/voice/deepgram)
 - [Inworld Voice](/integrations/voice/inworld#voice)
 - [LiveKit](/integrations/voice/livekit#api-reference)
-- [PlayAI Voice](/integrations/voice/playai)
 - [Voice Examples](https://github.com/mastra-ai/voice-examples)
