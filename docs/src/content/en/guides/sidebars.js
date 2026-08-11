@@ -18,51 +18,6 @@ const sidebars = {
           id: 'getting-started/quickstart',
           label: 'Quickstart',
         },
-        {
-          type: 'doc',
-          id: 'getting-started/next-js',
-          label: 'Next.js',
-        },
-        {
-          type: 'doc',
-          id: 'getting-started/vite-react',
-          label: 'React',
-        },
-        {
-          type: 'doc',
-          id: 'getting-started/astro',
-          label: 'Astro',
-        },
-        {
-          type: 'doc',
-          id: 'getting-started/sveltekit',
-          label: 'SvelteKit',
-        },
-        {
-          type: 'doc',
-          id: 'getting-started/nuxt',
-          label: 'Nuxt',
-        },
-        {
-          type: 'doc',
-          id: 'getting-started/express',
-          label: 'Express',
-        },
-        {
-          type: 'doc',
-          id: 'getting-started/nestjs',
-          label: 'NestJS',
-        },
-        {
-          type: 'doc',
-          id: 'getting-started/hono',
-          label: 'Hono',
-        },
-        {
-          type: 'doc',
-          id: 'getting-started/electron',
-          label: 'Electron',
-        },
       ],
     },
     {
