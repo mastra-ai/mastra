@@ -780,6 +780,169 @@ describe('AgentChannels', () => {
     });
   });
 
+  describe('per-agent thread identity', () => {
+    function makeChatThread(overrides: Record<string, unknown> = {}) {
+      return {
+        id: 'channel-1:thread-1',
+        channelId: 'channel-1',
+        isDM: false,
+        adapter: undefined as any, // set per-test from the channels instance
+        isSubscribed: vi.fn().mockResolvedValue(true),
+        subscribe: vi.fn().mockResolvedValue(undefined),
+        mentionUser: vi.fn((userId: string) => `<@${userId}>`),
+        messages: (async function* () {})(),
+        ...overrides,
+      } as any;
+    }
+
+    const message = {
+      id: 'message-1',
+      text: 'hi',
+      author: { userId: 'user-1', userName: 'tyler', fullName: 'Tyler Barnes' },
+      attachments: [],
+    } as any;
+
+    function makeMastra() {
+      const db = new InMemoryDB();
+      const memoryStore = new InMemoryMemory({ db });
+      return {
+        getStorage: () => ({ getStore: () => memoryStore }),
+        getServer: () => null,
+      } as any;
+    }
+
+    const legacyFilter = {
+      channel_platform: 'discord',
+      channel_externalThreadId: 'channel-1:thread-1',
+      channel_externalChannelId: 'channel-1',
+    };
+
+    it('stamps a newly created thread with the owning agent id', async () => {
+      const mockMastra = makeMastra();
+      await agentChannels.initialize(mockMastra);
+      const chatThread = makeChatThread({ adapter: agentChannels.adapters.discord });
+
+      await (agentChannels as any).processChatMessage(chatThread, message, mockMastra, new RequestContext());
+
+      const memoryStore = await mockMastra.getStorage().getStore('memory');
+      const { threads } = await memoryStore.listThreads({
+        filter: { metadata: legacyFilter },
+        perPage: 10,
+      });
+      expect(threads).toHaveLength(1);
+      expect(threads[0]!.metadata).toMatchObject({
+        ...legacyFilter,
+        channel_agentId: 'test-agent',
+      });
+    });
+
+    it('adopts an unclaimed legacy thread and stamps the agent id onto it', async () => {
+      const mockMastra = makeMastra();
+      await agentChannels.initialize(mockMastra);
+
+      // Pre-upgrade thread: the three legacy metadata keys, no channel_agentId.
+      const memoryStore = await mockMastra.getStorage().getStore('memory');
+      await memoryStore.saveThread({
+        thread: {
+          id: 'legacy-thread',
+          title: 'discord conversation',
+          resourceId: 'original-owner',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          metadata: { ...legacyFilter },
+        },
+      });
+
+      const chatThread = makeChatThread({ adapter: agentChannels.adapters.discord });
+      await (agentChannels as any).processChatMessage(chatThread, message, mockMastra, new RequestContext());
+
+      // The same thread is reused (no new thread) and now carries the agent id
+      // while preserving its stored owner and existing metadata keys.
+      const { threads } = await memoryStore.listThreads({
+        filter: { metadata: legacyFilter },
+        perPage: 10,
+      });
+      expect(threads).toHaveLength(1);
+      expect(threads[0]!.id).toBe('legacy-thread');
+      expect(threads[0]!.resourceId).toBe('original-owner');
+      expect(threads[0]!.metadata).toMatchObject({
+        ...legacyFilter,
+        channel_agentId: 'test-agent',
+      });
+    });
+
+    it('never steals a thread claimed by a different agent', async () => {
+      const mockMastra = makeMastra();
+      await agentChannels.initialize(mockMastra);
+
+      const memoryStore = await mockMastra.getStorage().getStore('memory');
+      await memoryStore.saveThread({
+        thread: {
+          id: 'other-agents-thread',
+          title: 'discord conversation',
+          resourceId: 'other-owner',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          metadata: { ...legacyFilter, channel_agentId: 'other-agent' },
+        },
+      });
+
+      const chatThread = makeChatThread({ adapter: agentChannels.adapters.discord });
+      await (agentChannels as any).processChatMessage(chatThread, message, mockMastra, new RequestContext());
+
+      const { threads } = await memoryStore.listThreads({
+        filter: { metadata: legacyFilter },
+        perPage: 10,
+      });
+      expect(threads).toHaveLength(2);
+
+      // The other agent's thread is untouched.
+      const otherThread = threads.find(t => t.id === 'other-agents-thread')!;
+      expect(otherThread.resourceId).toBe('other-owner');
+      expect(otherThread.metadata).toMatchObject({ ...legacyFilter, channel_agentId: 'other-agent' });
+
+      // A fresh thread was created for this agent, stamped with its own id.
+      const ownThread = threads.find(t => t.id !== 'other-agents-thread')!;
+      expect(ownThread.metadata).toMatchObject({ ...legacyFilter, channel_agentId: 'test-agent' });
+    });
+
+    it('gives two agents their own threads for the same external conversation', async () => {
+      const mockMastra = makeMastra();
+
+      const agentA = createMockAgent('agent-a');
+      const channelsA = new AgentChannels({ adapters: { discord: createMockAdapter('discord') } });
+      channelsA.__setAgent(agentA);
+      await channelsA.initialize(mockMastra);
+
+      const agentB = createMockAgent('agent-b');
+      const channelsB = new AgentChannels({ adapters: { discord: createMockAdapter('discord') } });
+      channelsB.__setAgent(agentB);
+      await channelsB.initialize(mockMastra);
+
+      await (channelsA as any).processChatMessage(
+        makeChatThread({ adapter: channelsA.adapters.discord }),
+        message,
+        mockMastra,
+        new RequestContext(),
+      );
+      await (channelsB as any).processChatMessage(
+        makeChatThread({ adapter: channelsB.adapters.discord }),
+        message,
+        mockMastra,
+        new RequestContext(),
+      );
+
+      const memoryStore = await mockMastra.getStorage().getStore('memory');
+      const { threads } = await memoryStore.listThreads({
+        filter: { metadata: legacyFilter },
+        perPage: 10,
+      });
+      expect(threads).toHaveLength(2);
+      const agentIds = threads.map(t => (t.metadata as any).channel_agentId).sort();
+      expect(agentIds).toEqual(['agent-a', 'agent-b']);
+    });
+  });
+
   describe('resolveThreadId', () => {
     function makeChatThread(overrides: Record<string, unknown> = {}) {
       return {
