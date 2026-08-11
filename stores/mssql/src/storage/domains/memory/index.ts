@@ -64,6 +64,7 @@ function buildMssqlMessageMetadataFilter(metadataFilter: StorageMetadataFilter |
 }
 
 export class MemoryMSSQL extends MemoryStorage {
+  override readonly supportsPartialThreadUpdate = true;
   private pool: sql.ConnectionPool;
   private schema?: string;
   private db: MssqlDB;

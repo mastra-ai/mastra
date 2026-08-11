@@ -4,13 +4,16 @@ import type { WorkspaceSandbox } from '@mastra/core/workspace';
 
 import { createTarball, hashInstallInputs, uploadFile } from './engine.js';
 import { getInfoSafe, resolveRemoteDir, runInSandbox, shellQuote } from './shared.js';
-import type {
-  DeployWorkerToSandboxOptions,
-  SandboxDestroyResult,
-  SandboxWorkerDeployment,
-  SandboxWorkerInput,
-  SandboxWorkerOutput,
-  SandboxWorkerStatus,
+import {
+  SandboxWorkerCapabilityError,
+  type DeployWorkerToSandboxOptions,
+  type SandboxDestroyResult,
+  type SandboxWorkerDeployment,
+  type SandboxWorkerInput,
+  type SandboxWorkerOutput,
+  type SandboxWorkerResourceLimitCapability,
+  type SandboxWorkerResourceLimits,
+  type SandboxWorkerStatus,
 } from './types.js';
 
 const ARCHIVE = '.mastra-worker.tar.gz';
@@ -21,6 +24,16 @@ const ARTIFACT_LOCK = '.mastra-artifact-lock';
 const EXECUTION_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 const DEFAULT_INPUT_LIMIT = 16 * 1024 * 1024;
 const DEFAULT_OUTPUT_READ_LIMIT = 1024 * 1024;
+const RESOURCE_CAPABILITY_PREFIX = 'MASTRA_WORKER_CAPABILITY:';
+
+interface NormalizedResourceLimits {
+  cpuTimeSeconds?: number;
+  addressSpaceBytes?: number;
+  addressSpaceKilobytes?: number;
+  fileSizeBytes?: number;
+  fileSizeBlocks?: number;
+  openFiles?: number;
+}
 
 interface WorkerConfig {
   sandbox: WorkspaceSandbox;
@@ -32,6 +45,7 @@ interface WorkerConfig {
   mode: 'worker' | 'job';
   startupTimeoutMs: number;
   executionTimeoutMs?: number;
+  resourceLimits?: NormalizedResourceLimits;
   terminationGraceMs: number;
   inputLimitBytes: number;
 }
@@ -50,9 +64,13 @@ export async function deployWorkerToSandbox(options: DeployWorkerToSandboxOption
     installCommand = 'npm install --omit=dev',
     startupTimeoutMs = 10_000,
     executionTimeoutMs,
+    resourceLimits: requestedResourceLimits,
     terminationGraceMs = 5_000,
     inputLimitBytes = DEFAULT_INPUT_LIMIT,
   } = options;
+
+  const resourceLimits = normalizeResourceLimits(requestedResourceLimits);
+  if (resourceLimits) await preflightResourceLimits(sandbox, resourceLimits);
 
   const remoteDir = await resolveRemoteDir(sandbox, options.remoteDir);
   const config: WorkerConfig = {
@@ -65,6 +83,7 @@ export async function deployWorkerToSandbox(options: DeployWorkerToSandboxOption
     mode,
     startupTimeoutMs,
     executionTimeoutMs,
+    resourceLimits,
     terminationGraceMs,
     inputLimitBytes,
   };
@@ -130,6 +149,23 @@ function validateOptions(options: DeployWorkerToSandboxOptions): void {
     if (value !== undefined && (!Number.isFinite(value) || value <= 0))
       throw new Error(`${name} must be greater than zero.`);
   }
+  const resourceLimits = options.resourceLimits;
+  if (resourceLimits) {
+    const knownLimits = new Set(['cpuTimeSeconds', 'addressSpaceBytes', 'fileSizeBytes', 'openFiles']);
+    for (const name of Object.keys(resourceLimits)) {
+      if (!knownLimits.has(name)) throw new Error(`Unknown worker resource limit: ${name}.`);
+    }
+    for (const [name, value] of [
+      ['cpuTimeSeconds', resourceLimits.cpuTimeSeconds],
+      ['addressSpaceBytes', resourceLimits.addressSpaceBytes],
+      ['fileSizeBytes', resourceLimits.fileSizeBytes],
+      ['openFiles', resourceLimits.openFiles],
+    ] as const) {
+      if (value !== undefined && (!Number.isSafeInteger(value) || value <= 0)) {
+        throw new Error(`Worker resourceLimits.${name} must be a positive safe integer.`);
+      }
+    }
+  }
 }
 
 function validateRelativePath(value: string, label: string): void {
@@ -140,6 +176,84 @@ function validateRelativePath(value: string, label: string): void {
 
 function validateInput(input: SandboxWorkerInput | undefined): void {
   if (input?.type === 'file') validateRelativePath(input.path, 'input file path');
+}
+
+function normalizeResourceLimits(
+  limits: SandboxWorkerResourceLimits | undefined,
+): NormalizedResourceLimits | undefined {
+  if (!limits || Object.values(limits).every(value => value === undefined)) return undefined;
+  return {
+    cpuTimeSeconds: limits.cpuTimeSeconds,
+    addressSpaceBytes: limits.addressSpaceBytes,
+    addressSpaceKilobytes:
+      limits.addressSpaceBytes === undefined ? undefined : Math.floor(limits.addressSpaceBytes / 1024),
+    fileSizeBytes: limits.fileSizeBytes,
+    fileSizeBlocks: limits.fileSizeBytes === undefined ? undefined : Math.floor(limits.fileSizeBytes / 512),
+    openFiles: limits.openFiles,
+  };
+}
+
+async function preflightResourceLimits(
+  sandbox: WorkspaceSandbox,
+  resourceLimits: NormalizedResourceLimits,
+): Promise<void> {
+  const checks: string[] = [];
+  if (resourceLimits.cpuTimeSeconds !== undefined) {
+    checks.push(`check_limit cpu_time -t ${resourceLimits.cpuTimeSeconds}`);
+  }
+  if (resourceLimits.addressSpaceKilobytes !== undefined) {
+    checks.push(`check_limit address_space -v ${resourceLimits.addressSpaceKilobytes}`);
+  }
+  if (resourceLimits.fileSizeBlocks !== undefined) {
+    checks.push(`check_limit file_size -f ${resourceLimits.fileSizeBlocks}`);
+  }
+  if (resourceLimits.openFiles !== undefined) {
+    checks.push(`check_limit open_files -n ${resourceLimits.openFiles}`);
+  }
+  if (resourceLimits.cpuTimeSeconds !== undefined) {
+    checks.push(`kill -l XCPU >/dev/null 2>&1 || fail cpu_signal`);
+  }
+  if (resourceLimits.fileSizeBytes !== undefined) {
+    checks.push(`kill -l XFSZ >/dev/null 2>&1 || fail file_size_signal`);
+  }
+
+  const script = `
+fail() {
+  printf '${RESOURCE_CAPABILITY_PREFIX}%s\\n' "$1" >&2
+  exit 1
+}
+check_limit() {
+  capability="$1"
+  flag="$2"
+  value="$3"
+  (
+    ulimit -S "$flag" "$value" >/dev/null 2>&1 || exit 1
+    ulimit -H "$flag" "$value" >/dev/null 2>&1 || exit 1
+    [ "$(ulimit -S "$flag")" = "$value" ] || exit 1
+    [ "$(ulimit -H "$flag")" = "$value" ] || exit 1
+    if ulimit -H "$flag" "$((value + 1))" >/dev/null 2>&1; then exit 1; fi
+  ) || fail "$capability"
+}
+[ "$(uname -s 2>/dev/null)" = Linux ] && [ -r /proc/self/stat ] || fail linux_proc
+command -v setsid >/dev/null 2>&1 || fail process_groups
+setsid sh -c 'kill -0 -$$ 2>/dev/null' || fail process_groups
+${checks.join('\n')}
+`;
+
+  let result;
+  try {
+    result = await runInSandbox(sandbox, script, { allowFailure: true, label: 'preflight worker resource limits' });
+  } catch (error) {
+    throw new SandboxWorkerCapabilityError('sandbox_command', undefined, { cause: error });
+  }
+  if (result.exitCode === 0) return;
+
+  const detail = `${result.stderr}\n${result.stdout}`;
+  const match = detail.match(new RegExp(`${RESOURCE_CAPABILITY_PREFIX}([a-z_]+)`));
+  const capability = (match?.[1] ?? 'sandbox_command') as SandboxWorkerResourceLimitCapability;
+  throw new SandboxWorkerCapabilityError(capability, undefined, {
+    cause: new Error(detail.trim() || 'Resource-limit preflight command failed.'),
+  });
 }
 
 async function acquireLock(
@@ -285,9 +399,50 @@ function buildExecutionScript(
     .join(' ');
   const executable = [shellQuote(config.command), ...config.args.map(shellQuote)].join(' ');
   const target = `${envPrefix ? `env ${envPrefix} ` : ''}${executable}`;
+  const limitCommands: string[] = [];
+  if (config.resourceLimits?.cpuTimeSeconds !== undefined) {
+    limitCommands.push(`ulimit -S -t ${config.resourceLimits.cpuTimeSeconds}`);
+    limitCommands.push(`ulimit -H -t ${config.resourceLimits.cpuTimeSeconds}`);
+  }
+  if (config.resourceLimits?.addressSpaceKilobytes !== undefined) {
+    limitCommands.push(`ulimit -S -v ${config.resourceLimits.addressSpaceKilobytes}`);
+    limitCommands.push(`ulimit -H -v ${config.resourceLimits.addressSpaceKilobytes}`);
+  }
+  if (config.resourceLimits?.fileSizeBlocks !== undefined) {
+    limitCommands.push(`ulimit -S -f ${config.resourceLimits.fileSizeBlocks}`);
+    limitCommands.push(`ulimit -H -f ${config.resourceLimits.fileSizeBlocks}`);
+  }
+  if (config.resourceLimits?.openFiles !== undefined) {
+    limitCommands.push(`ulimit -S -n ${config.resourceLimits.openFiles}`);
+    limitCommands.push(`ulimit -H -n ${config.resourceLimits.openFiles}`);
+  }
+  const workload = config.resourceLimits
+    ? `${limitCommands.map(command => `${command} || exit 125`).join('\n')}\nexec ${target}`
+    : `exec ${target}`;
   const graceAttempts = Math.max(1, Math.ceil(config.terminationGraceMs / 1000));
   const state = (value: string) =>
     `tmp=${shellQuote(`${paths.status}.tmp.$$`)}; printf '%s\\n' ${shellQuote(value)} > "$tmp"; mv "$tmp" ${shellQuote(paths.status)};`;
+  const normalExitStatus = `signal=''; if [ "$code" -gt 128 ]; then signal="SIG$((code - 128))"; fi; tmp=${shellQuote(
+    `${paths.status}.tmp.$$`,
+  )}; printf 'exited|%s|%s|%s\\n' "$execution_id" "$code" "$signal" > "$tmp"; mv "$tmp" ${shellQuote(paths.status)};`;
+  const resourceExitBranches: string[] = [];
+  if (config.resourceLimits?.cpuTimeSeconds !== undefined) {
+    resourceExitBranches.push(
+      `if xcpu="$(kill -l XCPU 2>/dev/null)" && [ -n "$xcpu" ] && [ "$code" -eq $((128 + xcpu)) ]; then ${state(
+        `resource_exhausted|${paths.executionId}|cpu|${config.resourceLimits.cpuTimeSeconds}|SIGXCPU`,
+      )}`,
+    );
+  }
+  if (config.resourceLimits?.fileSizeBytes !== undefined) {
+    resourceExitBranches.push(
+      `${resourceExitBranches.length ? 'elif' : 'if'} xfsz="$(kill -l XFSZ 2>/dev/null)" && [ -n "$xfsz" ] && [ "$code" -eq $((128 + xfsz)) ]; then ${state(
+        `resource_exhausted|${paths.executionId}|file_size|${config.resourceLimits.fileSizeBytes}|SIGXFSZ`,
+      )}`,
+    );
+  }
+  const resourceExitStatus = resourceExitBranches.length
+    ? `${resourceExitBranches.join(' ')} else ${normalExitStatus} fi`
+    : normalExitStatus;
 
   return [
     '#!/bin/sh',
@@ -299,7 +454,7 @@ function buildExecutionScript(
     `tokenfile=${shellQuote(paths.pidToken)}`,
     `: > "$stdout"; : > "$stderr"`,
     state(`starting|${paths.executionId}`),
-    `setsid sh -c ${shellQuote(`exec ${target}${stdinPath ? ` < ${shellQuote(stdinPath)}` : ''}`)} > "$stdout" 2> "$stderr" &`,
+    `setsid sh -c ${shellQuote(`${workload}${stdinPath ? ` < ${shellQuote(stdinPath)}` : ''}`)} > "$stdout" 2> "$stderr" &`,
     'child=$!',
     'printf %s "$child" > "$pidfile"',
     `if [ -r "/proc/$child/stat" ]; then awk '{print $22}' "/proc/$child/stat" > "$tokenfile"; else : > "$tokenfile"; fi`,
@@ -320,11 +475,7 @@ function buildExecutionScript(
     `current="$(cat ${shellQuote(paths.status)} 2>/dev/null || true)"`,
     `case "$current" in timed_out*) ;; *) if [ "$cancelled" -eq 1 ]; then ${state(
       `cancelled|${paths.executionId}|TERM`,
-    )} else signal=''; if [ "$code" -gt 128 ]; then signal="SIG$((code - 128))"; fi; tmp=${shellQuote(
-      `${paths.status}.tmp.$$`,
-    )}; printf 'exited|%s|%s|%s\\n' "$execution_id" "$code" "$signal" > "$tmp"; mv "$tmp" ${shellQuote(
-      paths.status,
-    )}; fi ;; esac`,
+    )} else ${resourceExitStatus} fi ;; esac`,
     'rm -f "$pidfile" "$tokenfile"',
     'exit "$code"',
   ].join('\n');
@@ -400,7 +551,7 @@ async function readWorkerStatus(
 }
 
 function parseStatus(executionId: string, value: string): SandboxWorkerStatus {
-  const [state, recordedId, first, second] = value.split('|');
+  const [state, recordedId, first, second, third] = value.split('|');
   if (recordedId !== executionId || state === 'stale') return { state: 'unknown', executionId };
   if (state === 'starting') return { state, executionId };
   if (state === 'running') return { state, executionId };
@@ -409,6 +560,16 @@ function parseStatus(executionId: string, value: string): SandboxWorkerStatus {
     return Number.isInteger(exitCode)
       ? { state, executionId, exitCode, ...(second ? { signal: second } : {}) }
       : { state: 'unknown', executionId };
+  }
+  if (state === 'resource_exhausted') {
+    const limit = Number(second);
+    if (first === 'cpu' && Number.isSafeInteger(limit) && limit > 0 && third === 'SIGXCPU') {
+      return { state, executionId, resource: first, limit, signal: third };
+    }
+    if (first === 'file_size' && Number.isSafeInteger(limit) && limit > 0 && third === 'SIGXFSZ') {
+      return { state, executionId, resource: first, limit, signal: third };
+    }
+    return { state: 'unknown', executionId };
   }
   if (state === 'cancelled') return { state, executionId, ...(first ? { signal: first } : {}) };
   if (state === 'timed_out' && (first === 'startup' || first === 'execution')) {
@@ -474,7 +635,7 @@ async function readOutput(
     const data = Buffer.from(encoded, 'base64');
     const nextOffset = offset + data.byteLength;
     const status = await readWorkerStatus(sandbox, executionId, paths);
-    const terminal = ['exited', 'cancelled', 'timed_out', 'failed'].includes(status.state);
+    const terminal = ['exited', 'resource_exhausted', 'cancelled', 'timed_out', 'failed'].includes(status.state);
     const interrupted = status.state === 'provider_unavailable' || status.state === 'unknown';
     return {
       stream,

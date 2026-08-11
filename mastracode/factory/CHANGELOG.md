@@ -1,5 +1,19 @@
 # @mastra/factory
 
+## 0.6.0-alpha.17
+
+### Patch Changes
+
+- Fixed sandbox checkpoints only being captured at session teardown. Factory sessions now snapshot the workspace sandbox at the end of every agent turn, so sandboxes that are reclaimed while idle can be restored from a checkpoint that includes the last completed turn's changes. ([#21227](https://github.com/mastra-ai/mastra/pull/21227))
+
+- Improved Factory workspace deletion by terminating matching live controller sessions before sandbox reclamation. ([#21174](https://github.com/mastra-ai/mastra/pull/21174))
+
+- Fixed new Factory sessions stalling for minutes when the background decision queue was deep. The dispatcher now claims pending session starts before deferred decisions, so a new session always starts on the next tick. ([#21265](https://github.com/mastra-ai/mastra/pull/21265))
+
+- Updated dependencies [[`210cb7a`](https://github.com/mastra-ai/mastra/commit/210cb7a167998c7bbf72cb3b93e6eb0563330239), [`5f798b3`](https://github.com/mastra-ai/mastra/commit/5f798b3362e9bdf4d690f85245606e146eef60b9), [`01a2943`](https://github.com/mastra-ai/mastra/commit/01a2943a7d886edefdff072bfa51f055bab54437), [`01a2943`](https://github.com/mastra-ai/mastra/commit/01a2943a7d886edefdff072bfa51f055bab54437), [`25ca73d`](https://github.com/mastra-ai/mastra/commit/25ca73d25dee7ce9f0ca72939e3a505c4db7257e), [`e1cead1`](https://github.com/mastra-ai/mastra/commit/e1cead17b5f3653cf00d2f90cc19b113119c02ba), [`01a2943`](https://github.com/mastra-ai/mastra/commit/01a2943a7d886edefdff072bfa51f055bab54437)]:
+  - @mastra/core@1.58.0-alpha.14
+  - @mastra/code-sdk@1.2.0-alpha.16
+
 ## 0.6.0-alpha.16
 
 ### Minor Changes

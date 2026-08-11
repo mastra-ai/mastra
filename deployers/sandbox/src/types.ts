@@ -73,6 +73,42 @@ export type SandboxWorkerInput =
   | { type: 'stdin'; data: string | Uint8Array }
   | { type: 'file'; path: string; data: string | Uint8Array };
 
+export interface SandboxWorkerResourceLimits {
+  /** Maximum CPU time in seconds. */
+  cpuTimeSeconds?: number;
+  /** Maximum virtual address space in bytes. Enforced in 1 KiB units, rounded down. */
+  addressSpaceBytes?: number;
+  /** Maximum file size in bytes. Enforced in 512-byte units, rounded down. */
+  fileSizeBytes?: number;
+  /** Maximum number of open file descriptors. */
+  openFiles?: number;
+}
+
+export type SandboxWorkerResourceLimitCapability =
+  | 'sandbox_command'
+  | 'linux_proc'
+  | 'process_groups'
+  | 'cpu_time'
+  | 'address_space'
+  | 'file_size'
+  | 'open_files'
+  | 'cpu_signal'
+  | 'file_size_signal';
+
+/** Error thrown before deployment when requested resource limits cannot be enforced. */
+export class SandboxWorkerCapabilityError extends Error {
+  readonly code = 'SANDBOX_WORKER_CAPABILITY_UNAVAILABLE';
+
+  constructor(
+    readonly capability: SandboxWorkerResourceLimitCapability,
+    message?: string,
+    options?: ErrorOptions,
+  ) {
+    super(message ?? `Worker resource-limit capability "${capability}" is unavailable.`, options);
+    this.name = 'SandboxWorkerCapabilityError';
+  }
+}
+
 /** Options for deploying a non-HTTP worker or trusted custom command. */
 export interface DeployWorkerToSandboxOptions {
   /** The workspace sandbox to deploy into. Only `executeCommand` is required. */
@@ -105,6 +141,8 @@ export interface DeployWorkerToSandboxOptions {
   startupTimeoutMs?: number;
   /** Optional maximum process execution time before graceful and then forced termination. */
   executionTimeoutMs?: number;
+  /** Hard limits applied only to the workload immediately before execution. */
+  resourceLimits?: SandboxWorkerResourceLimits;
   /** Grace period before forced termination. Defaults to 5000. */
   terminationGraceMs?: number;
 }
@@ -113,6 +151,13 @@ export type SandboxWorkerStatus =
   | { state: 'starting'; executionId: string }
   | { state: 'running'; executionId: string }
   | { state: 'exited'; executionId: string; exitCode: number; signal?: string }
+  | {
+      state: 'resource_exhausted';
+      executionId: string;
+      resource: 'cpu' | 'file_size';
+      limit: number;
+      signal: 'SIGXCPU' | 'SIGXFSZ';
+    }
   | { state: 'cancelled'; executionId: string; signal?: string }
   | { state: 'timed_out'; executionId: string; phase: 'startup' | 'execution' }
   | { state: 'failed'; executionId: string; phase: 'upload' | 'install' | 'launch'; message: string }

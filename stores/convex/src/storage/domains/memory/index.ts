@@ -195,6 +195,7 @@ function parseStoredOMRecord(doc: StoredOMRecord): ObservationalMemoryRecord {
 }
 
 export class MemoryConvex extends MemoryStorage {
+  override readonly supportsPartialThreadUpdate = true;
   readonly supportsObservationalMemory = true;
 
   #db: ConvexDB;

@@ -170,6 +170,7 @@ function addMySQLMessageMetadataFilter(
 }
 
 export class MemoryMySQL extends MemoryStorage {
+  override readonly supportsPartialThreadUpdate = true;
   readonly supportsObservationalMemory = true;
 
   private pool: Pool;
