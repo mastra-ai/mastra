@@ -223,6 +223,7 @@ export type ProviderModelsMap = {
     'moonshotai/Kimi-K3',
     'nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-FP8',
     'nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B',
+    'nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B',
     'openai/gpt-oss-120b',
     'openai/gpt-oss-20b',
     'zai-org/GLM-5.1',
@@ -281,6 +282,7 @@ export type ProviderModelsMap = {
   ];
   readonly llmtr: readonly ['gemma-4', 'magibu-11b-v8', 'medgemma-4b', 'qwen3-6-35b', 'sincap', 'trendyol-7b'];
   readonly claudinio: readonly ['claudinio', 'claudius'];
+  readonly coralbricks: readonly ['glm-5.2-fp4', 'gpt-oss-120b', 'kimi-k3'];
   readonly 'snowflake-cortex': readonly [
     'claude-fable-5',
     'claude-haiku-4-5',
@@ -792,8 +794,6 @@ export type ProviderModelsMap = {
     'TEE/glm-5.2:thinking',
     'TEE/gpt-oss-120b',
     'TEE/gpt-oss-20b',
-    'TEE/kimi-k2.5',
-    'TEE/kimi-k2.5-thinking',
     'TEE/kimi-k2.6',
     'TEE/kimi-k3',
     'TEE/llama3-3-70b',
@@ -1472,7 +1472,6 @@ export type ProviderModelsMap = {
     'claude-fable-5',
     'claude-haiku-4-5',
     'claude-haiku-4-5-20251001',
-    'claude-haiku-4-5-free',
     'claude-opus-4-1-20250805',
     'claude-opus-4-5-20251101',
     'claude-opus-4-6',
@@ -2121,6 +2120,7 @@ export type ProviderModelsMap = {
   ];
   readonly dinference: readonly ['glm-4.7', 'glm-5', 'glm-5.1', 'glm-5.2', 'gpt-oss-120b', 'minimax-m2.5'];
   readonly 'privatemode-ai': readonly [
+    'deepseek-ocr-2',
     'gpt-oss-120b',
     'kimi-k2.6',
     'qwen3-embedding-4b',
@@ -3583,6 +3583,7 @@ export type ProviderModelsMap = {
     'meta-llama/llama-4-maverick',
     'meta-llama/llama-4-scout',
     'meta-llama/llama-guard-4-12b',
+    'meta/muse-glimmer-30b',
     'meta/muse-spark-1.1',
     'meta/muse-spark-1.2',
     'microsoft/phi-4',
@@ -3761,6 +3762,7 @@ export type ProviderModelsMap = {
     'relace/relace-apply-3',
     'relace/relace-search',
     'sakana/fugu-ultra',
+    'sakana/sakana-namazu',
     'sao10k/l3-lunaris-8b',
     'sao10k/l3.1-euryale-70b',
     'sao10k/l3.3-euryale-70b',
@@ -3785,6 +3787,7 @@ export type ProviderModelsMap = {
     'thinkingmachines/inkling-small',
     'undi95/remm-slerp-l2-13b',
     'upstage/solar-pro-3',
+    'upstage/solar-pro4',
     'writer/palmyra-x5',
     'x-ai/grok-4.20',
     'x-ai/grok-4.20-multi-agent',
@@ -4081,6 +4084,7 @@ export type ProviderModelsMap = {
     'meta/llama-3.3-70b',
     'meta/llama-4-maverick',
     'meta/llama-4-scout',
+    'meta/muse-glimmer-30b',
     'meta/muse-spark-1.1',
     'meta/muse-spark-1.2',
     'meta/muse-spark-1.2-contributor',
@@ -4559,6 +4563,7 @@ export type ProviderModelsMap = {
     'meta-llama/llama-4-maverick',
     'meta-llama/llama-4-scout',
     'meta-llama/llama-guard-4-12b',
+    'meta/muse-glimmer-30b',
     'meta/muse-spark-1.1',
     'meta/muse-spark-1.2',
     'microsoft/phi-4',
@@ -4742,6 +4747,7 @@ export type ProviderModelsMap = {
     'relace/relace-apply-3',
     'relace/relace-search',
     'sakana/fugu-ultra',
+    'sakana/sakana-namazu',
     'sao10k/l3-lunaris-8b',
     'sao10k/l3.1-euryale-70b',
     'sao10k/l3.3-euryale-70b',
@@ -4758,6 +4764,7 @@ export type ProviderModelsMap = {
     'thinkingmachines/inkling-small',
     'undi95/remm-slerp-l2-13b',
     'upstage/solar-pro-3',
+    'upstage/solar-pro4',
     'writer/palmyra-x5',
     'x-ai/grok-4.20',
     'x-ai/grok-4.20-multi-agent',

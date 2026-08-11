@@ -668,7 +668,7 @@ describe('FactoryDecisionDispatcher', () => {
       skillName: 'understand-issue',
       idempotencyKey: 'wake-holds-capacity',
     });
-    await storage.prepareRunStart({
+    const prepared = await storage.prepareRunStart({
       orgId: 'org-1',
       userId: 'user-1',
       factoryProjectId: PROJECT_ID,
@@ -688,6 +688,10 @@ describe('FactoryDecisionDispatcher', () => {
       kickoffKey: 'kickoff-null',
       kickoffMessage: null,
     });
+    // The coordinator marks null-kickoff starts sent at prepare time; leaving
+    // the row pending would let it win the single in-flight slot under
+    // starts-first claiming and stall the wake decision this test exercises.
+    await storage.markPendingStart(prepared.binding.id, 'sent');
     const { controller, session, emitAgentEnd, getAgentEndListenerCount } = createSession(undefined, {
       signalAccepted: Promise.resolve({ accepted: true, action: 'wake' }),
     });
@@ -1624,6 +1628,75 @@ describe('FactoryDecisionDispatcher', () => {
     expect(primeCredentials).toHaveBeenCalledWith({ orgId: 'org-1', userId: 'user-1' });
     const kickoffOptions = sendNotificationSignal.mock.calls[0]![1];
     expect(kickoffOptions?.requestContext?.get('user')).toEqual({ workosId: 'user-1', organizationId: 'org-1' });
+    expect((await storage.listPendingStarts('org-1', PROJECT_ID))[0]?.status).toBe('sent');
+  });
+
+  it('dispatches a pending start on the first tick even when the deferred-decision queue exceeds the batch size', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    // Deeper than one tick's claim limit: without starts-first claiming these
+    // would consume the whole batch and starve the pending start.
+    const queueDepth = FACTORY_DISPATCH_CONSTANTS.batchSize + 2;
+    for (let index = 0; index < queueDepth; index += 1) {
+      await queueDecision(
+        storage,
+        { type: 'sendMessage', role: 'work', message: 'Continue.', idempotencyKey: `message-${index}` },
+        { sourceKey: `github-issue:${100 + index}`, ingress: `move-${index}` },
+      );
+    }
+    const { controller, delivered } = createSession();
+    const rules = defaultFactoryRules({ version: 'rules-v1' });
+    const transitionService = new FactoryTransitionService({ storage, rules });
+    const sourceControl = {
+      sessions: {
+        getBySessionId: async () => ({
+          id: 'source-session-1',
+          sessionId: 'session-1',
+          projectRepositoryId: 'project-repository-1',
+          orgId: 'org-1',
+          userId: 'user-1',
+          branch: 'factory/issue-1',
+          baseBranch: 'main',
+        }),
+      },
+      projectRepositories: { get: async ({ id }: { id: string }) => ({ id, connectionId: 'connection-1' }) },
+      connections: { get: async () => ({ factoryProjectId: PROJECT_ID }) },
+    };
+    const coordinator = new FactoryStartCoordinator(
+      controller as never,
+      storage,
+      transitionService,
+      sourceControl as never,
+    );
+    await coordinator.prepare({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: PROJECT_ID,
+      sessionId: 'session-1',
+      threadTitle: 'Fix issue',
+      kickoffKey: 'kickoff-1',
+      invocation: { type: 'prompt', prompt: 'Investigate the issue.' },
+      destinationStage: 'triage',
+      workItem: {
+        role: 'work',
+        input: {
+          externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:1' },
+          title: 'Fix issue',
+          stages: ['intake'],
+          sessions: {},
+          metadata: {},
+        },
+      },
+    });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    expect(delivered).toContain('factory-kickoff:kickoff-1');
     expect((await storage.listPendingStarts('org-1', PROJECT_ID))[0]?.status).toBe('sent');
   });
 

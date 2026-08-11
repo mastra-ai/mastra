@@ -30,6 +30,7 @@ export interface ChatSessionContextApi {
   sessionThreadId?: string;
   /** Workspace needs sandbox provision + clone before the controller can connect. */
   workspacePending?: boolean;
+  draftSessionId?: string;
   factorySessionState?: FactorySessionState;
   baseUrl: string;
   /**

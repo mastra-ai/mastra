@@ -64,20 +64,24 @@ Open `http://localhost:5873`.
 
 ### Split UI mode
 
-Use this for UI work. One command starts the API on :4111 and Vite on :5173:
+Use this for UI work. One command starts the Docker services, builds the
+workspace packages the UI depends on, then runs the API on :4111 and Vite on
+:5173:
 
 ```shell
-pnpm --filter ./mastracode/factory-ui web
+pnpm --dir mastracode/web dev:ui
 ```
 
-Open `http://localhost:5173`. To restart one side without losing the other, run
-`pnpm --filter ./mastracode/factory-ui web:api` and
-`pnpm --filter ./mastracode/factory-ui dev` in separate terminals.
+Open `http://localhost:5173`. To restart one side without losing the other,
+start the Docker services with `pnpm --dir mastracode/web db:up`, then run
+`pnpm --dir mastracode/web api` and `pnpm --filter ./mastracode/factory-ui dev`
+in separate terminals.
 
 ### Slack channels (optional)
 
 Slack sends events to public HTTPS origins only, so a local server needs a
-tunnel. Install [`cloudflared`](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/)
+tunnel. The steps below assume integrated mode, where the server listens on
+`5873`. Install [`cloudflared`](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/)
 (`brew install cloudflared`).
 
 #### 1. Start a tunnel

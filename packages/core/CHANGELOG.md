@@ -1,5 +1,59 @@
 # @mastra/core
 
+## 1.58.0-alpha.13
+
+### Minor Changes
+
+- Added support for schema-aware routes created with `createRoute()` in `server.apiRoutes`. ([#21184](https://github.com/mastra-ai/mastra/pull/21184))
+
+  ```ts
+  const route = createRoute({
+    method: 'POST',
+    path: '/items',
+    responseType: 'json',
+    bodySchema: z.object({ name: z.string() }),
+    handler: async ({ name }) => ({ name }),
+  });
+
+  const mastra = new Mastra({
+    server: { apiRoutes: [route] },
+  });
+  ```
+
+- Added a `command_exit` session event to the agent controller. Subscribers now receive the exit code and success flag of each foreground `execute_command` tool call, alongside the existing `shell_output` stream: ([#21211](https://github.com/mastra-ai/mastra/pull/21211))
+
+  ```typescript
+  session.subscribe(event => {
+    if (event.type === 'command_exit') {
+      console.log(event.toolCallId, event.exitCode, event.success);
+    }
+  });
+  ```
+
+  Previously the exit outcome was only visible inside the tool result text, so observers could stream a command's output but never tell whether it succeeded.
+
+- Added `WorkspaceSandbox.snapshot()` for persisting sandbox state when supported. ([#21221](https://github.com/mastra-ai/mastra/pull/21221))
+
+  ```ts
+  await sandbox.snapshot();
+  ```
+
+### Patch Changes
+
+- Added a `firstMeaningfulExecAt` timestamp to source-control sessions, recording when the session's agent completed its first successful sandbox command. Together with `firstMessageAt` this measures time-to-first-meaningful-exec: how long a user waits between sending their first message and the agent actually doing work in a live sandbox. The value is written once per session and is available on all session read APIs; setup commands run by the platform itself (skill loading, repo checkout) do not count. ([#21211](https://github.com/mastra-ai/mastra/pull/21211))
+
+- Fixed model configuration validation to safely reject null values. ([#21192](https://github.com/mastra-ai/mastra/pull/21192))
+
+- Fixed streamed assistant messages carrying a different id than their persisted copy. Chat UIs that reconcile a live stream with refetched history could show the same assistant reply twice (for example after returning to a hidden tab); with a shared id, deduplication by message id now works for every turn, including text-only replies without tool calls. ([#21185](https://github.com/mastra-ai/mastra/pull/21185))
+
+- Stop timeTravel from destroying recorded workflow snapshots. Two changes: ([#21222](https://github.com/mastra-ai/mastra/pull/21222))
+
+  1. timeTravel now fails with a descriptive error and leaves the recorded snapshot unchanged when the workflow graph has changed since the run was recorded. Steps inside preceding foreach or loop entries are not inspected by this check.
+
+  2. Unnamed .map() steps now get deterministic ids, so timeTravel works across process restarts for unchanged workflow code. Removing a .map() call is not detected, so re-run rather than time travel after deleting a mapping step.
+
+- Exported the `RunEvalsResult` type so the return type of `runEvals` can be imported from `@mastra/core/evals`. This also fixes a type error introduced in #21143 where the type-level tests imported a type that was not exported. ([#21196](https://github.com/mastra-ai/mastra/pull/21196))
+
 ## 1.58.0-alpha.12
 
 ### Patch Changes

@@ -1045,13 +1045,13 @@ Runs database migrations to update your storage schema. This command is useful w
 The command bundles your project and connects to your configured storage backend. It then executes any pending migrations. Currently supports:
 
 - **Duplicate spans migration**: Removes duplicate `(traceId, spanId)` entries and adds a unique constraint to ensure data integrity.
-- **ClickHouse legacy-to-vNext span migration**: Copies historical spans from the legacy `mastra_ai_spans` table to the vNext `mastra_span_events` schema. Runs in batches to stay within memory limits. See the [ClickHouse storage reference](/reference/storage/clickhouse#migrating-from-legacy-to-vnext) for details.
+- **ClickHouse legacy-to-vNext span migration**: Copies historical spans from the legacy `mastra_ai_spans` table to the vNext `mastra_span_events` schema. Runs in batches to stay within memory limits. See the [ClickHouse storage reference](/integrations/databases/clickhouse#migrating-from-legacy-to-vnext) for details.
 
 ```bash
 mastra migrate
 ```
 
-See the [Storage migration guide](/guides/migrations/upgrade-to-v1/storage#duplicate-spans-migration) for details on when migrations are needed.
+See the [Storage migration guide](/reference/migrations/upgrade-to-v1/storage#duplicate-spans-migration) for details on when migrations are needed.
 
 It accepts [common flags][common-flags].
 

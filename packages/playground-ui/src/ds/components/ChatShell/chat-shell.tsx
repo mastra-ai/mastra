@@ -25,9 +25,10 @@ export type ChatShellProps = ComponentPropsWithoutRef<'div'> & {
  * composer docks inside it, every region shares one column.
  *
  * Tuned through custom properties, all defaulted here: `--chat-column` (column
- * width), `--chat-surface` (page colour), `--chat-gutter` (room above and below
- * the composer), `--chat-veil` (what the dock paints with), `--chat-inset-end`
- * (room an overlay panel claims on the end edge).
+ * width), `--chat-surface` (page colour), `--chat-fade` (the band the veil ramps
+ * in across, above the composer), `--chat-veil` (strongest it ever gets — the
+ * transcript keeps showing through), `--chat-gutter` (room below the composer),
+ * `--chat-inset-end` (room an overlay panel claims on the end edge).
  */
 export function ChatShellRoot({ className, scroller, ...props }: ChatShellProps) {
   return (
@@ -36,9 +37,8 @@ export function ChatShellRoot({ className, scroller, ...props }: ChatShellProps)
         data-slot="chat-shell"
         className={cn(
           '@container relative isolate flex min-h-0 min-w-0 flex-col bg-(--chat-surface)',
-          '[--chat-column:48rem] [--chat-gutter:0.75rem] [--chat-inset-end:0px]',
-          '[--chat-surface:var(--color-surface2)]',
-          '[--chat-veil:color-mix(in_oklab,var(--chat-surface)_70%,transparent)]',
+          '[--chat-column:48rem] [--chat-fade:1.5rem] [--chat-gutter:0.75rem] [--chat-inset-end:0px]',
+          '[--chat-surface:var(--color-surface2)] [--chat-veil:70%]',
           className,
         )}
         {...props}
@@ -83,9 +83,9 @@ export function ChatShellViewport({ className, children, ...props }: MessageScro
   );
 }
 
-/** Scrolling content. Its bottom padding is the unveiled air above the composer. */
+/** Scrolling content. The air above the composer belongs to the dock's fade band. */
 export function ChatShellContent({ className, ...props }: MessageScrollerContentProps) {
-  return <MessageScrollerContent className={cn('flex-1 pb-(--chat-gutter)', className)} {...props} />;
+  return <MessageScrollerContent className={cn('flex-1', className)} {...props} />;
 }
 
 /** The shared reading column. Every chat region must go through it. */
@@ -104,14 +104,21 @@ export function ChatShellColumn({ className, ...props }: ComponentPropsWithoutRe
  * transcript scrolls behind, so nothing measures it and a composer growing under
  * the cursor resizes no box the scroller watches.
  *
- * The veil is a background, not an overlay, so it passes behind the composer card
- * and dims the transcript in its rounded corners too.
+ * Behind it, one sheet of the page masked in over `--chat-fade` of air and never
+ * past `--chat-veil`, so the transcript dims as it slides under but stays
+ * readable through the card's surroundings. The ramp runs three times the air, so
+ * it tops out behind the card and its end never shows.
  */
 export function ChatShellDock({ className, ...props }: ComponentPropsWithoutRef<'div'>) {
   return (
     <div
       data-slot="chat-shell-dock"
-      className={cn('sticky bottom-0 z-10 shrink-0 bg-(--chat-veil) pb-(--chat-gutter)', className)}
+      className={cn(
+        'sticky bottom-0 z-10 mt-(--chat-fade) shrink-0 pb-(--chat-gutter)',
+        'before:pointer-events-none before:absolute before:inset-x-0 before:-top-(--chat-fade) before:bottom-0 before:-z-10',
+        'before:bg-(--chat-surface) before:[mask-image:linear-gradient(to_bottom,transparent,rgb(0_0_0/var(--chat-veil))_calc(var(--chat-fade)*3))]',
+        className,
+      )}
       {...props}
     />
   );
