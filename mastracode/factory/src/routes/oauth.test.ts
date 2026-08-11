@@ -69,6 +69,7 @@ function buildApp(
       auth: fakeRouteAuth({ enabled: opts?.enabled }),
       authStorage,
       modelCredentials: opts?.noCredentials ? undefined : seed.credentials,
+      memorySettings: seed.memorySettings,
     }).routes(),
   );
   return app;
@@ -295,6 +296,71 @@ describe('device-code flow (github-copilot)', () => {
     const res = await post(app, '/web/config/providers/github-copilot/oauth/poll', { sessionId });
     expect(await res.json()).toMatchObject({ status: 'failed', error: 'Unsupported GitHub host' });
     expect(pollGitHubCopilotDeviceLogin).not.toHaveBeenCalled();
+  });
+});
+
+// ── OM defaults seeded on sign-in ────────────────────────────────────────
+
+describe('observational-memory defaults on sign-in', () => {
+  it('seeds both roles from the provider a paste-code sign-in connected', async () => {
+    const app = buildApp(userA);
+    const { sessionId } = await (await post(app, '/web/config/providers/anthropic/oauth/start')).json();
+
+    await post(app, '/web/config/providers/anthropic/oauth/complete', { sessionId, code: 'c' });
+
+    await expect(seed.memorySettings.get(TENANT_A)).resolves.toMatchObject({
+      observerModelId: 'anthropic/claude-haiku-4-5',
+      reflectorModelId: 'anthropic/claude-haiku-4-5',
+    });
+  });
+
+  it('seeds both roles when a device-code sign-in completes', async () => {
+    pollCodexDeviceLogin.mockResolvedValue({ status: 'complete', credentials: CODEX_CREDS });
+    const app = buildApp(userA);
+    const { sessionId } = await (await post(app, '/web/config/providers/openai/oauth/start')).json();
+    await makePollable(sessionId);
+
+    await post(app, '/web/config/providers/openai/oauth/poll', { sessionId });
+
+    await expect(seed.memorySettings.get(TENANT_A)).resolves.toMatchObject({
+      observerModelId: 'openai/gpt-5.4-mini',
+      reflectorModelId: 'openai/gpt-5.4-mini',
+    });
+  });
+
+  it('leaves OM unset for a provider with no low-cost model', async () => {
+    pollGitHubCopilotDeviceLogin.mockResolvedValue({ status: 'complete', credentials: CODEX_CREDS });
+    const app = buildApp(userA);
+    const { sessionId } = await (await post(app, '/web/config/providers/github-copilot/oauth/start')).json();
+    await makePollable(sessionId);
+
+    await post(app, '/web/config/providers/github-copilot/oauth/poll', { sessionId });
+
+    await expect(seed.memorySettings.get(TENANT_A)).resolves.toBeNull();
+  });
+
+  it('does not overwrite a model the user already chose', async () => {
+    await seed.memorySettings.patch({ ...TENANT_A, patch: { observerModelId: 'openai/gpt-5.6' } });
+    const app = buildApp(userA);
+    const { sessionId } = await (await post(app, '/web/config/providers/anthropic/oauth/start')).json();
+
+    await post(app, '/web/config/providers/anthropic/oauth/complete', { sessionId, code: 'c' });
+
+    await expect(seed.memorySettings.get(TENANT_A)).resolves.toMatchObject({
+      observerModelId: 'openai/gpt-5.6',
+      reflectorModelId: 'anthropic/claude-haiku-4-5',
+    });
+  });
+
+  it('seeds the sentinel local row when auth is disabled', async () => {
+    const app = buildApp(null, { enabled: false });
+    const { sessionId } = await (await post(app, '/web/config/providers/anthropic/oauth/start')).json();
+
+    await post(app, '/web/config/providers/anthropic/oauth/complete', { sessionId, code: 'c' });
+
+    await expect(seed.memorySettings.get({ orgId: 'local', userId: 'local' })).resolves.toMatchObject({
+      observerModelId: 'anthropic/claude-haiku-4-5',
+    });
   });
 });
 

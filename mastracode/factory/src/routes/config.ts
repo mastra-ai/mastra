@@ -28,6 +28,7 @@ import type {
   MemorySettingsStorage,
 } from '../storage/domains/memory-settings/base.js';
 import type { ModelPackRecord, ModelPacksStorage } from '../storage/domains/model-packs/base.js';
+import { fillProviderOMDefaults } from './om-defaults.js';
 import {
   getAuthProviderId,
   listTenantCredentialsForRequest,
@@ -506,6 +507,17 @@ export interface ProviderOMDefaultsResponse {
   config: OMConfigInfo;
 }
 
+/** Whether an OM role's model belongs to a provider the caller can reach. */
+export interface OMRoleProviderStatus {
+  providerId: string;
+  configured: boolean;
+}
+
+export interface OMProviderStatus {
+  observer: OMRoleProviderStatus;
+  reflector: OMRoleProviderStatus;
+}
+
 /** `GET /web/config/thinking` — deployment-scoped reasoning-effort defaults. */
 export interface ThinkingConfigInfo {
   /** All selectable levels, in escalation order. */
@@ -680,6 +692,41 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
     const onCredentialsChanged = options.onCredentialsChanged ?? (() => {});
     const onCustomProvidersChanged = options.onCustomProvidersChanged ?? (() => {});
 
+    /** Custom providers live only in the DB, so the model catalog alone would miss them. */
+    const reachableProviderIds = async (c: Context): Promise<Set<string>> => {
+      const tenantCredentials = await listTenantCredentialsForRequest({
+        c,
+        auth,
+        credentials: options.modelCredentials,
+      });
+      const access = await buildProviderAccess({
+        controller,
+        authStorage: tenantCredentials ? undefined : authStorage,
+        tenantCredentials,
+      });
+      const reachable = new Set(Object.keys(access).filter(provider => access[provider]));
+      if (options.customProviders) {
+        try {
+          const ctx = await resolveCustomProvidersContext({ c, auth, customProviders: options.customProviders });
+          if (!('response' in ctx)) {
+            for (const record of await ctx.storage.list({ orgId: ctx.orgId })) reachable.add(record.providerId);
+          }
+        } catch {
+          // Fail soft: built-in provider access still answers.
+        }
+      }
+      return reachable;
+    };
+
+    const omProviderStatus = async (c: Context, config: OMConfigInfo): Promise<OMProviderStatus> => {
+      const reachable = await reachableProviderIds(c);
+      const roleStatus = (modelId: string): OMRoleProviderStatus => {
+        const providerId = modelId.split('/')[0] ?? '';
+        return { providerId, configured: reachable.has(providerId) };
+      };
+      return { observer: roleStatus(config.observerModelId), reflector: roleStatus(config.reflectorModelId) };
+    };
+
     return [
       registerApiRoute('/web/config/providers', {
         method: 'GET',
@@ -739,6 +786,13 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
               // per-request, never written into process.env.
               await ctx.storage.setCredential(tenant, getAuthProviderId(provider), { type: 'api_key', key });
               onCredentialsChanged(tenant);
+              // Rows are per (org, user): an org-scoped key seeds only the caller.
+              await fillProviderOMDefaults({
+                memorySettings: options.memorySettings,
+                orgId: ctx.orgId,
+                userId: ctx.userId,
+                providerId: provider,
+              });
               const records = await ctx.storage.listCredentials(ctx.orgId, ctx.userId);
               const providers = await listProviders({ controller, tenantCredentials: records });
               return c.json({ ok: true, provider: providers.find(p => p.provider === provider) });
@@ -746,6 +800,12 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             if (!authStorage) return c.json({ error: 'Credential storage is not available' }, 503);
             // Local mode is single-user: scope is meaningless and ignored.
             authStorage.setStoredApiKey(provider, key, envVar);
+            await fillProviderOMDefaults({
+              memorySettings: options.memorySettings,
+              orgId: 'local',
+              userId: 'local',
+              providerId: provider,
+            });
             const providers = await listProviders({ controller, authStorage });
             return c.json({ ok: true, provider: providers.find(p => p.provider === provider) });
           } catch (error) {
@@ -1232,16 +1292,18 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
           if ('response' in context) return context.response;
           try {
             const record = await context.storage.get({ orgId: context.orgId, userId: context.userId });
-            if (!resourceId) return c.json({ config: readStoredOMConfig(record) });
+            const respond = async (config: OMConfigInfo) =>
+              c.json({ config, providerStatus: await omProviderStatus(loose(c), config) });
+            if (!resourceId) return respond(readStoredOMConfig(record));
 
             // Session sync is best-effort: the stored row is authoritative and
             // new sessions hydrate from it, so a resourceId without a live
             // session (e.g. settings page after a restart) still reads the
             // stored config instead of failing.
             const session = await controller.getSessionByResource?.(resourceId, scope);
-            if (!session) return c.json({ config: readStoredOMConfig(record) });
+            if (!session) return respond(readStoredOMConfig(record));
             await hydrateSessionMemorySettings(session, record);
-            return c.json({ config: readOMConfig(session) });
+            return respond(readOMConfig(session));
           } catch (error) {
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
           }
@@ -1276,24 +1338,14 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             // Best-effort session sync: persist regardless, apply to the live
             // session only when one exists for the resourceId.
             const session = resourceId ? await controller.getSessionByResource?.(resourceId, scope) : undefined;
-            const otherRole = session ? (role === 'observer' ? session.om.reflector : session.om.observer) : undefined;
-            const otherRoleCurrentModelId = otherRole?.modelId() ?? null;
             await session?.om[role].switchModel({ modelId });
-            // Pin the other role's current model too, so a later restart
-            // doesn't drift it once this role is explicitly overridden. The
-            // "only if still unset" check runs inside the storage layer's
-            // atomic update, so a concurrent explicit switch of the other
-            // role is never clobbered by this fill.
-            const otherKey = role === 'observer' ? 'reflectorModelId' : 'observerModelId';
-            await persistMemorySettings(
-              context,
-              { [role === 'observer' ? 'observerModelId' : 'reflectorModelId']: modelId },
-              otherRoleCurrentModelId ? { [otherKey]: otherRoleCurrentModelId } : undefined,
-            );
+            await persistMemorySettings(context, {
+              [role === 'observer' ? 'observerModelId' : 'reflectorModelId']: modelId,
+            });
             const config = session
               ? readOMConfig(session)
               : readStoredOMConfig(await context.storage.get({ orgId: context.orgId, userId: context.userId }));
-            return c.json({ ok: true, config });
+            return c.json({ ok: true, config, providerStatus: await omProviderStatus(loose(c), config) });
           } catch (error) {
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
           }

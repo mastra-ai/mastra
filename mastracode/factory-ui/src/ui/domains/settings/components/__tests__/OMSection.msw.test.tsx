@@ -69,6 +69,46 @@ describe('OMSection', () => {
     expect(reflectorModel).toHaveTextContent('google/gemini-3.5-flash');
   });
 
+  it('names the provider a role needs when that provider has no credentials', async () => {
+    server.use(
+      http.get(OM_URL, () =>
+        HttpResponse.json({
+          config: { ...baseConfig, observerModelId: 'google/gemini-3.5-flash' },
+          providerStatus: {
+            observer: { providerId: 'google', configured: false },
+            reflector: { providerId: 'openai', configured: true },
+          },
+        }),
+      ),
+    );
+
+    renderWithProviders(<OMSection models={models} />);
+
+    expect(await screen.findByText('Provider not connected')).toBeInTheDocument();
+    expect(screen.getByText(/Observer model runs on Google, which has no credentials/)).toBeInTheDocument();
+    expect(screen.queryByText(/Reflector model runs on/)).not.toBeInTheDocument();
+  });
+
+  it('stays quiet when both roles run on connected providers', async () => {
+    server.use(
+      http.get(OM_URL, () =>
+        HttpResponse.json({
+          config: baseConfig,
+          providerStatus: {
+            observer: { providerId: 'openai', configured: true },
+            reflector: { providerId: 'openai', configured: true },
+          },
+        }),
+      ),
+    );
+
+    renderWithProviders(<OMSection models={models} />);
+
+    expect(await screen.findByDisplayValue('1000')).toBeInTheDocument();
+    expect(screen.queryByText('Provider not connected')).not.toBeInTheDocument();
+    expect(screen.queryByText('Model credentials required')).not.toBeInTheDocument();
+  });
+
   it('loads the observer, reflector, thresholds, and attachment setting', async () => {
     server.use(
       http.get(OM_URL, async () => {

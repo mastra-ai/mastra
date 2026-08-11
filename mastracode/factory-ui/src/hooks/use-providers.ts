@@ -21,14 +21,16 @@ import type {
  */
 /**
  * A credential change (key saved/removed, OAuth completed, signed out) alters
- * which models are runnable, so the model catalog and the credential-gated
- * model packs must refetch along with the provider list.
+ * which models are runnable, so the model catalog, the credential-gated model
+ * packs and the OM config — seeded on connect, and reported against provider
+ * reachability — must refetch along with the provider list.
  */
 function invalidateCredentialDependentQueries(queryClient: QueryClient) {
   return Promise.all([
     queryClient.invalidateQueries({ queryKey: queryKeys.providers() }),
     queryClient.invalidateQueries({ queryKey: queryKeys.availableModels() }),
     queryClient.invalidateQueries({ queryKey: queryKeys.modelPacksAll() }),
+    queryClient.invalidateQueries({ queryKey: queryKeys.omAll() }),
   ]);
 }
 

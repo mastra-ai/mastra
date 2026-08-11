@@ -36,6 +36,8 @@ import type { Context } from 'hono';
 
 import { ModelCredentialsStorage } from '../storage/domains/credentials/base.js';
 import type { LoginSessionKind, LoginSessionRow } from '../storage/domains/credentials/base.js';
+import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
+import { fillProviderOMDefaults } from './om-defaults.js';
 import { getAuthProviderId, resolveCredentialContext } from './provider-credentials.js';
 import type { CredentialContext } from './provider-credentials.js';
 import { Route } from './route.js';
@@ -245,6 +247,8 @@ export interface OAuthRoutesDeps extends RouteDependencies {
   modelCredentials?: ModelCredentialsStorage;
   /** Notifies the host after tenant credentials change so caches can be dropped. */
   onCredentialsChanged?: (tenant: { orgId: string; userId?: string }) => void;
+  /** Memory-settings domain handle; seeds the caller's OM models on sign-in. */
+  memorySettings?: MemorySettingsStorage;
 }
 
 /**
@@ -257,7 +261,7 @@ export interface OAuthRoutesDeps extends RouteDependencies {
  */
 export class OAuthRoutes extends Route<OAuthRoutesDeps> {
   routes(): ApiRoute[] {
-    const { auth, authStorage, modelCredentials } = this.deps;
+    const { auth, authStorage, modelCredentials, memorySettings } = this.deps;
     const onCredentialsChanged = this.deps.onCredentialsChanged ?? (() => {});
 
     return [
@@ -353,6 +357,7 @@ export class OAuthRoutes extends Route<OAuthRoutesDeps> {
           }
 
           await persistOAuthCredential({ ctx, provider, credentials, authStorage, onCredentialsChanged });
+          await fillProviderOMDefaults({ memorySettings, ...sessionTenant(ctx), providerId: provider });
           await (await sessionStore(ctx)).deleteLoginSession(sessionId);
           return c.json({ status: 'complete', ok: true });
         },
@@ -411,6 +416,7 @@ export class OAuthRoutes extends Route<OAuthRoutesDeps> {
               authStorage,
               onCredentialsChanged,
             });
+            await fillProviderOMDefaults({ memorySettings, ...sessionTenant(ctx), providerId: provider });
             await (await sessionStore(ctx)).deleteLoginSession(sessionId);
             return c.json({ status: 'complete', ok: true });
           }

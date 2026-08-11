@@ -4,6 +4,7 @@ import { PROVIDER_DEFAULT_MODELS } from '../../auth/storage.js';
 import {
   getAvailableModePacks,
   getAvailableOmPacks,
+  resolveBuiltinProviderOMModelId,
   resolveProviderOMDefault,
   selectPreferredOMPack,
   type ProviderAccess,
@@ -115,6 +116,18 @@ describe('OM packs', () => {
       id: 'custom',
       modelId: 'xai/grok-4.5',
     });
+  });
+
+  it.each([
+    ['anthropic', 'anthropic/claude-haiku-4-5'],
+    ['openai-codex', 'openai/gpt-5.4-mini'],
+    ['deepseek', 'deepseek/deepseek-v4-flash'],
+  ])('resolves %s to its low-cost OM model', (providerId, modelId) => {
+    expect(resolveBuiltinProviderOMModelId(providerId)).toBe(modelId);
+  });
+
+  it.each(['xai', 'github-copilot', 'cerebras'])('resolves nothing for %s, which has no low-cost pack', providerId => {
+    expect(resolveBuiltinProviderOMModelId(providerId)).toBeUndefined();
   });
 
   it('lists only reachable packs, labelled by how each provider is reached', () => {

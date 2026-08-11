@@ -238,7 +238,11 @@ describe('provider key routes with a tenant', () => {
     { provider: 'anthropic', hasApiKey: false, apiKeyEnvVar: 'ANTHROPIC_API_KEY' },
   ]);
 
-  function buildApp(user: { workosId: string; organizationId?: string } | null, authStorage?: AuthStorage) {
+  function buildApp(
+    user: { workosId: string; organizationId?: string } | null,
+    authStorage?: AuthStorage,
+    opts: { authEnabled?: boolean } = {},
+  ) {
     const app = new Hono();
     app.use('*', async (c, next) => {
       if (user) c.set('factoryAuthUser' as never, user as never);
@@ -247,10 +251,11 @@ describe('provider key routes with a tenant', () => {
     mountApiRoutes(
       app as any,
       new ConfigRoutes({
-        auth: fakeRouteAuth({ isOrganizationAdmin }),
+        auth: fakeRouteAuth({ isOrganizationAdmin, enabled: opts.authEnabled }),
         controller,
         authStorage,
         modelCredentials: seed.credentials,
+        memorySettings: seed.memorySettings,
       }).routes(),
     );
     return app;
@@ -367,6 +372,65 @@ describe('provider key routes with a tenant', () => {
     const authStorage = { setStoredApiKey } as unknown as AuthStorage;
     await putKey(buildApp(userA, authStorage), { key: 'sk-mine' });
     expect(setStoredApiKey).not.toHaveBeenCalled();
+  });
+
+  // ── OM defaults seeded on connect ──────────────────────────────────────
+
+  const putProviderKey = (app: Hono, provider: string, body: unknown) =>
+    app.request(`/web/config/providers/${provider}/key`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+  it('seeds both OM roles from the provider the key belongs to', async () => {
+    await putKey(buildApp(userA), { key: 'sk-mine' });
+
+    await expect(seed.memorySettings.get({ orgId: 'org1', userId: 'user-a' })).resolves.toMatchObject({
+      observerModelId: 'anthropic/claude-haiku-4-5',
+      reflectorModelId: 'anthropic/claude-haiku-4-5',
+    });
+  });
+
+  it('leaves OM unset for a provider with no low-cost model', async () => {
+    await putProviderKey(buildApp(userA), 'xai', { key: 'sk-xai' });
+
+    await expect(seed.memorySettings.get({ orgId: 'org1', userId: 'user-a' })).resolves.toBeNull();
+  });
+
+  it('does not overwrite an OM model the user already chose', async () => {
+    await seed.memorySettings.patch({
+      orgId: 'org1',
+      userId: 'user-a',
+      patch: { observerModelId: 'openai/gpt-5.6' },
+    });
+
+    await putKey(buildApp(userA), { key: 'sk-mine' });
+
+    await expect(seed.memorySettings.get({ orgId: 'org1', userId: 'user-a' })).resolves.toMatchObject({
+      observerModelId: 'openai/gpt-5.6',
+      reflectorModelId: 'anthropic/claude-haiku-4-5',
+    });
+  });
+
+  it('seeds the caller row, not the org, for an org-scoped key', async () => {
+    await putKey(buildApp(userA), { key: 'sk-shared', scope: 'org' });
+
+    await expect(seed.memorySettings.get({ orgId: 'org1', userId: 'user-a' })).resolves.toMatchObject({
+      observerModelId: 'anthropic/claude-haiku-4-5',
+    });
+    await expect(seed.memorySettings.get({ orgId: 'org1', userId: 'user-b' })).resolves.toBeNull();
+  });
+
+  it('seeds the sentinel local row in local mode', async () => {
+    const authStorage = Object.assign(makeAuthStorage({}), { setStoredApiKey: vi.fn() });
+
+    const res = await putKey(buildApp(null, authStorage, { authEnabled: false }), { key: 'sk-local' });
+
+    expect(res.status).toBe(200);
+    await expect(seed.memorySettings.get({ orgId: 'local', userId: 'local' })).resolves.toMatchObject({
+      observerModelId: 'anthropic/claude-haiku-4-5',
+    });
   });
 });
 
@@ -674,6 +738,7 @@ describe('OM routes with a tenant', () => {
         auth: fakeRouteAuth({ enabled: opts.authEnabled !== false }),
         controller,
         modelCredentials: seed.credentials,
+        customProviders: seed.customProviders,
         ...(opts.withStorage === false ? {} : { memorySettings: seed.memorySettings }),
       }).routes(),
     );
@@ -792,7 +857,56 @@ describe('OM routes with a tenant', () => {
     });
   });
 
-  it('persists a role model switch to the memory-settings domain, snapshotting the other role', async () => {
+  it('reports the fallback OM model as unreachable when its provider has no credential', async () => {
+    const res = await buildApp(null).request('/web/config/om');
+
+    expect(res.status).toBe(200);
+    expect((await res.json()).providerStatus).toEqual({
+      observer: { providerId: 'google', configured: false },
+      reflector: { providerId: 'google', configured: false },
+    });
+  });
+
+  it('reports a stored OM model as reachable once its provider is credentialed', async () => {
+    await seed.memorySettings.patch({
+      orgId: 'org1',
+      userId: 'user-a',
+      patch: { observerModelId: 'anthropic/claude-haiku-4-5', reflectorModelId: 'anthropic/claude-haiku-4-5' },
+    });
+
+    const res = await buildApp(null).request('/web/config/om');
+
+    expect((await res.json()).providerStatus.observer).toEqual({ providerId: 'anthropic', configured: true });
+  });
+
+  it('counts DB-backed custom providers as reachable', async () => {
+    await seed.customProviders.upsert({
+      orgId: 'org1',
+      userId: 'user-a',
+      input: { providerId: 'acme', name: 'Acme', url: 'https://acme.test/v1', models: ['small'] },
+    });
+    await seed.memorySettings.patch({
+      orgId: 'org1',
+      userId: 'user-a',
+      patch: { observerModelId: 'acme/small' },
+    });
+
+    const res = await buildApp(null).request('/web/config/om');
+
+    expect((await res.json()).providerStatus.observer).toEqual({ providerId: 'acme', configured: true });
+  });
+
+  it('accepts a model whose provider is unconfigured and reports it back', async () => {
+    const res = await putJson(buildApp(makeOmSession()), '/web/config/om/observer/model', {
+      resourceId: 'r1',
+      modelId: 'google/gemini-3.5-flash',
+    });
+
+    expect(res.status).toBe(200);
+    expect((await res.json()).providerStatus.observer).toEqual({ providerId: 'google', configured: false });
+  });
+
+  it('persists a role model switch without inventing a choice for the other role', async () => {
     const session = makeOmSession();
     const res = await putJson(buildApp(session), '/web/config/om/observer/model', {
       resourceId: 'r1',
@@ -804,8 +918,7 @@ describe('OM routes with a tenant', () => {
     const stored = await seed.memorySettings.get({ orgId: 'org1', userId: 'user-a' });
     expect(stored).toMatchObject({
       observerModelId: 'anthropic/claude-fable-5',
-      // The reflector's current model is pinned so a restart doesn't drift it.
-      reflectorModelId: 'anthropic/claude-haiku-4-5',
+      reflectorModelId: null,
     });
   });
 

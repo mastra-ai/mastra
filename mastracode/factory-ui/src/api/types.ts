@@ -13,6 +13,8 @@ import type {
   CustomProviderInfo,
   ModelPackInfo,
   OMConfigInfo,
+  OMProviderStatus,
+  OMRoleProviderStatus,
   ProviderInfo,
   ProviderOMDefaultsResponse,
   ThinkingConfigInfo,
@@ -38,6 +40,8 @@ export type {
   CustomProviderInfo,
   ModelPackInfo,
   OMConfigInfo,
+  OMProviderStatus,
+  OMRoleProviderStatus,
   ProviderOMDefaultsResponse,
   ThinkingConfigInfo,
   UpdateThinkingConfigResponse,
@@ -76,6 +80,8 @@ export interface ModelPacksResponse {
 
 export interface OMResponse {
   config: OMConfigInfo;
+  /** Absent on servers predating provider reachability — callers fail open. */
+  providerStatus?: OMProviderStatus;
 }
 
 // ── Mutation request bodies ────────────────────────────────────────────────
@@ -167,4 +173,8 @@ export interface ActivateModelPackResponse {
 export interface UpdateOMResponse {
   ok: true;
   config: OMConfigInfo;
+}
+
+export interface UpdateOMModelResponse extends UpdateOMResponse {
+  providerStatus?: OMProviderStatus;
 }

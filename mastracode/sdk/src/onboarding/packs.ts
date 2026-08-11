@@ -177,10 +177,22 @@ function normalizeOMProviderId(providerId: string): string {
   return providerId === 'openai-codex' ? 'openai' : providerId;
 }
 
+function findBuiltinOMPack(providerId: string): BuiltinOMPack | undefined {
+  const normalizedProviderId = normalizeOMProviderId(providerId);
+  return BUILTIN_OM_PACKS.find(pack => pack.providerId === normalizedProviderId);
+}
+
+/**
+ * A provider's low-cost OM model, or `undefined` when it has none. Callers
+ * seeding a default leave OM unset rather than pinning it to a full-size model.
+ */
+export function resolveBuiltinProviderOMModelId(providerId: string): string | undefined {
+  return findBuiltinOMPack(providerId)?.modelId;
+}
+
 /** A provider's low-cost OM pack, or a custom pack on `fallbackModelId` when it has none. */
 export function resolveProviderOMDefault(providerId: string, fallbackModelId = DEFAULT_OM_MODEL_ID): OMPack {
-  const normalizedProviderId = normalizeOMProviderId(providerId);
-  const builtin = BUILTIN_OM_PACKS.find(pack => pack.providerId === normalizedProviderId);
+  const builtin = findBuiltinOMPack(providerId);
   if (builtin) {
     return {
       id: builtin.id,

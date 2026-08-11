@@ -59,6 +59,8 @@ export const queryKeys = {
   /** Prefix that matches every `modelPacks(*)` entry — pack CRUD is global, so it invalidates all of them. */
   modelPacksAll: () => ['model-packs'] as const,
   om: (resourceId: string | undefined) => ['om', resourceId ?? null] as const,
+  /** Prefix that matches every `om(*)` entry — OM settings are per user, not per session. */
+  omAll: () => ['om'] as const,
   thinkingConfig: () => ['thinking-config'] as const,
   fsList: (path: string | undefined) => ['fs-list', path ?? null] as const,
   artifactsList: (path: string | undefined) => ['artifacts-list', path ?? null] as const,

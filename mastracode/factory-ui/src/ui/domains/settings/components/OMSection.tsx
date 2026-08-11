@@ -5,6 +5,7 @@ import { Input } from '@mastra/playground-ui/components/Input';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useState } from 'react';
 
+import type { OMRoleProviderStatus } from '../../../../api/types';
 import {
   useOMQuery,
   useUpdateOMModel,
@@ -14,6 +15,7 @@ import {
 import type { AvailableModelOption } from '../../../../hooks/useAvailableModels';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { ModelCombobox } from './ModelCombobox';
+import { providerDisplayName } from './provider-display-name';
 
 type AttachmentChoice = 'auto' | 'on' | 'off';
 
@@ -27,6 +29,44 @@ function choiceToAttachment(choice: AttachmentChoice): 'auto' | boolean {
   if (choice === 'on') return true;
   if (choice === 'off') return false;
   return 'auto';
+}
+
+/** Why a role's model may not run — an unconnected provider outranks a model the catalog dropped. */
+function modelIssue({
+  role,
+  status,
+  inCatalog,
+}: {
+  role: 'Observer' | 'Reflector';
+  status: OMRoleProviderStatus | undefined;
+  inCatalog: boolean;
+}): { badge: string; message: string } | undefined {
+  if (status && !status.configured) {
+    return {
+      badge: 'Provider not connected',
+      message: `${role} model runs on ${providerDisplayName(status.providerId)}, which has no credentials. Connect it under Providers, or pick another model.`,
+    };
+  }
+  if (!inCatalog) {
+    return {
+      badge: 'Model credentials required',
+      message: `${role} model calls may fail until credentials are configured.`,
+    };
+  }
+  return undefined;
+}
+
+function ModelIssueNotice({ badge, message }: { badge: string; message: string }) {
+  return (
+    <div className="flex items-center gap-2">
+      <Badge size="md" variant="warning">
+        {badge}
+      </Badge>
+      <Txt as="p" variant="ui-xs" className="text-icon3">
+        {message}
+      </Txt>
+    </div>
+  );
 }
 
 function Field({ label, hint, children }: { label: string; hint: string; children: React.ReactNode }) {
@@ -98,10 +138,22 @@ export function OMSection({
   const attachmentsMutation = useUpdateOMObserveAttachments(resourceId, scope);
 
   const config = omQuery.data?.config;
-  const configuredModelIds = new Set(models.map(model => model.id));
-  const observerAvailable = config !== undefined && configuredModelIds.has(config.observerModelId);
-  const reflectorAvailable = config !== undefined && configuredModelIds.has(config.reflectorModelId);
-  const modelsAvailable = observerAvailable && reflectorAvailable;
+  const providerStatus = omQuery.data?.providerStatus;
+  const catalogModelIds = new Set(models.map(model => model.id));
+  const observerIssue =
+    config &&
+    modelIssue({
+      role: 'Observer',
+      status: providerStatus?.observer,
+      inCatalog: catalogModelIds.has(config.observerModelId),
+    });
+  const reflectorIssue =
+    config &&
+    modelIssue({
+      role: 'Reflector',
+      status: providerStatus?.reflector,
+      inCatalog: catalogModelIds.has(config.reflectorModelId),
+    });
   const loading = omQuery.isPending;
   const busy =
     observerMutation.isPending ||
@@ -141,17 +193,6 @@ export function OMSection({
         </Txt>
       )}
 
-      {config && !modelsAvailable && (
-        <div className="flex items-center gap-2">
-          <Badge size="md" variant="warning">
-            Model credentials required
-          </Badge>
-          <Txt as="p" variant="ui-xs" className="text-icon3">
-            Observational-memory model calls may fail until credentials are configured.
-          </Txt>
-        </div>
-      )}
-
       <Field label="Observer model" hint="Summarizes the conversation into observations">
         <ModelCombobox
           models={models}
@@ -160,6 +201,7 @@ export function OMSection({
           disabled={busy}
           onValueChange={modelId => switchModel('observer', modelId)}
         />
+        {observerIssue && <ModelIssueNotice badge={observerIssue.badge} message={observerIssue.message} />}
       </Field>
 
       <Field label="Reflector model" hint="Distills observations into longer-term memory">
@@ -170,6 +212,7 @@ export function OMSection({
           disabled={busy}
           onValueChange={modelId => switchModel('reflector', modelId)}
         />
+        {reflectorIssue && <ModelIssueNotice badge={reflectorIssue.badge} message={reflectorIssue.message} />}
       </Field>
 
       <Field label="Messages before observation" hint="Message tokens processed before the observer runs.">

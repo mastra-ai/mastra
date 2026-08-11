@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
-import type { OMResponse, ProviderOMDefaultsResponse, UpdateOMResponse } from '../api/types';
+import type { OMResponse, ProviderOMDefaultsResponse, UpdateOMModelResponse, UpdateOMResponse } from '../api/types';
 
 /**
  * Observational Memory config (mirrors the TUI `/om` command). Settings are
@@ -10,9 +10,9 @@ import type { OMResponse, ProviderOMDefaultsResponse, UpdateOMResponse } from '.
  * session is available, resourceId and scope let the server apply changes to it
  * immediately as well.
  *
- * The update mutations return the full refreshed `{ config }`, so they write it
- * straight into the cache via `setQueryData` instead of triggering a refetch —
- * preserving the single-response UX the section relies on.
+ * The update mutations return the refreshed config, so they merge it straight
+ * into the cache via `setQueryData` instead of triggering a refetch — merging
+ * rather than replacing, so the entry keeps whatever the response omits.
  */
 export function useOMQuery(resourceId: string | undefined, scope?: string) {
   const { client } = useApiConfig();
@@ -37,7 +37,8 @@ export function useApplyProviderOMDefaults() {
         providerId,
         factoryModelId,
       }),
-    onSuccess: response => queryClient.setQueryData<OMResponse>(queryKeys.om(undefined), { config: response.config }),
+    onSuccess: response =>
+      queryClient.setQueryData<OMResponse>(queryKeys.om(undefined), prev => ({ ...prev, config: response.config })),
   });
 }
 
@@ -52,8 +53,13 @@ export function useUpdateOMModel(resourceId: string | undefined, role: OMRole, s
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ modelId }: UpdateOMModelArgs) =>
-      client.put<UpdateOMResponse>(`/web/config/om/${role}/model`, { resourceId, modelId, scope }),
-    onSuccess: res => queryClient.setQueryData<OMResponse>(queryKeys.om(resourceId), { config: res.config }),
+      client.put<UpdateOMModelResponse>(`/web/config/om/${role}/model`, { resourceId, modelId, scope }),
+    onSuccess: res =>
+      queryClient.setQueryData<OMResponse>(queryKeys.om(resourceId), prev => ({
+        ...prev,
+        config: res.config,
+        providerStatus: res.providerStatus,
+      })),
   });
 }
 
@@ -68,7 +74,8 @@ export function useUpdateOMThresholds(resourceId: string | undefined, scope?: st
   return useMutation({
     mutationFn: (args: UpdateOMThresholdsArgs) =>
       client.put<UpdateOMResponse>('/web/config/om/thresholds', { resourceId, scope, ...args }),
-    onSuccess: res => queryClient.setQueryData<OMResponse>(queryKeys.om(resourceId), { config: res.config }),
+    onSuccess: res =>
+      queryClient.setQueryData<OMResponse>(queryKeys.om(resourceId), prev => ({ ...prev, config: res.config })),
   });
 }
 
@@ -82,6 +89,7 @@ export function useUpdateOMObserveAttachments(resourceId: string | undefined, sc
   return useMutation({
     mutationFn: ({ value }: UpdateOMObserveAttachmentsArgs) =>
       client.put<UpdateOMResponse>('/web/config/om/observe-attachments', { resourceId, value, scope }),
-    onSuccess: res => queryClient.setQueryData<OMResponse>(queryKeys.om(resourceId), { config: res.config }),
+    onSuccess: res =>
+      queryClient.setQueryData<OMResponse>(queryKeys.om(resourceId), prev => ({ ...prev, config: res.config })),
   });
 }

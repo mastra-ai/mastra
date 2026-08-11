@@ -87,6 +87,32 @@ describe('useUpdateOMThresholds', () => {
       // single-response UX: no refetch
       expect(onGet.mock.calls.length).toBe(callsBefore);
     });
+
+    it('keeps the provider reachability the GET reported', async () => {
+      const providerStatus = {
+        observer: { providerId: 'p', configured: false },
+        reflector: { providerId: 'p', configured: true },
+      };
+      server.use(
+        http.get(URL, () => HttpResponse.json(omResponse({}, providerStatus))),
+        http.put(`${URL}/thresholds`, () =>
+          HttpResponse.json({ ok: true, config: omResponse({ observationThreshold: 55_000 }).config }),
+        ),
+      );
+
+      const { result, client } = renderHookWithProviders(() => ({
+        query: useOMQuery('res-1'),
+        update: useUpdateOMThresholds('res-1'),
+      }));
+
+      await waitFor(() => expect(result.current.query.isSuccess).toBe(true));
+      await act(async () => {
+        await result.current.update.mutateAsync({ observationThreshold: 55_000 });
+      });
+      await waitForMutationsIdle(client);
+
+      expect(result.current.query.data?.providerStatus).toEqual(providerStatus);
+    });
   });
 });
 

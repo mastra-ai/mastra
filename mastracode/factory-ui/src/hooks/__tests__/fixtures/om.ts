@@ -1,4 +1,4 @@
-import type { OMConfigInfo, OMResponse } from '../../../api/types';
+import type { OMConfigInfo, OMProviderStatus, OMResponse } from '../../../api/types';
 
 export const omConfig: OMConfigInfo = {
   observerModelId: 'p/observer',
@@ -8,6 +8,6 @@ export const omConfig: OMConfigInfo = {
   observeAttachments: 'auto',
 };
 
-export function omResponse(overrides: Partial<OMConfigInfo> = {}): OMResponse {
-  return { config: { ...omConfig, ...overrides } };
+export function omResponse(overrides: Partial<OMConfigInfo> = {}, providerStatus?: OMProviderStatus): OMResponse {
+  return { config: { ...omConfig, ...overrides }, ...(providerStatus ? { providerStatus } : {}) };
 }
