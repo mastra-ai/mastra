@@ -1,5 +1,32 @@
 # @mastra/playground-ui
 
+## 48.0.0-alpha.17
+
+### Minor Changes
+
+- Added anchored turn positioning to `MessageScroller`. Newly added rows marked with `scrollAnchor` move toward the top of the viewport, while `defaultScrollPosition="last-anchor"` opens saved transcripts at their latest turn. ([#21283](https://github.com/mastra-ai/mastra/pull/21283))
+
+  Streaming replies can now grow beneath the current prompt without shifting the reading position. Completed replies retain that space until the next anchored turn arrives.
+
+  ```tsx
+  <MessageScrollerProvider defaultScrollPosition="last-anchor">
+    <MessageScrollerViewport>
+      <MessageScrollerContent>
+        <MessageScrollerItem messageId="turn-1" scrollAnchor>
+          <p>How do I deploy this workflow?</p>
+        </MessageScrollerItem>
+      </MessageScrollerContent>
+    </MessageScrollerViewport>
+  </MessageScrollerProvider>
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`296dc9a`](https://github.com/mastra-ai/mastra/commit/296dc9af29f3616e786c7825ec32e0df92d754c5), [`4a09a9c`](https://github.com/mastra-ai/mastra/commit/4a09a9c0474ef643558fcb5f0edc542b82f1cab0), [`1e83a47`](https://github.com/mastra-ai/mastra/commit/1e83a4734ab61ba5926af6793e3569a78b72ed37), [`ff28284`](https://github.com/mastra-ai/mastra/commit/ff2828416f14daff9d956e6a352fdaa23c950979), [`1670533`](https://github.com/mastra-ai/mastra/commit/1670533986f6bacf567746245348125e3a106448)]:
+  - @mastra/core@1.58.0-alpha.16
+  - @mastra/client-js@1.39.0-alpha.16
+  - @mastra/react@1.4.2-alpha.16
+
 ## 48.0.0-alpha.16
 
 ### Minor Changes
