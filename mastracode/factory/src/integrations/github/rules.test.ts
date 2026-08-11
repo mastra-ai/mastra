@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { builtInFactoryRules, defaultFactoryRules } from '../../rules/defaults.js';
 import { FactoryDecisionDispatcher } from '../../rules/dispatcher.js';
-import { FactoryStartCoordinator } from '../../rules/start-coordinator.js';
 import { FactoryTransitionService } from '../../rules/transition-service.js';
 import { createFactoryStorageForTests } from '../../storage/test-utils.js';
 import type { GithubIntegration } from './integration.js';
@@ -391,28 +390,9 @@ describe('GithubRules', () => {
     expect(decision?.decision).toMatchObject({ type: 'upsertLinkedWorkItem', stage: 'intake' });
   });
 
-  it('moves a trusted issue through Intake to Triage with one investigation and rematerializes it after deletion', async () => {
-    const { github, sourceControl, integrationStorage, workItems, projects, project, projectRepository } =
-      await setup('write');
-    const rules = defaultFactoryRules({
-      version: 'test-web-policy',
-      overrides: {
-        work: {
-          intake: {
-            issue: {
-              onEnter: context => ({
-                type: 'invokeSkill',
-                idempotencyKey: `${context.ingress.id}:factory-triage`,
-                role: 'triage',
-                skillName: 'factory-triage',
-                arguments: context.item.url ? `GitHub issue (${context.item.url})` : context.item.title,
-              }),
-            },
-          },
-        },
-      },
-    });
-    const transitionService = new FactoryTransitionService({ storage: workItems, rules });
+  it('materializes a trusted issue in Intake without starting triage and rematerializes it after deletion', async () => {
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
+    const rules = builtInFactoryRules();
     const service = new GithubRules({
       github,
       sourceControl,
@@ -421,143 +401,40 @@ describe('GithubRules', () => {
       storage: workItems,
       rules,
     });
-    const deliveredSignals: Array<{ id: string; contents: string; threadId: string; user: unknown }> = [];
-    const sessions = new Map<string, ReturnType<typeof makeSession>>();
-
-    function makeSession(key: string, initialThreadId?: string) {
-      let threadId: string | undefined = initialThreadId;
-      const agentEndListeners = new Set<(event: { type: string }) => void>();
-      const session = {
-        thread: {
-          list: vi.fn(async () => []),
-          create: vi.fn(async () => {
-            threadId = 'thread-issue-42';
-            return { id: threadId };
-          }),
-          switch: vi.fn(async ({ threadId: next }: { threadId: string }) => {
-            threadId = next;
-          }),
-          setSetting: vi.fn(async () => {}),
-          rename: vi.fn(async () => {}),
-          requireId: vi.fn(() => {
-            if (!threadId) throw new Error('Thread was not persisted before binding creation.');
-            return threadId;
-          }),
-          listActiveMessages: vi.fn(async () => deliveredSignals.map(({ id }) => ({ id }))),
-        },
-        getWorkspace: () => ({
-          skills: {
-            maybeRefresh: vi.fn(async () => {}),
-            get: vi.fn(async (name: string) => ({ name, instructions: 'Investigate the issue.' })),
-          },
-        }),
-        sendSignal: vi.fn(
-          (input: { id: string; contents: string }, options: { requestContext: { get(key: string): unknown } }) => {
-            if (!threadId) throw new Error('Signal delivered before thread persistence.');
-            deliveredSignals.push({ ...input, threadId, user: options.requestContext.get('user') });
-            for (const listener of agentEndListeners) {
-              listener({ type: 'agent_end' });
-            }
-            return { accepted: Promise.resolve({ accepted: true, action: 'wake' }) };
-          },
-        ),
-        subscribe: vi.fn((listener: (event: { type: string }) => void) => {
-          agentEndListeners.add(listener);
-          return () => agentEndListeners.delete(listener);
-        }),
-        state: { set: vi.fn(async () => {}) },
-        sendMessage: vi.fn(async () => {}),
-        sendNotificationSignal: vi.fn(async () => ({ persisted: Promise.resolve(), accepted: Promise.resolve() })),
-      };
-      sessions.set(key, session);
-      return session;
-    }
-
-    const controller = {
-      createSession: vi.fn(async ({ id, threadId }: { id: string; threadId: string }) => makeSession(id, threadId)),
-      getSessionByResource: vi.fn(async (resourceId: string) => sessions.get(resourceId)),
-    };
-    await sourceControl.sessions.create({
-      sessionId: 'session-issue-42',
-      projectRepositoryId: projectRepository.id,
-      orgId: 'org-1',
-      userId: 'user-1',
-      branch: 'factory/issue-42',
-      baseBranch: 'main',
-    });
-    const coordinator = new FactoryStartCoordinator(controller as never, workItems, transitionService, sourceControl);
-    const primeCredentials = vi.fn(async () => {});
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
-      transitionService,
+      controller: {} as never,
+      transitionService: new FactoryTransitionService({ storage: workItems, rules }),
       storage: workItems,
       isAutoRunEnabled: async () => true,
       ownerId: 'worker-1',
-      primeCredentials,
-      prepareBinding: async ({ record, item, role }) => {
-        await coordinator.prepare({
-          orgId: record.orgId,
-          userId: 'user-1',
-          factoryProjectId: record.factoryProjectId,
-          sessionId: 'session-issue-42',
-          threadTitle: `Issue: ${item.title}`,
-          kickoffKey: record.idempotencyKey,
-          destinationStage: 'triage',
-          workItem: { id: item.id, role, input: item },
-        });
-      },
     });
 
     await service.ingest(issueOpened('delivery-full-flow'));
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
-    await dispatcher.runOnce(new Date('2030-01-01T00:00:01Z'));
 
     const [item] = await workItems.list({ orgId: 'org-1', factoryProjectId: project.id });
     expect(item).toMatchObject({
       externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:42' },
-      stages: ['triage'],
-      sessions: {
-        triage: {
-          sessionId: 'session-issue-42',
-          branch: 'factory/issue-42',
-          threadId: 'session-issue-42',
-        },
-      },
+      stages: ['intake'],
+      sessions: {},
     });
-    expect(primeCredentials).toHaveBeenCalledWith({ orgId: 'org-1', userId: 'user-1' });
-    expect(deliveredSignals).toEqual([
-      expect.objectContaining({
-        threadId: 'session-issue-42',
-        contents: expect.stringContaining('<skill name="factory-triage">'),
-        user: { workosId: 'user-1', organizationId: 'org-1' },
-      }),
+    expect(await workItems.listRunBindings('org-1', project.id, item!.id)).toEqual([]);
+    expect(await workItems.listDeferredDecisions('org-1', project.id)).toMatchObject([
+      { status: 'succeeded', decision: { type: 'upsertLinkedWorkItem', stage: 'intake' } },
     ]);
-    const deferredDecisions = await workItems.listDeferredDecisions('org-1', project.id);
-    expect(deferredDecisions).toHaveLength(2);
-    expect(deferredDecisions.map(decision => decision.status)).toEqual(['succeeded', 'succeeded']);
-    expect(
-      deferredDecisions.filter(
-        decision => decision.decision.type === 'invokeSkill' && decision.decision.skillName === 'factory-triage',
-      ),
-    ).toHaveLength(1);
 
     await workItems.delete({ orgId: 'org-1', id: item!.id });
     await expect(service.ingest(issueOpened('delivery-full-flow'))).resolves.toEqual({ status: 'replayed' });
-    expect((await workItems.listDeferredDecisions('org-1', project.id)).map(decision => decision.status)).toEqual([
-      'retry',
-      'succeeded',
-    ]);
-
-    await dispatcher.runOnce(new Date('2030-01-01T00:00:02Z'));
-    await dispatcher.runOnce(new Date('2030-01-01T00:00:03Z'));
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:01Z'));
 
     const [rematerialized] = await workItems.list({ orgId: 'org-1', factoryProjectId: project.id });
     expect(rematerialized).toMatchObject({
       externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:42' },
-      stages: ['triage'],
+      stages: ['intake'],
+      sessions: {},
     });
     expect(rematerialized?.id).not.toBe(item?.id);
-    expect(deliveredSignals).toHaveLength(2);
+    expect(await workItems.listRunBindings('org-1', project.id, rematerialized!.id)).toEqual([]);
   });
 
   it('prefers canonical board identities over legacy GitHub rows during ingress', async () => {

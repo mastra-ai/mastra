@@ -149,7 +149,7 @@ describe('defaultFactoryRules', () => {
     expect(rules.work.triage?.linearIssue?.onEnter).toBeTypeOf('function');
   });
 
-  it('materializes observed Linear issues directly in Triage', async () => {
+  it('materializes observed Linear issues in Intake', async () => {
     const rule = defaultFactoryRules({ version: 'deployment-7' }).linear.issueObserved?.onEvent;
 
     expect(await rule?.(linearContext())).toMatchObject({
@@ -157,7 +157,7 @@ describe('defaultFactoryRules', () => {
       source: 'linear-issue',
       sourceKey: 'linear:ENG-42',
       title: 'ENG-42: Fix intake sync',
-      stage: 'triage',
+      stage: 'intake',
       metadata: { linearIssueId: 'issue-1', identifier: 'ENG-42' },
     });
   });
@@ -301,22 +301,38 @@ describe('defaultFactoryRules', () => {
     },
   );
 
-  it('does not duplicate investigation when a new GitHub issue is materialized into Triage', async () => {
+  it('does not duplicate investigation when a start coordinator moves a GitHub issue into Triage', async () => {
     const rule = defaultFactoryRules({ version: 'deployment-7' }).work.triage?.issue?.onEnter;
     const context = {
-      ...stageContext({ type: 'github', login: 'author', trusted: true, factoryAuthored: false }, 'work'),
-      cause: 'linked_item_materialized',
+      ...stageContext({ type: 'human', id: 'user-1' }, 'work'),
+      cause: 'run_start',
       stage: 'triage',
       fromStage: 'intake',
       toStage: 'triage',
     } as FactoryStageRuleContext;
 
     expect(await rule?.(context)).toBeUndefined();
-    expect(await rule?.({ ...context, fromStage: 'planning' })).toMatchObject({
-      type: 'invokeSkill',
-      role: 'triage',
-      skillName: 'factory-triage',
-    });
+  });
+
+  it('does not duplicate investigation when a start coordinator moves a Linear issue into Triage', async () => {
+    const rule = defaultFactoryRules({ version: 'deployment-7' }).work.triage?.linearIssue?.onEnter;
+    const context = {
+      ...stageContext({ type: 'human', id: 'user-1' }, 'work'),
+      cause: 'run_start',
+      item: {
+        ...item,
+        source: 'linear-issue',
+        sourceKey: 'linear:ENG-42',
+        title: 'ENG-42: Fix intake sync',
+        url: 'https://linear.app/acme/issue/ENG-42',
+      },
+      source: 'linearIssue',
+      stage: 'triage',
+      fromStage: 'intake',
+      toStage: 'triage',
+    } as FactoryStageRuleContext;
+
+    expect(await rule?.(context)).toBeUndefined();
   });
 
   it('starts investigation when a board drag or reconciliation moves an issue into Triage', async () => {
@@ -580,48 +596,51 @@ describe('defaultFactoryRules', () => {
     });
   });
 
-  it.each(['issueOpened', 'pullRequestOpened'] as const)(
-    'advances trusted %s authors and leaves untrusted authors in Intake',
-    async event => {
-      const rules = defaultFactoryRules({ version: 'deployment-7' });
-      const trustedStage = event === 'issueOpened' ? 'triage' : 'review';
-      const trusted = githubContext(event);
-      const untrusted = {
-        ...githubContext(event),
-        actor: { type: 'github', login: 'reader', trusted: false, factoryAuthored: false } as const,
-      };
-      const factoryAuthored = {
-        ...githubContext(event),
-        actor: { type: 'github', login: 'factory-bot', trusted: false, factoryAuthored: true } as const,
-      };
-
-      expect(await rules.github[event]?.onEvent?.(trusted)).toMatchObject({
-        type: 'upsertLinkedWorkItem',
-        stage: trustedStage,
-      });
-      expect(await rules.github[event]?.onEvent?.(untrusted)).toMatchObject({
-        type: 'upsertLinkedWorkItem',
-        stage: 'intake',
-      });
-      expect(await rules.github[event]?.onEvent?.(factoryAuthored)).toMatchObject({
-        type: 'upsertLinkedWorkItem',
-        stage: 'intake',
-      });
+  it.each([
+    githubContext('issueOpened'),
+    {
+      ...githubContext('issueOpened'),
+      actor: { type: 'github', login: 'reader', trusted: false, factoryAuthored: false } as const,
     },
-  );
-
-  it.each(['issueOpened', 'pullRequestOpened'] as const)(
-    'keeps trusted %s items created before the Factory in Intake',
-    async event => {
-      const rules = defaultFactoryRules({ version: 'deployment-7' });
-      const olderContext = githubContext(event, '2026-05-01T00:00:00Z');
-
-      expect(await rules.github[event]?.onEvent?.(olderContext)).toMatchObject({
-        type: 'upsertLinkedWorkItem',
-        stage: 'intake',
-      });
+    {
+      ...githubContext('issueOpened'),
+      actor: { type: 'github', login: 'factory-bot', trusted: false, factoryAuthored: true } as const,
     },
-  );
+    githubContext('issueOpened', '2026-05-01T00:00:00Z'),
+  ])('keeps injected GitHub issues in Intake regardless of trust or creation time', async context => {
+    const rule = defaultFactoryRules({ version: 'deployment-7' }).github.issueOpened?.onEvent;
+
+    expect(await rule?.(context)).toMatchObject({
+      type: 'upsertLinkedWorkItem',
+      stage: 'intake',
+    });
+  });
+
+  it('advances trusted pull-request authors and leaves untrusted authors in Intake', async () => {
+    const rule = defaultFactoryRules({ version: 'deployment-7' }).github.pullRequestOpened?.onEvent;
+    const trusted = githubContext('pullRequestOpened');
+    const untrusted = {
+      ...githubContext('pullRequestOpened'),
+      actor: { type: 'github', login: 'reader', trusted: false, factoryAuthored: false } as const,
+    };
+    const factoryAuthored = {
+      ...githubContext('pullRequestOpened'),
+      actor: { type: 'github', login: 'factory-bot', trusted: false, factoryAuthored: true } as const,
+    };
+
+    expect(await rule?.(trusted)).toMatchObject({ type: 'upsertLinkedWorkItem', stage: 'review' });
+    expect(await rule?.(untrusted)).toMatchObject({ type: 'upsertLinkedWorkItem', stage: 'intake' });
+    expect(await rule?.(factoryAuthored)).toMatchObject({ type: 'upsertLinkedWorkItem', stage: 'intake' });
+  });
+
+  it('keeps trusted pull requests created before the Factory in Intake', async () => {
+    const rule = defaultFactoryRules({ version: 'deployment-7' }).github.pullRequestOpened?.onEvent;
+
+    expect(await rule?.(githubContext('pullRequestOpened', '2026-05-01T00:00:00Z'))).toMatchObject({
+      type: 'upsertLinkedWorkItem',
+      stage: 'intake',
+    });
+  });
 
   it('uses the same issue and pull-request identities as board Intake', async () => {
     const rules = defaultFactoryRules({ version: 'deployment-7' });
