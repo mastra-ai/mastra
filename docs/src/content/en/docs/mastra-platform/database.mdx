@@ -117,7 +117,7 @@ When a database is `ready`, the provider has finished provisioning and the platf
 
 ### Turso (LibSQL)
 
-Turso exposes two environment variables: `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN`. The following example connects a [LibSQLStore](/reference/storage/libsql) using those variables.
+Turso exposes two environment variables: `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN`. The following example connects a [LibSQLStore](/integrations/databases/libsql) using those variables.
 
 ```ts title="src/mastra/storage.ts" caption="Connect a Turso (LibSQL) database"
 import { LibSQLStore } from '@mastra/libsql'
@@ -137,7 +137,7 @@ npm install @mastra/libsql@latest
 
 ### PostgreSQL
 
-PostgreSQL exposes a single `DATABASE_URL` connection string. The following example connects a [PostgresStore](/reference/storage/postgresql) using that variable.
+PostgreSQL exposes a single `DATABASE_URL` connection string. The following example connects a [PostgresStore](/integrations/databases/postgresql) using that variable.
 
 ```ts title="src/mastra/storage.ts" caption="Connect a Postgres database"
 import { PostgresStore } from '@mastra/pg'
