@@ -18,6 +18,8 @@ import { getLanguageId } from './language';
 import { buildCustomExtensions, buildServerDefs, getServersForFile, walkUp, walkUpAsync } from './servers';
 import type { DiagnosticSeverity, LSPConfig, LSPDiagnostic, LSPServerDef } from './types';
 
+const CLIENT_LEASE_SHUTDOWN_TIMEOUT_MS = 5000;
+
 /** Map LSP DiagnosticSeverity (numeric) to our string severity */
 function mapSeverity(severity: number | undefined): DiagnosticSeverity {
   switch (severity) {
@@ -182,6 +184,30 @@ export class LSPManager {
     const waiters = Array.from(this.clientLeaseWaiters);
     this.clientLeaseWaiters.clear();
     waiters.forEach(resolve => resolve());
+  }
+
+  /** Wait for active operations to release their clients, then force teardown after a bounded delay. */
+  private async waitForClientLeasesToDrain(): Promise<void> {
+    if (this.activeClientLeases.size === 0) return;
+
+    await new Promise<void>(resolve => {
+      let timeout: ReturnType<typeof setTimeout>;
+      const checkLeases = (): void => {
+        if (this.activeClientLeases.size > 0) {
+          this.clientLeaseWaiters.add(checkLeases);
+          return;
+        }
+
+        clearTimeout(timeout);
+        resolve();
+      };
+
+      timeout = setTimeout(() => {
+        this.clientLeaseWaiters.delete(checkLeases);
+        resolve();
+      }, CLIENT_LEASE_SHUTDOWN_TIMEOUT_MS);
+      this.clientLeaseWaiters.add(checkLeases);
+    });
   }
 
   /**
@@ -557,6 +583,7 @@ export class LSPManager {
       // Drain acquisition and initialization before taking the final client
       // snapshot. New acquisitions are rejected once shuttingDown is set.
       await Promise.allSettled([...this.initPromises.values(), this.clientInitQueue, this.clientLeaseAcquisitionQueue]);
+      await this.waitForClientLeasesToDrain();
       await Promise.allSettled(Array.from(this.clients.values()).map(client => client.shutdown()));
       this.clients.clear();
       this.initPromises.clear();

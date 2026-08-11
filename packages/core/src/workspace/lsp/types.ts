@@ -56,8 +56,8 @@ export interface LSPConfig {
   initTimeout?: number;
 
   /**
-   * Maximum number of language server clients retained by this workspace.
-   * When the limit is reached, the least recently used client is shut down
+   * Positive integer limiting language server clients retained by this workspace.
+   * When the limit is reached, the least recently used idle client is shut down
    * before a client for another project root is started. Unlimited by default.
    */
   maxOpenClients?: number;

@@ -271,6 +271,51 @@ describe('LSPManager', () => {
       expect(mockShutdown).toHaveBeenCalledTimes(1);
     });
 
+    it('waits for in-flight diagnostics before shutting the client down', async () => {
+      let finishDiagnostics!: (diagnostics: any[]) => void;
+      mockWaitForDiagnostics.mockImplementationOnce(
+        () =>
+          new Promise<any[]>(resolve => {
+            finishDiagnostics = resolve;
+          }),
+      );
+
+      const diagnosticsPromise = manager.getDiagnostics('/project/src/app.ts', 'const value = 1');
+      await vi.waitFor(() => expect(mockWaitForDiagnostics).toHaveBeenCalledTimes(1));
+
+      const shutdownPromise = manager.shutdownAll();
+      await Promise.resolve();
+      expect(mockShutdown).not.toHaveBeenCalled();
+
+      finishDiagnostics([{ severity: 1, message: 'diagnostic', range: { start: { line: 0, character: 0 } } }]);
+      await expect(diagnosticsPromise).resolves.toEqual([
+        { severity: 'error', message: 'diagnostic', line: 1, character: 1, source: undefined },
+      ]);
+      await shutdownPromise;
+
+      expect(mockShutdown).toHaveBeenCalledTimes(1);
+    });
+
+    it('forces shutdown after the lease drain timeout', async () => {
+      const query = await manager.prepareQuery('/project/src/app.ts');
+      expect(query).not.toBeNull();
+
+      vi.useFakeTimers();
+      try {
+        const shutdownPromise = manager.shutdownAll();
+        await vi.advanceTimersByTimeAsync(0);
+        expect(mockShutdown).not.toHaveBeenCalled();
+
+        await vi.advanceTimersByTimeAsync(5000);
+        await shutdownPromise;
+
+        expect(mockShutdown).toHaveBeenCalledTimes(1);
+      } finally {
+        query?.release();
+        vi.useRealTimers();
+      }
+    });
+
     it('rejects acquisition started after shutdown begins', async () => {
       const shutdownPromise = manager.shutdownAll();
       const clientPromise = manager.getClient('/project/src/app.ts');
@@ -715,7 +760,15 @@ describe('LSPManager', () => {
       // Either getDiagnostics returns [] or we timed out (null)
       // Both prove the system doesn't crash
       expect(result === null || (Array.isArray(result) && result.length === 0)).toBe(true);
-      await timeoutManager.shutdownAll();
+
+      vi.useFakeTimers();
+      try {
+        const shutdownPromise = timeoutManager.shutdownAll();
+        await vi.advanceTimersByTimeAsync(5000);
+        await shutdownPromise;
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 
