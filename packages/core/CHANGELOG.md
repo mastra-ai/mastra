@@ -1,5 +1,32 @@
 # @mastra/core
 
+## 1.58.0-alpha.16
+
+### Minor Changes
+
+- Added a reusable Workflow Builder authoring API for discovering registered primitives, validating complete workflow definitions, and creating strict-provider-safe builder agents. Built-in workspace tools now expose explicit output schemas so workflow authors can infer tool compatibility. ([#21210](https://github.com/mastra-ai/mastra/pull/21210))
+
+  ```ts
+  import { createWorkflowBuilderAgent } from '@mastra/core/workflows/builder';
+
+  const workflowBuilder = createWorkflowBuilderAgent({
+    id: 'workflow-builder',
+    name: 'Workflow Builder',
+    tools: discoveryAndSaveTools,
+    model,
+  });
+  ```
+
+### Patch Changes
+
+- Fixed dynamic workflows so object-form mapping configs keep working. Passing `mapConfig` as an object to `addDynamicWorkflow` previously failed at run time with `"[object Object]" is not valid JSON`; it now stays intact when the workflow is registered, saved, and loaded. ([#21287](https://github.com/mastra-ai/mastra/pull/21287))
+
+- Fixed an active goal being reported as cancelled when its objective was written while a run was already in flight. The objective a goal state projection sees is now read from storage whenever the run-start read found nothing, so a goal started or restarted mid-run is no longer projected as having no objective. ([#21255](https://github.com/mastra-ai/mastra/pull/21255))
+
+- Fixed an agent reply loop on the iMessage channel. iPhone read receipts arrive as inbound messages with no text and no attachments, and each agent reply triggered another receipt. Channel messages with neither text nor attachments no longer start an agent run. Custom channel handlers still receive them. ([#21240](https://github.com/mastra-ai/mastra/pull/21240))
+
+- Resolve dynamic models once when preparing assigned tools. ([#21281](https://github.com/mastra-ai/mastra/pull/21281))
+
 ## 1.58.0-alpha.15
 
 ### Patch Changes

@@ -1,5 +1,15 @@
 # @mastra/factory
 
+## 0.6.0-alpha.19
+
+### Patch Changes
+
+- Fixed the Factory review handoff turning finding references into GitHub links. A re-review that pointed back at "Blocking `#1`" published a link to issue 1 of the repository; findings are now named by subject and `file:line`. ([#21263](https://github.com/mastra-ai/mastra/pull/21263))
+
+- Updated dependencies [[`296dc9a`](https://github.com/mastra-ai/mastra/commit/296dc9af29f3616e786c7825ec32e0df92d754c5), [`1670533`](https://github.com/mastra-ai/mastra/commit/1670533986f6bacf567746245348125e3a106448), [`4a09a9c`](https://github.com/mastra-ai/mastra/commit/4a09a9c0474ef643558fcb5f0edc542b82f1cab0), [`1e83a47`](https://github.com/mastra-ai/mastra/commit/1e83a4734ab61ba5926af6793e3569a78b72ed37), [`ff28284`](https://github.com/mastra-ai/mastra/commit/ff2828416f14daff9d956e6a352fdaa23c950979), [`1670533`](https://github.com/mastra-ai/mastra/commit/1670533986f6bacf567746245348125e3a106448)]:
+  - @mastra/core@1.58.0-alpha.16
+  - @mastra/code-sdk@1.2.0-alpha.18
+
 ## 0.6.0-alpha.18
 
 ### Minor Changes
