@@ -727,6 +727,28 @@ describe('MastraFactory.prepare integrations', () => {
     expect(initialize.mock.calls[0]![0].storage.integrationId).toBe('custom-version-control');
   });
 
+  it('binds governed automation commands after the controller is mounted', async () => {
+    const initializeAutomation = vi.fn();
+    const controller = { setChannels: vi.fn(), createSession: vi.fn() };
+    prepareMock.mockResolvedValueOnce({
+      base: { controller },
+      mastraArgs: {},
+      finalize: vi.fn(async () => {}),
+    } as never);
+    const integration = fakeIntegration({ id: 'projects-v2', initializeAutomation });
+
+    await new MastraFactory({ storage: fakeStorage(), integrations: [integration] }).prepare();
+
+    expect(initializeAutomation).toHaveBeenCalledOnce();
+    expect(initializeAutomation).toHaveBeenCalledWith({
+      commands: expect.objectContaining({
+        startWorkItem: expect.any(Function),
+        transitionWorkItem: expect.any(Function),
+        getActiveRun: expect.any(Function),
+      }),
+    });
+  });
+
   it("folds a ready integration's routes into buildApiRoutes", async () => {
     const routes = vi.fn((_ctx: IntegrationContext) => [
       { path: '/web/custom/status', method: 'GET' as const, handler: () => new Response() },

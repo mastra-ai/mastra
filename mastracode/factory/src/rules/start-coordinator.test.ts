@@ -301,6 +301,35 @@ describe('FactoryStartCoordinator', () => {
     expect((await storage.listPendingStarts('org-1', PROJECT_ID))[0]?.status).toBe('pending');
   });
 
+  it('uses an explicitly supplied automation actor for the governed start transition', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const transition = vi.fn(async () => ({
+      status: 'committed' as const,
+      transitionId: 'transition-1',
+      itemId: 'item-1',
+      revision: 2,
+      stage: 'execute' as const,
+      decisions: [],
+    }));
+    const { controller } = makeController();
+    const coordinator = new FactoryStartCoordinator(
+      controller as never,
+      storage,
+      { transition },
+      makeSourceControl() as never,
+    );
+
+    await coordinator.prepare({
+      ...startRequest(),
+      destinationStage: 'execute',
+      actor: { type: 'system', id: 'integration:github-projects' },
+    });
+
+    expect(transition).toHaveBeenCalledWith(
+      expect.objectContaining({ actor: { type: 'system', id: 'integration:github-projects' } }),
+    );
+  });
+
   it('binds the controller session to the exact Factory session thread', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const { controller, session } = makeController();

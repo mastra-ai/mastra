@@ -54,6 +54,7 @@ import {
   primeTenantCredentials,
   registerTenantCredentialResolver,
 } from './routes/tenant-credentials.js';
+import { createFactoryAutomationCommands } from './rules/automation-commands.js';
 import { builtInFactoryRules } from './rules/defaults.js';
 import { FactoryDecisionDispatcher } from './rules/dispatcher.js';
 import { FactoryPhaseStateProcessor } from './rules/processor.js';
@@ -829,6 +830,22 @@ export class MastraFactory {
 
     this.#prepared = prepared;
     this.#factoryProcessor = factoryProcessor;
+
+    if (transitionService) {
+      for (const { integration, ready } of integrationRegistrations) {
+        if (!ready || !integration.initializeAutomation) continue;
+        integration.initializeAutomation({
+          commands: createFactoryAutomationCommands({
+            integrationId: integration.id,
+            controller: prepared.base.controller,
+            storage: workItemsStorage,
+            transitionService,
+            sourceControl: githubIntegration ? sourceControlStorage.forIntegration(githubIntegration.id) : undefined,
+            memorySettings: memorySettingsStorage,
+          }),
+        });
+      }
+    }
 
     // Chat-platform channels (Slack, Discord, …) contributed by integrations,
     // attached to the mounted controller so inbound platform messages reach

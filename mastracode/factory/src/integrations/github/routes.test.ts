@@ -595,6 +595,7 @@ function buildApp(
     controller?: NonNullable<Parameters<typeof buildGithubRoutes>[0]>['controller'];
     runIssueTriage?: (input: any) => Promise<{ threadId?: string; projectPath?: string; branch?: string }>;
     stateSigner?: typeof stateSigner | null;
+    verifiedWebhookObservers?: NonNullable<Parameters<typeof buildGithubRoutes>[0]>['verifiedWebhookObservers'];
   } = {},
 ) {
   const app = new Hono();
@@ -706,6 +707,43 @@ function signedGithubWebhookRequest(event: string, payload: Record<string, unkno
 }
 
 describe('webhook route', () => {
+  it('fans out a verified unsupported delivery before the built-in event filter', async () => {
+    const verifiedWebhookObserver = vi.fn(async () => undefined);
+    const response = await buildApp(null, { verifiedWebhookObservers: [verifiedWebhookObserver] }).request(
+      signedGithubWebhookRequest('projects_v2_item', {
+        action: 'edited',
+        projects_v2_item: { id: 'PVTI_1' },
+      }),
+    );
+
+    expect(response.status).toBe(202);
+    await expect(response.json()).resolves.toEqual({ ok: true, ignored: true });
+    expect(verifiedWebhookObserver).toHaveBeenCalledWith({
+      event: 'projects_v2_item',
+      deliveryId: expect.any(String),
+      payload: { action: 'edited', projects_v2_item: { id: 'PVTI_1' } },
+    });
+  });
+
+  it('never invokes verified observers for an invalid signature', async () => {
+    const verifiedWebhookObserver = vi.fn(async () => undefined);
+    const response = await buildApp(null, { verifiedWebhookObservers: [verifiedWebhookObserver] }).request(
+      '/web/github/webhook',
+      {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-github-event': 'projects_v2_item',
+          'x-github-delivery': 'delivery-invalid',
+          'x-hub-signature-256': `sha256=${'0'.repeat(64)}`,
+        },
+        body: JSON.stringify({ action: 'edited' }),
+      },
+    );
+
+    expect(response.status).toBe(401);
+    expect(verifiedWebhookObserver).not.toHaveBeenCalled();
+  });
   it('accepts a valid signed issues event without guessing a Factory project repository', async () => {
     seedMaterializedProject();
     const logSpy = vi.spyOn(console, 'info').mockImplementation(() => {});

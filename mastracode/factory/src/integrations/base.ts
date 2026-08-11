@@ -27,6 +27,7 @@ import type { MastraWorker } from '@mastra/core/worker';
 import type { Intake } from '../capabilities/intake.js';
 import type { VersionControl } from '../capabilities/version-control.js';
 import type { RouteAuth } from '../routes/route.js';
+import type { FactoryAutomationCommands } from '../rules/automation-commands.js';
 import type { FactoryRules } from '../rules/types.js';
 import type { SandboxFleet } from '../sandbox/fleet.js';
 import type { StateSigner } from '../state-signing.js';
@@ -178,6 +179,12 @@ export interface FactoryIntegration {
    * locator. Mirrors `sourceControl.initialize`.
    */
   initialize?(args: { storage: IntegrationStorageHandle; projects: FactoryProjectsStorage; auth: RouteAuth }): void;
+  /**
+   * Bind host-owned, governed work-item commands after the canonical controller
+   * and transition service exist. Integrations receive no storage handles or
+   * controller construction authority through this seam.
+   */
+  initializeAutomation?(args: { commands: FactoryAutomationCommands }): void;
   /**
    * The integration's full HTTP surface (status, OAuth, webhooks, feature
    * routes), as Mastra `apiRoutes`. Called once at boot; the factory folds
