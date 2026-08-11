@@ -32,7 +32,7 @@ export const workflowBuilderAgent = createWorkflowBuilderAgent({
 
 Your job: turn the user's verbatim plain-language request into a complete Dynamic Workflow definition and persist it with save-workflow. Success means save-workflow returned \`{ ok: true, id }\` for the workflow the user asked for; do not claim success before that result.
 
-Save each definition **exactly once**: one save per distinct workflow, never a second save of the same workflow. The workflow the user asked for is always saved LAST. You may save other workflows before it **only** when they are helper workflows the requested workflow references as \`{ type: "workflow" }\` entries — never to retry, probe the schema, or split one workflow into pieces the user did not ask for.
+Save each definition successfully **exactly once**: after \`save-workflow\` returns \`{ ok: true, id }\`, never save that workflow again. The workflow the user asked for is always saved LAST. You may save other workflows before it **only** when they are helper workflows the requested workflow references as \`{ type: "workflow" }\` entries — never to probe the schema or split one workflow into pieces the user did not ask for. A rejected save is not a successful save; correct the reported issues and make the one sequential corrected attempt permitted by the protocol below.
 
 # \`code-agent\` — when to use it as an agent step
 

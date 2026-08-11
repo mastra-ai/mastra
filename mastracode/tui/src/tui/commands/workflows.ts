@@ -306,6 +306,11 @@ export async function handleWorkflowsCommand(
   rawArgsText?: string,
 ): Promise<void> {
   const sub = args[0]?.toLowerCase() ?? 'list';
+  if (sub === 'help' || sub === '?' || sub === '--help') {
+    help(ctx);
+    return;
+  }
+
   const mastra = ctx.controller.getMastra();
   if (!mastra) {
     ctx.showError('Workflows: no Mastra instance attached to this controller.');
@@ -411,11 +416,6 @@ export async function handleWorkflowsCommand(
         ctx.showInfo(`Deleted workflow "${id}".`);
         return;
       }
-      case 'help':
-      case '?':
-      case '--help':
-        help(ctx);
-        return;
       default:
         ctx.showError(`Unknown /workflows subcommand: "${sub}". Try /workflows help.`);
     }

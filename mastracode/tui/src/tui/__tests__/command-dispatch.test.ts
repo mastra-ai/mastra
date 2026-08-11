@@ -267,10 +267,10 @@ describe('dispatchSlashCommand models routing', () => {
     expect(mocks.showError).not.toHaveBeenCalled();
   });
 
-  it('preserves whitespace in /workflows run JSON input', async () => {
+  it.each(['/workflows', '/workflow'])('preserves whitespace in %s run JSON input', async commandName => {
     const state = { customSlashCommands: [] } as any;
     const ctx = {} as any;
-    const command = '/workflows run greeting {"name":"Ada  Lovelace"}';
+    const command = `${commandName} run greeting {"name":"Ada  Lovelace"}`;
 
     const handled = await dispatchSlashCommand(command, state, () => ctx);
 

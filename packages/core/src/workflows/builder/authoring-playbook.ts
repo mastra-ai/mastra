@@ -224,14 +224,14 @@ The rules:
 - Output is an array of the inner step's outputs, order-preserved. Agent inner steps ⇒ \`{ text: string }[]\`. Tool inner steps ⇒ \`toolOutputSchema[]\`.
 - \`opts.concurrency\` (optional, default 1) controls how many elements run at once.
 
-**When the upstream step does NOT produce a raw array — INSERT A BRIDGE AGENT.** This is the critical case, and it is what you will hit most often. Many tools return a formatted \`string\`; others return objects. You must NOT give up on \`foreach\` in this case, and you must NOT fake iteration inside a single agent's prompt. Instead, insert an \`agent\` step BETWEEN the upstream step and the \`foreach\` whose sole job is to convert the upstream data into the array shape \`foreach\` needs. That bridge agent MUST declare an \`outputSchema\` whose top-level shape is the array (expressed as \`{ type: "array", items: {...} }\` in the canonical authoring schema). Because you can override an agent step's output shape via \`outputSchema\`, this bridge is always available, no matter what the upstream tool returns.
+**When the upstream step does NOT produce a raw array — INSERT A MAPPING AND A BRIDGE AGENT.** This is the critical case, and it is what you will hit most often. Many tools return a formatted \`string\`; others return objects. You must NOT give up on \`foreach\` in this case, and you must NOT fake iteration inside a single agent's prompt. First insert a \`mapping\` that builds the bridge agent's exact \`{ prompt: string }\` input, then insert an \`agent\` step whose sole job is to convert the upstream data into the array shape \`foreach\` needs. Never feed a raw string, array, or differently shaped object directly into the bridge agent: declarative agent inputs are always \`{ prompt: string }\`. The bridge agent MUST declare an \`outputSchema\` whose top-level shape is the array (expressed as \`{ type: "array", items: {...} }\` in the canonical authoring schema). Because you can override an agent step's output shape via \`outputSchema\`, this bridge is always available, no matter what the upstream tool returns.
 
 Concretely, the shape is ALWAYS one of:
 
 - \`tool (returns array) → foreach\` — direct, no bridge.
 - \`agent-with-outputSchema-array → foreach\` — direct, the agent step itself is the array producer.
-- \`tool (returns string OR object) → bridge-agent (outputSchema: array) → foreach\` — the common case, USE THIS.
-- \`upstream-step → mapping (to build { prompt }) → bridge-agent (outputSchema: array) → foreach\` — when the bridge agent needs a specifically-shaped prompt and the upstream isn't already a plain string.
+- \`upstream-step (returns string OR object) → mapping (builds { prompt }) → bridge-agent (outputSchema: array) → foreach\` — the common case, USE THIS.
+- A bridge agent may directly follow the upstream step only when that step already outputs exactly \`{ prompt: string }\`; otherwise the mapping is mandatory.
 
 If the array elements must be strings and the inner \`foreach\` step is an \`agent\`, prefer \`outputSchema: z.array(z.object({ prompt: z.string() }))\` so each iteration receives a well-formed \`{ prompt }\` input.
 
@@ -242,6 +242,11 @@ Worked example — \`foreach\` after a string-returning tool:
 \`\`\`json
 [
   { "type": "tool", "id": "list-files", "toolId": "<discovered-listing-tool-id>" },
+  {
+    "type": "mapping",
+    "id": "build-extraction-prompt",
+    "mapConfig": "{\\"prompt\\":{\\"template\\":\\"Create one { prompt } object per file in this listing. Each prompt must tell the summarizer to read and summarize that file.\\\\n\\\\nListing:\\\\n\\\\n\${stepResults.list-files}\\"}}"
+  },
   {
     "type": "agent",
     "id": "extract-paths",
@@ -264,7 +269,7 @@ Worked example — \`foreach\` after a string-returning tool:
 ]
 \`\`\`
 
-The \`extract-paths\` bridge agent's prompt (which it receives as the upstream tool's string output, coerced to the user message) tells it to emit one \`{ prompt }\` object per file. Its \`outputSchema\` forces the array shape at the top level, which \`foreach\` then iterates over.
+The \`build-extraction-prompt\` mapping wraps the listing in the exact \`{ prompt: string }\` input the \`extract-paths\` bridge agent requires. The bridge agent then emits one \`{ prompt }\` object per file. Its \`outputSchema\` forces the array shape at the top level, which \`foreach\` iterates over.
 
 **\`sleep\` — wait a fixed number of milliseconds.** Static only; a function form exists in code but does NOT round-trip.
 
@@ -405,11 +410,16 @@ User says: "for every open GitHub issue in the repo, have a discovered reasoning
 
 Discovery must surface an upstream that returns an ARRAY as its top-level output, AND each element of that array must already be shaped like the inner step's required input. The inner step here is an \`agent\`, so each element must be \`{ prompt: string }\`. If \`github_list_open_issues\` returns \`{ title: string, body: string }[]\`, that's the WRONG shape — the agent step will reject each iteration with "expected object, received …" because \`{ title, body }\` is not \`{ prompt }\`. And \`mapping\` cannot sit inside a \`foreach\` to fix it per-iteration.
 
-The fix: turn the raw list into \`Array<{ prompt: string }>\` FIRST using an agent with a structured \`outputSchema\`, then iterate that:
+The fix: map the raw list into the bridge agent's \`{ prompt: string }\` input, have that agent produce \`Array<{ prompt: string }>\` with a structured \`outputSchema\`, then iterate that array:
 
 \`\`\`json
 [
   { "type": "tool", "id": "list-issues", "toolId": "github_list_open_issues" },
+  {
+    "type": "mapping",
+    "id": "build-triage-prompt",
+    "mapConfig": "{\\"prompt\\":{\\"template\\":\\"Convert every issue below into one { prompt } object that asks for a one-line triage note and includes the issue title and body.\\\\n\\\\nIssues:\\\\n\\\\n\${stepResults.list-issues}\\"}}"
+  },
   {
     "type": "agent",
     "id": "prep-prompts",
@@ -434,9 +444,9 @@ The fix: turn the raw list into \`Array<{ prompt: string }>\` FIRST using an age
 
 Now \`triage-one\` receives \`{ prompt: string }\` per iteration — schemas line up — and returns \`{ text }\`. The foreach's output is \`{ text }[]\`, one per issue, in list order. The workflow's \`outputSchema\` is \`{ type: "array", items: { type: "object", properties: { text: { type: "string" } }, required: ["text"] } }\`.
 
-**Why the extra agent step exists:** it's the only declarative way to project \`Array<X>\` into \`Array<{ prompt: string }>\` today. A mapping can't produce an array-shaped root, and it can't live inside a foreach. So an agent-with-structured-outputSchema is the bridge.
+**Why both extra steps exist:** \`build-triage-prompt\` gives the bridge agent its required \`{ prompt: string }\` input. The bridge agent is then the only declarative way to project \`Array<X>\` into a raw \`Array<{ prompt: string }>\` root today. A mapping can't produce an array-shaped root, and it can't live inside a foreach.
 
-If instead \`github_list_open_issues\` returns \`{ issues: [...] }\` (array nested inside an object), you STILL need the \`prep-prompts\` bridge — mappings cannot produce an array root, so they can't un-wrap this either. The bridge agent handles both un-wrapping and shape-conversion in one step.
+If instead \`github_list_open_issues\` returns \`{ issues: [...] }\` (array nested inside an object), you STILL need both steps: the mapping places that object in the bridge agent's prompt, and \`prep-prompts\` handles both un-wrapping and shape conversion.
 
 # Worked example: extract-then-iterate using structured agent output
 
