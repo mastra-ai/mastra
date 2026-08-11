@@ -123,9 +123,24 @@ const sidebars = {
           label: 'AI SDK UI',
           customProps: { icon: 'https://cdn.simpleicons.org/vercel/black/white?viewbox=auto&size=28' },
         },
-        { type: 'doc', id: 'agentic-ui/assistant-ui', label: 'Assistant UI' },
-        { type: 'doc', id: 'agentic-ui/copilotkit', label: 'CopilotKit' },
-        { type: 'doc', id: 'agentic-ui/openui', label: 'OpenUI' },
+        {
+          type: 'doc',
+          id: 'agentic-ui/assistant-ui',
+          label: 'Assistant UI',
+          customProps: { icon: '/img/integrations/assistant-ui.svg', customCSS: 'dark:invert' },
+        },
+        {
+          type: 'doc',
+          id: 'agentic-ui/copilotkit',
+          label: 'CopilotKit',
+          customProps: { icon: '/img/integrations/copilotkit.svg' },
+        },
+        {
+          type: 'doc',
+          id: 'agentic-ui/openui',
+          label: 'OpenUI',
+          customProps: { icon: '/img/integrations/openui.svg', customCSS: 'dark:invert' },
+        },
       ],
     },
     {
@@ -133,22 +148,40 @@ const sidebars = {
       label: 'Sandboxes',
       collapsed: true,
       items: [
-        { type: 'doc', id: 'sandboxes/agentcore', label: 'AgentCore' },
+        {
+          type: 'doc',
+          id: 'sandboxes/agentcore',
+          label: 'AgentCore',
+          customProps: {
+            icon: 'https://svgl.app/library/aws_light.svg',
+            iconDark: 'https://svgl.app/library/aws_dark.svg',
+          },
+        },
         {
           type: 'doc',
           id: 'sandboxes/apple-container',
           label: 'Apple Container',
           customProps: { icon: 'https://cdn.simpleicons.org/apple/black/white?viewbox=auto&size=28' },
         },
-        { type: 'doc', id: 'sandboxes/blaxel', label: 'Blaxel' },
-        { type: 'doc', id: 'sandboxes/daytona', label: 'Daytona' },
+        { type: 'doc', id: 'sandboxes/blaxel', label: 'Blaxel', customProps: { icon: '/img/integrations/blaxel.svg' } },
+        {
+          type: 'doc',
+          id: 'sandboxes/daytona',
+          label: 'Daytona',
+          customProps: { icon: '/img/integrations/daytona.svg', customCSS: 'dark:invert' },
+        },
         {
           type: 'doc',
           id: 'sandboxes/docker',
           label: 'Docker',
           customProps: { icon: 'https://cdn.simpleicons.org/docker?viewbox=auto&size=28' },
         },
-        { type: 'doc', id: 'sandboxes/e2b', label: 'E2B' },
+        {
+          type: 'doc',
+          id: 'sandboxes/e2b',
+          label: 'E2B',
+          customProps: { icon: '/img/integrations/e2b.svg', customCSS: 'dark:invert' },
+        },
         {
           type: 'doc',
           id: 'sandboxes/modal',
@@ -174,24 +207,54 @@ const sidebars = {
       label: 'Observability',
       collapsed: true,
       items: [
-        { type: 'doc', id: 'observability/arize', label: 'Arize' },
-        { type: 'doc', id: 'observability/arthur', label: 'Arthur' },
+        {
+          type: 'doc',
+          id: 'observability/arize',
+          label: 'Arize',
+          customProps: { icon: '/img/integrations/arize.svg' },
+        },
+        {
+          type: 'doc',
+          id: 'observability/arthur',
+          label: 'Arthur',
+          customProps: { icon: '/img/integrations/arthur.svg' },
+        },
         {
           type: 'doc',
           id: 'observability/braintrust',
           label: 'Braintrust',
           customProps: { icon: 'https://cdn.simpleicons.org/braintrust/black/white?viewbox=auto&size=28' },
         },
-        { type: 'doc', id: 'observability/confident-ai', label: 'Confident AI' },
+        {
+          type: 'doc',
+          id: 'observability/confident-ai',
+          label: 'Confident AI',
+          customProps: { icon: '/img/integrations/confident-ai.svg', customCSS: 'dark:invert' },
+        },
         {
           type: 'doc',
           id: 'observability/datadog',
           label: 'Datadog',
           customProps: { icon: 'https://cdn.simpleicons.org/datadog?viewbox=auto&size=28' },
         },
-        { type: 'doc', id: 'observability/laminar', label: 'Laminar' },
-        { type: 'doc', id: 'observability/langfuse', label: 'Langfuse' },
-        { type: 'doc', id: 'observability/langsmith', label: 'LangSmith' },
+        {
+          type: 'doc',
+          id: 'observability/laminar',
+          label: 'Laminar',
+          customProps: { icon: '/img/integrations/laminar.svg' },
+        },
+        {
+          type: 'doc',
+          id: 'observability/langfuse',
+          label: 'Langfuse',
+          customProps: { icon: '/img/integrations/langfuse.svg' },
+        },
+        {
+          type: 'doc',
+          id: 'observability/langsmith',
+          label: 'LangSmith',
+          customProps: { icon: 'https://cdn.simpleicons.org/langchaincorporate/black/white?viewbox=auto&size=28' },
+        },
         {
           type: 'doc',
           id: 'observability/opentelemetry',
@@ -217,7 +280,15 @@ const sidebars = {
       label: 'Databases',
       collapsed: true,
       items: [
-        { type: 'doc', id: 'databases/aurora-dsql', label: 'Aurora DSQL' },
+        {
+          type: 'doc',
+          id: 'databases/aurora-dsql',
+          label: 'Aurora DSQL',
+          customProps: {
+            icon: 'https://svgl.app/library/aws_light.svg',
+            iconDark: 'https://svgl.app/library/aws_dark.svg',
+          },
+        },
         {
           type: 'doc',
           id: 'databases/clickhouse',
@@ -248,23 +319,46 @@ const sidebars = {
           label: 'DuckDB',
           customProps: { icon: 'https://cdn.simpleicons.org/duckdb?viewbox=auto&size=28' },
         },
-        { type: 'doc', id: 'databases/dynamodb', label: 'DynamoDB' },
+        {
+          type: 'doc',
+          id: 'databases/dynamodb',
+          label: 'DynamoDB',
+          customProps: {
+            icon: 'https://svgl.app/library/aws_light.svg',
+            iconDark: 'https://svgl.app/library/aws_dark.svg',
+          },
+        },
         {
           type: 'doc',
           id: 'databases/spanner',
           label: 'Google Cloud Spanner',
           customProps: { icon: 'https://cdn.simpleicons.org/googlecloudspanner?viewbox=auto&size=28' },
         },
-        { type: 'doc', id: 'databases/lancedb', label: 'LanceDB' },
-        { type: 'doc', id: 'databases/libsql', label: 'libSQL' },
+        {
+          type: 'doc',
+          id: 'databases/lancedb',
+          label: 'LanceDB',
+          customProps: { icon: '/img/integrations/lancedb.svg', customCSS: 'dark:invert' },
+        },
+        { type: 'doc', id: 'databases/libsql', label: 'libSQL', customProps: { icon: '/img/integrations/libsql.svg' } },
         {
           type: 'doc',
           id: 'databases/mongodb',
           label: 'MongoDB',
           customProps: { icon: 'https://cdn.simpleicons.org/mongodb?viewbox=auto&size=28' },
         },
-        { type: 'doc', id: 'databases/mssql', label: 'MSSQL' },
-        { type: 'doc', id: 'databases/oracledb', label: 'OracleDB' },
+        {
+          type: 'doc',
+          id: 'databases/mssql',
+          label: 'MSSQL',
+          customProps: { icon: 'https://svgl.app/library/microsoft.svg' },
+        },
+        {
+          type: 'doc',
+          id: 'databases/oracledb',
+          label: 'OracleDB',
+          customProps: { icon: '/img/integrations/oracle.svg' },
+        },
         {
           type: 'doc',
           id: 'databases/postgresql',
@@ -290,10 +384,39 @@ const sidebars = {
       label: 'Deploy',
       collapsed: true,
       items: [
-        { type: 'doc', id: 'deploy/aws-bedrock-agentcore', label: 'Amazon Bedrock AgentCore' },
-        { type: 'doc', id: 'deploy/amazon-ec2', label: 'Amazon EC2' },
-        { type: 'doc', id: 'deploy/aws-lambda', label: 'AWS Lambda' },
-        { type: 'doc', id: 'deploy/azure-app-services', label: 'Azure App Services' },
+        {
+          type: 'doc',
+          id: 'deploy/aws-bedrock-agentcore',
+          label: 'Amazon Bedrock AgentCore',
+          customProps: {
+            icon: 'https://svgl.app/library/aws_light.svg',
+            iconDark: 'https://svgl.app/library/aws_dark.svg',
+          },
+        },
+        {
+          type: 'doc',
+          id: 'deploy/amazon-ec2',
+          label: 'Amazon EC2',
+          customProps: {
+            icon: 'https://svgl.app/library/aws_light.svg',
+            iconDark: 'https://svgl.app/library/aws_dark.svg',
+          },
+        },
+        {
+          type: 'doc',
+          id: 'deploy/aws-lambda',
+          label: 'AWS Lambda',
+          customProps: {
+            icon: 'https://svgl.app/library/aws_light.svg',
+            iconDark: 'https://svgl.app/library/aws_dark.svg',
+          },
+        },
+        {
+          type: 'doc',
+          id: 'deploy/azure-app-services',
+          label: 'Azure App Services',
+          customProps: { icon: 'https://svgl.app/library/azure.svg' },
+        },
         {
           type: 'doc',
           id: 'deploy/cloudflare',
@@ -306,7 +429,12 @@ const sidebars = {
           label: 'Digital Ocean',
           customProps: { icon: 'https://cdn.simpleicons.org/digitalocean?viewbox=auto&size=28' },
         },
-        { type: 'doc', id: 'deploy/inngest', label: 'Inngest' },
+        {
+          type: 'doc',
+          id: 'deploy/inngest',
+          label: 'Inngest',
+          customProps: { icon: '/img/integrations/inngest.svg', customCSS: 'dark:invert' },
+        },
         {
           type: 'doc',
           id: 'deploy/kubernetes',
@@ -323,7 +451,7 @@ const sidebars = {
           type: 'doc',
           id: 'deploy/temporal',
           label: 'Temporal',
-          customProps: { icon: 'https://cdn.simpleicons.org/temporal?viewbox=auto&size=28' },
+          customProps: { icon: 'https://cdn.simpleicons.org/temporal/black/white?viewbox=auto&size=28' },
         },
         {
           type: 'doc',
@@ -338,15 +466,30 @@ const sidebars = {
       label: 'Tools',
       collapsed: true,
       items: [
-        { type: 'doc', id: 'tools/brightdata', label: 'Bright Data' },
-        { type: 'doc', id: 'tools/firecrawl', label: 'Firecrawl' },
+        {
+          type: 'doc',
+          id: 'tools/brightdata',
+          label: 'Bright Data',
+          customProps: { icon: '/img/integrations/bright-data.svg' },
+        },
+        {
+          type: 'doc',
+          id: 'tools/firecrawl',
+          label: 'Firecrawl',
+          customProps: { icon: '/img/integrations/firecrawl.svg' },
+        },
         {
           type: 'doc',
           id: 'tools/perplexity',
           label: 'Perplexity',
           customProps: { icon: 'https://cdn.simpleicons.org/perplexity?viewbox=auto&size=28' },
         },
-        { type: 'doc', id: 'tools/tavily', label: 'Tavily' },
+        {
+          type: 'doc',
+          id: 'tools/tavily',
+          label: 'Tavily',
+          customProps: { icon: '/img/integrations/tavily.svg', customCSS: 'dark:invert' },
+        },
       ],
     },
     {
@@ -354,8 +497,16 @@ const sidebars = {
       label: 'Voice',
       collapsed: true,
       items: [
-        { type: 'doc', id: 'voice/aws-nova-sonic', label: 'AWS Nova Sonic' },
-        { type: 'doc', id: 'voice/azure', label: 'Azure' },
+        {
+          type: 'doc',
+          id: 'voice/aws-nova-sonic',
+          label: 'AWS Nova Sonic',
+          customProps: {
+            icon: 'https://svgl.app/library/aws_light.svg',
+            iconDark: 'https://svgl.app/library/aws_dark.svg',
+          },
+        },
+        { type: 'doc', id: 'voice/azure', label: 'Azure', customProps: { icon: 'https://svgl.app/library/azure.svg' } },
         {
           type: 'doc',
           id: 'voice/cloudflare',
@@ -378,9 +529,14 @@ const sidebars = {
           type: 'doc',
           id: 'voice/google',
           label: 'Google',
-          customProps: { icon: 'https://cdn.simpleicons.org/google?viewbox=auto&size=28' },
+          customProps: { icon: 'https://svgl.app/library/google.svg' },
         },
-        { type: 'doc', id: 'voice/inworld', label: 'Inworld' },
+        {
+          type: 'doc',
+          id: 'voice/inworld',
+          label: 'Inworld',
+          customProps: { icon: '/img/integrations/inworld.svg', customCSS: 'dark:invert' },
+        },
         {
           type: 'doc',
           id: 'voice/livekit',
@@ -393,12 +549,34 @@ const sidebars = {
           label: 'Mistral',
           customProps: { icon: 'https://cdn.simpleicons.org/mistralai?viewbox=auto&size=28' },
         },
-        { type: 'doc', id: 'voice/murf', label: 'Murf' },
-        { type: 'doc', id: 'voice/openai', label: 'OpenAI' },
-        { type: 'doc', id: 'voice/playai', label: 'PlayAI' },
-        { type: 'doc', id: 'voice/sarvam', label: 'Sarvam' },
-        { type: 'doc', id: 'voice/speechify', label: 'Speechify' },
-        { type: 'doc', id: 'voice/xai', label: 'xAI' },
+        { type: 'doc', id: 'voice/murf', label: 'Murf', customProps: { icon: '/img/integrations/murf.svg' } },
+        {
+          type: 'doc',
+          id: 'voice/openai',
+          label: 'OpenAI',
+          customProps: { icon: 'https://svgl.app/library/openai.svg', customCSS: 'dark:invert' },
+        },
+        {
+          type: 'doc',
+          id: 'voice/sarvam',
+          label: 'Sarvam',
+          customProps: { icon: '/img/integrations/sarvam.svg', customCSS: 'dark:invert' },
+        },
+        {
+          type: 'doc',
+          id: 'voice/speechify',
+          label: 'Speechify',
+          customProps: { icon: '/img/integrations/speechify.svg', customCSS: 'dark:invert' },
+        },
+        {
+          type: 'doc',
+          id: 'voice/xai',
+          label: 'xAI',
+          customProps: {
+            icon: 'https://svgl.app/library/xai_light.svg',
+            iconDark: 'https://svgl.app/library/xai_dark.svg',
+          },
+        },
       ],
     },
     {
@@ -434,7 +612,7 @@ const sidebars = {
           type: 'doc',
           id: 'auth/google',
           label: 'Google',
-          customProps: { icon: 'https://cdn.simpleicons.org/google?viewbox=auto&size=28' },
+          customProps: { icon: 'https://svgl.app/library/google.svg' },
         },
         {
           type: 'doc',
@@ -448,7 +626,12 @@ const sidebars = {
           label: 'Supabase',
           customProps: { icon: 'https://cdn.simpleicons.org/supabase?viewbox=auto&size=28' },
         },
-        { type: 'doc', id: 'auth/workos', label: 'WorkOS' },
+        {
+          type: 'doc',
+          id: 'auth/workos',
+          label: 'WorkOS',
+          customProps: { icon: 'https://svgl.app/library/workos.svg' },
+        },
       ],
     },
     {
@@ -456,10 +639,30 @@ const sidebars = {
       label: 'Browsers',
       collapsed: true,
       items: [
-        { type: 'doc', id: 'browsers/agent-browser', label: 'AgentBrowser' },
-        { type: 'doc', id: 'browsers/browser-viewer', label: 'BrowserViewer' },
-        { type: 'doc', id: 'browsers/firecrawl', label: 'Firecrawl' },
-        { type: 'doc', id: 'browsers/stagehand', label: 'Stagehand' },
+        {
+          type: 'doc',
+          id: 'browsers/agent-browser',
+          label: 'AgentBrowser',
+          customProps: { icon: 'https://cdn.simpleicons.org/vercel/black/white?viewbox=auto&size=28' },
+        },
+        {
+          type: 'doc',
+          id: 'browsers/browser-viewer',
+          label: 'BrowserViewer',
+          customProps: { icon: '/img/integrations/mastra.svg', customCSS: 'dark:invert' },
+        },
+        {
+          type: 'doc',
+          id: 'browsers/firecrawl',
+          label: 'Firecrawl',
+          customProps: { icon: '/img/integrations/firecrawl.svg' },
+        },
+        {
+          type: 'doc',
+          id: 'browsers/stagehand',
+          label: 'Stagehand',
+          customProps: { icon: '/img/integrations/stagehand.svg' },
+        },
       ],
     },
     {
@@ -467,23 +670,51 @@ const sidebars = {
       label: 'File storage',
       collapsed: true,
       items: [
-        { type: 'doc', id: 'file-storage/agentfs', label: 'AgentFS' },
-        { type: 'doc', id: 'file-storage/amazon-s3', label: 'Amazon S3' },
-        { type: 'doc', id: 'file-storage/archil', label: 'Archil' },
-        { type: 'doc', id: 'file-storage/azure-blob', label: 'Azure Blob' },
+        {
+          type: 'doc',
+          id: 'file-storage/agentfs',
+          label: 'AgentFS',
+          customProps: { icon: 'https://cdn.simpleicons.org/turso?viewbox=auto&size=28' },
+        },
+        {
+          type: 'doc',
+          id: 'file-storage/amazon-s3',
+          label: 'Amazon S3',
+          customProps: {
+            icon: 'https://svgl.app/library/aws_light.svg',
+            iconDark: 'https://svgl.app/library/aws_dark.svg',
+          },
+        },
+        {
+          type: 'doc',
+          id: 'file-storage/archil',
+          label: 'Archil',
+          customProps: { icon: '/img/integrations/archil.svg', customCSS: 'dark:invert' },
+        },
+        {
+          type: 'doc',
+          id: 'file-storage/azure-blob',
+          label: 'Azure Blob',
+          customProps: { icon: 'https://svgl.app/library/azure.svg' },
+        },
         {
           type: 'doc',
           id: 'file-storage/google-cloud-storage',
           label: 'Google Cloud Storage',
-          customProps: { icon: 'https://cdn.simpleicons.org/googlecloudstorage?viewbox=auto&size=28' },
+          customProps: { icon: 'https://svgl.app/library/google-cloud.svg' },
         },
         {
           type: 'doc',
           id: 'file-storage/google-drive',
           label: 'Google Drive',
-          customProps: { icon: 'https://cdn.simpleicons.org/googledrive?viewbox=auto&size=28' },
+          customProps: { icon: 'https://svgl.app/library/drive.svg' },
         },
-        { type: 'doc', id: 'file-storage/mesa', label: 'Mesa' },
+        {
+          type: 'doc',
+          id: 'file-storage/mesa',
+          label: 'Mesa',
+          customProps: { icon: '/img/integrations/mesa.svg', customCSS: 'dark:invert' },
+        },
         {
           type: 'doc',
           id: 'file-storage/vercel-files',

@@ -329,11 +329,6 @@ const sidebars = {
           items: [
             {
               type: 'doc',
-              id: 'browser/overview',
-              label: 'Overview',
-            },
-            {
-              type: 'doc',
               id: 'browser/recording',
               label: 'Recording',
               customProps: {
@@ -481,11 +476,6 @@ const sidebars = {
             contextualSidebar: true,
           },
           items: [
-            {
-              type: 'doc',
-              id: 'server/auth/index',
-              label: 'Overview',
-            },
             {
               type: 'doc',
               id: 'server/auth/composite-auth',

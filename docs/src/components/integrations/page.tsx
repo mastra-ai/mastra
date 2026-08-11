@@ -12,6 +12,8 @@ interface IntegrationItem {
   label: string
   customProps?: {
     icon?: string
+    iconDark?: string
+    customCSS?: string
   }
 }
 
@@ -88,18 +90,38 @@ export default function IntegrationsPage() {
           <ul className={cn('grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4', styles.list)}>
             {category.items.map(item => (
               <li key={item.id} className="mt-0!">
-                <Link
-                  className="block h-full w-full text-black! no-underline! dark:text-white!"
-                  to={`/integrations/${item.id}`}
-                >
+                <Link className="block h-full w-full no-underline!" to={`/integrations/${item.id}`}>
                   <div className="text-card-foreground flex h-full w-full cursor-pointer items-center gap-4 rounded-xl border border-(--border) bg-(--mastra-surface-1)/20 px-4 py-4 shadow-none transition-colors hover:bg-(--mastra-surface-1)/70 dark:border-(--border) dark:hover:bg-(--mastra-surface-2)">
                     {item.customProps?.icon ? (
-                      <img
-                        src={item.customProps.icon}
-                        alt=""
-                        loading="lazy"
-                        className="size-7 rounded-none! object-contain"
-                      />
+                      item.customProps?.iconDark ? (
+                        <>
+                          <img
+                            src={item.customProps.icon}
+                            alt=""
+                            loading="lazy"
+                            className={cn(
+                              'size-7 rounded-none! object-contain dark:hidden',
+                              item.customProps.customCSS,
+                            )}
+                          />
+                          <img
+                            src={item.customProps.iconDark}
+                            alt=""
+                            loading="lazy"
+                            className={cn(
+                              'hidden size-7 rounded-none! object-contain dark:block',
+                              item.customProps.customCSS,
+                            )}
+                          />
+                        </>
+                      ) : (
+                        <img
+                          src={item.customProps.icon}
+                          alt=""
+                          loading="lazy"
+                          className={cn('size-7 rounded-none! object-contain', item.customProps?.customCSS)}
+                        />
+                      )
                     ) : null}
                     <span className="truncate">{item.label}</span>
                   </div>
