@@ -1,5 +1,6 @@
 import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent-controller';
 import { screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 
 import { renderWithProviders } from '../../../../../../e2e/ui/render';
@@ -42,6 +43,10 @@ function doneTool(toolCallId: string, toolName: string): MastraDBMessage['conten
   };
 }
 
+function runningTool(toolCallId: string, toolName: string, args: unknown): MastraDBMessage['content']['parts'][number] {
+  return { type: 'tool-invocation', toolInvocation: { state: 'call', toolCallId, toolName, args } };
+}
+
 function renderEntries(entries: TimelineEntry[]) {
   return renderWithProviders(<TranscriptEntries entries={entries} onApprove={() => {}} onRespond={() => {}} />);
 }
@@ -49,12 +54,9 @@ function renderEntries(entries: TimelineEntry[]) {
 describe('TranscriptEntries tool rows', () => {
   it('shows no status icon on success — only running and failed carry indicators', () => {
     renderEntries([
-      assistantMessage('msg-1', [
-        doneTool('call-1', 'view'),
-        {
-          type: 'tool-invocation',
-          toolInvocation: { state: 'call', toolCallId: 'call-2', toolName: 'execute_command', args: {} },
-        },
+      assistantMessage('msg-1', [doneTool('call-1', 'view')]),
+      assistantMessage('msg-2', [runningTool('call-2', 'execute_command', {})]),
+      assistantMessage('msg-3', [
         {
           type: 'tool-invocation',
           toolInvocation: {
@@ -80,6 +82,75 @@ describe('TranscriptEntries tool rows', () => {
     // Failure keeps its red cross.
     const failedRow = screen.getByRole('group', { name: 'Tool: write_file' });
     expect(within(failedRow).getByRole('img', { name: 'Failed' })).toBeInTheDocument();
+  });
+
+  it('renders a humanized action and salient argument instead of the raw tool name', () => {
+    renderEntries([
+      assistantMessage('msg-1', [
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'result',
+            toolCallId: 'call-1',
+            toolName: 'execute_command',
+            args: { command: 'pnpm build' },
+            result: 'ok',
+          },
+        },
+      ]),
+    ]);
+
+    const row = screen.getByRole('group', { name: 'Tool: execute_command' });
+    expect(within(row).getByText('Run')).toBeInTheDocument();
+    expect(within(row).getByText('pnpm build')).toBeInTheDocument();
+    expect(within(row).queryByText('execute_command')).not.toBeInTheDocument();
+  });
+
+  it('collapses three or more consecutive tool calls into a single group row', async () => {
+    renderEntries([
+      assistantMessage('msg-1', [
+        doneTool('call-1', 'view'),
+        doneTool('call-2', 'search_content'),
+        doneTool('call-3', 'view'),
+      ]),
+    ]);
+
+    const group = screen.getByRole('group', { name: 'Tool group: 3 steps' });
+    expect(screen.queryByRole('group', { name: 'Tool: view' })).not.toBeInTheDocument();
+
+    await userEvent.click(within(group).getAllByRole('button')[0]);
+    expect(screen.getAllByRole('group', { name: 'Tool: view' })).toHaveLength(2);
+  });
+
+  it('surfaces the running action live on a collapsed group header', () => {
+    renderEntries([
+      assistantMessage('msg-1', [
+        doneTool('call-1', 'view'),
+        doneTool('call-2', 'view'),
+        doneTool('call-3', 'view'),
+        runningTool('call-4', 'execute_command', { command: 'pnpm test' }),
+      ]),
+    ]);
+
+    const group = screen.getByRole('group', { name: 'Tool group: 4 steps' });
+    expect(within(group).getByText('Run')).toBeInTheDocument();
+    expect(within(group).getByText('pnpm test')).toBeInTheDocument();
+    expect(within(group).getByText('3/4')).toBeInTheDocument();
+    expect(within(group).getByLabelText('Running')).toBeInTheDocument();
+  });
+
+  it('does not group runs broken by prose', () => {
+    renderEntries([
+      assistantMessage('msg-1', [
+        doneTool('call-1', 'view'),
+        doneTool('call-2', 'view'),
+        { type: 'text', text: 'Interlude' },
+        doneTool('call-3', 'view'),
+      ]),
+    ]);
+
+    expect(screen.queryByRole('group', { name: /Tool group/ })).not.toBeInTheDocument();
+    expect(screen.getAllByRole('group', { name: 'Tool: view' })).toHaveLength(3);
   });
 
   it('trusts the persisted result over a stale running overlay — a lost tool_end must not spin forever', () => {

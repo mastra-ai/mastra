@@ -1,0 +1,214 @@
+import { CodeBlock as DsCodeBlock } from '@mastra/playground-ui/components/CodeBlock';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
+import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
+import { cn } from '@mastra/playground-ui/utils/cn';
+import type { ReactNode } from 'react';
+import { useState } from 'react';
+
+import { highlightCode, languageForPath } from '../../../../ui/highlight';
+import { stripSerializedAnsi } from '../../services/ansi';
+import type { ToolCall } from '../../services/transcript';
+import { presentTool } from './tool-presentation';
+import { ToolRow, TOOL_RAIL_OFFSET, TOOL_ROW_TRIGGER } from './ToolRow';
+
+function truncate(s: string, max: number): string {
+  return s.length > max ? s.slice(0, max) + '…' : s;
+}
+
+function stringify(v: unknown): string {
+  if (typeof v === 'string') return v;
+  try {
+    return JSON.stringify(v, null, 2);
+  } catch {
+    return String(v);
+  }
+}
+
+function MonoBlock({ copyText, className, children }: { copyText: string; className?: string; children: ReactNode }) {
+  return (
+    <div className="group/block relative max-w-full min-w-0">
+      <pre
+        className={cn(
+          'bg-surface1 m-0 max-h-60 max-w-full overflow-auto rounded-md px-3 py-2 font-mono text-xs leading-normal break-words whitespace-pre-wrap',
+          className,
+        )}
+      >
+        {children}
+      </pre>
+      <CopyButton
+        content={copyText}
+        size="sm"
+        variant="ghost"
+        className="absolute top-1 right-1 opacity-0 transition-opacity group-hover/block:opacity-100"
+      />
+    </div>
+  );
+}
+
+/** A unified-diff-style view of an edit's before/after text, syntax-highlighted. */
+function DiffView({ oldText, newText, path }: { oldText: string; newText: string; path?: string }) {
+  const lang = languageForPath(path);
+  const removed = oldText.split('\n');
+  const added = newText.split('\n');
+  return (
+    <div
+      className="border-border1 bg-surface1 max-w-full min-w-0 overflow-x-auto rounded-md border font-mono text-xs leading-normal"
+      role="group"
+      aria-label="File change"
+    >
+      {removed.map((line, i) => (
+        <div key={`r${i}`} className="bg-error/10 flex whitespace-pre">
+          <span className="text-error w-5 shrink-0 text-center opacity-70 select-none">-</span>
+          <span
+            className="text-icon6 [&_span]:font-inherit [&_span]:leading-inherit flex-1 pr-2.5 [&_span]:text-inherit dark:[&_span]:![background-color:var(--shiki-dark-bg)] dark:[&_span]:![color:var(--shiki-dark)]"
+            dangerouslySetInnerHTML={{ __html: highlightCode(line, lang) || '&nbsp;' }}
+          />
+        </div>
+      ))}
+      {added.map((line, i) => (
+        <div key={`a${i}`} className="bg-accent1/10 flex whitespace-pre">
+          <span className="text-accent1 w-5 shrink-0 text-center opacity-70 select-none">+</span>
+          <span
+            className="text-icon6 [&_span]:font-inherit [&_span]:leading-inherit flex-1 pr-2.5 [&_span]:text-inherit dark:[&_span]:![background-color:var(--shiki-dark-bg)] dark:[&_span]:![color:var(--shiki-dark)]"
+            dangerouslySetInnerHTML={{ __html: highlightCode(line, lang) || '&nbsp;' }}
+          />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+interface EditArgs {
+  path?: string;
+  old_string?: string;
+  new_string?: string;
+  content?: string;
+}
+
+function hasProperty<K extends string>(value: object, key: K): value is object & Record<K, unknown> {
+  return key in value;
+}
+
+function stringProperty(value: unknown, key: string): string | undefined {
+  if (!value || typeof value !== 'object' || !hasProperty(value, key)) return undefined;
+  return typeof value[key] === 'string' ? value[key] : undefined;
+}
+
+/** Detect edit-style tools whose args are better shown as a diff/code block. */
+function editArgs(toolName: string, args: unknown): EditArgs | undefined {
+  const edit = {
+    path: stringProperty(args, 'path'),
+    old_string: stringProperty(args, 'old_string'),
+    new_string: stringProperty(args, 'new_string'),
+    content: stringProperty(args, 'content'),
+  };
+  const isReplace = /string_replace|str_replace|edit_file/i.test(toolName) && edit.new_string !== undefined;
+  const isWrite = /write_file|create_file/i.test(toolName) && edit.content !== undefined;
+  return isReplace || isWrite ? edit : undefined;
+}
+
+function ToolBody({ tool, command }: { tool: ToolCall; command?: string }) {
+  const edit = editArgs(tool.toolName, tool.args);
+  const resultText =
+    tool.status !== 'running' && tool.result !== undefined ? stripSerializedAnsi(stringify(tool.result)) : undefined;
+
+  if (edit) {
+    return (
+      <>
+        {edit.new_string !== undefined ? (
+          <DiffView oldText={edit.old_string ?? ''} newText={edit.new_string} path={edit.path} />
+        ) : (
+          <DsCodeBlock
+            code={truncate(edit.content ?? '', 2000)}
+            lang={languageForPath(edit.path)}
+            fileName={edit.path ?? 'Change'}
+            overflow="scroll"
+          />
+        )}
+        {tool.status === 'error' && resultText !== undefined && (
+          <MonoBlock copyText={resultText} className="text-error/90">
+            {truncate(resultText, 800)}
+          </MonoBlock>
+        )}
+      </>
+    );
+  }
+
+  if (command) {
+    return (
+      <>
+        <MonoBlock copyText={command} className="text-icon5">
+          <span className="text-icon3 select-none">$ </span>
+          {command}
+        </MonoBlock>
+        {tool.output ? (
+          <MonoBlock copyText={tool.output} className="text-icon3">
+            {tool.output}
+          </MonoBlock>
+        ) : (
+          resultText !== undefined && (
+            <MonoBlock copyText={resultText} className="text-icon3">
+              {truncate(resultText, 800)}
+            </MonoBlock>
+          )
+        )}
+      </>
+    );
+  }
+
+  const argsPretty = tool.args !== undefined ? stringify(tool.args) : tool.argsText;
+  return (
+    <>
+      {argsPretty && (
+        <MonoBlock copyText={argsPretty} className="text-icon5">
+          {argsPretty}
+        </MonoBlock>
+      )}
+      {tool.output && (
+        <MonoBlock copyText={tool.output} className="text-icon3">
+          {tool.output}
+        </MonoBlock>
+      )}
+      {resultText !== undefined && (
+        <MonoBlock copyText={resultText} className="text-icon3">
+          {truncate(resultText, 800)}
+        </MonoBlock>
+      )}
+    </>
+  );
+}
+
+export function ToolCard({ tool }: { tool: ToolCall }) {
+  const [expanded, setExpanded] = useState(false);
+  const presentation = presentTool(tool.toolName, tool.args);
+
+  return (
+    <Collapsible
+      open={expanded}
+      onOpenChange={setExpanded}
+      className="max-w-full min-w-0"
+      role="group"
+      aria-label={`Tool: ${tool.toolName}`}
+    >
+      <CollapsibleTrigger className={TOOL_ROW_TRIGGER}>
+        <ToolRow
+          icon={presentation.icon}
+          label={presentation.label}
+          detail={presentation.detail}
+          status={tool.status}
+          expanded={expanded}
+        />
+      </CollapsibleTrigger>
+      <CollapsibleContent className="max-w-full min-w-0">
+        <div
+          className={cn(
+            'border-border1 flex max-w-full min-w-0 flex-col gap-1.5 border-l py-1.5 pr-1 pl-4',
+            TOOL_RAIL_OFFSET,
+          )}
+        >
+          <ToolBody tool={tool} command={presentation.command} />
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}

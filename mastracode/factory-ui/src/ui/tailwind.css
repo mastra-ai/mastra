@@ -100,3 +100,25 @@ html.light {
     }
   }
 }
+
+/* Sweeping highlight on the label of a running tool. Falls back to plain
+ * (inherited) text color under reduced motion — never transparent text. */
+@utility text-shimmer {
+  @media (prefers-reduced-motion: no-preference) {
+    background: linear-gradient(90deg, var(--neutral3) 35%, var(--neutral6) 50%, var(--neutral3) 65%);
+    background-size: 200% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    animation: text-shimmer 2s linear infinite;
+  }
+}
+
+@keyframes text-shimmer {
+  from {
+    background-position: 130% 0;
+  }
+  to {
+    background-position: -70% 0;
+  }
+}
