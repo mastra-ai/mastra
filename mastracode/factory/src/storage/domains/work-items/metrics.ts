@@ -127,6 +127,16 @@ function parseTime(iso: string): number {
   return time;
 }
 
+/** Asserted up front so a corrupt row fails every window, not just the ones that read it. */
+function assertParsableHistory(items: WorkItemRow[]): void {
+  for (const item of items) {
+    for (const entry of item.stageHistory) {
+      parseTime(entry.enteredAt);
+      if (entry.exitedAt !== undefined) parseTime(entry.exitedAt);
+    }
+  }
+}
+
 /** Nearest-rank percentile over an unsorted sample list. */
 function percentile(samples: number[], fraction: number): number | null {
   if (samples.length === 0) return null;
@@ -156,6 +166,7 @@ export function computeFactoryMetrics(
   opts: { windowStart: number; windowEnd: number },
 ): FactoryMetrics {
   const { windowStart, windowEnd } = opts;
+  assertParsableHistory(items);
 
   // ── Throughput + lead time (completions in window) ────────────────────────
   let earliestItem = Infinity;

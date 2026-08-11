@@ -63,6 +63,10 @@ export function QueueHealthPanel({ factoryProjectId }: { factoryProjectId: strin
   }
 
   const thresholds = thresholdsQuery.data.thresholdsSeconds;
+  const entries = drillDown ? cohortEntries(health, drillDown.selection) : [];
+  // Work items refetch on a timer: a cohort emptying unmounts the cell the
+  // popover hangs off, leaving the anchor detached.
+  if (drillDown && entries.length === 0) setDrillDown(null);
   const cohort = drillDown?.selection ?? null;
 
   return (
@@ -86,7 +90,7 @@ export function QueueHealthPanel({ factoryProjectId }: { factoryProjectId: strin
             aria-label={`${cohortLabel(drillDown.selection)} tasks`}
             className="w-80 p-0"
           >
-            <CohortTasks selection={drillDown.selection} entries={cohortEntries(health, drillDown.selection)} />
+            <CohortTasks selection={drillDown.selection} entries={entries} />
           </PopoverContent>
         ) : null}
       </Popover>

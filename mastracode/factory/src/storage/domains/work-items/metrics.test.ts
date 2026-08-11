@@ -221,6 +221,14 @@ describe('computeFactoryMetrics', () => {
     expect(() => computeFactoryMetrics([item], lastDays(7))).toThrow(/Unparsable stage-history timestamp/);
   });
 
+  it('given a corrupt stamp on an entry the window never reads, then it still fails loudly', () => {
+    const item = makeItem({
+      stageHistory: [{ stage: 'triage', enteredAt: hoursAgo(-48), exitedAt: 'whenever', by: 'user_1' }],
+    });
+
+    expect(() => computeFactoryMetrics([item], lastDays(7))).toThrow(/Unparsable stage-history timestamp/);
+  });
+
   it('given multi-stage and terminal cards, then wipTotal counts distinct in-flight cards', () => {
     const items = [
       makeItem({

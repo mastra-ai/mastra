@@ -32,18 +32,26 @@ function card(id: string, title: string, enteredAt: string) {
   };
 }
 
-function renderPanel(workItems: ReturnType<typeof card>[]) {
+function renderPanel(initial: ReturnType<typeof card>[]) {
+  let workItems = initial;
   server.use(
     http.get('*/web/factory/projects/:id/work-items', () => HttpResponse.json({ workItems })),
     http.get('*/web/factory/projects/:id/health/thresholds', () => HttpResponse.json({ thresholds: THRESHOLDS })),
   );
-  return renderWithProviders(
+  const rendered = renderWithProviders(
     <MemoryRouter initialEntries={[`/factories/${FACTORY_ID}/overview`]}>
       <Routes>
         <Route path="/factories/:factoryId/overview" element={<QueueHealthPanel factoryProjectId={PROJECT_ID} />} />
       </Routes>
     </MemoryRouter>,
   );
+  return {
+    ...rendered,
+    async serveWorkItems(next: ReturnType<typeof card>[]) {
+      workItems = next;
+      await rendered.client.invalidateQueries();
+    },
+  };
 }
 
 describe('QueueHealthPanel', () => {
@@ -58,6 +66,19 @@ describe('QueueHealthPanel', () => {
 
     expect(await screen.findByText('Stalled card')).toBeInTheDocument();
     expect(screen.getByText('1 task')).toBeInTheDocument();
+  });
+
+  it('closes the cohort tasks when a refetch empties the cohort', async () => {
+    const user = userEvent.setup();
+    const { serveWorkItems } = renderPanel([card('item-1', 'Stalled card', '2020-01-01T00:00:00.000Z')]);
+
+    await user.click(await screen.findByRole('button', { name: 'Triage Critical: 1' }));
+    expect(await screen.findByText('Stalled card')).toBeInTheDocument();
+
+    await serveWorkItems([card('item-1', 'Stalled card', new Date().toISOString())]);
+
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Triage Critical: 1' })).not.toBeInTheDocument());
+    expect(screen.queryByRole('dialog', { name: /Critical tasks/ })).not.toBeInTheDocument();
   });
 
   it('closes the cohort tasks on Escape', async () => {

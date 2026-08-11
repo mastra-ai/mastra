@@ -110,6 +110,8 @@ function OverviewContent({ factoryProjectId }: { factoryProjectId: string | unde
       <section className="flex flex-col gap-8">
         <div className="flex flex-col gap-4">
           <h2 className={SECTION_TITLE}>
+            {/* the picker is the heading; heading navigation needs more than "Last 30 days" */}
+            <span className="sr-only">Delivered over </span>
             <RangePicker rangeDays={rangeDays} onSelect={setRangeDays} />
           </h2>
           <Flow metrics={metrics} />
