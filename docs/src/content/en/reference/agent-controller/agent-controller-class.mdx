@@ -424,7 +424,7 @@ Returns: `() => void`
 
 #### `deleteSession({ resourceId, scope? })`
 
-Tear down the materialized session for a resource and optional scope. The method aborts active work, removes thread subscriptions, releases the active thread lock, and removes the live session from the controller registry. It does not delete persisted threads or messages.
+Tear down the materialized session for a resource and optional scope. The method aborts active work, removes thread subscriptions and the active thread lock, and removes the live session from the controller registry. It doesn't delete persisted threads or messages.
 
 ```typescript
 const deleted = await controller.deleteSession({
