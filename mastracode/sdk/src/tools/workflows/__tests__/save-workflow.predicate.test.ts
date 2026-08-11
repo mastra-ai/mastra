@@ -9,7 +9,7 @@
  *    canonical shape, so the SDK and Core schemas agree end-to-end.
  */
 import { describe, it, expect, vi } from 'vitest';
-import { saveWorkflowTool } from '../save-workflow';
+import { saveWorkflowTool } from '../save-workflow.js';
 
 function invoke(input: unknown, mastra: unknown) {
   // Call the raw execute; callers of the tool are responsible for schema

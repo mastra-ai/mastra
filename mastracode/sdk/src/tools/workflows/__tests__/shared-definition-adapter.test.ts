@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { normalizeWorkflowBuilderDefinition } from '@mastra/core/workflows/builder';
 import { describe, expect, it } from 'vitest';
-import { MAPPING_CONFIG_DESCRIPTION, workflowDefinitionInputSchema } from '../save-workflow';
+import { MAPPING_CONFIG_DESCRIPTION, workflowDefinitionInputSchema } from '../save-workflow.js';
 
 const fixtures = JSON.parse(
   readFileSync(

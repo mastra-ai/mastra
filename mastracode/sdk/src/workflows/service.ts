@@ -104,27 +104,34 @@ export async function runWorkflow(
   // runtime value, not a compile-time key. `as never` widens the arg past the
   // generic constraint; the runtime lookup already validates.
   let wf: ReturnType<Mastra['getWorkflow']> | undefined;
+  let lookupError: unknown;
   try {
     wf = mastra.getWorkflow(workflowId as never);
-  } catch {
-    wf = undefined;
+  } catch (error) {
+    lookupError = error;
   }
-  if (!wf) throw new Error(`No workflow registered with id "${workflowId}". Was it built and saved?`);
+  if (!wf) {
+    throw new Error(`No workflow registered with id "${workflowId}". Was it built and saved?`, { cause: lookupError });
+  }
 
   const run = await wf.createRun();
+  if (!onEvent) {
+    return (await run.start({
+      inputData,
+      requestContext: requestContext as Parameters<typeof run.start>[0]['requestContext'],
+    })) as RunResult;
+  }
+
   const output = run.stream({
     inputData,
     requestContext: requestContext as Parameters<typeof run.stream>[0]['requestContext'],
   }) as unknown as WorkflowRunOutputLike;
-  if (onEvent) {
-    for await (const event of output.fullStream) {
-      try {
-        onEvent(event);
-      } catch {
-        // Never let a bad consumer break the run.
-      }
+  for await (const event of output.fullStream) {
+    try {
+      onEvent(event);
+    } catch {
+      // Never let a bad consumer break the run.
     }
   }
-  const result = (await output.result) as RunResult;
-  return result;
+  return (await output.result) as RunResult;
 }

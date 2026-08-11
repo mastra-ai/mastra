@@ -10,6 +10,6 @@ import { listWorkflows, runWorkflow } from '@mastra/code-sdk/workflows/service';
 const { workflows } = await listWorkflows(mastra);
 const workflow = workflows[0];
 if (workflow) {
-  await runWorkflow(mastra, workflow.id, { topic: 'dynamic workflows' }, requestContext);
+  await runWorkflow(mastra, workflow.id, { topic: 'dynamic workflows' });
 }
 ```

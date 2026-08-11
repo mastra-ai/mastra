@@ -339,7 +339,7 @@ export const workflowBuilderGraphEntryInputSchema = z.discriminatedUnion('type',
 const GRAPH_DESCRIPTION =
   'The complete ordered top-level graph covering all ten persisted graph families: agent, tool, mapping, nested workflow, parallel, foreach, sleep, sleepUntil, conditional, and loop. Every adjacent pair must compose: the previous output shape must satisfy the next input schema — insert a mapping step whenever shapes differ. The workflow result is exactly the final top-level entry output, so add an explicit final mapping whenever that output does not match outputSchema.';
 
-export const workflowBuilderDefinitionSchema = z.object({
+export const workflowBuilderDefinitionSchema = z.strictObject({
   id: z.string().min(1).describe('Workflow id — kebab-case. Preserve the exact requested workflow ID.'),
   description: z.string().optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
@@ -351,7 +351,7 @@ export const workflowBuilderDefinitionSchema = z.object({
 });
 
 export const workflowBuilderDefinitionInputSchema = z
-  .object({
+  .strictObject({
     id: z
       .string()
       .min(1)

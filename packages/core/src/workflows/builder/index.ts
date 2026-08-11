@@ -175,7 +175,12 @@ function normalizeEntry(entry: Record<string, unknown>): WorkflowBuilderGraphEnt
     // Canonical foreach opts requires concurrency, so an emptied opts is invalid.
     if (Object.keys(normalized.opts).length === 0) delete normalized.opts;
   }
-  if (normalized.type === 'mapping' && typeof normalized.mapConfig !== 'string' && normalized.mapConfig !== undefined) {
+  if (
+    normalized.type === 'mapping' &&
+    typeof normalized.mapConfig !== 'string' &&
+    normalized.mapConfig !== null &&
+    normalized.mapConfig !== undefined
+  ) {
     normalized.mapConfig = JSON.stringify(normalized.mapConfig);
   }
   if ((normalized.type === 'parallel' || normalized.type === 'conditional') && Array.isArray(normalized.steps)) {

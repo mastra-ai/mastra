@@ -10,9 +10,9 @@ import { InMemoryStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
 import { createWorkflow, toStorableGraph } from '@mastra/core/workflows';
 import { describe, expect, it } from 'vitest';
-import { z } from 'zod/v4';
+import { z } from 'zod';
 
-import { deleteWorkflow } from '../service.js';
+import { deleteWorkflow, getWorkflow } from '../service.js';
 
 const doubleTool = createTool({
   id: 'double-tool',
@@ -53,7 +53,7 @@ describe('deleteWorkflow service', () => {
 
     await deleteWorkflow(mastra, 'shared-id');
 
-    // Live instance is gone
+    expect(await getWorkflow(mastra, 'shared-id')).toBeNull();
     expect(() => mastra.getWorkflow('shared-id')).toThrow();
   });
 

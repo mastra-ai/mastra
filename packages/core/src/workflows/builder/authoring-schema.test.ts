@@ -90,6 +90,27 @@ describe('shared workflow builder authoring schema', () => {
       expect(parsed.graph[1]).toEqual({ type: 'agent', id: 'answer', agentId: 'supportAgent' });
       expect(typeof (parsed.graph[0] as { mapConfig: string }).mapConfig).toBe('string');
     });
+
+    it('rejects unknown definition-level fields in both authoring dialects', () => {
+      expect(workflowBuilderDefinitionInputSchema.safeParse({ ...authoringDefinition, unexpected: true }).success).toBe(
+        false,
+      );
+      expect(
+        workflowBuilderDefinitionSchema.safeParse({
+          ...normalizeWorkflowBuilderDefinition(authoringDefinition),
+          unexpected: true,
+        }).success,
+      ).toBe(false);
+    });
+
+    it('does not stringify a null mapping config into a valid canonical string', () => {
+      const normalized = normalizeWorkflowBuilderDefinition({
+        ...authoringDefinition,
+        graph: [{ type: 'mapping', id: 'shape', mapConfig: null }],
+      });
+
+      expect(workflowBuilderDefinitionSchema.safeParse(normalized).success).toBe(false);
+    });
   });
 
   // The alias fields (`agent`, mapping `output`) are gone from the model-facing

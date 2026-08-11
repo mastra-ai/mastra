@@ -36,7 +36,8 @@ export const planMode: AgentControllerMode = {
 
 ## Workflows
 - You can INSPECT saved workflows via \`list-workflows\` and \`get-workflow\`.
-- You CANNOT build, run, or delete in this mode. If the user asks for a workflow design, sketch it in chat or write it to \`.mastracode/plans/\` and tell them to switch to build mode to save and run it.`,
+- You CANNOT build, run, or delete workflows in this mode.
+- If the user asks for a workflow design, include it in the implementation plan stored at the session-specific plan path, then call \`submit_plan({ path })\` as required above. After approval, build mode can save and run it.`,
 
   metadata: {
     default: false,
