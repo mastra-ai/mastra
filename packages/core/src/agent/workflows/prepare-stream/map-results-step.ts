@@ -344,6 +344,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
                 structuredOutput: !!options.structuredOutput?.schema,
                 overrideScorers: options.scorers,
                 onTitleGenerated: options.memory?.onTitleGenerated,
+                waitUntil: options.serverless?.waitUntil,
               });
             } catch (e) {
               capabilities.logger.error('Error saving memory on finish', {

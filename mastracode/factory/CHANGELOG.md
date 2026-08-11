@@ -1,5 +1,64 @@
 # @mastra/factory
 
+## 0.6.0-alpha.16
+
+### Minor Changes
+
+- Added a `firstMeaningfulExecAt` timestamp to source-control sessions, recording when the session's agent completed its first successful sandbox command. Together with `firstMessageAt` this measures time-to-first-meaningful-exec: how long a user waits between sending their first message and the agent actually doing work in a live sandbox. The value is written once per session and is available on all session read APIs; setup commands run by the platform itself (skill loading, repo checkout) do not count. ([#21211](https://github.com/mastra-ai/mastra/pull/21211))
+
+- Added a `firstMessageAt` timestamp to Factory source-control sessions. The session's first agent run now records when the first message reached the agent, so session listings and latency reporting can measure time-to-first-response from the real conversation start instead of the session's creation time (which can be long before the user sends anything). The value is returned on session objects from the source-control sessions API and is write-once: later messages never move it. ([#21206](https://github.com/mastra-ai/mastra/pull/21206))
+
+### Patch Changes
+
+- Fixed Slack threads on cloud factory deployments falling back to chat-only sessions or erroring instead of getting a repo-backed workspace. ([#21217](https://github.com/mastra-ai/mastra/pull/21217))
+
+  - Fixed repository resolution failing when a factory project carries a stale source-control connection (for example after a GitHub App reinstall deleted the old installation but left its connection behind). Resolution now tries every connection and skips the ones that no longer resolve.
+  - Fixed chat-only sessions on deployments configured with a remote sandbox replying with "A Factory session ID is required to create a remote sandbox workspace" on every message. These sessions now run without a workspace, so workspace tools are simply not registered and the server host never executes commands for them.
+  - Fixed top-level DM and channel conversations (threads with no thread timestamp) failing their clone with the invalid git ref `slack/`. Their session branch now derives from the channel id.
+
+- Fixed the sign-in callback redirecting straight back to the identity provider in a loop when it denies access (for example access_denied for an account that is not part of the organization). The denial now lands on the sign-in page with the error shown. ([#21166](https://github.com/mastra-ai/mastra/pull/21166))
+
+- Slow workspace opens can now be diagnosed directly from server logs. Added `[factory:timing]` log lines for each phase of the sandbox session-open path — `sandbox.reattach`, `sandbox.provision`, `workspace.materialize`, and `workspace.checkout` — so you can see exactly which phase is slow instead of reconstructing timings by hand. ([#21194](https://github.com/mastra-ai/mastra/pull/21194))
+
+- Added a `command_exit` session event to the agent controller. Subscribers now receive the exit code and success flag of each foreground `execute_command` tool call, alongside the existing `shell_output` stream: ([#21211](https://github.com/mastra-ai/mastra/pull/21211))
+
+  ```typescript
+  session.subscribe(event => {
+    if (event.type === 'command_exit') {
+      console.log(event.toolCallId, event.exitCode, event.success);
+    }
+  });
+  ```
+
+  Previously the exit outcome was only visible inside the tool result text, so observers could stream a command's output but never tell whether it succeeded.
+
+- Updated dependencies [[`9571e3a`](https://github.com/mastra-ai/mastra/commit/9571e3a06ed2c5220196460bf82a2129255c3a8b), [`d6c56f9`](https://github.com/mastra-ai/mastra/commit/d6c56f951db3213330b98b0abafa9778c8770e58), [`9571e3a`](https://github.com/mastra-ai/mastra/commit/9571e3a06ed2c5220196460bf82a2129255c3a8b), [`a04d1a6`](https://github.com/mastra-ai/mastra/commit/a04d1a642ccae3ea3b28be37067480d49bcb1b7d), [`acc3513`](https://github.com/mastra-ai/mastra/commit/acc3513b19f79bf0a7ec2998694580edca54086c), [`94e7ae9`](https://github.com/mastra-ai/mastra/commit/94e7ae970b37c888cd1244ef013292639a2fe6d1), [`6a667b4`](https://github.com/mastra-ai/mastra/commit/6a667b4b7cd6a93fe41fcdd357b08c5a8c09b9ab), [`2440e09`](https://github.com/mastra-ai/mastra/commit/2440e096ea6c2def1ccc1eb2d0f3f5b88c4af940), [`a59049b`](https://github.com/mastra-ai/mastra/commit/a59049b1652a13efff66ac826326b5ed9a550342)]:
+  - @mastra/core@1.58.0-alpha.13
+  - @mastra/code-sdk@1.2.0-alpha.15
+
+## 0.6.0-alpha.15
+
+### Patch Changes
+
+- Updated dependencies [[`72ce266`](https://github.com/mastra-ai/mastra/commit/72ce2669506e755c0bbe73baf3a7e8ea5208bdad)]:
+  - @mastra/code-sdk@1.2.0-alpha.14
+
+## 0.6.0-alpha.14
+
+### Patch Changes
+
+- Updated dependencies [[`2e4624e`](https://github.com/mastra-ai/mastra/commit/2e4624edb6917e61249cb60ee377735e7af7e4a9), [`2e4624e`](https://github.com/mastra-ai/mastra/commit/2e4624edb6917e61249cb60ee377735e7af7e4a9), [`e6534fa`](https://github.com/mastra-ai/mastra/commit/e6534fab031216f6cb48c4c9907cbfdce9d60bc6), [`7fdcaa6`](https://github.com/mastra-ai/mastra/commit/7fdcaa66105d64290f9b14432a12ec99f39c4d3a), [`cfd0d9e`](https://github.com/mastra-ai/mastra/commit/cfd0d9ec77ec3c69dd96f79cdb579e03d79f22ce), [`d9d93b2`](https://github.com/mastra-ai/mastra/commit/d9d93b25e4a65ad5fa153fa35be7ed149c8d587f)]:
+  - @mastra/core@1.58.0-alpha.12
+  - @mastra/code-sdk@1.2.0-alpha.13
+
+## 0.6.0-alpha.13
+
+### Patch Changes
+
+- Updated dependencies [[`b8ce7ec`](https://github.com/mastra-ai/mastra/commit/b8ce7ec96e39343c6c2f36d12d68a9ad816c09f7), [`a3a3624`](https://github.com/mastra-ai/mastra/commit/a3a3624f646b98e409424d8defccbd334da9e8b8), [`6246914`](https://github.com/mastra-ai/mastra/commit/62469146636911f3cbbe0880bd011c6a897a59a7), [`3f73c07`](https://github.com/mastra-ai/mastra/commit/3f73c076727e8c36b4fff7a1b40290fb68957fa8), [`7c1ebb1`](https://github.com/mastra-ai/mastra/commit/7c1ebb15690c4b3f0eabb19077cf8af573311e57), [`1315d8f`](https://github.com/mastra-ai/mastra/commit/1315d8f17e8e7acb61cca46b72a1d42f6d00d289), [`32980a3`](https://github.com/mastra-ai/mastra/commit/32980a3e2413d0274ac244d32c37d910edc13f00), [`4bcdfaf`](https://github.com/mastra-ai/mastra/commit/4bcdfaf0eac3199d7cb171b0a19a92c9c341eea4), [`af4636a`](https://github.com/mastra-ai/mastra/commit/af4636a74463275d71c1d13a38f7d2b738f128bf), [`a463cdf`](https://github.com/mastra-ai/mastra/commit/a463cdf1c95c3059e70f0bff27959e8558bb899d), [`0ea6b80`](https://github.com/mastra-ai/mastra/commit/0ea6b8001408ce02b56e8be0536b0fd8cbaf8ad2)]:
+  - @mastra/core@1.58.0-alpha.11
+  - @mastra/code-sdk@1.2.0-alpha.12
+
 ## 0.6.0-alpha.12
 
 ### Patch Changes

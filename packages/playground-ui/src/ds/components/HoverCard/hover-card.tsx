@@ -87,7 +87,7 @@ const HoverCardContent = React.forwardRef<HTMLDivElement, HoverCardContentProps>
 
     return (
       <PreviewCardPrimitive.Portal container={container ?? undefined}>
-        <PreviewCardPrimitive.Positioner className="z-50" {...positionerProps}>
+        <PreviewCardPrimitive.Positioner className="z-50 data-[anchor-hidden]:hidden" {...positionerProps}>
           <PreviewCardPrimitive.Popup
             ref={ref}
             className={cn(

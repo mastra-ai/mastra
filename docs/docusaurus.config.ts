@@ -13,7 +13,7 @@ const SHARED_REMARK_PLUGINS = [
   [require('@docusaurus/remark-plugin-npm2yarn'), NPM2YARN_CONFIG],
 ] as const
 const ADMONITIONS_CONFIG = {
-  keywords: ['note', 'tip', 'info', 'warning', 'danger', 'experimental'],
+  keywords: ['note', 'tip', 'info', 'warning', 'danger', 'beta'],
 }
 
 // The Kapa "Ask AI" chat requires an integrationId at build time. Only

@@ -8,6 +8,12 @@ packages:
 
 # Logger
 
+:::beta
+
+Breaking changes may occur without a major version bump until the API is stable.
+
+:::
+
 Mastra sets the project's [logger](/docs/observability/logging) from a `logger.ts` file directly under `src/mastra/`. The file default-exports a logger, which replaces the built-in `ConsoleLogger` used across agents, workflows, and other components.
 
 Use this page for the file-based convention. For log levels, transports, and provider details, see [logging](/docs/observability/logging).

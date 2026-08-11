@@ -14,6 +14,7 @@ const TEXT_MODE_ADORNMENTS = cn(
   'gap-[.75em] rounded-full',
   '[&>svg]:mx-[-.3em] [&>svg]:size-[1.1em]',
   '[&:hover>svg]:opacity-100 [&>svg]:opacity-50',
+  '[&>svg]:transition-opacity [&>svg]:duration-normal [&>svg]:ease-out-custom',
 );
 
 // eslint-disable-next-line react-refresh/only-export-components -- exported variant helper is part of Button's public API

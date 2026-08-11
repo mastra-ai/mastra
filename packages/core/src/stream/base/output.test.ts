@@ -1356,4 +1356,45 @@ describe('MastraModelOutput', () => {
       expect(receivedByA.map(c => c.type)).toEqual(['text-delta', 'text-delta', 'step-finish', 'finish']);
     }, 5000);
   });
+
+  describe('_waitUntilFinished on stream error', () => {
+    it('settles a waiter that subscribed before an error chunk terminates the stream', async () => {
+      const runId = 'test-run';
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      // The source stays open after the terminal error chunk, like a provider
+      // connection that died mid-stream: flush() is never reached.
+      const stream = new ReadableStream<ChunkType>({
+        start(controller) {
+          controller.enqueue({
+            type: 'error',
+            runId,
+            from: ChunkFrom.AGENT,
+            payload: { error: new Error('provider connection error') },
+          } as ChunkType);
+        },
+      });
+
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream,
+        messageList,
+        messageId: 'msg-1',
+        options: { runId },
+      });
+
+      // Subscribe BEFORE consumption starts, like #watchThreadRunCompletion does at
+      // run registration. An errored stream never reaches flush(), so without the
+      // error branch emitting 'finish' this promise hangs forever.
+      const armedBeforeError = output._waitUntilFinished();
+
+      void output.consumeStream({ onError: () => {} });
+
+      const outcome = await Promise.race([
+        armedBeforeError.then(() => 'settled' as const),
+        new Promise<'hung'>(resolve => setTimeout(() => resolve('hung'), 500)),
+      ]);
+      expect(outcome).toBe('settled');
+      expect(output.status).toBe('failed');
+    });
+  });
 });

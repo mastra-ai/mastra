@@ -1277,64 +1277,113 @@ export class AgentThreadStreamRuntime {
     }
 
     const queue = state.pendingSignalsByThread.get(key);
-    const signal = queue?.shift();
-    if (signal && queue) {
-      if (queue.length === 0) {
-        state.pendingSignalsByThread.delete(key);
-      }
-
-      // Hand the lease from the finished run to this drained run before
-      // streaming, so the lease key never goes empty during the handoff. If the
-      // old owner already lost the lease (e.g. a pubsub blip let the TTL lapse
-      // and another process took over), forward the signal to the new winner
-      // instead of starting a competing run here.
-      const nextRunId = randomUUID();
-      state.activeThreadRunIds.set(key, nextRunId);
-      state.threadKeysByRunId.set(nextRunId, key);
-      const owns = await this.#acquireOrTransferThreadLease(pubsub, key, nextRunId, previousRun.runId);
-      if (!owns.acquired) {
-        if (state.activeThreadRunIds.get(key) === nextRunId) {
-          state.activeThreadRunIds.delete(key);
+    let signal: CreatedAgentSignal | undefined;
+    let nextRunId: string | undefined;
+    try {
+      signal = queue?.shift();
+      if (signal && queue) {
+        if (queue.length === 0) {
+          state.pendingSignalsByThread.delete(key);
         }
-        state.threadKeysByRunId.delete(nextRunId);
-        // Early follow-ups were already published as retained signal-enqueued
-        // events, so only discard this runtime's local pre-run copies.
-        state.preRunSignalsByThread.delete(key);
-        // Put the signal back at the head so a later drain (or the winner) runs
-        // it, and forward it to the current lease owner.
-        const restored = state.pendingSignalsByThread.get(key) ?? [];
-        state.pendingSignalsByThread.set(key, [signal, ...restored]);
-        if (owns.owner) {
-          await this.#publishAndWait(pubsub, key, {
-            type: 'signal-enqueued',
-            runId: owns.owner,
-            signal: this.#serializeSignal(signal),
-            sourceId: this.#getSourceId(),
-          }).catch(() => {});
-          state.pendingSignalsByThread.get(key)?.shift();
-          if ((state.pendingSignalsByThread.get(key)?.length ?? 0) === 0) {
-            state.pendingSignalsByThread.delete(key);
+
+        // Hand the lease from the finished run to this drained run before
+        // streaming, so the lease key never goes empty during the handoff. If the
+        // old owner already lost the lease (e.g. a pubsub blip let the TTL lapse
+        // and another process took over), forward the signal to the new winner
+        // instead of starting a competing run here.
+        nextRunId = randomUUID();
+        state.activeThreadRunIds.set(key, nextRunId);
+        state.threadKeysByRunId.set(nextRunId, key);
+        const owns = await this.#acquireOrTransferThreadLease(pubsub, key, nextRunId, previousRun.runId);
+        if (!owns.acquired) {
+          if (state.activeThreadRunIds.get(key) === nextRunId) {
+            state.activeThreadRunIds.delete(key);
+          }
+          state.threadKeysByRunId.delete(nextRunId);
+          // Early follow-ups were already published as retained signal-enqueued
+          // events, so only discard this runtime's local pre-run copies.
+          state.preRunSignalsByThread.delete(key);
+          // Put the signal back at the head so a later drain (or the winner) runs
+          // it, and forward it to the current lease owner.
+          const restored = state.pendingSignalsByThread.get(key) ?? [];
+          state.pendingSignalsByThread.set(key, [signal, ...restored]);
+          if (owns.owner) {
+            await this.#publishAndWait(pubsub, key, {
+              type: 'signal-enqueued',
+              runId: owns.owner,
+              signal: this.#serializeSignal(signal),
+              sourceId: this.#getSourceId(),
+            }).catch(() => {});
+            state.pendingSignalsByThread.get(key)?.shift();
+            if ((state.pendingSignalsByThread.get(key)?.length ?? 0) === 0) {
+              state.pendingSignalsByThread.delete(key);
+            }
+          }
+          return;
+        }
+
+        const output = await previousRun.agent.stream(signal, {
+          ...(previousRun.streamOptions as any),
+          runId: nextRunId,
+          memory: withThreadMemory(
+            previousRun.streamOptions.memory,
+            previousRun.resourceId ?? '',
+            previousRun.threadId ?? '',
+          ),
+        });
+
+        if (queue.length > 0) {
+          const nextRecord = state.threadRunsById.get(output.runId);
+          if (nextRecord) {
+            this.#watchThreadRunCompletion(state, pubsub, key, nextRecord);
           }
         }
         return;
       }
-
-      const output = await previousRun.agent.stream(signal, {
-        ...(previousRun.streamOptions as any),
-        runId: nextRunId,
-        memory: withThreadMemory(
-          previousRun.streamOptions.memory,
-          previousRun.resourceId ?? '',
-          previousRun.threadId ?? '',
-        ),
-      });
-
-      if (queue.length > 0) {
-        const nextRecord = state.threadRunsById.get(output.runId);
-        if (nextRecord) {
-          this.#watchThreadRunCompletion(state, pubsub, key, nextRecord);
+    } catch (err) {
+      // Starting the follow-up run failed (e.g. a transient connection error
+      // from `agent.stream`, or the lease transfer itself threw). Mirror the
+      // `#startContinuation` failure path: clean up the failed run's state,
+      // restore the signal so it is not lost, surface the failure, then hand
+      // the lease to remaining queued work and only release once nothing is
+      // left to drain. The restored signal is deliberately NOT re-drained here
+      // (that would tight-loop against a still-broken upstream); it delivers on
+      // the next natural drain trigger instead.
+      const failedRunId = nextRunId ?? previousRun.runId;
+      if (nextRunId) {
+        state.threadKeysByRunId.delete(nextRunId);
+        this.#cleanupPreparedRun(state, nextRunId);
+        if (state.activeThreadRunIds.get(key) === nextRunId) {
+          state.activeThreadRunIds.delete(key);
         }
       }
+      if (signal) {
+        // Restore through the map, not the local `queue` array: the shift above
+        // deletes the map entry when it empties the queue, so the local array
+        // may be detached from the map by the time we get here.
+        state.pendingSignalsByThread.set(key, [signal, ...(state.pendingSignalsByThread.get(key) ?? [])]);
+      }
+      this.#publish(pubsub, key, {
+        type: 'run-failed',
+        runId: failedRunId,
+        error: `failed to start follow-up run for queued message: ${getErrorFromUnknown(err).message}; the message was requeued and will deliver on the next turn`,
+      });
+      if (previousRun.runId !== failedRunId) {
+        // A synchronous throw from the lease transfer leaves the lease still
+        // owned by the finished previous run with its renewal timer alive,
+        // which would hold the key forever. Release it unconditionally before
+        // the handoff below: the handoff helpers can report work without
+        // starting a local run (e.g. the idle drain's lease-lost branch), so
+        // gating this release on their outcome would leak the lease. Releasing
+        // is owner-guarded, so this is a no-op when the transfer completed and
+        // the failed run owned the lease.
+        this.#releaseThreadLease(pubsub, key, previousRun.runId);
+      }
+      void this.#drainPendingContinuations(state, pubsub, key, failedRunId).then(async started => {
+        if (started) return;
+        if (await this.#drainPendingIdleSignals(state, pubsub, key, failedRunId)) return;
+        this.#releaseThreadLease(pubsub, key, failedRunId);
+      });
       return;
     }
 
