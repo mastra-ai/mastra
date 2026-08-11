@@ -1214,6 +1214,11 @@
       "source": "/reference/core/addStoredWorkflows",
       "destination": "/reference/core/addDynamicWorkflows",
       "permanent": true
+    },
+    {
+      "source": "/guides/migrations/:path*",
+      "destination": "/reference/migrations/:path*",
+      "permanent": true
     }
   ]
 }
