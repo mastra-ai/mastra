@@ -149,6 +149,15 @@ describe('buildAutoResumeSystemMessageSuffix', () => {
     expect(suffix!).not.toContain('parentRunId');
     expect(suffix!).not.toContain('parent-run');
   });
+
+  it('fails closed when an approval decision is ambiguous', () => {
+    const suffix = buildAutoResumeSystemMessageSuffix([{ toolName: 'deleteFile', type: 'approval' }]);
+
+    expect(suffix).toContain("only set 'approved' to true or false when the user's message clearly communicates");
+    expect(suffix).toContain('do not construct resumeData, do not call the tool');
+    expect(suffix).toContain('ask the user to explicitly approve or deny it');
+    expect(suffix).not.toContain('set approved to true and add resumeData: { approved: true }');
+  });
 });
 
 describe('appendSuffixToLeadingSystemMessage', () => {
