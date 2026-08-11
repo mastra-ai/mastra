@@ -35,7 +35,7 @@ function main() {
     // An all-zero report from a mis-exported session reads exactly like a real
     // finding. Fail loudly instead.
     console.error(
-      `\nno MODEL_STEP spans found in ${file} — check the exporter is wired and MODEL_STEP is not in excludeSpanTypes`,
+      `\nno MODEL_STEP spans found in ${file}. Check the exporter is wired and MODEL_STEP is not in excludeSpanTypes`,
     );
     process.exit(2);
   }
@@ -43,7 +43,7 @@ function main() {
   if (rollup.steps.uninstrumented === rollup.steps.total) {
     // Every span predates the instrumentation: the region table above is an
     // all-zero table, which reads like a finding rather than a stale capture.
-    console.error(`\nno MODEL_STEP span in ${file} carries promptRegions — these spans predate the instrumentation`);
+    console.error(`\nno MODEL_STEP span in ${file} carries promptRegions. These spans predate the instrumentation`);
     process.exit(2);
   }
 }

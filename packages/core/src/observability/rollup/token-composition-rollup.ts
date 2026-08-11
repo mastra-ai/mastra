@@ -258,8 +258,8 @@ export function formatTokenCompositionRollup(rollup: TokenCompositionRollup): st
     const unattributedShare = unattributed / rollup.regions.totalEstimated;
     if (unattributedShare > 0.02) {
       lines.push(
-        `  WARNING: ${pct(unattributedShare)} of estimated prompt tokens are unattributed — ` +
-          `named region totals are missing mass and should not be used as gate inputs.`,
+        `  WARNING: ${pct(unattributedShare)} of estimated prompt tokens are unattributed. ` +
+          `Named region totals are missing mass and should not be used as gate inputs.`,
       );
     }
   }
