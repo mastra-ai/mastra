@@ -21,7 +21,7 @@ import {
 import { PendingIndicator } from '@mastra/playground-ui/components/PendingIndicator';
 import { buildThreadRailTurns, getClientMessageKey, ThreadRail } from '@mastra/playground-ui/components/ThreadRail';
 import type { ThreadRailTurn } from '@mastra/playground-ui/components/ThreadRail';
-import { useAutoscroll } from '@mastra/playground-ui/hooks/use-autoscroll';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import type { MessageFactoryPart } from '@mastra/react';
 import { useSpeechRecognition } from '@mastra/react';
 import { ArrowUp, Mic } from 'lucide-react';
@@ -129,9 +129,7 @@ export const Thread = ({
   runOptionsSlot,
   refreshThreadList,
 }: ThreadProps) => {
-  const areaRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
-  useAutoscroll(areaRef, { enabled: true });
 
   const messages = useChatMessages();
   const { isRunning } = useChatRunning();
@@ -147,17 +145,26 @@ export const Thread = ({
   const delayedPending = useDelayedFlag(showPending, SKELETON_DELAY_MS);
   const threadRailTurns = useMemo(() => buildThreadRailTurns(messages), [messages]);
   const threadRailAnchorIds = useMemo(() => new Set(threadRailTurns.map(turn => turn.messageId)), [threadRailTurns]);
+  // Keyed by the opening message's client key: `data-user-message` reconciliation
+  // swaps `message.id` to the server signal id, and a changing key would remount
+  // the whole turn.
+  const turnGroups = useMemo(() => {
+    const groups: { key: string; messages: MastraDBMessage[] }[] = [];
+    for (const message of messages) {
+      if (threadRailAnchorIds.has(message.id) || groups.length === 0) {
+        groups.push({ key: getClientMessageKey(message), messages: [] });
+      }
+      groups.at(-1)?.messages.push(message);
+    }
+    return groups;
+  }, [messages, threadRailAnchorIds]);
 
   return (
     <ComposerAttachmentsProvider>
-      <MessageScrollerProvider>
+      <MessageScrollerProvider defaultScrollPosition="last-anchor">
         <div className="group/thread grid h-full grid-rows-[1fr_auto] overflow-y-auto" data-testid="thread-wrapper">
           <MessageScroller>
-            <MessageScrollerViewport
-              ref={areaRef}
-              className="h-full overflow-y-scroll"
-              style={{ overflowAnchor: 'none' }}
-            >
+            <MessageScrollerViewport className="h-full overflow-y-scroll" style={{ overflowAnchor: 'none' }}>
               {isEmpty ? (
                 <ThreadWelcome agentName={agentName} suggestedPrompts={suggestedPrompts} />
               ) : (
@@ -170,31 +177,34 @@ export const Thread = ({
                   >
                     <BracketOverlay containerRef={messagesContainerRef} />
                     <MessageScrollerContent className="flex flex-col gap-6 py-6">
-                      {messages.map(message => {
-                        // Prefer the optimistic `clientMessageId` as the React key so the
-                        // user row keeps a stable identity when `data-user-message`
-                        // reconciliation swaps `message.id` to the server signal id. A
-                        // changing key would unmount/remount the row and shift the
-                        // trailing pending indicator. Falls back to `message.id` for
-                        // messages without a correlation key (assistant, reloaded).
-                        const messageKey = getClientMessageKey(message);
+                      {turnGroups.map((group, index) => {
+                        const isLiveTurn = index === turnGroups.length - 1;
                         return (
-                          <MessageScrollerItem
-                            key={messageKey}
-                            messageId={message.id}
-                            scrollAnchor={threadRailAnchorIds.has(message.id)}
+                          // The room a fresh turn scrolls up into is this min-height: pure
+                          // layout, filled by the streaming reply, gone with the run.
+                          <div
+                            key={group.key}
+                            className={cn('flex flex-col gap-6', isRunning && isLiveTurn && 'min-h-[50cqh]')}
                           >
-                            <MessageRow
-                              message={message}
-                              hasModelList={hasModelList}
-                              isSpeaking={isSpeaking}
-                              onReadAloud={readAloud}
-                              onStopSpeaking={stopSpeaking}
-                            />
-                          </MessageScrollerItem>
+                            {group.messages.map(message => (
+                              <MessageScrollerItem
+                                key={getClientMessageKey(message)}
+                                messageId={message.id}
+                                scrollAnchor={threadRailAnchorIds.has(message.id)}
+                              >
+                                <MessageRow
+                                  message={message}
+                                  hasModelList={hasModelList}
+                                  isSpeaking={isSpeaking}
+                                  onReadAloud={readAloud}
+                                  onStopSpeaking={stopSpeaking}
+                                />
+                              </MessageScrollerItem>
+                            ))}
+                            {isLiveTurn && delayedPending && <PendingIndicator />}
+                          </div>
                         );
                       })}
-                      {delayedPending && <PendingIndicator />}
                     </MessageScrollerContent>
 
                     {!isRunning && <SaveFullConversationAction />}

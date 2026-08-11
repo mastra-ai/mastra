@@ -6,6 +6,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/pla
 import { Input } from '@mastra/playground-ui/components/Input';
 import { MessageScrollerItem } from '@mastra/playground-ui/components/MessageScroller';
 import { Notice } from '@mastra/playground-ui/components/Notice';
+import { startsUserTurn } from '@mastra/playground-ui/components/ThreadRail';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { MessageFactory } from '@mastra/react/ui';
@@ -490,9 +491,9 @@ function SignalRow({ kind, label, message }: { kind: string; label: string; mess
 // Transcript
 // ---------------------------------------------------------------------------
 
-export function Transcript() {
+export function Transcript({ tail }: { tail?: ReactNode }) {
   const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
-  const { transcript, resolvePrompt } = useChatTranscript();
+  const { busy, transcript, resolvePrompt } = useChatTranscript();
   const hookArgs = {
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
@@ -515,23 +516,31 @@ export function Transcript() {
   return (
     <TranscriptEntries
       entries={transcript.entries}
+      awaitingReply={busy}
       isSubmitting={approveMutation.isPending || respondMutation.isPending}
       onApprove={onApprove}
       onRespond={onRespond}
+      tail={tail}
     />
   );
 }
 
 export function TranscriptEntries({
   entries,
+  awaitingReply = false,
   isSubmitting = false,
   onApprove,
   onRespond,
+  tail,
 }: {
   entries: TimelineEntry[];
+  /** A reply is on its way, so the live turn is worth room it has not filled yet. */
+  awaitingReply?: boolean;
   isSubmitting?: boolean;
   onApprove: (toolCallId: string, approved: boolean, promptId: string) => void;
   onRespond: (toolCallId: string, resumeData: string | string[] | PlanResume, promptId: string) => void;
+  /** Rendered inside the live turn (the activity line), so the reserved room stays under it. */
+  tail?: ReactNode;
 }) {
   const suspensions = new Map(
     entries.flatMap(entry => (entry.kind === 'suspension' ? [[entry.toolCallId, entry] as const] : [])),
@@ -571,25 +580,43 @@ export function TranscriptEntries({
     }
   };
 
+  const turnGroups: { key: string; entries: TimelineEntry[] }[] = [];
+  for (const entry of entries) {
+    const opensTurn = entry.kind === 'message' && startsUserTurn(entry.message);
+    if (opensTurn || turnGroups.length === 0) turnGroups.push({ key: entry.id, entries: [] });
+    turnGroups.at(-1)?.entries.push(entry);
+  }
+
   return (
     <>
-      {entries.map(entry => {
-        const rendered = renderEntry(entry);
-        if (!rendered) return null;
-
+      {turnGroups.map((group, index) => {
+        const isLiveTurn = index === turnGroups.length - 1;
         return (
-          <MessageScrollerItem
-            key={entry.id}
-            messageId={entry.id}
-            scrollAnchor={entry.kind === 'message' && entry.message.role === 'user'}
-            // Estimated off-screen heights would make the prepend anchor restore
-            // the wrong offset — measure the real thing.
-            className="[content-visibility:visible]"
-          >
-            {rendered}
-          </MessageScrollerItem>
+          // The room a fresh turn scrolls up into is this min-height: pure layout,
+          // filled by the streaming reply, gone with the flag — nothing measures it.
+          <div key={group.key} className={cn('flex flex-col', awaitingReply && isLiveTurn && 'min-h-[50cqh]')}>
+            {group.entries.map(entry => {
+              const rendered = renderEntry(entry);
+              if (!rendered) return null;
+
+              return (
+                <MessageScrollerItem
+                  key={entry.id}
+                  messageId={entry.id}
+                  scrollAnchor={entry.kind === 'message' && startsUserTurn(entry.message)}
+                  // Estimated off-screen heights would make the prepend anchor restore
+                  // the wrong offset — measure the real thing.
+                  className="[content-visibility:visible]"
+                >
+                  {rendered}
+                </MessageScrollerItem>
+              );
+            })}
+            {isLiveTurn && tail}
+          </div>
         );
       })}
+      {turnGroups.length === 0 && tail}
     </>
   );
 }

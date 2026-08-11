@@ -136,7 +136,7 @@ function ThreadShell({
     <ChatShell
       className={threadShellClass}
       scroller={{
-        autoScroll: true,
+        defaultScrollPosition: 'last-anchor',
         preserveScrollOnPrepend: true,
         onReachStart: canLoadMore ? loadMore.load : undefined,
       }}
@@ -153,8 +153,7 @@ function ThreadTranscript() {
     <>
       <TranscriptHistoryLoader />
       {transcript.entries.length === 0 && <EmptyThreadState />}
-      <Transcript />
-      <ActivityLine />
+      <Transcript tail={<ActivityLine />} />
     </>
   );
 }

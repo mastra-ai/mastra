@@ -428,6 +428,32 @@ const HistoryRailHarness = ({ messageIds }: { messageIds: string[] }) => (
   </MessageScrollerProvider>
 );
 
+const TurnHarness = ({ messageIds, replyIds = [] }: { messageIds: string[]; replyIds?: string[] }) => (
+  <MessageScrollerProvider defaultScrollPosition="last-anchor">
+    <MessageScrollerViewport data-testid="turn-viewport">
+      <MessageScrollerContent>
+        {messageIds.map(messageId => (
+          <MessageScrollerItem key={messageId} messageId={messageId} scrollAnchor>
+            <div>{messageId}</div>
+          </MessageScrollerItem>
+        ))}
+        {replyIds.map(replyId => (
+          <MessageScrollerItem key={replyId} messageId={replyId}>
+            <div>{replyId}</div>
+          </MessageScrollerItem>
+        ))}
+      </MessageScrollerContent>
+    </MessageScrollerViewport>
+  </MessageScrollerProvider>
+);
+
+const stubLayout = (tops: Record<string, number>) => {
+  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function () {
+    const top = this.dataset.messageId ? tops[this.dataset.messageId] : undefined;
+    return createRect({ top: top ?? 0 });
+  });
+};
+
 const contentResizeObserver = () => {
   const content = document.querySelector<HTMLElement>('[data-slot="message-scroller-content"]');
   if (!content) throw new Error('No scroller content');
@@ -555,6 +581,34 @@ describe('MessageScroller older history', () => {
     rerender(<HistoryHarness messageIds={['message-1', 'message-2', 'message-3']} onReachStart={onReachStart} />);
 
     expect(viewport.scrollTop).toBe(600);
+  });
+});
+
+describe('MessageScroller turn anchoring', () => {
+  it('parks a turn that opens below the ones already read at the top of the viewport', () => {
+    stubLayout({ 'message-2': 300 });
+    const { rerender } = render(<TurnHarness messageIds={['message-1']} />);
+
+    const viewport = screen.getByTestId('turn-viewport');
+    const scrollTo = installScrollTo(viewport);
+    setScrollMetrics(viewport, { scrollHeight: 1000, clientHeight: 400, scrollTop: 0 });
+
+    rerender(<TurnHarness messageIds={['message-1', 'message-2']} />);
+
+    expect(scrollTo).toHaveBeenLastCalledWith({ top: 300, behavior: 'smooth' });
+  });
+
+  it('stays put while the reply streams in below the turn', () => {
+    stubLayout({ 'message-1': 300 });
+    const { rerender } = render(<TurnHarness messageIds={['message-1']} />);
+
+    const viewport = screen.getByTestId('turn-viewport');
+    setScrollMetrics(viewport, { scrollHeight: 1000, clientHeight: 400, scrollTop: 300 });
+    const scrollTo = installScrollTo(viewport);
+
+    rerender(<TurnHarness messageIds={['message-1']} replyIds={['reply-1']} />);
+
+    expect(scrollTo).not.toHaveBeenCalled();
   });
 });
 
