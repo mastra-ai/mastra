@@ -197,6 +197,14 @@
                 "entityId": "test-agent",
                 "attributes": {
                   "stepIndex": 0,
+                  "promptRegions": {
+                    "method": "tokenx-estimate",
+                    "totalEstimated": 10,
+                    "regions": {
+                      "system": 5,
+                      "messages": 5
+                    }
+                  },
                   "messageId": "<messageId-1>",
                   "usage": {
                     "inputTokens": 15,
@@ -415,6 +423,15 @@
                 "entityId": "test-agent",
                 "attributes": {
                   "stepIndex": 1,
+                  "promptRegions": {
+                    "method": "tokenx-estimate",
+                    "totalEstimated": 102,
+                    "regions": {
+                      "system": 5,
+                      "messages": 97
+                    }
+                  },
+                  "promptPrefixChangedFromPreviousStep": false,
                   "messageId": "<messageId-1>",
                   "usage": {
                     "inputTokens": 15,

@@ -193,6 +193,14 @@
                         "entityId": "workflow-agent",
                         "attributes": {
                           "stepIndex": 0,
+                          "promptRegions": {
+                            "method": "tokenx-estimate",
+                            "totalEstimated": 10,
+                            "regions": {
+                              "system": 8,
+                              "messages": 2
+                            }
+                          },
                           "messageId": "<messageId-1>",
                           "usage": {
                             "inputTokens": 10,

@@ -1,10 +1,10 @@
 import { estimateTokenCount } from 'tokenx';
+import type { PromptRegionAttribution } from '../../observability/types/tracing';
 import type { MessageList } from './index';
 
 /**
- * Prompt token-composition estimate by MessageList region, computed over the
- * FINAL prompt actually sent to the model (after processLLMRequest processors
- * and other post-render rewrites).
+ * Region attribution over the FINAL prompt actually sent to the model (after
+ * processLLMRequest processors and other post-render rewrites).
  *
  * Regions:
  * - `system`             — untagged MessageList system messages
@@ -15,15 +15,10 @@ import type { MessageList } from './index';
  *
  * A missing region key means not-present, never zero. Estimates always sum to
  * `totalEstimated` over the final prompt by construction.
+ *
+ * The emitted shape is the span-attribute contract `PromptRegionAttribution`,
+ * which lives with the other span attributes in `observability/types/tracing`.
  */
-export interface PromptRegionAttribution {
-  /** Token-estimation method used (e.g. 'tokenx-estimate'). */
-  method: string;
-  /** Sum of all region estimates over the final prompt. */
-  totalEstimated: number;
-  /** Estimated tokens per region. */
-  regions: Record<string, number>;
-}
 
 const ESTIMATION_METHOD = 'tokenx-estimate';
 

@@ -132,6 +132,14 @@
                 "entityId": "metadata-agent",
                 "attributes": {
                   "stepIndex": 0,
+                  "promptRegions": {
+                    "method": "tokenx-estimate",
+                    "totalEstimated": 16,
+                    "regions": {
+                      "system": 7,
+                      "messages": 9
+                    }
+                  },
                   "messageId": "<messageId-1>",
                   "usage": {
                     "inputTokens": 15,
@@ -336,6 +344,15 @@
                 "entityId": "metadata-agent",
                 "attributes": {
                   "stepIndex": 1,
+                  "promptRegions": {
+                    "method": "tokenx-estimate",
+                    "totalEstimated": 102,
+                    "regions": {
+                      "system": 7,
+                      "messages": 95
+                    }
+                  },
+                  "promptPrefixChangedFromPreviousStep": false,
                   "messageId": "<messageId-1>",
                   "usage": {
                     "inputTokens": 15,

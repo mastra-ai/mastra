@@ -111,6 +111,14 @@
                 "entityId": "test-agent-preserve-tags",
                 "attributes": {
                   "stepIndex": 0,
+                  "promptRegions": {
+                    "method": "tokenx-estimate",
+                    "totalEstimated": 6,
+                    "regions": {
+                      "system": 5,
+                      "messages": 1
+                    }
+                  },
                   "messageId": "<messageId-1>",
                   "usage": {
                     "inputTokens": 15,
