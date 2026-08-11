@@ -1,92 +1,100 @@
-import type { MastraDBMessage } from '@mastra/core/agent-controller';
-import { render, screen } from '@testing-library/react';
+import type { QueryClient } from '@tanstack/react-query';
+import { screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 
-import { ChatTranscriptContext } from '../../context/ChatTranscriptContext';
-import type { ChatTranscriptApi } from '../../context/ChatTranscriptContext';
-import { initialTranscript } from '../../services/transcript';
-import type { TimelineEntry } from '../../services/transcript';
-import { ActivityLine } from '../ActivityLine';
+import { waitForMutationsIdle } from '../../../../../../e2e/ui/render';
+import { renderThread, stubPreparingSession } from './composer-session-test-fixture';
 
-const CREATED_AT = new Date('2026-07-15T10:00:00.000Z');
+const QUESTION = 'walk me through the auth flow';
 
-function assistantMessage(parts: MastraDBMessage['content']['parts']): TimelineEntry {
+type User = ReturnType<typeof userEvent.setup>;
+
+async function send(user: User) {
+  const message = () => screen.getByRole('textbox', { name: 'Message' });
+  await waitFor(() => expect(message()).toBeEnabled());
+  await user.type(message(), QUESTION);
+  await user.keyboard('{Enter}');
+  await waitFor(() => expect(screen.getByText(QUESTION)).toBeInTheDocument());
+}
+
+function assistantText(text: string) {
   return {
-    kind: 'message',
-    id: 'msg-1',
-    message: { id: 'msg-1', role: 'assistant', createdAt: CREATED_AT, content: { format: 2, parts } },
+    id: 'assistant-1',
+    role: 'assistant',
+    createdAt: '2026-07-15T10:00:00.000Z',
+    content: { format: 2, parts: [{ type: 'text', text }] },
   };
 }
 
-function userMessage(text: string): TimelineEntry {
-  return {
-    kind: 'message',
-    id: 'msg-0',
-    message: {
-      id: 'msg-0',
-      role: 'user',
-      createdAt: CREATED_AT,
-      content: { format: 2, parts: [{ type: 'text', text }] },
-    },
-  };
-}
-
-function renderLine(busy: boolean, entries: TimelineEntry[]) {
-  const value: ChatTranscriptApi = {
-    transcript: { ...initialTranscript, entries },
-    busy,
-    localUser: () => {},
-    reset: () => {},
-    resolvePrompt: () => {},
-    clearPending: () => {},
-    pushNotice: () => {},
-    loadMore: { hasMore: false, isLoading: false },
-  };
-  return render(
-    <ChatTranscriptContext.Provider value={value}>
-      <ActivityLine />
-    </ChatTranscriptContext.Provider>,
-  );
+/** Let the workspace come up so the session is bound and its stream is open. */
+async function ready(finishWorkspace: () => void, client: QueryClient) {
+  finishWorkspace();
+  await waitForMutationsIdle(client);
 }
 
 describe('ActivityLine', () => {
-  it('covers the silence between sending and the first output', () => {
-    renderLine(true, [userMessage('go on then')]);
+  it('covers the silence between sending and the run drawing anything', async () => {
+    stubPreparingSession({ autoAgentEnd: false });
+    const user = userEvent.setup();
+    renderThread();
 
+    await send(user);
+
+    expect(await screen.findByText('Thinking')).toBeInTheDocument();
+  });
+
+  it('keeps covering a call the transcript cannot draw yet', async () => {
+    const session = stubPreparingSession({ autoAgentEnd: false });
+    const user = userEvent.setup();
+    const { client } = renderThread();
+    await ready(session.finishWorkspace, client);
+    await send(user);
+
+    // An ask_user waits on its suspension prompt; until that lands the transcript shows no row,
+    // so the line is the only thing standing between the user and a blank screen.
+    await session.emit({ type: 'tool_start', toolCallId: 'call-ask', toolName: 'ask_user', args: {} });
+    await waitForMutationsIdle(client);
+
+    expect(screen.queryByRole('group', { name: /^Tool: / })).not.toBeInTheDocument();
     expect(screen.getByText('Thinking')).toBeInTheDocument();
   });
 
-  it('steps aside as soon as the run reaches for a tool', () => {
-    renderLine(true, [
-      userMessage('go on then'),
-      assistantMessage([
-        {
-          type: 'tool-invocation',
-          toolInvocation: { state: 'call', toolCallId: 'call-1', toolName: 'view', args: {} },
-        },
-      ]),
-    ]);
+  it('steps aside as soon as the run draws its first row', async () => {
+    const session = stubPreparingSession({ autoAgentEnd: false });
+    const user = userEvent.setup();
+    const { client } = renderThread();
+    await ready(session.finishWorkspace, client);
+    await send(user);
 
+    await session.emit({
+      type: 'tool_start',
+      toolCallId: 'call-view',
+      toolName: 'view',
+      args: { path: 'src/index.ts' },
+    });
+
+    await screen.findByRole('group', { name: 'Tool: view' });
     expect(screen.queryByText('Thinking')).not.toBeInTheDocument();
   });
 
-  it('stays away between two tool calls, where the streamed answer already shows the run is alive', () => {
-    renderLine(true, [
-      userMessage('go on then'),
-      assistantMessage([
-        {
-          type: 'tool-invocation',
-          toolInvocation: { state: 'result', toolCallId: 'call-1', toolName: 'view', args: {}, result: 'ok' },
-        },
-        { type: 'text', text: 'Here is what the file holds' },
-      ]),
-    ]);
+  it('steps aside while the answer streams', async () => {
+    const session = stubPreparingSession({ autoAgentEnd: false });
+    const user = userEvent.setup();
+    const { client } = renderThread();
+    await ready(session.finishWorkspace, client);
+    await send(user);
 
+    await session.emit({ type: 'message_update', message: assistantText('Auth starts at the composer') });
+
+    await screen.findByText('Auth starts at the composer');
     expect(screen.queryByText('Thinking')).not.toBeInTheDocument();
   });
 
-  it('says nothing when the run is idle', () => {
-    renderLine(false, [userMessage('go on then')]);
+  it('says nothing when the run is idle', async () => {
+    const session = stubPreparingSession();
+    const { client } = renderThread();
+    await ready(session.finishWorkspace, client);
 
     expect(screen.queryByText('Thinking')).not.toBeInTheDocument();
   });
