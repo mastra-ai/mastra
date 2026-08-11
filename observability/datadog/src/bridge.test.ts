@@ -271,6 +271,75 @@ describe('DatadogBridge', () => {
       await bridge.shutdown();
     });
 
+    it('keeps a resumed Mastra parent instead of adopting the active dd-trace scope', async () => {
+      const bridge = new DatadogBridge({ mlApp: 'test', agentless: false });
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'resume-under-ambient',
+        name: 'resume-under-ambient-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        bridge,
+      });
+
+      const requestSpan = {
+        context: () => ({
+          toSpanId: () => 'aaaaaaaaaaaaaaaa',
+          toTraceId: () => 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+        }),
+      };
+      mockScopeActive.mockReturnValueOnce(requestSpan);
+
+      const span = tracing.startSpan({
+        type: SpanType.GENERIC,
+        name: 'resumed-agent',
+        tracingOptions: {
+          parentSpanId: '1234567890abcdef',
+          isExternalParent: false,
+        },
+      })!;
+
+      expect(span.exportSpan()).toMatchObject({
+        parentSpanId: '1234567890abcdef',
+        isExternalParent: false,
+      });
+      expect(span.exportSpan().parentSpanId).not.toBe('aaaaaaaaaaaaaaaa');
+
+      span.end();
+      await tracing.flush();
+      await bridge.shutdown();
+    });
+
+    it('marks a bridged root external when it inherits the active dd-trace scope', async () => {
+      const bridge = new DatadogBridge({ mlApp: 'test', agentless: false });
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'bridged-root',
+        name: 'bridged-root-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        bridge,
+      });
+
+      const requestSpan = {
+        context: () => ({
+          toSpanId: () => 'aaaaaaaaaaaaaaaa',
+          toTraceId: () => 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+        }),
+      };
+      mockScopeActive.mockReturnValueOnce(requestSpan);
+
+      const span = tracing.startSpan({
+        type: SpanType.GENERIC,
+        name: 'bridged-root-agent',
+      })!;
+
+      expect(span.exportSpan()).toMatchObject({
+        parentSpanId: 'aaaaaaaaaaaaaaaa',
+        isExternalParent: true,
+      });
+
+      span.end();
+      await tracing.flush();
+      await bridge.shutdown();
+    });
+
     it('registers the eager span with the LLMObs tagger', () => {
       const bridge = new DatadogBridge({ mlApp: 'test', agentless: false });
 

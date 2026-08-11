@@ -10,10 +10,10 @@
 import type { CreateSpanOptions, LogEvent } from '@mastra/core/observability';
 import { InternalSpans, SamplingStrategyType, SpanType, TracingEventType } from '@mastra/core/observability';
 import { DefaultObservabilityInstance } from '@mastra/observability';
-import { isSpanContextValid, trace } from '@opentelemetry/api';
+import { context, isSpanContextValid, trace } from '@opentelemetry/api';
 import { logs as otelLogs, SeverityNumber } from '@opentelemetry/api-logs';
 import { InMemoryLogRecordExporter, LoggerProvider, SimpleLogRecordProcessor } from '@opentelemetry/sdk-logs';
-import { tracing } from '@opentelemetry/sdk-node';
+import { node, tracing } from '@opentelemetry/sdk-node';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { OtelBridge } from './bridge.js';
 
@@ -100,6 +100,83 @@ describe('OtelBridge', () => {
       span.end();
       await tracing.flush();
       await bridge.shutdown();
+    });
+
+    describe('with an ambient OTel span active', () => {
+      // The suite-level BasicTracerProvider has no context manager, so
+      // context.with() is a no-op there. Register a NodeTracerProvider for
+      // its AsyncLocalStorage context manager; the global tracer provider
+      // set in beforeAll stays in place (first registration wins).
+      let nodeProvider: InstanceType<typeof node.NodeTracerProvider>;
+
+      beforeAll(() => {
+        nodeProvider = new node.NodeTracerProvider();
+        nodeProvider.register();
+      });
+
+      afterAll(async () => {
+        context.disable();
+        await nodeProvider.shutdown();
+      });
+
+      it('keeps a resumed Mastra parent instead of adopting the ambient span', async () => {
+        const bridge = new OtelBridge();
+        const instance = new DefaultObservabilityInstance({
+          serviceName: 'resume-under-ambient',
+          name: 'resume-under-ambient-instance',
+          sampling: { type: SamplingStrategyType.ALWAYS },
+          bridge,
+        });
+
+        const ambient = trace.getTracer('ambient').startSpan('ambient-request');
+        const span = context.with(trace.setSpan(context.active(), ambient), () =>
+          instance.startSpan({
+            type: SpanType.GENERIC,
+            name: 'resumed-run',
+            tracingOptions: {
+              parentSpanId: '1234567890abcdef',
+              isExternalParent: false,
+            },
+          }),
+        )!;
+        ambient.end();
+
+        const exported = span.exportSpan();
+        expect(exported.parentSpanId).toBe('1234567890abcdef');
+        expect(exported.parentSpanId).not.toBe(ambient.spanContext().spanId);
+        expect(exported.isExternalParent).toBe(false);
+
+        span.end();
+        await instance.flush();
+        await bridge.shutdown();
+      });
+
+      it('marks a bridged root external when it inherits the ambient parent', async () => {
+        const bridge = new OtelBridge();
+        const instance = new DefaultObservabilityInstance({
+          serviceName: 'bridged-root',
+          name: 'bridged-root-instance',
+          sampling: { type: SamplingStrategyType.ALWAYS },
+          bridge,
+        });
+
+        const ambient = trace.getTracer('ambient').startSpan('ambient-request');
+        const span = context.with(trace.setSpan(context.active(), ambient), () =>
+          instance.startSpan({
+            type: SpanType.GENERIC,
+            name: 'bridged-root-run',
+          }),
+        )!;
+        ambient.end();
+
+        const exported = span.exportSpan();
+        expect(exported.parentSpanId).toBe(ambient.spanContext().spanId);
+        expect(exported.isExternalParent).toBe(true);
+
+        span.end();
+        await instance.flush();
+        await bridge.shutdown();
+      });
     });
 
     it('should handle errors gracefully and return undefined on failure', () => {

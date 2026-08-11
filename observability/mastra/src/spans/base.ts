@@ -319,6 +319,22 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     return this.parent.getParentSpanId(includeInternalSpans);
   }
 
+  /**
+   * Whether the parentSpanId returned by {@link getParentSpanId} refers to a
+   * span outside Mastra's stored trace. When every Mastra ancestor is dropped
+   * from export, the exported parentSpanId is the root's external parent, so
+   * the root's flag must travel with it.
+   */
+  protected getExportedIsExternalParent(includeInternalSpans?: boolean): boolean | undefined {
+    if (!this.parent) {
+      return this.isExternalParent;
+    }
+    if (this.getParentSpan(includeInternalSpans)) {
+      return this.isExternalParent;
+    }
+    return (this.parent as unknown as BaseSpan).getExportedIsExternalParent(includeInternalSpans);
+  }
+
   /** Find the closest parent span of a specific type by walking up the parent chain */
   public findParent<T extends SpanType>(spanType: T): Span<T> | undefined {
     let current: AnySpan | undefined = this.parent;
@@ -412,7 +428,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
       isEvent: this.isEvent,
       isRootSpan: this.isRootSpan,
       parentSpanId: this.getParentSpanId(includeInternalSpans),
-      isExternalParent: this.isExternalParent,
+      isExternalParent: this.getExportedIsExternalParent(includeInternalSpans),
       // Tags are only included for root spans
       ...(this.isRootSpan && this.tags?.length ? { tags: this.tags } : {}),
     };
