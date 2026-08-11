@@ -5,9 +5,11 @@ import type { WorkspaceSandbox } from '@mastra/core/workspace';
 import { createTarball, hashInstallInputs, uploadFile } from './engine.js';
 import { getInfoSafe, resolveRemoteDir, runInSandbox, shellQuote } from './shared.js';
 import type {
+  AttachWorkerDeploymentOptions,
   DeployWorkerToSandboxOptions,
   SandboxDestroyResult,
   SandboxWorkerDeployment,
+  SandboxWorkerExecution,
   SandboxWorkerInput,
   SandboxWorkerOutput,
   SandboxWorkerStatus,
@@ -22,8 +24,13 @@ const EXECUTION_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 const DEFAULT_INPUT_LIMIT = 16 * 1024 * 1024;
 const DEFAULT_OUTPUT_READ_LIMIT = 1024 * 1024;
 
-interface WorkerConfig {
+interface WorkerExecutionConfig {
   sandbox: WorkspaceSandbox;
+  resolveRemoteDir: () => Promise<string>;
+  terminationGraceMs: number;
+}
+
+interface WorkerConfig extends WorkerExecutionConfig {
   remoteDir: string;
   command: string;
   args: string[];
@@ -58,6 +65,7 @@ export async function deployWorkerToSandbox(options: DeployWorkerToSandboxOption
   const config: WorkerConfig = {
     sandbox,
     remoteDir,
+    resolveRemoteDir: async () => remoteDir,
     command,
     args,
     env,
@@ -103,6 +111,31 @@ export async function deployWorkerToSandbox(options: DeployWorkerToSandboxOption
   }
 
   return createExecution(config, executionId, options.input);
+}
+
+/** Reattach to a persisted worker execution without its original launch configuration. */
+export async function attachWorkerDeployment(options: AttachWorkerDeploymentOptions): Promise<SandboxWorkerExecution> {
+  if (!options.sandbox.executeCommand) {
+    throw new Error(
+      `Sandbox provider "${options.sandbox.provider}" does not support executeCommand, which is required for worker deploys.`,
+    );
+  }
+  validateExecutionId(options.executionId);
+  if (
+    options.terminationGraceMs !== undefined &&
+    (!Number.isFinite(options.terminationGraceMs) || options.terminationGraceMs <= 0)
+  ) {
+    throw new Error('terminationGraceMs must be greater than zero.');
+  }
+
+  let remoteDir: Promise<string> | undefined;
+  const config: WorkerExecutionConfig = {
+    sandbox: options.sandbox,
+    resolveRemoteDir: () => (remoteDir ??= resolveRemoteDir(options.sandbox, options.remoteDir)),
+    terminationGraceMs: options.terminationGraceMs ?? 5_000,
+  };
+  const info = await getInfoSafe(options.sandbox);
+  return execution(config, options.executionId, info?.id ?? options.sandbox.id, info?.timeoutAt);
 }
 
 function validateOptions(options: DeployWorkerToSandboxOptions): void {
@@ -219,8 +252,9 @@ async function createExecution(
     throw workerPhaseError('launch', error);
   }
 
-  const startup = await waitForStartup(config, executionId, paths);
-  if (startup.state === 'timed_out') await cancelExecution(config, executionId, paths, 'startup');
+  const resolvePaths = async () => paths;
+  const startup = await waitForStartup(config, executionId, resolvePaths);
+  if (startup.state === 'timed_out') await cancelExecution(config, executionId, resolvePaths, 'startup');
   if (startup.state === 'failed' || startup.state === 'timed_out' || startup.state === 'provider_unavailable') {
     throw new Error(
       `Worker ${startup.state} during startup${'message' in startup && startup.message ? `: ${startup.message}` : ''}.`,
@@ -228,28 +262,39 @@ async function createExecution(
   }
 
   const info = await getInfoSafe(config.sandbox);
-  return deployment(config, executionId, paths, info?.id ?? config.sandbox.id ?? 'unknown', info?.timeoutAt);
+  return deployment(config, executionId, info?.id ?? config.sandbox.id ?? 'unknown', info?.timeoutAt);
 }
 
-function deployment(
-  config: WorkerConfig,
+function execution(
+  config: WorkerExecutionConfig,
   executionId: string,
-  paths: ReturnType<typeof executionPaths>,
   sandboxId: string,
   expiresAt?: Date,
-): SandboxWorkerDeployment {
+): SandboxWorkerExecution {
+  const resolvePaths = async () => executionPaths(await config.resolveRemoteDir(), executionId);
   return {
     sandboxId,
     executionId,
     expiresAt,
-    status: options => readWorkerStatus(config.sandbox, executionId, paths, options),
-    readOutput: (stream, options) => readOutput(config.sandbox, executionId, paths, stream, options),
-    cancel: () => cancelExecution(config, executionId, paths),
+    status: options => readWorkerStatus(config.sandbox, executionId, resolvePaths, options),
+    readOutput: (stream, options) => readOutput(config.sandbox, executionId, resolvePaths, stream, options),
+    cancel: () => cancelExecution(config, executionId, resolvePaths),
     stop: async () => {
       if (!config.sandbox.stop) throw new Error(`Sandbox provider "${config.sandbox.provider}" does not support stop.`);
       await config.sandbox.stop();
     },
     destroy: options => destroyWithRetry(config.sandbox, options),
+  };
+}
+
+function deployment(
+  config: WorkerConfig,
+  executionId: string,
+  sandboxId: string,
+  expiresAt?: Date,
+): SandboxWorkerDeployment {
+  return {
+    ...execution(config, executionId, sandboxId, expiresAt),
     relaunch: async options => {
       if (options.executionId === executionId) throw new Error('Relaunch requires a new executionId.');
       validateInput(options.input);
@@ -339,11 +384,11 @@ async function launchExecution(sandbox: WorkspaceSandbox, paths: ReturnType<type
 async function waitForStartup(
   config: WorkerConfig,
   executionId: string,
-  paths: ReturnType<typeof executionPaths>,
+  resolvePaths: () => Promise<ReturnType<typeof executionPaths>>,
 ): Promise<SandboxWorkerStatus> {
   const deadline = Date.now() + config.startupTimeoutMs;
   while (Date.now() < deadline) {
-    const status = await readWorkerStatus(config.sandbox, executionId, paths);
+    const status = await readWorkerStatus(config.sandbox, executionId, resolvePaths);
     if (status.state !== 'unknown' && status.state !== 'starting') return status;
     await new Promise(resolve => setTimeout(resolve, 100));
   }
@@ -353,7 +398,7 @@ async function waitForStartup(
 async function readWorkerStatus(
   sandbox: WorkspaceSandbox,
   executionId: string,
-  paths: ReturnType<typeof executionPaths>,
+  resolvePaths: () => Promise<ReturnType<typeof executionPaths>>,
   options?: { wake?: boolean },
 ): Promise<SandboxWorkerStatus> {
   const providerState = sandbox.status;
@@ -370,6 +415,7 @@ async function readWorkerStatus(
   }
 
   try {
+    const paths = await resolvePaths();
     const result = await runInSandbox(
       sandbox,
       [
@@ -421,13 +467,14 @@ function parseStatus(executionId: string, value: string): SandboxWorkerStatus {
 }
 
 async function cancelExecution(
-  config: WorkerConfig,
+  config: WorkerExecutionConfig,
   executionId: string,
-  paths: ReturnType<typeof executionPaths>,
+  resolvePaths: () => Promise<ReturnType<typeof executionPaths>>,
   timeoutPhase?: 'startup',
 ): Promise<SandboxWorkerStatus> {
-  const current = await readWorkerStatus(config.sandbox, executionId, paths);
+  const current = await readWorkerStatus(config.sandbox, executionId, resolvePaths);
   if (current.state !== 'running' && current.state !== 'starting') return current;
+  const paths = await resolvePaths();
   const attempts = Math.max(1, Math.ceil(config.terminationGraceMs / 1000));
   const terminal = timeoutPhase ? `timed_out|${executionId}|startup` : `cancelled|${executionId}|TERM`;
   await runInSandbox(
@@ -452,14 +499,15 @@ async function cancelExecution(
 async function readOutput(
   sandbox: WorkspaceSandbox,
   executionId: string,
-  paths: ReturnType<typeof executionPaths>,
+  resolvePaths: () => Promise<ReturnType<typeof executionPaths>>,
   stream: 'stdout' | 'stderr',
   options?: { offset?: number; maxBytes?: number },
 ): Promise<SandboxWorkerOutput> {
   const offset = Math.max(0, Math.floor(options?.offset ?? 0));
   const maxBytes = Math.max(1, Math.floor(options?.maxBytes ?? DEFAULT_OUTPUT_READ_LIMIT));
-  const path = stream === 'stdout' ? paths.stdout : paths.stderr;
   try {
+    const paths = await resolvePaths();
+    const path = stream === 'stdout' ? paths.stdout : paths.stderr;
     const result = await runInSandbox(
       sandbox,
       `size=$(wc -c < ${shellQuote(path)} 2>/dev/null || echo 0); printf '%s\\n' "$size"; tail -c +${offset + 1} ${shellQuote(
@@ -473,7 +521,7 @@ async function readOutput(
     const encoded = newline === -1 ? '' : result.stdout.slice(newline + 1).replace(/\s/g, '');
     const data = Buffer.from(encoded, 'base64');
     const nextOffset = offset + data.byteLength;
-    const status = await readWorkerStatus(sandbox, executionId, paths);
+    const status = await readWorkerStatus(sandbox, executionId, resolvePaths);
     const terminal = ['exited', 'cancelled', 'timed_out', 'failed'].includes(status.state);
     const interrupted = status.state === 'provider_unavailable' || status.state === 'unknown';
     return {

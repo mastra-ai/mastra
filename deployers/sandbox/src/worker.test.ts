@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { describe, expect, it, vi } from 'vitest';
 
 import { FakeSandbox, makeBuildDir } from './fake-sandbox.mock.js';
-import { deployWorkerToSandbox } from './worker.js';
+import { attachWorkerDeployment, deployWorkerToSandbox } from './worker.js';
 
 async function deploy(sandbox: FakeSandbox, overrides: Record<string, unknown> = {}) {
   return deployWorkerToSandbox({
@@ -273,5 +273,53 @@ describe('deployWorkerToSandbox', () => {
     const relaunched = await deployment.relaunch({ executionId: 'attempt-2' });
     expect(relaunched.executionId).toBe('attempt-2');
     expect(sandbox.writtenFiles.flat().some(file => file.path.endsWith('/attempt-2/launch.sh'))).toBe(true);
+  });
+});
+
+describe('attachWorkerDeployment', () => {
+  it('reattaches from persisted identity and operates without launch configuration', async () => {
+    const sandbox = new FakeSandbox({
+      withNetworking: false,
+      workerOutput: Buffer.from('persisted output').toString('base64'),
+    });
+    await deploy(sandbox);
+
+    const attached = await attachWorkerDeployment({ sandbox, executionId: 'attempt-1' });
+
+    expect(attached).toMatchObject({ sandboxId: 'fake-info-id', executionId: 'attempt-1' });
+    expect('relaunch' in attached).toBe(false);
+    expect(await attached.status()).toEqual({ state: 'running', executionId: 'attempt-1' });
+    expect(Buffer.from((await attached.readOutput('stdout', { offset: 10 })).data).toString()).toBe('output');
+    expect(await attached.destroy()).toEqual({ state: 'destroyed', attempts: 1 });
+  });
+
+  it('returns distinct typed outcomes for completed, missing or corrupt, and destroyed executions', async () => {
+    const completed = new FakeSandbox({ withNetworking: false, workerStatus: 'exited|attempt-1|0' });
+    const missing = new FakeSandbox({ withNetworking: false, workerStatus: 'unknown|attempt-1' });
+    const corrupt = new FakeSandbox({ withNetworking: false, workerStatus: 'invalid-record' });
+    const destroyed = new FakeSandbox({ withNetworking: false });
+    destroyed.status = 'destroyed';
+
+    await expect(
+      (await attachWorkerDeployment({ sandbox: completed, executionId: 'attempt-1' })).status(),
+    ).resolves.toEqual({ state: 'exited', executionId: 'attempt-1', exitCode: 0 });
+    await expect(
+      (await attachWorkerDeployment({ sandbox: missing, executionId: 'attempt-1' })).status(),
+    ).resolves.toEqual({ state: 'unknown', executionId: 'attempt-1' });
+    await expect(
+      (await attachWorkerDeployment({ sandbox: corrupt, executionId: 'attempt-1' })).status(),
+    ).resolves.toEqual({ state: 'unknown', executionId: 'attempt-1' });
+    await expect(
+      (await attachWorkerDeployment({ sandbox: destroyed, executionId: 'attempt-1' })).status(),
+    ).resolves.toEqual({ state: 'provider_unavailable', executionId: 'attempt-1', providerState: 'destroyed' });
+    expect(destroyed.commands).toEqual([]);
+  });
+
+  it('preserves stale PID protection after reattachment', async () => {
+    const sandbox = new FakeSandbox({ withNetworking: false, workerStatus: 'stale|attempt-1' });
+    const attached = await attachWorkerDeployment({ sandbox, executionId: 'attempt-1', remoteDir: '/home/fake/app' });
+
+    expect(await attached.cancel()).toEqual({ state: 'unknown', executionId: 'attempt-1' });
+    expect(sandbox.commands.at(-1)).not.toContain('kill -TERM -"$pid"');
   });
 });

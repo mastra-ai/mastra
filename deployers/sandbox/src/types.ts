@@ -73,6 +73,18 @@ export type SandboxWorkerInput =
   | { type: 'stdin'; data: string | Uint8Array }
   | { type: 'file'; path: string; data: string | Uint8Array };
 
+/** Options for reattaching to a persisted worker execution. */
+export interface AttachWorkerDeploymentOptions {
+  /** The workspace sandbox to reconnect to by its provider-specific identity. */
+  sandbox: WorkspaceSandbox;
+  /** Persisted execution identity used to locate runtime state. */
+  executionId: string;
+  /** Persistent directory inside the sandbox. Defaults to `$HOME/mastra-app`. */
+  remoteDir?: string;
+  /** Grace period before forced termination. Defaults to 5000. */
+  terminationGraceMs?: number;
+}
+
 /** Options for deploying a non-HTTP worker or trusted custom command. */
 export interface DeployWorkerToSandboxOptions {
   /** The workspace sandbox to deploy into. Only `executeCommand` is required. */
@@ -136,8 +148,8 @@ export type SandboxDestroyResult =
   | { state: 'unsupported'; attempts: 0 }
   | { state: 'exhausted'; attempts: number; error: unknown };
 
-/** A deployed non-HTTP process execution. */
-export interface SandboxWorkerDeployment {
+/** An operational handle for a persisted non-HTTP process execution. */
+export interface SandboxWorkerExecution {
   sandboxId: string;
   executionId: string;
   expiresAt?: Date;
@@ -151,6 +163,10 @@ export interface SandboxWorkerDeployment {
   /** Snapshot-stop the sandbox. Process preservation is provider-specific and is never assumed. */
   stop(): Promise<void>;
   destroy(options?: { attempts?: number; delayMs?: number }): Promise<SandboxDestroyResult>;
+}
+
+/** A newly deployed process that retains its launch configuration for relaunches. */
+export interface SandboxWorkerDeployment extends SandboxWorkerExecution {
   /** Launch the same recorded command under a new caller-provided execution identity. */
   relaunch(options: { executionId: string; input?: SandboxWorkerInput }): Promise<SandboxWorkerDeployment>;
 }
