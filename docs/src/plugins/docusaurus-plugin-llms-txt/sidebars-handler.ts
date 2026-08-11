@@ -19,6 +19,10 @@ export function getSidebarLocations(siteDir: string) {
       path: path.join(siteDir, DOCS_DIR, 'guides', 'sidebars.js'),
     },
     {
+      id: 'Integrations',
+      path: path.join(siteDir, DOCS_DIR, 'integrations', 'sidebars.js'),
+    },
+    {
       id: 'Reference',
       path: path.join(siteDir, DOCS_DIR, 'reference', 'sidebars.js'),
     },
@@ -55,6 +59,7 @@ export function getBaseUrl(sectionId: string): string {
     Docs: 'https://mastra.ai/docs',
     Models: 'https://mastra.ai/models',
     Guides: 'https://mastra.ai/guides',
+    Integrations: 'https://mastra.ai/integrations',
     Reference: 'https://mastra.ai/reference',
   }
   return baseUrls[sectionId] || 'https://mastra.ai'

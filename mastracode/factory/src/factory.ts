@@ -64,6 +64,7 @@ import { assertFactoryRules } from './rules/validation.js';
 import { SandboxFleet } from './sandbox/fleet.js';
 import { registerSandboxReattach } from './sandbox/reattach.js';
 import { handleServerError } from './server-error.js';
+import { observeSessionCheckpoint } from './session/checkpoint-capture.js';
 import { observeSessionFilesystem } from './session/filesystem-capture.js';
 import { observeSessionFirstExec } from './session/first-exec-capture.js';
 import { observeSessionFirstMessage } from './session/first-message-capture.js';
@@ -817,6 +818,7 @@ export class MastraFactory {
         filesystem: filesystemStorage,
         sourceControl: sourceControlStorage.forIntegration('github'),
       });
+      observeSessionCheckpoint(session);
       observeSessionFirstMessage(session, {
         sourceControl: sourceControlStorage.forIntegration('github'),
       });

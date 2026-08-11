@@ -1946,6 +1946,63 @@ describe('Factory session routes', () => {
     expect(tables.sessions).toHaveLength(0);
   });
 
+  it('tears down the live controller session after deleting its row and before reclaiming its sandbox', async () => {
+    seedMaterializedProject();
+    const controller = { deleteSession: vi.fn(async () => {}) } as any;
+    const app = buildApp({ workosId: 'u1' }, { controller });
+    const created = await postJson(app, '/web/github/projects/p1/sessions', { branch: 'feat/x' });
+    const sessionId = (await created.json()).session.sessionId;
+    Object.assign(tables.sessions.find(row => row.sessionId === sessionId)!, {
+      sandboxId: 'sb-live',
+      sandboxWorkdir: '/workspace/hello',
+    });
+    controller.deleteSession.mockImplementation(async () => {
+      expect(tables.sessions).toHaveLength(0);
+      expect(reattachSandbox).not.toHaveBeenCalled();
+    });
+
+    const deleted = await app.request(`/web/user-sessions/${sessionId}`, { method: 'DELETE' });
+
+    expect(deleted.status).toBe(200);
+    expect(controller.deleteSession).toHaveBeenCalledWith({ resourceId: sessionId });
+    await vi.waitFor(() => expect(reattachSandbox).toHaveBeenCalledWith('sb-live'));
+  });
+
+  it('does not tear down a controller session for an unauthorized deletion', async () => {
+    seedMaterializedProject();
+    const controller = { deleteSession: vi.fn() } as any;
+    const ownerApp = buildApp({ workosId: 'u1' }, { controller });
+    const created = await postJson(ownerApp, '/web/github/projects/p1/sessions', { branch: 'feat/x' });
+    const sessionId = (await created.json()).session.sessionId;
+
+    const response = await buildApp({ workosId: 'u2' }, { controller }).request(`/web/user-sessions/${sessionId}`, {
+      method: 'DELETE',
+    });
+
+    expect(response.status).toBe(404);
+    expect(controller.deleteSession).not.toHaveBeenCalled();
+  });
+
+  it('continues sandbox reclamation and returns success when controller teardown fails', async () => {
+    seedMaterializedProject();
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const controller = { deleteSession: vi.fn(async () => Promise.reject(new Error('teardown failed'))) } as any;
+    const app = buildApp({ workosId: 'u1' }, { controller });
+    const created = await postJson(app, '/web/github/projects/p1/sessions', { branch: 'feat/x' });
+    const sessionId = (await created.json()).session.sessionId;
+    Object.assign(tables.sessions.find(row => row.sessionId === sessionId)!, {
+      sandboxId: 'sb-live',
+      sandboxWorkdir: '/workspace/hello',
+    });
+
+    const deleted = await app.request(`/web/user-sessions/${sessionId}`, { method: 'DELETE' });
+
+    expect(deleted.status).toBe(200);
+    expect(tables.sessions).toHaveLength(0);
+    await vi.waitFor(() => expect(reattachSandbox).toHaveBeenCalledWith('sb-live'));
+    error.mockRestore();
+  });
+
   it('returns a remote session sandbox to the reuse pool on delete instead of destroying it', async () => {
     seedMaterializedProject();
     const app = buildApp({ workosId: 'u1' });

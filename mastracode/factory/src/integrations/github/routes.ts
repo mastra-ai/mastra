@@ -387,7 +387,7 @@ async function ingestPolledEvents(
  */
 export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[] {
   const routes: ApiRoute[] = [];
-  const { auth, fleet, storage, github, stateSigner, emitAudit } = options;
+  const { auth, fleet, storage, github, stateSigner, controller, emitAudit } = options;
   const diagnostics = () =>
     getGithubFeatureDiagnostics({ github, auth, appDbConfigured: storage !== undefined, stateSigner, fleet });
 
@@ -1060,7 +1060,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
   );
 
   // ── Sessions / commit / push / PR ────────────────────────────────────────
-  routes.push(...buildProjectGitRoutes({ github, auth, fleet, emitAudit }));
+  routes.push(...buildProjectGitRoutes({ github, auth, fleet, controller, emitAudit }));
 
   return routes;
 }
@@ -1287,11 +1287,13 @@ function buildProjectGitRoutes({
   github,
   auth,
   fleet,
+  controller,
   emitAudit,
 }: {
   github: GithubIntegration;
   auth: RouteAuth;
   fleet: SandboxFleet;
+  controller?: MountedMastraCode['controller'];
   emitAudit?: AuditEmitter['emit'];
 }): ApiRoute[] {
   return [
@@ -1435,6 +1437,14 @@ function buildProjectGitRoutes({
         // a large repository — the caller must not sit through that for a
         // workspace that has already been removed.
         await github.sourceControlStorage.sessions.delete(session.id);
+        try {
+          await controller?.deleteSession({ resourceId: session.sessionId });
+        } catch (error) {
+          console.error('[GitHub Sessions] Failed to tear down live controller session', {
+            sessionId: session.sessionId,
+            error,
+          });
+        }
         void reclaimDeletedSessionSandbox({
           fleet,
           sourceControl: github.sourceControlStorage,

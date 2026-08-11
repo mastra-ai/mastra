@@ -106,6 +106,8 @@ export enum SpanType {
   GRAPH_ACTION = 'graph_action',
   /** Inline data mapping between pipeline stages (e.g. a tool's `toModelOutput` transform) */
   MAPPING = 'mapping',
+  /** Dynamic agent skills resolver run */
+  SKILL_RESOLUTION = 'skill_resolution',
 }
 
 export { EntityType };
@@ -454,6 +456,16 @@ export interface MappingAttributes extends AIBaseAttributes {
 }
 
 /**
+ * Skill resolution attributes — for a dynamic agent skills resolver run.
+ */
+export interface SkillResolutionAttributes extends AIBaseAttributes {
+  /** Agent whose skills resolver ran */
+  agentId?: string;
+  /** Number of skills the resolver returned */
+  skillCount?: number;
+}
+
+/**
  * Processor attributes
  */
 export interface ProcessorRunAttributes extends AIBaseAttributes {
@@ -761,6 +773,7 @@ export interface SpanTypeMap {
   [SpanType.RAG_ACTION]: RagActionAttributes;
   [SpanType.GRAPH_ACTION]: GraphActionAttributes;
   [SpanType.MAPPING]: MappingAttributes;
+  [SpanType.SKILL_RESOLUTION]: SkillResolutionAttributes;
 }
 
 /**
