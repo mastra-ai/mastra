@@ -68,6 +68,7 @@ import { observeSessionCheckpoint } from './session/checkpoint-capture.js';
 import { observeSessionFilesystem } from './session/filesystem-capture.js';
 import { observeSessionFirstExec } from './session/first-exec-capture.js';
 import { observeSessionFirstMessage } from './session/first-message-capture.js';
+import { FactoryMemorySettingsProcessor } from './session/memory-settings-processor.js';
 import { createSpaStaticMiddleware, resolveUiDistDir } from './spa-static.js';
 import { createStateSigner } from './state-signing.js';
 import { observeAgentGitAction } from './storage/domains/audit/agent-audit.js';
@@ -586,6 +587,16 @@ export class MastraFactory {
           },
         })
       : undefined;
+    // Every run reconciles the caller's stored memory settings onto their live
+    // session, so a setting changed mid-session takes effect on the next
+    // message instead of only on sessions created afterwards. Unconditional:
+    // plain chat sessions never run the start path that seeds them.
+    const memorySettingsProcessor = new FactoryMemorySettingsProcessor({
+      memorySettings: memorySettingsStorage,
+      getController: () => this.#prepared?.base.controller,
+      authEnabled: Boolean(auth),
+    });
+    const inputProcessors = [...(factoryProcessor ? [factoryProcessor] : []), memorySettingsProcessor];
 
     // Boot assertion: an active integration that signs OAuth `state` needs a
     // replica-stable signer — a per-process random secret silently breaks the
@@ -642,7 +653,7 @@ export class MastraFactory {
         initialState: { skipGlobalInstructions: true },
         storage: storage.getMastraStorage(),
         ...(mastraStorageBackend ? { storageBackend: mastraStorageBackend } : {}),
-        ...(factoryProcessor ? { inputProcessors: [factoryProcessor] } : {}),
+        inputProcessors,
         ...(vector ? { vector } : {}),
         ...(toolIntegrations.length > 0 || (workItemsStorage && transitionService)
           ? {

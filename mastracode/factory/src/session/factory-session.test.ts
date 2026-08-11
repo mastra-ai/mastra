@@ -44,12 +44,25 @@ async function seedLinkedRepository(options?: { pinnedBranch?: string }) {
 
 function createSessionDouble() {
   const calls: string[] = [];
+  const models = { observer: 'google/gemini-3.5-flash', reflector: 'google/gemini-3.5-flash' };
   const session = {
     om: {
-      observer: { switchModel: vi.fn(async () => void calls.push('observer')) },
-      reflector: { switchModel: vi.fn(async () => void calls.push('reflector')) },
+      observer: {
+        modelId: () => models.observer,
+        switchModel: vi.fn(async ({ modelId }: { modelId: string }) => {
+          models.observer = modelId;
+          calls.push('observer');
+        }),
+      },
+      reflector: {
+        modelId: () => models.reflector,
+        switchModel: vi.fn(async ({ modelId }: { modelId: string }) => {
+          models.reflector = modelId;
+          calls.push('reflector');
+        }),
+      },
     },
-    state: { set: vi.fn(async () => void calls.push('state')) },
+    state: { get: () => ({}), set: vi.fn(async () => void calls.push('state')) },
     model: { switch: vi.fn(async () => void calls.push('model')) },
   };
   return { session: session as unknown as FactorySessionHandle, double: session, calls };

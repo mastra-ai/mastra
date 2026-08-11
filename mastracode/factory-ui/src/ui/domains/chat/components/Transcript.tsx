@@ -16,8 +16,10 @@ import type { FilePart, MessageRoleRenderers, ReasoningPart, TextPart, ToolInvoc
 import { Bell, ChevronDown, CircleDot, ExternalLink, Info, Layers, Slack, Wrench, X } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
+import { useNavigate, useParams } from 'react-router';
 
 import { highlightCode, languageForPath } from '../../../ui/highlight';
+import { settingsSectionPath } from '../../settings/settingsSections';
 import { PullRequestStatusIcon } from '../../factory/components/PullRequestStatusIcon';
 import { useChatSessionContext } from '../context/useChatSessionContext';
 import { useChatTranscript } from '../context/useChatTranscript';
@@ -1220,11 +1222,18 @@ function StatusMetadataCard({ status }: { status: StatusMetadata }) {
 }
 
 function NoticeCard({ entry }: { entry: NoticeEntry }) {
+  const { factoryId } = useParams();
+  const navigate = useNavigate();
   return (
     <Notice className="my-2" variant={entry.level === 'error' ? 'destructive' : 'info'}>
       <div className="prose">
         <Markdown>{entry.text}</Markdown>
       </div>
+      {entry.action === 'om-settings' && factoryId && (
+        <Notice.Button onClick={() => void navigate(settingsSectionPath(factoryId, 'models'))}>
+          Memory settings
+        </Notice.Button>
+      )}
     </Notice>
   );
 }

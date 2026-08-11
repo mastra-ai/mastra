@@ -832,6 +832,31 @@ describe('transcript reducer error notices', () => {
   it('falls back to a generic hint when the payload is empty', () => {
     expect(errorNoticeText({ error: {} })).toBe('Run failed with an unknown error. Check the server logs for details.');
   });
+
+  function errorNotice(event: Record<string, unknown>) {
+    const state = transcriptReducer(initialTranscript, { type: 'event', event: { type: 'error', ...event } });
+    const notice = state.entries.find(entry => entry.kind === 'notice');
+    if (!notice || notice.kind !== 'notice') throw new Error('expected a notice entry');
+    return notice;
+  }
+
+  it('points an observation failure at the setting that caused it', () => {
+    const notice = errorNotice({ error: 'Observational memory observation run failed: 401 no credentials' });
+
+    expect(notice.text).toContain('401 no credentials');
+    expect(notice.text).toContain("The observer model can't run.");
+    expect(notice.action).toBe('om-settings');
+  });
+
+  it('names the reflector when reflection is what failed', () => {
+    const notice = errorNotice({ error: 'Observational memory reflection run failed: 401 no credentials' });
+
+    expect(notice.text).toContain("The reflector model can't run.");
+  });
+
+  it('leaves an unrelated failure without a settings shortcut', () => {
+    expect(errorNotice({ error: 'model quota exhausted' }).action).toBeUndefined();
+  });
 });
 
 describe('live user-signal events render the same as their persisted copy', () => {

@@ -52,6 +52,8 @@ export interface NoticeEntry {
   id: string;
   level: 'info' | 'error';
   text: string;
+  /** Where the user can fix what caused this notice, when there is such a place. */
+  action?: 'om-settings';
 }
 
 /** A pending tool approval (`tool_approval_required`). */
@@ -514,12 +516,28 @@ function applyEvent(state: TranscriptState, event: AgentControllerEvent): Transc
     // Notices.
     case 'info':
       return pushNotice(state, 'info', event.message);
-    case 'error':
-      return pushNotice(state, 'error', describeErrorEvent(event));
+    case 'error': {
+      const message = describeErrorEvent(event);
+      const omRole = omFailureRole(message);
+      return omRole
+        ? pushNotice(state, 'error', `${message}\n\nThe ${omRole} model can't run. Pick another one.`, 'om-settings')
+        : pushNotice(state, 'error', message);
+    }
 
     default:
       return state;
   }
+}
+
+/**
+ * The observational-memory role named by an abort error, if it is one. OM
+ * failures abort the whole turn, so the notice has to point at the setting
+ * that caused it rather than read as a generic run failure.
+ */
+function omFailureRole(message: string): 'observer' | 'reflector' | undefined {
+  const match = /^Observational memory (observation|reflection) /.exec(message);
+  if (!match) return undefined;
+  return match[1] === 'reflection' ? 'reflector' : 'observer';
 }
 
 /**
@@ -1061,9 +1079,17 @@ function pushPrompt(state: TranscriptState, prompt: PromptEntry): TranscriptStat
   return { ...state, entries: [...state.entries, prompt] };
 }
 
-function pushNotice(state: TranscriptState, level: 'info' | 'error', text: string): TranscriptState {
+function pushNotice(
+  state: TranscriptState,
+  level: 'info' | 'error',
+  text: string,
+  action?: NoticeEntry['action'],
+): TranscriptState {
   return {
     ...state,
-    entries: [...state.entries, { kind: 'notice', id: `notice-${Date.now()}-${noticeSeq++}`, level, text }],
+    entries: [
+      ...state.entries,
+      { kind: 'notice', id: `notice-${Date.now()}-${noticeSeq++}`, level, text, ...(action ? { action } : {}) },
+    ],
   };
 }
