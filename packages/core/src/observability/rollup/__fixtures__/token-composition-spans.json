@@ -1,0 +1,123 @@
+[
+  {
+    "id": "gen-1",
+    "traceId": "trace-1",
+    "name": "model generation",
+    "type": "model_generation",
+    "parentSpanId": "agent-run-1",
+    "attributes": { "model": "test-model" }
+  },
+  {
+    "id": "step-1",
+    "traceId": "trace-1",
+    "name": "model step",
+    "type": "model_step",
+    "parentSpanId": "gen-1",
+    "attributes": {
+      "stepIndex": 0,
+      "usage": {
+        "inputTokens": 106,
+        "outputTokens": 20,
+        "inputDetails": { "text": 6, "cacheRead": 94, "cacheWrite": 6 }
+      },
+      "promptRegions": {
+        "method": "tokenx-estimate",
+        "totalEstimated": 100,
+        "regions": { "system": 40, "tagged-system:memory": 30, "messages": 30 }
+      }
+    }
+  },
+  {
+    "id": "step-2",
+    "traceId": "trace-1",
+    "name": "model step",
+    "type": "model_step",
+    "parentSpanId": "gen-1",
+    "attributes": {
+      "stepIndex": 1,
+      "usage": {
+        "inputTokens": 110,
+        "outputTokens": 15,
+        "inputDetails": { "text": 10, "cacheRead": 100, "cacheWrite": 0 }
+      },
+      "promptRegions": {
+        "method": "tokenx-estimate",
+        "totalEstimated": 105,
+        "regions": { "system": 40, "tagged-system:memory": 30, "messages": 35 }
+      },
+      "promptPrefixChangedFromPreviousStep": false
+    }
+  },
+  {
+    "id": "step-3",
+    "traceId": "trace-1",
+    "name": "model step",
+    "type": "model_step",
+    "parentSpanId": "gen-1",
+    "attributes": {
+      "stepIndex": 2,
+      "usage": { "inputTokens": 120, "outputTokens": 30 },
+      "promptRegions": {
+        "method": "tokenx-estimate",
+        "totalEstimated": 118,
+        "regions": { "system": 40, "messages": 78 }
+      },
+      "promptPrefixChangedFromPreviousStep": true
+    }
+  },
+  {
+    "id": "step-4",
+    "traceId": "trace-1",
+    "name": "model step",
+    "type": "model_step",
+    "parentSpanId": "gen-2",
+    "attributes": {
+      "stepIndex": 0,
+      "usage": {
+        "inputTokens": 90,
+        "outputTokens": 12,
+        "inputDetails": { "text": 10, "cacheRead": 50, "cacheWrite": 0, "image": 30 }
+      },
+      "promptRegions": {
+        "method": "tokenx-estimate",
+        "totalEstimated": 88,
+        "regions": { "system": 40, "messages": 48 }
+      }
+    }
+  },
+  {
+    "id": "step-5",
+    "traceId": "trace-2",
+    "name": "model step",
+    "type": "model_step",
+    "parentSpanId": "gen-3",
+    "attributes": {
+      "stepIndex": 0,
+      "usage": {
+        "inputTokens": 10,
+        "outputTokens": 4,
+        "inputDetails": { "text": 4, "cacheRead": 6, "cacheWrite": 0 }
+      }
+    }
+  },
+  {
+    "id": "step-6",
+    "traceId": "trace-2",
+    "name": "model step",
+    "type": "model_step",
+    "parentSpanId": "gen-3",
+    "attributes": {
+      "stepIndex": 1,
+      "usage": {
+        "inputTokens": 20,
+        "outputTokens": 6,
+        "inputDetails": { "text": 6, "cacheRead": 10, "cacheWrite": 4 }
+      },
+      "promptRegions": {
+        "method": "tokenx-estimate",
+        "totalEstimated": 22,
+        "regions": { "system": 12, "messages": 10 }
+      }
+    }
+  }
+]
