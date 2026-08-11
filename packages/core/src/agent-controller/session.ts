@@ -3343,7 +3343,6 @@ export class Session<TState = unknown> {
       const threadId = this.thread.getId()!;
 
       const agent = this.machinery.getAgent();
-      this.runEngine.setRequestContext(requestContextInput);
       await this.thread.ensureSubscription(threadId);
 
       // A deferred abort (parked approval gate) leaves the AbortController
@@ -3439,7 +3438,6 @@ export class Session<TState = unknown> {
     const threadId = this.thread.getId()!;
 
     const agent = this.machinery.getAgent();
-    this.runEngine.setRequestContext(requestContextInput);
     await this.thread.ensureSubscription(threadId);
 
     if (this.run.getRunId() && this.stream.activeRunId()) {
@@ -3828,7 +3826,6 @@ export class Session<TState = unknown> {
       throw new Error('Cannot resume a suspended tool without a current thread');
     }
 
-    this.runEngine.setRequestContext(requestContextInput);
     await this.thread.ensureSubscription(threadId);
     const resumedSubscriptionBoundary = this.createSubscribedResumeBoundaryWaiter(
       suspension.toolName === 'submit_plan' ? toolCallId : undefined,
