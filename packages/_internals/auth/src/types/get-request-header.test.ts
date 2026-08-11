@@ -51,6 +51,15 @@ describe('getRequestHeader', () => {
     expect(getRequestHeader(request, 'x-api-key')).toBe('first');
   });
 
+  it('reads mixed-case plain-object keys case-insensitively', () => {
+    const request = {
+      headers: { Authorization: 'Bearer tok', Cookie: 'session=Mixed' },
+    };
+
+    expect(getRequestHeader(request, 'authorization')).toBe('Bearer tok');
+    expect(getRequestHeader(request, 'COOKIE')).toBe('session=Mixed');
+  });
+
   it('returns null when the header is missing', () => {
     expect(getRequestHeader(new Request('http://localhost/'), 'cookie')).toBeNull();
     expect(getRequestHeader({ headers: {} }, 'cookie')).toBeNull();

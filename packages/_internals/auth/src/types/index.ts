@@ -18,7 +18,9 @@ function headerFromPlainObject(
   headers: Record<string, string | string[] | undefined>,
   name: string,
 ): string | null {
-  const value = headers[name.toLowerCase()] ?? headers[name];
+  const normalizedName = name.toLowerCase();
+  const matchingKey = Object.keys(headers).find(key => key.toLowerCase() === normalizedName);
+  const value = matchingKey === undefined ? undefined : headers[matchingKey];
   return Array.isArray(value) ? (value[0] ?? null) : (value ?? null);
 }
 
