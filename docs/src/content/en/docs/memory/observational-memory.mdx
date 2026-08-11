@@ -749,13 +749,13 @@ Reflection works similarly, the Reflector runs in the background when observatio
 | - | - | - |
 | `observation.bufferTokens` | `0.2` | How often to buffer. `0.2` means every 20% of `messageTokens`. With the default 30k threshold, that's roughly every 6k tokens. Can also be an absolute token count (e.g. `5000`). |
 | `observation.bufferActivation` | `0.8` | How aggressively to clear the message window on activation. `0.8` means remove enough messages to keep only 20% of `messageTokens` remaining. Lower values keep more message history. |
-| `observation.blockAfter` | `1.2` | Safety net if buffering can't keep up. Values from 1 up to (but not including) 100 multiply `messageTokens`: at `1.2`, the threshold is 36k tokens (1.2 × 30k). Above it, activation may overshoot the retention target instead of activating fewer chunks. Values of 100 or more are absolute token counts (e.g. `50_000`). |
+| `observation.blockAfter` | `1.2` | Safety net if buffering can't keep up. Values from 1 up to (but not including) 100 multiply `messageTokens`: at `1.2`, the threshold is 36k tokens (1.2 × 30k). Above it, activation may overshoot the retention target instead of activating fewer chunks. Values of 100 or more are absolute token counts (e.g. `50_000`) and must be greater than `messageTokens`. |
 | `activateAfterIdle` | none | Forces buffered observations to activate after a period of inactivity, even before `observation.messageTokens` is reached. Accepts a numeric millisecond value such as `300_000`, duration strings like `"5m"` or `"1hr"`, or `"auto"` for a provider-aware prompt cache TTL. |
 | `activateOnProviderChange` | `false` | Forces buffered observations to activate when the next step uses a different `provider/model` than the one that produced the latest assistant step. Use this when switching providers or models would invalidate prompt cache reuse. |
 | `reflection.bufferActivation` | `0.5` | When to start background reflection. `0.5` means reflection begins when observations reach 50% of the `observationTokens` threshold. |
 | `reflection.activateAfterIdle` | none | Opts buffered reflections into idle activation. Reflections don't inherit top-level `activateAfterIdle`. |
 | `reflection.activateOnProviderChange` | `false` | Opts buffered reflections into provider-change activation. Reflections don't inherit top-level `activateOnProviderChange`. |
-| `reflection.blockAfter` | `1.2` | Safety threshold for reflection. Same value format as observation, but above it reflection runs synchronously when no buffered reflection is ready to activate. |
+| `reflection.blockAfter` | `1.2` | Safety threshold for reflection. Same value format as observation (absolute values must be greater than `observationTokens`), but above it reflection runs synchronously when no buffered reflection is ready to activate. |
 
 If you're relying on prompt caching, set `activateAfterIdle` to `"auto"` or to a specific cache TTL. That way, once a thread has been idle long enough for the cache to expire, the next request can activate buffered observations first and send a smaller compressed context window.
 
