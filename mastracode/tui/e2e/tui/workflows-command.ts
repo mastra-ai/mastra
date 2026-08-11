@@ -58,6 +58,9 @@ export const workflowsCommandScenario: McE2eScenario = {
     await runtime.waitForScreenText(/Running "e2e-greeting"/i, terminal);
     await runtime.waitForScreenText(/Hello, Ada  Lovelace!/i, terminal);
 
+    terminal.submit('/workflows run e2e-greeting {"name":}');
+    await runtime.waitForScreenText(/Invalid JSON input:/i, terminal);
+
     terminal.submit('/workflows delete e2e-greeting');
     await runtime.waitForScreenText(/Deleted workflow "e2e-greeting"\./i, terminal);
 
