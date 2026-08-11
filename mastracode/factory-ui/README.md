@@ -10,7 +10,7 @@ Complete the [repository setup](../README.md#setup) and [GitHub App setup](../we
 pnpm --dir mastracode/web dev:ui
 ```
 
-Open `http://localhost:5173`. To restart one side without losing the other, run `pnpm --dir mastracode/web api` and `pnpm --dir mastracode/web ui` in separate terminals.
+Open `http://localhost:5173`. To restart one side without losing the other, start the Docker services with `pnpm --dir mastracode/web db:up`, then run `pnpm --dir mastracode/web api` and `pnpm --filter ./mastracode/factory-ui dev` in separate terminals.
 
 Keep policy, validation, and persistence in [`@mastra/factory`](../factory/README.md), not in React.
 

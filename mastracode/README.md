@@ -43,4 +43,4 @@ For UI work with hot module replacement, run the Docker services, the API, and t
 pnpm --dir mastracode/web dev:ui
 ```
 
-Open `http://localhost:5173`. To run them in separate terminals instead, use `pnpm --dir mastracode/web api` and `pnpm --dir mastracode/web ui`.
+Open `http://localhost:5173`. To run them in separate terminals instead, start the Docker services with `pnpm --dir mastracode/web db:up`, then run `pnpm --dir mastracode/web api` and `pnpm --filter ./mastracode/factory-ui dev`.
