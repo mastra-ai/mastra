@@ -1422,6 +1422,66 @@ describe('MessageHistory', () => {
       saveSpy.mockRestore();
     });
 
+    it('should preserve v4 error fields in the legacy toolInvocations result path', async () => {
+      const stored = assistantMessage({
+        content: {
+          format: 2,
+          parts: [{ type: 'text', text: 'Searching' }],
+          toolInvocations: [
+            {
+              state: 'call',
+              toolCallId: 'call-1',
+              toolName: 'search',
+              args: { query: 'mastra' },
+            },
+          ],
+        },
+      });
+      mockStorage.setMessages([stored]);
+
+      processor = new MessageHistory({ storage: mockStorage });
+      const saveSpy = vi.spyOn(mockStorage, 'saveMessages');
+      const echoWithError = assistantMessage({
+        content: {
+          format: 2,
+          parts: [{ type: 'text', text: 'Searching' }],
+          toolInvocations: [
+            {
+              state: 'result',
+              toolCallId: 'call-1',
+              toolName: 'client-tool-name',
+              args: { query: 'client-modified', injected: true },
+              result: 'Search failed',
+              isError: true,
+              errorText: 'Search failed',
+            },
+          ],
+        },
+      });
+
+      await processor.processOutputResult({
+        messageList: new MessageList().add([echoWithError], 'input'),
+        messages: [],
+        abort: mockAbort,
+        requestContext: createRuntimeContextWithMemory('thread-1'),
+      });
+
+      const savedMessages = (saveSpy.mock.calls[0]![0] as any).messages as MastraDBMessage[];
+      expect(savedMessages[0]!.content.toolInvocations).toEqual([
+        {
+          state: 'result',
+          toolCallId: 'call-1',
+          toolName: 'search',
+          args: { query: 'mastra' },
+          result: 'Search failed',
+          isError: true,
+          errorText: 'Search failed',
+        },
+      ]);
+
+      saveSpy.mockRestore();
+    });
+
     it('should preserve a v6 client-authored output error without accepting other client fields', async () => {
       const stored = assistantMessage({
         content: {
