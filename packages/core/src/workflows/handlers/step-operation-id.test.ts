@@ -24,24 +24,50 @@ class RecordingExecutionEngine extends DefaultExecutionEngine {
 }
 
 describe('step durable operation IDs', () => {
-  it('distinguishes loop iterations and the resumed iteration', async () => {
+  it('keeps legacy operation IDs for an ordinary one-shot step', async () => {
+    const workflowId = 'test-workflow';
+    const runId = 'test-run';
+    const stepId = 'one-shot-step';
+    const engine = new RecordingExecutionEngine({ mastra: undefined });
+    const step = {
+      id: stepId,
+      inputSchema: z.any(),
+      outputSchema: z.any(),
+      execute: async ({ inputData }: any) => inputData,
+    };
+
+    await engine.executeStep({
+      workflowId,
+      runId,
+      step,
+      prevOutput: { value: 'input' },
+      stepResults: {},
+      serializedStepGraph: [],
+      executionContext: createExecutionContext(workflowId, runId),
+      pubsub: new EventEmitterPubSub(),
+      abortController: new AbortController(),
+      requestContext: new RequestContext(),
+      tracingContext: {},
+    });
+
+    expect(engine.operationIds).toEqual([
+      'workflow.test-workflow.run.test-run.step.one-shot-step.span.start',
+      'workflow.test-workflow.run.test-run.step.one-shot-step.running_ev',
+      'workflow.test-workflow.run.test-run.path.[0].stepUpdate.start',
+      'workflow.test-workflow.step.one-shot-step',
+      'workflow.test-workflow.run.test-run.step.one-shot-step.emit_result',
+      'workflow.test-workflow.run.test-run.step.one-shot-step.span.end',
+    ]);
+  });
+
+  it('distinguishes loop iterations and repeated resumes of the same iteration', async () => {
     const workflowId = 'test-workflow';
     const runId = 'test-run';
     const stepId = 'loop-step';
     const engine = new RecordingExecutionEngine({ mastra: undefined });
     const stepResults = {} as Record<string, StepResult<any, any, any, any>>;
     let executions = 0;
-    const executionContext: ExecutionContext = {
-      workflowId,
-      runId,
-      executionPath: [0],
-      stepExecutionPath: [],
-      activeStepsPath: {},
-      suspendedPaths: {},
-      resumeLabels: {},
-      retryConfig: { attempts: 0, delay: 0 },
-      state: {},
-    };
+    const executionContext = createExecutionContext(workflowId, runId);
     const step = {
       id: stepId,
       inputSchema: z.any(),
@@ -50,7 +76,7 @@ describe('step durable operation IDs', () => {
       resumeSchema: z.object({ approved: z.boolean() }),
       execute: async ({ resumeData, suspend }: any) => {
         executions++;
-        if (executions === 2 && !resumeData) {
+        if (executions === 2 || executions === 3) {
           await suspend({ reason: 'approval' });
         }
         return { iteration: resumeData ? 2 : executions };
@@ -78,6 +104,19 @@ describe('step durable operation IDs', () => {
 
     const suspended = await engine.executeLoop(params);
     expect(suspended.status).toBe('suspended');
+    expect((suspended as any).suspendPayload.__workflow_meta.resumeGeneration).toBe(0);
+
+    const suspendedAgain = await engine.executeLoop({
+      ...params,
+      resume: {
+        steps: [stepId],
+        stepResults,
+        resumePayload: { approved: true },
+        resumePath: [0],
+      },
+    });
+    expect(suspendedAgain.status).toBe('suspended');
+    expect((suspendedAgain as any).suspendPayload.__workflow_meta.resumeGeneration).toBe(1);
 
     const resumed = await engine.executeLoop({
       ...params,
@@ -92,8 +131,64 @@ describe('step durable operation IDs', () => {
 
     expect(new Set(engine.operationIds).size).toBe(engine.operationIds.length);
     expect(engine.operationIds).toContain(
-      'workflow.test-workflow.run.test-run.step.loop-step.path.[0].iteration.2.resume.span.start',
+      'workflow.test-workflow.run.test-run.step.loop-step.path.[0].iteration.2.resume.1.span.start',
     );
-    expect(engine.operationIds).toContain('workflow.test-workflow.step.loop-step.path.[0].iteration.2.resume');
+    expect(engine.operationIds).toContain(
+      'workflow.test-workflow.run.test-run.step.loop-step.path.[0].iteration.2.resume.2.span.start',
+    );
+    expect(engine.operationIds).toContain('workflow.test-workflow.step.loop-step.path.[0].iteration.2.resume.1');
+    expect(engine.operationIds).toContain('workflow.test-workflow.step.loop-step.path.[0].iteration.2.resume.2');
+  });
+
+  it('distinguishes concurrent foreach items even when their values repeat', async () => {
+    const workflowId = 'test-workflow';
+    const runId = 'test-run';
+    const stepId = 'foreach-step';
+    const engine = new RecordingExecutionEngine({ mastra: undefined });
+    const step = {
+      id: stepId,
+      inputSchema: z.string(),
+      outputSchema: z.string(),
+      execute: async ({ inputData }: any) => inputData,
+    };
+
+    const result = await engine.executeForeach({
+      workflowId,
+      runId,
+      entry: { type: 'foreach', step, opts: { concurrency: 3 } },
+      prevStep: { type: 'step', step },
+      prevOutput: ['same-value', 'same-value', 'same-value'],
+      stepResults: {},
+      serializedStepGraph: [],
+      executionContext: createExecutionContext(workflowId, runId),
+      pubsub: new EventEmitterPubSub(),
+      abortController: new AbortController(),
+      requestContext: new RequestContext(),
+      tracingContext: {},
+    });
+
+    expect(result).toMatchObject({ status: 'success', output: ['same-value', 'same-value', 'same-value'] });
+    expect(new Set(engine.operationIds).size).toBe(engine.operationIds.length);
+    expect(engine.operationIds).toEqual(
+      expect.arrayContaining([
+        'workflow.test-workflow.step.foreach-step.path.[0].foreach.0',
+        'workflow.test-workflow.step.foreach-step.path.[0].foreach.1',
+        'workflow.test-workflow.step.foreach-step.path.[0].foreach.2',
+      ]),
+    );
   });
 });
+
+function createExecutionContext(workflowId: string, runId: string): ExecutionContext {
+  return {
+    workflowId,
+    runId,
+    executionPath: [0],
+    stepExecutionPath: [],
+    activeStepsPath: {},
+    suspendedPaths: {},
+    resumeLabels: {},
+    retryConfig: { attempts: 0, delay: 0 },
+    state: {},
+  };
+}
