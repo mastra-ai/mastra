@@ -339,15 +339,23 @@ async function startGoal(
     goalManager.persistOnNextThreadCreate();
   }
 
-  if (state.pendingNewThread) {
-    await state.session.thread.create();
-    state.pendingNewThread = false;
+  // Arming the flag ahead of the create means any failure between here and a
+  // successful start would otherwise leave it armed for an unrelated later
+  // thread to consume. Disarm on every exit that isn't a started goal.
+  let goal: Awaited<ReturnType<typeof goalManager.setGoal>>;
+  try {
+    if (state.pendingNewThread) {
+      await state.session.thread.create();
+      state.pendingNewThread = false;
+    }
+
+    goal = await goalManager.setGoal(state, objective, judgeModelId, maxTurns);
+  } catch (error) {
+    goalManager.consumePersistOnNextThreadCreate();
+    throw error;
   }
 
-  const goal = await goalManager.setGoal(state, objective, judgeModelId, maxTurns);
   if (!goal) {
-    // Setting the flag ahead of the create means a failed start can leave it
-    // armed; disarm it so an unrelated later thread does not consume it.
     goalManager.consumePersistOnNextThreadCreate();
     ctx.showError('Failed to set goal.');
     return;

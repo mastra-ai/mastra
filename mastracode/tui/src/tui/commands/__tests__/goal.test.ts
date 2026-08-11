@@ -424,6 +424,42 @@ describe('handleGoalCommand', () => {
     expect(createThread).not.toHaveBeenCalled();
   });
 
+  // The flag is armed before the create, so any failure in between must disarm it
+  // — otherwise an unrelated later thread consumes it and gets this goal saved
+  // onto it.
+  it.each([
+    ['thread creation rejects', true],
+    ['setting the goal rejects', false],
+  ])('disarms the persist-on-thread-create flag when %s', async (_label, createRejects) => {
+    const boom = new Error('boom');
+    const goalManager = {
+      setGoal: createRejects ? vi.fn() : vi.fn().mockRejectedValue(boom),
+      persistOnNextThreadCreate: vi.fn(),
+      consumePersistOnNextThreadCreate: vi.fn(),
+      saveToThread: vi.fn().mockResolvedValue(undefined),
+    };
+    const ctx = {
+      state: createMockState({
+        session: {
+          thread: {
+            getId: vi.fn(() => null),
+            create: createRejects ? vi.fn().mockRejectedValue(boom) : vi.fn(),
+          },
+          sendSignal: vi.fn(() => ({ accepted: Promise.resolve({ accepted: true, runId: 'run-1' }) })),
+        },
+        extra: { pendingNewThread: true, goalManager },
+      }),
+      addUserMessage: vi.fn(),
+      showError: vi.fn(),
+      updateStatusLine: vi.fn(),
+    } as any;
+
+    await expect(handleGoalCommand(ctx, ['finish', 'the', 'task'])).rejects.toThrow('boom');
+
+    expect(goalManager.persistOnNextThreadCreate).toHaveBeenCalledTimes(1);
+    expect(goalManager.consumePersistOnNextThreadCreate).toHaveBeenCalledTimes(1);
+  });
+
   it('starts a goal from a plan-approval-style title+plan with only the goal reminder XML', async () => {
     // Regression: plan approval "Use as /goal" must enter the same goal
     // lifecycle as `/goal <text>` and send only the goal reminder. Sending an
