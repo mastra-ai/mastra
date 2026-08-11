@@ -816,6 +816,11 @@ export class PlatformSandbox extends MastraSandbox {
     this._addressRegistry?.delete(destroyedSandboxId);
   }
 
+  /** Persist the configured recovery checkpoint when available. */
+  async snapshot(): Promise<void> {
+    await this.captureCheckpoint();
+  }
+
   /**
    * Capture the sandbox's checkpoint on demand, outside any refresh timer the
    * workspace-proxy owns internally.

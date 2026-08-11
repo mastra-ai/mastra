@@ -95,7 +95,7 @@ export function useStartFactoryRun() {
       const setPhase = (phase: FactoryRunPhase) => setPhases(current => ({ ...current, [phaseKey]: phase }));
 
       setPhase('workspace');
-      const userSession = await createUserSession(baseUrl, repository.projectRepositoryId, branch);
+      const userSession = await createUserSession(baseUrl, repository.projectRepositoryId, { branch });
       const sessionId = userSession.sessionId;
       const desiredStage = workItem.stages.length === 1 ? workItem.stages[0] : undefined;
       if (!desiredStage) throw new Error('Factory runs require one exclusive destination stage');

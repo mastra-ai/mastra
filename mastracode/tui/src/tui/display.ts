@@ -1,6 +1,8 @@
 /**
  * Display helpers for the TUI: error messages, info messages, notifications.
  */
+import { randomUUID } from 'node:crypto';
+
 import { Container, Text } from '@earendil-works/pi-tui';
 
 import { parseError } from '@mastra/code-sdk/utils/errors';
@@ -186,15 +188,14 @@ export function notifyForInputRequest(state: TUIState, event: AgentControllerEve
  * synchronously in the controller subscription listener instead — the sibling
  * of notifyForInputRequest for hook dispatch rather than user pings.
  *
- * runId semantics (accepted, not handled): HookManager.runPermissionRequest
- * silently bails when no run id is set, and setRunId/clearRunId both run
- * inside the QUEUED agent_start/agent_end handling. Two cross-run microtask
- * edges therefore exist at receipt time: a permission event arriving before
- * its run's queued agent_start has been processed (hook silently skipped),
- * and a stale run id left over from the previous run (no constructible
- * trigger found — a new run cannot start while a prompt blocks the queue).
- * In the real starvation scenario the blocking run's id IS set, because its
- * agent_end cannot have been processed while its prompt blocks the queue.
+ * runId semantics: HookManager.runPermissionRequest silently bails when no run
+ * id is set, and setRunId/clearRunId both run inside the QUEUED agent_start/
+ * agent_end handling. To close the receipt-time gap — a permission event
+ * arriving before its run's queued agent_start has been processed — agent_start
+ * is handled here by setting the run id immediately (before the queued handler
+ * runs). beginLifecycleRun() in the queued handler reuses an existing run id
+ * instead of overwriting it, so the receipt-time id propagates to AgentStart
+ * hooks and beyond.
  *
  * Never throws: a hook failure must not break event delivery.
  */
@@ -202,6 +203,15 @@ export function runPermissionHooksForEvent(state: TUIState, event: AgentControll
   try {
     const hookMgr = state.hookManager;
     if (!hookMgr) return;
+    if (event.type === 'agent_start') {
+      // Set the run id at receipt time so subsequent permission events (e.g.
+      // a tool_suspended for request_access arriving in the same synchronous
+      // batch) have it available. beginLifecycleRun() reuses this id.
+      if (!hookMgr.getRunId()) {
+        hookMgr.setRunId(randomUUID());
+      }
+      return;
+    }
     if (event.type === 'tool_approval_required') {
       hookMgr.runPermissionRequest('tool_approval', event.toolCallId, event.toolName, event.args).catch(() => {});
       return;

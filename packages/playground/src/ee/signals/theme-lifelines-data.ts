@@ -35,6 +35,26 @@ export function lifelineConnectors(points: ThemeLifelinePoint[]): LifelineConnec
 }
 
 /**
+ * Runs of presence points at consecutive landmarks, single-point runs dropped —
+ * each run is one filled area under the lifeline, and gaps between runs stay
+ * unfilled so absence remains visible.
+ */
+export function lifelineSegments(points: ThemeLifelinePoint[]): ThemeLifelinePoint[][] {
+  const segments: ThemeLifelinePoint[][] = [];
+  let current: ThemeLifelinePoint[] = [];
+  for (const point of points) {
+    const last = current[current.length - 1];
+    if (last && point.snapshotIndex !== last.snapshotIndex + 1) {
+      if (current.length >= 2) segments.push(current);
+      current = [];
+    }
+    current.push(point);
+  }
+  if (current.length >= 2) segments.push(current);
+  return segments;
+}
+
+/**
  * One fixed row per theme label across an ordered run of landmark flows, most
  * persistent first, so stable themes read as continuous spines and transient
  * ones as short segments. Unloaded flows are skipped by passing undefined.

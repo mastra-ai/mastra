@@ -196,25 +196,29 @@ export class FactoryDecisionDispatcher {
     if (capacity <= 0) return [];
     const limit = Math.min(BATCH_SIZE, capacity);
     const leaseExpiresAt = new Date(now.getTime() + LEASE_MS);
-    const decisions = await this.#storage.claimDeferredDecisions({
+    // Starts are claimed before deferred decisions: a pending start is a user
+    // waiting on a brand-new session, while a deferred decision is a background
+    // continuation of one that is already running. A deep decision queue must
+    // never starve new sessions out of the tick.
+    const starts = await this.#storage.claimPendingStarts({
       ownerId: this.#ownerId,
       now,
       leaseExpiresAt,
       limit,
     });
-    const startsLimit = limit - decisions.length;
-    const starts =
-      startsLimit > 0
-        ? await this.#storage.claimPendingStarts({
+    const decisionsLimit = limit - starts.length;
+    const decisions =
+      decisionsLimit > 0
+        ? await this.#storage.claimDeferredDecisions({
             ownerId: this.#ownerId,
             now,
             leaseExpiresAt,
-            limit: startsLimit,
+            limit: decisionsLimit,
           })
         : [];
     return [
-      ...decisions.map(decision => this.#track(this.#dispatchDecision(decision, now))),
       ...starts.map(start => this.#track(this.#dispatchPendingStart(start, now))),
+      ...decisions.map(decision => this.#track(this.#dispatchDecision(decision, now))),
     ];
   }
 

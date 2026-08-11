@@ -2,22 +2,18 @@ import type { PlanResume } from '@mastra/client-js';
 import { mastraDBMessageToSignal } from '@mastra/core/signals';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { CodeBlock as DsCodeBlock } from '@mastra/playground-ui/components/CodeBlock';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
-import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { MessageScrollerItem } from '@mastra/playground-ui/components/MessageScroller';
 import { Notice } from '@mastra/playground-ui/components/Notice';
-import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { MessageFactory } from '@mastra/react/ui';
 import type { FilePart, MessageRoleRenderers, ReasoningPart, TextPart, ToolInvocationPart } from '@mastra/react/ui';
-import { Bell, ChevronDown, CircleDot, ExternalLink, Info, Layers, Slack, Wrench, X } from 'lucide-react';
+import { Bell, ChevronDown, CircleDot, ExternalLink, Info, Layers, Slack } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 
-import { highlightCode, languageForPath } from '../../../ui/highlight';
 import { PullRequestStatusIcon } from '../../factory/components/PullRequestStatusIcon';
 import { useChatSessionContext } from '../context/useChatSessionContext';
 import { useChatTranscript } from '../context/useChatTranscript';
@@ -25,9 +21,10 @@ import {
   useApproveAgentControllerToolMutation,
   useRespondAgentControllerSuspensionMutation,
 } from '../../../../hooks/useAgentControllerRunMutations';
-import { stripSerializedAnsi } from '../services/ansi';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { isTerminalInvocationState } from '../services/transcript';
+import { ToolCard } from './tool/ToolCard';
+import { ToolGroup, TOOL_GROUP_MIN } from './tool/ToolGroup';
 import { isTranscriptToolVisible, ToolFactory } from './ToolFactory';
 import { Markdown } from '../../../ui/Markdown';
 
@@ -78,72 +75,6 @@ function lastSegment(id: string): string {
 
 import { parseSkillActivation, SkillMessage } from './SkillMessage';
 
-// ---------------------------------------------------------------------------
-// Tool card (collapsible)
-// ---------------------------------------------------------------------------
-
-/** Quiet status indicator: muted spinner while running, red cross on failure, nothing on success. */
-function ToolStatusIcon({ status }: { status: ToolCall['status'] }) {
-  if (status === 'running') return <Spinner size="sm" aria-label="Running" className="text-icon3 size-3.5" />;
-  if (status === 'error') return <X size={14} role="img" aria-label="Failed" className="text-error" />;
-  return null;
-}
-
-/** Label + copy header for a section inside a tool card body. */
-function ToolSection({ label, copyText, children }: { label: string; copyText: string; children: ReactNode }) {
-  return (
-    <div className="flex max-w-full min-w-0 flex-col gap-1">
-      <div className="flex items-center justify-between gap-2">
-        <Txt as="span" variant="ui-xs" className="text-icon3 tracking-wide uppercase">
-          {label}
-        </Txt>
-        <CopyButton content={copyText} size="sm" variant="ghost" />
-      </div>
-      {children}
-    </div>
-  );
-}
-
-/** A unified-diff-style view of an edit's before/after text, syntax-highlighted. */
-function DiffView({ oldText, newText, path }: { oldText: string; newText: string; path?: string }) {
-  const lang = languageForPath(path);
-  const removed = oldText.split('\n');
-  const added = newText.split('\n');
-  return (
-    <div
-      className="border-border1 bg-surface1 max-w-full min-w-0 overflow-x-auto rounded-xl border font-mono text-xs leading-normal"
-      role="group"
-      aria-label="File change"
-    >
-      {removed.map((line, i) => (
-        <div key={`r${i}`} className="bg-error/10 flex whitespace-pre">
-          <span className="text-error w-5 shrink-0 text-center opacity-70 select-none">-</span>
-          <span
-            className="text-icon6 [&_span]:font-inherit [&_span]:leading-inherit flex-1 pr-2.5 [&_span]:text-inherit dark:[&_span]:![background-color:var(--shiki-dark-bg)] dark:[&_span]:![color:var(--shiki-dark)]"
-            dangerouslySetInnerHTML={{ __html: highlightCode(line, lang) || '&nbsp;' }}
-          />
-        </div>
-      ))}
-      {added.map((line, i) => (
-        <div key={`a${i}`} className="bg-accent1/10 flex whitespace-pre">
-          <span className="text-accent1 w-5 shrink-0 text-center opacity-70 select-none">+</span>
-          <span
-            className="text-icon6 [&_span]:font-inherit [&_span]:leading-inherit flex-1 pr-2.5 [&_span]:text-inherit dark:[&_span]:![background-color:var(--shiki-dark-bg)] dark:[&_span]:![color:var(--shiki-dark)]"
-            dangerouslySetInnerHTML={{ __html: highlightCode(line, lang) || '&nbsp;' }}
-          />
-        </div>
-      ))}
-    </div>
-  );
-}
-
-interface EditArgs {
-  path?: string;
-  old_string?: string;
-  new_string?: string;
-  content?: string;
-}
-
 function hasProperty<K extends string>(value: object, key: K): value is object & Record<K, unknown> {
   return key in value;
 }
@@ -151,103 +82,6 @@ function hasProperty<K extends string>(value: object, key: K): value is object &
 function stringProperty(value: unknown, key: string): string | undefined {
   if (!value || typeof value !== 'object' || !hasProperty(value, key)) return undefined;
   return typeof value[key] === 'string' ? value[key] : undefined;
-}
-
-/** Detect edit-style tools whose args are better shown as a diff/code block. */
-function editArgs(toolName: string, args: unknown): EditArgs | undefined {
-  const edit = {
-    path: stringProperty(args, 'path'),
-    old_string: stringProperty(args, 'old_string'),
-    new_string: stringProperty(args, 'new_string'),
-    content: stringProperty(args, 'content'),
-  };
-  const isReplace = /string_replace|str_replace/i.test(toolName) && edit.new_string !== undefined;
-  const isWrite = /write_file|create_file/i.test(toolName) && edit.content !== undefined;
-  return isReplace || isWrite ? edit : undefined;
-}
-
-function ToolCard({ tool }: { tool: ToolCall }) {
-  const [expanded, setExpanded] = useState(false);
-  const argsPreview = tool.args !== undefined ? JSON.stringify(tool.args) : tool.argsText;
-  const argsPretty = tool.args !== undefined ? stringify(tool.args) : tool.argsText;
-  const resultText =
-    tool.status !== 'running' && tool.result !== undefined ? stripSerializedAnsi(stringify(tool.result)) : undefined;
-  const edit = editArgs(tool.toolName, tool.args);
-
-  return (
-    <Collapsible
-      open={expanded}
-      onOpenChange={setExpanded}
-      className="max-w-full min-w-0"
-      role="group"
-      aria-label={`Tool: ${tool.toolName}`}
-    >
-      {/*
-        Wrap the trigger content in a span so the chevron is not a *direct*
-        child of CollapsibleTrigger — the DS trigger rotates direct-child <svg>
-        via `[&>svg]:rotate-90` on open. Nesting keeps the chevron controlled
-        here.
-      */}
-      <CollapsibleTrigger className="hover:bg-surface2 active:bg-surface4 w-full rounded-lg text-left transition-colors">
-        <span className="flex w-full items-center gap-2 px-2 py-1.5">
-          <ChevronDown
-            size={13}
-            className={cn(
-              'shrink-0 text-icon3 transition-transform duration-150',
-              expanded ? 'rotate-0' : '-rotate-90',
-            )}
-          />
-          <span className="flex shrink-0 items-center">
-            <Wrench size={13} className="text-icon3" />
-          </span>
-          <Txt as="span" variant="ui-smd" className="text-icon5">
-            {tool.toolName}
-          </Txt>
-          {edit?.path && (
-            <Txt as="span" variant="ui-xs" font="mono" className="text-icon3 truncate">
-              {edit.path}
-            </Txt>
-          )}
-          {!edit && argsPreview && (
-            <Txt as="span" variant="ui-xs" font="mono" className="text-icon3 truncate">
-              {truncate(argsPreview, 72)}
-            </Txt>
-          )}
-          <span className="ml-auto flex shrink-0 items-center">
-            <ToolStatusIcon status={tool.status} />
-          </span>
-        </span>
-      </CollapsibleTrigger>
-      <CollapsibleContent className="max-w-full min-w-0">
-        <div className="border-border1 bg-surface2 mt-1 flex max-w-full min-w-0 flex-col gap-2 rounded-2xl border p-2">
-          {edit ? (
-            edit.new_string !== undefined ? (
-              <ToolSection label={edit.path ?? 'Change'} copyText={edit.new_string}>
-                <DiffView oldText={edit.old_string ?? ''} newText={edit.new_string} path={edit.path} />
-              </ToolSection>
-            ) : (
-              <DsCodeBlock
-                code={truncate(edit.content ?? '', 2000)}
-                lang={languageForPath(edit.path)}
-                fileName={edit.path ?? 'Change'}
-                overflow="scroll"
-              />
-            )
-          ) : argsPretty ? (
-            <DsCodeBlock code={argsPretty} lang="json" fileName="Arguments" />
-          ) : null}
-          {tool.output && (
-            <ToolSection label="Output" copyText={tool.output}>
-              <pre className="bg-surface1 text-icon3 m-0 max-h-72 max-w-full overflow-auto rounded-xl px-3 py-2 font-mono text-xs leading-normal whitespace-pre">
-                {tool.output}
-              </pre>
-            </ToolSection>
-          )}
-          {resultText !== undefined && <DsCodeBlock code={truncate(resultText, 800)} lang="json" fileName="Result" />}
-        </div>
-      </CollapsibleContent>
-    </Collapsible>
-  );
 }
 
 // ---------------------------------------------------------------------------
@@ -854,6 +688,7 @@ function MessageBubble({
     return undefined;
   })();
 
+  const toolGroups = collectToolGroups(parts, suspensions, entry.runtimeTools);
   const origin = channelOrigin(entry);
   const roles: MessageRoleRenderers = {
     User: ({ children }) => (
@@ -907,7 +742,12 @@ function MessageBubble({
       </div>
     ),
     ToolInvocation: (part: ToolInvocationPart) => {
-      const runtime = entry.runtimeTools?.[part.toolInvocation.toolCallId];
+      const toolCallId = part.toolInvocation.toolCallId;
+      const group = toolGroups.byFirstId.get(toolCallId);
+      if (group) return <ToolGroup tools={group} />;
+      if (toolGroups.memberIds.has(toolCallId)) return null;
+
+      const runtime = entry.runtimeTools?.[toolCallId];
       const tool = toolFromInvocationPart(part, runtime);
       const suspension = suspensions.get(tool.toolCallId);
       if (tool.toolName === 'ask_user' && tool.status === 'running' && !suspension) return null;
@@ -991,6 +831,46 @@ function terminalInvocationStatus(invocation: ToolInvocationPart['toolInvocation
   if (!isTerminalInvocationState(invocation.state)) return undefined;
   if (invocation.state !== 'result') return 'error';
   return 'isError' in invocation && invocation.isError === true ? 'error' : 'done';
+}
+
+/**
+ * Collapse runs of {@link TOOL_GROUP_MIN}+ consecutive plain tool calls into
+ * groups keyed by their first toolCallId. Interactive tools (ask_user,
+ * submit_plan, suspended calls) break a run — their prompt cards must render
+ * inline, never swallowed by a group.
+ */
+function collectToolGroups(
+  parts: MessageEntry['message']['content']['parts'],
+  suspensions: ReadonlyMap<string, SuspensionPrompt>,
+  runtimeTools: MessageEntry['runtimeTools'],
+): { byFirstId: Map<string, ToolCall[]>; memberIds: Set<string> } {
+  const byFirstId = new Map<string, ToolCall[]>();
+  const memberIds = new Set<string>();
+  let run: ToolCall[] = [];
+
+  const flush = () => {
+    if (run.length >= TOOL_GROUP_MIN) {
+      byFirstId.set(run[0].toolCallId, run);
+      for (const tool of run.slice(1)) memberIds.add(tool.toolCallId);
+    }
+    run = [];
+  };
+
+  for (const part of parts) {
+    const groupable =
+      part.type === 'tool-invocation' &&
+      part.toolInvocation.toolName !== 'ask_user' &&
+      part.toolInvocation.toolName !== 'submit_plan' &&
+      !suspensions.has(part.toolInvocation.toolCallId);
+    if (groupable) {
+      run.push(toolFromInvocationPart(part, runtimeTools?.[part.toolInvocation.toolCallId]));
+    } else {
+      flush();
+    }
+  }
+  flush();
+
+  return { byFirstId, memberIds };
 }
 
 function toolFromInvocationPart(part: ToolInvocationPart, runtime?: ToolCall): ToolCall {
