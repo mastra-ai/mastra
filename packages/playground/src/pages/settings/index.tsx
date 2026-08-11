@@ -37,14 +37,19 @@ export const StudioSettingsPage = () => {
   const [saveCount, setSaveCount] = useState(0);
 
   // Auth capabilities and permission patterns are cached from the previous
-  // headers, so the auth gate keeps the user out until they are refetched. The
-  // effect runs after the saved config reaches the Mastra client, so the
-  // refetch carries the new headers and no page reload is needed.
+  // headers, so the auth gate keeps the user out until they are refetched.
+  // This effect runs before the providers above adopt the saved config, so the
+  // invalidation is deferred one tick — otherwise the refetch still carries
+  // the previous headers.
   useEffect(() => {
     if (saveCount === 0) return;
 
-    queryClient.invalidateQueries({ queryKey: ['auth', 'capabilities'] });
-    queryClient.invalidateQueries({ queryKey: ['permission-patterns'] });
+    const timeout = setTimeout(() => {
+      queryClient.invalidateQueries({ queryKey: ['auth', 'capabilities'] });
+      queryClient.invalidateQueries({ queryKey: ['permission-patterns'] });
+    }, 0);
+
+    return () => clearTimeout(timeout);
   }, [saveCount, queryClient]);
 
   return (
