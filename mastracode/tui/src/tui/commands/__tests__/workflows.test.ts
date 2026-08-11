@@ -60,10 +60,13 @@ describe('handleWorkflowsCommand', () => {
     expect(ctx.showError).not.toHaveBeenCalled();
   });
 
-  it('preserves non-Error workflow command failures', async () => {
+  it.each([
+    ['a string', 'connection lost'],
+    ['an object with a message', { message: 'connection lost' }],
+  ])('preserves non-Error workflow command failures from %s', async (_source, failure) => {
     const ctx = createCtx();
     ctx.controller.getMastra.mockReturnValue({});
-    mocks.runWorkflow.mockRejectedValue('connection lost');
+    mocks.runWorkflow.mockRejectedValue(failure);
 
     await handleWorkflowsCommand(ctx, ['run', 'greeting'], 'run greeting {}');
 

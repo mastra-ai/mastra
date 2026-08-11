@@ -5,7 +5,7 @@
  * function, so recursion into container entries lives in exactly one place
  * and is exhaustiveness-checked against `SerializedStepFlowEntry`.
  */
-import type { SerializedSingleStepEntry, SerializedStepFlowEntry } from '../types';
+import type { SerializedSingleStepEntry } from '../types';
 import type { ValidatableStepFlowEntry } from './validate/types';
 
 /**
@@ -17,7 +17,7 @@ import type { ValidatableStepFlowEntry } from './validate/types';
  * `sleep`/`sleepUntil` entries carry no references or schemas and are skipped.
  */
 export function forEachSingleStepEntry(
-  entries: readonly SerializedStepFlowEntry[],
+  entries: readonly ValidatableStepFlowEntry[],
   visit: (entry: SerializedSingleStepEntry) => void,
 ): void {
   for (const entry of entries) {
@@ -52,7 +52,7 @@ export function forEachSingleStepEntry(
  * Collect the ids of every nested workflow referenced by a stored graph.
  * Used by boot-time loading to hydrate stored definitions in dependency order.
  */
-export function collectNestedWorkflowIds(graph: readonly SerializedStepFlowEntry[]): Set<string> {
+export function collectNestedWorkflowIds(graph: readonly ValidatableStepFlowEntry[]): Set<string> {
   const out = new Set<string>();
   forEachSingleStepEntry(graph, entry => {
     if (entry.type === 'workflow') out.add(entry.workflowId);

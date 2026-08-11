@@ -62,6 +62,39 @@ describe('Mastra.addDynamicWorkflow — save path is strict on unsupported schem
     expect(mastra.getWorkflow('clean-wf')).toBeDefined();
   });
 
+  it('hydrates and persists the normalized definition', async () => {
+    const storage = new InMemoryStore({ id: 'normalized-definition' });
+    const mastra = new Mastra({ logger: false, storage });
+
+    await expect(
+      mastra.addDynamicWorkflow({
+        id: 'normalized-wf',
+        metadata: { owner: 'mastracode' },
+        inputSchema: { type: 'object', properties: { name: { type: 'string' } }, required: ['name'] },
+        outputSchema: { type: 'object', properties: { message: { type: 'string' } }, required: ['message'] },
+        graph: [
+          {
+            type: 'mapping',
+            id: 'format-greeting',
+            mapConfig: { message: { template: 'Hello, ${initData.name}!' } },
+          },
+        ],
+      } as any),
+    ).resolves.toBeUndefined();
+
+    expect(mastra.getWorkflow('normalized-wf')).toBeDefined();
+    const store = await storage.getStore('workflowDefinitions');
+    const row = await store!.get('normalized-wf');
+    expect(row?.metadata).toEqual({ owner: 'mastracode' });
+    expect(row?.graph).toEqual([
+      {
+        type: 'mapping',
+        id: 'format-greeting',
+        mapConfig: JSON.stringify({ message: { template: 'Hello, ${initData.name}!' } }),
+      },
+    ]);
+  });
+
   it('ignores runtime request context values outside the persisted workflow definition', async () => {
     const storage = new InMemoryStore({ id: 'runtime-request-context' });
     const mastra = new Mastra({

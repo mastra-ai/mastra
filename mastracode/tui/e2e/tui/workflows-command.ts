@@ -52,8 +52,7 @@ export const workflowsCommandScenario: McE2eScenario = {
     await runtime.waitForScreenText(/e2e-greeting \(active\).*Create a greeting for a name/i, terminal);
 
     terminal.submit('/workflows show e2e-greeting');
-    await runtime.waitForScreenText(/"id": "e2e-greeting"/i, terminal);
-    await runtime.waitForScreenText(/format-greeting/i, terminal);
+    await runtime.waitForScreenText(/format-greeting.*mapping/is, terminal);
 
     terminal.submit('/workflows run e2e-greeting {"name":"Ada  Lovelace"}');
     await runtime.waitForScreenText(/Running "e2e-greeting"/i, terminal);

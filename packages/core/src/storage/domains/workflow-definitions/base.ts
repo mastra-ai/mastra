@@ -1,4 +1,4 @@
-import type { SerializedStepFlowEntry } from '../../../workflows/types';
+import type { ValidatableStepFlowEntry } from '../../../workflows/dynamic/validate/types';
 import { StorageDomain } from '../base';
 
 /**
@@ -26,7 +26,7 @@ export interface WorkflowDefinition {
    * emits via `serializedStepGraph` — but with full mapping configs preserved
    * (no truncation) and all step/agent/tool references stored as ids.
    */
-  graph: SerializedStepFlowEntry[];
+  graph: ValidatableStepFlowEntry[];
 
   /** Lifecycle status. Only 'active' definitions are loaded at startWorkers(). */
   status: 'active' | 'archived';
@@ -48,7 +48,7 @@ export interface CreateWorkflowDefinitionInput {
   outputSchema: unknown;
   stateSchema?: unknown;
   requestContextSchema?: unknown;
-  graph: SerializedStepFlowEntry[];
+  graph: ValidatableStepFlowEntry[];
   authorId?: string;
 }
 
@@ -61,7 +61,7 @@ export interface UpdateWorkflowDefinitionInput {
   outputSchema?: unknown;
   stateSchema?: unknown;
   requestContextSchema?: unknown;
-  graph?: SerializedStepFlowEntry[];
+  graph?: ValidatableStepFlowEntry[];
   status?: 'active' | 'archived';
   authorId?: string;
 }
