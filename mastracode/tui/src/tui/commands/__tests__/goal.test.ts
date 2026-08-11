@@ -464,10 +464,19 @@ describe('handleGoalCommand', () => {
   // not consume a flag armed by a concurrent fresh-thread start — that would
   // hand the other goal's thread_created back to the wiping branch.
   it('leaves the persist-on-thread-create flag alone when a goal fails on an existing thread', async () => {
+    // Stateful one-shot flag, pre-armed as if a concurrent fresh-thread start
+    // owned it — an inert spy could not tell "left armed" from "never armed".
+    let armed = true;
     const goalManager = {
       setGoal: vi.fn().mockResolvedValue(undefined),
-      persistOnNextThreadCreate: vi.fn(),
-      consumePersistOnNextThreadCreate: vi.fn(),
+      persistOnNextThreadCreate: vi.fn(() => {
+        armed = true;
+      }),
+      consumePersistOnNextThreadCreate: vi.fn(() => {
+        const previous = armed;
+        armed = false;
+        return previous;
+      }),
       saveToThread: vi.fn().mockResolvedValue(undefined),
     };
     const ctx = {
@@ -488,6 +497,8 @@ describe('handleGoalCommand', () => {
     expect(ctx.showError).toHaveBeenCalledWith('Failed to set goal.');
     expect(goalManager.persistOnNextThreadCreate).not.toHaveBeenCalled();
     expect(goalManager.consumePersistOnNextThreadCreate).not.toHaveBeenCalled();
+    // The other start's flag survives this failure and is still there to use.
+    expect(armed).toBe(true);
   });
 
   it('starts a goal from a plan-approval-style title+plan with only the goal reminder XML', async () => {
