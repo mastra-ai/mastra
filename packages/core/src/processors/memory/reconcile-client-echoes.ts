@@ -4,29 +4,36 @@ type V2Part = MastraMessageContentV2['parts'][number];
 type ToolInvocationPart = Extract<V2Part, { type: 'tool-invocation' }>;
 
 /**
- * The only fields a client echo may contribute to a stored tool invocation.
- * Everything else (`toolName`, `toolCallId`, `args`, ...) is server-authored
- * and must never be taken from the client copy: letting the client spread its
- * invocation over the stored one would reopen the clobber vector this module
- * exists to close. Kept as a single constant so the doc comments and the merge
- * behavior cannot drift apart.
+ * Pick the fields for a supported client-authored terminal transition.
+ *
+ * A stored `call` may become either:
+ * - `result`, including the v4-compatible `isError` and `errorText` markers.
+ * - `output-error`, including only the v6 error text.
+ *
+ * Everything else (`toolName`, `toolCallId`, `args`, `rawInput`, ...) remains
+ * server-authored. In particular, fields for one terminal state are not
+ * accepted on the other terminal state.
  */
-const CLIENT_CONTRIBUTABLE_TOOL_INVOCATION_FIELDS = ['state', 'result'] as const;
+function pickClientTerminalTransition(
+  stored: MastraToolInvocation,
+  incoming: MastraToolInvocation,
+): Partial<MastraToolInvocation> | undefined {
+  if (stored.state !== 'call') return undefined;
 
-/**
- * Pick only the whitelisted fields from a tool invocation. Used to apply a
- * client-authored transition (e.g. `call` → `result`) without adopting any
- * other client-supplied value.
- */
-function pickClientContributable(invocation: MastraToolInvocation): Partial<MastraToolInvocation> {
-  const picked: Partial<MastraToolInvocation> = {};
-  for (const field of CLIENT_CONTRIBUTABLE_TOOL_INVOCATION_FIELDS) {
-    const value = (invocation as Record<string, unknown>)[field];
-    if (value !== undefined) {
-      (picked as Record<string, unknown>)[field] = value;
-    }
+  if (incoming.state === 'result') {
+    return {
+      state: 'result',
+      ...(incoming.result !== undefined ? { result: incoming.result } : {}),
+      ...(incoming.isError !== undefined ? { isError: incoming.isError } : {}),
+      ...(incoming.errorText !== undefined ? { errorText: incoming.errorText } : {}),
+    };
   }
-  return picked;
+
+  if (incoming.state === 'output-error' && incoming.errorText !== undefined) {
+    return { state: 'output-error', errorText: incoming.errorText };
+  }
+
+  return undefined;
 }
 
 /**
@@ -67,10 +74,10 @@ function getToolCallId(part: ToolInvocationPart): string | undefined {
  *
  * Rules (stored = canonical server state, incoming = client echo):
  * - Tool-invocation parts are matched by `toolCallId`. A client-authored
- *   transition (stored `call` → incoming `result`, e.g. a client-side tool
- *   result) is applied to the stored part, but the client may only contribute
- *   `state` and `result`; `toolName`, `toolCallId` and `args` always come from
- *   the stored (server-authored) invocation.
+ *   transition from a stored `call` to an incoming `result` or `output-error`
+ *   is applied to the stored part. The client may contribute the result/error
+ *   fields for that terminal state; `toolName`, `toolCallId` and `args` always
+ *   come from the stored (server-authored) invocation.
  * - Any other same-position conflict is resolved in favor of the stored part
  *   (server-authored text wins over a raw client copy).
  * - Incoming-only parts are never accepted: a client echo cannot introduce
@@ -132,20 +139,18 @@ function mergeEchoParts(storedParts: V2Part[], incomingParts: V2Part[]): V2Part[
     }
 
     const incomingPart = incomingParts[incomingIndex]!;
-    if (
-      isToolInvocationPart(incomingPart) &&
-      incomingPart.toolInvocation.state === 'result' &&
-      storedPart.toolInvocation.state !== 'result'
-    ) {
+    const transition = isToolInvocationPart(incomingPart)
+      ? pickClientTerminalTransition(storedPart.toolInvocation, incomingPart.toolInvocation)
+      : undefined;
+    if (transition) {
       // Legitimate client-authored transition: advance the stored call with the
-      // client's result. Only `state` + `result` are taken from the client — the
-      // tool call's identity (name, call id, args) is server-authored and stays
-      // as stored.
+      // matching terminal fields. The tool call's identity (name, call id,
+      // args) is server-authored and stays as stored.
       const transitioned: ToolInvocationPart = {
         ...storedPart,
         toolInvocation: {
           ...storedPart.toolInvocation,
-          ...pickClientContributable(incomingPart.toolInvocation),
+          ...transition,
           args: storedPart.toolInvocation.args,
         },
       };
@@ -160,7 +165,7 @@ function mergeEchoParts(storedParts: V2Part[], incomingParts: V2Part[]): V2Part[
 
 /**
  * Reconcile the legacy parallel `toolInvocations` array for client-authored
- * transitions, mirroring the part-level merge:
+ * successful-result transitions:
  *
  * - The stored array is canonical; a client copy can never introduce tool
  *   history (names, args, results) the server never stored, so when the stored
@@ -179,7 +184,7 @@ function mergeLegacyToolInvocations(
   const incomingById = new Map(incoming.toolInvocations.map(t => [t.toolCallId, t]));
   return stored.toolInvocations.map(t => {
     const incomingEntry = incomingById.get(t.toolCallId);
-    if (incomingEntry && incomingEntry.state === 'result' && t.state !== 'result') {
+    if (incomingEntry && incomingEntry.state === 'result' && t.state === 'call') {
       // The client may only advance the invocation: take its `state`/`result`
       // (narrowed to `result` by the guard) while keeping the server-authored
       // args — and everything else — from the stored entry.
