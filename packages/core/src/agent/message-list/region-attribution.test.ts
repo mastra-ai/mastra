@@ -1,3 +1,4 @@
+import { estimateTokenCount } from 'tokenx';
 import { describe, expect, it } from 'vitest';
 import { attributePromptRegions, didPromptPrefixChange } from './region-attribution';
 import { MessageList } from './index';
@@ -63,8 +64,27 @@ describe('attributePromptRegions', () => {
 
     // A tool payload is text the provider serializes and bills. Collapsing it to
     // a placeholder would understate the messages region in exactly the
-    // tool-calling loops this instrumentation exists to measure.
-    expect(withToolCall.regions.messages).toBeGreaterThan(bare.regions.messages + 10);
+    // tool-calling loops this instrumentation exists to measure. Pinned against
+    // the payload's own estimate, not just a floor: dropping `input` while
+    // keeping `toolName` would clear a floor and still be the bug.
+    const payloadTokens = estimateTokenCount(JSON.stringify(args));
+    expect(withToolCall.regions.messages).toBeGreaterThanOrEqual(bare.regions.messages + payloadTokens * 0.8);
+  });
+
+  it('does not serialize raw bytes nested in an untyped part', () => {
+    const messageList = new MessageList();
+    const bytes = new Uint8Array(20_000).fill(137);
+
+    const result = attributePromptRegions({
+      messageList,
+      inputMessages: [
+        { role: 'tool', content: [{ type: 'tool-result', toolCallId: 'call_1', output: { screenshot: bytes } }] },
+      ],
+    });
+
+    // A Uint8Array stringifies to {"0":137,"1":137,...}: bigger than the base64
+    // it stands in for, and not text the provider bills.
+    expect(result.regions.messages).toBeLessThan(40);
   });
 
   it('replaces a base64 payload buried inside a structured part', () => {

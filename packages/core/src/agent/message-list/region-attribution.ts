@@ -71,9 +71,16 @@ function projectPart(part: unknown): string {
   const type = (part as { type?: unknown }).type;
   if (typeof type === 'string' && BINARY_PART_TYPES.has(type)) return placeholder(type);
   try {
-    return JSON.stringify(part, (_key, value) =>
-      typeof value === 'string' && looksBinary(value) ? placeholder('binary') : value,
-    );
+    return JSON.stringify(part, (_key, value) => {
+      if (typeof value === 'string') return looksBinary(value) ? placeholder('binary') : value;
+      // Raw bytes nested in an untyped part: a Uint8Array serializes to
+      // {"0":137,"1":80,...} and a Buffer to {"type":"Buffer","data":[...]},
+      // both larger than the base64 they replace.
+      if (ArrayBuffer.isView(value) || (value as { type?: unknown } | null)?.type === 'Buffer') {
+        return placeholder('binary');
+      }
+      return value;
+    });
   } catch {
     // Cyclic or otherwise unserializable: fall back to the type name.
     return placeholder(typeof type === 'string' ? type : 'part');
