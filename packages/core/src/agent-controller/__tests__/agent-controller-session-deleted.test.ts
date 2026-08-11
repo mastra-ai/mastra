@@ -161,4 +161,63 @@ describe('AgentController.deleteSession', () => {
     const fresh = await controller.createSession({ resourceId: 'resource-2' });
     expect(fresh).not.toBe(session);
   });
+
+  it('does not re-key a session that was already deleted', async () => {
+    const controller = createController(new InMemoryStore());
+    await controller.init();
+    const session = await controller.createSession({ resourceId: 'resource-1' });
+
+    // Delete fully resolves first — #deletionsInProgress is cleared but
+    // #sessionsBeingDeleted still has the session. Without the early return,
+    // setResourceId would register the dead session under resource-2.
+    await controller.deleteSession({ resourceId: 'resource-1' });
+    await controller.setResourceId(session, { resourceId: 'resource-2' });
+
+    await expect(controller.getSessionByResource('resource-1')).resolves.toBeUndefined();
+    await expect(controller.getSessionByResource('resource-2')).resolves.toBeUndefined();
+
+    // createSession for the new resource must return a fresh session, not
+    // loop forever on the dead session.
+    const fresh = await controller.createSession({ resourceId: 'resource-2' });
+    expect(fresh).not.toBe(session);
+  });
+
+  it('does not register a dead session under a new key when setResourceId starts during deletion', async () => {
+    // Use a delaying thread lock so clearAndReleaseLock takes long enough for
+    // setResourceId to reach the registry registration point while the
+    // deletion is still in progress.
+    let resolveLock!: () => void;
+    const controller = createController(new InMemoryStore(), {
+      acquire: vi.fn(),
+      release: vi.fn(
+        () =>
+          new Promise<void>(resolve => {
+            resolveLock = resolve;
+          }),
+      ),
+    });
+    await controller.init();
+    const session = await controller.createSession({ resourceId: 'resource-1' });
+
+    // Start deletion — it will block at clearAndReleaseLock.
+    const deletionPromise = controller.deleteSession({ resourceId: 'resource-1' });
+    // Let the deletion IIFE advance to the clearAndReleaseLock await.
+    await vi.waitFor(() => expect(() => resolveLock()).not.toThrow());
+
+    // Now setResourceId runs while deletion is in progress. The session is
+    // already in #sessionsBeingDeleted, so setResourceId should return early.
+    await controller.setResourceId(session, { resourceId: 'resource-2' });
+
+    // Release the lock so the deletion can finish.
+    resolveLock();
+    await deletionPromise;
+
+    // The dead session must not be registered under either key.
+    await expect(controller.getSessionByResource('resource-1')).resolves.toBeUndefined();
+    await expect(controller.getSessionByResource('resource-2')).resolves.toBeUndefined();
+
+    // createSession for the new resource must return a fresh session.
+    const fresh = await controller.createSession({ resourceId: 'resource-2' });
+    expect(fresh).not.toBe(session);
+  });
 });

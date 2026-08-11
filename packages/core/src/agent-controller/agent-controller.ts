@@ -487,6 +487,9 @@ export class AgentController<TState = {}> {
         if (this.#sessionsBeingDeleted.has(session)) {
           const sessionDeletion = this.#sessionDeletionPromises.get(session);
           if (sessionDeletion) await sessionDeletion;
+          // Evict the dead session's registry entry so the retry finds a
+          // fresh slot instead of the same dead session forever.
+          this.#sessionsByResource.delete(registryKey);
           continue;
         }
         // An exact thread binding is part of the createSession contract
@@ -516,6 +519,9 @@ export class AgentController<TState = {}> {
         if (this.#sessionsBeingDeleted.has(session)) {
           const sessionDeletion = this.#sessionDeletionPromises.get(session);
           if (sessionDeletion) await sessionDeletion;
+          // Evict the dead session's registry entry so the retry finds a
+          // fresh slot instead of the same dead session forever.
+          this.#sessionsByResource.delete(registryKey);
           continue;
         }
         return session;
@@ -1500,6 +1506,10 @@ export class AgentController<TState = {}> {
    * — the deletion's {@link #dropSessionFromRegistry} cleans up all keys.
    */
   async setResourceId(session: Session<TState>, { resourceId }: { resourceId: string }): Promise<void> {
+    // If the session was already deleted (or deletion is in progress), don't
+    // re-key it — a dead session must never be registered under a new key.
+    if (this.#sessionsBeingDeleted.has(session)) return;
+
     const previousResourceId = session.identity.getResourceId();
     const scope = this.#sessionScopes.get(session);
     const oldKey = sessionRegistryKey(previousResourceId, scope);
@@ -1524,6 +1534,16 @@ export class AgentController<TState = {}> {
     // prior session registered there. The session keeps its creation scope, so
     // a scoped session re-keys under the same scope on the new resource.
     const dropPreviousResource = this.#dropSessionFromRegistry(oldKey, session);
+    // Re-check that a deletion didn't start during the awaits above. If it
+    // did, the session is being torn down — don't register it under the new
+    // key; the deletion's #dropSessionFromRegistry cleans up all keys.
+    if (this.#sessionsBeingDeleted.has(session)) {
+      await releasePreviousThreadLock;
+      await dropPreviousResource;
+      const postDeletion = this.#deletionsInProgress.get(newKey) ?? this.#deletionsInProgress.get(oldKey);
+      if (postDeletion) await postDeletion;
+      return;
+    }
     this.#sessionsByResource.set(newKey, Promise.resolve(session));
     await releasePreviousThreadLock;
     await dropPreviousResource;
