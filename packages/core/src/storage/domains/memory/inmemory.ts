@@ -38,6 +38,7 @@ import type { InMemoryDB } from '../inmemory-db';
 import { MemoryStorage } from './base';
 
 export class InMemoryMemory extends MemoryStorage {
+  override readonly supportsPartialThreadUpdate: boolean = true;
   readonly supportsObservationalMemory = true;
   private db: InMemoryDB;
 
