@@ -195,11 +195,16 @@ describe('GoalStateProcessor', () => {
 
     // A prior objective snapshot is in the window, so a shadowed store read
     // retracts it with `status: none` — what the model reads as "goal cancelled".
+    // The prior snapshot carries a different objective so that a correct read
+    // must emit a fresh projection rather than dedupe against an identical one.
     const result = await processor.computeStateSignal(
-      createArgs({ lastSnapshot: objective({ objective: 'Stored active objective' }), requestContext }),
+      createArgs({ lastSnapshot: objective({ objective: 'Superseded objective' }), requestContext }),
     );
 
-    expect(result?.attributes?.status).not.toBe('none');
+    // Pin the projected objective, not merely the absence of the retraction:
+    // emitting nothing at all would also satisfy `status !== 'none'`.
+    expect(result?.attributes?.status).toBe('active');
+    expect(result?.contents).toContain('Stored active objective');
   });
 
   // Inverted deliberately: this previously asserted a single store read, i.e. that

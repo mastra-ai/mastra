@@ -346,6 +346,9 @@ async function startGoal(
 
   const goal = await goalManager.setGoal(state, objective, judgeModelId, maxTurns);
   if (!goal) {
+    // Setting the flag ahead of the create means a failed start can leave it
+    // armed; disarm it so an unrelated later thread does not consume it.
+    goalManager.consumePersistOnNextThreadCreate();
     ctx.showError('Failed to set goal.');
     return;
   }
