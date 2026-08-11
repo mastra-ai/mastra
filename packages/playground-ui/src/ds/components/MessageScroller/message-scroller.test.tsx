@@ -447,6 +447,18 @@ const TurnHarness = ({ messageIds, replyIds = [] }: { messageIds: string[]; repl
   </MessageScrollerProvider>
 );
 
+const ReconciledTurnHarness = ({ messageId }: { messageId: string }) => (
+  <MessageScrollerProvider defaultScrollPosition="last-anchor">
+    <MessageScrollerViewport data-testid="reconciled-turn-viewport">
+      <MessageScrollerContent>
+        <MessageScrollerItem key="stable-turn" messageId={messageId} scrollAnchor>
+          <div>{messageId}</div>
+        </MessageScrollerItem>
+      </MessageScrollerContent>
+    </MessageScrollerViewport>
+  </MessageScrollerProvider>
+);
+
 const stubLayout = (tops: Record<string, number>) => {
   vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function () {
     const top = this.dataset.messageId ? tops[this.dataset.messageId] : undefined;
@@ -596,6 +608,19 @@ describe('MessageScroller turn anchoring', () => {
     rerender(<TurnHarness messageIds={['message-1', 'message-2']} />);
 
     expect(scrollTo).toHaveBeenLastCalledWith({ top: 300, behavior: 'smooth' });
+  });
+
+  it('does not re-anchor a turn when reconciliation replaces its message id', () => {
+    stubLayout({ 'client-message': 300, 'server-message': 300 });
+    const { rerender } = render(<ReconciledTurnHarness messageId="client-message" />);
+
+    const viewport = screen.getByTestId('reconciled-turn-viewport');
+    setScrollMetrics(viewport, { scrollHeight: 1000, clientHeight: 400, scrollTop: 300 });
+    const scrollTo = installScrollTo(viewport);
+
+    rerender(<ReconciledTurnHarness messageId="server-message" />);
+
+    expect(scrollTo).not.toHaveBeenCalled();
   });
 
   it('stays put while the reply streams in below the turn', () => {

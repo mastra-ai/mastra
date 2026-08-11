@@ -208,6 +208,10 @@ export function MessageScrollerProvider({
   const seenAnchorIdsRef = React.useRef<Set<string> | null>(null);
   seenAnchorIdsRef.current ??= new Set<string>();
   const seenAnchorIds = seenAnchorIdsRef.current;
+  // Message ID reconciliation keeps the row element while replacing its ID.
+  const seenAnchorElementsRef = React.useRef<WeakSet<HTMLElement> | null>(null);
+  seenAnchorElementsRef.current ??= new WeakSet<HTMLElement>();
+  const seenAnchorElements = seenAnchorElementsRef.current;
   const turnAnchoringArmedRef = React.useRef(false);
   const [scrollable, setScrollable] = React.useState<MessageScrollerScrollable>(DEFAULT_SCROLLABLE);
   const [visibility, setVisibility] = React.useState<MessageScrollerVisibility>(DEFAULT_VISIBILITY);
@@ -541,23 +545,34 @@ export function MessageScrollerProvider({
     viewportElement,
   ]);
 
-  // Park an arriving turn at the top and let the reply fill the room underneath.
-  // Prepended history and removed rows move the last anchor too, hence the ids
-  // already seen rather than a plain comparison against the previous one.
   React.useLayoutEffect(() => {
     const lastAnchorId = getLastAnchorId();
-    const newTurnId =
-      turnAnchoringArmedRef.current && lastAnchorId && !seenAnchorIds.has(lastAnchorId) ? lastAnchorId : undefined;
+    const lastAnchor = lastAnchorId ? itemsRegistry.get(lastAnchorId) : undefined;
+    const shouldAnchorNewTurn =
+      turnAnchoringArmedRef.current &&
+      lastAnchorId !== undefined &&
+      lastAnchor !== undefined &&
+      !seenAnchorIds.has(lastAnchorId) &&
+      !seenAnchorElements.has(lastAnchor.element);
 
     for (const [messageId, item] of getOrderedItems()) {
-      if (item.scrollAnchor) seenAnchorIds.add(messageId);
+      if (!item.scrollAnchor) continue;
+      seenAnchorIds.add(messageId);
+      seenAnchorElements.add(item.element);
     }
-    // Armed once the opening position lands: what was there at mount is history.
     turnAnchoringArmedRef.current = defaultScrollAppliedRef.current;
 
-    if (!newTurnId) return;
-    scrollToMessage(newTurnId, { align: 'start', behavior: 'smooth' });
-  }, [getLastAnchorId, getOrderedItems, itemsVersion, scrollToMessage, seenAnchorIds]);
+    if (!shouldAnchorNewTurn || !lastAnchorId) return;
+    scrollToMessage(lastAnchorId, { align: 'start', behavior: 'smooth' });
+  }, [
+    getLastAnchorId,
+    getOrderedItems,
+    itemsRegistry,
+    itemsVersion,
+    scrollToMessage,
+    seenAnchorElements,
+    seenAnchorIds,
+  ]);
 
   // Older items land above the reader and shove their position down. A prepend is
   // told from an append by the first item's id, then undone by offsetting
