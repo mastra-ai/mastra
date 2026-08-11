@@ -39,20 +39,25 @@ export function decrypt(value: string, passphrase: string): string {
   if (!saltB64 || !ivB64 || !tagB64 || ctB64 === undefined) {
     throw new Error('Invalid ciphertext payload');
   }
-  const decipher = createDecipheriv(
-    'aes-256-gcm',
-    deriveKey(passphrase, Buffer.from(saltB64, 'base64')),
-    Buffer.from(ivB64, 'base64'),
-  );
-  decipher.setAuthTag(Buffer.from(tagB64, 'base64'));
   try {
+    // Setup is inside the guard: base64 decoding never throws, it just yields
+    // the wrong number of bytes, and setAuthTag rejects a wrong-length tag
+    // outright ("Invalid authentication tag length"). A corrupt salt or iv still
+    // surfaces at final() instead, but both paths belong to the same failure.
+    const decipher = createDecipheriv(
+      'aes-256-gcm',
+      deriveKey(passphrase, Buffer.from(saltB64, 'base64')),
+      Buffer.from(ivB64, 'base64'),
+    );
+    decipher.setAuthTag(Buffer.from(tagB64, 'base64'));
     return Buffer.concat([decipher.update(Buffer.from(ctB64, 'base64')), decipher.final()]).toString('utf8');
   } catch (cause) {
-    // GCM authentication failed. Node's own message ("Unsupported state or unable
-    // to authenticate data") gives an operator nothing to act on, and this runs on
-    // the credential-load path — name both causes. A wrong key is the common one,
-    // but a corrupt stored value fails identically, and an operator who assumes
-    // the key would rotate a perfectly good one and lose the rest of the secrets.
+    // GCM authentication failed. Node's own messages ("Unsupported state or
+    // unable to authenticate data", "Invalid initialization vector") give an
+    // operator nothing to act on, and this runs on the credential-load path —
+    // name both causes. A wrong key is the common one, but a corrupt stored
+    // value fails identically, and an operator who assumes the key would rotate
+    // a perfectly good one and lose the rest of the secrets.
     throw new Error(
       'Failed to decrypt a stored Discord secret — either the configured encryption key does not match the one it was encrypted with, or the stored value is corrupt. Check `encryptionKey` on DiscordProvider or MASTRA_ENCRYPTION_KEY.',
       { cause },

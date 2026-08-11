@@ -455,6 +455,24 @@ describe('crypto (bot-token at rest)', () => {
     expect(decrypt(enc, 'pass')).toBe(APP.botToken);
     expect(decrypt(APP.botToken, 'pass')).toBe(APP.botToken);
   });
+
+  it('reports corrupt iv and auth-tag segments as a decryption failure', () => {
+    // Base64 decoding doesn't throw on a mangled segment, it just yields the
+    // wrong byte count. A short iv reaches final(), but a short tag is rejected
+    // by setAuthTag — which ran outside the guard, so it escaped as Node's
+    // "Invalid authentication tag length". Both must give the operator the same
+    // actionable message.
+    const [prefix, salt, iv, tag, ct] = encrypt(APP.botToken, 'pass').split(':');
+    const shortened = (segment: string) => segment.slice(0, 4);
+
+    for (const corrupt of [
+      [prefix, salt, shortened(iv!), tag, ct].join(':'),
+      [prefix, salt, iv, shortened(tag!), ct].join(':'),
+    ]) {
+      expect(isEncrypted(corrupt)).toBe(true);
+      expect(() => decrypt(corrupt, 'pass')).toThrow(/Failed to decrypt a stored Discord secret/);
+    }
+  });
 });
 
 describe('DiscordInstallStore — encryption key lifecycle', () => {
