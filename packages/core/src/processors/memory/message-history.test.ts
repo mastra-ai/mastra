@@ -1226,6 +1226,15 @@ describe('MessageHistory', () => {
         ]),
       });
 
+      // The client's raw copy is not persisted anywhere: the stored server text
+      // is the only text part, and the tool history survives intact.
+      const savedMessages = (saveSpy.mock.calls[0]![0] as any).messages as MastraDBMessage[];
+      const savedMsg1 = savedMessages.find(m => m.id === 'msg-1')!;
+      expect(savedMsg1.content.parts.filter((p: any) => p.type === 'text').map((p: any) => p.text)).toEqual([
+        'Transformed answer',
+      ]);
+      expect(savedMsg1.content.parts.filter((p: any) => p.type === 'tool-invocation')).toHaveLength(1);
+
       saveSpy.mockRestore();
     });
 
@@ -1297,6 +1306,311 @@ describe('MessageHistory', () => {
         toolName: 'search',
         result: 'result-from-client',
         args: { query: 'mastra' },
+      });
+
+      saveSpy.mockRestore();
+    });
+
+    it('should never adopt client-supplied toolName or client-injected args keys', async () => {
+      const stored = assistantMessage({
+        content: {
+          format: 2,
+          content: 'Let me look that up',
+          parts: [
+            { type: 'text', text: 'Let me look that up' },
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'call',
+                toolCallId: 'call-1',
+                toolName: 'search',
+                args: { query: 'mastra' },
+              },
+            },
+          ],
+        },
+      });
+      mockStorage.setMessages([stored]);
+
+      processor = new MessageHistory({ storage: mockStorage });
+      const saveSpy = vi.spyOn(mockStorage, 'saveMessages');
+
+      // The client echo returns the invocation with a different toolName and
+      // extra args keys the server call never had.
+      const echoWithResult = assistantMessage({
+        content: {
+          format: 2,
+          content: 'Let me look that up',
+          parts: [
+            { type: 'text', text: 'Let me look that up' },
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'call-1',
+                toolName: 'other-tool',
+                args: { query: 'client-modified', injected: 'key' },
+                result: 'result-from-client',
+              },
+            },
+          ],
+        },
+      });
+
+      const messageList = new MessageList().add([echoWithResult], 'input');
+
+      await processor.processOutputResult({
+        messageList,
+        messages: [],
+        abort: mockAbort,
+        requestContext: createRuntimeContextWithMemory('thread-1'),
+      });
+
+      const savedMessages = (saveSpy.mock.calls[0]![0] as any).messages as MastraDBMessage[];
+      const savedMsg1 = savedMessages.find(m => m.id === 'msg-1');
+      const toolPart = savedMsg1!.content.parts.find((p: any) => p.type === 'tool-invocation')!;
+
+      // Only `state` and `result` are taken from the client: the server-authored
+      // toolName and args (exactly, without injected keys) survive.
+      expect(toolPart.toolInvocation).toEqual({
+        state: 'result',
+        toolCallId: 'call-1',
+        toolName: 'search',
+        args: { query: 'mastra' },
+        result: 'result-from-client',
+      });
+
+      saveSpy.mockRestore();
+    });
+
+    it('should not adopt client tool history when the stored message has no legacy toolInvocations', async () => {
+      const stored = assistantMessage({
+        content: { format: 2, content: 'Answer', parts: [{ type: 'text', text: 'Answer' }] },
+      });
+      mockStorage.setMessages([stored]);
+
+      processor = new MessageHistory({ storage: mockStorage });
+      const saveSpy = vi.spyOn(mockStorage, 'saveMessages');
+
+      // The client copy carries a legacy toolInvocations array the server never stored.
+      const echo = assistantMessage({
+        content: {
+          format: 2,
+          content: 'Answer',
+          parts: [{ type: 'text', text: 'Answer' }],
+          toolInvocations: [
+            {
+              state: 'result',
+              toolCallId: 'call-1',
+              toolName: 'search',
+              args: { query: 'x' },
+              result: 'found',
+            },
+          ],
+        } as any,
+      });
+
+      const messageList = new MessageList().add([echo], 'input');
+
+      await processor.processOutputResult({
+        messageList,
+        messages: [],
+        abort: mockAbort,
+        requestContext: createRuntimeContextWithMemory('thread-1'),
+      });
+
+      const savedMessages = (saveSpy.mock.calls[0]![0] as any).messages as MastraDBMessage[];
+      const savedMsg1 = savedMessages.find(m => m.id === 'msg-1');
+      expect(savedMsg1!.content.toolInvocations).toBeUndefined();
+
+      saveSpy.mockRestore();
+    });
+
+    it('should drop echo-only metadata keys', async () => {
+      const stored = assistantMessage({
+        content: {
+          format: 2,
+          content: 'Answer',
+          parts: [{ type: 'text', text: 'Answer' }],
+          metadata: { sealed: true },
+        },
+      });
+      mockStorage.setMessages([stored]);
+
+      processor = new MessageHistory({ storage: mockStorage });
+      const saveSpy = vi.spyOn(mockStorage, 'saveMessages');
+
+      // The echo pre-seeds a metadata key the server never set.
+      const echo = assistantMessage({
+        content: {
+          format: 2,
+          content: 'Answer',
+          parts: [{ type: 'text', text: 'Answer' }],
+          metadata: { sealed: true, clientSeeded: 'x' },
+        },
+      });
+
+      const messageList = new MessageList().add([echo], 'input');
+
+      await processor.processOutputResult({
+        messageList,
+        messages: [],
+        abort: mockAbort,
+        requestContext: createRuntimeContextWithMemory('thread-1'),
+      });
+
+      const savedMessages = (saveSpy.mock.calls[0]![0] as any).messages as MastraDBMessage[];
+      const savedMsg1 = savedMessages.find(m => m.id === 'msg-1');
+      expect(savedMsg1!.content.metadata).toEqual({ sealed: true });
+
+      saveSpy.mockRestore();
+    });
+
+    it('should not accept incoming-only parts regardless of position', async () => {
+      const stored = assistantMessage({
+        content: {
+          format: 2,
+          content: 'Let me look that up',
+          parts: [
+            { type: 'text', text: 'Let me look that up' },
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'call-1',
+                toolName: 'search',
+                args: { query: 'mastra' },
+                result: 'found',
+              },
+            },
+          ],
+        },
+      });
+      mockStorage.setMessages([stored]);
+
+      processor = new MessageHistory({ storage: mockStorage });
+      const saveSpy = vi.spyOn(mockStorage, 'saveMessages');
+
+      // The echo carries two text parts the stored message never had: one at a
+      // position where the stored array has a part, one at a tail index. Under a
+      // positional rule the tail one would survive while the other is dropped —
+      // the rule must be position-independent: incoming-only parts are never
+      // accepted.
+      const echo = assistantMessage({
+        content: {
+          format: 2,
+          content: 'Let me look that up',
+          parts: [
+            { type: 'text', text: 'Let me look that up' },
+            { type: 'text', text: 'New client part 1' },
+            { type: 'text', text: 'New client part 2' },
+          ],
+        },
+      });
+
+      const messageList = new MessageList().add([echo], 'input');
+
+      await processor.processOutputResult({
+        messageList,
+        messages: [],
+        abort: mockAbort,
+        requestContext: createRuntimeContextWithMemory('thread-1'),
+      });
+
+      const savedMessages = (saveSpy.mock.calls[0]![0] as any).messages as MastraDBMessage[];
+      const savedMsg1 = savedMessages.find(m => m.id === 'msg-1');
+      const savedTexts = savedMsg1!.content.parts.filter((p: any) => p.type === 'text').map((p: any) => p.text);
+      expect(savedTexts).toEqual(['Let me look that up']);
+
+      saveSpy.mockRestore();
+    });
+
+    it('should keep an edited user message and skip an unchanged user echo', async () => {
+      const stored = {
+        id: 'msg-1',
+        role: 'user',
+        content: { format: 2, parts: [{ type: 'text', text: 'Original question' }] },
+        threadId: 'thread-1',
+        createdAt: new Date(baseTime - 1000),
+      } as MastraDBMessage;
+      mockStorage.setMessages([stored]);
+
+      processor = new MessageHistory({ storage: mockStorage });
+      const saveSpy = vi.spyOn(mockStorage, 'saveMessages');
+
+      const edited = {
+        ...stored,
+        content: { format: 2, parts: [{ type: 'text', text: 'Edited question' }] },
+      } as MastraDBMessage;
+      const messageList = new MessageList().add([edited], 'input');
+
+      await processor.processOutputResult({
+        messageList,
+        messages: [],
+        abort: mockAbort,
+        requestContext: createRuntimeContextWithMemory('thread-1'),
+      });
+
+      // The client is the author of user messages: the edit is persisted as-is
+      // instead of being discarded by the server-wins merge.
+      const savedMessages = (saveSpy.mock.calls[0]![0] as any).messages as MastraDBMessage[];
+      expect(savedMessages.map(m => m.id)).toEqual(['msg-1']);
+      expect(savedMessages[0]!.content.parts.map((p: any) => ({ type: p.type, text: p.text }))).toEqual([
+        { type: 'text', text: 'Edited question' },
+      ]);
+
+      // An unchanged re-send of the same user message is still recognized as a
+      // stale echo and not re-persisted.
+      const unchanged = { ...stored } as MastraDBMessage;
+      const messageList2 = new MessageList().add([unchanged], 'input');
+      await processor.processOutputResult({
+        messageList: messageList2,
+        messages: [],
+        abort: mockAbort,
+        requestContext: createRuntimeContextWithMemory('thread-1'),
+      });
+      expect(saveSpy.mock.calls.length).toBe(1);
+
+      saveSpy.mockRestore();
+    });
+
+    it('should treat an echoed ID from another thread as a fresh message', async () => {
+      const foreign = assistantMessage({
+        content: {
+          format: 2,
+          content: 'Other thread answer',
+          parts: [{ type: 'text', text: 'Other thread answer' }],
+        },
+        threadId: 'thread-2',
+      });
+      mockStorage.setMessages([foreign]);
+
+      processor = new MessageHistory({ storage: mockStorage });
+      const saveSpy = vi.spyOn(mockStorage, 'saveMessages');
+
+      const echo = assistantMessage({
+        content: {
+          format: 2,
+          content: 'Other thread answer',
+          parts: [{ type: 'text', text: 'Other thread answer' }],
+        },
+        threadId: 'thread-1',
+      });
+
+      const messageList = new MessageList().add([echo], 'input');
+
+      await processor.processOutputResult({
+        messageList,
+        messages: [],
+        abort: mockAbort,
+        requestContext: createRuntimeContextWithMemory('thread-1'),
+      });
+
+      // msg-1 resolves to thread-2's record, which is not canonical for this
+      // thread: the echo is persisted as-is (fresh message), neither suppressed
+      // as an "unchanged echo" nor merged under the foreign thread's IDs.
+      expect(saveSpy).toHaveBeenCalledWith({
+        messages: [expect.objectContaining({ id: 'msg-1', threadId: 'thread-1' })],
       });
 
       saveSpy.mockRestore();
