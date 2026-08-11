@@ -1727,6 +1727,7 @@ export class AgentThreadStreamRuntime {
     const replayedStreamIds = new Set<string>();
     let currentReader: ReadableStreamDefaultReader<any> | null = null;
     let activeReaderRunId: string | null = null;
+    let currentRunRequestContext: RequestContext | undefined;
     let cancelledByAbort = false;
 
     const markActiveIfLive = async (runId: string, streamId: string, local: boolean) => {
@@ -1909,6 +1910,7 @@ export class AgentThreadStreamRuntime {
 
     return {
       activeRunId,
+      __getCurrentRunRequestContext: () => currentRunRequestContext,
       abort: () => this.abortThread(options, resolvedPubSub),
       unsubscribe,
       stream: (async function* () {
@@ -1926,6 +1928,7 @@ export class AgentThreadStreamRuntime {
             const reader = subscriberStream.getReader();
             currentReader = reader as ReadableStreamDefaultReader<any>;
             activeReaderRunId = run.runId;
+            currentRunRequestContext = run.streamOptions.requestContext;
             let readerReleased = false;
             try {
               while (true) {
@@ -1972,6 +1975,7 @@ export class AgentThreadStreamRuntime {
             } finally {
               currentReader = null;
               activeReaderRunId = null;
+              currentRunRequestContext = undefined;
               if (!readerReleased) {
                 reader.releaseLock();
               }

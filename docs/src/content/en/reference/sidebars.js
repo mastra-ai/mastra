@@ -780,7 +780,7 @@ const sidebars = {
         { type: 'doc', id: 'storage/libsql', label: 'libSQL Storage' },
         { type: 'doc', id: 'storage/mongodb', label: 'MongoDB Storage' },
         { type: 'doc', id: 'storage/mssql', label: 'MSSQL Storage' },
-        { type: 'doc', id: 'storage/neon', label: 'Neon Storage' },
+        { type: 'doc', id: 'storage/neon', label: 'Neon Postgres' },
         { type: 'doc', id: 'storage/oracledb', label: 'OracleDB Storage' },
         { type: 'doc', id: 'storage/postgresql', label: 'PostgreSQL Storage' },
         { type: 'doc', id: 'storage/redis', label: 'Redis Storage' },

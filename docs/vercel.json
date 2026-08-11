@@ -252,7 +252,7 @@
     },
     {
       "source": "/examples/agents/whatsapp-chat-bot",
-      "destination": "/guides/guide/whatsapp-chat-bot",
+      "destination": "/docs/capabilities/channels/whatsapp",
       "permanent": true
     },
     {
@@ -832,7 +832,7 @@
     },
     {
       "source": "/docs/mcp/publishing-mcp-server",
-      "destination": "/guides/guide/publishing-mcp-server",
+      "destination": "/docs/mcp/overview",
       "permanent": true
     },
     {
@@ -852,17 +852,17 @@
     },
     {
       "source": "/docs/streaming",
-      "destination": "/guides/concepts/streaming",
+      "destination": "/docs/guides/streaming",
       "permanent": true
     },
     {
       "source": "/docs/streaming/overview",
-      "destination": "/guides/concepts/streaming",
+      "destination": "/docs/guides/streaming",
       "permanent": true
     },
     {
       "source": "/docs/streaming/events",
-      "destination": "/guides/concepts/streaming",
+      "destination": "/docs/guides/streaming",
       "permanent": true
     },
     {
@@ -1231,8 +1231,43 @@
       "permanent": true
     },
     {
+      "source": "/guides/guide/slack-assistant",
+      "destination": "/docs/capabilities/channels/slack",
+      "permanent": true
+    },
+    {
+      "source": "/guides/guide/whatsapp-chat-bot",
+      "destination": "/docs/capabilities/channels/whatsapp",
+      "permanent": true
+    },
+    {
+      "source": "/guides/guide/web-search",
+      "destination": "/docs/agents/using-tools",
+      "permanent": true
+    },
+    {
+      "source": "/guides/guide/publishing-mcp-server",
+      "destination": "/docs/mcp/overview",
+      "permanent": true
+    },
+    {
+      "source": "/guides/guide/chef-michel",
+      "destination": "/docs/agents/overview",
+      "permanent": true
+    },
+    {
+      "source": "/guides/guide/stock-agent",
+      "destination": "/docs/agents/using-tools",
+      "permanent": true
+    },
+    {
       "source": "/guides/migrations/:path*",
       "destination": "/reference/migrations/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/guides/concepts/:path*",
+      "destination": "/docs/guides/:path*",
       "permanent": true
     },
     {
@@ -1797,7 +1832,7 @@
     },
     {
       "source": "/docs/mcp/publishing-mcp-server/llms.txt",
-      "destination": "/guides/guide/publishing-mcp-server/llms.txt",
+      "destination": "/docs/mcp/overview/llms.txt",
       "permanent": true
     },
     {
@@ -1817,17 +1852,17 @@
     },
     {
       "source": "/docs/streaming/llms.txt",
-      "destination": "/guides/concepts/streaming/llms.txt",
+      "destination": "/docs/guides/streaming/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/streaming/overview/llms.txt",
-      "destination": "/guides/concepts/streaming/llms.txt",
+      "destination": "/docs/guides/streaming/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/streaming/events/llms.txt",
-      "destination": "/guides/concepts/streaming/llms.txt",
+      "destination": "/docs/guides/streaming/llms.txt",
       "permanent": true
     },
     {
@@ -2111,8 +2146,43 @@
       "permanent": true
     },
     {
+      "source": "/guides/guide/slack-assistant/llms.txt",
+      "destination": "/docs/capabilities/channels/slack/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/guides/guide/whatsapp-chat-bot/llms.txt",
+      "destination": "/docs/capabilities/channels/whatsapp/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/guides/guide/web-search/llms.txt",
+      "destination": "/docs/agents/using-tools/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/guides/guide/publishing-mcp-server/llms.txt",
+      "destination": "/docs/mcp/overview/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/guides/guide/chef-michel/llms.txt",
+      "destination": "/docs/agents/overview/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/guides/guide/stock-agent/llms.txt",
+      "destination": "/docs/agents/using-tools/llms.txt",
+      "permanent": true
+    },
+    {
       "source": "/guides/migrations/:path*/llms.txt",
       "destination": "/reference/migrations/:path*/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/guides/concepts/:path*/llms.txt",
+      "destination": "/docs/guides/:path*/llms.txt",
       "permanent": true
     }
   ]
