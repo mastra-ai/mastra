@@ -6,16 +6,24 @@ import type { McE2eScenario } from './types.js';
 const OBJECTIVE = 'Keep the fresh thread goal e2e objective alive.';
 
 /**
- * Regression coverage for goals started on a thread that does not exist yet.
- * The TUI creates the thread as part of starting the goal, and the deferred
- * `thread_created` handler runs afterwards — if the persistence flag is not
- * armed before the create, that handler drops the in-memory goal and the next
- * save clears the objective from the store. Here the goal must still be on the
- * created thread once the app shuts down.
+ * End-to-end coverage for goals started on a thread that does not exist yet:
+ * the TUI creates the thread as part of starting the goal, and the goal must
+ * still be on that created thread once the app shuts down.
+ *
+ * This is NOT a discriminating regression test for the persist-flag ordering
+ * defect. That defect needs the deferred `thread_created` handler to land
+ * between the create and a later save, and this harness does not reproduce
+ * that ordering — the scenario was verified green with
+ * `src/tui/commands/goal.ts` reverted to its pre-fix version. The deterministic
+ * pin for the ordering lives in the unit tests
+ * (`src/tui/commands/__tests__/goal.test.ts`), which assert the flag is armed
+ * before `thread.create()` and that the condition holds in both directions.
+ * What this scenario buys is the real end-to-end path: `/new`, a real goal
+ * start, and the goal record actually landing in SQLite on the new thread.
  */
 export const goalFreshThreadPersistenceScenario: McE2eScenario = {
   name: 'goal-fresh-thread-persistence',
-  description: 'Start a persistent goal on a not-yet-created thread and verify it survives thread creation.',
+  description: 'Start a persistent goal on a not-yet-created thread and verify it lands in storage on that thread.',
   testName: 'persists a goal started on a freshly created thread',
   useOpenAIModel: true,
   aimockFixture: 'goal-fresh-thread-persistence.json',
