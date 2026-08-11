@@ -1384,6 +1384,36 @@ describe('ChatChannelOutputProcessor', () => {
       // Tool call itself is hidden (no post for running card), but approval MUST post
       const posts = calls.filter(c => c.kind === 'post');
       expect(posts).toHaveLength(1);
+      const payloadStr = JSON.stringify((posts[0] as any).arg);
+      expect(payloadStr).toContain('tool_approve:t1');
+      expect(payloadStr).toContain('tool_deny:t1');
+      expect((channels as any).pendingApprovalCards.has('t1')).toBe(true);
+    });
+
+    it('posts approval card even when toolDisplayFn returns undefined (static mode)', async () => {
+      const { channels, calls, chatThread } = makeChannels({
+        streaming: false,
+        toolDisplay: () => undefined,
+      });
+      await drive(
+        channels,
+        [
+          {
+            type: 'tool-call',
+            payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' } },
+          },
+          {
+            type: 'tool-call-approval',
+            payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' } },
+          },
+        ],
+        chatThread,
+      );
+      const posts = calls.filter(c => c.kind === 'post');
+      expect(posts).toHaveLength(1);
+      const payloadStr = JSON.stringify((posts[0] as any).arg);
+      expect(payloadStr).toContain('tool_approve:t1');
+      expect(payloadStr).toContain('tool_deny:t1');
       expect((channels as any).pendingApprovalCards.has('t1')).toBe(true);
     });
 
