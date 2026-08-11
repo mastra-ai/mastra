@@ -1545,7 +1545,7 @@ export class AgentChannels {
 
     const ownerId = this.getOwnerId();
     if (ownerId === null) {
-      // No owner bound yet — scoping is impossible; behave exactly as before
+      // No owner bound yet - scoping is impossible; behave exactly as before
       // and never stamp a null owner id.
       const { threads } = await memoryStore.listThreads({
         filter: { metadata: legacyMetadata },
@@ -1565,10 +1565,10 @@ export class AgentChannels {
 
     // Legacy fallback: pre-upgrade threads carry no channel_ownerId. Metadata
     // filters match subsets, so this query also returns threads claimed by
-    // OTHER agents — post-filter to unclaimed rows only, oldest first so
+    // OTHER agents - post-filter to unclaimed rows only, oldest first so
     // adoption deterministically picks the original thread. If a conversation
     // somehow accumulates more than 10 candidate rows, an unclaimed one past
-    // the page could be missed and a fresh thread created — acceptable
+    // the page could be missed and a fresh thread created - acceptable
     // degradation.
     const { threads: candidates } = await memoryStore.listThreads({
       filter: { metadata: legacyMetadata },
