@@ -53,7 +53,12 @@ jobs:
             && ! grep -q '^e2e-tests/monorepo/' /tmp/changed-coverage-files \
             && grep '^packages/deployer/' /tmp/changed-coverage-files | grep -qv '^packages/deployer/AGENTS\.md$'; then
             first_deployer_file="$(grep -m1 '^packages/deployer/' /tmp/changed-files || true)"
-            echo "::error file=${first_deployer_file},title=Monorepo E2E coverage required::This PR changes packages/deployer/ but has no corresponding changes under e2e-tests/monorepo/. Deployer unit tests alone do not validate generated monorepo applications — add or update a monorepo E2E test. See packages/deployer/AGENTS.md for commands."
+            escaped_deployer_file="${first_deployer_file//%/%25}"
+            escaped_deployer_file="${escaped_deployer_file//$'\r'/%0D}"
+            escaped_deployer_file="${escaped_deployer_file//$'\n'/%0A}"
+            escaped_deployer_file="${escaped_deployer_file//:/%3A}"
+            escaped_deployer_file="${escaped_deployer_file//,/%2C}"
+            echo "::error file=${escaped_deployer_file},title=Monorepo E2E coverage required::This PR changes packages/deployer/ but has no corresponding changes under e2e-tests/monorepo/. Deployer unit tests alone do not validate generated monorepo applications — add or update a monorepo E2E test. See packages/deployer/AGENTS.md for commands."
             exit 1
           fi
 
