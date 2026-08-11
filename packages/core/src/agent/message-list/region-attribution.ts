@@ -92,3 +92,29 @@ export function attributePromptRegions({
 
   return { method: ESTIMATION_METHOD, totalEstimated, regions };
 }
+
+/**
+ * Previous step's serialized prompt, keyed by a per-run object (the
+ * MessageList instance). WeakMap so the entry dies with the run.
+ */
+const previousPromptByKey = new WeakMap<object, string>();
+
+/**
+ * Cheap step-to-step prompt-prefix change detector (instrumentation only).
+ *
+ * Serializes the prompt deterministically and compares against the previous
+ * step's serialization for the same key. Returns:
+ * - `undefined` on the first step (no previous prompt to compare against)
+ * - `false` when the previous prompt is a strict prefix of the current one
+ *   (append-only growth — provider prompt caches stay warm)
+ * - `true` when earlier bytes changed (prompt prefix invalidated)
+ *
+ * Cost is one serialization + one startsWith over in-memory strings per step.
+ */
+export function didPromptPrefixChange(key: object, inputMessages: readonly PromptLikeMessage[]): boolean | undefined {
+  const serialized = inputMessages.map(m => `${String(m.role)}\u0000${contentToText(m.content)}`).join('\u0001');
+  const previous = previousPromptByKey.get(key);
+  previousPromptByKey.set(key, serialized);
+  if (previous === undefined) return undefined;
+  return !serialized.startsWith(previous);
+}

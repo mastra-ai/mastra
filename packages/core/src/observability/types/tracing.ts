@@ -332,6 +332,12 @@ export interface ModelStepAttributes extends AIBaseAttributes {
    * final prompt. Emitted on MODEL_STEP only (not mirrored to MODEL_INFERENCE).
    */
   promptRegions?: PromptRegionAttribution;
+  /**
+   * Whether this step's prompt prefix changed relative to the previous step in
+   * the same run (a changed prefix invalidates provider prompt caches).
+   * Undefined on the first step. Emitted on MODEL_STEP only.
+   */
+  promptPrefixChangedFromPreviousStep?: boolean;
   /** Reason this step finished (stop, tool-calls, length, etc.) */
   finishReason?: string;
   /** Should execution continue */

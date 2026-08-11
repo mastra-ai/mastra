@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { attributePromptRegions } from './region-attribution';
+import { attributePromptRegions, didPromptPrefixChange } from './region-attribution';
 import { MessageList } from './index';
 
 const sumRegions = (regions: Record<string, number>) => Object.values(regions).reduce((a, b) => a + b, 0);
@@ -91,5 +91,40 @@ describe('attributePromptRegions', () => {
 
     expect(JSON.stringify(inputMessages)).toBe(before);
     expect(JSON.stringify(messageList.serializeForSpan())).toBe(serializedBefore);
+  });
+});
+
+describe('didPromptPrefixChange', () => {
+  it('returns undefined on the first step for a key', () => {
+    const key = {};
+    expect(didPromptPrefixChange(key, [{ role: 'system', content: 'a' }])).toBeUndefined();
+  });
+
+  it('returns false when the prompt grows append-only', () => {
+    const key = {};
+    const first = [{ role: 'system', content: 'a' }];
+    didPromptPrefixChange(key, first);
+    expect(didPromptPrefixChange(key, [...first, { role: 'user', content: 'b' }])).toBe(false);
+  });
+
+  it('returns true when earlier prompt bytes change', () => {
+    const key = {};
+    didPromptPrefixChange(key, [
+      { role: 'system', content: 'a' },
+      { role: 'user', content: 'b' },
+    ]);
+    expect(
+      didPromptPrefixChange(key, [
+        { role: 'system', content: 'CHANGED' },
+        { role: 'user', content: 'b' },
+      ]),
+    ).toBe(true);
+  });
+
+  it('tracks keys independently', () => {
+    const keyA = {};
+    const keyB = {};
+    didPromptPrefixChange(keyA, [{ role: 'system', content: 'a' }]);
+    expect(didPromptPrefixChange(keyB, [{ role: 'system', content: 'completely different' }])).toBeUndefined();
   });
 });
