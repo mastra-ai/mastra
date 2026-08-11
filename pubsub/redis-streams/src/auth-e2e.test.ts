@@ -115,8 +115,11 @@ async function fireStartAsync(
       body: JSON.stringify({ inputData: { name: 'world' } }),
       signal: ac.signal,
     });
+    // Keep the abort timer armed while the body is read: fetch resolves on
+    // headers, and a stalled body would otherwise bypass the safety net.
+    const body = (await res.json()) as StartAsyncBody;
     clearTimeout(timer);
-    return { aborted: false, status: res.status, body: (await res.json()) as StartAsyncBody };
+    return { aborted: false, status: res.status, body };
   } catch (err) {
     clearTimeout(timer);
     if ((err as Error).name === 'AbortError') return { aborted: true };

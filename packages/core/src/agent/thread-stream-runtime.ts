@@ -623,6 +623,15 @@ export class AgentThreadStreamRuntime {
         sourceId: runtime.#getSourceId(),
       });
       wake();
+      // An error chunk settles `_waitUntilFinished()` without closing
+      // `fullStream` (durable error-recovery keeps consuming), so the pump can
+      // stay blocked on `read()` forever. The error chunk is the last part
+      // this run broadcasts, and it has now been published — settle
+      // `broadcastFinished` here so the terminal publish gate (and the lease
+      // release/drain behind it) is never stranded on the error path.
+      if ((part as { type?: string } | null | undefined)?.type === 'error') {
+        resolveBroadcastFinished();
+      }
     };
 
     const start = () => {

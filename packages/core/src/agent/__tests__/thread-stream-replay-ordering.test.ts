@@ -13,85 +13,15 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { PubSub } from '../../events/pubsub';
-import type { LeaseProvider } from '../../events/pubsub';
-import type { EventCallback } from '../../events/types';
-import type { Agent } from '../agent';
-import { AgentThreadStreamRuntime } from '../thread-stream-runtime';
+import type { AgentThreadStreamRuntime } from '../thread-stream-runtime';
+import type { LeasePubSub } from './thread-stream-test-utils';
+import { collectThread, createHarness, nextTicks, setupRuntime } from './thread-stream-test-utils';
 
-const AGENT_THREAD_KEY_SEPARATOR = '\u0000';
+const harness = createHarness('ordering');
+const { runId, streamId } = harness;
 
-function nextTicks(count = 5) {
-  return Array.from({ length: count }).reduce<Promise<void>>(
-    acc => acc.then(() => new Promise(resolve => setTimeout(resolve, 0))),
-    Promise.resolve(),
-  );
-}
-
-class LeasePubSub extends PubSub implements LeaseProvider {
-  owners = new Map<string, string>();
-  #subscribers = new Map<string, Set<EventCallback>>();
-
-  async publish(topic: string, event: any): Promise<void> {
-    for (const subscriber of [...(this.#subscribers.get(topic) ?? [])]) {
-      await subscriber({ ...event, id: 'evt', createdAt: new Date() }, async () => {});
-    }
-  }
-  async flush(): Promise<void> {}
-  async subscribe(topic: string, cb: EventCallback): Promise<void> {
-    const subscribers = this.#subscribers.get(topic) ?? new Set<EventCallback>();
-    subscribers.add(cb);
-    this.#subscribers.set(topic, subscribers);
-  }
-  async unsubscribe(topic: string, cb: EventCallback): Promise<void> {
-    this.#subscribers.get(topic)?.delete(cb);
-  }
-  async acquireLease(key: string, owner: string): Promise<{ acquired: boolean; owner?: string }> {
-    const current = this.owners.get(key);
-    if (current && current !== owner) return { acquired: false, owner: current };
-    this.owners.set(key, owner);
-    return { acquired: true, owner };
-  }
-  async getLeaseOwner(key: string): Promise<string | undefined> {
-    return this.owners.get(key);
-  }
-  async releaseLease(key: string, owner: string): Promise<void> {
-    if (this.owners.get(key) === owner) this.owners.delete(key);
-  }
-  async renewLease(key: string, owner: string): Promise<boolean> {
-    return this.owners.get(key) === owner;
-  }
-  async transferLease(key: string, fromOwner: string, toOwner: string): Promise<boolean> {
-    if (this.owners.get(key) !== fromOwner) return false;
-    this.owners.set(key, toOwner);
-    return true;
-  }
-}
-
-const agent = { id: 'ordering-agent' } as Agent<any, any, any, any>;
-const threadId = 'ordering-thread';
-const resourceId = 'ordering-user';
-const key = [resourceId, threadId].join(AGENT_THREAD_KEY_SEPARATOR);
-const topic = `agent.thread-stream.${encodeURIComponent(key)}`;
-const runId = 'ordered-run';
-const streamId = 'ordered-stream';
-
-function setup() {
-  const runtime = new AgentThreadStreamRuntime();
-  const pubsub = new LeasePubSub();
-  const emit = (data: Record<string, unknown>) =>
-    pubsub.publish(topic, { type: 'agent.thread-stream', runId: data.runId, data });
-  return { runtime, pubsub, emit };
-}
-
-async function collect(runtime: AgentThreadStreamRuntime, pubsub: LeasePubSub) {
-  const subscription = await runtime.subscribeToThread(agent, { threadId, resourceId }, pubsub);
-  const collected: Array<{ type: string }> = [];
-  const consumed = (async () => {
-    for await (const part of subscription.stream) collected.push(part as { type: string });
-  })();
-  return { subscription, collected, consumed };
-}
+const setup = () => setupRuntime(harness);
+const collect = (runtime: AgentThreadStreamRuntime, pubsub: LeasePubSub) => collectThread(harness, runtime, pubsub);
 
 const finishPart = {
   type: 'finish',

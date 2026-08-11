@@ -5881,10 +5881,12 @@ export class Mastra<
     // must run after storage.init() above.
     //
     // Skip the read when the flag cannot change the outcome: it is already
-    // set, or the app opted out of the scheduler and nothing may start it.
-    // Reading the store anyway is a useless boot-time query, and storage
-    // adapters that need request/tenant context warn on it (see #20550).
-    if (!name && !this.#schedulerRequested && !this.#schedulerDisabled()) {
+    // set, the app opted out of the scheduler and nothing may start it, or an
+    // explicit worker filter already forces injection (see below). Reading the
+    // store anyway is a useless boot-time query, and storage adapters that
+    // need request/tenant context warn on it (see #20550).
+    const schedulerExplicitlyRequested = (this.#workerFilter?.has('scheduler') ?? false) && !this.#schedulerDisabled();
+    if (!name && !this.#schedulerRequested && !schedulerExplicitlyRequested && !this.#schedulerDisabled()) {
       await this.#detectPersistedSchedulerWork();
     }
 
@@ -5900,7 +5902,6 @@ export class Mastra<
     // created by *other* processes, so boot-time heuristics like
     // #hasScheduledWorkflow or persisted-row probes can't see the work it
     // exists to serve. Only `#schedulerDisabled()` overrides the request.
-    const schedulerExplicitlyRequested = (this.#workerFilter?.has('scheduler') ?? false) && !this.#schedulerDisabled();
     if (!name && (this.#shouldEnableScheduler() || schedulerExplicitlyRequested) && this.#storage) {
       if (!this.#findSchedulerWorker()) {
         const sw = new SchedulerWorker(this.#schedulerConfig);
