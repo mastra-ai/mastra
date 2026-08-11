@@ -139,6 +139,12 @@ export interface WorkspaceSandbox extends SandboxLifecycle<SandboxInfo> {
   readonly provider: string;
 
   /**
+   * Persist the sandbox's current state when the provider supports snapshots.
+   * Providers without snapshot support resolve without performing work.
+   */
+  snapshot(): Promise<void>;
+
+  /**
    * Get instructions describing how this sandbox works.
    * Used in tool descriptions to help agents understand execution context.
    *
