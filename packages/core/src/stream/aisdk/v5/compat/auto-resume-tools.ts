@@ -133,6 +133,41 @@ function isPreparedFunctionTool(tool: PreparedTool): tool is PreparedFunctionToo
   );
 }
 
+function normalizeRootObjectSchema(inputSchema: Record<string, unknown>): Record<string, unknown> | undefined {
+  const rootRef = inputSchema.$ref;
+  if (typeof rootRef === 'string' && rootRef.startsWith('#/')) {
+    let referencedSchema: unknown = inputSchema;
+    for (const encodedSegment of rootRef.slice(2).split('/')) {
+      const segment = encodedSegment.replace(/~1/g, '/').replace(/~0/g, '~');
+      if (!referencedSchema || typeof referencedSchema !== 'object' || Array.isArray(referencedSchema)) break;
+      referencedSchema = (referencedSchema as Record<string, unknown>)[segment];
+    }
+
+    if (referencedSchema && typeof referencedSchema === 'object' && !Array.isArray(referencedSchema)) {
+      const referencedObjectSchema = referencedSchema as Record<string, unknown>;
+      if (referencedObjectSchema.type === 'object' || referencedObjectSchema.properties !== undefined) {
+        const { $ref: _rootRef, ...rootSchema } = inputSchema;
+        return {
+          ...referencedObjectSchema,
+          ...rootSchema,
+          properties: {
+            ...((referencedObjectSchema.properties as Record<string, unknown> | undefined) ?? {}),
+            ...((rootSchema.properties as Record<string, unknown> | undefined) ?? {}),
+          },
+          required: Array.from(
+            new Set([
+              ...((referencedObjectSchema.required as string[] | undefined) ?? []),
+              ...((rootSchema.required as string[] | undefined) ?? []),
+            ]),
+          ),
+        };
+      }
+    }
+  }
+
+  return inputSchema.type === 'object' || inputSchema.properties !== undefined ? inputSchema : undefined;
+}
+
 /**
  * Add automatic-resume controls to the provider-facing schema for the suspended
  * tool only. The canonical tool schema remains untouched on ordinary turns.
@@ -157,8 +192,8 @@ export function injectAutoResumeToolSchemas<T extends PreparedTool>({
     const schemas = resumeSchemas.get(tool.name);
     if (!schemas?.length) return tool;
 
-    const inputSchema = tool.inputSchema;
-    if (inputSchema.type !== 'object' && inputSchema.properties === undefined) return tool;
+    const inputSchema = normalizeRootObjectSchema(tool.inputSchema);
+    if (!inputSchema) return tool;
 
     const resumeDataSchema =
       schemas.length === 1

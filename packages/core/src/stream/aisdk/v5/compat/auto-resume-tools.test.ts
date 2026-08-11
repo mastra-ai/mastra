@@ -61,6 +61,51 @@ describe('injectAutoResumeToolSchemas', () => {
     });
   });
 
+  it('injects resume controls into an object schema expressed as a root reference', () => {
+    const result = injectAutoResumeToolSchemas({
+      tools: [
+        {
+          type: 'function',
+          name: 'target',
+          inputSchema: {
+            $ref: '#/$defs/args',
+            $defs: {
+              args: {
+                type: 'object',
+                properties: {
+                  query: { type: 'string' },
+                },
+                required: ['query'],
+                additionalProperties: false,
+              },
+            },
+          },
+        },
+      ],
+      suspendedTools: [
+        {
+          toolName: 'target',
+          resumeSchema: {
+            type: 'object',
+            properties: { confirmed: { type: 'boolean' } },
+          },
+        },
+      ],
+      model: {
+        modelId: 'test-model',
+        provider: 'test-provider',
+        supportsStructuredOutputs: false,
+      },
+    });
+
+    const schema = result?.[0]?.inputSchema as any;
+    expect(schema.$ref).toBeUndefined();
+    expect(schema.required).toEqual(['query', 'suspendedToolRunId', 'resumeData']);
+    expect(schema.properties.query).toEqual({ type: 'string' });
+    expect(schema.properties.suspendedToolRunId).toMatchObject({ type: 'string' });
+    expect(schema.properties.resumeData).toMatchObject({ type: 'object' });
+  });
+
   it.each([
     ['primitive', { type: 'string', minLength: 1 }],
     ['array', { type: 'array', items: { type: 'string' } }],
