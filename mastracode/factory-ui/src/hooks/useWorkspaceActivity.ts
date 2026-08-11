@@ -10,8 +10,23 @@ import {
 /** How often workspace activity is re-checked while the tab is focused. */
 export const WORKSPACE_ACTIVITY_POLL_MS = 5000;
 
-function isActiveWorkspaceThread(thread: AgentControllerThreadInfo, projectPath: string): boolean {
-  return thread.tags?.projectPath === projectPath && 'state' in thread && thread.state === 'active';
+/**
+ * Whether a thread belongs to a given workspace row.
+ *
+ * Rows are keyed differently depending on where they come from, so both keys
+ * are accepted. Factory sessions are stamped with `factorySessionId` (the
+ * session id, which is also the sidebar row key) by
+ * `FactoryStartCoordinator.configureThread`. Personal/local worktree sessions
+ * predate that and are keyed by their `projectPath` — which now holds the
+ * sandbox workdir path rather than the session id, so it can no longer be
+ * relied on alone for factory rows.
+ */
+function isWorkspaceThread(thread: AgentControllerThreadInfo, key: string): boolean {
+  return thread.tags?.factorySessionId === key || thread.tags?.projectPath === key;
+}
+
+function isActiveWorkspaceThread(thread: AgentControllerThreadInfo, key: string): boolean {
+  return isWorkspaceThread(thread, key) && 'state' in thread && thread.state === 'active';
 }
 
 interface WorkspaceActivityOptions {
@@ -92,7 +107,7 @@ export function useWorkspaceThreadTitles(options: WorkspaceActivityOptions): Rec
   const threads = useWorkspaceThreadsQuery(options);
   const titles: Record<string, string> = {};
   for (const path of options.worktreePaths) {
-    const thread = conversationThread(threads.filter(t => t.tags?.projectPath === path));
+    const thread = conversationThread(threads.filter(t => isWorkspaceThread(t, path)));
     const title = thread?.title?.trim();
     if (title) titles[path] = title;
   }

@@ -1,6 +1,19 @@
 export interface PlatformClientOptions {
   accessToken?: string;
   projectId?: string;
+  /**
+   * Advisory correlation id for the factory session driving this client.
+   * Sent as `x-mastra-session-id` on every proxy request so proxy-side logs
+   * can be joined back to the calling session without a multi-store hand-join
+   * (`threadId → sessionId → sandboxId → providerResourceId`). Never used for
+   * authorization — the Bearer token remains the only credential.
+   */
+  sessionId?: string;
+  /**
+   * Advisory correlation id for the factory thread, sent as
+   * `x-mastra-thread-id` when present. See {@link PlatformClientOptions.sessionId}.
+   */
+  threadId?: string;
   fetch?: typeof fetch;
 }
 
@@ -24,15 +37,11 @@ export function requireOption(value: string | undefined, name: string): string {
 
 export function resolvePlatformOptions(options: PlatformClientOptions) {
   return {
-    accessToken: requireOption(
-      options.accessToken ??
-        process.env.MASTRA_PLATFORM_SECRET_KEY ??
-        // Deprecated alias — prefer MASTRA_PLATFORM_SECRET_KEY.
-        process.env.MASTRA_PLATFORM_ACCESS_TOKEN,
-      'accessToken',
-    ),
+    accessToken: requireOption(options.accessToken ?? process.env.MASTRA_PLATFORM_ACCESS_TOKEN, 'accessToken'),
     projectId: requireOption(options.projectId ?? process.env.MASTRA_PROJECT_ID, 'projectId'),
     proxyUrl: (process.env.MASTRA_WORKSPACE_PROXY_URL ?? DEFAULT_PROXY_URL).replace(/\/$/, ''),
+    sessionId: options.sessionId,
+    threadId: options.threadId,
     fetch: options.fetch ?? fetch,
   };
 }
@@ -89,6 +98,10 @@ export class PlatformClient {
   readonly accessToken: string;
   readonly projectId: string;
   readonly proxyUrl: string;
+  /** Advisory session correlation id — see {@link PlatformClientOptions.sessionId}. */
+  readonly sessionId: string | undefined;
+  /** Advisory thread correlation id — see {@link PlatformClientOptions.threadId}. */
+  readonly threadId: string | undefined;
   readonly fetch: typeof fetch;
 
   constructor(options: PlatformClientOptions) {
@@ -96,6 +109,8 @@ export class PlatformClient {
     this.accessToken = resolved.accessToken;
     this.projectId = resolved.projectId;
     this.proxyUrl = resolved.proxyUrl;
+    this.sessionId = resolved.sessionId;
+    this.threadId = resolved.threadId;
     this.fetch = resolved.fetch;
   }
 
@@ -107,6 +122,12 @@ export class PlatformClient {
 
     const headers = new Headers(options.headers);
     headers.set('authorization', `Bearer ${this.accessToken}`);
+    // Advisory correlation headers — the proxy folds them into its log lines
+    // so proxy-side events can be joined back to the calling factory session
+    // without a cross-store hand-join. Unknown headers are passthrough for
+    // older proxies; these are never used for authorization.
+    if (this.sessionId) headers.set('x-mastra-session-id', this.sessionId);
+    if (this.threadId) headers.set('x-mastra-thread-id', this.threadId);
 
     // Strip our helper-only field so the underlying fetch sees a valid RequestInit.
     const { query: _query, ...fetchOptions } = options;

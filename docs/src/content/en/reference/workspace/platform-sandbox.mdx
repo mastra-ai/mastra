@@ -10,11 +10,13 @@ import TabItem from "@theme/TabItem";
 
 # PlatformSandbox
 
-Executes commands inside a Mastra Platform sandbox tied to a Platform environment. Sandboxes boot from a pre-built recipe checkpoint with Python 3, Node 22, TypeScript, tsx, and common build tooling already installed.
+Client for provisioning sandboxes in a Mastra Platform environment. Each `PlatformSandbox` instance owns one remote sandbox: `start()` provisions it, `executeCommand()` runs against it, and `destroy()` tears it down. Construct additional instances to own additional remote sandboxes. Use `clone()` to derive them from a configured template (see [Cloning](#cloning-for-a-fleet-of-sandboxes)).
 
-Use `PlatformSandbox` when your agent runs on a Mastra Platform deployment and you want the sandbox to be provisioned and managed by the platform. For self-hosted Railway sandboxes, see [`RailwaySandbox`](/reference/workspace/railway-sandbox). For a local sandbox during development, see [`LocalSandbox`](/reference/workspace/local-sandbox).
+Sandboxes boot from a pre-built recipe checkpoint with Python 3, Node 22, TypeScript, tsx, and common build tooling already installed. Pass a stable `id` to opt into [checkpoint recovery](#checkpoint-recovery) so a new sandbox boots from the previous one's filesystem.
 
-:::info
+Related providers: [`RailwaySandbox`](/reference/workspace/railway-sandbox) for self-hosted Railway sandboxes, [`LocalSandbox`](/reference/workspace/local-sandbox) for local sandboxes.
+
+:::note
 
 For interface details, see [WorkspaceSandbox interface](/reference/workspace/sandbox).
 
@@ -31,7 +33,7 @@ Configure the platform credentials. The access token, project ID, and environmen
 <Tabs>
   <TabItem value="env-file" label=".env file">
     ```bash
-    MASTRA_PLATFORM_SECRET_KEY=your-platform-secret-key
+    MASTRA_PLATFORM_ACCESS_TOKEN=your-platform-access-token
     MASTRA_PROJECT_ID=your-project-id
     MASTRA_ENVIRONMENT_ID=your-environment-id
     ```
@@ -48,7 +50,7 @@ Configure the platform credentials. The access token, project ID, and environmen
   </TabItem>
 </Tabs>
 
-On a Mastra Platform deployment these variables are injected automatically, so the constructor can be called with no options.
+On a Mastra Platform deployment, `MASTRA_PLATFORM_ACCESS_TOKEN`, `MASTRA_PROJECT_ID`, and `MASTRA_ENVIRONMENT_ID` are injected automatically, so the constructor can be called with no options. For local development, `MASTRA_PLATFORM_ACCESS_TOKEN` can contain an `sk_` API token from your organization's settings page under **API Tokens**.
 
 ## Usage
 
@@ -97,7 +99,7 @@ The default `ISOLATED` mode allows outbound internet access only, with no privat
 
 ### Reattaching to a running sandbox
 
-Pass an existing `sandboxId` to reattach to a live sandbox instead of creating a new one. This is useful for stateful agents that resume between requests:
+Pass an existing `sandboxId` to reattach to a live sandbox instead of creating a new one:
 
 ```typescript
 const sandbox = new PlatformSandbox({
@@ -109,6 +111,48 @@ const result = await sandbox.executeCommand('cat', ['/workspace/state.json'])
 ```
 
 When `sandboxId` is set, `environmentId` isn't required because the sandbox already exists.
+
+### Checkpoint recovery
+
+The constructor `id` (explicit or auto-generated) is sent to the platform on `POST /sandbox` as an advisory recovery key:
+
+- If the platform recognises the `id` from a previous session, the new sandbox boots from the most recent checkpoint of that earlier sandbox's filesystem instead of the base recipe.
+- If the `id` isn't recognised, the platform starts a fresh sandbox from the base recipe. Auto-generated ids never match, so omitting `id` disables checkpoint recovery.
+
+Pass a stable `id` to preserve a sandbox's filesystem across sessions or across a `destroy()`/`start()` cycle:
+
+```typescript
+const sandbox = new PlatformSandbox({
+  id: `project-${projectId}`,
+})
+await sandbox.start() // Boots from the most recent checkpoint for this id, or fresh if unknown
+```
+
+Checkpoint recovery is coarser than `sandboxId` reattachment. Reattaching (via `sandboxId`) rejoins the exact live sandbox and its running processes. Checkpoint recovery constructs a brand new sandbox and restores its filesystem from the latest checkpoint the platform captured for the previous sandbox with that `id`. Running processes and any filesystem writes made after the last checkpoint aren't restored.
+
+Call `snapshot()` after a filesystem update to capture the configured recovery checkpoint immediately. It resolves without capturing when the sandbox has no caller-provided `id` or isn't running.
+
+```typescript
+await sandbox.snapshot()
+```
+
+Each `id` maps to one independent filesystem. Reusing the same `id` across unrelated sandboxes causes the platform to boot them from each other's checkpoint.
+
+### Cloning for a fleet of sandboxes
+
+`clone()` returns an independent sibling `PlatformSandbox` that inherits credentials and defaults (access token, project, environment, network isolation, timeout, instructions, env, idle timeout) with per-instance overrides. The returned sandbox is unstarted and provisions on its own `start()`, so `clone()` performs no I/O:
+
+```typescript
+const template = new PlatformSandbox({
+  networkIsolation: 'PRIVATE',
+  idleTimeoutMinutes: 30,
+})
+
+const perProject = template.clone({ id: `project-${projectId}` })
+await perProject.start()
+```
+
+Combine `clone()` with a stable `id` per clone to opt each clone into [checkpoint recovery](#checkpoint-recovery) independently.
 
 ### Executing commands
 
@@ -138,8 +182,7 @@ The `command` argument is a shell string and is concatenated verbatim into the r
   {
     name: 'accessToken',
     type: 'string',
-    description:
-      'Platform secret key. Falls back to the MASTRA_PLATFORM_SECRET_KEY environment variable (MASTRA_PLATFORM_ACCESS_TOKEN is a deprecated fallback).',
+    description: 'Platform access token. Falls back to the MASTRA_PLATFORM_ACCESS_TOKEN environment variable.',
     isOptional: true,
   },
   {
@@ -199,7 +242,8 @@ The `command` argument is a shell string and is concatenated verbatim into the r
   {
     name: 'id',
     type: 'string',
-    description: 'Unique identifier for this sandbox instance.',
+    description:
+      "Unique identifier for this sandbox instance. Sent to the platform as an advisory recovery key: if the platform recognizes the id from a previous sandbox, the new sandbox boots from that sandbox's most recent checkpoint instead of the base recipe. Unknown ids fall through to a fresh sandbox. Auto-generated when omitted, which disables checkpoint recovery.",
     isOptional: true,
     defaultValue: 'Auto-generated',
   },
@@ -246,6 +290,60 @@ The `command` argument is a shell string and is concatenated verbatim into the r
 ]}
 />
 
+## Methods
+
+<PropertiesTable
+  content={[
+  {
+    name: 'start',
+    type: '() => Promise<void>',
+    description:
+      'Provision the remote sandbox, or reattach when sandboxId was passed to the constructor. Idempotent once the sandbox is running. A destroyed reattach target falls through to a fresh provision.',
+  },
+  {
+    name: 'destroy',
+    type: '() => Promise<void>',
+    description:
+      'Tear down the remote sandbox and clear the cached exec lease. A subsequent start() provisions a fresh sandbox (or restores from checkpoint when a stable id is set).',
+  },
+  {
+    name: 'stop',
+    type: '() => Promise<void>',
+    description: 'Alias for destroy().',
+  },
+  {
+    name: 'executeCommand',
+    type: '(command: string, args?: string[], options?: ExecuteCommandOptions) => Promise<CommandResult>',
+    description:
+      'Run a command on the remote sandbox and return its stdout, stderr, exitCode, and executionTimeMs. command is a shell string, args are safely shell-quoted.',
+  },
+  {
+    name: 'clone',
+    type: '(options?: SandboxCloneOptions) => PlatformSandbox',
+    description:
+      'Construct an unstarted sibling PlatformSandbox that inherits credentials and defaults with per-instance overrides (id, sandboxId, env, idleTimeoutMinutes). Performs no I/O. Use to build a fleet of independent sandboxes from one configured template.',
+  },
+  {
+    name: 'snapshot',
+    type: '() => Promise<void>',
+    description:
+      'Capture the configured recovery checkpoint immediately. Resolves without work when no caller-provided id exists or the sandbox is not running.',
+  },
+  {
+    name: 'getInfo',
+    type: '() => Promise<SandboxInfo>',
+    description:
+      "Return the sandbox's platform id, provider, status, createdAt, and metadata (sandboxId, providerResourceId, platformStatus).",
+  },
+  {
+    name: 'getInstructions',
+    type: '(opts?: { requestContext?: RequestContext }) => string',
+    description:
+      'Return the sandbox instructions the workspace surfaces in tool descriptions. Honors the instructions constructor option; otherwise returns platform-default instructions that include the current remote sandbox id when running.',
+  },
+]}
+/>
+
 ## Errors
 
 Platform API failures raise `PlatformApiError`. Structured `{ error: { message, type } }` responses are parsed into `.code` (machine-readable kind) and `.proxyMessage` (human string); the raw response body stays available on `.body`:
@@ -268,6 +366,28 @@ try {
 ```
 
 `code` and `proxyMessage` are `undefined` when the response body isn't JSON, for example an HTML 502 from a load balancer.
+
+`executeCommand` runs over the direct-exec data plane (a WebSocket to the Railway tcp-proxy) and can also throw two typed sandbox errors on unrecoverable failure:
+
+```typescript
+import { SandboxDestroyedError, SandboxExecTransportError } from '@mastra/platform-workspace'
+
+try {
+  await sandbox.executeCommand('pytest')
+} catch (err) {
+  if (err instanceof SandboxDestroyedError) {
+    // /exec-lease returned 410; the sandbox has been destroyed.
+    // The cached sandbox id and lease have already been cleared,
+    // so reusing the instance will reprovision on the next call.
+  } else if (err instanceof SandboxExecTransportError) {
+    // Both the initial WebSocket attempt and the built-in retry
+    // closed without an exit frame against a live sandbox.
+    console.error(err.closeCode, err.closeReason, err.wsEndpoint)
+  }
+}
+```
+
+`SandboxExecTransportError` carries diagnostic fields (`opened`, `closeCode`, `closeReason`, `wsEndpoint`, plus `sandboxId`, `command`, and `attempts`) so operators can distinguish a broken Railway data plane from a failed command.
 
 ## Related
 

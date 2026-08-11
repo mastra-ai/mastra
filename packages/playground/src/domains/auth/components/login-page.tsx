@@ -8,6 +8,7 @@ import { useCredentialsLogin } from '../hooks/use-credentials-login';
 import { useCredentialsSignUp } from '../hooks/use-credentials-signup';
 import type { SSOConfig } from '../types';
 import { LoginLayout } from './login-layout';
+import { withStudioBasePath } from '@/lib/studio-base-path';
 
 export type LoginPageProps = {
   /** URL to redirect to after successful login */
@@ -85,7 +86,7 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin', erro
     } else if (redirectUri) {
       window.location.href = redirectUri;
     } else {
-      window.location.href = '/';
+      window.location.href = withStudioBasePath('/');
     }
   };
 

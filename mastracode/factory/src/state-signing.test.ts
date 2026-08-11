@@ -1,4 +1,5 @@
 import { Buffer } from 'node:buffer';
+import { createHmac } from 'node:crypto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createStateSigner } from './state-signing.js';
 
@@ -11,7 +12,23 @@ describe('sign/verify round-trip', () => {
   it('verifies its own signed state and returns the bound tenant', () => {
     const signer = createStateSigner('secret');
     const state = signer.sign('orgA', 'user1');
-    expect(signer.verify(state)).toEqual({ orgId: 'orgA', userId: 'user1' });
+    expect(signer.verify(state)).toEqual({
+      orgId: 'orgA',
+      userId: 'user1',
+      nonce: expect.stringMatching(/^[0-9a-f]{16}$/),
+    });
+  });
+
+  it('round-trips an optional initiating Factory', () => {
+    const signer = createStateSigner('secret');
+    const state = signer.sign('orgA', 'user1', { factoryProjectId: 'fp-1' });
+
+    expect(signer.verify(state)).toEqual({
+      orgId: 'orgA',
+      userId: 'user1',
+      factoryProjectId: 'fp-1',
+      nonce: expect.stringMatching(/^[0-9a-f]{16}$/),
+    });
   });
 
   it('rejects missing or malformed state', () => {
@@ -21,6 +38,29 @@ describe('sign/verify round-trip', () => {
     expect(signer.verify('no-dot-separator')).toBeNull();
   });
 
+  it('gives every state a distinct nonce so callers can enforce single use', () => {
+    const signer = createStateSigner('secret');
+
+    const first = signer.verify(signer.sign('orgA', 'user1'));
+    const second = signer.verify(signer.sign('orgA', 'user1'));
+
+    expect(first?.nonce).toBeTruthy();
+    expect(second?.nonce).not.toBe(first?.nonce);
+  });
+
+  it('rejects a signed state carrying no nonce', () => {
+    // A caller keying single-use bookkeeping on the nonce must never receive a
+    // verified tenant without one, or the replay guard silently degrades.
+    const signer = createStateSigner('secret');
+    const { nonce: _dropped, ...noNonce } = JSON.parse(
+      Buffer.from(signer.sign('orgA', 'user1').split('.')[0]!, 'base64url').toString('utf8'),
+    );
+    const body = Buffer.from(JSON.stringify(noNonce), 'utf8').toString('base64url');
+    const sig = createHmac('sha256', 'secret').update(body).digest('base64url');
+
+    expect(signer.verify(`${body}.${sig}`)).toBeNull();
+  });
+
   it('rejects tampered payloads', () => {
     const signer = createStateSigner('secret');
     const state = signer.sign('orgA', 'user1');
@@ -28,6 +68,17 @@ describe('sign/verify round-trip', () => {
     const forged = JSON.parse(Buffer.from(body, 'base64url').toString('utf8'));
     forged.orgId = 'orgB';
     const forgedBody = Buffer.from(JSON.stringify(forged), 'utf8').toString('base64url');
+    expect(signer.verify(`${forgedBody}.${sig}`)).toBeNull();
+  });
+
+  it('rejects a tampered Factory return context', () => {
+    const signer = createStateSigner('secret');
+    const state = signer.sign('orgA', 'user1', { factoryProjectId: 'fp-1' });
+    const [body, sig] = state.split('.') as [string, string];
+    const forged = JSON.parse(Buffer.from(body, 'base64url').toString('utf8'));
+    forged.factoryProjectId = 'fp-2';
+    const forgedBody = Buffer.from(JSON.stringify(forged), 'utf8').toString('base64url');
+
     expect(signer.verify(`${forgedBody}.${sig}`)).toBeNull();
   });
 
@@ -59,7 +110,11 @@ describe('state age validation', () => {
     const state = signer.sign('orgA', 'user1');
 
     vi.advanceTimersByTime(10 * 60 * 1000);
-    expect(signer.verify(state)).toEqual({ orgId: 'orgA', userId: 'user1' });
+    expect(signer.verify(state)).toEqual({
+      orgId: 'orgA',
+      userId: 'user1',
+      nonce: expect.stringMatching(/^[0-9a-f]{16}$/),
+    });
     vi.advanceTimersByTime(1);
     expect(signer.verify(state)).toBeNull();
   });
@@ -72,7 +127,11 @@ describe('explicit secret verifies across replicas', () => {
 
     const state = replicaA.sign('orgA', 'user1');
 
-    expect(replicaB.verify(state)).toEqual({ orgId: 'orgA', userId: 'user1' });
+    expect(replicaB.verify(state)).toEqual({
+      orgId: 'orgA',
+      userId: 'user1',
+      nonce: expect.stringMatching(/^[0-9a-f]{16}$/),
+    });
     expect(replicaA.stable).toBe(true);
     expect(replicaB.stable).toBe(true);
   });
@@ -97,7 +156,11 @@ describe('random fallback fails across replicas', () => {
   it('same process (same signer) still verifies its own random-signed state', () => {
     const signer = createStateSigner();
     const state = signer.sign('orgA', 'user1');
-    expect(signer.verify(state)).toEqual({ orgId: 'orgA', userId: 'user1' });
+    expect(signer.verify(state)).toEqual({
+      orgId: 'orgA',
+      userId: 'user1',
+      nonce: expect.stringMatching(/^[0-9a-f]{16}$/),
+    });
   });
 });
 

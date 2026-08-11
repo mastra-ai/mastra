@@ -10,9 +10,9 @@ packages:
 
 **Added in:** `@mastra/core@1.45.0`
 
-:::warning
+:::beta
 
-Durable agents are currently in **beta**. APIs may change in future releases.
+Breaking changes may occur without a major version bump until the API is stable.
 
 :::
 
@@ -259,7 +259,7 @@ Recovery re-runs the agentic loop from the last snapshot, which re-issues LLM ca
 
 ### Manual recovery
 
-If you need finer control — for example gating recovery behind a leader election or running it on a schedule — call the methods directly:
+If you need finer control, such as gating recovery behind a leader election or running it on a schedule, call the methods directly:
 
 ```typescript
 // Recover all durable agents
@@ -275,7 +275,7 @@ await durableAgent.recoverActiveRuns({ runId: 'run-abc-123' })
 
 ### Multi-instance deployments
 
-There is no distributed lease or lock yet. In multi-replica deployments, every replica that starts with `recovery.durableAgents: 'auto'` will race to recover the same runs. For now, either gate recovery behind your own leader election or run it from a single replica.
+Mastra doesn't provide a distributed lease or lock yet. In multi-replica deployments, every replica that starts with `recovery.durableAgents: 'auto'` will race to recover the same runs. For now, either gate recovery behind your own leader election or run it from a single replica.
 
 ## Related
 

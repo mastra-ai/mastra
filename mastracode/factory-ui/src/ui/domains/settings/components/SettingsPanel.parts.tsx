@@ -18,16 +18,19 @@ import { useEffect, useRef, useState } from 'react';
 
 import { DONE_SOUND_OPTIONS, loadDoneSound, playDoneSound, saveDoneSound } from '../services/doneSound';
 import type { DoneSound } from '../services/doneSound';
+import { SettingsCard, SettingsRow } from './SettingsCard';
+import { SettingsSubsection } from './SettingsSubsection';
 
-type ThinkingLevel = AgentControllerSessionSettings['thinkingLevel'];
+type ThinkingLevel = NonNullable<AgentControllerSessionSettings['thinkingLevel']>;
 type NotificationMode = AgentControllerSessionSettings['notifications'];
 
-const THINKING_LEVELS: { value: ThinkingLevel; label: string }[] = [
+export const THINKING_LEVELS: { value: ThinkingLevel; label: string }[] = [
   { value: 'off', label: 'Off' },
   { value: 'low', label: 'Low' },
   { value: 'medium', label: 'Medium' },
   { value: 'high', label: 'High' },
   { value: 'xhigh', label: 'Extra high' },
+  { value: 'max', label: 'Max' },
 ];
 const NOTIFICATION_MODES: { value: NotificationMode; label: string }[] = [
   { value: 'off', label: 'Off' },
@@ -50,8 +53,8 @@ export function GeneralSettings({ theme, onThemeChange }: GeneralSettingsProps) 
     playDoneSound(next);
   };
   return (
-    <FieldRowGroup>
-      <FieldRow label="Theme" hint="Color scheme for the interface">
+    <SettingsCard>
+      <SettingsRow label="Theme" hint="Color scheme for the interface">
         <Segmented
           ariaLabel="Theme"
           value={theme}
@@ -62,16 +65,16 @@ export function GeneralSettings({ theme, onThemeChange }: GeneralSettingsProps) 
           ]}
           onChange={onThemeChange}
         />
-      </FieldRow>
-      <FieldRow label="Completion sound" hint="Played when an agent run finishes in a workspace">
+      </SettingsRow>
+      <SettingsRow label="Completion sound" hint="Played when an agent run finishes in a workspace">
         <Segmented
           ariaLabel="Completion sound"
           value={doneSound}
           options={DONE_SOUND_OPTIONS}
           onChange={changeDoneSound}
         />
-      </FieldRow>
-    </FieldRowGroup>
+      </SettingsRow>
+    </SettingsCard>
   );
 }
 
@@ -83,17 +86,15 @@ interface ModelSettingsProps {
 
 export function ModelSettings({ settings, updating, onBehaviorChange }: ModelSettingsProps) {
   return (
-    <FieldRowGroup>
-      <FieldRow label="Thinking level" hint="Extended-reasoning budget for the agent">
-        <Segmented
-          ariaLabel="Thinking level"
-          value={settings?.thinkingLevel ?? 'off'}
-          disabled={!settings || updating}
-          options={THINKING_LEVELS}
-          onChange={v => onBehaviorChange({ thinkingLevel: v })}
-        />
-      </FieldRow>
-    </FieldRowGroup>
+    <SettingsRow label="Thinking level" hint="Extended-reasoning budget for the agent">
+      <Segmented
+        ariaLabel="Thinking level"
+        value={settings?.thinkingLevel ?? 'off'}
+        disabled={!settings || updating}
+        options={THINKING_LEVELS}
+        onChange={v => onBehaviorChange({ thinkingLevel: v })}
+      />
+    </SettingsRow>
   );
 }
 
@@ -116,25 +117,25 @@ export function BehaviorSettings({
 }: BehaviorSettingsProps) {
   const notificationMode = settings?.notifications ?? 'off';
   return (
-    <>
-      <FieldRowGroup>
-        <FieldRow label="Auto-approve tools" hint="Run tool calls without asking (YOLO)">
+    <div className="flex flex-col gap-8">
+      <SettingsCard>
+        <SettingsRow label="Auto-approve tools" hint="Run tool calls without asking (YOLO)">
           <Toggle
             ariaLabel="Auto-approve tools"
             checked={!!settings?.yolo}
             disabled={!settings || updating}
             onChange={v => onBehaviorChange({ yolo: v })}
           />
-        </FieldRow>
-        <FieldRow label="Smart editing" hint="Use AST-aware edits when available">
+        </SettingsRow>
+        <SettingsRow label="Smart editing" hint="Use AST-aware edits when available">
           <Toggle
             ariaLabel="Smart editing"
             checked={!!settings?.smartEditing}
             disabled={!settings || updating}
             onChange={v => onBehaviorChange({ smartEditing: v })}
           />
-        </FieldRow>
-        <FieldRow label="Notifications" hint="How completion alerts are delivered">
+        </SettingsRow>
+        <SettingsRow label="Notifications" hint="How completion alerts are delivered">
           <Segmented
             ariaLabel="Notifications"
             value={notificationMode}
@@ -142,14 +143,14 @@ export function BehaviorSettings({
             options={NOTIFICATION_MODES}
             onChange={v => onBehaviorChange({ notifications: v })}
           />
-        </FieldRow>
-      </FieldRowGroup>
+        </SettingsRow>
+      </SettingsCard>
       <PermissionsSection
         permissions={permissions}
         pendingPermissionCategory={pendingPermissionCategory}
         setPermissionForCategory={setPermissionForCategory}
       />
-    </>
+    </div>
   );
 }
 
@@ -176,17 +177,13 @@ function PermissionsSection({
   };
 
   return (
-    <div className="mt-6 pt-4">
-      <Txt variant="ui-lg" className="text-icon6 font-medium">
-        Tool permissions
-      </Txt>
-      <Txt variant="ui-sm" as="p" className="text-icon3 mt-1 mb-2">
-        Choose how each tool category is approved. “Allow” runs without asking, “Ask” prompts you, “Deny” blocks it.
-        Turning on “Auto-approve tools” above sets every category to Allow.
-      </Txt>
-      <FieldRowGroup>
+    <SettingsSubsection
+      title="Tool permissions"
+      description="“Allow” runs without asking, “Ask” prompts you, “Deny” blocks it. Auto-approve above sets every category to Allow."
+    >
+      <SettingsCard>
         {TOOL_CATEGORIES.map(({ value, label, hint }) => (
-          <FieldRow key={value} label={label} hint={hint}>
+          <SettingsRow key={value} label={label} hint={hint}>
             <Segmented
               ariaLabel={`${label} permission`}
               value={permissions?.categories?.[value] ?? 'ask'}
@@ -194,10 +191,10 @@ function PermissionsSection({
               options={PERMISSION_POLICIES}
               onChange={policy => void update(value, policy)}
             />
-          </FieldRow>
+          </SettingsRow>
         ))}
-      </FieldRowGroup>
-    </div>
+      </SettingsCard>
+    </SettingsSubsection>
   );
 }
 
@@ -363,29 +360,7 @@ function ModelPicker({
   );
 }
 
-function FieldRowGroup({ children }: { children: React.ReactNode }) {
-  return <div className="divide-border1/40 divide-y">{children}</div>;
-}
-
-function FieldRow({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
-  return (
-    <div className="flex items-center justify-between gap-4 py-3">
-      <div className="flex flex-col gap-0.5">
-        <Txt variant="ui-md" className="text-icon5">
-          {label}
-        </Txt>
-        {hint && (
-          <Txt variant="ui-sm" className="text-icon3">
-            {hint}
-          </Txt>
-        )}
-      </div>
-      {children}
-    </div>
-  );
-}
-
-function Segmented<T extends string>({
+export function Segmented<T extends string>({
   value,
   options,
   ariaLabel,

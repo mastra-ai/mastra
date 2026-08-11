@@ -64,17 +64,71 @@ Open `http://localhost:5873`.
 
 ### Split UI mode
 
-Use this for UI work. Run these in separate terminals:
-
-```shell
-pnpm --dir mastracode/web api
-```
+Use this for UI work. One command starts the API on :4111 and Vite on :5173:
 
 ```shell
 pnpm --filter ./mastracode/factory-ui web
 ```
 
-Open `http://localhost:5173`.
+Open `http://localhost:5173`. To restart one side without losing the other, run
+`pnpm --filter ./mastracode/factory-ui web:api` and
+`pnpm --filter ./mastracode/factory-ui dev` in separate terminals.
+
+### Slack channels (optional)
+
+Slack sends events to public HTTPS origins only, so a local server needs a
+tunnel. Install [`cloudflared`](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/)
+(`brew install cloudflared`).
+
+#### 1. Start a tunnel
+
+```shell
+cloudflared tunnel --url http://127.0.0.1:5873
+```
+
+Any HTTPS tunnel can be used. The command above starts a temporary Cloudflare
+Quick Tunnel without an account or config file. Keep it running and copy the
+`trycloudflare.com` hostname it prints; that hostname is valid until you stop
+the command.
+
+If you have a Cloudflare account and a domain, use a named tunnel with a stable
+hostname instead. Then the Slack manifest can keep the same public URL across
+local restarts instead of being updated for every new Quick Tunnel hostname.
+
+#### 2. Create the Slack app
+
+Generate a manifest for the tunnel URL:
+
+```shell
+pnpm --dir mastracode/web slack:manifest \
+  --url https://your-tunnel-hostname \
+  --name "Mastra Factory (dev)" \
+  --copy
+```
+
+At [api.slack.com/apps](https://api.slack.com/apps), choose **Create New App →
+From a manifest** and paste the manifest from your clipboard.
+
+Install it to your workspace. Copy the app credentials from **Basic Information → App Credentials** and the bot token from **OAuth & Permissions** into `.env`:
+
+```dotenv
+MASTRACODE_CHANNELS_PUBLIC_URL=https://your-tunnel-hostname
+SLACK_APP_SIGNING_SECRET=
+SLACK_APP_CLIENT_ID=
+SLACK_APP_CLIENT_SECRET=
+SLACK_APP_BOT_TOKEN=
+```
+
+Restart the dev server — varlock reads `.env` at startup.
+
+#### 3. Link your account
+
+DM the bot. It replies with a Connect card; that flow binds your Slack identity
+to your Mastra user, and messages then run as you.
+
+A quick tunnel gets a new hostname each run. When it changes, replace the
+hostname in `MASTRACODE_CHANNELS_PUBLIC_URL` and in the Slack app's **Event
+Subscriptions**, **Interactivity & Shortcuts**, and **OAuth & Permissions** settings.
 
 ### Optional local services
 

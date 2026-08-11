@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer",
-  "version": "1.55.0-alpha.0",
+  "version": "1.58.0-alpha.13",
   "description": "",
   "type": "module",
   "files": [
@@ -121,10 +121,11 @@
     "strip-json-comments": "^5.0.3",
     "tinyglobby": "^0.2.17",
     "typescript-paths": "^1.5.2",
-    "ws": "^8.21.0"
+    "ws": "^8.21.0",
+    "yaml": "^2.9.0"
   },
   "devDependencies": {
-    "@hono/node-server": "^1.19.14",
+    "@hono/node-server": "^2.0.0",
     "@hono/standard-validator": "^0.3.0",
     "@hono/swagger-ui": "^0.5.3",
     "@internal/lint": "workspace:*",

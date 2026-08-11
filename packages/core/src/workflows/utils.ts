@@ -6,10 +6,12 @@ import type { StandardSchemaWithJSON } from '../schema';
 import { removeUndefinedValues } from '../utils';
 import type { ExecutionGraph } from './execution-engine';
 import type { Step } from './step';
+import { getEntryId } from './step-entry';
 import type {
   ForeachConcurrencyContext,
   ForeachOptions,
   RestartExecutionParams,
+  SingleStepEntry,
   StepFlowEntry,
   StepResult,
   TimeTravelContext,
@@ -49,7 +51,7 @@ export async function validateStepInput({
   validateInputs,
 }: {
   prevOutput: any;
-  step: Step<string, any, any>;
+  step: Partial<Pick<Step<string, any, any>, 'inputSchema'>>;
   validateInputs: boolean;
 }) {
   let inputData = prevOutput;
@@ -84,7 +86,13 @@ export async function validateStepInput({
   return { inputData, validationError };
 }
 
-export async function validateStepResumeData({ resumeData, step }: { resumeData?: any; step: Step<string, any, any> }) {
+export async function validateStepResumeData({
+  resumeData,
+  step,
+}: {
+  resumeData?: any;
+  step: Partial<Pick<Step<string, any, any>, 'resumeSchema'>>;
+}) {
   if (!resumeData) {
     return { resumeData: undefined, validationError: undefined };
   }
@@ -116,7 +124,7 @@ export async function validateStepSuspendData({
   validateInputs,
 }: {
   suspendData?: any;
-  step: Step<string, any, any>;
+  step: Partial<Pick<Step<string, any, any>, 'suspendSchema'>>;
   validateInputs: boolean;
 }) {
   if (!suspendData) {
@@ -260,17 +268,131 @@ export function createDeprecationProxy<T extends Record<string, any>>(
   });
 }
 
+const SINGLE_STEP_TYPES = ['step', 'agent', 'tool', 'mapping'] as const;
+
+/**
+ * Whether an entry is a "single step-like" entry: a plain user step or one of the
+ * declarative variants (agent / tool / mapping) that resolve to exactly one step.
+ */
+export function isSingleStepEntry(entry: StepFlowEntry): entry is SingleStepEntry {
+  return (SINGLE_STEP_TYPES as readonly string[]).includes(entry.type);
+}
+
+/**
+ * The id of a single step-like entry. Plain `step` entries key off the wrapped
+ * step's id; declarative variants (agent / tool / mapping) carry their own `id`.
+ *
+ * Public alias of {@link getEntryId} from `./step-entry`.
+ */
+export const getSingleStepEntryId = getEntryId;
+
 export const getStepIds = (entry: StepFlowEntry): string[] => {
-  if (entry.type === 'step' || entry.type === 'foreach' || entry.type === 'loop') {
-    return [entry.step.id];
+  if (isSingleStepEntry(entry)) {
+    return [getSingleStepEntryId(entry)];
+  }
+  if (entry.type === 'foreach' || entry.type === 'loop') {
+    return [getSingleStepEntryId(entry.step)];
   }
   if (entry.type === 'parallel' || entry.type === 'conditional') {
-    return entry.steps.map(s => s.step.id);
+    return entry.steps.map(s => getSingleStepEntryId(s));
   }
   if (entry.type === 'sleep' || entry.type === 'sleepUntil') {
     return [entry.id];
   }
   return [];
+};
+
+const MAX_REPORTED_SNAPSHOT_IDS = 10;
+
+/**
+ * Verifies that the live execution graph is consistent with the recorded snapshot
+ * before a time-travel reconstruction is built. Without this check, any step id that
+ * exists in the live graph but not in the recorded snapshot context silently
+ * reconstructs to `{}`, and the execution engine then persists that reconstruction
+ * over the original snapshot — irreversibly corrupting it (see issue #21137).
+ *
+ * Divergence rules:
+ * - The target step id must exist in the live graph (enumerated via {@link getStepIds}).
+ * - Every step that precedes the target in the live graph must have an entry in the
+ *   recorded snapshot context or the caller-supplied context, EXCEPT legitimate
+ *   no-entry cases: unselected branch steps of a pre-target conditional entry (the
+ *   entry is healthy when at least one of its branch steps was recorded), sleep /
+ *   sleepUntil entries, and foreach / loop entries (which may record no per-step
+ *   entry when they ran zero iterations).
+ * - When the snapshot context records no step entries at all (only the reserved
+ *   `input` key, or nothing), the guard is a no-op: there is no recorded data to
+ *   protect, and the evented engine legitimately fabricates an empty snapshot
+ *   context for nested time travel when no nested snapshot exists.
+ */
+export const assertTimeTravelGraphMatchesSnapshot = (params: {
+  targetStepId: string;
+  graph: ExecutionGraph;
+  snapshot: WorkflowRunState;
+  context?: Record<string, any>;
+}): void => {
+  const { targetStepId, graph, snapshot, context } = params;
+  const snapshotContext = (snapshot.context ?? {}) as Record<string, any>;
+  const recordedStepIds = Object.keys(snapshotContext).filter(key => key !== 'input');
+
+  // Empty snapshot context: nothing recorded, nothing to protect.
+  if (recordedStepIds.length === 0) {
+    return;
+  }
+
+  const targetEntryIndex = graph.steps.findIndex(entry => getStepIds(entry).includes(targetStepId));
+  const reportedIds = recordedStepIds.slice(0, MAX_REPORTED_SNAPSHOT_IDS);
+  const reportedIdsSuffix =
+    recordedStepIds.length > MAX_REPORTED_SNAPSHOT_IDS
+      ? `${reportedIds.join(', ')} (and ${recordedStepIds.length - MAX_REPORTED_SNAPSHOT_IDS} more)`
+      : reportedIds.join(', ');
+
+  if (targetEntryIndex === -1) {
+    throw new Error(
+      `Cannot time travel to step '${targetStepId}': the step does not exist in the current execution graph. ` +
+        `The workflow definition has likely changed since the run was recorded (renamed step, or an unnamed .map() ` +
+        `step whose generated id changed across processes). Steps recorded in the snapshot: ${reportedIdsSuffix}. ` +
+        `The stored snapshot has not been modified.`,
+    );
+  }
+
+  const hasRecordedEntry = (stepId: string) => snapshotContext[stepId] != null || context?.[stepId] != null;
+
+  const missingStepIds: string[] = [];
+  for (const [index, entry] of graph.steps.entries()) {
+    if (index >= targetEntryIndex) {
+      break;
+    }
+    // sleep / sleepUntil entries and zero-iteration foreach / loop entries may
+    // legitimately have no recorded snapshot entry.
+    if (entry.type === 'sleep' || entry.type === 'sleepUntil' || entry.type === 'foreach' || entry.type === 'loop') {
+      continue;
+    }
+    const stepIds = getStepIds(entry);
+    if (entry.type === 'conditional') {
+      // A pre-target conditional is healthy when at least one of its branch steps
+      // was recorded; unselected branches legitimately have no entry.
+      if (stepIds.length > 0 && !stepIds.some(hasRecordedEntry)) {
+        missingStepIds.push(...stepIds);
+      }
+      continue;
+    }
+    for (const stepId of stepIds) {
+      if (!hasRecordedEntry(stepId)) {
+        missingStepIds.push(stepId);
+      }
+    }
+  }
+
+  if (missingStepIds.length > 0) {
+    throw new Error(
+      `Cannot time travel to step '${targetStepId}': step(s) ${missingStepIds.map(id => `'${id}'`).join(', ')} ` +
+        `precede the target in the current execution graph but were not recorded in the snapshot. Either the ` +
+        `workflow definition changed since the run was recorded (renamed steps, or unnamed .map() steps whose ` +
+        `generated ids changed across processes), or the recorded run never reached these steps (it failed, was ` +
+        `canceled, or was suspended before them). Steps recorded in the snapshot: ${reportedIdsSuffix}. ` +
+        `The stored snapshot has not been modified.`,
+    );
+  }
 };
 
 export const createTimeTravelExecutionParams = (params: {
@@ -286,6 +408,8 @@ export const createTimeTravelExecutionParams = (params: {
 }) => {
   const { steps, inputData, resumeData, context, nestedStepsContext, snapshot, initialState, graph, perStep } = params;
   const firstStepId = steps[0]!;
+
+  assertTimeTravelGraphMatchesSnapshot({ targetStepId: firstStepId, graph, snapshot, context });
 
   let executionPath: number[] = [];
   const stepResults: Record<string, StepResult<any, any, any, any>> = {};
@@ -453,9 +577,13 @@ export const createRestartExecutionParams = ({
 
   const firstEntry = graph.steps[0]!;
 
-  if (firstEntry.type === 'step' || firstEntry.type === 'foreach' || firstEntry.type === 'loop') {
+  if (isSingleStepEntry(firstEntry)) {
     nestedWorkflowActiveStepsPath = {
-      [firstEntry.step.id]: [0],
+      [getSingleStepEntryId(firstEntry)]: [0],
+    };
+  } else if (firstEntry.type === 'foreach' || firstEntry.type === 'loop') {
+    nestedWorkflowActiveStepsPath = {
+      [getSingleStepEntryId(firstEntry.step)]: [0],
     };
   } else if (firstEntry.type === 'sleep' || firstEntry.type === 'sleepUntil') {
     nestedWorkflowActiveStepsPath = {
@@ -464,7 +592,7 @@ export const createRestartExecutionParams = ({
   } else if (firstEntry.type === 'conditional' || firstEntry.type === 'parallel') {
     nestedWorkflowActiveStepsPath = firstEntry.steps.reduce(
       (acc, step) => {
-        acc[step.step.id] = [0];
+        acc[getSingleStepEntryId(step)] = [0];
         return acc;
       },
       {} as Record<string, number[]>,

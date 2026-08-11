@@ -22,7 +22,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "zhipuai-coding-plan/glm-4.5-air"
+  model: "zhipuai-coding-plan/glm-4.6v"
 });
 
 // Generate a response
@@ -35,7 +35,7 @@ for await (const chunk of stream) {
 }
 ```
 
-:::info
+:::note
 
 Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-specific features may not be available. Check the [Zhipu AI Coding Plan documentation](https://docs.bigmodel.cn/cn/coding-plan/overview) for details.
 
@@ -45,18 +45,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 <ProviderModelsTable
   models={[
-  {
-    "model": "zhipuai-coding-plan/glm-4.5-air",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 131072,
-    "maxOutput": 98304,
-    "inputCost": null,
-    "outputCost": null
-  },
   {
     "model": "zhipuai-coding-plan/glm-4.6v",
     "imageInput": true,
@@ -118,6 +106,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
+    "model": "zhipuai-coding-plan/glm-5.2-highspeed",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 131072,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
     "model": "zhipuai-coding-plan/glm-5v-turbo",
     "imageInput": true,
     "audioInput": false,
@@ -142,7 +142,7 @@ const agent = new Agent({
   name: "custom-agent",
   model: {
     url: "https://open.bigmodel.cn/api/coding/paas/v4",
-    id: "zhipuai-coding-plan/glm-4.5-air",
+    id: "zhipuai-coding-plan/glm-4.6v",
     apiKey: process.env.ZHIPU_API_KEY,
     headers: {
       "X-Custom-Header": "value"
@@ -161,7 +161,7 @@ const agent = new Agent({
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "zhipuai-coding-plan/glm-5v-turbo"
-      : "zhipuai-coding-plan/glm-4.5-air";
+      : "zhipuai-coding-plan/glm-4.6v";
   }
 });
 ```

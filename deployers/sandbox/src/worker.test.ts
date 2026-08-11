@@ -1,0 +1,277 @@
+import { tmpdir } from 'node:os';
+
+import { describe, expect, it, vi } from 'vitest';
+
+import { FakeSandbox, makeBuildDir } from './fake-sandbox.mock.js';
+import { deployWorkerToSandbox } from './worker.js';
+
+async function deploy(sandbox: FakeSandbox, overrides: Record<string, unknown> = {}) {
+  return deployWorkerToSandbox({
+    sandbox,
+    dir: await makeBuildDir(tmpdir()),
+    executionId: 'attempt-1',
+    command: 'node',
+    args: ['index.mjs'],
+    ...overrides,
+  });
+}
+
+describe('deployWorkerToSandbox', () => {
+  it('launches a namespaced execution without networking and preserves command arguments', async () => {
+    const sandbox = new FakeSandbox({ withNetworking: false });
+    const deployment = await deploy(sandbox, {
+      args: ['index.mjs', '--request', 'value with spaces'],
+      env: { SECRET: "doesn't leak" },
+    });
+
+    expect(deployment.executionId).toBe('attempt-1');
+    expect(await deployment.status()).toEqual({ state: 'running', executionId: 'attempt-1' });
+    expect(sandbox.spawned).toEqual([]);
+    expect(sandbox.commands.some(command => command.includes('setsid nohup sh'))).toBe(true);
+
+    const launchScript = sandbox.writtenFiles.flat().find(file => file.path.endsWith('/attempt-1/launch.sh'));
+    expect(launchScript).toBeDefined();
+    const content = Buffer.isBuffer(launchScript!.content)
+      ? launchScript!.content.toString()
+      : String(launchScript!.content);
+    expect(content).toContain('value with spaces');
+    expect(content).toContain('SECRET=');
+    expect(content).toContain('doesn');
+    expect(content).toContain('/attempt-1/stdout');
+    expect(content).toContain('/attempt-1/stderr');
+    expect(content).toContain("awk '{print $22}'");
+  });
+
+  it('stages bounded stdin before launch', async () => {
+    const sandbox = new FakeSandbox({ withNetworking: false });
+    await deploy(sandbox, { input: { type: 'stdin', data: Buffer.from([0, 1, 2, 255]) } });
+
+    const input = sandbox.writtenFiles.flat().find(file => file.path.endsWith('/attempt-1/stdin'));
+    expect(Buffer.from(input!.content as Uint8Array)).toEqual(Buffer.from([0, 1, 2, 255]));
+    const script = sandbox.writtenFiles.flat().find(file => file.path.endsWith('/attempt-1/launch.sh'));
+    expect(String(script!.content)).toContain('/attempt-1/stdin');
+    expect(String(script!.content)).toContain(' < ');
+  });
+
+  it('rejects input larger than the configured byte limit', async () => {
+    const sandbox = new FakeSandbox({ withNetworking: false });
+    await expect(deploy(sandbox, { input: { type: 'stdin', data: 'too large' }, inputLimitBytes: 3 })).rejects.toThrow(
+      'inputLimitBytes',
+    );
+  });
+
+  it('stages an artifact-relative input file without redirecting stdin', async () => {
+    const sandbox = new FakeSandbox({ withNetworking: false });
+    await deploy(sandbox, { input: { type: 'file', path: 'requests/request.bin', data: 'request' } });
+
+    expect(sandbox.writtenFiles.flat().some(file => file.path.endsWith('/requests/request.bin'))).toBe(true);
+    const script = sandbox.writtenFiles.flat().find(file => file.path.endsWith('/attempt-1/launch.sh'));
+    expect(String(script!.content)).not.toContain("< '/home/fake");
+  });
+
+  it('reports typed exit code and signal', async () => {
+    const sandbox = new FakeSandbox({
+      withNetworking: false,
+      workerStatus: 'exited|attempt-1|143|SIGTERM',
+    });
+    const deployment = await deploy(sandbox, { mode: 'job' });
+
+    expect(await deployment.status()).toEqual({
+      state: 'exited',
+      executionId: 'attempt-1',
+      exitCode: 143,
+      signal: 'SIGTERM',
+    });
+  });
+
+  it('reads separate bounded output with byte offsets and truncation', async () => {
+    const sandbox = new FakeSandbox({
+      withNetworking: false,
+      workerStatus: 'exited|attempt-1|0|',
+      workerOutput: Buffer.from('worker-output').toString('base64'),
+    });
+    const deployment = await deploy(sandbox, { mode: 'job' });
+
+    const output = await deployment.readOutput('stdout', { offset: 3, maxBytes: 6 });
+    expect(Buffer.from(output.data).toString()).toBe('ker-ou');
+    expect(output).toMatchObject({
+      stream: 'stdout',
+      offset: 3,
+      nextOffset: 9,
+      totalBytes: 13,
+      eof: false,
+      truncated: true,
+      interrupted: false,
+    });
+    expect(sandbox.commands.at(-2)).toContain('/attempt-1/stdout');
+  });
+
+  it('marks output reads as interrupted when transport is lost', async () => {
+    const sandbox = new FakeSandbox({ withNetworking: false });
+    const deployment = await deploy(sandbox);
+    vi.spyOn(sandbox, 'executeCommand').mockRejectedValueOnce(new Error('connection lost'));
+
+    await expect(deployment.readOutput('stderr', { offset: 12 })).resolves.toMatchObject({
+      stream: 'stderr',
+      offset: 12,
+      nextOffset: 12,
+      interrupted: true,
+      eof: false,
+    });
+  });
+
+  it('terminates the process group and reports a startup timeout', async () => {
+    const sandbox = new FakeSandbox({ withNetworking: false, workerStatus: 'starting|attempt-1' });
+
+    await expect(deploy(sandbox, { startupTimeoutMs: 1 })).rejects.toThrow('timed_out during startup');
+    const signalCommand = sandbox.commands.find(command => command.includes('kill -TERM -"$pid"'));
+    expect(signalCommand).toContain('kill -KILL -"$pid"');
+    expect(signalCommand).toContain('timed_out|attempt-1|startup');
+  });
+
+  it('preserves an execution-timeout terminal outcome', async () => {
+    const sandbox = new FakeSandbox({
+      withNetworking: false,
+      workerStatuses: ['running|attempt-1', 'timed_out|attempt-1|execution'],
+    });
+    const deployment = await deploy(sandbox, { executionTimeoutMs: 25 });
+
+    expect(await deployment.status()).toEqual({ state: 'timed_out', executionId: 'attempt-1', phase: 'execution' });
+    const script = sandbox.writtenFiles.flat().find(file => file.path.endsWith('/attempt-1/launch.sh'));
+    const content = String(script!.content);
+    expect(content).toContain('timed_out|attempt-1|execution');
+    expect(content).toContain('case "$current" in timed_out*)');
+  });
+
+  it('uses process-group TERM then KILL and makes repeated cancellation terminal', async () => {
+    const sandbox = new FakeSandbox({ withNetworking: false });
+    const deployment = await deploy(sandbox);
+
+    expect(await deployment.cancel()).toEqual({ state: 'cancelled', executionId: 'attempt-1', signal: 'TERM' });
+    expect(sandbox.commands.at(-1)).toContain('kill -TERM -"$pid"');
+    expect(sandbox.commands.at(-1)).toContain('kill -KILL -"$pid"');
+    expect(sandbox.commands.at(-1)).toContain('expected="$');
+    expect(sandbox.commands.at(-1)).toContain('expected" != "$actual');
+  });
+
+  it('rejects stale process identity without signaling another process', async () => {
+    const sandbox = new FakeSandbox({
+      withNetworking: false,
+      workerStatuses: ['running|attempt-1', 'stale|attempt-1'],
+    });
+    const deployment = await deploy(sandbox);
+    const commandCount = sandbox.commands.length;
+
+    expect(await deployment.cancel()).toEqual({ state: 'unknown', executionId: 'attempt-1' });
+    expect(sandbox.commands).toHaveLength(commandCount + 1);
+    expect(sandbox.commands.at(-1)).not.toContain('kill -TERM -"$pid"');
+  });
+
+  it('does not inspect or wake a stopped provider unless requested', async () => {
+    const sandbox = new FakeSandbox({ withNetworking: false });
+    const deployment = await deploy(sandbox);
+    sandbox.status = 'stopped';
+
+    expect(await deployment.status()).toEqual({
+      state: 'provider_unavailable',
+      executionId: 'attempt-1',
+      providerState: 'stopped',
+    });
+    expect(sandbox.started).toBe(0);
+    expect(await deployment.status({ wake: true })).toEqual({ state: 'running', executionId: 'attempt-1' });
+    expect(sandbox.started).toBe(1);
+  });
+
+  it('reports a destroyed provider without executing an inspection command', async () => {
+    const sandbox = new FakeSandbox({ withNetworking: false });
+    const deployment = await deploy(sandbox);
+    sandbox.status = 'destroyed';
+    const commandCount = sandbox.commands.length;
+
+    expect(await deployment.status()).toEqual({
+      state: 'provider_unavailable',
+      executionId: 'attempt-1',
+      providerState: 'destroyed',
+    });
+    expect(sandbox.commands).toHaveLength(commandCount);
+  });
+
+  it('retries destroy and reports success or exhaustion', async () => {
+    const recovering = new FakeSandbox({ withNetworking: false, destroyFailures: 2 });
+    const recoveredDeployment = await deploy(recovering);
+    expect(await recoveredDeployment.destroy({ attempts: 3, delayMs: 0 })).toEqual({ state: 'destroyed', attempts: 3 });
+
+    const failing = new FakeSandbox({ withNetworking: false, destroyFailures: 3 });
+    const failingDeployment = await deploy(failing);
+    expect(await failingDeployment.destroy({ attempts: 2, delayMs: 0 })).toMatchObject({
+      state: 'exhausted',
+      attempts: 2,
+    });
+  });
+
+  it('serializes dependency installs with a lock and atomic completion marker', async () => {
+    const sandbox = new FakeSandbox({ withNetworking: false });
+    await deploy(sandbox);
+
+    const lock = sandbox.commands.find(
+      command => command.includes('.mastra-install-lock') && command.includes('while ! mkdir'),
+    );
+    const install = sandbox.commands.find(command => command.includes('current="$(cat'));
+    expect(lock).toContain('sleep 1');
+    expect(install).toContain('.mastra-install-hash.tmp');
+    expect(install).toContain('mv');
+  });
+
+  it('keeps concurrent deployments isolated while sharing the dependency-install lock', async () => {
+    const sandbox = new FakeSandbox({ withNetworking: false });
+    const dir = await makeBuildDir(tmpdir());
+
+    const deployments = await Promise.all(
+      ['attempt-a', 'attempt-b'].map(executionId =>
+        deployWorkerToSandbox({ sandbox, dir, executionId, command: 'node', args: ['index.mjs'] }),
+      ),
+    );
+
+    expect(deployments.map(deployment => deployment.executionId)).toEqual(['attempt-a', 'attempt-b']);
+    expect(
+      sandbox.commands.filter(
+        command => command.includes('.mastra-artifact-lock') && command.includes('while ! mkdir'),
+      ),
+    ).toHaveLength(2);
+    expect(
+      sandbox.commands.filter(command => command.includes('.mastra-install-lock') && command.includes('while ! mkdir')),
+    ).toHaveLength(2);
+    expect(sandbox.writtenFiles.flat().some(file => file.path.endsWith('/attempt-a/launch.sh'))).toBe(true);
+    expect(sandbox.writtenFiles.flat().some(file => file.path.endsWith('/attempt-b/launch.sh'))).toBe(true);
+  });
+
+  it('tracks scripted worker statuses independently per execution', async () => {
+    const sandbox = new FakeSandbox({
+      withNetworking: false,
+      workerStatuses: ['starting', 'running'],
+    });
+    const status = (executionId: string) =>
+      sandbox.executeCommand('sh', ['-c', `read worker status .mastra/executions/${executionId}/status`]);
+
+    await expect(status('attempt-a')).resolves.toMatchObject({ stdout: 'starting' });
+    await expect(status('attempt-b')).resolves.toMatchObject({ stdout: 'starting' });
+    await expect(status('attempt-a')).resolves.toMatchObject({ stdout: 'running' });
+    await expect(status('attempt-b')).resolves.toMatchObject({ stdout: 'running' });
+  });
+
+  it('relaunches under a new execution ID and rejects identity reuse', async () => {
+    const sandbox = new FakeSandbox({ withNetworking: false });
+    const deployment = await deploy(sandbox);
+
+    await expect(deployment.relaunch({ executionId: 'attempt-1' })).rejects.toThrow('new executionId');
+    await expect(
+      deployment.relaunch({
+        executionId: 'attempt-2',
+        input: { type: 'file', path: '../escape', data: 'unsafe' },
+      }),
+    ).rejects.toThrow('must stay within the deployed artifact root');
+    const relaunched = await deployment.relaunch({ executionId: 'attempt-2' });
+    expect(relaunched.executionId).toBe('attempt-2');
+    expect(sandbox.writtenFiles.flat().some(file => file.path.endsWith('/attempt-2/launch.sh'))).toBe(true);
+  });
+});

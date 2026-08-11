@@ -31,6 +31,7 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 5
         with:
           fetch-depth: 0
 
@@ -94,6 +95,7 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 5
         with:
           fetch-depth: 0
 
@@ -157,6 +159,7 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 5
 
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node

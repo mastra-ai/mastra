@@ -67,10 +67,10 @@
   --mastra-green-code: #177326;
 
   /* Nextra text colors - Light mode */
-  --mastra-text-primary: #0a0a0a;
+  --mastra-text-primary: #080808;
   --mastra-text-secondary: #141414;
-  --mastra-text-tertiary: #5f5f5f;
-  --mastra-text-quaternary: #7f7e7e;
+  --mastra-text-tertiary: #494949;
+  --mastra-text-quaternary: #737272;
   --mastra-text-muted: #8f8f8f;
   --mastra-text-muted-2: #929292;
 
@@ -156,9 +156,12 @@
 
   /* Menu/Sidebar */
   --doc-sidebar-width: 280px;
-  --ifm-menu-color: var(--mastra-text-secondary);
+  --ifm-menu-color: var(--mastra-text-tertiary);
   --ifm-menu-color-active: var(--mastra-text-primary);
   --ifm-menu-link-sublist-icon: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="16px" height="16px" viewBox="0 0 24 24"><path fill="rgba(95,95,95,1)" d="M7.41 15.41L12 10.83l4.59 4.58L18 14l-6-6-6 6z"></path></svg>');
+  --ifm-menu-link-padding-vertical: 0.5rem;
+  --ifm-menu-color-background-active: rgba(0, 0, 0, 0.05);
+  --ifm-menu-color-background-hover: rgba(0, 0, 0, 0.03);
 
   /* Chat Sidebar */
   --doc-sidebar-hidden-width: 30px;
@@ -192,8 +195,8 @@
   /* Nextra text colors - Dark mode */
   --mastra-text-primary: #ffffff;
   --mastra-text-secondary: #e6e6e6;
-  --mastra-text-tertiary: #939393;
-  --mastra-text-quaternary: #707070;
+  --mastra-text-tertiary: #9d9d9d;
+  --mastra-text-quaternary: #787878;
 
   /* Nextra surface colors - Dark mode */
   --mastra-surface-1: hsla(0, 0%, 8%, 1);
@@ -231,8 +234,10 @@
   --ifm-navbar-link-hover-color: var(--mastra-text-primary);
 
   /* Menu/Sidebar */
-  --ifm-menu-color: var(--mastra-text-secondary);
+  --ifm-menu-color: var(--mastra-text-tertiary);
   --ifm-menu-color-active: var(--mastra-text-primary);
+  --ifm-menu-color-background-active: rgba(255, 255, 255, 0.1);
+  --ifm-menu-color-background-hover: rgba(255, 255, 255, 0.05);
 }
 
 /* ==================================================================== */
@@ -655,67 +660,51 @@ input[type='search']::-ms-clear {
 }
 
 /* ====================  Sidebar ==================== */
-span[class*='categoryLinkLabel'] {
-  color: var(--mastra-text-primary);
-}
-
 .menu__link {
-  font-size: 14px;
-  color: var(--mastra-text-tertiary);
+  font-size: 0.875rem;
   font-weight: 400;
-  padding-block: 0.25rem;
+  border-radius: 12px;
+  transition: all 0.2s ease-in-out;
+  height: 34px;
 
-  &:after {
-    background: var(--ifm-menu-link-sublist-icon) center;
-    transform-origin: center;
+  &:hover {
+    color: var(--mastra-text-primary);
   }
 }
 
-.theme-doc-sidebar-item-link-level-2 .menu__link {
-  padding-inline-start: 0;
+.menu__link span[class*='linkLabel'] {
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
 }
 
-.menu__caret {
+.menu__list-item-collapsible {
+  border-radius: 12px;
+}
+
+.menu__list-item:not(:first-child) {
+  margin-top: 1px;
+}
+
+.sidebar-group-name {
+  margin-top: 1rem !important;
+}
+
+.sidebar-group-name > .menu__list {
+  padding-left: 0;
+}
+
+.sidebar-group-name > .menu__list-item-collapsible {
   &:hover {
     background: transparent;
   }
-
-  &::before {
-    content: '';
-    background: var(--ifm-menu-link-sublist-icon) center;
-    transform-origin: center;
-    position: absolute;
-    right: 12%;
-  }
 }
 
-.menu__link--active:not(.menu__link--sublist) {
-  &after {
-    background: var(--ifm-menu-link-sublist-icon) center;
-    transform-origin: center;
-  }
-
-  background: transparent;
-}
-
-.menu__link:hover {
-  background: transparent;
-  color: var(--mastra-green-accent-3);
-}
-
-[data-theme='dark'] .menu__link:hover {
-  color: var(--mastra-green-accent);
-}
-
-.menu__link--active {
-  background: transparent;
-  color: var(--mastra-green-accent-3);
-  font-weight: 500;
-  position: relative;
-}
-
-[data-theme='dark'] .menu__link--active {
-  color: var(--mastra-green-accent);
+.sidebar-group-name > .menu__list-item-collapsible span[class*='categoryLinkLabel'] {
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+  font-size: 0.7rem;
+  color: var(--mastra-text-quaternary);
 }
 
 h2:has(code) {
@@ -1189,25 +1178,41 @@ article p {
   border-bottom: 0.5px solid var(--border) !important;
 }
 
-.theme-doc-sidebar-item-link-level-2 {
-  padding-inline-start: 0.75rem;
-  margin-block-end: calc(0.25rem * 1.5);
-}
-
 @media (min-width: 62.25rem) {
   #doc-item-container {
     gap: 2rem;
   }
 
-  .theme-doc-sidebar-item-link-level-2 .menu__link {
-    padding-inline-start: 0.25rem;
+  .menu__caret {
+    &::before {
+      background: var(--ifm-menu-link-sublist-icon) center;
+    }
   }
+
+  .menu__link {
+    &:after {
+      background: var(--ifm-menu-link-sublist-icon) center;
+      transform-origin: center;
+    }
+  }
+
+  /* stylelint-disable selector-class-pattern */
+  li[data-contextual-sidebar='true'] > .menu__link::after {
+    content: '';
+    flex: 0 0 1.25rem;
+    height: 1.25rem;
+    margin-inline-start: auto;
+    background: var(--ifm-menu-link-sublist-icon) center;
+    transform: rotate(90deg);
+    transition: transform var(--ifm-transition-fast) linear;
+  }
+  /* stylelint-enable selector-class-pattern */
 
   [class*='docSidebarContainer'] {
     width: 280px !important;
   }
 
-  .theme-doc-sidebar-container [class*='sidebar'] {
+  .theme-doc-sidebar-container [class^='sidebar_'] {
     width: 280px !important;
   }
 
@@ -1536,66 +1541,9 @@ article p {
     overflow-x: revert;
   }
 
-  .theme-doc-sidebar-item-link.theme-doc-sidebar-item-link-level-1 > a {
-    padding-inline-start: 0.5rem;
-  }
-
   [class*='docItemContainer'] {
     max-width: 48rem;
     margin: 0 auto;
-  }
-
-  li.theme-doc-sidebar-item-category-level-1 > ul.menu__list {
-    margin-bottom: 0.25rem;
-    position: relative;
-
-    &::before {
-      content: '';
-      position: absolute;
-      width: 1px;
-      inset-inline-start: calc(0.25rem * 3);
-      inset-block: calc(0.25rem * 1);
-      background-color: var(--sidebar-border);
-    }
-  }
-
-  .menu__link--active:not(.menu__link--sublist)::before {
-    content: '';
-    position: absolute;
-    left: calc(0.25rem * -3);
-    top: calc(0.25rem * 1);
-    bottom: 0;
-    width: 1.5px;
-    background: var(--mastra-green-accent-3);
-    border-radius: 8px;
-  }
-
-  li.theme-doc-sidebar-item-link-level-3 .menu__link--active:not(.menu__link--sublist)::before {
-    left: calc(0.25rem * -2);
-  }
-
-  li.theme-doc-sidebar-item-link-level-4 .menu__link--active:not(.menu__link--sublist)::before {
-    left: calc(0.25rem * -5);
-  }
-
-  li.theme-doc-sidebar-item-link-level-5 .menu__link--active:not(.menu__link--sublist)::before {
-    left: calc(0.25rem * -8);
-  }
-
-  [data-theme='dark'] .menu__link--active:not(.menu__link--sublist)::before {
-    background: var(--mastra-green-accent);
-  }
-
-  .menu__list-item:not(:first-child) {
-    margin-top: 0.5rem;
-  }
-
-  .menu__list-item-collapsible:hover {
-    background: transparent;
-  }
-
-  .menu__list-item-collapsible--active {
-    background: transparent;
   }
 
   .theme-doc-sidebar-container.theme-doc-sidebar-container {
@@ -1605,10 +1553,6 @@ article p {
        clips the inverse corner that intentionally overflows the right edge.
        Override it here with matching-or-higher specificity. */
     clip-path: none;
-  }
-
-  [class*='sidebar']:has(> .menu) {
-    padding-inline-start: 1rem;
   }
 
   .theme-doc-toc-desktop.theme-doc-toc-desktop {
@@ -1623,49 +1567,6 @@ article p {
     top: calc(var(--ifm-navbar-height) + 2rem);
     max-height: calc(100vh - var(--ifm-navbar-height) - 8rem);
     scrollbar-width: thin;
-  }
-
-  .menu__link--sublist {
-    &::after {
-      @apply absolute right-[12%];
-    }
-  }
-
-  .theme-doc-sidebar-item-link:not(.theme-doc-sidebar-item-link-level-2) .menu__link {
-    @apply relative;
-  }
-
-  .menu__list-item-collapsible {
-    margin-inline-start: -0.25rem;
-  }
-
-  .theme-doc-sidebar-item-link-level-3 > a,
-  .theme-doc-sidebar-item-link-level-4 > a,
-  .theme-doc-sidebar-item-link-level-5 > a,
-  .theme-doc-sidebar-item-link-level-6 > a {
-    margin-inline-start: -0.25rem;
-  }
-
-  .theme-doc-sidebar-item-category-level-2 > .menu__list-item-collapsible {
-    margin-inline-start: 0.25rem;
-  }
-
-  .theme-doc-sidebar-item-category-level-2 > .menu__list-item-collapsible a {
-    &::after {
-      right: 16.5%;
-    }
-  }
-
-  .theme-doc-sidebar-item-category-level-3 > .menu__list-item-collapsible a {
-    &::after {
-      right: 20.4%;
-    }
-  }
-
-  .theme-doc-sidebar-item-category-level-4 > .menu__list-item-collapsible a {
-    &::after {
-      right: 24.6%;
-    }
   }
 }
 

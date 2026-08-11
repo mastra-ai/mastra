@@ -1,3 +1,4 @@
+import { MainSidebarProvider } from '@mastra/playground-ui/components/MainSidebar';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { MemoryRouter, Route, Routes } from 'react-router';
@@ -8,13 +9,14 @@ import { TEST_BASE_URL } from '../../../../../../e2e/ui/render';
 import { OverlaysProvider } from '../../../../lib/overlays';
 
 if (typeof globalThis.ResizeObserver === 'undefined') {
-  class ResizeObserverPolyfill {
-    observe() {}
-    unobserve() {}
+  class ResizeObserverPolyfill implements ResizeObserver {
+    constructor(_callback: ResizeObserverCallback) {}
+    observe(_target: Element, _options?: ResizeObserverOptions) {}
+    unobserve(_target: Element) {}
     disconnect() {}
   }
 
-  globalThis.ResizeObserver = ResizeObserverPolyfill as unknown as typeof ResizeObserver;
+  globalThis.ResizeObserver = ResizeObserverPolyfill;
 }
 
 if (typeof globalThis.Element !== 'undefined' && !Element.prototype.scrollIntoView) {
@@ -26,6 +28,14 @@ const API = `${TEST_BASE_URL}/api/agent-controller/code`;
 const OVERLAY_FACTORY_ID = 'p-overlay';
 const OVERLAY_PROJECT_REPOSITORY_ID = 'repo-overlay';
 const OVERLAY_SESSION_ID = 'session-overlay';
+
+function resourceIdFromRequestBody(body: unknown): string {
+  if (typeof body !== 'object' || body === null || !('resourceId' in body)) {
+    throw new Error('Expected session request to include a resourceId');
+  }
+  if (typeof body.resourceId !== 'string') throw new Error('Expected resourceId to be a string');
+  return body.resourceId;
+}
 
 /** Install real network-boundary responses used by context-backed overlay tests. */
 export function useOverlayControllerHandlers() {
@@ -72,6 +82,12 @@ export function useOverlayControllerHandlers() {
         },
       }),
     ),
+    http.get(`${TEST_BASE_URL}/web/github/projects/:projectRepositoryId/sessions`, () =>
+      HttpResponse.json({ sessions: [] }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryProjectId/work-items`, () =>
+      HttpResponse.json({ workItems: [] }),
+    ),
     http.post(`${TEST_BASE_URL}/web/github/projects/:projectRepositoryId/ensure`, () =>
       HttpResponse.json({
         resourceId: 'test-resource',
@@ -80,7 +96,7 @@ export function useOverlayControllerHandlers() {
       }),
     ),
     http.post(`${API}/sessions`, async ({ request }) => {
-      const { resourceId } = (await request.json()) as { resourceId: string };
+      const resourceId = resourceIdFromRequestBody(await request.json());
       return HttpResponse.json({ controllerId: 'code', resourceId, threadId: 'thread-test' });
     }),
     http.get(`${API}/modes`, () => HttpResponse.json({ modes: [{ id: 'build', label: 'Build' }] })),
@@ -129,9 +145,11 @@ export function OverlayTestProviders({ children }: { children: ReactNode }) {
         <Route
           path="/factories/:factoryId/workspaces/:sessionId/threads/:threadId"
           element={
-            <ChatSessionProvider threadId="thread-test">
-              <OverlaysProvider>{children}</OverlaysProvider>
-            </ChatSessionProvider>
+            <MainSidebarProvider storageKey="overlay-test">
+              <ChatSessionProvider threadId="thread-test">
+                <OverlaysProvider>{children}</OverlaysProvider>
+              </ChatSessionProvider>
+            </MainSidebarProvider>
           }
         />
       </Routes>

@@ -157,7 +157,7 @@ export async function createCodingAgentSession() {
 }
 ```
 
-This example uses one mode and disables the controller's additional built-in tools so the introductory UI can focus on workspace execution. The simplified setup is intended for this tutorial. In a production application, enable the built-in tools your product needs and implement their UI flows: interactive tools such as `ask_user` and `submit_plan` suspend until your interface resumes them, while task and subagent tools have their own lifecycle events. See [tool approvals and suspensions](/docs/agent-controller/tool-approvals).
+This example uses one mode and disables the controller's additional built-in tools so the introductory UI can focus on workspace execution. The simplified setup is intended for this tutorial. In a production application, enable the built-in tools your product needs and implement their UI flows: interactive tools such as `ask_user` and `submit_plan` suspend until your interface resumes them, while task and subagent tools have their own lifecycle events. See [tool approvals and suspensions](/docs/harness/agent-controller#approve-tools-and-resume-suspensions).
 
 The example also omits storage, so the conversation lasts only for the current process. You can add storage later when you want to resume sessions.
 
@@ -333,6 +333,6 @@ Learn more:
 
 - [`createCodingAgent()` reference](/reference/coding-agent/create-coding-agent)
 - [`buildBasePrompt()` reference](/reference/coding-agent/build-base-prompt)
-- [AgentController overview](/docs/agent-controller/overview)
+- [AgentController overview](/docs/harness/agent-controller)
 - [`AgentController` reference](/reference/agent-controller/agent-controller-class)
 - [Workspace overview](/docs/workspace/overview)

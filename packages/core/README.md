@@ -59,3 +59,4 @@ npm install @mastra/core
 - [API Reference](https://mastra.ai/reference)
 - [Examples](https://mastra.ai/docs/examples)
 - [Deployment Guide](https://mastra.ai/docs/deployment/overview)
+- [Community Discord](https://discord.gg/mastra-ai)

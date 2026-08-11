@@ -560,4 +560,22 @@ describe('PlatformLinearIntegration', () => {
     vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'legacy-token');
     expect(() => new PlatformLinearIntegration()).toThrow(/MASTRA_PLATFORM_SECRET_KEY/);
   });
+
+  it('registers a single platform-linear-events worker with issue reconciliation folded in', () => {
+    const integration = new PlatformLinearIntegration() as unknown as {
+      workers(ctx: unknown): Array<{ name: string }>;
+    };
+    const context = {
+      controller: {},
+      storage: {
+        generic: {},
+        sourceControl: {},
+        projects: { listAll: async () => [] },
+        intake: {},
+      },
+      rules: { config: {}, workItems: {} },
+    };
+
+    expect(integration.workers(context).map(worker => worker.name)).toEqual(['platform-linear-events']);
+  });
 });

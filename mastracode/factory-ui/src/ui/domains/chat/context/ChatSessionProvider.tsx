@@ -5,7 +5,7 @@ import { createContext, useContext } from 'react';
 import { useParams } from 'react-router';
 
 import { useApiConfig } from '../../../../api/config';
-import { SkeletonRows } from '../../../ui';
+import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { useAgentControllerThreadMessages } from '../../../../hooks/useAgentControllerThreadMessages';
 import { useFactoryQuery } from '../../../../hooks/useFactories';
 import { useEnsureMaterializedSandbox } from '../../../../hooks/useEnsureMaterializedSandbox';
@@ -32,14 +32,17 @@ export function ChatSessionConfigProvider({
   children,
   threadId,
   userScoped = false,
+  draftSessionId,
 }: {
   children: ReactNode;
   threadId?: string;
   userScoped?: boolean;
+  draftSessionId?: string;
 }) {
   const { factoryId, sessionId } = useParams<{ factoryId: string; sessionId: string }>();
   const { baseUrl } = useApiConfig();
   const factoryQuery = useFactoryQuery(factoryId);
+  const isUserDraft = userScoped && Boolean(draftSessionId);
   const sessionQuery = useUserSessionQuery(userScoped ? threadId : sessionId);
   const factory = factoryQuery.data;
   const storedSession = sessionQuery.data;
@@ -48,30 +51,54 @@ export function ChatSessionConfigProvider({
         (repo: LinkedRepositoryPayload) => repo.projectRepositoryId === storedSession.projectRepositoryId,
       )
     : factory?.repositories[0];
-  const ensureQuery = useEnsureMaterializedSandbox(repository?.projectRepositoryId);
-  const resolvingSession = Boolean(userScoped ? threadId : sessionId) && sessionQuery.isPending;
+  // Materializing a sandbox provisions a VM and clones the repo, so it may only
+  // happen when the caller actually enters a session. Every factory route mounts
+  // this provider (the chat shell is the router layout), so an ungated /ensure
+  // here provisioned a sandbox just for visiting the board, metrics or settings.
+  const inSession = Boolean(userScoped ? threadId : sessionId);
+  const ensureQuery = useEnsureMaterializedSandbox(inSession ? repository?.projectRepositoryId : undefined);
+  const resolvingSession = inSession && sessionQuery.isPending;
   // Sessions and their threads are provisioned with the session's own id as the
   // memory resourceId and no scope (see FactoryStartCoordinator.prepare and
   // UserSessionsSection), so the chat surface must address the same
   // (resourceId, no scope) session to read threads and share the live run.
-  // On user routes the :threadId param IS the sessionId. Factory routes with
-  // no workspace session (e.g. /settings/*) fall back to the factory-level
-  // session address returned by the /ensure route so resource-scoped surfaces
-  // (behavior settings, tool permissions) stay functional.
-  const resourceId = userScoped ? threadId : (storedSession?.sessionId ?? sessionId ?? ensureQuery.data?.resourceId);
+  const resourceId = userScoped ? (draftSessionId ?? threadId) : (storedSession?.sessionId ?? sessionId ?? factory?.id);
   const projectPath = undefined;
+  // A `?resourceId=` query param overrides the resolved factory resource so the
+  // whole chat session (transcript, messages, connection, thread switch) binds
+  // to a thread that lives under a different resource — e.g. a Slack channel
+  // session keyed `channel:slack:...`. This only applies to the non-user-scoped
+  // branch; user-scoped sessions derive identity from their stored session.
+  //
+  // Read once from the entry URL rather than via the router's `useSearchParams`:
+  // this is a deep-link entry param that the session binds to at mount and does
+  // not re-read on in-app navigation, and this config provider otherwise has no
+  // added router dependency.
+  const resourceOverride = userScoped
+    ? null
+    : new URLSearchParams(typeof window === 'undefined' ? '' : window.location.search).get('resourceId');
   const sessionEnabled = userScoped
     ? Boolean(storedSession) && !resolvingSession
-    : ensureQuery.isSuccess && Boolean(storedSession) && !resolvingSession;
+    : resourceOverride
+      ? Boolean(resourceOverride)
+      : ensureQuery.isSuccess && Boolean(storedSession) && !resolvingSession;
   const sessionError = userScoped ? undefined : (ensureQuery.error ?? undefined);
+  // Outside a session the factory resource is addressable straight away (its id
+  // is the factory project id); inside one we keep the original ordering and
+  // wait for the workspace so resource reads follow materialization.
+  const resourceAddressable =
+    userScoped || !inSession ? Boolean(resourceId) : Boolean(resourceOverride) || ensureQuery.isSuccess;
+  const resourceEnabled = !isUserDraft && resourceAddressable;
   const value = {
-    resourceId: resourceId ?? '',
+    resourceId: resourceOverride ?? resourceId ?? '',
     sessionEnabled,
-    resourceEnabled: userScoped ? Boolean(resourceId) : ensureQuery.isSuccess,
+    resourceEnabled,
     sessionError,
     retrySession: sessionError ? () => void ensureQuery.refetch() : undefined,
     projectPath,
     sessionThreadId: storedSession?.sessionId,
+    workspacePending: storedSession !== undefined && !storedSession.materializedAt,
+    draftSessionId: isUserDraft ? draftSessionId : undefined,
     factorySessionState:
       factory && repository
         ? {
@@ -114,7 +141,7 @@ export function ChatSessionBoundary({
   const messages = {
     threadId,
     isPending: Boolean(threadId) && messagesQuery.isPending,
-    error: messagesQuery.error,
+    error: messagesQuery.data ? undefined : messagesQuery.error,
   };
 
   if (deferUntilMessagesReady && threadId && (messages.isPending || messages.error)) {
@@ -123,7 +150,9 @@ export function ChatSessionBoundary({
 
   return (
     <ChatTranscriptProvider
-      key={`${resourceId}:${threadId ?? 'draft'}:${messagesQuery.isPending ? 'loading' : 'ready'}`}
+      // No `isPending` segment: remounting on the pending -> ready flip would drop
+      // the live SSE listener. Results merge into the reducer instead.
+      key={`${resourceId}:${threadId ?? 'draft'}`}
       threadId={threadId}
       initialMessages={messagesQuery.data}
       hasMoreHistory={messagesQuery.hasMore}
@@ -159,7 +188,7 @@ function ChatMessageFeedback({ threadId, isPending, error }: ChatThreadMessagesA
   // an eternal skeleton.
   if (sessionError) {
     return (
-      <div className="flex min-h-0 flex-1 flex-col place-items-center gap-4 overflow-y-auto scroll-smooth px-3 pt-6 pb-2 md:px-5 [&>*]:mx-auto [&>*]:w-full [&>*]:max-w-[80ch]">
+      <div className="flex flex-col items-stretch gap-4">
         <Notice variant="destructive">Failed to prepare the workspace: {sessionError.message}</Notice>
         {retrySession && (
           <div>
@@ -174,7 +203,7 @@ function ChatMessageFeedback({ threadId, isPending, error }: ChatThreadMessagesA
 
   if (threadId && isPending) {
     return (
-      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto scroll-smooth px-3 pt-6 pb-2 md:px-5 [&>*]:mx-auto [&>*]:w-full [&>*]:max-w-[80ch]">
+      <div className="flex flex-col gap-4">
         <SkeletonRows label="Loading messages" rows={6} />
       </div>
     );
@@ -183,11 +212,9 @@ function ChatMessageFeedback({ threadId, isPending, error }: ChatThreadMessagesA
   if (threadId && error) {
     const errorMessage = error instanceof Error ? error.message : undefined;
     return (
-      <div className="flex min-h-0 flex-1 flex-col place-items-center gap-4 overflow-y-auto scroll-smooth px-3 pt-6 pb-2 md:px-5 [&>*]:mx-auto [&>*]:w-full [&>*]:max-w-[80ch]">
-        <Notice variant="destructive">
-          {errorMessage ? `Failed to load messages: ${errorMessage}` : 'Failed to load messages.'}
-        </Notice>
-      </div>
+      <Notice variant="destructive">
+        {errorMessage ? `Failed to load messages: ${errorMessage}` : 'Failed to load messages.'}
+      </Notice>
     );
   }
 

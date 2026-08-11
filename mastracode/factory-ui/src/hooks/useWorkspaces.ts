@@ -1,6 +1,14 @@
 import { toast } from '@mastra/playground-ui/components/Toaster';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useNavigate } from 'react-router';
+import {
+  type QueryClient,
+  queryOptions,
+  skipToken,
+  useMutation,
+  useQueries,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
+import { useNavigate, useParams } from 'react-router';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
@@ -12,15 +20,6 @@ import {
   USER_SESSION_BRANCH_PREFIX,
 } from '../ui/domains/workspaces/services/github';
 import type { FactoryUserSession } from '../ui/domains/workspaces/services/github';
-
-/**
- * The slice of the agent-controller session the delete mutation needs to
- * cascade a worktree deletion onto the threads that ran inside it.
- */
-export interface WorkspaceThreadSession {
-  listThreads: (opts: { limit?: number; tags?: Record<string, string> }) => Promise<Array<{ id: string }>>;
-  deleteThread: (threadId: string) => Promise<unknown>;
-}
 
 interface AgentControllerThreadsScope {
   agentControllerId?: string;
@@ -39,34 +38,49 @@ function splitSessions(sessions: FactoryUserSession[]): WorkspacesData {
   };
 }
 
-/**
- * Drop a deleted session from the cached list right away. Invalidation alone
- * leaves every consumer rendering the session until the refetch lands — a
- * window in which the board still offers to open a thread that died with its
- * workspace. The refetch still runs behind this to reconcile.
- *
- * In-flight list fetches are cancelled first: one issued before the delete
- * committed still carries the deleted session, and letting it settle would
- * write it straight back over this removal.
- */
+async function loadWorkspaces(baseUrl: string, projectRepositoryId: string, signal?: AbortSignal) {
+  return splitSessions(await listUserSessions(baseUrl, projectRepositoryId, signal));
+}
+
+export function workspacesQueryOptions(baseUrl: string, projectRepositoryId: string) {
+  return queryOptions({
+    queryKey: queryKeys.sessions(projectRepositoryId),
+    queryFn: ({ signal }): Promise<WorkspacesData> => loadWorkspaces(baseUrl, projectRepositoryId, signal),
+  });
+}
+
 export function removeCachedSession(
-  queryClient: ReturnType<typeof useQueryClient>,
+  queryClient: QueryClient,
   projectRepositoryId: string | undefined,
   sessionId: string,
 ) {
+  // an in-flight list fetch still carries the stale entry and would clobber the edit below
   void queryClient.cancelQueries({ queryKey: queryKeys.sessions(projectRepositoryId) });
-  queryClient.setQueryData<WorkspacesData>(queryKeys.sessions(projectRepositoryId), current =>
-    current
-      ? {
-          workspaces: current.workspaces.filter(session => session.sessionId !== sessionId),
-          userSessions: current.userSessions.filter(session => session.sessionId !== sessionId),
-        }
-      : current,
-  );
+  queryClient.setQueryData<WorkspacesData>(queryKeys.sessions(projectRepositoryId), current => {
+    if (!current) return current;
+    return {
+      workspaces: current.workspaces.filter(session => session.sessionId !== sessionId),
+      userSessions: current.userSessions.filter(session => session.sessionId !== sessionId),
+    };
+  });
+}
+
+export function addCachedSession(queryClient: QueryClient, projectRepositoryId: string, session: FactoryUserSession) {
+  const queryKey = queryKeys.sessions(projectRepositoryId);
+  if (!queryClient.getQueryData<WorkspacesData>(queryKey)) {
+    void queryClient.invalidateQueries({ queryKey });
+    return;
+  }
+  void queryClient.cancelQueries({ queryKey });
+  queryClient.setQueryData<WorkspacesData>(queryKey, current => {
+    if (!current) return current;
+    const all = [...current.workspaces, ...current.userSessions];
+    return all.some(cached => cached.sessionId === session.sessionId) ? current : splitSessions([...all, session]);
+  });
 }
 
 function invalidateSessionQueries(
-  queryClient: ReturnType<typeof useQueryClient>,
+  queryClient: QueryClient,
   projectRepositoryId: string | undefined,
   scope?: AgentControllerThreadsScope,
   projectPath?: string,
@@ -84,8 +98,16 @@ export function useWorkspacesQuery(projectRepositoryId: string | undefined) {
   const { baseUrl } = useApiConfig();
   return useQuery({
     queryKey: queryKeys.sessions(projectRepositoryId),
-    queryFn: async (): Promise<WorkspacesData> => splitSessions(await listUserSessions(baseUrl, projectRepositoryId!)),
-    enabled: Boolean(projectRepositoryId),
+    queryFn: projectRepositoryId
+      ? ({ signal }): Promise<WorkspacesData> => loadWorkspaces(baseUrl, projectRepositoryId, signal)
+      : skipToken,
+  });
+}
+
+export function useFactoryWorkspacesQueries(projectRepositoryIds: string[]) {
+  const { baseUrl } = useApiConfig();
+  return useQueries({
+    queries: projectRepositoryIds.map(projectRepositoryId => workspacesQueryOptions(baseUrl, projectRepositoryId)),
   });
 }
 
@@ -93,8 +115,7 @@ export function useUserSessionQuery(sessionId: string | undefined) {
   const { baseUrl } = useApiConfig();
   return useQuery({
     queryKey: queryKeys.userSession(sessionId),
-    queryFn: () => getUserSession(baseUrl, sessionId!),
-    enabled: Boolean(sessionId),
+    queryFn: sessionId ? () => getUserSession(baseUrl, sessionId) : skipToken,
   });
 }
 
@@ -112,7 +133,7 @@ export function useCreateWorkspaceMutation(
       const trimmedBranch = branch.trim();
       if (!factoryId) throw new Error('No Factory selected');
       if (!projectRepositoryId) throw new Error('Connect a repository before creating a workspace');
-      return createUserSession(baseUrl, projectRepositoryId, trimmedBranch);
+      return createUserSession(baseUrl, projectRepositoryId, { branch: trimmedBranch });
     },
     onSuccess: session => {
       invalidateSessionQueries(queryClient, projectRepositoryId, scope, session.sessionId);
@@ -123,37 +144,23 @@ export function useCreateWorkspaceMutation(
   });
 }
 
-/**
- * Delete a workspace: removes the sandbox checkout + branch server-side and
- * deletes every thread that ran inside it. Destructive; callers confirm first.
- */
 export function useDeleteWorkspaceMutation(
   factoryId: string | undefined,
   projectRepositoryId: string | undefined,
-  threadSession: WorkspaceThreadSession | null | undefined,
   scope?: AgentControllerThreadsScope,
 ) {
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  // user-session routes carry the session id as :threadId (user/threads/:threadId)
+  const { sessionId, threadId } = useParams<{ sessionId?: string; threadId?: string }>();
+  const viewedSessionId = sessionId ?? threadId;
 
   return useMutation({
     mutationFn: async (workspace: FactoryUserSession) => {
       if (!factoryId) throw new Error('No Factory selected');
       if (!projectRepositoryId) throw new Error('Connect a repository before deleting a workspace');
       await deleteUserSession(baseUrl, workspace.sessionId);
-
-      if (threadSession) {
-        for (let round = 0; round < 20; round++) {
-          const threads = await threadSession.listThreads({
-            limit: 50,
-            tags: { projectPath: workspace.sessionId },
-          });
-          if (threads.length === 0) break;
-          for (const thread of threads) await threadSession.deleteThread(thread.id);
-        }
-      }
-
       return workspace;
     },
     onSuccess: workspace => {
@@ -163,7 +170,7 @@ export function useDeleteWorkspaceMutation(
       void queryClient.invalidateQueries({
         queryKey: queryKeys.agentControllerThreads(scope?.agentControllerId, scope?.resourceId, workspace.sessionId),
       });
-      void navigate(`/factories/${factoryId}`);
+      if (workspace.sessionId === viewedSessionId) void navigate(`/factories/${factoryId}/new`);
       toast('Workspace deleted');
     },
     onError: error => toast.error(error instanceof Error ? error.message : 'Failed to delete workspace'),

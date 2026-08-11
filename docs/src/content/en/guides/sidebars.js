@@ -63,6 +63,11 @@ const sidebars = {
           id: 'getting-started/electron',
           label: 'Electron',
         },
+        {
+          type: 'doc',
+          id: 'getting-started/manual-install',
+          label: 'Manual Install',
+        },
       ],
     },
     {
@@ -84,13 +89,70 @@ const sidebars = {
     },
     {
       type: 'category',
-      label: 'Agent Frameworks',
+      label: 'Capabilities',
       collapsed: false,
       items: [
         {
-          type: 'doc',
-          id: 'agent-frameworks/ai-sdk',
-          label: 'AI SDK',
+          type: 'category',
+          label: 'RAG',
+          items: [
+            {
+              type: 'doc',
+              id: 'rag/overview',
+              label: 'Overview',
+            },
+            {
+              type: 'doc',
+              id: 'rag/chunking-and-embedding',
+              label: 'Chunking and Embedding',
+            },
+            {
+              type: 'doc',
+              id: 'rag/vector-databases',
+              label: 'Vector Databases',
+            },
+            {
+              type: 'doc',
+              id: 'rag/retrieval',
+              label: 'Retrieval',
+            },
+            {
+              type: 'doc',
+              id: 'rag/graph-rag',
+              label: 'GraphRAG',
+            },
+          ],
+        },
+        {
+          type: 'category',
+          label: 'Voice',
+          items: [
+            {
+              type: 'doc',
+              id: 'voice/overview',
+              label: 'Overview',
+            },
+            {
+              type: 'doc',
+              id: 'voice/text-to-speech',
+              label: 'Text to Speech',
+            },
+            {
+              type: 'doc',
+              id: 'voice/speech-to-text',
+              label: 'Speech to Text',
+            },
+            {
+              type: 'doc',
+              id: 'voice/speech-to-speech',
+              label: 'Speech to Speech',
+            },
+            {
+              type: 'doc',
+              id: 'voice/realtime-voice',
+              label: 'Realtime Voice',
+            },
+          ],
         },
       ],
     },
@@ -108,6 +170,11 @@ const sidebars = {
           type: 'doc',
           id: 'build-your-ui/assistant-ui',
           label: 'Assistant UI',
+        },
+        {
+          type: 'doc',
+          id: 'build-your-ui/openui',
+          label: 'OpenUI',
         },
         {
           type: 'category',
@@ -130,17 +197,24 @@ const sidebars = {
             },
           ],
         },
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Agent Frameworks',
+      collapsed: true,
+      items: [
         {
           type: 'doc',
-          id: 'build-your-ui/openui',
-          label: 'OpenUI',
+          id: 'agent-frameworks/ai-sdk',
+          label: 'AI SDK',
         },
       ],
     },
     {
       type: 'category',
       label: 'Deployment',
-      collapsed: false,
+      collapsed: true,
       items: [
         {
           type: 'doc',
@@ -191,7 +265,7 @@ const sidebars = {
           id: 'deployment/mastra-workers',
           label: 'Mastra Workers',
           customProps: {
-            tags: ['beta'],
+            tags: ['new'],
           },
         },
         {
@@ -214,27 +288,12 @@ const sidebars = {
     {
       type: 'category',
       label: 'Tutorials',
-      collapsed: false,
+      collapsed: true,
       items: [
         {
           type: 'category',
           label: 'Fundamentals',
           items: [
-            {
-              type: 'doc',
-              id: 'guide/chef-michel',
-              label: 'Agents: Chef Michel',
-            },
-            {
-              type: 'doc',
-              id: 'guide/stock-agent',
-              label: 'Tools: Stock Agent',
-            },
-            {
-              type: 'doc',
-              id: 'guide/web-search',
-              label: 'Tools: Web Search',
-            },
             {
               type: 'doc',
               id: 'guide/firecrawl',
@@ -303,144 +362,6 @@ const sidebars = {
           type: 'doc',
           id: 'guide/github-actions-pr-description',
           label: 'GitHub Actions: PR Description',
-        },
-        {
-          type: 'doc',
-          id: 'guide/slack-assistant',
-          label: 'Channels: Slack Assistant',
-        },
-        {
-          type: 'doc',
-          id: 'guide/publishing-mcp-server',
-          label: 'Publishing an MCP Server',
-        },
-        {
-          type: 'doc',
-          id: 'guide/whatsapp-chat-bot',
-          label: 'WhatsApp Chat Bot',
-        },
-      ],
-    },
-    {
-      type: 'category',
-      label: 'Migrations',
-      collapsed: false,
-      items: [
-        {
-          type: 'category',
-          label: 'v1.0',
-          items: [
-            {
-              id: 'migrations/upgrade-to-v1/overview',
-              type: 'doc',
-              label: 'Overview',
-            },
-            {
-              id: 'migrations/upgrade-to-v1/agent',
-              type: 'doc',
-              label: 'Agents',
-            },
-            {
-              id: 'migrations/upgrade-to-v1/cli',
-              type: 'doc',
-              label: 'CLI',
-            },
-            {
-              id: 'migrations/upgrade-to-v1/client',
-              type: 'doc',
-              label: 'Client SDK',
-            },
-            {
-              id: 'migrations/upgrade-to-v1/deployment',
-              type: 'doc',
-              label: 'Deployment',
-            },
-            {
-              id: 'migrations/upgrade-to-v1/evals',
-              type: 'doc',
-              label: 'Evals',
-            },
-            {
-              id: 'migrations/upgrade-to-v1/mastra',
-              type: 'doc',
-              label: 'Mastra',
-            },
-            {
-              id: 'migrations/upgrade-to-v1/mcp',
-              type: 'doc',
-              label: 'MCP',
-            },
-            {
-              id: 'migrations/upgrade-to-v1/memory',
-              type: 'doc',
-              label: 'Memory',
-            },
-            {
-              id: 'migrations/upgrade-to-v1/processors',
-              type: 'doc',
-              label: 'Processors',
-            },
-            {
-              id: 'migrations/upgrade-to-v1/rag',
-              type: 'doc',
-              label: 'RAG',
-            },
-            {
-              id: 'migrations/upgrade-to-v1/storage',
-              type: 'doc',
-              label: 'Storage',
-            },
-            {
-              id: 'migrations/upgrade-to-v1/tools',
-              type: 'doc',
-              label: 'Tools',
-            },
-            {
-              id: 'migrations/upgrade-to-v1/tracing',
-              type: 'doc',
-              label: 'Tracing',
-            },
-            {
-              id: 'migrations/upgrade-to-v1/vectors',
-              type: 'doc',
-              label: 'Vectors',
-            },
-            {
-              id: 'migrations/upgrade-to-v1/voice',
-              type: 'doc',
-              label: 'Voice',
-            },
-            {
-              id: 'migrations/upgrade-to-v1/workflows',
-              type: 'doc',
-              label: 'Workflows',
-            },
-          ],
-        },
-        {
-          type: 'doc',
-          id: 'migrations/mastra-cloud',
-          label: 'Mastra Cloud to Mastra platform',
-        },
-        {
-          type: 'doc',
-          id: 'migrations/network-to-supervisor',
-          label: '.network() to Supervisor Agents',
-        },
-        {
-          type: 'doc',
-          id: 'migrations/vnext-to-standard-apis',
-          label: 'VNext to Standard APIs',
-        },
-        {
-          type: 'doc',
-          id: 'migrations/agentnetwork',
-          label: 'AgentNetwork to .network()',
-        },
-        {
-          type: 'doc',
-          id: 'migrations/ai-sdk-v4-to-v5',
-          label: 'AI SDK v4 to v5',
         },
       ],
     },

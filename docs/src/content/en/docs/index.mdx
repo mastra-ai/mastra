@@ -8,6 +8,8 @@ description: 'Create your first Mastra application in seconds. Build AI agents, 
 import { CardGrid, CardGridItem } from '@site/src/components/cards/card-grid';
 import QuickstartPrompt from '@site/src/content/en/docs/getting-started/_partial-quickstart-prompt.mdx';
 import AgentQuickstart from '@site/src/content/en/docs/getting-started/_partial-agent-quickstart.mdx';
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
 
 # Get started
 
@@ -23,9 +25,31 @@ Mastra is a TypeScript framework for building AI agents and applications. Create
 
 Run this command to create a general-purpose agent harness with a local workspace, shell tools, memory, task tracking, web access, and recurring schedules. It also installs Mastra skills for your installed coding agent, so you can start prompting and editing it:
 
-```bash npm2yarn
-npm create mastra@latest
-```
+<Tabs groupId="npm2yarn">
+  <TabItem value="npm" label="npm">
+    ```bash
+    npm create mastra@latest
+    ```
+  </TabItem>
+
+  <TabItem value="pnpm" label="pnpm">
+    ```bash
+    pnpm create mastra@latest
+    ```
+  </TabItem>
+
+  <TabItem value="yarn" label="Yarn">
+    ```bash
+    yarn create mastra
+    ```
+  </TabItem>
+
+  <TabItem value="bun" label="Bun">
+    ```bash
+    bunx create-mastra
+    ```
+  </TabItem>
+</Tabs>
 
 You can open [Studio](/docs/studio/overview) immediately, which is an interactive UI for your Mastra project. See the [quickstart guide](/guides/getting-started/quickstart) for a full walkthrough.
 
@@ -172,8 +196,80 @@ For other frameworks, see the [framework integration guides](/guides/getting-sta
 
 Browse [templates](https://mastra.ai/templates) for complete Mastra projects you can clone and adapt.
 
-:::note
+## Use cases
 
-New to Mastra? Read [What is Mastra?](/docs/what-is-mastra) for an overview of the framework, its capabilities, and what you can build with it.
+<div className="accordion-group">
+  <details>
+    <summary>Embed agents in your product</summary>
+
+    Add AI capabilities to your platform so your users can build or interact with agents.
+
+    Used by <a href="/blog/replitagent3">Replit</a>, <a href="/blog/fireworks-xml-prompting">Fireworks</a>, <a href="/blog/medusa-ecommerce">Medusa</a>
+  </details>
+
+  <details>
+    <summary>Customer-facing assistants</summary>
+
+    Build agents that handle inquiries, schedule appointments, send reminders, and answer questions via chat, WhatsApp, or voice.
+
+    Used by <a href="/blog/vetnio">Vetnio</a>, <a href="/blog/lua-scaling">Lua</a>
+
+    Templates: <a href="/templates/docs-chatbot">Docs Chatbot</a>, <a href="/templates/slack-agent">Slack Agent</a>
+  </details>
+
+  <details>
+    <summary>Internal copilots</summary>
+
+    Help employees work faster with AI that understands your domain, such as HR queries, clinical documentation, sales prep, or document generation.
+
+    Used by <a href="/blog/factorial-case-study">Factorial</a>, <a href="/blog/counsel-health">Counsel Health</a>, <a href="/blog/cedar-case-study">Cedar</a>, <a href="/blog/softbank-productivity-mastra-2025-08-20">SoftBank</a>
+
+    Templates: <a href="/templates/chat-with-pdf">Chat with PDF</a>, <a href="/templates/google-sheets-analysis">Google Sheet Analysis</a>
+  </details>
+
+  <details>
+    <summary>Data analysis agents</summary>
+
+    Let users query databases and dashboards in natural language. Connect to your data sources and return answers, charts, or reports.
+
+    Used by <a href="/blog/index-case-study">Index</a>, <a href="/blog/plaid-jpn-gcp-agents">PLAID Japan</a>
+
+    Templates: <a href="/templates/text-to-sql">Chat with Database</a>, <a href="/templates/csv-to-questions">CSV to Questions</a>
+  </details>
+
+  <details>
+    <summary>Content automation</summary>
+
+    Generate, transform, and manage structured content at scale for a content management system, knowledge base, or documentation system.
+
+    Used by <a href="/blog/sanity">Sanity</a>
+
+    Templates: <a href="/templates/chat-with-youtube">Chat with YouTube</a>, <a href="/templates/flash-cards-from-pdf">Flash Cards from PDF</a>
+  </details>
+
+  <details>
+    <summary>DevOps and engineering automation</summary>
+
+    Automate deployments, debug production issues, manage infrastructure, and handle on-call workflows.
+
+    Used by <a href="/blog/starsling">StarSling</a>
+
+    Templates: <a href="/templates/github-pr-code-review-agent">GitHub PR Code Review</a>, <a href="/templates/browsing-agent">Browser Agent</a>
+  </details>
+
+  <details>
+    <summary>Sales and go-to-market workflows</summary>
+
+    Turn customer conversations into structured tasks, generate investment memos, or automate outreach sequences.
+
+    Used by <a href="/blog/kestral">Kestral</a>, <a href="/blog/orange-collective-vc-operating-system">Orange Collective</a>, <a href="/blog/workos-teaching-mastra">WorkOS</a>
+
+    Templates: <a href="/templates/customer-feedback-summarization">Customer Feedback Summarization</a>
+  </details>
+</div>
+
+:::tip[Video]
+
+[A quick tour of the Mastra platform](https://www.youtube.com/watch?v=NosES9aJxCc) shows how the pieces fit together.
 
 :::

@@ -131,16 +131,22 @@ const sandbox = new RailwaySandbox({
 
 `RailwaySandbox` refreshes the checkpoint shortly before the idle timeout. Recovery restores the latest successful checkpoint. It doesn't restore running processes or filesystem writes made after the last checkpoint.
 
+Call `snapshot()` after a filesystem update to capture the configured checkpoint immediately. It resolves without capturing when `checkpointName` isn't configured or the sandbox isn't running.
+
+```typescript
+await sandbox.snapshot()
+```
+
 Use one stable checkpoint name for each independent filesystem. Don't share a checkpoint name across unrelated sessions or projects.
 
-### Derived sandbox checkpoints
+### Cloned sandbox checkpoints
 
-Use `derive({ checkpointName })` when a configured `RailwaySandbox` acts as the template for a sandbox fleet:
+Use `clone({ checkpointName })` when a configured `RailwaySandbox` acts as the template for a sandbox fleet:
 
 ```typescript
 const template = new RailwaySandbox({ idleTimeoutMinutes: 30 })
 
-const sessionSandbox = template.derive({
+const sessionSandbox = template.clone({
   id: 'session-42',
   checkpointName: 'project-session-42',
 })
@@ -148,7 +154,7 @@ const sessionSandbox = template.derive({
 await sessionSandbox.start()
 ```
 
-A derived sandbox uses the checkpoint passed to `derive()`. If no override is passed, it inherits the template sandbox's `checkpointName`.
+A cloned sandbox uses the checkpoint passed to `clone()`. If no override is passed, it inherits the template sandbox's `checkpointName`.
 
 ### Streaming output
 
@@ -307,10 +313,16 @@ const result = await sandbox.executeCommand('cat', ['/tmp/state.txt'])
       'Clone this running sandbox into a new, independent RailwaySandbox. The returned sandbox is already started and reattached to the forked Railway sandbox. Accepts optional id, idleTimeoutMinutes, networkIsolation, and env overrides. Throws SandboxNotReadyError if this sandbox has not been started.',
   },
   {
-    name: 'derive',
+    name: 'clone',
     type: '(options?) => RailwaySandbox',
     description:
-      'Construct an unstarted sibling sandbox that inherits credentials and defaults. Accepts optional id, sandboxId, env, idleTimeoutMinutes, and checkpointName overrides. The derived sandbox uses options.checkpointName when set, otherwise it inherits the template checkpointName.',
+      'Construct an unstarted sibling sandbox that inherits credentials and defaults. Accepts optional id, sandboxId, env, idleTimeoutMinutes, and checkpointName overrides. The cloned sandbox uses options.checkpointName when set, otherwise it inherits the template checkpointName.',
+  },
+  {
+    name: 'snapshot',
+    type: '() => Promise<void>',
+    description:
+      'Capture the configured recovery checkpoint immediately. Resolves without work when checkpointName is not configured or the sandbox is not running.',
   },
 ]}
 />

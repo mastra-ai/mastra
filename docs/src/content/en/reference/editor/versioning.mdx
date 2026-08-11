@@ -1,0 +1,137 @@
+---
+title: "Reference: Versioning | Editor"
+description: "Reference for Editor version lifecycle, selection, sub-agent propagation, source behavior, REST endpoints, and SDK methods."
+packages:
+  - "@mastra/core"
+  - "@mastra/editor"
+  - "@mastra/client-js"
+---
+
+# Versioning
+
+Editor versions stored agents and prompt blocks. Database-backed resources use draft and publish operations. Code-backed agent overrides use deterministic files and Git history.
+
+See [Editor versioning](/docs/editor/overview#versioning) for release and experimentation patterns.
+
+## Database lifecycle
+
+The resource record stores an `activeVersionId`. Individual snapshots don't store a lifecycle status.
+
+| Term | Meaning |
+| - | - |
+| Latest | The most recently created configuration snapshot |
+| Published | The snapshot selected by `activeVersionId` |
+| Draft | The latest snapshot when it differs from `activeVersionId`, or when no active version exists |
+| Historical | Any other retained snapshot |
+
+Saving changed snapshot fields creates a new latest version. Saving identical snapshot fields or changing metadata alone doesn't create a version.
+
+If an active version exists, creating a draft doesn't change the version handling published requests. Publishing updates `activeVersionId`. Restoring a historical version copies its configuration into a new inactive draft.
+
+The direct namespace methods and REST APIs differ in one important way. `editor.prompt.update()` creates an inactive draft. `editor.agent.update()` creates a version and immediately assigns it to `activeVersionId`. The stored-agent REST `PATCH` route creates an inactive draft unless `autoPublish` is enabled.
+
+When a generic stored resource has no active version, published resolution can fall back to the latest snapshot. For a code-defined agent override, requesting `status: 'published'` without an active override returns the original code agent.
+
+## Code source
+
+With `source: 'code'`, active agent overrides are serialized as deterministic JSON under `<codePath>/agents/<encodedAgentId>.json`. The default `codePath` is `./mastra/editor`.
+
+The initial agent is published to create the file. Later server updates create a draft by default and write the file when that version becomes active. Git versions are read-only in Studio and use the commit message as their change message. The default history scan reads up to 50 recent commits and skips consecutive commits whose parsed JSON snapshot is unchanged.
+
+See [`MastraEditor`](/reference/editor/mastra-editor#source) for source options.
+
+## Select an agent version
+
+Calling [`mastra.getAgentById()`](/reference/core/getAgentById) without a selector returns the registered code-defined agent. Pass `status` or `versionId` to apply a stored override. See [Select a version](/docs/editor/overview#select-a-version) for a TypeScript example.
+
+With the default server prefix, pass selectors as query parameters under `/api`:
+
+```bash title="Version selection through the API"
+# Published version
+curl http://localhost:4111/api/agents/support-agent
+
+# Latest draft
+curl http://localhost:4111/api/agents/support-agent?status=draft
+
+# Exact version
+curl http://localhost:4111/api/agents/support-agent?versionId=abc-123
+```
+
+See the [Client SDK agents reference](/reference/client-js/agents#version-management) for Client SDK and React SDK selectors.
+
+## Sub-agent versioning
+
+Version overrides propagate through [supervisor-agent delegation](/docs/capabilities/subagents) in request context. Define selectors at three levels:
+
+1. `Mastra` instance `versions`: Defaults for every invocation
+1. Server request-body `versions`: Per-request values added to request context
+1. Direct `generate()` or `stream()` `versions`: Per-invocation values
+
+Entries merge by agent ID. For the same ID, precedence is **direct invocation > request body or existing request context > Mastra instance default**.
+
+Set defaults on the Mastra instance:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { MastraEditor } from '@mastra/editor'
+
+export const mastra = new Mastra({
+  agents: { supervisor, researchAgent, writerAgent },
+  editor: new MastraEditor(),
+  versions: {
+    agents: {
+      'research-agent': { status: 'published' },
+      'writer-agent': { versionId: 'abc-123' },
+    },
+  },
+})
+```
+
+Override one sub-agent for a direct invocation:
+
+```typescript title="src/routes/experiment.ts"
+const result = await supervisor.generate('Research and write about AI safety', {
+  versions: {
+    agents: {
+      'research-agent': { status: 'draft' },
+    },
+  },
+})
+```
+
+Or pass selectors in the server request body:
+
+```bash title="Per-request sub-agent versions"
+curl -X POST http://localhost:4111/api/agents/supervisor/generate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "messages": [{ "role": "user", "content": "Research AI safety" }],
+    "versions": {
+      "agents": {
+        "research-agent": { "status": "draft" }
+      }
+    }
+  }'
+```
+
+If Editor isn't configured or a version can't be resolved, Mastra logs a warning and uses the code-defined sub-agent.
+
+## Stored-agent REST API
+
+The default Mastra server prefix is `/api`. A custom server prefix changes the paths below.
+
+| Method | Path | Description |
+| - | - | - |
+| `GET` | `/api/stored/agents` | List stored agents |
+| `POST` | `/api/stored/agents` | Create a stored agent |
+| `GET` | `/api/stored/agents/:storedAgentId` | Get a stored agent |
+| `PATCH` | `/api/stored/agents/:storedAgentId` | Update a stored agent |
+| `DELETE` | `/api/stored/agents/:storedAgentId` | Delete a stored agent |
+| `GET` | `/api/stored/agents/:storedAgentId/dependents` | List readable dependents and count hidden cross-workspace references |
+| `POST` | `/api/stored/agents/:storedAgentId/export` | Export the allowed override fields as deterministic JSON |
+
+The dependents response lists caller-readable agents by `id` and `name`. Its `hiddenCount` field counts cross-workspace references that the caller can't read, but only when the target agent is public.
+
+Version-management routes are nested under `/api/stored/agents/:storedAgentId/versions`. See [version management](/reference/client-js/agents#version-management) for operations and Client SDK methods.
+
+The Client SDK exposes `listStoredAgents()`, `createStoredAgent()`, and `getStoredAgent()`. The resource returned by `getStoredAgent(id)` includes methods for updates, deletion, dependents, export, and version management.

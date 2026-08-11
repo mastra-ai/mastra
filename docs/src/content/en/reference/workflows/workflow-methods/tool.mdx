@@ -1,0 +1,75 @@
+---
+title: "Reference: Workflow.tool() | Workflows"
+description: Documentation for the `Workflow.tool()` method in workflows, which adds a tool as a declarative step.
+packages:
+  - "@mastra/core"
+---
+
+# Workflow\.tool()
+
+The `.tool()` method adds a tool as a declarative step. The tool's own input and output schemas apply, so the previous step's output must satisfy the tool's input schema. Use `.map()` to transform the data if they don't match.
+
+Unlike wrapping a tool with `createStep()`, `.tool()` records a declarative entry in the workflow graph. This makes the workflow portable: the same graph can be serialized and persisted as a [dynamic workflow](/docs/workflows/dynamic-workflows).
+
+## Usage example
+
+```typescript filename="src/mastra/workflows/test-workflow.ts" prettier:false
+workflow.tool(testTool).commit();
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'toolOrId',
+    type: 'Tool | string',
+    description:
+      'A tool instance, or the ID of a tool registered on the Mastra instance. When passing an ID, the tool is resolved from the registry at execution time.',
+    isOptional: false,
+  },
+  {
+    name: 'options',
+    type: '{ retries?: number, scorers?: DynamicArgument<MastraScorers>, metadata?: StepMetadata }',
+    description: 'Step-level retry count, scorers, and metadata for the tool step.',
+    isOptional: true,
+  },
+  {
+    name: 'stepOptions',
+    type: '{ id?: string }',
+    description:
+      "The step's call-site ID within the workflow. Defaults to the tool's ID. Set this when the same tool appears more than once in one workflow.",
+    isOptional: true,
+  },
+]}
+/>
+
+## Returns
+
+<PropertiesTable
+  content={[
+  {
+    name: 'workflow',
+    type: 'Workflow',
+    description: 'The workflow instance for method chaining',
+  },
+]}
+/>
+
+## Referencing a tool by ID
+
+Pass a string to reference a registered tool without importing it. The tool must be registered on the Mastra instance when the workflow runs:
+
+```typescript filename="src/mastra/workflows/test-workflow.ts" prettier:false
+workflow.tool("lookup-customer", { retries: 2 }).commit();
+```
+
+## Persisting tool steps
+
+Workflows built with `.tool()` serialize to the same declarative entries that [dynamic workflows](/docs/workflows/dynamic-workflows) use. Only `retries` and `metadata` round-trip through storage. A function-valued `scorers` option throws an error when the workflow is stored.
+
+## Related
+
+- [Agents and Tools](/docs/workflows/agents-and-tools)
+- [Dynamic workflows](/docs/workflows/dynamic-workflows)
+- [Workflow.agent()](/reference/workflows/workflow-methods/agent)

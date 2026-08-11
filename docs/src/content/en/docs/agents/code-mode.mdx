@@ -9,9 +9,9 @@ packages:
 
 **Added in:** `@mastra/core@1.38.0`
 
-:::experimental
+:::beta
 
-This feature is in beta. Breaking changes may occur without a major version bump until the API is stable.
+Breaking changes may occur without a major version bump until the API is stable.
 
 :::
 
@@ -39,6 +39,8 @@ Each turn adds the full tool response to the agent's context window which can le
 With code mode, your tools keep running on the host with full validation, request context, and tracing. Only the model's orchestration code runs in the sandbox. Each `external_*` call is bridged back to the real tool on the host, and the function can reduce or aggregate results before returning one response to the agent.
 
 The function runs in a [Workspace sandbox](/docs/workspace/overview). A sandbox is required, because code mode runs model-authored code and the execution boundary must be chosen deliberately. Pass one via `sandbox`, or run the agent in a workspace that provides one. To execute on the host machine, pass `new LocalSandbox()` explicitly. This runs the function as a host `node` process with host privileges, so only use it for trusted or local development.
+
+Transports that bring their own execution boundary are the exception: with [`IsolatedVmCodeModeTransport`](/reference/tools/isolated-vm-transport) the program runs in an in-process V8 isolate and no sandbox is needed (see [In-process isolation](#in-process-isolation)).
 
 ## Quickstart
 
@@ -155,8 +157,40 @@ const { tool, instructions } = createCodeMode(
 )
 ```
 
+## In-process isolation
+
+To get a secure boundary without spawning processes or running a remote sandbox, use [`IsolatedVmCodeModeTransport`](/reference/tools/isolated-vm-transport) from `@mastra/isolated-vm`. It runs the program in an in-process V8 isolate, so no sandbox is required: the isolate has no filesystem, network, or process access, and its only capabilities are the `external_*` functions bridged back to your tools on the host.
+
+```typescript
+import { createCodeMode } from '@mastra/core/tools'
+import { IsolatedVmCodeModeTransport } from '@mastra/isolated-vm'
+
+const { tool, instructions } = createCodeMode(
+  { tools }, // no sandbox needed
+  new IsolatedVmCodeModeTransport({ memoryLimitMb: 128 }),
+)
+```
+
+`isolated-vm` is a native addon, and on Node.js 20 and later the host process must be started with the `--no-node-snapshot` flag. See the [IsolatedVmCodeModeTransport reference](/reference/tools/isolated-vm-transport) for setup details.
+
+When the host can't install native addons or set Node.js flags, which is common on serverless platforms, use [`QuickJsCodeModeTransport`](/reference/tools/quickjs-transport) from `@mastra/quickjs` instead. It gives the same in-process boundary using a QuickJS runtime compiled to WebAssembly, at the cost of slower execution:
+
+```typescript
+import { createCodeMode } from '@mastra/core/tools'
+import { QuickJsCodeModeTransport } from '@mastra/quickjs'
+
+const { tool, instructions } = createCodeMode(
+  { tools }, // no sandbox needed
+  new QuickJsCodeModeTransport({ memoryLimitMb: 128 }),
+)
+```
+
+See [Choosing a transport](/reference/tools/quickjs-transport#choosing-a-transport) for a side-by-side comparison.
+
 ## Related
 
 - [createCodeMode() reference](/reference/tools/create-code-mode)
+- [IsolatedVmCodeModeTransport reference](/reference/tools/isolated-vm-transport)
+- [QuickJsCodeModeTransport reference](/reference/tools/quickjs-transport)
 - [Tools](/docs/agents/using-tools)
 - [Workspace overview](/docs/workspace/overview)

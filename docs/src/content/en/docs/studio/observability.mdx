@@ -88,6 +88,10 @@ Metrics require a separate OLAP store for observability. Relational databases li
 
 When you run an agent or workflow, the Observability tab displays traces that highlight the key AI operations such as model calls, tool executions, and workflow steps. Follow these traces to see how data moves, where time is spent, and what's happening under the hood.
 
+Above the trace list, open **Columns** to show or hide input, entity, duration, input token, output token, estimated cost, and custom metadata columns. To display custom metadata, add the top-level key used in `tracingOptions.metadata`. Studio saves the selection in browser storage for the current Mastra server and API prefix.
+
+Token and estimated cost columns require an observability store that supports metrics. These columns stay hidden in the **Branches** view because several branch rows can belong to the same trace.
+
 Tracing filters out low-level framework details so your traces stay focused and readable. Visit the [tracing overview](/docs/observability/tracing/overview) for more details.
 
 To export a trace, select **Download trace JSON** in the trace panel header. This saves the entire trace as a `trace-<id>.json` file, with every span and its full input, output, metadata, and attributes. Use it to share a trace or attach it to a bug report, or alternatively build an evaluation dataset offline.

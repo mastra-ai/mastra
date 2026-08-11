@@ -1,4 +1,5 @@
 export type {
+  EntityLearningProgressResponse,
   NoiseExamplesResponse,
   NoiseResponse,
   ThemeDetailResponse,
@@ -11,5 +12,6 @@ export type {
   ThemePathsResponse,
   ThemeSnapshot,
   ThemeSnapshotsResponse,
+  TraceInsightResponse,
   TraceSignalName,
 } from '@mastra/client-js';

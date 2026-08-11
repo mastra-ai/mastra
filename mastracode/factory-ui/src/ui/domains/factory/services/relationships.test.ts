@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { inferredParentWorkItemId, relatedWorkItems } from './relationships';
+import { inferredParentWorkItemId, relatedWorkItems, relationshipLabel } from './relationships';
 import type { WorkItem } from './workItems';
 
 function workItem(overrides: Partial<WorkItem> & Pick<WorkItem, 'id' | 'source'>): WorkItem {
@@ -97,5 +97,21 @@ describe('Factory work item relationships', () => {
 
     expect(relatedWorkItems(review, [review, issue])).toEqual([]);
     expect(inferredParentWorkItemId(review.metadata, [review, issue])).toBeUndefined();
+  });
+
+  it('uses source-specific GitHub numbers in relationship labels', () => {
+    const review = workItem({
+      id: 'pr-202',
+      source: 'github-pr',
+      metadata: { githubPullRequestNumber: 202, number: 25 },
+    });
+    const issue = workItem({
+      id: 'issue-24',
+      source: 'github-issue',
+      metadata: { githubIssueNumber: 24, number: 99 },
+    });
+
+    expect(relationshipLabel(review)).toBe('Review: PR #202');
+    expect(relationshipLabel(issue)).toBe('Work item: Issue #24');
   });
 });

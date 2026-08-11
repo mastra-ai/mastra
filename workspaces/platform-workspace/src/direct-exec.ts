@@ -89,6 +89,15 @@ export interface DirectExecResult {
   stderr: string;
   truncated: boolean;
   timedOut: boolean;
+  /**
+   * WebSocket close metadata. Populated on any close (normal or transport
+   * failure). `opened` distinguishes handshake failures (never opened) from
+   * mid-stream drops. Callers use this for diagnostic logging; not part of
+   * the CommandResult contract.
+   */
+  closeCode?: number;
+  closeReason?: string;
+  opened?: boolean;
 }
 
 const DEFAULT_WS_FACTORY: DirectExecWebSocketFactory = (endpoint, subprotocols) => {
@@ -123,6 +132,8 @@ export function execViaLease(lease: ExecLease, options: DirectExecOptions): Prom
     let timedOut = false;
     let settled = false;
     let opened = false;
+    let closeCode: number | undefined;
+    let closeReason: string | undefined;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let handshakeTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -149,7 +160,16 @@ export function execViaLease(lease: ExecLease, options: DirectExecOptions): Prom
       } catch {
         /* already closed */
       }
-      resolve({ exitCode, stdout, stderr, truncated: false, timedOut });
+      resolve({
+        exitCode,
+        stdout,
+        stderr,
+        truncated: false,
+        timedOut,
+        ...(closeCode !== undefined && { closeCode }),
+        ...(closeReason !== undefined && { closeReason }),
+        opened,
+      });
     };
 
     // Arm the timeout BEFORE we open the socket so a stalled handshake can't
@@ -201,6 +221,8 @@ export function execViaLease(lease: ExecLease, options: DirectExecOptions): Prom
     };
 
     socket.onclose = event => {
+      closeCode = event.code;
+      closeReason = event.reason;
       if (!opened) {
         // Never opened — surface as a failure via exitCode=null,
         // truncated=false, timedOut=false so the caller can distinguish
@@ -211,7 +233,6 @@ export function execViaLease(lease: ExecLease, options: DirectExecOptions): Prom
       // Preserve any info captured before close; if the server sent an
       // `exit` frame this is a no-op because settle() already ran.
       settle();
-      void event; // eslint: intentionally observed for future logging
     };
 
     socket.onerror = () => {

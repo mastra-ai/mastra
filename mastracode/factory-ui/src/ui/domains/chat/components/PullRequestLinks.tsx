@@ -1,125 +1,72 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { useQuery } from '@tanstack/react-query';
-import { CircleDot, CircleX, GitMerge } from 'lucide-react';
-import { useEffect, useRef } from 'react';
 
+import { PullRequestStatusIcon } from '../../factory/components/PullRequestStatusIcon';
+import type { PullRequestSubscription } from '../../factory/services/githubSubscriptions';
 import type { WorkItem } from '../../factory/services/workItems';
-import type { TranscriptState } from '../services/transcript';
-
-interface PullRequestSubscription {
-  id: string;
-  repoFullName: string;
-  pullRequestNumber: number;
-  status: 'open' | 'closed' | 'merged';
-  url: string;
-}
-
-interface PullRequestSubscriptionsResponse {
-  subscriptions: PullRequestSubscription[];
-}
-
-function PullRequestIcon({ status }: { status: PullRequestSubscription['status'] }) {
-  if (status === 'merged') return <GitMerge size={13} aria-hidden />;
-  if (status === 'closed') return <CircleX size={13} aria-hidden />;
-  return <CircleDot size={13} aria-hidden />;
-}
-
-function statusColor(status: PullRequestSubscription['status']): string {
-  if (status === 'merged') return 'text-accent3';
-  if (status === 'closed') return 'text-error';
-  return 'text-accent1';
-}
+import type { LinkedRepositoryPayload } from '../../workspaces/services/github';
+import { usePullRequestSubscriptions } from '../hooks/usePullRequestSubscriptions';
 
 interface PullRequestLinksProps {
-  baseUrl: string;
-  resourceId: string;
-  projectPath: string | undefined;
-  projectRepositoryId: unknown;
+  repository?: Pick<LinkedRepositoryPayload, 'slug'>;
   reviewItem?: WorkItem;
-  repositorySlug: string | undefined;
   threadId: string | undefined;
-  transcriptEntries: TranscriptState['entries'];
-  busy: boolean;
   size?: 'xs' | 'sm';
 }
 
-/** Pull requests subscribed to the active GitHub-backed thread. */
-export function PullRequestLinks({
-  baseUrl,
-  resourceId,
-  projectPath,
-  projectRepositoryId,
-  reviewItem,
-  repositorySlug,
-  threadId,
-  transcriptEntries,
-  busy,
-  size = 'xs',
-}: PullRequestLinksProps) {
-  const wasBusy = useRef(busy);
-  const reviewNumber = reviewItem?.metadata.githubPullRequestNumber ?? reviewItem?.metadata.number;
+function reviewStatus(reviewItem: WorkItem): PullRequestSubscription['status'] {
+  if (reviewItem.metadata.merged === true) return 'merged';
+  if (reviewItem.metadata.state === 'closed') return 'closed';
+  return 'open';
+}
+
+function reviewSubscription(
+  reviewItem: WorkItem | undefined,
+  repositorySlug: string | undefined,
+): PullRequestSubscription | undefined {
+  if (!reviewItem || !repositorySlug) return undefined;
+
+  const reviewNumber = reviewItem.metadata.githubPullRequestNumber ?? reviewItem.metadata.number;
+  if (typeof reviewNumber !== 'number' && typeof reviewNumber !== 'string') return undefined;
+
   const normalizedReviewNumber = Number(reviewNumber);
-  const factorySubscription: PullRequestSubscription | undefined =
-    reviewItem &&
-    repositorySlug &&
-    (typeof reviewNumber === 'number' || typeof reviewNumber === 'string') &&
-    Number.isInteger(normalizedReviewNumber)
-      ? {
-          id: `factory-work-item:${reviewItem.id}`,
-          repoFullName: repositorySlug,
-          pullRequestNumber: normalizedReviewNumber,
-          status:
-            reviewItem.metadata.merged === true ? 'merged' : reviewItem.metadata.state === 'closed' ? 'closed' : 'open',
-          url: `https://github.com/${repositorySlug}/pull/${normalizedReviewNumber}`,
-        }
-      : undefined;
-  const notificationIds = transcriptEntries
-    .flatMap(entry => {
-      if (entry.kind === 'notification') return [entry.notificationId];
-      if (entry.kind !== 'message') return [];
-      const content = entry.message.content.metadata?.harnessContent;
-      if (!Array.isArray(content)) return [];
-      return content.flatMap(part =>
-        typeof part === 'object' && part !== null && 'type' in part && part.type === 'notification'
-          ? ['notificationId' in part ? part.notificationId : undefined]
-          : [],
-      );
-    })
-    .filter(id => typeof id === 'string')
-    .join(':');
-  const enabled = typeof projectRepositoryId === 'string' && Boolean(threadId);
-  const query = useQuery({
-    queryKey: ['github', 'subscriptions', resourceId, threadId, projectPath],
-    queryFn: async () => {
-      if (!threadId) return { subscriptions: [] };
-      const params = new URLSearchParams({ resourceId, threadId });
-      if (projectPath) params.set('scope', projectPath);
-      const response = await fetch(`${baseUrl}/web/github/subscriptions?${params}`, { credentials: 'include' });
-      if (!response.ok) throw new Error(`Failed to load pull request subscriptions (${response.status}).`);
-      return response.json() as Promise<PullRequestSubscriptionsResponse>;
-    },
-    enabled,
-  });
+  if (!Number.isInteger(normalizedReviewNumber) || normalizedReviewNumber <= 0) return undefined;
 
-  useEffect(() => {
-    if (notificationIds) void query.refetch();
-  }, [notificationIds, query.refetch]);
+  return {
+    id: `factory-work-item:${reviewItem.id}`,
+    repoFullName: repositorySlug,
+    pullRequestNumber: normalizedReviewNumber,
+    status: reviewStatus(reviewItem),
+    url: `https://github.com/${repositorySlug}/pull/${normalizedReviewNumber}`,
+  };
+}
 
-  useEffect(() => {
-    if (wasBusy.current && !busy) void query.refetch();
-    wasBusy.current = busy;
-  }, [busy, query.refetch]);
+function pullRequestLinks(
+  subscriptions: PullRequestSubscription[],
+  activeReview: PullRequestSubscription | undefined,
+): PullRequestSubscription[] {
+  if (!activeReview) return subscriptions;
 
-  const subscriptions = query.data?.subscriptions ?? [];
-  const links =
-    factorySubscription &&
-    !subscriptions.some(
-      subscription =>
-        subscription.repoFullName === factorySubscription.repoFullName &&
-        subscription.pullRequestNumber === factorySubscription.pullRequestNumber,
-    )
-      ? [...subscriptions, factorySubscription]
-      : subscriptions;
+  // github slugs are case-insensitive — factory config and the subscriptions endpoint can disagree on case
+  const activeRepo = activeReview.repoFullName.toLowerCase();
+  const alreadySubscribed = subscriptions.some(
+    subscription =>
+      subscription.repoFullName.toLowerCase() === activeRepo &&
+      subscription.pullRequestNumber === activeReview.pullRequestNumber,
+  );
+  if (alreadySubscribed) return subscriptions;
+  return [...subscriptions, activeReview];
+}
+
+/**
+ * Pull requests subscribed to the active GitHub-backed thread.
+ *
+ * Must render inside `ChatSessionBoundary` — `usePullRequestSubscriptions`
+ * reads the chat session and transcript contexts.
+ */
+export function PullRequestLinks({ repository, reviewItem, threadId, size = 'xs' }: PullRequestLinksProps) {
+  const subscriptions = usePullRequestSubscriptions(threadId, Boolean(repository));
+  const activeReview = reviewSubscription(reviewItem, repository?.slug);
+  const links = pullRequestLinks(subscriptions, activeReview);
   if (links.length === 0) return null;
 
   return (
@@ -135,8 +82,8 @@ export function PullRequestLinks({
           rel="noreferrer"
           aria-label={`Open ${subscription.status} ${subscription.repoFullName} pull request ${subscription.pullRequestNumber}`}
         >
-          <PullRequestIcon status={subscription.status} />
-          <span className={statusColor(subscription.status)}>PR #{subscription.pullRequestNumber}</span>
+          <PullRequestStatusIcon status={subscription.status} size={13} decorative />
+          <span>PR #{subscription.pullRequestNumber}</span>
         </Button>
       ))}
     </div>

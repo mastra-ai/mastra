@@ -239,7 +239,7 @@ Visit the [Configuration reference](/reference/configuration) for detailed docum
     name: 'versions',
     type: 'VersionOverrides',
     description:
-      'Global version overrides for sub-agent delegation. When a supervisor agent delegates to a sub-agent, these overrides determine which stored version of that sub-agent to use instead of the code-defined default. Requires the editor package to be configured. See [Sub-agent versioning](/docs/editor/overview#sub-agent-versioning) for details.',
+      'Global version overrides for sub-agent delegation. When a supervisor agent delegates to a sub-agent, these overrides determine which stored version of that sub-agent to use instead of the code-defined default. Requires the editor package to be configured. See [Editor versioning](/docs/editor/overview#versioning) for details.',
     isOptional: true,
     properties: [
       {
@@ -393,7 +393,7 @@ Visit the [Configuration reference](/reference/configuration) for detailed docum
 
 Re-drives every orphaned `running` durable-agent run across all registered durable agents. Called automatically on boot when `recovery.durableAgents` is `'auto'`. You can also call it directly for manual recovery or from a scheduled task.
 
-Requires persistent storage — with an in-memory store there is nothing to recover after a process restart.
+Requires persistent storage. With an in-memory store, there's nothing to recover after a process restart.
 
 ```typescript
 const result = await mastra.recoverAllDurableAgents()

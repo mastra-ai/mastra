@@ -10,12 +10,12 @@ import StepItem from "@site/src/components/StepItem";
 
 Run a Mastra application across multiple pods on [Kubernetes](https://kubernetes.io/), so it scales horizontally behind a load balancer. Because each pod is a separate process, the pods must share a pub/sub backend and a database, otherwise work started on one pod is invisible to the others.
 
-:::info
+:::note
 This guide covers deploying the [Mastra server](/docs/server/mastra-server). If you're using a [server adapter](/docs/server/server-adapters) or [web framework](/docs/deployment/web-framework), deploy the way you normally would for that framework.
 :::
 
-:::warning
-Multi-pod support relies on [durable agents](/docs/long-running-agents/durable-agents), which are currently in **beta**. APIs may change in minor versions. Read [Known limitations](#known-limitations) before you rely on this in production.
+:::beta
+Multi-pod support relies on [durable agents](/docs/long-running-agents/durable-agents). Breaking changes may occur without a major version bump until the API is stable. Read [Known limitations](#known-limitations) before you rely on this in production.
 :::
 
 ## Before you begin
@@ -304,5 +304,7 @@ The pod that handles the approval loads the suspended run from Postgres. It then
 
 - [PubSub](/docs/server/pubsub)
 - [Durable agents](/docs/long-running-agents/durable-agents)
+- [Workers](/docs/deployment/workers): Split background processing into separate containers on Kubernetes
+- [Worker deployment guide](/guides/deployment/mastra-workers): Full Kubernetes manifests for orchestration, scheduler, and background task workers
 - [Mastra server](/docs/server/mastra-server)
 - [Deployment overview](/docs/deployment/overview)

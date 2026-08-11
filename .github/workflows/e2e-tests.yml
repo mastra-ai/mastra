@@ -6,6 +6,10 @@ on:
       head_sha:
         required: true
         type: string
+      experiment_worker_e2e_changed:
+        required: false
+        default: false
+        type: boolean
     secrets:
       TURBO_TOKEN:
         required: false
@@ -21,6 +25,8 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: read
+    outputs:
+      digest: ${{ steps.registry_digest.outputs.digest }}
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
@@ -31,6 +37,7 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 5
         with:
           ref: ${{ inputs.head_sha }}
           persist-credentials: false
@@ -56,12 +63,86 @@ jobs:
           MASTRA_E2E_REGISTRY_STORAGE: ${{ runner.temp }}/mastra-e2e-registry/storage
           MASTRA_E2E_REGISTRY_CONFIG: ${{ runner.temp }}/mastra-e2e-registry/verdaccio.yaml
 
+      - name: Create immutable registry snapshot
+        id: registry_digest
+        shell: bash
+        run: |
+          archive="${{ runner.temp }}/mastra-e2e-registry/registry-snapshot.tar"
+          tar --exclude='./registry-snapshot.tar' -cf "$archive" -C "${{ runner.temp }}/mastra-e2e-registry" .
+          digest="$(node e2e-tests/experiment-worker/scripts/registry-artifact-digest.cjs "$archive")"
+          printf '%s\n' "$digest" > "${{ runner.temp }}/mastra-e2e-registry/handoff-digest.txt"
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+
       - name: Upload E2E registry artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: e2e-verdaccio-registry
           path: ${{ runner.temp }}/mastra-e2e-registry
           retention-days: 1
+
+  e2e-experiments:
+    needs: publish-e2e-registry
+    if: inputs.experiment_worker_e2e_changed
+    name: E2E experiments
+    runs-on: starsling-ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 5
+        with:
+          ref: ${{ inputs.head_sha }}
+          persist-credentials: false
+
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
+
+      - name: Install experiment worker E2E dependencies
+        working-directory: ./e2e-tests/experiment-worker
+        run: pnpm install --frozen-lockfile
+
+      - name: Download E2E registry artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: e2e-verdaccio-registry
+          path: ${{ runner.temp }}/mastra-e2e-registry
+
+      - name: Extract immutable registry snapshot
+        shell: bash
+        run: |
+          mkdir -p "${{ runner.temp }}/experiment-worker-registry"
+          tar -xf "${{ runner.temp }}/mastra-e2e-registry/registry-snapshot.tar" -C "${{ runner.temp }}/experiment-worker-registry"
+
+      - name: Create experiments report directory
+        run: mkdir -p "${{ runner.temp }}/experiments-reports"
+
+      - name: Run strict published-registry PR tier
+        working-directory: ./e2e-tests/experiment-worker
+        shell: bash
+        run: |
+          set -o pipefail
+          test -f tests/minimal-agent.test.ts
+          pnpm test:experiment 2>&1 | tee "$MASTRA_EXPERIMENT_E2E_REPORT_DIR/vitest.log"
+        env:
+          MASTRA_E2E_REGISTRY_STORAGE: ${{ runner.temp }}/experiment-worker-registry/storage
+          MASTRA_E2E_REGISTRY_CONFIG: ${{ runner.temp }}/experiment-worker-registry/verdaccio.yaml
+          MASTRA_E2E_REGISTRY_ARTIFACT_PATH: ${{ runner.temp }}/mastra-e2e-registry/registry-snapshot.tar
+          MASTRA_E2E_REGISTRY_TAG: e2e-ci-${{ github.run_id }}-${{ github.run_attempt }}
+          MASTRA_E2E_REGISTRY_ARTIFACT_DIGEST: ${{ needs.publish-e2e-registry.outputs.digest }}
+          MASTRA_E2E_REGISTRY_PORT: '4873'
+          MASTRA_EXPERIMENT_E2E_REQUIRE_PUBLISHED_REGISTRY: '1'
+          MASTRA_EXPERIMENT_E2E_REPORT_DIR: ${{ runner.temp }}/experiments-reports
+
+      - name: Upload experiments reports and transcripts
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: experiments-pr-reports
+          path: ${{ runner.temp }}/experiments-reports
+          if-no-files-found: error
+          retention-days: 14
 
   e2e-monorepo:
     needs: publish-e2e-registry
@@ -78,6 +159,7 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 5
         with:
           ref: ${{ inputs.head_sha }}
 
@@ -122,6 +204,7 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 5
         with:
           ref: ${{ inputs.head_sha }}
 
@@ -168,6 +251,7 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 5
         with:
           ref: ${{ inputs.head_sha }}
 
@@ -212,6 +296,7 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 5
         with:
           ref: ${{ inputs.head_sha }}
 
@@ -256,6 +341,7 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 5
         with:
           ref: ${{ inputs.head_sha }}
 
@@ -299,6 +385,7 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 5
         with:
           ref: ${{ inputs.head_sha }}
 
@@ -343,6 +430,7 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 5
         with:
           ref: ${{ inputs.head_sha }}
 
@@ -389,6 +477,7 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 5
         with:
           ref: ${{ inputs.head_sha }}
 
@@ -431,6 +520,7 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 5
         with:
           ref: ${{ inputs.head_sha }}
 

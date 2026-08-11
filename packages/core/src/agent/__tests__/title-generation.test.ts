@@ -5,6 +5,7 @@ import { noopLogger } from '../../logger';
 import { MockMemory } from '../../memory/mock';
 import { RequestContext } from '../../request-context';
 import { Agent } from '../agent';
+import type { MastraDBMessage } from '../types';
 
 function titleGenerationTests(version: 'v1' | 'v2') {
   let dummyModel: MockLanguageModelV1 | MockLanguageModelV2;
@@ -811,6 +812,162 @@ function titleGenerationTests(version: 'v1' | 'v2') {
       await new Promise(resolve => setTimeout(resolve, 100));
       expect(titleGenerationCallCount).toBe(0); // No title generation should happen
       expect(agentCallCount).toBe(1); // But main agent should still be called
+    });
+
+    it('keeps title persistence alive via waitUntil without blocking generate (#20682)', async () => {
+      // Title gen stays fire-and-forget so generate() is not slowed for serverless.
+      // Callers pass platform waitUntil so the isolate stays alive until persistence finishes.
+      let releaseTitleWrite: (() => void) | undefined;
+      const titleWriteGate = new Promise<void>(resolve => {
+        releaseTitleWrite = resolve;
+      });
+      let titlePersisted = false;
+
+      const mockMemory = new MockMemory();
+      mockMemory.getMergedThreadConfig = () => ({
+        generateTitle: true,
+      });
+
+      const originalCreateThread = mockMemory.createThread.bind(mockMemory);
+      mockMemory.createThread = async args => {
+        if (args.title) {
+          await titleWriteGate;
+          titlePersisted = true;
+        }
+        return originalCreateThread(args);
+      };
+
+      let testModel: MockLanguageModelV1 | MockLanguageModelV2;
+
+      if (version === 'v1') {
+        testModel = new MockLanguageModelV1({
+          doGenerate: async options => {
+            const messages = options.prompt;
+            const isForTitle = messages.some((msg: any) => msg.content?.includes?.('you will generate a short title'));
+
+            if (isForTitle) {
+              return {
+                rawCall: { rawPrompt: null, rawSettings: {} },
+                finishReason: 'stop',
+                usage: { promptTokens: 5, completionTokens: 10 },
+                text: 'Serverless Safe Title',
+              };
+            }
+
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'stop',
+              usage: { promptTokens: 10, completionTokens: 20 },
+              text: 'Agent Response',
+            };
+          },
+        });
+      } else {
+        testModel = new MockLanguageModelV2({
+          doGenerate: async options => {
+            const messages = options.prompt;
+            const isForTitle = messages.some((msg: any) => msg.content?.includes?.('you will generate a short title'));
+
+            if (isForTitle) {
+              return {
+                rawCall: { rawPrompt: null, rawSettings: {} },
+                finishReason: 'stop',
+                usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+                text: 'Serverless Safe Title',
+                content: [{ type: 'text', text: 'Serverless Safe Title' }],
+                warnings: [],
+              };
+            }
+
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'stop',
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              text: 'Agent Response',
+              content: [{ type: 'text', text: 'Agent Response' }],
+              warnings: [],
+            };
+          },
+          doStream: async options => {
+            const messages = options.prompt;
+            const isForTitle = messages.some((msg: any) => msg.content?.includes?.('you will generate a short title'));
+            const text = isForTitle ? 'Serverless Safe Title' : 'Agent Response';
+
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              warnings: [],
+              stream: convertArrayToReadableStream([
+                { type: 'stream-start', warnings: [] },
+                {
+                  type: 'response-metadata',
+                  id: 'id-0',
+                  modelId: 'mock-model-id',
+                  timestamp: new Date(0),
+                },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: text },
+                { type: 'text-end', id: 'text-1' },
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                },
+              ]),
+            };
+          },
+        });
+      }
+
+      const agent = new Agent({
+        id: 'waituntil-title-agent',
+        name: 'WaitUntil Title Agent',
+        instructions: 'test agent',
+        model: testModel,
+        memory: mockMemory,
+      });
+
+      const threadId = `thread-waituntil-title-${version}`;
+      const pending: Promise<unknown>[] = [];
+      const waitUntil = (promise: Promise<unknown>) => {
+        pending.push(promise);
+      };
+
+      if (version === 'v1') {
+        // Legacy already awaits title generation inline — no waitUntil hook needed.
+        releaseTitleWrite?.();
+        await agent.generateLegacy('Name this conversation', {
+          memory: {
+            resource: 'user-await',
+            thread: {
+              id: threadId,
+              title: '',
+            },
+          },
+        });
+        expect(titlePersisted).toBe(true);
+      } else {
+        await agent.generate('Name this conversation', {
+          serverless: { waitUntil },
+          memory: {
+            resource: 'user-await',
+            thread: {
+              id: threadId,
+              title: '',
+            },
+          },
+        });
+
+        // generate() must resolve without waiting on title persistence.
+        expect(titlePersisted).toBe(false);
+        expect(pending.length).toBe(1);
+
+        releaseTitleWrite?.();
+        await Promise.all(pending);
+        expect(titlePersisted).toBe(true);
+      }
+
+      const thread = await mockMemory.getThreadById({ threadId });
+      expect(thread?.title).toBe('Serverless Safe Title');
     });
 
     it('should not generate title for pre-created threads (thread already exists)', async () => {
@@ -3347,5 +3504,125 @@ describe('onTitleGenerated callback', () => {
 
     // Should not throw — error is caught in the .catch() handler
     await new Promise(resolve => setTimeout(resolve, 200));
+  });
+});
+
+describe('title generation with resource-scoped memory recall', () => {
+  it('derives the title only from the thread being titled, not from recalled messages of other threads', async () => {
+    const capturedTitlePrompts: any[] = [];
+
+    const titleModel = new MockLanguageModelV2({
+      doGenerate: async options => {
+        capturedTitlePrompts.push(options.prompt);
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+          content: [{ type: 'text' as const, text: 'Biryani Recipe' }],
+          warnings: [],
+        };
+      },
+      doStream: async options => {
+        capturedTitlePrompts.push(options.prompt);
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start' as const, warnings: [] },
+            { type: 'response-metadata' as const, id: 'id-t', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-start' as const, id: 'text-1' },
+            { type: 'text-delta' as const, id: 'text-1', delta: 'Biryani Recipe' },
+            { type: 'text-end' as const, id: 'text-1' },
+            {
+              type: 'finish' as const,
+              finishReason: 'stop' as const,
+              usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+            },
+          ]),
+        };
+      },
+    });
+
+    const agentModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop' as const,
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        content: [{ type: 'text' as const, text: 'Agent response' }],
+        warnings: [],
+      }),
+      doStream: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start' as const, warnings: [] },
+          { type: 'response-metadata' as const, id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+          { type: 'text-start' as const, id: 'text-1' },
+          { type: 'text-delta' as const, id: 'text-1', delta: 'Agent response' },
+          { type: 'text-end' as const, id: 'text-1' },
+          {
+            type: 'finish' as const,
+            finishReason: 'stop' as const,
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          },
+        ]),
+      }),
+    });
+
+    const mockMemory = new MockMemory();
+    mockMemory.getMergedThreadConfig = () => ({
+      generateTitle: { model: titleModel },
+      lastMessages: 10,
+    });
+
+    // Simulate resource-scoped recall: a memory loader adds a message that
+    // belongs to a different thread of the same resource to the message list.
+    const foreignMessage: MastraDBMessage = {
+      id: 'foreign-thread-message',
+      threadId: 'old-thread',
+      resourceId: 'user-1',
+      role: 'user',
+      content: {
+        format: 2,
+        parts: [{ type: 'text', text: 'Help me write a Python stock scraper' }],
+        content: 'Help me write a Python stock scraper',
+      },
+      createdAt: new Date(Date.now() - 60_000),
+    };
+
+    const agent = new Agent({
+      id: 'resource-scope-title-agent',
+      name: 'Resource Scope Title Agent',
+      instructions: 'test agent',
+      model: agentModel,
+      memory: mockMemory,
+      inputProcessors: [
+        {
+          id: 'fake-resource-scoped-recall',
+          processInput: async ({ messageList }) => {
+            messageList.add(foreignMessage, 'memory');
+            return messageList;
+          },
+        },
+      ],
+    });
+
+    await agent.generate('What is a good recipe for biryani?', {
+      memory: {
+        resource: 'user-1',
+        thread: { id: 'new-thread', title: '' },
+      },
+    });
+
+    // Title generation is fire-and-forget, wait for it
+    await new Promise(resolve => setTimeout(resolve, 200));
+
+    expect(capturedTitlePrompts.length).toBeGreaterThan(0);
+    const titleInput = JSON.stringify(capturedTitlePrompts);
+    expect(titleInput).toContain('biryani');
+    expect(titleInput).not.toContain('stock scraper');
+
+    const thread = await mockMemory.getThreadById({ threadId: 'new-thread' });
+    expect(thread?.title).toBe('Biryani Recipe');
   });
 });

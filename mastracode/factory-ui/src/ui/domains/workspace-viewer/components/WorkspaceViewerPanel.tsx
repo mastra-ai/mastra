@@ -1,135 +1,93 @@
-import { Button } from '@mastra/playground-ui/components/Button';
-import { ArrowLeft } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 
-import { useWorkspaceFile, useWorkspaceRenderedListing } from '../../../../hooks/use-fs';
-import type { RenderedWorkspacePath } from '../config';
+import { useWorkspaceFile, useWorkspaceFiles } from '../../../../hooks/use-fs';
+import { WorkspaceChangesPanel } from './WorkspaceChangesPanel';
 import { WorkspaceFileBrowser } from './WorkspaceFileBrowser';
 import { WorkspaceFileViewer } from './WorkspaceFileViewer';
 
 interface WorkspaceViewerPanelProps {
   workspacePath: string;
-  renderedPaths: RenderedWorkspacePath[];
-  title?: string;
-  context?: string;
+  threadId: string;
+  /** Fires when the file viewer opens or closes, so a floating host can widen its surface. */
   onExpandedChange?: (expanded: boolean) => void;
+  /** A host that keeps the panel mounted off-screen passes false to keep queries dormant. */
+  visible?: boolean;
 }
 
-export function WorkspaceViewerPanel({ workspacePath, renderedPaths, ...props }: WorkspaceViewerPanelProps) {
-  const resetKey = [workspacePath, ...renderedPaths.map(path => `${path.id}:${path.root}`)].join('|');
-
+export function WorkspaceViewerPanel({ workspacePath, threadId, visible = true, ...props }: WorkspaceViewerPanelProps) {
   return (
-    <WorkspaceViewerPanelInner key={resetKey} workspacePath={workspacePath} renderedPaths={renderedPaths} {...props} />
+    <WorkspaceViewerPanelReset
+      key={`${workspacePath}|${threadId}`}
+      workspacePath={workspacePath}
+      threadId={threadId}
+      visible={visible}
+      {...props}
+    />
   );
+}
+
+type MountedPanelProps = Omit<WorkspaceViewerPanelProps, 'visible'> & { visible: boolean };
+
+function WorkspaceViewerPanelReset(props: MountedPanelProps) {
+  const [view, setView] = useState<'files' | 'changes'>('files');
+
+  if (view === 'changes') {
+    return (
+      <WorkspaceChangesPanel
+        workspacePath={props.workspacePath}
+        visible={props.visible}
+        onShowFiles={() => setView('files')}
+      />
+    );
+  }
+
+  return <WorkspaceViewerPanelInner {...props} onShowChanges={() => setView('changes')} />;
 }
 
 function WorkspaceViewerPanelInner({
   workspacePath,
-  renderedPaths,
-  title,
-  context,
+  threadId,
   onExpandedChange,
-}: WorkspaceViewerPanelProps) {
-  const [selectedRenderedPathId, setSelectedRenderedPathId] = useState(renderedPaths[0]?.id ?? '');
+  onShowChanges,
+  visible,
+}: MountedPanelProps & { onShowChanges: () => void }) {
   const [selectedFilePath, setSelectedFilePath] = useState<string | undefined>();
   const [viewerOpen, setViewerOpenState] = useState(false);
-  const [browserWidth, setBrowserWidth] = useState(320);
-  const resizeCleanupRef = useRef<(() => void) | undefined>(undefined);
-
-  const selectedRenderedPath = renderedPaths.find(path => path.id === selectedRenderedPathId) ?? renderedPaths[0];
-  const selectedFileRequestPath = selectedFilePath ? `${selectedRenderedPath?.root}/${selectedFilePath}` : undefined;
-  const listing = useWorkspaceRenderedListing(workspacePath, selectedRenderedPath?.root);
-  const file = useWorkspaceFile(workspacePath, selectedFileRequestPath, { enabled: viewerOpen });
-
-  useEffect(() => () => resizeCleanupRef.current?.(), []);
-
-  if (!selectedRenderedPath) return null;
+  const listing = useWorkspaceFiles(workspacePath, threadId, { enabled: visible });
+  const file = useWorkspaceFile(workspacePath, selectedFilePath, threadId, { enabled: visible && viewerOpen });
+  const selectedFile = file.data?.path === selectedFilePath ? file.data : undefined;
 
   const setViewerOpen = (open: boolean) => {
     setViewerOpenState(open);
     onExpandedChange?.(open);
   };
 
-  const startResize = (event: React.PointerEvent<HTMLDivElement>) => {
-    resizeCleanupRef.current?.();
-    const startX = event.clientX;
-    const startWidth = browserWidth;
-    const onPointerMove = (moveEvent: PointerEvent) => {
-      const nextWidth = startWidth - (moveEvent.clientX - startX);
-      setBrowserWidth(Math.min(420, Math.max(220, nextWidth)));
-    };
-    const cleanup = () => {
-      window.removeEventListener('pointermove', onPointerMove);
-      window.removeEventListener('pointerup', cleanup);
-      window.removeEventListener('pointercancel', cleanup);
-      resizeCleanupRef.current = undefined;
-    };
-    resizeCleanupRef.current = cleanup;
-    window.addEventListener('pointermove', onPointerMove);
-    window.addEventListener('pointerup', cleanup);
-    window.addEventListener('pointercancel', cleanup);
-  };
-
   return (
-    <div className="bg-surface1 relative flex h-full w-full min-w-0" data-testid="workspace-viewer-panel">
+    <div className="flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden" data-testid="workspace-viewer-panel">
       {viewerOpen ? (
-        <div className="relative h-full min-w-0 flex-1 overflow-hidden">
-          <Button
-            size="icon-sm"
-            variant="ghost"
-            className="absolute top-2 left-2 z-10 lg:hidden"
-            onClick={() => setViewerOpen(false)}
-            aria-label="Back to workspace files"
-          >
-            <ArrowLeft />
-          </Button>
-          <WorkspaceFileViewer
-            filePath={selectedFilePath}
-            file={file.data}
-            isLoading={file.isLoading}
-            error={file.error instanceof Error ? file.error : undefined}
-          />
-        </div>
-      ) : null}
-      {viewerOpen ? (
-        <div
-          className="bg-border1 hover:bg-accent1 hidden w-1 cursor-col-resize lg:block"
-          role="separator"
-          aria-orientation="vertical"
-          aria-label="Resize workspace file browser"
-          onPointerDown={startResize}
+        <WorkspaceFileViewer
+          key={selectedFilePath}
+          filePath={selectedFilePath}
+          file={selectedFile}
+          isLoading={file.isLoading || (file.isFetching && !selectedFile)}
+          error={file.error instanceof Error ? file.error : undefined}
+          onBack={() => setViewerOpen(false)}
         />
-      ) : null}
-      <div
-        className={
-          viewerOpen
-            ? 'hidden h-full min-w-0 shrink-0 overflow-hidden lg:block'
-            : 'h-full min-w-0 flex-1 overflow-hidden'
-        }
-        style={viewerOpen ? { width: browserWidth } : undefined}
-      >
-        <div className="sr-only">
-          {title ?? 'Workspace viewer'} {context ?? ''}
-        </div>
+      ) : (
         <WorkspaceFileBrowser
-          renderedPaths={renderedPaths}
-          selectedPath={selectedRenderedPath}
+          files={listing.data?.files}
           selectedFilePath={selectedFilePath}
-          listing={listing.data}
           isLoading={listing.isLoading}
+          isRefreshing={listing.isFetching}
           error={listing.error instanceof Error ? listing.error : undefined}
-          onRenderedPathChange={path => {
-            setSelectedRenderedPathId(path.id);
-            setSelectedFilePath(undefined);
-            setViewerOpen(false);
-          }}
+          onRefresh={() => listing.refetch()}
           onFileSelect={filePath => {
             setSelectedFilePath(filePath);
             setViewerOpen(true);
           }}
-          onRefresh={() => listing.refetch()}
+          onShowChanges={onShowChanges}
         />
-      </div>
+      )}
     </div>
   );
 }

@@ -10,6 +10,7 @@ import type {
   SourceControlStorageHandle,
 } from '../../storage/domains/source-control/base.js';
 import {
+  checkoutSessionBranch,
   computeWorktreePath,
   configureGitIdentity,
   createPullRequest,
@@ -19,6 +20,7 @@ import {
   materializeRepo as materializeRepoWithStorage,
   MaterializeError,
   pushBranch,
+  recycleClaimedWorkdir,
   resolveGitIdentity,
   runWorktreeSetup,
   safeBranchDir,
@@ -401,6 +403,84 @@ describe('materializeRepo', () => {
     expect(dbUpdates.at(-1)).toHaveProperty('materializedAt');
   });
 
+  it('keeps a dirty checkout as-is when local changes block the pull', async () => {
+    // A previous run left uncommitted modifications in the checkout (e.g. a
+    // changeset-version run or build residue); git refuses to merge over
+    // them. The checkout is intact — keep it, never discard the local state.
+    const sandbox = new FakeSandbox(script => {
+      if (script.includes('remote get-url origin')) {
+        return { exitCode: 0, stdout: 'https://github.com/octocat/hello.git\n', stderr: '' };
+      }
+      if (script.includes('pull --ff-only')) {
+        return {
+          exitCode: 1,
+          stdout: '',
+          stderr:
+            'error: Your local changes to the following files would be overwritten by merge:\n\tpackage.json\nPlease commit your changes or stash them before you merge.\nAborting\n',
+        };
+      }
+      return OK;
+    });
+
+    await materializeRepo(makeRow({ materializedAt: new Date() }), makeRepoInfo(), sandbox, 'tok-secret');
+
+    const joined = sandbox.calls.join('\n');
+    expect(joined).not.toContain('git clone');
+    expect(joined).not.toMatch(/rebase|reset --hard|stash|checkout --/);
+    expect(dbUpdates.at(-1)).toHaveProperty('materializedAt');
+  });
+
+  it('keeps a checkout with blocking untracked files as-is on re-open', async () => {
+    const sandbox = new FakeSandbox(script => {
+      if (script.includes('remote get-url origin')) {
+        return { exitCode: 0, stdout: 'https://github.com/octocat/hello.git\n', stderr: '' };
+      }
+      if (script.includes('pull --ff-only')) {
+        return {
+          exitCode: 1,
+          stdout: '',
+          stderr:
+            'error: The following untracked working tree files would be overwritten by merge:\n\t.changeset/new-note.md\nPlease move or remove them before you merge.\nAborting\n',
+        };
+      }
+      return OK;
+    });
+
+    await materializeRepo(makeRow({ materializedAt: new Date() }), makeRepoInfo(), sandbox, 'tok');
+
+    const joined = sandbox.calls.join('\n');
+    expect(joined).not.toContain('git clone');
+    expect(joined).not.toMatch(/rebase|reset --hard|stash|checkout --|clean -/);
+    expect(dbUpdates.at(-1)).toHaveProperty('materializedAt');
+  });
+
+  it('keeps a dirty checkout as-is when pull.rebase turns the refusal into rebase wording', async () => {
+    // Same dirty checkout, different git config: with `pull.rebase` set, git
+    // refuses in rebase's words rather than merge's. It is still the session's
+    // own uncommitted work — keep it, never discard it to force the pull.
+    const sandbox = new FakeSandbox(script => {
+      if (script.includes('remote get-url origin')) {
+        return { exitCode: 0, stdout: 'https://github.com/octocat/hello.git\n', stderr: '' };
+      }
+      if (script.includes('pull --ff-only')) {
+        return {
+          exitCode: 1,
+          stdout: '',
+          stderr:
+            'error: cannot pull with rebase: Your index contains uncommitted changes.\nerror: Please commit or stash them.\n',
+        };
+      }
+      return OK;
+    });
+
+    await materializeRepo(makeRow({ materializedAt: new Date() }), makeRepoInfo(), sandbox, 'tok');
+
+    const joined = sandbox.calls.join('\n');
+    expect(joined).not.toContain('git clone');
+    expect(joined).not.toMatch(/rebase|reset --hard|stash|checkout --|clean -/);
+    expect(dbUpdates.at(-1)).toHaveProperty('materializedAt');
+  });
+
   it('treats a session branch without an upstream as materialized on re-open', async () => {
     // Session branches are created from FETCH_HEAD and have no tracking
     // branch; `git pull` then exits with "no tracking information".
@@ -420,6 +500,56 @@ describe('materializeRepo', () => {
 
     await materializeRepo(makeRow({ materializedAt: new Date() }), makeRepoInfo(), sandbox, 'tok');
 
+    expect(dbUpdates.at(-1)).toHaveProperty('materializedAt');
+  });
+
+  it('keeps a checkout when the upstream branch was deleted after merge', async () => {
+    // Session branch was auto-deleted on the remote after its PR merged;
+    // `git pull` reports the configured upstream ref is gone. The checkout
+    // is intact (and the work is already integrated) — keep it as-is.
+    const sandbox = new FakeSandbox(script => {
+      if (script.includes('remote get-url origin')) {
+        return { exitCode: 0, stdout: 'https://github.com/octocat/hello.git\n', stderr: '' };
+      }
+      if (script.includes('pull --ff-only')) {
+        return {
+          exitCode: 1,
+          stdout: '',
+          stderr:
+            "Your configuration specifies to merge with the ref 'refs/heads/factory/issue-1'\nfrom the remote, but no such ref was fetched.\n",
+        };
+      }
+      return OK;
+    });
+
+    await materializeRepo(makeRow({ materializedAt: new Date() }), makeRepoInfo(), sandbox, 'tok');
+
+    const joined = sandbox.calls.join('\n');
+    expect(joined).not.toContain('git clone');
+    expect(joined).not.toMatch(/rebase|reset --hard/);
+    expect(dbUpdates.at(-1)).toHaveProperty('materializedAt');
+  });
+
+  it('keeps a checkout when git cannot find the remote ref', async () => {
+    const sandbox = new FakeSandbox(script => {
+      if (script.includes('remote get-url origin')) {
+        return { exitCode: 0, stdout: 'https://github.com/octocat/hello.git\n', stderr: '' };
+      }
+      if (script.includes('pull --ff-only')) {
+        return {
+          exitCode: 1,
+          stdout: '',
+          stderr: "fatal: couldn't find remote ref refs/heads/factory/issue-1\n",
+        };
+      }
+      return OK;
+    });
+
+    await materializeRepo(makeRow({ materializedAt: new Date() }), makeRepoInfo(), sandbox, 'tok');
+
+    const joined = sandbox.calls.join('\n');
+    expect(joined).not.toContain('git clone');
+    expect(joined).not.toMatch(/rebase|reset --hard/);
     expect(dbUpdates.at(-1)).toHaveProperty('materializedAt');
   });
 
@@ -495,6 +625,131 @@ describe('materializeRepo', () => {
     expect(err).toBeInstanceOf(MaterializeError);
     expect(err.code).toBe('pull-failed');
     expect(String(err.message)).toContain('scrub');
+  });
+});
+
+describe('checkoutSessionBranch', () => {
+  const opts = { branch: 'factory/pr-1', baseBranch: 'main', token: 'tok-secret', repoFullName: 'octocat/hello' };
+
+  it('keeps the current branch when uncommitted work blocks the switch', async () => {
+    // The session's agent switched branches itself (e.g. `gh pr checkout`)
+    // and left uncommitted edits; git refuses to switch back over them.
+    // That work must win — no error, no stash/reset to force the switch.
+    const sandbox = new FakeSandbox(script => {
+      if (script.includes('branch --show-current')) {
+        return { exitCode: 0, stdout: 'pr-1\n', stderr: '' };
+      }
+      if (script.includes('show-ref')) return OK;
+      if (script.includes('checkout')) {
+        return {
+          exitCode: 1,
+          stdout: '',
+          stderr:
+            'error: Your local changes to the following files would be overwritten by checkout:\n\tsrc/app.ts\nPlease commit your changes or stash them before you switch branches.\nAborting\n',
+        };
+      }
+      return OK;
+    });
+
+    await expect(checkoutSessionBranch(sandbox, '/workspace/repo', opts)).resolves.toBeUndefined();
+
+    const joined = sandbox.calls.join('\n');
+    expect(joined).not.toMatch(/stash|reset --hard|checkout --|clean -/);
+  });
+
+  it('keeps the current branch when local work blocks creating the session branch', async () => {
+    const sandbox = new FakeSandbox(script => {
+      if (script.includes('branch --show-current')) {
+        return { exitCode: 0, stdout: 'pr-1\n', stderr: '' };
+      }
+      if (script.includes('show-ref')) return { exitCode: 1, stdout: '', stderr: '' };
+      if (script.includes('checkout -b')) {
+        return {
+          exitCode: 1,
+          stdout: '',
+          stderr:
+            'error: The following untracked working tree files would be overwritten by checkout:\n\tnotes.md\nPlease move or remove them before you switch branches.\nAborting\n',
+        };
+      }
+      return OK;
+    });
+
+    await expect(checkoutSessionBranch(sandbox, '/workspace/repo', opts)).resolves.toBeUndefined();
+
+    // Token still scrubbed back to the clean URL in the finally.
+    const scrub = sandbox.calls.filter(c => c.includes('remote set-url origin')).at(-1);
+    expect(scrub).toContain('https://github.com/octocat/hello.git');
+    expect(scrub).not.toContain('tok-secret');
+  });
+
+  it('still surfaces real checkout failures', async () => {
+    const sandbox = new FakeSandbox(script => {
+      if (script.includes('branch --show-current')) {
+        return { exitCode: 0, stdout: 'main\n', stderr: '' };
+      }
+      if (script.includes('show-ref')) return OK;
+      if (script.includes('checkout')) {
+        return { exitCode: 1, stdout: '', stderr: 'fatal: index file corrupt' };
+      }
+      return OK;
+    });
+
+    const err = await checkoutSessionBranch(sandbox, '/workspace/repo', opts).catch(e => e);
+    expect(err).toBeInstanceOf(MaterializeError);
+    expect(err.code).toBe('clone-failed');
+  });
+});
+
+describe('recycleClaimedWorkdir', () => {
+  it('is a no-op when the claimed workdir has no checkout yet', async () => {
+    const sandbox = new FakeSandbox(script =>
+      script.includes('rev-parse') ? { exitCode: 128, stdout: '', stderr: 'not a git repository' } : OK,
+    );
+
+    await recycleClaimedWorkdir(sandbox, '/workspace/hello', 'main');
+
+    expect(sandbox.calls).toHaveLength(1);
+    expect(sandbox.calls[0]).toContain('rev-parse --is-inside-work-tree');
+  });
+
+  it('resets the previous session state back to the default branch', async () => {
+    const sandbox = new FakeSandbox();
+
+    await recycleClaimedWorkdir(sandbox, '/workspace/hello', 'main');
+
+    const recycle = sandbox.calls[1]!;
+    expect(recycle).toContain("checkout -f 'main'");
+    expect(recycle).toContain('reset --hard');
+    // `-x` included: gitignored files (.env, caches) must not leak between sessions.
+    expect(recycle).toContain('clean -fdx');
+    expect(sandbox.calls.some(call => call.startsWith('rm -rf'))).toBe(false);
+  });
+
+  it('wipes a wedged checkout so materialization re-clones inside the same VM', async () => {
+    const sandbox = new FakeSandbox(script =>
+      script.includes('checkout -f') ? { exitCode: 1, stdout: '', stderr: 'index locked' } : OK,
+    );
+
+    await recycleClaimedWorkdir(sandbox, '/workspace/hello', 'main');
+
+    expect(sandbox.calls.at(-1)).toBe("rm -rf '/workspace/hello'");
+  });
+
+  it('throws when the wedged checkout cannot even be wiped', async () => {
+    const sandbox = new FakeSandbox(script =>
+      script.includes('rev-parse') ? OK : { exitCode: 1, stdout: '', stderr: 'device busy' },
+    );
+
+    await expect(recycleClaimedWorkdir(sandbox, '/workspace/hello', 'main')).rejects.toBeInstanceOf(MaterializeError);
+  });
+
+  it('refuses shell-hostile default branch names', async () => {
+    const sandbox = new FakeSandbox();
+
+    await expect(recycleClaimedWorkdir(sandbox, '/workspace/hello', 'main; rm -rf /')).rejects.toBeInstanceOf(
+      MaterializeError,
+    );
+    expect(sandbox.calls).toHaveLength(0);
   });
 });
 
@@ -915,6 +1170,100 @@ describe('sh transport retry', () => {
 
     expect(err.status).toBe(404);
     expect(sandbox.calls).toHaveLength(1);
+  });
+});
+
+describe('git transfer retry', () => {
+  // A git command that reaches github.com and then loses the connection exits
+  // non-zero rather than throwing, so the `sh` transport retry above never sees
+  // it. One HTTP/2 hiccup used to permanently fail opening a workspace.
+  const HTTP2_GLITCH = {
+    exitCode: 128,
+    stdout: '',
+    stderr: "fatal: unable to access 'https://github.com/octocat/hello.git/': Error in the HTTP2 framing layer",
+  };
+
+  it('retries a clone that lost the connection mid-transfer and succeeds', async () => {
+    vi.useFakeTimers();
+    try {
+      let clones = 0;
+      const sandbox = new FakeSandbox(script => {
+        if (script.includes('git clone')) return ++clones === 1 ? HTTP2_GLITCH : OK;
+        return OK;
+      });
+
+      const pending = materializeRepo(makeRow(), makeRepoInfo(), sandbox, 'tok');
+      await vi.advanceTimersByTimeAsync(2000);
+      await pending;
+
+      expect(clones).toBe(2);
+      // The dead attempt leaves a partial directory that git refuses to clone
+      // into, so the retry has to clear it first.
+      const cloneCalls = sandbox.calls.filter(call => call.includes('git clone'));
+      const wipe = sandbox.calls.findIndex(call => call.startsWith('rm -rf'));
+      expect(cloneCalls).toHaveLength(2);
+      expect(wipe).toBeGreaterThan(sandbox.calls.indexOf(cloneCalls[0]!));
+      expect(wipe).toBeLessThan(sandbox.calls.lastIndexOf(cloneCalls[1]!));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('gives up and reports the clone failure once the retries are exhausted', async () => {
+    vi.useFakeTimers();
+    try {
+      const sandbox = new FakeSandbox(script => (script.includes('git clone') ? HTTP2_GLITCH : OK));
+
+      const pending = materializeRepo(makeRow(), makeRepoInfo(), sandbox, 'tok').catch(e => e);
+      await vi.advanceTimersByTimeAsync(10_000);
+      const err = await pending;
+
+      expect(err).toBeInstanceOf(MaterializeError);
+      expect(err.code).toBe('clone-failed');
+      expect(sandbox.calls.filter(call => call.includes('git clone'))).toHaveLength(3); // initial + 2 retries
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not retry a refusal, which would only fail slower', async () => {
+    // Bad credentials, a missing repo, or blocked egress are settled answers:
+    // the user needs them now, not in six seconds.
+    const sandbox = new FakeSandbox(script =>
+      script.includes('git clone')
+        ? { exitCode: 128, stdout: '', stderr: 'fatal: Authentication failed for https://github.com/octocat/hello/' }
+        : OK,
+    );
+
+    const err = await materializeRepo(makeRow(), makeRepoInfo(), sandbox, 'tok').catch(e => e);
+
+    expect(err.code).toBe('clone-failed');
+    expect(sandbox.calls.filter(call => call.includes('git clone'))).toHaveLength(1);
+  });
+
+  it('retries a pull that lost the connection mid-transfer', async () => {
+    vi.useFakeTimers();
+    try {
+      let pulls = 0;
+      const sandbox = new FakeSandbox(script => {
+        // An origin pointing at this repo sends materialize down the pull path.
+        if (script.includes('remote get-url origin')) {
+          return { exitCode: 0, stdout: 'https://github.com/octocat/hello.git\n', stderr: '' };
+        }
+        if (script.includes('pull --ff-only')) return ++pulls === 1 ? HTTP2_GLITCH : OK;
+        return OK;
+      });
+
+      const pending = materializeRepo(makeRow(), makeRepoInfo(), sandbox, 'tok');
+      await vi.advanceTimersByTimeAsync(2000);
+      await pending;
+
+      expect(pulls).toBe(2);
+      // Nothing to clean up between pull attempts — the checkout is intact.
+      expect(sandbox.calls.some(call => call.startsWith('rm -rf'))).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

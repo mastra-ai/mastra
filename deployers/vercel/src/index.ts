@@ -44,13 +44,17 @@ export class VercelDeployer extends Deployer {
   async prepare(outputDirectory: string): Promise<void> {
     await super.prepare(outputDirectory);
 
-    this.writeVercelJSON(join(outputDirectory, this.outputDir, '..', '..'));
+    const __filename = fileURLToPath(import.meta.url);
+    const __dirname = dirname(__filename);
+
+    const studioSource = join(dirname(__dirname), 'dist', 'studio');
+
+    this.writeVercelJSON(
+      join(outputDirectory, this.outputDir, '..', '..'),
+      this.studio ? this.readStudioRouteRoots(studioSource) : [],
+    );
 
     if (this.studio) {
-      const __filename = fileURLToPath(import.meta.url);
-      const __dirname = dirname(__filename);
-
-      const studioSource = join(dirname(__dirname), 'dist', 'studio');
       const staticDir = join(outputDirectory, '.vercel', 'output', 'static');
 
       try {
@@ -62,6 +66,27 @@ export class VercelDeployer extends Deployer {
       }
 
       this.injectStudioConfig(staticDir);
+    }
+  }
+
+  /**
+   * Studio's top-level route segments, emitted by the Studio build alongside index.html.
+   * The Vercel route table needs them explicitly: custom `registerApiRoute()` paths are mounted
+   * at the root of the server, so the function has to own every path Studio doesn't claim.
+   */
+  private readStudioRouteRoots(studioSource: string): string[] {
+    const manifestPath = join(studioSource, 'routes-manifest.json');
+
+    try {
+      const roots = JSON.parse(readFileSync(manifestPath, 'utf-8'));
+      if (!Array.isArray(roots) || roots.some(root => typeof root !== 'string')) {
+        throw new Error('expected an array of route segments');
+      }
+      return roots;
+    } catch (err) {
+      throw new Error(
+        `Failed to read studio routes manifest at "${manifestPath}": ${err instanceof Error ? err.message : err}`,
+      );
     }
   }
 
@@ -120,10 +145,10 @@ export const HEAD = handle(app);
     writeFileSync(indexPath, html);
   }
 
-  private writeVercelJSON(outputDirectory: string) {
+  private writeVercelJSON(outputDirectory: string, studioRouteRoots: string[]) {
     writeFileSync(
       join(outputDirectory, 'config.json'),
-      JSON.stringify({ version: 3, routes: getVercelRoutes({ studio: this.studio }) }),
+      JSON.stringify({ version: 3, routes: getVercelRoutes({ studio: this.studio, studioRouteRoots }) }),
     );
   }
 

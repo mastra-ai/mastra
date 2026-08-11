@@ -9,6 +9,12 @@ packages:
 
 # Workers
 
+:::beta
+
+Breaking changes may occur without a major version bump until the API is stable.
+
+:::
+
 For usage patterns and deployment topologies, see [Workers](/docs/deployment/workers).
 
 ## Environment variables
@@ -20,7 +26,7 @@ Controls which workers start in the current process.
 | Value | Behavior |
 | - | - |
 | _(not set)_ | Default workers are auto-created based on configuration |
-| `"false"` | Disables all event processing. The process only serves HTTP requests. |
+| `"false"` | Disables worker event processing. The process serves HTTP requests and can still publish events to PubSub (e.g., workflow starts) without consuming them. |
 | `"orchestration"` | Only the orchestration worker starts |
 | `"scheduler"` | Only the scheduler worker starts |
 | `"backgroundTasks"` | Only the background task worker starts |
@@ -35,6 +41,8 @@ The base URL of the API server, used by the orchestration worker to execute work
 ```
 MASTRA_STEP_EXECUTION_URL=http://api:4111/api
 ```
+
+Use HTTPS URLs in production. See [Security recommendations](/docs/server/auth/workers#security-recommendations).
 
 The orchestration worker sends step execution requests to:
 

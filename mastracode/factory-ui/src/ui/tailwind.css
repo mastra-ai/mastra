@@ -27,6 +27,17 @@
   --color-icon4: var(--neutral4);
   --color-icon5: var(--neutral5);
   --color-icon6: var(--neutral6);
+  --color-pr-merged: var(--pr-merged);
+}
+
+/* Merged pull requests read purple everywhere; the DS accent ramp has no purple.
+ * Brightens on near-black, darkens on white so it stays legible in both themes. */
+:root {
+  --pr-merged: oklch(0.714 0.203 305.5);
+}
+
+html.light {
+  --pr-merged: oklch(0.496 0.265 302);
 }
 
 /* Keyframes must live inside @theme so Tailwind emits them alongside the

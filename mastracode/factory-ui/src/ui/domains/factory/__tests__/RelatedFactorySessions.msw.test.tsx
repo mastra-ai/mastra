@@ -1,3 +1,4 @@
+import { MainSidebarProvider } from '@mastra/playground-ui/components/MainSidebar';
 import { screen } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
@@ -5,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../e2e/ui/render';
+import { WorkspaceFilesProvider } from '../../workspace-viewer/context/WorkspaceFilesProvider';
 import { FactorySessionHeader } from '../components/RelatedFactorySessions';
 
 const FACTORY_ID = 'factory-1';
@@ -88,12 +90,18 @@ function stubHeader(item: ReturnType<typeof workItem> | ReturnType<typeof linear
 function renderHeader() {
   return renderWithProviders(
     <MemoryRouter initialEntries={[`/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/${THREAD_ID}`]}>
-      <Routes>
-        <Route
-          path="/factories/:factoryId/workspaces/:sessionId/threads/:threadId"
-          element={<FactorySessionHeader />}
-        />
-      </Routes>
+      <MainSidebarProvider storageKey="related-factory-sessions-test">
+        <Routes>
+          <Route
+            path="/factories/:factoryId/workspaces/:sessionId/threads/:threadId"
+            element={
+              <WorkspaceFilesProvider>
+                <FactorySessionHeader />
+              </WorkspaceFilesProvider>
+            }
+          />
+        </Routes>
+      </MainSidebarProvider>
     </MemoryRouter>,
   );
 }
@@ -110,6 +118,7 @@ describe('FactorySessionHeader', () => {
       expect(link).toHaveAttribute('href', issueUrl);
       expect(link).toHaveAttribute('target', '_blank');
       expect(link).toHaveAttribute('rel', 'noreferrer');
+      expect(link.querySelector('[data-source="github-issue"]')).toBeInTheDocument();
     });
   });
 
@@ -124,6 +133,7 @@ describe('FactorySessionHeader', () => {
       expect(link).toHaveAttribute('href', issueUrl);
       expect(link).toHaveAttribute('target', '_blank');
       expect(link).toHaveAttribute('rel', 'noreferrer');
+      expect(link.querySelector('[data-source="linear-issue"]')).toBeInTheDocument();
     });
   });
 

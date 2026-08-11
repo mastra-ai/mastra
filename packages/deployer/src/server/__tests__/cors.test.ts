@@ -1,6 +1,8 @@
 import { Mastra } from '@mastra/core/mastra';
 import { registerApiRoute } from '@mastra/core/server';
+import { createRoute } from '@mastra/server/server-adapter';
 import { describe, expect, it } from 'vitest';
+import { z } from 'zod/v4';
 import { createHonoServer } from '../index';
 
 const preflight = (path: string, origin: string) =>
@@ -55,6 +57,35 @@ describe('server CORS', () => {
     expect(customResponse.headers.get('Access-Control-Allow-Credentials')).toBe('true');
     expect(otherResponse.headers.get('Access-Control-Allow-Origin')).toBe('*');
     expect(otherResponse.headers.get('Access-Control-Allow-Credentials')).toBeNull();
+  });
+
+  it('uses server CORS config for createRoute routes', async () => {
+    const route = createRoute({
+      method: 'POST',
+      path: '/custom/validated',
+      responseType: 'json',
+      requiresAuth: false,
+      bodySchema: z.object({ name: z.string() }),
+      handler: async ({ name }) => ({ greeting: `Hello, ${name}` }),
+    });
+    const mastra = new Mastra({
+      server: {
+        cors: { origin: ['https://app.example'] },
+        apiRoutes: [route],
+      },
+    });
+    const app = await createHonoServer(mastra, { tools: {} });
+
+    const preflightResponse = await app.request(preflight('/custom/validated', 'https://app.example'));
+    const routeResponse = await app.request('/custom/validated', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'Ada' }),
+    });
+
+    expect(preflightResponse.headers.get('Access-Control-Allow-Origin')).toBe('https://app.example');
+    expect(routeResponse.status).toBe(200);
+    await expect(routeResponse.json()).resolves.toEqual({ greeting: 'Hello, Ada' });
   });
 
   it('uses route-specific CORS config for internal API routes', async () => {
@@ -176,6 +207,7 @@ describe('server CORS', () => {
     const allowHeaders = response.headers.get('Access-Control-Allow-Headers');
 
     expect(response.headers.get('Access-Control-Allow-Origin')).toBe('https://custom.example');
+    expect(allowHeaders).toContain('A2A-Version');
     expect(allowHeaders).toContain('x-mastra-client-type');
     expect(allowHeaders).toContain('x-custom-header');
   });

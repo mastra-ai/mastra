@@ -1,57 +1,56 @@
 ---
 title: "CopilotKit channels | Frameworks"
-description: "Deploy the same Mastra agent to Slack, Discord, Telegram, and other messaging channels"
+description: "Run the same Mastra agent as a bot in Slack and other messaging platforms"
 ---
 
 # CopilotKit channels
 
-The same Mastra agent that powers your in-app copilot can also run as a bot in messaging platforms. CopilotKit's bot layer connects your agent to Slack, Discord, Telegram, WhatsApp, and Microsoft Teams, with threads, tool calls, and human-in-the-loop approvals handled in the channel.
+The same Mastra agent that powers your in-app copilot can also run as a bot in messaging platforms. CopilotKit's Channels SDK connects your agent to Slack and other messaging platforms, with threads, tool calls, rich interactive messages, and human-in-the-loop approvals handled natively in the channel.
 
-:::info
+:::note
 
-The full setup lives in the [CopilotKit bot documentation](https://docs.copilotkit.ai/slack). This page shows how it fits together with a Mastra agent.
+Full platform setup lives in the [CopilotKit Channels documentation](https://docs.copilotkit.ai/slack/mastra). This page shows how Channels fit together with a Mastra agent.
 
 :::
 
 ## How it fits together
 
-Your Mastra agent stays where it's, exposed through `registerCopilotKit()` as described in [CopilotKit overview](/guides/build-your-ui/copilotkit/overview). The bot is a separate process built with `@copilotkit/bot`: you attach one or more platform adapters and point the bot at your agent. `createBot` takes an array of adapters, so a single bot can serve several platforms at once.
+Your Mastra agent stays where it's deployed, exposed over AG-UI through `registerCopilotKit()` (see [CopilotKit overview](/guides/build-your-ui/copilotkit/overview)). A channel is a separate long-running process built with `@copilotkit/channels`: you attach one or more platform adapters and point the channel at your agent. `createChannel` takes an array of adapters, so a single process can serve several platforms at once.
 
-```typescript title="bot.ts"
-import { createBot } from '@copilotkit/bot'
-import { slack } from '@copilotkit/bot-slack'
+Install the SDK (batteries-included, every adapter):
 
-const bot = createBot({
+```bash npm2yarn
+npm install @copilotkit/channels
+```
+
+```typescript title="channel.ts"
+import { createChannel, Message, Section } from '@copilotkit/channels'
+import { slack } from '@copilotkit/channels/slack'
+import { mastraAgent } from './agent' // your AG-UI Mastra agent
+
+const channel = createChannel({
+  // Point the channel at your Mastra agent (an AbstractAgent, or a per-thread factory).
+  agent: mastraAgent,
   adapters: [
     slack({
       botToken: process.env.SLACK_BOT_TOKEN!,
       appToken: process.env.SLACK_APP_TOKEN!,
     }),
   ],
-  // Point the bot at your agent.
-  agent: threadId => {
-    // ...connect to your CopilotKit runtime / Mastra agent
-  },
 })
 
-bot.onMention(async ({ thread }) => {
+channel.onMention(async ({ thread }) => {
   await thread.runAgent()
 })
 
-await bot.start()
+await channel.start()
 ```
 
-Rich messages are written as JSX and rendered to each platform's native message format (Block Kit on Slack, for example), so an interactive card degrades gracefully where a platform has no equivalent.
+The agent receives ordinary AG-UI input and emits ordinary AG-UI events; the platform mechanics stay behind the adapter, so the same Mastra agent runs unchanged across every channel. Rich messages are written as JSX and rendered to each platform's native format (Block Kit on Slack, for example), so an interactive card degrades gracefully where a platform has no equivalent.
 
 ## Slack
 
-The [Slack quickstart](https://docs.copilotkit.ai/slack) takes you from zero to a bot you can `@`-mention in a channel, then adds an interactive button card. Slack runs over Socket Mode, which opens an outbound WebSocket to Slack, so no public URL or tunnel is required during development.
-
-Install the packages:
-
-```bash npm2yarn
-npm install @copilotkit/bot @copilotkit/bot-ui @copilotkit/bot-slack
-```
+The [Slack quickstart](https://docs.copilotkit.ai/slack/mastra) takes you from zero to a bot you can `@`-mention in a channel, then adds an interactive button card. Slack runs over Socket Mode, which opens an outbound WebSocket to Slack, so no public URL or tunnel is required during development.
 
 Set the Slack credentials in your environment:
 
@@ -60,4 +59,19 @@ Set the Slack credentials in your environment:
 
 ## Other platforms
 
-The bot adapters share one `@copilotkit/bot` API and differ only in what each platform natively supports. For Discord, Telegram, WhatsApp, and Microsoft Teams, set the relevant platform credentials and add the matching adapter to the `adapters` array. See the [CopilotKit bot documentation](https://docs.copilotkit.ai/slack) for platform-specific setup.
+The Channels SDK isn't limited to Slack. Other platforms like Microsoft Teams run through the same `@copilotkit/channels` API: add the matching adapter to the `adapters` array and the rest of your agent code stays the same. See the [CopilotKit Channels documentation](https://docs.copilotkit.ai/slack/mastra) for the current platform list and per-platform setup.
+
+## Message pipeline and architecture
+
+Managed channels keep a deliberate credential split, which matters when your Mastra agent uses separate model keys and tools:
+
+- **You keep** the agent logic, model credentials, tools, and the channel process.
+- **CopilotKit Intelligence holds** the platform credentials, message delivery, registration, health, and reconnects.
+
+A turn begins when a user messages the app. Intelligence receives the platform event, and the gateway delivers the turn to your running channel process. Your Mastra agent runs and renders a reply. Intelligence then returns the reply as native platform content. Platform credentials never enter the agent process, and enterprise Intelligence can be self-hosted for data residency.
+
+:::note
+
+By default, interactive actions live in memory and reset on restart. Back the channel with a durable action and state store (Redis or Postgres) so buttons and per-thread state survive restarts and span multiple instances.
+
+:::

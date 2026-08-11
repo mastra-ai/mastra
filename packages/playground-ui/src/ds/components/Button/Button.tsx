@@ -14,13 +14,14 @@ const TEXT_MODE_ADORNMENTS = cn(
   'gap-[.75em] rounded-full',
   '[&>svg]:mx-[-.3em] [&>svg]:size-[1.1em]',
   '[&:hover>svg]:opacity-100 [&>svg]:opacity-50',
+  '[&>svg]:transition-opacity [&>svg]:duration-normal [&>svg]:ease-out-custom',
 );
 
 // eslint-disable-next-line react-refresh/only-export-components -- exported variant helper is part of Button's public API
 export const buttonVariants = cva(
   cn(
     'inline-flex cursor-pointer items-center justify-center leading-0',
-    'duration-normal transition-all ease-out-custom',
+    'transition-all duration-normal ease-out-custom',
     sharedFormElementDisabledStyle,
     controlFocusBorderVisible,
   ),

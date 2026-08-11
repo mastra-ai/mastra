@@ -1,10 +1,4 @@
-/**
- * BDD coverage for the NewPage default-model guard: starting a chat requires
- * the active Factory to have a saved `defaultModelId`. Without one the
- * composer is replaced by an empty state pointing at Model settings; with one
- * (or when the project fetch fails — fail open) the composer renders.
- */
-import { screen, waitFor } from '@testing-library/react';
+import { screen } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
@@ -19,7 +13,7 @@ function renderNewPage() {
   return router;
 }
 
-function stubFactory(project: Record<string, unknown> | null) {
+function stubFactoryShell() {
   server.use(
     http.get(`${TEST_BASE_URL}/auth/me`, () =>
       HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
@@ -27,6 +21,16 @@ function stubFactory(project: Record<string, unknown> | null) {
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
       HttpResponse.json({ projects: [{ id: 'fp-1', name: 'Mastra' }] }),
     ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/work-items`, () => HttpResponse.json({ workItems: [] })),
+    http.get(`${TEST_BASE_URL}/api/agent-controller/code/sessions/fp-1/permissions`, () =>
+      HttpResponse.json({ categories: {}, tools: {} }),
+    ),
+  );
+}
+
+function stubFactory(project: Record<string, unknown> | null) {
+  stubFactoryShell();
+  server.use(
     project
       ? http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1`, () => HttpResponse.json({ project }))
       : http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1`, () =>
@@ -44,26 +48,21 @@ describe('NewPage default-model guard', () => {
     expect(
       await screen.findByRole('heading', { name: 'No default model configured for this Factory' }),
     ).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Open Model settings' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: 'Open Models settings' })).toHaveAttribute(
       'href',
-      '/factories/fp-1/settings/model',
+      '/factories/fp-1/settings/models',
     );
     expect(screen.queryByLabelText('Message')).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'What do you want to work on?' })).not.toBeInTheDocument();
   });
 
-  it('shows a spinner while the guard resolves instead of flashing the draft heading', async () => {
-    let releaseProject!: () => void;
+  it('renders a usable composer while the guard resolves, then swaps in the guard', async () => {
+    let releaseProject = () => {};
     const projectGate = new Promise<void>(resolve => {
       releaseProject = resolve;
     });
+    stubFactoryShell();
     server.use(
-      http.get(`${TEST_BASE_URL}/auth/me`, () =>
-        HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
-      ),
-      http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-        HttpResponse.json({ projects: [{ id: 'fp-1', name: 'Mastra' }] }),
-      ),
       http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1`, async () => {
         await projectGate;
         return HttpResponse.json({ project: { id: 'fp-1', name: 'Mastra', defaultModelId: null } });
@@ -72,18 +71,15 @@ describe('NewPage default-model guard', () => {
 
     renderNewPage();
 
-    expect(await screen.findByLabelText('Loading Factory')).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: 'What do you want to work on?' })).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole('heading', { name: 'No default model configured for this Factory' }),
-    ).not.toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'What do you want to work on?' })).toBeInTheDocument();
+    expect(await screen.findByLabelText('Message')).toBeInTheDocument();
 
     releaseProject();
 
     expect(
       await screen.findByRole('heading', { name: 'No default model configured for this Factory' }),
     ).toBeInTheDocument();
-    expect(screen.queryByLabelText('Loading Factory')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Message')).not.toBeInTheDocument();
   });
 
   it('renders the composer when the Factory has a default model', async () => {
@@ -98,17 +94,13 @@ describe('NewPage default-model guard', () => {
     expect(screen.getByRole('heading', { name: 'What do you want to work on?' })).toBeInTheDocument();
   });
 
-  it('fails open: the composer renders when the factory project fetch errors', async () => {
+  it('fails open with a visible error when the factory project fetch errors', async () => {
     stubFactory(null);
 
     renderNewPage();
 
     expect(await screen.findByLabelText('Message')).toBeInTheDocument();
-    await waitFor(() =>
-      expect(
-        screen.queryByRole('heading', { name: 'No default model configured for this Factory' }),
-      ).not.toBeInTheDocument(),
-    );
+    expect(await screen.findByText(/Failed to load session configuration/)).toBeInTheDocument();
   });
 });
 
@@ -125,9 +117,9 @@ describe('NewPage credential guard', () => {
 
     expect(await screen.findByRole('heading', { name: "You don't have access to Anthropic" })).toBeInTheDocument();
     expect(screen.getByText(/ask an org admin to share an org-wide key/)).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Open Model settings' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: 'Open Models settings' })).toHaveAttribute(
       'href',
-      '/factories/fp-1/settings/model',
+      '/factories/fp-1/settings/models',
     );
     expect(screen.queryByLabelText('Message')).not.toBeInTheDocument();
   });

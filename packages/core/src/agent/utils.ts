@@ -98,6 +98,8 @@ export async function tryStreamWithJsonFallback<OUTPUT extends {}>(
   options: AgentExecutionOptionsBase<OUTPUT> & {
     structuredOutput: StructuredOutputOptions<OUTPUT>;
     onStream?: (stream: Awaited<ReturnType<Agent['stream']>>) => void | Promise<void>;
+    /** Called immediately before each primary or fallback stream invocation. */
+    onStreamAttempt?: () => void | Promise<void>;
     /** Called after each stream invocation is consumed, including a failed structured-output attempt. */
     onStreamFinish?: (stream: Awaited<ReturnType<Agent['stream']>>) => void | Promise<void>;
   },
@@ -111,14 +113,15 @@ export async function tryStreamWithJsonFallback<OUTPUT extends {}>(
     });
   }
 
-  const { onStream, onStreamFinish, ...streamOptions } = options;
+  const { onStream, onStreamAttempt, onStreamFinish, ...streamOptions } = options;
 
   try {
+    await onStreamAttempt?.();
     const result = await agent.stream(prompt, streamOptions);
     void onStream?.(result as unknown as Awaited<ReturnType<Agent['stream']>>);
     try {
       const object = await result.object;
-      if (!object) {
+      if (object === undefined) {
         throw new MastraError({
           id: 'STRUCTURED_OUTPUT_OBJECT_UNDEFINED',
           domain: ErrorDomain.AGENT,
@@ -134,6 +137,7 @@ export async function tryStreamWithJsonFallback<OUTPUT extends {}>(
     if (!isStructuredOutputFormatError(error)) throw error;
 
     console.warn('Error in tryStreamWithJsonFallback. Attempting fallback.', error);
+    await onStreamAttempt?.();
     const result = await agent.stream(prompt, {
       ...streamOptions,
       structuredOutput: {

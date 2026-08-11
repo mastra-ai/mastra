@@ -1,6 +1,6 @@
 {
   "name": "@mastra/mongodb",
-  "version": "1.15.0",
+  "version": "1.17.0-alpha.2",
   "description": "MongoDB provider for Mastra - includes vector store capabilities",
   "type": "module",
   "main": "dist/index.js",
@@ -34,7 +34,7 @@
   "dependencies": {
     "@lukeed/uuid": "^2.0.1",
     "cloudflare": "^5.2.0",
-    "mongodb": "^7.2.0"
+    "mongodb": "^7.5.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
@@ -51,7 +51,7 @@
     "vitest": "catalog:"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.51.0-0 <2.0.0-0"
+    "@mastra/core": ">=1.53.0-0 <2.0.0-0"
   },
   "files": [
     "dist",

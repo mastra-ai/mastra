@@ -239,6 +239,108 @@ describe('AgentsMDInjector', () => {
     );
   });
 
+  it('injects nothing when isEnabled returns false (untrusted checkout)', async () => {
+    const messageList = new TestMessageList();
+    const toolCallId = 'call-agents-disabled';
+    messageList.push(createUserMessage('Open the instructions'));
+    messageList.pushResponse(
+      createAssistantMessage({
+        format: 2,
+        parts: [
+          createToolInvocationPart(toolCallId, { path: '/repo/src/agents/nested/AGENTS.md' }, 'result', { ok: true }),
+        ],
+      }),
+    );
+
+    const testProcessor = new AgentsMDInjector({
+      reminderText: REMINDER_TEXT,
+      pathExists: path => String(path) === '/repo/src/agents/nested/AGENTS.md',
+      isDirectory: () => false,
+      readFile: () => FILE_CONTENT,
+      isEnabled: () => false,
+    });
+
+    await testProcessor.processInputStep(
+      createProcessInputStepArgs(messageList, [
+        createToolCall({ path: '/repo/src/agents/nested/AGENTS.md' }, 'view', toolCallId),
+      ]),
+    );
+
+    expect(extractReminderMarkup(messageList)).toEqual([]);
+  });
+
+  it('uses the reader from getReader instead of instance defaults when provided', async () => {
+    const messageList = new TestMessageList();
+    const toolCallId = 'call-agents-reader';
+    messageList.push(createUserMessage('Open the instructions'));
+    messageList.pushResponse(
+      createAssistantMessage({
+        format: 2,
+        parts: [
+          createToolInvocationPart(toolCallId, { path: '/repo/src/agents/nested/AGENTS.md' }, 'result', { ok: true }),
+        ],
+      }),
+    );
+
+    const instanceReadFile = vi.fn(() => FILE_CONTENT);
+    const testProcessor = new AgentsMDInjector({
+      reminderText: REMINDER_TEXT,
+      pathExists: () => true,
+      isDirectory: () => false,
+      readFile: instanceReadFile,
+      // Simulates serving content from a trusted git ref rather than the
+      // (untrusted) working tree.
+      getReader: () => ({
+        pathExists: path => String(path) === '/repo/src/agents/nested/AGENTS.md',
+        isDirectory: () => false,
+        readFile: () => '# Trusted ref content',
+      }),
+    });
+
+    await testProcessor.processInputStep(
+      createProcessInputStepArgs(messageList, [
+        createToolCall({ path: '/repo/src/agents/nested/AGENTS.md' }, 'view', toolCallId),
+      ]),
+    );
+
+    expect(instanceReadFile).not.toHaveBeenCalled();
+    expect(extractReminderMarkup(messageList)).toEqual([
+      `<system-reminder type="dynamic-agents-md" path="/repo/src/agents/nested/AGENTS.md"># Trusted ref content</system-reminder>`,
+    ]);
+  });
+
+  it('falls back to instance readers when getReader returns undefined', async () => {
+    const messageList = new TestMessageList();
+    const toolCallId = 'call-agents-reader-fallback';
+    messageList.push(createUserMessage('Open the instructions'));
+    messageList.pushResponse(
+      createAssistantMessage({
+        format: 2,
+        parts: [
+          createToolInvocationPart(toolCallId, { path: '/repo/src/agents/nested/AGENTS.md' }, 'result', { ok: true }),
+        ],
+      }),
+    );
+
+    const testProcessor = new AgentsMDInjector({
+      reminderText: REMINDER_TEXT,
+      pathExists: path => String(path) === '/repo/src/agents/nested/AGENTS.md',
+      isDirectory: () => false,
+      readFile: () => FILE_CONTENT,
+      getReader: () => undefined,
+    });
+
+    await testProcessor.processInputStep(
+      createProcessInputStepArgs(messageList, [
+        createToolCall({ path: '/repo/src/agents/nested/AGENTS.md' }, 'view', toolCallId),
+      ]),
+    );
+
+    expect(extractReminderMarkup(messageList)).toEqual([
+      `<system-reminder type="dynamic-agents-md" path="/repo/src/agents/nested/AGENTS.md"># Nested AGENTS\n\nUse the nested instructions when replying.</system-reminder>`,
+    ]);
+  });
+
   it('injects reminder for tool calls array format', async () => {
     const messageList = new TestMessageList();
     const toolCallId = 'call-read';

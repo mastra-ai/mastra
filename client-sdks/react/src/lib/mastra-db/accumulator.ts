@@ -597,10 +597,16 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
     case 'text-start': {
       const lastMessage = result[result.length - 1];
       const textId = chunk.payload.id || `text-${Date.now()}`;
+      // Dedupe a repeated text-start only when the currently open (tail) text
+      // part already carries this id. Matching anywhere in the message would
+      // wrongly swallow a post-tool continuation that reuses the same text id
+      // (text → tool → text), leaving the second segment without its own part.
+      const tailPart = lastMessage?.content.parts[lastMessage.content.parts.length - 1];
       if (
         chunk.payload.id &&
         lastMessage?.role === 'assistant' &&
-        lastMessage.content.parts.some(part => part.type === 'text' && partTextId(part) === textId)
+        tailPart?.type === 'text' &&
+        partTextId(tailPart) === textId
       ) {
         return result;
       }
@@ -680,6 +686,19 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
 
       if (textPartIndex === -1) {
         textPartIndex = parts.findLastIndex(part => part.type === 'text' && partState(part) === 'streaming');
+      }
+
+      // A text run is closed once ANY non-text part is emitted after it — a tool
+      // call, reasoning, a source/citation, a file, a step marker, etc. If the
+      // matched text part is followed by such a part (e.g. text → tool → text or
+      // text → reasoning → text, where a provider like DeepSeek reuses the same
+      // text id across segments), this delta belongs to a NEW text segment.
+      // Appending to the earlier part would merge the two text blocks and push
+      // the intervening part out of order in the live view (issue #18964).
+      // Storage persists them as separate parts, which is why a reload already
+      // renders correctly.
+      if (textPartIndex !== -1 && parts.some((part, index) => index > textPartIndex && part.type !== 'text')) {
+        textPartIndex = -1;
       }
 
       if (textPartIndex === -1) {
@@ -984,6 +1003,31 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
           state: 'call',
           args: parsedArgs,
         } as MastraToolInvocation,
+      } as MastraMessagePart;
+
+      return replaceAt(result, messageIndex, withParts(targetMessage, parts));
+    }
+
+    case 'tool-output-denied': {
+      const location = locateToolPart(result, chunk.payload.toolCallId, false);
+      if (!location || location.toolPartIndex < 0) return result;
+      const { messageIndex, toolPartIndex } = location;
+      const targetMessage = result[messageIndex];
+      if (!targetMessage || targetMessage.role !== 'assistant') return result;
+
+      const parts = [...targetMessage.content.parts];
+      const toolPart = parts[toolPartIndex];
+      if (!isToolPart(toolPart)) return result;
+
+      parts[toolPartIndex] = {
+        ...toolPart,
+        toolInvocation: {
+          ...toolPart.toolInvocation,
+          state: 'output-denied',
+          toolName: chunk.payload.toolName,
+          args: chunk.payload.args ?? toolPart.toolInvocation.args,
+          approval: chunk.payload.approval,
+        },
       } as MastraMessagePart;
 
       return replaceAt(result, messageIndex, withParts(targetMessage, parts));
@@ -1443,8 +1487,29 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
       return [...result, newMessage];
     }
 
+    // ----- Rotated response message ids (`step-start.payload.messageId` carries
+    // the id the following step's output is persisted under; processors like
+    // observational memory can rotate it mid-run) -----
+    case 'step-start': {
+      const stepMessageId = typeof chunk.payload?.messageId === 'string' ? chunk.payload.messageId : undefined;
+      if (!stepMessageId) return result;
+
+      const lastMessage = result[result.length - 1];
+      if (!lastMessage || lastMessage.role !== 'assistant') return result;
+      if (result.some(message => message.id === stepMessageId)) return result;
+
+      // Re-key the pending message in place while it only holds `data-*` parts
+      // (they belong to the run, not a persisted row); once model content has
+      // streamed under the previous id, split into a new message instead.
+      const hasModelContent = lastMessage.content.parts.some(part => !String(part.type).startsWith('data-'));
+      if (!hasModelContent) {
+        return replaceLast(result, { ...lastMessage, id: stepMessageId });
+      }
+
+      return appendAssistantMessage(finishStreamingAssistantMessage(result), stepMessageId, [], metadata);
+    }
+
     // ----- Lifecycle / step / framing chunks (not surfaced on DB messages) -----
-    case 'step-start':
     case 'step-finish':
     case 'step-output':
     case 'raw':
@@ -1509,11 +1574,12 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
     case 'network-validation-end':
     case 'network-object':
     case 'network-object-result':
+    case 'tool-output-denied':
       return result;
 
     default:
       // Exhaustiveness check: any new `ChunkType` variant must be added above.
-      return assertExhaustive(chunk, result);
+      return assertExhaustive(chunk as never, result);
   }
 };
 

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/dsql",
-  "version": "1.2.0",
+  "version": "1.3.0-alpha.2",
   "description": "Amazon Aurora DSQL storage provider for Mastra",
   "type": "module",
   "main": "dist/index.js",
@@ -29,9 +29,9 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "@aws-sdk/types": "^3.973.9",
+    "@aws-sdk/types": "^3.974.2",
     "@aws/aurora-dsql-node-postgres-connector": "^0.1.9",
-    "pg": "^8.21.0"
+    "pg": "^8.22.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
@@ -40,7 +40,7 @@
     "@mastra/core": "workspace:*",
     "@microsoft/api-extractor": "^7.58.12",
     "@types/node": "22.20.1",
-    "@types/pg": "^8.11.14",
+    "@types/pg": "^8.20.0",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "eslint": "^10.7.0",
@@ -49,7 +49,7 @@
     "vitest": "catalog:"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.0.0-0 <2.0.0-0"
+    "@mastra/core": ">=1.53.0-0 <2.0.0-0"
   },
   "files": [
     "dist",

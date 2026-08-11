@@ -131,7 +131,21 @@ export const agent = new Agent({
 })
 ```
 
-The resolver function receives `{ requestContext }` and returns a `SkillInput[]` array or a `Promise<SkillInput[]>`.
+The resolver function receives `{ requestContext, tracingContext }` and returns a `SkillInput[]` array or a `Promise<SkillInput[]>`.
+
+The resolver runs once per `RequestContext`. During an agent execution it runs inside a `resolve-skills` span, and `tracingContext.currentSpan` lets you create child spans for your own work, the same way tools do. The resolver also runs on metadata reads such as `agent.listSkills()` and the server's agent endpoints, where no span exists and `tracingContext.currentSpan` is `undefined`, so keep it fast and guard any span usage:
+
+```typescript title="src/mastra/agents/index.ts"
+skills: async ({ requestContext, tracingContext }) => {
+  const span = tracingContext?.currentSpan?.createChildSpan({
+    type: 'generic',
+    name: 'entitlements-lookup',
+  })
+  const skills = await fetchSkillsFor(requestContext.get('userId'))
+  span?.end()
+  return skills
+}
+```
 
 See [Request Context](/docs/server/request-context) for more on using request context with agents and workflows.
 

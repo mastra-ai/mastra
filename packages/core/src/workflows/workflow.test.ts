@@ -41,10 +41,15 @@ createWorkflowTestSuite({
 
   // Register workflows with Mastra for storage/resume support
   registerWorkflows: async registry => {
-    // Collect all workflows
+    // Collect all workflows + any Mastra-level agents/tools the entries declare
+    // (used by `.agent('id')` / `.tool('id')` by-id forms).
     const workflows: Record<string, any> = {};
+    const agents: Record<string, any> = {};
+    const tools: Record<string, any> = {};
     for (const [id, entry] of Object.entries(registry)) {
       workflows[id] = entry.workflow;
+      if (entry.mastraAgents) Object.assign(agents, entry.mastraAgents);
+      if (entry.mastraTools) Object.assign(tools, entry.mastraTools);
     }
 
     // Create Mastra with all workflows - this automatically binds mastra to each workflow
@@ -52,6 +57,8 @@ createWorkflowTestSuite({
       logger: false,
       storage: sharedStorage,
       workflows,
+      agents: Object.keys(agents).length ? agents : undefined,
+      tools: Object.keys(tools).length ? tools : undefined,
     });
   },
 
@@ -1211,6 +1218,42 @@ describe('Workflow (Default Engine Specifics)', () => {
       expect(nestedWorkflowStoreResult?.status).toBe('success');
     });
   });
+
+  describe('streamLegacy cleanup error safety', () => {
+    it('completes cleanup when an observer stream is not consumed', async () => {
+      const step = createStep({
+        id: 'test-step',
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({ value: z.string() }),
+        execute: async ({ inputData }) => inputData,
+      });
+
+      const workflow = createWorkflow({
+        id: 'stream-legacy-cleanup-error-wf',
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({ value: z.string() }),
+        steps: [step],
+      })
+        .then(step)
+        .commit();
+
+      const run = await workflow.createRun();
+      const { stream, getWorkflowState } = run.streamLegacy({ inputData: { value: 'test' } });
+      const observer = run.observeStreamLegacy();
+
+      for await (const _event of stream) {
+        // Discard events
+      }
+
+      const result = await getWorkflowState();
+      expect(result.status).toBe('success');
+      await expect((run as any).closeStreamAction()).resolves.toBeUndefined();
+
+      for await (const _event of observer.stream) {
+        // Consume events queued before cleanup
+      }
+    });
+  });
 });
 
 describe('createRun storage existence read (issue #19015)', () => {
@@ -1285,5 +1328,126 @@ describe('createRun storage existence read (issue #19015)', () => {
     await workflow.createRun({ runId: 'explicit-run-id' });
 
     expect(readSpy).toHaveBeenCalled();
+  });
+});
+
+describe('concurrent stream close', () => {
+  // An abandoned stream can only be observed by bounding the read — a plain drain
+  // would hang the suite rather than fail it.
+  async function drainWithin(stream: ReadableStream<any>, boundMs = 2000) {
+    const reader = stream.getReader();
+    const types: string[] = [];
+    try {
+      for (;;) {
+        const res = await Promise.race([
+          reader.read(),
+          new Promise<'timed-out'>(resolve => setTimeout(() => resolve('timed-out'), boundMs)),
+        ]);
+        if (res === 'timed-out') return { closed: false, types };
+        if (res.done) return { closed: true, types };
+        if (res.value?.type) types.push(res.value.type);
+      }
+    } finally {
+      reader.releaseLock();
+    }
+  }
+
+  it('closes both outputs when two resumeStream calls race for the same run', async () => {
+    const suspending = createStep({
+      id: 'suspending-step',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ result: z.string() }),
+      execute: async ({ suspend }) => {
+        await suspend({ waiting: true });
+        return { result: 'resumed' };
+      },
+    });
+    const final = createStep({
+      id: 'final-step',
+      inputSchema: z.object({ result: z.string() }),
+      outputSchema: z.object({ result: z.string() }),
+      execute: async () => ({ result: 'done' }),
+    });
+
+    const workflow = createWorkflow({
+      id: 'concurrent-resume-close-wf',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ result: z.string() }),
+      steps: [suspending, final],
+    })
+      .then(suspending)
+      .then(final)
+      .commit();
+
+    new Mastra({
+      logger: false,
+      storage: new MockStore(),
+      workflows: { 'concurrent-resume-close-wf': workflow },
+    });
+
+    const run = await workflow.createRun({ runId: 'concurrent-resume-close-run' });
+    await run.start({ inputData: {} });
+
+    // Two concurrent resumes of the same cached run: each must close its own stream.
+    const first = run.resumeStream({ step: 'suspending-step', resumeData: {} });
+    const second = run.resumeStream({ step: 'suspending-step', resumeData: {} });
+
+    const [firstDrain, secondDrain] = await Promise.all([
+      drainWithin(first.fullStream),
+      drainWithin(second.fullStream),
+    ]);
+
+    expect(firstDrain.closed).toBe(true);
+    expect(secondDrain.closed).toBe(true);
+    expect(firstDrain.types).toContain('workflow-finish');
+    expect(secondDrain.types).toContain('workflow-finish');
+  });
+
+  it('closes both outputs when two timeTravelStream calls race for the same run', async () => {
+    const first = createStep({
+      id: 'first-step',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ result: z.string() }),
+      execute: async () => ({ result: 'first' }),
+    });
+    const second = createStep({
+      id: 'second-step',
+      inputSchema: z.object({ result: z.string() }),
+      outputSchema: z.object({ result: z.string() }),
+      execute: async () => ({ result: 'second' }),
+    });
+
+    const workflow = createWorkflow({
+      id: 'concurrent-time-travel-close-wf',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ result: z.string() }),
+      steps: [first, second],
+    })
+      .then(first)
+      .then(second)
+      .commit();
+
+    new Mastra({
+      logger: false,
+      storage: new MockStore(),
+      workflows: { 'concurrent-time-travel-close-wf': workflow },
+    });
+
+    const run = await workflow.createRun({ runId: 'concurrent-time-travel-close-run' });
+    await run.start({ inputData: {} });
+
+    // Two concurrent time travels of the same cached run: each must close its own stream.
+    const firstTravel = run.timeTravelStream({ step: 'second-step', inputData: { result: 'first' } });
+    const secondTravel = run.timeTravelStream({ step: 'second-step', inputData: { result: 'first' } });
+
+    const [firstDrain, secondDrain] = await Promise.all([
+      drainWithin(firstTravel.fullStream),
+      drainWithin(secondTravel.fullStream),
+    ]);
+
+    expect(firstDrain.closed).toBe(true);
+    expect(secondDrain.closed).toBe(true);
+    expect(firstDrain.types).toContain('workflow-finish');
+    expect(secondDrain.types).toContain('workflow-finish');
   });
 });

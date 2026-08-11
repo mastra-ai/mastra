@@ -1,11 +1,17 @@
 ---
-title: "Reference: DurableAgent | Agents"
-description: "API reference for DurableAgent, which wraps an Agent with durable execution and resumable streams."
+title: 'Reference: DurableAgent | Agents'
+description: 'API reference for DurableAgent, which wraps an Agent with durable execution and resumable streams.'
 packages:
-  - "@mastra/core"
+  - '@mastra/core'
 ---
 
 # DurableAgent
+
+:::beta
+
+Breaking changes may occur without a major version bump until the API is stable.
+
+:::
 
 `DurableAgent` wraps an existing [`Agent`](/reference/agents/agent) with durable execution and resumable streams. It runs the agentic loop so that a client can disconnect and reconnect without missing events, and it streams those events over [PubSub](/docs/server/pubsub). Use it when a run must outlive a single request or survive a dropped connection.
 
@@ -273,6 +279,17 @@ const { output, cleanup } = await durableAgent.observe(runId, {
 
 await output.text
 ```
+
+By default `observe()` waits indefinitely for events. If the process running the run stops unexpectedly, the run stops producing events but never emits a completion event, so the observed stream would wait forever. Pass `idleTimeoutMs` to bound that wait: after that many milliseconds of silence the stream ends. An optional `isAlive` check is consulted first. Return `true` while the run is still being worked on (for example a long-running tool call, or a run paused waiting for human input) to keep waiting. Returning `false`, or omitting `isAlive`, ends the stream with an error. A transient throw from `isAlive` is treated as "still alive", so a momentary check failure never ends a live stream.
+
+```typescript
+const { output } = await durableAgent.observe(runId, {
+  idleTimeoutMs: 30_000,
+  isAlive: () => runHeartbeat.isFresh(runId),
+})
+```
+
+Ending a run on idle timeout runs the same cleanup as a run that errors (see the warning below), so its cached state is released rather than retained. Both options are opt-in. Omit them for the previous wait-indefinitely behavior.
 
 Returns: `Promise<DurableAgentStreamResult>`
 
@@ -615,7 +632,7 @@ Returns: [`Promise<DurableAgentStreamResult>`](#durableagentstreamresult)
 
 ## DurableAgentStreamResult
 
-The object returned by `stream()`, `resume()`, and `observe()`.
+The object returned by `stream()`, `resume()`, `observe()`, and `recover()`.
 
 ```typescript
 interface DurableAgentStreamResult<OUTPUT = undefined> {

@@ -7,6 +7,12 @@ packages:
 
 # Workers
 
+:::beta
+
+Breaking changes may occur without a major version bump until the API is stable.
+
+:::
+
 When workers run in separate processes from the API, they communicate over HTTP. The orchestration worker calls the API's step execution endpoint to run workflow steps on the API server. Push-mode PubSub brokers (like Google Cloud Pub/Sub in push mode) can also deliver events directly to the API's event endpoint. This is a distinct integration path from pull-mode workers, which pull events from the broker themselves. Both HTTP endpoints require authentication when an auth provider is configured.
 
 ## How it works
@@ -66,13 +72,15 @@ services:
   orchestration-worker:
     environment:
       MASTRA_WORKER_AUTH_TOKEN: ${WORKER_TOKEN}
-      MASTRA_STEP_EXECUTION_URL: http://api:4111/api
+      MASTRA_STEP_EXECUTION_URL: http://api:4111/api # Use HTTPS in production
       # ... other env vars
 ```
 
 ```bash title=".env"
 WORKER_TOKEN=sk-worker-secret-token
 ```
+
+These examples use `http://` for local development. In production, use HTTPS URLs and terminate TLS with a service mesh or ingress controller. See [Security recommendations](#security-recommendations).
 
 The orchestration worker reads `MASTRA_WORKER_AUTH_TOKEN` and sends it as a `Bearer` token in the `Authorization` header on every step execution request.
 
@@ -96,7 +104,7 @@ Send the credential as `x-worker-api-key` instead of `Authorization`:
 import { HttpRemoteStrategy } from '@mastra/core/worker'
 
 const strategy = new HttpRemoteStrategy({
-  serverUrl: 'http://api:4111/api',
+  serverUrl: 'http://api:4111/api', // Use HTTPS in production
   auth: { type: 'api-key', key: process.env.WORKER_API_KEY! },
 })
 ```
@@ -111,7 +119,7 @@ Use any header name and value:
 import { HttpRemoteStrategy } from '@mastra/core/worker'
 
 const strategy = new HttpRemoteStrategy({
-  serverUrl: 'http://api:4111/api',
+  serverUrl: 'http://api:4111/api', // Use HTTPS in production
   auth: {
     type: 'header',
     name: 'X-Internal-Service-Key',
@@ -120,7 +128,7 @@ const strategy = new HttpRemoteStrategy({
 })
 ```
 
-## Push-mode broker authentication
+## Push-mode broker auth
 
 When using a push-mode PubSub (like Google Cloud Pub/Sub), the broker POSTs events directly to the `/api/workflows/events` endpoint. The broker attaches its own credentials. For example, Google Cloud Pub/Sub sends a Google-signed OIDC token.
 
@@ -130,7 +138,7 @@ Your auth provider's `authenticateToken` callback must recognize whatever creden
 
 - **Use different tokens for different worker types.** This lets you revoke access to one worker without affecting others.
 - **Rotate tokens on a schedule.** Update the `WORKER_TOKEN` environment variable and restart the affected containers.
-- **Use TLS in production.** Worker-to-API communication should go over HTTPS to protect tokens in transit. Within a private network (Docker bridge, Kubernetes cluster), plain HTTP is acceptable.
+- **Use TLS in production.** Worker-to-API communication should go over HTTPS to protect tokens in transit. This applies to all environments, including Kubernetes clusters and Docker networks. Use a service mesh (e.g., Istio, Linkerd) or TLS-terminating ingress to encrypt internal traffic.
 - **Restrict network access.** The step execution and event endpoints are internal. If possible, keep them off the public internet using network policies or firewall rules.
 
 ## Related

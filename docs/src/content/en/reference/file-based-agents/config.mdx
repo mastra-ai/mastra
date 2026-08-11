@@ -7,6 +7,12 @@ packages:
 
 # config.ts
 
+:::beta
+
+Breaking changes may occur without a major version bump until the API is stable.
+
+:::
+
 An agent's `config.ts` sets its model and runtime options. Use it for options that belong to the [`Agent`](/reference/agents/agent) itself, while sibling files provide instructions, tools, skills, et cetera.
 
 ## What belongs in `config.ts`
@@ -76,7 +82,7 @@ Keep `config.ts` focused on runtime options. Use sibling files for concerns that
 
 | Setting | File or folder | Why it lives there |
 | - | - | - |
-| Instructions | [`instructions.md`](/reference/file-based-agents/instructions) | Keeps the always-on prompt readable as markdown |
+| Instructions | [`instructions.md` or `instructions.ts`](/reference/file-based-agents/instructions) | Keeps the always-on prompt readable as markdown, or computed in TypeScript |
 | Tools | [`tools/`](/reference/file-based-agents/tools) | Gives each callable action its own typed module |
 | Skills | [`skills/`](/reference/file-based-agents/skills) | Keeps load-on-demand procedures separate from always-on instructions |
 | Memory | [`memory.ts`](/reference/file-based-agents/memory) | Configures persistent memory without crowding runtime options |
@@ -90,8 +96,9 @@ Keep `config.ts` focused on runtime options. Use sibling files for concerns that
 
 | Domain | Source A | Source B | Winner |
 | - | - | - | - |
-| Instructions | Dynamic `config.instructions` | [`instructions.md`](/reference/file-based-agents/instructions) | Dynamic `config.instructions` |
-| Instructions | Static `config.instructions` | [`instructions.md`](/reference/file-based-agents/instructions) | `instructions.md` |
+| Instructions | Dynamic `config.instructions` | [`instructions.ts` or `instructions.md`](/reference/file-based-agents/instructions) | Dynamic `config.instructions` |
+| Instructions | Static `config.instructions` | [`instructions.ts` or `instructions.md`](/reference/file-based-agents/instructions) | The instructions file |
+| Instructions | [`instructions.ts`](/reference/file-based-agents/instructions) | [`instructions.md`](/reference/file-based-agents/instructions) | `instructions.ts` |
 | Tools | `config.tools` | [`tools/`](/reference/file-based-agents/tools) | Both merge; `config.tools` wins on key collisions |
 | Tools | Function `config.tools` | [`tools/`](/reference/file-based-agents/tools) | Function `config.tools`; discovered tools are ignored |
 | Skills | `config.skills` | [`skills/`](/reference/file-based-agents/skills) | Both merge; `config.skills` wins on name collisions |
@@ -99,4 +106,22 @@ Keep `config.ts` focused on runtime options. Use sibling files for concerns that
 | Memory | `config.memory` | [`memory.ts`](/reference/file-based-agents/memory) | `config.memory` |
 | Workspace | `config.workspace` | [`workspace.ts`](/reference/file-based-agents/workspace) | `config.workspace` |
 
-Missing both `instructions.md` and `config.instructions` fails the build. Missing both `config.memory` and `memory.ts` leaves the agent without memory.
+Missing `instructions.md`, `instructions.ts`, and `config.instructions` fails the build. Missing both `config.memory` and `memory.ts` leaves the agent without memory.
+
+## Discovery lifecycle
+
+File-based primitives are discovered by the Mastra bundler under `mastra dev` and `mastra build`. During discovery, Mastra reads supported files under `src/mastra/`, imports TypeScript and JavaScript modules, reads markdown instructions and skills, copies workspace seed files, and registers the assembled primitives with your Mastra app.
+
+After discovery, a file-based agent runs as a normal [`Agent`](/reference/agents/agent). Calling it from the Agent API, Studio, workflows, or your application code uses the same runtime as a code-defined agent.
+
+Discovery is source-based and conservative.
+
+It skips symlinks, test files, and directories that aren't agent directories. Workflows and singleton project files are file-routed only when they have a default export.
+
+Start your app through the Mastra CLI so discovery runs:
+
+```bash npm2yarn
+npx mastra dev
+```
+
+If you import your `mastra` instance directly, `agents/<name>/` directories and the other conventions aren't discovered. When you consume Mastra as a library, register those primitives in code instead.

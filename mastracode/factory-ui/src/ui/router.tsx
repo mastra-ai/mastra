@@ -11,7 +11,7 @@
  * The URL is the single source of truth for the active factory: everything
  * factory-scoped lives under `/factories/:factoryId/**` behind `FactoryLayout`.
  */
-import { createBrowserRouter, Navigate, useLocation } from 'react-router';
+import { createBrowserRouter, Navigate, useLocation, useParams } from 'react-router';
 import type { RouteObject } from 'react-router';
 
 import Chat from './domains/chat/Chat';
@@ -23,6 +23,7 @@ import { MetricsPage } from './pages/MetricsPage';
 import { NewPage } from './pages/NewPage';
 import { OnboardingPage } from './pages/OnboardingPage';
 import { SettingsPage } from './pages/SettingsPage';
+import { SlackConnectionPage } from './pages/SlackConnectionPage';
 import { RulesPage } from './pages/RulesPage';
 import { SignInPage } from './pages/SignInPage';
 import { ThreadPage } from './pages/ThreadPage';
@@ -60,6 +61,49 @@ function FactoryHomeRedirect() {
   return <Navigate to="work" replace />;
 }
 
+/**
+ * Factory-agnostic thread deep link, used by server-built links that don't
+ * know a factory id (e.g. the Slack "View Session" card, whose channel
+ * sessions are controller-scoped). Forwards to the first factory's workspaces
+ * thread route, preserving the query string — the `?resourceId=` override
+ * binds the chat surface to the channel session's resource there.
+ */
+function ChannelThreadRedirect() {
+  const { data: factories, isPending } = useFactoriesQuery();
+  const { threadId } = useParams<{ threadId: string }>();
+  const { search } = useLocation();
+
+  if (isPending) return null;
+
+  const firstFactory = factories?.[0];
+  // Empty list is bounced to /onboarding by OnboardingGuard before we render.
+  if (!firstFactory || !threadId) return null;
+
+  return (
+    <Navigate
+      to={`/factories/${firstFactory.id}/workspaces/channel/threads/${encodeURIComponent(threadId)}${search}`}
+      replace
+    />
+  );
+}
+
+/**
+ * Factory-agnostic entry to Connections, used by server-built links that do not
+ * know a Factory id. Routing through the SPA guarantees the visitor is
+ * authenticated before they start the OIDC flow.
+ */
+function ConnectionsRedirect() {
+  const { data: factories, isPending } = useFactoriesQuery();
+
+  if (isPending) return null;
+
+  const firstFactory = factories?.[0];
+  // Empty list is bounced to /onboarding by OnboardingGuard before we render.
+  if (!firstFactory) return null;
+
+  return <Navigate to={`/factories/${firstFactory.id}/settings/connections`} replace />;
+}
+
 export function createAppRoutes(): RouteObject[] {
   // NOTE: route paths must not (case-insensitively) match a file at the Vite
   // root (src/ui), or dev deep-links serve the module source instead of
@@ -91,6 +135,11 @@ export function createAppRoutes(): RouteObject[] {
               ],
             },
             {
+              path: 'user/new/:draftSessionId',
+              element: <Chat />,
+              children: [{ index: true, element: <NewPage /> }],
+            },
+            {
               path: 'user/threads/:threadId',
               element: <Chat />,
               children: [{ index: true, element: <ThreadPage /> }],
@@ -107,7 +156,8 @@ export function createAppRoutes(): RouteObject[] {
                 {
                   path: 'settings',
                   children: [
-                    { index: true, element: <Navigate to="general" replace /> },
+                    { index: true, element: <Navigate to="preferences" replace /> },
+                    { path: 'connections/slack', element: <SlackConnectionPage /> },
                     { path: ':section', element: <SettingsPage /> },
                   ],
                 },
@@ -115,6 +165,9 @@ export function createAppRoutes(): RouteObject[] {
             },
           ],
         },
+        // Server-built thread deep links without a factory id (Slack cards).
+        { path: 'threads/:threadId', element: <ChannelThreadRedirect /> },
+        { path: 'settings/connections', element: <ConnectionsRedirect /> },
         // Legacy deep links (the app used to serve everything at any path).
         { path: '*', element: <Navigate to="/" replace /> },
       ],

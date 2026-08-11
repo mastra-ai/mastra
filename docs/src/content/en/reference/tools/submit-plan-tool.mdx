@@ -146,4 +146,4 @@ Pass an object to `agent.resumeStream()`:
 - **Rejected with feedback:** The tool returns the feedback and asks the model to revise the plan and submit again.
 - **Rejected without feedback:** The tool tells the model to wait for the user's next message before revising.
 
-When used inside an [AgentController](/docs/agent-controller/overview), plan approval triggers an automatic mode switch from the planning mode to the default execution mode. See [Modes](/docs/agent-controller/modes) for details.
+When used inside an [AgentController](/docs/harness/agent-controller), plan approval switches from the current mode to the mode configured by `transitionsTo`. When no `transitionsTo` is configured, the controller switches to its resolved default mode. See [Modes](/docs/harness/agent-controller#switch-modes-and-models) for details.

@@ -18,6 +18,7 @@ Start with the page for your platform:
 - [Discord](/docs/capabilities/channels/discord)
 - [Telegram](/docs/capabilities/channels/telegram)
 - [WhatsApp](/docs/capabilities/channels/whatsapp)
+- [iMessage](/docs/capabilities/channels/imessage)
 
 [More](/docs/capabilities/channels/other-adapters) lists additional platforms. Mastra channels work with compatible [Chat SDK adapters](https://chat-sdk.dev/adapters) beyond the platforms listed here, and the same Mastra configuration pattern applies across adapters.
 
@@ -145,6 +146,25 @@ When the agent calls this tool, users see a card with the tool name, arguments, 
 
 Set `toolDisplay: 'text'` on an adapter to render tool calls as plain text instead of interactive cards. In `'hidden'` mode, `autoResumeSuspendedTools` can resume suspended tools when a later user message arrives on the same thread. This requires memory. Hidden mode only suppresses the approval buttons.
 
+## Reply formatting
+
+Agent replies post as markdown by default. Platforms with native markdown rendering, such as Slack, render bold text, links, and tables directly. Other platforms convert the markdown to their own format. Agents write standard markdown and it renders correctly everywhere, matching how the same reply renders in Studio.
+
+Set `textFormat: 'plain'` on an adapter to post replies as literal plain text instead:
+
+```typescript title="src/mastra/agents/your-agent.ts"
+channels: {
+  adapters: {
+    slack: {
+      adapter: createSlackAdapter(),
+      textFormat: 'plain',
+    },
+  },
+},
+```
+
+Use this escape hatch if your agent is prompted to emit a platform-specific dialect, such as Slack mrkdwn, instead of standard markdown. If you added such prompt instructions to work around markdown rendering literally, remove them instead. The default now renders standard markdown natively. `textFormat` affects final reply text only. Tool cards, error messages, and natively streamed text are unaffected.
+
 ## Multi-user awareness
 
 In group conversations, Mastra prefixes each message with the sender's name and platform ID so the agent can distinguish between speakers:
@@ -250,5 +270,5 @@ Vercel's managed Redis integration and Upstash Redis both work well. For more on
 ## Related
 
 - [Channels reference](/reference/agents/channels)
-- [AgentController channels](/docs/agent-controller/channels)
+- [AgentController channels](/docs/harness/agent-controller#connect-chat-channels)
 - 📹 [Mastra channels workshop](https://www.youtube.com/watch?v=E9KFsZEnQO8\&t=5s)

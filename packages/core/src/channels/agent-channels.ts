@@ -21,6 +21,7 @@ import { createTool } from '../tools/tool';
 
 import { chatModule, getChatModule } from './chat-lazy';
 import { resolveSlackTopLevelThreadId } from './compat/slack';
+import { ChannelSessionRejectedError } from './errors';
 
 import { formatArgsSummary, formatToolApproved, formatToolDenied, stripToolPrefix } from './formatting';
 import {
@@ -412,19 +413,27 @@ export class AgentChannels {
         ...this.chatOptions,
       });
 
-      // Default handler that routes messages to the agent
-      const defaultHandler = (chatThread: Thread, message: Message) =>
-        this.handleChatMessage(chatThread, message, mastra);
-
       // Register handlers with optional overrides
       const { onDirectMessage, onMention, onSubscribedMessage } = this.handlerOverrides;
 
-      // Context handed to custom handlers so they can reach the resolved Mastra
-      // instance without being injected with an external accessor.
-      const handlerContext: ChannelHandlerContext = { mastra };
+      // Per-message dispatch scope. The request context and the handler context
+      // MUST be built per message, never once at initialize() time: a custom
+      // handler may write the sender's tenant onto the request context, and a
+      // shared instance would leak that tenant into the next message's run.
+      const beginMessage = () => {
+        const requestContext = new RequestContext();
+        const defaultHandler = (chatThread: Thread, message: Message) =>
+          this.handleChatMessage(chatThread, message, mastra, requestContext);
+        // Context handed to custom handlers so they can reach the resolved Mastra
+        // instance without being injected with an external accessor, and
+        // contribute to the request context the run will dispatch with.
+        const handlerContext: ChannelHandlerContext = { mastra, requestContext };
+        return { defaultHandler, handlerContext };
+      };
 
       if (onDirectMessage !== false) {
         chat.onDirectMessage((thread, message) => {
+          const { defaultHandler, handlerContext } = beginMessage();
           if (typeof onDirectMessage === 'function') {
             return onDirectMessage(thread, message, defaultHandler, handlerContext);
           }
@@ -434,6 +443,7 @@ export class AgentChannels {
 
       if (onMention !== false) {
         chat.onNewMention((thread, message) => {
+          const { defaultHandler, handlerContext } = beginMessage();
           if (typeof onMention === 'function') {
             return onMention(thread, message, defaultHandler, handlerContext);
           }
@@ -443,6 +453,7 @@ export class AgentChannels {
 
       if (onSubscribedMessage !== false) {
         chat.onSubscribedMessage((thread, message) => {
+          const { defaultHandler, handlerContext } = beginMessage();
           if (typeof onSubscribedMessage === 'function') {
             return onSubscribedMessage(thread, message, defaultHandler, handlerContext);
           }
@@ -654,6 +665,13 @@ export class AgentChannels {
           const isStaleApproval = err instanceof Error && err.message.includes('No snapshot found');
           if (isStaleApproval) {
             this.log('info', `Ignoring stale tool approval action (runId already consumed)`);
+            return;
+          }
+          // The resolver also runs on approval continuations, so a refusal
+          // here means this clicker isn't allowed to act — same silence as the
+          // inbound path (see handleChatMessage).
+          if (err instanceof ChannelSessionRejectedError) {
+            this.log('info', 'Session resolver refused the tool approval action', { reason: err.message });
             return;
           }
           this.log('error', 'Error handling tool approval action', err);
@@ -987,11 +1005,28 @@ export class AgentChannels {
    * and onSubscribedMessage. Streams the Mastra agent response and
    * updates the channel message in real-time via edits.
    */
-  private async handleChatMessage(chatThread: Thread, message: Message, mastra: Mastra): Promise<void> {
+  private async handleChatMessage(
+    chatThread: Thread,
+    message: Message,
+    mastra: Mastra,
+    requestContext: RequestContext,
+  ): Promise<void> {
     try {
-      await this.processChatMessage(chatThread, message, mastra);
+      await this.processChatMessage(chatThread, message, mastra, requestContext);
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err));
+      // A refused request is not a malfunction: the host decided this sender
+      // gets nothing. Log it and stop — posting would echo the host's
+      // authorization message into the chat thread and confirm the bot is
+      // present to a sender who was just turned away.
+      if (err instanceof ChannelSessionRejectedError) {
+        this.log('info', `[${chatThread.adapter.name}] Session resolver refused the message`, {
+          messageId: message.id,
+          authorId: message.author?.userId,
+          reason: error.message,
+        });
+        return;
+      }
       this.log('error', `[${chatThread.adapter.name}] Error handling message`, {
         messageId: message.id,
         authorId: message.author?.userId,
@@ -1009,7 +1044,12 @@ export class AgentChannels {
     }
   }
 
-  private async processChatMessage(chatThread: Thread, message: Message, mastra: Mastra): Promise<void> {
+  private async processChatMessage(
+    chatThread: Thread,
+    message: Message,
+    mastra: Mastra,
+    requestContext: RequestContext,
+  ): Promise<void> {
     const platform = chatThread.adapter.name;
 
     // Map to a Mastra thread for memory/history.
@@ -1195,7 +1235,10 @@ export class AgentChannels {
       actor: message.author,
     });
 
-    const requestContext = new RequestContext();
+    // NOTE: `requestContext` is constructed per message at the handler boundary
+    // (see `beginMessage` in initialize) so a custom handler can contribute to
+    // it — e.g. stamping the tenant — before the run dispatches. Core only
+    // enriches it here.
     requestContext.set('channel', channelContext);
 
     // Stash the per-event render deps so `ChatChannelOutputProcessor` can
@@ -1321,6 +1364,7 @@ export class AgentChannels {
       wrapStream: stream => this.withTypingStatus(stream, chatThread, platform, adapterConfig, typingGate),
       typingGate,
       formatError: adapterConfig?.formatError,
+      textFormat: adapterConfig?.textFormat,
       approvalContext,
     };
   }

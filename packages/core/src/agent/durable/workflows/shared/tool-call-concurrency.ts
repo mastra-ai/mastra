@@ -1,3 +1,4 @@
+import { normalizeToolCallConcurrency } from '../../../../loop/workflows/agentic-execution/tool-call-concurrency';
 import { DurableAgentDefaults } from '../../constants';
 import type { DurableToolCallInput, SerializableDurableOptions, SerializableToolMetadata } from '../../types';
 
@@ -37,23 +38,35 @@ export function resolveDurableToolCallConcurrency({
 }: {
   options?: Pick<SerializableDurableOptions, 'requireToolApproval' | 'toolCallConcurrency' | 'activeTools'>;
   toolsMetadata?: SerializableToolMetadata[];
-  toolCalls?: Pick<DurableToolCallInput, 'activeTools'>[];
+  toolCalls?: Pick<DurableToolCallInput, 'activeTools' | 'toolName'>[];
 }): number {
   if (options?.requireToolApproval) {
     return 1;
   }
 
-  const stamped = toolCalls?.find(tc => tc.activeTools !== undefined);
-  const activeTools = stamped ? stamped.activeTools : options?.activeTools;
-  const consideredTools =
-    activeTools === undefined || activeTools === null
-      ? (toolsMetadata ?? [])
-      : (toolsMetadata ?? []).filter(tool => activeTools.includes(tool.name));
+  const { limit, strategy } = normalizeToolCallConcurrency(options?.toolCallConcurrency);
+
+  let consideredTools: SerializableToolMetadata[];
+  if (strategy === 'called') {
+    // Opt-in: consider only the tools the model actually called this step. A
+    // batch that never called a suspend/approval tool cannot suspend this step,
+    // so it may run at the configured concurrency.
+    const calledNames = new Set((toolCalls ?? []).map(tc => tc.toolName).filter((name): name is string => !!name));
+    consideredTools = (toolsMetadata ?? []).filter(tool => calledNames.has(tool.name));
+  } else {
+    // Default: consider the step's effective active tool set (a registered
+    // suspend/approval tool forces sequential even if the model skipped it).
+    const stamped = toolCalls?.find(tc => tc.activeTools !== undefined);
+    const activeTools = stamped ? stamped.activeTools : options?.activeTools;
+    consideredTools =
+      activeTools === undefined || activeTools === null
+        ? (toolsMetadata ?? [])
+        : (toolsMetadata ?? []).filter(tool => activeTools.includes(tool.name));
+  }
 
   if (consideredTools.some(tool => tool.hasSuspendSchema || tool.requireApproval)) {
     return 1;
   }
 
-  const configured = options?.toolCallConcurrency;
-  return typeof configured === 'number' && configured > 0 ? configured : DurableAgentDefaults.TOOL_CALL_CONCURRENCY;
+  return limit > 0 ? limit : DurableAgentDefaults.TOOL_CALL_CONCURRENCY;
 }

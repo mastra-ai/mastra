@@ -7,8 +7,10 @@ import type { ModePack, ProviderAccess, ProviderAccessLevel } from '@mastra/code
 import { getAvailableModePacks } from '@mastra/code-sdk/onboarding/packs';
 import {
   loadSettings,
+  resolveDefaultThinkingLevel,
   resolveThreadActiveModelPackId,
   saveSettings,
+  stripMastraCodeCustomProviderPrefix,
   THREAD_ACTIVE_MODEL_PACK_ID_KEY,
 } from '@mastra/code-sdk/onboarding/settings';
 import type { GlobalSettings } from '@mastra/code-sdk/onboarding/settings';
@@ -93,7 +95,8 @@ async function selectModel(
       onSelect: async (model: ModelItem) => {
         ctx.state.ui.hideOverlay();
         await promptForApiKeyIfNeeded(ctx.state.ui, model, ctx.authStorage);
-        resolve(model.id);
+        const { customProviders } = loadSettings();
+        resolve(stripMastraCodeCustomProviderPrefix(model.id, customProviders));
       },
       onCancel: () => {
         ctx.state.ui.hideOverlay();
@@ -401,11 +404,22 @@ async function applyPack(ctx: SlashCommandContext, pack: ModePack, previousPackI
 
   s.models.subagentModels = {};
 
-  const hasOpenAI = Object.values(pack.models).some(m => m.startsWith('openai/'));
-  const currentThinking = ((ctx.state.session.state.get() as any)?.thinkingLevel ?? 'off') as string;
-  if (hasOpenAI && currentThinking === 'off') {
-    await ctx.state.session.state.set({ thinkingLevel: 'low' } as any);
+  const hasOpenAI = Object.values(pack.models).some(modelId => modelId.startsWith('openai/'));
+  const sessionOverride = (ctx.state.session.state.get() as any)?.thinkingLevel as string | undefined;
+  const defaultThinking = resolveDefaultThinkingLevel(s, currentModeId);
+  const effectiveThinking = sessionOverride ?? defaultThinking.level;
+  if (
+    hasOpenAI &&
+    sessionOverride === undefined &&
+    defaultThinking.source === 'global' &&
+    defaultThinking.level === 'off'
+  ) {
+    // Bump the active global fallback so OpenAI models don't silently run
+    // without reasoning, while preserving explicit session and mode defaults.
     s.preferences.thinkingLevel = 'low';
+  } else if (currentModeModel?.startsWith('openai/') && effectiveThinking === 'max') {
+    // OpenAI API-key models do not accept the Codex-only `max` effort.
+    await ctx.state.session.state.set({ thinkingLevel: 'xhigh' });
   }
 
   saveSettings(s);

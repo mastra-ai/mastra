@@ -10,11 +10,10 @@ import {
 } from '@mastra/observability';
 import { agent } from './agents/agent';
 import { startScheduleTool, stopScheduleTool } from './tools/schedule-tools';
-import { webFetchTool } from './tools/web-fetch-tool';
 
 export const mastra = new Mastra({
   agents: { agent },
-  tools: { startScheduleTool, stopScheduleTool, webFetchTool },
+  tools: { startScheduleTool, stopScheduleTool },
   storage: new MastraCompositeStore({
     id: 'composite-storage',
     default: new LibSQLStore({

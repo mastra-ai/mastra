@@ -47,7 +47,20 @@ const serializedStepSchema = z.object({
  * Represents different step flow types in the workflow graph
  */
 const serializedStepFlowEntrySchema = z.object({
-  type: z.enum(['step', 'sleep', 'sleepUntil', 'waitForEvent', 'parallel', 'conditional', 'loop', 'foreach']),
+  type: z.enum([
+    'step',
+    'agent',
+    'tool',
+    'mapping',
+    'sleep',
+    'sleepUntil',
+    'waitForEvent',
+    'parallel',
+    'conditional',
+    'loop',
+    'foreach',
+    'workflow',
+  ]),
 });
 
 /**
@@ -66,6 +79,7 @@ export const workflowInfoSchema = z.object({
   stateSchema: z.string().optional(),
   options: z.object({}).optional(),
   isProcessorWorkflow: z.boolean().optional(),
+  origin: z.enum(['code', 'dynamic']).optional(),
 });
 
 /**
@@ -106,6 +120,13 @@ export const listWorkflowRunsQuerySchema = createCombinedPaginationSchema().exte
   resourceId: z.string().optional(),
   status: workflowRunStatusSchema.optional(),
 });
+
+export const workflowRunCountsEntrySchema = z.object({
+  running: z.number(),
+  suspended: z.number(),
+});
+
+export const workflowRunCountsResponseSchema = z.record(z.string(), workflowRunCountsEntrySchema);
 
 /**
  * Base schema for workflow execution with input data and tracing

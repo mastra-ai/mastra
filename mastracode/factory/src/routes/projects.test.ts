@@ -30,8 +30,14 @@ describe('ProjectRoutes', () => {
       body: JSON.stringify({ name: ' Platform ', description: ' Core services ' }),
     });
     expect(createdResponse.status).toBe(201);
-    const created = (await createdResponse.json()) as { project: { id: string; name: string; description: string } };
-    expect(created.project).toMatchObject({ name: 'Platform', description: 'Core services' });
+    const created = (await createdResponse.json()) as {
+      project: { id: string; name: string; description: string; slackWorkItemsEnabled: boolean };
+    };
+    expect(created.project).toMatchObject({
+      name: 'Platform',
+      description: 'Core services',
+      slackWorkItemsEnabled: false,
+    });
 
     const listed = (await (await app.request('/web/factory/projects')).json()) as { projects: Array<{ id: string }> };
     expect(listed.projects.map(project => project.id)).toEqual([created.project.id]);
@@ -40,11 +46,11 @@ describe('ProjectRoutes', () => {
     const updatedResponse = await app.request(`/web/factory/projects/${created.project.id}`, {
       method: 'PATCH',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ name: 'Platform engineering', description: null }),
+      body: JSON.stringify({ name: 'Platform engineering', description: null, slackWorkItemsEnabled: true }),
     });
     expect(updatedResponse.status).toBe(200);
     expect((await updatedResponse.json()) as unknown).toMatchObject({
-      project: { name: 'Platform engineering', description: null },
+      project: { name: 'Platform engineering', description: null, slackWorkItemsEnabled: true },
     });
 
     expect((await app.request(`/web/factory/projects/${created.project.id}`, { method: 'DELETE' })).status).toBe(204);

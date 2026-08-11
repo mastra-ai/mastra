@@ -14,6 +14,7 @@ import { useProvidersQuery } from '../../hooks/use-providers';
 import { useFactoryAuth } from '../../hooks/useFactoryAuth';
 import { useUserSessionQuery } from '../../hooks/useWorkspaces';
 import { providerDisplayName } from '../domains/settings/components/provider-display-name';
+import { settingsSectionPath } from '../domains/settings/settingsSections';
 import type { FactoryProject } from '../domains/workspaces/services/github';
 import { ChatHeader } from '../domains/chat/components/ChatHeader';
 import { ComposerPanel } from '../domains/chat/components/ComposerPanel';
@@ -21,7 +22,6 @@ import { TranscriptEntries } from '../domains/chat/components/Transcript';
 import { ChatSessionBoundary } from '../domains/chat/context/ChatSessionProvider';
 import { useChatTranscript } from '../domains/chat/context/useChatTranscript';
 import { useGlobalShortcuts } from '../domains/chat/hooks/useGlobalShortcuts';
-import { Spinner } from '@mastra/playground-ui/components/Spinner';
 
 const draftStartClass = 'flex w-full max-w-xl flex-col items-stretch gap-6';
 
@@ -32,15 +32,7 @@ export function NewPage() {
   const projectQuery = useFactoryProjectQuery(activeFactory?.id);
   const providersQuery = useProvidersQuery();
   const defaultModelId = projectQuery.data?.defaultModelId ?? undefined;
-  const resolvingModelGuard =
-    factoryQuery.isPending ||
-    (Boolean(activeFactory) && projectQuery.isPending) ||
-    (Boolean(defaultModelId) && providersQuery.isPending);
   const missingDefaultModel = Boolean(activeFactory) && projectQuery.isSuccess && !defaultModelId;
-  // The factory default model is set, but the signed-in caller has no
-  // credential for its provider — starting a chat would only fail at run
-  // time (exactly the shared-factory teammate case). Unknown providers
-  // (custom providers) are skipped: their keys live elsewhere.
   const defaultModelProvider = defaultModelId
     ? providersQuery.data?.find(entry => entry.provider === defaultModelId.split('/')[0])
     : undefined;
@@ -48,6 +40,7 @@ export function NewPage() {
     Boolean(activeFactory) && defaultModelId && defaultModelProvider?.source === 'none'
       ? { modelId: defaultModelId, provider: defaultModelProvider.provider }
       : undefined;
+  const configurationError = projectQuery.error ?? providersQuery.error ?? undefined;
 
   return (
     <ChatLayout
@@ -55,17 +48,12 @@ export function NewPage() {
       header={<ChatHeader />}
       main={
         <ChatSessionBoundary>
-          {resolvingModelGuard ? (
-            <div className="grid min-h-0 flex-1 place-items-center">
-              <Spinner aria-label="Loading Factory" className="text-icon3" />
-            </div>
-          ) : (
-            <NewPageContent
-              activeFactory={activeFactory}
-              missingDefaultModel={missingDefaultModel}
-              missingCredential={missingCredential}
-            />
-          )}
+          <NewPageContent
+            activeFactory={activeFactory}
+            missingDefaultModel={missingDefaultModel}
+            missingCredential={missingCredential}
+            configurationError={configurationError}
+          />
         </ChatSessionBoundary>
       }
     />
@@ -77,20 +65,27 @@ interface MissingCredentialGuard {
   provider: string;
 }
 
+function readRouteErrorNotice(state: unknown): string | undefined {
+  if (typeof state !== 'object' || state === null || !('routeErrorNotice' in state)) return undefined;
+  const { routeErrorNotice } = state;
+  return typeof routeErrorNotice === 'string' ? routeErrorNotice : undefined;
+}
+
 function NewPageContent({
   activeFactory,
   missingDefaultModel,
   missingCredential,
+  configurationError,
 }: {
   activeFactory: FactoryProject | undefined;
   missingDefaultModel: boolean;
   missingCredential: MissingCredentialGuard | undefined;
+  configurationError: Error | undefined;
 }) {
   useGlobalShortcuts();
   const { transcript } = useChatTranscript();
   const location = useLocation();
-  const locationState = location.state as { routeErrorNotice?: string } | null;
-  const routeErrorNotice = locationState?.routeErrorNotice ?? null;
+  const routeErrorNotice = readRouteErrorNotice(location.state);
   const noticeEntries = transcript.entries.filter(entry => entry.kind === 'notice');
   const hasNotices = Boolean(routeErrorNotice) || noticeEntries.length > 0;
 
@@ -99,6 +94,7 @@ function NewPageContent({
       <div className="flex w-full max-w-xl flex-col items-center gap-4">
         <DraftStart
           activeFactory={activeFactory}
+          configurationError={configurationError}
           missingDefaultModel={missingDefaultModel}
           missingCredential={missingCredential}
         />
@@ -115,10 +111,12 @@ function NewPageContent({
 
 function DraftStart({
   activeFactory,
+  configurationError,
   missingDefaultModel,
   missingCredential,
 }: {
   activeFactory: FactoryProject | undefined;
+  configurationError: Error | undefined;
   missingDefaultModel: boolean;
   missingCredential: MissingCredentialGuard | undefined;
 }) {
@@ -147,18 +145,15 @@ function DraftStart({
         </h1>
         <FactoryContext activeFactory={activeFactory} />
       </div>
+      {configurationError && (
+        <Notice variant="destructive">Failed to load session configuration: {configurationError.message}</Notice>
+      )}
 
       {activeFactory && <ComposerPanel composerVariant="textarea" />}
     </section>
   );
 }
 
-/**
- * The factory default model exists but the signed-in caller has no credential
- * for its provider — most often a teammate whose org shares a factory backed
- * by someone's personal key. Say exactly how to get unblocked instead of
- * failing on the first message.
- */
 function MissingCredentialState({ factoryId, guard }: { factoryId: string; guard: MissingCredentialGuard }) {
   const authQuery = useFactoryAuth();
   const providerName = providerDisplayName(guard.provider);
@@ -169,10 +164,10 @@ function MissingCredentialState({ factoryId, guard }: { factoryId: string; guard
       as="h2"
       iconSlot={<Bot size={40} className="text-icon3" />}
       titleSlot={`You don't have access to ${providerName}`}
-      descriptionSlot={`The Factory default model (${guard.modelId}) needs a ${providerName} credential. Add your own key in Model settings${orgHint}.`}
+      descriptionSlot={`The Factory default model (${guard.modelId}) needs a ${providerName} credential. Add your own key in Models settings${orgHint}.`}
       actionSlot={
-        <Link to={`/factories/${factoryId}/settings/model`} className={buttonVariants({ variant: 'primary' })}>
-          Open Model settings
+        <Link to={settingsSectionPath(factoryId, 'models')} className={buttonVariants({ variant: 'primary' })}>
+          Open Models settings
         </Link>
       }
     />
@@ -185,10 +180,10 @@ function MissingDefaultModelState({ factoryId }: { factoryId: string }) {
       as="h2"
       iconSlot={<Bot size={40} className="text-icon3" />}
       titleSlot="No default model configured for this Factory"
-      descriptionSlot="Connect a model provider and choose a default model in Model settings before starting a chat."
+      descriptionSlot="Connect a model provider and choose a default model in Models settings before starting a chat."
       actionSlot={
-        <Link to={`/factories/${factoryId}/settings/model`} className={buttonVariants({ variant: 'primary' })}>
-          Open Model settings
+        <Link to={settingsSectionPath(factoryId, 'models')} className={buttonVariants({ variant: 'primary' })}>
+          Open Models settings
         </Link>
       }
     />

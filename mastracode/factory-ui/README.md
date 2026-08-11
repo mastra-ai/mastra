@@ -4,19 +4,21 @@
 
 ## Development
 
-Complete the [repository setup](../README.md#setup) and [GitHub App setup](../web/README.md#configure-local-onboarding). Then run these in separate terminals:
-
-```shell
-pnpm --dir mastracode/web api
-```
+Complete the [repository setup](../README.md#setup) and [GitHub App setup](../web/README.md#configure-local-onboarding). Then start the API and the Vite dev server:
 
 ```shell
 pnpm --filter ./mastracode/factory-ui web
 ```
 
-Open `http://localhost:5173`.
+Open `http://localhost:5173`. To restart one side without losing the other, run `pnpm --filter ./mastracode/factory-ui web:api` and `pnpm --filter ./mastracode/factory-ui dev` in separate terminals.
 
 Keep policy, validation, and persistence in [`@mastra/factory`](../factory/README.md), not in React.
+
+## Board activity
+
+Cards on the **Work** and **Review** boards show the last person recorded in the work item's audit history. Hover over the person's name or profile image to open the recent event timeline for that card.
+
+Factory stores actor names and profile images in audit event metadata when events are written. For older events without that metadata, Factory resolves actor profiles through the configured authentication provider and falls back to the stored actor ID and an initial.
 
 ## Tests
 

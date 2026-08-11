@@ -7,6 +7,7 @@ const REPOSITORIES = 'source_control_repositories';
 const CONNECTIONS = 'factory_project_source_control_connections';
 const PROJECT_REPOSITORIES = 'factory_project_repositories';
 const SANDBOXES = 'source_control_project_repository_sandboxes';
+const SANDBOX_POOL = 'source_control_sandbox_pool';
 const WORKTREES = 'source_control_worktrees';
 const SESSIONS = 'source_control_sessions';
 
@@ -125,6 +126,30 @@ export const SOURCE_CONTROL_SCHEMAS: CollectionSchema[] = [
     ],
   },
   {
+    name: SANDBOX_POOL,
+    columns: {
+      id: { type: 'uuid-pk' },
+      org_id: { type: 'text' },
+      project_repository_id: { type: 'text' },
+      user_id: { type: 'text' },
+      sandbox_id: { type: 'text' },
+      sandbox_workdir: { type: 'text' },
+      released_at: { type: 'timestamp' },
+    },
+    uniqueIndexes: [
+      {
+        name: 'source_control_sandbox_pool_sandbox_unique',
+        columns: ['sandbox_id'],
+      },
+    ],
+    indexes: [
+      {
+        name: 'source_control_sandbox_pool_repository_user_idx',
+        columns: ['project_repository_id', 'user_id'],
+      },
+    ],
+  },
+  {
     name: WORKTREES,
     columns: {
       id: { type: 'uuid-pk' },
@@ -152,9 +177,12 @@ export const SOURCE_CONTROL_SCHEMAS: CollectionSchema[] = [
       user_id: { type: 'text' },
       branch: { type: 'text' },
       base_branch: { type: 'text' },
+      title: { type: 'text', nullable: true },
       sandbox_id: { type: 'text', nullable: true },
       sandbox_workdir: { type: 'text', nullable: true },
       materialized_at: { type: 'timestamp', nullable: true },
+      first_message_at: { type: 'timestamp', nullable: true },
+      first_meaningful_exec_at: { type: 'timestamp', nullable: true },
       created_at: { type: 'timestamp' },
       updated_at: { type: 'timestamp' },
     },
@@ -279,6 +307,33 @@ export interface ProjectRepositorySandbox {
   createdAt: Date;
 }
 
+/**
+ * A provider sandbox that is no longer bound to any session and can be handed
+ * to the next session for the same project-repository link instead of
+ * provisioning a fresh VM. Pooling is per-repository, not per-user: no
+ * credentials are baked into the VM (tokens are injected per command), so any
+ * user's session can safely claim it. `userId` records who released it,
+ * purely as provenance.
+ */
+export interface PooledSandbox {
+  id: string;
+  orgId: string;
+  projectRepositoryId: string;
+  /** User whose session released this sandbox (provenance, not a claim key). */
+  userId: string;
+  sandboxId: string;
+  sandboxWorkdir: string;
+  releasedAt: Date;
+}
+
+export interface ReleasePooledSandboxInput {
+  orgId: string;
+  projectRepositoryId: string;
+  userId: string;
+  sandboxId: string;
+  sandboxWorkdir: string;
+}
+
 export interface SourceControlWorktree {
   id: string;
   projectRepositoryId: string;
@@ -304,10 +359,15 @@ export interface SourceControlSession {
   orgId: string;
   userId: string;
   branch: string;
+  title: string | null;
   baseBranch: string;
   sandboxId: string | null;
   sandboxWorkdir: string | null;
   materializedAt: Date | null;
+  /** When the first user message reached the session's agent. Write-once. */
+  firstMessageAt: Date | null;
+  /** When the agent's first successful sandbox exec finished. Write-once. */
+  firstMeaningfulExecAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -318,6 +378,7 @@ export interface CreateSourceControlSessionInput {
   orgId: string;
   userId: string;
   branch: string;
+  title?: string | null;
   baseBranch: string;
 }
 
@@ -383,6 +444,20 @@ export interface SourceControlStorageHandle {
     clearBinding(args: { id: string }): Promise<void>;
     markMaterialized(args: { id: string }): Promise<void>;
   };
+  readonly sandboxPool: {
+    /**
+     * Return a sandbox to the reuse pool. Idempotent per provider sandbox ID —
+     * releasing the same sandbox twice keeps one pool row.
+     */
+    release(args: ReleasePooledSandboxInput): Promise<void>;
+    /**
+     * Atomically take one pooled sandbox for the given project-repository
+     * link, preferring the most recently released (warmest) VM. Returns
+     * `null` when the pool is empty. Each pooled sandbox is handed to exactly
+     * one claimer even under concurrent claims.
+     */
+    claim(args: { projectRepositoryId: string }): Promise<PooledSandbox | null>;
+  };
   readonly worktrees: {
     upsert(args: UpsertSourceControlWorktreeInput): Promise<void>;
     list(args: { projectRepositoryId: string; userId: string }): Promise<SourceControlWorktree[]>;
@@ -405,6 +480,21 @@ export interface SourceControlStorageHandle {
     create(input: CreateSourceControlSessionInput): Promise<SourceControlSession>;
     setSandbox(args: { id: string; sandboxId: string | null; sandboxWorkdir: string }): Promise<void>;
     markMaterialized(args: { id: string }): Promise<void>;
+    /**
+     * Record when the session's agent received its first user message.
+     * Write-once: the guarded update only lands while the column is still
+     * NULL, so retries and process restarts are no-ops. Keyed by the
+     * controller-facing `sessionId` (not the row id) because the caller —
+     * the session observer — only knows the controller resourceId.
+     */
+    markFirstMessage(args: { sessionId: string }): Promise<void>;
+    /**
+     * Record when the session's agent completed its first successful sandbox
+     * exec (TTFME anchor). Same write-once contract as `markFirstMessage`:
+     * guarded on the column being NULL, keyed by the controller-facing
+     * `sessionId`.
+     */
+    markFirstMeaningfulExec(args: { sessionId: string }): Promise<void>;
     delete(id: string): Promise<void>;
   };
 }
@@ -464,6 +554,16 @@ interface SandboxDbRow extends Record<string, unknown> {
   created_at: Date;
 }
 
+interface SandboxPoolDbRow extends Record<string, unknown> {
+  id: string;
+  org_id: string;
+  project_repository_id: string;
+  user_id: string;
+  sandbox_id: string;
+  sandbox_workdir: string;
+  released_at: Date;
+}
+
 interface WorktreeDbRow extends Record<string, unknown> {
   id: string;
   project_repository_id: string;
@@ -481,10 +581,13 @@ interface SessionDbRow extends Record<string, unknown> {
   org_id: string;
   user_id: string;
   branch: string;
+  title: string | null;
   base_branch: string;
   sandbox_id: string | null;
   sandbox_workdir: string | null;
   materialized_at: Date | null;
+  first_message_at: Date | null;
+  first_meaningful_exec_at: Date | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -554,6 +657,18 @@ function toSandbox(row: SandboxDbRow): ProjectRepositorySandbox {
   };
 }
 
+function toPooledSandbox(row: SandboxPoolDbRow): PooledSandbox {
+  return {
+    id: row.id,
+    orgId: row.org_id,
+    projectRepositoryId: row.project_repository_id,
+    userId: row.user_id,
+    sandboxId: row.sandbox_id,
+    sandboxWorkdir: row.sandbox_workdir,
+    releasedAt: row.released_at,
+  };
+}
+
 function toWorktree(row: WorktreeDbRow): SourceControlWorktree {
   return {
     id: row.id,
@@ -574,10 +689,13 @@ function toSession(row: SessionDbRow): SourceControlSession {
     orgId: row.org_id,
     userId: row.user_id,
     branch: row.branch,
+    title: row.title,
     baseBranch: row.base_branch,
     sandboxId: row.sandbox_id,
     sandboxWorkdir: row.sandbox_workdir,
     materializedAt: row.materialized_at,
+    firstMessageAt: row.first_message_at,
+    firstMeaningfulExecAt: row.first_meaningful_exec_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -595,6 +713,7 @@ export class SourceControlStorage extends FactoryStorageDomain {
   async dangerouslyClearAll(): Promise<void> {
     await this.ops.deleteMany(SESSIONS, {});
     await this.ops.deleteMany(WORKTREES, {});
+    await this.ops.deleteMany(SANDBOX_POOL, {});
     await this.ops.deleteMany(SANDBOXES, {});
     await this.ops.deleteMany(PROJECT_REPOSITORIES, {});
     await this.ops.deleteMany(CONNECTIONS, {});
@@ -848,6 +967,7 @@ export class SourceControlStorage extends FactoryStorageDomain {
           for (const projectRepository of projectRepositories) {
             await db().deleteMany(SESSIONS, { project_repository_id: projectRepository.id });
             await db().deleteMany(WORKTREES, { project_repository_id: projectRepository.id });
+            await db().deleteMany(SANDBOX_POOL, { project_repository_id: projectRepository.id });
             await db().deleteMany(SANDBOXES, { project_repository_id: projectRepository.id });
           }
           await db().deleteMany(PROJECT_REPOSITORIES, { connection_id: id });
@@ -962,6 +1082,7 @@ export class SourceControlStorage extends FactoryStorageDomain {
           if (!existing) return false;
           await db().deleteMany(SESSIONS, { project_repository_id: id });
           await db().deleteMany(WORKTREES, { project_repository_id: id });
+          await db().deleteMany(SANDBOX_POOL, { project_repository_id: id });
           await db().deleteMany(SANDBOXES, { project_repository_id: id });
           await db().deleteMany(PROJECT_REPOSITORIES, { id });
           return true;
@@ -1005,6 +1126,39 @@ export class SourceControlStorage extends FactoryStorageDomain {
         markMaterialized: async ({ id }) => {
           await requireSandbox(id);
           await db().updateMany(SANDBOXES, { id }, { materialized_at: new Date() });
+        },
+      },
+      sandboxPool: {
+        release: async input => {
+          // Mirror claim(): a concurrently unlinked project repository makes
+          // the release a silent no-op (the unlink cascade drops pool rows
+          // anyway) — callers treat release as best-effort and must not throw.
+          if (!(await getProjectRepositoryById(input.projectRepositoryId))) return;
+          try {
+            await db().insertOne<SandboxPoolDbRow>(SANDBOX_POOL, {
+              org_id: input.orgId,
+              project_repository_id: input.projectRepositoryId,
+              user_id: input.userId,
+              sandbox_id: input.sandboxId,
+              sandbox_workdir: input.sandboxWorkdir,
+              released_at: new Date(),
+            });
+          } catch (error) {
+            if (!(error instanceof UniqueViolationError)) throw error;
+            // The provider sandbox is already pooled — keep the existing row.
+          }
+        },
+        claim: async ({ projectRepositoryId }) => {
+          if (!(await getProjectRepositoryById(projectRepositoryId))) return null;
+          const rows = await db().findMany<SandboxPoolDbRow>(SANDBOX_POOL, {
+            project_repository_id: projectRepositoryId,
+          });
+          rows.sort((left, right) => right.released_at.getTime() - left.released_at.getTime());
+          for (const row of rows) {
+            // Delete-by-id succeeds for exactly one concurrent claimer.
+            if ((await db().deleteMany(SANDBOX_POOL, { id: row.id })) === 1) return toPooledSandbox(row);
+          }
+          return null;
         },
       },
       worktrees: {
@@ -1093,10 +1247,12 @@ export class SourceControlStorage extends FactoryStorageDomain {
               org_id: input.orgId,
               user_id: input.userId,
               branch: input.branch,
+              title: input.title ?? null,
               base_branch: input.baseBranch,
               sandbox_id: null,
               sandbox_workdir: null,
               materialized_at: null,
+              first_message_at: null,
               created_at: now,
               updated_at: now,
             });
@@ -1121,6 +1277,26 @@ export class SourceControlStorage extends FactoryStorageDomain {
         },
         markMaterialized: async ({ id }) => {
           await db().updateMany(SESSIONS, { id }, { materialized_at: new Date(), updated_at: new Date() });
+        },
+        markFirstMessage: async ({ sessionId }) => {
+          // `first_message_at: null` in the filter compiles to `IS NULL`, making
+          // this an atomic one-shot: concurrent callers and later messages
+          // match zero rows. Sessions without a source-control row (chat-only
+          // channels) are a zero-row no-op too.
+          await db().updateMany(
+            SESSIONS,
+            { session_id: sessionId, first_message_at: null },
+            { first_message_at: new Date(), updated_at: new Date() },
+          );
+        },
+        markFirstMeaningfulExec: async ({ sessionId }) => {
+          // Same atomic one-shot shape as markFirstMessage: the NULL filter
+          // makes concurrent callers and later execs zero-row no-ops.
+          await db().updateMany(
+            SESSIONS,
+            { session_id: sessionId, first_meaningful_exec_at: null },
+            { first_meaningful_exec_at: new Date(), updated_at: new Date() },
+          );
         },
         delete: async id => {
           await db().deleteMany(SESSIONS, { id });

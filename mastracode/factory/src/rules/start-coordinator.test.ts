@@ -1,3 +1,4 @@
+import { RequestContext } from '@mastra/core/request-context';
 import { describe, expect, it, vi } from 'vitest';
 
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
@@ -160,6 +161,39 @@ describe('FactoryStartCoordinator', () => {
     });
   });
 
+  it('seeds caller identity into an existing request context', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { controller } = makeController();
+    const coordinator = new FactoryStartCoordinator(
+      controller as never,
+      storage,
+      undefined,
+      makeSourceControl() as never,
+    );
+    const requestContext = new RequestContext();
+
+    await coordinator.prepare({ ...startRequest(), requestContext });
+
+    expect(requestContext.get('user')).toEqual({ workosId: 'user-1', organizationId: 'org-1' });
+  });
+
+  it('leaves an authenticated identity on the request context untouched', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { controller } = makeController();
+    const coordinator = new FactoryStartCoordinator(
+      controller as never,
+      storage,
+      undefined,
+      makeSourceControl() as never,
+    );
+    const requestContext = new RequestContext();
+    requestContext.set('user', { workosId: 'authenticated-user', organizationId: 'org-1' });
+
+    await coordinator.prepare({ ...startRequest(), requestContext });
+
+    expect(requestContext.get('user')).toEqual({ workosId: 'authenticated-user', organizationId: 'org-1' });
+  });
+
   it('applies the Factory default model before preparing a board run', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const { controller, session } = makeController();
@@ -298,6 +332,99 @@ describe('FactoryStartCoordinator', () => {
     expect(session.thread.list).not.toHaveBeenCalled();
     expect(session.thread.switch).not.toHaveBeenCalled();
     expect(session.thread.create).not.toHaveBeenCalled();
+  });
+
+  it('tags pull-request review sessions with untrustedCheckout', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { controller, session } = makeController();
+    const coordinator = new FactoryStartCoordinator(
+      controller as never,
+      storage,
+      undefined,
+      makeSourceControl() as never,
+    );
+
+    const request = startRequest({ role: 'review', kickoffMessage: null });
+    request.workItem.input.externalSource.type = 'pull-request' as never;
+    await coordinator.prepare(request);
+
+    // The PR checkout is attacker-writable third-party content — the SDK
+    // reads this flag to skip AGENTS.md/CLAUDE.md ingestion for the session.
+    // `baseRef` carries the trusted ref (the session's base branch) that the
+    // SDK may serve instruction files from instead.
+    expect(session.state.set).toHaveBeenCalledWith({
+      factoryProjectId: PROJECT_ID,
+      projectRepositoryId: 'project-repository-1',
+      untrustedCheckout: true,
+      baseRef: 'main',
+    });
+  });
+
+  it('tags factory-review skill kickoffs with untrustedCheckout', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { controller, session } = makeController();
+    session.getWorkspace.mockReturnValue({
+      skills: {
+        maybeRefresh: vi.fn(async () => {}),
+        get: vi.fn(async () => ({ name: 'factory-review', description: 'Review a PR', instructions: 'Review.' })),
+      },
+    } as never);
+    const coordinator = new FactoryStartCoordinator(
+      controller as never,
+      storage,
+      undefined,
+      makeSourceControl() as never,
+    );
+
+    const request = startRequest({ kickoffMessage: null });
+    request.invocation = { type: 'skill', skillName: 'factory-review', arguments: 'PR #1' } as never;
+    await coordinator.prepare(request);
+
+    expect(session.state.set).toHaveBeenCalledWith({
+      factoryProjectId: PROJECT_ID,
+      projectRepositoryId: 'project-repository-1',
+      untrustedCheckout: true,
+      baseRef: 'main',
+    });
+  });
+
+  it('falls back to intake metadata for baseRef when the session record has no base branch', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { controller, session } = makeController();
+    const sourceControl = makeSourceControl();
+    const record = await sourceControl.sessions.getBySessionId('session-1');
+    record!.baseBranch = '';
+    const coordinator = new FactoryStartCoordinator(controller as never, storage, undefined, sourceControl as never);
+
+    const request = startRequest({ role: 'review', kickoffMessage: null });
+    request.workItem.input.externalSource.type = 'pull-request' as never;
+    request.workItem.input.metadata = { baseBranch: 'release-1.x' };
+    await coordinator.prepare(request);
+
+    expect(session.state.set).toHaveBeenCalledWith({
+      factoryProjectId: PROJECT_ID,
+      projectRepositoryId: 'project-repository-1',
+      untrustedCheckout: true,
+      baseRef: 'release-1.x',
+    });
+  });
+
+  it('does not tag issue work sessions with untrustedCheckout', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { controller, session } = makeController();
+    const coordinator = new FactoryStartCoordinator(
+      controller as never,
+      storage,
+      undefined,
+      makeSourceControl() as never,
+    );
+
+    await coordinator.prepare(startRequest({ kickoffMessage: null }));
+
+    expect(session.state.set).toHaveBeenCalledWith({
+      factoryProjectId: PROJECT_ID,
+      projectRepositoryId: 'project-repository-1',
+    });
   });
 
   it('reuses the exact Factory session thread across roles', async () => {

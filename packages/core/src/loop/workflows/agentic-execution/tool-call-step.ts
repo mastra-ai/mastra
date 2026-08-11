@@ -1,7 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import type { ToolSet } from '@internal/ai-sdk-v5';
 import { z } from 'zod/v4';
+import { normalizeModelOutput } from '../../../agent/durable/workflows/steps/normalize-model-output';
 import { stopGoalActivity } from '../../../agent/goal';
+import { resolveDeclineReason } from '../../../agent/tool-approval';
 import { createBackgroundTask } from '../../../background-tasks/create';
 import { resolveBackgroundConfig } from '../../../background-tasks/resolve-config';
 import type { BackgroundTaskProgressChunk, ToolBackgroundConfig } from '../../../background-tasks/types';
@@ -51,6 +53,8 @@ type AddToolMetadataOptions = {
   toolCallId: string;
   toolName: string;
   args: unknown;
+  parentToolName?: string;
+  parentArgs?: unknown;
   resumeSchema: string;
   suspendedToolRunId?: string;
   metadata?: Record<string, unknown>;
@@ -154,6 +158,8 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         toolCallId,
         toolName,
         args,
+        parentToolName,
+        parentArgs,
         suspendPayload,
         resumeSchema,
         type,
@@ -161,68 +167,89 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         metadata: toolStateTransformMetadata,
       }: AddToolMetadataOptions) => {
         const metadataKey = type === 'suspension' ? 'suspendedTools' : 'pendingToolApprovals';
-        // Find the last assistant message in the response (which should contain this tool call)
-        const responseMessages = messageList.get.response.db();
-        const lastAssistantMessage = [...responseMessages].reverse().find(msg => msg.role === 'assistant');
+        const inputTransform = getTransformedToolPayload(toolStateTransformMetadata, 'transcript', 'input-available');
+        const approvalTransform = getTransformedToolPayload(toolStateTransformMetadata, 'transcript', 'approval');
+        const suspendTransform = getTransformedToolPayload(toolStateTransformMetadata, 'transcript', 'suspend');
+        const transformedArgs =
+          type === 'approval'
+            ? hasTransformedToolPayload(approvalTransform)
+              ? approvalTransform.transformed
+              : hasTransformedToolPayload(inputTransform)
+                ? inputTransform.transformed
+                : args
+            : hasTransformedToolPayload(inputTransform)
+              ? inputTransform.transformed
+              : hasTransformedToolPayload(suspendTransform)
+                ? suspendTransform.transformed
+                : args;
+        const transformedSuspendPayload =
+          type === 'suspension'
+            ? hasTransformedToolPayload(suspendTransform)
+              ? suspendTransform.transformed
+              : suspendPayload
+            : undefined;
+        const entry = {
+          toolCallId,
+          toolName,
+          args: transformedArgs,
+          ...(parentToolName ? { parentToolName, parentArgs } : {}),
+          type,
+          // Store the OUTER (resumable) runId so clients can resume after page refresh or
+          // server restart via `resumeStream({ runId, toolCallId })`. For delegated sub-agent /
+          // workflow tools the inner suspended run is preserved separately as `delegatedRunId`
+          // — it is required to resume the delegate's own suspended stream, but it is not a
+          // valid public resume target (resuming with it fails closed). No `parentRunId` is
+          // written: readers that resume `parentRunId ?? runId` (channels) get the outer run
+          // from `runId` directly; legacy entries with `parentRunId` keep working.
+          runId,
+          ...(suspendedToolRunId && suspendedToolRunId !== runId ? { delegatedRunId: suspendedToolRunId } : {}),
+          ...(type === 'suspension' ? { suspendPayload: transformedSuspendPayload } : {}),
+          resumeSchema,
+          ...(toolStateTransformMetadata ? { metadata: toolStateTransformMetadata } : {}),
+        };
+        const carriesToolCall = (message: MastraDBMessage) =>
+          message.role === 'assistant' &&
+          (message.content?.parts ?? []).some(
+            part => part.type === 'tool-invocation' && part.toolInvocation.toolCallId === toolCallId,
+          );
 
-        if (lastAssistantMessage) {
-          const content = lastAssistantMessage.content;
-          if (!content) return;
-          // Add metadata to indicate this tool call is pending approval.
-          // Reuse the live metadata object on the message and bind it back immediately. Two
-          // parallel suspensions for the same step (e.g. two delegations to one sub-agent) run
-          // concurrently; if each seeded a fresh {} and only reassigned at the end, the last
-          // writer would clobber the first's entry (lost write). Mutating one shared object in
-          // place keeps both entries.
-          let metadata: Record<string, any>;
-          if (
-            typeof lastAssistantMessage.content.metadata === 'object' &&
-            lastAssistantMessage.content.metadata !== null
-          ) {
-            metadata = lastAssistantMessage.content.metadata as Record<string, any>;
-          } else {
-            metadata = {};
-            lastAssistantMessage.content.metadata = metadata;
-          }
+        const responseMessages = messageList.get.response.db();
+        const responseMessage = [...responseMessages].reverse().find(carriesToolCall);
+        if (responseMessage?.content) {
+          const metadata =
+            typeof responseMessage.content.metadata === 'object' && responseMessage.content.metadata !== null
+              ? (responseMessage.content.metadata as Record<string, any>)
+              : {};
+          responseMessage.content.metadata = metadata;
           metadata[metadataKey] = metadata[metadataKey] || {};
-          // Key by toolCallId (not toolName) so multiple parallel calls to the SAME tool — e.g.
-          // two parallel delegations to one sub-agent — each persist their own suspension entry.
-          // Keying by toolName collapsed them in storage, dropping all but the last suspended
-          // runId; on resume (including page-refresh, which reconstructs purely from the persisted
-          // message) the others could not be recovered (AGENT_RESUME_NO_SNAPSHOT_FOUND). Read and
-          // remove paths match by the entry's toolCallId value, with a legacy toolName-key
-          // fallback so pre-upgrade persisted metadata still resolves.
-          const inputTransform = getTransformedToolPayload(
-            toolStateTransformMetadata,
-            'transcript',
-            'input-available',
-          )?.transformed;
-          const approvalTransform = getTransformedToolPayload(
-            toolStateTransformMetadata,
-            'transcript',
-            'approval',
-          )?.transformed;
-          const suspendTransform = getTransformedToolPayload(
-            toolStateTransformMetadata,
-            'transcript',
-            'suspend',
-          )?.transformed;
-          const transformedArgs =
-            type === 'approval'
-              ? (approvalTransform ?? inputTransform ?? args)
-              : (inputTransform ?? suspendTransform ?? args);
-          const transformedSuspendPayload = type === 'suspension' ? (suspendTransform ?? suspendPayload) : undefined;
-          metadata[metadataKey][toolCallId] = {
-            toolCallId,
-            toolName,
-            args: transformedArgs,
-            type,
-            runId: suspendedToolRunId ?? runId, // Store the runId so we can resume after page refresh
-            ...(suspendedToolRunId && suspendedToolRunId !== runId ? { parentRunId: runId } : {}),
-            ...(type === 'suspension' ? { suspendPayload: transformedSuspendPayload } : {}),
-            resumeSchema,
-            ...(toolStateTransformMetadata ? { metadata: toolStateTransformMetadata } : {}),
-          };
+          metadata[metadataKey][toolCallId] = entry;
+          return;
+        }
+
+        // A sibling suspension may have already flushed the shared assistant response, leaving
+        // this iteration's tool call absent from the response view. Update the drained message
+        // and mark it unsaved again so this sibling's metadata reaches the next flush.
+        const target = [...messageList.get.all.db()].reverse().find(carriesToolCall);
+        if (!target?.content) {
+          logger?.warn?.(
+            `addToolMetadata could not find an assistant message for tool call ${toolCallId} (${toolName}); ${metadataKey} entry was not persisted.`,
+          );
+          return;
+        }
+        const existingMetadata =
+          typeof target.content.metadata === 'object' && target.content.metadata !== null
+            ? (target.content.metadata as Record<string, any>)
+            : {};
+        const existingEntries = (existingMetadata[metadataKey] ?? {}) as Record<string, any>;
+        const updated = messageList.updateMessageMetadataByToolCallId(toolCallId, {
+          [metadataKey]: { ...existingEntries, [toolCallId]: entry },
+        });
+        if (!updated) {
+          // updateMessageMetadataByToolCallId already logged a warning; add the metadata context
+          // at debug level instead of duplicating the warn.
+          logger?.debug?.(
+            `addToolMetadata could not update the assistant message for tool call ${toolCallId} (${toolName}); ${metadataKey} entry was not persisted.`,
+          );
         }
       };
 
@@ -247,7 +274,9 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           if (entries[toolCallId]) return toolCallId;
           const byCallId = Object.keys(entries).find(key => entries[key]?.toolCallId === toolCallId);
           if (byCallId) return byCallId;
-          const byName = Object.keys(entries).find(key => entries[key]?.toolName === toolName);
+          const byName = Object.keys(entries).find(
+            key => entries[key]?.parentToolName === toolName || entries[key]?.toolName === toolName,
+          );
           if (byName) return byName;
           return entries[toolName] ? toolName : undefined;
         };
@@ -353,7 +382,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         const resourceId = readScoped(scopeCtx, RESOURCE_ID_KEY, 'resourceId');
         const memory = readScoped(scopeCtx, MEMORY_KEY, 'memory');
 
-        if (!saveQueueManager || !threadId) {
+        if (!saveQueueManager || !threadId || memoryConfig?.readOnly) {
           return;
         }
 
@@ -501,6 +530,36 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           }
         }
 
+        // On resume, the live `requireToolApproval` policy may be gone: function-form
+        // policies do not survive RequestContext serialization, and decline/approve
+        // helpers typically only pass `{ runId, toolCallId }` — not the original option.
+        // The suspend payload still records that this step waited for approval, so treat
+        // that as authoritative for the resume decision (especially declines).
+        //
+        // Nested sub-agent/workflow approvals also write `requireToolApproval` on the
+        // outer suspend payload, but they additionally set `suspendedToolRunId`. Those
+        // must resume into the nested tool path — not the outer approval short-circuit —
+        // even when a live outer `requireToolApproval` policy is still present.
+        const isDelegatedApproval = Boolean(
+          suspendData &&
+          typeof suspendData === 'object' &&
+          (suspendData as { suspendedToolRunId?: unknown }).suspendedToolRunId,
+        );
+        const suspendedForApproval = Boolean(
+          suspendData &&
+          typeof suspendData === 'object' &&
+          (suspendData as { requireToolApproval?: unknown }).requireToolApproval &&
+          !isDelegatedApproval,
+        );
+        const isApprovalResume =
+          resumeData != null && typeof resumeData === 'object' && 'approved' in (resumeData as Record<string, unknown>);
+        // Gate the resume branch on either a live policy or a prior outer approval suspend.
+        // Without this, `declineToolCall` falls through to `execute` when the policy was
+        // lost (#20470). Do not key only on `approved` in resumeData — generic tool
+        // resumes can carry that field for unrelated reasons (same guard as durable).
+        const approvalGated =
+          !isDelegatedApproval && (toolRequiresApproval || (suspendedForApproval && isApprovalResume));
+
         // Schema for tool call approval - used for both streaming and metadata
         const approvalSchema = toStandardSchema(
           z.object({
@@ -509,10 +568,14 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               .describe(
                 'Controls if the tool call is approved or not, should be true when approved and false when declined',
               ),
+            reason: z
+              .string()
+              .optional()
+              .describe('Optional explanation for the decision, surfaced to the model when the tool call is declined'),
           }),
         );
 
-        if (toolRequiresApproval) {
+        if (approvalGated) {
           if (!resumeData) {
             await stopGoalActivity({
               agentId,
@@ -573,12 +636,13 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             if (!resumeData.approved) {
               // Return the approval decision (not a `result` string) so it persists as
               // `state: 'output-denied'` with `approval`. The denial reason carries the
-              // existing string so downstream consumers/UI keep the same message.
+              // caller-supplied reason when one was provided, otherwise the default string
+              // so downstream consumers/UI keep the same message.
               return {
                 approval: {
                   id: inputData.toolCallId,
                   approved: false,
-                  reason: 'Tool call was not approved by the user',
+                  reason: resolveDeclineReason(resumeData),
                 },
                 ...inputData,
               };
@@ -588,8 +652,9 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
 
         // When an approval-gated tool is approved on resume, tag the resolved output with the
         // approval decision so it round-trips through persistence as `approval: { approved: true }`.
+        // Use `approvalGated` (not only the live policy) so approve-after-policy-loss still tags.
         const approvalGrant =
-          toolRequiresApproval && resumeData && (resumeData as { approved?: boolean }).approved === true
+          approvalGated && resumeData && (resumeData as { approved?: boolean }).approved === true
             ? ({ approval: { id: inputData.toolCallId, approved: true as const } } as const)
             : undefined;
 
@@ -599,7 +664,11 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         const isAgentTool = inputData.toolName?.startsWith('agent-');
         const isWorkflowTool = inputData.toolName?.startsWith('workflow-');
         const resumeDataToPassToToolOptions =
-          !isAgentTool && toolRequiresApproval && Object.keys(resumeData).length === 1 && 'approved' in resumeData
+          !isAgentTool &&
+          approvalGated &&
+          resumeData &&
+          Object.keys(resumeData).length === 1 &&
+          'approved' in resumeData
             ? undefined
             : resumeData;
 
@@ -630,6 +699,16 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           })(),
           suspend: async (suspendPayload: any, options?: SuspendOptions) => {
             if (options?.requireToolApproval) {
+              const innerApproval =
+                typeof options.requireToolApproval === 'object' && options.requireToolApproval
+                  ? options.requireToolApproval
+                  : typeof suspendPayload?.requireToolApproval === 'object' && suspendPayload?.requireToolApproval
+                    ? suspendPayload.requireToolApproval
+                    : null;
+
+              const approvalToolName = innerApproval?.toolName ?? inputData.toolName;
+              const approvalArgs = innerApproval?.args !== undefined ? innerApproval.args : inputData.args;
+
               await stopGoalActivity({
                 agentId,
                 runId,
@@ -642,21 +721,9 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                   from: ChunkFrom.AGENT,
                   payload: {
                     toolCallId: inputData.toolCallId,
-                    toolName: inputData.toolName,
-                    args: inputData.args,
-                    resumeSchema: JSON.stringify(
-                      standardSchemaToJSONSchema(
-                        toStandardSchema(
-                          z.object({
-                            approved: z
-                              .boolean()
-                              .describe(
-                                'Controls if the tool call is approved or not, should be true when approved and false when declined',
-                              ),
-                          }),
-                        ),
-                      ),
-                    ),
+                    toolName: approvalToolName,
+                    args: approvalArgs,
+                    resumeSchema: JSON.stringify(standardSchemaToJSONSchema(approvalSchema)),
                   },
                 },
                 'approval',
@@ -670,8 +737,11 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               // Add approval metadata to message before persisting
               addToolMetadata({
                 toolCallId: inputData.toolCallId,
-                toolName: inputData.toolName,
-                args: inputData.args,
+                toolName: approvalToolName,
+                args: approvalArgs,
+                ...(approvalToolName !== inputData.toolName || approvalArgs !== inputData.args
+                  ? { parentToolName: inputData.toolName, parentArgs: inputData.args }
+                  : {}),
                 type: 'approval',
                 suspendedToolRunId: options.runId,
                 resumeSchema: JSON.stringify(
@@ -697,18 +767,15 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 {
                   requireToolApproval: {
                     toolCallId: inputData.toolCallId,
-                    toolName: inputData.toolName,
-                    args: inputData.args,
+                    toolName: approvalToolName,
+                    args: approvalArgs,
                   },
                   __streamState: streamState.serialize(),
                   __agentId: agentId,
-                  // Persist the inner suspended run id in the workflow snapshot, partitioned
-                  // per tool call (resumeLabel = toolCallId). The shared per-message
-                  // pendingToolApprovals metadata is keyed by toolName and flushed/rehydrated
-                  // concurrently across parallel branches of the same assistant step, so for two
-                  // delegations to the same sub-agent the second branch's entry is overwritten,
-                  // leaving its run id unrecoverable on resume (AGENT_RESUME_NO_SNAPSHOT_FOUND).
-                  // The foreach snapshot is collision-free, so it is the reliable source here.
+                  // Persist the inner suspended run id in the workflow snapshot, partitioned per
+                  // tool call (resumeLabel = toolCallId). Persisted message metadata exposes the
+                  // same id as delegatedRunId for cold reloads, while the snapshot remains the
+                  // runtime source for routing this targeted resume.
                   suspendedToolRunId: options.runId,
                 },
                 {
@@ -757,6 +824,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                   toolCallId: inputData.toolCallId,
                   toolName: inputData.toolName,
                   resumeLabel: options?.resumeLabel,
+                  suspendedToolRunId: options?.runId,
                 },
                 {
                   resumeLabel: inputData.toolCallId,
@@ -802,7 +870,10 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 pendingOrSuspendedTools[inputData.toolName] ??
                 Object.values(pendingOrSuspendedTools).find((e: any) => e?.toolName === inputData.toolName);
               if (entry) {
-                suspendedToolRunId = entry.runId;
+                // Prefer the inner delegated run id — that's the run the sub-agent/workflow tool
+                // must resume. `entry.runId` is the outer resumable run; older persisted entries
+                // stored the inner run there, so it remains the fallback.
+                suspendedToolRunId = entry.delegatedRunId ?? entry.runId;
                 break;
               }
             }
@@ -820,7 +891,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                   dataToolSuspendedParts.find((part: any) => part.data.toolCallId === inputData.toolCallId) ??
                   dataToolSuspendedParts.find((part: any) => part.data.toolName === inputData.toolName);
                 if (foundTool) {
-                  suspendedToolRunId = (foundTool as any).data.runId;
+                  suspendedToolRunId = (foundTool as any).data.delegatedRunId ?? (foundTool as any).data.runId;
                   break;
                 }
               }
@@ -1094,20 +1165,60 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                   const transcriptResult = hasTransformedToolPayload(transcriptResultTransform)
                     ? transcriptResultTransform.transformed
                     : result;
-                  const providerMetadata = withToolPayloadTransformProviderMetadata(
+                  let providerMetadata = withToolPayloadTransformProviderMetadata(
                     inputData.providerMetadata as ProviderMetadata | undefined,
                     transformCarrier.metadata,
                   ) as ProviderMetadata | undefined;
+
+                  // Recompute the model-facing output from the *real* result.
+                  //
+                  // The dispatch turn stored `mastra.modelOutput` derived from the
+                  // "Background task started..." placeholder, and `llmPrompt()`
+                  // prefers that field over `toolInvocation.result` when building
+                  // the tool message. Carrying the dispatch metadata through
+                  // unchanged would leave the model reading the placeholder
+                  // forever, so it re-dispatches the tool or answers from nothing.
+                  // Mirrors the synchronous path in llm-mapping-step.
+                  // Every path below overwrites the dispatch's `mastra.modelOutput`, including
+                  // the ones that produce nothing: a tool with no `toModelOutput`, a mapping
+                  // that returns nullish, and a mapping that throws. Leaving the key untouched
+                  // in those cases would preserve the placeholder — the exact bug this fixes.
+                  // A null `modelOutput` is the established "no mapping, use the raw result"
+                  // signal that `MessageList` keys off by value.
+                  const toModelOutput = (resolvedTool as { toModelOutput?: (output: unknown) => unknown } | undefined)
+                    ?.toModelOutput;
+                  let modelOutput: unknown = null;
+                  if (params.status !== 'failed' && toModelOutput && result != null) {
+                    try {
+                      modelOutput = normalizeModelOutput(await toModelOutput(result)) ?? null;
+                    } catch (mappingError) {
+                      // Non-fatal: the real result is still written to `toolInvocation.result`
+                      // below and the model reads that instead. Surface it loudly because the
+                      // tool asked for a mapping and did not get one.
+                      logger?.warn?.(
+                        `toModelOutput failed for background tool "${params.toolName}" — falling back to the raw result`,
+                        { toolCallId: params.toolCallId, error: mappingError },
+                      );
+                      modelOutput = null;
+                    }
+                  }
+                  providerMetadata = {
+                    ...providerMetadata,
+                    mastra: { ...(providerMetadata as any)?.mastra, modelOutput },
+                  } as ProviderMetadata;
 
                   const updated = messageList.updateToolInvocation(
                     {
                       type: 'tool-invocation',
                       toolInvocation: {
-                        state: 'result',
+                        // A failed background task is recorded as `output-error` with the
+                        // message in `errorText`; a successful one keeps `state: 'result'`.
+                        ...(params.status === 'failed'
+                          ? { state: 'output-error' as const, errorText: result as string }
+                          : { state: 'result' as const, result }),
                         toolCallId: params.toolCallId,
                         toolName: params.toolName,
                         args,
-                        result,
                         // Preserve the approval decision for an approved approval-gated tool that
                         // ran in the background so it round-trips on recall, matching the sync path
                         // and the "started" placeholder above.
@@ -1292,6 +1403,24 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         // Re-throw FGA authorization errors instead of swallowing them
         if (error instanceof Error && error.name === 'FGADeniedError') {
           throw error;
+        }
+        // A throw while the request is aborted is a mid-flight cancellation, not a genuine
+        // failure. Recording it as an error result would fake-complete the call (its
+        // `result` becomes the abort message) and read as success on resume, so flag it
+        // aborted instead and let the mapping step leave the call incomplete. Key off the
+        // abort signal, not the error type: CoreToolBuilder wraps the AbortError in a
+        // TOOL_EXECUTION_FAILED MastraError, so isAbortError(error) wouldn't match here.
+        if (options?.abortSignal?.aborted) {
+          // Log the discarded error for observability (control flow unchanged).
+          logger?.debug?.('Tool execution interrupted by request abort; leaving the tool call incomplete', {
+            toolName: inputData.toolName,
+            toolCallId: inputData.toolCallId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+          return {
+            aborted: true,
+            ...inputData,
+          };
         }
         return {
           error: serializeToolError(error),

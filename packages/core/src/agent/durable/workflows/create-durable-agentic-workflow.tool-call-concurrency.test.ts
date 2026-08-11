@@ -13,10 +13,21 @@ import { createDurableAgenticWorkflow } from './create-durable-agentic-workflow'
 function findForeachEntry(steps: any[]): any {
   for (const entry of steps ?? []) {
     if (entry.type === 'foreach') return entry;
-    if (entry.step?.executionGraph) {
+
+    // Nested workflow as a plain step: { type: 'step', step: Workflow }
+    if (entry.type === 'step' && entry.step?.executionGraph) {
       const nested = findForeachEntry(entry.step.executionGraph.steps);
       if (nested) return nested;
     }
+
+    // Loop / foreach containers hold a SingleStepEntry in `.step`.
+    // Recurse into that one-element list so nested workflows buried under
+    // `.dowhile(subWorkflow, …)` are still found.
+    if (entry.step && entry.type !== 'step') {
+      const nested = findForeachEntry([entry.step]);
+      if (nested) return nested;
+    }
+
     if (entry.steps) {
       const nested = findForeachEntry(entry.steps);
       if (nested) return nested;

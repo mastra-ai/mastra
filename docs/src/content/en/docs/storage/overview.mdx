@@ -6,6 +6,7 @@ packages:
   - "@mastra/libsql"
   - "@mastra/memory"
   - "@mastra/mongodb"
+  - "@mastra/oracledb"
   - "@mastra/pg"
 ---
 
@@ -202,7 +203,7 @@ export const mastra = new Mastra({
 })
 ```
 
-You can also route `observability` to a dedicated analytics backend. See [observability storage](/docs/observability/storage) for an observability-specific example.
+You can also route `observability` to a dedicated analytics backend. See the [observability quickstart](/docs/observability/overview#quickstart) for an observability-specific example.
 
 ## Supported providers
 
@@ -210,7 +211,9 @@ Each provider page includes installation instructions, configuration parameters,
 
 - [libSQL](/reference/storage/libsql)
 - [PostgreSQL](/reference/storage/postgresql)
+- [Neon Postgres](/reference/storage/neon)
 - [MongoDB](/reference/storage/mongodb)
+- [OracleDB](/reference/storage/oracledb)
 - [Upstash](/reference/storage/upstash)
 - [Redis](/reference/storage/redis)
 - [Cloudflare D1](/reference/storage/cloudflare-d1)
@@ -233,4 +236,4 @@ libSQL is the fastest path for local development because it doesn't require runn
 - [Storage retention](/reference/storage/retention)
 - [Storage schemas](/reference/storage/overview)
 - [Memory](/docs/memory/overview)
-- [Observability storage](/docs/observability/storage)
+- [Observability storage](/docs/observability/overview#storage)

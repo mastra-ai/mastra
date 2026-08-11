@@ -14,6 +14,8 @@
  * @example Batch move with glob patterns:
  * pnpm tsx scripts/move-doc.ts "/docs/old/**" "/docs/new/**"
  *
+ * Use --dry-run to preview changes without making any modifications.
+ *
  * Note:
  * - The .mdx extension should be omitted from routes.
  * - Supported editable route families are /docs, /reference, and /guides.
@@ -77,6 +79,7 @@ interface MoveDocumentsOptions {
 
 interface UpdateRedirectsOptions {
   glob?: boolean
+  verbose?: boolean
 }
 
 const splitPathAndHash = (url: string): PathWithHash => {
@@ -253,7 +256,13 @@ const updateSidebarDocIds = async (oldRoute: string, newRoute: string): Promise<
   }
 }
 
-const updateMdxLinks = async (oldPaths: string[], newPath: string): Promise<void> => {
+const updateMdxLinks = async (
+  oldPaths: string[],
+  newPath: string,
+  options: { verbose?: boolean } = {},
+): Promise<void> => {
+  const { verbose = true } = options
+
   const processFile = async (filePath: string): Promise<void> => {
     const content = await fs.readFile(filePath, 'utf-8')
     let updatedContent = content
@@ -262,6 +271,7 @@ const updateMdxLinks = async (oldPaths: string[], newPath: string): Promise<void
     oldPaths.forEach(oldPath => {
       const { path: oldBasePath } = splitPathAndHash(oldPath)
       const { path: newBasePath, hash: newHash } = splitPathAndHash(newPath)
+      const externalDestination = newBasePath.startsWith('https://')
 
       const markdownLinkRegex = new RegExp(`(?<!!)(\\[[^\\]]+\\])\\(([^)]+)\\)`, 'g')
       updatedContent = updatedContent.replace(markdownLinkRegex, (match, label, linkPath) => {
@@ -271,7 +281,8 @@ const updateMdxLinks = async (oldPaths: string[], newPath: string): Promise<void
         if (resolveRelativeRoute(currentRoute, linkBasePath) !== oldBasePath) return match
 
         const finalHash = newHash || linkHash || ''
-        return `${label}(${routeToRelativeLink(currentRoute, newBasePath)}${finalHash})`
+        const replacementPath = externalDestination ? newBasePath : routeToRelativeLink(currentRoute, newBasePath)
+        return `${label}(${replacementPath}${finalHash})`
       })
 
       const absoluteMarkdownLinkRegex = new RegExp(`\\[([^\\]]+)\\]\\(${escapeRegExp(oldBasePath)}(?:#[^)]*)?\\)`, 'g')
@@ -309,7 +320,7 @@ const updateMdxLinks = async (oldPaths: string[], newPath: string): Promise<void
 
     if (content !== updatedContent) {
       await fs.writeFile(filePath, updatedContent)
-      console.log(`Updated links in ${filePath}`)
+      if (verbose) console.log(`Updated links in ${filePath}`)
     }
   }
 
@@ -317,6 +328,7 @@ const updateMdxLinks = async (oldPaths: string[], newPath: string): Promise<void
     let entries: Dirent[]
     try {
       entries = await fs.readdir(dir, { withFileTypes: true })
+      entries.sort((a, b) => a.name.localeCompare(b.name))
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') return
       throw error
@@ -420,17 +432,18 @@ const updateRedirects = async (
   newPath: string,
   options: UpdateRedirectsOptions = {},
 ): Promise<string[]> => {
+  const { glob = false, verbose = true } = options
   const config = await readRedirectConfig()
   let redirects = config.redirects.map(redirect => ({ ...redirect, permanent: true }))
 
-  if (options.glob) {
+  if (glob) {
     const sourceDynamicPattern = globToDynamicPattern(oldPath)
     const destDynamicPattern = globToDynamicPattern(newPath)
 
     if (sourceDynamicPattern !== destDynamicPattern) {
       redirects.push({ source: sourceDynamicPattern, destination: destDynamicPattern, permanent: true })
-      console.log(`Added dynamic redirect: ${sourceDynamicPattern} -> ${destDynamicPattern}`)
-    } else {
+      if (verbose) console.log(`Added dynamic redirect: ${sourceDynamicPattern} -> ${destDynamicPattern}`)
+    } else if (verbose) {
       console.log(`Skipped redundant dynamic redirect: ${sourceDynamicPattern} -> ${destDynamicPattern}`)
     }
 
@@ -460,7 +473,7 @@ const updateRedirects = async (
 
   if (oldPath !== newPath) {
     redirects.push({ source: oldPath, destination: newPath, permanent: true })
-  } else {
+  } else if (verbose) {
     console.log(`Skipped redundant static redirect: ${oldPath} -> ${newPath}`)
   }
 

@@ -12,9 +12,21 @@ export interface PromptsListProps {
   promptBlocks: StoredPromptBlockResponse[];
   isLoading: boolean;
   search?: string;
+  currentPage?: number;
+  hasMore?: boolean;
+  onNextPage?: () => void;
+  onPrevPage?: () => void;
 }
 
-export function PromptsList({ promptBlocks, isLoading, search = '' }: PromptsListProps) {
+export function PromptsList({
+  promptBlocks,
+  isLoading,
+  search = '',
+  currentPage,
+  hasMore,
+  onNextPage,
+  onPrevPage,
+}: PromptsListProps) {
   const { paths, Link } = useLinkComponent();
 
   const filteredData = useMemo(() => {
@@ -56,6 +68,13 @@ export function PromptsList({ promptBlocks, isLoading, search = '' }: PromptsLis
           </EntityList.RowLink>
         );
       })}
+
+      <EntityList.Pagination
+        currentPage={currentPage}
+        hasMore={hasMore}
+        onNextPage={onNextPage}
+        onPrevPage={onPrevPage}
+      />
     </EntityList>
   );
 }

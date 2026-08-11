@@ -33,8 +33,8 @@ describe('getAvailableModePacks', () => {
     });
 
     expect(packs.find(pack => pack.id === 'openai')?.models).toEqual({
-      plan: 'openai/gpt-5.6',
-      build: 'openai/gpt-5.6',
+      plan: 'openai/gpt-5.6-sol',
+      build: 'openai/gpt-5.6-sol',
       fast: 'openai/gpt-5.4-mini',
     });
   });

@@ -1,8 +1,8 @@
 import { Box, SelectList, Spacer, Text } from '@earendil-works/pi-tui';
 import type { SelectItem } from '@earendil-works/pi-tui';
 
-import type { ThinkingLevelSetting } from '@mastra/code-sdk/onboarding/settings';
-import { loadSettings, saveSettings } from '@mastra/code-sdk/onboarding/settings';
+import type { ThinkingLevelSetting, ThinkingLevelSource } from '@mastra/code-sdk/onboarding/settings';
+import { loadSettings, resolveDefaultThinkingLevel } from '@mastra/code-sdk/onboarding/settings';
 import {
   THINKING_LEVELS,
   getThinkingLevelForModel,
@@ -12,24 +12,50 @@ import { showModalOverlay } from '../overlay.js';
 import { theme, getSelectListTheme } from '../theme.js';
 import type { SlashCommandContext } from './types.js';
 
+/** Sentinel value used by the selector for "clear the session override". */
+const DEFAULT_ITEM_VALUE = '__default__';
+
 /** Models that support reasoning effort. */
 function supportsThinking(modelId: string): boolean {
-  return modelId.startsWith('openai/');
-}
-
-function getThinkingStatusLine(modelId: string, levelId: string): string {
-  const level = getThinkingLevelForModel(modelId, levelId);
-  return `Thinking: ${level.label}`;
+  return modelId.startsWith('openai/') || modelId.startsWith('anthropic/');
 }
 
 function isThinkingLevelSetting(level: string): level is ThinkingLevelSetting {
   return THINKING_LEVELS.some(option => option.id === level);
 }
 
-function persistGlobalThinkingLevel(level: ThinkingLevelSetting): void {
-  const settings = loadSettings();
-  settings.preferences.thinkingLevel = level;
-  saveSettings(settings);
+function levelLabel(levelId: string): string {
+  return THINKING_LEVELS.find(l => l.id === levelId)?.label ?? levelId;
+}
+
+function sourceLabel(source: ThinkingLevelSource, modeId: string | null): string {
+  return source === 'mode-default' && modeId ? `${modeId} mode default` : 'global default';
+}
+
+/** The session override, or undefined when the session inherits the defaults. */
+function getSessionOverride(ctx: SlashCommandContext): ThinkingLevelSetting | undefined {
+  const level = (ctx.state.session.state.get() as any)?.thinkingLevel as string | undefined;
+  return level !== undefined && isThinkingLevelSetting(level) ? level : undefined;
+}
+
+/** Resolve the configured default (mode default → global default) for display. */
+function getConfiguredDefault(ctx: SlashCommandContext): {
+  level: ThinkingLevelSetting;
+  source: ThinkingLevelSource;
+  modeId: string | null;
+} {
+  const modeId = ctx.state.session.mode.get() ?? null;
+  const { level, source } = resolveDefaultThinkingLevel(loadSettings(), modeId);
+  return { level, source, modeId };
+}
+
+function getThinkingStatusLine(ctx: SlashCommandContext): string {
+  const override = getSessionOverride(ctx);
+  const fallback = getConfiguredDefault(ctx);
+  if (override !== undefined) {
+    return `Thinking: ${levelLabel(override)} (session override) · default: ${levelLabel(fallback.level)} (${sourceLabel(fallback.source, fallback.modeId)})`;
+  }
+  return `Thinking: ${levelLabel(fallback.level)} (${sourceLabel(fallback.source, fallback.modeId)})`;
 }
 
 function getModelNote(ctx: SlashCommandContext): string | null {
@@ -42,43 +68,61 @@ function getModelNote(ctx: SlashCommandContext): string | null {
 }
 
 export async function handleThinkCommand(ctx: SlashCommandContext, args: string[] = []): Promise<void> {
-  const currentLevel = ((ctx.state.session.state.get() as any)?.thinkingLevel ?? 'off') as string;
   const modelId = ctx.state.session.model.get() ?? '';
   const thinkingLevels = getThinkingLevelsForModel(modelId);
+  const override = getSessionOverride(ctx);
+  const configuredDefault = getConfiguredDefault(ctx);
   const arg = args[0]?.toLowerCase();
 
   if (arg === 'status') {
-    ctx.showInfo(getThinkingStatusLine(modelId, currentLevel));
+    ctx.showInfo(getThinkingStatusLine(ctx));
     return;
   }
 
-  // Direct level argument: /think high
+  // Clear the session override: /think default (or /think clear)
+  if (arg === 'default' || arg === 'clear') {
+    await ctx.state.session.state.set({ thinkingLevel: undefined } as any);
+    ctx.showInfo(
+      `Thinking → ${levelLabel(configuredDefault.level)} (${sourceLabel(configuredDefault.source, configuredDefault.modeId)})`,
+    );
+    return;
+  }
+
+  // Direct level argument: /think high — sets a session override
   if (arg) {
     const selected = thinkingLevels.find(l => l.id === arg);
     if (!selected) {
       ctx.showInfo(
-        `Invalid thinking level: ${arg}. Use one of: ${THINKING_LEVELS.map(l => l.id).join(', ')} or 'status'.`,
+        `Invalid thinking level: ${arg}. Use one of: ${thinkingLevels.map(l => l.id).join(', ')}, 'default', or 'status'.`,
       );
       return;
     }
     const note = getModelNote(ctx);
     await ctx.state.session.state.set({ thinkingLevel: selected.id } as any);
-    persistGlobalThinkingLevel(selected.id);
-    ctx.showInfo(getThinkingStatusLine(modelId, selected.id) + (note ? ` (${note})` : ''));
+    ctx.showInfo(`Thinking: ${selected.label} (session override)` + (note ? ` (${note})` : ''));
     return;
   }
 
   // No argument: show inline selector
-  const items: SelectItem[] = thinkingLevels.map(l => ({
-    value: l.id,
-    label: `  ${l.label}  ${theme.fg('dim', l.description)}${l.id === currentLevel ? theme.fg('dim', ' (current)') : ''}`,
-  }));
+  const defaultDescription = `${levelLabel(configuredDefault.level)} · ${sourceLabel(configuredDefault.source, configuredDefault.modeId)}`;
+  const items: SelectItem[] = [
+    {
+      value: DEFAULT_ITEM_VALUE,
+      label: `  Default  ${theme.fg('dim', defaultDescription)}${override === undefined ? theme.fg('dim', ' (current)') : ''}`,
+    },
+    ...thinkingLevels.map(l => ({
+      value: l.id,
+      label: `  ${l.label}  ${theme.fg('dim', l.description)}${l.id === override ? theme.fg('dim', ' (current)') : ''}`,
+    })),
+  ];
 
   const modelNote = getModelNote(ctx);
 
   return new Promise<void>(resolve => {
     const container = new Box(4, 2, text => theme.bg('overlayBg', text));
     container.addChild(new Text(theme.bold(theme.fg('accent', 'Thinking Level')), 0, 0));
+    container.addChild(new Spacer(1));
+    container.addChild(new Text(theme.fg('dim', 'Session override — "Default" inherits mode/global defaults.'), 0, 0));
     container.addChild(new Spacer(1));
     if (modelNote) {
       container.addChild(new Text(theme.fg('warning', modelNote), 0, 0));
@@ -89,17 +133,21 @@ export async function handleThinkCommand(ctx: SlashCommandContext, args: string[
 
     selectList.onSelect = async (item: SelectItem) => {
       ctx.state.ui.hideOverlay();
-      const selectedLevel = item.value;
-      if (!isThinkingLevelSetting(selectedLevel)) {
-        resolve();
-        return;
-      }
+      const selectedValue = item.value;
 
       try {
-        await ctx.state.session.state.set({ thinkingLevel: selectedLevel } as any);
-        persistGlobalThinkingLevel(selectedLevel);
-        const selectedLabel = getThinkingLevelForModel(modelId, selectedLevel).label;
-        ctx.showInfo(`Thinking → ${selectedLevel === currentLevel ? `${selectedLabel} (unchanged)` : selectedLabel}`);
+        if (selectedValue === DEFAULT_ITEM_VALUE) {
+          await ctx.state.session.state.set({ thinkingLevel: undefined } as any);
+          ctx.showInfo(
+            `Thinking → ${levelLabel(configuredDefault.level)} (${sourceLabel(configuredDefault.source, configuredDefault.modeId)})`,
+          );
+        } else if (isThinkingLevelSetting(selectedValue)) {
+          await ctx.state.session.state.set({ thinkingLevel: selectedValue } as any);
+          const selectedLabel = getThinkingLevelForModel(modelId, selectedValue).label;
+          ctx.showInfo(
+            `Thinking → ${selectedValue === override ? `${selectedLabel} (unchanged)` : `${selectedLabel} (session override)`}`,
+          );
+        }
       } catch {
         // Keep cancel behavior silent.
       } finally {
@@ -116,8 +164,8 @@ export async function handleThinkCommand(ctx: SlashCommandContext, args: string[
     container.addChild(new Spacer(1));
     container.addChild(new Text(theme.fg('dim', '↑↓ navigate · Enter select · Esc cancel'), 0, 0));
 
-    // Pre-select current level (after adding to container, matching models-pack pattern)
-    const currentIdx = thinkingLevels.findIndex(l => l.id === currentLevel);
+    // Pre-select current entry (after adding to container, matching models-pack pattern)
+    const currentIdx = override === undefined ? 0 : thinkingLevels.findIndex(l => l.id === override) + 1;
     if (currentIdx > 0) selectList.setSelectedIndex(currentIdx);
 
     const modal = container as Box & { handleInput: (data: string) => void };

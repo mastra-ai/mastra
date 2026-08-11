@@ -18,7 +18,7 @@ Here's a quick start to run the docs locally
   pnpm run dev
   ```
 
-## Optional: Linting
+## Linting
 
 ### Remark
 

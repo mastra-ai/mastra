@@ -47,6 +47,35 @@ describe('Factory work item service boundary', () => {
     });
   });
 
+  it('maps Slack thread work items to the Slack board source', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        jsonResponse({
+          workItems: [
+            {
+              ...wireItem,
+              externalSource: {
+                integrationId: 'slack',
+                type: 'slack-thread',
+                externalId: 'slack:C-1:1700.42',
+                url: 'https://app.slack.com/client/T-1/C-1/thread/C-1-170042',
+              },
+            },
+          ],
+        }),
+      ),
+    );
+
+    const [item] = await listWorkItems('', 'project-1');
+
+    expect(item).toMatchObject({
+      source: 'slack-thread',
+      sourceKey: 'slack:C-1:1700.42',
+      url: 'https://app.slack.com/client/T-1/C-1/thread/C-1-170042',
+    });
+  });
+
   it('sends provider-neutral external source data when creating a board item', async () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ workItem: wireItem }));
     vi.stubGlobal('fetch', fetchMock);

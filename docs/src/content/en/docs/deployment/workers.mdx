@@ -14,9 +14,9 @@ import TabItem from '@theme/TabItem'
 
 # Workers
 
-:::experimental
+:::beta
 
-This feature is in beta. The API is stable enough for production use, but some details may change. See [known limitations](#known-limitations) for current gaps.
+Breaking changes may occur without a major version bump until the API is stable. See [known limitations](#known-limitations) for current gaps.
 
 :::
 
@@ -33,7 +33,7 @@ Workers matter when any of these apply:
 - Different parts of the system need to scale independently (e.g., more orchestration capacity without more API instances)
 - Background tool calls should run on dedicated compute
 
-If your application handles light traffic and workflows complete quickly, the default in-process setup works fine. Skip the worker infrastructure until you need it.
+If your application handles light traffic and workflows complete fast, the default in-process setup works fine. Skip the worker infrastructure until you need it.
 
 ## Worker types
 
@@ -49,11 +49,11 @@ The orchestration worker requires a PubSub backend that supports pull mode (e.g.
 
 ### Scheduler worker
 
-Polls storage for due cron schedules and publishes `workflow.start` events. It is a producer only, meaning it creates work for the orchestration worker to pick up.
+Polls storage for due cron schedules and publishes `workflow.start` events. It's a producer only, meaning it creates work for the orchestration worker to pick up.
 
 The scheduler reads declarative `schedule` fields from your workflow definitions automatically. See [Scheduled workflows](/docs/workflows/scheduled-workflows) for how to declare schedules.
 
-**Do not run more than one scheduler instance.** Multiple schedulers polling the same storage would fire duplicate events for the same schedule.
+**Don't run more than one scheduler instance.** Multiple schedulers polling the same storage would fire duplicate events for the same schedule.
 
 ### Background task worker
 
@@ -63,7 +63,7 @@ The background task worker manages concurrency limits, task lifecycle, and resul
 
 ## How workers run
 
-### In-process (default)
+### In-process mode (default)
 
 With no configuration, Mastra creates and starts workers inside the API process. Events flow through an in-memory PubSub, and everything shares a single Node.js runtime.
 
@@ -80,7 +80,7 @@ This setup needs no external infrastructure beyond your storage adapter. It does
 
 ### Split processes
 
-To run workers separately, configure a distributed [PubSub](/docs/server/pubsub) backend and use the `MASTRA_WORKERS` environment variable to control which workers start in each process.
+To run workers in their own processes, configure a distributed [PubSub](/docs/server/pubsub) backend and use the `MASTRA_WORKERS` environment variable to control which workers start in each process.
 
 <Tabs>
   <TabItem value="redis" label="Redis Streams + PostgreSQL">
@@ -118,38 +118,38 @@ To run workers separately, configure a distributed [PubSub](/docs/server/pubsub)
   </TabItem>
 </Tabs>
 
-Any [supported storage backend](/reference/workers/overview#supported-storage-backends) works — swap the storage adapter for your preferred database.
+Any [supported storage backend](/reference/workers/overview#supported-storage-backends) works. Swap the storage adapter for your preferred database.
 
 Run the same build artifact in multiple containers, each with a different [`MASTRA_WORKERS`](/reference/workers/overview#mastra_workers) value to control which worker starts in each process.
 
 Split deployments require a distributed PubSub backend ([`RedisStreamsPubSub`](/reference/pubsub/redis-streams) or [`GoogleCloudPubSub`](/reference/pubsub/google-cloud-pubsub)), a shared [storage backend](/reference/workers/overview#supported-storage-backends), and network connectivity between the orchestration worker and the API.
 
-The [worker deployment guide](/guides/deployment/mastra-workers) walks through this setup with a Docker Compose example.
+The [worker deployment guide](/guides/deployment/mastra-workers) walks through this setup with Docker Compose and Kubernetes examples.
 
 ## Network architecture
 
-Workers are internal infrastructure. They are not exposed to end users and do not need their own subdomain, public URL, or inbound HTTP route.
+Workers are internal infrastructure. They're not exposed to end users and don't need their own subdomain, public URL, or inbound HTTP route.
 
 In a split deployment:
 
-- **The API server is the only public-facing process.** It serves all client HTTP requests — REST endpoints, agent interactions, workflow triggers, and any custom routes.
-- **Workers connect outbound only.** They pull events from the distributed PubSub backend and read/write to the shared storage database. They do not accept inbound traffic from clients.
-- **The orchestration worker calls the API internally.** It sends step execution requests to the API over the container network using `MASTRA_STEP_EXECUTION_URL`. This is internal service-to-service communication, not a public endpoint.
+- **The API server is the only public-facing process**: It serves all client HTTP requests, including REST endpoints, agent interactions, workflow triggers, and any custom routes.
+- **Workers connect outbound only**: They pull events from the distributed PubSub backend and read/write to the shared storage database. They don't accept inbound traffic from clients.
+- **The orchestration worker calls the API internally**: It sends step execution requests to the API over the container network using `MASTRA_STEP_EXECUTION_URL`. This is internal service-to-service communication, not a public endpoint.
 
 All three worker types (orchestration, scheduler, background task) sit behind the API on a private network. They share access to the PubSub backend and storage database but never receive traffic directly from clients. If a worker-related feature needs an HTTP route (for example, token minting for a voice integration), that route runs on the API server, not on the worker process.
 
 ## Known limitations
 
-- **No dead-letter queue**: Failed events are nacked and retried, but there is no DLQ for events that repeatedly fail.
+- **No dead-letter queue**: Failed events are nacked and retried, but there's no DLQ for events that fail after all retries.
 - **No built-in health endpoint**: Workers don't expose an HTTP health check. Use container-level liveness probes or process monitoring.
 - **Scheduler is single-instance**: Running multiple scheduler processes causes duplicate schedule fires.
 - **Runs stuck in "running" after API crash**: If the API process crashes while executing a workflow step, the run remains in `running` status with no automatic retry. For [durable agents](/docs/long-running-agents/durable-agents), set `recovery.durableAgents` to `'auto'` in the Mastra config to automatically re-drive orphaned runs on server restart. See [Crash recovery](/docs/long-running-agents/durable-agents#crash-recovery) for details.
 
 ## Related
 
-- [Worker deployment guide](/guides/deployment/mastra-workers): Docker Compose example and topology options
+- [Worker deployment guide](/guides/deployment/mastra-workers): Docker Compose and Kubernetes examples
 - [Worker authentication](/docs/server/auth/workers): Secure worker-to-API communication
-- [Workers reference](/reference/workers/overview): Environment variables, worker types, and storage backends
+- [Workers reference](/reference/workers/overview): Details about worker environment variables and types, with a list of supported storage backends
 - [CLI reference](/reference/cli/mastra#mastra-worker-build): `mastra worker build` and `mastra worker start`
 - [PubSub](/docs/server/pubsub): Event delivery backends
 - [Scheduled workflows](/docs/workflows/scheduled-workflows): Declare cron schedules on workflows
