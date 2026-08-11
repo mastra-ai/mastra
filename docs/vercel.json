@@ -312,7 +312,7 @@
     },
     {
       "source": "/examples/agents/whatsapp-chat-bot",
-      "destination": "/docs/capabilities/channels/whatsapp",
+      "destination": "/integrations/channels/whatsapp",
       "permanent": true
     },
     {
@@ -1872,12 +1872,12 @@
     },
     {
       "source": "/guides/guide/slack-assistant",
-      "destination": "/docs/capabilities/channels/slack",
+      "destination": "/integrations/channels/slack",
       "permanent": true
     },
     {
       "source": "/guides/guide/whatsapp-chat-bot",
-      "destination": "/docs/capabilities/channels/whatsapp",
+      "destination": "/integrations/channels/whatsapp",
       "permanent": true
     },
     {
@@ -3427,12 +3427,12 @@
     },
     {
       "source": "/guides/guide/slack-assistant/llms.txt",
-      "destination": "/docs/capabilities/channels/slack/llms.txt",
+      "destination": "/integrations/channels/slack/llms.txt",
       "permanent": true
     },
     {
       "source": "/guides/guide/whatsapp-chat-bot/llms.txt",
-      "destination": "/docs/capabilities/channels/whatsapp/llms.txt",
+      "destination": "/integrations/channels/whatsapp/llms.txt",
       "permanent": true
     },
     {

@@ -95,7 +95,25 @@ export function assertNoDuplicateSources(redirects) {
   }
 }
 
+export function assertNoRedirectChains(redirects) {
+  const redirectsBySource = new Map(redirects.map(redirect => [redirect.source.split('#', 1)[0], redirect]))
+
+  for (const redirect of redirects) {
+    const destinationPath = redirect.destination.split('#', 1)[0]
+    const nextRedirect = redirectsBySource.get(destinationPath)
+
+    if (nextRedirect) {
+      throw new Error(
+        `Redirect chain detected: ${redirect.source} -> ${redirect.destination} -> ${nextRedirect.destination}`,
+      )
+    }
+  }
+}
+
 export function generateRedirects(sourceRedirects) {
+  assertNoDuplicateSources(sourceRedirects)
+  assertNoRedirectChains(sourceRedirects)
+
   const generated = sourceRedirects.filter(shouldGenerateLlmsRedirect).map(createLlmsRedirect)
   const redirects = [...sourceRedirects, ...generated]
   assertNoDuplicateSources(redirects)

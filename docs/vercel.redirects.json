@@ -297,7 +297,7 @@
     },
     {
       "source": "/examples/agents/whatsapp-chat-bot",
-      "destination": "/docs/capabilities/channels/whatsapp",
+      "destination": "/integrations/channels/whatsapp",
       "permanent": true
     },
     {
@@ -1857,12 +1857,12 @@
     },
     {
       "source": "/guides/guide/slack-assistant",
-      "destination": "/docs/capabilities/channels/slack",
+      "destination": "/integrations/channels/slack",
       "permanent": true
     },
     {
       "source": "/guides/guide/whatsapp-chat-bot",
-      "destination": "/docs/capabilities/channels/whatsapp",
+      "destination": "/integrations/channels/whatsapp",
       "permanent": true
     },
     {
