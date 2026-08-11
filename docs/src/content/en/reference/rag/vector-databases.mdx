@@ -425,7 +425,7 @@ Once initialized, all vector stores share the same interface for creating indexe
 Before storing embeddings, you need to create an index with the appropriate dimension size for your embedding model:
 
 ```ts title="store-embeddings.ts"
-// Create an index with dimension 1536 (for text-embedding-3-small)
+// Create an index with dimension 1536 (for __AI_SDK_OPENAI_EMBEDDING_MODEL__)
 await store.createIndex({
   indexName: 'myCollection',
   dimension: 1536,
@@ -434,7 +434,7 @@ await store.createIndex({
 
 The dimension size must match the output dimension of your chosen embedding model. Common dimension sizes are:
 
-- `OpenAI text-embedding-3-small`: 1536 dimensions (or custom, e.g., 256)
+- OpenAI `__AI_SDK_OPENAI_EMBEDDING_MODEL__`: 1536 dimensions (or custom, e.g., 256)
 - `Cohere embed-multilingual-v3`: 1024 dimensions
 - `VoyageAI voyage-3.5`: 1024 dimensions (or custom: 256, 512, 1024, 2048)
 - `Google gemini-embedding-001`: 768 dimensions (or custom)
@@ -726,4 +726,4 @@ await store.deleteVectors({
 - Create indexes before bulk insertions
 - Use batch operations for large insertions (the upsert method handles batching automatically)
 - Only store metadata you'll query against
-- Match embedding dimensions to your model (e.g., 1536 for `text-embedding-3-small`)
+- Match embedding dimensions to your model (e.g., 1536 for `__AI_SDK_OPENAI_EMBEDDING_MODEL__`)
