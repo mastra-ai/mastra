@@ -2,14 +2,15 @@ import { CodeBlock as DsCodeBlock } from '@mastra/playground-ui/components/CodeB
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
 import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import { cn } from '@mastra/playground-ui/utils/cn';
+import { X } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 
 import { highlightCode, languageForPath } from '../../../../ui/highlight';
 import { stripSerializedAnsi } from '../../services/ansi';
 import type { ToolCall } from '../../services/transcript';
+import { ROW_RAIL, ROW_TRIGGER, TranscriptRow } from '../TranscriptRow';
 import { presentTool } from './tool-presentation';
-import { ToolRow, TOOL_RAIL_OFFSET, TOOL_ROW_TRIGGER } from './ToolRow';
 
 function truncate(s: string, max: number): string {
   return s.length > max ? s.slice(0, max) + '…' : s;
@@ -194,7 +195,8 @@ function ToolBody({ tool, command }: { tool: ToolCall; command?: string }) {
 
 export function ToolCard({ tool }: { tool: ToolCall }) {
   const [expanded, setExpanded] = useState(false);
-  const presentation = presentTool(tool.toolName, tool.args);
+  const { icon: Icon, label, detail, command } = presentTool(tool.toolName, tool.args);
+  const failed = tool.status === 'error';
 
   return (
     <Collapsible
@@ -205,23 +207,19 @@ export function ToolCard({ tool }: { tool: ToolCall }) {
       aria-label={`Tool: ${tool.toolName}`}
       aria-busy={tool.status === 'running'}
     >
-      <CollapsibleTrigger className={TOOL_ROW_TRIGGER}>
-        <ToolRow
-          icon={presentation.icon}
-          label={presentation.label}
-          detail={presentation.detail}
-          status={tool.status}
+      <CollapsibleTrigger className={ROW_TRIGGER}>
+        <TranscriptRow
+          icon={<Icon size={14} strokeWidth={1.75} aria-hidden className={failed ? 'text-error/80' : 'text-icon3'} />}
+          label={label}
+          detail={detail}
+          running={tool.status === 'running'}
           expanded={expanded}
+          trailing={failed && <X size={13} role="img" aria-label="Failed" className="text-error shrink-0" />}
         />
       </CollapsibleTrigger>
       <CollapsibleContent className="max-w-full min-w-0">
-        <div
-          className={cn(
-            'border-border1 flex max-w-full min-w-0 flex-col gap-1.5 border-l py-1.5 pr-1 pl-4',
-            TOOL_RAIL_OFFSET,
-          )}
-        >
-          <ToolBody tool={tool} command={presentation.command} />
+        <div className={cn(ROW_RAIL, 'flex flex-col gap-1.5')}>
+          <ToolBody tool={tool} command={command} />
         </div>
       </CollapsibleContent>
     </Collapsible>

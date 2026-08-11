@@ -1,18 +1,21 @@
 /* Sweeping highlight for text that is still being produced.
  * The gradient period is a fixed pixel width and the animation travels exactly
  * one period, so the loop never jumps and a short label sweeps at the same
- * speed as a long one. */
+ * speed as a long one. The sweep is relative to the inherited color, so muted
+ * text stays muted and only brightens as the highlight passes through it. */
 .shimmer-text {
-  --shimmer-period: 180px;
+  --shimmer-period: 120px;
+  --shimmer-dim: color-mix(in oklab, currentColor 55%, transparent);
 
-  background-image: linear-gradient(90deg, var(--neutral3) 0%, var(--neutral6) 50%, var(--neutral3) 100%);
+  background-image: linear-gradient(90deg, var(--shimmer-dim) 0%, currentColor 50%, var(--shimmer-dim) 100%);
   background-size: var(--shimmer-period) 100%;
   background-repeat: repeat;
   /* stylelint-disable-next-line property-no-vendor-prefix -- Chrome < 120 and Safari < 14 only clip to text prefixed. */
   -webkit-background-clip: text;
   background-clip: text;
-  color: transparent;
-  animation: shimmer-text 1.6s linear infinite;
+  /* stylelint-disable-next-line property-no-vendor-prefix -- Zeroing the fill rather than `color` keeps `currentColor` resolvable above. */
+  -webkit-text-fill-color: transparent;
+  animation: shimmer-text 1.25s linear infinite;
 }
 
 @keyframes shimmer-text {
@@ -28,7 +31,7 @@
 @media (prefers-reduced-motion: reduce) {
   .shimmer-text {
     background-image: none;
-    color: inherit;
+    -webkit-text-fill-color: currentColor;
     animation: none;
   }
 }

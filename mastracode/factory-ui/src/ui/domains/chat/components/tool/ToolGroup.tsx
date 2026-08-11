@@ -2,12 +2,13 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/pla
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
+import { X } from 'lucide-react';
 import { useState } from 'react';
 
 import type { ToolCall } from '../../services/transcript';
+import { ROW_RAIL, ROW_TRIGGER, TranscriptRow } from '../TranscriptRow';
 import { ToolCard } from './ToolCard';
 import { presentTool } from './tool-presentation';
-import { ToolRow, TOOL_RAIL_OFFSET, TOOL_ROW_TRIGGER } from './ToolRow';
 
 /** Consecutive tool calls this long collapse into one group row. */
 export const TOOL_GROUP_MIN = 3;
@@ -29,24 +30,26 @@ export function ToolGroup({ tools }: { tools: ToolCall[] }) {
       aria-label={`Tool group: ${tools.length} steps`}
       aria-busy={Boolean(running)}
     >
-      <CollapsibleTrigger className={TOOL_ROW_TRIGGER}>
-        <ToolRow
+      <CollapsibleTrigger className={ROW_TRIGGER}>
+        <TranscriptRow
           label={live?.label ?? `${tools.length} steps`}
           detail={live?.detail ?? actionSummary(tools)}
-          status={running ? 'running' : hasError ? 'error' : 'done'}
+          running={Boolean(running)}
           expanded={expanded}
           rule
           trailing={
-            running && (
+            running ? (
               <Txt as="span" variant="ui-xs" className="text-icon3 shrink-0 tabular-nums">
                 {doneCount}/{tools.length}
               </Txt>
+            ) : (
+              hasError && <X size={13} role="img" aria-label="Failed" className="text-error shrink-0" />
             )
           }
         />
       </CollapsibleTrigger>
       <CollapsibleContent className="max-w-full min-w-0">
-        <div className={cn('border-border1 max-w-full min-w-0 border-l py-0.5 pl-2.5', TOOL_RAIL_OFFSET)}>
+        <div className={cn(ROW_RAIL, 'py-0.5 pr-0 pl-2.5')}>
           <ScrollArea maxHeight="18rem" autoScroll={Boolean(running)}>
             {tools.map(tool => (
               <ToolCard key={tool.toolCallId} tool={tool} />
