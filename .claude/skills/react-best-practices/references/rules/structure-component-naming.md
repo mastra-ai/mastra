@@ -51,23 +51,27 @@ const formatJson = (value: unknown) => JSON.stringify(value, null, 2) ?? String(
 
 Smell to catch in reviews: `renderSomething(...)` returning JSX, especially when it accepts props-like arguments or is reused in multiple JSX branches.
 
-## Dynamic Tags: Pick One, Don't Build One
+## Dynamic Tags: Put the Level in Context, Not the Tag
 
-The mirror case is a PascalCase binding that is *not* a component. When the tag depends on a prop or on context, choose between literal tags — never assemble the tag name. A built name widens to `string`, so it needs an `as const` just to be usable as JSX, and the React Compiler lint reads any opaque capitalized binding in tag position as a component created during render (`Cannot create components during render`).
+The mirror case is a PascalCase binding that is *not* a component. Choosing the tag at runtime is a normal pattern and stays one: an `as` prop, a ternary between literal tags, a lookup in a const map, and a template literal all render fine and keep their state.
+
+One form does break. A tag read off a context trips `react-hooks/static-components` with `Cannot create components during render`, because passing a component through context is itself a real pattern, so the rule cannot tell a tag name from a component. Naming the value first does not help — the rule follows the assignment.
 
 **Incorrect:**
 
 ```tsx
-const Heading = `h${level}` as const; // the assertion exists only to stop the widening
-const Heading = useContext(HeadingContext); // opaque to the compiler, so assumed to be a component
+const HeadingTagContext = createContext<'h2' | 'h3'>('h3');
+const Heading = useContext(HeadingTagContext); // a tag name, read as a component
 ```
 
 **Correct:**
 
 ```tsx
-const Heading = level === 2 ? 'h2' : 'h3';
+const HeadingLevelContext = createContext<2 | 3>(3);
+const headingLevel = useContext(HeadingLevelContext);
+const Heading = headingLevel === 2 ? 'h2' : 'h3';
 ```
 
-The ternary infers `'h2' | 'h3'`, which the compiler recognises as host tags, and nothing has to be asserted. Returning real elements from each branch (`<h2>…</h2>` / `<h3>…</h3>`) is also correct, at the cost of duplicating the attributes.
+Carry the level and let the component pick the tag. The ternary is what proves the value is a host tag, and the context now describes the document outline instead of naming an element on the consumer's behalf.
 
-Smell to catch in reviews: a template literal or lookup producing a tag name; `as const` on a computed tag; a capitalized binding assigned straight from a hook call and used as JSX.
+Smell to catch in reviews: a capitalized binding assigned straight from `useContext` and used as JSX; a context typed as a tag name.

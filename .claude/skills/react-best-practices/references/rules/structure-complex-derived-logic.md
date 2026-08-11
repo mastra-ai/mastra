@@ -162,6 +162,25 @@ The casts were not incidental, and deleting them in place would not have compile
 
 Extracting is not the same as wrapping. A ternary that picks between two values on one line is fine and gains nothing from a helper; the helper would add a name, an indirection, and often a type argument, without removing any work from the callsite.
 
+### Hook Calls Are Sources, Not Terms
+
+A hook call declares where a value comes from and what the component re-renders on. Buried inside the expression that consumes it, the line reads as a computation and the subscription has to be spotted inside a condition, a template, or an argument list. Bind it first.
+
+**Incorrect:**
+
+```tsx
+const Heading = useContext(HeadingLevelContext) === 2 ? 'h2' : 'h3';
+```
+
+**Correct:**
+
+```tsx
+const headingLevel = useContext(HeadingLevelContext);
+const Heading = headingLevel === 2 ? 'h2' : 'h3';
+```
+
+The extra line pays for itself twice: the subscription is visible on its own line, and the value gets the name the expression was already using it under.
+
 ### Fallback and Operator Soup
 
 **Incorrect:**
@@ -277,4 +296,4 @@ The callsite receives the final value directly. The reader does not have to trac
 
 Keep helpers local to the file unless multiple domains genuinely share the same concept. The point is to name the condition or derivation and remove useless complexity, not to create a generic utility layer.
 
-Smells: very large `&&`/`||` conditions inline in JSX or render prep; nested ternaries that choose structural data; ternary branches spanning several lines or wrapping a block arrow, IIFE, or multi-line object; an `as` cast in a branch for a shape the condition just tested; the same requirement encoded twice, once in a condition and once in the value it guards; `let result = ...` followed by `if (...) result = ...`; derived props passed as `propName={complexHelper({ ... })}` instead of a named local; four-line blocks mixing `? :`, `||`, `??`, `?.`, spreads, and default objects; comments explaining mutation order; review comments like "feels intense", "can we simplify this?", "could we refactor those lines into an understandable function?", or "why do we need let?"; derived arrays/objects that are later rendered or passed as props.
+Smells: a hook call nested inside a condition, ternary, template literal, or argument list; very large `&&`/`||` conditions inline in JSX or render prep; nested ternaries that choose structural data; ternary branches spanning several lines or wrapping a block arrow, IIFE, or multi-line object; an `as` cast in a branch for a shape the condition just tested; the same requirement encoded twice, once in a condition and once in the value it guards; `let result = ...` followed by `if (...) result = ...`; derived props passed as `propName={complexHelper({ ... })}` instead of a named local; four-line blocks mixing `? :`, `||`, `??`, `?.`, spreads, and default objects; comments explaining mutation order; review comments like "feels intense", "can we simplify this?", "could we refactor those lines into an understandable function?", or "why do we need let?"; derived arrays/objects that are later rendered or passed as props.
