@@ -5893,7 +5893,15 @@ export class Mastra<
     // This runs after all workflows have been registered (unlike the
     // constructor's default-workers block), so #hasScheduledWorkflow is
     // accurate.
-    if (!name && this.#shouldEnableScheduler() && this.#storage) {
+    //
+    // An explicit worker filter naming the scheduler role (e.g.
+    // `MASTRA_WORKERS=scheduler` on a dedicated scheduler deployment) always
+    // injects it: a standalone scheduler process polls storage for rows
+    // created by *other* processes, so boot-time heuristics like
+    // #hasScheduledWorkflow or persisted-row probes can't see the work it
+    // exists to serve. Only `#schedulerDisabled()` overrides the request.
+    const schedulerExplicitlyRequested = (this.#workerFilter?.has('scheduler') ?? false) && !this.#schedulerDisabled();
+    if (!name && (this.#shouldEnableScheduler() || schedulerExplicitlyRequested) && this.#storage) {
       if (!this.#findSchedulerWorker()) {
         const sw = new SchedulerWorker(this.#schedulerConfig);
         sw.__registerMastra(this);

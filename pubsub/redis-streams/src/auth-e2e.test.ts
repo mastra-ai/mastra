@@ -90,14 +90,19 @@ async function teardown(pair: Pair | undefined): Promise<void> {
   await pair.storage?.cleanup();
 }
 
-/** POST start-async with a hard client-side abort. start-async waits for the
- *  run to finish, so when the worker can't authenticate the request would
- *  otherwise hang forever. The signal-driven abort lets the test continue. */
+interface StartAsyncBody {
+  status: string;
+  error?: { name?: string; status?: number; message?: string };
+  result?: { greeting?: string };
+}
+
+/** POST start-async with a hard client-side abort as a safety net so a
+ *  regression back to the old hang-forever behavior can't wedge the test. */
 async function fireStartAsync(
   serverUrl: string,
   token: string | undefined,
   abortMs: number,
-): Promise<{ aborted: boolean; status?: number }> {
+): Promise<{ aborted: boolean; status?: number; body?: StartAsyncBody }> {
   const ac = new AbortController();
   const timer = setTimeout(() => ac.abort(), abortMs);
   try {
@@ -111,7 +116,7 @@ async function fireStartAsync(
       signal: ac.signal,
     });
     clearTimeout(timer);
-    return { aborted: false, status: res.status };
+    return { aborted: false, status: res.status, body: (await res.json()) as StartAsyncBody };
   } catch (err) {
     clearTimeout(timer);
     if ((err as Error).name === 'AbortError') return { aborted: true };
@@ -154,30 +159,36 @@ describe.sequential('step-execution endpoint auth (end-to-end)', () => {
     expect(countMarker(pair.server, 'step-execute-hit')).toBeGreaterThan(before);
   }, 60_000);
 
-  it('B: workflow stalls when worker presents the wrong token', async () => {
+  it('B: workflow fails with a 401 step error when worker presents the wrong token', async () => {
     pair = await spawnServer({ TEST_AUTH_TOKEN: 'secret-abc' });
     await spawnWorker(pair, { MASTRA_WORKER_AUTH_TOKEN: 'wrong-token' });
 
-    // start-async waits for the run to finish; the worker will fail auth
-    // forever, so abort the client after 6s.
-    const result = await fireStartAsync(pair.serverUrl, 'secret-abc', 6000);
-    expect(result.aborted).toBe(true);
+    // The orchestrator retries the step-execute call up to the event delivery
+    // budget, then surfaces a terminal failure — the run fails, it never
+    // silently advances past auth.
+    const result = await fireStartAsync(pair.serverUrl, 'secret-abc', 25_000);
+    expect(result.aborted).toBe(false);
+    expect(result.body?.status).toBe('failed');
+    expect(result.body?.error?.status).toBe(401);
+    expect(result.body?.result?.greeting).toBeUndefined();
 
-    // The middleware ran — proves the worker actually called the endpoint.
-    // start-async never returned (request aborted), so the run did not
-    // complete. Together this means the worker hit auth and was rejected.
+    // The middleware ran — proves the worker actually called the endpoint
+    // and was rejected by auth (rather than never attempting the call).
     expect(countMarker(pair.server, 'step-execute-hit')).toBeGreaterThan(0);
-  }, 30_000);
+  }, 60_000);
 
-  it('C: workflow stalls when worker omits the token entirely', async () => {
+  it('C: workflow fails with a 401 step error when worker omits the token entirely', async () => {
     pair = await spawnServer({ TEST_AUTH_TOKEN: 'secret-abc' });
     await spawnWorker(pair, { MASTRA_WORKER_AUTH_TOKEN: '' });
 
-    const result = await fireStartAsync(pair.serverUrl, 'secret-abc', 6000);
-    expect(result.aborted).toBe(true);
+    const result = await fireStartAsync(pair.serverUrl, 'secret-abc', 25_000);
+    expect(result.aborted).toBe(false);
+    expect(result.body?.status).toBe('failed');
+    expect(result.body?.error?.status).toBe(401);
+    expect(result.body?.result?.greeting).toBeUndefined();
 
     expect(countMarker(pair.server, 'step-execute-hit')).toBeGreaterThan(0);
-  }, 30_000);
+  }, 60_000);
 
   it('D: anonymous direct request rejected with 401 when auth provider is configured', async () => {
     pair = await spawnServer({ TEST_AUTH_TOKEN: 'secret-abc' });
