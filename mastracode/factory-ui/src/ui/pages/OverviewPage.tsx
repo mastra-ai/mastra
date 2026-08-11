@@ -1,12 +1,10 @@
-import { buttonVariants } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { MetricsLineChart } from '@mastra/playground-ui/components/MetricsLineChart';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
-import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Bot, Check, ChevronDown, CircleCheck, Clock3, Gauge, Inbox, Layers3, Workflow } from 'lucide-react';
+import { Bot, Check, ChevronDown, CircleCheck, Clock3, Layers3, Workflow } from 'lucide-react';
 import { useId, useMemo, useState, type ReactNode } from 'react';
 import { flushSync } from 'react-dom';
 import { useParams } from 'react-router';
@@ -57,13 +55,18 @@ const TERMINAL_STAGE_IDS = new Set(['done', 'canceled']);
 
 const EM_DASH = '—';
 
-export function MetricsPage() {
+/** Both section titles, so "Now" and the range picker read as the same rank. */
+const SECTION_TITLE = 'text-ui-sm text-icon5 m-0 font-medium';
+const BLOCK_TITLE = 'text-ui-xs text-icon3 m-0 tracking-wider uppercase';
+
+export function OverviewPage() {
   return (
-    <DocumentFactoryPageShell>{project => <MetricsContent factoryProjectId={project.id} />}</DocumentFactoryPageShell>
+    <DocumentFactoryPageShell>{project => <OverviewContent factoryProjectId={project.id} />}</DocumentFactoryPageShell>
   );
 }
 
-function MetricsContent({ factoryProjectId }: { factoryProjectId: string | undefined }) {
+/** Split by time, not topic: the queue is live, everything under the picker is windowed. */
+function OverviewContent({ factoryProjectId }: { factoryProjectId: string | undefined }) {
   const [today] = useState(() => new Date().toISOString().slice(0, 10));
   const [rangeDays, setRangeDays] = useState(DEFAULT_RANGE_DAYS);
   const range = useMemo(() => ({ from: shiftUtcDay(today, -(rangeDays - 1)), to: today }), [today, rangeDays]);
@@ -75,105 +78,68 @@ function MetricsContent({ factoryProjectId }: { factoryProjectId: string | undef
     return <Notice variant="destructive">{message}</Notice>;
   }
   const metrics = metricsQuery.data;
-  // server count, not the picker — it clips the range to the board's life
-  const daysCovered = metrics?.daysCovered ?? rangeDays;
+  if (!metrics) return <OverviewLoading />;
 
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-col gap-20 pb-16">
-      <h1 className="sr-only">Metrics</h1>
+    <div className="mx-auto flex w-full max-w-6xl flex-col gap-14 pb-16">
+      <h1 className="sr-only">Overview</h1>
 
-      <section className="flex flex-col gap-3">
-        <div className="flex justify-end">
-          <RangePicker rangeDays={rangeDays} onSelect={setRangeDays} />
+      <section className="flex flex-col gap-8">
+        <div className="flex flex-col gap-4">
+          <h2 className={SECTION_TITLE}>Now</h2>
+          <dl className="m-0 grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Readout
+              icon={<Layers3 aria-hidden="true" />}
+              label="In flight"
+              value={String(metrics.wipTotal)}
+              detail="Items in non-terminal stages"
+            />
+            <Readout
+              icon={<Bot aria-hidden="true" />}
+              label="Agents running"
+              value={String(agentsRunning)}
+              detail="Live across active worktrees"
+            />
+          </dl>
         </div>
-        {metrics ? (
-          <FlowOverview metrics={metrics} agentsRunning={agentsRunning} daysCovered={daysCovered} />
-        ) : (
-          <MetricsLoading />
-        )}
+        <Block title="Queue health">
+          <QueueHealthPanel factoryProjectId={factoryProjectId} />
+        </Block>
       </section>
 
-      {metrics ? <BreakdownSection factoryProjectId={factoryProjectId} metrics={metrics} /> : null}
+      <section className="flex flex-col gap-8">
+        <div className="flex flex-col gap-4">
+          <h2 className={SECTION_TITLE}>
+            <RangePicker rangeDays={rangeDays} onSelect={setRangeDays} />
+          </h2>
+          <Flow metrics={metrics} />
+        </div>
+        <div className="grid grid-cols-1 gap-10 lg:grid-cols-2">
+          <Block title="Work intake">
+            <SourceMix metrics={metrics} />
+          </Block>
+          <Block title="Automation coverage" note="First pass through each stage, handled end to end by automation.">
+            <StageAutomation metrics={metrics} />
+          </Block>
+        </div>
+      </section>
     </div>
   );
 }
 
-const BREAKDOWN_VIEWS = {
-  queue: {
-    label: 'Queue health',
-    shortLabel: 'Queue',
-    icon: Gauge,
-    description: 'Live snapshot of in-flight work by time in its current stage — not scoped to the date range.',
-  },
-  intake: {
-    label: 'Work intake',
-    shortLabel: 'Intake',
-    icon: Inbox,
-    description: 'Where new work entered during this period.',
-  },
-  coverage: {
-    label: 'Automation coverage',
-    shortLabel: 'Automation',
-    icon: Workflow,
-    description: 'First pass through each stage, handled end to end by automation. Redos count as an outcome.',
-  },
-} as const;
-
-type BreakdownView = keyof typeof BREAKDOWN_VIEWS;
-
-const PANEL_MOTION = [
-  // grid panel — without minmax(0,…) its auto minimum is the longest untruncated title
-  'grid-cols-[minmax(0,1fr)]',
-  'overflow-visible transition-[opacity,transform] duration-300 ease-out',
-  'data-[starting-style]:translate-y-2 data-[starting-style]:opacity-0',
-  'data-[ending-style]:-translate-y-1 data-[ending-style]:opacity-0 data-[ending-style]:duration-150',
-  // outgoing panel out of flow — in flow both panels stack and the section balloons
-  'data-[ending-style]:pointer-events-none data-[ending-style]:absolute data-[ending-style]:inset-x-0 data-[ending-style]:top-0',
-  'motion-reduce:transition-none',
-].join(' ');
-
-function BreakdownSection({
-  factoryProjectId,
-  metrics,
-}: {
-  factoryProjectId: string | undefined;
-  metrics: FactoryMetrics;
-}) {
-  const [view, setView] = useState<BreakdownView>('queue');
+function Block({ title, note, children }: { title: string; note?: string; children: ReactNode }) {
   return (
-    <Tabs defaultTab="queue" value={view} onValueChange={setView} className="flex flex-col gap-4 overflow-visible">
-      <h2 className="sr-only">Board breakdowns</h2>
-      <div className="flex flex-col gap-2">
-        {/* list + tab padding pulled into the gutter so labels sit on the text column */}
-        <div className="-ml-4">
-          <TabList variant="pill-ghost" className="text-ui-sm w-fit">
-            {Object.entries(BREAKDOWN_VIEWS).map(([value, { label, shortLabel, icon: Icon }]) => (
-              <Tab key={value} value={value}>
-                <Icon aria-hidden="true" className="size-3.5" />
-                {/* full labels overflow the strip below ~490px — the description carries the rest */}
-                <span className="sm:hidden">{shortLabel}</span>
-                <span className="hidden sm:inline">{label}</span>
-              </Tab>
-            ))}
-          </TabList>
-        </div>
-        <Txt as="p" variant="ui-sm" className="text-icon3 m-0">
-          {BREAKDOWN_VIEWS[view].description}
-        </Txt>
+    <section className="flex flex-col gap-3">
+      <div className="flex flex-col gap-1">
+        <h3 className={BLOCK_TITLE}>{title}</h3>
+        {note ? (
+          <Txt as="p" variant="ui-xs" className="text-icon3 m-0">
+            {note}
+          </Txt>
+        ) : null}
       </div>
-
-      <div className="relative">
-        <TabContent value="queue" className={PANEL_MOTION}>
-          <QueueHealthPanel factoryProjectId={factoryProjectId} />
-        </TabContent>
-        <TabContent value="intake" className={PANEL_MOTION}>
-          <SourceMix metrics={metrics} />
-        </TabContent>
-        <TabContent value="coverage" className={PANEL_MOTION}>
-          <StageAutomation metrics={metrics} />
-        </TabContent>
-      </div>
-    </Tabs>
+      {children}
+    </section>
   );
 }
 
@@ -184,12 +150,12 @@ function RangePicker({ rangeDays, onSelect }: { rangeDays: number; onSelect: (da
       <DropdownMenu.Trigger
         type="button"
         aria-label={`Date range: ${current.label}`}
-        className={buttonVariants({ variant: 'ghost', size: 'sm' })}
+        className="text-icon5 hover:text-icon6 focus-visible:outline-accent1 -mx-1 flex cursor-pointer items-center gap-1 rounded-md px-1 focus-visible:outline-2 focus-visible:outline-offset-2"
       >
         {current.label}
-        <ChevronDown className="text-icon3" />
+        <ChevronDown className="text-icon3 size-4" />
       </DropdownMenu.Trigger>
-      <DropdownMenu.Content align="end" className="min-w-44">
+      <DropdownMenu.Content align="start" className="min-w-44">
         {RANGE_PRESETS.map(preset => (
           <DropdownMenu.Item key={preset.days} onSelect={() => onSelect(preset.days)}>
             <span className="flex-1">{preset.label}</span>
@@ -222,41 +188,32 @@ function useAgentsRunningCount(): number {
   return Object.values(runningByPath).filter(Boolean).length;
 }
 
-function MetricsLoading() {
+function OverviewLoading() {
   return (
     <div
       role="status"
-      aria-label="Loading Factory metrics"
-      className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3"
+      aria-label="Loading factory overview"
+      className="mx-auto grid w-full max-w-6xl grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3"
     >
+      <Skeleton className="h-28 w-full rounded-xl" />
+      <Skeleton className="h-28 w-full rounded-xl" />
+      <Skeleton className="h-40 w-full rounded-xl sm:col-span-2 lg:col-span-3" />
       <Skeleton className="h-28 w-full rounded-xl sm:col-span-2" />
-      <Skeleton className="h-28 w-full rounded-xl" />
-      <Skeleton className="h-28 w-full rounded-xl" />
-      <Skeleton className="h-28 w-full rounded-xl" />
       <Skeleton className="h-28 w-full rounded-xl" />
     </div>
   );
 }
 
-function FlowOverview({
-  metrics,
-  agentsRunning,
-  daysCovered,
-}: {
-  metrics: FactoryMetrics;
-  agentsRunning: number;
-  daysCovered: number;
-}) {
+function Flow({ metrics }: { metrics: FactoryMetrics }) {
   const completed = metrics.throughput.reduce((sum, point) => sum + point.count, 0);
-  const averagePerDay = daysCovered === 0 ? 0 : completed / daysCovered;
   const automatedMoves = metrics.transitions.total - metrics.transitions.human;
   const automationRate =
     metrics.transitions.total === 0 ? EM_DASH : `${Math.round((automatedMoves / metrics.transitions.total) * 100)}%`;
 
   return (
     <dl className="m-0 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-      <ThroughputCard metrics={metrics} completed={completed} averagePerDay={averagePerDay} daysCovered={daysCovered} />
-      <OverviewReadout
+      <ThroughputCard metrics={metrics} completed={completed} />
+      <Readout
         icon={<Clock3 aria-hidden="true" />}
         label="Median lead time"
         value={formatDuration(metrics.leadTime.medianMs)}
@@ -266,19 +223,7 @@ function FlowOverview({
             : `p90 ${formatDuration(metrics.leadTime.p90Ms)} · ${metrics.leadTime.samples} samples`
         }
       />
-      <OverviewReadout
-        icon={<Layers3 aria-hidden="true" />}
-        label="In flight"
-        value={String(metrics.wipTotal)}
-        detail="Items in non-terminal stages"
-      />
-      <OverviewReadout
-        icon={<Bot aria-hidden="true" />}
-        label="Agents running"
-        value={String(agentsRunning)}
-        detail="Live across active worktrees"
-      />
-      <OverviewReadout
+      <Readout
         icon={<Workflow aria-hidden="true" />}
         label="Automated moves"
         value={automationRate}
@@ -305,19 +250,11 @@ function morph(update: () => void) {
   view.startViewTransition(() => flushSync(update)).ready.catch(() => {});
 }
 
-function ThroughputCard({
-  metrics,
-  completed,
-  averagePerDay,
-  daysCovered,
-}: {
-  metrics: FactoryMetrics;
-  completed: number;
-  averagePerDay: number;
-  daysCovered: number;
-}) {
+function ThroughputCard({ metrics, completed }: { metrics: FactoryMetrics; completed: number }) {
   const [expanded, setExpanded] = useState(false);
   const chartId = useId();
+  const { daysCovered } = metrics;
+  const averagePerDay = daysCovered === 0 ? 0 : completed / daysCovered;
   const perDay = `${averagePerDay.toLocaleString(undefined, { maximumFractionDigits: 1 })} per day`;
 
   return (
@@ -387,17 +324,7 @@ function ThroughputCard({
   );
 }
 
-function OverviewReadout({
-  icon,
-  label,
-  value,
-  detail,
-}: {
-  icon: ReactNode;
-  label: string;
-  value: string;
-  detail: string;
-}) {
+function Readout({ icon, label, value, detail }: { icon: ReactNode; label: string; value: string; detail: string }) {
   return (
     <div className="border-border1 bg-surface3 hover:border-border2 flex min-w-0 flex-col gap-3 rounded-xl border p-4 transition-colors">
       <dt className="text-ui-xs text-icon3 flex items-center gap-1.5 tracking-wider uppercase [&>svg]:size-3.5">

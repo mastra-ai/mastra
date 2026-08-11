@@ -1,5 +1,5 @@
 /**
- * Aggregation math for the Factory Metrics page.
+ * Aggregation math for the Factory Overview page.
  *
  * Pure functions over `work_items` rows — throughput, lead time, in-flight
  * count, demand mix and per-stage automation, all read from the server-appended
