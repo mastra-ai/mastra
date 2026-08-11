@@ -23,7 +23,9 @@ export class DefaultSpan<TType extends SpanType> extends BaseSpan<TType> {
       this.traceId = options.traceId;
       if (options.parentSpanId) {
         this.parentSpanId = options.parentSpanId;
-        this.isExternalParent = options.isExternalParent;
+      }
+      if (options.externalParentSpanId) {
+        this.externalParentSpanId = options.externalParentSpanId;
       }
       return;
     }
@@ -35,10 +37,11 @@ export class DefaultSpan<TType extends SpanType> extends BaseSpan<TType> {
       if (bridgeIds) {
         this.id = bridgeIds.spanId;
         this.traceId = bridgeIds.traceId;
+        // Caller-supplied links win over bridge parentage. Per the SpanIds
+        // contract, bridges report a Mastra parent (in storage) as
+        // parentSpanId and an ambient parent as externalParentSpanId.
         this.parentSpanId = options.parentSpanId ?? bridgeIds.parentSpanId;
-        this.isExternalParent = options.parentSpanId
-          ? options.isExternalParent
-          : bridgeIds.parentSpanId !== undefined && !options.parent;
+        this.externalParentSpanId = options.externalParentSpanId ?? bridgeIds.externalParentSpanId;
         return;
       }
     }
@@ -57,10 +60,18 @@ export class DefaultSpan<TType extends SpanType> extends BaseSpan<TType> {
     if (options.parentSpanId) {
       if (isValidSpanId(options.parentSpanId)) {
         this.parentSpanId = options.parentSpanId;
-        this.isExternalParent = options.isExternalParent;
       } else {
         console.error(
           `[Mastra Tracing] Invalid parentSpanId: must be 1-16 hexadecimal characters, got "${options.parentSpanId}". Ignoring.`,
+        );
+      }
+    }
+    if (options.externalParentSpanId) {
+      if (isValidSpanId(options.externalParentSpanId)) {
+        this.externalParentSpanId = options.externalParentSpanId;
+      } else {
+        console.error(
+          `[Mastra Tracing] Invalid externalParentSpanId: must be 1-16 hexadecimal characters, got "${options.externalParentSpanId}". Ignoring.`,
         );
       }
     }

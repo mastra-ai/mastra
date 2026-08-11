@@ -278,13 +278,11 @@ describe('MastraStorageExporter', () => {
 
         const rootEvent = createMockEvent(TracingEventType.SPAN_STARTED, 'trace-1', 'root-span');
         rootEvent.exportedSpan.isRootSpan = true;
-        rootEvent.exportedSpan.parentSpanId = 'external-parent';
-        rootEvent.exportedSpan.isExternalParent = true;
+        rootEvent.exportedSpan.externalParentSpanId = 'external-parent';
 
         const resumedRootEvent = createMockEvent(TracingEventType.SPAN_STARTED, 'trace-1', 'resumed-root-span');
         resumedRootEvent.exportedSpan.isRootSpan = true;
         resumedRootEvent.exportedSpan.parentSpanId = 'suspended-span';
-        resumedRootEvent.exportedSpan.isExternalParent = false;
 
         const childEvent = createMockEvent(TracingEventType.SPAN_STARTED, 'trace-1', 'child-span');
         childEvent.exportedSpan.isRootSpan = false;

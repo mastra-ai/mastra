@@ -979,10 +979,10 @@ export interface AIModelGenerationSpan extends Span<SpanType.MODEL_GENERATION> {
  * - RecordedSpan: span data loaded from storage with annotation methods
  */
 export interface SpanData<TType extends SpanType> extends BaseSpan<TType> {
-  /** Parent span id reference (undefined for root spans) */
+  /** Parent span id reference — always a Mastra span present in storage (undefined for root spans) */
   parentSpanId?: string;
-  /** Whether parentSpanId refers to a span outside Mastra's stored trace */
-  isExternalParent?: boolean;
+  /** Parent span id outside Mastra storage (ambient OTel / bridge parent); never used as the stored parent */
+  externalParentSpanId?: string;
   /** `TRUE` if the span is the root span of a trace */
   isRootSpan: boolean;
   /**
@@ -1231,11 +1231,18 @@ export interface CreateSpanOptions<TType extends SpanType> extends CreateBaseOpt
   spanId?: string;
   /**
    * Parent span ID to use for this span (1-16 hexadecimal characters).
+   * Must reference a Mastra span present in storage (a rebuilt span's parent,
+   * or the suspended span a resumed run links back to).
    * Only used for root spans without a parent.
    */
   parentSpanId?: string;
-  /** Whether parentSpanId refers to a span outside Mastra's stored trace. */
-  isExternalParent?: boolean;
+  /**
+   * Parent span ID outside Mastra storage (1-16 hexadecimal characters), such
+   * as an ambient OpenTelemetry span. Exported for external tracing systems;
+   * never persisted as the stored parent.
+   * Only used for root spans without a parent.
+   */
+  externalParentSpanId?: string;
   /**
    * Start time for this span.
    * Used when rebuilding a span from cached data, or when a span is created
@@ -1327,6 +1334,11 @@ export interface GetOrCreateSpanOptions<TType extends SpanType> {
   tracingContext?: TracingContext;
   requestContext?: RequestContext;
   mastra?: Mastra;
+  /**
+   * Span id of the suspended span a resumed run links back to. The id is in
+   * Mastra storage, so it becomes the new root span's stored parent.
+   */
+  resumedFromSpanId?: string;
 }
 
 /**
@@ -1405,11 +1417,11 @@ export interface TracingOptions {
   traceId?: string;
   /**
    * Parent span ID to use for this execution (1-16 hexadecimal characters).
-   * If provided, the root span will be created as a child of this span.
+   * Intended for correlating with an external tracing system (e.g. an
+   * OpenTelemetry span in the calling service): the id is exported for
+   * external tracing but is not treated as a parent within Mastra storage.
    */
   parentSpanId?: string;
-  /** @internal Whether parentSpanId refers to a span outside Mastra's stored trace. */
-  isExternalParent?: boolean;
   /**
    * Tags to apply to this trace.
    * Tags are string labels that can be used to categorize and filter traces
@@ -1432,7 +1444,14 @@ export interface TracingOptions {
 export interface SpanIds {
   traceId: string;
   spanId: string;
+  /** Parent that is a Mastra span (present in Mastra storage). */
   parentSpanId?: string;
+  /**
+   * Parent that lives only in the external tracing system (e.g. an ambient
+   * OpenTelemetry or dd-trace span). Not present in Mastra storage.
+   * Bridges set exactly one of `parentSpanId` / `externalParentSpanId`.
+   */
+  externalParentSpanId?: string;
 }
 
 /**

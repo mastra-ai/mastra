@@ -267,6 +267,13 @@ export class DatadogBridge extends BaseExporter implements ObservabilityBridge {
       const parentContext = apmParentDdSpan?.context?.() as { toSpanId?: (hex?: boolean) => string } | undefined;
       const parentSpanId = parentContext?.toSpanId?.(true) ?? externalParentId;
 
+      // Declare which kind of parent was used. A parent resolved from the
+      // Mastra span chain exists in Mastra storage; an active dd-trace scope
+      // span is a Mastra span only if this bridge created it, otherwise it
+      // lives solely in Datadog (e.g. APM auto-instrumentation).
+      const parentIsMastraSpan =
+        parentSpanId !== undefined && (parentSource !== 'active-scope' || this.ddSpanMap.has(parentSpanId));
+
       this.captureTraceContext(traceId, options);
       this.openSpanCounts.set(traceId, (this.openSpanCounts.get(traceId) ?? 0) + 1);
       this.ddSpanMap.set(spanId, ddSpan);
@@ -278,7 +285,11 @@ export class DatadogBridge extends BaseExporter implements ObservabilityBridge {
           `[parentSource=${parentSource}] [externalParentId=${externalParentId ?? 'none'}]`,
       );
 
-      return { spanId, traceId, parentSpanId };
+      return {
+        spanId,
+        traceId,
+        ...(parentIsMastraSpan ? { parentSpanId } : { externalParentSpanId: parentSpanId }),
+      };
     } catch (error) {
       this.logger.error('[DatadogBridge] Failed to create span:', error);
       return undefined;

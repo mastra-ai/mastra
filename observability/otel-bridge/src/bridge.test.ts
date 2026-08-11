@@ -74,7 +74,7 @@ describe('OtelBridge', () => {
       bridge.shutdown();
     });
 
-    it('preserves a resumed Mastra parent instead of marking it as external', async () => {
+    it('preserves a resumed Mastra parent instead of treating it as external', async () => {
       const bridge = new OtelBridge();
       const tracing = new DefaultObservabilityInstance({
         serviceName: 'resume-parent',
@@ -86,16 +86,11 @@ describe('OtelBridge', () => {
       const span = tracing.startSpan({
         type: SpanType.GENERIC,
         name: 'resumed-agent',
-        tracingOptions: {
-          parentSpanId: '1234567890abcdef',
-          isExternalParent: false,
-        },
+        parentSpanId: '1234567890abcdef',
       })!;
 
-      expect(span.exportSpan()).toMatchObject({
-        parentSpanId: '1234567890abcdef',
-        isExternalParent: false,
-      });
+      expect(span.exportSpan().parentSpanId).toBe('1234567890abcdef');
+      expect(span.exportSpan().externalParentSpanId).toBeUndefined();
 
       span.end();
       await tracing.flush();
@@ -133,10 +128,7 @@ describe('OtelBridge', () => {
           instance.startSpan({
             type: SpanType.GENERIC,
             name: 'resumed-run',
-            tracingOptions: {
-              parentSpanId: '1234567890abcdef',
-              isExternalParent: false,
-            },
+            parentSpanId: '1234567890abcdef',
           }),
         )!;
         ambient.end();
@@ -144,14 +136,14 @@ describe('OtelBridge', () => {
         const exported = span.exportSpan();
         expect(exported.parentSpanId).toBe('1234567890abcdef');
         expect(exported.parentSpanId).not.toBe(ambient.spanContext().spanId);
-        expect(exported.isExternalParent).toBe(false);
+        expect(exported.externalParentSpanId).toBe(ambient.spanContext().spanId);
 
         span.end();
         await instance.flush();
         await bridge.shutdown();
       });
 
-      it('marks a bridged root external when it inherits the ambient parent', async () => {
+      it('reports an ambient parent as external on a bridged root', async () => {
         const bridge = new OtelBridge();
         const instance = new DefaultObservabilityInstance({
           serviceName: 'bridged-root',
@@ -170,10 +162,44 @@ describe('OtelBridge', () => {
         ambient.end();
 
         const exported = span.exportSpan();
-        expect(exported.parentSpanId).toBe(ambient.spanContext().spanId);
-        expect(exported.isExternalParent).toBe(true);
+        expect(exported.parentSpanId).toBeUndefined();
+        expect(exported.externalParentSpanId).toBe(ambient.spanContext().spanId);
 
         span.end();
+        await instance.flush();
+        await bridge.shutdown();
+      });
+
+      it('classifies a Mastra-created ambient span as an internal parent', async () => {
+        // executeInContext runs code inside a Mastra span's OTel context. A
+        // root created there inherits that span as its ambient parent — but
+        // it IS in Mastra storage, so it must not be reported as external.
+        const bridge = new OtelBridge();
+        const instance = new DefaultObservabilityInstance({
+          serviceName: 'nested-root',
+          name: 'nested-root-instance',
+          sampling: { type: SamplingStrategyType.ALWAYS },
+          bridge,
+        });
+
+        const outerSpan = instance.startSpan({
+          type: SpanType.GENERIC,
+          name: 'outer-mastra-span',
+        })!;
+
+        const nestedRoot = bridge.executeInContextSync(outerSpan.id, () =>
+          instance.startSpan({
+            type: SpanType.GENERIC,
+            name: 'nested-root-run',
+          }),
+        )!;
+
+        const exported = nestedRoot.exportSpan();
+        expect(exported.parentSpanId).toBe(outerSpan.id);
+        expect(exported.externalParentSpanId).toBeUndefined();
+
+        nestedRoot.end();
+        outerSpan.end();
         await instance.flush();
         await bridge.shutdown();
       });

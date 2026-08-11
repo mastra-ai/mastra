@@ -149,10 +149,10 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
   public entityId?: string;
   /** Entity name that created the span */
   public entityName?: string;
-  /** Parent span ID (for root spans that are children of external spans) */
+  /** Parent span ID — always a Mastra span present in storage (e.g. the suspended span a resumed run links to) */
   protected parentSpanId?: string;
-  /** Whether parentSpanId refers to a span outside Mastra's stored trace */
-  protected isExternalParent?: boolean;
+  /** Parent span ID outside Mastra storage (ambient OTel / bridge parent); never used as the stored parent */
+  protected externalParentSpanId?: string;
   /** Deep clean options for serialization */
   protected deepCleanOptions: DeepCleanOptions;
   /**
@@ -320,19 +320,19 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
   }
 
   /**
-   * Whether the parentSpanId returned by {@link getParentSpanId} refers to a
-   * span outside Mastra's stored trace. When every Mastra ancestor is dropped
-   * from export, the exported parentSpanId is the root's external parent, so
-   * the root's flag must travel with it.
+   * External (non-Mastra-storage) parent id to export alongside
+   * {@link getParentSpanId}. When every Mastra ancestor is dropped from
+   * export, the span is exported at the root's position, so the root's
+   * external parent must travel with it.
    */
-  protected getExportedIsExternalParent(includeInternalSpans?: boolean): boolean | undefined {
+  protected getExportedExternalParentSpanId(includeInternalSpans?: boolean): string | undefined {
     if (!this.parent) {
-      return this.isExternalParent;
+      return this.externalParentSpanId;
     }
     if (this.getParentSpan(includeInternalSpans)) {
-      return this.isExternalParent;
+      return this.externalParentSpanId;
     }
-    return (this.parent as unknown as BaseSpan).getExportedIsExternalParent(includeInternalSpans);
+    return (this.parent as unknown as BaseSpan).getExportedExternalParentSpanId(includeInternalSpans);
   }
 
   /** Find the closest parent span of a specific type by walking up the parent chain */
@@ -428,7 +428,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
       isEvent: this.isEvent,
       isRootSpan: this.isRootSpan,
       parentSpanId: this.getParentSpanId(includeInternalSpans),
-      isExternalParent: this.getExportedIsExternalParent(includeInternalSpans),
+      externalParentSpanId: this.getExportedExternalParentSpanId(includeInternalSpans),
       // Tags are only included for root spans
       ...(this.isRootSpan && this.tags?.length ? { tags: this.tags } : {}),
     };

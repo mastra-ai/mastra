@@ -275,8 +275,8 @@ describe('resumed AGENT_RUN span input and trace continuity', () => {
         toolCallId,
       });
       expect(resumedCall.tracingOptions?.traceId).toBe('mock-trace-id');
-      expect(resumedCall.tracingOptions?.parentSpanId).toBeTruthy();
-      expect(resumedCall.tracingOptions?.isExternalParent).toBe(false);
+      expect(resumedCall.resumedFromSpanId).toBeTruthy();
+      expect(resumedCall.tracingOptions?.parentSpanId).toBeUndefined();
     } finally {
       spy.mockRestore();
     }
@@ -503,7 +503,7 @@ describe('resumed AGENT_RUN span input and trace continuity', () => {
       const resumedCall = agentRunCalls[1];
       expect(resumedCall.tracingOptions?.traceId).toBe('caller-trace-id');
       expect(resumedCall.tracingOptions?.parentSpanId).toBe('caller-parent-span');
-      expect(resumedCall.tracingOptions?.isExternalParent).toBe(true);
+      expect(resumedCall.resumedFromSpanId).toBeUndefined();
     } finally {
       spy.mockRestore();
     }
@@ -597,8 +597,8 @@ describe('resumed AGENT_RUN span input and trace continuity', () => {
         toolCallId: output.suspendPayload!.toolCallId,
       });
       expect(resumedCall.tracingOptions?.traceId).toBe('mock-trace-id');
-      expect(resumedCall.tracingOptions?.parentSpanId).toBeTruthy();
-      expect(resumedCall.tracingOptions?.isExternalParent).toBe(false);
+      expect(resumedCall.resumedFromSpanId).toBeTruthy();
+      expect(resumedCall.tracingOptions?.parentSpanId).toBeUndefined();
     } finally {
       spy.mockRestore();
     }

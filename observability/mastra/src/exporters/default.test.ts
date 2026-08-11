@@ -277,12 +277,10 @@ describe('DefaultExporter', () => {
         await exporter.init({ mastra: mockMastra });
 
         const externalRootEvent = createMockEvent(TracingEventType.SPAN_STARTED, 'trace-1', 'external-root');
-        externalRootEvent.exportedSpan.parentSpanId = 'external-parent';
-        externalRootEvent.exportedSpan.isExternalParent = true;
+        externalRootEvent.exportedSpan.externalParentSpanId = 'external-parent';
 
         const resumedRootEvent = createMockEvent(TracingEventType.SPAN_STARTED, 'trace-1', 'resumed-root');
         resumedRootEvent.exportedSpan.parentSpanId = 'suspended-span';
-        resumedRootEvent.exportedSpan.isExternalParent = false;
 
         await exporter.exportTracingEvent(externalRootEvent);
         await exporter.exportTracingEvent(resumedRootEvent);

@@ -255,16 +255,11 @@ describe('DatadogBridge', () => {
       const span = tracing.startSpan({
         type: SpanType.GENERIC,
         name: 'resumed-agent',
-        tracingOptions: {
-          parentSpanId: '1234567890abcdef',
-          isExternalParent: false,
-        },
+        parentSpanId: '1234567890abcdef',
       })!;
 
-      expect(span.exportSpan()).toMatchObject({
-        parentSpanId: '1234567890abcdef',
-        isExternalParent: false,
-      });
+      expect(span.exportSpan().parentSpanId).toBe('1234567890abcdef');
+      expect(span.exportSpan().externalParentSpanId).toBeUndefined();
 
       span.end();
       await tracing.flush();
@@ -291,17 +286,11 @@ describe('DatadogBridge', () => {
       const span = tracing.startSpan({
         type: SpanType.GENERIC,
         name: 'resumed-agent',
-        tracingOptions: {
-          parentSpanId: '1234567890abcdef',
-          isExternalParent: false,
-        },
+        parentSpanId: '1234567890abcdef',
       })!;
 
-      expect(span.exportSpan()).toMatchObject({
-        parentSpanId: '1234567890abcdef',
-        isExternalParent: false,
-      });
-      expect(span.exportSpan().parentSpanId).not.toBe('aaaaaaaaaaaaaaaa');
+      expect(span.exportSpan().parentSpanId).toBe('1234567890abcdef');
+      expect(span.exportSpan().externalParentSpanId).toBe('aaaaaaaaaaaaaaaa');
 
       span.end();
       await tracing.flush();
@@ -330,10 +319,8 @@ describe('DatadogBridge', () => {
         name: 'bridged-root-agent',
       })!;
 
-      expect(span.exportSpan()).toMatchObject({
-        parentSpanId: 'aaaaaaaaaaaaaaaa',
-        isExternalParent: true,
-      });
+      expect(span.exportSpan().parentSpanId).toBeUndefined();
+      expect(span.exportSpan().externalParentSpanId).toBe('aaaaaaaaaaaaaaaa');
 
       span.end();
       await tracing.flush();
@@ -425,7 +412,8 @@ describe('DatadogBridge', () => {
       const result = bridge.createSpan(createMockSpanOptions())!;
 
       expect(mockStartSpan).toHaveBeenCalledWith('test-span', { childOf: requestSpan });
-      expect(result.parentSpanId).toBe('aaaaaaaaaaaaaaaa');
+      expect(result.parentSpanId).toBeUndefined();
+      expect(result.externalParentSpanId).toBe('aaaaaaaaaaaaaaaa');
       expect(result.traceId).toBe('bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb');
       expect(llmobsRegistrations[0]?.options.parent).toBeUndefined();
     });
@@ -454,7 +442,8 @@ describe('DatadogBridge', () => {
       )!;
 
       expect(mockStartSpan).toHaveBeenCalledWith('test-span', { childOf: requestSpan });
-      expect(result.parentSpanId).toBe('aaaaaaaaaaaaaaaa');
+      expect(result.parentSpanId).toBeUndefined();
+      expect(result.externalParentSpanId).toBe('aaaaaaaaaaaaaaaa');
       expect(result.traceId).toBe('bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb');
       expect(llmobsRegistrations[0]?.options.parent).toBe(requestSpan);
     });
