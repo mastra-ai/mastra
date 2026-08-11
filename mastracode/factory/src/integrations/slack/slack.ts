@@ -272,10 +272,16 @@ export async function resolveFactoryForLink({
  * outside the sandbox git-ref allow-list (`[A-Za-z0-9_./-]`, and `.` for
  * readability) mapped to `-`. `thread.id` is `{channelId}:{threadTs}`
  * (platform-prefixed on handler threads) — the trailing segment is the ts.
+ *
+ * Top-level DM and channel conversations use the empty-threadTs thread form,
+ * so the trailing segment can be empty; a bare `slack/` is not a valid git
+ * ref. Fall back to the last non-empty segment (the channel id): one
+ * deterministic branch per top-level conversation.
  */
 function threadBranch(threadId: string): string {
-  const ts = threadId.split(':').at(-1) ?? threadId;
-  return `slack/${ts.replace(/[^A-Za-z0-9_/-]/g, '-')}`;
+  const segments = threadId.split(':');
+  const tail = segments.findLast(segment => segment.length > 0) ?? threadId;
+  return `slack/${tail.replace(/[^A-Za-z0-9_/-]/g, '-')}`;
 }
 
 /**

@@ -5997,12 +5997,6 @@ importers:
       zod-from-json-schema:
         specifier: ^0.5.2
         version: 0.5.2
-      zod-from-json-schema-v3:
-        specifier: npm:zod-from-json-schema@^0.0.5
-        version: zod-from-json-schema@0.0.5
-      zod-to-json-schema:
-        specifier: ^3.25.1
-        version: 3.25.2(zod@4.4.3)
     devDependencies:
       '@ai-sdk/anthropic':
         specifier: ^3.0.103
@@ -6073,6 +6067,12 @@ importers:
       zod:
         specifier: 'catalog:'
         version: 4.4.3
+      zod-from-json-schema-v3:
+        specifier: npm:zod-from-json-schema@^0.0.5
+        version: zod-from-json-schema@0.0.5
+      zod-to-json-schema:
+        specifier: ^3.25.2
+        version: 3.25.2(zod@4.4.3)
       zod-v3:
         specifier: npm:zod@^3.25.76
         version: zod@3.25.76

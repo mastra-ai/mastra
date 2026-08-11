@@ -30,6 +30,7 @@ import type {
   ProjectRepositorySandbox,
   SourceControlStorageHandle,
 } from '../../storage/domains/source-control/base.js';
+import { timedPhase } from '../../timing.js';
 
 type SourceControlSandboxStorage = SourceControlStorageHandle['sandboxes'];
 type MaterializationStore = Pick<SourceControlSandboxStorage, 'markMaterialized'>;
@@ -269,13 +270,8 @@ export interface RepoMaterializeInfo {
   defaultBranch: string;
 }
 
-/**
- * Materialize the repo inside the user's sandbox. Clones on first open, pulls on
- * re-open. Always scrubs the install token from the remote afterwards and sets
- * `materialized_at` on the per-user sandbox binding row.
- *
- */
-export async function materializeRepo(options: {
+/** Options for {@link materializeRepo}. */
+export interface MaterializeRepoOptions {
   /** The per-(project,user) sandbox binding (provisioned via `ensureProjectSandbox`). */
   row: RepoMaterializationBinding;
   /** Repo metadata from the org-owned project row. */
@@ -286,7 +282,19 @@ export async function materializeRepo(options: {
   token: string;
   storage: MaterializationStore;
   onProgress?: ProgressFn;
-}): Promise<void> {
+}
+
+/**
+ * Materialize the repo inside the user's sandbox. Clones on first open, pulls on
+ * re-open. Always scrubs the install token from the remote afterwards and sets
+ * `materialized_at` on the per-user sandbox binding row.
+ *
+ */
+export async function materializeRepo(options: MaterializeRepoOptions): Promise<void> {
+  return timedPhase('workspace.materialize', () => materializeRepoImpl(options));
+}
+
+async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<void> {
   const { row: sandboxRow, repoInfo, sandbox, token, storage, onProgress } = options;
   const workdir = sandboxRow.sandboxWorkdir;
   const repo = repoInfo.repoFullName;
@@ -438,6 +446,14 @@ export async function recycleClaimedWorkdir(
 
 /** Check out a session's branch inside its isolated repository clone. */
 export async function checkoutSessionBranch(
+  sandbox: MaterializationSandbox,
+  workdir: string,
+  options: { branch: string; baseBranch: string; token: string; repoFullName: string },
+): Promise<void> {
+  return timedPhase('workspace.checkout', () => checkoutSessionBranchImpl(sandbox, workdir, options));
+}
+
+async function checkoutSessionBranchImpl(
   sandbox: MaterializationSandbox,
   workdir: string,
   {

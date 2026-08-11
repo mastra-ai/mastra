@@ -12,7 +12,13 @@ import TabItem from '@theme/TabItem'
 
 Run [Mastra workers](/docs/deployment/workers) as separate processes so you can scale orchestration, scheduling, and background tasks independently from the API. This guide walks through a fully split deployment using Docker Compose or Kubernetes.
 
-:::info
+:::beta
+
+Breaking changes may occur without a major version bump until the API is stable.
+
+:::
+
+:::note
 This guide covers splitting workers into their own containers. If you only need workers to run in-process alongside the API, see [Workers](/docs/deployment/workers). No extra setup is required.
 :::
 

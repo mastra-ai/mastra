@@ -4,7 +4,7 @@ import { RequestContext } from '../../request-context';
 import { AISDKV4LegacyLanguageModel } from './aisdk/v4/model';
 import { AISDKV5LanguageModel } from './aisdk/v5/model';
 import { AISDKV7LanguageModel } from './aisdk/v7/model';
-import { resolveModelConfig } from './resolve-model';
+import { isOpenAICompatibleObjectConfig, resolveModelConfig } from './resolve-model';
 import { ModelRouterLanguageModel } from './router';
 
 describe('resolveModelConfig', () => {
@@ -72,6 +72,14 @@ describe('resolveModelConfig', () => {
 
   it('should throw error for invalid config', async () => {
     await expect(resolveModelConfig({} as any)).rejects.toThrow('Invalid model configuration');
+  });
+
+  it('should return false when checking a null OpenAI-compatible config', () => {
+    expect(isOpenAICompatibleObjectConfig(null as any)).toBe(false);
+  });
+
+  it('should throw an invalid configuration error for null', async () => {
+    await expect(resolveModelConfig(null as any)).rejects.toThrow('Invalid model configuration provided');
   });
 
   describe('v4 (LanguageModelV4 / AI SDK v7) handling', () => {

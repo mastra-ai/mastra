@@ -613,10 +613,10 @@ function mergeServerWindow(state: TranscriptState, messages: MastraDBMessage[]):
 
   const reconciled = reconcileToolResults(adoptCoveringWindowCopies(state, messages), messages);
 
-  // A streamed turn and its persisted copy carry different message ids (the
-  // engine mints display ids independently of what MessageList persists), so
-  // identity falls back to shared toolCallIds — inserting such a window message
-  // would duplicate a turn that reconcileToolResults already heals in place.
+  // Streamed turns adopt the loop's persisted message id (#21185), so window
+  // copies normally match by id; the shared-toolCallId fallback covers paths
+  // that can still diverge (retries, resume, older servers) — inserting such a
+  // window message would duplicate a turn reconcileToolResults heals in place.
   const entryToolCallIds = reconciled.entries.map(entry =>
     entry.kind === 'message' && entry.message.role === 'assistant'
       ? new Set(toolCallIdsOf(entry.message.content.parts))

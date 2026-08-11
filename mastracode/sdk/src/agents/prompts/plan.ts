@@ -7,8 +7,9 @@ interface PlanPromptContext {
   state?: Record<string, unknown>;
 }
 
-export function planModePrompt(_ctx: PlanPromptContext): string {
-  const plansDir = getLocalPlansRelativeDir();
+export function planModePrompt(ctx: PlanPromptContext): string {
+  const factoryProjectId = typeof ctx.state?.factoryProjectId === 'string' ? ctx.state.factoryProjectId : undefined;
+  const plansDir = getLocalPlansRelativeDir({ factoryProjectId });
   const examplePath = `${plansDir}/add-dark-mode.md`;
 
   return `
