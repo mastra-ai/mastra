@@ -1,0 +1,13 @@
+{
+  "extends": "../../tsconfig.node.json",
+  "include": ["src/**/*", "integration/**/*", "tsup.config.ts", "vitest.config.ts", "vitest.integration.config.ts"],
+  "exclude": [
+    "node_modules",
+    "dist",
+    // The shared suite pulls the whole @internal/workflow-test-utils TS source
+    // graph into the program, which tsc cannot hold in memory. It is
+    // typechecked by vitest/editor tooling instead, same as the other engines'
+    // shared-suite files (see workflows/inngest/tsconfig.json).
+    "integration/shared-suite.test.ts"
+  ]
+}

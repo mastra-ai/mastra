@@ -1,0 +1,15 @@
+packages:
+  - '.'
+
+# pnpm reads overrides from here, not package.json. They are duplicated in
+# package.json `pnpm.overrides` because the example validator
+# (.github/scripts/validate-examples.js) checks for them there.
+overrides:
+  '@mastra/core': 'link:../../packages/core'
+  '@mastra/libsql': 'link:../../stores/libsql'
+  '@mastra/workflow-sdk': 'link:../../workflows/workflow-sdk'
+
+allowBuilds:
+  '@swc/core': true
+  cbor-extract: true
+  esbuild: true

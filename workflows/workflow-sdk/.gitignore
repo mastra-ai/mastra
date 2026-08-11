@@ -1,0 +1,8 @@
+# Workflow SDK test artifacts: bundles built by @workflow/vitest, the local
+# world's run data, and the SWC plugin cache the compiler writes next to it.
+.swc/
+.workflow-vitest/
+.workflow-data/
+integration/.swc/
+integration/.workflow-vitest/
+integration/.workflow-data/

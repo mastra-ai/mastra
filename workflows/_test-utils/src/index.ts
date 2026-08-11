@@ -41,6 +41,8 @@ export type {
   DurableAgentTestDomain,
   CreateAgentConfig,
   DurableAgentLike,
+  StreamEvent,
+  StreamWorkflowResult,
 } from './types';
 
 // Mock model factories

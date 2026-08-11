@@ -18,6 +18,7 @@ import { ToolStream } from '../../tools/stream';
 import type { DynamicArgument } from '../../types';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
 import type { DefaultExecutionEngine } from '../default';
+import type { ExecutionEngine } from '../execution-engine';
 import type { Step, SuspendOptions } from '../step';
 import { getStepResult } from '../step';
 import type {
@@ -557,8 +558,13 @@ export async function executeStep(
   };
 }
 
-export interface RunScorersParams extends ObservabilityContext {
-  engine: DefaultExecutionEngine;
+export interface RunScorersParams extends Partial<ObservabilityContext> {
+  /**
+   * Only `getLogger()` and `mastra` are used, so any engine — including
+   * non-default ones like the Workflow SDK engine — can invoke step scorers.
+   * Observability context is optional; missing fields resolve to no-ops.
+   */
+  engine: ExecutionEngine;
   scorers: DynamicArgument<MastraScorers>;
   runId: string;
   input: any;
