@@ -299,10 +299,19 @@ Prefer concrete resolved outcomes over abstract workflow status so the assistant
  */
 export const OBSERVER_OUTPUT_FORMAT_BASE = buildObserverOutputFormat();
 
-export function buildObserverOutputFormat(extractors: readonly Extractor<any>[] = []): string {
-  const extractorSections = buildExtractorOutputSections(extractors);
+/**
+ * Build the Observer's output format.
+ *
+ * `extractors` distinguishes two cases that both look empty:
+ * - `undefined` — the caller is on the legacy path and never opted into extractors, so the
+ *   built-in continuation sections are described inline.
+ * - `[]` — the caller composed extractors and every section was disabled, so no continuation
+ *   sections are described at all.
+ */
+export function buildObserverOutputFormat(extractors?: readonly Extractor<any>[]): string {
+  const extractorSections = buildExtractorOutputSections(extractors ?? []);
   const legacyContinuationSections =
-    extractors.length === 0
+    extractors === undefined
       ? `
 <current-task>
 State the current task(s) explicitly:
@@ -367,21 +376,68 @@ export const OBSERVER_GUIDELINES = `- Be specific enough for the assistant to ac
 - Observe WHAT the agent did and WHAT it means
 - If the user provides detailed messages or code snippets, observe all important details`;
 
+const CURRENT_TASK_SENTENCE =
+  'If the user asks a question or gives a new task, make it clear in <current-task> that this is the priority.';
+const SUGGESTED_RESPONSE_SENTENCE =
+  'If the assistant needs to respond to the user, indicate in <suggested-response> that it should pause for user reply before continuing other tasks.';
+
+/**
+ * Undefined extractors mean the caller is on the legacy path, where
+ * `buildObserverOutputFormat` still describes both continuation sections.
+ */
+function hasContinuationSection(extractors: readonly Extractor<any>[] | undefined, slug: string): boolean {
+  return extractors === undefined || extractors.some(extractor => extractor.slug === slug);
+}
+
+/** Render section names as a readable English list: "a", "a and b", "a, b, and c". */
+function formatSectionList(sections: readonly string[]): string {
+  if (sections.length <= 1) return sections[0] ?? '';
+  if (sections.length === 2) return `${sections[0]} and ${sections[1]}`;
+  return `${sections.slice(0, -1).join(', ')}, and ${sections[sections.length - 1]}`;
+}
+
+/**
+ * Build the closing guidance about continuation sections, naming only the sections the
+ * prompt actually defines. Without this the prompt can reference `<current-task>` or
+ * `<suggested-response>` tags that the output format has already omitted.
+ */
+export function buildContinuationGuidance(
+  extractors: readonly Extractor<any>[] | undefined,
+  { includeSuggestedResponse }: { includeSuggestedResponse: boolean },
+): string {
+  const sentences = ['User messages are extremely important.'];
+  if (hasContinuationSection(extractors, 'current-task')) {
+    sentences.push(CURRENT_TASK_SENTENCE);
+  }
+  if (includeSuggestedResponse && hasContinuationSection(extractors, 'suggested-response')) {
+    sentences.push(SUGGESTED_RESPONSE_SENTENCE);
+  }
+  return sentences.join(' ');
+}
+
 /**
  * Build the complete observer system prompt.
  * @param multiThread - Whether this is for multi-thread batched observation (default: false)
  * @param instruction - Optional custom instructions to append to the prompt
+ * @param includeThreadTitle - Whether the Observer should also produce a thread title
+ * @param extractors - Active extractors, used to decide which sections the prompt describes.
+ *   Omit entirely for the legacy path; pass `[]` to describe no continuation sections at all.
  */
 export function buildObserverSystemPrompt(
   multiThread: boolean = false,
   instruction?: string,
   includeThreadTitle: boolean = false,
-  extractors: readonly Extractor<any>[] = [],
+  extractors?: readonly Extractor<any>[],
 ): string {
   const outputFormat = buildObserverOutputFormat(extractors);
-  const multiThreadTitleInstruction = includeThreadTitle
-    ? ` Each thread's observations, current-task, suggested-response, and thread-title should be nested inside a <thread id="..."> block within <observations>.`
-    : ` Each thread's observations, current-task, and suggested-response should be nested inside a <thread id="..."> block within <observations>.`;
+  const customInstructions = instruction ? `\n\n=== CUSTOM INSTRUCTIONS ===\n\n${instruction}` : '';
+  const multiThreadSections = [
+    'observations',
+    ...(hasContinuationSection(extractors, 'current-task') ? ['current-task'] : []),
+    ...(hasContinuationSection(extractors, 'suggested-response') ? ['suggested-response'] : []),
+    ...(includeThreadTitle ? ['thread-title'] : []),
+  ];
+  const multiThreadTitleInstruction = ` Each thread's ${formatSectionList(multiThreadSections)} should be nested inside a <thread id="..."> block within <observations>.`;
   const multiThreadTitleExample = includeThreadTitle
     ? `
 <thread-title>Feature X implementation</thread-title>`
@@ -390,6 +446,19 @@ export function buildObserverSystemPrompt(
     ? `
 <thread-title>Deployment setup</thread-title>`
     : '';
+  // Only demonstrate the continuation sections the prompt actually asks for, otherwise the
+  // example contradicts the instructions whenever a section is disabled.
+  const buildThreadExample = (currentTask: string, suggestedResponse: string, titleExample: string): string => {
+    const sections = [
+      ...(hasContinuationSection(extractors, 'current-task')
+        ? [`\n\n<current-task>\n${currentTask}\n</current-task>`]
+        : []),
+      ...(hasContinuationSection(extractors, 'suggested-response')
+        ? [`\n\n<suggested-response>\n${suggestedResponse}\n</suggested-response>`]
+        : []),
+    ];
+    return `${sections.join('')}${titleExample}`;
+  };
 
   if (multiThread) {
     return `You are the memory consciousness of an AI assistant. Your observations will be the ONLY information the assistant has about past interactions with this user.
@@ -417,28 +486,20 @@ For multi-thread output, wrap each thread's observations like this:
 <thread id="thread_id_1">
 Date: Dec 4, 2025
 * 🔴 (14:30) User prefers direct answers
-* 🔴 (14:31) Working on feature X
-
-<current-task>
-What the agent is currently working on in this thread
-</current-task>
-
-<suggested-response>
-Hint for the agent's next message in this thread
-</suggested-response>${multiThreadTitleExample}
+* 🔴 (14:31) Working on feature X${buildThreadExample(
+      'What the agent is currently working on in this thread',
+      "Hint for the agent's next message in this thread",
+      multiThreadTitleExample,
+    )}
 </thread>
 
 <thread id="thread_id_2">
 Date: Dec 5, 2025
-* 🔴 (09:15) User asked about deployment
-
-<current-task>
-Current task for this thread
-</current-task>
-
-<suggested-response>
-Suggested response for this thread
-</suggested-response>${multiThreadSecondTitleExample}
+* 🔴 (09:15) User asked about deployment${buildThreadExample(
+      'Current task for this thread',
+      'Suggested response for this thread',
+      multiThreadSecondTitleExample,
+    )}
 </thread>
 </observations>
 
@@ -448,7 +509,7 @@ ${OBSERVER_GUIDELINES}
 
 Remember: These observations are the assistant's ONLY memory. Make them count.
 
-User messages are extremely important. If the user asks a question or gives a new task, make it clear in <current-task> that this is the priority.${instruction ? `\n\n=== CUSTOM INSTRUCTIONS ===\n\n${instruction}` : ''}`;
+${buildContinuationGuidance(extractors, { includeSuggestedResponse: false })}${customInstructions}`;
   }
 
   return `You are the memory consciousness of an AI assistant. Your observations will be the ONLY information the assistant has about past interactions with this user.
@@ -475,7 +536,7 @@ Simply output your observations without any thread-related markup.
 
 Remember: These observations are the assistant's ONLY memory. Make them count.
 
-User messages are extremely important. If the user asks a question or gives a new task, make it clear in <current-task> that this is the priority. If the assistant needs to respond to the user, indicate in <suggested-response> that it should pause for user reply before continuing other tasks.${instruction ? `\n\n=== CUSTOM INSTRUCTIONS ===\n\n${instruction}` : ''}`;
+${buildContinuationGuidance(extractors, { includeSuggestedResponse: true })}${customInstructions}`;
 }
 
 /**

@@ -10,6 +10,7 @@ import { reconcileObservationGroupsFromReflection, stripObservationGroups } from
 import {
   OBSERVER_EXTRACTION_INSTRUCTIONS,
   OBSERVER_GUIDELINES,
+  buildContinuationGuidance,
   buildObserverOutputFormat,
   sanitizeObservationLines,
   detectDegenerateRepetition,
@@ -36,9 +37,14 @@ export interface ReflectorResult extends BaseReflectorResult {
  * - Preserving ALL important information (reflections become the ENTIRE memory)
  *
  * @param instruction - Optional custom instructions to append to the prompt
+ * @param extractors - Active extractors, used to decide which sections the prompt describes
  */
-export function buildReflectorSystemPrompt(instruction?: string, extractors: readonly Extractor<any>[] = []): string {
+export function buildReflectorSystemPrompt(
+  instruction?: string,
+  extractors?: readonly Extractor<any>[],
+): string {
   const outputFormat = buildObserverOutputFormat(extractors);
+  const customInstructions = instruction ? `\n\n=== CUSTOM INSTRUCTIONS ===\n\n${instruction}` : '';
   return `You are the memory consciousness of an AI assistant. Your memory observation reflections will be the ONLY information the assistant has about past interactions with this user.
 
 The following instructions were given to another part of your psyche (the observer) to create memories.
@@ -115,7 +121,7 @@ Date: Dec 4, 2025
 
 ${outputFormat}
 
-User messages are extremely important. If the user asks a question or gives a new task, make it clear in <current-task> that this is the priority. If the assistant needs to respond to the user, indicate in <suggested-response> that it should pause for user reply before continuing other tasks.${instruction ? `\n\n=== CUSTOM INSTRUCTIONS ===\n\n${instruction}` : ''}`;
+${buildContinuationGuidance(extractors, { includeSuggestedResponse: true })}${customInstructions}`;
 }
 
 /**
