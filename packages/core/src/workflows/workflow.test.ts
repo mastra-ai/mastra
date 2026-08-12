@@ -225,57 +225,63 @@ createWorkflowTestSuite({
   },
 });
 
+function createMinimalApprovalCheckpoint(workflowId: string, runId: string) {
+  return {
+    kind: 'agent-approval-checkpoint' as const,
+    version: 1 as const,
+    workflowId,
+    runId,
+    status: 'suspended' as const,
+    timestamp: Date.now(),
+    approvals: [
+      {
+        toolCallId: 'call-1',
+        toolName: 'approvalTool',
+        args: {},
+        resumeLabel: 'call-1',
+        stepId: 'approval-step',
+        executionPath: [0],
+        suspendPayload: { requireToolApproval: { toolCallId: 'call-1', toolName: 'approvalTool' } },
+      },
+    ],
+    routing: {
+      activePaths: [0],
+      activeStepsPath: {},
+      suspendedPaths: { 'approval-step': [0] },
+      resumeLabels: { 'call-1': { stepId: 'approval-step' } },
+      waitingPaths: {},
+    },
+    rehydration: {},
+  };
+}
+
+async function createRunWithMinimalApprovalCheckpoint(id: string) {
+  const storage = new MockStore();
+  const step = createStep({
+    id: 'approval-step',
+    inputSchema: z.object({ value: z.string() }),
+    outputSchema: z.object({ value: z.string() }),
+    execute: async ({ inputData }) => inputData,
+  });
+  const workflow = createWorkflow({
+    id,
+    inputSchema: z.object({ value: z.string() }),
+    outputSchema: z.object({ value: z.string() }),
+  })
+    .then(step)
+    .commit();
+  void new Mastra({ workflows: { workflow }, storage, logger: false });
+  const runId = `${id}-run`;
+  const run = await workflow.createRun({ runId });
+  const workflowsStore = (await storage.getStore('workflows'))!;
+  const checkpoint = createMinimalApprovalCheckpoint(workflow.id, runId);
+  await workflowsStore.persistWorkflowSnapshot({ workflowName: workflow.id, runId, snapshot: checkpoint });
+  return { checkpoint, run, runId, workflow, workflowsStore };
+}
+
 describe('minimal approval checkpoint operations', () => {
   it('rejects full workflow restart with an actionable approval-only message', async () => {
-    const storage = new MockStore();
-    const step = createStep({
-      id: 'approval-step',
-      inputSchema: z.object({ value: z.string() }),
-      outputSchema: z.object({ value: z.string() }),
-      execute: async ({ inputData }) => inputData,
-    });
-    const workflow = createWorkflow({
-      id: 'minimal-checkpoint-restart',
-      inputSchema: z.object({ value: z.string() }),
-      outputSchema: z.object({ value: z.string() }),
-    })
-      .then(step)
-      .commit();
-    void new Mastra({ workflows: { workflow }, storage, logger: false });
-    const runId = 'minimal-checkpoint-restart-run';
-    const run = await workflow.createRun({ runId });
-    const workflowsStore = (await storage.getStore('workflows'))!;
-    await workflowsStore.persistWorkflowSnapshot({
-      workflowName: workflow.id,
-      runId,
-      snapshot: {
-        kind: 'agent-approval-checkpoint',
-        version: 1,
-        workflowId: workflow.id,
-        runId,
-        status: 'suspended',
-        timestamp: Date.now(),
-        approvals: [
-          {
-            toolCallId: 'call-1',
-            toolName: 'approvalTool',
-            args: {},
-            resumeLabel: 'call-1',
-            stepId: 'approval-step',
-            executionPath: [0],
-            suspendPayload: { requireToolApproval: { toolCallId: 'call-1', toolName: 'approvalTool' } },
-          },
-        ],
-        routing: {
-          activePaths: [0],
-          activeStepsPath: {},
-          suspendedPaths: { 'approval-step': [0] },
-          resumeLabels: { 'call-1': { stepId: 'approval-step' } },
-          waitingPaths: {},
-        },
-        rehydration: {},
-      },
-    });
+    const { run } = await createRunWithMinimalApprovalCheckpoint('minimal-checkpoint-restart');
 
     await expect(run.restart()).rejects.toThrow(
       'Workflow restart() cannot consume a minimal agent approval checkpoint. Continue the run with Agent.approveToolCall() or Agent.declineToolCall() instead.',
@@ -283,56 +289,25 @@ describe('minimal approval checkpoint operations', () => {
   });
 
   it('rejects cancellation without consuming the approval checkpoint', async () => {
-    const storage = new MockStore();
-    const workflow = createWorkflow({
-      id: 'minimal-checkpoint-cancel',
-      inputSchema: z.object({ value: z.string() }),
-      outputSchema: z.object({ value: z.string() }),
-    })
-      .then(
-        createStep({
-          id: 'approval-step',
-          inputSchema: z.object({ value: z.string() }),
-          outputSchema: z.object({ value: z.string() }),
-          execute: async ({ inputData }) => inputData,
-        }),
-      )
-      .commit();
-    void new Mastra({ workflows: { workflow }, storage, logger: false });
-    const runId = 'minimal-checkpoint-cancel-run';
-    const run = await workflow.createRun({ runId });
-    const workflowsStore = (await storage.getStore('workflows'))!;
-    const checkpoint = {
-      kind: 'agent-approval-checkpoint' as const,
-      version: 1 as const,
-      workflowId: workflow.id,
-      runId,
-      status: 'suspended' as const,
-      timestamp: Date.now(),
-      approvals: [
-        {
-          toolCallId: 'call-1',
-          toolName: 'approvalTool',
-          args: {},
-          resumeLabel: 'call-1',
-          stepId: 'approval-step',
-          executionPath: [0],
-          suspendPayload: { requireToolApproval: { toolCallId: 'call-1', toolName: 'approvalTool' } },
-        },
-      ],
-      routing: {
-        activePaths: [0],
-        activeStepsPath: {},
-        suspendedPaths: { 'approval-step': [0] },
-        resumeLabels: { 'call-1': { stepId: 'approval-step' } },
-        waitingPaths: {},
-      },
-      rehydration: {},
-    };
-    await workflowsStore.persistWorkflowSnapshot({ workflowName: workflow.id, runId, snapshot: checkpoint });
+    const { checkpoint, run, runId, workflow, workflowsStore } =
+      await createRunWithMinimalApprovalCheckpoint('minimal-checkpoint-cancel');
 
     await expect(run.cancel()).rejects.toThrow(
       'Workflow cancel() cannot consume a minimal agent approval checkpoint. Continue the run with Agent.approveToolCall() or Agent.declineToolCall() instead.',
+    );
+    expect(await workflowsStore.loadWorkflowSnapshot({ workflowName: workflow.id, runId })).toEqual(checkpoint);
+  });
+
+  it('rejects resume and time travel without consuming the approval checkpoint', async () => {
+    const { checkpoint, run, runId, workflow, workflowsStore } = await createRunWithMinimalApprovalCheckpoint(
+      'minimal-checkpoint-generic-resume',
+    );
+
+    await expect(run.resume({ resumeData: { approved: true } })).rejects.toThrow(
+      'Workflow resume() cannot consume a minimal agent approval checkpoint.',
+    );
+    await expect(run.timeTravel({ step: 'approval-step' })).rejects.toThrow(
+      'Workflow timeTravel() cannot consume a minimal agent approval checkpoint.',
     );
     expect(await workflowsStore.loadWorkflowSnapshot({ workflowName: workflow.id, runId })).toEqual(checkpoint);
   });

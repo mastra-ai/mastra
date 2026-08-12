@@ -1,6 +1,7 @@
 import type { ApprovalPersistenceMode } from '../../agent/approval-persistence';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import type { WorkflowsStorage } from '../../storage/domains/workflows/base';
+import type { SerializedMastraModelOutputState } from '../../stream/base/output';
 import type {
   AgentApprovalCheckpoint,
   AgentApprovalCheckpointApproval,
@@ -97,12 +98,13 @@ function selectContinuationSteps(snapshot: WorkflowRunState): JsonObject | undef
   );
 }
 
-function selectMinimalStreamState(value: unknown): Record<string, unknown> | undefined {
+function selectMinimalStreamState(value: unknown): SerializedMastraModelOutputState | undefined {
   if (!isRecord(value)) return undefined;
 
   return {
     status: value.status ?? 'suspended',
     bufferedSteps: [],
+    bufferedStepRequests: [],
     bufferedReasoningDetails: {},
     bufferedByStep: {
       text: '',

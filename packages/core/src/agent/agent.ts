@@ -46,6 +46,7 @@ import {
   isAgentApprovalCheckpoint,
   materializePersistedAgentApprovalCheckpoints,
 } from '../loop/workflows/agent-approval-checkpoint';
+import { AGENTIC_EXECUTION_WORKFLOW_ID } from '../loop/workflows/agentic-execution/constants';
 import { AGENTIC_LOOP_WORKFLOW_ID } from '../loop/workflows/agentic-loop/constants';
 // `Mastra` is imported type-only here: a runtime import would create an ESM
 // init cycle (agent → mastra → agent/durable → agent) that breaks
@@ -6500,7 +6501,7 @@ export class Agent<
       existingSnapshot =
         (await materializePersistedAgentApprovalCheckpoints({
           workflowsStore,
-          workflowNames: [AGENTIC_LOOP_WORKFLOW_ID, 'executionWorkflow'],
+          workflowNames: [AGENTIC_LOOP_WORKFLOW_ID, AGENTIC_EXECUTION_WORKFLOW_ID],
           outerWorkflowName: AGENTIC_LOOP_WORKFLOW_ID,
           runId,
         })) ?? existingSnapshot;
