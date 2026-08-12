@@ -144,8 +144,8 @@ describe('PostgresStore Domain Performance Indexes', () => {
     });
   });
 
-  describe('Total index count across all domains', () => {
-    it('should define 7 indexes total (2 memory + 1 scores + 4 observability)', () => {
+  describe('Total index count across tested domains', () => {
+    it('should define 13 indexes total (2 memory + 1 scores + 10 observability)', () => {
       const memory = new MemoryPG({ client: mockClient as any });
       const scores = new ScoresPG({ client: mockClient as any });
       const observability = new ObservabilityPG({ client: mockClient as any });
@@ -155,7 +155,7 @@ describe('PostgresStore Domain Performance Indexes', () => {
         scores.getDefaultIndexDefinitions().length +
         observability.getDefaultIndexDefinitions().length;
 
-      expect(totalIndexes).toBe(7);
+      expect(totalIndexes).toBe(13);
     });
   });
 });
