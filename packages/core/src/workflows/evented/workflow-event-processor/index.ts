@@ -24,6 +24,7 @@ import {
   getSingleStepEntryId,
   getStepIds,
   isSingleStepEntry,
+  omitPriorCompletionFields,
   validateStepResumeData,
 } from '../../utils';
 import { resolveCurrentState } from '../helpers';
@@ -2567,9 +2568,15 @@ export class WorkflowEventProcessor extends EventProcessor {
           type: 'workflow-step-suspended',
           payload: {
             id: stepId,
-            ...prevResult,
-            suspendedAt: Date.now(),
+            // Strip completion fields of the step's *previous* run (a stale
+            // `output` would otherwise re-publish state blobs), then re-add
+            // the fields describing the current suspension.  Use the
+            // step-execution timestamp so a delayed or retried event doesn't
+            // report a different time than the persisted result.
+            ...omitPriorCompletionFields(prevResult),
+            suspendedAt: prevResult.suspendedAt,
             suspendPayload: prevResult.suspendPayload,
+            ...(prevResult.suspendOutput !== undefined ? { suspendOutput: prevResult.suspendOutput } : {}),
           },
         },
       });
@@ -2676,7 +2683,11 @@ export class WorkflowEventProcessor extends EventProcessor {
           type: 'workflow-step-result',
           payload: {
             id: stepId,
-            ...prevResult,
+            // Strip completion fields of the step's *previous* run (stale
+            // suspend state, errors), then re-add this run's own result.
+            ...omitPriorCompletionFields(prevResult),
+            ...('output' in prevResult ? { output: prevResult.output } : {}),
+            ...('endedAt' in prevResult && prevResult.endedAt !== undefined ? { endedAt: prevResult.endedAt } : {}),
           },
         },
       });
