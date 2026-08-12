@@ -56,14 +56,21 @@ export const integrationCategories = Array.isArray(sidebar.integrationsSidebar)
   ? sidebar.integrationsSidebar.filter(isIntegrationCategory)
   : []
 
-export function getIntegrationItems(section: string, allowlist?: readonly string[]): IntegrationItem[] {
+export function getIntegrationItems(
+  section: string,
+  allowlist?: readonly string[],
+  blocklist?: readonly string[],
+): IntegrationItem[] {
   const category = integrationCategories.find(candidate => candidate.label === section)
   if (!category) return []
-  if (!allowlist) return category.items
 
-  const itemsById = new Map(category.items.map(item => [item.id, item]))
-  return allowlist.flatMap(id => {
-    const item = itemsById.get(id)
-    return item ? [item] : []
-  })
+  const blockedIds = new Set(blocklist)
+  const items = allowlist
+    ? allowlist.flatMap(id => {
+        const item = category.items.find(candidate => candidate.id === id)
+        return item ? [item] : []
+      })
+    : category.items
+
+  return items.filter(item => !blockedIds.has(item.id))
 }

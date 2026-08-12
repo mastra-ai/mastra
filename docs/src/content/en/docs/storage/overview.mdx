@@ -12,6 +12,7 @@ packages:
 
 import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
+import { IntegrationGrid } from '@site/src/components/integrations/grid';
 
 # Storage overview
 
@@ -207,28 +208,9 @@ You can also route `observability` to a dedicated analytics backend. See the [ob
 
 ## Supported providers
 
-Each provider page includes installation instructions, configuration parameters, and usage examples:
+Each provider page includes installation instructions, configuration parameters, and usage examples. libSQL is the fastest path for local development because it doesn't require running a separate database server.
 
-- [Cloudflare D1](/integrations/databases/cloudflare-d1)
-- [Cloudflare KV & Durable Objects](/integrations/databases/cloudflare-kv)
-- [Convex](/integrations/databases/convex)
-- [DynamoDB](/integrations/databases/dynamodb)
-- [Google Cloud Spanner](/integrations/databases/spanner)
-- [LanceDB](/integrations/databases/lancedb)
-- [libSQL](/integrations/databases/libsql)
-- [Microsoft SQL Server](/integrations/databases/mssql)
-- [MongoDB](/integrations/databases/mongodb)
-- [Neon Postgres](/integrations/databases/neon)
-- [OracleDB](/integrations/databases/oracledb)
-- [PostgreSQL](/integrations/databases/postgresql)
-- [Redis](/integrations/databases/redis)
-- [Upstash](/integrations/databases/upstash)
-
-:::tip
-
-libSQL is the fastest path for local development because it doesn't require running a separate database server.
-
-:::
+<IntegrationGrid section="Databases" />
 
 ## Next steps
 

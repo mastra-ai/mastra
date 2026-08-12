@@ -39,7 +39,23 @@ describe('getIntegrationItems', () => {
     ])
   })
 
-  it('ignores unknown sections and allowlist entries', () => {
+  it('excludes blocklisted items', () => {
+    expect(
+      getIntegrationItems('Channels', undefined, ['channels/github', 'channels/imessage']).map(item => item.id),
+    ).toEqual(['channels/discord', 'channels/teams', 'channels/slack', 'channels/telegram', 'channels/whatsapp'])
+  })
+
+  it('applies the blocklist after the allowlist', () => {
+    expect(
+      getIntegrationItems(
+        'Channels',
+        ['channels/slack', 'channels/github', 'channels/discord'],
+        ['channels/github'],
+      ).map(item => item.id),
+    ).toEqual(['channels/slack', 'channels/discord'])
+  })
+
+  it('ignores unknown sections and list entries', () => {
     expect(getIntegrationItems('Unknown')).toEqual([])
     expect(getIntegrationItems('Channels', ['channels/slack', 'channels/unknown']).map(item => item.id)).toEqual([
       'channels/slack',

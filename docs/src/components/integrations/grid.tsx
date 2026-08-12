@@ -7,6 +7,7 @@ import styles from './integrations.module.css'
 interface IntegrationGridProps {
   section: string
   allowlist?: readonly string[]
+  blocklist?: readonly string[]
   columns?: 3 | 4
 }
 
@@ -65,6 +66,6 @@ export function IntegrationItemsGrid({ items, columns = 3 }: IntegrationItemsGri
   )
 }
 
-export function IntegrationGrid({ section, allowlist, columns = 3 }: IntegrationGridProps) {
-  return <IntegrationItemsGrid items={getIntegrationItems(section, allowlist)} columns={columns} />
+export function IntegrationGrid({ section, allowlist, blocklist, columns = 3 }: IntegrationGridProps) {
+  return <IntegrationItemsGrid items={getIntegrationItems(section, allowlist, blocklist)} columns={columns} />
 }
