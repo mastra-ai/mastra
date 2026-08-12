@@ -2009,6 +2009,11 @@
       "source": "/guides/deployment/mastra-workers",
       "destination": "/docs/deployment/workers",
       "permanent": true
+    },
+    {
+      "source": "/guides/agent-frameworks/ai-sdk",
+      "destination": "/reference/ai-sdk/overview",
+      "permanent": true
     }
   ]
 }

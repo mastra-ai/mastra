@@ -84,6 +84,7 @@ const sidebars = {
       label: 'AI SDK',
       collapsed: true,
       items: [
+        { type: 'doc', id: 'ai-sdk/overview', label: 'Overview' },
         { type: 'doc', id: 'ai-sdk/chat-route', label: 'chatRoute()' },
         { type: 'doc', id: 'ai-sdk/handle-chat-stream', label: 'handleChatStream()' },
         { type: 'doc', id: 'ai-sdk/handle-network-stream', label: 'handleNetworkStream()' },

@@ -107,18 +107,6 @@ const config: Config = {
     [
       '@docusaurus/plugin-content-docs',
       {
-        id: 'guides',
-        path: 'src/content/en/guides',
-        routeBasePath: 'guides',
-        sidebarPath: false,
-        editUrl: 'https://github.com/mastra-ai/mastra/tree/main/docs',
-        admonitions: ADMONITIONS_CONFIG,
-        remarkPlugins: [...SHARED_REMARK_PLUGINS],
-      },
-    ],
-    [
-      '@docusaurus/plugin-content-docs',
-      {
         id: 'reference',
         path: 'src/content/en/reference',
         routeBasePath: 'reference',
