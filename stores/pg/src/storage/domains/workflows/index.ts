@@ -19,8 +19,9 @@ import type {
   RetentionTablesDescriptor,
   TableRetentionPolicy,
 } from '@mastra/core/storage';
+import { parseSqlIdentifier } from '@mastra/core/utils';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
-import { PgDB, resolvePgConfig, generateTableSQL } from '../../db';
+import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL } from '../../db';
 import type { PgDomainConfig } from '../../db';
 import { runPrune, resolveTargets } from '../../retention';
 
@@ -109,11 +110,13 @@ export class WorkflowsPG extends WorkflowsStorage {
   }
 
   /**
-   * Returns all DDL statements for this domain: table with unique constraint.
+   * Returns all DDL statements for this domain: table with unique constraint, indexes.
    * Used by exportSchemas to produce a complete, reproducible schema export.
    */
   static getExportDDL(schemaName?: string): string[] {
     const statements: string[] = [];
+    const parsedSchema = schemaName ? parseSqlIdentifier(schemaName, 'schema name') : '';
+    const schemaPrefix = parsedSchema && parsedSchema !== 'public' ? `${parsedSchema}_` : '';
 
     // Table (includes the UNIQUE constraint on workflow_name, run_id via generateTableSQL)
     statements.push(
@@ -125,26 +128,76 @@ export class WorkflowsPG extends WorkflowsStorage {
       }),
     );
 
+    // Default indexes
+    for (const idx of WorkflowsPG.getDefaultIndexDefs(schemaPrefix)) {
+      statements.push(generateIndexSQL(idx, schemaName));
+    }
+
     return statements;
   }
 
   /**
-   * Returns default index definitions for the workflows domain tables.
-   * Currently no default indexes are defined for workflows.
+   * Default indexes serving `listWorkflowRuns`, which always orders by
+   * `"createdAt" DESC` and filters on either `workflow_name` or `resourceId`.
+   *
+   * Both are composite `(filter, "createdAt" DESC)` rather than single-column:
+   * the leading equality column narrows the scan and the trailing sort column
+   * lets Postgres read rows already ordered, so a paged query stops after
+   * `LIMIT` rows instead of sorting the whole match set. The same
+   * `"createdAt"` position also serves the `fromDate`/`toDate` range filters.
+   *
+   * The primary key `(workflow_name, run_id)` cannot serve these queries — it
+   * has no `"createdAt"` component — so before these indexes existed a
+   * dominant `workflow_name` degraded to a sequential scan plus a top-N sort.
+   *
+   * Ordered `DESC` to match the query's sort direction. A btree can be walked
+   * backwards, so `ASC` would also be usable here; `DESC` keeps the common
+   * path a plain forward scan and matches the convention used by the other
+   * domains.
+   *
+   * The `status` filter is deliberately not indexed: it is evaluated as a
+   * `regexp_replace(...)::jsonb ->> 'status'` expression over the snapshot,
+   * which is not indexable without a matching expression index.
+   */
+  static getDefaultIndexDefs(schemaPrefix: string): CreateIndexOptions[] {
+    return [
+      {
+        name: `${schemaPrefix}mastra_workflow_snapshot_name_createdat_idx`,
+        table: TABLE_WORKFLOW_SNAPSHOT,
+        columns: ['workflow_name', 'createdAt DESC'],
+      },
+      {
+        name: `${schemaPrefix}mastra_workflow_snapshot_resourceid_createdat_idx`,
+        table: TABLE_WORKFLOW_SNAPSHOT,
+        columns: ['resourceId', 'createdAt DESC'],
+      },
+    ];
+  }
+
+  /**
+   * Returns default index definitions for this instance's schema.
    */
   getDefaultIndexDefinitions(): CreateIndexOptions[] {
-    return [];
+    const schemaPrefix = this.#schema !== 'public' ? `${this.#schema}_` : '';
+    return WorkflowsPG.getDefaultIndexDefs(schemaPrefix);
   }
 
   /**
    * Creates default indexes for optimal query performance.
-   * Currently no default indexes are defined for workflows.
    */
   async createDefaultIndexes(): Promise<void> {
     if (this.#skipDefaultIndexes) {
       return;
     }
-    // No default indexes for workflows domain
+
+    for (const indexDef of this.getDefaultIndexDefinitions()) {
+      try {
+        await this.#db.createIndex(indexDef);
+      } catch (error) {
+        // Log but continue - indexes are performance optimizations
+        this.logger?.warn?.(`Failed to create index ${indexDef.name}:`, error);
+      }
+    }
   }
 
   async init(): Promise<void> {

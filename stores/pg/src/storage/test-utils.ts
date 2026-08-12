@@ -769,6 +769,10 @@ export function pgTests() {
           'CREATE INDEX IF NOT EXISTS "mastra_ai_spans_tags_gin_idx" ON "public"."mastra_ai_spans" USING gin',
         );
 
+        // Workflows domain indexes
+        expect(schema).toContain('CREATE INDEX IF NOT EXISTS "mastra_workflow_snapshot_name_createdat_idx"');
+        expect(schema).toContain('CREATE INDEX IF NOT EXISTS "mastra_workflow_snapshot_resourceid_createdat_idx"');
+
         // Scores domain indexes
         expect(schema).toContain('CREATE INDEX IF NOT EXISTS "mastra_scores_trace_id_span_id_created_at_idx"');
 
@@ -785,6 +789,7 @@ export function pgTests() {
         // Index names should have the schema prefix
         expect(schema).toContain('CREATE INDEX IF NOT EXISTS "my_schema_mastra_threads_resourceid_createdat_idx"');
         expect(schema).toContain('CREATE INDEX IF NOT EXISTS "my_schema_mastra_ai_spans_traceid_startedat_idx"');
+        expect(schema).toContain('CREATE INDEX IF NOT EXISTS "my_schema_mastra_workflow_snapshot_name_createdat_idx"');
         expect(schema).toContain(
           'CREATE INDEX IF NOT EXISTS "my_schema_mastra_scores_trace_id_span_id_created_at_idx"',
         );
