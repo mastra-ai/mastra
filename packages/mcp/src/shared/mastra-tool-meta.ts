@@ -44,9 +44,7 @@ export function getMastraToolStrictMeta(meta: Record<string, unknown> | undefine
  * result's `_meta`, so emitting it in only one of the two leaves non-Studio hosts
  * unable to open the app.
  */
-export function normalizeToolUiMeta(
-  meta: Record<string, unknown> | undefined,
-): Record<string, unknown> | undefined {
+export function normalizeToolUiMeta(meta: Record<string, unknown> | undefined): Record<string, unknown> | undefined {
   if (!meta) {
     return meta;
   }
