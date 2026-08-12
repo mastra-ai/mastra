@@ -17,6 +17,7 @@ import { useMatch, useNavigate, useParams } from 'react-router';
 
 import { INITIAL_THREAD_MESSAGE_LIMIT, queryKeys } from '../../../../api/keys';
 import { useChatCommands } from '../context/ChatCommandsProvider';
+import { useChatMessagesInitializing } from '../context/ChatSessionProvider';
 import { useChatConnection } from '../context/useChatConnection';
 import { useChatModels } from '../context/useChatModels';
 import { useChatModes } from '../context/useChatModes';
@@ -38,6 +39,7 @@ import { ComposerImageAttachments, ComposerSuggestions } from './ComposerParts';
 import { useComposerSpotlight } from './useComposerSpotlight';
 import { useComposerImages } from './useComposerImages';
 import type { PendingImage } from './useComposerImages';
+import { useInitializingPlaceholder } from './useInitializingPlaceholder';
 
 type ComposerVariant = 'inline' | 'textarea';
 
@@ -56,7 +58,15 @@ type ComposerProps = {
 };
 
 export function Composer({ variant = 'inline' }: ComposerProps) {
-  const { kind, resourceId, sessionEnabled, projectPath, baseUrl, factorySessionState } = useChatSessionContext();
+  const { kind, resourceId, sessionEnabled, sandboxPreparing, projectPath, baseUrl, factorySessionState } =
+    useChatSessionContext();
+  const messagesInitializing = useChatMessagesInitializing();
+  // A single "preparing" concept from the composer's point of view: the ring
+  // must keep spinning, the placeholder must keep saying "Initializing…",
+  // and Send must stay disabled through both the sandbox provisioning phase
+  // and the post-ensure messages-fetch phase — otherwise the ring stops
+  // spinning mid-open and the user thinks the app is stuck.
+  const chatPreparing = sandboxPreparing || messagesInitializing;
   const { factoryId } = useParams<{ factoryId: string }>();
   const onDraftComposer = useMatch('/factories/:factoryId/new') !== null;
   const onUserDraft = useMatch('/factories/:factoryId/user/new/:draftSessionId') !== null;
@@ -83,21 +93,28 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
 
   const preparingThreadId = usePreparingThreadId();
   const createDraftSessionMutation = useCreateUserSessionFromDraft();
-
-  const { images, setImages, fileInputRef, removeImage, onPaste, onDrop, onFileInputChange } =
-    useComposerImages(onUserDraft);
-  const spotlightRef = useComposerSpotlight(!busy);
-  const modeSwitchPendingRef = useRef(false);
-  const suggestions = matchCommands(draft);
-  const showSuggestions = suggestions.length > 0;
-  const [activeSuggestion, setActiveSuggestion] = useState(0);
   const blocked = onUserDraft ? !factorySessionState : status !== 'ready' && !preparingThreadId;
   // typing stays free while the mode/model catalogs load; only creating the session commits to them
   const draftConfigNotReady =
     onUserDraft && (modesLoading || modesError !== undefined || modelLoading || modelError !== undefined);
-  const attachDisabled = onUserDraft || blocked;
+  const attachDisabled = onUserDraft || blocked || chatPreparing;
+  const { images, setImages, fileInputRef, removeImage, onPaste, onDrop, onFileInputChange } = useComposerImages({
+    onUserDraft,
+    disabled: chatPreparing,
+  });
+  const spotlightRef = useComposerSpotlight();
+  const modeSwitchPendingRef = useRef(false);
+  const suggestions = matchCommands(draft);
+  const showSuggestions = suggestions.length > 0;
+  const [activeSuggestion, setActiveSuggestion] = useState(0);
   const disabled = createDraftSessionMutation.isPending || blocked;
-  const sendDisabled = disabled || draftConfigNotReady;
+  const sendDisabled = disabled || draftConfigNotReady || chatPreparing;
+  // Keep the textarea fully typable while the session is preparing — the
+  // user must be able to draft a message immediately. Only Send/attach gate
+  // on chatPreparing above.
+  const textareaDisabled = chatPreparing ? false : disabled;
+  const initializingPlaceholder = useInitializingPlaceholder(chatPreparing, draft.length === 0);
+  const sendTitle = chatPreparing ? 'Initializing session…' : undefined;
 
   const updateDraft = (next: string) => {
     setComposerDraft(next);
@@ -267,7 +284,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   return (
     <ComposerRoot onSubmit={onSubmit} onDrop={onDrop} onDragOver={e => e.preventDefault()} className="relative">
       <ComposerSuggestions suggestions={suggestions} activeIndex={activeSuggestion} onSelect={applyCommand} />
-      <ComposerRing busy={busy} className={modeColorClass}>
+      <ComposerRing busy={busy || chatPreparing} className={modeColorClass}>
         <ComposerBox ref={spotlightRef} className={cn('composer-spotlight', modeColorClass)}>
           <div aria-hidden="true" className="composer-spotlight-surface" />
           <ComposerImageAttachments images={images} onRemove={removeImage} />
@@ -277,8 +294,10 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
             onChange={e => updateDraft(e.target.value)}
             onKeyDown={onComposerKeyDown}
             onPaste={onPaste}
-            placeholder={busy && !preparingThreadId ? 'Steer the agent…' : 'Ask Mastra Code…'}
-            disabled={disabled}
+            placeholder={
+              initializingPlaceholder ?? (busy && !preparingThreadId ? 'Steer the agent…' : 'Ask Mastra Code…')
+            }
+            disabled={textareaDisabled}
             maxHeight={composerVariantMaxHeight[variant]}
             className={cn(composerVariantClass[variant], 'text-[15px]')}
             aria-label="Message"
@@ -323,6 +342,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
                 size="icon-sm"
                 disabled={sendDisabled || (!draft.trim() && images.length === 0)}
                 aria-label="Send message"
+                title={sendTitle}
               >
                 <ArrowUp size={16} />
               </Button>

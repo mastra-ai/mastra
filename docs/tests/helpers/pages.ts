@@ -31,12 +31,11 @@ export const pages: PageConfig[] = [
   { path: '/integrations', name: 'Integrations – Index' },
   { path: '/integrations/channels/slack', name: 'Integrations – Slack' },
 
-  // --- Guides ---
-  { path: '/guides/getting-started/quickstart', name: 'Guides – Quickstart' },
   { path: '/integrations/agentic-ui/ai-sdk-ui', name: 'Integrations – AI SDK UI' },
   { path: '/integrations/frameworks/next-js', name: 'Integrations – Next.js' },
 
   // --- Reference ---
+  { path: '/reference/voice/overview', name: 'Reference – Voice' },
   { path: '/reference/configuration', name: 'Reference – Configuration' },
   { path: '/reference/core/mastra-class', name: 'Reference – Mastra Class' },
   { path: '/reference/agents/agent', name: 'Reference – Agent' },

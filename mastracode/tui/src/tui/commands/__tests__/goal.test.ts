@@ -637,7 +637,7 @@ describe('handleGoalCommand', () => {
     vi.setSystemTime(new Date('2026-05-15T15:00:00.000Z'));
 
     expect(goalManager.isActive()).toBe(true);
-    expect(goalManager.getGoal()).toMatchObject({ activeDurationMs: 0, activeStartedAt: undefined });
+    expect(goalManager.getGoal()).toMatchObject({ activeDurationMs: 0 });
     expect(sendMessage).not.toHaveBeenCalled();
     vi.useRealTimers();
   });

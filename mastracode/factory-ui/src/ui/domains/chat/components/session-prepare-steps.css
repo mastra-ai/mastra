@@ -1,0 +1,29 @@
+/*
+ * Suppress the dashed outer-card border that `ProcessStepListItem`
+ * paints on its active step. The pending-status dashed circle is
+ * intentionally kept — only the surrounding card border is removed.
+ *
+ * We scope by the loader's root class so this cannot leak into any
+ * other consumer of the shared DS primitive.
+ *
+ * The primitive uses `border border-dashed border-neutral2 bg-surface3`
+ * on the active row and animates ALL properties via `transitions.all`.
+ * We must:
+ *   - Force `border-style: none` (Tailwind `border-dashed` sets style
+ *     to `dashed`; on transition the browser interpolates toward the
+ *     default `solid`, briefly flashing a solid line as the active
+ *     step advances). `none` disables painting regardless of
+ *     interpolated width or color.
+ *   - Zero the border width so no space is reserved.
+ *   - Suppress the surface background so the row visually matches
+ *     inactive rows.
+ *
+ * Row height parity: the inactive rows have no border at all, so
+ * removing width/style on the active row leaves both rows the same
+ * total height (padding is identical on the primitive).
+ */
+.session-prepare-steps [class*='border-dashed'][class*='bg-surface3'] {
+  border-style: none;
+  border-width: 0;
+  background-color: transparent;
+}

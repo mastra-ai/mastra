@@ -46,6 +46,7 @@ interface DispatcherSession extends SkillSession {
     switch(input: { threadId: string }): Promise<unknown>;
     listActiveMessages(): Promise<Array<{ id: string }>>;
   };
+  abort(): void;
   sendSignal(
     input: { id: string; type: 'user'; tagName: 'user'; contents: string },
     options: { requestContext: RequestContext; requireDelivery?: boolean },
@@ -350,6 +351,7 @@ export class FactoryDecisionDispatcher {
         await this.#switchThread(session, binding);
         const delivered = await session.thread.listActiveMessages();
         if (delivered.some(message => message.id === record.id)) return;
+        if (decision.cancelInFlight) session.abort();
         if (decision.precedingMessage) {
           await awaitNotification(
             await session.sendNotificationSignal(

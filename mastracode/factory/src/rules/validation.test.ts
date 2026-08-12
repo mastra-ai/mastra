@@ -148,6 +148,48 @@ describe('Factory rule validation', () => {
     expect(String(error)).not.toContain(secret);
   });
 
+  it('accepts and normalizes the optional cancelInFlight flag on invokeSkill decisions', () => {
+    expect(
+      validateFactoryRuleDecision({
+        type: 'invokeSkill',
+        idempotencyKey: 'skill-2',
+        role: 'review',
+        skillName: 'factory-review',
+        cancelInFlight: true,
+      }),
+    ).toEqual({
+      type: 'invokeSkill',
+      idempotencyKey: 'skill-2',
+      role: 'review',
+      skillName: 'factory-review',
+      cancelInFlight: true,
+    });
+    // false is the default and is dropped so persisted decisions stay minimal.
+    expect(
+      validateFactoryRuleDecision({
+        type: 'invokeSkill',
+        idempotencyKey: 'skill-3',
+        role: 'review',
+        skillName: 'factory-review',
+        cancelInFlight: false,
+      }),
+    ).toEqual({
+      type: 'invokeSkill',
+      idempotencyKey: 'skill-3',
+      role: 'review',
+      skillName: 'factory-review',
+    });
+    expect(() =>
+      validateFactoryRuleDecision({
+        type: 'invokeSkill',
+        idempotencyKey: 'skill-4',
+        role: 'review',
+        skillName: 'factory-review',
+        cancelInFlight: 'yes',
+      }),
+    ).toThrow(/cancelInFlight must be a boolean/i);
+  });
+
   it('requires unique decision idempotency keys', () => {
     expect(() =>
       validateFactoryRuleDecisions([

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/quickjs",
-  "version": "0.1.0-alpha.0",
+  "version": "0.1.0",
   "description": "In-process WebAssembly Code Mode transport for Mastra, backed by QuickJS — no native binaries and no Node flags required",
   "type": "module",
   "main": "dist/index.js",

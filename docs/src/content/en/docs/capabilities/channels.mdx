@@ -1,11 +1,13 @@
 ---
-title: "Channels overview"
+title: "Channels"
 description: "Channels connect Mastra agents to messaging platforms like Slack, Discord, and Telegram."
 packages:
   - "@mastra/core"
 ---
 
-# Channels overview
+import { IntegrationGrid } from '@site/src/components/integrations/grid';
+
+# Channels
 
 **Added in:** `@mastra/core@1.22.0`
 
@@ -13,13 +15,7 @@ Channels connect agents to messaging and collaboration platforms like Slack, Mic
 
 Start with the page for your platform:
 
-- [Slack](/integrations/channels/slack)
-- [Microsoft Teams](/integrations/channels/teams)
-- [Discord](/integrations/channels/discord)
-- [Telegram](/integrations/channels/telegram)
-- [WhatsApp](/integrations/channels/whatsapp)
-- [iMessage](/integrations/channels/imessage)
-- [GitHub](/integrations/channels/github)
+<IntegrationGrid section="Channels" />
 
 [Other adapters](#other-adapters) lists additional platforms. Mastra channels work with compatible [Chat SDK adapters](https://chat-sdk.dev/adapters) beyond the platforms listed here, and the same Mastra configuration pattern applies across adapters.
 
