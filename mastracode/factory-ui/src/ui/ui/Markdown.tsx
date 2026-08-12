@@ -1,4 +1,5 @@
 import { CodeBlock } from '@mastra/playground-ui/components/CodeBlock';
+import type { ReactNode } from 'react';
 import ReactMarkdown from 'react-markdown';
 import type { Components, ExtraProps } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -13,31 +14,35 @@ function languageOf(node: MarkdownNode): string | undefined {
   return typeof language === 'string' ? language.slice('language-'.length) : undefined;
 }
 
-function fencedCode(node: MarkdownNode | undefined): { code: string; language?: string } | null {
+function fencedCode(node: MarkdownNode | undefined): { code: string; language?: string } | undefined {
   const child = node?.children.find(entry => entry.type === 'element' && entry.tagName === 'code');
-  if (child?.type !== 'element') return null;
+  if (child?.type !== 'element') return undefined;
 
   const code = child.children.map(entry => (entry.type === 'text' ? entry.value : '')).join('');
   return { code: code.replace(/\n$/, ''), language: languageOf(child) };
 }
 
-const components: Components = {
-  pre: ({ node, children }) => {
-    const fenced = fencedCode(node);
-    if (!fenced) return <pre>{children}</pre>;
+function MarkdownCodeBlock({ node, children }: { node?: MarkdownNode; children?: ReactNode }) {
+  const fenced = fencedCode(node);
+  if (!fenced) return <pre>{children}</pre>;
 
-    return (
-      <CodeBlock
-        code={fenced.code}
-        lang={fenced.language}
-        overflow="scroll"
-        className="bg-surface1 my-3"
-        copyMessage="Copied code to clipboard"
-      />
-    );
-  },
-  a: ({ children, ...props }) => (
-    <a {...props} target="_blank" rel="noopener noreferrer nofollow">
+  return (
+    <CodeBlock
+      code={fenced.code}
+      lang={fenced.language}
+      overflow="scroll"
+      className="bg-surface1 my-3"
+      copyMessage="Copied code to clipboard"
+    />
+  );
+}
+
+// Props are listed one by one: react-markdown also passes its `node`, which
+// React would forward to the DOM as a stray attribute.
+const components: Components = {
+  pre: MarkdownCodeBlock,
+  a: ({ href, title, children }) => (
+    <a href={href} title={title} target="_blank" rel="noopener noreferrer nofollow">
       {children}
     </a>
   ),
