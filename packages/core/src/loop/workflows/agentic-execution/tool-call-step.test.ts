@@ -1282,6 +1282,22 @@ describe('createToolCallStep suspension metadata cleanup on resume', () => {
     expect(flushMessages).toHaveBeenCalled();
   });
 
+  it.each([
+    ['false', false],
+    ['zero', 0],
+    ['an empty string', ''],
+  ])('clears suspendedTools when the resume payload is %s', async (_label, resumeData) => {
+    // A tool with a primitive resumeSchema can legitimately be resumed with a falsy value —
+    // `false` is how a boolean HITL tool declines. A truthiness gate would skip cleanup here.
+    const message = createSuspendedAssistantMessage('hitl-call-id', 'hitl-tool');
+    const flushMessages = vi.fn();
+
+    await runResumedTool({ resumeData, args: { prompt: 'do thing' }, message, flushMessages });
+
+    expect(message.content.metadata.suspendedTools).toBeUndefined();
+    expect(flushMessages).toHaveBeenCalled();
+  });
+
   it('leaves suspendedTools intact for a plain (non-resume) tool call', async () => {
     const message = createSuspendedAssistantMessage('other-call-id', 'other-tool');
     const flushMessages = vi.fn();

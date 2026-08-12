@@ -908,7 +908,9 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         // `agent.resumeStream(resumeData, { runId, toolCallId })` delivers. `isResumeToolCall` only
         // covers the former — it stays args-specific because the runId lookup above depends on
         // that narrower meaning.
-        if (!toolRequiresApproval && !!resumeData) {
+        // Nullish, not truthy: `false` / `0` / `''` are valid resume payloads for a tool whose
+        // resumeSchema is a primitive (e.g. a boolean decline), and they must clear the entry too.
+        if (!toolRequiresApproval && resumeData != null) {
           await removeToolMetadata({ toolCallId: inputData.toolCallId, toolName: inputData.toolName }, 'suspension');
         }
 
