@@ -580,6 +580,11 @@ const sidebars = {
               label: 'Feedback',
             },
             {
+              type: 'doc',
+              id: 'observability/integrations/exporters/mastra-storage',
+              label: 'Storage',
+            },
+            {
               type: 'category',
               label: 'Integrations',
               items: [
@@ -592,11 +597,6 @@ const sidebars = {
                   type: 'category',
                   label: 'Exporters',
                   items: [
-                    {
-                      type: 'doc',
-                      id: 'observability/integrations/exporters/mastra-storage',
-                      label: 'Mastra Storage',
-                    },
                     {
                       type: 'doc',
                       id: 'observability/integrations/exporters/mastra-platform',
