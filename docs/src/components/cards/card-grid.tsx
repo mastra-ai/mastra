@@ -10,7 +10,7 @@ export const CardGrid = ({ children, columns = 2 }: { children: React.ReactNode;
   }[columns]
 
   return (
-    <div data-slot="card-grid" className={`grid grid-cols-1 md:grid-cols-2 ${gridCols} gap-4 py-4`}>
+    <div data-slot="card-grid" className={`grid grid-cols-1 md:grid-cols-2 ${gridCols} gap-4`}>
       {children}
     </div>
   )
@@ -34,26 +34,24 @@ export const CardGridItem = ({
   const hasContent = !!(children || description)
 
   return (
-    <Link to={href} className="block h-full w-full text-black! no-underline! dark:text-white!">
-      <Card className="h-full w-full cursor-pointer border-(--border) bg-(--mastra-surface-1)/20 shadow-none transition-colors hover:bg-(--mastra-surface-1)/70 dark:border-(--border) dark:hover:bg-(--mastra-surface-2)">
-        <CardHeader>
-          <div className={cn('flex items-center gap-3', !hasContent ? 'justify-center' : '')}>
-            {logo &&
-              (typeof logo === 'string' ? (
-                <img
-                  src={logo}
-                  alt={`${title} logo`}
-                  className={
-                    preserveLogoColor
-                      ? 'h-8 w-8 object-contain'
-                      : 'h-8 w-8 object-contain dark:brightness-0 dark:contrast-200 dark:invert'
-                  }
-                />
-              ) : (
-                <div className={preserveLogoColor ? 'h-8 w-8' : 'h-8 w-8 text-black dark:text-white'}>{logo}</div>
-              ))}
-            <CardTitle className="border-b-0 text-lg">{title}</CardTitle>
-          </div>
+    <Link to={href} className="block h-full w-full no-underline!">
+      <Card className="text-card-foreground h-full w-full cursor-pointer rounded-xl border border-(--border) bg-(--mastra-surface-1)/20 px-4 py-4 shadow-none transition-colors hover:bg-(--mastra-surface-1)/70 dark:border-(--border) dark:hover:bg-(--mastra-surface-2)">
+        <CardHeader className={cn('flex items-center gap-3', !hasContent ? 'justify-center' : '')}>
+          {logo &&
+            (typeof logo === 'string' ? (
+              <img
+                src={logo}
+                alt={`${title} logo`}
+                className={
+                  preserveLogoColor
+                    ? 'h-8 w-8 object-contain'
+                    : 'h-8 w-8 object-contain dark:brightness-0 dark:contrast-200 dark:invert'
+                }
+              />
+            ) : (
+              <div className={preserveLogoColor ? 'h-8 w-8' : 'h-8 w-8 text-black dark:text-white'}>{logo}</div>
+            ))}
+          <CardTitle>{title}</CardTitle>
         </CardHeader>
         {hasContent ? <CardContent className="text-sm">{children || description}</CardContent> : null}
       </Card>
