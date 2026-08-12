@@ -20,6 +20,7 @@ import { CustomProvidersSection } from './CustomProvidersSection';
 import { SettingsHeader } from './SettingsHeader';
 import { FactoryManagementSection } from './FactoryManagementSection';
 import { FactoryDefaultModelSection } from './FactoryDefaultModelSection';
+import { FactorySkillsSection } from './FactorySkillsSection';
 import { IntakeSection } from './IntakeSection';
 import { ModelPacksSection } from './ModelPacksSection';
 import { RepositoriesSection } from './RepositoriesSection';
@@ -132,6 +133,7 @@ export function SettingsPanel() {
             </SettingsSubsection>
           </div>
         )}
+        {section === 'skills' && <FactorySkillsSection />}
         {section === 'behavior' && (
           <BehaviorSettings
             settings={settings}

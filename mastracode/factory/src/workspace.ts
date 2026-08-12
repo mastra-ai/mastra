@@ -36,7 +36,7 @@ export function checkpointNameForSession(sessionId: string): string {
 
 const bundleDirectory = dirname(fileURLToPath(import.meta.url));
 const bundledFactorySkillsPath = join(bundleDirectory, 'factory-skills');
-const FACTORY_SKILLS_SOURCE_PATH =
+export const FACTORY_SKILLS_SOURCE_PATH =
   [
     // Deploy bundle: the consumer copies `factory-skills/` next to the built
     // server module (e.g. via its public/ dir).
@@ -48,7 +48,7 @@ const FACTORY_SKILLS_SOURCE_PATH =
     join(process.cwd(), 'src', 'mastra', 'public', 'factory-skills'),
   ].find(existsSync) ?? bundledFactorySkillsPath;
 const FACTORY_SKILLS_MOUNT = path.resolve(path.parse(process.cwd()).root, '__mastracode_factory_skills__');
-const FACTORY_SKILL_NAMES = new Set([
+export const FACTORY_SKILL_NAMES = new Set([
   'configure-factory-rules',
   'factory-plan',
   'factory-rereview',
