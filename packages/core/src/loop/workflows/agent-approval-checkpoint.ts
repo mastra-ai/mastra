@@ -32,14 +32,17 @@ const DURABLE_REHYDRATION_FIELDS = [
   'requestContextEntries',
 ] as const;
 
+/** Returns whether a value is a non-array object suitable for checkpoint field inspection. */
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+/** Validates an execution path encoded as an array of integer indices. */
 function isNumberArray(value: unknown): value is number[] {
   return Array.isArray(value) && value.every(entry => typeof entry === 'number' && Number.isInteger(entry));
 }
 
+/** Creates a consistently classified user-facing checkpoint error. */
 function checkpointError(
   id: Uppercase<string>,
   text: string,
@@ -71,6 +74,7 @@ function toJsonValue<T>(value: unknown, field: string): T {
   }
 }
 
+/** Selects the JSON-safe durable-agent input fields required after a process restart. */
 function selectRehydrationInput(input: unknown): JsonObject | undefined {
   if (!isRecord(input) || input.__workflowKind !== 'durable-agent') return undefined;
 
@@ -81,6 +85,7 @@ function selectRehydrationInput(input: unknown): JsonObject | undefined {
   return toJsonValue<JsonObject>(selected, 'durable rehydration input');
 }
 
+/** Retains only the completed LLM step data required to continue the agent loop. */
 function selectContinuationSteps(snapshot: WorkflowRunState): JsonObject | undefined {
   const llmExecution = snapshot.context['llm-execution'];
   if (!isRecord(llmExecution) || llmExecution.status !== 'success' || !isRecord(llmExecution.output)) {
@@ -98,11 +103,36 @@ function selectContinuationSteps(snapshot: WorkflowRunState): JsonObject | undef
   );
 }
 
+/** Reconstructs the smallest serializer-compatible stream state needed by approval resume. */
 function selectMinimalStreamState(value: unknown): SerializedMastraModelOutputState | undefined {
-  if (!isRecord(value)) return undefined;
+  if (!isRecord(value) || !isRecord(value.messageList)) return undefined;
+
+  const toolCalls = Array.isArray(value.toolCalls)
+    ? toJsonValue<SerializedMastraModelOutputState['toolCalls']>(value.toolCalls, 'stream tool calls')
+    : [];
+  const warnings = Array.isArray(value.warnings)
+    ? toJsonValue<SerializedMastraModelOutputState['warnings']>(value.warnings, 'stream warnings')
+    : [];
+  const finishReason =
+    typeof value.finishReason === 'string'
+      ? toJsonValue<SerializedMastraModelOutputState['finishReason']>(value.finishReason, 'stream finish reason')
+      : undefined;
+  const request = isRecord(value.request)
+    ? toJsonValue<SerializedMastraModelOutputState['request']>(value.request, 'stream request')
+    : {};
+  const usageCount = isRecord(value.usageCount)
+    ? toJsonValue<SerializedMastraModelOutputState['usageCount']>(value.usageCount, 'stream usage')
+    : { inputTokens: undefined, outputTokens: undefined, totalTokens: undefined };
+  const tripwire = isRecord(value.tripwire)
+    ? toJsonValue<SerializedMastraModelOutputState['tripwire']>(value.tripwire, 'stream tripwire')
+    : undefined;
+  const messageList = toJsonValue<SerializedMastraModelOutputState['messageList']>(
+    value.messageList,
+    'stream message list',
+  );
 
   return {
-    status: value.status ?? 'suspended',
+    status: 'suspended',
     bufferedSteps: [],
     bufferedStepRequests: [],
     bufferedReasoningDetails: {},
@@ -132,18 +162,19 @@ function selectMinimalStreamState(value: unknown): SerializedMastraModelOutputSt
     toolCallArgsDeltas: {},
     toolCallDeltaIdNameMap: {},
     toolCallStreamingMeta: {},
-    toolCalls: value.toolCalls ?? [],
+    toolCalls,
     toolResults: [],
-    warnings: value.warnings ?? [],
-    finishReason: value.finishReason,
-    request: value.request ?? {},
-    usageCount: value.usageCount,
-    tripwire: value.tripwire,
+    warnings,
+    finishReason,
+    request,
+    usageCount,
+    tripwire,
     wasSuspended: true,
-    messageList: value.messageList,
+    messageList,
   };
 }
 
+/** Removes unrelated suspension data while retaining approval and routing state. */
 function selectSuspendPayload(payload: Record<string, unknown>): JsonObject {
   const selected: Record<string, unknown> = {};
   for (const field of ['requireToolApproval', '__agentId', 'suspendedToolRunId'] as const) {
@@ -160,6 +191,7 @@ function selectSuspendPayload(payload: Record<string, unknown>): JsonObject {
   return toJsonValue<JsonObject>(selected, 'approval suspend payload');
 }
 
+/** Converts one suspended tool payload into a routed checkpoint approval entry. */
 function approvalFromPayload(params: {
   payload: unknown;
   stepId: string;
@@ -186,6 +218,7 @@ function approvalFromPayload(params: {
   };
 }
 
+/** Collects pending approvals and status-only markers for completed foreach iterations. */
 function collectApprovalState(snapshot: WorkflowRunState): {
   approvals: AgentApprovalCheckpointApproval[];
   completedForeachIndices: Record<string, number[]>;
@@ -238,6 +271,7 @@ function collectApprovalState(snapshot: WorkflowRunState): {
   return { approvals, completedForeachIndices };
 }
 
+/** Builds the persisted checkpoint after approval state has already been collected. */
 function buildAgentApprovalCheckpointFromState(params: {
   workflowId: string;
   snapshot: WorkflowRunState;
@@ -392,10 +426,12 @@ export function parseAgentApprovalCheckpoint(value: unknown): AgentApprovalCheck
   return toJsonValue<AgentApprovalCheckpoint>(value, 'checkpoint');
 }
 
+/** Identifies the checkpoint representation without performing full schema validation. */
 export function isAgentApprovalCheckpoint(value: unknown): value is AgentApprovalCheckpoint {
   return isRecord(value) && value.kind === AGENT_APPROVAL_CHECKPOINT_KIND;
 }
 
+/** Recreates the tool-call input consumed by the workflow foreach step. */
 function approvalInput(approval: AgentApprovalCheckpointApproval): JsonObject {
   return {
     toolCallId: approval.toolCallId,
@@ -549,7 +585,14 @@ export async function materializePersistedAgentApprovalCheckpoints(params: {
   for (const workflowName of params.workflowNames) {
     const run = await params.workflowsStore.getWorkflowRunById({ workflowName, runId: params.runId });
     if (!run?.snapshot) continue;
-    const persisted = typeof run.snapshot === 'string' ? JSON.parse(run.snapshot) : run.snapshot;
+    let persisted: unknown = run.snapshot;
+    if (typeof persisted === 'string') {
+      try {
+        persisted = JSON.parse(persisted);
+      } catch {
+        continue;
+      }
+    }
     if (!isAgentApprovalCheckpoint(persisted)) continue;
 
     const materialized = materializeAgentApprovalCheckpoint(persisted, {

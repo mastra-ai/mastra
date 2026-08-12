@@ -225,6 +225,7 @@ createWorkflowTestSuite({
   },
 });
 
+/** Creates the minimal persisted fixture shared by unsupported-operation tests. */
 function createMinimalApprovalCheckpoint(workflowId: string, runId: string) {
   return {
     kind: 'agent-approval-checkpoint' as const,
@@ -255,6 +256,7 @@ function createMinimalApprovalCheckpoint(workflowId: string, runId: string) {
   };
 }
 
+/** Registers a workflow run whose stored state is a minimal approval checkpoint. */
 async function createRunWithMinimalApprovalCheckpoint(id: string) {
   const storage = new MockStore();
   const step = createStep({
@@ -296,6 +298,14 @@ describe('minimal approval checkpoint operations', () => {
       'Workflow cancel() cannot consume a minimal agent approval checkpoint. Continue the run with Agent.approveToolCall() or Agent.declineToolCall() instead.',
     );
     expect(await workflowsStore.loadWorkflowSnapshot({ workflowName: workflow.id, runId })).toEqual(checkpoint);
+  });
+
+  it('still cancels when reading the stored snapshot fails', async () => {
+    const { run, workflowsStore } = await createRunWithMinimalApprovalCheckpoint('cancel-storage-read-failure');
+    vi.spyOn(workflowsStore, 'loadWorkflowSnapshot').mockRejectedValueOnce(new Error('storage unavailable'));
+
+    await expect(run.cancel()).resolves.toBeUndefined();
+    expect(run.abortController.signal.aborted).toBe(true);
   });
 
   it('rejects resume and time travel without consuming the approval checkpoint', async () => {
