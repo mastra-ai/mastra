@@ -22,6 +22,7 @@ import type { AgentControllerChannelsConfig, ChannelAdapterConfig } from '@mastr
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
 import type { FactoryStorage } from '@mastra/core/storage';
+import type { Context } from 'hono';
 import type { MastraWorker } from '@mastra/core/worker';
 
 import type { Intake } from '../capabilities/intake.js';
@@ -246,4 +247,66 @@ export interface FactoryIntegration {
    * available (see `./state-signing.ts`).
    */
   readonly requiresStableStateSigner?: boolean;
+}
+
+// ── Integration reauth error ────────────────────────────────────────────────
+
+/**
+ * Thrown when an integration's upstream authorization is permanently dead
+ * (expired/revoked OAuth tokens, invalid API keys, etc.) and the user must
+ * re-authenticate through the integration's connect flow.
+ *
+ * Integration-specific errors (e.g. `LinearReauthRequiredError`) should
+ * extend this so route-level error mappers can use a single `instanceof`
+ * check for any integration.
+ */
+export class IntegrationReauthRequiredError extends Error {
+  readonly integrationId: string;
+  readonly connectPath: string;
+
+  constructor(integrationId: string, connectPath: string, message?: string) {
+    super(message ?? `${integrationId} authorization expired. Reconnect to continue.`);
+    this.integrationId = integrationId;
+    this.connectPath = connectPath;
+  }
+}
+
+/**
+ * Map an upstream integration error to the standard reauth or fetch-failed
+ * API response. Every integration's route error handler should use this
+ * instead of a bespoke mapper so the SPA gets a uniform wire shape.
+ *
+ * Reauth response (HTTP 409):
+ * ```json
+ * {
+ *   "error": "integration_reauth_required",
+ *   "integration": "linear",
+ *   "connectPath": "/auth/linear/connect",
+ *   "message": "Linear authorization expired. Reconnect to continue."
+ * }
+ * ```
+ */
+export function integrationFetchError(c: Context, integrationId: string, connectPath: string, err: unknown) {
+  if (err instanceof IntegrationReauthRequiredError || (err as { status?: number })?.status === 401) {
+    return c.json(
+      {
+        error: 'integration_reauth_required' as const,
+        integration: integrationId,
+        connectPath,
+        message:
+          err instanceof IntegrationReauthRequiredError
+            ? err.message
+            : `${integrationId} authorization expired. Reconnect to continue.`,
+      },
+      409,
+    );
+  }
+  return c.json(
+    {
+      error: 'integration_fetch_failed' as const,
+      integration: integrationId,
+      message: err instanceof Error ? err.message : String(err),
+    },
+    502,
+  );
 }

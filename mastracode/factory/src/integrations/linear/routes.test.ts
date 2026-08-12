@@ -352,32 +352,44 @@ describe('issues route', () => {
     expect(listActiveLinearIssues).toHaveBeenCalledWith('linear-token', undefined, ['proj-1']);
   });
 
-  it('409s with linear_reauth_required when the token is expired and has no refresh token', async () => {
+  it('409s with integration_reauth_required when the token is expired and has no refresh token', async () => {
     await connect({ expiresAt: new Date(Date.now() - 1000), refreshToken: null });
     const res = await buildApp(org1()).request('/web/linear/issues');
     expect(res.status).toBe(409);
-    expect(await res.json()).toMatchObject({ error: 'linear_reauth_required' });
+    expect(await res.json()).toMatchObject({
+      error: 'integration_reauth_required',
+      integration: 'linear',
+      connectPath: '/auth/linear/connect',
+    });
     expect(listActiveLinearIssues).not.toHaveBeenCalled();
   });
 
-  it('409s with linear_reauth_required when the refresh grant is rejected', async () => {
+  it('409s with integration_reauth_required when the refresh grant is rejected', async () => {
     await connect({ expiresAt: new Date(Date.now() - 1000) });
     const err = new Error('Linear token refresh failed (400)');
     (err as any).status = 400;
     refreshLinearAccessToken.mockRejectedValueOnce(err);
     const res = await buildApp(org1()).request('/web/linear/issues');
     expect(res.status).toBe(409);
-    expect(await res.json()).toMatchObject({ error: 'linear_reauth_required' });
+    expect(await res.json()).toMatchObject({
+      error: 'integration_reauth_required',
+      integration: 'linear',
+      connectPath: '/auth/linear/connect',
+    });
   });
 
-  it('409s with linear_reauth_required when Linear rejects the access token', async () => {
+  it('409s with integration_reauth_required when Linear rejects the access token', async () => {
     await connect();
     const err = new Error('Linear API request failed (401)');
     (err as any).status = 401;
     listActiveLinearIssues.mockRejectedValueOnce(err);
     const res = await buildApp(org1()).request('/web/linear/issues');
     expect(res.status).toBe(409);
-    expect(await res.json()).toMatchObject({ error: 'linear_reauth_required' });
+    expect(await res.json()).toMatchObject({
+      error: 'integration_reauth_required',
+      integration: 'linear',
+      connectPath: '/auth/linear/connect',
+    });
   });
 
   it('502s when the Linear API fails', async () => {
@@ -385,6 +397,9 @@ describe('issues route', () => {
     listActiveLinearIssues.mockRejectedValueOnce(new Error('Linear API request failed (500)'));
     const res = await buildApp(org1()).request('/web/linear/issues');
     expect(res.status).toBe(502);
-    expect(await res.json()).toMatchObject({ error: 'linear_fetch_failed' });
+    expect(await res.json()).toMatchObject({
+      error: 'integration_fetch_failed',
+      integration: 'linear',
+    });
   });
 });

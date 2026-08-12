@@ -35,6 +35,7 @@ import type {
 import type { RouteAuth } from '../../routes/route.js';
 import type { IntegrationStorageHandle } from '../../storage/domains/integrations/base.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
+import { IntegrationReauthRequiredError } from '../base.js';
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../base.js';
 import { IssueReconcileWorker } from '../issue-reconcile-worker.js';
 import { buildLinearAgentTools } from './agent-tools.js';
@@ -152,9 +153,13 @@ const CONNECTION_TTL_MS = 60_000;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** Thrown when the org's Linear authorization can no longer be renewed. */
-export class LinearReauthRequiredError extends Error {
+export class LinearReauthRequiredError extends IntegrationReauthRequiredError {
   constructor() {
-    super('Linear authorization expired. Reconnect Linear to keep syncing intake issues.');
+    super(
+      'linear',
+      '/auth/linear/connect',
+      'Linear authorization expired. Reconnect Linear to keep syncing intake issues.',
+    );
   }
 }
 

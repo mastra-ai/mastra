@@ -5,11 +5,11 @@ import { useApiConfig } from '../../../../api/config';
 import type { useProjectIssuesQuery, useProjectPullRequestsQuery } from '../../../../hooks/useFactoryData';
 import type { useLinearIssuesQuery } from '../../../../hooks/useLinearData';
 import type { IntakeSource } from '../boardCandidates';
-import { connectLinear, isLinearReauthError } from '../services/linear';
+import { getIntegrationReauthInfo } from '../services/integration-reauth';
 import { LoadMoreSentinel } from './LoadMoreSentinel';
 
 /**
- * Intake column tail for the ACTIVE candidate feed: loading state, Linear
+ * Intake column tail for the ACTIVE candidate feed: loading state, integration
  * reauth notice, and pagination. Only one feed is browsed at a time, so only
  * its states render.
  */
@@ -27,16 +27,17 @@ export function IntakeColumnExtras({
   const { baseUrl } = useApiConfig();
   if (source === undefined) return null;
   const feed = source === 'github' ? issues : source === 'github-prs' ? pulls : linearIssues;
+  const reauthInfo = feed.isError ? getIntegrationReauthInfo(feed.error) : null;
 
   return (
     <>
-      {source === 'linear' && linearIssues.isError && isLinearReauthError(linearIssues.error) && (
+      {reauthInfo && (
         <div className="flex flex-col gap-2 p-1">
           <Txt as="span" variant="ui-xs" className="text-icon3">
-            Linear authorization expired. Reconnect to keep syncing issues.
+            {reauthInfo.message}
           </Txt>
-          <Button size="xs" onClick={() => connectLinear(baseUrl)}>
-            Connect Linear
+          <Button size="xs" onClick={() => window.location.assign(`${baseUrl}${reauthInfo.connectPath}`)}>
+            Reconnect
           </Button>
         </div>
       )}

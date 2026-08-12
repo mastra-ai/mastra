@@ -14,7 +14,8 @@ import { useApiConfig } from '../../../../api/config';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { useIntakeConfigQuery, useSaveIntakeConfigMutation } from '../../../../hooks/useIntakeConfig';
 import { useLinearProjectsQuery, useLinearStatusQuery } from '../../../../hooks/useLinearData';
-import { connectLinear, isLinearReauthError } from '../../factory/services/linear';
+import { getIntegrationReauthInfo } from '../../factory/services/integration-reauth';
+import { connectLinear } from '../../factory/services/linear';
 import type { LinearProject } from '../../factory/services/linear';
 import type { IntakeConfig } from '../../factory/services/intake';
 import { useFactoriesQuery } from '../../../../hooks/useFactories';
@@ -247,11 +248,12 @@ export function IntakeSection() {
               </Button>
             )}
           </div>
-        ) : config.linear.enabled && isLinearReauthError(linearProjectsQuery.error) ? (
+        ) : config.linear.enabled && getIntegrationReauthInfo(linearProjectsQuery.error) ? (
           // Expired token still reports connected; offer OAuth again.
           <div className="flex items-center gap-3 px-4 py-3">
             <Txt as="span" variant="ui-sm" className="text-icon3">
-              Linear authorization expired. Reconnect to keep syncing issues.
+              {getIntegrationReauthInfo(linearProjectsQuery.error)?.message ??
+                'Linear authorization expired. Reconnect to keep syncing issues.'}
             </Txt>
             <Button size="xs" onClick={() => connectLinear(baseUrl)}>
               Reconnect Linear

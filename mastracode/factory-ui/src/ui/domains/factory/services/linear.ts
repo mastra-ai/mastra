@@ -8,11 +8,7 @@
  */
 
 export type LinearStatusReason =
-  | 'missing_config'
-  | 'auth_required'
-  | 'organization_required'
-  | 'not_connected'
-  | 'ready';
+  'missing_config' | 'auth_required' | 'organization_required' | 'not_connected' | 'ready';
 
 export interface LinearStatus {
   enabled: boolean;
@@ -97,16 +93,27 @@ async function getLinearResource<T>(baseUrl: string, path: string): Promise<T> {
   if (!res.ok) {
     let message = `Request failed (${res.status})`;
     let code: string | undefined;
+    let integration: string | undefined;
+    let connectPath: string | undefined;
     try {
-      const body = (await res.json()) as { error?: string; message?: string };
+      const body = (await res.json()) as {
+        error?: string;
+        message?: string;
+        integration?: string;
+        connectPath?: string;
+      };
       code = body.error;
+      integration = body.integration;
+      connectPath = body.connectPath;
       if (body.message) message = body.message;
       else if (body.error) message = body.error;
     } catch {
       /* ignore non-JSON */
     }
     const err = new Error(message);
-    (err as { code?: string }).code = code;
+    (err as { code?: string; integration?: string; connectPath?: string }).code = code;
+    (err as { integration?: string }).integration = integration;
+    (err as { connectPath?: string }).connectPath = connectPath;
     throw err;
   }
   return (await res.json()) as T;
@@ -115,9 +122,14 @@ async function getLinearResource<T>(baseUrl: string, path: string): Promise<T> {
 /**
  * True when the server reported that the org's Linear authorization is no
  * longer valid (expired/revoked token) and OAuth must be redone.
+ *
+ * Matches both the legacy `linear_reauth_required` error code and the
+ * general `integration_reauth_required` code (when `integration === 'linear'`).
  */
 export function isLinearReauthError(err: unknown): boolean {
-  return (err as { code?: string } | null)?.code === 'linear_reauth_required';
+  const coded = err as { code?: string; integration?: string } | null;
+  if (coded?.code === 'linear_reauth_required') return true;
+  return coded?.code === 'integration_reauth_required' && coded?.integration === 'linear';
 }
 
 /** List one cursor page of the workspace's active issues. */

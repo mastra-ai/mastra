@@ -18,8 +18,8 @@ import type { Context } from 'hono';
 import type { RouteAuth } from '../../routes/route.js';
 import type { StateSigner } from '../../state-signing.js';
 import type { IntakeStorage } from '../../storage/domains/intake/base.js';
+import { integrationFetchError } from '../base.js';
 import type { LinearIntegration } from './integration.js';
-import { LinearReauthRequiredError } from './integration.js';
 import type { LinearRulesIngress } from './rules.js';
 
 type RouteContext = Context;
@@ -107,12 +107,9 @@ function parseAfterCursor(raw: string | undefined): string | undefined | null {
   return raw;
 }
 
-/** Map a Linear read failure to the API response for the SPA. */
+/** Map a Linear read failure to the standard integration reauth / fetch-failed response. */
 function linearFetchError(c: RouteContext, err: unknown) {
-  if (err instanceof LinearReauthRequiredError || (err as { status?: number }).status === 401) {
-    return c.json({ error: 'linear_reauth_required', message: new LinearReauthRequiredError().message }, 409);
-  }
-  return c.json({ error: 'linear_fetch_failed', message: err instanceof Error ? err.message : String(err) }, 502);
+  return integrationFetchError(c, 'linear', '/auth/linear/connect', err);
 }
 
 /**
