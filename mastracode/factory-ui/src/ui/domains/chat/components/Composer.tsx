@@ -285,7 +285,9 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
             onChange={e => updateDraft(e.target.value)}
             onKeyDown={onComposerKeyDown}
             onPaste={onPaste}
-            placeholder={initializingPlaceholder ?? (busy && !preparingThreadId ? 'Steer the agent…' : 'Ask Mastra Code…')}
+            placeholder={
+              initializingPlaceholder ?? (busy && !preparingThreadId ? 'Steer the agent…' : 'Ask Mastra Code…')
+            }
             disabled={textareaDisabled}
             maxHeight={composerVariantMaxHeight[variant]}
             className={cn(composerVariantClass[variant], 'text-[15px]')}

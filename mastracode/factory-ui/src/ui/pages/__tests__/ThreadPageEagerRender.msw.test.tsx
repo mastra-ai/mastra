@@ -187,9 +187,7 @@ describe('ThreadPage eager render during /ensure', () => {
 
     // Advance through phases.
     await ensure.emitProgress('provisioning', 'Provisioning a new sandbox…');
-    await waitFor(() =>
-      expect(screen.getByText('Provisioning a new sandbox…')).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.getByText('Provisioning a new sandbox…')).toBeInTheDocument());
 
     await ensure.emitProgress('cloning', 'Cloning octo/hello…');
     await waitFor(() => expect(screen.getByText('Cloning octo/hello…')).toBeInTheDocument());
@@ -199,9 +197,7 @@ describe('ThreadPage eager render during /ensure', () => {
 
     // Resolve /ensure — the step loader unmounts.
     await ensure.complete();
-    await waitFor(() =>
-      expect(screen.queryByRole('status', { name: 'Preparing session' })).not.toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.queryByRole('status', { name: 'Preparing session' })).not.toBeInTheDocument());
   });
 
   it('keeps the textarea typable during preparing and preserves the draft after /ensure', async () => {
@@ -240,9 +236,7 @@ describe('ThreadPage eager render during /ensure', () => {
     // Resolve /ensure — draft is preserved, ring stops spinning, placeholder
     // reverts, Send tooltip clears, Send becomes enabled.
     await ensure.complete();
-    await waitFor(() =>
-      expect(screen.queryByRole('status', { name: 'Preparing session' })).not.toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.queryByRole('status', { name: 'Preparing session' })).not.toBeInTheDocument());
     // Draft survives the flag flip without remount.
     expect(textarea.value).toBe('my draft prompt');
     await waitFor(() => expect(ring.getAttribute('data-busy')).toBe('false'));

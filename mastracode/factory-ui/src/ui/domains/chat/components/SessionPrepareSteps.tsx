@@ -79,15 +79,7 @@ function stepStatus(
   return 'pending';
 }
 
-function SessionPrepareStep({
-  label,
-  status,
-  message,
-}: {
-  label: string;
-  status: StepStatus;
-  message?: string;
-}) {
+function SessionPrepareStep({ label, status, message }: { label: string; status: StepStatus; message?: string }) {
   return (
     <div className="flex items-start gap-3" data-status={status} data-testid={`session-prepare-step`}>
       <StepIcon status={status} />
@@ -95,25 +87,24 @@ function SessionPrepareStep({
         <span
           className={
             status === 'complete'
-              ? 'text-sm text-icon-primary'
+              ? 'text-icon-primary text-sm'
               : status === 'active'
-                ? 'text-sm text-icon-primary'
+                ? 'text-icon-primary text-sm'
                 : status === 'skipped'
-                  ? 'text-sm text-icon-tertiary line-through'
-                  : 'text-sm text-icon-tertiary'
+                  ? 'text-icon-tertiary text-sm line-through'
+                  : 'text-icon-tertiary text-sm'
           }
         >
           {label}
         </span>
-        {message && <span className="text-xs text-icon-secondary">{message}</span>}
+        {message && <span className="text-icon-secondary text-xs">{message}</span>}
       </div>
     </div>
   );
 }
 
 function StepIcon({ status }: { status: StepStatus }) {
-  if (status === 'complete') return <CheckCircle2 className="mt-0.5 h-4 w-4 text-icon-primary" aria-hidden />;
-  if (status === 'active')
-    return <Loader2 className="mt-0.5 h-4 w-4 animate-spin text-icon-primary" aria-hidden />;
-  return <Circle className="mt-0.5 h-4 w-4 text-icon-tertiary" aria-hidden />;
+  if (status === 'complete') return <CheckCircle2 className="text-icon-primary mt-0.5 h-4 w-4" aria-hidden />;
+  if (status === 'active') return <Loader2 className="text-icon-primary mt-0.5 h-4 w-4 animate-spin" aria-hidden />;
+  return <Circle className="text-icon-tertiary mt-0.5 h-4 w-4" aria-hidden />;
 }
