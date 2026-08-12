@@ -1,7 +1,6 @@
-/* Ring gauge: the annulus is the track, the wedge is the fill, and while work
- * runs a highlight travels around that wedge. Same reading as `shimmer-text` —
- * the trait dims and the light passes through it — so nothing moves alongside
- * the dial and nothing can be mistaken for a rendering glitch. */
+/* Annulus is the track, wedge is the fill, and while work runs a highlight
+ * travels the wedge — `shimmer-text` transposed to an arc, so nothing moves
+ * beside the dial and nothing reads as a rendering glitch. */
 .token-budget-dial {
   --token-budget-fill: 0;
 

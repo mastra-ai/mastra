@@ -8,8 +8,8 @@ Added two status-strip metrics so any app showing a chat runtime — Studio, Fac
 import { TokenBudget } from '@mastra/playground-ui/components/TokenBudget';
 import { TokenRate } from '@mastra/playground-ui/components/TokenRate';
 
-// `group` on the strip unfolds every metric on the line at once
-<div className="group flex items-center gap-3">
+// `metric-strip` unfolds every metric on the line at once, on hover or focus
+<div className="metric-strip flex items-center gap-3">
   <TokenBudget label="Message window" tokens={14_900} threshold={30_000} working={isObserving} />
   <TokenBudget label="Observations" tokens={5_200} threshold={8_000} tone="memory" />
   <TokenRate tokensPerSec={42} history={recentRates} />

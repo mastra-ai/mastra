@@ -1,31 +1,32 @@
-/* A status metric reads as a glyph and gives up its digits on demand: the value
- * unfolds when the metric itself is hovered or focused, and when any ancestor
- * marked `group` (the status strip) is hovered, so one pass of the mouse opens
- * every metric on the line at once. */
+/* Digits unfold on the metric itself, and on any `metric-strip` around it, so
+ * one pass of the mouse opens a whole status line. The 0fr → 1fr grid is what
+ * animates the fold to the digits' own width. */
 .metric {
   display: inline-flex;
   align-items: center;
-  border-radius: 0.25rem;
   font-variant-numeric: tabular-nums;
 }
 
 .metric-value {
-  display: inline-block;
-  overflow: hidden;
-  max-inline-size: 0;
+  display: inline-grid;
+  grid-template-columns: 0fr;
   opacity: 0;
-  white-space: nowrap;
   transition:
-    max-inline-size 180ms ease,
-    padding-inline-start 180ms ease,
+    grid-template-columns 180ms ease,
     opacity 140ms ease;
 }
 
-.metric:hover .metric-value,
-.metric:focus-visible .metric-value,
-.group:hover .metric-value {
-  max-inline-size: var(--metric-value-width, 14ch);
+.metric-value > * {
+  min-inline-size: 0;
+  overflow: hidden;
   padding-inline-start: 0.3rem;
+  white-space: nowrap;
+}
+
+.metric:hover .metric-value,
+.metric-strip:hover .metric-value,
+.metric-strip:focus-within .metric-value {
+  grid-template-columns: 1fr;
   opacity: 1;
 }
 

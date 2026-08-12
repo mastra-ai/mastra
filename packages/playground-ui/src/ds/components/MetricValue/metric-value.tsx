@@ -1,7 +1,5 @@
 import type { ReactNode } from 'react';
 
-import { cn } from '@/lib/utils';
-
 import './metric-value.css';
 
 export interface MetricValueProps {
@@ -11,5 +9,9 @@ export interface MetricValueProps {
 
 /** Digits of a status metric, folded away until the metric or its strip is hovered. */
 export function MetricValue({ children, className }: MetricValueProps) {
-  return <span className={cn('metric-value', className)}>{children}</span>;
+  return (
+    <span className="metric-value">
+      <span className={className}>{children}</span>
+    </span>
+  );
 }

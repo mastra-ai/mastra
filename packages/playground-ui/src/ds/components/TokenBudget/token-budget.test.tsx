@@ -12,7 +12,7 @@ describe('TokenBudget', () => {
   it('speaks the budget and its digits even while they are folded away', () => {
     render(<TokenBudget label="Message window" threshold={30_000} tokens={14_900} />);
 
-    expect(screen.getByLabelText('Message window, 14.9/30k')).not.toBeNull();
+    expect(screen.getByRole('meter', { name: 'Message window' }).getAttribute('aria-valuetext')).toBe('14.9/30k');
   });
 
   it('fills the ring to the share of the threshold that is used', () => {

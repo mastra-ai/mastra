@@ -24,19 +24,12 @@ export interface TokenRateProps {
   className?: string;
 }
 
-/**
- * Decode throughput as a shape: the curve carries the trend that a bare number
- * can't, and `42 tok/s` unfolds when the metric or its strip is hovered.
- */
+/** Decode throughput as a curve: the trend a bare number can't carry, digits on hover. */
 export function TokenRate({ tokensPerSec, history, className }: TokenRateProps) {
   const { points, headY } = plot(history, tokensPerSec);
 
   return (
-    <span
-      aria-label={`${tokensPerSec} tokens per second`}
-      className={cn('metric outline-hidden focus-visible:ring-2 focus-visible:ring-accent1', className)}
-      tabIndex={0}
-    >
+    <span aria-label={`${tokensPerSec} tokens per second`} className={cn('metric', className)} role="img">
       <svg aria-hidden className="overflow-visible" height={HEIGHT} viewBox={`0 0 ${WIDTH} ${HEIGHT}`} width={WIDTH}>
         <polyline
           className="fill-none stroke-current opacity-55"

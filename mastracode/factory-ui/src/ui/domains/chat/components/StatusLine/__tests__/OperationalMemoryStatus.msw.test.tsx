@@ -44,11 +44,11 @@ describe('observational memory status', () => {
     it('works the ring of the budget it acts on and stays silent otherwise', () => {
       const { container } = renderStatus({ bufferingObservations: true });
 
-      const working = container.querySelectorAll('[data-working]');
+      const working = container.querySelectorAll<HTMLElement>('[data-working]');
 
       expect(working).toHaveLength(1);
-      expect(screen.getByLabelText(/Consolidating observations in the background/)).toContainElement(
-        working.item(0) as HTMLElement,
+      expect(screen.getByRole('meter', { name: 'Consolidating observations in the background' })).toContainElement(
+        working.item(0),
       );
       expect(screen.queryByText('consolidating memory')).toBeNull();
     });
@@ -59,7 +59,10 @@ describe('observational memory status', () => {
       renderStatus({ omPhase: 'reflecting' });
 
       expect(screen.getByText('consolidating memory')).toBeVisible();
-      expect(screen.getByLabelText('Consolidating observations, 12/40k')).toBeVisible();
+      expect(screen.getByRole('meter', { name: 'Consolidating observations' })).toHaveAttribute(
+        'aria-valuetext',
+        '12/40k',
+      );
     });
   });
 
@@ -68,7 +71,7 @@ describe('observational memory status', () => {
       renderStatus({ omPhase: 'reflecting', bufferingObservations: true });
 
       expect(screen.queryByText('consolidating memory')).toBeNull();
-      expect(screen.getByLabelText(/Consolidating observations in the background/)).toBeVisible();
+      expect(screen.getByRole('meter', { name: 'Consolidating observations in the background' })).toBeVisible();
     });
   });
 
@@ -76,7 +79,10 @@ describe('observational memory status', () => {
     it('shows the budgets at rest, digits folded away', () => {
       const { container } = renderStatus({});
 
-      expect(screen.getByLabelText('Message window until next observation, 14.9/30k')).toBeVisible();
+      expect(screen.getByRole('meter', { name: 'Message window until next observation' })).toHaveAttribute(
+        'aria-valuetext',
+        '14.9/30k',
+      );
       expect(container.querySelector('[data-working]')).toBeNull();
     });
   });
