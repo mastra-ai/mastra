@@ -20,6 +20,7 @@ import { FactoryStartTransitionError } from '../rules/start-coordinator.js';
 import type { FactoryTransitionRequest, FactoryTransitionService } from '../rules/transition-service.js';
 import type { FactoryRuleBoard, FactoryRuleStage } from '../rules/types.js';
 import { FACTORY_RULE_BOARDS, FACTORY_RULE_STAGES } from '../rules/types.js';
+import type { LiveSessions } from '../session/live-sessions.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { QueueHealthStorage } from '../storage/domains/queue-health/base.js';
@@ -53,6 +54,19 @@ export interface WorkItemRoutesDeps extends RouteDependencies {
   transitionService?: Pick<FactoryTransitionService, 'transition' | 'ruleSetVersion'>;
   /** Coordinator that binds a Factory run before dispatching its kickoff. */
   startCoordinator?: Pick<FactoryStartCoordinator, 'prepare'>;
+  /** Materialized sessions, read to report which of the listed cards are being worked. */
+  liveSessions: Pick<LiveSessions, 'isRunning'>;
+}
+
+/** Session ids of the listed cards whose agent run is in flight. */
+function runningSessionIds(items: WorkItemRow[], liveSessions: Pick<LiveSessions, 'isRunning'>): string[] {
+  const running = new Set<string>();
+  for (const item of items) {
+    for (const { sessionId } of Object.values(item.sessions)) {
+      if (liveSessions.isRunning(sessionId)) running.add(sessionId);
+    }
+  }
+  return [...running];
 }
 
 function loose(c: unknown): Context {
@@ -518,9 +532,9 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
 
   /** Build the Factory work-item routes as Mastra `apiRoutes`. */
   routes(): ApiRoute[] {
-    const { audit, workItems, queueHealth, transitionService, startCoordinator } = this.deps;
+    const { audit, workItems, queueHealth, transitionService, startCoordinator, liveSessions } = this.deps;
     return [
-      // ── List the org's work items for a project ─────────────────────────────
+      // ── List the org's work items for a project, and which are being worked ─
       registerApiRoute('/web/factory/projects/:id/work-items', {
         method: 'GET',
         requiresAuth: false,
@@ -532,7 +546,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
             orgId: resolved.orgId,
             factoryProjectId: resolved.factoryProjectId,
           });
-          return c.json({ workItems: items });
+          return c.json({ workItems: items, runningSessionIds: runningSessionIds(items, liveSessions) });
         },
       }),
 
