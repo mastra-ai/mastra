@@ -27,3 +27,7 @@
   border-width: 0;
   background-color: transparent;
 }
+
+.session-prepare-steps p {
+  white-space: nowrap;
+}

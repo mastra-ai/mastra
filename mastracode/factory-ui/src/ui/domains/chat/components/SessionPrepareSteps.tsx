@@ -31,6 +31,16 @@ const PHASE_TO_GROUP: Record<PrepareProgress['phase'], GroupId | 'done'> = {
 
 const GROUP_ORDER: GroupId[] = ['preparing-sandbox', 'cloning-repository', 'starting-session'];
 
+const PHASE_DESCRIPTION: Record<PrepareProgress['phase'], string> = {
+  reattaching: 'Reattaching…',
+  provisioning: 'Provisioning…',
+  'preparing-workspace': 'Preparing files…',
+  cloning: 'Cloning…',
+  pulling: 'Fetching updates…',
+  finalizing: 'Finalizing…',
+  done: 'Starting…',
+};
+
 type StepStatus = 'pending' | 'running' | 'success';
 
 /**
@@ -49,7 +59,7 @@ export function SessionPrepareSteps() {
   const observedPhase = sandboxProgress?.phase;
   const observedGroup: GroupId | undefined =
     observedPhase && observedPhase !== 'done' ? (PHASE_TO_GROUP[observedPhase] as GroupId) : undefined;
-  const activeMessage = sandboxProgress?.message ?? 'Starting…';
+  const activeDescription = observedPhase ? PHASE_DESCRIPTION[observedPhase] : 'Starting…';
 
   // Post-ensure but pre-transcript: the sandbox step is done, we're waiting
   // on the initial messages fetch. Collapse the pipeline so "Starting session"
@@ -72,7 +82,7 @@ export function SessionPrepareSteps() {
         status,
         isActive,
         title: id,
-        description: isActive ? activeMessage : '',
+        description: isActive ? (loadingMessages ? 'Loading messages…' : activeDescription) : '',
       },
     };
   });

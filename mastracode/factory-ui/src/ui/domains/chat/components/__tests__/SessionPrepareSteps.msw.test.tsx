@@ -64,35 +64,44 @@ describe('SessionPrepareSteps', () => {
     expect(within(stepByTitle('Preparing sandbox')).getByText('Starting…')).toBeInTheDocument();
   });
 
-  it('reattaching / provisioning / preparing-workspace all map to Preparing sandbox as running', () => {
-    const phases: Array<PrepareProgress['phase']> = ['reattaching', 'provisioning', 'preparing-workspace'];
-    for (const phase of phases) {
-      const { unmount } = renderWithProgress({ phase, message: `msg for ${phase}` });
+  it('reattaching / provisioning / preparing-workspace all map to Preparing sandbox with short descriptions', () => {
+    const phases: Array<[PrepareProgress['phase'], string]> = [
+      ['reattaching', 'Reattaching…'],
+      ['provisioning', 'Provisioning…'],
+      ['preparing-workspace', 'Preparing files…'],
+    ];
+    for (const [phase, description] of phases) {
+      const { unmount } = renderWithProgress({ phase, message: `long server message for ${phase}` });
       expect(stepByTitle('Preparing sandbox')).toHaveAttribute('data-status', 'running');
-      expect(within(stepByTitle('Preparing sandbox')).getByText(`msg for ${phase}`)).toBeInTheDocument();
+      expect(within(stepByTitle('Preparing sandbox')).getByText(description)).toBeInTheDocument();
+      expect(screen.queryByText(`long server message for ${phase}`)).not.toBeInTheDocument();
       expect(stepByTitle('Cloning repository')).toHaveAttribute('data-status', 'pending');
       unmount();
     }
   });
 
-  it('cloning and pulling both map to Cloning repository as running; Preparing sandbox marked success', () => {
-    const phases: Array<PrepareProgress['phase']> = ['cloning', 'pulling'];
-    for (const phase of phases) {
-      const { unmount } = renderWithProgress({ phase, message: `msg for ${phase}` });
+  it('cloning and pulling map to Cloning repository with short descriptions', () => {
+    const phases: Array<[PrepareProgress['phase'], string]> = [
+      ['cloning', 'Cloning…'],
+      ['pulling', 'Fetching updates…'],
+    ];
+    for (const [phase, description] of phases) {
+      const { unmount } = renderWithProgress({ phase, message: `long server message for ${phase}` });
       expect(stepByTitle('Preparing sandbox')).toHaveAttribute('data-status', 'success');
       expect(stepByTitle('Cloning repository')).toHaveAttribute('data-status', 'running');
-      expect(within(stepByTitle('Cloning repository')).getByText(`msg for ${phase}`)).toBeInTheDocument();
+      expect(within(stepByTitle('Cloning repository')).getByText(description)).toBeInTheDocument();
+      expect(screen.queryByText(`long server message for ${phase}`)).not.toBeInTheDocument();
       expect(stepByTitle('Starting session')).toHaveAttribute('data-status', 'pending');
       unmount();
     }
   });
 
   it('finalizing lights up Starting session with earlier groups marked success', () => {
-    renderWithProgress({ phase: 'finalizing', message: 'Almost there…' });
+    renderWithProgress({ phase: 'finalizing', message: 'A long server finalization message…' });
     expect(stepByTitle('Preparing sandbox')).toHaveAttribute('data-status', 'success');
     expect(stepByTitle('Cloning repository')).toHaveAttribute('data-status', 'success');
     expect(stepByTitle('Starting session')).toHaveAttribute('data-status', 'running');
-    expect(within(stepByTitle('Starting session')).getByText('Almost there…')).toBeInTheDocument();
+    expect(within(stepByTitle('Starting session')).getByText('Finalizing…')).toBeInTheDocument();
   });
 
   it('advances the active group as the observed phase crosses group boundaries', () => {
@@ -109,8 +118,9 @@ describe('SessionPrepareSteps', () => {
 
     expect(stepByTitle('Preparing sandbox')).toHaveAttribute('data-status', 'success');
     expect(stepByTitle('Cloning repository')).toHaveAttribute('data-status', 'running');
-    expect(within(stepByTitle('Cloning repository')).getByText('Cloning octo/hello…')).toBeInTheDocument();
-    // The prior phase's secondary text is gone with its step.
+    expect(within(stepByTitle('Cloning repository')).getByText('Cloning…')).toBeInTheDocument();
+    // Raw server text never enters the fixed-width description slot.
+    expect(screen.queryByText('Cloning octo/hello…')).not.toBeInTheDocument();
     expect(screen.queryByText('Provisioning a new sandbox…')).not.toBeInTheDocument();
   });
 });

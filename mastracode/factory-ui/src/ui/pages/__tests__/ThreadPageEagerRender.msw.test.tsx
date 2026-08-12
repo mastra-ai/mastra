@@ -185,13 +185,14 @@ describe('ThreadPage eager render during /ensure', () => {
 
     // Advance through phases.
     await ensure.emitProgress('provisioning', 'Provisioning a new sandbox…');
-    await waitFor(() => expect(screen.getByText('Provisioning a new sandbox…')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('Provisioning…')).toBeInTheDocument());
 
     await ensure.emitProgress('cloning', 'Cloning octo/hello…');
-    await waitFor(() => expect(screen.getByText('Cloning octo/hello…')).toBeInTheDocument());
-    // The "Preparing sandbox" group is now complete → its secondary message
-    // unmounts, the "Cloning repository" group is the new active step.
-    await waitFor(() => expect(screen.queryByText('Provisioning a new sandbox…')).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('Cloning…')).toBeInTheDocument());
+    // The "Preparing sandbox" group is now complete → its short secondary
+    // message unmounts, the "Cloning repository" group is the active step.
+    await waitFor(() => expect(screen.queryByText('Provisioning…')).not.toBeInTheDocument());
+    expect(screen.queryByText('Cloning octo/hello…')).not.toBeInTheDocument();
 
     // Resolve /ensure — the step loader unmounts.
     await ensure.complete();
