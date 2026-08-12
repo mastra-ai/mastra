@@ -19,8 +19,7 @@ function bars(container: HTMLElement) {
 describe('TokenRate', () => {
   it('scales height against a fixed ceiling, so a steady rate stays a steady height', () => {
     const { container } = render(<TokenRate history={[60, 60]} tokensPerSec={60} />);
-
-    const [first, second] = bars(container);
+    const [first, second] = bars(container).slice(-2);
 
     expect(first.height).toBe(6);
     expect(second.height).toBe(6);
@@ -36,9 +35,19 @@ describe('TokenRate', () => {
 
   it('lands the newest sample at the right edge whatever the run has produced', () => {
     const { container } = render(<TokenRate history={[40]} tokensPerSec={40} />);
+    const drawn = bars(container);
 
-    expect(bars(container)).toHaveLength(1);
-    expect(bars(container)[0].x).toBe(33);
+    expect(drawn).toHaveLength(12);
+    expect(drawn.at(-1)?.x).toBe(33);
+    expect(drawn.at(-1)?.height).toBe(4);
+  });
+
+  it('holds its width on a baseline before a run has produced anything', () => {
+    const { container } = render(<TokenRate history={[]} tokensPerSec={0} />);
+    const drawn = bars(container);
+
+    expect(drawn).toHaveLength(12);
+    expect(drawn.every(bar => bar.height === 2)).toBe(true);
   });
 
   it('keeps the rate readable next to the waveform', () => {

@@ -117,6 +117,27 @@ describe('chat runtime reducer', () => {
       expect(second.tokensPerSec).toBe(150);
     });
 
+    it('still reads a reply too short to fill a sampling window, once the run ends', () => {
+      const opened = streamText(runtimeReducer(initialChatRuntime, { type: 'agent_start' }), 'x'.repeat(20));
+      vi.advanceTimersByTime(100);
+      const streamed = streamText(opened, 'x'.repeat(220));
+
+      expect(streamed.tokensPerSec).toBe(0);
+
+      const ended = runtimeReducer(streamed, { type: 'agent_end' });
+
+      expect(ended.tokensPerSec).toBe(500);
+      expect(ended.tokensPerSecHistory).toEqual([500]);
+    });
+
+    it('leaves a measured run alone when it ends', () => {
+      const opened = streamText(runtimeReducer(initialChatRuntime, { type: 'agent_start' }), 'x'.repeat(20));
+      vi.advanceTimersByTime(1000);
+      const measured = streamText(opened, 'x'.repeat(220));
+
+      expect(runtimeReducer(measured, { type: 'agent_end' }).tokensPerSecHistory).toEqual([50]);
+    });
+
     it('reopens the window after a tool call rather than averaging over the pause', () => {
       const opened = streamText(runtimeReducer(initialChatRuntime, { type: 'agent_start' }), 'x'.repeat(20));
       vi.advanceTimersByTime(30_000);

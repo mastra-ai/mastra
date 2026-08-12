@@ -24,9 +24,7 @@ export function RuntimeActivity() {
           <Brain size={13} /> <Shimmer>{label}</Shimmer>
         </span>
       )}
-      {runtime.tokensPerSec > 0 && (
-        <TokenRate className="text-icon3" history={runtime.tokensPerSecHistory} tokensPerSec={runtime.tokensPerSec} />
-      )}
+      <TokenRate className="text-icon3" history={runtime.tokensPerSecHistory} tokensPerSec={runtime.tokensPerSec} />
     </>
   );
 }

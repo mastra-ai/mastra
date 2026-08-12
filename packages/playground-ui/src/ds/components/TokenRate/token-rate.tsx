@@ -12,6 +12,11 @@ function barHeight(tokensPerSec: number) {
   return Math.max(BAR, Math.round(Math.min(tokensPerSec / CEILING, 1) * HEIGHT));
 }
 
+function barOpacity(index: number, baselineCount: number) {
+  if (index < baselineCount) return 0.2;
+  return index === SLOTS - 1 ? 1 : 0.45;
+}
+
 export interface TokenRateProps {
   tokensPerSec: number;
   /** Recent throughput samples, oldest first. */
@@ -22,22 +27,24 @@ export interface TokenRateProps {
 /** Decode throughput: the rate, and a waveform for the trend a bare number can't carry. */
 export function TokenRate({ tokensPerSec, history, className }: TokenRateProps) {
   const samples = history.slice(-SLOTS);
-  const offset = SLOTS - samples.length;
+  const baselineCount = SLOTS - samples.length;
+  /** Slots a run has not filled yet sit on the baseline, so the strip keeps its width from the first render. */
+  const bars = [...Array.from({ length: baselineCount }, () => 0), ...samples];
 
   return (
     <span className={cn('inline-flex items-center tabular-nums', className)}>
       <svg aria-hidden height={HEIGHT} viewBox={`0 0 ${WIDTH} ${HEIGHT}`} width={WIDTH}>
-        {samples.map((sample, index) => {
+        {bars.map((sample, index) => {
           const height = barHeight(sample);
           return (
             <rect
               className="fill-current"
               height={height}
               key={index}
-              opacity={index === samples.length - 1 ? 1 : 0.45}
+              opacity={barOpacity(index, baselineCount)}
               rx={BAR / 2}
               width={BAR}
-              x={(offset + index) * (BAR + GAP)}
+              x={index * (BAR + GAP)}
               y={(HEIGHT - height) / 2}
             />
           );

@@ -43,6 +43,8 @@ export interface ChatRuntimeState {
 
 const RATE_SAMPLES = 12;
 const SAMPLE_SECONDS = 0.25;
+/** A reply shorter than one sampling window still gets one reading, once the run ends and the whole decode can be timed. */
+const FLUSH_SECONDS = 0.05;
 /** Longer than this and the window spans a tool call or a reconnect, not decoding: reopen it. */
 const WINDOW_SECONDS = 3;
 /* The stream carries text, not token counts; ~4 chars per token is close enough for a speed readout. */
@@ -98,7 +100,7 @@ export function runtimeReducer(state: ChatRuntimeState, event: AgentControllerEv
       const chars = decodedChars(event.message);
       if (chars === 0) return state;
       const streamedChars = { ...state._streamedChars, [event.message.id]: chars };
-      const decoded = Object.values(streamedChars).reduce((total, messageChars) => total + messageChars, 0);
+      const decoded = totalChars(streamedChars);
       const now = Date.now();
       const seconds = (now - state._sampledAt) / 1000;
       if (state._sampledAt === 0 || seconds > WINDOW_SECONDS || decoded <= state._sampledChars) {
@@ -117,6 +119,14 @@ export function runtimeReducer(state: ChatRuntimeState, event: AgentControllerEv
         _streamedChars: streamedChars,
         _sampledChars: decoded,
       };
+    }
+    case 'agent_end': {
+      if (state.tokensPerSecHistory.length > 0 || state._sampledAt === 0) return state;
+      const decoded = totalChars(state._streamedChars);
+      const seconds = (Date.now() - state._sampledAt) / 1000;
+      if (seconds < FLUSH_SECONDS || decoded <= state._sampledChars) return state;
+      const tokensPerSec = Math.round((decoded - state._sampledChars) / CHARS_PER_TOKEN / seconds);
+      return { ...state, tokensPerSec, tokensPerSecHistory: [tokensPerSec] };
     }
     case 'usage_update':
       return { ...state, usage: event.usage as UsageSnapshot };
@@ -168,6 +178,10 @@ interface RuntimeMessagePart {
 interface RuntimeMessage {
   role: string;
   content: RuntimeMessagePart[] | { parts: RuntimeMessagePart[] };
+}
+
+function totalChars(streamedChars: Record<string, number>) {
+  return Object.values(streamedChars).reduce((total, chars) => total + chars, 0);
 }
 
 function decodedChars(message: RuntimeMessage) {

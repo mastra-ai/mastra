@@ -99,10 +99,15 @@ describe('observational memory status', () => {
 
   describe('when the model is decoding', () => {
     it('plots the throughput the run has measured so far', () => {
-      const { container } = renderStatus({ tokensPerSec: 42, tokensPerSecHistory: [30, 38, 42] });
+      renderStatus({ tokensPerSec: 42, tokensPerSecHistory: [30, 38, 42] });
 
       expect(screen.getByText('42')).toBeVisible();
-      expect(container.querySelectorAll('rect')).toHaveLength(3);
+    });
+
+    it('holds the throughput slot before a run has measured anything, so the strip cannot jump', () => {
+      renderStatus({ tokensPerSec: 0, tokensPerSecHistory: [] });
+
+      expect(screen.getByText('tok/s')).toBeVisible();
     });
   });
 });
