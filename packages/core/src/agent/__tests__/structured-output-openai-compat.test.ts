@@ -160,11 +160,18 @@ describe('OpenAI compat layer in agent.ts with structured output', () => {
       type: 'object',
       required: ['name', 'optionalNote', 'nested'],
       additionalProperties: false,
+      'x-optional': ['optionalNote', 'nested'],
       properties: {
         nested: {
-          type: 'object',
-          required: ['maybeCount'],
-          additionalProperties: false,
+          anyOf: [
+            {
+              type: 'object',
+              required: ['maybeCount'],
+              additionalProperties: false,
+              'x-optional': ['maybeCount'],
+            },
+            { type: 'null' },
+          ],
         },
       },
     });

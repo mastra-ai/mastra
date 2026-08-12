@@ -149,7 +149,10 @@ describe('execute structured output prompt handling', () => {
         };
       },
     });
-    Object.assign(model, { provider: 'openai', modelId: 'gpt-4o' });
+    Object.defineProperties(model, {
+      provider: { get: () => 'openai' },
+      modelId: { get: () => 'gpt-4o' },
+    });
 
     const stream = execute({
       runId: 'test-run-id-openai-strict',

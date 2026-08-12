@@ -216,8 +216,16 @@ export function execute<OUTPUT = undefined>({
     responseFormat.schema = applyCompatLayer({
       schema: responseFormat.schema,
       compatLayers: [
-        new OpenAIReasoningSchemaCompatLayer({ ...model, supportsStructuredOutputs: true }),
-        new OpenAISchemaCompatLayer({ ...model, supportsStructuredOutputs: true }),
+        new OpenAIReasoningSchemaCompatLayer({
+          provider: model.provider,
+          modelId: model.modelId,
+          supportsStructuredOutputs: true,
+        }),
+        new OpenAISchemaCompatLayer({
+          provider: model.provider,
+          modelId: model.modelId,
+          supportsStructuredOutputs: true,
+        }),
       ],
       mode: 'jsonSchema',
     });

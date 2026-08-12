@@ -334,7 +334,7 @@ const modelsToTestV1 = [
   openai('o4-mini'),
   // openrouter('google/gemini-2.5-pro'),
   // openrouter('google/gemini-2.5-flash'),
-  openrouter('google/gemini-2.0-flash-lite-001'),
+  openrouter('google/gemini-2.5-flash-lite'),
 ];
 const modelsToTestV2 = [
   // openrouter_v5('anthropic/claude-3.7-sonnet'),
@@ -347,7 +347,7 @@ const modelsToTestV2 = [
   openai_v5('o4-mini'),
   // openrouter_v5('google/gemini-2.5-pro'),
   // openrouter_v5('google/gemini-2.5-flash'),
-  openrouter_v5('google/gemini-2.0-flash-lite-001'),
+  openrouter_v5('google/gemini-2.5-flash-lite'),
 ];
 
 // Specify which schemas to test - empty array means test all
