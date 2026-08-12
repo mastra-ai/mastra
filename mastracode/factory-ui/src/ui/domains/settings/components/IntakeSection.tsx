@@ -250,15 +250,19 @@ export function IntakeSection() {
           </div>
         ) : config.linear.enabled && getIntegrationReauthInfo(linearProjectsQuery.error) ? (
           // Expired token still reports connected; offer OAuth again.
-          <div className="flex items-center gap-3 px-4 py-3">
-            <Txt as="span" variant="ui-sm" className="text-icon3">
-              {getIntegrationReauthInfo(linearProjectsQuery.error)?.message ??
-                'Linear authorization expired. Reconnect to keep syncing issues.'}
-            </Txt>
-            <Button size="xs" onClick={() => connectLinear(baseUrl)}>
-              Reconnect Linear
-            </Button>
-          </div>
+          (() => {
+            const linearReauthInfo = getIntegrationReauthInfo(linearProjectsQuery.error)!;
+            return (
+              <div className="flex items-center gap-3 px-4 py-3">
+                <Txt as="span" variant="ui-sm" className="text-icon3">
+                  {linearReauthInfo.message ?? 'Linear authorization expired. Reconnect to keep syncing issues.'}
+                </Txt>
+                <Button size="xs" onClick={() => window.location.assign(`${baseUrl}${linearReauthInfo.connectPath}`)}>
+                  Reconnect Linear
+                </Button>
+              </div>
+            );
+          })()
         ) : (
           config.linear.enabled && (
             <div className="flex flex-col gap-2.5 px-4 py-3">
