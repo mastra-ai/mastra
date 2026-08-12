@@ -38,6 +38,17 @@ export interface CostGuardUsage {
 }
 
 /**
+ * Per-provider/model cost breakdown entry attached to violations when
+ * `includeBreakdown` is enabled.
+ */
+export interface CostGuardBreakdownEntry {
+  provider: string | null;
+  model: string | null;
+  estimatedCost: number | null;
+  costUnit: string | null;
+}
+
+/**
  * Metadata attached to the TripWire when the cost guard aborts
  */
 export interface CostGuardTripwireMetadata {
@@ -46,6 +57,11 @@ export interface CostGuardTripwireMetadata {
   maxCost: number;
   scope: CostScope;
   scopeKey?: string;
+  /**
+   * Per-provider/model cost breakdown. Present only when `includeBreakdown`
+   * is enabled and the breakdown query succeeds.
+   */
+  breakdown?: CostGuardBreakdownEntry[];
 }
 
 /**
@@ -109,6 +125,15 @@ export interface CostGuardOptions {
    * regardless of strategy. Never aborts the step.
    */
   warnAtPercent?: number;
+
+  /**
+   * When true, violations (soft and hard) include a per-provider/model cost
+   * breakdown queried via `getMetricBreakdown`. Defaults to false. The
+   * breakdown query runs only when a violation trips — never on the happy
+   * path. If the store does not support breakdowns (or the query fails), the
+   * violation fires without the `breakdown` field.
+   */
+  includeBreakdown?: boolean;
 }
 
 /**
@@ -125,6 +150,11 @@ export interface CostGuardViolationDetail {
    * 'hard' for the maxCost limit.
    */
   threshold: 'soft' | 'hard';
+  /**
+   * Per-provider/model cost breakdown. Present only when `includeBreakdown`
+   * is enabled and the breakdown query succeeds.
+   */
+  breakdown?: CostGuardBreakdownEntry[];
 }
 
 const WARNED_HARD_STATE_KEY = 'costGuardWarned:hard';
@@ -208,6 +238,7 @@ export class CostGuardProcessor implements Processor<'cost-guard', CostGuardTrip
   private strategy: 'block' | 'warn';
   private messageTemplate: string;
   private warnAtPercent?: number;
+  private includeBreakdown: boolean;
   public onViolation?: (violation: ProcessorViolation) => void | Promise<void>;
   private observabilityStorage?: ObservabilityStorage;
   private logger?: IMastraLogger;
@@ -229,6 +260,7 @@ export class CostGuardProcessor implements Processor<'cost-guard', CostGuardTrip
     this.window = options.window ?? '7d';
     this.strategy = options.strategy ?? 'block';
     this.messageTemplate = options.message ?? 'Cost guard: estimated cost limit exceeded ({usage}/{limit})';
+    this.includeBreakdown = options.includeBreakdown ?? false;
   }
 
   __registerMastra(mastra: Mastra<any, any, any, any, any, any, any, any, any, any>): void {
@@ -295,20 +327,26 @@ export class CostGuardProcessor implements Processor<'cost-guard', CostGuardTrip
     return { start: new Date(Date.now() - windowMs) };
   }
 
+  private buildFilters(scopeFilter: Record<string, string>): Record<string, unknown> {
+    const filters: Record<string, unknown> = {
+      ...scopeFilter,
+      entityType: EntityType.AGENT,
+    };
+
+    // Apply time window for all non-run scopes
+    if (this.scope !== 'run') {
+      filters['timestamp'] = this.getWindowTimestamp();
+    }
+
+    return filters;
+  }
+
   private async queryCost(scopeFilter: Record<string, string>): Promise<CostGuardUsage> {
     if (!this.observabilityStorage) {
       return { estimatedCost: null, costUnit: null };
     }
     try {
-      const filters: Record<string, unknown> = {
-        ...scopeFilter,
-        entityType: EntityType.AGENT,
-      };
-
-      // Apply time window for resource/thread scopes
-      if (this.scope !== 'run') {
-        filters['timestamp'] = this.getWindowTimestamp();
-      }
+      const filters = this.buildFilters(scopeFilter);
 
       const result = await this.observabilityStorage.getMetricAggregate({
         name: ['mastra_model_total_input_tokens', 'mastra_model_total_output_tokens'],
@@ -325,6 +363,33 @@ export class CostGuardProcessor implements Processor<'cost-guard', CostGuardTrip
     } catch (error) {
       this.logger?.warn('CostGuardProcessor: cost query failed; allowing step (fail-open)', { error });
       return { estimatedCost: null, costUnit: null };
+    }
+  }
+
+  /**
+   * Queries a per-provider/model cost breakdown for the current scope.
+   * Only called when a violation trips and `includeBreakdown` is enabled.
+   * Degrades to undefined on any error (e.g. stores without breakdown support).
+   */
+  private async queryBreakdown(scopeFilter: Record<string, string>): Promise<CostGuardBreakdownEntry[] | undefined> {
+    if (!this.observabilityStorage) return undefined;
+    try {
+      const result = await this.observabilityStorage.getMetricBreakdown({
+        name: ['mastra_model_total_input_tokens', 'mastra_model_total_output_tokens'],
+        groupBy: ['provider', 'model'],
+        aggregation: 'sum',
+        filters: this.buildFilters(scopeFilter),
+        limit: 10,
+      });
+      return result.groups.map(group => ({
+        provider: group.dimensions['provider'] ?? null,
+        model: group.dimensions['model'] ?? null,
+        estimatedCost: group.estimatedCost ?? null,
+        costUnit: group.costUnit ?? null,
+      }));
+    } catch (error) {
+      this.logger?.debug('CostGuardProcessor: breakdown query failed; omitting breakdown', { error });
+      return undefined;
     }
   }
 
@@ -389,6 +454,7 @@ export class CostGuardProcessor implements Processor<'cost-guard', CostGuardTrip
         // Fire the warning and onViolation at most once per request
         if (!args.state[WARNED_HARD_STATE_KEY]) {
           args.state[WARNED_HARD_STATE_KEY] = true;
+          const breakdown = this.includeBreakdown ? await this.queryBreakdown(filter) : undefined;
           await this.emitWarning(message, {
             usage: cost,
             limit: maxCost,
@@ -396,11 +462,13 @@ export class CostGuardProcessor implements Processor<'cost-guard', CostGuardTrip
             scope: this.scope,
             scopeKey,
             threshold: 'hard',
+            ...(breakdown ? { breakdown } : {}),
           });
         }
         return;
       }
 
+      const breakdown = this.includeBreakdown ? await this.queryBreakdown(filter) : undefined;
       args.abort(message, {
         retry: false,
         metadata: {
@@ -409,6 +477,7 @@ export class CostGuardProcessor implements Processor<'cost-guard', CostGuardTrip
           maxCost,
           scope: this.scope,
           scopeKey,
+          ...(breakdown ? { breakdown } : {}),
         },
       });
     }
@@ -418,6 +487,7 @@ export class CostGuardProcessor implements Processor<'cost-guard', CostGuardTrip
       if (!args.state[WARNED_SOFT_STATE_KEY]) {
         args.state[WARNED_SOFT_STATE_KEY] = true;
         const message = `Cost guard: estimated cost reached ${this.warnAtPercent}% of the limit (${this.formatNumber(cost)}/${this.formatNumber(maxCost)})`;
+        const breakdown = this.includeBreakdown ? await this.queryBreakdown(filter) : undefined;
         await this.emitWarning(message, {
           usage: cost,
           limit: maxCost,
@@ -425,6 +495,7 @@ export class CostGuardProcessor implements Processor<'cost-guard', CostGuardTrip
           scope: this.scope,
           scopeKey,
           threshold: 'soft',
+          ...(breakdown ? { breakdown } : {}),
         });
       }
     }

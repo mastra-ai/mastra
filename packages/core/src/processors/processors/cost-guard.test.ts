@@ -1225,6 +1225,193 @@ describe('CostGuardProcessor', () => {
     });
   });
 
+  describe('includeBreakdown', () => {
+    const breakdownGroups = [
+      { dimensions: { provider: 'openai', model: 'gpt-5' }, value: 1000, estimatedCost: 0.4, costUnit: 'usd' },
+      {
+        dimensions: { provider: 'anthropic', model: 'claude-sonnet-4-5' },
+        value: 500,
+        estimatedCost: 0.2,
+        costUnit: 'usd',
+      },
+    ];
+
+    const expectedBreakdown = [
+      { provider: 'openai', model: 'gpt-5', estimatedCost: 0.4, costUnit: 'usd' },
+      { provider: 'anthropic', model: 'claude-sonnet-4-5', estimatedCost: 0.2, costUnit: 'usd' },
+    ];
+
+    function withBreakdown(obsStorage: ObservabilityStorage, impl?: () => Promise<{ groups: typeof breakdownGroups }>) {
+      (obsStorage as any).getMetricBreakdown = vi
+        .fn()
+        .mockImplementation(impl ?? (async () => ({ groups: breakdownGroups })));
+      return obsStorage;
+    }
+
+    it('violation detail carries the mapped breakdown (warn strategy)', async () => {
+      const obsStorage = withBreakdown(
+        createMockObservabilityStorage({ inputCost: 0.4, outputCost: 0.2, costUnit: 'usd' }),
+      );
+      const guard = new CostGuardProcessor({ maxCost: 0.5, scope: 'run', strategy: 'warn', includeBreakdown: true });
+      guard.__registerMastra(createMockMastra(obsStorage));
+      const onViolation = vi.fn();
+      guard.onViolation = onViolation;
+
+      const args = createInputStepArgs({ stepNumber: 1, tracing: createMockTracing('trace-bd-warn') as any });
+      await expect(guard.processInputStep(args)).resolves.toBeUndefined();
+
+      expect(onViolation.mock.calls[0]![0].detail.breakdown).toEqual(expectedBreakdown);
+    });
+
+    it('block-strategy tripwire metadata carries the mapped breakdown', async () => {
+      const obsStorage = withBreakdown(
+        createMockObservabilityStorage({ inputCost: 0.4, outputCost: 0.2, costUnit: 'usd' }),
+      );
+      const guard = new CostGuardProcessor({ maxCost: 0.5, scope: 'run', includeBreakdown: true });
+      (guard as any).observabilityStorage = obsStorage;
+
+      const args = createInputStepArgs({ stepNumber: 1, tracing: createMockTracing('trace-bd-block') as any });
+      try {
+        await guard.processInputStep(args);
+        expect.fail('Expected TripWire to be thrown');
+      } catch (error) {
+        const tripwire = error as TripWire<any>;
+        expect(tripwire.options.metadata.breakdown).toEqual(expectedBreakdown);
+      }
+    });
+
+    it('soft-threshold violation carries the breakdown', async () => {
+      const obsStorage = withBreakdown(
+        createMockObservabilityStorage({ inputCost: 0.3, outputCost: 0.1, costUnit: 'usd' }),
+      );
+      const guard = new CostGuardProcessor({
+        maxCost: 0.5,
+        scope: 'run',
+        warnAtPercent: 80,
+        includeBreakdown: true,
+      });
+      guard.__registerMastra(createMockMastra(obsStorage));
+      const onViolation = vi.fn();
+      guard.onViolation = onViolation;
+
+      const args = createInputStepArgs({ stepNumber: 1, tracing: createMockTracing('trace-bd-soft') as any });
+      await expect(guard.processInputStep(args)).resolves.toBeUndefined();
+
+      expect(onViolation.mock.calls[0]![0].detail.threshold).toBe('soft');
+      expect(onViolation.mock.calls[0]![0].detail.breakdown).toEqual(expectedBreakdown);
+    });
+
+    it('breakdown query uses the same filters as the cost query', async () => {
+      const obsStorage = withBreakdown(
+        createMockObservabilityStorage({ inputCost: 0.4, outputCost: 0.2, costUnit: 'usd' }),
+      );
+      const guard = new CostGuardProcessor({ maxCost: 0.5, scope: 'run', strategy: 'warn', includeBreakdown: true });
+      (guard as any).observabilityStorage = obsStorage;
+
+      const args = createInputStepArgs({ stepNumber: 1, tracing: createMockTracing('trace-bd-filters') as any });
+      await guard.processInputStep(args);
+
+      const aggregateFilters = (obsStorage.getMetricAggregate as any).mock.calls[0][0].filters;
+      const breakdownCall = (obsStorage as any).getMetricBreakdown.mock.calls[0][0];
+      expect(breakdownCall.filters).toEqual(aggregateFilters);
+      expect(breakdownCall.name).toEqual(['mastra_model_total_input_tokens', 'mastra_model_total_output_tokens']);
+      expect(breakdownCall.groupBy).toEqual(['provider', 'model']);
+      expect(breakdownCall.aggregation).toBe('sum');
+      expect(breakdownCall.limit).toBe(10);
+    });
+
+    it('includeBreakdown unset → getMetricBreakdown never called on violation', async () => {
+      const obsStorage = withBreakdown(
+        createMockObservabilityStorage({ inputCost: 0.4, outputCost: 0.2, costUnit: 'usd' }),
+      );
+      const guard = new CostGuardProcessor({ maxCost: 0.5, scope: 'run', strategy: 'warn' });
+      guard.__registerMastra(createMockMastra(obsStorage));
+
+      const args = createInputStepArgs({ stepNumber: 1, tracing: createMockTracing('trace-bd-off') as any });
+      await guard.processInputStep(args);
+
+      expect((obsStorage as any).getMetricBreakdown).not.toHaveBeenCalled();
+    });
+
+    it('no violation → getMetricBreakdown never called even when enabled', async () => {
+      const obsStorage = withBreakdown(
+        createMockObservabilityStorage({ inputCost: 0.01, outputCost: 0.01, costUnit: 'usd' }),
+      );
+      const guard = new CostGuardProcessor({ maxCost: 10.0, scope: 'run', includeBreakdown: true });
+      (guard as any).observabilityStorage = obsStorage;
+
+      const args = createInputStepArgs({ stepNumber: 1, tracing: createMockTracing('trace-bd-happy') as any });
+      await expect(guard.processInputStep(args)).resolves.toBeUndefined();
+
+      expect((obsStorage as any).getMetricBreakdown).not.toHaveBeenCalled();
+    });
+
+    it('getMetricBreakdown throwing → violation fires without breakdown, debug logged', async () => {
+      const obsStorage = withBreakdown(
+        createMockObservabilityStorage({ inputCost: 0.4, outputCost: 0.2, costUnit: 'usd' }),
+        async () => {
+          throw new Error('getMetricBreakdown not implemented');
+        },
+      );
+      const guard = new CostGuardProcessor({ maxCost: 0.5, scope: 'run', strategy: 'warn', includeBreakdown: true });
+      guard.__registerMastra(createMockMastra(obsStorage));
+      const onViolation = vi.fn();
+      guard.onViolation = onViolation;
+
+      const args = createInputStepArgs({ stepNumber: 1, tracing: createMockTracing('trace-bd-err') as any });
+      await expect(guard.processInputStep(args)).resolves.toBeUndefined();
+
+      expect(onViolation).toHaveBeenCalledTimes(1);
+      expect(onViolation.mock.calls[0]![0].detail.breakdown).toBeUndefined();
+      expect(mockLogger.debug).toHaveBeenCalledWith(
+        'CostGuardProcessor: breakdown query failed; omitting breakdown',
+        expect.objectContaining({ error: expect.any(Error) }),
+      );
+    });
+
+    it('getMetricBreakdown throwing on block strategy → still aborts, no breakdown in metadata', async () => {
+      const obsStorage = withBreakdown(
+        createMockObservabilityStorage({ inputCost: 0.4, outputCost: 0.2, costUnit: 'usd' }),
+        async () => {
+          throw new Error('not implemented');
+        },
+      );
+      const guard = new CostGuardProcessor({ maxCost: 0.5, scope: 'run', includeBreakdown: true });
+      (guard as any).observabilityStorage = obsStorage;
+
+      const args = createInputStepArgs({ stepNumber: 1, tracing: createMockTracing('trace-bd-err-block') as any });
+      try {
+        await guard.processInputStep(args);
+        expect.fail('Expected TripWire to be thrown');
+      } catch (error) {
+        const tripwire = error as TripWire<any>;
+        expect(tripwire.options.metadata.breakdown).toBeUndefined();
+        expect(tripwire.options.metadata.processorId).toBe('cost-guard');
+      }
+    });
+
+    it('null dimensions map to null provider/model entries', async () => {
+      const obsStorage = withBreakdown(
+        createMockObservabilityStorage({ inputCost: 0.4, outputCost: 0.2, costUnit: 'usd' }),
+        async () =>
+          ({
+            groups: [{ dimensions: {}, value: 100, estimatedCost: null, costUnit: null }],
+          }) as any,
+      );
+      const guard = new CostGuardProcessor({ maxCost: 0.5, scope: 'run', strategy: 'warn', includeBreakdown: true });
+      (guard as any).observabilityStorage = obsStorage;
+      const onViolation = vi.fn();
+      guard.onViolation = onViolation;
+
+      const args = createInputStepArgs({ stepNumber: 1, tracing: createMockTracing('trace-bd-null') as any });
+      await guard.processInputStep(args);
+
+      expect(onViolation.mock.calls[0]![0].detail.breakdown).toEqual([
+        { provider: null, model: null, estimatedCost: null, costUnit: null },
+      ]);
+    });
+  });
+
   describe('user, organization, and session scopes', () => {
     const scopeCases = [
       { scope: 'user' as const, contextKey: 'userId', filterKey: 'userId', id: 'user-123' },
