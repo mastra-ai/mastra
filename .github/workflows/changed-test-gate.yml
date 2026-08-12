@@ -30,6 +30,8 @@ jobs:
           persist-credentials: false
           ref: ${{ github.event.pull_request.base.sha }}
           fetch-depth: 0
+          # Partial clone: name-only diffs need trees, not blob contents.
+          filter: blob:none
 
       - name: Restore changed test files from PR head
         id: changed_tests

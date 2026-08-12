@@ -25,6 +25,8 @@ jobs:
         timeout-minutes: 20
         with:
           fetch-depth: 0
+          # Partial clone: name-only diffs need trees, not blob contents.
+          filter: blob:none
 
       - name: Check for docs changes
         id: filter
@@ -46,6 +48,8 @@ jobs:
         timeout-minutes: 20
         with:
           fetch-depth: 0
+          # Partial clone: name-only diffs need trees, not blob contents.
+          filter: blob:none
 
       - name: Check for MDX changes
         id: mdx-changes
@@ -198,6 +202,8 @@ jobs:
         timeout-minutes: 20
         with:
           fetch-depth: 0
+          # Partial clone: name-only diffs need trees, not blob contents.
+          filter: blob:none
 
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
