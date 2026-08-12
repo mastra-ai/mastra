@@ -16,6 +16,7 @@ import {
   formatToolResultForObserver,
   resolveToolResultValue,
 } from './tool-result-helpers';
+import type { InstructionMode } from './types';
 
 /**
  * Filter controlling which attachment parts (image/file) are forwarded to
@@ -368,17 +369,56 @@ export const OBSERVER_GUIDELINES = `- Be specific enough for the assistant to ac
 - If the user provides detailed messages or code snippets, observe all important details`;
 
 /**
+ * Resolve the extraction guidance block for a prompt.
+ *
+ * In `'replace'` mode the caller's instruction stands in for OM's built-in extraction
+ * instructions, so the caller owns *what* gets extracted. OM keeps ownership of the
+ * persona, output format, and guidelines, which together are the parsing contract.
+ */
+export function resolveExtractionInstructions(
+  instruction: string | undefined,
+  instructionMode: InstructionMode = 'append',
+): string {
+  return instructionMode === 'replace' && instruction ? instruction : OBSERVER_EXTRACTION_INSTRUCTIONS;
+}
+
+function buildCustomInstructionSuffix(instruction: string | undefined, instructionMode: InstructionMode): string {
+  return instructionMode === 'append' && instruction ? `\n\n=== CUSTOM INSTRUCTIONS ===\n\n${instruction}` : '';
+}
+
+/**
+ * Resolve the complete extraction guidance the Observer is actually running under: the
+ * extraction block plus, in append mode, the custom-instruction suffix that follows it.
+ *
+ * The Reflector reads this so it consolidates under the same domain rules the Observer
+ * applied. Using {@link resolveExtractionInstructions} alone would drop the caller's custom
+ * instruction in append mode, leaving the Reflector unaware of it.
+ */
+export function resolveEffectiveObserverInstructions(
+  instruction: string | undefined,
+  instructionMode: InstructionMode = 'append',
+): string {
+  return `${resolveExtractionInstructions(instruction, instructionMode)}${buildCustomInstructionSuffix(instruction, instructionMode)}`;
+}
+
+/**
  * Build the complete observer system prompt.
  * @param multiThread - Whether this is for multi-thread batched observation (default: false)
- * @param instruction - Optional custom instructions to append to the prompt
+ * @param instruction - Optional custom instructions for the prompt
+ * @param includeThreadTitle - Whether the Observer should also produce a thread title
+ * @param extractors - Active extractors, used to decide which sections the prompt describes
+ * @param instructionMode - Whether `instruction` is appended to or replaces OM's extraction guidance
  */
 export function buildObserverSystemPrompt(
   multiThread: boolean = false,
   instruction?: string,
   includeThreadTitle: boolean = false,
   extractors: readonly Extractor<any>[] = [],
+  instructionMode: InstructionMode = 'append',
 ): string {
   const outputFormat = buildObserverOutputFormat(extractors);
+  const extractionInstructions = resolveExtractionInstructions(instruction, instructionMode);
+  const customInstructions = buildCustomInstructionSuffix(instruction, instructionMode);
   const multiThreadTitleInstruction = includeThreadTitle
     ? ` Each thread's observations, current-task, suggested-response, and thread-title should be nested inside a <thread id="..."> block within <observations>.`
     : ` Each thread's observations, current-task, and suggested-response should be nested inside a <thread id="..."> block within <observations>.`;
@@ -396,7 +436,7 @@ export function buildObserverSystemPrompt(
 
 Extract observations that will help the assistant remember:
 
-${OBSERVER_EXTRACTION_INSTRUCTIONS}
+${extractionInstructions}
 
 === MULTI-THREAD INPUT ===
 
@@ -448,14 +488,14 @@ ${OBSERVER_GUIDELINES}
 
 Remember: These observations are the assistant's ONLY memory. Make them count.
 
-User messages are extremely important. If the user asks a question or gives a new task, make it clear in <current-task> that this is the priority.${instruction ? `\n\n=== CUSTOM INSTRUCTIONS ===\n\n${instruction}` : ''}`;
+User messages are extremely important. If the user asks a question or gives a new task, make it clear in <current-task> that this is the priority.${customInstructions}`;
   }
 
   return `You are the memory consciousness of an AI assistant. Your observations will be the ONLY information the assistant has about past interactions with this user.
 
 Extract observations that will help the assistant remember:
 
-${OBSERVER_EXTRACTION_INSTRUCTIONS}
+${extractionInstructions}
 
 === OUTPUT FORMAT ===
 
@@ -475,7 +515,7 @@ Simply output your observations without any thread-related markup.
 
 Remember: These observations are the assistant's ONLY memory. Make them count.
 
-User messages are extremely important. If the user asks a question or gives a new task, make it clear in <current-task> that this is the priority. If the assistant needs to respond to the user, indicate in <suggested-response> that it should pause for user reply before continuing other tasks.${instruction ? `\n\n=== CUSTOM INSTRUCTIONS ===\n\n${instruction}` : ''}`;
+User messages are extremely important. If the user asks a question or gives a new task, make it clear in <current-task> that this is the priority. If the assistant needs to respond to the user, indicate in <suggested-response> that it should pause for user reply before continuing other tasks.${customInstructions}`;
 }
 
 /**

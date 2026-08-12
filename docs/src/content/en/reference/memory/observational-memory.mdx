@@ -131,8 +131,16 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
             name: 'instruction',
             type: 'string',
             description:
-              "Custom instruction appended to the Observer's system prompt. Use this to customize what the Observer focuses on, such as domain-specific preferences or priorities.",
+              "Custom instruction for the Observer's system prompt. Use this to customize what the Observer focuses on, such as domain-specific preferences or priorities. Appended to the built-in extraction guidance by default; see `instructionMode`.",
             isOptional: true,
+          },
+          {
+            name: 'instructionMode',
+            type: "'append' | 'replace'",
+            description:
+              "How `instruction` combines with the built-in extraction guidance. `'append'` adds it under a custom-instructions heading. `'replace'` substitutes the built-in guidance entirely, which suits domains where the defaults work against you — OM still owns the persona, output format, and guidelines, so the parsing contract is unchanged. Ignored when `instruction` is not set.",
+            isOptional: true,
+            defaultValue: "'append'",
           },
           {
             name: 'threadTitle',
@@ -297,8 +305,16 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
             name: 'instruction',
             type: 'string',
             description:
-              "Custom instruction appended to the Reflector's system prompt. Use this to customize how the Reflector consolidates observations, such as prioritizing certain types of information.",
+              "Custom instruction for the Reflector's system prompt. Use this to customize how the Reflector consolidates observations, such as prioritizing certain types of information. Appended to the built-in consolidation guidance by default; see `instructionMode`.",
             isOptional: true,
+          },
+          {
+            name: 'instructionMode',
+            type: "'append' | 'replace'",
+            description:
+              "How `instruction` combines with the built-in consolidation guidance. `'append'` adds it under a custom-instructions heading. `'replace'` substitutes the built-in guidance entirely. OM still owns the persona, thread attribution rules, and output format. Ignored when `instruction` is not set.",
+            isOptional: true,
+            defaultValue: "'append'",
           },
           {
             name: 'extract',

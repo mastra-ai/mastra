@@ -37,6 +37,7 @@ import {
 import { getObservableMessages } from './message-utils';
 import type { ModelByInputTokens } from './model-by-input-tokens';
 import { didProviderChange } from './model-context';
+import { resolveEffectiveObserverInstructions } from './observer-agent';
 import { registerOp, unregisterOp, isOpActiveInProcess } from './operation-registry';
 import {
   buildReflectorSystemPrompt,
@@ -260,7 +261,17 @@ export class ReflectorRunner {
     const agent = new Agent({
       id: 'observational-memory-reflector',
       name: 'Reflector',
-      instructions: buildReflectorSystemPrompt(this.reflectionConfig.instruction, extractors),
+      instructions: buildReflectorSystemPrompt(
+        this.reflectionConfig.instruction,
+        extractors,
+        this.reflectionConfig.instructionMode,
+        // Tell the Reflector how observations were actually produced. This is the Observer's
+        // full effective guidance, so it covers both a replaced instruction and an appended one.
+        resolveEffectiveObserverInstructions(
+          this.observationConfig.instruction,
+          this.observationConfig.instructionMode,
+        ),
+      ),
       model,
       ...(memory ? { memory } : {}),
     });

@@ -14,7 +14,7 @@ import {
   sanitizeObservationLines,
   detectDegenerateRepetition,
 } from './observer-agent';
-import type { ReflectorResult as BaseReflectorResult } from './types';
+import type { InstructionMode, ReflectorResult as BaseReflectorResult } from './types';
 
 /**
  * Result from parsing Reflector output, extending the base type with
@@ -37,15 +37,51 @@ export interface ReflectorResult extends BaseReflectorResult {
  *
  * @param instruction - Optional custom instructions to append to the prompt
  */
-export function buildReflectorSystemPrompt(instruction?: string, extractors: readonly Extractor<any>[] = []): string {
+/**
+ * OM's built-in consolidation policy — what the Reflector should keep, merge, and prioritise.
+ * Exported so it can be substituted via `reflection.instructionMode: 'replace'`.
+ */
+export const REFLECTOR_CONSOLIDATION_INSTRUCTIONS = `When consolidating observations:
+- Preserve and include dates/times when present (temporal context is critical)
+- Retain the most relevant timestamps (start times, completion times, significant events)
+- Combine related items where it makes sense (e.g., "agent called view tool 5 times on file x")
+- Preserve ✅ completion markers — they are memory signals that tell the assistant what is already resolved and help prevent repeated work
+- Preserve the concrete resolved outcome captured by ✅ markers so the assistant knows what exactly is done
+- Condense older observations more aggressively, retain more detail for recent ones
+
+CRITICAL: USER ASSERTIONS vs QUESTIONS
+- "User stated: X" = authoritative assertion (user told us something about themselves)
+- "User asked: X" = question/request (user seeking information)
+
+When consolidating, USER ASSERTIONS TAKE PRECEDENCE. The user is the authority on their own life.
+If you see both "User stated: has two kids" and later "User asked: how many kids do I have?",
+keep the assertion - the question doesn't invalidate what they told you. The answer is in the assertion.`;
+
+/**
+ * @param instruction - Optional custom instructions for the prompt
+ * @param extractors - Active extractors, used to decide which sections the prompt describes
+ * @param instructionMode - Whether `instruction` is appended to or replaces the consolidation policy
+ * @param observerExtractionInstructions - The extraction guidance the Observer is actually running,
+ *   so the Reflector is told how the observations it receives were really produced
+ */
+export function buildReflectorSystemPrompt(
+  instruction?: string,
+  extractors: readonly Extractor<any>[] = [],
+  instructionMode: InstructionMode = 'append',
+  observerExtractionInstructions: string = OBSERVER_EXTRACTION_INSTRUCTIONS,
+): string {
   const outputFormat = buildObserverOutputFormat(extractors);
+  const consolidationInstructions =
+    instructionMode === 'replace' && instruction ? instruction : REFLECTOR_CONSOLIDATION_INSTRUCTIONS;
+  const customInstructions =
+    instructionMode === 'append' && instruction ? `\n\n=== CUSTOM INSTRUCTIONS ===\n\n${instruction}` : '';
   return `You are the memory consciousness of an AI assistant. Your memory observation reflections will be the ONLY information the assistant has about past interactions with this user.
 
 The following instructions were given to another part of your psyche (the observer) to create memories.
 Use this to understand how your observational memories were created.
 
 <observational-memory-instruction>
-${OBSERVER_EXTRACTION_INSTRUCTIONS}
+${observerExtractionInstructions}
 
 === OUTPUT FORMAT ===
 
@@ -65,21 +101,7 @@ Take the existing observations and rewrite them to make it easier to continue in
 
 IMPORTANT: your reflections are THE ENTIRETY of the assistants memory. Any information you do not add to your reflections will be immediately forgotten. Make sure you do not leave out anything. Your reflections must assume the assistant knows nothing - your reflections are the ENTIRE memory system.
 
-When consolidating observations:
-- Preserve and include dates/times when present (temporal context is critical)
-- Retain the most relevant timestamps (start times, completion times, significant events)
-- Combine related items where it makes sense (e.g., "agent called view tool 5 times on file x")
-- Preserve ✅ completion markers — they are memory signals that tell the assistant what is already resolved and help prevent repeated work
-- Preserve the concrete resolved outcome captured by ✅ markers so the assistant knows what exactly is done
-- Condense older observations more aggressively, retain more detail for recent ones
-
-CRITICAL: USER ASSERTIONS vs QUESTIONS
-- "User stated: X" = authoritative assertion (user told us something about themselves)
-- "User asked: X" = question/request (user seeking information)
-
-When consolidating, USER ASSERTIONS TAKE PRECEDENCE. The user is the authority on their own life.
-If you see both "User stated: has two kids" and later "User asked: how many kids do I have?",
-keep the assertion - the question doesn't invalidate what they told you. The answer is in the assertion.
+${consolidationInstructions}
 
 === THREAD ATTRIBUTION (Resource Scope) ===
 
@@ -115,7 +137,7 @@ Date: Dec 4, 2025
 
 ${outputFormat}
 
-User messages are extremely important. If the user asks a question or gives a new task, make it clear in <current-task> that this is the priority. If the assistant needs to respond to the user, indicate in <suggested-response> that it should pause for user reply before continuing other tasks.${instruction ? `\n\n=== CUSTOM INSTRUCTIONS ===\n\n${instruction}` : ''}`;
+User messages are extremely important. If the user asks a question or gives a new task, make it clear in <current-task> that this is the priority. If the assistant needs to respond to the user, indicate in <suggested-response> that it should pause for user reply before continuing other tasks.${customInstructions}`;
 }
 
 /**
