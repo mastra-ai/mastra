@@ -19,6 +19,7 @@ function resolved(): ResolvedSubconsciousConfig {
     learnedGuidance: true,
     tools: true,
     activity: { recentUpdates: 10 },
+    pins: false,
   };
 }
 

@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { Extractor } from '../extractor';
 import type { ExtractorOnExtractedContext, ExtractorRuntimeContext } from '../extractor';
 import { publishSubconsciousActivity } from './activity';
+import { publishSubconsciousPinned } from './pins';
 import type { SubconsciousCaptureConfig, SubconsciousCaptureOutput, SubconsciousDefaultCapture } from './types';
 
 const CAPTURE_GUIDANCE_PAGE = 'capture-guidance';
@@ -86,6 +87,7 @@ export interface CaptureExtractorOptions {
   maxScope?: KnowledgeScopeLevel;
   learnedGuidance: boolean;
   activityRecentUpdates?: number;
+  pinnedMaxCharacters?: number;
 }
 
 export class SubconsciousCaptureExtractor extends Extractor<SubconsciousCaptureOutput> {
@@ -155,11 +157,22 @@ export class SubconsciousCaptureExtractor extends Extractor<SubconsciousCaptureO
           });
         };
 
+        const publishPinned = async () => {
+          if (!options.pinnedMaxCharacters) return;
+          await publishSubconsciousPinned({
+            store: await getKnowledgeStore(context),
+            scope: requireScopeContext(context),
+            maxCharacters: options.pinnedMaxCharacters,
+            sendStateSignal: context.sendStateSignal,
+          });
+        };
+
         try {
           const result = options.config?.onExtracted
             ? await options.config.onExtracted({ ...context, defaultImplementation })
             : await defaultImplementation(context);
           await publishActivity();
+          await publishPinned();
           return result ?? context.current;
         } catch (error) {
           await publishActivity([error instanceof Error ? error.message : String(error)]).catch(() => {});

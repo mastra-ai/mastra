@@ -1,5 +1,6 @@
 import { Extractor } from '../extractor';
 import { SubconsciousCaptureExtractor } from './capture';
+import { DEFAULT_PINNED_MAX_CHARACTERS, MAX_PINNED_MAX_CHARACTERS } from './pins';
 import { SubconsciousRemindExtractor } from './remind';
 import type {
   ResolvedSubconsciousAgent,
@@ -90,6 +91,19 @@ export class Subconscious {
       throw new Error(`Subconscious activity.recentUpdates must be an integer between 1 and ${MAX_RECENT_UPDATES}.`);
     }
 
+    const pinnedMaxCharacters =
+      config.pins === undefined || config.pins === false
+        ? false
+        : ((config.pins === true ? undefined : config.pins.maxCharacters) ?? DEFAULT_PINNED_MAX_CHARACTERS);
+    if (
+      pinnedMaxCharacters !== false &&
+      (!Number.isInteger(pinnedMaxCharacters) ||
+        pinnedMaxCharacters < 1 ||
+        pinnedMaxCharacters > MAX_PINNED_MAX_CHARACTERS)
+    ) {
+      throw new Error(`Subconscious pins.maxCharacters must be an integer between 1 and ${MAX_PINNED_MAX_CHARACTERS}.`);
+    }
+
     this.config = Object.freeze({ ...config, observation: [...observation], reflection: [...reflection] });
     this.resolved = Object.freeze({
       observation: observation.map(entry =>
@@ -103,6 +117,7 @@ export class Subconscious {
       learnedGuidance: config.learnedGuidance !== false,
       tools: config.tools !== false,
       activity: recentUpdates === false ? false : { recentUpdates },
+      pins: pinnedMaxCharacters === false ? false : { maxCharacters: pinnedMaxCharacters },
     });
   }
 
@@ -118,6 +133,7 @@ export class Subconscious {
             maxScope: this.resolved.maxScope,
             learnedGuidance: this.resolved.learnedGuidance,
             activityRecentUpdates: this.resolved.activity === false ? undefined : this.resolved.activity.recentUpdates,
+            pinnedMaxCharacters: this.resolved.pins === false ? undefined : this.resolved.pins.maxCharacters,
           }),
         );
       } else if (name === 'remind') {
@@ -196,6 +212,16 @@ export {
 export type { SubconsciousActivitySnapshot, SubconsciousActivityUpdate } from './activity';
 export { SubconsciousCaptureExtractor, subconsciousCaptureSchema } from './capture';
 export { SubconsciousRemindExtractor } from './remind';
+export {
+  buildSubconsciousPinnedSnapshot,
+  DEFAULT_PINNED_MAX_CHARACTERS,
+  MAX_PINNED_MAX_CHARACTERS,
+  PINNED_KNOWLEDGE_PAGE,
+  publishSubconsciousPinned,
+  renderSubconsciousPinned,
+  SUBCONSCIOUS_PINNED_STATE_ID,
+} from './pins';
+export type { SubconsciousPinnedSnapshot } from './pins';
 export { createKnowledgeWriteTools } from './knowledge-write-tools';
 export type { KnowledgeWriteToolsOptions } from './knowledge-write-tools';
 export { KnowledgeSemanticIndexCoordinator, StaleKnowledgeSemanticIndexError } from './semantic-index';

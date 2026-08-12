@@ -7,6 +7,7 @@ import type { ReflectionCommittedContext } from '../types';
 import { publishSubconsciousActivity, publishSubconsciousError } from './activity';
 import { createKnowledgeTools } from './knowledge-tools';
 import { createKnowledgeWriteTools } from './knowledge-write-tools';
+import { PINNED_KNOWLEDGE_PAGE, publishSubconsciousPinned } from './pins';
 import type { ResolvedSubconsciousAgent, ResolvedSubconsciousConfig } from './types';
 
 const CURATION_AGENT = 'curate';
@@ -15,6 +16,8 @@ const DEFAULT_INSTRUCTIONS = `Maintain durable scoped knowledge from the committ
 Use the read tools to inspect existing entities, facts, mentions, backlinks, and pages. Use the write tools to merge true duplicates, repair names and links, soft-delete superseded facts, rescope facts only when justified and permitted by their ceilings, and synthesize useful pages. Never restore deleted facts. Never invent provenance, capture timestamps, scopes, ceilings, IDs, or versions; those are enforced by code. Resolve optimistic-concurrency conflicts by reading the latest record and retrying the intended mutation. Keep the reserved capture-guidance page concise and update it only with durable guidance that will improve future capture.
 
 Process the worklist in ID order. Your final response must end with <curation-complete through="FACT_ID" /> using the ID of the last fact you fully processed. If you cannot finish the batch, acknowledge only the last fact you did finish. Do not emit a completion marker when no fact was fully processed.`;
+
+const PINNED_INSTRUCTIONS = `Maintain the reserved ${PINNED_KNOWLEDGE_PAGE} page. Its body is delivered to the main agent on every turn, so it costs tokens permanently and must stay short. Pin only knowledge that should apply without being asked for, such as standing instructions, durable preferences, and hard constraints. Remove a pin as soon as it stops being unconditionally true. Everything a reminder can surface on demand belongs off this page.`;
 
 function resolveScope(context: ReflectionCommittedContext): KnowledgeScope {
   const organizationId = context.requestContext?.get('organizationId');
@@ -90,6 +93,15 @@ export function createCuratorHandler(
           lastFactId: acknowledgedId,
         });
       }
+
+      if (subconscious.pins) {
+        await publishSubconsciousPinned({
+          store,
+          scope,
+          maxCharacters: subconscious.pins.maxCharacters,
+          sendStateSignal: context.sendStateSignal,
+        });
+      }
     } catch (error) {
       const message = `curate: ${error instanceof Error ? error.message : String(error)}`;
       await context.writer?.custom({ type: 'data-subconscious-error', data: { agent: 'curate', error: message } });
@@ -125,7 +137,13 @@ async function createCuratorAgent(
   return new Agent({
     id: `subconscious-curate-${context.parentThreadId}`,
     name: 'Subconscious Curate',
-    instructions: [DEFAULT_INSTRUCTIONS, config.instructions?.trim()].filter(Boolean).join('\n\n'),
+    instructions: [
+      DEFAULT_INSTRUCTIONS,
+      subconscious.pins ? PINNED_INSTRUCTIONS : undefined,
+      config.instructions?.trim(),
+    ]
+      .filter(Boolean)
+      .join('\n\n'),
     model,
     memory: curatorMemory,
     tools: {
@@ -135,6 +153,7 @@ async function createCuratorAgent(
         sourceThreadId: context.parentThreadId,
         defaultScope: subconscious.defaultScope,
         maxScope: subconscious.maxScope,
+        ...(subconscious.pins ? { pinnedMaxCharacters: subconscious.pins.maxCharacters } : {}),
       }),
     },
   });
