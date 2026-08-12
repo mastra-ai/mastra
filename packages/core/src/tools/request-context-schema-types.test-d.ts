@@ -31,9 +31,9 @@ describe('requestContextSchema type inference', () => {
         const all = context.requestContext.all;
         expectTypeOf(all).toEqualTypeOf<{ userId: string; apiKey: string }>();
 
-        // Verify unknown keys are rejected
-        // @ts-expect-error - key does not exist in the request context schema
-        context.requestContext.get('nonexistentKey');
+        // Undeclared keys are accepted — the runtime map is open (#21286) — and
+        // surface as `unknown` since the schema says nothing about their shape.
+        expectTypeOf(context.requestContext.get('nonexistentKey')).toEqualTypeOf<unknown>();
 
         return { success: true };
       },
@@ -129,8 +129,8 @@ describe('requestContextSchema type inference', () => {
         const all = context.requestContext.all;
         expectTypeOf(all).toEqualTypeOf<{ userId: string; apiKey: string }>();
 
-        // @ts-expect-error - key does not exist in the request context schema
-        context.requestContext.get('nonexistentKey');
+        // Undeclared keys are accepted and typed `unknown` (#21286).
+        expectTypeOf(context.requestContext.get('nonexistentKey')).toEqualTypeOf<unknown>();
 
         return { success: true };
       },

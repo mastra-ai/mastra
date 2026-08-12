@@ -32,8 +32,10 @@ describe('RequestContext', () => {
       // @ts-expect-error - wrong value type for 'count'
       ctx.set('count', 'not-a-number');
 
-      // @ts-expect-error - unknown key
+      // Undeclared keys are accepted: the runtime map is open and Mastra's own
+      // middleware writes reserved keys into schema'd contexts (#21286).
       ctx.set('unknown', 'value');
+      expectTypeOf(ctx.get('unknown')).toEqualTypeOf<unknown>();
     });
 
     it('should return typed keys', () => {

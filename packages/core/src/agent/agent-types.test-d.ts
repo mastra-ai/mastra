@@ -172,9 +172,10 @@ describe('Agent Type Tests', () => {
           const documentId = requestContext.get('documentId');
           expectTypeOf(documentId).toEqualTypeOf<string>();
 
-          // Verify unknown keys are rejected
-          // @ts-expect-error - key does not exist in the request context schema
-          requestContext.get('nonexistentKey');
+          // Undeclared keys are accepted — the runtime map is open, and Mastra's
+          // own middleware writes reserved keys into schema'd contexts (#21286).
+          // They carry no declared type, so they surface as `unknown`.
+          expectTypeOf(requestContext.get('nonexistentKey')).toEqualTypeOf<unknown>();
 
           return [];
         },

@@ -571,4 +571,36 @@ describe('RequestContext', () => {
       expect(ctx.serializeForSpan()).toEqual({});
     });
   });
+
+  describe('open map with a declared Values type (#21286)', () => {
+    type Declared = { tenantTier?: 'free' | 'pro' };
+
+    it('should store and return undeclared keys on a typed context', () => {
+      // The type parameter narrows autocomplete; it must not narrow the
+      // registry. This guards the runtime contract the typing was corrected
+      // to match — a future change that closes the map would break callers
+      // relying on runtime-only keys.
+      const ctx = new RequestContext<Declared>();
+
+      ctx.set('tenantTier', 'pro');
+      ctx.set('session.cache', { hits: 0 });
+
+      expect(ctx.get('tenantTier')).toBe('pro');
+      expect(ctx.get('session.cache')).toEqual({ hits: 0 });
+      expect(ctx.has('session.cache')).toBe(true);
+      expect([...ctx.keys()]).toEqual(['tenantTier', 'session.cache']);
+      expect(ctx.size()).toBe(2);
+      expect(ctx.delete('session.cache')).toBe(true);
+      expect(ctx.has('session.cache')).toBe(false);
+    });
+
+    it('should pass reserved middleware keys through a declared schema', () => {
+      // Mastra injects these regardless of any declared schema.
+      const ctx = new RequestContext<Declared>();
+
+      ctx.set(MASTRA_AUTH_TOKEN_KEY, 'token-1');
+
+      expect(ctx.get(MASTRA_AUTH_TOKEN_KEY)).toBe('token-1');
+    });
+  });
 });

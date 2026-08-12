@@ -112,6 +112,54 @@ describe('RequestContext Type Tests', () => {
     });
   });
 
+  describe('Issue #21286: a declared schema narrows autocomplete without closing the map', () => {
+    type MyContext = {
+      tenantTier?: 'free' | 'pro';
+      verbose?: boolean;
+    };
+
+    const RUNTIME_KEY = 'session.cache';
+
+    it('should accept undeclared keys without a cast', () => {
+      const context = new RequestContext<MyContext>();
+
+      // The runtime stores these; before #21286 each of these lines was a
+      // TS2345 and callers had to write `get(KEY as never)`.
+      context.set(RUNTIME_KEY, { hits: 0 });
+      context.set('mastra__resourceId', 'resource-1');
+      context.has(RUNTIME_KEY);
+      context.delete(RUNTIME_KEY);
+    });
+
+    it('should type undeclared keys as unknown, not never', () => {
+      const context = new RequestContext<MyContext>();
+
+      const value = context.get(RUNTIME_KEY);
+      expectTypeOf(value).toEqualTypeOf<unknown>();
+
+      // `unknown` is the honest type: the caller narrows it themselves.
+      expectTypeOf<{ hits: number }>().toMatchTypeOf<unknown>();
+    });
+
+    it('should keep declared keys strictly typed', () => {
+      const context = new RequestContext<MyContext>();
+
+      // Declared keys must not have been widened to unknown by the fix.
+      expectTypeOf(context.get('tenantTier')).toEqualTypeOf<'free' | 'pro' | undefined>();
+      expectTypeOf(context.get('verbose')).toEqualTypeOf<boolean | undefined>();
+
+      // And their value types are still enforced on set().
+      expectTypeOf<number>().not.toMatchTypeOf<Parameters<typeof context.set<'verbose'>>[1]>();
+    });
+
+    it('should still honour an explicit return-type override on get()', () => {
+      const context = new RequestContext<MyContext>();
+
+      const value = context.get<typeof RUNTIME_KEY, { hits: number }>(RUNTIME_KEY);
+      expectTypeOf(value).toEqualTypeOf<{ hits: number }>();
+    });
+  });
+
   describe('Untyped RequestContext should allow any key', () => {
     it('should return unknown for untyped context', () => {
       const context = new RequestContext();

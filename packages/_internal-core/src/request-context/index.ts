@@ -190,6 +190,32 @@ function isPlainObjectOrArray(value: unknown): boolean {
 let _probeBudgetActive = false;
 let _probeBudgetRemaining = 0;
 
+/**
+ * Keys the accessors accept.
+ *
+ * A declared `Values` record narrows autocomplete to its own keys, but does not
+ * close the map: the runtime registry is a plain `Map` that accepts any string,
+ * schema validation only validates the declared keys and passes everything else
+ * through, and Mastra's own middleware writes reserved keys
+ * (`mastra__resourceId`, `mastra__threadId`, `mastra__versions`,
+ * `mastra__authToken`) into contexts that never declared them. Typing the key
+ * as `keyof Values` alone therefore rejected keys the runtime accepts, which
+ * forced callers into `get(KEY as never)` casts.
+ *
+ * The `string & {}` arm is what keeps both properties at once: it accepts any
+ * string while still letting TypeScript infer literal types for the declared
+ * keys, so `Values[K]` inference survives.
+ */
+export type RequestContextKey<Values> = Values extends Record<string, any> ? keyof Values | (string & {}) : string;
+
+/**
+ * Value type for a given key: declared keys keep their exact type from
+ * `Values`, undeclared keys are `unknown` — mirroring a runtime that stores
+ * them but knows nothing about their shape.
+ */
+export type RequestContextValue<Values, K> =
+  Values extends Record<string, any> ? (K extends keyof Values ? Values[K] : unknown) : unknown;
+
 export class RequestContext<Values extends Record<string, any> | unknown = unknown> {
   private registry = new Map<string, unknown>();
 
@@ -206,12 +232,10 @@ export class RequestContext<Values extends Record<string, any> | unknown = unkno
   }
 
   /**
-   * set a value with strict typing if `Values` is a Record and the key exists in it.
+   * Set a value. Declared keys are strictly typed against `Values`; undeclared
+   * keys are accepted and typed `unknown`, matching the open runtime map.
    */
-  public set<K extends (Values extends Record<string, any> ? keyof Values : string)>(
-    key: K,
-    value: Values extends Record<string, any> ? (K extends keyof Values ? Values[K] : never) : unknown,
-  ): void {
+  public set<K extends RequestContextKey<Values>>(key: K, value: RequestContextValue<Values, K>): void {
     // The type assertion `key as string` is safe because K always extends string ultimately.
     this.registry.set(key as string, value);
   }
@@ -219,25 +243,22 @@ export class RequestContext<Values extends Record<string, any> | unknown = unkno
   /**
    * Get a value with its type
    */
-  public get<
-    K extends (Values extends Record<string, any> ? keyof Values : string),
-    R = Values extends Record<string, any> ? (K extends keyof Values ? Values[K] : never) : unknown,
-  >(key: K): R {
+  public get<K extends RequestContextKey<Values>, R = RequestContextValue<Values, K>>(key: K): R {
     return this.registry.get(key as string) as R;
   }
 
   /**
    * Check if a key exists in the container
    */
-  public has<K extends (Values extends Record<string, any> ? keyof Values : string)>(key: K): boolean {
-    return this.registry.has(key);
+  public has<K extends RequestContextKey<Values>>(key: K): boolean {
+    return this.registry.has(key as string);
   }
 
   /**
    * Delete a value by key
    */
-  public delete<K extends (Values extends Record<string, any> ? keyof Values : string)>(key: K): boolean {
-    return this.registry.delete(key);
+  public delete<K extends RequestContextKey<Values>>(key: K): boolean {
+    return this.registry.delete(key as string);
   }
 
   /**

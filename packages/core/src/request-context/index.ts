@@ -6,4 +6,9 @@ export {
   RequestContext,
   mergeVersionOverrides,
 } from '@internal/core/request-context';
-export type { VersionOverrides, VersionSelector } from '@internal/core/request-context';
+export type {
+  RequestContextKey,
+  RequestContextValue,
+  VersionOverrides,
+  VersionSelector,
+} from '@internal/core/request-context';
