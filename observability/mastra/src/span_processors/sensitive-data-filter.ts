@@ -1,6 +1,21 @@
 import type { SpanOutputProcessor, AnySpan } from '@mastra/core/observability';
 
-export type RedactionStyle = 'full' | 'partial';
+export type RedactionStyle = 'full' | 'partial' | 'indexed';
+
+/**
+ * Per-trace state for indexed redaction: maps raw values to their assigned
+ * tokens and tracks the next index per token label.
+ */
+interface IndexedRedactionState {
+  tokensByValue: Map<string, string>;
+  counters: Map<string, number>;
+}
+
+/**
+ * Maximum number of traces to keep indexed-redaction state for.
+ * Spans never signal trace completion, so state is evicted least-recently-used.
+ */
+const MAX_TRACKED_TRACES = 1000;
 
 /**
  * Options for configuring the SensitiveDataFilter.
@@ -25,6 +40,10 @@ export interface SensitiveDataFilterOptions {
    * Style of redaction to use:
    * - "full": always replace with redactionToken.
    * - "partial": show 3 characters from the start and end, redact the middle.
+   * - "indexed": replace each unique value with a stable token derived from the
+   *   matched field name, e.g. `[APIKEY_1]`. The same value maps to the same
+   *   token across all spans of a trace, so redacted values stay correlatable
+   *   without exposing the raw value. Mapping is scoped per trace.
    *
    * Default: "full"
    */
@@ -37,8 +56,10 @@ export interface SensitiveDataFilterOptions {
  * An SpanOutputProcessor that redacts sensitive information from span fields.
  *
  * - Sensitive keys are matched case-insensitively, normalized to remove separators.
- * - Sensitive values are redacted using either full or partial redaction.
+ * - Sensitive values are redacted using full, partial, or indexed redaction.
  * - Partial redaction always keeps 3 chars at the start and end.
+ * - Indexed redaction assigns each unique value a stable `[LABEL_N]` token,
+ *   consistent across all spans of a trace.
  * - JSON strings containing sensitive fields are parsed and redacted.
  * - If filtering a field fails, the field is replaced with:
  *   `{ error: { processor: "sensitive-data-filter" } }`
@@ -48,6 +69,7 @@ export class SensitiveDataFilter implements SpanOutputProcessor {
   private sensitiveFields: string[];
   private redactionToken: string;
   private redactionStyle: RedactionStyle;
+  private traceStates = new Map<string, IndexedRedactionState>();
 
   constructor(options: SensitiveDataFilterOptions = {}) {
     this.sensitiveFields = (
@@ -82,12 +104,34 @@ export class SensitiveDataFilter implements SpanOutputProcessor {
    * @returns A new span with sensitive values redacted
    */
   process(span: AnySpan): AnySpan {
-    span.attributes = this.tryFilter(span.attributes);
-    span.metadata = this.tryFilter(span.metadata);
-    span.input = this.tryFilter(span.input);
-    span.output = this.tryFilter(span.output);
-    span.errorInfo = this.tryFilter(span.errorInfo);
+    const indexedState = this.redactionStyle === 'indexed' ? this.getTraceState(span.traceId) : undefined;
+    span.attributes = this.tryFilter(span.attributes, indexedState);
+    span.metadata = this.tryFilter(span.metadata, indexedState);
+    span.input = this.tryFilter(span.input, indexedState);
+    span.output = this.tryFilter(span.output, indexedState);
+    span.errorInfo = this.tryFilter(span.errorInfo, indexedState);
     return span;
+  }
+
+  /**
+   * Get (or create) the indexed-redaction state for a trace.
+   * Uses the Map's insertion order as an LRU: accessed traces are re-inserted,
+   * and the least recently used trace is evicted once the cap is exceeded.
+   */
+  private getTraceState(traceId: string): IndexedRedactionState {
+    let state = this.traceStates.get(traceId);
+    if (state) {
+      this.traceStates.delete(traceId);
+    } else {
+      state = { tokensByValue: new Map(), counters: new Map() };
+    }
+    this.traceStates.set(traceId, state);
+    while (this.traceStates.size > MAX_TRACKED_TRACES) {
+      const oldest = this.traceStates.keys().next().value;
+      if (oldest === undefined) break;
+      this.traceStates.delete(oldest);
+    }
+    return state;
   }
 
   /**
@@ -95,14 +139,14 @@ export class SensitiveDataFilter implements SpanOutputProcessor {
    * Handles circular references by replacing with a marker.
    * Also attempts to parse and redact JSON strings.
    */
-  private deepFilter(obj: any, seen = new WeakSet()): any {
+  private deepFilter(obj: any, seen = new WeakSet(), indexedState?: IndexedRedactionState): any {
     if (obj === null || typeof obj !== 'object') {
       // Handle string values - check if they contain JSON that needs redacting
       if (typeof obj === 'string') {
         // Quick check - JSON objects/arrays start with { or [
         const trimmed = obj.trim();
         if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
-          return this.redactJsonString(obj);
+          return this.redactJsonString(obj, indexedState);
         }
       }
       return obj;
@@ -120,7 +164,7 @@ export class SensitiveDataFilter implements SpanOutputProcessor {
     }
 
     if (Array.isArray(obj)) {
-      return obj.map(item => this.deepFilter(item, seen));
+      return obj.map(item => this.deepFilter(item, seen, indexedState));
     }
 
     const filtered: any = {};
@@ -129,21 +173,21 @@ export class SensitiveDataFilter implements SpanOutputProcessor {
 
       if (this.isSensitive(normKey)) {
         if (obj[key] && typeof obj[key] === 'object') {
-          filtered[key] = this.deepFilter(obj[key], seen);
+          filtered[key] = this.deepFilter(obj[key], seen, indexedState);
         } else {
-          filtered[key] = this.redactValue(obj[key]);
+          filtered[key] = this.redactValue(obj[key], normKey, indexedState);
         }
       } else {
-        filtered[key] = this.deepFilter(obj[key], seen);
+        filtered[key] = this.deepFilter(obj[key], seen, indexedState);
       }
     }
 
     return filtered;
   }
 
-  private tryFilter(value: any): any {
+  private tryFilter(value: any, indexedState?: IndexedRedactionState): any {
     try {
-      return this.deepFilter(value);
+      return this.deepFilter(value, new WeakSet(), indexedState);
     } catch {
       return { error: { processor: this.name } };
     }
@@ -177,14 +221,14 @@ export class SensitiveDataFilter implements SpanOutputProcessor {
    * Attempt to parse a string as JSON and redact sensitive fields within it.
    * If parsing fails or no sensitive data is found, returns the original string.
    */
-  private redactJsonString(str: string): string {
+  private redactJsonString(str: string, indexedState?: IndexedRedactionState): string {
     try {
       // Try to parse as JSON
       const parsed = JSON.parse(str);
 
       // If it's an object, filter it and serialize back
       if (parsed && typeof parsed === 'object') {
-        const filtered = this.deepFilter(parsed, new WeakSet());
+        const filtered = this.deepFilter(parsed, new WeakSet(), indexedState);
         return JSON.stringify(filtered);
       }
 
@@ -200,23 +244,40 @@ export class SensitiveDataFilter implements SpanOutputProcessor {
    * Redact a sensitive value.
    * - Full style: replaces with a fixed token.
    * - Partial style: shows 3 chars at start and end, hides the middle.
+   * - Indexed style: replaces with a stable `[LABEL_N]` token, where the label
+   *   comes from the normalized field name and the same value always maps to
+   *   the same token within a trace.
    *
-   * Non-string values are converted to strings before partial redaction.
+   * Non-string values are converted to strings before partial or indexed redaction.
    */
-  private redactValue(value: any): string {
-    if (this.redactionStyle === 'full') {
-      return this.redactionToken;
+  private redactValue(value: any, normKey: string, indexedState?: IndexedRedactionState): string {
+    if (this.redactionStyle === 'partial') {
+      const str = String(value);
+      const len = str.length;
+      if (len <= 6) {
+        return this.redactionToken; // too short, redact fully
+      }
+      return str.slice(0, 3) + '…' + str.slice(len - 3);
     }
 
-    const str = String(value);
-    const len = str.length;
-    if (len <= 6) {
-      return this.redactionToken; // too short, redact fully
+    if (this.redactionStyle === 'indexed' && indexedState) {
+      const valueKey = String(value);
+      const existing = indexedState.tokensByValue.get(valueKey);
+      if (existing) {
+        return existing;
+      }
+      const label = normKey.toUpperCase();
+      const count = (indexedState.counters.get(label) ?? 0) + 1;
+      indexedState.counters.set(label, count);
+      const token = `[${label}_${count}]`;
+      indexedState.tokensByValue.set(valueKey, token);
+      return token;
     }
-    return str.slice(0, 3) + '…' + str.slice(len - 3);
+
+    return this.redactionToken;
   }
 
   async shutdown(): Promise<void> {
-    // No cleanup needed
+    this.traceStates.clear();
   }
 }

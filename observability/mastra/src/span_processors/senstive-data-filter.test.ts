@@ -446,6 +446,139 @@ describe('Tracing', () => {
       });
     });
 
+    describe('indexed redaction style', () => {
+      const makeSpan = (traceId: string, fields: { attributes?: any; input?: any }) =>
+        ({
+          id: `span-${traceId}`,
+          name: 'test-span',
+          type: SpanType.AGENT_RUN,
+          startTime: new Date(),
+          traceId,
+          trace: { traceId } as any,
+          attributes: fields.attributes ?? {},
+          input: fields.input,
+          observabilityInstance: {} as any,
+          end: () => {},
+          error: () => {},
+          update: () => {},
+          createChildSpan: () => ({}) as any,
+        }) as any;
+
+      it('should assign stable indexed tokens per unique value', () => {
+        const processor = new SensitiveDataFilter({ redactionStyle: 'indexed' });
+
+        const span = makeSpan('trace-1', {
+          attributes: {
+            apiKey: 'sk-first',
+            config: { apiKey: 'sk-first', backupKey: 'unrelated' },
+            fallback: { api_key: 'sk-second' },
+          },
+        });
+
+        const attributes = processor.process(span)!.attributes as any;
+
+        // Same value gets the same token, distinct values get distinct indexes
+        expect(attributes.apiKey).toBe('[APIKEY_1]');
+        expect(attributes.config.apiKey).toBe('[APIKEY_1]');
+        expect(attributes.fallback.api_key).toBe('[APIKEY_2]');
+
+        // Non-sensitive fields are untouched
+        expect(attributes.config.backupKey).toBe('unrelated');
+      });
+
+      it('should reuse the token when the same value appears under different field names', () => {
+        const processor = new SensitiveDataFilter({ redactionStyle: 'indexed' });
+
+        const span = makeSpan('trace-1', {
+          attributes: {
+            token: 'shared-secret',
+            authorization: 'shared-secret',
+            password: 'other-secret',
+          },
+        });
+
+        const attributes = processor.process(span)!.attributes as any;
+
+        // First-seen field name determines the label
+        expect(attributes.token).toBe('[TOKEN_1]');
+        expect(attributes.authorization).toBe('[TOKEN_1]');
+        expect(attributes.password).toBe('[PASSWORD_1]');
+      });
+
+      it('should keep tokens consistent across spans of the same trace', () => {
+        const processor = new SensitiveDataFilter({ redactionStyle: 'indexed' });
+
+        const first = processor.process(makeSpan('trace-1', { attributes: { apiKey: 'sk-first' } }))!;
+        const second = processor.process(
+          makeSpan('trace-1', { attributes: { apiKey: 'sk-first', secret: 'sk-second' } }),
+        )!;
+
+        expect((first.attributes as any).apiKey).toBe('[APIKEY_1]');
+        expect((second.attributes as any).apiKey).toBe('[APIKEY_1]');
+        expect((second.attributes as any).secret).toBe('[SECRET_1]');
+      });
+
+      it('should number tokens independently per trace', () => {
+        const processor = new SensitiveDataFilter({ redactionStyle: 'indexed' });
+
+        const traceA = processor.process(makeSpan('trace-a', { attributes: { apiKey: 'sk-a' } }))!;
+        const traceB = processor.process(makeSpan('trace-b', { attributes: { apiKey: 'sk-b' } }))!;
+
+        // Different values in different traces both start at _1
+        expect((traceA.attributes as any).apiKey).toBe('[APIKEY_1]');
+        expect((traceB.attributes as any).apiKey).toBe('[APIKEY_1]');
+      });
+
+      it('should redact JSON strings with indexed tokens', () => {
+        const processor = new SensitiveDataFilter({ redactionStyle: 'indexed', sensitiveFields: ['email'] });
+
+        const span = makeSpan('trace-1', {
+          input: {
+            messages: [
+              { role: 'tool', content: JSON.stringify({ email: 'john@email.com', id: '32ddf' }) },
+              { role: 'tool', content: JSON.stringify({ email: 'john@email.com' }) },
+              { role: 'tool', content: JSON.stringify({ email: 'jane@email.com' }) },
+            ],
+          },
+        });
+
+        const input = processor.process(span)!.input as any;
+
+        expect(JSON.parse(input.messages[0].content)).toEqual({ email: '[EMAIL_1]', id: '32ddf' });
+        expect(JSON.parse(input.messages[1].content)).toEqual({ email: '[EMAIL_1]' });
+        expect(JSON.parse(input.messages[2].content)).toEqual({ email: '[EMAIL_2]' });
+      });
+
+      it('should redact non-string values with indexed tokens', () => {
+        const processor = new SensitiveDataFilter({ redactionStyle: 'indexed' });
+
+        const span = makeSpan('trace-1', {
+          attributes: { ssn: 123456789, backup: { ssn: 123456789 } },
+        });
+
+        const attributes = processor.process(span)!.attributes as any;
+
+        expect(attributes.ssn).toBe('[SSN_1]');
+        expect(attributes.backup.ssn).toBe('[SSN_1]');
+      });
+
+      it('should evict least recently used trace state once the cap is exceeded', () => {
+        const processor = new SensitiveDataFilter({ redactionStyle: 'indexed' });
+
+        processor.process(makeSpan('trace-evicted', { attributes: { apiKey: 'sk-first' } }));
+
+        // Flood past the 1000-trace cap so 'trace-evicted' is dropped
+        for (let i = 0; i < 1000; i++) {
+          processor.process(makeSpan(`trace-flood-${i}`, { attributes: { apiKey: `sk-flood-${i}` } }));
+        }
+
+        const revisited = processor.process(makeSpan('trace-evicted', { attributes: { apiKey: 'sk-second' } }))!;
+
+        // Fresh state: a new value starts back at _1 instead of continuing at _2
+        expect((revisited.attributes as any).apiKey).toBe('[APIKEY_1]');
+      });
+    });
+
     describe('as part of the default config', () => {
       it('should automatically filter sensitive data in default tracing', () => {
         const tracing = new DefaultObservabilityInstance({
