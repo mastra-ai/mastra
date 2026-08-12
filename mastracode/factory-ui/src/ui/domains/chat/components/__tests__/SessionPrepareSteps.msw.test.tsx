@@ -92,6 +92,25 @@ describe('SessionPrepareSteps', () => {
     expect(stepByLabel('Cloning repository')).toHaveAttribute('data-status', 'pending');
   });
 
+  it('keeps provisioning skipped once reattaching was observed, even after the server advances', () => {
+    const { rerender } = renderWithProgress({ phase: 'reattaching', message: 'Reattaching…' });
+    expect(stepByLabel('Provisioning sandbox')).toHaveAttribute('data-status', 'skipped');
+
+    // Server moves past reattaching to a later phase — provisioning must
+    // stay `skipped`, not flip to `complete` (which would read as "it ran").
+    rerender(
+      <ChatSessionContext.Provider
+        value={{ ...BASE_SESSION, sandboxProgress: { phase: 'cloning', message: 'Cloning octo/hello…' } }}
+      >
+        <SessionPrepareSteps />
+      </ChatSessionContext.Provider>,
+    );
+
+    expect(stepByLabel('Reattaching to sandbox')).toHaveAttribute('data-status', 'complete');
+    expect(stepByLabel('Provisioning sandbox')).toHaveAttribute('data-status', 'skipped');
+    expect(stepByLabel('Cloning repository')).toHaveAttribute('data-status', 'active');
+  });
+
   it('falls back to just the canonical label when no server message is present on the active step', () => {
     renderWithProgress({ phase: 'cloning', message: '' });
 

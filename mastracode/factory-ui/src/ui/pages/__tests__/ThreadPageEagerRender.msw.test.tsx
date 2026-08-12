@@ -177,11 +177,9 @@ describe('ThreadPage eager render during /ensure', () => {
     expect(screen.getByText('Reattaching to sandbox')).toBeInTheDocument();
     expect(screen.getByText('Starting…')).toBeInTheDocument();
 
-    // Send button is disabled during preparing. In Phase 1 this is a
-    // *transitive* effect of the connection status (SSE stream is opened but
-    // never emits an event in this fixture, so `status` stays 'connecting').
-    // Phase 2 makes this the primary gate by wiring `sandboxPreparing` into
-    // `sendDisabled` directly; the assertion carries over unchanged.
+    // Send button is disabled during preparing. Phase 2 wires
+    // `sandboxPreparing` directly into `sendDisabled` — the more precise
+    // assertion (title attribute) lives in the second `it` block below.
     const sendButton = screen.getByRole('button', { name: 'Send message' });
     expect(sendButton).toBeDisabled();
 

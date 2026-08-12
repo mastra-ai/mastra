@@ -1,3 +1,4 @@
+import { useRef } from 'react';
 import { CheckCircle2, Circle, Loader2 } from 'lucide-react';
 
 import type { PrepareProgress } from '../../workspaces/services/github';
@@ -42,7 +43,13 @@ export function SessionPrepareSteps() {
   // generic "Starting…" message so the loader isn't visually empty.
   const activePhase: PrepareProgress['phase'] = observed ?? 'reattaching';
   const activeMessage = sandboxProgress?.message ?? 'Starting…';
-  const reattaching = observed === 'reattaching';
+  // Track "we ever saw reattaching" so `provisioning` stays consistently
+  // skipped even after the server advances past `reattaching`. Without this,
+  // `provisioning` would flip strikethrough → check-mark as later phases
+  // arrive, which reads as "provisioning ran".
+  const sawReattachingRef = useRef(false);
+  if (observed === 'reattaching') sawReattachingRef.current = true;
+  const sawReattaching = sawReattachingRef.current;
 
   return (
     <div
@@ -52,7 +59,7 @@ export function SessionPrepareSteps() {
       data-testid="session-prepare-steps"
     >
       {PHASE_ORDER.map(phase => {
-        const status = stepStatus(phase, activePhase, reattaching);
+        const status = stepStatus(phase, activePhase, sawReattaching);
         return (
           <SessionPrepareStep
             key={phase}
@@ -69,9 +76,11 @@ export function SessionPrepareSteps() {
 function stepStatus(
   phase: PrepareProgress['phase'],
   activePhase: PrepareProgress['phase'],
-  reattaching: boolean,
+  sawReattaching: boolean,
 ): StepStatus {
-  if (reattaching && phase === 'provisioning') return 'skipped';
+  // `provisioning` is skipped for the whole ensure cycle once `reattaching`
+  // has been observed — even after the server advances past it.
+  if (sawReattaching && phase === 'provisioning') return 'skipped';
   const activeIdx = PHASE_ORDER.indexOf(activePhase);
   const phaseIdx = PHASE_ORDER.indexOf(phase);
   if (phaseIdx < activeIdx) return 'complete';
