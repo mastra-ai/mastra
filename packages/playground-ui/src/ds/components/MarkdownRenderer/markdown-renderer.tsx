@@ -66,7 +66,7 @@ function MarkdownCodeBlock({ node, children }: { node?: MarkdownNode; children?:
       code={fenced.code}
       lang={fenced.language}
       overflow="scroll"
-      className="my-3 bg-surface1"
+      className="bg-surface1 my-3"
       copyMessage="Copied code to clipboard"
     />
   );

@@ -1,7 +1,12 @@
 /* Markdown typography. Plain CSS rather than one React wrapper per element:
  * markers, task lists and tables need selectors no `[&_x]` class string carries
  * readably. Declared in `@layer components`, so a surface that needs another
- * tone or size overrides it with a utility on the renderer itself. */
+ * tone or size overrides it with a utility on the renderer itself.
+ *
+ * A component stylesheet can load before the app's Tailwind entry, and the
+ * first sheet to name a layer fixes its rank. Restating the full order keeps
+ * preflight from winning over these rules whichever one lands first. */
+@layer properties, theme, base, components, utilities;
 
 @layer components {
   .mastra-markdown {
