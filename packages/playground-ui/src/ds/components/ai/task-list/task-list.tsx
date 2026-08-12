@@ -1,6 +1,6 @@
 import type { TaskItem } from '@mastra/core/signals';
 import { CheckCircle2, ChevronRight, Circle, ListChecks, Loader2 } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import type { ComponentProps, ReactNode } from 'react';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
 import { ScrollArea } from '@/ds/components/ScrollArea';
@@ -100,6 +100,17 @@ const TaskListSummary = ({ task }: { task: TaskListItem }) => (
   </span>
 );
 
+const TaskListTitle = ({ title }: { title: ReactNode }) => (
+  <span className="flex min-w-0 flex-1 items-center gap-2">
+    <ListChecks className="text-accent6 size-4 shrink-0" />
+    <span className="text-ui-sm leading-ui-sm text-neutral6 truncate font-medium">{title}</span>
+  </span>
+);
+
+const scrollTaskIntoView = (node: HTMLLIElement | null) => {
+  if (typeof node?.scrollIntoView === 'function') node.scrollIntoView({ block: 'nearest' });
+};
+
 export interface TaskListProps extends Omit<ComponentProps<typeof TaskListContainer>, 'children' | 'title'> {
   tasks: TaskListItem[];
   title?: ReactNode;
@@ -119,17 +130,10 @@ export const TaskList = ({
   ...props
 }: TaskListProps) => {
   const [open, setOpen] = useState(defaultOpen);
-  const activeTaskRef = useRef<HTMLLIElement | null>(null);
   const activeTask = tasks.find(task => task.status === 'in_progress');
   const summaryTask = activeTask ?? tasks.find(task => task.status === 'pending');
   const completed = tasks.filter(task => task.status === 'completed').length;
   const total = tasks.length;
-
-  useEffect(() => {
-    if (!scrollActiveIntoView || !activeTaskRef.current || typeof activeTaskRef.current.scrollIntoView !== 'function')
-      return;
-    activeTaskRef.current.scrollIntoView({ block: 'nearest' });
-  }, [activeTask?.id, open, scrollActiveIntoView]);
 
   if ((hideWhenEmpty && total === 0) || (hideWhenComplete && total > 0 && completed === total)) return null;
 
@@ -138,14 +142,7 @@ export const TaskList = ({
       <Collapsible open={open} onOpenChange={setOpen}>
         <TaskListHeader>
           <ChevronRight className="size-3.5 shrink-0" />
-          {open || !summaryTask ? (
-            <span className="flex min-w-0 flex-1 items-center gap-2">
-              <ListChecks className="text-accent6 size-4 shrink-0" />
-              <span className="text-ui-sm leading-ui-sm text-neutral6 truncate font-medium">{title}</span>
-            </span>
-          ) : (
-            <TaskListSummary task={summaryTask} />
-          )}
+          {open || !summaryTask ? <TaskListTitle title={title} /> : <TaskListSummary task={summaryTask} />}
           <TaskListCount completed={completed} total={total} />
         </TaskListHeader>
         <CollapsibleContent>
@@ -153,7 +150,11 @@ export const TaskList = ({
           <ScrollArea maxHeight="8rem" viewPortClassName="pr-1">
             <ul className="space-y-1">
               {tasks.map(task => (
-                <TaskListRow key={task.id} ref={task.id === activeTask?.id ? activeTaskRef : undefined} task={task} />
+                <TaskListRow
+                  key={task.id}
+                  ref={scrollActiveIntoView && task.id === activeTask?.id ? scrollTaskIntoView : undefined}
+                  task={task}
+                />
               ))}
             </ul>
           </ScrollArea>
