@@ -165,34 +165,23 @@ describe('MCPServer tools/call `_meta`', () => {
     });
   });
 
-  it('preserves declared `ui` siblings (csp, permissions) when execute() overrides resourceUri', async () => {
+  it('preserves the declared `ui.visibility` when execute() overrides resourceUri', async () => {
     const server = makeServer({
       calculator: {
-        description: 'An app tool declaring a CSP and permissions',
+        description: 'An app tool declaring a visibility scope',
         parameters: z.object({}),
         execute: async () => ({ value: 42, _meta: { ui: { resourceUri: 'ui://calculator/override' } } }),
-        mcp: {
-          _meta: {
-            ui: {
-              resourceUri: RESOURCE_URI,
-              csp: { connectDomains: ['https://api.example.com'] },
-              permissions: { clipboard: true },
-            },
-          },
-        },
+        mcp: { _meta: { ui: { resourceUri: RESOURCE_URI, visibility: ['app'] } } },
       },
     } as ToolsInput);
 
     const result = await callTool(server, 'calculator');
 
-    // `ui` is a namespace (McpUiToolMetaSchema: resourceUri, visibility, csp,
-    // permissions) — an author-supplied `ui` must not drop the declared CSP.
+    // `ui` is a namespace — per McpUiToolMetaSchema a tool may set `resourceUri`
+    // and `visibility` — so an author-supplied `ui` must not drop the declared
+    // visibility scope.
     expect(result._meta).toEqual({
-      ui: {
-        resourceUri: 'ui://calculator/override',
-        csp: { connectDomains: ['https://api.example.com'] },
-        permissions: { clipboard: true },
-      },
+      ui: { resourceUri: 'ui://calculator/override', visibility: ['app'] },
       [RESOURCE_URI_META_KEY]: 'ui://calculator/override',
     });
   });

@@ -65,10 +65,11 @@ export function normalizeToolUiMeta(meta: Record<string, unknown> | undefined): 
  * Merges a tool's declared `_meta` with the `_meta` its `execute()` returned.
  *
  * Author metadata wins on collision, except that `ui` is merged key by key rather
- * than replaced. `ui` is a namespace — per `McpUiToolMetaSchema` it carries
- * `visibility`, `csp` and `permissions` alongside `resourceUri` — so letting an
- * author-supplied `ui` object replace the declared one wholesale would silently
- * drop the tool's CSP and permissions.
+ * than replaced. `ui` is a namespace — per `McpUiToolMetaSchema` a tool may set
+ * `visibility` alongside `resourceUri` — so letting an author-supplied `ui` object
+ * replace the declared one wholesale would drop the sibling keys, and an author
+ * `ui` carrying no `resourceUri` would strip the declared nested URI while the
+ * mirrored flat key survived, leaving the two forms disagreeing.
  */
 export function mergeToolMeta(
   declared: Record<string, unknown> | undefined,
