@@ -1,19 +1,19 @@
 import sidebar from '../../content/en/integrations/sidebars'
 
-interface IntegrationCustomProps {
+export interface IntegrationCustomProps {
   icon?: string
   iconDark?: string
   customCSS?: string
 }
 
-interface IntegrationDocItem {
+export interface IntegrationDocItem {
   type: 'doc'
   id: string
   label: string
   customProps?: IntegrationCustomProps
 }
 
-interface IntegrationLinkItem {
+export interface IntegrationLinkItem {
   type: 'link'
   href: string
   label: string
@@ -86,6 +86,7 @@ export function getIntegrationItems(
   section: string,
   allowlist?: readonly string[],
   blocklist?: readonly string[],
+  additionalItems: readonly IntegrationItem[] = [],
 ): IntegrationItem[] {
   const category = integrationCategories.find(candidate => candidate.label === section)
   if (!category) return []
@@ -97,6 +98,7 @@ export function getIntegrationItems(
         return item ? [item] : []
       })
     : category.items
+  const includedItems = [...items, ...additionalItems].filter(item => !blockedKeys.has(getIntegrationItemKey(item)))
 
-  return items.filter(item => !blockedKeys.has(getIntegrationItemKey(item)))
+  return additionalItems.length > 0 ? [...includedItems].sort((a, b) => a.label.localeCompare(b.label)) : includedItems
 }

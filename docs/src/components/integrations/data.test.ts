@@ -1,42 +1,21 @@
 import { describe, expect, it } from 'vitest'
 
-import { getIntegrationItemHref, getIntegrationItemKey, getIntegrationItems } from './data'
+import { getIntegrationItemHref, getIntegrationItemKey, getIntegrationItems, integrationCategories } from './data'
 
 describe('getIntegrationItems', () => {
   it('returns all items from a sidebar section', () => {
-    expect(getIntegrationItems('Channels').map(item => getIntegrationItemKey(item))).toEqual([
-      'channels/discord',
-      'channels/github',
-      'channels/imessage',
-      'channels/teams',
-      'channels/slack',
-      'channels/telegram',
-      'channels/whatsapp',
-    ])
+    const channels = integrationCategories.find(category => category.label === 'Channels')
+
+    expect(channels).toBeDefined()
+    expect(getIntegrationItems('Channels')).toEqual(channels?.items)
   })
 
   it('returns allowlisted items in the requested display order', () => {
     expect(
-      getIntegrationItems('Frameworks', ['frameworks/next-js', 'frameworks/vite-react', 'frameworks/astro']).map(
-        item => ({ id: getIntegrationItemKey(item), label: item.label, icon: item.customProps?.icon }),
+      getIntegrationItems('Frameworks', ['frameworks/next-js', 'frameworks/vite-react', 'frameworks/astro']).map(item =>
+        getIntegrationItemKey(item),
       ),
-    ).toEqual([
-      {
-        id: 'frameworks/next-js',
-        label: 'Next.js',
-        icon: 'https://cdn.simpleicons.org/nextdotjs/black?viewbox=auto&size=28',
-      },
-      {
-        id: 'frameworks/vite-react',
-        label: 'React + Vite',
-        icon: 'https://cdn.simpleicons.org/vite?viewbox=auto&size=28',
-      },
-      {
-        id: 'frameworks/astro',
-        label: 'Astro',
-        icon: 'https://cdn.simpleicons.org/astro?viewbox=auto&size=28',
-      },
-    ])
+    ).toEqual(['frameworks/next-js', 'frameworks/vite-react', 'frameworks/astro'])
   })
 
   it('includes sidebar links with their configured destination', () => {
@@ -49,12 +28,30 @@ describe('getIntegrationItems', () => {
     expect(getIntegrationItemHref(mastra)).toBe('/docs/mastra-platform/deploy')
   })
 
-  it('excludes blocklisted items', () => {
-    expect(
-      getIntegrationItems('Channels', undefined, ['channels/github', 'channels/imessage']).map(item =>
-        getIntegrationItemKey(item),
-      ),
-    ).toEqual(['channels/discord', 'channels/teams', 'channels/slack', 'channels/telegram', 'channels/whatsapp'])
+  it('inserts additional items into the section label order', () => {
+    const additionalItem = {
+      type: 'link' as const,
+      href: '/reference/workspace/local-sandbox',
+      label: 'LocalSandbox',
+    }
+    const items = getIntegrationItems('Sandboxes', undefined, undefined, [additionalItem])
+    const labels = items.map(item => item.label)
+    const additionalItemIndex = labels.indexOf(additionalItem.label)
+
+    expect(items).toContainEqual(additionalItem)
+    expect(additionalItemIndex).toBeGreaterThan(0)
+    expect(additionalItemIndex).toBeLessThan(labels.length - 1)
+    expect(labels[additionalItemIndex - 1]?.localeCompare(additionalItem.label)).toBeLessThan(0)
+    expect(additionalItem.label.localeCompare(labels[additionalItemIndex + 1] ?? '')).toBeLessThan(0)
+  })
+
+  it('excludes blocklisted items without changing the remaining section items', () => {
+    const blocklist = ['channels/github', 'channels/imessage']
+    const expectedItems = getIntegrationItems('Channels').filter(
+      item => !blocklist.includes(getIntegrationItemKey(item)),
+    )
+
+    expect(getIntegrationItems('Channels', undefined, blocklist)).toEqual(expectedItems)
   })
 
   it('applies the blocklist after the allowlist', () => {

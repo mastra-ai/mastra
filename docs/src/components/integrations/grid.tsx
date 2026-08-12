@@ -8,6 +8,7 @@ interface IntegrationGridProps {
   section: string
   allowlist?: readonly string[]
   blocklist?: readonly string[]
+  additionalItems?: readonly IntegrationItem[]
   columns?: 3 | 4
 }
 
@@ -66,6 +67,11 @@ export function IntegrationItemsGrid({ items, columns = 3 }: IntegrationItemsGri
   )
 }
 
-export function IntegrationGrid({ section, allowlist, blocklist, columns = 3 }: IntegrationGridProps) {
-  return <IntegrationItemsGrid items={getIntegrationItems(section, allowlist, blocklist)} columns={columns} />
+export function IntegrationGrid({ section, allowlist, blocklist, additionalItems, columns = 3 }: IntegrationGridProps) {
+  return (
+    <IntegrationItemsGrid
+      items={getIntegrationItems(section, allowlist, blocklist, additionalItems)}
+      columns={columns}
+    />
+  )
 }

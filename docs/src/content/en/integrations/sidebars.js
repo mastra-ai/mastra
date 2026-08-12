@@ -202,6 +202,12 @@ const sidebars = {
           customProps: { icon: '/img/integrations/e2b.svg', customCSS: 'dark:invert' },
         },
         {
+          type: 'link',
+          label: 'Mastra',
+          href: '/reference/workspace/platform-sandbox',
+          customProps: { icon: '/img/integrations/mastra.svg', customCSS: 'dark:invert' },
+        },
+        {
           type: 'doc',
           id: 'sandboxes/modal',
           label: 'Modal',
