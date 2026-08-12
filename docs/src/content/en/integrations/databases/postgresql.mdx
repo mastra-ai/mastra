@@ -1,5 +1,5 @@
 ---
-title: "PostgreSQL | Storage"
+title: "PostgreSQL | Database"
 description: Documentation for the PostgreSQL storage implementation in Mastra.
 packages:
   - "@mastra/core"
@@ -627,7 +627,7 @@ const stats = await storage.db.one(`
 
 PostgreSQL offers different index types optimized for specific scenarios:
 
-| Index Type | Best For | Storage | Speed |
+| Index Type | Best For | Database | Speed |
 | - | - | - | - |
 | **btree** (default) | Range queries, sorting, general purpose | Moderate | Fast |
 | **hash** | Equality comparisons only | Small | Very fast for `=` |
