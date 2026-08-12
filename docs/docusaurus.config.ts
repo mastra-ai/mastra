@@ -147,7 +147,7 @@ const config: Config = {
           {
             label: 'Quickstart',
             description: 'Get up and running with Mastra',
-            link: '/guides/getting-started/quickstart',
+            link: '/docs',
           },
           { label: 'Studio', description: 'Test your agents, workflows, and tools', link: '/docs/studio/overview' },
           {

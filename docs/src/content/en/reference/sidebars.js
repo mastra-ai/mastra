@@ -881,6 +881,10 @@ const sidebars = {
       label: 'Voice',
       collapsed: true,
       items: [
+        { type: 'doc', id: 'voice/overview', label: 'Overview' },
+        { type: 'doc', id: 'voice/text-to-speech', label: 'Text to Speech' },
+        { type: 'doc', id: 'voice/speech-to-text', label: 'Speech to Text' },
+        { type: 'doc', id: 'voice/speech-to-speech', label: 'Speech to Speech' },
         { type: 'doc', id: 'voice/composite-voice', label: 'Composite Voice' },
         { type: 'doc', id: 'voice/voice.events', label: 'Events' },
         { type: 'doc', id: 'voice/mastra-voice', label: 'Mastra Voice' },
