@@ -42,7 +42,7 @@
     },
     {
       "source": "/docs/observability/tracing/exporters/cloud",
-      "destination": "/docs/observability/integrations/exporters/mastra-platform",
+      "destination": "/docs/mastra-platform/observability",
       "permanent": true
     },
     {
@@ -2006,6 +2006,11 @@
       "permanent": true
     },
     {
+      "source": "/docs/observability/integrations/exporters/mastra-platform",
+      "destination": "/docs/mastra-platform/observability",
+      "permanent": true
+    },
+    {
       "source": "/docs/editor/prompts/llms.txt",
       "destination": "/docs/editor/overview/llms.txt",
       "permanent": true
@@ -2032,7 +2037,7 @@
     },
     {
       "source": "/docs/observability/tracing/exporters/cloud/llms.txt",
-      "destination": "/docs/observability/integrations/exporters/mastra-platform/llms.txt",
+      "destination": "/docs/mastra-platform/observability/llms.txt",
       "permanent": true
     },
     {
@@ -3603,6 +3608,11 @@
     {
       "source": "/docs/observability/integrations/processors/sensitive-data-filter/llms.txt",
       "destination": "/reference/observability/tracing/processors/sensitive-data-filter/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/integrations/exporters/mastra-platform/llms.txt",
+      "destination": "/docs/mastra-platform/observability/llms.txt",
       "permanent": true
     }
   ]

@@ -593,17 +593,6 @@ const sidebars = {
                   id: 'observability/integrations/overview',
                   label: 'Overview',
                 },
-                {
-                  type: 'category',
-                  label: 'Exporters',
-                  items: [
-                    {
-                      type: 'doc',
-                      id: 'observability/integrations/exporters/mastra-platform',
-                      label: 'Mastra Platform',
-                    },
-                  ],
-                },
               ],
             },
           ],

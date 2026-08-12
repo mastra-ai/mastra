@@ -27,7 +27,7 @@
     },
     {
       "source": "/docs/observability/tracing/exporters/cloud",
-      "destination": "/docs/observability/integrations/exporters/mastra-platform",
+      "destination": "/docs/mastra-platform/observability",
       "permanent": true
     },
     {
@@ -1988,6 +1988,11 @@
     {
       "source": "/docs/observability/integrations/processors/sensitive-data-filter",
       "destination": "/reference/observability/tracing/processors/sensitive-data-filter",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/integrations/exporters/mastra-platform",
+      "destination": "/docs/mastra-platform/observability",
       "permanent": true
     }
   ]
