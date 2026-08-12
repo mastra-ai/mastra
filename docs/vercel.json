@@ -1946,6 +1946,11 @@
       "permanent": true
     },
     {
+      "source": "/reference/mastra-platform/api",
+      "destination": "/docs/mastra-platform/api",
+      "permanent": true
+    },
+    {
       "source": "/docs/editor/prompts/llms.txt",
       "destination": "/docs/editor/overview/llms.txt",
       "permanent": true
@@ -3533,6 +3538,11 @@
     {
       "source": "/guides/getting-started/manual-install/llms.txt",
       "destination": "/reference/manual-install/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/reference/mastra-platform/api/llms.txt",
+      "destination": "/docs/mastra-platform/api/llms.txt",
       "permanent": true
     }
   ]
