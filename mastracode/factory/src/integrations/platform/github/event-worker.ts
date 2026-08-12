@@ -11,7 +11,6 @@ import type { GithubRepositoryPermission } from '../../github/integration.js';
 import type { GithubIssueReconciler } from '../../github/issue-reconciler.js';
 import type { GithubPullRequestReconciler, ReconcileRepository } from '../../github/rules.js';
 import { listPullRequestSubscriptionsForWebhook, retirePullRequestSubscription } from '../../github/subscriptions.js';
-import type { GithubSubscriptionStorage } from '../../github/subscriptions.js';
 import { dispatchGithubWebhook } from '../../github/webhook.js';
 import type {
   GithubWebhookDispatchIntegration,
@@ -417,6 +416,7 @@ export class PlatformGithubEventWorker extends MastraWorker {
           isAuthorizedSender: notification => this.#isAuthorizedSender(notification),
           onTargetError: (subscription, error) => {
             this.deps?.logger.error('Platform GitHub event delivery failed for a subscription', {
+              deliveryId: event.deliveryId,
               subscriptionId: subscription.id,
               resourceId: subscription.resourceId,
               threadId: subscription.threadId,
@@ -425,9 +425,12 @@ export class PlatformGithubEventWorker extends MastraWorker {
           },
         });
         if (result.failed > 0) {
-          throw new Error(
-            `Platform GitHub event ${event.deliveryId} failed for ${result.failed} subscribed target(s).`,
-          );
+          this.deps?.logger.warn('Platform GitHub event completed with failed subscription deliveries', {
+            repositoryId,
+            deliveryId: event.deliveryId,
+            delivered: result.delivered,
+            failed: result.failed,
+          });
         }
       }
 

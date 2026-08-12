@@ -3,6 +3,7 @@ import { Mastra } from '@mastra/core/mastra';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MastraFactory } from '../../../factory.js';
+import type { FactoryProjectsStorage } from '../../../storage/domains/projects/base.js';
 import { subscribeToPullRequest } from '../../github/subscriptions.js';
 
 import { PlatformGithubIntegration } from './integration.js';
@@ -24,8 +25,8 @@ const harness = vi.hoisted(() => {
       mastra = instance;
     }),
     getMastra: vi.fn(() => mastra),
-    getSessionByResource: vi.fn(async () => session),
-    createSession: vi.fn(async () => session),
+    getSessionByResource: vi.fn<() => Promise<typeof session | undefined>>(async () => session),
+    createSession: vi.fn(async (_input: { requestContext: { get(key: string): unknown } }) => session),
     onSessionCreated: vi.fn(),
     // Mastra's constructor probes each controller for channels wiring.
     getChannels: vi.fn(() => undefined),
@@ -131,17 +132,50 @@ describe('Platform GitHub event worker factory lifecycle', () => {
       expect(worker?.name).toBe('platform-github-events');
       expect(worker?.isRunning).toBe(false);
 
+      const projects = storage.getDomain<FactoryProjectsStorage>('projects');
+      const factoryProject = await projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'App' } });
+      const installation = await github.sourceControlStorage.installations.upsert({
+        orgId: 'org-1',
+        connectedByUserId: 'user-1',
+        externalId: '7',
+      });
+      const repository = await github.sourceControlStorage.repositories.upsert({
+        orgId: 'org-1',
+        input: { installationId: installation.id, externalId: '99', slug: 'octo/hello', defaultBranch: 'main' },
+      });
+      const connection = await github.sourceControlStorage.connections.create({
+        orgId: 'org-1',
+        factoryProjectId: factoryProject.id,
+        installationId: installation.id,
+        createdByUserId: 'user-1',
+      });
+      const projectRepository = await github.sourceControlStorage.projectRepositories.link({
+        orgId: 'org-1',
+        connectionId: connection.id,
+        repositoryId: repository.id,
+        createdByUserId: 'user-1',
+        sandboxProvider: 'local',
+        sandboxWorkdir: '/tmp/app',
+      });
+      await github.sourceControlStorage.sessions.create({
+        sessionId: 'session-1',
+        projectRepositoryId: projectRepository.id,
+        orgId: 'org-1',
+        userId: 'user-1',
+        branch: 'feat/polling',
+        baseBranch: 'main',
+      });
       await subscribeToPullRequest(
         {
           orgId: 'org-1',
           installationExternalId: '7',
-          projectRepositoryId: 'project-repository-1',
+          projectRepositoryId: projectRepository.id,
           repositoryExternalId: '99',
           repositorySlug: 'octo/hello',
           changeRequestId: '34',
           sessionId: 'session-1',
           ownerId: 'owner-1',
-          resourceId: 'resource-1',
+          resourceId: factoryProject.id,
           threadId: 'thread-1',
           sessionScope: '/worktrees/a',
           source: 'explicit-tool',
@@ -150,11 +184,23 @@ describe('Platform GitHub event worker factory lifecycle', () => {
         github.integrationStorage,
       );
 
+      harness.controller.getSessionByResource.mockResolvedValueOnce(undefined);
       const mastra = new Mastra(args);
       await factory.finalize();
       expect(worker?.isRunning).toBe(true);
 
       await vi.waitFor(() => expect(harness.sendNotificationSignal).toHaveBeenCalledOnce());
+      expect(harness.controller.createSession).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'session-1',
+          ownerId: 'user-1',
+          resourceId: factoryProject.id,
+          scope: '/worktrees/a',
+          requestContext: expect.anything(),
+        }),
+      );
+      const requestContext = harness.controller.createSession.mock.calls[0]![0].requestContext;
+      expect(requestContext.get('user')).toEqual({ workosId: 'user-1', organizationId: 'org-1' });
       expect(await pubsub.getLeaseOwner('platform-github-events:github')).toEqual(expect.any(String));
 
       await mastra.stopWorkers();

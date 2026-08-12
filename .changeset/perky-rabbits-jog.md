@@ -2,6 +2,10 @@
 '@mastra/factory': patch
 ---
 
-Trigger a fresh review pass when a push arrives on a pull request whose review card already finished Reviewing, and cancel any in-flight review run before dispatching the new one so the superseded pass stops consuming tokens. Re-review from Factory's own bot now also cancels the previous run. The platform-backed polling worker also feeds `synchronize` and `review_requested` events to the factory rules engine, so hosted Factory installations get re-reviews the same way direct-webhook installations do.
+- Trigger a fresh review when a push arrives after a pull request review finishes.
+- Cancel an in-flight review when a push or Factory bot re-review request supersedes it.
+- Route platform-polled `synchronize` and `review_requested` events through the same review rules as direct webhooks.
+- Revive subscribed sessions with the persisted owner identified by the subscription session ID.
+- Isolate failed subscription deliveries so stale bindings do not replay events or block newer repository activity.
 
-A push (or bot re-review request) that returns a card from `done` back to `review` now dispatches the new `factory-rereview` skill instead of `factory-review`. The re-review pass is tuned for its context — reconcile the previous review against the pushed commits, flag defects the push itself introduced, take a fresh sweep over the PR as it now stands, then publish and transition — while running on the same terminal-handoff and untrusted-checkout contracts as `factory-review`. Cancellation and skill choice are decoupled: a superseded first-time review still dispatches `factory-review` on restart (no prior pass to reconcile), only re-entries from `done` get `factory-rereview`.
+A push or bot request that returns a card from `done` to `review` now runs `factory-rereview`. The skill reconciles the previous review against the pushed commits, checks for newly introduced defects, and reviews the whole pull request again before publishing its verdict. A canceled first-time review still restarts with `factory-review` because it has no completed pass to reconcile.
