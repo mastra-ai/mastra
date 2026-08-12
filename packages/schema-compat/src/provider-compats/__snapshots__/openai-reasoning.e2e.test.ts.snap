@@ -181,6 +181,7 @@ constraints: multiple of 2",
     "optional": {
       "anyOf": [
         {
+          "description": "leave this field empty (undefined value) as an example of an optional field",
           "type": "string",
         },
         {

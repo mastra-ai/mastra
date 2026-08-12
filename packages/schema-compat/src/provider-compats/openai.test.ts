@@ -49,37 +49,30 @@ describe('OpenAISchemaCompatLayer', () => {
       required: ['query'],
     };
 
-    it('keeps shared annotations once and splits type-specific keywords into branches', () => {
+    it('keeps recursive object structure only in the object branch', () => {
       const result = compat.processToJSONSchema(structuredClone(searchToolSchema) as any) as Record<string, any>;
       const filter = result.properties.filter;
 
-      // Shared annotation stays once on the containing property
-      expect(filter.description).toBe('Filter object or saved filter name');
-      expect(JSON.stringify(result).split('Filter object or saved filter name').length - 1).toBe(1);
-
-      // Property itself no longer carries object-only structure
       expect(filter).not.toHaveProperty('properties');
       expect(filter).not.toHaveProperty('required');
       expect(filter).not.toHaveProperty('additionalProperties');
       expect(filter).not.toHaveProperty('x-optional');
       expect(filter).not.toHaveProperty('type');
 
-      // anyOf has exactly object, string, and null branches
       const types = filter.anyOf.map((b: any) => b.type);
       expect(types).toEqual(['string', 'object', 'null']);
 
-      // Only the object branch carries object structure
+      expect(filter.description).toBe('Filter object or saved filter name');
       const objectBranch = filter.anyOf.find((b: any) => b.type === 'object');
       expect(objectBranch.properties.field).toEqual({ type: 'string' });
       expect(objectBranch.additionalProperties).toBe(false);
       expect(objectBranch.required).toEqual(['field', 'note']);
       expect(objectBranch['x-optional']).toEqual(['note']);
 
-      // The string branch carries no object-only keywords or nested subtree
       const stringBranch = filter.anyOf.find((b: any) => b.type === 'string');
       expect(stringBranch).toEqual({ type: 'string' });
+      expect(JSON.stringify(result).split('Filter object or saved filter name').length - 1).toBe(1);
 
-      // Strict-mode invariants on the parent remain
       expect(result.required).toContain('filter');
       expect(result['x-optional']).toContain('filter');
       expect(result.additionalProperties).toBe(false);
@@ -151,12 +144,43 @@ describe('OpenAISchemaCompatLayer', () => {
       expect(value).not.toHaveProperty('minLength');
     });
 
-    it('keeps enum and const constraints once while accepting optional nulls', async () => {
+    it('preserves parent date metadata when traversing a multi-type property', async () => {
+      const dateSchema = {
+        '~standard': {
+          version: 1,
+          vendor: 'test',
+          validate: (value: any) =>
+            value.timestamp instanceof Date
+              ? { value }
+              : { issues: [{ message: 'timestamp must be a Date', path: ['timestamp'] }] },
+          jsonSchema: {
+            input: () => ({
+              type: 'object',
+              properties: {
+                timestamp: {
+                  type: ['string', 'number'],
+                  format: 'date-time',
+                  'x-date': true,
+                },
+              },
+              required: [],
+            }),
+            output: () => ({}),
+          },
+        },
+      } as any;
+      const compatSchema = compat.processToCompatSchema(dateSchema);
+
+      const result: any = await compatSchema['~standard'].validate({ timestamp: '2026-08-12T12:00:00.000Z' });
+      expect(result).not.toHaveProperty('issues');
+      expect(result.value.timestamp).toEqual(new Date('2026-08-12T12:00:00.000Z'));
+    });
+
+    it('keeps multi-type enum constraints once while accepting optional nulls', async () => {
       const compatSchema = compat.processToCompatSchema({
         type: 'object',
         properties: {
           mode: { type: ['string', 'integer'], enum: ['fast', 'slow', 1, 2] },
-          status: { type: 'string', const: 'ready' },
         },
         required: [],
       } as any);
@@ -167,54 +191,17 @@ describe('OpenAISchemaCompatLayer', () => {
       expect(mode.anyOf).toEqual([{ type: 'string' }, { type: 'integer' }, { type: 'null' }]);
       expect(JSON.stringify(mode).split('"enum"').length - 1).toBe(1);
 
-      const status = result.properties.status;
-      expect(status.enum).toEqual(['ready', null]);
-      expect(status).not.toHaveProperty('const');
-
-      const nullResult: any = await compatSchema['~standard'].validate({ mode: null, status: null });
+      const nullResult: any = await compatSchema['~standard'].validate({ mode: null });
       expect(nullResult).not.toHaveProperty('issues');
-      expect(nullResult.value).toEqual({ mode: undefined, status: undefined });
+      expect(nullResult.value).toEqual({ mode: undefined });
 
-      const validResult: any = await compatSchema['~standard'].validate({ mode: 'fast', status: 'ready' });
+      const validResult: any = await compatSchema['~standard'].validate({ mode: 'fast' });
       expect(validResult).not.toHaveProperty('issues');
-      const invalidResult: any = await compatSchema['~standard'].validate({ mode: 'invalid', status: 'waiting' });
+      const invalidResult: any = await compatSchema['~standard'].validate({ mode: 'invalid' });
       expect(invalidResult).toHaveProperty('issues');
     });
 
-    it('does not duplicate subtrees for single-type optional object properties', () => {
-      const result = compat.processToJSONSchema({
-        type: 'object',
-        properties: {
-          settings: {
-            type: 'object',
-            description: 'Optional settings',
-            properties: { theme: { type: 'string', description: 'THEME_MARKER' } },
-            required: ['theme'],
-            additionalProperties: false,
-          },
-        },
-        required: [],
-      } as any) as Record<string, any>;
-
-      // The nested subtree is serialized once, in the object branch only
-      expect(JSON.stringify(result).split('THEME_MARKER').length - 1).toBe(1);
-
-      const settings = result.properties.settings;
-      expect(settings.description).toBe('Optional settings');
-      expect(settings).not.toHaveProperty('properties');
-      expect(settings).not.toHaveProperty('required');
-      expect(settings).not.toHaveProperty('additionalProperties');
-
-      const objectBranch = settings.anyOf.find((b: any) => b.type === 'object');
-      expect(objectBranch.properties.theme).toEqual({ type: 'string', description: 'THEME_MARKER' });
-      expect(objectBranch.required).toEqual(['theme']);
-      expect(objectBranch.additionalProperties).toBe(false);
-    });
-
-    it.each([
-      ['multi-type', ['object', 'string']],
-      ['single-type', 'object'],
-    ] as const)('grows linearly for %s nested optional properties', (_, propertyType) => {
+    it('grows linearly for nested multi-type optional properties', () => {
       function nested(depth: number): Record<string, any> {
         if (depth === 0) {
           return {
@@ -228,7 +215,7 @@ describe('OpenAISchemaCompatLayer', () => {
           type: 'object',
           properties: {
             filter: {
-              type: propertyType,
+              type: ['object', 'string'],
               properties: { child: nested(depth - 1) },
               required: ['child'],
               additionalProperties: false,

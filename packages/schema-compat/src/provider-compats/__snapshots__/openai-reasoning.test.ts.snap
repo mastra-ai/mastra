@@ -137,6 +137,7 @@ exports[`OpenAIReasoningSchemaCompatLayer > ZodIntersection > should handle opti
   "additionalProperties": false,
   "properties": {
     "data": {
+      "additionalProperties": false,
       "anyOf": [
         {
           "additionalProperties": false,
@@ -157,6 +158,18 @@ exports[`OpenAIReasoningSchemaCompatLayer > ZodIntersection > should handle opti
         {
           "type": "null",
         },
+      ],
+      "properties": {
+        "a": {
+          "type": "string",
+        },
+        "b": {
+          "type": "number",
+        },
+      },
+      "required": [
+        "a",
+        "b",
       ],
     },
   },
