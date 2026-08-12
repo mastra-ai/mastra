@@ -903,7 +903,12 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           }
         }
 
-        if (!toolRequiresApproval && isResumeToolCall) {
+        // Clear the suspension entry for BOTH resume conventions: `resumeData` embedded in the
+        // LLM's re-emitted args (autoResumeSuspendedTools) and the workflow-level resumeData that
+        // `agent.resumeStream(resumeData, { runId, toolCallId })` delivers. `isResumeToolCall` only
+        // covers the former — it stays args-specific because the runId lookup above depends on
+        // that narrower meaning.
+        if (!toolRequiresApproval && !!resumeData) {
           await removeToolMetadata({ toolCallId: inputData.toolCallId, toolName: inputData.toolName }, 'suspension');
         }
 

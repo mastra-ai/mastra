@@ -1165,6 +1165,133 @@ describe('createToolCallStep delegated agent tool metadata', () => {
   });
 });
 
+describe('createToolCallStep suspension metadata cleanup on resume', () => {
+  let controller: { enqueue: Mock };
+  let streamState: { serialize: Mock };
+
+  const createSuspendedAssistantMessage = (toolCallId: string, toolName: string) => ({
+    id: 'assistant-suspended',
+    role: 'assistant' as const,
+    createdAt: new Date(0),
+    content: {
+      format: 2 as const,
+      metadata: {
+        suspendedTools: {
+          [toolCallId]: { toolCallId, toolName, runId: 'parent-run-id' },
+        },
+      } as Record<string, unknown>,
+      parts: [
+        {
+          type: 'tool-invocation' as const,
+          toolInvocation: { state: 'call' as const, toolCallId, toolName, args: {} },
+        },
+      ],
+    },
+  });
+
+  const runResumedTool = async ({
+    resumeData,
+    args,
+    message,
+    flushMessages,
+  }: {
+    resumeData?: unknown;
+    args: Record<string, unknown>;
+    message: ReturnType<typeof createSuspendedAssistantMessage>;
+    flushMessages: Mock;
+  }) => {
+    const messageList = {
+      get: {
+        input: { aiV5: { model: () => [] } },
+        response: { db: () => [message] },
+        all: { db: () => [message], aiV5: { model: () => [] } },
+      },
+    } as unknown as MessageList;
+
+    const tools = {
+      'hitl-tool': {
+        execute: vi.fn(async () => ({ confirmed: true })),
+      },
+    } as ToolSet;
+
+    const inputData = { toolCallId: 'hitl-call-id', toolName: 'hitl-tool', args };
+
+    const toolCallStep = createToolCallStep({
+      tools,
+      messageList,
+      controller,
+      runId: 'parent-run-id',
+      streamState,
+      _internal: {
+        saveQueueManager: { flushMessages },
+        threadId: 'thread-1',
+      },
+    } as any);
+
+    return toolCallStep.execute({
+      ...makeBaseExecuteParams(vi.fn(), { resumeData }),
+      writer: new ToolStream({
+        prefix: 'tool',
+        callId: inputData.toolCallId,
+        name: inputData.toolName,
+        runId: 'parent-run-id',
+      }),
+      inputData,
+    });
+  };
+
+  beforeEach(() => {
+    controller = { enqueue: vi.fn() };
+    streamState = { serialize: vi.fn().mockReturnValue('serialized-state') };
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+    vi.restoreAllMocks();
+  });
+
+  it('clears suspendedTools when resumed via workflow resumeData (agent.resumeStream)', async () => {
+    // `agent.resumeStream(resumeData, { runId, toolCallId })` delivers the payload as the step's
+    // workflow resumeData, NOT embedded in the LLM's args. The suspension entry must still be
+    // cleared, or a reloading client reads the resolved tool as still resumable.
+    const message = createSuspendedAssistantMessage('hitl-call-id', 'hitl-tool');
+    const flushMessages = vi.fn();
+
+    await runResumedTool({
+      resumeData: { confirmed: true },
+      args: { prompt: 'do thing' },
+      message,
+      flushMessages,
+    });
+
+    expect(message.content.metadata.suspendedTools).toBeUndefined();
+    expect(flushMessages).toHaveBeenCalled();
+  });
+
+  it('clears suspendedTools when resumed via resumeData embedded in args', async () => {
+    const message = createSuspendedAssistantMessage('hitl-call-id', 'hitl-tool');
+    const flushMessages = vi.fn();
+
+    await runResumedTool({
+      args: { prompt: 'do thing', resumeData: { confirmed: true } },
+      message,
+      flushMessages,
+    });
+
+    expect(message.content.metadata.suspendedTools).toBeUndefined();
+    expect(flushMessages).toHaveBeenCalled();
+  });
+
+  it('leaves suspendedTools intact for a plain (non-resume) tool call', async () => {
+    const message = createSuspendedAssistantMessage('other-call-id', 'other-tool');
+    const flushMessages = vi.fn();
+
+    await runResumedTool({ args: { prompt: 'do thing' }, message, flushMessages });
+
+    expect(message.content.metadata.suspendedTools).toHaveProperty('other-call-id');
+  });
+});
+
 describe('createToolCallStep needsApprovalFn enriched context', () => {
   let controller: { enqueue: Mock };
   let suspend: Mock;
