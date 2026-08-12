@@ -33,10 +33,10 @@ function requireFactoryProjectId(factoryProjectId: string | undefined): string {
 
 /** Rewrite the cached board's cards, keeping the run activity read alongside them. */
 function patchCards(queryClient: QueryClient, listKey: QueryKey, patch: (cards: WorkItem[]) => WorkItem[]) {
-  queryClient.setQueryData<BoardSnapshot>(listKey, board => ({
-    runningSessionIds: board?.runningSessionIds ?? [],
-    workItems: patch(board?.workItems ?? []),
-  }));
+  // Returning undefined skips the write: never seed a partial board before the list query loads.
+  queryClient.setQueryData<BoardSnapshot>(listKey, board =>
+    board ? { runningSessionIds: board.runningSessionIds, workItems: patch(board.workItems) } : undefined,
+  );
 }
 
 // Module-level so React Query can cache each derived value instead of
@@ -103,7 +103,7 @@ export function useUpdateWorkItemMutation(factoryProjectId: string | undefined) 
     onMutate: async ({ id, patch }) => {
       await queryClient.cancelQueries({ queryKey: listKey });
       const previous = queryClient.getQueryData<BoardSnapshot>(listKey);
-      if (previous && patch.parentWorkItemId !== undefined) {
+      if (patch.parentWorkItemId !== undefined) {
         patchCards(queryClient, listKey, cards =>
           cards.map(item => (item.id === id ? { ...item, parentWorkItemId: patch.parentWorkItemId ?? null } : item)),
         );
@@ -228,7 +228,7 @@ export function useDeleteWorkItemMutation(factoryProjectId: string | undefined) 
     onMutate: async id => {
       await queryClient.cancelQueries({ queryKey: listKey });
       const previous = queryClient.getQueryData<BoardSnapshot>(listKey);
-      if (previous) patchCards(queryClient, listKey, cards => cards.filter(item => item.id !== id));
+      patchCards(queryClient, listKey, cards => cards.filter(item => item.id !== id));
       return { previous };
     },
     onError: (_err, _id, context) => {

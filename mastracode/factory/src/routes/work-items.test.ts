@@ -714,6 +714,7 @@ describe('GET /web/factory/projects/:id/metrics', () => {
     const planned = await move('planning', (triaged as { revision: number }).revision, 'auto-2', {
       type: 'agent',
       bindingId: 'binding-1',
+      role: 'triage',
     });
     expect(planned.status).toBe('accepted');
     const approved = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items/${workItem.id}/transition`, {

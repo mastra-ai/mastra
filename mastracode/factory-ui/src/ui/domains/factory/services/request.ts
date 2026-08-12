@@ -1,10 +1,9 @@
 /** Shared JSON fetch for the Factory endpoints: cookie auth, server error message. */
 export async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, {
-    headers: { Accept: 'application/json', ...(init?.body ? { 'content-type': 'application/json' } : {}) },
-    credentials: 'include',
-    ...init,
-  });
+  const headers = new Headers(init?.headers);
+  if (!headers.has('Accept')) headers.set('Accept', 'application/json');
+  if (init?.body && !headers.has('content-type')) headers.set('content-type', 'application/json');
+  const res = await fetch(url, { ...init, headers, credentials: 'include' });
   if (!res.ok) {
     let message = `Request failed (${res.status})`;
     try {
