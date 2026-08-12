@@ -1,9 +1,12 @@
 import { describe, it, expectTypeOf } from 'vitest';
+import { z } from 'zod/v4';
 import type { Agent } from '../../agent';
+import { createStep, createWorkflow } from '../../workflows';
 import type { AnyWorkflow } from '../../workflows/workflow';
+import { createScorer } from '../base';
 import type { MastraScorer } from '../base';
 import { runEvals } from '.';
-import type { AgentScorerConfig, RunEvalsResult, ScorerEntry, WorkflowScorerConfig } from '.';
+import type { AgentScorerConfig, RunEvalsResult, WorkflowScorerConfig } from '.';
 
 /**
  * Regression tests for issues #21136 and #21290: `runEvals` accepts `gates`
@@ -43,16 +46,33 @@ describe('runEvals gates + scorer overloads', () => {
     expectTypeOf(result).resolves.toEqualTypeOf<RunEvalsResult>();
   });
 
-  it('accepts gates together with threshold scorers for a workflow target', () => {
-    const workflow = {} as AnyWorkflow;
-    const gates = [] as MastraScorer<any, any, any, any>[];
-    const scorers = [{ scorer: {} as MastraScorer, threshold: 0.7 }] satisfies ScorerEntry[];
+  it('accepts the issue #21290 workflow repro with gates and a threshold scorer', () => {
+    const inputSchema = z.object({ n: z.number() });
+    const outputSchema = z.object({ doubled: z.number() });
+    const workflow = createWorkflow({ id: 'repro-wf', inputSchema, outputSchema })
+      .then(
+        createStep({
+          id: 'double',
+          inputSchema,
+          outputSchema,
+          execute: async ({ inputData }) => ({ doubled: inputData.n * 2 }),
+        }),
+      )
+      .commit();
+
+    const scorerType = { input: inputSchema, output: outputSchema };
+    const evenGate = createScorer({ id: 'even-gate', description: 'gate', type: scorerType }).generateScore(
+      ({ run }) => (run.output.doubled % 2 === 0 ? 1 : 0),
+    );
+    const ratioScorer = createScorer({ id: 'ratio', description: 'threshold scorer', type: scorerType }).generateScore(
+      ({ run }) => run.output.doubled / 10,
+    );
 
     const result = runEvals({
       target: workflow,
-      data: [{ input: 'run it' }],
-      gates,
-      scorers,
+      data: [{ input: { n: 2 } }, { input: { n: 4 } }],
+      gates: [evenGate],
+      scorers: [{ scorer: ratioScorer, threshold: 0.5 }],
     });
 
     expectTypeOf(result).resolves.toEqualTypeOf<RunEvalsResult>();
