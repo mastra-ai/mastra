@@ -205,6 +205,8 @@ export function MessageScrollerProvider({
   const [viewportElement, setViewportElement] = React.useState<HTMLDivElement | null>(null);
   const [contentElement, setContentElement] = React.useState<HTMLDivElement | null>(null);
   const defaultScrollAppliedRef = React.useRef(false);
+  const deferDefaultScrollRef = React.useRef(false);
+  const defaultScrollScheduledRef = React.useRef(false);
   const seenAnchorIdsRef = React.useRef<Set<string> | null>(null);
   seenAnchorIdsRef.current ??= new Set<string>();
   const seenAnchorIds = seenAnchorIdsRef.current;
@@ -519,21 +521,48 @@ export function MessageScrollerProvider({
   }, [itemsVersion, updateScrollable, updateVisibility]);
 
   React.useLayoutEffect(() => {
-    if (defaultScrollAppliedRef.current || !viewportElement || itemsRegistry.size === 0) return;
-
-    const lastAnchorId = getLastAnchorId();
-    let didScroll = false;
-    if (defaultScrollPosition === 'start') {
-      didScroll = scrollToStart({ behavior: 'auto' });
-    } else if (defaultScrollPosition === 'last-anchor') {
-      didScroll = lastAnchorId
-        ? scrollToMessage(lastAnchorId, { align: 'start', behavior: 'auto' })
-        : scrollToEnd({ behavior: 'auto' });
-    } else {
-      didScroll = scrollToEnd({ behavior: 'auto' });
+    if (defaultScrollAppliedRef.current || !viewportElement) return undefined;
+    if (itemsRegistry.size === 0) {
+      deferDefaultScrollRef.current = true;
+      return undefined;
     }
 
-    if (didScroll) defaultScrollAppliedRef.current = true;
+    const applyDefaultScroll = () => {
+      const lastAnchorId = getLastAnchorId();
+      let didScroll = false;
+      if (defaultScrollPosition === 'start') {
+        didScroll = scrollToStart({ behavior: 'auto' });
+      } else if (defaultScrollPosition === 'last-anchor') {
+        didScroll = lastAnchorId
+          ? scrollToMessage(lastAnchorId, { align: 'start', behavior: 'auto' })
+          : scrollToEnd({ behavior: 'auto' });
+      } else {
+        didScroll = scrollToEnd({ behavior: 'auto' });
+      }
+
+      if (!didScroll) return;
+      defaultScrollAppliedRef.current = true;
+      turnAnchoringArmedRef.current = true;
+    };
+
+    if (!deferDefaultScrollRef.current) {
+      applyDefaultScroll();
+      return undefined;
+    }
+    if (defaultScrollScheduledRef.current) return undefined;
+
+    defaultScrollScheduledRef.current = true;
+    let cancelled = false;
+    scheduleScrollSync(() => {
+      scheduleScrollSync(() => {
+        defaultScrollScheduledRef.current = false;
+        if (!cancelled && !defaultScrollAppliedRef.current) applyDefaultScroll();
+      });
+    });
+    return () => {
+      cancelled = true;
+      defaultScrollScheduledRef.current = false;
+    };
   }, [
     defaultScrollPosition,
     getLastAnchorId,

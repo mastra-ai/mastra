@@ -37,11 +37,17 @@ minimumReleaseAgeExclude:
   - mastra
   - "@mastra/*"
 allowBuilds:
+  bufferutil: true
   esbuild: true
+  protobufjs: true
   sharp: true
+  utf-8-validate: true
 onlyBuiltDependencies:
+  - bufferutil
   - esbuild
+  - protobufjs
   - sharp
+  - utf-8-validate
 `;
 
 export interface OwnedStagingDirectory {
