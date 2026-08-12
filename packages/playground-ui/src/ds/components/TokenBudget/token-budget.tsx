@@ -58,7 +58,7 @@ export function TokenBudget({
       <span aria-hidden className="token-budget-dial" data-working={working || undefined} style={dialStyle} />
       <MetricValue className="text-icon3">
         {value}
-        {hint && <span className="text-icon2 italic"> {hint}</span>}
+        {hint && <span className="text-icon2 ps-1 italic">{hint}</span>}
       </MetricValue>
     </span>
   );

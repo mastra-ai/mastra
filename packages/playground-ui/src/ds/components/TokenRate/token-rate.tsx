@@ -43,7 +43,7 @@ export function TokenRate({ tokensPerSec, history, className }: TokenRateProps) 
       </svg>
       <MetricValue>
         {tokensPerSec}
-        <span className="text-icon2"> tok/s</span>
+        <span className="text-icon2 ps-1">tok/s</span>
       </MetricValue>
     </span>
   );
