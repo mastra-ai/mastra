@@ -37,8 +37,8 @@ describe('TokenRate', () => {
     const { container } = render(<TokenRate history={[40]} tokensPerSec={40} />);
     const drawn = bars(container);
 
-    expect(drawn).toHaveLength(12);
-    expect(drawn.at(-1)?.x).toBe(33);
+    expect(drawn).toHaveLength(6);
+    expect(drawn.at(-1)?.x).toBe(15);
     expect(drawn.at(-1)?.height).toBe(4);
   });
 
@@ -46,7 +46,7 @@ describe('TokenRate', () => {
     const { container } = render(<TokenRate history={[]} tokensPerSec={0} />);
     const drawn = bars(container);
 
-    expect(drawn).toHaveLength(12);
+    expect(drawn).toHaveLength(6);
     expect(drawn.every(bar => bar.height === 2)).toBe(true);
   });
 

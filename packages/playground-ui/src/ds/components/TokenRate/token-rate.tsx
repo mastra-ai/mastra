@@ -1,6 +1,6 @@
 import { cn } from '@/lib/utils';
 
-const SLOTS = 12;
+const SLOTS = 6;
 const BAR = 2;
 const GAP = 1;
 const HEIGHT = 12;

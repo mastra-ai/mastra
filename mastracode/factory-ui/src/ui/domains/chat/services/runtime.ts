@@ -41,7 +41,7 @@ export interface ChatRuntimeState {
   _sampledChars: number;
 }
 
-const RATE_SAMPLES = 12;
+const RATE_SAMPLES = 6;
 const SAMPLE_SECONDS = 0.25;
 /** A reply shorter than one sampling window still gets one reading, once the run ends and the whole decode can be timed. */
 const FLUSH_SECONDS = 0.05;
