@@ -274,7 +274,7 @@ export class EditorWorkspaceNamespace extends CrudEditorNamespace<
 
     return {
       create: input => store.create({ workspace: input }),
-      getByIdResolved: id => store.getByIdResolved(id),
+      getByIdResolved: (id, options) => store.getByIdResolved(id, options),
       update: input => store.update(input),
       delete: id => store.delete(id),
       list: args => store.list(args),

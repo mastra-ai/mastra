@@ -173,7 +173,7 @@ export class EditorPromptNamespace extends CrudEditorNamespace<
 
     return {
       create: input => store.create({ promptBlock: input }),
-      getByIdResolved: id => store.getByIdResolved(id),
+      getByIdResolved: (id, options) => store.getByIdResolved(id, options),
       update: input => store.update(input),
       delete: id => store.delete(id),
       list: args => store.list(args),
@@ -211,7 +211,6 @@ export class EditorPromptNamespace extends CrudEditorNamespace<
       throw new Error(`Failed to resolve entity ${input.id} after update`);
     }
 
-    this._cache.set(input.id, resolved);
     return resolved;
   }
 
