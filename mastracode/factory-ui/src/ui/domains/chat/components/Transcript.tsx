@@ -684,7 +684,7 @@ function MessageBubble({
       <div className="my-3 flex w-full flex-col items-end">
         <div
           className={`text-text1 max-w-[70%] rounded-xl px-4 py-2 break-words ${
-            entry.steer ? 'bg-warning1/10' : 'bg-surface3'
+            entry.steer ? 'bg-warning1/10' : 'bg-neutral6/5'
           }`}
         >
           {children}
