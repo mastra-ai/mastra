@@ -182,10 +182,9 @@ function useAgentsRunningCount(): number {
   const runningByPath = useWorkspaceActivity({
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId: resourceId ?? '',
-    scope: repository?.projectRepositoryId,
     worktreePaths: workspaceSessions.map(workspace => workspace.sessionId),
     baseUrl,
-    enabled: Boolean(resourceId && repository?.projectRepositoryId),
+    enabled: Boolean(resourceId),
   });
   return Object.values(runningByPath).filter(Boolean).length;
 }

@@ -995,6 +995,26 @@ export class AgentController extends BaseResource {
   }
 
   /**
+   * Passively list a resource's threads with live run state, without
+   * getting-or-creating a server session — safe for observers (e.g. a sidebar
+   * polling activity) that must not bring cold sessions online. Supports the
+   * same `limit` and `tags` filtering as `session().listThreads()`.
+   */
+  async listResourceThreads(
+    resourceId: string,
+    options?: { limit?: number; tags?: Record<string, string> },
+  ): Promise<AgentControllerThreadInfo[]> {
+    const params = new URLSearchParams();
+    if (options?.limit != null) params.set('limit', String(options.limit));
+    if (options?.tags && Object.keys(options.tags).length > 0) params.set('tags', JSON.stringify(options.tags));
+    const query = params.toString() ? `?${params.toString()}` : '';
+    const body = await this.request<{ threads: AgentControllerThreadInfo[] }>(
+      `${this.basePath()}/resources/${encodeURIComponent(resourceId)}/threads${query}`,
+    );
+    return body.threads;
+  }
+
+  /**
    * Scope to a session bound to `resourceId` (e.g. a user or conversation id).
    * Pass `scope` to address an independent session over the same resourceId
    * (e.g. one session per git worktree, with the worktree path as the scope).

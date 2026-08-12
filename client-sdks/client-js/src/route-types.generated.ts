@@ -20118,6 +20118,39 @@ export interface GetAgentControllerControllerIdSessionsResourceIdThreads_RouteCo
 }
 
 // ============================================================================
+// Route: GET /agent-controller/:controllerId/resources/:resourceId/threads
+// ============================================================================
+export type GetAgentControllerControllerIdResourcesResourceIdThreads_PathParams =
+  GetAgentControllerControllerIdSessionsResourceId_PathParams;
+
+export type GetAgentControllerControllerIdResourcesResourceIdThreads_QueryParams =
+  GetAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
+
+export type GetAgentControllerControllerIdResourcesResourceIdThreads_Response =
+  GetAgentControllerControllerIdSessionsResourceIdThreads_Response;
+
+export type GetAgentControllerControllerIdResourcesResourceIdThreads_Request = Simplify<
+  (GetAgentControllerControllerIdResourcesResourceIdThreads_PathParams extends never
+    ? {}
+    : { params: GetAgentControllerControllerIdResourcesResourceIdThreads_PathParams }) &
+    (GetAgentControllerControllerIdResourcesResourceIdThreads_QueryParams extends never
+      ? {}
+      : {} extends GetAgentControllerControllerIdResourcesResourceIdThreads_QueryParams
+        ? { query?: GetAgentControllerControllerIdResourcesResourceIdThreads_QueryParams }
+        : { query: GetAgentControllerControllerIdResourcesResourceIdThreads_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetAgentControllerControllerIdResourcesResourceIdThreads_RouteContract {
+  pathParams: GetAgentControllerControllerIdResourcesResourceIdThreads_PathParams;
+  queryParams: GetAgentControllerControllerIdResourcesResourceIdThreads_QueryParams;
+  body: never;
+  request: GetAgentControllerControllerIdResourcesResourceIdThreads_Request;
+  response: GetAgentControllerControllerIdResourcesResourceIdThreads_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
 // Route: POST /agent-controller/:controllerId/sessions/:resourceId/threads
 // ============================================================================
 export type PostAgentControllerControllerIdSessionsResourceIdThreads_PathParams =
@@ -21660,6 +21693,7 @@ export interface RouteTypes {
   'POST /agent-controller/:controllerId/sessions': PostAgentControllerControllerIdSessions_RouteContract;
   'GET /agent-controller/:controllerId/sessions/:resourceId': GetAgentControllerControllerIdSessionsResourceId_RouteContract;
   'GET /agent-controller/:controllerId/sessions/:resourceId/threads': GetAgentControllerControllerIdSessionsResourceIdThreads_RouteContract;
+  'GET /agent-controller/:controllerId/resources/:resourceId/threads': GetAgentControllerControllerIdResourcesResourceIdThreads_RouteContract;
   'POST /agent-controller/:controllerId/sessions/:resourceId/threads': PostAgentControllerControllerIdSessionsResourceIdThreads_RouteContract;
   'DELETE /agent-controller/:controllerId/sessions/:resourceId/threads/:threadId': DeleteAgentControllerControllerIdSessionsResourceIdThreadsThreadId_RouteContract;
   'PUT /agent-controller/:controllerId/sessions/:resourceId/threads/:threadId': PutAgentControllerControllerIdSessionsResourceIdThreadsThreadId_RouteContract;
@@ -21764,6 +21798,9 @@ export interface Client {
   };
   '/agent-controller/:controllerId/modes': {
     GET: GetAgentControllerControllerIdModes_RouteContract;
+  };
+  '/agent-controller/:controllerId/resources/:resourceId/threads': {
+    GET: GetAgentControllerControllerIdResourcesResourceIdThreads_RouteContract;
   };
   '/agent-controller/:controllerId/sessions': {
     POST: PostAgentControllerControllerIdSessions_RouteContract;

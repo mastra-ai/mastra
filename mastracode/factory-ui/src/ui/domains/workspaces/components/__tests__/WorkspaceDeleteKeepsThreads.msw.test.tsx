@@ -74,6 +74,11 @@ describe('Deleting a workspace', () => {
         HttpResponse.json({ sessions }),
       ),
       http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/work-items`, () => HttpResponse.json({ items: [] })),
+      // Passive sidebar activity poll — a read-only observation, not part of
+      // the delete flow this test guards against.
+      http.get(`${TEST_BASE_URL}/api/agent-controller/code/resources/:resourceId/threads`, () =>
+        HttpResponse.json({ threads: [] }),
+      ),
       http.delete(`${TEST_BASE_URL}/web/user-sessions/:sessionId`, ({ params }) => {
         deletedSessions.push(String(params.sessionId));
         sessions = sessions.filter(session => session.sessionId !== params.sessionId);
@@ -83,9 +88,11 @@ describe('Deleting a workspace', () => {
 
     // Watch the raw network instead of a handler: any touch of the thread store
     // at all — enumerating them to cascade, or deleting one — is a failure here,
-    // whatever URL shape the controller client happens to use.
+    // whatever URL shape the controller client happens to use. The passive
+    // resource-scoped activity poll is a read-only observer and is exempt.
     const recordThreadRequest = ({ request }: { request: Request }) => {
       const { pathname } = new URL(request.url);
+      if (request.method === 'GET' && /\/resources\/[^/]+\/threads$/.test(pathname)) return;
       if (pathname.includes('/threads')) threadRequests.push(`${request.method} ${pathname}`);
     };
     server.events.on('request:start', recordThreadRequest);
