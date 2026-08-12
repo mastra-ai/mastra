@@ -20,6 +20,7 @@ import type { PubSub } from '../events/pubsub';
 import type { Event } from '../events/types';
 import type { IMastraLogger } from '../logger';
 import { RegisteredLogger } from '../logger';
+import { isAgentApprovalCheckpoint } from '../loop/workflows/agent-approval-checkpoint';
 import type { Mastra } from '../mastra';
 import type { ObservabilityContext, TracingOptions, TracingPolicy } from '../observability';
 import {
@@ -117,7 +118,7 @@ export { createMappingStep, createStepFromAgent, createStepFromTool } from './st
 export type { AgentStepOptions } from './step-factories';
 
 function rejectApprovalCheckpointOperation(snapshot: unknown, operation: string): void {
-  if (!snapshot || typeof snapshot !== 'object' || (snapshot as any).kind !== 'agent-approval-checkpoint') return;
+  if (!isAgentApprovalCheckpoint(snapshot)) return;
   throw new MastraError({
     id: 'WORKFLOW_AGENT_APPROVAL_CHECKPOINT_UNSUPPORTED_OPERATION',
     domain: ErrorDomain.MASTRA_WORKFLOW,
