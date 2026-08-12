@@ -282,7 +282,7 @@ describe('TranscriptEntries tool rows', () => {
     const userBubbleWrapper = screen.getByText('Please run the tests').closest('.items-end');
     expect(userBubbleWrapper).toHaveClass('my-3');
 
-    const assistantProse = screen.getByText('All 36 tests passed.').closest('.prose');
+    const assistantProse = screen.getByText('All 36 tests passed.').closest('.mc-markdown');
     expect(assistantProse).toHaveClass('my-3');
   });
 });

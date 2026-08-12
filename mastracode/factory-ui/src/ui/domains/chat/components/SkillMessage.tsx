@@ -35,9 +35,7 @@ export function SkillMessage({ activation }: { activation: SkillActivation }) {
       <CollapsibleContent className="max-w-full min-w-0">
         <div className={ROW_RAIL}>
           <ScrollArea maxHeight="24rem" revealScrollbarOnHover={false}>
-            <div className="prose text-ui-sm">
-              <Markdown>{activation.instructions}</Markdown>
-            </div>
+            <Markdown className="text-ui-sm">{activation.instructions}</Markdown>
           </ScrollArea>
         </div>
       </CollapsibleContent>

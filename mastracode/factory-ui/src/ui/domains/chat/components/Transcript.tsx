@@ -701,20 +701,10 @@ function MessageBubble({
     Text: (part: TextPart) => {
       if (entry.message.role === 'user') {
         const activation = parseSkillActivation(part.text);
-        return activation ? (
-          <SkillMessage activation={activation} />
-        ) : (
-          <div className="prose">
-            <Markdown>{part.text}</Markdown>
-          </div>
-        );
+        return activation ? <SkillMessage activation={activation} /> : <Markdown>{part.text}</Markdown>;
       }
 
-      return (
-        <div className="prose my-3">
-          <Markdown>{part.text}</Markdown>
-        </div>
-      );
+      return <Markdown className="my-3">{part.text}</Markdown>;
     },
     Reasoning: (part: ReasoningPart) => (
       <div className="border-border1 text-ui-sm text-icon3 my-1.5 border-l-2 pl-2.5 italic [&_p]:my-0.5">
@@ -1118,9 +1108,7 @@ function StatusMetadataCard({ status }: { status: StatusMetadata }) {
 function NoticeCard({ entry }: { entry: NoticeEntry }) {
   return (
     <Notice className="my-2" variant={entry.level === 'error' ? 'destructive' : 'info'}>
-      <div className="prose">
-        <Markdown>{entry.text}</Markdown>
-      </div>
+      <Markdown>{entry.text}</Markdown>
     </Notice>
   );
 }

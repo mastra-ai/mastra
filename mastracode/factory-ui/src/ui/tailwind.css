@@ -11,6 +11,7 @@
  * treating theme.css as the component stylesheet. */
 @import '@mastra/playground-ui/theme.css';
 @import './domains/factory/metrics-theme.css';
+@import './ui/markdown.css' layer(components);
 
 @custom-variant dark (&:is(.dark *));
 
