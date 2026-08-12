@@ -3,6 +3,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ChatRuntimeState } from '../runtime';
 import { initialChatRuntime, omWork, runtimeReducer } from '../runtime';
 
+const omProgress = {
+  status: 'idle',
+  pendingTokens: 320,
+  threshold: 1000,
+  thresholdPercent: 32,
+  observationTokens: 0,
+  reflectionThreshold: 2000,
+  reflectionThresholdPercent: 0,
+};
+
 describe('chat runtime reducer', () => {
   it('tracks background memory work per budget from the display state', () => {
     const buffering = runtimeReducer(initialChatRuntime, {
@@ -20,21 +30,24 @@ describe('chat runtime reducer', () => {
     expect(omWork(settled).observations).toBe('idle');
   });
 
+  it('reconciles the memory phase from the display state, so a missed end event cannot strand it', () => {
+    const observing = runtimeReducer(initialChatRuntime, { type: 'om_observation_start' });
+
+    expect(observing.omPhase).toBe('observing');
+
+    const reported = runtimeReducer(observing, {
+      type: 'display_state_changed',
+      displayState: { omProgress: { ...omProgress, status: 'idle' } },
+    });
+
+    expect(reported.omPhase).toBe('idle');
+  });
+
   it('keeps display-state telemetry available until newer usage arrives', () => {
     const displayState = runtimeReducer(initialChatRuntime, {
       type: 'display_state_changed',
       displayState: {
-        omProgress: {
-          status: 'ready',
-          pendingTokens: 320,
-          threshold: 1000,
-          thresholdPercent: 32,
-          observationTokens: 0,
-          reflectionThreshold: 2000,
-          reflectionThresholdPercent: 0,
-          projectedMessageRemoval: 0,
-          projectedReflectionSavings: 0,
-        },
+        omProgress,
         tokenUsage: { promptTokens: 21, completionTokens: 34, totalTokens: 55 },
       },
     });
@@ -117,17 +130,68 @@ describe('chat runtime reducer', () => {
       expect(second.tokensPerSec).toBe(150);
     });
 
-    it('still reads a reply too short to fill a sampling window, once the run ends', () => {
+    it('still reads a reply the sampler never got to close, once the run ends', () => {
       const opened = streamText(runtimeReducer(initialChatRuntime, { type: 'agent_start' }), 'x'.repeat(20));
       vi.advanceTimersByTime(100);
       const streamed = streamText(opened, 'x'.repeat(220));
 
       expect(streamed.tokensPerSec).toBe(0);
 
+      vi.advanceTimersByTime(300);
       const ended = runtimeReducer(streamed, { type: 'agent_end' });
 
-      expect(ended.tokensPerSec).toBe(500);
-      expect(ended.tokensPerSecHistory).toEqual([500]);
+      expect(ended.tokensPerSec).toBe(125);
+      expect(ended.tokensPerSecHistory).toEqual([125]);
+    });
+
+    it('refuses to time a burst that arrived faster than the sampling floor', () => {
+      const opened = streamText(runtimeReducer(initialChatRuntime, { type: 'agent_start' }), 'x'.repeat(20));
+      vi.advanceTimersByTime(55);
+      const buffered = streamText(opened, 'x'.repeat(8000));
+
+      expect(runtimeReducer(buffered, { type: 'agent_end' }).tokensPerSec).toBe(0);
+    });
+
+    it('smooths a new reading against the last instead of jumping to it', () => {
+      let state = streamText(runtimeReducer(initialChatRuntime, { type: 'agent_start' }), 'x'.repeat(20));
+      vi.advanceTimersByTime(1000);
+      state = streamText(state, 'x'.repeat(60));
+
+      expect(state.tokensPerSec).toBe(10);
+
+      vi.advanceTimersByTime(1000);
+      state = streamText(state, 'x'.repeat(140));
+
+      expect(state.tokensPerSec).toBe(13);
+    });
+
+    it('keeps the last reading through the end of a run and clears it on the next one', () => {
+      const opened = streamText(runtimeReducer(initialChatRuntime, { type: 'agent_start' }), 'x'.repeat(20));
+      vi.advanceTimersByTime(1000);
+      const ended = runtimeReducer(streamText(opened, 'x'.repeat(220)), { type: 'agent_end' });
+
+      expect(ended.tokensPerSec).toBe(50);
+      expect(runtimeReducer(ended, { type: 'agent_start' }).tokensPerSec).toBe(0);
+    });
+
+    it('ignores a step that streamed no text, so a tool call cannot read as decoding', () => {
+      const started = runtimeReducer(initialChatRuntime, { type: 'agent_start' });
+      const toolOnly = runtimeReducer(started, {
+        type: 'message_update',
+        message: {
+          id: 'assistant-1',
+          role: 'assistant',
+          content: {
+            format: 2,
+            parts: [
+              { type: 'tool-invocation', toolInvocation: { state: 'result', toolCallId: 't1', toolName: 'read' } },
+            ],
+          },
+        },
+      });
+
+      expect(toolOnly).toBe(started);
+      expect(runtimeReducer(toolOnly, { type: 'agent_end' }).tokensPerSec).toBe(0);
     });
 
     it('leaves a measured run alone when it ends', () => {

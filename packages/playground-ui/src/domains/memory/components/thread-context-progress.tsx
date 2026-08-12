@@ -1,4 +1,4 @@
-import { formatCompactTokens } from '@/ds/components/TokenBudget';
+import { formatCompactTokens } from '@/ds/components/TokenBudget/format-tokens';
 
 interface ThreadContextProgressProps {
   messageTokens?: number;

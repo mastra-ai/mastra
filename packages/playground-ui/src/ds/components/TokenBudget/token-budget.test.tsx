@@ -21,13 +21,13 @@ describe('TokenBudget', () => {
   it('fills the ring to the share of the threshold that is used', () => {
     const { container } = render(<TokenBudget label="Message window" threshold={30_000} tokens={14_900} />);
 
-    expect(container.querySelector('.token-budget-dial')?.getAttribute('style')).toContain('--token-budget-fill: 50');
+    expect(container.querySelector('.token-budget-arc')?.getAttribute('stroke-dasharray')).toBe('21.99 43.98');
   });
 
   it('caps the ring at full rather than overflowing past the threshold', () => {
     const { container } = render(<TokenBudget label="Message window" threshold={30_000} tokens={44_000} />);
 
-    expect(container.querySelector('.token-budget-dial')?.getAttribute('style')).toContain('--token-budget-fill: 100');
+    expect(container.querySelector('.token-budget-arc')?.getAttribute('stroke-dasharray')).toBe('43.98 43.98');
   });
 
   it('marks the ring as working only while work runs against the budget', () => {

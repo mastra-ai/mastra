@@ -1,6 +1,3 @@
-/* Annulus is the track, wedge is the fill, and while work runs a highlight
- * travels the wedge — `shimmer-text` transposed to an arc, so nothing moves
- * beside the dial and nothing reads as a rendering glitch. */
 /* Hatching reads as provisional: the slice of the fill a pending pass will free. */
 .token-budget-hatch {
   background-image: repeating-linear-gradient(
@@ -11,43 +8,32 @@
 }
 
 .token-budget-dial {
-  --token-budget-fill: 0;
-
-  position: relative;
-  display: inline-block;
+  display: block;
   flex: none;
-  inline-size: var(--token-budget-size, 0.875rem);
-  aspect-ratio: 1;
-  border-radius: 50%;
-  background-image: conic-gradient(color-mix(in oklab, currentcolor 22%, transparent) 0 360deg);
-  mask-image: radial-gradient(closest-side, transparent 58%, black 60%);
+  inline-size: 0.875rem;
+  block-size: 0.875rem;
 }
 
-.token-budget-dial::before,
-.token-budget-dial::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  mask-image: conic-gradient(black 0 calc(var(--token-budget-fill) * 3.6deg), transparent 0);
+.token-budget-dial circle {
+  fill: none;
+  stroke-linecap: round;
 }
 
-.token-budget-dial::before {
-  background-color: currentcolor;
+.token-budget-track {
+  stroke: color-mix(in oklab, currentcolor 22%, transparent);
 }
 
-.token-budget-dial::after {
-  opacity: 0;
-  background-image: conic-gradient(transparent 0deg, currentcolor 60deg, transparent 120deg);
+/* The wedge starts at noon rather than at three o'clock. */
+.token-budget-arc {
+  transform: rotate(-90deg);
+  transform-origin: 10px 10px;
 }
 
-.token-budget-dial[data-working]::before {
-  background-color: color-mix(in oklab, currentcolor 32%, transparent);
-}
-
-.token-budget-dial[data-working]::after {
-  opacity: 1;
-  animation: token-budget-sweep 1.4s linear infinite;
+/* While work runs, the wedge is painted by a light travelling along the stroke —
+ * `shimmer-text` transposed to an arc, so nothing moves beside the dial. */
+.token-budget-sheen {
+  transform-origin: 10px 10px;
+  animation: token-budget-sweep 1.6s linear infinite;
 }
 
 @keyframes token-budget-sweep {
@@ -56,11 +42,10 @@
   }
 }
 
-/* Without motion the highlight still has to distinguish work from rest, so it
- * parks mid-wedge instead of disappearing. */
+/* Without motion the light still has to separate work from rest, so it parks on the wedge. */
 @media (prefers-reduced-motion: reduce) {
-  .token-budget-dial[data-working]::after {
+  .token-budget-sheen {
     animation: none;
-    transform: rotate(140deg);
+    transform: rotate(120deg);
   }
 }

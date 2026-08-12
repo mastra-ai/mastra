@@ -45,8 +45,14 @@ export interface AgentControllerOMProgress {
   observationTokens: number;
   reflectionThreshold: number;
   reflectionThresholdPercent: number;
-  projectedMessageRemoval: number;
-  projectedReflectionSavings: number;
+  /** Session-state route only: the projections flattened out of `buffered`. */
+  projectedMessageRemoval?: number;
+  projectedReflectionSavings?: number;
+  /** Event stream only: the buffered passes the route's projections are derived from. */
+  buffered?: {
+    observations: { status: string; projectedMessageRemoval: number; observationTokens: number };
+    reflection: { status: string; inputObservationTokens: number; observationTokens: number };
+  };
 }
 
 /**

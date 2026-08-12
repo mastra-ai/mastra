@@ -86,14 +86,41 @@ describe('observational memory status', () => {
       expect(container.querySelector('[data-working]')).toBeNull();
     });
 
+    it('speaks both readings on the control, which hides the rings from assistive tech', () => {
+      renderStatus({});
+
+      expect(
+        screen.getByRole('button', {
+          name: 'Memory budgets: messages 14.9 of 30k, observations 12 of 40k',
+        }),
+      ).toBeVisible();
+    });
+
     it('opens both budgets and what they do from a single control', async () => {
       renderStatus({});
 
-      fireEvent.click(screen.getByRole('button', { name: 'Memory budgets' }));
+      fireEvent.click(screen.getByRole('button', { name: /^Memory budgets:/ }));
 
       await waitFor(() => expect(screen.getByText('Read into memory once full')).toBeVisible());
       expect(screen.getByText('Consolidated into a reflection once full')).toBeVisible();
       expect(screen.getAllByText('/40k')).toHaveLength(2);
+    });
+
+    it('reads the pending savings off the buffered passes the event stream sends', async () => {
+      renderStatus({
+        omProgress: {
+          ...omProgress,
+          buffered: {
+            observations: { status: 'running', projectedMessageRemoval: 6_000, observationTokens: 800 },
+            reflection: { status: 'running', inputObservationTokens: 12_000, observationTokens: 9_000 },
+          },
+        },
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: /^Memory budgets:/ }));
+
+      await waitFor(() => expect(screen.getByText('−6k')).toBeVisible());
+      expect(screen.getByText('−3k')).toBeVisible();
     });
   });
 

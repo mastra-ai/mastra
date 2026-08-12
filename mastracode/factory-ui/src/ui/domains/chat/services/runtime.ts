@@ -42,9 +42,8 @@ export interface ChatRuntimeState {
 }
 
 const RATE_SAMPLES = 6;
+/** Below this a burst reads as network buffering rather than decoding, whatever the arithmetic says. */
 const SAMPLE_SECONDS = 0.25;
-/** A reply shorter than one sampling window still gets one reading, once the run ends and the whole decode can be timed. */
-const FLUSH_SECONDS = 0.05;
 /** Longer than this and the window spans a tool call or a reconnect, not decoding: reopen it. */
 const WINDOW_SECONDS = 3;
 /* The stream carries text, not token counts; ~4 chars per token is close enough for a speed readout. */
@@ -121,12 +120,13 @@ export function runtimeReducer(state: ChatRuntimeState, event: AgentControllerEv
       };
     }
     case 'agent_end': {
-      if (state.tokensPerSecHistory.length > 0 || state._sampledAt === 0) return state;
+      const closed = { ...state, _sampledAt: 0, _streamedChars: {}, _sampledChars: 0 };
+      if (state.tokensPerSecHistory.length > 0 || state._sampledAt === 0) return closed;
       const decoded = totalChars(state._streamedChars);
       const seconds = (Date.now() - state._sampledAt) / 1000;
-      if (seconds < FLUSH_SECONDS || decoded <= state._sampledChars) return state;
+      if (seconds < SAMPLE_SECONDS || decoded <= state._sampledChars) return closed;
       const tokensPerSec = Math.round((decoded - state._sampledChars) / CHARS_PER_TOKEN / seconds);
-      return { ...state, tokensPerSec, tokensPerSecHistory: [tokensPerSec] };
+      return { ...closed, tokensPerSec, tokensPerSecHistory: [tokensPerSec] };
     }
     case 'usage_update':
       return { ...state, usage: event.usage as UsageSnapshot };
@@ -134,6 +134,7 @@ export function runtimeReducer(state: ChatRuntimeState, event: AgentControllerEv
       return {
         ...state,
         omProgress: event.displayState.omProgress ?? state.omProgress,
+        omPhase: reportedPhase(event.displayState.omProgress?.status) ?? state.omPhase,
         usage: (event.displayState.tokenUsage as UsageSnapshot | undefined) ?? state.usage,
         bufferingMessages: event.displayState.bufferingMessages ?? state.bufferingMessages,
         bufferingObservations: event.displayState.bufferingObservations ?? state.bufferingObservations,
@@ -178,6 +179,12 @@ interface RuntimeMessagePart {
 interface RuntimeMessage {
   role: string;
   content: RuntimeMessagePart[] | { parts: RuntimeMessagePart[] };
+}
+
+/** The display state carries the phase on every update, so a missed `om_*_end` cannot strand the ring. */
+function reportedPhase(status: string | undefined): OMPhase | undefined {
+  if (status === 'idle' || status === 'observing' || status === 'reflecting') return status;
+  return undefined;
 }
 
 function totalChars(streamedChars: Record<string, number>) {
