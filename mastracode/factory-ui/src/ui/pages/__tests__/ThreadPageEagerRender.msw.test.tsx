@@ -7,6 +7,7 @@
  * the SSE progress phases, and the Send button stays disabled.
  */
 import { screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
@@ -201,5 +202,52 @@ describe('ThreadPage eager render during /ensure', () => {
     await waitFor(() =>
       expect(screen.queryByRole('status', { name: 'Preparing session' })).not.toBeInTheDocument(),
     );
+  });
+
+  it('keeps the textarea typable during preparing and preserves the draft after /ensure', async () => {
+    const ensure = stubThreadRoute();
+    renderThreadRoute();
+
+    // Composer mounts eagerly.
+    const composerRegion = await screen.findByRole('region', { name: 'Thread composer' });
+    const textarea = composerRegion.querySelector('textarea[aria-label="Message"]') as HTMLTextAreaElement;
+    expect(textarea).not.toBeNull();
+
+    // Textarea is fully typable: not disabled, not readOnly, focusable.
+    expect(textarea).not.toBeDisabled();
+    expect(textarea).not.toHaveAttribute('readOnly');
+    textarea.focus();
+    expect(document.activeElement).toBe(textarea);
+
+    // Ring is spinning (data-busy="true") during preparing.
+    const ring = composerRegion.querySelector('[data-slot="composer-ring"]') as HTMLElement;
+    expect(ring).not.toBeNull();
+    expect(ring.getAttribute('data-busy')).toBe('true');
+
+    // Placeholder starts with the initializing prefix while empty.
+    expect(textarea.placeholder.startsWith('Initializing work session')).toBe(true);
+
+    // Send button has the "Initializing session…" title and is disabled.
+    const sendButton = screen.getByRole('button', { name: 'Send message' });
+    expect(sendButton).toBeDisabled();
+    expect(sendButton).toHaveAttribute('title', 'Initializing session…');
+
+    // User types a draft during preparing.
+    const user = userEvent.setup();
+    await user.type(textarea, 'my draft prompt');
+    expect(textarea.value).toBe('my draft prompt');
+
+    // Resolve /ensure — draft is preserved, ring stops spinning, placeholder
+    // reverts, Send tooltip clears, Send becomes enabled.
+    await ensure.complete();
+    await waitFor(() =>
+      expect(screen.queryByRole('status', { name: 'Preparing session' })).not.toBeInTheDocument(),
+    );
+    // Draft survives the flag flip without remount.
+    expect(textarea.value).toBe('my draft prompt');
+    await waitFor(() => expect(ring.getAttribute('data-busy')).toBe('false'));
+    expect(textarea.placeholder).toBe('Ask Mastra Code…');
+    expect(sendButton).not.toHaveAttribute('title', 'Initializing session…');
+    await waitFor(() => expect(sendButton).not.toBeDisabled());
   });
 });
