@@ -227,6 +227,57 @@ describe('MCPServer tools/call `_meta`', () => {
     expect(result).not.toHaveProperty('_meta');
   });
 
+  it('resolves a declared conflict between the two resource URI forms in favour of the nested one', async () => {
+    const server = makeServer({
+      calculator: {
+        description: 'An app tool declaring two different resource URIs',
+        parameters: z.object({}),
+        execute: async () => ({ value: 42 }),
+        mcp: {
+          _meta: {
+            ui: { resourceUri: RESOURCE_URI },
+            [RESOURCE_URI_META_KEY]: 'ui://calculator/stale',
+          },
+        },
+      },
+    } as ToolsInput);
+
+    const called = await callTool(server, 'calculator');
+    const listed = await listTools(server);
+    const listedTool = listed.tools.find((tool: { name: string }) => tool.name === 'calculator');
+
+    // A tool must never advertise two different resource URIs: a host reading
+    // whichever key it understands would otherwise resolve a different app.
+    expect(called._meta).toEqual({
+      ui: { resourceUri: RESOURCE_URI },
+      [RESOURCE_URI_META_KEY]: RESOURCE_URI,
+    });
+    expect(listedTool._meta).toEqual(called._meta);
+  });
+
+  it('resolves a conflict in execute() metadata in favour of the nested resource URI', async () => {
+    const server = makeServer({
+      calculator: {
+        description: 'A tool returning two different resource URIs',
+        parameters: z.object({}),
+        execute: async () => ({
+          value: 42,
+          _meta: {
+            ui: { resourceUri: 'ui://calculator/fresh' },
+            [RESOURCE_URI_META_KEY]: 'ui://calculator/stale',
+          },
+        }),
+      },
+    } as ToolsInput);
+
+    const result = await callTool(server, 'calculator');
+
+    expect(result._meta).toEqual({
+      ui: { resourceUri: 'ui://calculator/fresh' },
+      [RESOURCE_URI_META_KEY]: 'ui://calculator/fresh',
+    });
+  });
+
   it('keeps the call result `_meta` consistent with what tools/list advertises', async () => {
     const server = makeServer({
       calculator: {

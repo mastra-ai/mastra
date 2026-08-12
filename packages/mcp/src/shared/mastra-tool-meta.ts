@@ -50,12 +50,18 @@ export function normalizeToolUiMeta(meta: Record<string, unknown> | undefined): 
   }
 
   const uiMeta = meta.ui as { resourceUri?: string } | undefined;
+  const nestedUri = uiMeta?.resourceUri;
   const legacyUri = meta[RESOURCE_URI_META_KEY] as string | undefined;
 
-  if (uiMeta?.resourceUri && !legacyUri) {
-    return { ...meta, [RESOURCE_URI_META_KEY]: uiMeta.resourceUri };
+  // The nested `ui.resourceUri` is canonical and the flat key is its legacy alias,
+  // so when both are present but disagree the nested value wins and overwrites the
+  // alias. Leaving them divergent would let one tool advertise two different
+  // resource URIs, and a host picking whichever key it understands would resolve a
+  // different app than the one the tool declared.
+  if (nestedUri) {
+    return legacyUri === nestedUri ? meta : { ...meta, [RESOURCE_URI_META_KEY]: nestedUri };
   }
-  if (legacyUri && !uiMeta?.resourceUri) {
+  if (legacyUri) {
     return { ...meta, ui: { ...((meta.ui as object) ?? {}), resourceUri: legacyUri } };
   }
   return meta;
