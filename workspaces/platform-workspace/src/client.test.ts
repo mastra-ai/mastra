@@ -29,6 +29,36 @@ describe('PlatformClient', () => {
     expect(init.method).toBe('POST');
   });
 
+  it('sends advisory session/thread correlation headers when configured', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(response('{}', { status: 200 }));
+    const client = new PlatformClient({
+      accessToken: 'sk_test',
+      projectId: 'proj_123',
+      sessionId: 'sess_42',
+      threadId: 'thread_7',
+      fetch: fetchMock,
+    });
+
+    await client.request('/sandbox');
+
+    const [, init] = fetchMock.mock.calls[0]!;
+    expect((init.headers as Headers).get('x-mastra-session-id')).toBe('sess_42');
+    expect((init.headers as Headers).get('x-mastra-thread-id')).toBe('thread_7');
+    // Auth is unchanged — the correlation headers ride alongside, never replace.
+    expect((init.headers as Headers).get('authorization')).toBe('Bearer sk_test');
+  });
+
+  it('omits correlation headers when session/thread ids are not configured', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(response('{}', { status: 200 }));
+    const client = new PlatformClient({ accessToken: 'sk_test', projectId: 'proj_123', fetch: fetchMock });
+
+    await client.request('/sandbox');
+
+    const [, init] = fetchMock.mock.calls[0]!;
+    expect((init.headers as Headers).get('x-mastra-session-id')).toBeNull();
+    expect((init.headers as Headers).get('x-mastra-thread-id')).toBeNull();
+  });
+
   it('reads the access token from MASTRA_PLATFORM_ACCESS_TOKEN', () => {
     vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'platform_access_token');
     vi.stubEnv('MASTRA_PROJECT_ID', 'proj_env');

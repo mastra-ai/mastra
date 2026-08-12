@@ -1,5 +1,21 @@
 # @mastra/langsmith
 
+## 1.3.9-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [[`210cb7a`](https://github.com/mastra-ai/mastra/commit/210cb7a167998c7bbf72cb3b93e6eb0563330239), [`5f798b3`](https://github.com/mastra-ai/mastra/commit/5f798b3362e9bdf4d690f85245606e146eef60b9), [`01a2943`](https://github.com/mastra-ai/mastra/commit/01a2943a7d886edefdff072bfa51f055bab54437), [`01a2943`](https://github.com/mastra-ai/mastra/commit/01a2943a7d886edefdff072bfa51f055bab54437), [`25ca73d`](https://github.com/mastra-ai/mastra/commit/25ca73d25dee7ce9f0ca72939e3a505c4db7257e), [`e1cead1`](https://github.com/mastra-ai/mastra/commit/e1cead17b5f3653cf00d2f90cc19b113119c02ba), [`01a2943`](https://github.com/mastra-ai/mastra/commit/01a2943a7d886edefdff072bfa51f055bab54437), [`d97107a`](https://github.com/mastra-ai/mastra/commit/d97107a7edc517ae8feddf914fc43cd80a66c0a8)]:
+  - @mastra/core@1.58.0-alpha.14
+  - @mastra/observability@1.16.6-alpha.4
+
+## 1.3.9-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [[`2e4624e`](https://github.com/mastra-ai/mastra/commit/2e4624edb6917e61249cb60ee377735e7af7e4a9), [`e6534fa`](https://github.com/mastra-ai/mastra/commit/e6534fab031216f6cb48c4c9907cbfdce9d60bc6), [`7fdcaa6`](https://github.com/mastra-ai/mastra/commit/7fdcaa66105d64290f9b14432a12ec99f39c4d3a), [`65b1183`](https://github.com/mastra-ai/mastra/commit/65b11832834f87a9bc8719391deb27559de5138a), [`cfd0d9e`](https://github.com/mastra-ai/mastra/commit/cfd0d9ec77ec3c69dd96f79cdb579e03d79f22ce), [`d9d93b2`](https://github.com/mastra-ai/mastra/commit/d9d93b25e4a65ad5fa153fa35be7ed149c8d587f)]:
+  - @mastra/core@1.58.0-alpha.12
+  - @mastra/observability@1.16.6-alpha.3
+
 ## 1.3.9-alpha.2
 
 ### Patch Changes

@@ -1,5 +1,73 @@
 # @mastra/code-sdk
 
+## 1.2.0-alpha.18
+
+### Minor Changes
+
+- Added Dynamic Workflow creation and management to Mastra Code, including discovery-backed authoring, immediate persistence, execution, and deletion. ([#21210](https://github.com/mastra-ai/mastra/pull/21210))
+
+  ```ts
+  import { listWorkflows, runWorkflow } from '@mastra/code-sdk/workflows/service';
+
+  const { workflows } = await listWorkflows(mastra);
+  const workflow = workflows[0];
+  if (workflow) {
+    await runWorkflow(mastra, workflow.id, { topic: 'dynamic workflows' });
+  }
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`296dc9a`](https://github.com/mastra-ai/mastra/commit/296dc9af29f3616e786c7825ec32e0df92d754c5), [`4a09a9c`](https://github.com/mastra-ai/mastra/commit/4a09a9c0474ef643558fcb5f0edc542b82f1cab0), [`1e83a47`](https://github.com/mastra-ai/mastra/commit/1e83a4734ab61ba5926af6793e3569a78b72ed37), [`ff28284`](https://github.com/mastra-ai/mastra/commit/ff2828416f14daff9d956e6a352fdaa23c950979), [`1670533`](https://github.com/mastra-ai/mastra/commit/1670533986f6bacf567746245348125e3a106448)]:
+  - @mastra/core@1.58.0-alpha.16
+
+## 1.2.0-alpha.17
+
+### Patch Changes
+
+- Updated dependencies [[`dc4a25d`](https://github.com/mastra-ai/mastra/commit/dc4a25d41af4e2fe97a816070eaec6aa963ab53b), [`dc4a25d`](https://github.com/mastra-ai/mastra/commit/dc4a25d41af4e2fe97a816070eaec6aa963ab53b)]:
+  - @mastra/memory@1.26.1-alpha.7
+  - @mastra/core@1.58.0-alpha.15
+  - @mastra/libsql@1.20.0-alpha.3
+  - @mastra/pg@1.20.0-alpha.4
+
+## 1.2.0-alpha.16
+
+### Patch Changes
+
+- Updated dependencies [[`210cb7a`](https://github.com/mastra-ai/mastra/commit/210cb7a167998c7bbf72cb3b93e6eb0563330239), [`5f798b3`](https://github.com/mastra-ai/mastra/commit/5f798b3362e9bdf4d690f85245606e146eef60b9), [`01a2943`](https://github.com/mastra-ai/mastra/commit/01a2943a7d886edefdff072bfa51f055bab54437), [`01a2943`](https://github.com/mastra-ai/mastra/commit/01a2943a7d886edefdff072bfa51f055bab54437), [`25ca73d`](https://github.com/mastra-ai/mastra/commit/25ca73d25dee7ce9f0ca72939e3a505c4db7257e), [`e1cead1`](https://github.com/mastra-ai/mastra/commit/e1cead17b5f3653cf00d2f90cc19b113119c02ba), [`01a2943`](https://github.com/mastra-ai/mastra/commit/01a2943a7d886edefdff072bfa51f055bab54437), [`d97107a`](https://github.com/mastra-ai/mastra/commit/d97107a7edc517ae8feddf914fc43cd80a66c0a8)]:
+  - @mastra/core@1.58.0-alpha.14
+  - @mastra/observability@1.16.6-alpha.4
+  - @mastra/mcp@1.16.0-alpha.2
+
+## 1.2.0-alpha.15
+
+### Patch Changes
+
+- Fixed authentication failures for unprefixed direct-provider models by using provider environment credentials when no provider-specific stored credential exists. ([#21197](https://github.com/mastra-ai/mastra/pull/21197))
+
+- Updated dependencies [[`9571e3a`](https://github.com/mastra-ai/mastra/commit/9571e3a06ed2c5220196460bf82a2129255c3a8b), [`d6c56f9`](https://github.com/mastra-ai/mastra/commit/d6c56f951db3213330b98b0abafa9778c8770e58), [`9571e3a`](https://github.com/mastra-ai/mastra/commit/9571e3a06ed2c5220196460bf82a2129255c3a8b), [`acc3513`](https://github.com/mastra-ai/mastra/commit/acc3513b19f79bf0a7ec2998694580edca54086c), [`94e7ae9`](https://github.com/mastra-ai/mastra/commit/94e7ae970b37c888cd1244ef013292639a2fe6d1), [`6a667b4`](https://github.com/mastra-ai/mastra/commit/6a667b4b7cd6a93fe41fcdd357b08c5a8c09b9ab), [`2440e09`](https://github.com/mastra-ai/mastra/commit/2440e096ea6c2def1ccc1eb2d0f3f5b88c4af940), [`a59049b`](https://github.com/mastra-ai/mastra/commit/a59049b1652a13efff66ac826326b5ed9a550342)]:
+  - @mastra/core@1.58.0-alpha.13
+
+## 1.2.0-alpha.14
+
+### Patch Changes
+
+- Fixed Factory interactive plans so they are stored as browsable artifacts. ([#21173](https://github.com/mastra-ai/mastra/pull/21173))
+
+## 1.2.0-alpha.13
+
+### Patch Changes
+
+- Fixed woken notifications running against the controller-level workspace, which is `undefined` for dynamic workspace factories. They now use the workspace of the session that owns the target thread. ([#21144](https://github.com/mastra-ai/mastra/pull/21144))
+
+- Updated dependencies [[`2e4624e`](https://github.com/mastra-ai/mastra/commit/2e4624edb6917e61249cb60ee377735e7af7e4a9), [`e6534fa`](https://github.com/mastra-ai/mastra/commit/e6534fab031216f6cb48c4c9907cbfdce9d60bc6), [`7fdcaa6`](https://github.com/mastra-ai/mastra/commit/7fdcaa66105d64290f9b14432a12ec99f39c4d3a), [`65b1183`](https://github.com/mastra-ai/mastra/commit/65b11832834f87a9bc8719391deb27559de5138a), [`5dba2a4`](https://github.com/mastra-ai/mastra/commit/5dba2a41600385751f5aace79878904e1972609d), [`cfd0d9e`](https://github.com/mastra-ai/mastra/commit/cfd0d9ec77ec3c69dd96f79cdb579e03d79f22ce), [`d9d93b2`](https://github.com/mastra-ai/mastra/commit/d9d93b25e4a65ad5fa153fa35be7ed149c8d587f)]:
+  - @mastra/core@1.58.0-alpha.12
+  - @mastra/observability@1.16.6-alpha.3
+  - @mastra/schema-compat@1.3.6-alpha.3
+  - @mastra/mcp@1.16.0-alpha.2
+  - @mastra/memory@1.26.1-alpha.6
+
 ## 1.2.0-alpha.12
 
 ### Minor Changes

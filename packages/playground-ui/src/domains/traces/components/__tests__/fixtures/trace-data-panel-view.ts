@@ -22,4 +22,16 @@ const rootSpan: TraceSpan = {
   updatedAt: new Date('2026-06-01T10:00:01.000Z'),
 };
 
+// Nested spans only reach the DOM once their parent is expanded, which the
+// panel does after its first render.
+const childSpan: TraceSpan = {
+  ...rootSpan,
+  spanId: 'child',
+  parentSpanId: 'root',
+  name: 'weather tool',
+  spanType: SpanType.TOOL_CALL,
+};
+
 export const rootSpanFixture: TraceSpan[] = [rootSpan];
+
+export const nestedSpanFixture: TraceSpan[] = [rootSpan, childSpan];

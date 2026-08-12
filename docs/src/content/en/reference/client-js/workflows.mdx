@@ -19,7 +19,7 @@ const workflows = await mastraClient.listWorkflows()
 
 ## Getting workflow run counts
 
-Retrieve per-workflow counts of `running` and [`suspended`](/docs/workflows/suspend-and-resume) runs in a single request. The counts are computed on the server and keyed by the workflow's registry key — the key used when registering the workflow in the Mastra config, which can differ from the workflow's own `id`:
+Retrieve per-workflow counts of `running` and [`suspended`](/docs/workflows/suspend-and-resume) runs in a single request. The counts are computed on the server and keyed by the workflow's registry key, the key used when registering the workflow in the Mastra config, which can differ from the workflow's own `id`:
 
 ```typescript
 const runCounts = await mastraClient.listWorkflowRunCounts()
@@ -28,7 +28,7 @@ const runCounts = await mastraClient.listWorkflowRunCounts()
 
 Returns: `Record<string, { running: number; suspended: number }>`
 
-The server may cache the counts for a few seconds between requests. Servers that predate this endpoint respond with `404 Not Found` — handle the error when the client can talk to older deployments.
+The server may cache the counts for a few seconds between requests. Servers that predate this endpoint respond with `404 Not Found`. Handle the error when the client can talk to older deployments.
 
 ## Working with a specific workflow
 
@@ -246,9 +246,9 @@ A workflow run result yields the following:
 
 ## Dynamic workflows
 
-:::experimental
+:::beta
 
-Dynamic workflows are in beta. Breaking changes may occur without a major version bump until the API is stable.
+Breaking changes may occur without a major version bump until the API is stable.
 
 :::
 

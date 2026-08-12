@@ -1,5 +1,41 @@
 # @mastra/deployer-sandbox
 
+## 0.3.0-alpha.1
+
+### Minor Changes
+
+- Added `attachWorkerDeployment()` so restarted supervisors can reconstruct worker handles from persisted sandbox and execution identities. ([#21271](https://github.com/mastra-ai/mastra/pull/21271))
+
+  ```typescript
+  const worker = await attachWorkerDeployment({ sandbox, executionId });
+  const status = await worker.status();
+  const output = await worker.readOutput('stdout', { offset });
+  ```
+
+- Added fail-closed hard resource limits for sandbox workers. ([#21273](https://github.com/mastra-ai/mastra/pull/21273))
+
+  Workers can now opt into per-attempt CPU time, address-space, file-size, and open-file limits:
+
+  ```ts
+  await deployWorkerToSandbox({
+    // ...
+    resourceLimits: {
+      cpuTimeSeconds: 30,
+      addressSpaceBytes: 536_870_912,
+      fileSizeBytes: 10_485_760,
+      openFiles: 256,
+    },
+  });
+  ```
+
+  Requested limits are capability-checked before deployment. CPU and file-size signal exhaustion is reported through the typed `resource_exhausted` status.
+
+### Patch Changes
+
+- Updated dependencies [[`dc4a25d`](https://github.com/mastra-ai/mastra/commit/dc4a25d41af4e2fe97a816070eaec6aa963ab53b), [`dc4a25d`](https://github.com/mastra-ai/mastra/commit/dc4a25d41af4e2fe97a816070eaec6aa963ab53b)]:
+  - @mastra/core@1.58.0-alpha.15
+  - @mastra/deployer@1.58.0-alpha.15
+
 ## 0.2.3-alpha.0
 
 ### Patch Changes

@@ -22,6 +22,7 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 20
         with:
           fetch-depth: 0
 
@@ -53,6 +54,7 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 20
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 2
@@ -97,6 +99,7 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 20
         with:
           fetch-depth: 0
 
@@ -382,6 +385,7 @@ jobs:
 
     steps:
       - uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 20
         with:
           ref: ${{ github.event.pull_request.head.sha }}
 
