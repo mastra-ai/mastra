@@ -63,9 +63,10 @@ function stubWith(tagsFor: (sessionId: string) => ThreadTags, states: Record<str
     http.get(`${TEST_BASE_URL}/web/factory/projects/${factoryId}/work-items`, () =>
       HttpResponse.json(fixtures.workItemsResponse),
     ),
-    http.get(`${TEST_BASE_URL}/api/agent-controller/code/sessions/${workSessionId}/threads`, () =>
-      HttpResponse.json(fixtures.threadsResponse),
-    ),
+    http.get(`${TEST_BASE_URL}/api/agent-controller/code/sessions/${workSessionId}/threads`, ({ request }) => {
+      expect(new URL(request.url).searchParams.getAll('resourceIds')).toEqual([workSessionId, reviewSessionId]);
+      return HttpResponse.json(fixtures.threadsResponse);
+    }),
   );
 }
 

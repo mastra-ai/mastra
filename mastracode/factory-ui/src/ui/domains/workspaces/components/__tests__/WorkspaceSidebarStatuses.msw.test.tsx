@@ -166,9 +166,13 @@ function stubWorkspaceStatuses({
     http.get(`${TEST_BASE_URL}/web/factory/projects/${factoryProjectId}/work-items`, () =>
       HttpResponse.json({ workItems: items }),
     ),
-    http.get(`${TEST_BASE_URL}/api/agent-controller/code/sessions/${resourceId}/threads`, () =>
-      HttpResponse.json({ threads }),
-    ),
+    http.get(`${TEST_BASE_URL}/api/agent-controller/code/sessions/${resourceId}/threads`, ({ request }) => {
+      expect(new URL(request.url).searchParams.getAll('resourceIds')).toEqual([
+        workSession.sessionId,
+        reviewSession.sessionId,
+      ]);
+      return HttpResponse.json({ threads });
+    }),
     http.get(`${TEST_BASE_URL}/web/github/subscriptions`, ({ request }) => {
       const url = new URL(request.url);
       const threadId = url.searchParams.get('threadId');

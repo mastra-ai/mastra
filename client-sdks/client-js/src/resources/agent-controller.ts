@@ -792,20 +792,15 @@ export class AgentControllerSession extends BaseResource {
     });
   }
 
-  /**
-   * List the session's threads, newest first. Pass `limit` to cap the count
-   * (e.g. for a sidebar) and `tags` to scope to threads matching every tag —
-   * necessary when one resourceId is shared across git worktrees of the same
-   * repo (e.g. `{ tags: { projectPath } }` so each worktree sees only its own
-   * threads). Passing a bare number is shorthand for `{ limit }`.
-   */
+  /** List threads newest first, optionally matching tags or specific resources. */
   async listThreads(
-    options?: number | { limit?: number; tags?: Record<string, string> },
+    options?: number | { limit?: number; tags?: Record<string, string>; resourceIds?: string[] },
   ): Promise<AgentControllerThreadInfo[]> {
     const opts = typeof options === 'number' ? { limit: options } : (options ?? {});
     const params = new URLSearchParams();
     if (opts.limit != null) params.set('limit', String(opts.limit));
     if (opts.tags && Object.keys(opts.tags).length > 0) params.set('tags', JSON.stringify(opts.tags));
+    for (const resourceId of opts.resourceIds ?? []) params.append('resourceIds', resourceId);
     const query = params.toString() ? `?${params.toString()}` : '';
     const body = await this.request<{ threads: AgentControllerThreadInfo[] }>(
       this.url(`${this.base()}/threads${query}`),

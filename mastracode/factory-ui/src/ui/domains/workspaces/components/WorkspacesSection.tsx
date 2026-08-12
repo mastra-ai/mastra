@@ -39,11 +39,11 @@ export function WorkspacesSection() {
   const { pinnedSessions, setPinned } = usePinnedSessions();
   const workItems = useWorkItemsQuery(factoryId);
   const workspaceRows = workspaces.data?.workspaces ?? [];
+  const workspaceIds = workspaceRows.map(workspace => workspace.sessionId);
   const activityOptions = {
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
-    scope: sessionId,
-    worktreePaths: workspaceRows.map(workspace => workspace.sessionId),
+    workspaceIds,
     baseUrl,
     enabled: sessionEnabled && Boolean(sessionId),
   };

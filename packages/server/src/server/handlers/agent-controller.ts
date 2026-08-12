@@ -209,6 +209,7 @@ const listMessagesQuerySchema = z.object({ limit: z.coerce.number().optional(), 
 const listThreadsQuerySchema = z.object({
   limit: z.coerce.number().optional(),
   sessionScope: z.string().optional(),
+  resourceIds: z.union([z.string(), z.array(z.string())]).optional(),
   tags: z
     .preprocess(value => {
       if (typeof value !== 'string' || value.length === 0) return undefined;
@@ -290,6 +291,7 @@ const listThreadsResponseSchema = z.object({
     z.object({
       id: z.string(),
       title: z.string().optional(),
+      resourceId: z.string().optional(),
       updatedAt: z.string().optional(),
       /** The session scoping tags stamped on this thread (e.g. `{ projectPath }`). */
       tags: z.record(z.string(), z.string()).optional(),
@@ -849,11 +851,15 @@ export const LIST_AGENT_CONTROLLER_THREADS_ROUTE = createRoute({
   tags: ['AgentController'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:read',
-  handler: async ({ mastra, controllerId, resourceId, sessionScope, limit, tags, requestContext }) => {
+  handler: async ({ mastra, controllerId, resourceId, sessionScope, limit, tags, resourceIds, requestContext }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const session = await getSession(controller, resourceId, { scope: sessionScope }, requestContext);
-      const threads = await session.thread.list();
+      const requestedResourceIds =
+        resourceIds === undefined ? undefined : Array.isArray(resourceIds) ? resourceIds : [resourceIds];
+      const threads = requestedResourceIds
+        ? await session.thread.list({ allResources: true })
+        : await session.thread.list();
       // A thread's metadata mixes the session scoping tags (stamped at creation,
       // e.g. `projectPath`) with internal session bookkeeping that
       // `Session.loadMetadata()` reads back (selected model/mode, observer/
@@ -868,20 +874,18 @@ export const LIST_AGENT_CONTROLLER_THREADS_ROUTE = createRoute({
         }
         return result;
       };
-      // A single resourceId can be shared across git worktrees of the same repo
-      // (the id is derived from the git URL). When tags are supplied, scope to
-      // threads whose metadata matches every tag and drop the rest, so worktree A
-      // never shows worktree B's threads. Mirrors the controller's tag-aware
-      // selection and the TUI's worktree-strict listing. Reserved internal keys
-      // are ignored as filter tags so callers can't match on session bookkeeping.
+      const requestedResources = requestedResourceIds ? new Set(requestedResourceIds) : undefined;
+      const scopedByResource = requestedResources
+        ? threads.filter(thread => requestedResources.has(thread.resourceId))
+        : threads;
       const tagEntries = tags ? Object.entries(tags).filter(([key]) => !isReservedThreadMetadataKey(key)) : [];
       const scoped =
         tagEntries.length > 0
-          ? threads.filter(t => {
+          ? scopedByResource.filter(t => {
               const metadata = (t.metadata as Record<string, unknown> | undefined) ?? {};
               return tagEntries.every(([key, value]) => metadata[key] === value);
             })
-          : threads;
+          : scopedByResource;
       const toTime = (t: { updatedAt?: Date; createdAt?: Date }) => (t.updatedAt ?? t.createdAt)?.getTime() ?? 0;
       const sorted = [...scoped].sort((a, b) => toTime(b) - toTime(a));
       const max = Number(limit);
@@ -898,9 +902,12 @@ export const LIST_AGENT_CONTROLLER_THREADS_ROUTE = createRoute({
           return {
             id: t.id,
             title: t.title,
+            resourceId: t.resourceId,
             tags: Object.keys(threadTags).length > 0 ? threadTags : undefined,
             updatedAt: t.updatedAt instanceof Date ? t.updatedAt.toISOString() : undefined,
-            state: agent.getActiveThreadRunId({ resourceId, threadId: t.id }) ? ('active' as const) : ('idle' as const),
+            state: agent.getActiveThreadRunId({ resourceId: t.resourceId, threadId: t.id })
+              ? ('active' as const)
+              : ('idle' as const),
           };
         }),
       };

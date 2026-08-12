@@ -101,11 +101,9 @@ export const queryKeys = {
     resourceId: string | undefined,
     projectPath: string | undefined,
   ) => [...queryKeys.agentControllerConnection(agentControllerId, resourceId, projectPath), 'state'] as const,
-  // Kept outside agentControllerSession for the same reason as connection:
-  // this is a lightweight activity poll, not session state to invalidate. One
-  // entry covers every worktree sharing the resource (single thread listing).
-  agentControllerActivity: (agentControllerId: string | undefined, resourceId: string | undefined) =>
-    ['agent-controller', agentControllerId ?? null, 'activity', resourceId ?? null] as const,
+  // This is a lightweight activity poll, not session state to invalidate.
+  agentControllerActivity: (agentControllerId: string | undefined, resourceIds: string[]) =>
+    ['agent-controller', agentControllerId ?? null, 'activity', ...resourceIds] as const,
   agentControllerSettings: (
     agentControllerId: string | undefined,
     resourceId: string | undefined,

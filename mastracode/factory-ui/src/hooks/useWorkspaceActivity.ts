@@ -32,39 +32,28 @@ function isActiveWorkspaceThread(thread: AgentControllerThreadInfo, key: string)
 interface WorkspaceActivityOptions {
   agentControllerId: string;
   resourceId: string;
-  /** Session scope for the listing read — the active worktree's project path. */
-  scope: string | undefined;
-  worktreePaths: string[];
+  workspaceIds: string[];
   baseUrl?: string;
   enabled: boolean;
 }
 
-/**
- * The shared resource-wide thread listing behind the workspace hooks. Threads
- * are stamped with their worktree's `projectPath` tag and the server annotates
- * each with its run state (`active`/`idle`), so one poll covers every worktree
- * sharing the resourceId instead of a request per row.
- */
+/** Fetches every visible workspace from one stable aggregate query. */
 function useWorkspaceThreadsQuery({
   agentControllerId,
   resourceId,
-  scope,
+  workspaceIds,
   baseUrl,
   enabled,
-}: Omit<WorkspaceActivityOptions, 'worktreePaths'>): AgentControllerThreadInfo[] {
+}: WorkspaceActivityOptions): AgentControllerThreadInfo[] {
   const query = useQuery({
-    queryKey: queryKeys.agentControllerActivity(agentControllerId, resourceId),
+    queryKey: queryKeys.agentControllerActivity(agentControllerId, workspaceIds),
     queryFn: async () => {
-      // A thread listing spans the whole resource regardless of session scope,
-      // so read through the already-live active-worktree session rather than
-      // seeding a new one.
       const { session } = createAgentControllerClient({
         agentControllerId,
         resourceId,
-        scope,
         baseUrl,
       });
-      return requireAgentControllerSession(session).listThreads();
+      return requireAgentControllerSession(session).listThreads({ resourceIds: workspaceIds });
     },
     enabled,
     refetchInterval: WORKSPACE_ACTIVITY_POLL_MS,
@@ -77,7 +66,7 @@ function useWorkspaceThreadsQuery({
 export function useWorkspaceActivity(options: WorkspaceActivityOptions): Record<string, boolean> {
   const threads = useWorkspaceThreadsQuery(options);
   return Object.fromEntries(
-    options.worktreePaths.map(path => [path, threads.some(thread => isActiveWorkspaceThread(thread, path))]),
+    options.workspaceIds.map(path => [path, threads.some(thread => isActiveWorkspaceThread(thread, path))]),
   );
 }
 
@@ -106,7 +95,7 @@ export function conversationThread<T extends { title?: string | null; updatedAt?
 export function useWorkspaceThreadTitles(options: WorkspaceActivityOptions): Record<string, string> {
   const threads = useWorkspaceThreadsQuery(options);
   const titles: Record<string, string> = {};
-  for (const path of options.worktreePaths) {
+  for (const path of options.workspaceIds) {
     const thread = conversationThread(threads.filter(t => isWorkspaceThread(t, path)));
     const title = thread?.title?.trim();
     if (title) titles[path] = title;

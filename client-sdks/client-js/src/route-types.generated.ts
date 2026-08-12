@@ -20072,6 +20072,7 @@ export type GetAgentControllerControllerIdSessionsResourceIdThreads_PathParams =
 export type GetAgentControllerControllerIdSessionsResourceIdThreads_QueryParams = {
   limit?: number | undefined;
   sessionScope?: string | undefined;
+  resourceIds?: (string | string[]) | undefined;
   tags?:
     | (
         | {
@@ -20086,6 +20087,7 @@ export type GetAgentControllerControllerIdSessionsResourceIdThreads_Response = {
   threads: {
     id: string;
     title?: string | undefined;
+    resourceId?: string | undefined;
     updatedAt?: string | undefined;
     tags?:
       | {

@@ -176,14 +176,12 @@ function useAgentsRunningCount(): number {
   const repository = factoryQuery.data?.repositories[0];
   const workspaces = useWorkspacesQuery(repository?.projectRepositoryId);
   const workspaceSessions = workspaces.data?.workspaces ?? [];
-  // The factory-level session address is the factory project id, so read
-  // activity without materializing a sandbox for a page that only renders counts.
   const resourceId = factoryQuery.data?.id;
+  const workspaceIds = workspaceSessions.map(workspace => workspace.sessionId);
   const runningByPath = useWorkspaceActivity({
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId: resourceId ?? '',
-    scope: repository?.projectRepositoryId,
-    worktreePaths: workspaceSessions.map(workspace => workspace.sessionId),
+    workspaceIds,
     baseUrl,
     enabled: Boolean(resourceId && repository?.projectRepositoryId),
   });
