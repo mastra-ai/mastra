@@ -9,17 +9,22 @@ packages:
 
 The `CostGuardProcessor` enforces monetary cost limits across the agentic loop, blocking or warning when a configurable cost threshold is exceeded.
 
-It uses `processInputStep` to check the cost limit before each LLM call. Cost data is queried from the observability storage APIs (`getMetricAggregate`) for all scopes. For `resource` and `thread` scopes, it aggregates cost across runs within a configurable time window (defaults to 7 days). For `run` scope, it queries cost for the current trace.
+It uses `processInputStep` to check the cost limit before each LLM call. Cost data is queried from the observability storage APIs (`getMetricAggregate`) for all scopes. For all scopes except `run`, it aggregates cost across runs within a configurable time window (defaults to 7 days). For `run` scope, it queries cost for the current trace.
 
 For token-based limits, use `TokenLimiterProcessor` instead.
 
-Supports three scoping modes:
+Supports six scoping modes:
 
 - **Run scope**: Tracks cost within a single agent run via trace ID
 - **Resource scope** (default): Tracks cumulative cost per `resourceId` across runs
 - **Thread scope**: Tracks cumulative cost per `threadId` across runs
+- **User scope**: Tracks cumulative cost per `userId` across runs
+- **Organization scope**: Tracks cumulative cost per `organizationId` across runs
+- **Session scope**: Tracks cumulative cost per `sessionId` across runs
 
 > **Approximate cost guard.** Cost data is persisted asynchronously via buffered exporters in the observability pipeline. Fast-running agents may exceed the configured limit before metrics are available for query. Treat `maxCost` as an approximate threshold that fast-running agents may exceed.
+
+> **Agent attribution only.** Cost is attributed via the `entityType: 'agent'` metric filter. Model calls made outside an agent run — for example, direct model usage in workflow steps — have no agent parent span and are not counted by this guard.
 
 ## Usage example
 
@@ -33,7 +38,7 @@ const costGuard = new CostGuardProcessor({
 })
 ```
 
-Track cumulative cost per thread with a 24-hour window:
+Track cumulative cost per thread with a 24-hour window and a soft warning at 80% of the limit:
 
 ```typescript
 import { CostGuardProcessor } from '@mastra/core/processors'
@@ -42,10 +47,22 @@ const costGuard = new CostGuardProcessor({
   maxCost: 5.0,
   scope: 'thread',
   window: '24h',
+  warnAtPercent: 80,
 })
 ```
 
-Attach to an agent with an `onViolation` callback:
+Use a per-tier budget by passing a function as `maxCost`:
+
+```typescript
+import { CostGuardProcessor } from '@mastra/core/processors'
+
+const costGuard = new CostGuardProcessor({
+  maxCost: requestContext => (requestContext?.get('tier') === 'pro' ? 10.0 : 1.0),
+  scope: 'user',
+})
+```
+
+Attach to an agent with an `onViolation` callback and a per-provider/model breakdown:
 
 ```typescript
 import { Agent } from '@mastra/core/agent'
@@ -55,10 +72,16 @@ const costGuard = new CostGuardProcessor({
   maxCost: 5.0,
   scope: 'resource',
   window: '30d',
+  includeBreakdown: true,
 })
 
 costGuard.onViolation = ({ detail }) => {
-  console.log(`Cost exceeded for ${detail.scopeKey}: $${detail.usage}/$${detail.limit}`)
+  console.log(
+    `Cost ${detail.threshold} threshold for ${detail.scopeKey}: $${detail.usage}/$${detail.limit}`,
+  )
+  for (const entry of detail.breakdown ?? []) {
+    console.log(`  ${entry.provider}/${entry.model}: $${entry.estimatedCost}`)
+  }
 }
 
 const agent = new Agent({
@@ -77,24 +100,23 @@ const agent = new Agent({
   content={[
   {
     name: 'maxCost',
-    type: 'number',
+    type: 'number | ((requestContext?: RequestContext) => number)',
     description:
-      'Maximum estimated cost allowed (e.g. 0.50 for $0.50 USD). Must be a positive number. Uses cost data from observability metrics. This is an approximate limit due to metric persistence delays.',
+      "Maximum estimated cost allowed (e.g. 0.50 for $0.50 USD). A number must be positive. A function is called with the request's RequestContext on every check, enabling per-tier or per-user budgets; if it returns anything other than a finite positive number, the check is skipped for that request (fail-open) and a warning is logged. This is an approximate limit due to metric persistence delays.",
     isOptional: false,
   },
   {
     name: 'scope',
-    type: "'run' | 'resource' | 'thread'",
+    type: "'run' | 'resource' | 'thread' | 'user' | 'organization' | 'session'",
     description:
-      "Scope for cost tracking. 'run' tracks cost within the current agent run via trace ID. 'resource' tracks cumulative cost per resourceId across runs (default). 'thread' tracks cumulative cost per threadId across runs. All scopes require observability storage with getMetricAggregate support.",
+      "Scope for cost tracking. 'run' tracks cost within the current agent run via trace ID. 'resource' tracks cumulative cost per resourceId across runs (default). 'thread' tracks cumulative cost per threadId across runs. 'user', 'organization', and 'session' track cumulative cost per userId, organizationId, and sessionId respectively, read from the plain RequestContext keys 'userId', 'organizationId', and 'sessionId'. All scopes require observability storage with getMetricAggregate support.",
     isOptional: true,
     defaultValue: "'resource'",
   },
   {
     name: 'window',
     type: "'1h' | '6h' | '24h' | '7d' | '30d' | '365d'",
-    description:
-      "Time window for cost aggregation when using 'resource' or 'thread' scope. Only applicable to non-run scopes.",
+    description: "Time window for cost aggregation for all scopes except 'run'.",
     isOptional: true,
     defaultValue: "'7d'",
   },
@@ -102,7 +124,7 @@ const agent = new Agent({
     name: 'strategy',
     type: "'block' | 'warn'",
     description:
-      "Strategy when the cost limit is exceeded. 'block' aborts with a TripWire error. 'warn' logs a warning but allows the step to proceed.",
+      "Strategy when the cost limit is exceeded. 'block' aborts with a TripWire error. 'warn' logs a warning and calls onViolation at most once per request, then allows the step to proceed.",
     isOptional: true,
     defaultValue: "'block'",
   },
@@ -112,6 +134,21 @@ const agent = new Agent({
     description: 'Custom message template for the abort reason. Supports {usage} and {limit} placeholders.',
     isOptional: true,
     defaultValue: "'Cost guard: cost limit exceeded ({usage}/{limit})'",
+  },
+  {
+    name: 'warnAtPercent',
+    type: 'number',
+    description:
+      'Optional soft threshold as a percentage of maxCost (exclusive 0-100, e.g. 80). When the estimated cost reaches this percentage of the limit but is still below it, a warning is logged and onViolation is called once per request with threshold: "soft", regardless of strategy. Never aborts the step.',
+    isOptional: true,
+  },
+  {
+    name: 'includeBreakdown',
+    type: 'boolean',
+    description:
+      'When true, violations (soft and hard) include a per-provider/model cost breakdown queried via getMetricBreakdown. The breakdown query runs only when a violation trips, never on the happy path. If the configured store does not support breakdown queries or the query fails, the violation fires without the breakdown field.',
+    isOptional: true,
+    defaultValue: 'false',
   },
 ]}
 />
@@ -136,14 +173,14 @@ const agent = new Agent({
     name: 'onViolation',
     type: '(violation: ProcessorViolation) => void | Promise<void>',
     description:
-      'Callback invoked when a cost violation is detected, regardless of strategy. Part of the generalized Processor interface. Use for side effects like alerting, logging to external systems, or emailing users. Errors thrown by this callback are silently caught.',
+      'Callback invoked when a cost violation is detected, regardless of strategy. For the warn strategy and for soft thresholds, it fires at most once per request per threshold level. The violation detail includes a threshold field ("soft" or "hard") and, when includeBreakdown is enabled, a breakdown array. Use for side effects like alerting, logging to external systems, or emailing users. Errors thrown by this callback are caught and logged through the Mastra logger.',
     isOptional: true,
   },
   {
     name: 'processInputStep',
     type: '(args: ProcessInputStepArgs) => Promise<void>',
     description:
-      'Checks cumulative estimated cost against maxCost before each LLM call. Queries observability storage for cost data: run scope filters by trace ID, resource/thread scopes filter by their respective IDs with a time window. Calls abort() when the limit is exceeded (block strategy) or logs a warning (warn strategy). Cost checks are approximate due to metric persistence delays.',
+      'Checks cumulative estimated cost against the resolved maxCost before each LLM call. Queries observability storage for cost data: run scope filters by trace ID, all other scopes filter by their respective IDs with a time window. Calls abort() when the limit is exceeded (block strategy) or logs a warning (warn strategy). Cost checks are approximate due to metric persistence delays.',
     isOptional: false,
   },
 ]}
@@ -155,9 +192,14 @@ When the `block` strategy is active (default), `CostGuardProcessor` calls `abort
 
 - `processorId`: `'cost-guard'`
 - `usage`: Current cumulative usage (`estimatedCost`, `costUnit`)
-- `maxCost`: The configured cost limit
-- `scope`: The active scope (`'run'`, `'resource'`, or `'thread'`)
-- `scopeKey`: The scope identifier for resource/thread scopes (if applicable)
+- `maxCost`: The resolved cost limit for the request
+- `scope`: The active scope
+- `scopeKey`: The scope identifier for non-run scopes (if applicable)
+- `breakdown`: Per-provider/model cost entries (only when `includeBreakdown` is enabled and the breakdown query succeeds)
+
+With the `warn` strategy, the hard-limit warning and `onViolation` callback fire at most once per request; subsequent steps in the same request proceed without repeating the warning.
+
+Numbers interpolated into violation messages are normalized to at most 6 decimal places, so messages never contain float precision artifacts.
 
 ## Scoping behavior
 
@@ -166,11 +208,16 @@ When the `block` strategy is active (default), `CostGuardProcessor` calls `abort
 | `run` | No | `traceId` from current span | Tracing context (automatic) |
 | `resource` | Yes | `resourceId` + time window | `resourceId` in `RequestContext` |
 | `thread` | Yes | `threadId` + time window | `threadId` in `RequestContext` |
+| `user` | Yes | `userId` + time window | `userId` key in `RequestContext` |
+| `organization` | Yes | `organizationId` + time window | `organizationId` key in `RequestContext` |
+| `session` | Yes | `sessionId` + time window | `sessionId` key in `RequestContext` |
 
 All scopes require observability storage with `getMetricAggregate` support. If the Mastra instance doesn't have observability storage configured, an error is thrown at registration time.
 
 For `run` scope, the processor reads the trace ID from the current span's tracing context. If no tracing context is available, the check is skipped (fail-open).
 
-For `resource` and `thread` scopes, if the required context ID is missing at runtime, the check is skipped. Observability query failures are handled with a fail-open strategy: if a query fails, cost is treated as zero.
+For all other scopes, if the required context ID is missing at runtime, the check is skipped. Observability query failures are handled with a fail-open strategy: if a query fails, a warning is logged through the Mastra logger and the step proceeds.
+
+> **The `user`, `organization`, and `session` scopes require annotated traces.** These scopes match metric records by their `userId`, `organizationId`, and `sessionId` fields, which are populated from span metadata on the trace (for example, via tracing options metadata). If your traces don't carry the matching metadata, these scopes match zero records and the guard never trips. Setting the RequestContext key alone is not enough — both the RequestContext key (for scope resolution) and the span metadata (for cost attribution) must be present.
 
 > **Note on metric persistence delay.** The observability pipeline uses buffered exporters that flush metrics asynchronously. A short delay exists between when an LLM call completes and when its cost metrics are available for query. During high-frequency agent execution, the cost guard may not detect a limit breach until one or more steps after the actual cost exceeded the threshold.

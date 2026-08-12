@@ -933,7 +933,7 @@ The callback receives a `ProcessorViolation` object with:
 - `message`: A human-readable description of what was violated
 - `detail`: Processor-specific metadata (e.g. cost usage, detected PII types, moderation categories)
 
-`onViolation` is part of the base [`Processor` interface](/reference/processors/processor-interface), so any custom processor can use it too. The runner automatically invokes it when any processor calls `abort()`. Errors thrown inside the callback are silently caught to prevent interfering with the processor pipeline.
+`onViolation` is part of the base [`Processor` interface](/reference/processors/processor-interface), so any custom processor can use it too. The runner automatically invokes it when any processor calls `abort()`. Errors thrown inside the callback are caught to prevent interfering with the processor pipeline.
 
 ### Abort and tripwire chunks
 
