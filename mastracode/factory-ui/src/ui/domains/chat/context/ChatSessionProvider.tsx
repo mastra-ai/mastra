@@ -28,6 +28,18 @@ interface ChatThreadMessagesApi {
 
 const ChatThreadMessagesContext = createContext<ChatThreadMessagesApi | null>(null);
 
+/**
+ * True while the initial thread-messages fetch is in flight for the current
+ * threadId. Returns false outside a `ChatSessionBoundary` (e.g. draft
+ * composer routes with no thread), which keeps preparing-aware consumers
+ * from treating "no boundary" as "still loading".
+ */
+export function useChatMessagesInitializing(): boolean {
+  const value = useContext(ChatThreadMessagesContext);
+  if (!value) return false;
+  return Boolean(value.threadId) && value.isPending;
+}
+
 /** Stable project/API configuration for chat shell consumers such as the sidebar. */
 export function ChatSessionConfigProvider({
   children,
@@ -205,15 +217,16 @@ export function ChatMessageBoundary({ children }: { children: ReactNode }) {
   // real failure instead of an eternal skeleton or a partial-state loader.
   if (sessionError) return <ChatMessageFeedback />;
 
-  // Sandbox is still being provisioned/cloned. Show the step loader so the
-  // user knows what the server is doing right now, instead of stacked skeleton
-  // bars that carry no information.
-  if (sandboxPreparing) return <SessionPrepareSteps />;
+  // Any pre-transcript wait — sandbox provisioning OR the initial thread
+  // messages fetch — is shown as the step loader. Splitting these into two
+  // different loaders would flicker between them on cold visits where the
+  // ensure resolves fast but the messages fetch is still in flight; keeping
+  // them under one loader keeps the composer's spinning ring continuously
+  // meaningful through the whole preparing window.
+  const messagesInitializing = Boolean(value.threadId) && value.isPending;
+  if (sandboxPreparing || messagesInitializing) return <SessionPrepareSteps />;
 
-  // Sandbox is ready but the messages fetch is still in flight (a narrow
-  // window after `/ensure` resolves). Fall back to the classic skeleton — no
-  // useful step-loader phases to render here.
-  if (value.threadId && (value.isPending || value.error)) return <ChatMessageFallback {...value} />;
+  if (value.threadId && value.error) return <ChatMessageFallback {...value} />;
 
   return children;
 }

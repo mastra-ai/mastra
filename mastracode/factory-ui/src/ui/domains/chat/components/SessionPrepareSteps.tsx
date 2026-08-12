@@ -2,6 +2,7 @@ import { useRef } from 'react';
 import { CheckCircle2, Circle, Loader2 } from 'lucide-react';
 
 import type { PrepareProgress } from '../../workspaces/services/github';
+import { useChatMessagesInitializing } from '../context/ChatSessionProvider';
 import { useChatSessionContext } from '../context/useChatSessionContext';
 
 /**
@@ -35,9 +36,16 @@ type StepStatus = 'pending' | 'active' | 'complete' | 'skipped';
  * Step loader shown in the transcript region while `/ensure` is in flight,
  * driven by the SSE progress phase in `ChatSessionContext.sandboxProgress`.
  * See "Step loader spec" in the plan for the phase-to-status rules.
+ *
+ * Also covers the post-ensure, pre-transcript window where the initial
+ * thread-messages fetch is still in flight: rendering the same loader (with
+ * a "Loading messages" tail step) instead of flipping to skeleton bars keeps
+ * the composer's spinning ring continuously meaningful across the whole
+ * preparing window.
  */
 export function SessionPrepareSteps() {
-  const { sandboxProgress } = useChatSessionContext();
+  const { sandboxPreparing, sandboxProgress } = useChatSessionContext();
+  const messagesInitializing = useChatMessagesInitializing();
   const observed = sandboxProgress?.phase;
   // Before any event arrives, mark `reattaching` as the active step with a
   // generic "Starting…" message so the loader isn't visually empty.
@@ -51,6 +59,10 @@ export function SessionPrepareSteps() {
   if (observed === 'reattaching') sawReattachingRef.current = true;
   const sawReattaching = sawReattachingRef.current;
 
+  // Once `/ensure` finishes the transcript fetch may still be in flight.
+  // Mark every ensure step complete and light up a synthetic tail step.
+  const loadingMessages = !sandboxPreparing && messagesInitializing;
+
   return (
     <div
       role="status"
@@ -59,7 +71,12 @@ export function SessionPrepareSteps() {
       data-testid="session-prepare-steps"
     >
       {PHASE_ORDER.map(phase => {
-        const status = stepStatus(phase, activePhase, sawReattaching);
+        const rawStatus = stepStatus(phase, activePhase, sawReattaching);
+        const status: StepStatus = loadingMessages
+          ? rawStatus === 'skipped'
+            ? 'skipped'
+            : 'complete'
+          : rawStatus;
         return (
           <SessionPrepareStep
             key={phase}
@@ -69,6 +86,10 @@ export function SessionPrepareSteps() {
           />
         );
       })}
+      <SessionPrepareStep
+        label="Loading messages"
+        status={loadingMessages ? 'active' : 'pending'}
+      />
     </div>
   );
 }

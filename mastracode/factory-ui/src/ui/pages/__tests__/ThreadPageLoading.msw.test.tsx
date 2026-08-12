@@ -179,11 +179,17 @@ describe('ThreadPage loading shell', () => {
     sessionGate.resolve();
 
     const header = await screen.findByRole('region', { name: 'Factory session' });
-    expect(await screen.findByLabelText('Loading messages')).toBeInTheDocument();
+    // The messages-loading window is now covered by the session-prepare step
+    // loader (with "Loading messages" as its active tail step) rather than
+    // the old skeleton bars — keeps the composer's spinning ring meaningful
+    // across the whole preparing window.
+    expect(await screen.findByRole('status', { name: 'Preparing session' })).toBeInTheDocument();
     expect(within(header).getByRole('button', { name: 'Workspace files' })).toBeInTheDocument();
 
     messagesGate.resolve();
-    await waitFor(() => expect(screen.queryByLabelText('Loading messages')).not.toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.queryByRole('status', { name: 'Preparing session' })).not.toBeInTheDocument(),
+    );
     expect(screen.getByRole('region', { name: 'Factory session' })).toBeInTheDocument();
   });
 
@@ -195,7 +201,7 @@ describe('ThreadPage loading shell', () => {
     renderThreadRoute(`/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/${ROUTE_THREAD_ID}`);
     sessionGate.resolve();
 
-    expect(await screen.findByLabelText('Loading messages')).toBeInTheDocument();
+    expect(await screen.findByRole('status', { name: 'Preparing session' })).toBeInTheDocument();
     await waitFor(() => expect(onSwitchThread).toHaveBeenCalledWith(ROUTE_THREAD_ID));
   });
 });
