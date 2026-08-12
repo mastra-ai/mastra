@@ -321,7 +321,9 @@ function BoardContent({
                     evaluatingStage={items.evaluatingStages.get(item.id)}
                     transitionReason={items.transitionReasons[item.id]}
                     decision={decisions.byItem.get(item.id)}
+                    approvingDecisionId={decisions.approvingId}
                     retryingDecisionId={decisions.retryingId}
+                    onApproveDecision={decisions.approve}
                     onRetryDecision={decisions.retry}
                     pendingRunRoles={runs.pendingRolesFor(item.id)}
                     onCreateSession={() => void runs.openOrCreateSession(item, stage.id)}

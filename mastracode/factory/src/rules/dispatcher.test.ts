@@ -897,6 +897,65 @@ describe('FactoryDecisionDispatcher', () => {
     expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]?.status).toBe('succeeded');
   });
 
+  it('parks a rule-started run for approval when the project does not allow automatic runs', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { transitionService } = await queueDecision(storage, {
+      type: 'invokeSkill',
+      role: 'work',
+      skillName: 'understand-issue',
+      idempotencyKey: 'skill-needs-approval',
+    });
+    const { controller, session } = createSession();
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+      isAutoRunEnabled: async () => false,
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    const [parked] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+    expect(parked).toMatchObject({ status: 'proposed', attempts: 0 });
+    expect(session.sendSignal).not.toHaveBeenCalled();
+
+    // A proposed effect stays out of every later claim until someone approves it.
+    await dispatcher.runOnce(new Date('2030-01-01T00:01:00Z'));
+    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]?.status).toBe('proposed');
+
+    const approved = await storage.approveDeferredDecision(
+      'org-1',
+      PROJECT_ID,
+      parked!.id,
+      new Date('2030-01-01T00:02:00Z'),
+    );
+    expect(approved?.status).toBe('pending');
+  });
+
+  it('still moves cards for external facts while automatic runs are off', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { item, transitionService } = await queueDecision(storage, {
+      type: 'transition',
+      board: 'work',
+      stage: 'done',
+      idempotencyKey: 'merged-while-manual',
+    });
+    const { controller } = createSession();
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+      isAutoRunEnabled: async () => false,
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]?.status).toBe('succeeded');
+    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stages).toEqual(['done']);
+  });
+
   it('completes a transition with a message silently when the item has no active binding', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const { item, transitionService } = await queueDecision(storage, {

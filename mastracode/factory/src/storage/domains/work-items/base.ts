@@ -134,7 +134,12 @@ export interface FactoryRuleEvaluationRecord {
   createdAt: Date;
 }
 
-export type FactoryDispatchStatus = 'pending' | 'leased' | 'retry' | 'succeeded' | 'failed';
+/**
+ * `proposed` is the only non-terminal status the dispatcher never claims: the
+ * effect is a run the Factory is not allowed to start on its own, parked until
+ * someone approves it.
+ */
+export type FactoryDispatchStatus = 'pending' | 'proposed' | 'leased' | 'retry' | 'succeeded' | 'failed';
 
 export interface FactoryDeferredDecisionPageInput {
   orgId: string;
@@ -1278,6 +1283,51 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   async failDeferredDecision(input: FactoryDispatchFailureInput): Promise<FactoryDeferredDecisionRecord | null> {
     const row = await this.#failLease('factory_deferred_decisions', input);
     return row ? toDeferredDecision(row) : null;
+  }
+
+  /** Park a claimed effect for human approval; the dispatcher never claims `proposed` rows. */
+  async proposeDeferredDecision(
+    identity: FactoryLeaseIdentity,
+    now: Date,
+  ): Promise<FactoryDeferredDecisionRecord | null> {
+    let proposed = false;
+    const row = await this.#db.updateAtomic<GovernanceDbRow>(
+      'factory_deferred_decisions',
+      { id: identity.id, org_id: identity.orgId, factory_project_id: identity.factoryProjectId },
+      current => {
+        if (current.status !== 'leased' || current.lease_owner !== identity.ownerId) return null;
+        proposed = true;
+        return {
+          status: 'proposed',
+          // The claim that parked it consumed an attempt no effect was spent on.
+          attempts: 0,
+          lease_owner: null,
+          lease_expires_at: null,
+          updated_at: now,
+        };
+      },
+    );
+    return proposed && row ? toDeferredDecision(row) : null;
+  }
+
+  /** Release an approved effect back to the dispatcher; only `proposed` rows are approvable. */
+  async approveDeferredDecision(
+    orgId: string,
+    factoryProjectId: string,
+    decisionId: string,
+    now: Date,
+  ): Promise<FactoryDeferredDecisionRecord | null> {
+    let approved = false;
+    const row = await this.#db.updateAtomic<GovernanceDbRow>(
+      'factory_deferred_decisions',
+      { id: decisionId, org_id: orgId, factory_project_id: factoryProjectId },
+      current => {
+        if (current.status !== 'proposed') return null;
+        approved = true;
+        return { status: 'pending', attempts: 0, available_at: now, updated_at: now };
+      },
+    );
+    return approved && row ? toDeferredDecision(row) : null;
   }
 
   /** Requeue the same idempotent terminal effect; non-failed decisions are never rerun. */

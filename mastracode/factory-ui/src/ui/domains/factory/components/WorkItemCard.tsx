@@ -1,19 +1,8 @@
-import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import {
-  ArrowUpRight,
-  EllipsisVertical,
-  Link2,
-  MessageSquare,
-  MessagesSquare,
-  Play,
-  Trash2,
-  TriangleAlert,
-} from 'lucide-react';
+import { ArrowUpRight, EllipsisVertical, Link2, MessageSquare, MessagesSquare, Play, Trash2 } from 'lucide-react';
 import { Link, useParams } from 'react-router';
 
 import type { FactoryRunPhase } from '../../../../hooks/useStartFactoryRun';
@@ -35,18 +24,11 @@ import { relatedWorkItems, relationshipLabel, relationshipPath } from '../servic
 import type { WorkItem } from '../services/workItems';
 import type { BoardStageId } from '../stages';
 import { workItemActivity } from '../workItemActivity';
-import { CardLabels, CardTitleTooltip, SourceTitle } from './BoardCardParts';
+import { CardDecisionStatus, CardLabels, CardTitleTooltip, SourceTitle } from './BoardCardParts';
 import { BoardStageIcon, SourceIcon } from './BoardIcons';
 import { actionIcon } from './FactoryItemActions';
 import { PullRequestStatusIcon } from './PullRequestStatusIcon';
 import { WorkItemActivity } from './WorkItemActivity';
-
-function decisionStatusText(decision: FactoryDecisionSummary): string {
-  if (decision.status === 'pending') return `Rule effect pending · ${decision.type}`;
-  if (decision.status === 'leased') return `Rule effect dispatching · ${decision.type} · attempt ${decision.attempts}`;
-  if (decision.status === 'retry') return `Rule effect retrying · ${decision.type} · attempt ${decision.attempts}`;
-  return decision.lastError ? `Rule effect failed: ${decision.lastError}` : `Rule effect failed · ${decision.type}`;
-}
 
 export function WorkItemCard({
   item,
@@ -59,7 +41,9 @@ export function WorkItemCard({
   evaluatingStage,
   transitionReason,
   decision,
+  approvingDecisionId,
   retryingDecisionId,
+  onApproveDecision,
   onRetryDecision,
   pendingRunRoles,
   onCreateSession,
@@ -81,7 +65,9 @@ export function WorkItemCard({
   evaluatingStage?: string;
   transitionReason?: string;
   decision?: FactoryDecisionSummary;
+  approvingDecisionId?: string;
   retryingDecisionId?: string;
+  onApproveDecision: (decisionId: string) => void;
   onRetryDecision: (decisionId: string) => void;
   pendingRunRoles: ReadonlyMap<string, FactoryRunPhase | undefined>;
   /** Card click fallback when the item has no run spec: open an empty session (no run). */
@@ -309,46 +295,13 @@ export function WorkItemCard({
           </span>
         )}
         {!evaluating && decision !== undefined && (
-          <div className="flex items-center justify-between gap-2">
-            {decision.status === 'failed' ? (
-              <Tooltip>
-                <TooltipTrigger
-                  render={
-                    <Badge
-                      variant="error"
-                      size="xs"
-                      icon={<TriangleAlert aria-hidden />}
-                      role="alert"
-                      aria-label={decisionStatusText(decision)}
-                      tabIndex={0}
-                      className="focus-visible:ring-accent1 relative z-20 cursor-help outline-hidden focus-visible:ring-2"
-                    >
-                      Error
-                    </Badge>
-                  }
-                />
-                <TooltipContent side="top" className="max-w-80">
-                  <span className="wrap-anywhere whitespace-pre-wrap">{decisionStatusText(decision)}</span>
-                </TooltipContent>
-              </Tooltip>
-            ) : (
-              <span role="status" className="text-ui-xs text-icon4">
-                {decisionStatusText(decision)}
-              </span>
-            )}
-            {decision.status === 'failed' ? (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="relative z-20"
-                disabled={retryingDecisionId === decision.id}
-                onClick={() => onRetryDecision(decision.id)}
-              >
-                {retryingDecisionId === decision.id ? 'Retrying…' : 'Retry'}
-              </Button>
-            ) : null}
-          </div>
+          <CardDecisionStatus
+            decision={decision}
+            approving={approvingDecisionId === decision.id}
+            retrying={retryingDecisionId === decision.id}
+            onApprove={() => onApproveDecision(decision.id)}
+            onRetry={() => onRetryDecision(decision.id)}
+          />
         )}
         {!evaluating && transitionReason !== undefined && (
           <span role="alert" className="text-ui-xs text-error">

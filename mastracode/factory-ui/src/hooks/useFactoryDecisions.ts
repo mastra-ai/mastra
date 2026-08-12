@@ -2,7 +2,11 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tansta
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
-import { fetchFactoryDecisions, retryFactoryDecision } from '../ui/domains/factory/services/decisions';
+import {
+  approveFactoryDecision,
+  fetchFactoryDecisions,
+  retryFactoryDecision,
+} from '../ui/domains/factory/services/decisions';
 import type { FactoryDecisionPage, FactoryDecisionStatus } from '../ui/domains/factory/services/decisions';
 
 export function useFactoryDecisionStatus(githubProjectId: string | undefined, statuses: FactoryDecisionStatus[]) {
@@ -14,6 +18,18 @@ export function useFactoryDecisionStatus(githubProjectId: string | undefined, st
     enabled: Boolean(githubProjectId),
     refetchInterval: 2_000,
     staleTime: 1_000,
+  });
+}
+
+/** Release a run a rule proposed while automatic runs are off. */
+export function useApproveFactoryDecision(githubProjectId: string | undefined) {
+  const { baseUrl } = useApiConfig();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (decisionId: string) => approveFactoryDecision(baseUrl, githubProjectId!, decisionId),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['factory', 'decisions', githubProjectId ?? null] });
+    },
   });
 }
 

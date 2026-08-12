@@ -537,8 +537,7 @@ export class MastraFactory {
       integrations.some(integration => integration.intake !== undefined) && storage.isDomainReady('intake');
     const factoryReady = storage.isDomainReady('projects') && storage.isDomainReady('work-items');
     const githubIntegration = integrations.find(integration => integration.id === 'github') as
-      | GithubIntegration
-      | undefined;
+      GithubIntegration | undefined;
     const workItemsReady = storage.isDomainReady('work-items');
     // Terminal work items release their session sandboxes back to the reuse
     // pool so the next session for the same repository/user claims a warm VM
@@ -750,6 +749,11 @@ export class MastraFactory {
                 transitionService: runtimeTransitionService,
                 storage: storage.getDomain<WorkItemsStorage>('work-items'),
                 maxInFlight: this.#config.dispatcher?.maxInFlight,
+                isAutoRunEnabled: async ({ orgId, factoryProjectId }) => {
+                  await factoryProjectsStorage.ensureReady();
+                  const project = await factoryProjectsStorage.get({ orgId, id: factoryProjectId });
+                  return project?.autoRunEnabled ?? false;
+                },
                 reconcileToolResults: () => factoryProcessor?.reconcileAllBoundThreads() ?? Promise.resolve(),
                 prepareBinding,
                 primeCredentials: tenant => primeTenantCredentials({ tenant, credentials: modelCredentialsStorage }),

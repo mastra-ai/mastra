@@ -1,4 +1,5 @@
-export type FactoryDecisionStatus = 'pending' | 'leased' | 'retry' | 'succeeded' | 'failed';
+/** `proposed`: an agent run a rule wants to start, waiting for someone to approve it. */
+export type FactoryDecisionStatus = 'pending' | 'proposed' | 'leased' | 'retry' | 'succeeded' | 'failed';
 
 export interface FactoryDecisionSummary {
   id: string;
@@ -45,6 +46,19 @@ export async function fetchFactoryDecisions(
   );
   if (!response.ok) return throwRequestError(response);
   return (await response.json()) as FactoryDecisionPage;
+}
+
+export async function approveFactoryDecision(
+  baseUrl: string,
+  githubProjectId: string,
+  decisionId: string,
+): Promise<{ decision: FactoryDecisionSummary }> {
+  const response = await fetch(
+    `${baseUrl}/web/factory/projects/${encodeURIComponent(githubProjectId)}/decisions/${encodeURIComponent(decisionId)}/approve`,
+    { method: 'POST', headers: { Accept: 'application/json' }, credentials: 'include' },
+  );
+  if (!response.ok) return throwRequestError(response);
+  return (await response.json()) as { decision: FactoryDecisionSummary };
 }
 
 export async function retryFactoryDecision(

@@ -1,14 +1,19 @@
 import { useMemo } from 'react';
 
-import { useFactoryDecisionStatus, useRetryFactoryDecision } from '../../../../hooks/useFactoryDecisions';
+import {
+  useApproveFactoryDecision,
+  useFactoryDecisionStatus,
+  useRetryFactoryDecision,
+} from '../../../../hooks/useFactoryDecisions';
 import type { FactoryDecisionStatus, FactoryDecisionSummary } from '../services/decisions';
 
-const ACTIVE_STATUSES: FactoryDecisionStatus[] = ['pending', 'leased', 'retry', 'failed'];
+const ACTIVE_STATUSES: FactoryDecisionStatus[] = ['pending', 'proposed', 'leased', 'retry', 'failed'];
 
-/** Rule effects still in flight for the board's cards, and the retry behind a failed one. */
+/** Rule effects still in flight for the board's cards, plus approving a proposed run and retrying a failed effect. */
 export function useBoardDecisions(factoryProjectId: string) {
   const status = useFactoryDecisionStatus(factoryProjectId, ACTIVE_STATUSES);
   const retry = useRetryFactoryDecision(factoryProjectId);
+  const approve = useApproveFactoryDecision(factoryProjectId);
 
   const byItem = useMemo(() => {
     const decisions = new Map<string, FactoryDecisionSummary>();
@@ -22,5 +27,7 @@ export function useBoardDecisions(factoryProjectId: string) {
     byItem,
     retryingId: retry.isPending ? retry.variables : undefined,
     retry: (decisionId: string) => retry.mutate(decisionId),
+    approvingId: approve.isPending ? approve.variables : undefined,
+    approve: (decisionId: string) => approve.mutate(decisionId),
   };
 }

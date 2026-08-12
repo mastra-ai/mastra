@@ -298,7 +298,14 @@ function parseStartBody(
   };
 }
 
-const DECISION_STATUSES = new Set<FactoryDispatchStatus>(['pending', 'leased', 'retry', 'succeeded', 'failed']);
+const DECISION_STATUSES = new Set<FactoryDispatchStatus>([
+  'pending',
+  'proposed',
+  'leased',
+  'retry',
+  'succeeded',
+  'failed',
+]);
 const DEFAULT_DECISION_PAGE_SIZE = 25;
 const MAX_DECISION_PAGE_SIZE = 50;
 
@@ -545,6 +552,27 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
             decisions: page.decisions.map(decisionSummary),
             ...(page.hasMore && last ? { nextCursor: encodeDecisionCursor(last) } : {}),
           });
+        },
+      }),
+
+      registerApiRoute('/web/factory/projects/:id/decisions/:decisionId/approve', {
+        method: 'POST',
+        requiresAuth: false,
+        handler: async c => {
+          const context = loose(c);
+          const resolved = await this.#resolveProject(context);
+          if ('response' in resolved) return resolved.response;
+          const decisionId = context.req.param('decisionId');
+          if (!decisionId || !UUID_RE.test(decisionId)) return c.json({ error: 'invalid_decision_id' }, 422);
+          await workItems.ensureReady();
+          const decision = await workItems.approveDeferredDecision(
+            resolved.orgId,
+            resolved.factoryProjectId,
+            decisionId,
+            new Date(),
+          );
+          if (!decision) return c.json({ error: 'decision_not_approvable' }, 409);
+          return c.json({ decision: decisionSummary(decision) });
         },
       }),
 

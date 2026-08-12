@@ -23,11 +23,7 @@ export interface GithubInstallation {
 
 /** Reason the GitHub feature is in its current state, returned by the server. */
 export type GithubStatusReason =
-  | 'missing_config'
-  | 'auth_required'
-  | 'organization_required'
-  | 'not_connected'
-  | 'ready';
+  'missing_config' | 'auth_required' | 'organization_required' | 'not_connected' | 'ready';
 
 /** Non-secret diagnostic snapshot of every GitHub feature gate. */
 export interface GithubFeatureDiagnostics {
@@ -203,6 +199,8 @@ export interface FactoryProjectPayload {
   defaultModelId?: string | null;
   /** Whether new Slack sessions create Work-board items for this Factory. */
   slackWorkItemsEnabled?: boolean;
+  /** Whether Factory rules may start agent runs without someone asking for them. */
+  autoRunEnabled?: boolean;
 }
 
 /** `{...projectRepository, repository}` payload from the Factory project routes. */
@@ -332,6 +330,22 @@ export async function updateFactoryDefaultModel(
     res,
     'Failed to update Factory default model',
   );
+  return project;
+}
+
+/** Enable or disable rule-started agent runs (review, triage, planning) for this Factory. */
+export async function updateFactoryAutoRun(
+  baseUrl: string,
+  factoryProjectId: string,
+  autoRunEnabled: boolean,
+): Promise<FactoryProjectPayload> {
+  const res = await fetch(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}`, {
+    method: 'PATCH',
+    credentials: 'include',
+    headers: { 'content-type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ autoRunEnabled }),
+  });
+  const { project } = await readJsonOrThrow<{ project: FactoryProjectPayload }>(res, 'Failed to update automatic runs');
   return project;
 }
 

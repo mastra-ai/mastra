@@ -9,6 +9,7 @@ import {
   Check,
   CircleCheck,
   CircleDashed,
+  CirclePause,
   CircleX,
   Clock,
   ListFilter,
@@ -18,7 +19,11 @@ import {
 } from 'lucide-react';
 import { Fragment, useState } from 'react';
 
-import { useFactoryDecisionHistory, useRetryFactoryDecision } from '../../hooks/useFactoryDecisions';
+import {
+  useApproveFactoryDecision,
+  useFactoryDecisionHistory,
+  useRetryFactoryDecision,
+} from '../../hooks/useFactoryDecisions';
 import { relativeTime } from '../../lib/date/relativeTime';
 import { FactoryPageShell } from '../domains/factory/components/FactoryPageShell';
 import type { FactoryDecisionStatus, FactoryDecisionSummary } from '../domains/factory/services/decisions';
@@ -32,12 +37,14 @@ const DECISION_GROUPS: ReadonlyArray<{
 }> = [
   { key: 'all', label: 'All effects', icon: ListFilter, statuses: undefined },
   { key: 'active', label: 'Active', icon: CircleDashed, statuses: ['pending', 'leased', 'retry'] },
+  { key: 'proposed', label: 'Awaiting approval', icon: CirclePause, statuses: ['proposed'] },
   { key: 'failed', label: 'Failed', icon: CircleX, statuses: ['failed'] },
   { key: 'succeeded', label: 'Succeeded', icon: CircleCheck, statuses: ['succeeded'] },
 ];
 
 const STATUS_ICON: Record<FactoryDecisionStatus, { icon: LucideIcon; className: string }> = {
   pending: { icon: CircleDashed, className: 'text-accent1' },
+  proposed: { icon: CirclePause, className: 'text-accent6' },
   leased: { icon: CircleDashed, className: 'text-accent1' },
   retry: { icon: CircleDashed, className: 'text-accent1' },
   succeeded: { icon: CircleCheck, className: 'text-green' },
@@ -55,6 +62,7 @@ function RulesContent({ factoryProjectId }: { factoryProjectId: string | undefin
   const decisionStatuses = decisionFilter?.statuses;
   const decisionsQuery = useFactoryDecisionHistory(factoryProjectId, decisionGroup, decisionStatuses);
   const retryDecision = useRetryFactoryDecision(factoryProjectId);
+  const approveDecision = useApproveFactoryDecision(factoryProjectId);
 
   if (decisionsQuery.isError) {
     const message =
@@ -121,7 +129,9 @@ function RulesContent({ factoryProjectId }: { factoryProjectId: string | undefin
                   <DecisionRow
                     decision={decision}
                     retrying={retryDecision.isPending && retryDecision.variables === decision.id}
+                    approving={approveDecision.isPending && approveDecision.variables === decision.id}
                     onRetry={() => retryDecision.mutate(decision.id)}
+                    onApprove={() => approveDecision.mutate(decision.id)}
                   />
                 </Fragment>
               ))}
@@ -147,11 +157,15 @@ function RulesContent({ factoryProjectId }: { factoryProjectId: string | undefin
 function DecisionRow({
   decision,
   retrying,
+  approving,
   onRetry,
+  onApprove,
 }: {
   decision: FactoryDecisionSummary;
   retrying: boolean;
+  approving: boolean;
   onRetry: () => void;
+  onApprove: () => void;
 }) {
   const active = decision.status === 'pending' || decision.status === 'leased' || decision.status === 'retry';
   const { icon: StatusIcon, className: statusIconClass } = STATUS_ICON[decision.status];
@@ -195,6 +209,11 @@ function DecisionRow({
             </Txt>
           ) : null}
         </div>
+        {decision.status === 'proposed' ? (
+          <Button size="sm" disabled={approving} onClick={onApprove}>
+            {approving ? 'Starting…' : 'Run'}
+          </Button>
+        ) : null}
         {decision.status === 'failed' ? (
           <Button variant="outline" size="sm" disabled={retrying} onClick={onRetry}>
             {retrying ? 'Retrying…' : 'Retry'}

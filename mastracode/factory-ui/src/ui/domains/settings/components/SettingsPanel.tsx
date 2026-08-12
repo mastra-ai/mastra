@@ -18,6 +18,7 @@ import { ConnectedAccountsSection } from './ConnectedAccountsSection';
 import { AccountSettingsSection } from './AccountSettingsSection';
 import { CustomProvidersSection } from './CustomProvidersSection';
 import { SettingsHeader } from './SettingsHeader';
+import { FactoryAutomationSection } from './FactoryAutomationSection';
 import { FactoryManagementSection } from './FactoryManagementSection';
 import { FactoryDefaultModelSection } from './FactoryDefaultModelSection';
 import { IntakeSection } from './IntakeSection';
@@ -73,7 +74,12 @@ export function SettingsPanel() {
         {!isMobile && <SettingsHeader autoFocus placement="desktop" />}
         {section === 'account' && <AccountSettingsSection />}
         {section === 'preferences' && <GeneralSettings theme={theme} onThemeChange={setTheme} />}
-        {section === 'factory' && <FactoryManagementSection />}
+        {section === 'factory' && (
+          <div className="flex flex-col gap-8">
+            <FactoryAutomationSection />
+            <FactoryManagementSection />
+          </div>
+        )}
         {section === 'connections' && (
           <div className="flex flex-col gap-2">
             <Txt as="p" variant="ui-sm" className="text-icon3">
