@@ -101,7 +101,7 @@ function stubBoardEndpoints({ issues = [] as object[], workItems = [issueWorkIte
     http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
       HttpResponse.json({ enabled: false, connected: false, workspace: null }),
     ),
-    // The label-filtered (auto-triaged) feed stays empty; the plain feed
+    // The label-filtered (status: auto-triaged) feed stays empty; the plain feed
     // serves the candidate under test.
     http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/issues`, ({ request }) =>
       HttpResponse.json({ issues: new URL(request.url).searchParams.has('label') ? [] : issues, nextPage: null }),

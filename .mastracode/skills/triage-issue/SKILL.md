@@ -13,8 +13,8 @@ Keep the work focused on first-contact intake: classify the issue, explain the r
 
 Use only these auto-triage labels:
 
-- `auto-triaged` — add after a successful triage comment for every issue processed by this skill.
-- `needs-approval` — add only when the recommended next action needs maintainer approval or prep before someone should investigate, implement, close, or reject.
+- `status: auto-triaged` — add after a successful triage comment for every issue processed by this skill.
+- `status: needs approval` — add only when the recommended next action needs maintainer approval or prep before someone should investigate, implement, close, or reject.
 
 Also remove `status: needs triage` after the triage comment is posted or updated, if that label is present.
 
@@ -113,8 +113,8 @@ When there is an explicit active PR that closes/fixes the issue, mention it in t
 
 After the comment is posted or updated:
 
-1. Add `auto-triaged`.
-2. Add `needs-approval` only if the selected route needs maintainer approval/prep.
+1. Add `status: auto-triaged`.
+2. Add `status: needs approval` only if the selected route needs maintainer approval/prep.
 3. Remove `status: needs triage` if present.
 4. Stop.
 

@@ -1324,7 +1324,7 @@ describe('PlatformGithubIntegration', () => {
       const fetchImpl = vi.fn<typeof fetch>(async input => {
         const url = String(input);
         // addIssueLabels calls the platform label endpoint
-        if (url.includes('/labels')) return json({ labels: ['auto-triaged'] });
+        if (url.includes('/labels')) return json({ labels: ['status: auto-triaged'] });
         throw new Error(`Unexpected fetch: ${url}`);
       });
       // Stub fetch BEFORE constructing the integration — PlatformApiClient
