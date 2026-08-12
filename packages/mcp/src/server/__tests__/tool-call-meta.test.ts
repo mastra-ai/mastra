@@ -145,6 +145,99 @@ describe('MCPServer tools/call `_meta`', () => {
     });
   });
 
+  it('keeps the declared resourceUri when execute() returns other `ui` keys', async () => {
+    const server = makeServer({
+      calculator: {
+        description: 'An app tool whose execute returns an unrelated ui key',
+        parameters: z.object({}),
+        execute: async () => ({ value: 42, _meta: { ui: { visibility: 'hidden' } } }),
+        mcp: { _meta: { ui: { resourceUri: RESOURCE_URI } } },
+      },
+    } as ToolsInput);
+
+    const result = await callTool(server, 'calculator');
+
+    // The nested and flat forms must not diverge: an author `ui` object without a
+    // resourceUri must not knock out the declared one while the flat key survives.
+    expect(result._meta).toEqual({
+      ui: { resourceUri: RESOURCE_URI, visibility: 'hidden' },
+      [RESOURCE_URI_META_KEY]: RESOURCE_URI,
+    });
+  });
+
+  it('preserves declared `ui` siblings (csp, permissions) when execute() overrides resourceUri', async () => {
+    const server = makeServer({
+      calculator: {
+        description: 'An app tool declaring a CSP and permissions',
+        parameters: z.object({}),
+        execute: async () => ({ value: 42, _meta: { ui: { resourceUri: 'ui://calculator/override' } } }),
+        mcp: {
+          _meta: {
+            ui: {
+              resourceUri: RESOURCE_URI,
+              csp: { connectDomains: ['https://api.example.com'] },
+              permissions: { clipboard: true },
+            },
+          },
+        },
+      },
+    } as ToolsInput);
+
+    const result = await callTool(server, 'calculator');
+
+    // `ui` is a namespace (McpUiToolMetaSchema: resourceUri, visibility, csp,
+    // permissions) — an author-supplied `ui` must not drop the declared CSP.
+    expect(result._meta).toEqual({
+      ui: {
+        resourceUri: 'ui://calculator/override',
+        csp: { connectDomains: ['https://api.example.com'] },
+        permissions: { clipboard: true },
+      },
+      [RESOURCE_URI_META_KEY]: 'ui://calculator/override',
+    });
+  });
+
+  it('still advertises declared `_meta` for a tool that has an outputSchema', async () => {
+    const server = makeServer({
+      calculator: {
+        description: 'An app tool with an outputSchema',
+        parameters: z.object({}),
+        outputSchema: z.object({ value: z.number() }),
+        execute: async () => ({ value: 42 }),
+        mcp: { _meta: { ui: { resourceUri: RESOURCE_URI } } },
+      },
+    } as ToolsInput);
+
+    const result = await callTool(server, 'calculator');
+
+    expect(result.structuredContent).toEqual({ value: 42 });
+    expect(result._meta).toEqual({
+      ui: { resourceUri: RESOURCE_URI },
+      [RESOURCE_URI_META_KEY]: RESOURCE_URI,
+    });
+  });
+
+  it('cannot see author `_meta` when the tool declares an outputSchema', async () => {
+    // Documented limitation, not a regression: a tool's outputSchema is applied
+    // inside execute(), and it strips unknown keys there, so `_meta` returned
+    // alongside the structured payload never reaches the result builder. Declared
+    // `mcp._meta` is resolved independently of the result and is unaffected, which
+    // is what app tools rely on (covered by the test above).
+    const server = makeServer({
+      reporter: {
+        description: 'A tool with an outputSchema that also returns _meta',
+        parameters: z.object({}),
+        outputSchema: z.object({ value: z.number() }),
+        execute: async () => ({ value: 1, _meta: { 'acme/traceId': 'abc-123' } }),
+      },
+    } as ToolsInput);
+
+    const result = await callTool(server, 'reporter');
+
+    expect(result.structuredContent).toEqual({ value: 1 });
+    expect(result).not.toHaveProperty('_meta');
+  });
+
   it('keeps the call result `_meta` consistent with what tools/list advertises', async () => {
     const server = makeServer({
       calculator: {

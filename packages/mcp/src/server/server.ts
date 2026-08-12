@@ -44,7 +44,7 @@ import type { SSEStreamingApi } from 'hono/streaming';
 import { streamSSE } from 'hono/streaming';
 import { SSETransport } from 'hono-mcp-server-sse-transport';
 
-import { normalizeToolUiMeta, withMastraToolStrictMeta } from '../shared/mastra-tool-meta';
+import { mergeToolMeta, normalizeToolUiMeta, withMastraToolStrictMeta } from '../shared/mastra-tool-meta';
 import { broadcastNotification } from './notificationBroadcast';
 import { ServerPromptActions } from './promptActions';
 import { ServerResourceActions } from './resourceActions';
@@ -1012,8 +1012,9 @@ export class MCPServer extends MCPServerBase {
             ? (result._meta as Record<string, unknown>)
             : undefined,
         );
-        if (declaredMeta || authorMeta) {
-          response._meta = { ...declaredMeta, ...authorMeta };
+        const mergedMeta = mergeToolMeta(declaredMeta, authorMeta);
+        if (mergedMeta) {
+          response._meta = mergedMeta;
         }
 
         return response;

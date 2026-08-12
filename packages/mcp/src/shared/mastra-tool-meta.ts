@@ -60,3 +60,29 @@ export function normalizeToolUiMeta(meta: Record<string, unknown> | undefined): 
   }
   return meta;
 }
+
+/**
+ * Merges a tool's declared `_meta` with the `_meta` its `execute()` returned.
+ *
+ * Author metadata wins on collision, except that `ui` is merged key by key rather
+ * than replaced. `ui` is a namespace — per `McpUiToolMetaSchema` it carries
+ * `visibility`, `csp` and `permissions` alongside `resourceUri` — so letting an
+ * author-supplied `ui` object replace the declared one wholesale would silently
+ * drop the tool's CSP and permissions.
+ */
+export function mergeToolMeta(
+  declared: Record<string, unknown> | undefined,
+  author: Record<string, unknown> | undefined,
+): Record<string, unknown> | undefined {
+  if (!declared && !author) {
+    return undefined;
+  }
+
+  const merged: Record<string, unknown> = { ...declared, ...author };
+  const declaredUi = declared?.ui;
+  const authorUi = author?.ui;
+  if (declaredUi && authorUi && typeof declaredUi === 'object' && typeof authorUi === 'object') {
+    merged.ui = { ...(declaredUi as Record<string, unknown>), ...(authorUi as Record<string, unknown>) };
+  }
+  return merged;
+}
