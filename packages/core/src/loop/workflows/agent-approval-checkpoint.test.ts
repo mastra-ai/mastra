@@ -273,6 +273,34 @@ describe('materializeAgentApprovalCheckpoint', () => {
     );
   });
 
+  it('skips corrupt serialized rows and continues materializing related workflows', async () => {
+    const snapshot = createSuspendedSnapshot();
+    const checkpoint = buildAgentApprovalCheckpoint({ workflowId: 'agentic-loop', snapshot });
+    const persistWorkflowSnapshot = vi.fn();
+    const workflowsStore = {
+      getWorkflowRunById: vi.fn(async ({ workflowName }: { workflowName: string }) => ({
+        workflowName,
+        runId: snapshot.runId,
+        snapshot: workflowName === 'executionWorkflow' ? '{corrupt-json' : JSON.stringify(checkpoint),
+        createdAt: new Date(0),
+      })),
+      persistWorkflowSnapshot,
+    } as any;
+
+    const outer = await materializePersistedAgentApprovalCheckpoints({
+      workflowsStore,
+      workflowNames: ['executionWorkflow', 'agentic-loop'],
+      outerWorkflowName: 'agentic-loop',
+      runId: snapshot.runId,
+    });
+
+    expect(outer).toMatchObject({ runId: snapshot.runId, status: 'suspended' });
+    expect(persistWorkflowSnapshot).toHaveBeenCalledTimes(1);
+    expect(persistWorkflowSnapshot).toHaveBeenCalledWith(
+      expect.objectContaining({ workflowName: 'agentic-loop', runId: snapshot.runId }),
+    );
+  });
+
   it('rejects a checkpoint stored under the wrong workflow or run', () => {
     const checkpoint = buildAgentApprovalCheckpoint({
       workflowId: 'agentic-loop',

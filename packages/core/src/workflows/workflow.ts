@@ -3390,8 +3390,14 @@ export class Run<
    * This aborts any running execution and updates the workflow status to 'canceled' in storage.
    */
   async cancel() {
-    const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
-    const snapshot = await workflowsStore?.loadWorkflowSnapshot({ workflowName: this.workflowId, runId: this.runId });
+    let workflowsStore;
+    let snapshot;
+    try {
+      workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
+      snapshot = await workflowsStore?.loadWorkflowSnapshot({ workflowName: this.workflowId, runId: this.runId });
+    } catch {
+      // Cancellation remains best-effort when storage cannot be read.
+    }
     rejectApprovalCheckpointOperation(snapshot, 'cancel');
 
     // Abort any running execution and update in-memory status
