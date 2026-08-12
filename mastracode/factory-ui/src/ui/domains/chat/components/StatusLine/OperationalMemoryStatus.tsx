@@ -1,6 +1,6 @@
 import { buttonVariants } from '@mastra/playground-ui/components/Button';
 import { Popover, PopoverContent, PopoverTrigger } from '@mastra/playground-ui/components/Popover';
-import { TokenBudget, TokenBudgetDetail, formatCompactTokens } from '@mastra/playground-ui/components/TokenBudget';
+import { TokenBudget, TokenBudgetDetail } from '@mastra/playground-ui/components/TokenBudget';
 import { cn } from '@mastra/playground-ui/utils/cn';
 
 import { useChatRuntime } from '../../context/useChatRuntime';
@@ -18,10 +18,6 @@ const observationLabel: Record<OMWork, string> = {
   background: 'Consolidating observations in the background',
   blocking: 'Consolidating observations',
 };
-
-function savingHint(tokens: number): string | undefined {
-  return tokens > 0 ? `The pending pass frees ${formatCompactTokens(tokens)}k.` : undefined;
-}
 
 /**
  * Observational-memory budgets: the message window until the next observation
@@ -68,9 +64,9 @@ export function OperationalMemoryStatus() {
       <PopoverContent align="start" className="flex flex-col gap-3.5" side="top">
         {showMsg && (
           <TokenBudgetDetail
-            description="When it fills, the conversation so far is read into memory as observations and leaves the message window."
-            hint={savingHint(om.projectedMessageRemoval)}
-            label={messageLabel[work.messages]}
+            description="Read into memory once full"
+            label="Messages"
+            projected={om.projectedMessageRemoval}
             threshold={om.threshold}
             tokens={om.pendingTokens}
             tone={messageTone}
@@ -78,9 +74,9 @@ export function OperationalMemoryStatus() {
         )}
         {showMem && (
           <TokenBudgetDetail
-            description="When it fills, the observations are consolidated into a shorter reflection the agent keeps working from."
-            hint={savingHint(om.projectedReflectionSavings)}
-            label={observationLabel[work.observations]}
+            description="Consolidated into a reflection once full"
+            label="Observations"
+            projected={om.projectedReflectionSavings}
             threshold={om.reflectionThreshold}
             tokens={om.observationTokens}
             tone={observationTone}

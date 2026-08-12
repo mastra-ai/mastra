@@ -1,6 +1,15 @@
 /* Annulus is the track, wedge is the fill, and while work runs a highlight
  * travels the wedge — `shimmer-text` transposed to an arc, so nothing moves
  * beside the dial and nothing reads as a rendering glitch. */
+/* Hatching reads as provisional: the slice of the fill a pending pass will free. */
+.token-budget-hatch {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    currentcolor 0 1.5px,
+    color-mix(in oklab, currentcolor 25%, transparent) 1.5px 4px
+  );
+}
+
 .token-budget-dial {
   --token-budget-fill: 0;
 

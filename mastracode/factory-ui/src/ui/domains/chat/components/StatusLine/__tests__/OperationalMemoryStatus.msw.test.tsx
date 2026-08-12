@@ -91,9 +91,9 @@ describe('observational memory status', () => {
 
       fireEvent.click(screen.getByRole('button', { name: 'Memory budgets' }));
 
-      await waitFor(() => expect(screen.getByText(/read into memory as observations/)).toBeVisible());
-      expect(screen.getByText(/consolidated into a shorter reflection/)).toBeVisible();
-      expect(screen.getByText('12/40k')).toBeVisible();
+      await waitFor(() => expect(screen.getByText('Read into memory once full')).toBeVisible());
+      expect(screen.getByText('Consolidated into a reflection once full')).toBeVisible();
+      expect(screen.getAllByText('/40k')).toHaveLength(2);
     });
   });
 

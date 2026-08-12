@@ -42,20 +42,29 @@ describe('TokenBudget', () => {
 });
 
 describe('TokenBudgetDetail', () => {
-  it('states the reading and what filling the budget up does', () => {
+  it('states the reading and what reaching the threshold sets off', () => {
     const { container } = render(
       <TokenBudgetDetail
-        description="Observations are consolidated when it fills."
-        hint="The pending pass frees 1.2k."
+        description="Consolidated into a reflection once full"
         label="Observations"
         threshold={8000}
         tokens={5200}
       />,
     );
 
-    expect(screen.getByText('5.2/8k')).not.toBeNull();
-    expect(screen.getByText('Observations are consolidated when it fills.')).not.toBeNull();
-    expect(screen.getByText('The pending pass frees 1.2k.')).not.toBeNull();
+    expect(screen.getByText('5.2')).not.toBeNull();
+    expect(screen.getByText('/8k')).not.toBeNull();
+    expect(screen.getByText('Consolidated into a reflection once full')).not.toBeNull();
     expect(container.querySelector('[style*="width: 65%"]')).not.toBeNull();
+  });
+
+  it('hatches the slice a pending pass will free rather than spelling it out', () => {
+    const { container } = render(
+      <TokenBudgetDetail label="Messages" projected={2000} threshold={8000} tokens={5200} />,
+    );
+
+    expect(screen.getByText('−2k')).not.toBeNull();
+    expect(container.querySelector('.token-budget-hatch')?.getAttribute('style')).toBe('width: 25%;');
+    expect(container.querySelector('.bg-current')?.getAttribute('style')).toBe('width: 40%;');
   });
 });
