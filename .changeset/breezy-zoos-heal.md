@@ -2,4 +2,4 @@
 '@mastra/factory': patch
 ---
 
-Improved Factory issue triage label handling.
+Factory triage now uses `status:` labels so triaged and approval-pending issues remain visible to the Factory workflow.
