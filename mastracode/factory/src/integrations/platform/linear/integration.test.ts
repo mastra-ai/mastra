@@ -561,21 +561,52 @@ describe('PlatformLinearIntegration', () => {
     expect(() => new PlatformLinearIntegration()).toThrow(/MASTRA_PLATFORM_SECRET_KEY/);
   });
 
+  const workerContext = {
+    controller: {},
+    storage: {
+      generic: {},
+      sourceControl: {},
+      projects: { listAll: async () => [] },
+      intake: {},
+    },
+    rules: { config: {}, workItems: {} },
+  };
+
   it('registers a single platform-linear-events worker with issue reconciliation folded in', () => {
     const integration = new PlatformLinearIntegration() as unknown as {
       workers(ctx: unknown): Array<{ name: string }>;
     };
-    const context = {
-      controller: {},
-      storage: {
-        generic: {},
-        sourceControl: {},
-        projects: { listAll: async () => [] },
-        intake: {},
-      },
-      rules: { config: {}, workItems: {} },
+
+    expect(integration.workers(workerContext).map(worker => worker.name)).toEqual(['platform-linear-events']);
+  });
+
+  it('keeps event polling active when issue reconciliation is disabled', () => {
+    vi.stubEnv('MASTRACODE_LINEAR_ISSUE_RECONCILE_ENABLED', 'false');
+    const integration = new PlatformLinearIntegration() as unknown as {
+      workers(ctx: unknown): Array<{ name: string }>;
     };
 
-    expect(integration.workers(context).map(worker => worker.name)).toEqual(['platform-linear-events']);
+    expect(integration.workers(workerContext).map(worker => worker.name)).toEqual(['platform-linear-events']);
+  });
+
+  it('registers only issue reconciliation when event polling is disabled', () => {
+    vi.stubEnv('MASTRACODE_PLATFORM_LINEAR_POLLING_ENABLED', 'false');
+    vi.stubEnv('MASTRACODE_LINEAR_RECONCILE_ENABLED', 'false');
+    vi.stubEnv('MASTRACODE_LINEAR_ISSUE_RECONCILE_ENABLED', 'true');
+    const integration = new PlatformLinearIntegration() as unknown as {
+      workers(ctx: unknown): Array<{ name: string }>;
+    };
+
+    expect(integration.workers(workerContext).map(worker => worker.name)).toEqual(['platform-linear-events']);
+  });
+
+  it('does not register when polling and issue reconciliation are disabled', () => {
+    vi.stubEnv('MASTRACODE_PLATFORM_LINEAR_POLLING_ENABLED', 'false');
+    vi.stubEnv('MASTRACODE_LINEAR_ISSUE_RECONCILE_ENABLED', 'false');
+    const integration = new PlatformLinearIntegration() as unknown as {
+      workers(ctx: unknown): Array<{ name: string }>;
+    };
+
+    expect(integration.workers(workerContext)).toEqual([]);
   });
 });

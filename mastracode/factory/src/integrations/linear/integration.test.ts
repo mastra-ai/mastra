@@ -263,21 +263,41 @@ describe('LinearIntegration capability surface', () => {
 });
 
 describe('LinearIntegration workers', () => {
+  const context = {
+    controller: {},
+    storage: {
+      generic: {},
+      sourceControl: {},
+      projects: { listAll: async () => [] },
+      intake: {},
+    },
+    rules: { config: {}, workItems: {} },
+  };
+
   it('registers a standalone issue reconciler worker', () => {
     const linear = integration() as unknown as {
       workers(ctx: unknown): Array<{ name: string }>;
     };
-    const context = {
-      controller: {},
-      storage: {
-        generic: {},
-        sourceControl: {},
-        projects: { listAll: async () => [] },
-        intake: {},
-      },
-      rules: { config: {}, workItems: {} },
+
+    expect(linear.workers(context).map(worker => worker.name)).toEqual(['linear-issue-reconcile']);
+  });
+
+  it('uses the issue reconcile switch before the legacy switch', () => {
+    vi.stubEnv('MASTRACODE_LINEAR_RECONCILE_ENABLED', 'false');
+    vi.stubEnv('MASTRACODE_LINEAR_ISSUE_RECONCILE_ENABLED', 'true');
+    const linear = integration() as unknown as {
+      workers(ctx: unknown): Array<{ name: string }>;
     };
 
     expect(linear.workers(context).map(worker => worker.name)).toEqual(['linear-issue-reconcile']);
+  });
+
+  it('does not register when issue reconciliation is disabled', () => {
+    vi.stubEnv('MASTRACODE_LINEAR_ISSUE_RECONCILE_ENABLED', 'false');
+    const linear = integration() as unknown as {
+      workers(ctx: unknown): Array<{ name: string }>;
+    };
+
+    expect(linear.workers(context)).toEqual([]);
   });
 });
