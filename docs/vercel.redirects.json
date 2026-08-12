@@ -1936,6 +1936,11 @@
       "permanent": true
     },
     {
+      "source": "/reference/mastra-platform/api",
+      "destination": "/docs/mastra-platform/api",
+      "permanent": true
+    },
+    {
       "source": "/guides/guide/ai-recruiter",
       "destination": "https://mastra.ai/blog/building-an-ai-recruiter",
       "permanent": true

@@ -1951,6 +1951,11 @@
       "permanent": true
     },
     {
+      "source": "/reference/mastra-platform/api",
+      "destination": "/docs/mastra-platform/api",
+      "permanent": true
+    },
+    {
       "source": "/guides/guide/ai-recruiter",
       "destination": "https://mastra.ai/blog/building-an-ai-recruiter",
       "permanent": true
@@ -3623,6 +3628,11 @@
     {
       "source": "/guides/getting-started/manual-install/llms.txt",
       "destination": "/reference/manual-install/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/reference/mastra-platform/api/llms.txt",
+      "destination": "/docs/mastra-platform/api/llms.txt",
       "permanent": true
     },
     {
