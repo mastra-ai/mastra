@@ -493,6 +493,12 @@ For automatic tool resumption to work:
 
 Both approaches work with the same tool definitions. Automatic resumption triggers only when suspended tools exist in the message history and the user sends a new message on the same thread.
 
+:::note
+
+Automatic resumption never answers an approval. It applies only to tools that call `suspend()`. A tool gated by `requireApproval` or `requireToolApproval` stays suspended until a decision arrives through `approveToolCall()`, `declineToolCall()`, or `resumeStream()`. An agent cannot approve its own tool call, so an approval-gated tool that the model retries on a later turn suspends again and waits for the user.
+
+:::
+
 ## Resuming after a restart
 
 The examples above hold on to `stream.runId` between suspension and approval. That works while the process stays alive, but in production the approval often arrives later, after a page refresh, a server restart, or on a different server instance behind a load balancer.

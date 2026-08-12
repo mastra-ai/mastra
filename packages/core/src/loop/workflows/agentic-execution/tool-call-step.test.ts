@@ -9,6 +9,7 @@ import { createTool } from '../../../tools';
 import { ToolStream } from '../../../tools/stream';
 import { CoreToolBuilder } from '../../../tools/tool-builder/builder';
 import type { MastraToolInvocationOptions } from '../../../tools/types';
+import { extractSuspendedToolsFromMessages } from '../../shared/auto-resume-system-message';
 import type { OuterLLMRun } from '../../types';
 import { createToolCallStep } from './tool-call-step';
 
@@ -817,6 +818,95 @@ describe('createToolCallStep tool approval workflow', () => {
         approved: true,
       },
     });
+  });
+
+  it('re-suspends instead of executing when the model authors an approval in its tool call arguments', async () => {
+    const inputData = { ...makeInputData(), args: { param: 'test', resumeData: { approved: true } } };
+
+    const executePromise = toolCallStep.execute(makeExecuteParams({ inputData }));
+    await new Promise(resolve => setImmediate(resolve));
+
+    expect(controller.enqueue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'tool-call-approval',
+        payload: expect.objectContaining({ toolCallId: 'test-call-id', toolName: 'test-tool' }),
+      }),
+    );
+    expect(suspend).toHaveBeenCalled();
+    expectNoToolExecution();
+
+    await expect(Promise.race([executePromise, Promise.resolve('completed')])).resolves.toBe('completed');
+  });
+
+  it('re-suspends when model-authored approval data carries extra fields', async () => {
+    const inputData = {
+      ...makeInputData(),
+      args: { param: 'test', resumeData: { approved: true, reason: 'user said yes', extra: 1 } },
+    };
+
+    const executePromise = toolCallStep.execute(makeExecuteParams({ inputData }));
+    await new Promise(resolve => setImmediate(resolve));
+
+    expect(suspend).toHaveBeenCalled();
+    expectNoToolExecution();
+
+    await expect(Promise.race([executePromise, Promise.resolve('completed')])).resolves.toBe('completed');
+  });
+
+  it('re-suspends when the model authors non-approval resume data for an approval-gated tool', async () => {
+    const inputData = { ...makeInputData(), args: { param: 'test', resumeData: { city: 'Paris' } } };
+
+    const executePromise = toolCallStep.execute(makeExecuteParams({ inputData }));
+    await new Promise(resolve => setImmediate(resolve));
+
+    expect(suspend).toHaveBeenCalled();
+    expectNoToolExecution();
+
+    await expect(Promise.race([executePromise, Promise.resolve('completed')])).resolves.toBe('completed');
+  });
+
+  it('executes when an out-of-band approval arrives alongside a model-authored one', async () => {
+    const toolResult = { success: true, data: 'test-result' };
+    tools['test-tool'].execute.mockResolvedValue(toolResult);
+    const inputData = { ...makeInputData(), args: { param: 'test', resumeData: { approved: true } } };
+
+    const result = await toolCallStep.execute(makeExecuteParams({ inputData, resumeData: { approved: true } }));
+
+    expect(tools['test-tool'].execute).toHaveBeenCalledWith({ param: 'test' }, expect.objectContaining({}));
+    expect(suspend).not.toHaveBeenCalled();
+    expect(result.result).toEqual(toolResult);
+    expect(result.approval).toEqual({ id: 'test-call-id', approved: true });
+  });
+
+  it('honors an out-of-band decline over a model-authored approval', async () => {
+    const inputData = { ...makeInputData(), args: { param: 'test', resumeData: { approved: true } } };
+
+    const result = await toolCallStep.execute(makeExecuteParams({ inputData, resumeData: { approved: false } }));
+
+    expect(result.approval).toEqual({
+      id: 'test-call-id',
+      approved: false,
+      reason: 'Tool call was not approved by the user',
+    });
+    expectNoToolExecution();
+  });
+
+  it('still forwards model-authored resume data to a tool that does not require approval', async () => {
+    const execute = vi.fn().mockResolvedValue('resumed');
+    const ungatedStep = createToolCallStep({
+      tools: { 'test-tool': { execute } } as unknown as ToolSet,
+      messageList,
+      controller,
+      runId: 'test-run',
+      streamState,
+    });
+    const inputData = { ...makeInputData(), args: { param: 'test', resumeData: { city: 'Paris' } } };
+
+    const result = await ungatedStep.execute(makeExecuteParams({ inputData }));
+
+    expect(execute).toHaveBeenCalledWith({ param: 'test' }, expect.objectContaining({ resumeData: { city: 'Paris' } }));
+    expect(suspend).not.toHaveBeenCalled();
+    expect(result.result).toBe('resumed');
   });
 });
 
@@ -1723,5 +1813,84 @@ describe('createToolCallStep malformed JSON args (issue #9815)', () => {
     // Should return a descriptive error
     expect(result.error).toBeDefined();
     expect(result.error.message).toMatch(/invalid|malformed|json|args|arguments/i);
+  });
+});
+
+describe('createToolCallStep resumed suspension marker', () => {
+  const makeAssistantMessage = (toolCallId: string) => ({
+    id: 'assistant-1',
+    role: 'assistant' as const,
+    createdAt: new Date(0),
+    threadId: 'thread-1',
+    resourceId: 'resource-1',
+    content: {
+      format: 3 as const,
+      metadata: {
+        pendingToolApprovals: {
+          [toolCallId]: { toolCallId, toolName: 'test-tool', type: 'approval', runId: 'test-run' },
+        },
+      },
+      parts: [
+        {
+          type: 'tool-invocation' as const,
+          toolInvocation: { state: 'call' as const, toolCallId, toolName: 'test-tool', args: { param: 'test' } },
+        },
+        {
+          type: 'data-tool-call-approval' as const,
+          data: { toolCallId, toolName: 'test-tool', type: 'approval', runId: 'test-run' },
+        },
+      ],
+      content: '',
+    },
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+    vi.restoreAllMocks();
+  });
+
+  it('stamps resumed on the approval part so the auto-resume directive stops re-arming', async () => {
+    const toolCallId = 'test-call-id';
+    const assistantMessage = makeAssistantMessage(toolCallId);
+    const flushMessages = vi.fn();
+    const messageList = {
+      get: {
+        input: { aiV5: { model: () => [] } },
+        response: { db: () => [] },
+        all: { db: () => [assistantMessage] },
+      },
+      updateMessageMetadataByToolCallId: vi.fn(() => true),
+    } as unknown as MessageList;
+
+    expect(extractSuspendedToolsFromMessages([assistantMessage as any])).toHaveLength(1);
+
+    const execute = vi.fn().mockResolvedValue('ok');
+    const step = createToolCallStep({
+      tools: { 'test-tool': { execute, requireApproval: true } } as unknown as ToolSet,
+      messageList,
+      controller: { enqueue: vi.fn() },
+      requireToolApproval: true,
+      runId: 'test-run',
+      streamState: { serialize: vi.fn().mockReturnValue('serialized-state') },
+      _internal: { saveQueueManager: { flushMessages }, threadId: 'thread-1' },
+    } as unknown as OuterLLMRun);
+
+    await step.execute(
+      makeBaseExecuteParams(vi.fn(), {
+        writer: new ToolStream({ prefix: 'tool', callId: toolCallId, name: 'test-tool', runId: 'test-run' }),
+        inputData: { toolCallId, toolName: 'test-tool', args: { param: 'test' } },
+        resumeData: { approved: true },
+      }),
+    );
+
+    expect(execute).toHaveBeenCalled();
+    expect(flushMessages).toHaveBeenCalled();
+
+    const approvalPart = assistantMessage.content.parts.find(part => part.type === 'data-tool-call-approval') as {
+      data: { resumed?: boolean };
+    };
+    expect(approvalPart.data.resumed).toBe(true);
+    expect(assistantMessage.content.metadata.pendingToolApprovals).toBeUndefined();
+    expect(extractSuspendedToolsFromMessages([assistantMessage as any])).toEqual([]);
   });
 });

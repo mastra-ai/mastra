@@ -337,26 +337,25 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           }
 
           if (suspendedTools && typeof suspendedTools === 'object') {
+            lastAssistantMessage.content.parts = lastAssistantMessage.content.parts?.map(part => {
+              if (part.type === 'data-tool-call-suspended' || part.type === 'data-tool-call-approval') {
+                if (partMatches(part.data)) {
+                  return {
+                    ...part,
+                    data: {
+                      ...(part.data as any),
+                      resumed: true,
+                    },
+                  };
+                }
+              }
+              return part;
+            });
             if (metadata) {
               const entryKey = resolveEntryKey(suspendedTools);
               if (entryKey) {
                 delete suspendedTools[entryKey];
               }
-            } else {
-              lastAssistantMessage.content.parts = lastAssistantMessage.content.parts?.map(part => {
-                if (part.type === 'data-tool-call-suspended' || part.type === 'data-tool-call-approval') {
-                  if (partMatches(part.data)) {
-                    return {
-                      ...part,
-                      data: {
-                        ...(part.data as any),
-                        resumed: true,
-                      },
-                    };
-                  }
-                }
-                return part;
-              });
             }
 
             // If no more pending suspensions, remove the whole object
@@ -552,7 +551,9 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           !isDelegatedApproval,
         );
         const isApprovalResume =
-          resumeData != null && typeof resumeData === 'object' && 'approved' in (resumeData as Record<string, unknown>);
+          workflowResumeData != null &&
+          typeof workflowResumeData === 'object' &&
+          'approved' in (workflowResumeData as Record<string, unknown>);
         // Gate the resume branch on either a live policy or a prior outer approval suspend.
         // Without this, `declineToolCall` falls through to `execute` when the policy was
         // lost (#20470). Do not key only on `approved` in resumeData — generic tool
@@ -576,7 +577,8 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         );
 
         if (approvalGated) {
-          if (!resumeData) {
+          const approvalDecision = workflowResumeData as { approved?: boolean } | undefined;
+          if (!approvalDecision) {
             await stopGoalActivity({
               agentId,
               runId,
@@ -633,7 +635,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             // Remove approval metadata since we're resuming (either approved or declined)
             await removeToolMetadata({ toolCallId: inputData.toolCallId, toolName: inputData.toolName }, 'approval');
 
-            if (!resumeData.approved) {
+            if (!approvalDecision.approved) {
               // Return the approval decision (not a `result` string) so it persists as
               // `state: 'output-denied'` with `approval`. The denial reason carries the
               // caller-supplied reason when one was provided, otherwise the default string
@@ -642,7 +644,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 approval: {
                   id: inputData.toolCallId,
                   approved: false,
-                  reason: resolveDeclineReason(resumeData),
+                  reason: resolveDeclineReason(approvalDecision),
                 },
                 ...inputData,
               };
@@ -654,7 +656,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         // approval decision so it round-trips through persistence as `approval: { approved: true }`.
         // Use `approvalGated` (not only the live policy) so approve-after-policy-loss still tags.
         const approvalGrant =
-          approvalGated && resumeData && (resumeData as { approved?: boolean }).approved === true
+          approvalGated && workflowResumeData && (workflowResumeData as { approved?: boolean }).approved === true
             ? ({ approval: { id: inputData.toolCallId, approved: true as const } } as const)
             : undefined;
 

@@ -149,6 +149,19 @@ describe('buildAutoResumeSystemMessageSuffix', () => {
     expect(suffix!).not.toContain('parentRunId');
     expect(suffix!).not.toContain('parent-run');
   });
+
+  it('never instructs the model to default an approval to approved', () => {
+    const suffix = buildAutoResumeSystemMessageSuffix([{ toolName: 'sendPost', type: 'approval', runId: 'run-1' }]);
+    expect(suffix).not.toBeNull();
+    expect(suffix!).not.toContain('set approved to true');
+    expect(suffix!).not.toContain('{ approved: true }');
+  });
+
+  it('tells the model to skip approval-type suspended tools', () => {
+    const suffix = buildAutoResumeSystemMessageSuffix([{ toolName: 'sendPost', type: 'approval', runId: 'run-1' }]);
+    expect(suffix!).toContain("If the suspendedTool.type is 'approval', skip it entirely");
+    expect(suffix!).toContain('Approval decisions are only accepted from the user through the approval API');
+  });
 });
 
 describe('appendSuffixToLeadingSystemMessage', () => {

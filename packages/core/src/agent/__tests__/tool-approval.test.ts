@@ -27,7 +27,7 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
 
   describe('tool approval and suspension', () => {
     describe.skipIf(version === 'v1')('requireToolApproval (mock-based)', () => {
-      it('should call findUserTool with requireToolApproval on tool and resume via stream when autoResumeSuspendedTools is true', async () => {
+      it('does not execute an approval-gated tool when the model self-approves, and executes once approved out-of-band', async () => {
         const findUserTool = createTool({
           id: 'Find user tool',
           description: 'This is a test tool that returns the name and email',
@@ -145,6 +145,8 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
             resourceId: memory.resource,
           });
 
+          mockFindUser.mockClear();
+
           const stream = await agentOne.stream('Find the user with name - Dero Israel', { memory });
           let toolName = '';
           for await (const _chunk of stream.fullStream) {
@@ -158,7 +160,17 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
           expect((await agentOne.getObjective({ threadId: memory.thread }))?.activeDurationMs).toBe(durationAtApproval);
 
           if (toolName) {
-            const resumeStream = await agentOne.stream('Approve', {
+            const selfApproveStream = await agentOne.stream('Approve', {
+              memory,
+            });
+            for await (const _chunk of selfApproveStream.fullStream) {
+            }
+
+            expect(mockFindUser).not.toHaveBeenCalled();
+
+            const resumeStream = await agentOne.approveToolCall({
+              runId: selfApproveStream.runId,
+              toolCallId: 'call-2',
               memory,
             });
             for await (const _chunk of resumeStream.fullStream) {
@@ -298,16 +310,12 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
               stream: convertArrayToReadableStream([
                 { type: 'stream-start', warnings: [] },
                 { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
-                {
-                  type: 'tool-call',
-                  toolCallId: 'call-2',
-                  toolName: 'findUserTool',
-                  input: '{"name":"Dero Israel", "resumeData": { "approved": true }}',
-                  providerExecuted: false,
-                },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: 'User name is Dero Israel' },
+                { type: 'text-end', id: 'text-1' },
                 {
                   type: 'finish',
-                  finishReason: 'tool-calls',
+                  finishReason: 'stop',
                   usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
                 },
               ]),
@@ -353,7 +361,12 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
         expect(mockFindUser).not.toHaveBeenCalled();
 
         // Resume call: re-supplies the same function policy. Approval is granted, tool executes.
-        const resumeStream = await agent.stream('Approve', { memory, requireToolApproval });
+        const resumeStream = await agent.approveToolCall({
+          runId: suspendStream.runId,
+          toolCallId: 'call-1',
+          memory,
+          requireToolApproval,
+        });
         for await (const _chunk of resumeStream.fullStream) {
           // drain
         }

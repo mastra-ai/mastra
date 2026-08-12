@@ -17,15 +17,15 @@ import { randomUUID } from 'node:crypto';
  * Regression classes:
  * - Tool with `requireApproval: true` emits `tool-call-approval` chunk
  * - `autoResumeSuspendedTools` detects suspended tool in memory on next call
- * - Tool executes with `resumeData: { approved: true }` injected by the loop
- * - Final output reflects the resumed tool's result
+ * - Approval gates never accept a model-authored `resumeData: { approved: true }`
+ * - A plain `suspend()` tool still auto-resumes from model-authored resumeData
  */
 describeForAllEngines(
   'AIMock loop scenario: autoResumeSuspendedTools',
   engine => {
     const getMock = useLoopScenarioAimock();
 
-    it('auto-resumes a suspended tool when the user sends a follow-up message on the same thread', async () => {
+    it('does not let the model approve its own suspended approval-gated tool call', async () => {
       let toolExecuted = false;
       let toolInputName = '';
 
@@ -87,10 +87,7 @@ describeForAllEngines(
       // Tool should NOT have executed yet (suspended before execution)
       expect(toolExecuted).toBe(false);
 
-      // Second call: user sends follow-up on same thread.
-      // With autoResumeSuspendedTools, the loop detects the suspended tool
-      // and modifies the system prompt to instruct the model about it.
-      const { output, requests: secondCallRequests } = await runLoopScenario({
+      const { chunks: secondCallChunks, requests: secondCallRequests } = await runLoopScenario({
         engine,
         llm: getMock(),
         sharedAgent: shared,
@@ -99,8 +96,6 @@ describeForAllEngines(
         threadId,
         resourceId,
         fixtures: llm => {
-          // Turn 1 of second call: model re-calls the tool with resumeData
-          // (responding to the auto-resume instruction in the system prompt)
           llm.on(
             { endpoint: 'chat', hasToolResult: false },
             {
@@ -113,30 +108,93 @@ describeForAllEngines(
               ],
             },
           );
-          // Turn 2 of second call: after tool executes, model gets result and returns text
-          llm.on(
-            { endpoint: 'chat', toolCallId: 'call-2', hasToolResult: true },
-            {
-              content: 'User found: Dero Israel (dero.israel@test.com)',
-            },
-          );
         },
+        collectChunks: true,
       });
 
-      // Assert: system prompt was modified to mention suspended tools
       // AIMock captures ALL requests across calls; the second call's first request is at index 1
       // (index 0 is from the first call which had no suspended tools yet)
       const secondCallFirstRequest = secondCallRequests[1];
       const systemMessage = secondCallFirstRequest?.body?.messages?.find((m: any) => m.role === 'system');
       expect(systemMessage?.content).toContain('suspended tools');
 
-      // Assert: tool was executed during the auto-resume
-      expect(toolExecuted).toBe(true);
-      expect(toolInputName).toBe('Dero Israel');
+      expect(toolExecuted).toBe(false);
+      expect(toolInputName).toBe('');
+      expect(secondCallChunks!.filter(c => c.type === 'tool-call-approval').length).toBeGreaterThan(0);
+    });
 
-      // Assert: final output mentions the user
-      const text = await output.text;
-      expect(text.length).toBeGreaterThan(0);
+    it('auto-resumes a plain suspension that is not gated by approval', async () => {
+      let resumedCity = '';
+
+      const weatherTool = createTool({
+        id: 'weather',
+        description: 'Fetches weather for a city',
+        inputSchema: z.object({ city: z.string().optional() }),
+        suspendSchema: z.object({ message: z.string() }),
+        resumeSchema: z.object({ city: z.string() }),
+        execute: async (_input, context) => {
+          const resumeData = context?.agent?.resumeData as { city?: string } | undefined;
+          if (!resumeData?.city) {
+            await context?.agent?.suspend?.({ message: 'Which city?' });
+            return { weather: 'unknown' };
+          }
+          resumedCity = resumeData.city;
+          return { weather: `${resumeData.city}: sunny` };
+        },
+      });
+
+      const sharedMemory = new MockMemory();
+      const shared = await createSharedAgent(getMock(), {
+        tools: { weatherTool },
+        memory: sharedMemory,
+        defaultOptions: {
+          autoResumeSuspendedTools: true,
+        },
+        engine,
+      });
+
+      const threadId = randomUUID();
+      const resourceId = randomUUID();
+
+      const { chunks } = await runLoopScenario({
+        engine,
+        llm: getMock(),
+        sharedAgent: shared,
+        prompt: 'What is the weather?',
+        memory: sharedMemory,
+        threadId,
+        resourceId,
+        fixtures: llm => {
+          llm.onMessage(/weather/i, {
+            toolCalls: [{ id: 'w-1', name: 'weather', arguments: {} }],
+          });
+        },
+        collectChunks: true,
+      });
+
+      expect(chunks!.filter(c => c.type === 'tool-call-suspended').length).toBeGreaterThan(0);
+      expect(resumedCity).toBe('');
+
+      await runLoopScenario({
+        engine,
+        llm: getMock(),
+        sharedAgent: shared,
+        prompt: 'Paris',
+        memory: sharedMemory,
+        threadId,
+        resourceId,
+        fixtures: llm => {
+          llm.on(
+            { endpoint: 'chat', hasToolResult: false },
+            {
+              toolCalls: [{ id: 'w-2', name: 'weather', arguments: { resumeData: { city: 'Paris' } } }],
+            },
+          );
+          llm.on({ endpoint: 'chat', toolCallId: 'w-2', hasToolResult: true }, { content: 'Paris: sunny' });
+        },
+      });
+
+      expect(resumedCity).toBe('Paris');
     });
 
     it('does NOT auto-resume when autoResumeSuspendedTools is false', async () => {

@@ -608,6 +608,15 @@ export function createDurableToolCallStep() {
             ? (lastAssistantMessage.content.metadata as Record<string, any>)
             : undefined;
         if (!meta?.[metadataKey]) return;
+        lastAssistantMessage.content.parts = lastAssistantMessage.content.parts?.map(part => {
+          if (part.type === 'data-tool-call-suspended' || part.type === 'data-tool-call-approval') {
+            const data = part.data as any;
+            if (data?.toolCallId === toolCallId || data?.toolName === toolName) {
+              return { ...part, data: { ...data, resumed: true } };
+            }
+          }
+          return part;
+        });
         // Resolve key: exact toolCallId, then by entry toolCallId, then by toolName
         const entries = meta[metadataKey] as Record<string, any>;
         const key = entries[toolCallId]
@@ -627,7 +636,7 @@ export function createDurableToolCallStep() {
         await doFlush();
       };
 
-      if (requiresApproval && !resumeData) {
+      if (requiresApproval && !workflowResumeData) {
         const resumeSchema = JSON.stringify({
           type: 'object',
           properties: {
@@ -690,15 +699,15 @@ export function createDurableToolCallStep() {
       // would be misinterpreted as an approval response.
       if (
         requiresApproval &&
-        resumeData &&
-        typeof resumeData === 'object' &&
-        resumeData !== null &&
-        'approved' in resumeData
+        workflowResumeData &&
+        typeof workflowResumeData === 'object' &&
+        workflowResumeData !== null &&
+        'approved' in workflowResumeData
       ) {
         // Remove approval metadata since we're resuming (either approved or declined)
         await removeToolMetadata('approval');
 
-        if (!(resumeData as { approved: boolean }).approved) {
+        if (!(workflowResumeData as { approved: boolean }).approved) {
           // Return the approval decision (not a `result` string) so it persists as
           // `state: 'output-denied'` with `approval`. The denial reason carries the
           // existing string so downstream consumers/UI keep the same message.
@@ -707,7 +716,7 @@ export function createDurableToolCallStep() {
           const approval = {
             id: toolCallId,
             approved: false as const,
-            reason: resolveDeclineReason(resumeData),
+            reason: resolveDeclineReason(workflowResumeData),
           };
           if (pubsub) {
             try {
@@ -751,10 +760,10 @@ export function createDurableToolCallStep() {
       // approval decision so it round-trips through persistence as `approval: { approved: true }`.
       const approvalGrant =
         requiresApproval &&
-        resumeData &&
-        typeof resumeData === 'object' &&
-        resumeData !== null &&
-        (resumeData as { approved?: boolean }).approved === true
+        workflowResumeData &&
+        typeof workflowResumeData === 'object' &&
+        workflowResumeData !== null &&
+        (workflowResumeData as { approved?: boolean }).approved === true
           ? ({ approval: { id: toolCallId, approved: true as const } } as const)
           : undefined;
 
