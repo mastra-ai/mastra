@@ -10,8 +10,8 @@ A tool suspended with `suspendSchema` left its `suspendedTools` entry on the sav
 
 A tool whose `resumeSchema` is a primitive can legitimately be resumed with `false`, `0` or `""`, which is how a boolean human-in-the-loop tool declines. Those payloads now clear the suspension entry, and a delegated `agent-*` or `workflow-*` tool resumed with one keeps resuming its existing sub-run instead of silently starting a fresh one.
 
-**Approval resumes no longer disturb sibling suspensions**
+**Approving one tool call no longer clears another's pending state**
 
-On an approve-after-policy-loss resume the approval branch already clears its own metadata, so the generic suspension cleanup is skipped there. Previously it could run on top and remove the entry of a different, still-suspended call of the same tool.
+When two calls of the same tool were waiting and one of them was approved after its approval requirement had changed, the other call's pending state could be removed, leaving it stuck and unresumable. Approving one call now leaves the other waiting as expected.
 
 Fixes [#19083](https://github.com/mastra-ai/mastra/issues/19083).
