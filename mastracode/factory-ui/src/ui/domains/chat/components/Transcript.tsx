@@ -71,7 +71,6 @@ function stringify(v: unknown): string {
   }
 }
 
-/** The prose a reader would copy out of a message — its text, without tool calls or reasoning. */
 function messageText(parts: MessageEntry['message']['content']['parts']): string {
   return parts
     .flatMap(part => (part.type === 'text' ? [part.text] : []))
@@ -691,11 +690,12 @@ function MessageBubble({
   const prose = messageText(parts);
   const roles: MessageRoleRenderers = {
     User: ({ children }) => (
-      <div className={cn(MESSAGE_HOVER, 'my-3 flex w-full flex-col items-end')}>
+      <div className={cn(MESSAGE_HOVER, 'my-3 ml-auto flex w-fit max-w-[70%] flex-col items-end')}>
         <div
-          className={`text-text1 max-w-[70%] rounded-xl px-4 py-2 break-words ${
-            entry.steer ? 'bg-warning1/10' : 'bg-neutral6/5'
-          }`}
+          className={cn(
+            'text-text1 rounded-xl px-4 py-2 break-words',
+            entry.steer ? 'bg-warning1/10' : 'bg-neutral6/5',
+          )}
         >
           {children}
         </div>

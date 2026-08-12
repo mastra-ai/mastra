@@ -1,12 +1,11 @@
 import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import { cn } from '@mastra/playground-ui/utils/cn';
 
-/** Hover scope a message opens so its meta row can surface with the message. */
 export const MESSAGE_HOVER = 'group/message';
 
 const clock = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' });
+const calendar = new Intl.DateTimeFormat(undefined, { dateStyle: 'full', timeStyle: 'short' });
 
-/** When the message landed and a way to take its text, kept out of sight until the message is hovered. */
 export function MessageMeta({ text, createdAt, align }: { text: string; createdAt: Date; align: 'start' | 'end' }) {
   // Thread history arrives as JSON, so the typed Date is an ISO string at runtime.
   const time = new Date(createdAt);
@@ -18,8 +17,8 @@ export function MessageMeta({ text, createdAt, align }: { text: string; createdA
         align === 'end' && 'flex-row-reverse',
       )}
     >
-      <CopyButton content={text} size="icon-xs" variant="ghost" tooltip="Copy message" />
-      <time className="text-ui-xs text-icon3" dateTime={time.toISOString()}>
+      <CopyButton content={text} size="icon-xs" variant="ghost" tooltip="Copy message" showToast={false} />
+      <time className="text-ui-xs text-icon3" dateTime={time.toISOString()} title={calendar.format(time)}>
         {clock.format(time)}
       </time>
     </div>
