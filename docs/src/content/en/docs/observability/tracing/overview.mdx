@@ -1,11 +1,11 @@
 ---
-title: "Tracing | Observability"
+title: "Traces | Observability"
 description: "Record and inspect hierarchical execution for agents, workflows, tools, and model calls."
 packages:
   - "@mastra/observability"
 ---
 
-# Tracing
+# Traces
 
 Tracing is the observability signal that records how a request moves through agents, workflows, tools, and model calls. Mastra represents each operation as a span and groups related spans into a trace so you can inspect the full execution path.
 
@@ -28,7 +28,6 @@ To get started with tracing, configure observability in your Mastra instance and
 
 - [Configuration](/docs/observability/overview#configuration): Base observability config and multiple configs, plus serverless flushing
 - [Storage](/docs/observability/overview#storage): Storage routing for traces, logs, and metrics
-- [Integrations overview](/docs/observability/integrations/overview): Exporters, bridges, and processors
 
 ## Sampling strategies
 
@@ -337,7 +336,7 @@ const result = await agent.generate([{ role: 'user', content: 'Sensitive operati
 })
 ```
 
-For more fine-grained control over sensitive data, consider using the [Sensitive Data Filter](/docs/observability/integrations/processors/sensitive-data-filter) processor, which can redact specific fields (like passwords, tokens, and keys) while preserving the rest of the input/output.
+For more fine-grained control over sensitive data, consider using the [Sensitive Data Filter](/reference/observability/tracing/processors/sensitive-data-filter) processor, which can redact specific fields (like passwords, tokens, and keys) while preserving the rest of the input/output.
 
 #### Child spans and metadata extraction
 
@@ -427,7 +426,7 @@ Span processors transform, filter, or enrich trace data before it's exported. Th
 
 #### Built-in processors
 
-- [Sensitive Data Filter](/docs/observability/integrations/processors/sensitive-data-filter) redacts sensitive information. It's enabled in the default observability config.
+- [Sensitive Data Filter](/reference/observability/tracing/processors/sensitive-data-filter) redacts sensitive information. It's enabled in the default observability config.
 
 #### Creating custom processors
 
@@ -469,8 +468,6 @@ Processors are executed in the order they're defined, allowing you to chain mult
 - Filtering out spans based on criteria
 - Normalizing data formats
 - Enriching spans with business context
-
-For the broader exporter, bridge, and processor model, see [Integrations overview](/docs/observability/integrations/overview).
 
 ## Span filtering
 

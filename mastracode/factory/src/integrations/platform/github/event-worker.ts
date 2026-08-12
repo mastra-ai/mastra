@@ -404,7 +404,7 @@ export class PlatformGithubEventWorker extends MastraWorker {
           });
           continue;
         }
-        if (isFactoryClosureEvent(parsed)) {
+        if (isFactoryIngestedEvent(parsed)) {
           await this.#ingestFactoryEvent?.(parsed);
         }
         const result = await this.#dispatch(parsed, {
@@ -483,8 +483,21 @@ function normalizeSettings(value: PlatformGithubEventWorkerSettings | null): Pla
   return { version: 1, repositories: { ...value.repositories } };
 }
 
-function isFactoryClosureEvent(event: ParsedGithubWebhook): boolean {
-  return (event.event === 'issues' || event.event === 'pull_request') && event.payload.action === 'closed';
+// Events the polling worker forwards to the factory rules engine. Closures
+// let the reconciler finalize cards; `synchronize` and `review_requested` on a
+// pull request are the two triggers the review board's re-review path listens
+// for. Direct-webhook consumers ingest every parsed event; the platform path
+// gates because most other events (comments, reviews, edits) only interest the
+// subscription dispatcher, not the factory rules.
+function isFactoryIngestedEvent(event: ParsedGithubWebhook): boolean {
+  if ((event.event === 'issues' || event.event === 'pull_request') && event.payload.action === 'closed') {
+    return true;
+  }
+  if (event.event === 'pull_request') {
+    const action = event.payload.action;
+    if (action === 'synchronize' || action === 'review_requested') return true;
+  }
+  return false;
 }
 
 function parseEvent(event: EventLogEntry): ParsedGithubWebhook | null {

@@ -4,6 +4,7 @@ import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
 import { Input } from '@mastra/playground-ui/components/Input';
+import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { MessageScrollerItem } from '@mastra/playground-ui/components/MessageScroller';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { startsUserTurn } from '@mastra/playground-ui/components/ThreadRail';
@@ -29,7 +30,6 @@ import { ToolCard } from './tool/ToolCard';
 import { ToolGroup, TOOL_GROUP_MIN } from './tool/ToolGroup';
 import { isTranscriptToolVisible, ToolFactory } from './ToolFactory';
 import { ROW_RAIL, ROW_TRIGGER, TranscriptRow } from './TranscriptRow';
-import { Markdown } from '../../../ui/Markdown';
 
 import type {
   ApprovalPrompt,
@@ -679,20 +679,12 @@ function MessageBubble({
   onRespond: (toolCallId: string, resumeData: string | string[] | PlanResume, promptId: string) => void;
 }) {
   const messageParts = entry.message.content.parts ?? [];
-  const parts = messageParts.filter(
-    part => part.type !== 'tool-invocation' || isTranscriptToolVisible(part.toolInvocation.toolName),
-  );
+  const parts = messageParts.filter(part => isRenderablePart(part, suspensions, entry.runtimeTools));
   const message =
     parts.length === messageParts.length
       ? entry.message
       : { ...entry.message, content: { ...entry.message.content, parts } };
-  const hasRenderablePart = parts.some(
-    part =>
-      (part.type === 'text' && part.text.trim().length > 0) ||
-      (part.type === 'reasoning' && part.reasoning.trim().length > 0) ||
-      part.type === 'tool-invocation' ||
-      part.type === 'file',
-  );
+  const hasRenderablePart = parts.length > 0;
 
   const toolGroups = collectToolGroups(parts, suspensions, entry.runtimeTools);
   const origin = channelOrigin(entry);
@@ -702,7 +694,7 @@ function MessageBubble({
       <div className={cn(MESSAGE_HOVER, 'my-3 flex w-full flex-col items-end')}>
         <div
           className={`text-text1 max-w-[70%] rounded-xl px-4 py-2 break-words ${
-            entry.steer ? 'bg-warning1/10' : 'bg-surface3'
+            entry.steer ? 'bg-warning1/10' : 'bg-neutral6/5'
           }`}
         >
           {children}
@@ -725,24 +717,14 @@ function MessageBubble({
     Text: (part: TextPart) => {
       if (entry.message.role === 'user') {
         const activation = parseSkillActivation(part.text);
-        return activation ? (
-          <SkillMessage activation={activation} />
-        ) : (
-          <div className="prose">
-            <Markdown>{part.text}</Markdown>
-          </div>
-        );
+        return activation ? <SkillMessage activation={activation} /> : <MarkdownRenderer>{part.text}</MarkdownRenderer>;
       }
 
-      return (
-        <div className="prose my-3">
-          <Markdown>{part.text}</Markdown>
-        </div>
-      );
+      return <MarkdownRenderer className="my-3">{part.text}</MarkdownRenderer>;
     },
     Reasoning: (part: ReasoningPart) => (
-      <div className="border-border1 text-ui-sm text-icon3 my-1.5 border-l-2 pl-2.5 italic [&_p]:my-0.5">
-        <Markdown>{part.reasoning}</Markdown>
+      <div className="border-border1 my-1.5 border-l-2 pl-2.5 italic [&_p]:my-0.5">
+        <MarkdownRenderer className="text-ui-sm text-icon3">{part.reasoning}</MarkdownRenderer>
       </div>
     ),
     ToolInvocation: (part: ToolInvocationPart) => {
@@ -754,7 +736,6 @@ function MessageBubble({
       const runtime = entry.runtimeTools?.[toolCallId];
       const tool = toolFromInvocationPart(part, runtime);
       const suspension = suspensions.get(tool.toolCallId);
-      if (tool.toolName === 'ask_user' && tool.status === 'running' && !suspension) return null;
       return (
         <ToolFactory
           toolName={tool.toolName}
@@ -838,11 +819,45 @@ function terminalInvocationStatus(invocation: ToolInvocationPart['toolInvocation
   return 'isError' in invocation && invocation.isError === true ? 'error' : 'done';
 }
 
+/** Parts that draw something: step markers and blank prose leave empty bubbles and split runs of calls. */
+function isRenderablePart(
+  part: MessageEntry['message']['content']['parts'][number],
+  suspensions: ReadonlyMap<string, SuspensionPrompt>,
+  runtimeTools: MessageEntry['runtimeTools'],
+): boolean {
+  switch (part.type) {
+    case 'text':
+      return part.text.trim().length > 0;
+    case 'reasoning':
+      return part.reasoning.trim().length > 0;
+    case 'tool-invocation':
+      return isRenderableTool(part, suspensions, runtimeTools);
+    case 'file':
+      return true;
+    default:
+      return false;
+  }
+}
+
+function isRenderableTool(
+  part: ToolInvocationPart,
+  suspensions: ReadonlyMap<string, SuspensionPrompt>,
+  runtimeTools: MessageEntry['runtimeTools'],
+): boolean {
+  const tool = toolFromInvocationPart(part, runtimeTools?.[part.toolInvocation.toolCallId]);
+  if (!isTranscriptToolVisible(tool.toolName)) return false;
+
+  const awaitingPrompt = tool.toolName === 'ask_user' && tool.status === 'running' && !suspensions.has(tool.toolCallId);
+  return !awaitingPrompt;
+}
+
+/** Tools whose own card carries the turn: a group row would swallow the prompt, the plan or the skill instructions. */
+const UNGROUPABLE_TOOLS = new Set(['ask_user', 'submit_plan', 'skill']);
+
 /**
  * Collapse runs of {@link TOOL_GROUP_MIN}+ consecutive plain tool calls into
- * groups keyed by their first toolCallId. Interactive tools (ask_user,
- * submit_plan, suspended calls) break a run — their prompt cards must render
- * inline, never swallowed by a group.
+ * groups keyed by their first toolCallId. Suspended calls break a run too —
+ * their prompt must render inline.
  */
 function collectToolGroups(
   parts: MessageEntry['message']['content']['parts'],
@@ -864,8 +879,7 @@ function collectToolGroups(
   for (const part of parts) {
     const groupable =
       part.type === 'tool-invocation' &&
-      part.toolInvocation.toolName !== 'ask_user' &&
-      part.toolInvocation.toolName !== 'submit_plan' &&
+      !UNGROUPABLE_TOOLS.has(part.toolInvocation.toolName) &&
       !suspensions.has(part.toolInvocation.toolCallId);
     if (groupable) {
       run.push(toolFromInvocationPart(part, runtimeTools?.[part.toolInvocation.toolCallId]));
@@ -1110,9 +1124,7 @@ function StatusMetadataCard({ status }: { status: StatusMetadata }) {
 function NoticeCard({ entry }: { entry: NoticeEntry }) {
   return (
     <Notice className="my-2" variant={entry.level === 'error' ? 'destructive' : 'info'}>
-      <div className="prose">
-        <Markdown>{entry.text}</Markdown>
-      </div>
+      <MarkdownRenderer className="text-current">{entry.text}</MarkdownRenderer>
     </Notice>
   );
 }

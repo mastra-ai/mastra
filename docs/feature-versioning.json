@@ -13,7 +13,6 @@
   "/integrations/frameworks/express": "v1",
   "/reference/manual-install": "v1",
   "/integrations/frameworks/next-js": "v1",
-  "/guides/getting-started/quickstart": "v1",
   "/integrations/frameworks/sveltekit": "v1",
   "/integrations/frameworks/vite-react": "v1",
   "/reference/migrations/ai-sdk-v4-to-v5": "v1",
