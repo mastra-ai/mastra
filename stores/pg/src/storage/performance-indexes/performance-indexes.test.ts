@@ -88,7 +88,7 @@ describe('PostgresStore Domain Performance Indexes', () => {
 
       const indexes = observability.getDefaultIndexDefinitions();
 
-      expect(indexes.length).toBe(4);
+      expect(indexes.length).toBe(10);
       expect(indexes).toContainEqual({
         name: 'test_schema_mastra_ai_spans_traceid_startedat_idx',
         table: 'mastra_ai_spans',
