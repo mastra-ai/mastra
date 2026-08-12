@@ -1,99 +1,161 @@
-import type { ProcessorContext } from '@mastra/core/processors';
 import { InMemoryStore } from '@mastra/core/storage';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 import {
   createKnowledgeWriteTools,
-  PINNED_KNOWLEDGE_PAGE,
-  publishSubconsciousPinned,
+  createPinnedTools,
+  listPinnedKnowledge,
+  PINNED_ENTITY_NAME,
   Subconscious,
-  SUBCONSCIOUS_PINNED_STATE_ID,
 } from '../subconscious';
 
 const resourceScope = ['org:acme', 'resource:user-42'];
 const threadScope = [...resourceScope, 'thread:alpha'];
 
-async function createStore() {
+function createMemory() {
   const storage = new InMemoryStore();
-  return (await storage.getStore('knowledge'))!;
+  return { storage } as unknown as Parameters<typeof createPinnedTools>[0];
+}
+
+function createTools(
+  memory: ReturnType<typeof createMemory>,
+  overrides: Partial<Parameters<typeof createPinnedTools>[1]> = {},
+) {
+  return createPinnedTools(memory, {
+    scope: threadScope,
+    sourceThreadId: 'alpha',
+    defaultScope: 'resource',
+    maxPins: 20,
+    maxCharacters: 2_000,
+    ...overrides,
+  });
+}
+
+async function getStore(memory: ReturnType<typeof createMemory>) {
+  return (await (memory as any).storage.getStore('knowledge'))!;
 }
 
 describe('Subconscious pinned knowledge', () => {
   it('is off unless configured, and resolves a bounded budget when enabled', () => {
     expect(new Subconscious().resolved.pins).toBe(false);
     expect(new Subconscious({ pins: false }).resolved.pins).toBe(false);
-    expect(new Subconscious({ pins: true }).resolved.pins).toEqual({ maxCharacters: 2_000 });
-    expect(new Subconscious({ pins: { maxCharacters: 500 } }).resolved.pins).toEqual({ maxCharacters: 500 });
+    expect(new Subconscious({ pins: true }).resolved.pins).toEqual({ maxPins: 20, maxCharacters: 2_000 });
+    expect(new Subconscious({ pins: { maxCharacters: 500, maxPins: 3 } }).resolved.pins).toEqual({
+      maxPins: 3,
+      maxCharacters: 500,
+    });
     expect(() => new Subconscious({ pins: { maxCharacters: 100_000 } })).toThrow(/maxCharacters/);
     expect(() => new Subconscious({ pins: { maxCharacters: 0 } })).toThrow(/maxCharacters/);
+    expect(() => new Subconscious({ pins: { maxPins: 0 } })).toThrow(/maxPins/);
   });
 
-  it('publishes the pinned page as a snapshot state signal, and stays silent when there is nothing pinned', async () => {
-    const store = await createStore();
-    const sendStateSignal = vi.fn() as unknown as ProcessorContext['sendStateSignal'];
-
-    await publishSubconsciousPinned({ store, scope: threadScope, maxCharacters: 2_000, sendStateSignal });
-    expect(sendStateSignal).not.toHaveBeenCalled();
-
-    await store.createPage({
-      name: PINNED_KNOWLEDGE_PAGE,
-      body: 'Always answer in French.',
-      scope: resourceScope,
-    });
-
-    const snapshot = await publishSubconsciousPinned({
-      store,
-      scope: threadScope,
-      maxCharacters: 2_000,
-      sendStateSignal,
-    });
-
-    expect(snapshot?.body).toBe('Always answer in French.');
-    expect(sendStateSignal).toHaveBeenCalledTimes(1);
-    const signal = (sendStateSignal as unknown as ReturnType<typeof vi.fn>).mock.calls[0]![0];
-    expect(signal).toMatchObject({
-      id: SUBCONSCIOUS_PINNED_STATE_ID,
-      mode: 'snapshot',
-      contents: 'Always answer in French.',
-    });
-    expect(signal.cacheKey).toEqual(expect.any(String));
+  it('pins a fact and assembles it into the pin set', async () => {
+    const memory = createMemory();
+    const tools = createTools(memory);
+    const pinned = await tools.knowledge_pin!.execute!({ text: 'Always answer in French.' } as any, {} as any);
+    const { pins } = await listPinnedKnowledge({ store: await getStore(memory), scope: threadScope });
+    expect(pins).toHaveLength(1);
+    expect(pins[0]!.id).toBe(pinned.id);
+    expect(pins[0]!.text).toBe('Always answer in French.');
   });
 
-  it('reuses the cache key while the pinned page is unchanged', async () => {
-    const store = await createStore();
-    const sendStateSignal = vi.fn() as unknown as ProcessorContext['sendStateSignal'];
-    const page = await store.createPage({
-      name: PINNED_KNOWLEDGE_PAGE,
-      body: 'Never force push.',
-      scope: resourceScope,
-    });
-
-    await publishSubconsciousPinned({ store, scope: threadScope, maxCharacters: 2_000, sendStateSignal });
-    await publishSubconsciousPinned({ store, scope: threadScope, maxCharacters: 2_000, sendStateSignal });
-    await store.updatePage({ id: page.id, version: page.version, body: 'Never force push to main.' });
-    await publishSubconsciousPinned({ store, scope: threadScope, maxCharacters: 2_000, sendStateSignal });
-
-    const keys = (sendStateSignal as unknown as ReturnType<typeof vi.fn>).mock.calls.map(call => call[0].cacheKey);
-    expect(keys[0]).toBe(keys[1]);
-    expect(keys[2]).not.toBe(keys[0]);
+  it('unpin soft-deletes the fact and it leaves the assembled set', async () => {
+    const memory = createMemory();
+    const tools = createTools(memory);
+    const pinned = await tools.knowledge_pin!.execute!({ text: 'Never force push.' } as any, {} as any);
+    await tools.knowledge_unpin!.execute!({ factId: pinned.id } as any, {} as any);
+    const store = await getStore(memory);
+    const { pins } = await listPinnedKnowledge({ store, scope: threadScope });
+    expect(pins).toHaveLength(0);
+    const raw = await store.getFact({ id: pinned.id, includeDeleted: true });
+    expect(raw?.deletedAt).toBeTruthy();
   });
 
-  it('rejects a pinned page over its budget on the write path', async () => {
-    const storage = new InMemoryStore();
-    const memory = { storage } as unknown as Parameters<typeof createKnowledgeWriteTools>[0];
-    const tools = createKnowledgeWriteTools(memory, {
+  it('never returns a deleted fact even when later reads overlap it', async () => {
+    const memory = createMemory();
+    const tools = createTools(memory);
+    const a = await tools.knowledge_pin!.execute!({ text: 'keep me' } as any, {} as any);
+    const b = await tools.knowledge_pin!.execute!({ text: 'drop me' } as any, {} as any);
+    await tools.knowledge_unpin!.execute!({ factId: b.id } as any, {} as any);
+    const { pins } = await listPinnedKnowledge({ store: await getStore(memory), scope: threadScope });
+    expect(pins.map(pin => pin.id)).toEqual([a.id]);
+  });
+
+  it('edit replaces the pin under a new fact id and removes the old one', async () => {
+    const memory = createMemory();
+    const tools = createTools(memory);
+    const pinned = await tools.knowledge_pin!.execute!({ text: 'Speak French.' } as any, {} as any);
+    const edited = await tools.knowledge_edit_pin!.execute!(
+      { factId: pinned.id, text: 'Speak French. Loudly.' } as any,
+      {} as any,
+    );
+    expect(edited.id).not.toBe(pinned.id);
+    const { pins } = await listPinnedKnowledge({ store: await getStore(memory), scope: threadScope });
+    expect(pins.map(pin => pin.id)).toEqual([edited.id]);
+    expect(pins[0]!.text).toBe('Speak French. Loudly.');
+  });
+
+  it('rejects an over-budget pin naming the character limit, and an over-count pin naming the pin limit', async () => {
+    const memory = createMemory();
+    const tools = createTools(memory, { maxCharacters: 40, maxPins: 1 });
+    await expect(tools.knowledge_pin!.execute!({ text: 'x'.repeat(41) } as any, {} as any)).rejects.toThrow(
+      /limited to 40 characters/,
+    );
+    await tools.knowledge_pin!.execute!({ text: 'short' } as any, {} as any);
+    await expect(tools.knowledge_pin!.execute!({ text: 'one too many' } as any, {} as any)).rejects.toThrow(
+      /at most 1 pins/,
+    );
+  });
+
+  it('a pin written at the narrowest scope level is visible through the read expression', async () => {
+    const memory = createMemory();
+    const tools = createTools(memory);
+    const pinned = await tools.knowledge_pin!.execute!({ text: 'thread-only pin', scope: 'thread' } as any, {} as any);
+    expect(pinned.scope).toContain('thread:alpha');
+    const { pins } = await listPinnedKnowledge({ store: await getStore(memory), scope: threadScope });
+    expect(pins.map(pin => pin.id)).toEqual([pinned.id]);
+  });
+
+  it('a pin written at the default write scope is visible in the same turn', async () => {
+    const memory = createMemory();
+    const tools = createTools(memory);
+    const pinned = await tools.knowledge_pin!.execute!({ text: 'resource pin' } as any, {} as any);
+    expect(pinned.scope).not.toContain('thread:alpha');
+    const { pins } = await listPinnedKnowledge({ store: await getStore(memory), scope: threadScope });
+    expect(pins.map(pin => pin.id)).toEqual([pinned.id]);
+  });
+
+  it('resolves one reserved entity across pins written at two different scopes', async () => {
+    const memory = createMemory();
+    const tools = createTools(memory);
+    const a = await tools.knowledge_pin!.execute!({ text: 'wide pin', scope: 'resource' } as any, {} as any);
+    const b = await tools.knowledge_pin!.execute!({ text: 'narrow pin', scope: 'thread' } as any, {} as any);
+    expect(a.parentEntityId).toBe(b.parentEntityId);
+    const store = await getStore(memory);
+    const entity = await store.getEntity(a.parentEntityId);
+    expect(entity?.name).toBe(PINNED_ENTITY_NAME);
+    const { pins, entityId } = await listPinnedKnowledge({ store, scope: threadScope });
+    expect(entityId).toBe(a.parentEntityId);
+    expect(pins).toHaveLength(2);
+  });
+
+  it('stores a mixed-case reserved page name canonically so the guard and readers agree', async () => {
+    const memory = createMemory();
+    const tools = createKnowledgeWriteTools(memory as any, {
       scope: threadScope,
       sourceThreadId: 'alpha',
       defaultScope: 'resource',
-      pinnedMaxCharacters: 40,
     });
-
     await expect(
-      tools.knowledge_write_page!.execute!({ name: PINNED_KNOWLEDGE_PAGE, body: 'x'.repeat(41) } as any, {} as any),
-    ).rejects.toThrow(/limited to 40 characters/);
-
-    await expect(
-      tools.knowledge_write_page!.execute!({ name: PINNED_KNOWLEDGE_PAGE, body: 'x'.repeat(40) } as any, {} as any),
-    ).resolves.toMatchObject({ name: PINNED_KNOWLEDGE_PAGE });
+      tools.knowledge_write_page!.execute!({ name: 'Capture-Guidance', body: 'x'.repeat(8_001) } as any, {} as any),
+    ).rejects.toThrow(/capture-guidance is limited/);
+    const written = await tools.knowledge_write_page!.execute!(
+      { name: 'Capture-Guidance', body: 'be concise' } as any,
+      {} as any,
+    );
+    expect(written.name).toBe('capture-guidance');
+    const store = await getStore(memory);
+    const byCanonicalName = await store.getPageByName({ name: 'capture-guidance', scope: threadScope });
+    expect(byCanonicalName?.id).toBe(written.id);
   });
 });

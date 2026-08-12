@@ -9,8 +9,6 @@ import type { ToolAction } from '@mastra/core/tools';
 import { createTool } from '@mastra/core/tools';
 import type { JSONSchema7 } from 'json-schema';
 
-import { PINNED_KNOWLEDGE_PAGE } from './pins';
-
 const CURATOR_IDENTITY = 'subconscious:curate';
 const MAX_GUIDANCE_LENGTH = 8_000;
 const scopeLevelSchema: JSONSchema7 = { type: 'string', enum: ['org', 'resource', 'thread'] };
@@ -26,8 +24,6 @@ export interface KnowledgeWriteToolsOptions {
   sourceThreadId: string;
   defaultScope: KnowledgeScopeLevel;
   maxScope?: KnowledgeScopeLevel;
-  /** Size bound for the reserved pinned page. Enforced in code because a pin costs tokens every turn. */
-  pinnedMaxCharacters?: number;
 }
 
 async function getStore(memory: KnowledgeWriteToolsMemory): Promise<KnowledgeStorage> {
@@ -198,26 +194,23 @@ export function createKnowledgeWriteTools(
           scope?: KnowledgeScopeLevel;
           expectedVersion?: number;
         };
-        const reservedName = value.name.trim().toLowerCase();
+        // Reserved page names are canonicalized on write so the guard, the stored record, and
+        // readers that look the page up by its literal name all agree on identity.
+        const trimmedName = value.name.trim();
+        const reservedName = trimmedName.toLowerCase();
+        const name = reservedName === 'capture-guidance' ? reservedName : trimmedName;
         if (reservedName === 'capture-guidance' && value.body.length > MAX_GUIDANCE_LENGTH) {
           throw new Error(`capture-guidance is limited to ${MAX_GUIDANCE_LENGTH} characters.`);
         }
-        if (
-          reservedName === PINNED_KNOWLEDGE_PAGE &&
-          options.pinnedMaxCharacters !== undefined &&
-          value.body.length > options.pinnedMaxCharacters
-        ) {
-          throw new Error(`${PINNED_KNOWLEDGE_PAGE} is limited to ${options.pinnedMaxCharacters} characters.`);
-        }
         const store = await getStore(memory);
         const scope = resolveWriteScope(options, value.scope);
-        const resolvedPage = await store.getPageByName({ name: value.name, scope });
+        const resolvedPage = await store.getPageByName({ name, scope });
         const existing =
           resolvedPage && knowledgeScopeKey(resolvedPage.scope) === knowledgeScopeKey(scope) ? resolvedPage : null;
         if (!existing) {
           if (value.expectedVersion !== undefined)
             throw new Error('expectedVersion is only valid for an existing page.');
-          return store.createPage({ name: value.name, body: value.body, scope });
+          return store.createPage({ name, body: value.body, scope });
         }
         if (value.expectedVersion === undefined) throw new Error('Updating a page requires expectedVersion.');
         return store.updatePage({
