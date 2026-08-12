@@ -604,17 +604,6 @@ const sidebars = {
                     },
                   ],
                 },
-                {
-                  type: 'category',
-                  label: 'Processors',
-                  items: [
-                    {
-                      type: 'doc',
-                      id: 'observability/integrations/processors/sensitive-data-filter',
-                      label: 'SensitiveDataFilter',
-                    },
-                  ],
-                },
               ],
             },
           ],

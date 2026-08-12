@@ -2001,6 +2001,11 @@
       "permanent": true
     },
     {
+      "source": "/docs/observability/integrations/processors/sensitive-data-filter",
+      "destination": "/reference/observability/tracing/processors/sensitive-data-filter",
+      "permanent": true
+    },
+    {
       "source": "/docs/editor/prompts/llms.txt",
       "destination": "/docs/editor/overview/llms.txt",
       "permanent": true
@@ -3593,6 +3598,11 @@
     {
       "source": "/reference/mastra-platform/api/llms.txt",
       "destination": "/docs/mastra-platform/api/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/integrations/processors/sensitive-data-filter/llms.txt",
+      "destination": "/reference/observability/tracing/processors/sensitive-data-filter/llms.txt",
       "permanent": true
     }
   ]

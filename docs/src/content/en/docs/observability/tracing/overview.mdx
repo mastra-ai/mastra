@@ -337,7 +337,7 @@ const result = await agent.generate([{ role: 'user', content: 'Sensitive operati
 })
 ```
 
-For more fine-grained control over sensitive data, consider using the [Sensitive Data Filter](/docs/observability/integrations/processors/sensitive-data-filter) processor, which can redact specific fields (like passwords, tokens, and keys) while preserving the rest of the input/output.
+For more fine-grained control over sensitive data, consider using the [Sensitive Data Filter](/reference/observability/tracing/processors/sensitive-data-filter) processor, which can redact specific fields (like passwords, tokens, and keys) while preserving the rest of the input/output.
 
 #### Child spans and metadata extraction
 
@@ -427,7 +427,7 @@ Span processors transform, filter, or enrich trace data before it's exported. Th
 
 #### Built-in processors
 
-- [Sensitive Data Filter](/docs/observability/integrations/processors/sensitive-data-filter) redacts sensitive information. It's enabled in the default observability config.
+- [Sensitive Data Filter](/reference/observability/tracing/processors/sensitive-data-filter) redacts sensitive information. It's enabled in the default observability config.
 
 #### Creating custom processors
 
