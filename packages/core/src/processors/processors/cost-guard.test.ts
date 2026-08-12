@@ -1,10 +1,30 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { MessageList } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
+import type { IMastraLogger } from '../../logger';
 import { RequestContext, MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../../request-context';
 import type { ObservabilityStorage } from '../../storage/domains';
 import type { ProcessInputStepArgs } from '../index';
 import { CostGuardProcessor } from './cost-guard';
+
+// Mock logger that implements all required methods
+const mockLogger: IMastraLogger = {
+  debug: vi.fn(),
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+  trackException: vi.fn(),
+  getTransports: vi.fn(() => []),
+  listLogs: vi.fn(() => []),
+  listLogsByRunId: vi.fn(() => []),
+} as any;
+
+function createMockMastra(obsStorage: ObservabilityStorage) {
+  return {
+    getStorage: () => ({ stores: { observability: obsStorage } }),
+    getLogger: () => mockLogger,
+  } as any;
+}
 
 function createMockObservabilityStorage(options?: {
   inputCost?: number;
@@ -13,21 +33,19 @@ function createMockObservabilityStorage(options?: {
 }): ObservabilityStorage {
   return {
     getMetricAggregate: vi.fn().mockImplementation(async (args: { name: string[] }) => {
-      if (args.name[0] === 'mastra_model_total_input_tokens') {
-        return {
-          value: 0,
-          estimatedCost: options?.inputCost ?? null,
-          costUnit: options?.costUnit ?? null,
-        };
+      // The guard queries both token totals in one call; sum the configured costs.
+      let estimatedCost: number | null = null;
+      if (args.name.includes('mastra_model_total_input_tokens') && options?.inputCost !== undefined) {
+        estimatedCost = (estimatedCost ?? 0) + options.inputCost;
       }
-      if (args.name[0] === 'mastra_model_total_output_tokens') {
-        return {
-          value: 0,
-          estimatedCost: options?.outputCost ?? null,
-          costUnit: options?.costUnit ?? null,
-        };
+      if (args.name.includes('mastra_model_total_output_tokens') && options?.outputCost !== undefined) {
+        estimatedCost = (estimatedCost ?? 0) + options.outputCost;
       }
-      return { value: null, estimatedCost: null, costUnit: null };
+      return {
+        value: 0,
+        estimatedCost,
+        costUnit: options?.costUnit ?? null,
+      };
     }),
   } as unknown as ObservabilityStorage;
 }
@@ -214,10 +232,11 @@ describe('CostGuardProcessor', () => {
   });
 
   describe('warn strategy', () => {
-    it('logs warning instead of throwing', async () => {
-      const spy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    it('logs warning through the Mastra logger instead of throwing', async () => {
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       const obsStorage = createMockObservabilityStorage({ inputCost: 0.4, outputCost: 0.2, costUnit: 'usd' });
-      const guard = createRunScopeGuard(0.5, obsStorage, { strategy: 'warn' });
+      const guard = new CostGuardProcessor({ maxCost: 0.5, scope: 'run', strategy: 'warn' });
+      guard.__registerMastra(createMockMastra(obsStorage));
 
       const args = createInputStepArgs({
         stepNumber: 1,
@@ -225,9 +244,10 @@ describe('CostGuardProcessor', () => {
       });
 
       await expect(guard.processInputStep(args)).resolves.toBeUndefined();
-      expect(spy).toHaveBeenCalledWith(expect.stringContaining('[CostGuardProcessor]'));
+      expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining('CostGuardProcessor'));
+      expect(consoleSpy).not.toHaveBeenCalled();
 
-      spy.mockRestore();
+      consoleSpy.mockRestore();
     });
   });
 
@@ -484,9 +504,7 @@ describe('CostGuardProcessor', () => {
   describe('__registerMastra', () => {
     it('resolves observability storage for all scopes', () => {
       const mockObsStorage = createMockObservabilityStorage();
-      const mockMastra = {
-        getStorage: () => ({ stores: { observability: mockObsStorage } }),
-      } as any;
+      const mockMastra = createMockMastra(mockObsStorage);
 
       for (const scope of ['run', 'resource', 'thread'] as const) {
         const guard = new CostGuardProcessor({ maxCost: 1.0, scope });
@@ -664,10 +682,11 @@ describe('CostGuardProcessor', () => {
       const obsStorage = createMockObservabilityStorage({ inputCost: 0.4, outputCost: 0.2, costUnit: 'usd' });
       const guard = createRunScopeGuard(0.5, obsStorage, { strategy: 'warn' });
       guard.onViolation = onViolation;
-
-      const spy = vi.spyOn(console, 'warn').mockImplementation(() => {
-        callOrder.push('warn');
-      });
+      (guard as any).logger = {
+        warn: () => {
+          callOrder.push('warn');
+        },
+      };
 
       const args = createInputStepArgs({
         stepNumber: 1,
@@ -676,8 +695,6 @@ describe('CostGuardProcessor', () => {
 
       await guard.processInputStep(args);
       expect(callOrder).toEqual(['violation', 'warn']);
-
-      spy.mockRestore();
     });
   });
 
@@ -1075,6 +1092,87 @@ describe('CostGuardProcessor', () => {
           filters: expect.objectContaining({ traceId: 'trace-run-memory' }),
         }),
       );
+    });
+  });
+
+  describe('hardening (single query, logger, precision)', () => {
+    it('queries both token metric names in a single getMetricAggregate call', async () => {
+      const obsStorage = createMockObservabilityStorage({ inputCost: 0.1, outputCost: 0.1, costUnit: 'usd' });
+      const guard = createRunScopeGuard(10.0, obsStorage);
+
+      const args = createInputStepArgs({
+        stepNumber: 1,
+        tracing: createMockTracing('trace-single-query') as any,
+      });
+
+      await guard.processInputStep(args);
+
+      expect(obsStorage.getMetricAggregate).toHaveBeenCalledTimes(1);
+      expect(obsStorage.getMetricAggregate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: ['mastra_model_total_input_tokens', 'mastra_model_total_output_tokens'],
+          aggregation: 'sum',
+        }),
+      );
+    });
+
+    it('logs through the Mastra logger when the cost query fails (fail-open)', async () => {
+      const obsStorage = {
+        getMetricAggregate: vi.fn().mockRejectedValue(new Error('storage down')),
+      } as unknown as ObservabilityStorage;
+      const guard = new CostGuardProcessor({ maxCost: 0.5, scope: 'run' });
+      guard.__registerMastra(createMockMastra(obsStorage));
+
+      const args = createInputStepArgs({
+        stepNumber: 1,
+        tracing: createMockTracing('trace-query-fail') as any,
+      });
+
+      // Fail-open: step proceeds
+      await expect(guard.processInputStep(args)).resolves.toBeUndefined();
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('cost query failed'),
+        expect.objectContaining({ error: expect.any(Error) }),
+      );
+    });
+
+    it('normalizes float precision artifacts in violation messages', async () => {
+      // 0.1 + 0.2 = 0.30000000000000004 in IEEE 754
+      const obsStorage = createMockObservabilityStorage({ inputCost: 0.1, outputCost: 0.2, costUnit: 'usd' });
+      const guard = createRunScopeGuard(0.25, obsStorage);
+
+      const args = createInputStepArgs({
+        stepNumber: 1,
+        tracing: createMockTracing('trace-precision') as any,
+      });
+
+      try {
+        await guard.processInputStep(args);
+        expect.fail('Expected TripWire to be thrown');
+      } catch (error) {
+        const tripwire = error as TripWire<any>;
+        expect(tripwire.message).toContain('0.3');
+        expect(tripwire.message).not.toContain('0.30000000000000004');
+      }
+    });
+
+    it('logs a warning when onViolation throws and still logs the violation warning', async () => {
+      const obsStorage = createMockObservabilityStorage({ inputCost: 0.4, outputCost: 0.2, costUnit: 'usd' });
+      const guard = new CostGuardProcessor({ maxCost: 0.5, scope: 'run', strategy: 'warn' });
+      guard.__registerMastra(createMockMastra(obsStorage));
+      guard.onViolation = vi.fn().mockRejectedValue(new Error('callback boom'));
+
+      const args = createInputStepArgs({
+        stepNumber: 1,
+        tracing: createMockTracing('trace-cb-throw') as any,
+      });
+
+      await expect(guard.processInputStep(args)).resolves.toBeUndefined();
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('onViolation callback threw'),
+        expect.objectContaining({ error: expect.any(Error) }),
+      );
+      expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining('cost limit exceeded'));
     });
   });
 });

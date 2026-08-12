@@ -1,3 +1,4 @@
+import type { IMastraLogger } from '../../logger';
 import type { Mastra } from '../../mastra';
 import { parseMemoryRequestContext } from '../../memory/types';
 import { EntityType } from '../../observability';
@@ -112,6 +113,10 @@ const WINDOW_MS: Record<CostWindow, number> = {
  * Fast-running agents may exceed the configured limit before metrics are available
  * for query. Treat `maxCost` as a best-effort threshold, not a hard ceiling.
  *
+ * **Important:** Cost is attributed via the `entityType: 'agent'` metric filter.
+ * Model calls made outside an agent run — for example direct model usage in
+ * workflow steps — have no agent parent span and are NOT counted by this guard.
+ *
  * Uses `processInputStep` to check the cost limit before each LLM call.
  * Queries the observability storage APIs (`getMetricAggregate`) to retrieve
  * estimated cost. For 'resource' and 'thread' scopes, aggregates cost across
@@ -163,6 +168,7 @@ export class CostGuardProcessor implements Processor<'cost-guard', CostGuardTrip
   private messageTemplate: string;
   public onViolation?: (violation: ProcessorViolation) => void | Promise<void>;
   private observabilityStorage?: ObservabilityStorage;
+  private logger?: IMastraLogger;
 
   constructor(options: CostGuardOptions) {
     if (options.maxCost <= 0) {
@@ -186,6 +192,7 @@ export class CostGuardProcessor implements Processor<'cost-guard', CostGuardTrip
       );
     }
     this.observabilityStorage = obsStorage;
+    this.logger = mastra.getLogger();
   }
 
   private resolveScopeFilter(
@@ -237,35 +244,28 @@ export class CostGuardProcessor implements Processor<'cost-guard', CostGuardTrip
         filters['timestamp'] = this.getWindowTimestamp();
       }
 
-      const [inputResult, outputResult] = await Promise.all([
-        this.observabilityStorage.getMetricAggregate({
-          name: ['mastra_model_total_input_tokens'],
-          aggregation: 'sum',
-          filters,
-        }),
-        this.observabilityStorage.getMetricAggregate({
-          name: ['mastra_model_total_output_tokens'],
-          aggregation: 'sum',
-          filters,
-        }),
-      ]);
+      const result = await this.observabilityStorage.getMetricAggregate({
+        name: ['mastra_model_total_input_tokens', 'mastra_model_total_output_tokens'],
+        aggregation: 'sum',
+        filters,
+      });
 
-      const inputCost = inputResult.estimatedCost ?? 0;
-      const outputCost = outputResult.estimatedCost ?? 0;
-      const totalCost = inputCost + outputCost;
-      const costUnit = inputResult.costUnit ?? outputResult.costUnit ?? null;
+      const totalCost = result.estimatedCost ?? 0;
 
       return {
         estimatedCost: totalCost > 0 ? totalCost : null,
-        costUnit,
+        costUnit: result.costUnit ?? null,
       };
-    } catch {
+    } catch (error) {
+      this.logger?.warn('CostGuardProcessor: cost query failed; allowing step (fail-open)', { error });
       return { estimatedCost: null, costUnit: null };
     }
   }
 
   private formatMessage(usage: number, limit: number): string {
-    return this.messageTemplate.replace('{usage}', String(usage)).replace('{limit}', String(limit));
+    // Normalize float precision artifacts (e.g. 0.30000000000000004 → 0.3)
+    const format = (value: number) => String(Number(value.toFixed(6)));
+    return this.messageTemplate.replace('{usage}', format(usage)).replace('{limit}', format(limit));
   }
 
   async processInputStep(args: ProcessInputStepArgs<CostGuardTripwireMetadata>): Promise<void> {
@@ -294,11 +294,12 @@ export class CostGuardProcessor implements Processor<'cost-guard', CostGuardTrip
               scopeKey,
             },
           });
-        } catch {
+        } catch (error) {
           // onViolation errors should not prevent the guard from functioning
+          this.logger?.warn('CostGuardProcessor: onViolation callback threw', { error });
         }
       }
-      console.warn(`[CostGuardProcessor] ${message}`);
+      this.logger?.warn(`CostGuardProcessor: ${message}`);
       return;
     }
 
