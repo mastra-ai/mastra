@@ -235,6 +235,14 @@ export {
   SUBCONSCIOUS_PINS_STATE_ID,
 } from './pinned';
 export type { PinnedKnowledgeSet, PinnedToolsOptions } from './pinned';
+export {
+  PinnedStateProcessor,
+  applyPinOps,
+  diffPins,
+  effectivePriorPins,
+  stablePinsCacheKey,
+} from './pinned-state-processor';
+export type { PinDeltaOp, PinEntry, PinnedStateProcessorDeps } from './pinned-state-processor';
 export { createKnowledgeWriteTools } from './knowledge-write-tools';
 export type { KnowledgeWriteToolsOptions } from './knowledge-write-tools';
 export { KnowledgeSemanticIndexCoordinator, StaleKnowledgeSemanticIndexError } from './semantic-index';
