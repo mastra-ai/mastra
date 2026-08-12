@@ -1,7 +1,7 @@
 import Link from '@docusaurus/Link'
 import { cn } from '@site/src/lib/utils'
 import type { IntegrationItem } from './data'
-import { getIntegrationItems } from './data'
+import { getIntegrationItemHref, getIntegrationItemKey, getIntegrationItems } from './data'
 import styles from './integrations.module.css'
 
 interface IntegrationGridProps {
@@ -48,8 +48,8 @@ export function IntegrationItemsGrid({ items, columns = 3 }: IntegrationItemsGri
       )}
     >
       {items.map(item => (
-        <li key={item.id} className="mt-0!">
-          <Link className="block h-full w-full no-underline!" to={`/integrations/${item.id}`}>
+        <li key={getIntegrationItemKey(item)} className="mt-0!">
+          <Link className="block h-full w-full no-underline!" to={getIntegrationItemHref(item)}>
             <div
               data-slot="card"
               className="text-card-foreground flex h-full w-full cursor-pointer items-center gap-4 rounded-xl border border-(--border) bg-(--mastra-surface-1)/20 px-4 py-4 shadow-none transition-colors hover:bg-(--mastra-surface-1)/70 dark:border-(--border) dark:hover:bg-(--mastra-surface-2)"

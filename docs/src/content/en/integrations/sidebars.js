@@ -485,6 +485,12 @@ const sidebars = {
           customProps: { icon: 'https://cdn.simpleicons.org/kubernetes?viewbox=auto&size=28' },
         },
         {
+          type: 'link',
+          label: 'Mastra',
+          href: '/docs/mastra-platform/deploy',
+          customProps: { icon: '/img/integrations/mastra.svg', customCSS: 'dark:invert' },
+        },
+        {
           type: 'doc',
           id: 'deploy/netlify',
           label: 'Netlify',

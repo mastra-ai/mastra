@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { Input } from '@site/src/components/ui/input'
 import { Search as SearchIcon } from 'lucide-react'
-import { integrationCategories } from './data'
+import { getIntegrationItemKey, integrationCategories } from './data'
 import { IntegrationItemsGrid } from './grid'
 
 export default function IntegrationsPage() {
@@ -10,7 +10,9 @@ export default function IntegrationsPage() {
   const filteredCategories = integrationCategories
     .map(category => ({
       ...category,
-      items: category.items.filter(item => `${item.label} ${item.id}`.toLowerCase().includes(normalizedQuery)),
+      items: category.items.filter(item =>
+        `${item.label} ${getIntegrationItemKey(item)}`.toLowerCase().includes(normalizedQuery),
+      ),
     }))
     .filter(category => category.items.length > 0)
 

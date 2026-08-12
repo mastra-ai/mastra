@@ -1,15 +1,26 @@
 import sidebar from '../../content/en/integrations/sidebars'
 
-export interface IntegrationItem {
+interface IntegrationCustomProps {
+  icon?: string
+  iconDark?: string
+  customCSS?: string
+}
+
+interface IntegrationDocItem {
   type: 'doc'
   id: string
   label: string
-  customProps?: {
-    icon?: string
-    iconDark?: string
-    customCSS?: string
-  }
+  customProps?: IntegrationCustomProps
 }
+
+interface IntegrationLinkItem {
+  type: 'link'
+  href: string
+  label: string
+  customProps?: IntegrationCustomProps
+}
+
+export type IntegrationItem = IntegrationDocItem | IntegrationLinkItem
 
 export interface IntegrationCategory {
   type: 'category'
@@ -25,21 +36,26 @@ function isOptionalString(value: unknown): boolean {
   return value === undefined || typeof value === 'string'
 }
 
+function hasIntegrationCustomProps(value: Record<string, unknown>): boolean {
+  return (
+    value.customProps === undefined ||
+    (isRecord(value.customProps) &&
+      isOptionalString(value.customProps.icon) &&
+      isOptionalString(value.customProps.iconDark) &&
+      isOptionalString(value.customProps.customCSS))
+  )
+}
+
 function isIntegrationItem(value: unknown): value is IntegrationItem {
-  if (!isRecord(value) || value.type !== 'doc' || typeof value.id !== 'string' || typeof value.label !== 'string') {
+  if (!isRecord(value) || typeof value.label !== 'string' || !hasIntegrationCustomProps(value)) {
     return false
   }
 
-  if (value.customProps === undefined) {
-    return true
+  if (value.type === 'doc') {
+    return typeof value.id === 'string'
   }
 
-  return (
-    isRecord(value.customProps) &&
-    isOptionalString(value.customProps.icon) &&
-    isOptionalString(value.customProps.iconDark) &&
-    isOptionalString(value.customProps.customCSS)
-  )
+  return value.type === 'link' && typeof value.href === 'string'
 }
 
 function isIntegrationCategory(value: unknown): value is IntegrationCategory {
@@ -52,9 +68,19 @@ function isIntegrationCategory(value: unknown): value is IntegrationCategory {
   )
 }
 
-export const integrationCategories = Array.isArray(sidebar.integrationsSidebar)
-  ? sidebar.integrationsSidebar.filter(isIntegrationCategory)
+const integrationsSidebar: unknown = sidebar.integrationsSidebar
+
+export const integrationCategories = Array.isArray(integrationsSidebar)
+  ? integrationsSidebar.filter(isIntegrationCategory)
   : []
+
+export function getIntegrationItemKey(item: IntegrationItem): string {
+  return item.type === 'doc' ? item.id : item.href
+}
+
+export function getIntegrationItemHref(item: IntegrationItem): string {
+  return item.type === 'doc' ? `/integrations/${item.id}` : item.href
+}
 
 export function getIntegrationItems(
   section: string,
@@ -64,13 +90,13 @@ export function getIntegrationItems(
   const category = integrationCategories.find(candidate => candidate.label === section)
   if (!category) return []
 
-  const blockedIds = new Set(blocklist)
+  const blockedKeys = new Set(blocklist)
   const items = allowlist
-    ? allowlist.flatMap(id => {
-        const item = category.items.find(candidate => candidate.id === id)
+    ? allowlist.flatMap(key => {
+        const item = category.items.find(candidate => getIntegrationItemKey(candidate) === key)
         return item ? [item] : []
       })
     : category.items
 
-  return items.filter(item => !blockedIds.has(item.id))
+  return items.filter(item => !blockedKeys.has(getIntegrationItemKey(item)))
 }
