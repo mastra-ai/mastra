@@ -340,6 +340,7 @@ function BoardContent({
                         key={candidate.sourceKey}
                         candidate={candidate}
                         pendingRunRoles={runs.pendingRolesForSource(candidate.sourceKey)}
+                        preparing={runs.preparingForSource(candidate.sourceKey)}
                         triageStarting={issue !== undefined && runs.triagingIssueNumbers.has(issue.number)}
                         disabled={!runs.enabled}
                         onRun={(action, prompt) => runs.startCandidateRun(candidate, action, prompt)}

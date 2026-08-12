@@ -1,7 +1,11 @@
+import { Button } from '@mastra/playground-ui/components/Button';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { cn } from '@mastra/playground-ui/utils/cn';
+import { MessageSquare, Play, TriangleAlert } from 'lucide-react';
 import type { ReactElement } from 'react';
 
+import type { BoardCardStatus } from '../boardCardStatus';
 import { HIDDEN_CARD_LABELS, SOURCE_LABELS } from '../boardItems';
 import type { WorkItemSource } from '../services/workItems';
 
@@ -33,6 +37,83 @@ export function CardTitleTooltip({ title, children }: { title: string; children:
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>
+  );
+}
+
+/** The card's one status row: a hover hint when idle, a live region once something is happening. */
+export function CardStatus({
+  status,
+  onRetry,
+  retrying,
+}: {
+  status: BoardCardStatus;
+  /** Re-queues the failed rule effect; omitted when nothing is retryable. */
+  onRetry?: () => void;
+  retrying?: boolean;
+}) {
+  if (status.kind === 'idle') {
+    const Icon = status.affordance === 'open' ? MessageSquare : Play;
+    return (
+      <span
+        aria-hidden
+        className="text-ui-xs text-icon3 group-hover:text-icon5 group-focus-within:text-icon5 flex items-center gap-1.5 transition-colors motion-reduce:transition-none"
+      >
+        <Icon size={11} aria-hidden />
+        {status.label}
+      </span>
+    );
+  }
+
+  if (status.kind === 'busy') {
+    return (
+      <span role="status" aria-live="polite" className="text-ui-xs text-icon4 flex items-center gap-1.5">
+        <Spinner size="sm" aria-hidden className="size-3" />
+        {status.label}
+      </span>
+    );
+  }
+
+  const message = (
+    <span
+      role="alert"
+      tabIndex={status.detail === undefined ? undefined : 0}
+      className={cn(
+        'text-ui-xs text-error flex min-w-0 items-start gap-1.5',
+        status.detail !== undefined &&
+          'focus-visible:outline-accent1 relative z-20 cursor-help underline decoration-dotted underline-offset-2 outline-none focus-visible:outline-2',
+      )}
+    >
+      <TriangleAlert size={11} aria-hidden className="mt-0.5 shrink-0" />
+      <span className="min-w-0 wrap-anywhere">{status.label}</span>
+    </span>
+  );
+
+  return (
+    <div className="flex items-start justify-between gap-2">
+      {status.detail === undefined ? (
+        message
+      ) : (
+        // Raw failure text stays one hover away instead of costing a row.
+        <Tooltip>
+          <TooltipTrigger render={message} />
+          <TooltipContent side="top" className="max-w-80">
+            <span className="wrap-anywhere whitespace-pre-wrap">{status.detail}</span>
+          </TooltipContent>
+        </Tooltip>
+      )}
+      {onRetry && (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="relative z-20"
+          disabled={retrying}
+          onClick={onRetry}
+        >
+          {retrying ? 'Retrying…' : 'Retry'}
+        </Button>
+      )}
+    </div>
   );
 }
 

@@ -166,7 +166,7 @@ describe('Board card click starts the default run', () => {
     });
   });
 
-  it('starts the default run with its invocation when a candidate card title is clicked', async () => {
+  it('starts the default run with its invocation when a candidate card is clicked', async () => {
     const { startRequests } = stubBoardEndpoints({
       issues: [
         {
@@ -184,7 +184,9 @@ describe('Board card click starts the default run', () => {
     const user = userEvent.setup();
     renderWorkBoard();
 
-    await user.click(await screen.findByRole('button', { name: 'Issue: Crash on logout' }));
+    // Same click target and same wording as a filed card: the candidate names
+    // the run it starts, not the record it happens to create.
+    await user.click(await screen.findByRole('button', { name: 'Investigate Crash on logout' }));
 
     await waitFor(() => expect(startRequests).toHaveLength(1));
     expect(startRequests[0]).toMatchObject({

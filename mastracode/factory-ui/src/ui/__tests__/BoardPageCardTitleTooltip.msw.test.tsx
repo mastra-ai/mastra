@@ -62,7 +62,7 @@ const failedDecision: FactoryDecisionSummary = {
   id: 'decision-1',
   evaluationId: 'evaluation-1',
   workItemId: issueWorkItem.id,
-  type: 'startReview',
+  type: 'invokeSkill',
   status: 'failed',
   attempts: 1,
   lastError: DECISION_ERROR,
@@ -130,18 +130,18 @@ function renderWorkBoard() {
 }
 
 describe('Board card tooltips', () => {
-  it('shows failed rule effects as a compact badge with the error on hover', async () => {
+  it('names what the failed rule effect was doing and keeps its raw error one hover away', async () => {
     stubBoardEndpoints([failedDecision]);
     const user = userEvent.setup();
     renderWorkBoard();
 
-    const errorBadge = await screen.findByRole('alert', { name: `Rule effect failed: ${DECISION_ERROR}` });
-    expect(errorBadge).toHaveTextContent('Error');
-    expect(screen.queryByText(`Rule effect failed: ${DECISION_ERROR}`)).not.toBeInTheDocument();
+    const failure = await screen.findByRole('alert');
+    expect(failure).toHaveTextContent('Automated run could not start');
+    expect(screen.queryByText(DECISION_ERROR)).not.toBeInTheDocument();
 
-    await user.hover(errorBadge);
+    await user.hover(failure);
 
-    expect(await screen.findByText(`Rule effect failed: ${DECISION_ERROR}`)).toBeVisible();
+    expect(await screen.findByText(DECISION_ERROR)).toBeVisible();
   });
 
   it('reveals the full work-item title on hover', async () => {

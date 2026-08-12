@@ -300,6 +300,43 @@ describe('Board card pending states', () => {
     await waitFor(() => expect(screen.queryByText('Moving to Planning…')).not.toBeInTheDocument());
   });
 
+  it('re-queues a failed rule effect from the card', async () => {
+    stubBoardEndpoints();
+    const retried: string[] = [];
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/decisions`, () =>
+        HttpResponse.json({
+          decisions: [
+            {
+              id: 'decision-1',
+              evaluationId: 'evaluation-1',
+              workItemId: ITEM_ID,
+              type: 'invokeSkill',
+              status: 'failed',
+              attempts: 5,
+              lastError: 'Command failed with ENOENT',
+              createdAt: '2026-07-18T00:00:00.000Z',
+              updatedAt: '2026-07-18T00:01:00.000Z',
+              completedAt: null,
+            },
+          ],
+        }),
+      ),
+      http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/decisions/decision-1/retry`, () => {
+        retried.push('decision-1');
+        return HttpResponse.json({ decision: { id: 'decision-1', status: 'retry' } });
+      }),
+    );
+    const user = userEvent.setup();
+    renderWorkBoard();
+
+    // A terminal rule effect is only recoverable from the card, so the failure
+    // row has to carry the action out of it.
+    await user.click(await screen.findByRole('button', { name: 'Retry' }));
+
+    await waitFor(() => expect(retried).toEqual(['decision-1']));
+  });
+
   it('uses the whole card as the thread link without rendering a separate thread action', async () => {
     stubBoardEndpoints();
     renderWorkBoard();
@@ -556,7 +593,7 @@ describe('Board card pending states', () => {
     const user = userEvent.setup();
     renderWorkBoard();
 
-    await user.click(await screen.findByRole('button', { name: 'More actions for Unfiled GitHub intake issue' }));
+    await user.click(await screen.findByRole('button', { name: 'Actions for Unfiled GitHub intake issue' }));
     const githubLink = await screen.findByRole('menuitem', { name: 'Open in GitHub' });
     expect(githubLink).toHaveAttribute('href', 'https://github.com/acme/app/issues/43');
     expect(githubLink).toHaveAttribute('target', '_blank');
