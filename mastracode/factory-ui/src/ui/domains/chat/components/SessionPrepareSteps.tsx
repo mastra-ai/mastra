@@ -19,14 +19,14 @@ import './session-prepare-steps.css';
  */
 type GroupId = 'preparing-sandbox' | 'cloning-repository' | 'starting-session';
 
-const PHASE_TO_GROUP: Record<PrepareProgress['phase'], GroupId | 'done'> = {
+const PHASE_TO_GROUP: Record<PrepareProgress['phase'], GroupId> = {
   reattaching: 'preparing-sandbox',
   provisioning: 'preparing-sandbox',
   'preparing-workspace': 'preparing-sandbox',
   cloning: 'cloning-repository',
   pulling: 'cloning-repository',
   finalizing: 'starting-session',
-  done: 'done',
+  done: 'starting-session',
 };
 
 const GROUP_ORDER: GroupId[] = ['preparing-sandbox', 'cloning-repository', 'starting-session'];
@@ -57,8 +57,7 @@ export function SessionPrepareSteps() {
   const messagesInitializing = useChatMessagesInitializing();
 
   const observedPhase = sandboxProgress?.phase;
-  const observedGroup: GroupId | undefined =
-    observedPhase && observedPhase !== 'done' ? (PHASE_TO_GROUP[observedPhase] as GroupId) : undefined;
+  const observedGroup = observedPhase ? PHASE_TO_GROUP[observedPhase] : undefined;
   const activeDescription = observedPhase ? PHASE_DESCRIPTION[observedPhase] : 'Starting…';
 
   // Post-ensure but pre-transcript: the sandbox step is done, we're waiting
@@ -92,7 +91,7 @@ export function SessionPrepareSteps() {
       role="status"
       aria-label="Preparing session"
       data-testid="session-prepare-steps"
-      className="session-prepare-steps flex flex-1 items-center justify-center px-4 py-8"
+      className="session-prepare-steps flex flex-1 items-center justify-center px-4 py-8 [&_p]:whitespace-nowrap"
     >
       <div className="flex w-full max-w-md flex-col gap-1">
         {items.map(({ step, position }) => (

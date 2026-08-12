@@ -4,34 +4,45 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useInitializingPlaceholder } from './useInitializingPlaceholder';
 
-type MediaQueryListStub = {
+class TestMediaQueryListEvent extends Event implements MediaQueryListEvent {
+  readonly matches: boolean;
+  readonly media: string;
+
+  constructor(matches: boolean, media: string) {
+    super('change');
+    this.matches = matches;
+    this.media = media;
+  }
+}
+
+class TestMediaQueryList extends EventTarget implements MediaQueryList {
   matches: boolean;
-  media: string;
-  addEventListener: () => void;
-  removeEventListener: () => void;
-  addListener: () => void;
-  removeListener: () => void;
-  dispatchEvent: () => boolean;
-  onchange: null;
-};
+  readonly media = '(prefers-reduced-motion: reduce)';
+  onchange: ((this: MediaQueryList, ev: MediaQueryListEvent) => unknown) | null = null;
+
+  constructor(matches: boolean) {
+    super();
+    this.matches = matches;
+  }
+
+  addListener() {}
+
+  removeListener() {}
+
+  setMatches(next: boolean) {
+    this.matches = next;
+    this.dispatchEvent(new TestMediaQueryListEvent(next, this.media));
+  }
+}
 
 function stubMatchMedia(matches: boolean) {
-  const impl = (query: string): MediaQueryListStub => ({
-    matches,
-    media: query,
-    addEventListener: () => {},
-    removeEventListener: () => {},
-    addListener: () => {},
-    removeListener: () => {},
-    dispatchEvent: () => true,
-    onchange: null,
-  });
-  // jsdom provides window.matchMedia in some setups; ensure our stub is used.
+  const mediaQuery = new TestMediaQueryList(matches);
   Object.defineProperty(window, 'matchMedia', {
     configurable: true,
     writable: true,
-    value: impl,
+    value: () => mediaQuery,
   });
+  return mediaQuery;
 }
 
 describe('useInitializingPlaceholder', () => {
@@ -86,5 +97,18 @@ describe('useInitializingPlaceholder', () => {
     const { result } = renderHook(() => useInitializingPlaceholder(true, true));
     expect(result.current).toBe('Initializing work session...');
     expect(setIntervalSpy).not.toHaveBeenCalled();
+  });
+
+  it('reacts when the reduced-motion preference changes during initialization', () => {
+    const mediaQuery = stubMatchMedia(false);
+    const setIntervalSpy = vi.spyOn(globalThis, 'setInterval');
+    const { result } = renderHook(() => useInitializingPlaceholder(true, true));
+    expect(setIntervalSpy).toHaveBeenCalledTimes(1);
+
+    act(() => mediaQuery.setMatches(true));
+    expect(result.current).toBe('Initializing work session...');
+
+    act(() => mediaQuery.setMatches(false));
+    expect(setIntervalSpy).toHaveBeenCalledTimes(2);
   });
 });

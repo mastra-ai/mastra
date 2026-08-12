@@ -4,9 +4,9 @@ const BASE = 'Initializing work session';
 const CYCLE = ['', '.', '..', '...'] as const;
 const REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)';
 
-function prefersReducedMotion(): boolean {
-  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return false;
-  return window.matchMedia(REDUCED_MOTION_QUERY).matches;
+function getReducedMotionQuery(): MediaQueryList | undefined {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return undefined;
+  return window.matchMedia(REDUCED_MOTION_QUERY);
 }
 
 /**
@@ -20,15 +20,23 @@ function prefersReducedMotion(): boolean {
 export function useInitializingPlaceholder(sandboxPreparing: boolean, isEmpty: boolean): string | undefined {
   const active = sandboxPreparing && isEmpty;
   const [tick, setTick] = useState(0);
+  const [reducedMotion, setReducedMotion] = useState(() => getReducedMotionQuery()?.matches ?? false);
 
   useEffect(() => {
-    if (!active) return;
-    if (prefersReducedMotion()) return;
+    const query = getReducedMotionQuery();
+    if (!query) return;
+    const onChange = (event: MediaQueryListEvent) => setReducedMotion(event.matches);
+    query.addEventListener('change', onChange);
+    return () => query.removeEventListener('change', onChange);
+  }, []);
+
+  useEffect(() => {
+    if (!active || reducedMotion) return;
     const id = setInterval(() => setTick(t => (t + 1) % CYCLE.length), 500);
     return () => clearInterval(id);
-  }, [active]);
+  }, [active, reducedMotion]);
 
   if (!active) return undefined;
-  if (prefersReducedMotion()) return `${BASE}${CYCLE[CYCLE.length - 1]}`;
+  if (reducedMotion) return `${BASE}${CYCLE[CYCLE.length - 1]}`;
   return `${BASE}${CYCLE[tick]}`;
 }

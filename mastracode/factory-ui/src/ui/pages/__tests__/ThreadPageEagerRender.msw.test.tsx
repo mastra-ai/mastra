@@ -6,7 +6,7 @@
  * transcript region shows the `<SessionPrepareSteps>` step loader driven by
  * the SSE progress phases, and the Send button stays disabled.
  */
-import { screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
@@ -36,18 +36,23 @@ const workspaceSession = {
   updatedAt: '2026-07-23T00:00:00.000Z',
 };
 
-interface EnsureController {
+interface ThreadRouteController {
   emitProgress(phase: string, message: string): Promise<void>;
-  complete(): Promise<void>;
+  completeEnsure(): Promise<void>;
+  completeMessages(): void;
 }
 
-/** Stub the thread route's network surface, exposing a controllable SSE ensure stream. */
-function stubThreadRoute(): EnsureController {
+/** Stub the thread route's network surface, exposing controllable ensure and messages responses. */
+function stubThreadRoute(): ThreadRouteController {
   const encoder = new TextEncoder();
   let streamController: ReadableStreamDefaultController<Uint8Array> | undefined;
   let resolveStreamReady = () => {};
+  let resolveMessages = () => {};
   const streamReady = new Promise<void>(resolve => {
     resolveStreamReady = resolve;
+  });
+  const messagesReady = new Promise<void>(resolve => {
+    resolveMessages = resolve;
   });
 
   server.use(
@@ -124,7 +129,10 @@ function stubThreadRoute(): EnsureController {
     ),
     http.get(`${AC}/sessions/:resourceId/permissions`, () => HttpResponse.json({})),
     http.get(`${AC}/sessions/:resourceId/threads`, () => HttpResponse.json({ threads: [{ id: SESSION_ID }] })),
-    http.get(`${AC}/sessions/:resourceId/threads/:threadId/messages`, () => HttpResponse.json({ messages: [] })),
+    http.get(`${AC}/sessions/:resourceId/threads/:threadId/messages`, async () => {
+      await messagesReady;
+      return HttpResponse.json({ messages: [] });
+    }),
     http.get(`${AC}/modes`, () => HttpResponse.json({ modes: [] })),
     http.get(`${TEST_BASE_URL}/web/workspace/rendered/list`, () =>
       HttpResponse.json({ workspacePath: `/ws/${SESSION_ID}`, root: '.artifacts', rootPath: '', entries: [] }),
@@ -137,7 +145,7 @@ function stubThreadRoute(): EnsureController {
       const payload = JSON.stringify({ phase, message });
       streamController?.enqueue(encoder.encode(`event: progress\ndata: ${payload}\n\n`));
     },
-    async complete() {
+    async completeEnsure() {
       await streamReady;
       const payload = JSON.stringify({
         resourceId: SESSION_ID,
@@ -148,6 +156,9 @@ function stubThreadRoute(): EnsureController {
       });
       streamController?.enqueue(encoder.encode(`event: done\ndata: ${payload}\n\n`));
       streamController?.close();
+    },
+    completeMessages() {
+      resolveMessages();
     },
   };
 }
@@ -194,8 +205,14 @@ describe('ThreadPage eager render during /ensure', () => {
     await waitFor(() => expect(screen.queryByText('Provisioning…')).not.toBeInTheDocument());
     expect(screen.queryByText('Cloning octo/hello…')).not.toBeInTheDocument();
 
-    // Resolve /ensure — the step loader unmounts.
-    await ensure.complete();
+    // Resolve /ensure while messages are still held: the loader stays mounted,
+    // advances to its final step, and Send remains disabled.
+    await ensure.completeEnsure();
+    await waitFor(() => expect(screen.getByText('Loading messages…')).toBeInTheDocument());
+    expect(screen.getByRole('status', { name: 'Preparing session' })).toBeInTheDocument();
+    expect(sendButton).toBeDisabled();
+
+    ensure.completeMessages();
     await waitFor(() => expect(screen.queryByRole('status', { name: 'Preparing session' })).not.toBeInTheDocument());
   });
 
@@ -205,8 +222,8 @@ describe('ThreadPage eager render during /ensure', () => {
 
     // Composer mounts eagerly.
     const composerRegion = await screen.findByRole('region', { name: 'Thread composer' });
-    const textarea = composerRegion.querySelector('textarea[aria-label="Message"]') as HTMLTextAreaElement;
-    expect(textarea).not.toBeNull();
+    const textarea = screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Message' });
+    expect(composerRegion).toContainElement(textarea);
 
     // Textarea is fully typable: not disabled, not readOnly, focusable.
     expect(textarea).not.toBeDisabled();
@@ -215,26 +232,38 @@ describe('ThreadPage eager render during /ensure', () => {
     expect(document.activeElement).toBe(textarea);
 
     // Ring is spinning (data-busy="true") during preparing.
-    const ring = composerRegion.querySelector('[data-slot="composer-ring"]') as HTMLElement;
-    expect(ring).not.toBeNull();
-    expect(ring.getAttribute('data-busy')).toBe('true');
+    const ring = composerRegion.querySelector<HTMLElement>('[data-slot="composer-ring"]');
+    if (!ring) throw new Error('Composer ring not found');
+    expect(ring).toHaveAttribute('data-busy', 'true');
 
     // Placeholder starts with the initializing prefix while empty.
     expect(textarea.placeholder.startsWith('Initializing work session')).toBe(true);
 
-    // Send button has the "Initializing session…" title and is disabled.
+    // Send and every image-attachment entry point stay disabled while /ensure
+    // is pending, without disabling text entry.
     const sendButton = screen.getByRole('button', { name: 'Send message' });
     expect(sendButton).toBeDisabled();
     expect(sendButton).toHaveAttribute('title', 'Initializing session…');
+    const image = new File(['png'], 'diagram.png', { type: 'image/png' });
+    fireEvent.drop(composerRegion.querySelector('form') ?? composerRegion, { dataTransfer: { files: [image] } });
+    fireEvent.paste(textarea, { clipboardData: { files: [image] } });
+    expect(screen.queryByRole('button', { name: 'Remove image' })).not.toBeInTheDocument();
 
     // User types a draft during preparing.
     const user = userEvent.setup();
     await user.type(textarea, 'my draft prompt');
     expect(textarea.value).toBe('my draft prompt');
 
-    // Resolve /ensure — draft is preserved, ring stops spinning, placeholder
-    // reverts, Send tooltip clears, Send becomes enabled.
-    await ensure.complete();
+    // Resolve /ensure first — the draft remains while the initial messages
+    // request is still held and the final loader step stays active.
+    await ensure.completeEnsure();
+    await waitFor(() => expect(screen.getByText('Loading messages…')).toBeInTheDocument());
+    expect(textarea.value).toBe('my draft prompt');
+    expect(sendButton).toBeDisabled();
+
+    // Once messages resolve, the loader unmounts, ring stops spinning,
+    // placeholder reverts, Send tooltip clears, and Send becomes enabled.
+    ensure.completeMessages();
     await waitFor(() => expect(screen.queryByRole('status', { name: 'Preparing session' })).not.toBeInTheDocument());
     // Draft survives the flag flip without remount.
     expect(textarea.value).toBe('my draft prompt');

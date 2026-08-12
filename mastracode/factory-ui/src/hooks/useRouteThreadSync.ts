@@ -95,8 +95,8 @@ export function useRouteThreadSync() {
     const sessionKeyChanged = previousSessionKey.current !== undefined && previousSessionKey.current !== sessionKey;
     previousSessionKey.current = sessionKey;
     latestRouteThreadId.current = routeThreadId;
-    if (!routeThreadId || status !== 'ready' || !threadsQuery.isSuccess) return;
+    if (!routeThreadId || !sessionEnabled || status !== 'ready' || !threadsQuery.isSuccess) return;
     if (threadId === routeThreadId) return;
     switchToRouteThread(routeThreadId, sessionKeyChanged);
-  }, [routeThreadId, sessionKey, status, threadId, threadsQuery.isSuccess, threadsQuery.data]);
+  }, [routeThreadId, sessionEnabled, sessionKey, status, threadId, threadsQuery.isSuccess, threadsQuery.data]);
 }

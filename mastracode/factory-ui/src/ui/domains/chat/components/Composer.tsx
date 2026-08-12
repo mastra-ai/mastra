@@ -93,19 +93,20 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
 
   const preparingThreadId = usePreparingThreadId();
   const createDraftSessionMutation = useCreateUserSessionFromDraft();
-
-  const { images, setImages, fileInputRef, removeImage, onPaste, onDrop, onFileInputChange } =
-    useComposerImages(onUserDraft);
-  const spotlightRef = useComposerSpotlight();
-  const modeSwitchPendingRef = useRef(false);
-  const suggestions = matchCommands(draft);
-  const showSuggestions = suggestions.length > 0;
-  const [activeSuggestion, setActiveSuggestion] = useState(0);
   const blocked = onUserDraft ? !factorySessionState : status !== 'ready' && !preparingThreadId;
   // typing stays free while the mode/model catalogs load; only creating the session commits to them
   const draftConfigNotReady =
     onUserDraft && (modesLoading || modesError !== undefined || modelLoading || modelError !== undefined);
   const attachDisabled = onUserDraft || blocked || chatPreparing;
+  const { images, setImages, fileInputRef, removeImage, onPaste, onDrop, onFileInputChange } = useComposerImages({
+    onUserDraft,
+    disabled: sandboxPreparing,
+  });
+  const spotlightRef = useComposerSpotlight();
+  const modeSwitchPendingRef = useRef(false);
+  const suggestions = matchCommands(draft);
+  const showSuggestions = suggestions.length > 0;
+  const [activeSuggestion, setActiveSuggestion] = useState(0);
   const disabled = createDraftSessionMutation.isPending || blocked;
   const sendDisabled = disabled || draftConfigNotReady || chatPreparing;
   // Keep the textarea fully typable while the session is preparing — the

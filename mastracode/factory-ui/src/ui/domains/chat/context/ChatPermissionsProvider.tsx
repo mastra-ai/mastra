@@ -29,7 +29,9 @@ export function ChatPermissionsProvider({ children }: ChatPermissionsProviderPro
     ...commonArgs,
     enabled: resourceReady || (resourceEnabled && Boolean(resourceId)),
   });
-  // Writes touch the sandbox — keep on sandboxReady (= sessionEnabled).
+  // In-session writes wait for sandboxReady (= sessionEnabled). The existing
+  // resourceEnabled fallback remains for session-less factory Settings pages,
+  // where the factory-level controller resource is already addressable.
   const setPermissionForCategoryMutation = useSetPermissionForCategoryMutation({
     ...commonArgs,
     enabled: sessionEnabled || (resourceEnabled && Boolean(resourceId)),

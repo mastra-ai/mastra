@@ -191,15 +191,29 @@ describe('ThreadPage loading shell', () => {
     expect(screen.getByRole('region', { name: 'Factory session' })).toBeInTheDocument();
   });
 
-  it('synchronizes the route while thread messages are still loading', async () => {
+  it('waits for sandbox readiness before synchronizing an existing route thread', async () => {
     const { sessionGate, onSwitchThread } = stubThreadRoute({
       initialThreadId: 'thread-1',
       threads: [{ id: 'thread-1' }, { id: ROUTE_THREAD_ID }],
     });
+    let resolveEnsure = () => {};
+    const ensureReady = new Promise<void>(resolve => {
+      resolveEnsure = resolve;
+    });
+    server.use(
+      http.post(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/ensure`, async () => {
+        await ensureReady;
+        return HttpResponse.json({ ok: true });
+      }),
+    );
     renderThreadRoute(`/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/${ROUTE_THREAD_ID}`);
     sessionGate.resolve();
 
     expect(await screen.findByRole('status', { name: 'Preparing session' })).toBeInTheDocument();
+    await new Promise(resolve => setTimeout(resolve, 25));
+    expect(onSwitchThread).not.toHaveBeenCalled();
+
+    resolveEnsure();
     await waitFor(() => expect(onSwitchThread).toHaveBeenCalledWith(ROUTE_THREAD_ID));
   });
 });

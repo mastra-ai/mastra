@@ -39,9 +39,9 @@ function renderWithProgress(sandboxProgress: PrepareProgress | undefined) {
 
 function stepByTitle(title: string) {
   const heading = screen.getByRole('heading', { name: title });
-  const stepRoot = heading.closest('[data-testid="session-prepare-step"]');
+  const stepRoot = heading.closest<HTMLElement>('[data-testid="session-prepare-step"]');
   if (!stepRoot) throw new Error(`Could not find step root for title ${title}`);
-  return stepRoot as HTMLElement;
+  return stepRoot;
 }
 
 describe('SessionPrepareSteps', () => {
@@ -102,6 +102,14 @@ describe('SessionPrepareSteps', () => {
     expect(stepByTitle('Cloning repository')).toHaveAttribute('data-status', 'success');
     expect(stepByTitle('Starting session')).toHaveAttribute('data-status', 'running');
     expect(within(stepByTitle('Starting session')).getByText('Finalizing…')).toBeInTheDocument();
+  });
+
+  it('keeps Starting session active when the done event arrives before readiness updates', () => {
+    renderWithProgress({ phase: 'done', message: 'Ready' });
+    expect(stepByTitle('Preparing sandbox')).toHaveAttribute('data-status', 'success');
+    expect(stepByTitle('Cloning repository')).toHaveAttribute('data-status', 'success');
+    expect(stepByTitle('Starting session')).toHaveAttribute('data-status', 'running');
+    expect(within(stepByTitle('Starting session')).getByText('Starting…')).toBeInTheDocument();
   });
 
   it('advances the active group as the observed phase crosses group boundaries', () => {
