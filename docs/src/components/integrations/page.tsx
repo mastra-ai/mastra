@@ -67,7 +67,7 @@ export default function IntegrationsPage() {
 
   return (
     <div>
-      <label className="relative mb-18 block" htmlFor="integration-search">
+      <label data-llms-ignore className="relative mb-18 block" htmlFor="integration-search">
         <span className="sr-only">Search integrations</span>
         <SearchIcon
           aria-hidden="true"
@@ -87,11 +87,17 @@ export default function IntegrationsPage() {
       {filteredCategories.map(category => (
         <section key={category.label} className="mb-12">
           <h2>{category.label}</h2>
-          <ul className={cn('grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4', styles.list)}>
+          <ul
+            data-slot="card-grid"
+            className={cn('grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4', styles.list)}
+          >
             {category.items.map(item => (
               <li key={item.id} className="mt-0!">
                 <Link className="block h-full w-full no-underline!" to={`/integrations/${item.id}`}>
-                  <div className="text-card-foreground flex h-full w-full cursor-pointer items-center gap-4 rounded-xl border border-(--border) bg-(--mastra-surface-1)/20 px-4 py-4 shadow-none transition-colors hover:bg-(--mastra-surface-1)/70 dark:border-(--border) dark:hover:bg-(--mastra-surface-2)">
+                  <div
+                    data-slot="card"
+                    className="text-card-foreground flex h-full w-full cursor-pointer items-center gap-4 rounded-xl border border-(--border) bg-(--mastra-surface-1)/20 px-4 py-4 shadow-none transition-colors hover:bg-(--mastra-surface-1)/70 dark:border-(--border) dark:hover:bg-(--mastra-surface-2)"
+                  >
                     {item.customProps?.icon ? (
                       item.customProps?.iconDark ? (
                         <>
@@ -123,7 +129,9 @@ export default function IntegrationsPage() {
                         />
                       )
                     ) : null}
-                    <span className="truncate">{item.label}</span>
+                    <span data-slot="card-title" className="truncate">
+                      {item.label}
+                    </span>
                   </div>
                 </Link>
               </li>
