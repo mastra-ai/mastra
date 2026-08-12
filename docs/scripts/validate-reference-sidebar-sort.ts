@@ -8,7 +8,7 @@ import { fileURLToPath } from 'url'
  *
  * Rules (applied recursively at every level):
  *   1. "Overview" labeled items always come first.
- *   2. "Configuration" and conceptual Voice pages have fixed positions after Overview.
+ *   2. "Configuration" labeled items come right after Overview.
  *   3. Standalone doc pages (non-dot labels) come before subcategories.
  *   4. Subcategories are sorted alphabetically by label (case-insensitive).
  *   5. Within doc pages, non-dot items come before dot-prefixed items.
@@ -58,12 +58,8 @@ function isDotLabel(label: string): boolean {
   return label.startsWith('.')
 }
 
-function isPinnedDoc(item: SidebarDoc): boolean {
-  return (
-    item.label === 'Overview' ||
-    item.label === 'Configuration' ||
-    ['voice/text-to-speech', 'voice/speech-to-text', 'voice/speech-to-speech'].includes(item.id)
-  )
+function isPinnedLabel(label: string): boolean {
+  return label === 'Overview' || label === 'Configuration'
 }
 
 function sortKey(label: string): string {
@@ -82,13 +78,10 @@ function escapeJsString(s: string): string {
   return s.replace(/\\/g, '\\\\').replace(/'/g, "\\'")
 }
 
-function pinnedOrder(item: SidebarDoc): number {
-  if (item.label === 'Overview') return 0
-  if (item.label === 'Configuration') return 1
-  if (item.id === 'voice/text-to-speech') return 2
-  if (item.id === 'voice/speech-to-text') return 3
-  if (item.id === 'voice/speech-to-speech') return 4
-  return 5
+function pinnedOrder(label: string): number {
+  if (label === 'Overview') return 0
+  if (label === 'Configuration') return 1
+  return 2
 }
 
 function buildExpectedOrder(items: SidebarItem[]): SidebarItem[] {
@@ -102,7 +95,7 @@ function buildExpectedOrder(items: SidebarItem[]): SidebarItem[] {
     if (isCategory(item)) {
       categories.push(item)
     } else if (isDoc(item)) {
-      if (isPinnedDoc(item)) {
+      if (isPinnedLabel(item.label)) {
         pinnedItems.push(item)
       } else if (isDotLabel(item.label)) {
         dotDocs.push(item)
@@ -116,7 +109,7 @@ function buildExpectedOrder(items: SidebarItem[]): SidebarItem[] {
   }
 
   return [
-    ...pinnedItems.sort((a, b) => pinnedOrder(a) - pinnedOrder(b)),
+    ...pinnedItems.sort((a, b) => pinnedOrder(a.label) - pinnedOrder(b.label)),
     ...nonDotDocs.sort((a, b) => compareKeys(a.label, b.label)),
     ...dotDocs.sort((a, b) => compareKeys(a.label, b.label)),
     ...categories.sort((a, b) => compareKeys(a.label, b.label)),
