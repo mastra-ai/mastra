@@ -1,11 +1,13 @@
 /* Markdown typography. Plain CSS rather than one React wrapper per element:
  * markers, task lists and tables need selectors no `[&_x]` class string carries
- * readably. Color and font size are inherited on purpose — the surface owns the
- * tone, so a muted parent (reasoning trail, system notice) stays muted.
- * Declared in `@layer components` so call-site utilities still win. */
+ * readably. Declared in `@layer components`, so a surface that needs another
+ * tone or size overrides it with a utility on the renderer itself. */
 
 @layer components {
   .mastra-markdown {
+    color: var(--neutral5);
+    font-size: var(--text-ui-md);
+    line-height: 1.7;
     overflow-wrap: break-word;
     text-wrap: pretty;
   }
@@ -21,12 +23,12 @@
   /* `pre-wrap` keeps single newlines as line breaks, the way chat authors expect. */
   .mastra-markdown p {
     margin: 0.7em 0;
-    line-height: 1.7;
     white-space: pre-wrap;
   }
 
   .mastra-markdown :is(h1, h2, h3, h4, h5, h6) {
     margin: 1.6em 0 0.6em;
+    color: var(--neutral6);
     font-weight: 600;
     letter-spacing: -0.012em;
     line-height: 1.35;
@@ -49,6 +51,7 @@
   }
 
   .mastra-markdown strong {
+    color: var(--neutral6);
     font-weight: 600;
   }
 
@@ -57,7 +60,7 @@
   }
 
   .mastra-markdown del {
-    color: color-mix(in oklab, currentcolor 55%, transparent);
+    color: var(--neutral3);
     text-decoration: line-through;
   }
 
@@ -77,7 +80,6 @@
   .mastra-markdown :is(ul, ol) {
     margin: 0.7em 0;
     padding-left: 1.35em;
-    line-height: 1.7;
   }
 
   .mastra-markdown ul {
@@ -105,7 +107,7 @@
   }
 
   .mastra-markdown li::marker {
-    color: color-mix(in oklab, currentcolor 55%, transparent);
+    color: var(--neutral3);
   }
 
   .mastra-markdown li > p {
@@ -126,7 +128,7 @@
     margin: 0.9em 0;
     border-left: 2px solid var(--border2);
     padding-left: 0.9em;
-    color: color-mix(in oklab, currentcolor 75%, transparent);
+    color: var(--neutral4);
   }
 
   .mastra-markdown hr {
@@ -141,6 +143,7 @@
     border-radius: 4px;
     background: var(--surface-overlay-strong);
     padding: 0.1em 0.35em;
+    color: var(--neutral6);
     font-family: var(--font-mono);
     font-size: 0.875em;
   }
@@ -163,6 +166,7 @@
 
   .mastra-markdown th {
     background: var(--surface-overlay-soft);
+    color: var(--neutral6);
     font-weight: 600;
   }
 

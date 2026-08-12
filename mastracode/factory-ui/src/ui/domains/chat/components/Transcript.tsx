@@ -704,7 +704,7 @@ function MessageBubble({
         return activation ? <SkillMessage activation={activation} /> : <MarkdownRenderer>{part.text}</MarkdownRenderer>;
       }
 
-      return <MarkdownRenderer className="text-icon5 my-3">{part.text}</MarkdownRenderer>;
+      return <MarkdownRenderer className="my-3">{part.text}</MarkdownRenderer>;
     },
     Reasoning: (part: ReasoningPart) => (
       <div className="border-border1 text-ui-sm text-icon3 my-1.5 border-l-2 pl-2.5 italic [&_p]:my-0.5">
