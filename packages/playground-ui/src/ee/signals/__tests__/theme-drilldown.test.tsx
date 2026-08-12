@@ -445,7 +445,8 @@ describe('SankeySignals drill-in', () => {
       expect(await screen.findByRole('heading', { name: 'Trend' })).not.toBeNull();
       expect(screen.queryByText(/^birth$/i)).toBeNull();
 
-      fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Clear theme filter' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Next' }));
       expect(await screen.findByText('Save the transcript with the project.')).not.toBeNull();
     });
   });

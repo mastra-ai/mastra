@@ -9,6 +9,25 @@ function selectionLabel(selection: ThemeSelection) {
   return `${formatSignalName(selection.signalName)} · ${selection.kind === 'theme' ? selection.label : 'Noise'}`;
 }
 
+function filterSummary({
+  selections,
+  filteredTraceCount,
+  totalTraceCount,
+  isUnavailable,
+}: {
+  selections: ThemeSelection[];
+  filteredTraceCount?: number;
+  totalTraceCount: number;
+  isUnavailable?: boolean;
+}) {
+  if (isUnavailable) return 'Filters unavailable for this snapshot';
+  if (filteredTraceCount === undefined) return 'Loading matching traces…';
+  if (selections.length === 1) {
+    return `Showing the ${filteredTraceCount} of ${totalTraceCount} traces that flow through this theme`;
+  }
+  return `Showing the ${filteredTraceCount} of ${totalTraceCount} traces that match these filters`;
+}
+
 export function ThemeFilterBanner({
   selections,
   filteredTraceCount,
@@ -51,24 +70,22 @@ export function ThemeFilterBanner({
             onClick={() => onRemove(selection.signalName)}
             type="button"
           >
-            <span aria-hidden="true" className="size-2 rounded-[2px]" style={{ backgroundColor: color }} />
+            <span aria-hidden="true" className="rounded-0.5 size-2" style={{ backgroundColor: color }} />
             {selectionLabel(selection)}
             <X aria-hidden="true" className="size-3.5" />
           </button>
         );
       })}
       <span className="text-neutral4 text-xs">
-        {isUnavailable
-          ? 'Filters unavailable for this snapshot'
-          : filteredTraceCount === undefined
-            ? 'Loading matching traces…'
-            : selections.length === 1
-              ? `Showing the ${filteredTraceCount} of ${totalTraceCount} traces that flow through this theme`
-              : `Showing the ${filteredTraceCount} of ${totalTraceCount} traces that match these filters`}
+        {filterSummary({ selections, filteredTraceCount, totalTraceCount, isUnavailable })}
       </span>
       {!isUnavailable && filteredTraceCount !== undefined && latestSelection ? (
         <Button
-          aria-label={`View details for ${selectionLabel(latestSelection)}`}
+          aria-label={
+            latestSelection.kind === 'theme'
+              ? `View theme details for ${latestSelection.label}`
+              : `View noise details for ${formatSignalName(latestSelection.signalName)}`
+          }
           onClick={() => onViewDetails(latestSelection)}
           size="sm"
           type="button"
