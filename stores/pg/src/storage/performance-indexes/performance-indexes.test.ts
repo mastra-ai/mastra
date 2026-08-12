@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { MemoryPG } from '../domains/memory';
 import { ObservabilityPG } from '../domains/observability';
 import { ScoresPG } from '../domains/scores';
+import { WorkflowsPG } from '../domains/workflows';
 
 // Mock DbClient
 const mockClient = {
@@ -107,6 +108,38 @@ describe('PostgresStore Domain Performance Indexes', () => {
         name: 'test_schema_mastra_ai_spans_spantype_startedat_idx',
         table: 'mastra_ai_spans',
         columns: ['spanType', 'startedAt DESC'],
+      });
+    });
+  });
+
+  describe('WorkflowsPG.getDefaultIndexDefinitions', () => {
+    it('should return a composite index for workflow_snapshot on (workflow_name, "createdAt" DESC)', () => {
+      const workflows = new WorkflowsPG({
+        client: mockClient as any,
+        schemaName: 'test_schema',
+      });
+
+      const indexes = workflows.getDefaultIndexDefinitions();
+
+      expect(indexes.length).toBe(1);
+      expect(indexes).toContainEqual({
+        name: 'test_schema_mastra_workflow_snapshot_name_createdat_idx',
+        table: 'mastra_workflow_snapshot',
+        columns: ['workflow_name', 'createdAt DESC'],
+      });
+    });
+
+    it('should work with default schema (public)', () => {
+      const workflows = new WorkflowsPG({
+        client: mockClient as any,
+      });
+
+      const indexes = workflows.getDefaultIndexDefinitions();
+
+      expect(indexes).toContainEqual({
+        name: 'mastra_workflow_snapshot_name_createdat_idx',
+        table: 'mastra_workflow_snapshot',
+        columns: ['workflow_name', 'createdAt DESC'],
       });
     });
   });
