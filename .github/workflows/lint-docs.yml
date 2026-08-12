@@ -230,7 +230,7 @@ jobs:
               "${{ github.event.pull_request.head.sha }}" \
               -- \
               docs/src/content/en/docs \
-              docs/src/content/en/guides \
+              docs/src/content/en/integrations \
               docs/src/content/en/reference \
               | grep '\.mdx$' || true
           )
