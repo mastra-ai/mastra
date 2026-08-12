@@ -55,5 +55,6 @@ describe('pnpm v11 packageManager normalization', () => {
     expect(workspace).toContain('  bufferutil: true');
     expect(workspace).toContain('  protobufjs: true');
     expect(workspace).toContain('  utf-8-validate: true');
+    expect(workspace).not.toContain('onlyBuiltDependencies');
   });
 });
