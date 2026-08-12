@@ -82,6 +82,14 @@ export interface CostGuardOptions {
    * Placeholders: {usage}, {limit}
    */
   message?: string;
+
+  /**
+   * Optional soft threshold as a percentage of maxCost (exclusive 0-100, e.g. 80).
+   * When the estimated cost reaches this percentage of the limit (but is still
+   * below it), a warning is logged and onViolation is called once per request,
+   * regardless of strategy. Never aborts the step.
+   */
+  warnAtPercent?: number;
 }
 
 /**
@@ -93,7 +101,15 @@ export interface CostGuardViolationDetail {
   totalUsage: CostGuardUsage;
   scope: CostScope;
   scopeKey?: string;
+  /**
+   * Which threshold was crossed: 'soft' for the warnAtPercent threshold,
+   * 'hard' for the maxCost limit.
+   */
+  threshold: 'soft' | 'hard';
 }
+
+const WARNED_HARD_STATE_KEY = 'costGuardWarned:hard';
+const WARNED_SOFT_STATE_KEY = 'costGuardWarned:soft';
 
 const WINDOW_MS: Record<CostWindow, number> = {
   '1h': 60 * 60 * 1000,
@@ -166,6 +182,7 @@ export class CostGuardProcessor implements Processor<'cost-guard', CostGuardTrip
   private window: CostWindow;
   private strategy: 'block' | 'warn';
   private messageTemplate: string;
+  private warnAtPercent?: number;
   public onViolation?: (violation: ProcessorViolation) => void | Promise<void>;
   private observabilityStorage?: ObservabilityStorage;
   private logger?: IMastraLogger;
@@ -173,6 +190,13 @@ export class CostGuardProcessor implements Processor<'cost-guard', CostGuardTrip
   constructor(options: CostGuardOptions) {
     if (options.maxCost <= 0) {
       throw new Error('CostGuardProcessor requires maxCost to be a positive number');
+    }
+
+    if (options.warnAtPercent !== undefined) {
+      if (!Number.isFinite(options.warnAtPercent) || options.warnAtPercent <= 0 || options.warnAtPercent >= 100) {
+        throw new Error('CostGuardProcessor requires warnAtPercent to be a number between 0 and 100 (exclusive)');
+      }
+      this.warnAtPercent = options.warnAtPercent;
     }
 
     this.maxCost = options.maxCost;
@@ -262,10 +286,31 @@ export class CostGuardProcessor implements Processor<'cost-guard', CostGuardTrip
     }
   }
 
+  // Normalize float precision artifacts (e.g. 0.30000000000000004 → 0.3)
+  private formatNumber(value: number): string {
+    return String(Number(value.toFixed(6)));
+  }
+
   private formatMessage(usage: number, limit: number): string {
-    // Normalize float precision artifacts (e.g. 0.30000000000000004 → 0.3)
-    const format = (value: number) => String(Number(value.toFixed(6)));
-    return this.messageTemplate.replace('{usage}', format(usage)).replace('{limit}', format(limit));
+    return this.messageTemplate
+      .replace('{usage}', this.formatNumber(usage))
+      .replace('{limit}', this.formatNumber(limit));
+  }
+
+  private async emitWarning(message: string, detail: CostGuardViolationDetail): Promise<void> {
+    if (this.onViolation) {
+      try {
+        await this.onViolation({
+          processorId: this.id,
+          message,
+          detail,
+        });
+      } catch (error) {
+        // onViolation errors should not prevent the guard from functioning
+        this.logger?.warn('CostGuardProcessor: onViolation callback threw', { error });
+      }
+    }
+    this.logger?.warn(`CostGuardProcessor: ${message}`);
   }
 
   async processInputStep(args: ProcessInputStepArgs<CostGuardTripwireMetadata>): Promise<void> {
@@ -276,42 +321,55 @@ export class CostGuardProcessor implements Processor<'cost-guard', CostGuardTrip
     const { filter, scopeKey } = resolved;
     const usage = await this.queryCost(filter);
 
-    if (usage.estimatedCost === null || usage.estimatedCost < this.maxCost) return;
+    if (usage.estimatedCost === null) return;
+    const cost = usage.estimatedCost;
 
-    const message = this.formatMessage(usage.estimatedCost, this.maxCost);
+    // Hard limit
+    if (cost >= this.maxCost) {
+      const message = this.formatMessage(cost, this.maxCost);
 
-    if (this.strategy === 'warn') {
-      if (this.onViolation) {
-        try {
-          await this.onViolation({
-            processorId: this.id,
-            message,
-            detail: {
-              usage: usage.estimatedCost,
-              limit: this.maxCost,
-              totalUsage: usage,
-              scope: this.scope,
-              scopeKey,
-            },
+      if (this.strategy === 'warn') {
+        // Fire the warning and onViolation at most once per request
+        if (!args.state[WARNED_HARD_STATE_KEY]) {
+          args.state[WARNED_HARD_STATE_KEY] = true;
+          await this.emitWarning(message, {
+            usage: cost,
+            limit: this.maxCost,
+            totalUsage: usage,
+            scope: this.scope,
+            scopeKey,
+            threshold: 'hard',
           });
-        } catch (error) {
-          // onViolation errors should not prevent the guard from functioning
-          this.logger?.warn('CostGuardProcessor: onViolation callback threw', { error });
         }
+        return;
       }
-      this.logger?.warn(`CostGuardProcessor: ${message}`);
-      return;
+
+      args.abort(message, {
+        retry: false,
+        metadata: {
+          processorId: this.id,
+          usage,
+          maxCost: this.maxCost,
+          scope: this.scope,
+          scopeKey,
+        },
+      });
     }
 
-    args.abort(message, {
-      retry: false,
-      metadata: {
-        processorId: this.id,
-        usage,
-        maxCost: this.maxCost,
-        scope: this.scope,
-        scopeKey,
-      },
-    });
+    // Soft threshold (cost < maxCost here)
+    if (this.warnAtPercent !== undefined && cost >= (this.maxCost * this.warnAtPercent) / 100) {
+      if (!args.state[WARNED_SOFT_STATE_KEY]) {
+        args.state[WARNED_SOFT_STATE_KEY] = true;
+        const message = `Cost guard: estimated cost reached ${this.warnAtPercent}% of the limit (${this.formatNumber(cost)}/${this.formatNumber(this.maxCost)})`;
+        await this.emitWarning(message, {
+          usage: cost,
+          limit: this.maxCost,
+          totalUsage: usage,
+          scope: this.scope,
+          scopeKey,
+          threshold: 'soft',
+        });
+      }
+    }
   }
 }

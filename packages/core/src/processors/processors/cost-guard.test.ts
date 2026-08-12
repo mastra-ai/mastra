@@ -1095,6 +1095,135 @@ describe('CostGuardProcessor', () => {
     });
   });
 
+  describe('soft threshold (warnAtPercent) and once-per-run dedup', () => {
+    it('constructor rejects invalid warnAtPercent values', () => {
+      for (const warnAtPercent of [0, 100, 150, NaN]) {
+        expect(() => new CostGuardProcessor({ maxCost: 1.0, warnAtPercent })).toThrow('warnAtPercent');
+      }
+    });
+
+    it('constructor accepts valid warnAtPercent', () => {
+      expect(() => new CostGuardProcessor({ maxCost: 1.0, warnAtPercent: 80 })).not.toThrow();
+    });
+
+    it('soft threshold fires onViolation with threshold soft and does not abort (block strategy)', async () => {
+      // cost 0.45 >= 80% of 0.5 (0.4) but < 0.5
+      const obsStorage = createMockObservabilityStorage({ inputCost: 0.25, outputCost: 0.2, costUnit: 'usd' });
+      const guard = new CostGuardProcessor({ maxCost: 0.5, scope: 'run', strategy: 'block', warnAtPercent: 80 });
+      guard.__registerMastra(createMockMastra(obsStorage));
+      const onViolation = vi.fn();
+      guard.onViolation = onViolation;
+
+      const args = createInputStepArgs({
+        stepNumber: 1,
+        tracing: createMockTracing('trace-soft-block') as any,
+      });
+
+      await expect(guard.processInputStep(args)).resolves.toBeUndefined();
+      expect(onViolation).toHaveBeenCalledTimes(1);
+      expect(onViolation.mock.calls[0]![0].detail.threshold).toBe('soft');
+      expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining('80%'));
+    });
+
+    it('soft threshold fires onViolation with threshold soft and does not abort (warn strategy)', async () => {
+      const obsStorage = createMockObservabilityStorage({ inputCost: 0.25, outputCost: 0.2, costUnit: 'usd' });
+      const guard = new CostGuardProcessor({ maxCost: 0.5, scope: 'run', strategy: 'warn', warnAtPercent: 80 });
+      guard.__registerMastra(createMockMastra(obsStorage));
+      const onViolation = vi.fn();
+      guard.onViolation = onViolation;
+
+      const args = createInputStepArgs({
+        stepNumber: 1,
+        tracing: createMockTracing('trace-soft-warn') as any,
+      });
+
+      await expect(guard.processInputStep(args)).resolves.toBeUndefined();
+      expect(onViolation).toHaveBeenCalledTimes(1);
+      expect(onViolation.mock.calls[0]![0].detail.threshold).toBe('soft');
+    });
+
+    it('soft warning fires once across multiple steps sharing the same state object', async () => {
+      const obsStorage = createMockObservabilityStorage({ inputCost: 0.25, outputCost: 0.2, costUnit: 'usd' });
+      const guard = new CostGuardProcessor({ maxCost: 0.5, scope: 'run', warnAtPercent: 80 });
+      guard.__registerMastra(createMockMastra(obsStorage));
+      const onViolation = vi.fn();
+      guard.onViolation = onViolation;
+
+      const sharedState: Record<string, unknown> = {};
+      for (let step = 1; step <= 3; step++) {
+        const args = createInputStepArgs({
+          stepNumber: step,
+          state: sharedState,
+          tracing: createMockTracing('trace-soft-dedup') as any,
+        });
+        await expect(guard.processInputStep(args)).resolves.toBeUndefined();
+      }
+
+      expect(onViolation).toHaveBeenCalledTimes(1);
+    });
+
+    it('hard warn-strategy violation fires log + onViolation once across steps sharing state', async () => {
+      const obsStorage = createMockObservabilityStorage({ inputCost: 0.4, outputCost: 0.2, costUnit: 'usd' });
+      const guard = new CostGuardProcessor({ maxCost: 0.5, scope: 'run', strategy: 'warn' });
+      guard.__registerMastra(createMockMastra(obsStorage));
+      const onViolation = vi.fn();
+      guard.onViolation = onViolation;
+
+      const sharedState: Record<string, unknown> = {};
+      for (let step = 1; step <= 3; step++) {
+        const args = createInputStepArgs({
+          stepNumber: step,
+          state: sharedState,
+          tracing: createMockTracing('trace-hard-dedup') as any,
+        });
+        // Step still proceeds every time
+        await expect(guard.processInputStep(args)).resolves.toBeUndefined();
+      }
+
+      expect(onViolation).toHaveBeenCalledTimes(1);
+      expect(onViolation.mock.calls[0]![0].detail.threshold).toBe('hard');
+      const violationLogs = (mockLogger.warn as any).mock.calls.filter((c: any[]) =>
+        String(c[0]).includes('cost limit exceeded'),
+      );
+      expect(violationLogs).toHaveLength(1);
+    });
+
+    it('cost below soft threshold: no callbacks, no logs', async () => {
+      // cost 0.3 < 80% of 0.5 (0.4)
+      const obsStorage = createMockObservabilityStorage({ inputCost: 0.1, outputCost: 0.2, costUnit: 'usd' });
+      const guard = new CostGuardProcessor({ maxCost: 0.5, scope: 'run', warnAtPercent: 80 });
+      guard.__registerMastra(createMockMastra(obsStorage));
+      const onViolation = vi.fn();
+      guard.onViolation = onViolation;
+
+      const args = createInputStepArgs({
+        stepNumber: 1,
+        tracing: createMockTracing('trace-under-soft') as any,
+      });
+
+      await expect(guard.processInputStep(args)).resolves.toBeUndefined();
+      expect(onViolation).not.toHaveBeenCalled();
+      expect(mockLogger.warn).not.toHaveBeenCalled();
+    });
+
+    it('at exactly maxCost only the hard path fires', async () => {
+      const obsStorage = createMockObservabilityStorage({ inputCost: 0.3, outputCost: 0.2, costUnit: 'usd' });
+      const guard = new CostGuardProcessor({ maxCost: 0.5, scope: 'run', strategy: 'warn', warnAtPercent: 80 });
+      guard.__registerMastra(createMockMastra(obsStorage));
+      const onViolation = vi.fn();
+      guard.onViolation = onViolation;
+
+      const args = createInputStepArgs({
+        stepNumber: 1,
+        tracing: createMockTracing('trace-exact-limit') as any,
+      });
+
+      await expect(guard.processInputStep(args)).resolves.toBeUndefined();
+      expect(onViolation).toHaveBeenCalledTimes(1);
+      expect(onViolation.mock.calls[0]![0].detail.threshold).toBe('hard');
+    });
+  });
+
   describe('hardening (single query, logger, precision)', () => {
     it('queries both token metric names in a single getMetricAggregate call', async () => {
       const obsStorage = createMockObservabilityStorage({ inputCost: 0.1, outputCost: 0.1, costUnit: 'usd' });
