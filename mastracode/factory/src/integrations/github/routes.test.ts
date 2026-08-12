@@ -1594,7 +1594,7 @@ describe('issues route', () => {
     expect(addIssueLabels).toHaveBeenCalledOnce();
     expect(addIssueLabels).toHaveBeenCalledWith(7, 'octo/hello', 5, ['status: auto-triaged']);
     expect(removeIssueLabel).not.toHaveBeenCalled();
-    // The runner receives labels with 'auto-triaged' appended by the wrapper.
+    // The wrapper ensures the runner receives the canonical 'status: auto-triaged' label.
     expect(runIssueTriage).toHaveBeenCalledWith(
       expect.objectContaining({
         labels: ['enhancement', 'status: auto-triaged'],

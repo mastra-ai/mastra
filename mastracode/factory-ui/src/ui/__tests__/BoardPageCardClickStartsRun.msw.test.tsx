@@ -103,9 +103,14 @@ function stubBoardEndpoints({ issues = [] as object[], workItems = [issueWorkIte
     ),
     // The label-filtered (status: auto-triaged) feed stays empty; the plain feed
     // serves the candidate under test.
-    http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/issues`, ({ request }) =>
-      HttpResponse.json({ issues: new URL(request.url).searchParams.has('label') ? [] : issues, nextPage: null }),
-    ),
+    http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/issues`, ({ request }) => {
+      const label = new URL(request.url).searchParams.get('label');
+      if (label && label !== 'status: auto-triaged') {
+        return HttpResponse.error();
+      }
+
+      return HttpResponse.json({ issues: label ? [] : issues, nextPage: null });
+    }),
     http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/sessions`, () => HttpResponse.json({ sessions: [] })),
     http.post(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/ensure`, () => HttpResponse.json({ ok: true })),
     http.post(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/sessions`, () =>
