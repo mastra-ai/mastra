@@ -1,0 +1,26 @@
+---
+title: "Gandr | Voice"
+description: "Documentation for the GandrVoice class, providing text-to-speech capabilities via Gandr's OpenAI-compatible endpoint."
+packages:
+  - "@mastra/voice-gandr"
+---
+
+# Gandr
+
+## Voice
+
+GandrVoice renders text to speech through Gandr's OpenAI-compatible `/v1/audio/speech` endpoint. One voice in 23 languages, every render watermarked.
+
+```ts
+import { GandrVoice } from '@mastra/voice-gandr';
+
+const voice = new GandrVoice({
+  speechModel: {
+    name: 'tts-1',
+    apiKey: process.env.GANDR_API_KEY,
+  },
+  speaker: 'alloy',
+});
+```
+
+The free key starts at 100,000 tokens at gandr.ai. WAV output by default; PCM is supported.

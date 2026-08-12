@@ -536,6 +536,10 @@ const sidebars = {
           customProps: { icon: 'https://cdn.simpleicons.org/elevenlabs/black/white?viewbox=auto&size=28' },
         },
         {
+          id: 'voice/gandr',
+          label: 'Gandr',
+        },
+        {
           type: 'doc',
           id: 'voice/google',
           label: 'Google',
