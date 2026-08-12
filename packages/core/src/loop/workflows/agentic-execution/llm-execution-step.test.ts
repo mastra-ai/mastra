@@ -5,6 +5,7 @@ import type { Mock } from 'vitest';
 import { z } from 'zod/v4';
 import { MODEL_TOKENS } from '../../../../../../docs/src/plugins/remark-model-tokens/models';
 import { MessageList } from '../../../agent/message-list';
+import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
 import { SpanType } from '../../../observability';
 import { StreamErrorRetryProcessor } from '../../../processors';
 import { ProviderHistoryCompat } from '../../../processors/provider-history-compat';
@@ -1615,6 +1616,87 @@ describe('createLLMExecutionStep gateway provider tools', () => {
       stepResult: { reason: 'tripwire', isContinued: false },
       output: { text: '' },
     });
+  });
+
+  it('preserves structured errors when all fallback models fail', async () => {
+    // Mirrors the observational-memory case: an input processor throws a
+    // structured USER error before the model is ever called. The fallback loop
+    // must rethrow the original MastraError (with details.status) instead of
+    // wrapping it in a plain "Exhausted all fallback models" Error.
+    const structuredError = new MastraError({
+      id: 'TEST_USER_INPUT_ERROR',
+      domain: ErrorDomain.AGENT,
+      category: ErrorCategory.USER,
+      details: { status: 400 },
+      text: 'Invalid agent input',
+    });
+    const doStream = vi.fn(async () => ({
+      stream: convertArrayToReadableStream([
+        {
+          type: 'finish',
+          finishReason: 'stop',
+          usage: testUsage,
+        },
+      ]),
+      request: {},
+      response: { headers: undefined },
+      warnings: [],
+    }));
+
+    const llmExecutionStep = createLLMExecutionStep({
+      agentId: 'test-agent',
+      messageId: 'msg-0',
+      runId: 'test-run',
+      startTimestamp: Date.now(),
+      methodType: 'stream',
+      controller,
+      outputWriter: vi.fn(),
+      messageList,
+      models: [
+        {
+          id: 'test-model',
+          maxRetries: 0,
+          model: {
+            specificationVersion: 'v2' as const,
+            provider: 'mock-provider',
+            modelId: 'mock-model-id',
+            supportedUrls: {},
+            doGenerate: vi.fn(),
+            doStream,
+          } as any,
+        },
+      ],
+      inputProcessors: [
+        {
+          id: 'structured-error-processor',
+          processLLMRequest: vi.fn(async () => {
+            throw structuredError;
+          }),
+        },
+      ],
+      tools: {},
+      streamState: {
+        serialize: vi.fn(),
+        deserialize: vi.fn(),
+      },
+      _internal: {
+        generateId: () => 'generated-id',
+        threadId: 'thread-123',
+        resourceId: 'resource-456',
+      },
+      logger: {
+        error: vi.fn(),
+        warn: vi.fn(),
+        debug: vi.fn(),
+      } as any,
+    } as unknown as OuterLLMRun<{}>);
+
+    await expect(llmExecutionStep.execute(createExecuteParams(createIterationInput()))).rejects.toMatchObject({
+      id: 'TEST_USER_INPUT_ERROR',
+      category: ErrorCategory.USER,
+      details: { status: 400 },
+    });
+    expect(doStream).not.toHaveBeenCalled();
   });
 
   it('preserves fallback model index when processAPIError requests a retry', async () => {

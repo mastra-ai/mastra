@@ -67,6 +67,7 @@ import MCPs from './pages/mcps';
 import { McpServerPage } from './pages/mcps/[serverId]';
 import MCPServerToolExecutor from './pages/mcps/tool';
 import Metrics from './pages/metrics';
+import { NotFound } from './pages/not-found';
 import PromptBlocks from './pages/prompt-blocks';
 import RequestContext from './pages/request-context';
 import Resources from './pages/resources';
@@ -679,6 +680,11 @@ export const routes: RouteObject[] = [
         handle: { crumbs: [{ id: 'home', label: 'Home' }] },
       },
       { path: '/request-context', element: <RequestContext />, handle: navHandle('/request-context') },
+      {
+        path: '*',
+        element: <NotFound />,
+        handle: { crumbs: [{ id: 'not-found', label: 'Page not found' }] },
+      },
     ],
   },
 ];

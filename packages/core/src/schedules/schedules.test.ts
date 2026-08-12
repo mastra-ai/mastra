@@ -85,7 +85,37 @@ describe('mastra.schedules canonical service', () => {
 
     await expect(
       mastra.schedules.create({ agentId: 'a', cron: '*/5 * * * *', prompt: 'B', id: 'dupe' }),
-    ).rejects.toThrow(/already exists/);
+    ).rejects.toMatchObject({ id: 'SCHEDULES_ID_EXISTS', details: { status: 409 } });
+  });
+
+  it('carries an HTTP status on user-facing schedule errors', async () => {
+    const { mastra } = makeMastra(['a']);
+
+    // Not-found errors map to 404 so API consumers get a 4xx instead of 500.
+    await expect(mastra.schedules.update('missing', { prompt: 'x' })).rejects.toMatchObject({
+      id: 'SCHEDULES_NOT_FOUND',
+      details: { status: 404 },
+    });
+    await expect(mastra.schedules.pause('missing')).rejects.toMatchObject({
+      id: 'SCHEDULES_NOT_FOUND',
+      details: { status: 404 },
+    });
+    await expect(mastra.schedules.resume('missing')).rejects.toMatchObject({
+      id: 'SCHEDULES_NOT_FOUND',
+      details: { status: 404 },
+    });
+    await expect(mastra.schedules.run('missing')).rejects.toMatchObject({
+      id: 'SCHEDULES_NOT_FOUND',
+      details: { status: 404 },
+    });
+
+    // Validation errors map to 400.
+    await expect(
+      mastra.schedules.create({ agentId: 'a', cron: '*/5 * * * *', prompt: 'A', resourceId: 'u1' }),
+    ).rejects.toMatchObject({ id: 'SCHEDULES_THREADLESS_OPTIONS', details: { status: 400 } });
+    await expect(
+      mastra.schedules.create({ agentId: 'a', cron: '*/5 * * * *', prompt: 'A', threadId: 't1' }),
+    ).rejects.toMatchObject({ id: 'SCHEDULES_MISSING_RESOURCE_ID', details: { status: 400 } });
   });
 
   it('throws when a custom id is empty after normalization', async () => {

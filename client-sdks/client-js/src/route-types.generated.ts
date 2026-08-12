@@ -8585,7 +8585,11 @@ export type GetObservabilityTracesTraceId_PathParams = {
   traceId: string;
 };
 
-export type GetObservabilityTracesTraceId_Response = GetObservabilityTracesTraceIdBranchesSpanId_Response;
+export type GetObservabilityTracesTraceId_Response = {
+  /** Unique trace identifier */
+  traceId: string;
+  spans: Shared_Type_74[];
+};
 
 export type GetObservabilityTracesTraceId_Request = Simplify<
   (GetObservabilityTracesTraceId_PathParams extends never ? {} : { params: GetObservabilityTracesTraceId_PathParams }) &
