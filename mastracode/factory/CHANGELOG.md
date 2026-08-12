@@ -1,5 +1,23 @@
 # @mastra/factory
 
+## 0.6.1-alpha.0
+
+### Patch Changes
+
+- Cleaned up the agent transcript in the Factory web UI. Tool calls, tool groups and skill activations now share one row shape: a leading glyph for the kind of call, the label, the live command, and a disclosure chevron that only shows on hover. A collapsed group keeps its `5 steps` label and stands for what it holds with one glyph per kind of call, instead of a generic `Find files · Read · Run` list. ([#21321](https://github.com/mastra-ai/mastra/pull/21321))
+
+  A skill now looks the same whether you activated it or the agent called the `skill` tool itself: both render the instructions as Markdown rather than a raw arguments-and-output dump, and a skill call no longer disappears inside a group of steps.
+
+  Also fixed two artefacts: a message carrying only internal step markers drew an empty chat bubble, and invisible parts split runs of tool calls into unrelated groups.
+
+- Factory triage now uses `status:` labels so triaged and approval-pending issues remain visible to the Factory workflow. ([#21318](https://github.com/mastra-ai/mastra/pull/21318))
+
+- Fixed the Factory error screen rendering its message as a single column of letters down the page when the factories list fails to load. The notice now shows as a centered card with a readable line length. ([#21322](https://github.com/mastra-ai/mastra/pull/21322))
+
+- Updated dependencies [[`088e41e`](https://github.com/mastra-ai/mastra/commit/088e41e434ed05f2c674b254f1034ec46a57a7be), [`b2f0013`](https://github.com/mastra-ai/mastra/commit/b2f0013375588d40c03c13e843b99c0ff8872ca5), [`3b541ae`](https://github.com/mastra-ai/mastra/commit/3b541ae5d410c52b80a7e381d84d021cddb9a449), [`ae79e34`](https://github.com/mastra-ai/mastra/commit/ae79e34c0bd8674fc24c7524217bfc4a051c6136), [`a6c4399`](https://github.com/mastra-ai/mastra/commit/a6c4399763590b3dae21a2c81826e89a3b1deee4)]:
+  - @mastra/core@1.59.0-alpha.0
+  - @mastra/code-sdk@1.2.1-alpha.0
+
 ## 0.6.0
 
 ### Minor Changes

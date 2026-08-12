@@ -1,5 +1,28 @@
 # @mastra/playground-ui
 
+## 48.1.0-alpha.0
+
+### Minor Changes
+
+- Made the task list collapsible and moved its scrolling to the design system scroll area. ([#21337](https://github.com/mastra-ai/mastra/pull/21337))
+
+  Clicking the task list header now collapses it. The collapsed row keeps the completion count and shows the task currently in progress — or the next pending one — with its status icon and color, so the panel can be minimized without losing track of where the agent is. Long lists scroll inside `ScrollArea` (overlay scrollbar, edge fades) instead of a raw `overflow-y` container.
+
+  Use `defaultOpen` to render it collapsed:
+
+  ```tsx
+  <TaskList tasks={tasks} defaultOpen={false} />
+  ```
+
+### Patch Changes
+
+- Fixed the composer edge glow so it follows the cursor only when the cursor is actually there. Focusing the composer used to light the moving arc as well, which meant the coloured segment kept sliding around the border while you typed or moved the mouse anywhere on the page. Focus now just brightens the border, and the arc lights on hover. ([#21320](https://github.com/mastra-ai/mastra/pull/21320))
+
+- Updated dependencies [[`088e41e`](https://github.com/mastra-ai/mastra/commit/088e41e434ed05f2c674b254f1034ec46a57a7be), [`b2f0013`](https://github.com/mastra-ai/mastra/commit/b2f0013375588d40c03c13e843b99c0ff8872ca5), [`3b541ae`](https://github.com/mastra-ai/mastra/commit/3b541ae5d410c52b80a7e381d84d021cddb9a449), [`ae79e34`](https://github.com/mastra-ai/mastra/commit/ae79e34c0bd8674fc24c7524217bfc4a051c6136), [`a6c4399`](https://github.com/mastra-ai/mastra/commit/a6c4399763590b3dae21a2c81826e89a3b1deee4)]:
+  - @mastra/core@1.59.0-alpha.0
+  - @mastra/client-js@1.39.1-alpha.0
+  - @mastra/react@1.4.3-alpha.0
+
 ## 48.0.0
 
 ### Minor Changes

@@ -580,42 +580,9 @@ const sidebars = {
               label: 'Feedback',
             },
             {
-              type: 'category',
-              label: 'Integrations',
-              items: [
-                {
-                  type: 'doc',
-                  id: 'observability/integrations/overview',
-                  label: 'Overview',
-                },
-                {
-                  type: 'category',
-                  label: 'Exporters',
-                  items: [
-                    {
-                      type: 'doc',
-                      id: 'observability/integrations/exporters/mastra-storage',
-                      label: 'Mastra Storage',
-                    },
-                    {
-                      type: 'doc',
-                      id: 'observability/integrations/exporters/mastra-platform',
-                      label: 'Mastra Platform',
-                    },
-                  ],
-                },
-                {
-                  type: 'category',
-                  label: 'Processors',
-                  items: [
-                    {
-                      type: 'doc',
-                      id: 'observability/integrations/processors/sensitive-data-filter',
-                      label: 'SensitiveDataFilter',
-                    },
-                  ],
-                },
-              ],
+              type: 'doc',
+              id: 'observability/integrations/exporters/mastra-storage',
+              label: 'Storage',
             },
           ],
         },

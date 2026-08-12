@@ -96,7 +96,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
 
   const { images, setImages, fileInputRef, removeImage, onPaste, onDrop, onFileInputChange } =
     useComposerImages(onUserDraft);
-  const spotlightRef = useComposerSpotlight(!busy);
+  const spotlightRef = useComposerSpotlight();
   const modeSwitchPendingRef = useRef(false);
   const suggestions = matchCommands(draft);
   const showSuggestions = suggestions.length > 0;

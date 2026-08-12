@@ -217,8 +217,8 @@ export function PlanContent({ children, className, style, ...props }: PlanConten
       style={!isExpanded ? { ...style, maxHeight: collapsedHeight } : style}
       {...props}
     >
-      <div className="text-neutral6 [&_code]:bg-surface4 [&_h1]:text-header-md [&_h1]:leading-header-md [&_h2]:text-header-sm [&_h2]:leading-header-sm [&_h3]:text-ui-lg [&_h3]:leading-ui-lg [&_p]:text-ui-md [&_p]:leading-6">
-        <MarkdownRenderer>{children}</MarkdownRenderer>
+      <div className="[&_code]:bg-surface4 [&_h1]:text-header-md [&_h1]:leading-header-md [&_h2]:text-header-sm [&_h2]:leading-header-sm [&_h3]:text-ui-lg [&_h3]:leading-ui-lg [&_p]:text-ui-md [&_p]:leading-6">
+        <MarkdownRenderer className="text-neutral6">{children}</MarkdownRenderer>
       </div>
     </div>
   );
