@@ -1756,4 +1756,148 @@ describe('CostGuardProcessor', () => {
       expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining('cost limit exceeded'));
     });
   });
+
+  describe('review fixes', () => {
+    it('constructor rejects NaN and Infinity maxCost', () => {
+      expect(() => new CostGuardProcessor({ maxCost: NaN })).toThrow('finite positive number');
+      expect(() => new CostGuardProcessor({ maxCost: Infinity })).toThrow('finite positive number');
+    });
+
+    it('two guard instances sharing one state bag each fire their own warning', async () => {
+      // The runner keys per-processor state by processor.id, which is
+      // hardcoded 'cost-guard' — two instances in one pipeline share a state
+      // bag. Their dedup keys must not collide.
+      const obsStorage = createMockObservabilityStorage({ inputCost: 0.4, outputCost: 0.2, costUnit: 'usd' });
+      const lowGuard = new CostGuardProcessor({ maxCost: 0.5, scope: 'run', strategy: 'warn' });
+      const highGuard = new CostGuardProcessor({ maxCost: 0.55, scope: 'run', strategy: 'warn' });
+      lowGuard.__registerMastra(createMockMastra(obsStorage));
+      highGuard.__registerMastra(createMockMastra(obsStorage));
+      const lowViolation = vi.fn();
+      const highViolation = vi.fn();
+      lowGuard.onViolation = lowViolation;
+      highGuard.onViolation = highViolation;
+
+      const sharedState: Record<string, unknown> = {};
+      const tracing = createMockTracing('trace-shared-state') as any;
+      await lowGuard.processInputStep(createInputStepArgs({ stepNumber: 1, tracing, state: sharedState }));
+      await highGuard.processInputStep(createInputStepArgs({ stepNumber: 1, tracing, state: sharedState }));
+
+      expect(lowViolation).toHaveBeenCalledTimes(1);
+      expect(highViolation).toHaveBeenCalledTimes(1);
+    });
+
+    it('two distinct state objects (two requests) each fire the warning once', async () => {
+      const obsStorage = createMockObservabilityStorage({ inputCost: 0.4, outputCost: 0.2, costUnit: 'usd' });
+      const guard = new CostGuardProcessor({ maxCost: 0.5, scope: 'run', strategy: 'warn' });
+      guard.__registerMastra(createMockMastra(obsStorage));
+      const onViolation = vi.fn();
+      guard.onViolation = onViolation;
+
+      const tracing = createMockTracing('trace-two-requests') as any;
+      const stateA: Record<string, unknown> = {};
+      await guard.processInputStep(createInputStepArgs({ stepNumber: 1, tracing, state: stateA }));
+      await guard.processInputStep(createInputStepArgs({ stepNumber: 2, tracing, state: stateA }));
+      expect(onViolation).toHaveBeenCalledTimes(1);
+
+      const stateB: Record<string, unknown> = {};
+      await guard.processInputStep(createInputStepArgs({ stepNumber: 1, tracing, state: stateB }));
+      expect(onViolation).toHaveBeenCalledTimes(2);
+    });
+
+    it('block tripwire metadata carries threshold: hard', async () => {
+      const obsStorage = createMockObservabilityStorage({ inputCost: 0.4, outputCost: 0.2, costUnit: 'usd' });
+      const guard = new CostGuardProcessor({ maxCost: 0.5, scope: 'run' });
+      guard.__registerMastra(createMockMastra(obsStorage));
+
+      const args = createInputStepArgs({
+        stepNumber: 1,
+        tracing: createMockTracing('trace-threshold-meta') as any,
+      });
+
+      try {
+        await guard.processInputStep(args);
+        expect.fail('Expected TripWire');
+      } catch (error) {
+        expect((error as TripWire<any>).options.metadata.threshold).toBe('hard');
+      }
+    });
+
+    it('throwing dynamic maxCost function fails open with a logged warning', async () => {
+      const obsStorage = createMockObservabilityStorage({ inputCost: 0.4, outputCost: 0.2, costUnit: 'usd' });
+      const guard = new CostGuardProcessor({
+        maxCost: () => {
+          throw new Error('tier lookup failed');
+        },
+        scope: 'run',
+      });
+      guard.__registerMastra(createMockMastra(obsStorage));
+      const onViolation = vi.fn();
+      guard.onViolation = onViolation;
+
+      const args = createInputStepArgs({
+        stepNumber: 1,
+        tracing: createMockTracing('trace-maxcost-throw') as any,
+      });
+
+      await expect(guard.processInputStep(args)).resolves.toBeUndefined();
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('dynamic maxCost function threw'),
+        expect.objectContaining({ error: expect.any(Error) }),
+      );
+      expect(onViolation).not.toHaveBeenCalled();
+      expect(obsStorage.getMetricAggregate).not.toHaveBeenCalled();
+    });
+
+    it('live-fire: input and output totals on one run sum without double counting (real ObservabilityInMemory)', async () => {
+      const { InMemoryStore } = await import('../../storage/mock');
+      const observability = new InMemoryStore().stores.observability!;
+      await observability.batchCreateMetrics({
+        metrics: [
+          {
+            metricId: 'metric-dc-input',
+            timestamp: new Date(),
+            name: 'mastra_model_total_input_tokens',
+            value: 1000,
+            traceId: 'trace-double-count',
+            entityType: EntityType.AGENT,
+            estimatedCost: 0.1,
+            costUnit: 'usd',
+            labels: {},
+          },
+          {
+            metricId: 'metric-dc-output',
+            timestamp: new Date(),
+            name: 'mastra_model_total_output_tokens',
+            value: 500,
+            traceId: 'trace-double-count',
+            entityType: EntityType.AGENT,
+            estimatedCost: 0.2,
+            costUnit: 'usd',
+            labels: {},
+          },
+        ],
+      });
+
+      // Total is 0.3 exactly — a double-counting bug would report 0.6.
+      const allowGuard = new CostGuardProcessor({ maxCost: 0.35, scope: 'run' });
+      (allowGuard as any).observabilityStorage = observability;
+      await expect(
+        allowGuard.processInputStep(
+          createInputStepArgs({ stepNumber: 1, tracing: createMockTracing('trace-double-count') as any }),
+        ),
+      ).resolves.toBeUndefined();
+
+      const blockGuard = new CostGuardProcessor({ maxCost: 0.25, scope: 'run' });
+      (blockGuard as any).observabilityStorage = observability;
+      try {
+        await blockGuard.processInputStep(
+          createInputStepArgs({ stepNumber: 1, tracing: createMockTracing('trace-double-count') as any }),
+        );
+        expect.fail('Expected TripWire');
+      } catch (error) {
+        expect((error as TripWire<any>).message).toContain('0.3/0.25');
+        expect((error as TripWire<any>).options.metadata.usage.estimatedCost).toBe(0.30000000000000004);
+      }
+    });
+  });
 });

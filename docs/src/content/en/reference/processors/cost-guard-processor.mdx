@@ -72,6 +72,7 @@ const costGuard = new CostGuardProcessor({
   maxCost: 5.0,
   scope: 'resource',
   window: '30d',
+  strategy: 'warn',
   includeBreakdown: true,
 })
 
@@ -133,7 +134,7 @@ const agent = new Agent({
     type: 'string',
     description: 'Custom message template for the abort reason. Supports {usage} and {limit} placeholders.',
     isOptional: true,
-    defaultValue: "'Cost guard: cost limit exceeded ({usage}/{limit})'",
+    defaultValue: "'Cost guard: estimated cost limit exceeded ({usage}/{limit})'",
   },
   {
     name: 'warnAtPercent',
@@ -146,7 +147,7 @@ const agent = new Agent({
     name: 'includeBreakdown',
     type: 'boolean',
     description:
-      'When true, violations (soft and hard) include a per-provider/model cost breakdown queried via getMetricBreakdown. The breakdown query runs only when a violation trips, never on the happy path. If the configured store does not support breakdown queries or the query fails, the violation fires without the breakdown field.',
+      'When true, violations (soft and hard) include a per-provider/model cost breakdown queried via getMetricBreakdown. The breakdown is capped at the top 10 provider/model groups ranked by aggregated token volume, not by spend. The breakdown query runs only when a violation trips, never on the happy path. If the configured store does not support breakdown queries or the query fails, the violation fires without the breakdown field.',
     isOptional: true,
     defaultValue: 'false',
   },
@@ -173,7 +174,7 @@ const agent = new Agent({
     name: 'onViolation',
     type: '(violation: ProcessorViolation) => void | Promise<void>',
     description:
-      'Callback invoked when a cost violation is detected, regardless of strategy. For the warn strategy and for soft thresholds, it fires at most once per request per threshold level. The violation detail includes a threshold field ("soft" or "hard") and, when includeBreakdown is enabled, a breakdown array. Use for side effects like alerting, logging to external systems, or emailing users. Errors thrown by this callback are caught and logged through the Mastra logger.',
+      'Callback invoked when a cost violation is detected, regardless of strategy. For the warn strategy and for soft thresholds, the guard calls it with a CostGuardViolationDetail (usage, limit, threshold, and optional breakdown) at most once per request per threshold level. For the block strategy, the processor runner invokes it with the TripWire metadata as the detail (see Error behavior). Use for side effects like alerting, logging to external systems, or emailing users. Errors thrown by this callback are caught and logged through the Mastra logger.',
     isOptional: true,
   },
   {
@@ -195,6 +196,7 @@ When the `block` strategy is active (default), `CostGuardProcessor` calls `abort
 - `maxCost`: The resolved cost limit for the request
 - `scope`: The active scope
 - `scopeKey`: The scope identifier for non-run scopes (if applicable)
+- `threshold`: Always `'hard'` — only the hard limit aborts
 - `breakdown`: Per-provider/model cost entries (only when `includeBreakdown` is enabled and the breakdown query succeeds)
 
 With the `warn` strategy, the hard-limit warning and `onViolation` callback fire at most once per request; subsequent steps in the same request proceed without repeating the warning.

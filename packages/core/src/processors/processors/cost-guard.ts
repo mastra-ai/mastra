@@ -58,6 +58,10 @@ export interface CostGuardTripwireMetadata {
   scope: CostScope;
   scopeKey?: string;
   /**
+   * Which threshold was crossed. Always 'hard' — only the hard limit aborts.
+   */
+  threshold: 'hard';
+  /**
    * Per-provider/model cost breakdown. Present only when `includeBreakdown`
    * is enabled and the breakdown query succeeds.
    */
@@ -157,8 +161,7 @@ export interface CostGuardViolationDetail {
   breakdown?: CostGuardBreakdownEntry[];
 }
 
-const WARNED_HARD_STATE_KEY = 'costGuardWarned:hard';
-const WARNED_SOFT_STATE_KEY = 'costGuardWarned:soft';
+const TOKEN_TOTAL_METRIC_NAMES = ['mastra_model_total_input_tokens', 'mastra_model_total_output_tokens'];
 
 const WINDOW_MS: Record<CostWindow, number> = {
   '1h': 60 * 60 * 1000,
@@ -244,8 +247,8 @@ export class CostGuardProcessor implements Processor<'cost-guard', CostGuardTrip
   private logger?: IMastraLogger;
 
   constructor(options: CostGuardOptions) {
-    if (typeof options.maxCost === 'number' && options.maxCost <= 0) {
-      throw new Error('CostGuardProcessor requires maxCost to be a positive number');
+    if (typeof options.maxCost === 'number' && (!Number.isFinite(options.maxCost) || options.maxCost <= 0)) {
+      throw new Error('CostGuardProcessor requires maxCost to be a finite positive number');
     }
 
     if (options.warnAtPercent !== undefined) {
@@ -349,7 +352,7 @@ export class CostGuardProcessor implements Processor<'cost-guard', CostGuardTrip
       const filters = this.buildFilters(scopeFilter);
 
       const result = await this.observabilityStorage.getMetricAggregate({
-        name: ['mastra_model_total_input_tokens', 'mastra_model_total_output_tokens'],
+        name: TOKEN_TOTAL_METRIC_NAMES,
         aggregation: 'sum',
         filters,
       });
@@ -375,7 +378,7 @@ export class CostGuardProcessor implements Processor<'cost-guard', CostGuardTrip
     if (!this.observabilityStorage) return undefined;
     try {
       const result = await this.observabilityStorage.getMetricBreakdown({
-        name: ['mastra_model_total_input_tokens', 'mastra_model_total_output_tokens'],
+        name: TOKEN_TOTAL_METRIC_NAMES,
         groupBy: ['provider', 'model'],
         aggregation: 'sum',
         filters: this.buildFilters(scopeFilter),
@@ -420,9 +423,25 @@ export class CostGuardProcessor implements Processor<'cost-guard', CostGuardTrip
     this.logger?.warn(`CostGuardProcessor: ${message}`);
   }
 
+  /**
+   * Builds the per-request dedup state key. Includes the threshold level,
+   * scope, scope key, and resolved limit so that multiple CostGuardProcessor
+   * instances in the same pipeline (which share one state bag keyed by
+   * processor id) don't suppress each other's warnings.
+   */
+  private warnedStateKey(level: 'hard' | 'soft', scopeKey: string | undefined, maxCost: number): string {
+    return `costGuardWarned:${level}:${this.scope}:${scopeKey ?? ''}:${maxCost}`;
+  }
+
   private resolveMaxCost(requestContext?: RequestContext): number | undefined {
     if (typeof this.maxCost === 'number') return this.maxCost;
-    const value = this.maxCost(requestContext);
+    let value: number;
+    try {
+      value = this.maxCost(requestContext);
+    } catch (error) {
+      this.logger?.warn('CostGuardProcessor: dynamic maxCost function threw; skipping check (fail-open)', { error });
+      return undefined;
+    }
     if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
       this.logger?.warn('CostGuardProcessor: dynamic maxCost resolved to an invalid value; skipping check', {
         value,
@@ -452,8 +471,9 @@ export class CostGuardProcessor implements Processor<'cost-guard', CostGuardTrip
 
       if (this.strategy === 'warn') {
         // Fire the warning and onViolation at most once per request
-        if (!args.state[WARNED_HARD_STATE_KEY]) {
-          args.state[WARNED_HARD_STATE_KEY] = true;
+        const stateKey = this.warnedStateKey('hard', scopeKey, maxCost);
+        if (!args.state[stateKey]) {
+          args.state[stateKey] = true;
           const breakdown = this.includeBreakdown ? await this.queryBreakdown(filter) : undefined;
           await this.emitWarning(message, {
             usage: cost,
@@ -477,15 +497,18 @@ export class CostGuardProcessor implements Processor<'cost-guard', CostGuardTrip
           maxCost,
           scope: this.scope,
           scopeKey,
+          threshold: 'hard',
           ...(breakdown ? { breakdown } : {}),
         },
       });
+      return;
     }
 
     // Soft threshold (cost < maxCost here)
     if (this.warnAtPercent !== undefined && cost >= (maxCost * this.warnAtPercent) / 100) {
-      if (!args.state[WARNED_SOFT_STATE_KEY]) {
-        args.state[WARNED_SOFT_STATE_KEY] = true;
+      const stateKey = this.warnedStateKey('soft', scopeKey, maxCost);
+      if (!args.state[stateKey]) {
+        args.state[stateKey] = true;
         const message = `Cost guard: estimated cost reached ${this.warnAtPercent}% of the limit (${this.formatNumber(cost)}/${this.formatNumber(maxCost)})`;
         const breakdown = this.includeBreakdown ? await this.queryBreakdown(filter) : undefined;
         await this.emitWarning(message, {
