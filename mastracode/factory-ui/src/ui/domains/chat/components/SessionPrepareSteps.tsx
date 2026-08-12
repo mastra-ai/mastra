@@ -1,10 +1,11 @@
-import { Check } from 'lucide-react';
-import { Spinner } from '@mastra/playground-ui/components/Spinner';
-import { cn } from '@mastra/playground-ui/utils/cn';
+import { ProcessStepListItem } from '@mastra/playground-ui/components/Steps';
+import type { ProcessStep } from '@mastra/playground-ui/components/Steps';
 
 import type { PrepareProgress } from '../../workspaces/services/github';
 import { useChatMessagesInitializing } from '../context/ChatSessionProvider';
 import { useChatSessionContext } from '../context/useChatSessionContext';
+
+import './session-prepare-steps.css';
 
 /**
  * User-facing preparation groups. The server emits six granular SSE phases;
@@ -16,33 +17,27 @@ import { useChatSessionContext } from '../context/useChatSessionContext';
  *  - "Cloning repository"   ← cloning, pulling
  *  - "Starting session"     ← finalizing (+ post-ensure messages fetch)
  */
-type GroupId = 'sandbox' | 'clone' | 'starting';
-
-const GROUP_LABEL: Record<GroupId, string> = {
-  sandbox: 'Preparing sandbox',
-  clone: 'Cloning repository',
-  starting: 'Starting session',
-};
+type GroupId = 'preparing-sandbox' | 'cloning-repository' | 'starting-session';
 
 const PHASE_TO_GROUP: Record<PrepareProgress['phase'], GroupId | 'done'> = {
-  reattaching: 'sandbox',
-  provisioning: 'sandbox',
-  'preparing-workspace': 'sandbox',
-  cloning: 'clone',
-  pulling: 'clone',
-  finalizing: 'starting',
+  reattaching: 'preparing-sandbox',
+  provisioning: 'preparing-sandbox',
+  'preparing-workspace': 'preparing-sandbox',
+  cloning: 'cloning-repository',
+  pulling: 'cloning-repository',
+  finalizing: 'starting-session',
   done: 'done',
 };
 
-const GROUP_ORDER: GroupId[] = ['sandbox', 'clone', 'starting'];
+const GROUP_ORDER: GroupId[] = ['preparing-sandbox', 'cloning-repository', 'starting-session'];
 
 type StepStatus = 'pending' | 'running' | 'success';
 
 /**
  * Step loader shown in the transcript region while `/ensure` is in flight,
  * driven by the SSE progress phase in `ChatSessionContext.sandboxProgress`.
- * Also covers the post-ensure, pre-transcript window where the initial
- * thread-messages fetch is still in flight (via the "Starting session" step).
+ * Also covers the post-ensure window where the initial thread-messages
+ * fetch is still in flight (surfaced through the "Starting session" step).
  *
  * The loader fills the transcript viewport and centers so it reads as the
  * primary content of the empty chat, not a footnote.
@@ -53,23 +48,33 @@ export function SessionPrepareSteps() {
 
   const observedPhase = sandboxProgress?.phase;
   const observedGroup: GroupId | undefined =
-    observedPhase && observedPhase !== 'done' ? PHASE_TO_GROUP[observedPhase] as GroupId : undefined;
+    observedPhase && observedPhase !== 'done' ? (PHASE_TO_GROUP[observedPhase] as GroupId) : undefined;
   const activeMessage = sandboxProgress?.message ?? 'Starting…';
 
-  // Once ensure has finished, messages may still be loading — collapse the
-  // whole pipeline to "starting session" running so there is no visual dip.
+  // Post-ensure but pre-transcript: the sandbox step is done, we're waiting
+  // on the initial messages fetch. Collapse the pipeline so "Starting session"
+  // is the running step and earlier groups are success.
   const loadingMessages = !sandboxPreparing && messagesInitializing;
 
-  // Determine the active group.
-  const activeGroup: GroupId = loadingMessages ? 'starting' : (observedGroup ?? 'sandbox');
+  const activeGroup: GroupId = loadingMessages ? 'starting-session' : (observedGroup ?? 'preparing-sandbox');
   const activeIdx = GROUP_ORDER.indexOf(activeGroup);
 
-  const steps = GROUP_ORDER.map((id, idx) => {
+  const items: Array<{ step: ProcessStep; position: number }> = GROUP_ORDER.map((id, idx) => {
     let status: StepStatus;
     if (idx < activeIdx) status = 'success';
     else if (idx === activeIdx) status = 'running';
     else status = 'pending';
-    return { id, status, label: GROUP_LABEL[id] };
+    const isActive = status === 'running';
+    return {
+      position: idx + 1,
+      step: {
+        id,
+        status,
+        isActive,
+        title: id,
+        description: isActive ? activeMessage : '',
+      },
+    };
   });
 
   return (
@@ -77,56 +82,15 @@ export function SessionPrepareSteps() {
       role="status"
       aria-label="Preparing session"
       data-testid="session-prepare-steps"
-      className="flex flex-1 items-center justify-center px-4 py-8"
+      className="session-prepare-steps flex flex-1 items-center justify-center px-4 py-8"
     >
-      <ul className="flex w-full max-w-sm flex-col gap-3">
-        {steps.map(step => (
-          <li
-            key={step.id}
-            data-testid="session-prepare-step"
-            data-status={step.status}
-            className="flex items-center gap-3"
-          >
-            <StatusIcon status={step.status} />
-            <div className="flex min-w-0 flex-col">
-              <span
-                className={cn('text-sm', {
-                  'text-icon6': step.status === 'success',
-                  'text-icon6 font-medium': step.status === 'running',
-                  'text-icon3': step.status === 'pending',
-                })}
-              >
-                {step.label}
-              </span>
-              {step.status === 'running' && activeMessage ? (
-                <span className="text-icon3 text-xs">{activeMessage}</span>
-              ) : null}
-            </div>
-          </li>
+      <div className="flex w-full max-w-md flex-col gap-1">
+        {items.map(({ step, position }) => (
+          <div key={step.id} data-testid="session-prepare-step" data-status={step.status}>
+            <ProcessStepListItem stepId={step.id} step={step} isActive={step.isActive} position={position} />
+          </div>
         ))}
-      </ul>
+      </div>
     </div>
-  );
-}
-
-function StatusIcon({ status }: { status: StepStatus }) {
-  if (status === 'success') {
-    return (
-      <span className="text-accent1 flex size-5 items-center justify-center rounded-full">
-        <Check className="size-4" strokeWidth={2.5} />
-      </span>
-    );
-  }
-  if (status === 'running') {
-    return (
-      <span className="flex size-5 items-center justify-center">
-        <Spinner size="sm" />
-      </span>
-    );
-  }
-  return (
-    <span className="text-icon3 flex size-5 items-center justify-center">
-      <span className="size-2 rounded-full bg-current opacity-50" />
-    </span>
   );
 }

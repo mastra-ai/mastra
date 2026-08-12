@@ -1,0 +1,17 @@
+/*
+ * Suppress the dashed outer-card border that `ProcessStepListItem`
+ * paints on its active step. The pending-status dashed circle is
+ * intentionally kept — only the surrounding card border is removed.
+ *
+ * We scope by the loader's root class so this cannot leak into any
+ * other consumer of the shared DS primitive.
+ *
+ * The primitive uses `border border-dashed border-neutral2 bg-surface3`
+ * on the active row; we set `border-color: transparent` (rather than
+ * `border-width: 0`) so the row height stays identical to inactive rows
+ * and the pipeline doesn't visually jitter as the active step advances.
+ */
+.session-prepare-steps [class*='border-dashed'][class*='bg-surface3'] {
+  border-color: transparent;
+  background-color: transparent;
+}
