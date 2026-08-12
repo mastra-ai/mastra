@@ -149,9 +149,9 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
   public entityId?: string;
   /** Entity name that created the span */
   public entityName?: string;
-  /** Parent span ID — always a Mastra span present in storage (e.g. the suspended span a resumed run links to) */
+  /** Parent span within this Mastra trace: a span Mastra created (the span-tree parent, or a prior Mastra span such as the suspended run a resume links back to) */
   protected parentSpanId?: string;
-  /** Parent span ID outside Mastra storage (ambient OTel / bridge parent); never used as the stored parent */
+  /** Parent from an external tracing system (ambient OTel / dd-trace span) that Mastra did not create; carried for external correlation, not part of Mastra's own parent/child linkage */
   protected externalParentSpanId?: string;
   /** Deep clean options for serialization */
   protected deepCleanOptions: DeepCleanOptions;
@@ -320,7 +320,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
   }
 
   /**
-   * External (non-Mastra-storage) parent id to export alongside
+   * External (foreign tracing-system) parent id to export alongside
    * {@link getParentSpanId}. When every Mastra ancestor is dropped from
    * export, the span is exported at the root's position, so the root's
    * external parent must travel with it.

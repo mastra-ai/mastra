@@ -268,9 +268,9 @@ export class DatadogBridge extends BaseExporter implements ObservabilityBridge {
       const parentSpanId = parentContext?.toSpanId?.(true) ?? externalParentId;
 
       // Declare which kind of parent was used. A parent resolved from the
-      // Mastra span chain exists in Mastra storage; an active dd-trace scope
+      // Mastra span chain is part of the Mastra trace; an active dd-trace scope
       // span is a Mastra span only if this bridge created it, otherwise it
-      // lives solely in Datadog (e.g. APM auto-instrumentation).
+      // belongs to Datadog (e.g. APM auto-instrumentation).
       const parentIsMastraSpan =
         parentSpanId !== undefined && (parentSource !== 'active-scope' || this.ddSpanMap.has(parentSpanId));
 

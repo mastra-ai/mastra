@@ -1,5 +1,5 @@
 ---
-'@mastra/observability': patch
+'@mastra/observability': minor
 ---
 
-Fix traces created under OpenTelemetry parent spans not appearing in Mastra Studio.
+Fixed traces that start under an external parent span not appearing in Mastra Studio.

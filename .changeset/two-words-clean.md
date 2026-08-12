@@ -1,6 +1,6 @@
 ---
-'@mastra/otel-bridge': patch
-'@mastra/datadog': patch
+'@mastra/otel-bridge': minor
+'@mastra/datadog': minor
 ---
 
-The OpenTelemetry and Datadog bridges now report whether a created span's parent is a Mastra span or lives only in the external tracing system. Custom bridges should adopt the new SpanIds.externalParentSpanId field so externally parented runs keep appearing as trace roots in Mastra Studio.
+Bridges now report whether a created span's parent is a Mastra span or an external one, so runs that start under an external parent are recorded as trace roots in Mastra Studio.
