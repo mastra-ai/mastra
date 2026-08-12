@@ -1,5 +1,6 @@
 import { useRef } from 'react';
-import { CheckCircle2, Circle, Loader2 } from 'lucide-react';
+import { ProcessStepListItem } from '@mastra/playground-ui/components/Steps';
+import type { ProcessStep } from '@mastra/playground-ui/components/Steps';
 
 import type { PrepareProgress } from '../../workspaces/services/github';
 import { useChatMessagesInitializing } from '../context/ChatSessionProvider';
@@ -9,7 +10,9 @@ import { useChatSessionContext } from '../context/useChatSessionContext';
  * Canonical ordered phases of `/ensure` — mirror of the SSE contract in
  * `ensureRepoMaterialized` (see `workspaces/services/github.ts`). `done` is
  * the completion signal that unmounts the loader; `reattaching` and
- * `provisioning` are mutually exclusive.
+ * `provisioning` are mutually exclusive — when the server picks `reattaching`
+ * we auto-complete `provisioning` as the pipeline advances so the visual
+ * pipeline never shows a "crossed-out" step (which reads as failure).
  */
 const PHASE_ORDER: PrepareProgress['phase'][] = [
   'reattaching',
@@ -20,28 +23,35 @@ const PHASE_ORDER: PrepareProgress['phase'][] = [
   'finalizing',
 ];
 
-const PHASE_LABEL: Record<PrepareProgress['phase'], string> = {
-  reattaching: 'Reattaching to sandbox',
-  provisioning: 'Provisioning sandbox',
-  'preparing-workspace': 'Preparing workspace',
-  cloning: 'Cloning repository',
-  pulling: 'Fetching latest changes',
-  finalizing: 'Finalizing session',
-  done: 'Done',
+// The `ProcessStepListItem` primitive auto-formats an `id` like
+// `preparing-workspace` into the title `Preparing workspace`, so the id
+// doubles as the label — no separate label map needed.
+const PHASE_ID: Record<PrepareProgress['phase'], string> = {
+  reattaching: 'reattaching-to-sandbox',
+  provisioning: 'provisioning-sandbox',
+  'preparing-workspace': 'preparing-workspace',
+  cloning: 'cloning-repository',
+  pulling: 'fetching-latest-changes',
+  finalizing: 'finalizing-session',
+  done: 'done',
 };
 
-type StepStatus = 'pending' | 'active' | 'complete' | 'skipped';
+const LOADING_MESSAGES_ID = 'loading-messages';
+
+type StepStatus = 'pending' | 'running' | 'success';
 
 /**
  * Step loader shown in the transcript region while `/ensure` is in flight,
  * driven by the SSE progress phase in `ChatSessionContext.sandboxProgress`.
- * See "Step loader spec" in the plan for the phase-to-status rules.
  *
  * Also covers the post-ensure, pre-transcript window where the initial
  * thread-messages fetch is still in flight: rendering the same loader (with
  * a "Loading messages" tail step) instead of flipping to skeleton bars keeps
  * the composer's spinning ring continuously meaningful across the whole
  * preparing window.
+ *
+ * The loader fills the transcript viewport and centers so it reads as the
+ * primary content of the empty chat, not a footnote.
  */
 export function SessionPrepareSteps() {
   const { sandboxPreparing, sandboxProgress } = useChatSessionContext();
@@ -51,10 +61,10 @@ export function SessionPrepareSteps() {
   // generic "Starting…" message so the loader isn't visually empty.
   const activePhase: PrepareProgress['phase'] = observed ?? 'reattaching';
   const activeMessage = sandboxProgress?.message ?? 'Starting…';
-  // Track "we ever saw reattaching" so `provisioning` stays consistently
-  // skipped even after the server advances past `reattaching`. Without this,
-  // `provisioning` would flip strikethrough → check-mark as later phases
-  // arrive, which reads as "provisioning ran".
+  // Track "we ever saw reattaching" so `provisioning` is auto-completed for
+  // the rest of the pipeline (server picked reattach → we skip the provision
+  // path). Auto-completing (vs. striking through) matches the user's request:
+  // when the stepper reaches it, it just visually completes.
   const sawReattachingRef = useRef(false);
   if (observed === 'reattaching') sawReattachingRef.current = true;
   const sawReattaching = sawReattachingRef.current;
@@ -63,33 +73,46 @@ export function SessionPrepareSteps() {
   // Mark every ensure step complete and light up a synthetic tail step.
   const loadingMessages = !sandboxPreparing && messagesInitializing;
 
+  const items: Array<{ step: ProcessStep; position: number }> = PHASE_ORDER.map((phase, idx) => {
+    const rawStatus = stepStatus(phase, activePhase, sawReattaching);
+    const status: StepStatus = loadingMessages ? 'success' : rawStatus;
+    const isActive = status === 'running';
+    return {
+      position: idx + 1,
+      step: {
+        id: PHASE_ID[phase],
+        status,
+        isActive,
+        title: PHASE_ID[phase],
+        description: isActive ? activeMessage : '',
+      },
+    };
+  });
+  items.push({
+    position: items.length + 1,
+    step: {
+      id: LOADING_MESSAGES_ID,
+      status: loadingMessages ? 'running' : 'pending',
+      isActive: loadingMessages,
+      title: LOADING_MESSAGES_ID,
+      description: '',
+    },
+  });
+
   return (
     <div
       role="status"
       aria-label="Preparing session"
-      className="flex flex-col gap-2"
       data-testid="session-prepare-steps"
+      className="flex flex-1 items-center justify-center px-4 py-8"
     >
-      {PHASE_ORDER.map(phase => {
-        const rawStatus = stepStatus(phase, activePhase, sawReattaching);
-        const status: StepStatus = loadingMessages
-          ? rawStatus === 'skipped'
-            ? 'skipped'
-            : 'complete'
-          : rawStatus;
-        return (
-          <SessionPrepareStep
-            key={phase}
-            label={PHASE_LABEL[phase]}
-            status={status}
-            message={status === 'active' ? activeMessage : undefined}
-          />
-        );
-      })}
-      <SessionPrepareStep
-        label="Loading messages"
-        status={loadingMessages ? 'active' : 'pending'}
-      />
+      <div className="flex w-full max-w-md flex-col gap-1">
+        {items.map(({ step, position }) => (
+          <div key={step.id} data-testid="session-prepare-step" data-status={step.status}>
+            <ProcessStepListItem stepId={step.id} step={step} isActive={step.isActive} position={position} />
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -99,42 +122,12 @@ function stepStatus(
   activePhase: PrepareProgress['phase'],
   sawReattaching: boolean,
 ): StepStatus {
-  // `provisioning` is skipped for the whole ensure cycle once `reattaching`
-  // has been observed — even after the server advances past it.
-  if (sawReattaching && phase === 'provisioning') return 'skipped';
+  // `provisioning` auto-completes once `reattaching` was observed — the
+  // pipeline reached it and just walks past.
+  if (sawReattaching && phase === 'provisioning') return 'success';
   const activeIdx = PHASE_ORDER.indexOf(activePhase);
   const phaseIdx = PHASE_ORDER.indexOf(phase);
-  if (phaseIdx < activeIdx) return 'complete';
-  if (phaseIdx === activeIdx) return 'active';
+  if (phaseIdx < activeIdx) return 'success';
+  if (phaseIdx === activeIdx) return 'running';
   return 'pending';
-}
-
-function SessionPrepareStep({ label, status, message }: { label: string; status: StepStatus; message?: string }) {
-  return (
-    <div className="flex items-start gap-3" data-status={status} data-testid={`session-prepare-step`}>
-      <StepIcon status={status} />
-      <div className="flex flex-col">
-        <span
-          className={
-            status === 'complete'
-              ? 'text-icon-primary text-sm'
-              : status === 'active'
-                ? 'text-icon-primary text-sm'
-                : status === 'skipped'
-                  ? 'text-icon-tertiary text-sm line-through'
-                  : 'text-icon-tertiary text-sm'
-          }
-        >
-          {label}
-        </span>
-        {message && <span className="text-icon-secondary text-xs">{message}</span>}
-      </div>
-    </div>
-  );
-}
-
-function StepIcon({ status }: { status: StepStatus }) {
-  if (status === 'complete') return <CheckCircle2 className="text-icon-primary mt-0.5 h-4 w-4" aria-hidden />;
-  if (status === 'active') return <Loader2 className="text-icon-primary mt-0.5 h-4 w-4 animate-spin" aria-hidden />;
-  return <Circle className="text-icon-tertiary mt-0.5 h-4 w-4" aria-hidden />;
 }
