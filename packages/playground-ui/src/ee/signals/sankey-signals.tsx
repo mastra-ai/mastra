@@ -3,7 +3,7 @@ import { ArrowLeftRight, ChartNoAxesGantt, Waypoints } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
 import { SignalsOverviewPage as SignalsEmptyState } from './components/signals-overview-page';
-import { fetchThemeFlow, fetchThemePaths, fetchThemeSnapshots } from './entity-learning-api';
+import { fetchThemeFlow, fetchThemePaths, fetchThemeSnapshots, serializeThemeFilters } from './entity-learning-api';
 import { FlowCard } from './flow-card';
 import { useEntityLearningProgress } from './hooks/use-entity-learning-progress';
 import { useSnapshotPlayback } from './hooks/use-snapshot-playback';
@@ -23,8 +23,14 @@ import { SignalsFrameLoadingSkeleton, SignalsLoadingSkeleton } from './signals-l
 import { SnapshotTimeline } from './snapshot-timeline';
 import { ThemeCompare } from './theme-compare';
 import { ThemeDetailPanel } from './theme-detail-panel';
-import { buildDrilledThemeFlow, findNoiseSelection, findThemeSelection } from './theme-drilldown-data';
-import type { ThemeSelection } from './theme-drilldown-data';
+import {
+  buildDrilledThemeFlow,
+  findNoiseSelection,
+  findSelectionStats,
+  findThemeSelection,
+  mergeVisibleSignalOrder,
+} from './theme-drilldown-data';
+import type { SelectedTheme, ThemeSelection } from './theme-drilldown-data';
 import { ThemeFilterBanner } from './theme-filter-banner';
 import { ThemeLifelines } from './theme-lifelines';
 import { TraceIntelligenceExplainer } from './trace-intelligence-explainer';
@@ -74,8 +80,8 @@ export function SankeySignals({
   const [selectedSnapshotOrdinal, setSelectedSnapshotOrdinal] = useState<number>();
   const [isPlaying, setIsPlaying] = useState(false);
   const [viewMode, setViewMode] = useState<SignalsViewMode>('flow');
-  const [drillIn, setDrillIn] = useState<ThemeSelection>();
-  const [detailSelection, setDetailSelection] = useState<ThemeSelection>();
+  const [drillStack, setDrillStack] = useState<ThemeSelection[]>([]);
+  const [detailSelection, setDetailSelection] = useState<SelectedTheme>();
   const [noiseSignalName, setNoiseSignalName] = useState<TraceSignalName>();
   const matchedSnapshotIndex = snapshots.findIndex(snapshot => snapshot.ordinal === selectedSnapshotOrdinal);
   const selectedSnapshotIndex = matchedSnapshotIndex >= 0 ? matchedSnapshotIndex : 0;
@@ -94,6 +100,7 @@ export function SankeySignals({
   // Compare cards and lifeline points open details for the theme at the
   // landmark they were clicked on, so the panel's snapshot follows the click.
   const openThemeDetailsAt = (selection: ThemeSelection, snapshotIndex: number) => {
+    if (selection.kind !== 'theme') return;
     selectSnapshot(snapshotIndex);
     setNoiseSignalName(undefined);
     setDetailSelection(selection);
@@ -123,14 +130,14 @@ export function SankeySignals({
     entityType,
     signalNames,
     snapshot?.snapshotId,
-    drillInAvailable ? drillIn?.themeId : undefined,
+    drillInAvailable && drillStack.length > 0,
   );
   const flow = useMemo(() => {
-    if (!stableUnfilteredFlow || !drillIn || !pathsQuery.data) return stableUnfilteredFlow;
+    if (!stableUnfilteredFlow || drillStack.length === 0 || !pathsQuery.data) return stableUnfilteredFlow;
 
-    const drilledFlow = buildDrilledThemeFlow(stableUnfilteredFlow, pathsQuery.data, drillIn);
+    const drilledFlow = buildDrilledThemeFlow(stableUnfilteredFlow, pathsQuery.data, drillStack);
     return stabilizeThemeFlow(drilledFlow, [stableUnfilteredFlow, drilledFlow]);
-  }, [drillIn, pathsQuery.data, stableUnfilteredFlow]);
+  }, [drillStack, pathsQuery.data, stableUnfilteredFlow]);
   const graphSummary = useMemo(() => (flow ? buildSignalGraphSummary(flow) : undefined), [flow]);
   const populatedStageCount = currentFlow?.stages.filter(stage => stage.nodes.length > 0).length ?? 0;
   const shouldLoadProgress =
@@ -138,8 +145,8 @@ export function SankeySignals({
     !snapshotsQuery.isError &&
     (!snapshot || Boolean(currentFlow && (!flow || !graphSummary || populatedStageCount < 2)));
   const progressQuery = useEntityLearningProgress(entityId, entityType, shouldLoadProgress);
-  const isPlaybackBlockedByDrillIn = drillIn !== undefined && (pathsQuery.isFetching || pathsQuery.isError);
-  const hasActivePathsError = drillIn !== undefined && pathsQuery.isError;
+  const isPlaybackBlockedByDrillIn = drillStack.length > 0 && (pathsQuery.isFetching || pathsQuery.isError);
+  const hasActivePathsError = drillStack.length > 0 && pathsQuery.isError;
 
   useSnapshotPlayback({
     isPlaying,
@@ -182,7 +189,7 @@ export function SankeySignals({
           }),
         ),
       );
-      if (drillIn && nextSnapshot && nextSnapshot.traceCount <= DRILL_IN_TRACE_LIMIT) {
+      if (drillStack.length > 0 && nextSnapshot && nextSnapshot.traceCount <= DRILL_IN_TRACE_LIMIT) {
         await queryClient.fetchQuery({
           queryKey: [
             'entity-learning',
@@ -224,9 +231,9 @@ export function SankeySignals({
             setIsPlaying(false);
             void snapshotsQuery.refetch();
             void Promise.all(flowQueries.map(query => query.refetch()));
-            if (drillIn && drillInAvailable) void pathsQuery.refetch();
+            if (drillStack.length > 0 && drillInAvailable) void pathsQuery.refetch();
           }}
-          onClear={hasActivePathsError ? () => setDrillIn(undefined) : undefined}
+          onClear={hasActivePathsError ? () => setDrillStack([]) : undefined}
         />
       </>
     );
@@ -269,37 +276,42 @@ export function SankeySignals({
   }
 
   const stages = flow.stages;
-  // Noise nodes open the noise details panel (noise has no themeId, so it
-  // cannot drill in). Theme nodes always open details; they additionally
-  // isolate the flow when the snapshot is under the drill-in limit.
   const isNodeClickable = (selection: SankeyChartNodeSelection) =>
     findNoiseSelection(flow, selection.column.id, selection.value) !== undefined ||
     findThemeSelection(flow, selection.column.id, selection.value) !== undefined;
   const handleNodeClick = (selection: SankeyChartNodeSelection) => {
-    const noiseSignal = findNoiseSelection(flow, selection.column.id, selection.value);
-    if (noiseSignal) {
+    const nextSelection =
+      findNoiseSelection(flow, selection.column.id, selection.value) ??
+      findThemeSelection(flow, selection.column.id, selection.value);
+    if (!nextSelection || drillStack.some(filter => filter.signalName === nextSelection.signalName)) return;
+    if (nextSelection.kind === 'theme') {
+      setNoiseSignalName(undefined);
+      setDetailSelection(nextSelection);
+      if (drillInAvailable) setDrillStack(current => [...current, nextSelection]);
+    } else {
       setDetailSelection(undefined);
-      setNoiseSignalName(noiseSignal);
-      return;
+      setNoiseSignalName(nextSelection.signalName);
     }
-    const nextSelection = findThemeSelection(flow, selection.column.id, selection.value);
-    if (!nextSelection) return;
-    setNoiseSignalName(undefined);
-    setDetailSelection(nextSelection);
-    if (drillInAvailable) setDrillIn(nextSelection);
   };
   const drillInDisabledReason = drillInAvailable
     ? undefined
     : 'Drill-in is unavailable for snapshots with more than 2,000 traces.';
-  const isDrilledEmpty = drillIn !== undefined && pathsQuery.data !== undefined && flow.snapshot.traceCount === 0;
+  const isDrilledEmpty = drillStack.length > 0 && pathsQuery.data !== undefined && flow.snapshot.traceCount === 0;
   const handleSignalOrderChange = (nextSignalNames: TraceSignalName[]) => {
     if (perspectiveMutation.isPending) return;
     setIsPlaying(false);
     setDetailSelection(undefined);
     setNoiseSignalName(undefined);
-    setPendingSignalNames(nextSignalNames);
-    perspectiveMutation.mutate(nextSignalNames);
+    const mergedSignalNames = mergeVisibleSignalOrder(signalNames, nextSignalNames);
+    setPendingSignalNames(mergedSignalNames);
+    perspectiveMutation.mutate(mergedSignalNames);
   };
+  const filtersResolved = drillStack.length > 0 && drillInAvailable && pathsQuery.data !== undefined;
+  const detailStats = filtersResolved ? findSelectionStats(flow, drillStack, detailSelection) : undefined;
+  const noiseStats = filtersResolved
+    ? findSelectionStats(flow, drillStack, noiseSignalName ? { kind: 'noise', signalName: noiseSignalName } : undefined)
+    : undefined;
+  const filterKey = serializeThemeFilters(drillStack);
 
   return (
     <main className="min-w-0 space-y-5 p-4 lg:p-6">
@@ -348,31 +360,33 @@ export function SankeySignals({
             snapshots={snapshots}
             selectedIndex={selectedSnapshotIndex}
             totalSnapshots={totalSnapshots}
-            summary={`${drillIn ? 'Filtered · ' : ''}${snapshotSummaryLabel(snapshot, flow)}`}
+            summary={`${drillStack.length > 0 ? (drillInAvailable ? 'Filtered · ' : 'Filters unavailable · ') : ''}${snapshotSummaryLabel(snapshot, flow)}`}
             isPlaying={isPlaying}
             onPlayingChange={handlePlayingChange}
             onSnapshotChange={selectSnapshot}
           />
-          {drillIn ? (
+          {drillStack.length > 0 ? (
             <ThemeFilterBanner
-              selection={drillIn}
-              filteredTraceCount={pathsQuery.data ? flow.stages[0]?.traceCount : undefined}
-              totalTraceCount={currentFlow.stages[0]?.traceCount ?? currentFlow.snapshot.traceCount}
-              onViewDetails={() => {
-                setNoiseSignalName(undefined);
-                setDetailSelection(drillIn);
+              selections={drillStack}
+              filteredTraceCount={filtersResolved ? flow.snapshot.traceCount : undefined}
+              totalTraceCount={currentFlow.snapshot.traceCount}
+              isUnavailable={!drillInAvailable}
+              onViewDetails={selection => {
+                if (selection.kind === 'theme') {
+                  setNoiseSignalName(undefined);
+                  setDetailSelection(selection);
+                } else {
+                  setDetailSelection(undefined);
+                  setNoiseSignalName(selection.signalName);
+                }
               }}
-              onClear={() => setDrillIn(undefined)}
+              onRemove={signalName =>
+                setDrillStack(current => current.filter(filter => filter.signalName !== signalName))
+              }
+              onClear={() => setDrillStack([])}
             />
           ) : null}
-          {drillIn && !drillInAvailable ? (
-            <section className="border-border1 bg-surface2 text-neutral3 rounded-lg border p-6 text-sm">
-              This drill-in is unavailable for snapshots with more than 2,000 traces. Use the clear filter action above
-              or choose another snapshot.
-            </section>
-          ) : drillIn && pathsQuery.isPending ? (
-            <SignalsFrameLoadingSkeleton />
-          ) : isDrilledEmpty ? (
+          {isDrilledEmpty ? (
             <section className="border-border1 bg-surface2 text-neutral3 rounded-lg border p-6 text-sm">
               This theme is not present in the selected snapshot. Use the clear filter action above to return to the
               full flow.
@@ -409,20 +423,24 @@ export function SankeySignals({
         </>
       )}
       <ThemeDetailPanel
-        key={`${snapshot.snapshotId}:${detailSelection?.signalName ?? ''}:${detailSelection?.themeId ?? ''}`}
+        key={`${snapshot.snapshotId}:${detailSelection?.signalName ?? ''}:${detailSelection?.themeId ?? ''}:${filterKey}`}
         entityId={entityId}
         entityType={entityType}
         snapshotId={snapshot.snapshotId}
         snapshotTotal={snapshot.total}
         selection={detailSelection}
+        filters={drillStack}
+        filteredStats={detailStats}
         onClose={() => setDetailSelection(undefined)}
       />
       <NoiseDetailPanel
-        key={`${snapshot.snapshotId}:${noiseSignalName ?? ''}`}
+        key={`${snapshot.snapshotId}:${noiseSignalName ?? ''}:${filterKey}`}
         entityId={entityId}
         entityType={entityType}
         snapshotId={snapshot.snapshotId}
         signalName={noiseSignalName}
+        filters={drillStack}
+        filteredStats={noiseStats}
         onClose={() => setNoiseSignalName(undefined)}
       />
     </main>

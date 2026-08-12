@@ -8,7 +8,7 @@ import { useApiConfig } from '../../../../api/config';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { useAgentControllerThreadMessages } from '../../../../hooks/useAgentControllerThreadMessages';
 import { useFactoryQuery } from '../../../../hooks/useFactories';
-import { useEnsureMaterializedSandbox } from '../../../../hooks/useEnsureMaterializedSandbox';
+import { useEnsureMaterializedSandbox, useEnsureProgress } from '../../../../hooks/useEnsureMaterializedSandbox';
 import { useUserSessionQuery } from '../../../../hooks/useWorkspaces';
 import type { LinkedRepositoryPayload } from '../../workspaces/services/github';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
@@ -17,6 +17,7 @@ import { ChatModelsProvider } from './ChatModelsProvider';
 import { ChatModesProvider } from './ChatModesProvider';
 import { ChatSessionContext } from './ChatSessionContext';
 import { ChatTranscriptProvider } from './ChatTranscriptProvider';
+import { SessionPrepareSteps } from '../components/SessionPrepareSteps';
 import { useChatSessionContext } from './useChatSessionContext';
 
 interface ChatThreadMessagesApi {
@@ -26,6 +27,18 @@ interface ChatThreadMessagesApi {
 }
 
 const ChatThreadMessagesContext = createContext<ChatThreadMessagesApi | null>(null);
+
+/**
+ * True while the initial thread-messages fetch is in flight for the current
+ * threadId. Returns false outside a `ChatSessionBoundary` (e.g. draft
+ * composer routes with no thread), which keeps preparing-aware consumers
+ * from treating "no boundary" as "still loading".
+ */
+export function useChatMessagesInitializing(): boolean {
+  const value = useContext(ChatThreadMessagesContext);
+  if (!value) return false;
+  return Boolean(value.threadId) && value.isPending;
+}
 
 /** Stable project/API configuration for chat shell consumers such as the sidebar. */
 export function ChatSessionConfigProvider({
@@ -77,12 +90,24 @@ export function ChatSessionConfigProvider({
   const resourceOverride = userScoped
     ? null
     : new URLSearchParams(typeof window === 'undefined' ? '' : window.location.search).get('resourceId');
-  const sessionEnabled = userScoped
+  const sandboxReady = resourceOverride
+    ? Boolean(resourceOverride)
+    : ensureQuery.isSuccess && Boolean(storedSession) && !resolvingSession;
+  const sessionError = ensureQuery.error ?? undefined;
+  // `resourceReady` — safe to address the agent-controller session by
+  // `resourceId` for reads/streaming as soon as server-side session metadata
+  // resolves. Does NOT wait on `/ensure` — the agent-controller endpoints are
+  // keyed by resourceId, not by a live sandbox, so reads and thread lookups
+  // can parallelize with sandbox provisioning.
+  const resourceReady = userScoped
     ? Boolean(storedSession) && !resolvingSession
-    : resourceOverride
-      ? Boolean(resourceOverride)
-      : ensureQuery.isSuccess && Boolean(storedSession) && !resolvingSession;
-  const sessionError = userScoped ? undefined : (ensureQuery.error ?? undefined);
+    : Boolean(resourceOverride) || (Boolean(storedSession) && !resolvingSession);
+  // `sandboxPreparing` — true only when we're actively inside a session and
+  // awaiting `/ensure`. Distinct from `!sandboxReady`, which is also false
+  // outside any session.
+  const sandboxPreparing = inSession && !sandboxReady && !sessionError;
+  const sandboxProgressQuery = useEnsureProgress(inSession ? repository?.projectRepositoryId : undefined);
+  const sandboxProgress = sandboxPreparing ? sandboxProgressQuery.data : undefined;
   // Outside a session the factory resource is addressable straight away (its id
   // is the factory project id); inside one we keep the original ordering and
   // wait for the workspace so resource reads follow materialization.
@@ -91,7 +116,13 @@ export function ChatSessionConfigProvider({
   const resourceEnabled = !isUserDraft && resourceAddressable;
   const value = {
     resourceId: resourceOverride ?? resourceId ?? '',
-    sessionEnabled,
+    // `sessionEnabled` retained as an alias for `sandboxReady` so existing
+    // mutation/display consumers don't need to be renamed in this change.
+    sessionEnabled: sandboxReady,
+    sandboxReady,
+    resourceReady,
+    sandboxPreparing,
+    sandboxProgress,
     resourceEnabled,
     sessionError,
     retrySession: sessionError ? () => void ensureQuery.refetch() : undefined,
@@ -129,14 +160,14 @@ export function ChatSessionBoundary({
   threadId?: string;
   deferUntilMessagesReady?: boolean;
 }) {
-  const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
+  const { resourceId, resourceReady, projectPath, baseUrl } = useChatSessionContext();
   const messagesQuery = useAgentControllerThreadMessages({
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
     scope: projectPath,
     threadId,
     baseUrl,
-    enabled: sessionEnabled && Boolean(threadId),
+    enabled: resourceReady && Boolean(threadId),
   });
   const messages = {
     threadId,
@@ -145,7 +176,11 @@ export function ChatSessionBoundary({
   };
 
   if (deferUntilMessagesReady && threadId && (messages.isPending || messages.error)) {
-    return <ChatMessageFeedback {...messages} />;
+    return (
+      <ChatThreadMessagesContext.Provider value={messages}>
+        <ChatMessageBoundary>{null}</ChatMessageBoundary>
+      </ChatThreadMessagesContext.Provider>
+    );
   }
 
   return (
@@ -174,33 +209,44 @@ export function ChatSessionBoundary({
 export function ChatMessageBoundary({ children }: { children: ReactNode }) {
   const value = useContext(ChatThreadMessagesContext);
   if (!value) throw new Error('ChatMessageBoundary must be used within a ChatSessionBoundary');
+  const { sessionError, sandboxPreparing } = useChatSessionContext();
 
-  if (value.isPending || value.error) return <ChatMessageFeedback {...value} />;
+  // A failed workspace preparation keeps the session disabled — surface the
+  // real failure instead of an eternal skeleton or a partial-state loader.
+  if (sessionError) return <ChatMessageFeedback />;
+
+  // Any pre-transcript wait — sandbox provisioning OR the initial thread
+  // messages fetch — is shown as the step loader. Splitting these into two
+  // different loaders would flicker between them on cold visits where the
+  // ensure resolves fast but the messages fetch is still in flight; keeping
+  // them under one loader keeps the composer's spinning ring continuously
+  // meaningful through the whole preparing window.
+  const messagesInitializing = Boolean(value.threadId) && value.isPending;
+  if (sandboxPreparing || messagesInitializing) return <SessionPrepareSteps />;
+
+  if (value.threadId && value.error) return <ChatMessageFallback {...value} />;
 
   return children;
 }
 
-function ChatMessageFeedback({ threadId, isPending, error }: ChatThreadMessagesApi) {
+function ChatMessageFeedback() {
   const { sessionError, retrySession } = useChatSessionContext();
+  if (!sessionError) return null;
+  return (
+    <div className="flex flex-col items-stretch gap-4">
+      <Notice variant="destructive">Failed to prepare the workspace: {sessionError.message}</Notice>
+      {retrySession && (
+        <div>
+          <Button variant="default" onClick={retrySession}>
+            Retry
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
 
-  // A failed workspace preparation keeps the session disabled, which leaves
-  // the messages query pending forever — surface the real failure instead of
-  // an eternal skeleton.
-  if (sessionError) {
-    return (
-      <div className="flex flex-col items-stretch gap-4">
-        <Notice variant="destructive">Failed to prepare the workspace: {sessionError.message}</Notice>
-        {retrySession && (
-          <div>
-            <Button variant="default" onClick={retrySession}>
-              Retry
-            </Button>
-          </div>
-        )}
-      </div>
-    );
-  }
-
+function ChatMessageFallback({ threadId, isPending, error }: ChatThreadMessagesApi) {
   if (threadId && isPending) {
     return (
       <div className="flex flex-col gap-4">

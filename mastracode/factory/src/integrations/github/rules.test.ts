@@ -491,6 +491,7 @@ describe('GithubRules', () => {
       controller: controller as never,
       transitionService,
       storage: workItems,
+      isAutoRunEnabled: async () => true,
       ownerId: 'worker-1',
       primeCredentials,
       prepareBinding: async ({ record, item, role }) => {
@@ -841,6 +842,7 @@ describe('GithubRules', () => {
       controller: { getSessionByResource: vi.fn(async () => undefined) } as never,
       transitionService: new FactoryTransitionService({ storage: workItems, rules }),
       storage: workItems,
+      isAutoRunEnabled: async () => true,
       ownerId: 'worker-1',
     });
 
@@ -922,6 +924,7 @@ describe('GithubRules', () => {
       controller: { getSessionByResource: vi.fn(async () => undefined) } as never,
       transitionService: new FactoryTransitionService({ storage: workItems, rules }),
       storage: workItems,
+      isAutoRunEnabled: async () => true,
       ownerId: 'worker-1',
     });
 
@@ -1639,7 +1642,11 @@ describe('createGithubPullRequestReconciler', () => {
     const context = await setup('read');
     const card = await createIssueCard(context, { number: 42 });
     const fetchIssue = vi.fn(async () => closedIssueState(42, 'not_planned'));
-    const reconcile = createReconciler(context, vi.fn(async () => undefined), fetchIssue);
+    const reconcile = createReconciler(
+      context,
+      vi.fn(async () => undefined),
+      fetchIssue,
+    );
 
     await reconcile([repositoryTarget]);
 
@@ -1662,7 +1669,11 @@ describe('createGithubPullRequestReconciler', () => {
     // No repository signal at all: ambiguous, so the sweep must not guess.
     await createIssueCard(context, { number: 44, url: null });
     const fetchIssue = vi.fn(async () => closedIssueState(42, 'completed'));
-    const reconcile = createReconciler(context, vi.fn(async () => undefined), fetchIssue);
+    const reconcile = createReconciler(
+      context,
+      vi.fn(async () => undefined),
+      fetchIssue,
+    );
 
     await expect(reconcile([repositoryTarget])).resolves.toMatchObject({ issuesChecked: 1, issuesClosed: 1 });
     expect(fetchIssue).toHaveBeenCalledTimes(1);
@@ -1692,7 +1703,11 @@ describe('createGithubPullRequestReconciler', () => {
       metadata: { githubRepositoryId: 999 },
     });
     const fetchIssue = vi.fn(async () => closedIssueState(42, 'completed'));
-    const reconcile = createReconciler(context, vi.fn(async () => undefined), fetchIssue);
+    const reconcile = createReconciler(
+      context,
+      vi.fn(async () => undefined),
+      fetchIssue,
+    );
 
     await expect(reconcile([repositoryTarget])).resolves.toMatchObject({ issuesChecked: 1, issuesClosed: 1 });
     expect(fetchIssue).toHaveBeenCalledTimes(1);
@@ -1711,7 +1726,11 @@ describe('createGithubPullRequestReconciler', () => {
     await createIssueCard(context, { number: 41, stages: ['done'] });
     await createIssueCard(context, { number: 42 });
     const fetchIssue = vi.fn(async () => ({ ...closedIssueState(42), state: 'open' as const }));
-    const reconcile = createReconciler(context, vi.fn(async () => undefined), fetchIssue);
+    const reconcile = createReconciler(
+      context,
+      vi.fn(async () => undefined),
+      fetchIssue,
+    );
 
     await expect(reconcile([repositoryTarget])).resolves.toEqual({
       repositories: 1,
@@ -1735,13 +1754,22 @@ describe('createGithubPullRequestReconciler', () => {
     });
 
     // No fetcher wired: issue cards are ignored entirely.
-    await expect(createReconciler(context, vi.fn(async () => undefined))([repositoryTarget])).resolves.toMatchObject({
+    await expect(
+      createReconciler(
+        context,
+        vi.fn(async () => undefined),
+      )([repositoryTarget]),
+    ).resolves.toMatchObject({
       failed: 0,
     });
 
     // Wired but failing: the sweep records the failure with issue context.
     await expect(
-      createReconciler(context, vi.fn(async () => undefined), fetchIssue)([repositoryTarget]),
+      createReconciler(
+        context,
+        vi.fn(async () => undefined),
+        fetchIssue,
+      )([repositoryTarget]),
     ).resolves.toMatchObject({
       failed: 1,
       errors: [
