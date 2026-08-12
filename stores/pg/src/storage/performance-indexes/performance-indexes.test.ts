@@ -73,7 +73,7 @@ describe('PostgresStore Domain Performance Indexes', () => {
       expect(indexes.length).toBe(1);
       expect(indexes).toContainEqual({
         name: 'test_schema_mastra_scores_trace_id_span_id_created_at_idx',
-        table: 'mastra_scores',
+        table: 'mastra_scorers',
         columns: ['traceId', 'spanId', 'createdAt DESC'],
       });
     });
