@@ -117,6 +117,7 @@ beforeEach(async () => {
 
 afterEach(() => {
   vi.clearAllMocks();
+  vi.useRealTimers();
 });
 
 // ── Auth / scoping ───────────────────────────────────────────────────────
@@ -634,6 +635,9 @@ describe('GET /web/factory/projects/:id/metrics', () => {
   });
 
   it('aggregates the cards the Factory ran: throughput, WIP, and source mix', async () => {
+    // Freeze the clock so the cards and the one-day window below share a date
+    // even when the run straddles UTC midnight.
+    vi.useFakeTimers({ now: new Date('2026-06-15T12:00:00.000Z'), toFake: ['Date'] });
     // One card completed today (intake → done), one still in intake.
     const created = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody({ sessions: run }));
     const { workItem } = await created.json();
