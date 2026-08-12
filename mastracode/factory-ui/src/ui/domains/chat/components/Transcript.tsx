@@ -707,8 +707,8 @@ function MessageBubble({
       return <MarkdownRenderer className="my-3">{part.text}</MarkdownRenderer>;
     },
     Reasoning: (part: ReasoningPart) => (
-      <div className="border-border1 text-ui-sm text-icon3 my-1.5 border-l-2 pl-2.5 italic [&_p]:my-0.5">
-        <MarkdownRenderer>{part.reasoning}</MarkdownRenderer>
+      <div className="border-border1 my-1.5 border-l-2 pl-2.5 italic [&_p]:my-0.5">
+        <MarkdownRenderer className="text-ui-sm text-icon3">{part.reasoning}</MarkdownRenderer>
       </div>
     ),
     ToolInvocation: (part: ToolInvocationPart) => {
@@ -1108,7 +1108,7 @@ function StatusMetadataCard({ status }: { status: StatusMetadata }) {
 function NoticeCard({ entry }: { entry: NoticeEntry }) {
   return (
     <Notice className="my-2" variant={entry.level === 'error' ? 'destructive' : 'info'}>
-      <MarkdownRenderer>{entry.text}</MarkdownRenderer>
+      <MarkdownRenderer className="text-current">{entry.text}</MarkdownRenderer>
     </Notice>
   );
 }
