@@ -1,3 +1,4 @@
+import type { AgentControllerOMProgress } from '@mastra/client-js';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
@@ -7,7 +8,7 @@ import type { ChatRuntimeApi } from '../../../context/ChatRuntimeContext';
 import { OperationalMemoryStatus } from '../OperationalMemoryStatus';
 import { RuntimeActivity } from '../RuntimeActivity';
 
-const omProgress = {
+const omProgress: AgentControllerOMProgress = {
   status: 'idle',
   pendingTokens: 14_900,
   threshold: 30_000,

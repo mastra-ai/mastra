@@ -1,9 +1,10 @@
+import type { AgentControllerOMProgress } from '@mastra/client-js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ChatRuntimeState } from '../runtime';
 import { initialChatRuntime, omWork, runtimeReducer } from '../runtime';
 
-const omProgress = {
+const omProgress: AgentControllerOMProgress = {
   status: 'idle',
   pendingTokens: 320,
   threshold: 1000,
@@ -130,26 +131,13 @@ describe('chat runtime reducer', () => {
       expect(second.tokensPerSec).toBe(150);
     });
 
-    it('still reads a reply the sampler never got to close, once the run ends', () => {
+    it('leaves a reply too short to time unmeasured rather than counting the wait for the run to end', () => {
       const opened = streamText(runtimeReducer(initialChatRuntime, { type: 'agent_start' }), 'x'.repeat(20));
       vi.advanceTimersByTime(100);
       const streamed = streamText(opened, 'x'.repeat(220));
-
-      expect(streamed.tokensPerSec).toBe(0);
-
       vi.advanceTimersByTime(300);
-      const ended = runtimeReducer(streamed, { type: 'agent_end' });
 
-      expect(ended.tokensPerSec).toBe(125);
-      expect(ended.tokensPerSecHistory).toEqual([125]);
-    });
-
-    it('refuses to time a burst that arrived faster than the sampling floor', () => {
-      const opened = streamText(runtimeReducer(initialChatRuntime, { type: 'agent_start' }), 'x'.repeat(20));
-      vi.advanceTimersByTime(55);
-      const buffered = streamText(opened, 'x'.repeat(8000));
-
-      expect(runtimeReducer(buffered, { type: 'agent_end' }).tokensPerSec).toBe(0);
+      expect(runtimeReducer(streamed, { type: 'agent_end' }).tokensPerSec).toBe(0);
     });
 
     it('smooths a new reading against the last instead of jumping to it', () => {

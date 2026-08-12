@@ -1,4 +1,4 @@
-import type { AgentControllerEvent, AgentControllerOMProgress } from '@mastra/client-js';
+import type { AgentControllerEvent, AgentControllerOMProgress, OMStatus } from '@mastra/client-js';
 import { isKnownAgentControllerEvent } from '@mastra/client-js';
 
 export interface UsageSnapshot {
@@ -9,7 +9,7 @@ export interface UsageSnapshot {
   [key: string]: unknown;
 }
 
-export type OMPhase = 'idle' | 'observing' | 'reflecting';
+export type OMPhase = OMStatus;
 
 /** Memory work on one budget: none, in the background, or with the turn on hold. */
 export type OMWork = 'idle' | 'background' | 'blocking';
@@ -34,12 +34,19 @@ export interface ChatRuntimeState {
   tokensPerSec: number;
   /** Recent decode rates of this run, oldest first, for the throughput curve. */
   tokensPerSecHistory: number[];
-  /** Start of the open measurement window, 0 before any text has streamed. */
-  _sampledAt: number;
-  /** Decoded characters per assistant message, so a second message can't read as a rewind. */
-  _streamedChars: Record<string, number>;
-  _sampledChars: number;
+  /** Reducer-private, kept out of `ChatRuntimeApi`. */
+  _sampler: RateSampler;
 }
+
+/** The open measurement window: when it opened, and what had been decoded by then. */
+interface RateSampler {
+  openedAt: number;
+  charsAtOpen: number;
+  /** Decoded characters per assistant message, so a second message can't read as a rewind. */
+  charsByMessage: Record<string, number>;
+}
+
+const closedSampler: RateSampler = { openedAt: 0, charsAtOpen: 0, charsByMessage: {} };
 
 const RATE_SAMPLES = 6;
 /** Below this a burst reads as network buffering rather than decoding, whatever the arithmetic says. */
@@ -56,9 +63,7 @@ export const initialChatRuntime: ChatRuntimeState = {
   bufferingObservations: false,
   tokensPerSec: 0,
   tokensPerSecHistory: [],
-  _sampledAt: 0,
-  _streamedChars: {},
-  _sampledChars: 0,
+  _sampler: closedSampler,
 };
 
 export interface OMWorkByBudget {
@@ -86,27 +91,21 @@ export function runtimeReducer(state: ChatRuntimeState, event: AgentControllerEv
 
   switch (event.type) {
     case 'agent_start':
-      return {
-        ...state,
-        tokensPerSec: 0,
-        tokensPerSecHistory: [],
-        _sampledAt: 0,
-        _streamedChars: {},
-        _sampledChars: 0,
-      };
+      return { ...state, tokensPerSec: 0, tokensPerSecHistory: [], _sampler: closedSampler };
     case 'message_start':
     case 'message_update': {
       const chars = decodedChars(event.message);
       if (chars === 0) return state;
-      const streamedChars = { ...state._streamedChars, [event.message.id]: chars };
-      const decoded = totalChars(streamedChars);
+      const { openedAt, charsAtOpen } = state._sampler;
+      const charsByMessage = { ...state._sampler.charsByMessage, [event.message.id]: chars };
+      const decoded = totalChars(charsByMessage);
       const now = Date.now();
-      const seconds = (now - state._sampledAt) / 1000;
-      if (state._sampledAt === 0 || seconds > WINDOW_SECONDS || decoded <= state._sampledChars) {
-        return { ...state, _sampledAt: now, _streamedChars: streamedChars, _sampledChars: decoded };
+      const seconds = (now - openedAt) / 1000;
+      if (openedAt === 0 || seconds > WINDOW_SECONDS || decoded <= charsAtOpen) {
+        return { ...state, _sampler: { openedAt: now, charsAtOpen: decoded, charsByMessage } };
       }
-      if (seconds < SAMPLE_SECONDS) return { ...state, _streamedChars: streamedChars };
-      const instantaneous = (decoded - state._sampledChars) / CHARS_PER_TOKEN / seconds;
+      if (seconds < SAMPLE_SECONDS) return { ...state, _sampler: { ...state._sampler, charsByMessage } };
+      const instantaneous = (decoded - charsAtOpen) / CHARS_PER_TOKEN / seconds;
       const tokensPerSec = Math.round(
         state.tokensPerSec > 0 ? 0.3 * instantaneous + 0.7 * state.tokensPerSec : instantaneous,
       );
@@ -114,27 +113,19 @@ export function runtimeReducer(state: ChatRuntimeState, event: AgentControllerEv
         ...state,
         tokensPerSec,
         tokensPerSecHistory: [...state.tokensPerSecHistory, tokensPerSec].slice(-RATE_SAMPLES),
-        _sampledAt: now,
-        _streamedChars: streamedChars,
-        _sampledChars: decoded,
+        _sampler: { openedAt: now, charsAtOpen: decoded, charsByMessage },
       };
     }
-    case 'agent_end': {
-      const closed = { ...state, _sampledAt: 0, _streamedChars: {}, _sampledChars: 0 };
-      if (state.tokensPerSecHistory.length > 0 || state._sampledAt === 0) return closed;
-      const decoded = totalChars(state._streamedChars);
-      const seconds = (Date.now() - state._sampledAt) / 1000;
-      if (seconds < SAMPLE_SECONDS || decoded <= state._sampledChars) return closed;
-      const tokensPerSec = Math.round((decoded - state._sampledChars) / CHARS_PER_TOKEN / seconds);
-      return { ...closed, tokensPerSec, tokensPerSecHistory: [tokensPerSec] };
-    }
+    case 'agent_end':
+      return { ...state, _sampler: closedSampler };
     case 'usage_update':
       return { ...state, usage: event.usage as UsageSnapshot };
     case 'display_state_changed':
       return {
         ...state,
         omProgress: event.displayState.omProgress ?? state.omProgress,
-        omPhase: reportedPhase(event.displayState.omProgress?.status) ?? state.omPhase,
+        /** Sent on every update, so a missed `om_*_end` cannot strand the ring. */
+        omPhase: event.displayState.omProgress?.status ?? state.omPhase,
         usage: (event.displayState.tokenUsage as UsageSnapshot | undefined) ?? state.usage,
         bufferingMessages: event.displayState.bufferingMessages ?? state.bufferingMessages,
         bufferingObservations: event.displayState.bufferingObservations ?? state.bufferingObservations,
@@ -181,14 +172,8 @@ interface RuntimeMessage {
   content: RuntimeMessagePart[] | { parts: RuntimeMessagePart[] };
 }
 
-/** The display state carries the phase on every update, so a missed `om_*_end` cannot strand the ring. */
-function reportedPhase(status: string | undefined): OMPhase | undefined {
-  if (status === 'idle' || status === 'observing' || status === 'reflecting') return status;
-  return undefined;
-}
-
-function totalChars(streamedChars: Record<string, number>) {
-  return Object.values(streamedChars).reduce((total, chars) => total + chars, 0);
+function totalChars(charsByMessage: Record<string, number>) {
+  return Object.values(charsByMessage).reduce((total, chars) => total + chars, 0);
 }
 
 function decodedChars(message: RuntimeMessage) {

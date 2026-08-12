@@ -1,4 +1,7 @@
 import { formatCompactTokens } from '@/ds/components/TokenBudget/format-tokens';
+import { toneClass } from '@/ds/components/TokenBudget/tones';
+import type { TokenBudgetTone } from '@/ds/components/TokenBudget/tones';
+import { cn } from '@/lib/utils';
 
 interface ThreadContextProgressProps {
   messageTokens?: number;
@@ -18,13 +21,12 @@ function ProgressBar({
   label: string;
   value: number;
   max: number;
-  tone: 'message' | 'memory';
+  tone: TokenBudgetTone;
 }) {
   const percent = Math.max(0, Math.min(100, (value / max) * 100));
-  const toneClass = tone === 'message' ? 'bg-blue-500/80' : 'bg-violet-500/80';
 
   return (
-    <div className="min-w-0 flex-1">
+    <div className={cn('min-w-0 flex-1', toneClass[tone])}>
       <div className="text-icon3 text-ui-xs mb-1 flex items-center justify-between gap-2 font-mono">
         <span className="text-icon6 tracking-wide uppercase">{label}</span>
         <span className="text-icon3 tabular-nums">
@@ -32,7 +34,7 @@ function ProgressBar({
         </span>
       </div>
       <div className="h-1.5 overflow-hidden rounded-full bg-white/[0.08]">
-        <div className={`h-full rounded-full ${toneClass}`} style={{ width: `${percent}%` }} />
+        <div className="h-full rounded-full bg-current/80" style={{ width: `${percent}%` }} />
       </div>
     </div>
   );
@@ -56,7 +58,7 @@ export function ThreadContextProgress({
     <div className="border-border1 border-b px-3 py-2">
       <div className="flex flex-col gap-2 sm:flex-row">
         {showMessages ? (
-          <ProgressBar label="Messages" value={messageTokens} max={messageThreshold} tone="message" />
+          <ProgressBar label="Messages" value={messageTokens} max={messageThreshold} tone="messages" />
         ) : null}
         {showMemory ? (
           <ProgressBar label={memoryLabel} value={memoryTokens} max={memoryThreshold} tone="memory" />
