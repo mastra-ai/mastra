@@ -246,11 +246,12 @@ const tokenCostControl = new TokenCostControl({
   maxCost: 10.0,
   scope: 'resource',
   window: '30d',
+  strategy: 'warn',
 })
 
 tokenCostControl.onViolation = ({ processorId, message, detail }) => {
   alertSystem.notify(`[${processorId}] ${message}`)
-  // detail contains: { usage, limit, totalUsage, scope, scopeKey }
+  // detail contains: { usage, limit, totalUsage, scope, scopeKey, threshold }
 }
 
 // Log moderation violations
@@ -266,7 +267,7 @@ moderation.onViolation = ({ processorId, message, detail }) => {
 
 The `onViolation` property is part of the base [`Processor` interface](/reference/processors/processor-interface), so any processor, including custom ones, can use it. The runner automatically invokes `onViolation` when any processor calls `abort()`. For processors using a `warn` strategy (like `TokenCostControl`), the callback also fires on warnings without blocking the request.
 
-Errors thrown by the callback are silently caught to prevent interfering with the processor's main logic.
+Errors thrown by runner-invoked callbacks after `abort()` are silently caught to prevent interfering with the processor's main logic. On the `TokenCostControl` warning path, callback errors are caught and logged through the Mastra logger.
 
 For more on how violation callbacks integrate with the processor pipeline, see [Violation callbacks](/docs/agents/processors#violation-callbacks) in the Processors documentation.
 

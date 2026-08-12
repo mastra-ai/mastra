@@ -7,6 +7,7 @@ Renamed CostGuardProcessor to TokenCostControl, improved its reliability and dia
 **Rename**
 
 - `CostGuardProcessor` is now `TokenCostControl` with processor id `'token-cost-control'`. The `CostGuardProcessor` export (and the `CostGuardOptions`, `CostGuardUsage`, `CostGuardBreakdownEntry`, `CostGuardTripwireMetadata`, and `CostGuardViolationDetail` types) remains available as a deprecated alias for the same class and will be removed in a future major version.
+- `CostControlProcessor` is also available as a deprecated alias for `TokenCostControl` and will be removed in a future major version.
 
 **Improvements**
 
