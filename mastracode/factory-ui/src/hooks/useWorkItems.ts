@@ -234,5 +234,9 @@ export function useDeleteWorkItemMutation(factoryProjectId: string | undefined) 
     onError: (_err, _id, context) => {
       if (context?.previous) queryClient.setQueryData(listKey, context.previous);
     },
+    onSuccess: () => {
+      // patchCards keeps runningSessionIds, so refetch to drop the deleted card's run marker with it.
+      void queryClient.invalidateQueries({ queryKey: listKey });
+    },
   });
 }

@@ -656,13 +656,13 @@ describe('GET /web/factory/projects/:id/metrics', () => {
       createBody({ externalSource: { integrationId: 'github', type: 'issue', externalId: '43' }, title: 'Upstream' }),
     );
 
-    const to = new Date().toISOString().slice(0, 10);
-    const from = new Date(Date.parse(`${to}T00:00:00.000Z`) - 6 * 86_400_000).toISOString().slice(0, 10);
-    const res = await json('GET', `/web/factory/projects/${PROJECT_ID}/metrics?from=${from}&to=${to}`);
+    // One-day window matching when the cards were filed; multi-day series and
+    // board-lifetime clipping are covered by the range test above and the unit tests.
+    const today = new Date().toISOString().slice(0, 10);
+    const res = await json('GET', `/web/factory/projects/${PROJECT_ID}/metrics?from=${today}&to=${today}`);
     expect(res.status).toBe(200);
     const { metrics } = await res.json();
 
-    // Both run cards were filed today, so the series covers today alone.
     expect(metrics.daysCovered).toBe(1);
     expect(metrics.throughput).toHaveLength(1);
     expect(metrics.throughput.reduce((sum: number, p: any) => sum + p.count, 0)).toBe(1);
