@@ -2,7 +2,7 @@
 '@mastra/core': minor
 ---
 
-Renamed CostGuardProcessor to CostControlProcessor, hardened it, and added new budgeting options.
+Renamed CostGuardProcessor to CostControlProcessor, improved its reliability and diagnostics, and added new budgeting options.
 
 **Rename**
 
@@ -10,8 +10,8 @@ Renamed CostGuardProcessor to CostControlProcessor, hardened it, and added new b
 
 **Improvements**
 
-- Cost is now fetched in a single aggregate query instead of two, reducing storage load.
-- Diagnostics now go through the Mastra logger, and cost query failures are logged instead of silently swallowed (the guard still fails open and never blocks on missing cost data).
+- Each cost check now issues fewer queries against observability storage.
+- Diagnostics now go through the Mastra logger, and failed cost queries now log diagnostics and allow the request to continue instead of failing silently.
 - With the warn strategy, warnings and the onViolation callback now fire at most once per request instead of on every step.
 - Violation messages no longer contain float precision artifacts (e.g. 0.30000000000000004 now renders as 0.3).
 
