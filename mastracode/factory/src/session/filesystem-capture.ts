@@ -10,7 +10,7 @@ const ARTIFACTS_LIST_COMMAND = 'cd "$1" && test -d .artifacts && find .artifacts
 export interface FilesystemCaptureSession {
   readonly identity: { getResourceId(): string };
   readonly thread: { requireId(): string };
-  getWorkspace(): { sandbox?: Pick<WorkspaceSandbox, 'executeCommand'> };
+  getWorkspace(): { sandbox?: Pick<WorkspaceSandbox, 'executeCommand'> } | undefined;
   onBeforeAgentEnd(listener: SessionBeforeAgentEndListener): () => void;
 }
 
@@ -50,7 +50,8 @@ export async function captureSessionFilesystem(
     const resourceId = session.identity.getResourceId();
     const threadId = session.thread.requireId();
     const sourceSession = await sourceControl.sessions.getBySessionId(resourceId);
-    const sandbox = session.getWorkspace().sandbox;
+    // Chat-only sessions run without a workspace; there is nothing to capture.
+    const sandbox = session.getWorkspace()?.sandbox;
     if (!sourceSession?.sandboxWorkdir || !sandbox?.executeCommand) return;
 
     const result = await sandbox.executeCommand('git', ['-C', sourceSession.sandboxWorkdir, ...GIT_STATUS_ARGS], {

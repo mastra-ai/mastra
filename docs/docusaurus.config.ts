@@ -83,10 +83,10 @@ const config: Config = {
     [
       '@docusaurus/plugin-content-docs',
       {
-        id: 'models',
-        path: 'src/content/en/models',
-        routeBasePath: 'models',
-        sidebarPath: './src/content/en/models/sidebars.js',
+        id: 'integrations',
+        path: 'src/content/en/integrations',
+        routeBasePath: 'integrations',
+        sidebarPath: './src/content/en/integrations/sidebars.js',
         editUrl: 'https://github.com/mastra-ai/mastra/tree/main/docs',
         admonitions: ADMONITIONS_CONFIG,
         remarkPlugins: [...SHARED_REMARK_PLUGINS],
@@ -95,10 +95,10 @@ const config: Config = {
     [
       '@docusaurus/plugin-content-docs',
       {
-        id: 'guides',
-        path: 'src/content/en/guides',
-        routeBasePath: 'guides',
-        sidebarPath: './src/content/en/guides/sidebars.js',
+        id: 'models',
+        path: 'src/content/en/models',
+        routeBasePath: 'models',
+        sidebarPath: './src/content/en/models/sidebars.js',
         editUrl: 'https://github.com/mastra-ai/mastra/tree/main/docs',
         admonitions: ADMONITIONS_CONFIG,
         remarkPlugins: [...SHARED_REMARK_PLUGINS],
@@ -135,7 +135,7 @@ const config: Config = {
           {
             label: 'Quickstart',
             description: 'Get up and running with Mastra',
-            link: '/guides/getting-started/quickstart',
+            link: '/docs',
           },
           { label: 'Studio', description: 'Test your agents, workflows, and tools', link: '/docs/studio/overview' },
           {

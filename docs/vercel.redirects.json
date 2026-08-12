@@ -17,12 +17,12 @@
     },
     {
       "source": "/docs/agents/channels",
-      "destination": "/docs/capabilities/channels/overview",
+      "destination": "/docs/capabilities/channels",
       "permanent": true
     },
     {
       "source": "/docs/voice/livekit",
-      "destination": "/guides/voice/realtime-voice",
+      "destination": "/integrations/voice/livekit",
       "permanent": true
     },
     {
@@ -36,13 +36,73 @@
       "permanent": true
     },
     {
+      "source": "/docs/observability/tracing/exporters/arize",
+      "destination": "/integrations/observability/arize",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/tracing/exporters/arthur",
+      "destination": "/integrations/observability/arthur",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/tracing/exporters/braintrust",
+      "destination": "/integrations/observability/braintrust",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/tracing/exporters/confident-ai",
+      "destination": "/integrations/observability/confident-ai",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/tracing/exporters/datadog",
+      "destination": "/integrations/observability/datadog",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/tracing/exporters/laminar",
+      "destination": "/integrations/observability/laminar",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/tracing/exporters/langfuse",
+      "destination": "/integrations/observability/langfuse",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/tracing/exporters/langsmith",
+      "destination": "/integrations/observability/langsmith",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/tracing/exporters/otel",
+      "destination": "/integrations/observability/opentelemetry",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/tracing/exporters/posthog",
+      "destination": "/integrations/observability/posthog",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/tracing/exporters/sentry",
+      "destination": "/integrations/observability/sentry",
+      "permanent": true
+    },
+    {
       "source": "/docs/observability/tracing/exporters/:path*",
       "destination": "/docs/observability/integrations/exporters/:path*",
       "permanent": true
     },
     {
-      "source": "/docs/observability/tracing/bridges/:path*",
-      "destination": "/docs/observability/integrations/bridges/:path*",
+      "source": "/docs/observability/tracing/bridges/datadog",
+      "destination": "/integrations/observability/datadog",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/tracing/bridges/otel",
+      "destination": "/integrations/observability/opentelemetry",
       "permanent": true
     },
     {
@@ -87,17 +147,17 @@
     },
     {
       "source": "/examples/memory/memory-with-mongodb",
-      "destination": "/reference/storage/mongodb",
+      "destination": "/integrations/databases/mongodb",
       "permanent": true
     },
     {
       "source": "/docs/getting-started/installation",
-      "destination": "/guides/getting-started/quickstart",
+      "destination": "/docs",
       "permanent": true
     },
     {
       "source": "/examples/agents/ai-sdk-v5-integration",
-      "destination": "/guides/getting-started/next-js",
+      "destination": "/integrations/frameworks/next-js",
       "permanent": true
     },
     {
@@ -117,7 +177,7 @@
     },
     {
       "source": "/docs/agents/adding-voice",
-      "destination": "/guides/voice/overview",
+      "destination": "/reference/voice/overview",
       "permanent": true
     },
     {
@@ -167,17 +227,17 @@
     },
     {
       "source": "/docs/frameworks/agentic-uis/ai-sdk",
-      "destination": "/guides/build-your-ui/ai-sdk-ui",
+      "destination": "/integrations/agentic-ui/ai-sdk-ui",
       "permanent": true
     },
     {
       "source": "/docs/frameworks/agentic-uis/assistant-ui",
-      "destination": "/guides/build-your-ui/assistant-ui",
+      "destination": "/integrations/agentic-ui/assistant-ui",
       "permanent": true
     },
     {
       "source": "/docs/frameworks/agentic-uis/copilotkit",
-      "destination": "/guides/build-your-ui/copilotkit/overview",
+      "destination": "/integrations/agentic-ui/copilotkit",
       "permanent": true
     },
     {
@@ -187,47 +247,47 @@
     },
     {
       "source": "/docs/frameworks/web-frameworks/astro",
-      "destination": "/guides/getting-started/astro",
+      "destination": "/integrations/frameworks/astro",
       "permanent": true
     },
     {
       "source": "/docs/frameworks/web-frameworks/next-js",
-      "destination": "/guides/getting-started/next-js",
+      "destination": "/integrations/frameworks/next-js",
       "permanent": true
     },
     {
       "source": "/docs/frameworks/web-frameworks/sveltekit",
-      "destination": "/guides/getting-started/sveltekit",
+      "destination": "/integrations/frameworks/sveltekit",
       "permanent": true
     },
     {
       "source": "/docs/frameworks/web-frameworks/vite-react",
-      "destination": "/guides/getting-started/vite-react",
+      "destination": "/integrations/frameworks/vite-react",
       "permanent": true
     },
     {
       "source": "/docs/frameworks/servers/express",
-      "destination": "/guides/getting-started/express",
+      "destination": "/integrations/frameworks/express",
       "permanent": true
     },
     {
       "source": "/guides/guide/manual-install",
-      "destination": "/guides/getting-started/manual-install",
+      "destination": "/reference/manual-install",
       "permanent": true
     },
     {
       "source": "/guides/quickstarts/nextjs",
-      "destination": "/guides/getting-started/next-js",
+      "destination": "/integrations/frameworks/next-js",
       "permanent": true
     },
     {
       "source": "/guides/quickstarts/standalone-server",
-      "destination": "/guides/getting-started/quickstart",
+      "destination": "/docs",
       "permanent": true
     },
     {
       "source": "/docs/getting-started/quickstart",
-      "destination": "/guides/getting-started/quickstart",
+      "destination": "/docs",
       "permanent": true
     },
     {
@@ -237,7 +297,7 @@
     },
     {
       "source": "/examples/agents/whatsapp-chat-bot",
-      "destination": "/guides/guide/whatsapp-chat-bot",
+      "destination": "/integrations/channels/whatsapp",
       "permanent": true
     },
     {
@@ -272,82 +332,82 @@
     },
     {
       "source": "/examples/rag/chunking/chunk-text",
-      "destination": "/guides/rag/chunking-and-embedding",
+      "destination": "/reference/rag/chunking-and-embedding",
       "permanent": true
     },
     {
       "source": "/examples/rag/chunking/chunk-html",
-      "destination": "/guides/rag/chunking-and-embedding",
+      "destination": "/reference/rag/chunking-and-embedding",
       "permanent": true
     },
     {
       "source": "/examples/rag/chunking/chunk-json",
-      "destination": "/guides/rag/chunking-and-embedding",
+      "destination": "/reference/rag/chunking-and-embedding",
       "permanent": true
     },
     {
       "source": "/examples/rag/chunking/chunk-markdown",
-      "destination": "/guides/rag/chunking-and-embedding",
+      "destination": "/reference/rag/chunking-and-embedding",
       "permanent": true
     },
     {
       "source": "/examples/rag/chunking/adjust-chunk-size",
-      "destination": "/guides/rag/chunking-and-embedding",
+      "destination": "/reference/rag/chunking-and-embedding",
       "permanent": true
     },
     {
       "source": "/examples/rag/chunking/adjust-chunk-delimiters",
-      "destination": "/guides/rag/chunking-and-embedding",
+      "destination": "/reference/rag/chunking-and-embedding",
       "permanent": true
     },
     {
       "source": "/examples/rag/embedding/embed-text-chunk",
-      "destination": "/guides/rag/chunking-and-embedding",
+      "destination": "/reference/rag/chunking-and-embedding",
       "permanent": true
     },
     {
       "source": "/examples/rag/embedding/embed-chunk-array",
-      "destination": "/guides/rag/chunking-and-embedding",
+      "destination": "/reference/rag/chunking-and-embedding",
       "permanent": true
     },
     {
       "source": "/examples/rag/embedding/embed-text-with-cohere",
-      "destination": "/guides/rag/chunking-and-embedding",
+      "destination": "/reference/rag/chunking-and-embedding",
       "permanent": true
     },
     {
       "source": "/examples/rag/upsert/upsert-embeddings",
-      "destination": "/guides/rag/vector-databases",
+      "destination": "/reference/rag/vector-databases",
       "permanent": true
     },
     {
       "source": "/examples/rag/query/retrieve-results",
-      "destination": "/guides/rag/retrieval",
+      "destination": "/reference/rag/retrieval",
       "permanent": true
     },
     {
       "source": "/examples/rag/rerank/rerank",
-      "destination": "/guides/rag/retrieval",
+      "destination": "/reference/rag/retrieval",
       "permanent": true
     },
     {
       "source": "/examples/rag/rerank/rerank-rag",
-      "destination": "/guides/rag/retrieval",
+      "destination": "/reference/rag/retrieval",
       "permanent": true
     },
     {
       "source": "/examples/rag/rerank/reranking-with-cohere",
-      "destination": "/guides/rag/retrieval",
+      "destination": "/reference/rag/retrieval",
       "permanent": true
     },
     {
       "source": "/examples/rag/rerank/reranking-with-zeroentropy",
-      "destination": "/guides/rag/retrieval",
+      "destination": "/reference/rag/retrieval",
       "permanent": true
     },
     {
       "source": "/examples/rag/usage/basic-rag",
-      "destination": "/guides/rag/retrieval",
+      "destination": "/reference/rag/retrieval",
       "permanent": true
     },
     {
@@ -442,27 +502,27 @@
     },
     {
       "source": "/docs/auth/clerk",
-      "destination": "/docs/server/auth/clerk",
+      "destination": "/integrations/auth/clerk",
       "permanent": true
     },
     {
       "source": "/docs/auth/supabase",
-      "destination": "/docs/server/auth/supabase",
+      "destination": "/integrations/auth/supabase",
       "permanent": true
     },
     {
       "source": "/docs/auth/firebase",
-      "destination": "/docs/server/auth/firebase",
+      "destination": "/integrations/auth/firebase",
       "permanent": true
     },
     {
       "source": "/docs/auth/workos",
-      "destination": "/docs/server/auth/workos",
+      "destination": "/integrations/auth/workos",
       "permanent": true
     },
     {
       "source": "/docs/auth/auth0",
-      "destination": "/docs/server/auth/auth0",
+      "destination": "/integrations/auth/auth0",
       "permanent": true
     },
     {
@@ -487,12 +547,12 @@
     },
     {
       "source": "/examples/rag/query/hybrid-vector-search",
-      "destination": "/guides/rag/retrieval",
+      "destination": "/reference/rag/retrieval",
       "permanent": true
     },
     {
       "source": "/examples/rag/usage/graph-rag",
-      "destination": "/guides/rag/graph-rag",
+      "destination": "/reference/rag/graph-rag-guide",
       "permanent": true
     },
     {
@@ -522,37 +582,37 @@
     },
     {
       "source": "/docs/deployment/cloud-providers/amazon-ec2",
-      "destination": "/guides/deployment/amazon-ec2",
+      "destination": "/integrations/deploy/amazon-ec2",
       "permanent": true
     },
     {
       "source": "/docs/deployment/cloud-providers/aws-lambda",
-      "destination": "/guides/deployment/aws-lambda",
+      "destination": "/integrations/deploy/aws-lambda",
       "permanent": true
     },
     {
       "source": "/docs/deployment/cloud-providers/azure-app-services",
-      "destination": "/guides/deployment/azure-app-services",
+      "destination": "/integrations/deploy/azure-app-services",
       "permanent": true
     },
     {
       "source": "/docs/deployment/cloud-providers/cloudflare-deployer",
-      "destination": "/guides/deployment/cloudflare",
+      "destination": "/integrations/deploy/cloudflare",
       "permanent": true
     },
     {
       "source": "/docs/deployment/cloud-providers/digital-ocean",
-      "destination": "/guides/deployment/digital-ocean",
+      "destination": "/integrations/deploy/digital-ocean",
       "permanent": true
     },
     {
       "source": "/docs/deployment/cloud-providers/netlify-deployer",
-      "destination": "/guides/deployment/netlify",
+      "destination": "/integrations/deploy/netlify",
       "permanent": true
     },
     {
       "source": "/docs/deployment/cloud-providers/vercel-deployer",
-      "destination": "/guides/deployment/vercel",
+      "destination": "/integrations/deploy/vercel",
       "permanent": true
     },
     {
@@ -562,7 +622,7 @@
     },
     {
       "source": "/docs/workflows/inngest-workflow",
-      "destination": "/guides/deployment/inngest",
+      "destination": "/integrations/deploy/inngest",
       "permanent": true
     },
     {
@@ -577,22 +637,22 @@
     },
     {
       "source": "/docs/memory/storage/memory-with-pg",
-      "destination": "/reference/storage/postgresql",
+      "destination": "/integrations/databases/postgresql",
       "permanent": true
     },
     {
       "source": "/docs/memory/storage/memory-with-libsql",
-      "destination": "/reference/storage/libsql",
+      "destination": "/integrations/databases/libsql",
       "permanent": true
     },
     {
       "source": "/docs/memory/storage/memory-with-mongodb",
-      "destination": "/reference/storage/mongodb",
+      "destination": "/integrations/databases/mongodb",
       "permanent": true
     },
     {
       "source": "/docs/memory/storage/memory-with-upstash",
-      "destination": "/reference/storage/upstash",
+      "destination": "/integrations/databases/upstash",
       "permanent": true
     },
     {
@@ -677,12 +737,12 @@
     },
     {
       "source": "/guides/deployment/netlify-deployer",
-      "destination": "/guides/deployment/netlify",
+      "destination": "/integrations/deploy/netlify",
       "permanent": true
     },
     {
       "source": "/guides/deployment/vercel-deployer",
-      "destination": "/guides/deployment/vercel",
+      "destination": "/integrations/deploy/vercel",
       "permanent": true
     },
     {
@@ -712,7 +772,7 @@
     },
     {
       "source": "/guides/deployment/cloudflare-deployer",
-      "destination": "/guides/deployment/cloudflare",
+      "destination": "/integrations/deploy/cloudflare",
       "permanent": true
     },
     {
@@ -817,7 +877,7 @@
     },
     {
       "source": "/docs/mcp/publishing-mcp-server",
-      "destination": "/guides/guide/publishing-mcp-server",
+      "destination": "/docs/mcp/overview",
       "permanent": true
     },
     {
@@ -837,17 +897,17 @@
     },
     {
       "source": "/docs/streaming",
-      "destination": "/guides/concepts/streaming",
+      "destination": "/docs/guides/streaming",
       "permanent": true
     },
     {
       "source": "/docs/streaming/overview",
-      "destination": "/guides/concepts/streaming",
+      "destination": "/docs/guides/streaming",
       "permanent": true
     },
     {
       "source": "/docs/streaming/events",
-      "destination": "/guides/concepts/streaming",
+      "destination": "/docs/guides/streaming",
       "permanent": true
     },
     {
@@ -922,17 +982,17 @@
     },
     {
       "source": "/reference/workspace/vercel",
-      "destination": "/reference/workspace/vercel-serverless",
+      "destination": "/integrations/sandboxes/vercel",
       "permanent": true
     },
     {
       "source": "/reference/workspace/vercel-microvm-sandbox",
-      "destination": "/reference/workspace/vercel-sandbox",
+      "destination": "/integrations/sandboxes/vercel",
       "permanent": true
     },
     {
       "source": "/guides/build-your-ui/copilotkit",
-      "destination": "/guides/build-your-ui/copilotkit/overview",
+      "destination": "/integrations/agentic-ui/copilotkit",
       "permanent": true
     },
     {
@@ -1032,7 +1092,7 @@
     },
     {
       "source": "/docs/getting-started/manual-install",
-      "destination": "/guides/getting-started/manual-install",
+      "destination": "/reference/manual-install",
       "permanent": true
     },
     {
@@ -1131,8 +1191,13 @@
       "permanent": true
     },
     {
+      "source": "/docs/voice",
+      "destination": "/reference/voice/overview",
+      "permanent": true
+    },
+    {
       "source": "/docs/voice/:path*",
-      "destination": "/guides/voice/:path*",
+      "destination": "/reference/voice/:path*",
       "permanent": true
     },
     {
@@ -1196,6 +1261,576 @@
       "permanent": true
     },
     {
+      "source": "/docs/capabilities/channels/discord",
+      "destination": "/integrations/channels/discord",
+      "permanent": true
+    },
+    {
+      "source": "/docs/capabilities/channels/imessage",
+      "destination": "/integrations/channels/imessage",
+      "permanent": true
+    },
+    {
+      "source": "/docs/capabilities/channels/slack",
+      "destination": "/integrations/channels/slack",
+      "permanent": true
+    },
+    {
+      "source": "/docs/capabilities/channels/teams",
+      "destination": "/integrations/channels/teams",
+      "permanent": true
+    },
+    {
+      "source": "/docs/capabilities/channels/telegram",
+      "destination": "/integrations/channels/telegram",
+      "permanent": true
+    },
+    {
+      "source": "/docs/capabilities/channels/whatsapp",
+      "destination": "/integrations/channels/whatsapp",
+      "permanent": true
+    },
+    {
+      "source": "/guides/getting-started/astro",
+      "destination": "/integrations/frameworks/astro",
+      "permanent": true
+    },
+    {
+      "source": "/guides/getting-started/electron",
+      "destination": "/integrations/frameworks/electron",
+      "permanent": true
+    },
+    {
+      "source": "/guides/getting-started/next-js",
+      "destination": "/integrations/frameworks/next-js",
+      "permanent": true
+    },
+    {
+      "source": "/guides/getting-started/nuxt",
+      "destination": "/integrations/frameworks/nuxt",
+      "permanent": true
+    },
+    {
+      "source": "/guides/getting-started/sveltekit",
+      "destination": "/integrations/frameworks/sveltekit",
+      "permanent": true
+    },
+    {
+      "source": "/guides/getting-started/vite-react",
+      "destination": "/integrations/frameworks/vite-react",
+      "permanent": true
+    },
+    {
+      "source": "/guides/build-your-ui/ai-sdk-ui",
+      "destination": "/integrations/agentic-ui/ai-sdk-ui",
+      "permanent": true
+    },
+    {
+      "source": "/guides/build-your-ui/assistant-ui",
+      "destination": "/integrations/agentic-ui/assistant-ui",
+      "permanent": true
+    },
+    {
+      "source": "/guides/build-your-ui/openui",
+      "destination": "/integrations/agentic-ui/openui",
+      "permanent": true
+    },
+    {
+      "source": "/guides/build-your-ui/copilotkit/overview",
+      "destination": "/integrations/agentic-ui/copilotkit",
+      "permanent": true
+    },
+    {
+      "source": "/reference/workspace/agentcore-runtime-sandbox",
+      "destination": "/integrations/sandboxes/agentcore",
+      "permanent": true
+    },
+    {
+      "source": "/reference/workspace/apple-container-sandbox",
+      "destination": "/integrations/sandboxes/apple-container",
+      "permanent": true
+    },
+    {
+      "source": "/reference/workspace/blaxel-sandbox",
+      "destination": "/integrations/sandboxes/blaxel",
+      "permanent": true
+    },
+    {
+      "source": "/reference/workspace/daytona-sandbox",
+      "destination": "/integrations/sandboxes/daytona",
+      "permanent": true
+    },
+    {
+      "source": "/reference/workspace/docker-sandbox",
+      "destination": "/integrations/sandboxes/docker",
+      "permanent": true
+    },
+    {
+      "source": "/reference/workspace/e2b-sandbox",
+      "destination": "/integrations/sandboxes/e2b",
+      "permanent": true
+    },
+    {
+      "source": "/reference/workspace/modal-sandbox",
+      "destination": "/integrations/sandboxes/modal",
+      "permanent": true
+    },
+    {
+      "source": "/reference/workspace/railway-sandbox",
+      "destination": "/integrations/sandboxes/railway",
+      "permanent": true
+    },
+    {
+      "source": "/reference/workspace/vercel-sandbox",
+      "destination": "/integrations/sandboxes/vercel",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/integrations/exporters/arize",
+      "destination": "/integrations/observability/arize",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/integrations/exporters/arthur",
+      "destination": "/integrations/observability/arthur",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/integrations/exporters/braintrust",
+      "destination": "/integrations/observability/braintrust",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/integrations/exporters/confident-ai",
+      "destination": "/integrations/observability/confident-ai",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/integrations/exporters/datadog",
+      "destination": "/integrations/observability/datadog",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/integrations/exporters/laminar",
+      "destination": "/integrations/observability/laminar",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/integrations/exporters/langfuse",
+      "destination": "/integrations/observability/langfuse",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/integrations/exporters/langsmith",
+      "destination": "/integrations/observability/langsmith",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/integrations/exporters/otel",
+      "destination": "/integrations/observability/opentelemetry",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/integrations/exporters/posthog",
+      "destination": "/integrations/observability/posthog",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/integrations/exporters/sentry",
+      "destination": "/integrations/observability/sentry",
+      "permanent": true
+    },
+    {
+      "source": "/guides/deployment/amazon-ec2",
+      "destination": "/integrations/deploy/amazon-ec2",
+      "permanent": true
+    },
+    {
+      "source": "/guides/deployment/aws-bedrock-agentcore",
+      "destination": "/integrations/deploy/aws-bedrock-agentcore",
+      "permanent": true
+    },
+    {
+      "source": "/guides/deployment/aws-lambda",
+      "destination": "/integrations/deploy/aws-lambda",
+      "permanent": true
+    },
+    {
+      "source": "/guides/deployment/azure-app-services",
+      "destination": "/integrations/deploy/azure-app-services",
+      "permanent": true
+    },
+    {
+      "source": "/guides/deployment/cloudflare",
+      "destination": "/integrations/deploy/cloudflare",
+      "permanent": true
+    },
+    {
+      "source": "/guides/deployment/digital-ocean",
+      "destination": "/integrations/deploy/digital-ocean",
+      "permanent": true
+    },
+    {
+      "source": "/guides/deployment/inngest",
+      "destination": "/integrations/deploy/inngest",
+      "permanent": true
+    },
+    {
+      "source": "/guides/deployment/kubernetes",
+      "destination": "/integrations/deploy/kubernetes",
+      "permanent": true
+    },
+    {
+      "source": "/guides/deployment/netlify",
+      "destination": "/integrations/deploy/netlify",
+      "permanent": true
+    },
+    {
+      "source": "/guides/deployment/temporal",
+      "destination": "/integrations/deploy/temporal",
+      "permanent": true
+    },
+    {
+      "source": "/guides/deployment/vercel",
+      "destination": "/integrations/deploy/vercel",
+      "permanent": true
+    },
+    {
+      "source": "/reference/tools/brightdata",
+      "destination": "/integrations/tools/brightdata",
+      "permanent": true
+    },
+    {
+      "source": "/guides/guide/firecrawl",
+      "destination": "/integrations/tools/firecrawl",
+      "permanent": true
+    },
+    {
+      "source": "/reference/tools/perplexity",
+      "destination": "/integrations/tools/perplexity",
+      "permanent": true
+    },
+    {
+      "source": "/reference/tools/tavily",
+      "destination": "/integrations/tools/tavily",
+      "permanent": true
+    },
+    {
+      "source": "/reference/voice/aws-nova-sonic",
+      "destination": "/integrations/voice/aws-nova-sonic",
+      "permanent": true
+    },
+    {
+      "source": "/reference/voice/azure",
+      "destination": "/integrations/voice/azure",
+      "permanent": true
+    },
+    {
+      "source": "/reference/voice/cloudflare",
+      "destination": "/integrations/voice/cloudflare",
+      "permanent": true
+    },
+    {
+      "source": "/reference/voice/deepgram",
+      "destination": "/integrations/voice/deepgram",
+      "permanent": true
+    },
+    {
+      "source": "/reference/voice/elevenlabs",
+      "destination": "/integrations/voice/elevenlabs",
+      "permanent": true
+    },
+    {
+      "source": "/reference/voice/google",
+      "destination": "/integrations/voice/google",
+      "permanent": true
+    },
+    {
+      "source": "/reference/voice/inworld",
+      "destination": "/integrations/voice/inworld",
+      "permanent": true
+    },
+    {
+      "source": "/guides/voice/realtime-voice",
+      "destination": "/integrations/voice/livekit",
+      "permanent": true
+    },
+    {
+      "source": "/reference/voice/mistral",
+      "destination": "/integrations/voice/mistral",
+      "permanent": true
+    },
+    {
+      "source": "/reference/voice/murf",
+      "destination": "/integrations/voice/murf",
+      "permanent": true
+    },
+    {
+      "source": "/reference/voice/openai",
+      "destination": "/integrations/voice/openai",
+      "permanent": true
+    },
+    {
+      "source": "/reference/voice/playai",
+      "destination": "/integrations",
+      "permanent": true
+    },
+    {
+      "source": "/reference/voice/sarvam",
+      "destination": "/integrations/voice/sarvam",
+      "permanent": true
+    },
+    {
+      "source": "/reference/voice/speechify",
+      "destination": "/integrations/voice/speechify",
+      "permanent": true
+    },
+    {
+      "source": "/reference/voice/xai-realtime",
+      "destination": "/integrations/voice/xai",
+      "permanent": true
+    },
+    {
+      "source": "/docs/server/auth/auth0",
+      "destination": "/integrations/auth/auth0",
+      "permanent": true
+    },
+    {
+      "source": "/docs/server/auth/better-auth",
+      "destination": "/integrations/auth/better-auth",
+      "permanent": true
+    },
+    {
+      "source": "/docs/server/auth/clerk",
+      "destination": "/integrations/auth/clerk",
+      "permanent": true
+    },
+    {
+      "source": "/docs/server/auth/firebase",
+      "destination": "/integrations/auth/firebase",
+      "permanent": true
+    },
+    {
+      "source": "/docs/server/auth/google",
+      "destination": "/integrations/auth/google",
+      "permanent": true
+    },
+    {
+      "source": "/docs/server/auth/okta",
+      "destination": "/integrations/auth/okta",
+      "permanent": true
+    },
+    {
+      "source": "/docs/server/auth/supabase",
+      "destination": "/integrations/auth/supabase",
+      "permanent": true
+    },
+    {
+      "source": "/docs/server/auth/workos",
+      "destination": "/integrations/auth/workos",
+      "permanent": true
+    },
+    {
+      "source": "/reference/storage/dsql",
+      "destination": "/integrations/databases/aurora-dsql",
+      "permanent": true
+    },
+    {
+      "source": "/reference/storage/clickhouse",
+      "destination": "/integrations/databases/clickhouse",
+      "permanent": true
+    },
+    {
+      "source": "/reference/storage/cloudflare-d1",
+      "destination": "/integrations/databases/cloudflare-d1",
+      "permanent": true
+    },
+    {
+      "source": "/reference/storage/cloudflare",
+      "destination": "/integrations/databases/cloudflare-kv",
+      "permanent": true
+    },
+    {
+      "source": "/reference/storage/convex",
+      "destination": "/integrations/databases/convex",
+      "permanent": true
+    },
+    {
+      "source": "/reference/storage/duckdb",
+      "destination": "/integrations/databases/duckdb",
+      "permanent": true
+    },
+    {
+      "source": "/reference/storage/dynamodb",
+      "destination": "/integrations/databases/dynamodb",
+      "permanent": true
+    },
+    {
+      "source": "/reference/storage/spanner",
+      "destination": "/integrations/databases/spanner",
+      "permanent": true
+    },
+    {
+      "source": "/reference/storage/lance",
+      "destination": "/integrations/databases/lancedb",
+      "permanent": true
+    },
+    {
+      "source": "/reference/storage/libsql",
+      "destination": "/integrations/databases/libsql",
+      "permanent": true
+    },
+    {
+      "source": "/reference/storage/mongodb",
+      "destination": "/integrations/databases/mongodb",
+      "permanent": true
+    },
+    {
+      "source": "/reference/storage/mssql",
+      "destination": "/integrations/databases/mssql",
+      "permanent": true
+    },
+    {
+      "source": "/reference/storage/postgresql",
+      "destination": "/integrations/databases/postgresql",
+      "permanent": true
+    },
+    {
+      "source": "/reference/storage/redis",
+      "destination": "/integrations/databases/redis",
+      "permanent": true
+    },
+    {
+      "source": "/reference/storage/upstash",
+      "destination": "/integrations/databases/upstash",
+      "permanent": true
+    },
+    {
+      "source": "/docs/browser/agent-browser",
+      "destination": "/integrations/browsers/agent-browser",
+      "permanent": true
+    },
+    {
+      "source": "/docs/browser/browser-viewer",
+      "destination": "/integrations/browsers/browser-viewer",
+      "permanent": true
+    },
+    {
+      "source": "/docs/browser/firecrawl",
+      "destination": "/integrations/browsers/firecrawl",
+      "permanent": true
+    },
+    {
+      "source": "/docs/browser/stagehand",
+      "destination": "/integrations/browsers/stagehand",
+      "permanent": true
+    },
+    {
+      "source": "/reference/workspace/agentfs-filesystem",
+      "destination": "/integrations/file-storage/agentfs",
+      "permanent": true
+    },
+    {
+      "source": "/reference/workspace/archil-filesystem",
+      "destination": "/integrations/file-storage/archil",
+      "permanent": true
+    },
+    {
+      "source": "/reference/workspace/azure-blob-filesystem",
+      "destination": "/integrations/file-storage/azure-blob",
+      "permanent": true
+    },
+    {
+      "source": "/reference/workspace/files-sdk-filesystem",
+      "destination": "/integrations/file-storage/vercel-files",
+      "permanent": true
+    },
+    {
+      "source": "/reference/workspace/gcs-filesystem",
+      "destination": "/integrations/file-storage/google-cloud-storage",
+      "permanent": true
+    },
+    {
+      "source": "/reference/workspace/google-drive-filesystem",
+      "destination": "/integrations/file-storage/google-drive",
+      "permanent": true
+    },
+    {
+      "source": "/reference/workspace/mesa-filesystem",
+      "destination": "/integrations/file-storage/mesa",
+      "permanent": true
+    },
+    {
+      "source": "/reference/workspace/s3-filesystem",
+      "destination": "/integrations/file-storage/amazon-s3",
+      "permanent": true
+    },
+    {
+      "source": "/docs/capabilities/channels/other-adapters",
+      "destination": "/docs/capabilities/channels",
+      "permanent": true
+    },
+    {
+      "source": "/guides/build-your-ui/copilotkit/generative-ui",
+      "destination": "/integrations/agentic-ui/copilotkit",
+      "permanent": true
+    },
+    {
+      "source": "/guides/build-your-ui/copilotkit/channels",
+      "destination": "/integrations/agentic-ui/copilotkit",
+      "permanent": true
+    },
+    {
+      "source": "/reference/workspace/vercel-serverless",
+      "destination": "/integrations/sandboxes/vercel",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/integrations/bridges/datadog",
+      "destination": "/integrations/observability/datadog",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/integrations/bridges/otel",
+      "destination": "/integrations/observability/opentelemetry",
+      "permanent": true
+    },
+    {
+      "source": "/reference/voice/google-gemini-live",
+      "destination": "/integrations/voice/google",
+      "permanent": true
+    },
+    {
+      "source": "/reference/voice/inworld-realtime",
+      "destination": "/integrations/voice/inworld",
+      "permanent": true
+    },
+    {
+      "source": "/reference/voice/livekit",
+      "destination": "/integrations/voice/livekit",
+      "permanent": true
+    },
+    {
+      "source": "/reference/voice/openai-realtime",
+      "destination": "/integrations/voice/openai",
+      "permanent": true
+    },
+    {
+      "source": "/guides/getting-started/express",
+      "destination": "/integrations/frameworks/express",
+      "permanent": true
+    },
+    {
+      "source": "/guides/getting-started/hono",
+      "destination": "/integrations/frameworks/hono",
+      "permanent": true
+    },
+    {
+      "source": "/guides/getting-started/nestjs",
+      "destination": "/integrations/frameworks/nestjs",
+      "permanent": true
+    },
+    {
       "source": "/docs/workflows/stored-workflows",
       "destination": "/docs/workflows/dynamic-workflows",
       "permanent": true
@@ -1213,6 +1848,176 @@
     {
       "source": "/reference/core/addStoredWorkflows",
       "destination": "/reference/core/addDynamicWorkflows",
+      "permanent": true
+    },
+    {
+      "source": "/docs/capabilities/channels/overview",
+      "destination": "/docs/capabilities/channels",
+      "permanent": true
+    },
+    {
+      "source": "/reference/storage/oracledb",
+      "destination": "/integrations/databases/oracledb",
+      "permanent": true
+    },
+    {
+      "source": "/guides/guide/slack-assistant",
+      "destination": "/integrations/channels/slack",
+      "permanent": true
+    },
+    {
+      "source": "/guides/guide/whatsapp-chat-bot",
+      "destination": "/integrations/channels/whatsapp",
+      "permanent": true
+    },
+    {
+      "source": "/guides/guide/web-search",
+      "destination": "/docs/agents/using-tools",
+      "permanent": true
+    },
+    {
+      "source": "/guides/guide/publishing-mcp-server",
+      "destination": "/docs/mcp/overview",
+      "permanent": true
+    },
+    {
+      "source": "/guides/guide/chef-michel",
+      "destination": "/docs/agents/overview",
+      "permanent": true
+    },
+    {
+      "source": "/guides/guide/stock-agent",
+      "destination": "/docs/agents/using-tools",
+      "permanent": true
+    },
+    {
+      "source": "/guides/migrations/:path*",
+      "destination": "/reference/migrations/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/reference/storage/neon",
+      "destination": "/integrations/databases/neon",
+      "permanent": true
+    },
+    {
+      "source": "/guides/concepts/:path*",
+      "destination": "/docs/guides/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/guides/rag/chunking-and-embedding",
+      "destination": "/reference/rag/chunking-and-embedding",
+      "permanent": true
+    },
+    {
+      "source": "/guides/rag/graph-rag",
+      "destination": "/reference/rag/graph-rag-guide",
+      "permanent": true
+    },
+    {
+      "source": "/guides/rag/overview",
+      "destination": "/reference/rag/overview",
+      "permanent": true
+    },
+    {
+      "source": "/guides/rag/retrieval",
+      "destination": "/reference/rag/retrieval",
+      "permanent": true
+    },
+    {
+      "source": "/guides/rag/vector-databases",
+      "destination": "/reference/rag/vector-databases",
+      "permanent": true
+    },
+    {
+      "source": "/guides/getting-started/manual-install",
+      "destination": "/reference/manual-install",
+      "permanent": true
+    },
+    {
+      "source": "/reference/mastra-platform/api",
+      "destination": "/docs/mastra-platform/api",
+      "permanent": true
+    },
+    {
+      "source": "/guides/guide/ai-recruiter",
+      "destination": "https://mastra.ai/blog/building-an-ai-recruiter",
+      "permanent": true
+    },
+    {
+      "source": "/guides/guide/research-assistant",
+      "destination": "https://mastra.ai/blog/building-a-research-paper-assistant-with-rag",
+      "permanent": true
+    },
+    {
+      "source": "/guides/guide/notes-mcp-server",
+      "destination": "https://mastra.ai/blog/building-a-notes-mcp-server",
+      "permanent": true
+    },
+    {
+      "source": "/guides/guide/signal-provider",
+      "destination": "https://mastra.ai/blog/building-a-signal-provider",
+      "permanent": true
+    },
+    {
+      "source": "/guides/guide/research-coordinator",
+      "destination": "https://mastra.ai/blog/build-a-research-coordinator-with-supervisor-agents",
+      "permanent": true
+    },
+    {
+      "source": "/guides/guide/dev-assistant",
+      "destination": "https://mastra.ai/blog/building-a-dev-assistant",
+      "permanent": true
+    },
+    {
+      "source": "/guides/guide/code-review-bot",
+      "destination": "https://mastra.ai/blog/building-a-code-review-bot",
+      "permanent": true
+    },
+    {
+      "source": "/guides/guide/docs-manager",
+      "destination": "https://mastra.ai/blog/building-a-docs-manager",
+      "permanent": true
+    },
+    {
+      "source": "/guides/guide/coding-agent",
+      "destination": "https://mastra.ai/blog/building-a-coding-agent",
+      "permanent": true
+    },
+    {
+      "source": "/guides/guide/github-actions-pr-description",
+      "destination": "https://mastra.ai/blog/automating-multi-language-pr-descriptions-in-github-actions",
+      "permanent": true
+    },
+    {
+      "source": "/guides/voice",
+      "destination": "/reference/voice/overview",
+      "permanent": true
+    },
+    {
+      "source": "/guides/voice/:path*",
+      "destination": "/reference/voice/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/guides/getting-started/quickstart",
+      "destination": "/docs",
+      "permanent": true
+    },
+    {
+      "source": "/guides",
+      "destination": "/docs",
+      "permanent": true
+    },
+    {
+      "source": "/guides/deployment/mastra-workers",
+      "destination": "/docs/deployment/workers",
+      "permanent": true
+    },
+    {
+      "source": "/guides/agent-frameworks/ai-sdk",
+      "destination": "/reference/ai-sdk/overview",
       "permanent": true
     }
   ]

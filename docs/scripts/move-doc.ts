@@ -18,11 +18,12 @@
  *
  * Note:
  * - The .mdx extension should be omitted from routes.
- * - Supported editable route families are /docs, /reference, and /guides.
+ * - Supported editable route families are /docs, /integrations, /reference, and /guides.
  * - /models is auto-generated and intentionally unsupported.
  * - When using glob patterns, both source and destination must be glob patterns.
  * - Glob patterns should be quoted to prevent shell expansion.
  * - After a non-dry run, run `pnpm run generate-vercel-redirects` and commit vercel.json.
+ * - Use --skip-links to leave inbound MDX links unchanged.
  */
 
 import fs from 'fs/promises'
@@ -35,6 +36,7 @@ const CONTENT_ROOT = 'src/content/en'
 
 const FAMILIES = {
   '/docs': 'docs',
+  '/integrations': 'integrations',
   '/reference': 'reference',
   '/guides': 'guides',
 } as const
@@ -75,6 +77,7 @@ interface MoveDocumentsResult {
 interface MoveDocumentsOptions {
   verbose?: boolean
   dryRun?: boolean
+  skipLinks?: boolean
 }
 
 interface UpdateRedirectsOptions {
@@ -571,7 +574,7 @@ export async function moveDocuments(
   destination: string,
   options: MoveDocumentsOptions = {},
 ): Promise<MoveDocumentsResult> {
-  const { verbose = true, dryRun = false } = options
+  const { verbose = true, dryRun = false, skipLinks = false } = options
   const isSourceGlob = isGlobPattern(source)
   const isDestGlob = isGlobPattern(destination)
 
@@ -625,8 +628,10 @@ export async function moveDocuments(
       }
     }
 
-    for (const movedRoute of movedRoutes) {
-      await updateMdxLinks([movedRoute.source], movedRoute.destination)
+    if (!skipLinks) {
+      for (const movedRoute of movedRoutes) {
+        await updateMdxLinks([movedRoute.source], movedRoute.destination)
+      }
     }
 
     const successful = results.filter(r => r.status === 'success').length
@@ -669,7 +674,7 @@ export async function moveDocuments(
     await moveFile(source, destination)
     const pathsToUpdate = await updateRedirects(source, destination)
     await updateSidebarDocIds(source, destination)
-    await updateMdxLinks(pathsToUpdate, destination)
+    if (!skipLinks) await updateMdxLinks(pathsToUpdate, destination)
 
     if (verbose) {
       console.log('Document move completed successfully')
@@ -706,6 +711,7 @@ const main = async (): Promise<void> => {
   const result = await moveDocuments(source, destination, {
     verbose: !process.argv.includes('--silent'),
     dryRun: process.argv.includes('--dry-run'),
+    skipLinks: process.argv.includes('--skip-links'),
   })
 
   if (!result.success) {

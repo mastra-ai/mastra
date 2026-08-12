@@ -27,6 +27,7 @@ import { CloudflareKVDB, resolveCloudflareConfig } from '../../db';
 import type { CloudflareDomainConfig } from '../../types';
 
 export class MemoryStorageCloudflare extends MemoryStorage {
+  override readonly supportsPartialThreadUpdate = true;
   #db: CloudflareKVDB;
 
   constructor(config: CloudflareDomainConfig) {

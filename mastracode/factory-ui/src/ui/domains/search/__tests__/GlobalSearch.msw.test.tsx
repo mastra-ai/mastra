@@ -343,9 +343,9 @@ describe('Global search', () => {
     expect(screen.getByText('Mastra Factory')).toBeInTheDocument();
     expect(screen.getByText('Docs Factory')).toBeInTheDocument();
     for (const label of [
+      'Overview',
       'Work',
       'Review',
-      'Metrics',
       'Rules',
       'Audit log',
       'Preferences',

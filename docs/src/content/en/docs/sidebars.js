@@ -256,6 +256,11 @@ const sidebars = {
           label: 'Skills',
         },
         {
+          type: 'doc',
+          id: 'capabilities/channels',
+          label: 'Channels',
+        },
+        {
           type: 'category',
           label: 'Sandbox',
           link: {
@@ -295,54 +300,6 @@ const sidebars = {
         },
         {
           type: 'category',
-          label: 'Channels',
-          link: {
-            type: 'doc',
-            id: 'capabilities/channels/overview',
-          },
-          customProps: {
-            contextualSidebar: true,
-          },
-          items: [
-            {
-              type: 'doc',
-              id: 'capabilities/channels/slack',
-              label: 'Slack',
-            },
-            {
-              type: 'doc',
-              id: 'capabilities/channels/teams',
-              label: 'Microsoft Teams',
-            },
-            {
-              type: 'doc',
-              id: 'capabilities/channels/discord',
-              label: 'Discord',
-            },
-            {
-              type: 'doc',
-              id: 'capabilities/channels/telegram',
-              label: 'Telegram',
-            },
-            {
-              type: 'doc',
-              id: 'capabilities/channels/whatsapp',
-              label: 'WhatsApp',
-            },
-            {
-              type: 'doc',
-              id: 'capabilities/channels/imessage',
-              label: 'iMessage',
-            },
-            {
-              type: 'doc',
-              id: 'capabilities/channels/other-adapters',
-              label: 'Other Adapters',
-            },
-          ],
-        },
-        {
-          type: 'category',
           label: 'Browser',
           link: {
             type: 'doc',
@@ -354,31 +311,11 @@ const sidebars = {
           items: [
             {
               type: 'doc',
-              id: 'browser/agent-browser',
-              label: 'AgentBrowser',
-            },
-            {
-              type: 'doc',
-              id: 'browser/stagehand',
-              label: 'Stagehand',
-            },
-            {
-              type: 'doc',
-              id: 'browser/firecrawl',
-              label: 'Firecrawl',
-            },
-            {
-              type: 'doc',
               id: 'browser/recording',
               label: 'Recording',
               customProps: {
                 tags: ['new'],
               },
-            },
-            {
-              type: 'doc',
-              id: 'browser/browser-viewer',
-              label: 'BrowserViewer',
             },
           ],
         },
@@ -523,21 +460,6 @@ const sidebars = {
           items: [
             {
               type: 'doc',
-              id: 'server/auth/auth0',
-              label: 'Auth0',
-            },
-            {
-              type: 'doc',
-              id: 'server/auth/better-auth',
-              label: 'Better Auth',
-            },
-            {
-              type: 'doc',
-              id: 'server/auth/clerk',
-              label: 'Clerk',
-            },
-            {
-              type: 'doc',
               id: 'server/auth/composite-auth',
               label: 'Composite Auth',
             },
@@ -548,18 +470,8 @@ const sidebars = {
             },
             {
               type: 'doc',
-              id: 'server/auth/firebase',
-              label: 'Firebase',
-            },
-            {
-              type: 'doc',
               id: 'server/auth/fga',
               label: 'Fine-Grained Authorization',
-            },
-            {
-              type: 'doc',
-              id: 'server/auth/google',
-              label: 'Google',
             },
             {
               type: 'doc',
@@ -568,23 +480,8 @@ const sidebars = {
             },
             {
               type: 'doc',
-              id: 'server/auth/okta',
-              label: 'Okta',
-            },
-            {
-              type: 'doc',
               id: 'server/auth/simple-auth',
               label: 'Simple Auth',
-            },
-            {
-              type: 'doc',
-              id: 'server/auth/supabase',
-              label: 'Supabase',
-            },
-            {
-              type: 'doc',
-              id: 'server/auth/workos',
-              label: 'WorkOS',
             },
             {
               type: 'doc',
@@ -693,22 +590,6 @@ const sidebars = {
                 },
                 {
                   type: 'category',
-                  label: 'Bridges',
-                  items: [
-                    {
-                      type: 'doc',
-                      id: 'observability/integrations/bridges/datadog',
-                      label: 'Datadog',
-                    },
-                    {
-                      type: 'doc',
-                      id: 'observability/integrations/bridges/otel',
-                      label: 'OpenTelemetry',
-                    },
-                  ],
-                },
-                {
-                  type: 'category',
                   label: 'Exporters',
                   items: [
                     {
@@ -720,61 +601,6 @@ const sidebars = {
                       type: 'doc',
                       id: 'observability/integrations/exporters/mastra-platform',
                       label: 'Mastra Platform',
-                    },
-                    {
-                      type: 'doc',
-                      id: 'observability/integrations/exporters/arize',
-                      label: 'Arize',
-                    },
-                    {
-                      type: 'doc',
-                      id: 'observability/integrations/exporters/arthur',
-                      label: 'Arthur',
-                    },
-                    {
-                      type: 'doc',
-                      id: 'observability/integrations/exporters/braintrust',
-                      label: 'Braintrust',
-                    },
-                    {
-                      type: 'doc',
-                      id: 'observability/integrations/exporters/confident-ai',
-                      label: 'Confident AI',
-                    },
-                    {
-                      type: 'doc',
-                      id: 'observability/integrations/exporters/datadog',
-                      label: 'Datadog',
-                    },
-                    {
-                      type: 'doc',
-                      id: 'observability/integrations/exporters/laminar',
-                      label: 'Laminar',
-                    },
-                    {
-                      type: 'doc',
-                      id: 'observability/integrations/exporters/langfuse',
-                      label: 'Langfuse',
-                    },
-                    {
-                      type: 'doc',
-                      id: 'observability/integrations/exporters/langsmith',
-                      label: 'LangSmith',
-                    },
-                    {
-                      type: 'doc',
-                      id: 'observability/integrations/exporters/otel',
-                      label: 'OpenTelemetry',
-                    },
-                    {
-                      type: 'doc',
-                      id: 'observability/integrations/exporters/posthog',
-                      label: 'PostHog',
-                    },
-                    {
-                      type: 'doc',
-                      id: 'observability/integrations/exporters/sentry',
-                      label: 'Sentry',
                     },
                   ],
                 },
@@ -879,89 +705,113 @@ const sidebars = {
         },
       ],
     },
-  ],
-  platformSidebar: [
     {
       type: 'category',
-      label: 'Mastra Platform',
+      label: 'More',
+      collapsed: false,
+      collapsible: false,
+      className: 'sidebar-group-name',
       items: [
         {
-          type: 'doc',
-          id: 'mastra-platform/overview',
-          label: 'Overview',
-        },
-        {
-          type: 'doc',
-          id: 'mastra-platform/deploy',
-          label: 'Deploy',
-          customProps: {
-            tags: ['new'],
+          type: 'category',
+          label: 'Guides',
+          link: {
+            type: 'doc',
+            id: 'guides/multi-agent-systems',
           },
-        },
-        {
-          type: 'doc',
-          id: 'mastra-platform/environments',
-          label: 'Environments',
+          collapsed: true,
           customProps: {
-            tags: ['new'],
+            contextualSidebar: true,
+            contextualSidebarLabel: 'Multi-agent systems',
           },
-        },
-        {
-          type: 'doc',
-          id: 'mastra-platform/regions',
-          label: 'Regions',
-          customProps: {
-            tags: ['new'],
-          },
-        },
-        {
-          type: 'doc',
-          id: 'mastra-platform/observability',
-          label: 'Observability',
-        },
-        {
-          type: 'doc',
-          id: 'mastra-platform/trace-intelligence',
-          label: 'Trace Intelligence',
-          customProps: {
-            tags: ['new'],
-          },
-        },
-        {
-          type: 'doc',
-          id: 'mastra-platform/studio',
-          label: 'Studio',
-        },
-        {
-          type: 'doc',
-          id: 'mastra-platform/server',
-          label: 'Server',
-        },
-        {
-          type: 'doc',
-          id: 'mastra-platform/github',
-          label: 'GitHub integration',
-        },
-        {
-          type: 'doc',
-          id: 'mastra-platform/database',
-          label: 'Hosted databases',
-        },
-        {
-          type: 'doc',
-          id: 'mastra-platform/workspaces',
-          label: 'Workspaces',
-          customProps: {
-            tags: ['new'],
-          },
-        },
-        {
-          type: 'doc',
-          id: 'mastra-platform/configuration',
-          label: 'Configuration',
+          items: [
+            {
+              type: 'doc',
+              id: 'guides/streaming',
+              label: 'Streaming',
+            },
+          ],
         },
       ],
     },
+  ],
+  platformSidebar: [
+    {
+      type: 'doc',
+      id: 'mastra-platform/overview',
+      label: 'Overview',
+    },
+    {
+      type: 'doc',
+      id: 'mastra-platform/deploy',
+      label: 'Deploy',
+      customProps: {
+        tags: ['new'],
+      },
+    },
+    {
+      type: 'doc',
+      id: 'mastra-platform/environments',
+      label: 'Environments',
+      customProps: {
+        tags: ['new'],
+      },
+    },
+    {
+      type: 'doc',
+      id: 'mastra-platform/regions',
+      label: 'Regions',
+      customProps: {
+        tags: ['new'],
+      },
+    },
+    {
+      type: 'doc',
+      id: 'mastra-platform/observability',
+      label: 'Observability',
+    },
+    {
+      type: 'doc',
+      id: 'mastra-platform/trace-intelligence',
+      label: 'Trace Intelligence',
+      customProps: {
+        tags: ['new'],
+      },
+    },
+    {
+      type: 'doc',
+      id: 'mastra-platform/studio',
+      label: 'Studio',
+    },
+    {
+      type: 'doc',
+      id: 'mastra-platform/server',
+      label: 'Server',
+    },
+    {
+      type: 'doc',
+      id: 'mastra-platform/github',
+      label: 'GitHub integration',
+    },
+    {
+      type: 'doc',
+      id: 'mastra-platform/database',
+      label: 'Hosted databases',
+    },
+    {
+      type: 'doc',
+      id: 'mastra-platform/workspaces',
+      label: 'Workspaces',
+      customProps: {
+        tags: ['new'],
+      },
+    },
+    {
+      type: 'doc',
+      id: 'mastra-platform/configuration',
+      label: 'Configuration',
+    },
+    { type: 'doc', id: 'mastra-platform/api', label: 'API Reference' },
   ],
 }
 
