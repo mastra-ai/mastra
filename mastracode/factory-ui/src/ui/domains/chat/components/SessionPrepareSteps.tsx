@@ -1,54 +1,48 @@
-import { useRef } from 'react';
-import { ProcessStepListItem } from '@mastra/playground-ui/components/Steps';
-import type { ProcessStep } from '@mastra/playground-ui/components/Steps';
+import { Check } from 'lucide-react';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { cn } from '@mastra/playground-ui/utils/cn';
 
 import type { PrepareProgress } from '../../workspaces/services/github';
 import { useChatMessagesInitializing } from '../context/ChatSessionProvider';
 import { useChatSessionContext } from '../context/useChatSessionContext';
 
 /**
- * Canonical ordered phases of `/ensure` — mirror of the SSE contract in
- * `ensureRepoMaterialized` (see `workspaces/services/github.ts`). `done` is
- * the completion signal that unmounts the loader; `reattaching` and
- * `provisioning` are mutually exclusive — when the server picks `reattaching`
- * we auto-complete `provisioning` as the pipeline advances so the visual
- * pipeline never shows a "crossed-out" step (which reads as failure).
+ * User-facing preparation groups. The server emits six granular SSE phases;
+ * we roll them up into three coarse steps so the loader reads as an at-a-
+ * glance status, not a debug log.
+ *
+ * Group → SSE phases:
+ *  - "Preparing sandbox"    ← reattaching, provisioning, preparing-workspace
+ *  - "Cloning repository"   ← cloning, pulling
+ *  - "Starting session"     ← finalizing (+ post-ensure messages fetch)
  */
-const PHASE_ORDER: PrepareProgress['phase'][] = [
-  'reattaching',
-  'provisioning',
-  'preparing-workspace',
-  'cloning',
-  'pulling',
-  'finalizing',
-];
+type GroupId = 'sandbox' | 'clone' | 'starting';
 
-// The `ProcessStepListItem` primitive auto-formats an `id` like
-// `preparing-workspace` into the title `Preparing workspace`, so the id
-// doubles as the label — no separate label map needed.
-const PHASE_ID: Record<PrepareProgress['phase'], string> = {
-  reattaching: 'reattaching-to-sandbox',
-  provisioning: 'provisioning-sandbox',
-  'preparing-workspace': 'preparing-workspace',
-  cloning: 'cloning-repository',
-  pulling: 'fetching-latest-changes',
-  finalizing: 'finalizing-session',
+const GROUP_LABEL: Record<GroupId, string> = {
+  sandbox: 'Preparing sandbox',
+  clone: 'Cloning repository',
+  starting: 'Starting session',
+};
+
+const PHASE_TO_GROUP: Record<PrepareProgress['phase'], GroupId | 'done'> = {
+  reattaching: 'sandbox',
+  provisioning: 'sandbox',
+  'preparing-workspace': 'sandbox',
+  cloning: 'clone',
+  pulling: 'clone',
+  finalizing: 'starting',
   done: 'done',
 };
 
-const LOADING_MESSAGES_ID = 'loading-messages';
+const GROUP_ORDER: GroupId[] = ['sandbox', 'clone', 'starting'];
 
 type StepStatus = 'pending' | 'running' | 'success';
 
 /**
  * Step loader shown in the transcript region while `/ensure` is in flight,
  * driven by the SSE progress phase in `ChatSessionContext.sandboxProgress`.
- *
  * Also covers the post-ensure, pre-transcript window where the initial
- * thread-messages fetch is still in flight: rendering the same loader (with
- * a "Loading messages" tail step) instead of flipping to skeleton bars keeps
- * the composer's spinning ring continuously meaningful across the whole
- * preparing window.
+ * thread-messages fetch is still in flight (via the "Starting session" step).
  *
  * The loader fills the transcript viewport and centers so it reads as the
  * primary content of the empty chat, not a footnote.
@@ -56,47 +50,26 @@ type StepStatus = 'pending' | 'running' | 'success';
 export function SessionPrepareSteps() {
   const { sandboxPreparing, sandboxProgress } = useChatSessionContext();
   const messagesInitializing = useChatMessagesInitializing();
-  const observed = sandboxProgress?.phase;
-  // Before any event arrives, mark `reattaching` as the active step with a
-  // generic "Starting…" message so the loader isn't visually empty.
-  const activePhase: PrepareProgress['phase'] = observed ?? 'reattaching';
-  const activeMessage = sandboxProgress?.message ?? 'Starting…';
-  // Track "we ever saw reattaching" so `provisioning` is auto-completed for
-  // the rest of the pipeline (server picked reattach → we skip the provision
-  // path). Auto-completing (vs. striking through) matches the user's request:
-  // when the stepper reaches it, it just visually completes.
-  const sawReattachingRef = useRef(false);
-  if (observed === 'reattaching') sawReattachingRef.current = true;
-  const sawReattaching = sawReattachingRef.current;
 
-  // Once `/ensure` finishes the transcript fetch may still be in flight.
-  // Mark every ensure step complete and light up a synthetic tail step.
+  const observedPhase = sandboxProgress?.phase;
+  const observedGroup: GroupId | undefined =
+    observedPhase && observedPhase !== 'done' ? PHASE_TO_GROUP[observedPhase] as GroupId : undefined;
+  const activeMessage = sandboxProgress?.message ?? 'Starting…';
+
+  // Once ensure has finished, messages may still be loading — collapse the
+  // whole pipeline to "starting session" running so there is no visual dip.
   const loadingMessages = !sandboxPreparing && messagesInitializing;
 
-  const items: Array<{ step: ProcessStep; position: number }> = PHASE_ORDER.map((phase, idx) => {
-    const rawStatus = stepStatus(phase, activePhase, sawReattaching);
-    const status: StepStatus = loadingMessages ? 'success' : rawStatus;
-    const isActive = status === 'running';
-    return {
-      position: idx + 1,
-      step: {
-        id: PHASE_ID[phase],
-        status,
-        isActive,
-        title: PHASE_ID[phase],
-        description: isActive ? activeMessage : '',
-      },
-    };
-  });
-  items.push({
-    position: items.length + 1,
-    step: {
-      id: LOADING_MESSAGES_ID,
-      status: loadingMessages ? 'running' : 'pending',
-      isActive: loadingMessages,
-      title: LOADING_MESSAGES_ID,
-      description: '',
-    },
+  // Determine the active group.
+  const activeGroup: GroupId = loadingMessages ? 'starting' : (observedGroup ?? 'sandbox');
+  const activeIdx = GROUP_ORDER.indexOf(activeGroup);
+
+  const steps = GROUP_ORDER.map((id, idx) => {
+    let status: StepStatus;
+    if (idx < activeIdx) status = 'success';
+    else if (idx === activeIdx) status = 'running';
+    else status = 'pending';
+    return { id, status, label: GROUP_LABEL[id] };
   });
 
   return (
@@ -106,28 +79,54 @@ export function SessionPrepareSteps() {
       data-testid="session-prepare-steps"
       className="flex flex-1 items-center justify-center px-4 py-8"
     >
-      <div className="flex w-full max-w-md flex-col gap-1">
-        {items.map(({ step, position }) => (
-          <div key={step.id} data-testid="session-prepare-step" data-status={step.status}>
-            <ProcessStepListItem stepId={step.id} step={step} isActive={step.isActive} position={position} />
-          </div>
+      <ul className="flex w-full max-w-sm flex-col gap-3">
+        {steps.map(step => (
+          <li
+            key={step.id}
+            data-testid="session-prepare-step"
+            data-status={step.status}
+            className="flex items-center gap-3"
+          >
+            <StatusIcon status={step.status} />
+            <div className="flex min-w-0 flex-col">
+              <span
+                className={cn('text-sm', {
+                  'text-icon6': step.status === 'success',
+                  'text-icon6 font-medium': step.status === 'running',
+                  'text-icon3': step.status === 'pending',
+                })}
+              >
+                {step.label}
+              </span>
+              {step.status === 'running' && activeMessage ? (
+                <span className="text-icon3 text-xs">{activeMessage}</span>
+              ) : null}
+            </div>
+          </li>
         ))}
-      </div>
+      </ul>
     </div>
   );
 }
 
-function stepStatus(
-  phase: PrepareProgress['phase'],
-  activePhase: PrepareProgress['phase'],
-  sawReattaching: boolean,
-): StepStatus {
-  // `provisioning` auto-completes once `reattaching` was observed — the
-  // pipeline reached it and just walks past.
-  if (sawReattaching && phase === 'provisioning') return 'success';
-  const activeIdx = PHASE_ORDER.indexOf(activePhase);
-  const phaseIdx = PHASE_ORDER.indexOf(phase);
-  if (phaseIdx < activeIdx) return 'success';
-  if (phaseIdx === activeIdx) return 'running';
-  return 'pending';
+function StatusIcon({ status }: { status: StepStatus }) {
+  if (status === 'success') {
+    return (
+      <span className="text-accent1 flex size-5 items-center justify-center rounded-full">
+        <Check className="size-4" strokeWidth={2.5} />
+      </span>
+    );
+  }
+  if (status === 'running') {
+    return (
+      <span className="flex size-5 items-center justify-center">
+        <Spinner size="sm" />
+      </span>
+    );
+  }
+  return (
+    <span className="text-icon3 flex size-5 items-center justify-center">
+      <span className="size-2 rounded-full bg-current opacity-50" />
+    </span>
+  );
 }

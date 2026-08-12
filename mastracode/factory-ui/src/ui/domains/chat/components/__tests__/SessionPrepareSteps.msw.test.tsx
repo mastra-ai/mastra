@@ -1,9 +1,13 @@
 /**
- * Focused coverage of the `<SessionPrepareSteps>` loader: renders the
- * canonical six-phase list and marks each step pending / running (active) /
- * success (complete) based on `sandboxProgress.phase` from
- * `ChatSessionContext`. Uses the shared `ProcessStepListItem` DS primitive;
- * each step is wrapped in a `data-status` carrier for test inspection.
+ * Focused coverage of the `<SessionPrepareSteps>` loader: renders three
+ * user-facing groups ("Preparing sandbox" → "Cloning repository" →
+ * "Starting session") and marks each step pending / running / success based
+ * on `sandboxProgress.phase` from `ChatSessionContext`.
+ *
+ * SSE phase → group mapping:
+ *   reattaching / provisioning / preparing-workspace  →  Preparing sandbox
+ *   cloning / pulling                                 →  Cloning repository
+ *   finalizing (+ post-ensure messages fetch)         →  Starting session
  */
 import { render, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
@@ -41,35 +45,58 @@ function stepByLabel(label: string) {
 }
 
 describe('SessionPrepareSteps', () => {
-  it('renders the canonical phase list before any progress arrives, with reattaching as active and Starting… secondary text', () => {
+  it('renders exactly three user-facing groups in the canonical order', () => {
     renderWithProgress(undefined);
-
-    // Landmark + all six ordered phases (auto-formatted from kebab ids).
     expect(screen.getByRole('status', { name: 'Preparing session' })).toBeInTheDocument();
-    const canonicalLabels = [
-      'Reattaching to sandbox',
-      'Provisioning sandbox',
-      'Preparing workspace',
-      'Cloning repository',
-      'Fetching latest changes',
-      'Finalizing session',
-    ];
-    for (const label of canonicalLabels) expect(screen.getByText(label)).toBeInTheDocument();
+    const stepRoots = screen.getAllByTestId('session-prepare-step');
+    expect(stepRoots).toHaveLength(3);
+    expect(stepRoots[0]).toHaveTextContent('Preparing sandbox');
+    expect(stepRoots[1]).toHaveTextContent('Cloning repository');
+    expect(stepRoots[2]).toHaveTextContent('Starting session');
+  });
 
-    expect(stepByLabel('Reattaching to sandbox')).toHaveAttribute('data-status', 'running');
-    expect(within(stepByLabel('Reattaching to sandbox')).getByText('Starting…')).toBeInTheDocument();
-    for (const label of canonicalLabels.slice(1)) {
-      expect(stepByLabel(label)).toHaveAttribute('data-status', 'pending');
+  it('before any progress arrives, Preparing sandbox is active with the Starting… fallback message', () => {
+    renderWithProgress(undefined);
+    expect(stepByLabel('Preparing sandbox')).toHaveAttribute('data-status', 'running');
+    expect(stepByLabel('Cloning repository')).toHaveAttribute('data-status', 'pending');
+    expect(stepByLabel('Starting session')).toHaveAttribute('data-status', 'pending');
+    expect(within(stepByLabel('Preparing sandbox')).getByText('Starting…')).toBeInTheDocument();
+  });
+
+  it('reattaching / provisioning / preparing-workspace all map to Preparing sandbox as active', () => {
+    const phases: Array<PrepareProgress['phase']> = ['reattaching', 'provisioning', 'preparing-workspace'];
+    for (const phase of phases) {
+      const { unmount } = renderWithProgress({ phase, message: `msg for ${phase}` });
+      expect(stepByLabel('Preparing sandbox')).toHaveAttribute('data-status', 'running');
+      expect(within(stepByLabel('Preparing sandbox')).getByText(`msg for ${phase}`)).toBeInTheDocument();
+      expect(stepByLabel('Cloning repository')).toHaveAttribute('data-status', 'pending');
+      unmount();
     }
   });
 
-  it('advances the active/complete/pending statuses as the observed phase moves forward', () => {
-    const { rerender } = renderWithProgress({ phase: 'provisioning', message: 'Provisioning a new sandbox…' });
+  it('cloning and pulling both map to Cloning repository as active, with Preparing sandbox marked success', () => {
+    const phases: Array<PrepareProgress['phase']> = ['cloning', 'pulling'];
+    for (const phase of phases) {
+      const { unmount } = renderWithProgress({ phase, message: `msg for ${phase}` });
+      expect(stepByLabel('Preparing sandbox')).toHaveAttribute('data-status', 'success');
+      expect(stepByLabel('Cloning repository')).toHaveAttribute('data-status', 'running');
+      expect(within(stepByLabel('Cloning repository')).getByText(`msg for ${phase}`)).toBeInTheDocument();
+      expect(stepByLabel('Starting session')).toHaveAttribute('data-status', 'pending');
+      unmount();
+    }
+  });
 
-    expect(stepByLabel('Reattaching to sandbox')).toHaveAttribute('data-status', 'success');
-    expect(stepByLabel('Provisioning sandbox')).toHaveAttribute('data-status', 'running');
-    expect(within(stepByLabel('Provisioning sandbox')).getByText('Provisioning a new sandbox…')).toBeInTheDocument();
-    expect(stepByLabel('Cloning repository')).toHaveAttribute('data-status', 'pending');
+  it('finalizing lights up Starting session with earlier groups marked success', () => {
+    renderWithProgress({ phase: 'finalizing', message: 'Almost there…' });
+    expect(stepByLabel('Preparing sandbox')).toHaveAttribute('data-status', 'success');
+    expect(stepByLabel('Cloning repository')).toHaveAttribute('data-status', 'success');
+    expect(stepByLabel('Starting session')).toHaveAttribute('data-status', 'running');
+    expect(within(stepByLabel('Starting session')).getByText('Almost there…')).toBeInTheDocument();
+  });
+
+  it('advances the active group as the observed phase moves across group boundaries', () => {
+    const { rerender } = renderWithProgress({ phase: 'provisioning', message: 'Provisioning a new sandbox…' });
+    expect(stepByLabel('Preparing sandbox')).toHaveAttribute('data-status', 'running');
 
     rerender(
       <ChatSessionContext.Provider
@@ -79,49 +106,10 @@ describe('SessionPrepareSteps', () => {
       </ChatSessionContext.Provider>,
     );
 
-    expect(stepByLabel('Provisioning sandbox')).toHaveAttribute('data-status', 'success');
+    expect(stepByLabel('Preparing sandbox')).toHaveAttribute('data-status', 'success');
     expect(stepByLabel('Cloning repository')).toHaveAttribute('data-status', 'running');
     expect(within(stepByLabel('Cloning repository')).getByText('Cloning octo/hello…')).toBeInTheDocument();
-    // Prior secondary text unmounts with the completed step.
+    // The prior phase's secondary text is gone with its step.
     expect(screen.queryByText('Provisioning a new sandbox…')).not.toBeInTheDocument();
-  });
-
-  it('auto-completes provisioning when the observed phase is reattaching (no crossed-out step)', () => {
-    renderWithProgress({ phase: 'reattaching', message: 'Reattaching…' });
-
-    expect(stepByLabel('Reattaching to sandbox')).toHaveAttribute('data-status', 'running');
-    // Provisioning is auto-completed rather than struck-through when the
-    // server chose the reattach path — a crossed-out step reads as failure.
-    expect(stepByLabel('Provisioning sandbox')).toHaveAttribute('data-status', 'success');
-    expect(stepByLabel('Cloning repository')).toHaveAttribute('data-status', 'pending');
-  });
-
-  it('keeps provisioning auto-completed once reattaching was observed, even after the server advances', () => {
-    const { rerender } = renderWithProgress({ phase: 'reattaching', message: 'Reattaching…' });
-    expect(stepByLabel('Provisioning sandbox')).toHaveAttribute('data-status', 'success');
-
-    // Server moves past reattaching to a later phase — provisioning must
-    // stay `success`.
-    rerender(
-      <ChatSessionContext.Provider
-        value={{ ...BASE_SESSION, sandboxProgress: { phase: 'cloning', message: 'Cloning octo/hello…' } }}
-      >
-        <SessionPrepareSteps />
-      </ChatSessionContext.Provider>,
-    );
-
-    expect(stepByLabel('Reattaching to sandbox')).toHaveAttribute('data-status', 'success');
-    expect(stepByLabel('Provisioning sandbox')).toHaveAttribute('data-status', 'success');
-    expect(stepByLabel('Cloning repository')).toHaveAttribute('data-status', 'running');
-  });
-
-  it('falls back to just the canonical label when no server message is present on the active step', () => {
-    renderWithProgress({ phase: 'cloning', message: '' });
-
-    const activeStep = stepByLabel('Cloning repository');
-    expect(activeStep).toHaveAttribute('data-status', 'running');
-    // No secondary description paragraph — the ProcessStepListItem primitive
-    // only renders one when description is truthy.
-    expect(activeStep.querySelector('p')).toBeNull();
   });
 });

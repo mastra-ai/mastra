@@ -172,9 +172,9 @@ describe('ThreadPage eager render during /ensure', () => {
     expect(await screen.findByRole('status', { name: 'Preparing session' })).toBeInTheDocument();
     expect(screen.queryByLabelText('Loading messages')).not.toBeInTheDocument();
 
-    // Before any SSE event, `reattaching` is the active default with a
-    // "Starting…" secondary message.
-    expect(screen.getByText('Reattaching to sandbox')).toBeInTheDocument();
+    // Before any SSE event, the first group ("Preparing sandbox") is the
+    // active default with a "Starting…" secondary message.
+    expect(screen.getByText('Preparing sandbox')).toBeInTheDocument();
     expect(screen.getByText('Starting…')).toBeInTheDocument();
 
     // Send button is disabled during preparing. Phase 2 wires
@@ -189,8 +189,8 @@ describe('ThreadPage eager render during /ensure', () => {
 
     await ensure.emitProgress('cloning', 'Cloning octo/hello…');
     await waitFor(() => expect(screen.getByText('Cloning octo/hello…')).toBeInTheDocument());
-    // Provisioning is now complete → the "Provisioning a new sandbox…" secondary
-    // message unmounts, and the "Provisioning sandbox" label stays but as complete.
+    // The "Preparing sandbox" group is now complete → its secondary message
+    // unmounts, the "Cloning repository" group is the new active step.
     await waitFor(() => expect(screen.queryByText('Provisioning a new sandbox…')).not.toBeInTheDocument());
 
     // Resolve /ensure — the step loader unmounts.
