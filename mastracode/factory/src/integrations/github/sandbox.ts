@@ -333,7 +333,7 @@ async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<voi
   // trusting the row.
   const alreadyMaterialized = await hasExistingCheckout(sandbox, workdir, repo);
 
-  let succeeded = false;
+  let tokenInRemote = false;
   try {
     if (!alreadyMaterialized) {
       // 2a. First open: shallow-clone the default branch into the workdir. A
@@ -362,6 +362,7 @@ async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<voi
       if (clone.exitCode !== 0) {
         throw classifyGitFailure(clone, 'clone-failed');
       }
+      tokenInRemote = true;
     } else {
       // 2b. Re-open: refresh remote to the token URL and fast-forward pull.
       reportProgress(onProgress, { phase: 'pulling', message: `Updating ${repo} to the latest changes…` });
@@ -369,6 +370,7 @@ async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<voi
       if (setUrl.exitCode !== 0) {
         throw new MaterializeError(`Failed to set git remote: ${setUrl.stderr}`, 'pull-failed');
       }
+      tokenInRemote = true;
       const pull = await gitTransfer(sandbox, `git -C ${shellQuote(workdir)} pull --ff-only`, {
         phase: 'repository pull',
         beforeRetry: async attempt =>
@@ -395,15 +397,27 @@ async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<voi
         });
       }
     }
-    succeeded = true;
-  } finally {
-    // 3. Always scrub the token from the remote so it isn't left in the VM's
-    // git config, even when the clone/pull above failed partway through. This
-    // is best-effort on the failure path (the workdir may not even exist, and
-    // a scrub error must never mask the primary failure); on the success path
-    // the scrub must succeed or we surface it.
-    await scrubRemote(sandbox, workdir, repo, succeeded);
+  } catch (primary) {
+    // 3a. The clone/pull failed — still scrub the token from the VM's git
+    // config. The scrub must never hide the actionable failure, but once the
+    // token reached the remote its own failure can't stay silent either:
+    // report both, primary cause and classification first.
+    try {
+      await scrubRemote(sandbox, workdir, repo, tokenInRemote);
+    } catch (scrubError) {
+      const primaryMessage = primary instanceof Error ? primary.message : String(primary);
+      const scrubMessage = scrubError instanceof Error ? scrubError.message : String(scrubError);
+      throw new MaterializeError(
+        `${primaryMessage} — additionally: ${scrubMessage}`,
+        primary instanceof MaterializeError ? primary.code : 'pull-failed',
+      );
+    }
+    throw primary;
   }
+
+  // 3b. Success — the token is in the remote and the workdir has a `.git`, so
+  // a failed scrub means the token may still be persisted: surface it.
+  await scrubRemote(sandbox, workdir, repo, tokenInRemote);
 
   // 4. Mark materialized.
   reportProgress(onProgress, { phase: 'finalizing', message: 'Finalizing workspace…' });
@@ -540,31 +554,34 @@ async function hasExistingCheckout(
 }
 
 /**
- * Reset the git remote back to the tokenless URL. On a successful clone/pull the
- * workdir always has a `.git`, so any failure here means the token may still be
- * persisted — surface it. On the failure path the workdir may not exist (e.g. a
- * failed clone), and a missing directory makes providers that spawn with `cwd`
- * throw rather than return a non-zero exit code; both outcomes are tolerated so
- * neither masks the primary failure being thrown through the `finally`.
+ * Reset the git remote back to the tokenless URL. Strict when the token
+ * reached the remote: any failure — a non-zero exit or a provider throw —
+ * means the token may still be persisted, so it is thrown for the caller to
+ * surface. Best-effort when it never did: the workdir may not exist (e.g. a
+ * failed clone), which makes providers that spawn with `cwd` throw rather
+ * than return a non-zero exit code; both outcomes are tolerated so neither
+ * masks the primary failure.
  */
 async function scrubRemote(
   sandbox: MaterializationSandbox,
   workdir: string,
   repoFullName: string,
-  expectGitDir: boolean,
+  tokenInRemote: boolean,
 ): Promise<void> {
   const scrub = `git -C ${shellQuote(workdir)} remote set-url origin ${shellQuote(cleanUrl(repoFullName))}`;
-  if (!expectGitDir) {
+  if (!tokenInRemote) {
     await sh(sandbox, scrub).catch(() => undefined);
     return;
   }
-  const result = await sh(sandbox, scrub);
-  if (result.exitCode !== 0) {
-    throw new MaterializeError(
-      `Failed to scrub installation token from git remote: ${result.stderr.trim() || result.stdout.trim()}`,
-      'pull-failed',
-    );
+  let failure: string;
+  try {
+    const result = await sh(sandbox, scrub);
+    if (result.exitCode === 0) return;
+    failure = result.stderr.trim() || result.stdout.trim();
+  } catch (error) {
+    failure = error instanceof Error ? error.message : String(error);
   }
+  throw new MaterializeError(`Failed to scrub installation token from git remote: ${failure}`, 'pull-failed');
 }
 
 /**
@@ -691,9 +708,9 @@ export async function configureGitIdentity(
  * token therefore only ever lives in the remote URL for the duration of the
  * operation and is never left in the VM's git config.
  *
- * On the success path the scrub must succeed (a leaked token is a hard error);
- * if it fails we surface it. On the failure path the scrub is best-effort but
- * still attempted, and the original operation error is rethrown.
+ * Once the tokenized URL is installed the scrub must succeed — a leaked token
+ * is a hard error that outranks even `fn`'s own failure. Only a failed
+ * set-url (the token never reached the remote) downgrades it to best-effort.
  */
 export async function withInstallToken<T>(
   sandbox: MaterializationSandbox,
