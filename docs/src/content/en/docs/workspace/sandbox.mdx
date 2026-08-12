@@ -9,9 +9,15 @@ packages:
 
 **Added in:** `@mastra/core@1.1.0`
 
-A workspace gives an agent an isolated environment for working with files and running commands. The sandbox provides command execution. Add a filesystem, code inspection, search, or reusable skills as needed.
+Agents work with files and run shell commands. Because their actions aren't always predictable, they should operate within deliberate boundaries that protect the host system. A sandbox provides that execution environment.
 
-A sandbox provider executes commands in a controlled environment:
+In Mastra, a sandbox operates through a `Workspace`. `Workspace` is the API you configure and attach to `Mastra` or an agent. Its `sandbox` provider defines where commands run, while the workspace gives the agent tools for using that environment.
+
+You control how long the environment lasts and who shares it. A workspace can belong to the application or a specific agent. Resolver functions can scope a sandbox or filesystem to request context such as a user, tenant, or thread.
+
+Workspace filesystems can persist independently from the sandbox. Supported providers can mount them through FUSE, which lets an ephemeral sandbox start with seeded files and save results to storage that survives the run. You can also configure a workspace with only a filesystem. The agent then receives file and search tools without a shell command tool.
+
+A sandbox provider can control:
 
 - **Command execution**: Run shell commands with arguments
 - **Background processes**: Spawn long-running processes like dev servers and watchers
@@ -20,9 +26,9 @@ A sandbox provider executes commands in a controlled environment:
 - **Timeouts**: Prevent long-running commands from hanging
 - **Isolation**: Optional OS-level sandboxing for security
 
-:::warning
+:::warning[Isolation depends on the provider]
 
-A sandbox doesn't guarantee isolation by itself. `LocalSandbox` runs commands directly on the host unless you enable native isolation. Container and remote providers have their own security boundaries and configuration.
+Provider choice determines the isolation boundary. `LocalSandbox` runs commands directly on the host unless you enable native isolation with macOS Seatbelt or Linux Bubblewrap. Container and remote providers such as Daytona run commands within their own isolation boundaries.
 
 Choose the provider and controls that meet your requirements for network access, credentials, retention, and deletion.
 
