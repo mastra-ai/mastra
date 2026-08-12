@@ -26,7 +26,7 @@ const harness = vi.hoisted(() => {
     }),
     getMastra: vi.fn(() => mastra),
     getSessionByResource: vi.fn<() => Promise<typeof session | undefined>>(async () => session),
-    createSession: vi.fn(async () => session),
+    createSession: vi.fn(async (_input: { requestContext: { get(key: string): unknown } }) => session),
     onSessionCreated: vi.fn(),
     // Mastra's constructor probes each controller for channels wiring.
     getChannels: vi.fn(() => undefined),
@@ -199,6 +199,8 @@ describe('Platform GitHub event worker factory lifecycle', () => {
           requestContext: expect.anything(),
         }),
       );
+      const requestContext = harness.controller.createSession.mock.calls[0]![0].requestContext;
+      expect(requestContext.get('user')).toEqual({ workosId: 'user-1', organizationId: 'org-1' });
       expect(await pubsub.getLeaseOwner('platform-github-events:github')).toEqual(expect.any(String));
 
       await mastra.stopWorkers();
