@@ -136,8 +136,9 @@ describe('TranscriptEntries tool rows', () => {
     ]);
 
     const group = screen.getByRole('group', { name: 'Tool group: 4 steps' });
-    expect(within(group).getByText('Run')).toBeInTheDocument();
+    expect(within(group).getByText('4 steps')).toBeInTheDocument();
     expect(within(group).getByText('pnpm test')).toBeInTheDocument();
+    expect(within(group).getByRole('img', { name: 'Read, Run' })).toBeInTheDocument();
     expect(within(group).getByText('3/4')).toBeInTheDocument();
     expect(group).toHaveAttribute('aria-busy', 'true');
   });
@@ -159,7 +160,8 @@ describe('TranscriptEntries tool rows', () => {
   it.each([
     ['ask_user', 'Question from the agent', { question: 'Which file should I edit?' }],
     ['submit_plan', 'Plan approval', { plan: { title: 'Ship the fix', content: 'Step one' } }],
-  ])('breaks a run on %s so its prompt is never swallowed by a group', (toolName, promptLabel, args) => {
+    ['skill', 'Skill: understand-issue', { name: 'understand-issue' }],
+  ])('breaks a run on %s so its card is never swallowed by a group', (toolName, promptLabel, args) => {
     renderEntries([
       assistantMessage('msg-1', [
         doneTool('call-1', 'view'),

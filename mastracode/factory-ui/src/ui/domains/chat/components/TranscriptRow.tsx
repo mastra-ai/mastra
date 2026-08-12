@@ -24,42 +24,55 @@ function Chevron({ expanded, className }: { expanded: boolean; className: string
 }
 
 interface TranscriptRowProps {
-  /** Leading glyph; a group of calls leads with the disclosure chevron instead. */
+  /** Glyph naming the kind of row, held in the leading column every row shares. */
   icon?: ReactNode;
   label: string;
   detail?: string;
+  /** Glyphs standing in for what a collapsed row holds, sat next to the label. */
+  summary?: ReactNode;
   /** Sweeps the label to say the row is in flight. */
   running?: boolean;
-  /** Undefined marks the row as not collapsible, so it grows no disclosure chevron. */
+  /** Undefined marks the row as not collapsible, so its trailing disclosure column stays empty. */
   expanded?: boolean;
   /** Trails the label with a hairline, marking the row as a group of calls. */
   rule?: boolean;
   trailing?: ReactNode;
 }
 
+const ROW_LINE = 'flex w-full min-w-0 items-center gap-2 px-1.5 py-1';
+
 /** The one row shape every transcript line uses, so tools, signals and notifications share a rhythm. */
-export function TranscriptRow({ icon, label, detail, running, expanded, rule, trailing }: TranscriptRowProps) {
+export function TranscriptRow({ icon, label, detail, summary, running, expanded, rule, trailing }: TranscriptRowProps) {
+  const Line = running ? Shimmer : 'span';
+
   return (
-    <span className="flex w-full min-w-0 items-center gap-2 px-1.5 py-1">
-      <span className="flex size-4 shrink-0 items-center justify-center">
-        {icon ?? <Chevron expanded={Boolean(expanded)} className="text-icon3 group-hover/row:text-icon5" />}
-      </span>
-      <Txt as="span" variant="ui-sm" className="text-icon5 max-w-[55%] shrink-0 truncate">
-        {running ? <Shimmer>{label}</Shimmer> : label}
+    <Line className={ROW_LINE}>
+      <span className="flex size-4 shrink-0 items-center justify-center">{icon}</span>
+      <Txt as="span" variant="ui-sm" className="text-icon3 max-w-[55%] shrink-0 truncate">
+        {label}
       </Txt>
       {detail && (
         <Txt as="span" variant="ui-xs" font="mono" className="text-icon3 min-w-0 truncate">
           {detail}
         </Txt>
       )}
-      {icon && expanded !== undefined && (
-        <Chevron expanded={expanded} className="text-icon2 group-hover/row:text-icon4" />
-      )}
+      {summary}
       <span
         aria-hidden
         className={cn('min-w-2 flex-1', rule && 'bg-border1 mask-r-from-[calc(100%-min(100%,160px))] h-px')}
       />
       {trailing}
-    </span>
+      <span className="flex size-4 shrink-0 items-center justify-center">
+        {expanded !== undefined && (
+          <Chevron
+            expanded={expanded}
+            className={cn(
+              'text-icon3 group-hover/row:opacity-100 group-focus-visible/row:opacity-100',
+              !expanded && 'opacity-0',
+            )}
+          />
+        )}
+      </span>
+    </Line>
   );
 }
