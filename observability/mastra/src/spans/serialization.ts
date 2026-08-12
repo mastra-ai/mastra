@@ -114,7 +114,11 @@ function getMapKeyType(key: unknown): string {
 }
 
 function hasOnlyKnownKeys(value: Record<string, unknown>, keys: string[]): boolean {
-  return Object.keys(value).every(key => keys.includes(key));
+  try {
+    return Object.keys(value).every(key => keys.includes(key));
+  } catch {
+    return false;
+  }
 }
 
 function isSpanLike(value: unknown): boolean {
@@ -123,12 +127,16 @@ function isSpanLike(value: unknown): boolean {
   }
 
   const span = value as Record<string, unknown>;
-  return (
-    typeof span.id === 'string' &&
-    typeof span.traceId === 'string' &&
-    typeof span.type === 'string' &&
-    typeof span.name === 'string'
-  );
+  try {
+    return (
+      typeof span.id === 'string' &&
+      typeof span.traceId === 'string' &&
+      typeof span.type === 'string' &&
+      typeof span.name === 'string'
+    );
+  } catch {
+    return false;
+  }
 }
 
 function isTracingContextLike(value: unknown): boolean {
@@ -141,7 +149,11 @@ function isTracingContextLike(value: unknown): boolean {
     return false;
   }
 
-  return context.currentSpan === undefined || isSpanLike(context.currentSpan);
+  try {
+    return context.currentSpan === undefined || isSpanLike(context.currentSpan);
+  } catch {
+    return false;
+  }
 }
 
 function isLoggerLike(value: unknown): boolean {
@@ -150,7 +162,11 @@ function isLoggerLike(value: unknown): boolean {
   }
 
   const logger = value as Record<string, unknown>;
-  return LOGGER_METHODS.some(method => typeof logger[method] === 'function');
+  try {
+    return LOGGER_METHODS.some(method => typeof logger[method] === 'function');
+  } catch {
+    return false;
+  }
 }
 
 function shouldStripEntry(key: string, value: unknown, stripSet: Set<string>): boolean {
@@ -479,6 +495,11 @@ export function deepClean(value: any, options: DeepCleanOptions = DEFAULT_DEEP_C
         try {
           rawValue = (val as Record<string, unknown>)[key];
         } catch (error) {
+          if (keyCount >= maxObjectKeys) {
+            cleaned['__truncated'] = `${keys.length - keyCount} more keys omitted`;
+            break;
+          }
+
           cleaned[key] = formatSerializationError(error);
           keyCount++;
           continue;

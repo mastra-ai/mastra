@@ -915,6 +915,28 @@ describe('Span', () => {
       expect(result.$schema).toBe('[schema getter failed]');
     });
 
+    it('should respect maxObjectKeys when a property getter throws', () => {
+      const input: Record<string, unknown> = {
+        first: 1,
+        second: 2,
+      };
+
+      Object.defineProperty(input, 'third', {
+        enumerable: true,
+        get() {
+          throw new Error('third getter failed');
+        },
+      });
+
+      const result = deepClean(input, { ...DEFAULT_DEEP_CLEAN_OPTIONS, maxObjectKeys: 2 });
+
+      expect(result).toEqual({
+        first: 1,
+        second: 2,
+        __truncated: '1 more keys omitted',
+      });
+    });
+
     it('should serialize Maps including nested and primitive/object values', () => {
       const inner = new Map<string, any>([['k', 'v']]);
       const map = new Map<any, any>([
@@ -1017,6 +1039,21 @@ describe('Span', () => {
         ['string', 'runtimeTracing', {}],
         ['string', 'runtimeFunction', {}],
       ]);
+    });
+
+    it('should not strip Map entries when runtime-shape checks hit throwing getters', () => {
+      const logger = {};
+      Object.defineProperty(logger, 'info', {
+        enumerable: true,
+        get() {
+          throw new Error('logger getter failed');
+        },
+      });
+      const map = new Map<any, any>([['logger', logger]]);
+
+      const result = deepClean({ map });
+
+      expect(result.map.__map_entries).toEqual([['string', 'logger', { info: '[logger getter failed]' }]]);
     });
 
     it('should serialize Sets including nested and object items', () => {
@@ -1158,6 +1195,53 @@ describe('Span', () => {
 
       expect(stepSpan?.output).toEqual({ text: 'ok', object: { steps: ['domain-step'] } });
       expect(inferenceSpan?.output).toEqual({ text: 'ok', object: { steps: ['domain-step'] } });
+    });
+
+    it('only prepares plain record model outputs before deepClean', () => {
+      class ModelOutput {
+        steps = ['class-owned'];
+        text = 'class output';
+      }
+
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test-tracing',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+      });
+
+      const classOutputSpan = tracing.startSpan({
+        type: SpanType.MODEL_STEP,
+        name: 'model-step-class-output',
+        attributes: { stepIndex: 0 },
+      });
+      classOutputSpan.end({ output: new ModelOutput() });
+
+      const throwingOutput: Record<string, unknown> = {
+        text: 'throwing output',
+      };
+      Object.defineProperty(throwingOutput, 'steps', {
+        enumerable: true,
+        get() {
+          throw new Error('steps getter failed');
+        },
+      });
+
+      const throwingOutputSpan = tracing.startSpan({
+        type: SpanType.MODEL_STEP,
+        name: 'model-step-throwing-output',
+        attributes: { stepIndex: 1 },
+      });
+      throwingOutputSpan.end({ output: throwingOutput });
+
+      const spans = testExporter.events
+        .filter(event => event.type === TracingEventType.SPAN_ENDED)
+        .map(event => event.exportedSpan);
+      const classSpan = spans.find(span => span.name === 'model-step-class-output');
+      const throwingSpan = spans.find(span => span.name === 'model-step-throwing-output');
+
+      expect(classSpan?.output).toEqual({ steps: ['class-owned'], text: 'class output' });
+      expect(throwingSpan?.output).toEqual({ text: 'throwing output', steps: '[steps getter failed]' });
     });
 
     it('strips model step metadata provider metadata but preserves model chunk provider metadata', () => {

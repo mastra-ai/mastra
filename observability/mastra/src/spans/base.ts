@@ -74,6 +74,19 @@ function isSpanInternal(spanType: SpanType, flags?: InternalSpans): boolean {
   }
 }
 
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+
+  try {
+    const prototype = Object.getPrototypeOf(value);
+    return prototype === Object.prototype || prototype === null;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Get the external parent span ID from CreateSpanOptions.
  *
@@ -248,7 +261,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
   }
 
   protected prepareSpanOutput<T>(value: T): T {
-    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    if (!isPlainRecord(value)) {
       return value;
     }
 
@@ -256,13 +269,17 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
       return value;
     }
 
-    const prepared = { ...(value as Record<string, unknown>) };
-    delete prepared.steps;
-    return prepared as T;
+    try {
+      const prepared = { ...value };
+      delete prepared.steps;
+      return prepared as T;
+    } catch {
+      return value;
+    }
   }
 
   protected prepareSpanMetadata<T>(value: T): T {
-    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    if (!isPlainRecord(value)) {
       return value;
     }
 
@@ -270,10 +287,14 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
       return value;
     }
 
-    const prepared = { ...(value as Record<string, unknown>) };
-    delete prepared.providerMetadata;
-    delete prepared.experimental_providerMetadata;
-    return prepared as T;
+    try {
+      const prepared = { ...value };
+      delete prepared.providerMetadata;
+      delete prepared.experimental_providerMetadata;
+      return prepared as T;
+    } catch {
+      return value;
+    }
   }
 
   // Methods for span lifecycle
