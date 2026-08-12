@@ -1194,11 +1194,15 @@ describe('createToolCallStep suspension metadata cleanup on resume', () => {
     args,
     message,
     flushMessages,
+    suspendData,
+    toolCallId = 'hitl-call-id',
   }: {
     resumeData?: unknown;
     args: Record<string, unknown>;
     message: ReturnType<typeof createSuspendedAssistantMessage>;
     flushMessages: Mock;
+    suspendData?: unknown;
+    toolCallId?: string;
   }) => {
     const messageList = {
       get: {
@@ -1214,7 +1218,7 @@ describe('createToolCallStep suspension metadata cleanup on resume', () => {
       },
     } as ToolSet;
 
-    const inputData = { toolCallId: 'hitl-call-id', toolName: 'hitl-tool', args };
+    const inputData = { toolCallId, toolName: 'hitl-tool', args };
 
     const toolCallStep = createToolCallStep({
       tools,
@@ -1229,7 +1233,7 @@ describe('createToolCallStep suspension metadata cleanup on resume', () => {
     } as any);
 
     return toolCallStep.execute({
-      ...makeBaseExecuteParams(vi.fn(), { resumeData }),
+      ...makeBaseExecuteParams(vi.fn(), { resumeData, suspendData }),
       writer: new ToolStream({
         prefix: 'tool',
         callId: inputData.toolCallId,
@@ -1296,6 +1300,27 @@ describe('createToolCallStep suspension metadata cleanup on resume', () => {
 
     expect(message.content.metadata.suspendedTools).toBeUndefined();
     expect(flushMessages).toHaveBeenCalled();
+  });
+
+  it('leaves a same-name sibling suspended when an approval resume arrives after policy loss', async () => {
+    // Approve-after-policy-loss (#20470): the live `requireToolApproval` policy is gone, but the
+    // suspension was an approval one, so `approvalGated` is still true and the approval branch
+    // clears its own metadata. The generic suspension cleanup must not also run here —
+    // `removeToolMetadata` falls back from toolCallId to toolName, so it would delete the entry
+    // belonging to a different, still-suspended call of the same tool.
+    const message = createSuspendedAssistantMessage('sibling-call-id', 'hitl-tool');
+    const flushMessages = vi.fn();
+
+    await runResumedTool({
+      toolCallId: 'approved-call-id',
+      resumeData: { approved: true },
+      suspendData: { requireToolApproval: true },
+      args: { prompt: 'do thing' },
+      message,
+      flushMessages,
+    });
+
+    expect(message.content.metadata.suspendedTools).toHaveProperty('sibling-call-id');
   });
 
   it('leaves suspendedTools intact for a plain (non-resume) tool call', async () => {

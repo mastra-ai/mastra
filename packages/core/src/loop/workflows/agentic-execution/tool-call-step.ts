@@ -910,7 +910,14 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         // that narrower meaning.
         // Nullish, not truthy: `false` / `0` / `''` are valid resume payloads for a tool whose
         // resumeSchema is a primitive (e.g. a boolean decline), and they must clear the entry too.
-        if (!toolRequiresApproval && resumeData != null) {
+        //
+        // Keyed on `approvalGated`, not the live `toolRequiresApproval`, for the same reason as
+        // `approvalGrant` above: on an approve-after-policy-loss resume the live policy is gone
+        // while the suspension was an approval one, which cleans up its own metadata in the
+        // branch above. Using the live policy here would run the generic suspension cleanup on
+        // top of it, and `removeToolMetadata`'s toolCallId -> toolName fallback could then drop a
+        // concurrently suspended sibling that shares this tool name.
+        if (!approvalGated && resumeData != null) {
           await removeToolMetadata({ toolCallId: inputData.toolCallId, toolName: inputData.toolName }, 'suspension');
         }
 
