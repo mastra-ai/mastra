@@ -34,13 +34,17 @@ export interface ChatRuntimeState {
   tokensPerSec: number;
   /** Recent decode rates of this run, oldest first, for the throughput curve. */
   tokensPerSecHistory: number[];
-  /** Start of the open measurement window, 0 when no run is streaming. */
+  /** Start of the open measurement window, 0 before any text has streamed. */
   _sampledAt: number;
-  _streamedChars: number;
+  /** Decoded characters per assistant message, so a second message can't read as a rewind. */
+  _streamedChars: Record<string, number>;
+  _sampledChars: number;
 }
 
 const RATE_SAMPLES = 12;
 const SAMPLE_SECONDS = 0.25;
+/** Longer than this and the window spans a tool call or a reconnect, not decoding: reopen it. */
+const WINDOW_SECONDS = 3;
 /* The stream carries text, not token counts; ~4 chars per token is close enough for a speed readout. */
 const CHARS_PER_TOKEN = 4;
 
@@ -52,7 +56,8 @@ export const initialChatRuntime: ChatRuntimeState = {
   tokensPerSec: 0,
   tokensPerSecHistory: [],
   _sampledAt: 0,
-  _streamedChars: 0,
+  _streamedChars: {},
+  _sampledChars: 0,
 };
 
 export interface OMWorkByBudget {
@@ -80,21 +85,27 @@ export function runtimeReducer(state: ChatRuntimeState, event: AgentControllerEv
 
   switch (event.type) {
     case 'agent_start':
-      return { ...state, tokensPerSec: 0, tokensPerSecHistory: [], _sampledAt: Date.now(), _streamedChars: 0 };
-    case 'agent_end':
-      return { ...state, tokensPerSec: 0, tokensPerSecHistory: [], _sampledAt: 0, _streamedChars: 0 };
+      return {
+        ...state,
+        tokensPerSec: 0,
+        tokensPerSecHistory: [],
+        _sampledAt: 0,
+        _streamedChars: {},
+        _sampledChars: 0,
+      };
     case 'message_start':
     case 'message_update': {
-      if (state._sampledAt === 0) return state;
       const chars = decodedChars(event.message);
       if (chars === 0) return state;
-      // A first text, or a shorter one than the last sample, is a new message: open a window instead of measuring one.
-      if (state._streamedChars === 0 || chars < state._streamedChars) {
-        return { ...state, _sampledAt: Date.now(), _streamedChars: chars };
+      const streamedChars = { ...state._streamedChars, [event.message.id]: chars };
+      const decoded = Object.values(streamedChars).reduce((total, messageChars) => total + messageChars, 0);
+      const now = Date.now();
+      const seconds = (now - state._sampledAt) / 1000;
+      if (state._sampledAt === 0 || seconds > WINDOW_SECONDS || decoded <= state._sampledChars) {
+        return { ...state, _sampledAt: now, _streamedChars: streamedChars, _sampledChars: decoded };
       }
-      const seconds = (Date.now() - state._sampledAt) / 1000;
-      if (chars === state._streamedChars || seconds < SAMPLE_SECONDS) return state;
-      const instantaneous = (chars - state._streamedChars) / CHARS_PER_TOKEN / seconds;
+      if (seconds < SAMPLE_SECONDS) return { ...state, _streamedChars: streamedChars };
+      const instantaneous = (decoded - state._sampledChars) / CHARS_PER_TOKEN / seconds;
       const tokensPerSec = Math.round(
         state.tokensPerSec > 0 ? 0.3 * instantaneous + 0.7 * state.tokensPerSec : instantaneous,
       );
@@ -102,8 +113,9 @@ export function runtimeReducer(state: ChatRuntimeState, event: AgentControllerEv
         ...state,
         tokensPerSec,
         tokensPerSecHistory: [...state.tokensPerSecHistory, tokensPerSec].slice(-RATE_SAMPLES),
-        _sampledAt: Date.now(),
-        _streamedChars: chars,
+        _sampledAt: now,
+        _streamedChars: streamedChars,
+        _sampledChars: decoded,
       };
     }
     case 'usage_update':
@@ -149,6 +161,8 @@ export function runtimeReducer(state: ChatRuntimeState, event: AgentControllerEv
 interface RuntimeMessagePart {
   type: string;
   text?: string;
+  /** Thinking parts carry their stream here, not in `text`. */
+  reasoning?: string;
 }
 
 interface RuntimeMessage {
@@ -159,5 +173,5 @@ interface RuntimeMessage {
 function decodedChars(message: RuntimeMessage) {
   if (message.role !== 'assistant') return 0;
   const parts = Array.isArray(message.content) ? message.content : message.content.parts;
-  return parts.reduce((total, part) => total + (part.text?.length ?? 0), 0);
+  return parts.reduce((total, part) => total + (part.text?.length ?? 0) + (part.reasoning?.length ?? 0), 0);
 }

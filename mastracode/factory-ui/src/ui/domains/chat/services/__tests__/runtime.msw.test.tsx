@@ -80,24 +80,62 @@ describe('chat runtime reducer', () => {
       expect(burst.tokensPerSecHistory).toEqual([]);
     });
 
-    it('drops the reading when the run ends, so an idle composer shows no throughput', () => {
-      const opened = streamText(runtimeReducer(initialChatRuntime, { type: 'agent_start' }), 'x'.repeat(20));
+    it('counts thinking as decoding, so a long reasoning pass still reads as speed', () => {
+      const opened = runtimeReducer(runtimeReducer(initialChatRuntime, { type: 'agent_start' }), {
+        type: 'message_update',
+        message: {
+          id: 'assistant-1',
+          role: 'assistant',
+          content: { format: 2, parts: [{ type: 'reasoning', reasoning: 'x'.repeat(20), details: [] }] },
+        },
+      });
       vi.advanceTimersByTime(1000);
-      const measured = streamText(opened, 'x'.repeat(220));
-      const ended = runtimeReducer(measured, { type: 'agent_end' });
+      const thinking = runtimeReducer(opened, {
+        type: 'message_update',
+        message: {
+          id: 'assistant-1',
+          role: 'assistant',
+          content: { format: 2, parts: [{ type: 'reasoning', reasoning: 'x'.repeat(220), details: [] }] },
+        },
+      });
 
-      expect(ended.tokensPerSec).toBe(0);
-      expect(ended.tokensPerSecHistory).toEqual([]);
-      expect(streamText(ended, 'x'.repeat(9000)).tokensPerSec).toBe(0);
+      expect(thinking.tokensPerSec).toBe(50);
+    });
+
+    it('measures a run it joined mid-flight, without waiting for the next one', () => {
+      const opened = streamText(initialChatRuntime, 'x'.repeat(20));
+      vi.advanceTimersByTime(1000);
+
+      expect(streamText(opened, 'x'.repeat(220)).tokensPerSec).toBe(50);
+    });
+
+    it('keeps counting across the messages of one run instead of restarting on each', () => {
+      const opened = streamText(runtimeReducer(initialChatRuntime, { type: 'agent_start' }), 'x'.repeat(400));
+      vi.advanceTimersByTime(1000);
+      const second = streamText(opened, 'x'.repeat(600), 'assistant-2');
+
+      expect(second.tokensPerSec).toBe(150);
+    });
+
+    it('reopens the window after a tool call rather than averaging over the pause', () => {
+      const opened = streamText(runtimeReducer(initialChatRuntime, { type: 'agent_start' }), 'x'.repeat(20));
+      vi.advanceTimersByTime(30_000);
+      const afterTool = streamText(opened, 'x'.repeat(220));
+
+      expect(afterTool.tokensPerSec).toBe(0);
+
+      vi.advanceTimersByTime(1000);
+
+      expect(streamText(afterTool, 'x'.repeat(420)).tokensPerSec).toBe(50);
     });
   });
 });
 
-function streamText(state: ChatRuntimeState, text: string): ChatRuntimeState {
+function streamText(state: ChatRuntimeState, text: string, id = 'assistant-1'): ChatRuntimeState {
   return runtimeReducer(state, {
     type: 'message_update',
     message: {
-      id: 'assistant-1',
+      id,
       role: 'assistant',
       content: { format: 2, parts: [{ type: 'text', text }] },
     },
