@@ -11,12 +11,7 @@ export interface FactoryProject {
   defaultModelId: string | null;
   /** Whether new Slack sessions create Work-board items for this Factory. */
   slackWorkItemsEnabled: boolean;
-  /**
-   * Whether rule decisions may start agent runs on their own. Off: the run is
-   * held as a `proposed` decision until someone approves it from the board.
-   * Rules that only mirror external facts (a merged PR moving to Done) always
-   * run — this gates work, not bookkeeping.
-   */
+  /** Whether rules may start agent runs on their own; off, a run waits for approval on its card. */
   autoRunEnabled: boolean;
   createdAt: Date;
   updatedAt: Date;

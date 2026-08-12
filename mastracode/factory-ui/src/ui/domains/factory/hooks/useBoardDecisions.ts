@@ -5,10 +5,7 @@ import type { FactoryDecisionStatus, FactoryDecisionSummary } from '../services/
 
 const BOARD_STATUSES: FactoryDecisionStatus[] = ['pending', 'proposed', 'leased', 'retry', 'failed'];
 
-/**
- * What the board's cards owe a person: a run a rule proposed and nobody has
- * released yet, and the effects already in flight (or failed) behind them.
- */
+/** Runs proposed on the board's cards, and the effects already in flight behind them. */
 export function useBoardDecisions(factoryProjectId: string) {
   const status = useFactoryDecisionStatus(factoryProjectId, BOARD_STATUSES);
   const approve = useFactoryDecisionAction(factoryProjectId, 'approve');
@@ -34,5 +31,6 @@ export function useBoardDecisions(factoryProjectId: string) {
     dismiss: (decisionId: string) => dismiss.mutate(decisionId),
     retryingId: retry.isPending ? retry.variables : undefined,
     retry: (decisionId: string) => retry.mutate(decisionId),
+    error: [approve, dismiss, retry].find(mutation => mutation.isError)?.error,
   };
 }

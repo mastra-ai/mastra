@@ -67,12 +67,7 @@ export interface FactoryDecisionDispatcherOptions {
   transitionService: Pick<FactoryTransitionService, 'transition'>;
   storage: WorkItemsStorage;
   ownerId?: string;
-  /**
-   * Whether the project lets rules start agent runs without a human. When it
-   * answers `false`, `invokeSkill` effects are parked as `proposed` until
-   * someone approves them; every other effect (transitions, linked-item
-   * upserts, messages) still runs, so the board keeps mirroring reality.
-   */
+  /** `false` parks `invokeSkill` effects as `proposed`; every other effect still runs. */
   isAutoRunEnabled: (tenant: { orgId: string; factoryProjectId: string }) => Promise<boolean>;
   reconcileToolResults?: () => Promise<void>;
   prepareBinding?: (input: FactoryBindingPreparationInput) => Promise<void>;

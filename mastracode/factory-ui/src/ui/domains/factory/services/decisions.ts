@@ -1,7 +1,4 @@
-/**
- * `proposed`: an agent run a rule wants to start, waiting for someone to
- * release it. `dismissed`: a proposal that was turned down, so it never runs.
- */
+/** `proposed`: a run waiting for someone to release it. `dismissed`: one turned down, so it never runs. */
 export type FactoryDecisionStatus = 'pending' | 'proposed' | 'dismissed' | 'leased' | 'retry' | 'succeeded' | 'failed';
 
 /** What a person can do to a queued effect from the board or the Rules page. */

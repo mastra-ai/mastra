@@ -5,11 +5,6 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 
 import { useSetFactoryAutoRunMutation } from '../../../../hooks/useFactoryAutoRun';
 
-/**
- * Whether rules may start agent runs on their own. Off, a proposed run waits
- * on its card until someone clicks it — the board keeps filing cards either
- * way, so this gates work, not bookkeeping.
- */
 export function BoardAutoRunToggle({ factoryProjectId, enabled }: { factoryProjectId: string; enabled: boolean }) {
   const autoRun = useSetFactoryAutoRunMutation(factoryProjectId);
 

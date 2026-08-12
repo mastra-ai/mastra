@@ -220,7 +220,7 @@ function BoardContent({
         workItemMatchesLabels(item, selectedLabels, liveCandidate)
       );
     });
-  const mutationError = runs.error ?? items.mutationError;
+  const mutationError = runs.error ?? decisions.error ?? items.mutationError;
   const visibleWorkItems = new Set(stages.flatMap(stage => workItemsForStage(stage.id)));
   const unfilteredVisibleWorkItems = new Set(stages.flatMap(stage => unfilteredWorkItemsForStage(stage.id)));
   const totalTaskCount = visibleWorkItems.size + filteredCandidates.length;

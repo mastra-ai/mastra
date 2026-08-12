@@ -134,11 +134,7 @@ export interface FactoryRuleEvaluationRecord {
   createdAt: Date;
 }
 
-/**
- * `proposed` is a run the Factory may not start on its own: parked until
- * someone approves it, and never claimed meanwhile. `dismissed` is the
- * terminal end of a proposal nobody wanted.
- */
+/** `proposed` is parked awaiting approval and never claimed; `dismissed` is a proposal turned down. */
 export type FactoryDispatchStatus = 'pending' | 'proposed' | 'dismissed' | 'leased' | 'retry' | 'succeeded' | 'failed';
 
 export interface FactoryDeferredDecisionPageInput {

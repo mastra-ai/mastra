@@ -45,10 +45,7 @@ interface CardPrimaryAction {
   start: () => void;
 }
 
-/**
- * What clicking the card does. A run a rule proposed wins: releasing it keeps
- * the work attributed to the rule instead of starting a rival run beside it.
- */
+/** A proposed run wins the click: releasing it beats starting a rival run beside it. */
 function cardPrimaryAction({
   item,
   runSpec,
@@ -140,8 +137,8 @@ export function WorkItemCard({
 }) {
   const { factoryId = '' } = useParams<{ factoryId: string }>();
   const evaluating = evaluatingStage !== undefined;
-  const approving = proposal !== undefined && approvingDecisionId === proposal.id;
-  const runPending = pendingRunRoles.size > 0 || preparing !== undefined || approving;
+  const busyLabel = proposal !== undefined && approvingDecisionId === proposal.id ? 'Starting…' : preparing;
+  const runPending = pendingRunRoles.size > 0 || busyLabel !== undefined;
   const otherStages = item.stages.filter(stage => stage !== columnStage);
   const runSpec = itemRunSpec(item);
   const sessions = liveSessions(item.sessions, liveWorktreePaths);
@@ -197,9 +194,6 @@ export function WorkItemCard({
             className="focus-visible:outline-accent1 absolute inset-0 z-10 cursor-pointer rounded-xl outline-none focus-visible:outline-2 focus-visible:outline-offset-2"
           />
         ) : (
-          // Clicking a card starts its next step: the run a rule proposed, the
-          // default run (first unused action, e.g. Review for PRs), or a plain
-          // chat session on the item's branch when it has no run spec.
           <button
             type="button"
             draggable={false}
@@ -331,10 +325,10 @@ export function WorkItemCard({
             {evaluatingStage === 'done' ? 'Marking done…' : `Moving to ${itemStageLabel(item, evaluatingStage)}…`}
           </span>
         )}
-        {pendingRunRoles.size === 0 && preparing !== undefined && (
+        {pendingRunRoles.size === 0 && busyLabel !== undefined && (
           <span role="status" aria-live="polite" className="text-ui-xs text-icon4 flex items-center gap-1.5">
             <Spinner size="sm" aria-hidden className="size-3" />
-            {preparing}
+            {busyLabel}
           </span>
         )}
         {[...pendingRunRoles].map(([role, phase]) => (
