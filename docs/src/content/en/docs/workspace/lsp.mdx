@@ -112,7 +112,7 @@ Use custom configuration when you need to:
 
 ### Limit retained clients
 
-Set `maxOpenClients` to a positive integer to limit the language server clients retained by a workspace. When the limit is reached, the workspace closes the least recently used client that has no active query lease. If every retained client is active, the next acquisition waits for a lease to be released.
+Set `maxOpenClients` to a positive integer to limit the language server clients retained by a workspace. When the limit is reached, the workspace closes the least recently used client that has no active query lease. If every retained client is active, the next acquisition waits up to five seconds for a lease to be released. If no lease becomes available, `prepareQuery()` and `getDiagnostics()` return `null`, while `getDiagnosticsMulti()` omits the unavailable server.
 
 Workspaces retain an unlimited number of clients when `maxOpenClients` is omitted. Mastra Code sets `maxOpenClients` to `4` by default.
 

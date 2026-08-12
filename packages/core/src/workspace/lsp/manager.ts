@@ -403,10 +403,6 @@ export class LSPManager {
     return this.initClient(serverDef, projectRoot, key, onAcquired);
   }
 
-  async getClient(filePath: string): Promise<LSPClient | null> {
-    return this.getClientInternal(filePath);
-  }
-
   /**
    * Get LSP client ready to query a file.
    * Opens the file in the client so queries can be made. Call `release` after
