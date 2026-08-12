@@ -229,7 +229,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
     // Extract traceId and parent ids from tracingOptions for root spans (no parent)
     // These allow nested workflows to join the parent workflow's trace.
     // tracingOptions.parentSpanId is the public external-correlation channel,
-    // so it feeds externalParentSpanId — never the stored parent.
+    // so it feeds externalParentSpanId — not Mastra's own parent link.
     const traceId = !options.parent ? (options.traceId ?? tracingOptions?.traceId) : options.traceId;
     const parentSpanId = options.parentSpanId;
     const externalParentSpanId = !options.parent

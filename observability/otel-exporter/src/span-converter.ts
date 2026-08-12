@@ -132,7 +132,7 @@ export class SpanConverter {
       isRemote: false,
     };
 
-    // External parents (ambient OTel spans outside Mastra storage) are real
+    // External parents (ambient OTel spans Mastra did not create) are real
     // spans in the OTel namespace this exporter targets, so keep them as the
     // OTel-side parent when no Mastra parent exists.
     const exportedParentSpanId = span.parentSpanId ?? span.externalParentSpanId;

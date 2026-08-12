@@ -231,8 +231,8 @@ export class OtelBridge extends BaseExporter implements ObservabilityBridge {
         parentSpanContext && isSpanContextValid(parentSpanContext) ? parentSpanContext.spanId : undefined;
 
       // Declare which kind of parent was used: a span this bridge created for
-      // a Mastra span exists in Mastra storage, while anything else in the
-      // ambient OTEL context lives only in the external tracing system.
+      // a Mastra span is part of the Mastra trace, while anything else in the
+      // ambient OTEL context belongs to the external tracing system.
       const parentIsMastraSpan = parentSpanId !== undefined && this.otelSpanMap.has(parentSpanId);
 
       this.logger.debug(
