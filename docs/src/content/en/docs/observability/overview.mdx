@@ -15,7 +15,6 @@ Mastra's observability system gives you visibility into every agent run, workflo
 - [**Logging**](/docs/observability/logging): Forwards structured log entries from your application and Mastra internals to observability storage, correlated to traces automatically.
 - [**Metrics**](/docs/observability/metrics/overview): Extracts trace usage and cost data. No additional instrumentation is required.
 - [**Feedback**](/docs/observability/feedback): Stores ratings, comments, corrections, and other review signals linked to traces and spans.
-- [**Integrations**](/docs/observability/integrations/overview): Choose exporters, bridges, and span processors for Studio, hosted, or external observability workflows.
 
 ## When to use observability
 
@@ -105,8 +104,6 @@ An observability config usually contains:
 - `exporters`: One or more destinations for traces, logs, and derived metrics.
 - `spanOutputProcessors`: Transformations that run before spans are exported.
 - `logging`: Log forwarding settings for observability storage.
-
-For destinations and processors, see [Integrations overview](/docs/observability/integrations/overview).
 
 ### Maintaining Studio access
 
@@ -219,7 +216,6 @@ For hosted traces, logs, and metrics across projects and deploys, see [Observabi
 - [Logging](/docs/observability/logging)
 - [Metrics](/docs/observability/metrics/overview)
 - [Feedback](/docs/observability/feedback)
-- [Integrations overview](/docs/observability/integrations/overview)
 - [Mastra Studio](/docs/studio/observability)
 - [Automatic metrics reference](/reference/observability/metrics/automatic-metrics)
 - [Mastra platform observability](/docs/mastra-platform/observability)

@@ -1994,6 +1994,11 @@
       "source": "/docs/observability/integrations/exporters/mastra-platform",
       "destination": "/docs/mastra-platform/observability",
       "permanent": true
+    },
+    {
+      "source": "/docs/observability/integrations/overview",
+      "destination": "/integrations",
+      "permanent": true
     }
   ]
 }
