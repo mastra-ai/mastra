@@ -103,7 +103,7 @@ const agent = new Agent({
     name: 'maxCost',
     type: 'number | ((requestContext?: RequestContext) => number)',
     description:
-      "Maximum estimated cost allowed (e.g. 0.50 for $0.50 USD). A number must be positive. A function is called with the request's RequestContext on every check, enabling per-tier or per-user budgets; if it returns anything other than a finite positive number, the check is skipped for that request (fail-open) and a warning is logged. This is an approximate limit due to metric persistence delays.",
+      "Maximum estimated cost allowed (e.g. 0.50 for $0.50 USD). A number must be finite and positive. A function is called with the request's RequestContext on every check, enabling per-tier or per-user budgets; if it returns anything other than a finite positive number, the check is skipped for that request (fail-open) and a warning is logged. This is an approximate limit due to metric persistence delays.",
     isOptional: false,
   },
   {

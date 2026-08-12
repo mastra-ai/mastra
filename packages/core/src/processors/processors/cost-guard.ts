@@ -163,6 +163,13 @@ export interface CostGuardViolationDetail {
 
 const TOKEN_TOTAL_METRIC_NAMES = ['mastra_model_total_input_tokens', 'mastra_model_total_output_tokens'];
 
+/**
+ * Monotonic counter distinguishing CostGuardProcessor instances in per-request
+ * dedup state keys. The runner keys the state bag by processor id, which is
+ * hardcoded 'cost-guard', so multiple instances in one pipeline share a bag.
+ */
+let costGuardInstanceCounter = 0;
+
 const WINDOW_MS: Record<CostWindow, number> = {
   '1h': 60 * 60 * 1000,
   '6h': 6 * 60 * 60 * 1000,
@@ -219,12 +226,14 @@ const WINDOW_MS: Record<CostWindow, number> = {
  * })
  * ```
  *
- * @example With onViolation callback:
+ * @example With onViolation callback (warn strategy — detail is CostGuardViolationDetail;
+ * with the block strategy the runner passes the TripWire metadata as detail instead):
  * ```typescript
  * const guard = new CostGuardProcessor({
  *   maxCost: 10.00,
  *   scope: 'resource',
  *   window: '30d',
+ *   strategy: 'warn',
  * });
  * guard.onViolation = ({ detail }) => {
  *   alertSystem.notify(`Cost limit exceeded for ${detail.scopeKey}: $${detail.usage}/$${detail.limit}`);
@@ -242,6 +251,7 @@ export class CostGuardProcessor implements Processor<'cost-guard', CostGuardTrip
   private messageTemplate: string;
   private warnAtPercent?: number;
   private includeBreakdown: boolean;
+  private readonly instanceKey = costGuardInstanceCounter++;
   public onViolation?: (violation: ProcessorViolation) => void | Promise<void>;
   private observabilityStorage?: ObservabilityStorage;
   private logger?: IMastraLogger;
@@ -424,13 +434,14 @@ export class CostGuardProcessor implements Processor<'cost-guard', CostGuardTrip
   }
 
   /**
-   * Builds the per-request dedup state key. Includes the threshold level,
-   * scope, scope key, and resolved limit so that multiple CostGuardProcessor
-   * instances in the same pipeline (which share one state bag keyed by
-   * processor id) don't suppress each other's warnings.
+   * Builds the per-request dedup state key. Includes a per-instance component
+   * so that multiple CostGuardProcessor instances in the same pipeline (which
+   * share one state bag keyed by processor id) don't suppress each other's
+   * warnings, and stays stable across steps even when a dynamic `maxCost`
+   * resolves to different values per step.
    */
-  private warnedStateKey(level: 'hard' | 'soft', scopeKey: string | undefined, maxCost: number): string {
-    return `costGuardWarned:${level}:${this.scope}:${scopeKey ?? ''}:${maxCost}`;
+  private warnedStateKey(level: 'hard' | 'soft'): string {
+    return `costGuardWarned:${level}:${this.instanceKey}`;
   }
 
   private resolveMaxCost(requestContext?: RequestContext): number | undefined {
@@ -471,7 +482,7 @@ export class CostGuardProcessor implements Processor<'cost-guard', CostGuardTrip
 
       if (this.strategy === 'warn') {
         // Fire the warning and onViolation at most once per request
-        const stateKey = this.warnedStateKey('hard', scopeKey, maxCost);
+        const stateKey = this.warnedStateKey('hard');
         if (!args.state[stateKey]) {
           args.state[stateKey] = true;
           const breakdown = this.includeBreakdown ? await this.queryBreakdown(filter) : undefined;
@@ -506,7 +517,7 @@ export class CostGuardProcessor implements Processor<'cost-guard', CostGuardTrip
 
     // Soft threshold (cost < maxCost here)
     if (this.warnAtPercent !== undefined && cost >= (maxCost * this.warnAtPercent) / 100) {
-      const stateKey = this.warnedStateKey('soft', scopeKey, maxCost);
+      const stateKey = this.warnedStateKey('soft');
       if (!args.state[stateKey]) {
         args.state[stateKey] = true;
         const message = `Cost guard: estimated cost reached ${this.warnAtPercent}% of the limit (${this.formatNumber(cost)}/${this.formatNumber(maxCost)})`;

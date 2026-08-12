@@ -1786,6 +1786,50 @@ describe('CostGuardProcessor', () => {
       expect(highViolation).toHaveBeenCalledTimes(1);
     });
 
+    it('two instances with the same limit but different warnAtPercent each fire their soft warning', async () => {
+      // Cost 0.6 against maxCost 1.0 crosses both the 50% and 55% soft
+      // thresholds; each instance must fire despite the shared state bag.
+      const obsStorage = createMockObservabilityStorage({ inputCost: 0.4, outputCost: 0.2, costUnit: 'usd' });
+      const fiftyGuard = new CostGuardProcessor({ maxCost: 1.0, scope: 'run', warnAtPercent: 50 });
+      const fiftyFiveGuard = new CostGuardProcessor({ maxCost: 1.0, scope: 'run', warnAtPercent: 55 });
+      fiftyGuard.__registerMastra(createMockMastra(obsStorage));
+      fiftyFiveGuard.__registerMastra(createMockMastra(obsStorage));
+      const fiftyViolation = vi.fn();
+      const fiftyFiveViolation = vi.fn();
+      fiftyGuard.onViolation = fiftyViolation;
+      fiftyFiveGuard.onViolation = fiftyFiveViolation;
+
+      const sharedState: Record<string, unknown> = {};
+      const tracing = createMockTracing('trace-soft-shared') as any;
+      await fiftyGuard.processInputStep(createInputStepArgs({ stepNumber: 1, tracing, state: sharedState }));
+      await fiftyFiveGuard.processInputStep(createInputStepArgs({ stepNumber: 1, tracing, state: sharedState }));
+
+      expect(fiftyViolation).toHaveBeenCalledTimes(1);
+      expect(fiftyFiveViolation).toHaveBeenCalledTimes(1);
+    });
+
+    it('dedup stays once-per-request when a dynamic maxCost resolves differently per step', async () => {
+      const obsStorage = createMockObservabilityStorage({ inputCost: 0.4, outputCost: 0.2, costUnit: 'usd' });
+      let call = 0;
+      const guard = new CostGuardProcessor({
+        // Varies per step but always below the queried cost of 0.6
+        maxCost: () => 0.5 + call++ * 0.01,
+        scope: 'run',
+        strategy: 'warn',
+      });
+      guard.__registerMastra(createMockMastra(obsStorage));
+      const onViolation = vi.fn();
+      guard.onViolation = onViolation;
+
+      const sharedState: Record<string, unknown> = {};
+      const tracing = createMockTracing('trace-varying-limit') as any;
+      for (let step = 1; step <= 3; step++) {
+        await guard.processInputStep(createInputStepArgs({ stepNumber: step, tracing, state: sharedState }));
+      }
+
+      expect(onViolation).toHaveBeenCalledTimes(1);
+    });
+
     it('two distinct state objects (two requests) each fire the warning once', async () => {
       const obsStorage = createMockObservabilityStorage({ inputCost: 0.4, outputCost: 0.2, costUnit: 'usd' });
       const guard = new CostGuardProcessor({ maxCost: 0.5, scope: 'run', strategy: 'warn' });
