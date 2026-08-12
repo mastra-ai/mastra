@@ -1929,6 +1929,61 @@
       "source": "/guides/getting-started/manual-install",
       "destination": "/reference/manual-install",
       "permanent": true
+    },
+    {
+      "source": "/reference/mastra-platform/api",
+      "destination": "/docs/mastra-platform/api",
+      "permanent": true
+    },
+    {
+      "source": "/guides/guide/ai-recruiter",
+      "destination": "https://mastra.ai/blog/building-an-ai-recruiter",
+      "permanent": true
+    },
+    {
+      "source": "/guides/guide/research-assistant",
+      "destination": "https://mastra.ai/blog/building-a-research-paper-assistant-with-rag",
+      "permanent": true
+    },
+    {
+      "source": "/guides/guide/notes-mcp-server",
+      "destination": "https://mastra.ai/blog/building-a-notes-mcp-server",
+      "permanent": true
+    },
+    {
+      "source": "/guides/guide/signal-provider",
+      "destination": "https://mastra.ai/blog/building-a-signal-provider",
+      "permanent": true
+    },
+    {
+      "source": "/guides/guide/research-coordinator",
+      "destination": "https://mastra.ai/blog/build-a-research-coordinator-with-supervisor-agents",
+      "permanent": true
+    },
+    {
+      "source": "/guides/guide/dev-assistant",
+      "destination": "https://mastra.ai/blog/building-a-dev-assistant",
+      "permanent": true
+    },
+    {
+      "source": "/guides/guide/code-review-bot",
+      "destination": "https://mastra.ai/blog/building-a-code-review-bot",
+      "permanent": true
+    },
+    {
+      "source": "/guides/guide/docs-manager",
+      "destination": "https://mastra.ai/blog/building-a-docs-manager",
+      "permanent": true
+    },
+    {
+      "source": "/guides/guide/coding-agent",
+      "destination": "https://mastra.ai/blog/building-a-coding-agent",
+      "permanent": true
+    },
+    {
+      "source": "/guides/guide/github-actions-pr-description",
+      "destination": "https://mastra.ai/blog/automating-multi-language-pr-descriptions-in-github-actions",
+      "permanent": true
     }
   ]
 }

@@ -52,7 +52,9 @@ export function useStartIssueTriageMutation(projectRepositoryId: string | undefi
     mutationFn: (issue: GithubIssue) => startRepositoryIssueTriage(baseUrl, projectRepositoryId!, issue),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.githubIssues(projectRepositoryId) });
-      void queryClient.invalidateQueries({ queryKey: queryKeys.githubIssues(projectRepositoryId, 'auto-triaged') });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.githubIssues(projectRepositoryId, 'status: auto-triaged'),
+      });
       void queryClient.invalidateQueries({ queryKey: queryKeys.workItems(factoryProjectId) });
     },
   });
