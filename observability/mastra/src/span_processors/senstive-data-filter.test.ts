@@ -588,6 +588,29 @@ describe('Tracing', () => {
         expect((refreshed.attributes as any).apiKey).toBe('[APIKEY_3]');
       });
 
+      it('should tokenize oversized values without retaining them in state', () => {
+        const processor = new SensitiveDataFilter({ redactionStyle: 'indexed' });
+
+        const bigValueA = 'a'.repeat(1024 * 1024);
+        const bigValueB = 'b'.repeat(1024 * 1024);
+
+        const first = processor.process(makeSpan('trace-1', { attributes: { apiKey: bigValueA } }))!;
+        const second = processor.process(
+          makeSpan('trace-1', { attributes: { apiKey: bigValueB, secret: bigValueA } }),
+        )!;
+
+        // Distinct oversized values get distinct tokens; repeats reuse the token
+        expect((first.attributes as any).apiKey).toBe('[APIKEY_1]');
+        expect((second.attributes as any).apiKey).toBe('[APIKEY_2]');
+        expect((second.attributes as any).secret).toBe('[APIKEY_1]');
+
+        // State keys are fixed-length digests, not the raw values
+        const state = (processor as any).traceStates.get('trace-1');
+        for (const key of state.tokensByValue.keys()) {
+          expect(key).toHaveLength(64);
+        }
+      });
+
       it('should fall back to the full redaction token once the per-trace value cap is reached', () => {
         const processor = new SensitiveDataFilter({ redactionStyle: 'indexed' });
 

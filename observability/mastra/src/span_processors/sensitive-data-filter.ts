@@ -1,10 +1,13 @@
+import { createHash } from 'node:crypto';
 import type { SpanOutputProcessor, AnySpan } from '@mastra/core/observability';
 
 export type RedactionStyle = 'full' | 'partial' | 'indexed';
 
 /**
- * Per-trace state for indexed redaction: maps raw values to their assigned
- * tokens and tracks the next index per token label.
+ * Per-trace state for indexed redaction: maps SHA-256 digests of values to
+ * their assigned tokens and tracks the next index per token label.
+ * Keying on fixed-length digests keeps state size bounded and avoids
+ * retaining raw sensitive values in memory.
  */
 interface IndexedRedactionState {
   tokensByValue: Map<string, string>;
@@ -271,7 +274,7 @@ export class SensitiveDataFilter implements SpanOutputProcessor {
     }
 
     if (this.redactionStyle === 'indexed' && indexedState) {
-      const valueKey = String(value);
+      const valueKey = createHash('sha256').update(String(value)).digest('hex');
       const existing = indexedState.tokensByValue.get(valueKey);
       if (existing) {
         return existing;
