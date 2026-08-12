@@ -65,6 +65,25 @@ describe('MarkdownRenderer', () => {
     expect(link.hasAttribute('node')).toBe(false);
   });
 
+  it('drops link schemes that can execute, and keeps the visible text', () => {
+    render(
+      <MarkdownRenderer>
+        {'[Claim your run](javascript:alert(1)) and [export](data:text/html,<script/>)'}
+      </MarkdownRenderer>,
+    );
+
+    for (const text of ['Claim your run', 'export']) {
+      expect(screen.getByText(text).getAttribute('href')).toBe('');
+    }
+  });
+
+  it('renders raw HTML in the source as text instead of markup', () => {
+    render(<MarkdownRenderer>{'<img src=x onerror="alert(1)"> done'}</MarkdownRenderer>);
+
+    expect(document.querySelector('img')).toBeNull();
+    expect(document.body.textContent).toContain('<img src=x onerror="alert(1)">');
+  });
+
   it('keeps escaped newlines inside a fenced block that already has real ones', () => {
     render(
       <TooltipProvider>
