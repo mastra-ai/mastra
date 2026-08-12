@@ -30,10 +30,13 @@ function parseSkillMarkdown(name: string, raw: string): FactorySkillInfo {
   return { name, description, content: content.trim() };
 }
 
-/** List the bundled Factory skills, skipping any missing from the bundle. */
+/** Internal skills that configure Factory itself rather than describe a pipeline stage. */
+const INTERNAL_SKILL_NAMES = new Set(['configure-factory-rules']);
+
+/** List the bundled Factory stage skills, skipping any missing from the bundle. */
 export async function listFactorySkills(): Promise<FactorySkillInfo[]> {
   const skills: FactorySkillInfo[] = [];
-  for (const name of [...FACTORY_SKILL_NAMES].sort()) {
+  for (const name of [...FACTORY_SKILL_NAMES].filter(name => !INTERNAL_SKILL_NAMES.has(name)).sort()) {
     let raw: string;
     try {
       raw = await readFile(join(FACTORY_SKILLS_SOURCE_PATH, name, 'SKILL.md'), 'utf8');
