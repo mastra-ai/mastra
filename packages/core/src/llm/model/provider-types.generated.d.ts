@@ -4243,7 +4243,6 @@ export type ProviderModelsMap = {
     'xai/grok-build-0.1',
     'xai/grok-imagine-image',
     'xai/grok-imagine-image-2.0',
-    'xai/grok-imagine-image-2.0-preview',
     'xai/grok-imagine-video',
     'xai/grok-imagine-video-1.5',
     'xai/grok-imagine-video-1.5-preview',

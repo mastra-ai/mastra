@@ -16,7 +16,7 @@ Realtime voice turns a Mastra agent into a live call a user can talk over, in th
 
 The [`@mastra/livekit`](#api-reference) package connects Mastra agents to the [LiveKit Agents framework](https://docs.livekit.io/agents/): LiveKit owns the audio loop like voice activity detection, streaming speech-to-text, semantic turn detection, barge-in, and text-to-speech. Your Mastra agent generates every reply with its own model, tools, and memory.
 
-Use realtime voice when you need low-latency, interruptible voice conversations. For provider-based speech-to-speech without LiveKit, see [Speech to Speech](/guides/voice/speech-to-speech).
+Use realtime voice when you need low-latency, interruptible voice conversations. For provider-based speech-to-speech without LiveKit, see [Speech to Speech](/reference/voice/speech-to-speech).
 
 These steps take you from an empty project to a voice agent you can talk to. A voice session has two moving parts you set up here: an API route on your Mastra server that hands out access tokens, and a separate worker process that runs the audio pipeline and calls your agent each turn.
 
@@ -383,7 +383,7 @@ Conversation history lives in Mastra Memory, so voice sessions and text chat can
 ### Related
 
 - [`@mastra/livekit` reference](#api-reference)
-- [Speech to Speech](/guides/voice/speech-to-speech)
+- [Speech to Speech](/reference/voice/speech-to-speech)
 - [Agent Memory](/docs/memory/overview)
 - [LiveKit Agents docs](https://docs.livekit.io/agents/)
 

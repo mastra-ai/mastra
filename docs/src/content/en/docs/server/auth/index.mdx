@@ -5,6 +5,9 @@ packages:
   - "@mastra/auth"
 ---
 
+import { IntegrationGrid } from '@site/src/components/integrations/grid';
+import { CardGrid, CardGridItem } from "@site/src/components/cards/card-grid";
+
 # Auth overview
 
 Mastra lets you choose how you handle authentication, so you can secure access to your API and [Studio](/docs/studio/overview) using the identity system that fits your stack.
@@ -36,21 +39,32 @@ Authentication for Studio is currently supported by the following providers: Sim
 
 ### Built-in
 
-- [Simple Auth](/docs/server/auth/simple-auth): Token-to-user mapping for development and API keys
-- [JSON Web Token (JWT)](/docs/server/auth/jwt): HMAC-signed JWT verification
+<CardGrid>
+  <CardGridItem
+    title="Simple Auth"
+    href="/docs/server/auth/simple-auth"
+    description="Token-to-user mapping for development and API keys"
+  />
+
+  <CardGridItem title="JSON Web Token" href="/docs/server/auth/jwt" description="HMAC-signed JWT verification" />
+</CardGrid>
 
 ### Third-party integrations
 
-- [Auth0](/integrations/auth/auth0)
-- [Better Auth](/integrations/auth/better-auth)
-- [Clerk](/integrations/auth/clerk)
-- [Firebase](/integrations/auth/firebase)
-- [Google](/integrations/auth/google)
-- [Okta](/integrations/auth/okta)
-- [Supabase](/integrations/auth/supabase)
-- [WorkOS](/integrations/auth/workos)
+<IntegrationGrid section="Auth" />
 
 ### Advanced
 
-- [Composite Auth](/docs/server/auth/composite-auth): Combine multiple auth providers
-- [Custom Auth Provider](/docs/server/auth/custom-auth-provider): Build your own provider
+<CardGrid>
+  <CardGridItem
+    title="Composite Auth"
+    href="/docs/server/auth/composite-auth"
+    description="Combine multiple auth providers"
+  />
+
+  <CardGridItem
+    title="Custom Provider"
+    href="/docs/server/auth/custom-auth-provider"
+    description="Build your own provider"
+  />
+</CardGrid>

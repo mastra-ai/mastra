@@ -170,6 +170,7 @@ export class LangfuseExporter extends BaseExporter {
         value,
         ...(comment ? { comment } : {}),
         ...(metadata ? { metadata } : {}),
+        ...(this.#environment ? { environment: this.#environment } : {}),
         dataType: 'NUMERIC' as const,
       });
     } catch (error) {

@@ -26,12 +26,6 @@ const SECTIONS: SectionConfig[] = [
     sidebarKey: 'docsSidebar',
   },
   {
-    name: 'guides',
-    contentDir: 'src/content/en/guides',
-    sidebarPath: 'src/content/en/guides/sidebars.js',
-    sidebarKey: 'guidesSidebar',
-  },
-  {
     name: 'integrations',
     contentDir: 'src/content/en/integrations',
     sidebarPath: 'src/content/en/integrations/sidebars.js',
