@@ -4,6 +4,7 @@ import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
 import { Input } from '@mastra/playground-ui/components/Input';
+import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { MessageScrollerItem } from '@mastra/playground-ui/components/MessageScroller';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { startsUserTurn } from '@mastra/playground-ui/components/ThreadRail';
@@ -28,7 +29,6 @@ import { ToolCard } from './tool/ToolCard';
 import { ToolGroup, TOOL_GROUP_MIN } from './tool/ToolGroup';
 import { isTranscriptToolVisible, ToolFactory } from './ToolFactory';
 import { ROW_RAIL, ROW_TRIGGER, TranscriptRow } from './TranscriptRow';
-import { Markdown } from '../../../ui/Markdown';
 
 import type {
   ApprovalPrompt,
@@ -701,14 +701,14 @@ function MessageBubble({
     Text: (part: TextPart) => {
       if (entry.message.role === 'user') {
         const activation = parseSkillActivation(part.text);
-        return activation ? <SkillMessage activation={activation} /> : <Markdown>{part.text}</Markdown>;
+        return activation ? <SkillMessage activation={activation} /> : <MarkdownRenderer>{part.text}</MarkdownRenderer>;
       }
 
-      return <Markdown className="my-3">{part.text}</Markdown>;
+      return <MarkdownRenderer className="text-icon5 my-3">{part.text}</MarkdownRenderer>;
     },
     Reasoning: (part: ReasoningPart) => (
       <div className="border-border1 text-ui-sm text-icon3 my-1.5 border-l-2 pl-2.5 italic [&_p]:my-0.5">
-        <Markdown>{part.reasoning}</Markdown>
+        <MarkdownRenderer>{part.reasoning}</MarkdownRenderer>
       </div>
     ),
     ToolInvocation: (part: ToolInvocationPart) => {
@@ -1108,7 +1108,7 @@ function StatusMetadataCard({ status }: { status: StatusMetadata }) {
 function NoticeCard({ entry }: { entry: NoticeEntry }) {
   return (
     <Notice className="my-2" variant={entry.level === 'error' ? 'destructive' : 'info'}>
-      <Markdown>{entry.text}</Markdown>
+      <MarkdownRenderer>{entry.text}</MarkdownRenderer>
     </Notice>
   );
 }

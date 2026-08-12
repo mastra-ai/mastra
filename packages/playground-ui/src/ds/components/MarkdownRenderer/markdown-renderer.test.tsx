@@ -62,6 +62,17 @@ describe('MarkdownRenderer', () => {
 
     expect(link.target).toBe('_blank');
     expect(link.rel).toBe('noopener noreferrer');
+    expect(link.hasAttribute('node')).toBe(false);
+  });
+
+  it('keeps escaped newlines inside a fenced block that already has real ones', () => {
+    render(
+      <TooltipProvider>
+        <MarkdownRenderer>{'```js\nconst s = "a\\nb";\n```'}</MarkdownRenderer>
+      </TooltipProvider>,
+    );
+
+    expect(screen.getByText('const s = "a\\nb";')).toBeTruthy();
   });
 
   it('requests a separate browser window for external links when configured', () => {
