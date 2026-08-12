@@ -71,6 +71,76 @@ export function createExperimentsTests({
         expect(exp.id).toBe(customId);
       });
 
+      it('persists provenance, runner attestation, and grouping identity', async () => {
+        const exp = await experimentsStorage.createExperiment({
+          name: 'provenance-exp',
+          datasetId: null,
+          datasetVersion: null,
+          targetType: 'agent',
+          targetId: 'agent-1',
+          totalItems: 1,
+          metadata: { nested: { value: 'original' } },
+          provenance: {
+            source: 'github',
+            sourceId: 'mastra-ai/mastra',
+            sourceVersion: 'abc123',
+            metadata: { pullRequest: 42, nested: { branch: 'feature/provenance' } },
+          },
+          runnerAttestation: {
+            runnerId: 'runner-1',
+            invocationId: 'invocation-1',
+            runnerVersion: '1.0.0',
+          },
+          experimentSetId: 'set-1',
+          comparisonId: 'comparison-1',
+          variantId: 'variant-a',
+          trialIndex: 0,
+        });
+
+        expect(exp).toMatchObject({
+          provenance: {
+            source: 'github',
+            sourceId: 'mastra-ai/mastra',
+            sourceVersion: 'abc123',
+            metadata: { pullRequest: 42, nested: { branch: 'feature/provenance' } },
+          },
+          runnerAttestation: {
+            runnerId: 'runner-1',
+            invocationId: 'invocation-1',
+            runnerVersion: '1.0.0',
+          },
+          experimentSetId: 'set-1',
+          comparisonId: 'comparison-1',
+          variantId: 'variant-a',
+          trialIndex: 0,
+        });
+
+        (exp.metadata as { nested: { value: string } }).nested.value = 'mutated';
+        (exp.provenance!.metadata as { nested: { branch: string } }).nested.branch = 'mutated';
+        exp.runnerAttestation!.runnerId = 'mutated';
+
+        const fetched = await experimentsStorage.getExperimentById({ id: exp.id });
+
+        expect(fetched).toMatchObject({
+          metadata: { nested: { value: 'original' } },
+          provenance: {
+            source: 'github',
+            sourceId: 'mastra-ai/mastra',
+            sourceVersion: 'abc123',
+            metadata: { pullRequest: 42, nested: { branch: 'feature/provenance' } },
+          },
+          runnerAttestation: {
+            runnerId: 'runner-1',
+            invocationId: 'invocation-1',
+            runnerVersion: '1.0.0',
+          },
+          experimentSetId: 'set-1',
+          comparisonId: 'comparison-1',
+          variantId: 'variant-a',
+          trialIndex: 0,
+        });
+      });
+
       it('createExperiment with null datasetId', async () => {
         const exp = await experimentsStorage.createExperiment({
           name: 'no-dataset-exp',
@@ -205,6 +275,43 @@ export function createExperimentsTests({
         expect(page0.experiments).toHaveLength(2);
         expect(page0.pagination.total).toBe(3);
         expect(page0.pagination.hasMore).toBe(true);
+      });
+
+      it('filters experiments conjunctively by grouping identity, including trialIndex 0', async () => {
+        const groupedExperiments = [
+          ['matching-exp', 'set-1', 'comparison-1', 'variant-a', 0],
+          ['other-trial', 'set-1', 'comparison-1', 'variant-a', 1],
+          ['other-variant', 'set-1', 'comparison-1', 'variant-b', 0],
+          ['other-comparison', 'set-1', 'comparison-2', 'variant-a', 0],
+          ['other-set', 'set-2', 'comparison-1', 'variant-a', 0],
+        ] as const;
+
+        for (const [name, experimentSetId, comparisonId, variantId, trialIndex] of groupedExperiments) {
+          await experimentsStorage.createExperiment({
+            name,
+            datasetId: null,
+            datasetVersion: null,
+            targetType: 'agent',
+            targetId: 'agent-1',
+            totalItems: 1,
+            experimentSetId,
+            comparisonId,
+            variantId,
+            trialIndex,
+          });
+        }
+
+        const filtered = await experimentsStorage.listExperiments({
+          experimentSetId: 'set-1',
+          comparisonId: 'comparison-1',
+          variantId: 'variant-a',
+          trialIndex: 0,
+          pagination: { page: 0, perPage: 10 },
+        });
+
+        expect(filtered.experiments).toHaveLength(1);
+        expect(filtered.experiments[0]?.name).toBe('matching-exp');
+        expect(filtered.pagination.total).toBe(1);
       });
 
       it('deleteExperiment cascades to results', async () => {

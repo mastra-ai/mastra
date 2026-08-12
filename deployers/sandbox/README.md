@@ -15,7 +15,7 @@ import { VercelSandbox } from '@mastra/vercel';
 const deployer = new SandboxDeployer({
   sandbox: new VercelSandbox({
     sandboxName: 'my-preview', // identity: redeploys resume this sandbox
-    timeout: 3_600_000,
+    timeout: 2_400_000, // must stay under the plan's max sandbox lifetime (45 min on Pro)
     ports: [4111],
   }),
 });
@@ -90,6 +90,19 @@ await worker.cancel();
 Each caller-provided execution ID gets isolated runtime state. Input is bounded and may be delivered through stdin or staged at an artifact-relative file path. Stdout and stderr remain separate and are read as raw bytes with offsets, EOF, truncation, and interruption metadata; the deployer does not interpret their protocol.
 
 Dependency installs are serialized and cached using the artifact's `package.json`, supported lockfiles, and install command. `cancel()` sends TERM and then KILL to the process group when necessary. `stop()` snapshot-stops the provider sandbox without assuming process preservation. `relaunch({ executionId })` starts the recorded command under a new execution identity. `destroy()` retries permanent sandbox deletion and returns a typed result.
+
+A restarted supervisor can reconstruct an operational handle from the persisted sandbox and execution identities. The attached handle supports status, offset-based output reads, cancellation, stop, and destroy, but not relaunch because the original launch configuration isn't persisted.
+
+```typescript
+import { attachWorkerDeployment } from '@mastra/deployer-sandbox';
+import { VercelSandbox } from '@mastra/vercel';
+
+const sandbox = new VercelSandbox({ sandboxName: persistedSandboxId });
+const worker = await attachWorkerDeployment({ sandbox, executionId: persistedExecutionId });
+
+const status = await worker.status();
+const stdout = await worker.readOutput('stdout', { offset: persistedStdoutOffset });
+```
 
 Pass `wake: true` to resume a stopped server sandbox before returning — useful in a route handler that fronts the sandbox. If the server isn't healthy after the resume (some providers restore the filesystem but not processes), the wake relaunches it:
 

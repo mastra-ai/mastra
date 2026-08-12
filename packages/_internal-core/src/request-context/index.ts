@@ -137,14 +137,12 @@ let _toJSONDepth = 0;
  * to persist. 1M visits keeps the worst-case probe in the tens of
  * milliseconds while remaining far above any reasonable context value.
  *
- * Two caveats to that bound. The budget is per `JSON.stringify` call, and a
- * nested value's `toJSON()` runs before the replacer sees it — so a stored
- * graph that reaches a nested `RequestContext` through N shared paths
- * re-runs that context's probes with a fresh budget on every visit
- * (tracked in #20446). And `Buffer.prototype.toJSON` materializes a
- * `{ type, data }` object before the replacer, so Buffers charge one budget
- * unit per byte rather than the arithmetic typed-array fast path — a Buffer
- * past the budget is filtered.
+ * The budget is shared across nested `RequestContext` probes within one
+ * outermost probe (see `_probeBudgetRemaining`), so a shared-reference graph of
+ * nested contexts is bounded too. One caveat remains: `Buffer.prototype.toJSON`
+ * materializes a `{ type, data }` object before the replacer, so Buffers charge
+ * one budget unit per byte rather than the arithmetic typed-array fast path — a
+ * Buffer past the budget is filtered.
  */
 const SERIALIZATION_PROBE_BUDGET = 1_000_000;
 
@@ -176,6 +174,21 @@ function isPlainObjectOrArray(value: unknown): boolean {
     return false;
   }
 }
+
+/**
+ * Shared state for the serialization probe budget.
+ *
+ * The budget is drawn down by every `isSerializable` probe running within one
+ * outermost probe — including the probes a nested `RequestContext.toJSON()`
+ * runs, which `JSON.stringify` invokes *before* the outer replacer sees the
+ * result. Sharing one budget across them keeps the probe's time bound holding
+ * regardless of nesting; a fresh per-call budget (the earlier approach) let a
+ * shared-reference graph of nested contexts re-run full-budget probes on every
+ * visit and block for seconds. `_probeBudgetActive` marks that an outermost
+ * probe owns the budget so nested probes draw down rather than reset it.
+ */
+let _probeBudgetActive = false;
+let _probeBudgetRemaining = 0;
 
 export class RequestContext<Values extends Record<string, any> | unknown = unknown> {
   private registry = new Map<string, unknown>();
@@ -327,7 +340,10 @@ export class RequestContext<Values extends Record<string, any> | unknown = unkno
    * serialization would visit an unbounded number of nodes — an acyclic
    * graph with layered shared references expands as 2^depth — is treated as
    * non-serializable and filtered instead of blocking the event loop for
-   * the full expansion.
+   * the full expansion. The budget is shared across nested `RequestContext`
+   * probes within one outermost probe (a nested `toJSON()` runs before the
+   * replacer sees its result), so the bound holds even when the graph reaches
+   * nested contexts through many shared paths.
    *
    * Re-throws `CyclicRequestContextToJSONError` when called from a nested
    * `toJSON()` (`_toJSONDepth > 1`), so the marker propagates up to the
@@ -341,10 +357,18 @@ export class RequestContext<Values extends Record<string, any> | unknown = unkno
     if (typeof value === 'symbol') return false;
     if (typeof value !== 'object') return true;
 
+    // The outermost probe owns the budget; nested probes (a nested
+    // `RequestContext.toJSON()` invoked while this JSON.stringify runs) draw
+    // down the same remaining budget instead of starting fresh, so total probe
+    // time is bounded regardless of how many nested contexts the graph reaches.
+    const outermostProbe = !_probeBudgetActive;
+    if (outermostProbe) {
+      _probeBudgetActive = true;
+      _probeBudgetRemaining = SERIALIZATION_PROBE_BUDGET;
+    }
     try {
-      let budget = SERIALIZATION_PROBE_BUDGET;
       JSON.stringify(value, (_key, probed) => {
-        if (--budget < 0) {
+        if (--_probeBudgetRemaining < 0) {
           throw new RangeError('RequestContext.isSerializable: value expands past the serialization probe budget');
         }
         // Typed arrays serialize one element per index; charge them against
@@ -376,8 +400,8 @@ export class RequestContext<Values extends Record<string, any> | unknown = unkno
           }
           // Charge the intrinsic element count — an own `length` data
           // property can shadow the prototype getter and lie.
-          budget -= elementCount;
-          if (budget < 0) {
+          _probeBudgetRemaining -= elementCount;
+          if (_probeBudgetRemaining < 0) {
             throw new RangeError('RequestContext.isSerializable: value expands past the serialization probe budget');
           }
           // Preserve probe semantics for non-index own enumerable properties
@@ -405,6 +429,10 @@ export class RequestContext<Values extends Record<string, any> | unknown = unkno
         throw e;
       }
       return false;
+    } finally {
+      if (outermostProbe) {
+        _probeBudgetActive = false;
+      }
     }
   }
 

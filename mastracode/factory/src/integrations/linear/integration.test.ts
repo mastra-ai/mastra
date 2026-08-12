@@ -17,6 +17,7 @@ const issue: LinearIssue = {
   stateType: 'unstarted',
   priorityLabel: 'High',
   assignee: 'Ada',
+  creator: 'Grace',
   team: 'ENG',
   labels: ['bug'],
   createdAt: '2026-07-01T00:00:00Z',
@@ -258,5 +259,25 @@ describe('LinearIntegration capability surface', () => {
 
   it('throws listing every missing required field', () => {
     expect(() => new LinearIntegration({ clientId: '', clientSecret: '' })).toThrow(/clientId, clientSecret/);
+  });
+});
+
+describe('LinearIntegration workers', () => {
+  it('registers a standalone issue reconciler worker', () => {
+    const linear = integration() as unknown as {
+      workers(ctx: unknown): Array<{ name: string }>;
+    };
+    const context = {
+      controller: {},
+      storage: {
+        generic: {},
+        sourceControl: {},
+        projects: { listAll: async () => [] },
+        intake: {},
+      },
+      rules: { config: {}, workItems: {} },
+    };
+
+    expect(linear.workers(context).map(worker => worker.name)).toEqual(['linear-issue-reconcile']);
   });
 });

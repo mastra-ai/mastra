@@ -10,6 +10,7 @@ import type { RequestContext } from '../request-context';
 import type { GoalEvaluationPayload } from '../stream/types';
 import { getTransformedToolPayload, hasTransformedToolPayload } from '../tools/payload-transform';
 import type { Session, SessionMachinery } from './session';
+import { ABORTED_BY_USER_REASON } from './session';
 import {
   addOptionalUsageField,
   describeNonSuccessFinishReason,
@@ -74,6 +75,7 @@ type StreamChunk =
   | StreamPayloadChunk<'tool-call'>
   | StreamPayloadChunk<'tool-result'>
   | StreamPayloadChunk<'tool-error'>
+  | StreamPayloadChunk<'tool-output-denied'>
   | StreamPayloadChunk<'tool-call-approval'>
   | StreamPayloadChunk<'tool-call-suspended'>
   | StreamPayloadChunk<'error'>
@@ -94,7 +96,8 @@ type StreamChunk =
   | StreamDataChunk<'data-om-thread-update'>
   | StreamDataChunk<'data-mastracode-tool-progress'>
   | StreamDataChunk<'data-sandbox-stdout'>
-  | StreamDataChunk<'data-sandbox-stderr'>;
+  | StreamDataChunk<'data-sandbox-stderr'>
+  | StreamDataChunk<'data-sandbox-exit'>;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -181,6 +184,41 @@ function formatToolProgressOutput(progress: unknown): string {
   return parts.length > 0 ? `${parts.join(': ')}\n` : `${JSON.stringify(progress)}\n`;
 }
 
+const ABORT_STREAM_GRACE_MS = 5_000;
+const abortBailed = Symbol('abort-bailed');
+
+/**
+ * Resolves `graceMs` after an abort is requested for the session's run, but
+ * only while that abort is still pending. Raced against the chunk-consuming
+ * loop: a hung upstream await (e.g. a model call that never settles) ignores
+ * the abort signal and would otherwise leave the loop suspended forever with
+ * the session stuck in `running` — the only recovery being a server restart.
+ *
+ * The deadline is scoped to the abort request that armed it: if the aborted
+ * run settles on its own during the grace (terminal chunk → `run.reset()`,
+ * observed via teardown), the deadline re-arms for the next abort instead of
+ * firing. A persistent consumer (subscribed thread stream) outlives many runs,
+ * and a stale deadline must never bail a follow-up run. `guard` cancels the
+ * deadline once the consuming loop settles (the value still resolves, but the
+ * race is already won).
+ */
+async function abortDeadline(run: Session['run'], guard: AbortSignal, graceMs: number): Promise<typeof abortBailed> {
+  while (!guard.aborted) {
+    await run.waitForAbortRequest(guard);
+    if (guard.aborted) break;
+    if (!run.isAbortRequested()) continue;
+    const graceExpired = await new Promise<boolean>(resolve => {
+      const timer = setTimeout(() => resolve(true), graceMs);
+      void run.waitForTeardown(guard).then(() => {
+        clearTimeout(timer);
+        resolve(false);
+      });
+    });
+    if (graceExpired && run.isAbortRequested()) break;
+  }
+  return abortBailed;
+}
+
 type StreamState = {
   currentMessage: MastraDBMessage;
   lastFinishedMessage?: MastraDBMessage;
@@ -188,6 +226,8 @@ type StreamState = {
   textContentById: Map<string, { index: number; text: string }>;
   thinkingContentById: Map<string, { index: number; text: string }>;
   toolPartById: Map<string, number>;
+  /** Response ids offered by `step-start` — an id binds to at most one display message. */
+  offeredResponseIds: Set<string>;
   /**
    * Set when a stream ends on a non-success finish reason (e.g. `content-filter`,
    * `error`, `length`). Carries the user-facing message so the run finalizes
@@ -212,15 +252,10 @@ type StreamState = {
 export class SessionRunEngine {
   readonly #session: Session;
   readonly #machinery: SessionMachinery;
-  #requestContext?: RequestContext;
 
   constructor(session: Session, machinery: SessionMachinery) {
     this.#session = session;
     this.#machinery = machinery;
-  }
-
-  setRequestContext(requestContext?: RequestContext): void {
-    if (requestContext) this.#requestContext = requestContext;
   }
 
   private createEmptyAssistantMessage(): MastraDBMessage {
@@ -266,8 +301,14 @@ export class SessionRunEngine {
    * (text/reasoning deltas, tool-invocation upgrades) and `setStopReason` /
    * `setErrorMessage` mutate `content.metadata`, so emitted snapshots must
    * deep-clone the content or later mutations rewrite earlier snapshots.
+   *
+   * With no subscribers there is no earlier snapshot to protect, and the only
+   * remaining consumer is the display state, which already aliases the live
+   * message on `message_end`. Skipping the clone there drops a full
+   * `structuredClone` of the message per streamed delta.
    */
   private cloneMessage(message: MastraDBMessage): MastraDBMessage {
+    if (!this.#session.hasListeners()) return message;
     return { ...message, content: structuredClone(message.content) };
   }
 
@@ -304,7 +345,61 @@ export class SessionRunEngine {
       textContentById: new Map<string, { index: number; text: string }>(),
       thinkingContentById: new Map<string, { index: number; text: string }>(),
       toolPartById: new Map<string, number>(),
+      offeredResponseIds: new Set<string>(),
     };
+  }
+
+  /**
+   * Fold a `tool-result`/`tool-error` chunk into the invocation part and
+   * notify — an errored tool must reach a terminal state or clients spin forever.
+   */
+  private applyToolOutcome(
+    state: StreamState,
+    outcome: {
+      toolCallId: string;
+      toolName: string;
+      result: unknown;
+      isError: boolean;
+      providerMetadata?: MastraProviderMetadata;
+    },
+  ): void {
+    const { toolCallId, toolName, result, isError, providerMetadata } = outcome;
+    const toolIndex = state.toolPartById.get(toolCallId);
+    const existing = toolIndex !== undefined ? state.currentMessage.content.parts[toolIndex] : undefined;
+    if (existing && existing.type === 'tool-invocation') {
+      existing.toolInvocation = Object.assign(existing.toolInvocation, {
+        state: 'result' as const,
+        result,
+        isError,
+      });
+      if (providerMetadata) {
+        existing.providerMetadata = providerMetadata;
+      }
+    } else {
+      const toolInvocationPart: MastraToolInvocationPart = {
+        type: 'tool-invocation',
+        toolInvocation: {
+          state: 'result',
+          toolCallId,
+          toolName,
+          args: {},
+          result,
+          isError,
+        },
+      };
+      if (providerMetadata) {
+        toolInvocationPart.providerMetadata = providerMetadata;
+      }
+      state.currentMessage.content.parts.push(toolInvocationPart);
+    }
+    this.#session.emit({
+      type: 'tool_end',
+      toolCallId,
+      result,
+      isError,
+      ...(providerMetadata ? { providerMetadata } : {}),
+    });
+    this.#session.emit({ type: 'message_update', message: this.cloneMessage(state.currentMessage) });
   }
 
   private abortForOmFailure({ operationType, stage, error }: { operationType: string; stage: string; error: string }) {
@@ -316,7 +411,8 @@ export class SessionRunEngine {
   }
 
   /**
-   * Process a stream response (shared between sendMessage and tool approval).
+   * Process a stream response. Production runs stream through
+   * `processSubscribedThreadStream`; only tests call this entry directly.
    */
   async processStream(
     response: { fullStream: AsyncIterable<StreamChunk> },
@@ -330,26 +426,41 @@ export class SessionRunEngine {
     let result: { message: MastraDBMessage; suspended?: boolean } | undefined;
     let error = false;
     let aborted = false;
+    let bailed = false;
 
-    for await (const chunk of response.fullStream) {
-      result = await this.processStreamChunk(state, chunk, requestContext);
-      if (chunk.type === 'error') {
-        error = true;
+    const consume = async (): Promise<void> => {
+      for await (const chunk of response.fullStream) {
+        if (bailed) return;
+        result = await this.processStreamChunk(state, chunk, requestContext);
+        if (chunk.type === 'error') {
+          error = true;
+        }
+        if (chunk.type === 'abort') {
+          aborted = true;
+        }
+        if (
+          result ||
+          chunk.type === 'finish' ||
+          chunk.type === 'error' ||
+          chunk.type === 'abort' ||
+          chunk.type === 'tool-call-suspended' ||
+          this.#session.run.isAbortRequested()
+        ) {
+          result ??= this.finishStreamState(state);
+          break;
+        }
       }
-      if (chunk.type === 'abort') {
-        aborted = true;
-      }
-      if (
-        result ||
-        chunk.type === 'finish' ||
-        chunk.type === 'error' ||
-        chunk.type === 'abort' ||
-        chunk.type === 'tool-call-suspended' ||
-        this.#session.run.isAbortRequested()
-      ) {
-        result ??= this.finishStreamState(state);
-        break;
-      }
+    };
+
+    const bailGuard = new AbortController();
+    try {
+      const outcome = await Promise.race([
+        consume(),
+        abortDeadline(this.#session.run, bailGuard.signal, ABORT_STREAM_GRACE_MS),
+      ]);
+      bailed = outcome === abortBailed;
+    } finally {
+      bailGuard.abort();
     }
 
     result ??= this.finishStreamState(state);
@@ -362,16 +473,15 @@ export class SessionRunEngine {
       this.#session.emit({ type: 'error', error: new Error(state.terminalError) });
     }
 
-    this.#session.emit({
-      type: 'agent_end',
-      reason: error
+    await this.#session.finishAgentRun(
+      error
         ? 'error'
         : result.suspended
           ? 'suspended'
           : aborted || this.#session.run.isAbortRequested()
             ? 'aborted'
             : 'complete',
-    });
+    );
 
     this.#session.run.reset();
     await this.#session.drainFollowUpQueue();
@@ -389,6 +499,21 @@ export class SessionRunEngine {
     }
 
     switch (chunk.type) {
+      case 'step-start': {
+        // Adopt the loop's response message id so the streamed turn and its
+        // persisted copy share one identity (clients dedupe by id). An id is
+        // consumed on first offer and binds only while the message is still
+        // empty — an emitted id must never change, and a re-offered id must
+        // never attach to a later message.
+        const messageId = getString(getPayload(chunk).messageId);
+        if (!messageId || state.offeredResponseIds.has(messageId)) break;
+        state.offeredResponseIds.add(messageId);
+        if (!this.hasCurrentMessageContent(state)) {
+          state.currentMessage.id = messageId;
+        }
+        break;
+      }
+
       case 'text-start': {
         const textIndex = state.currentMessage.content.parts.length;
         state.currentMessage.content.parts.push({ type: 'text', text: '' });
@@ -491,63 +616,61 @@ export class SessionRunEngine {
 
       case 'tool-result': {
         const toolResult = getPayload(chunk);
-        const toolCallId = getString(toolResult.toolCallId) ?? '';
-        const toolName = getString(toolResult.toolName) ?? '';
-        const providerMetadata = isProviderMetadata(toolResult.providerMetadata)
-          ? toolResult.providerMetadata
-          : undefined;
-        const result = getDisplayTransform(chunk.metadata, 'output-available', toolResult.result);
-        const isError = getBoolean(toolResult.isError, false);
-        const toolIndex = state.toolPartById.get(toolCallId);
-        const existing = toolIndex !== undefined ? state.currentMessage.content.parts[toolIndex] : undefined;
-        if (existing && existing.type === 'tool-invocation') {
-          existing.toolInvocation = Object.assign(existing.toolInvocation, {
-            state: 'result' as const,
-            result,
-            isError,
-          });
-          if (providerMetadata) {
-            existing.providerMetadata = providerMetadata;
-          }
-        } else {
-          const toolInvocationPart: MastraToolInvocationPart = {
-            type: 'tool-invocation',
-            toolInvocation: Object.assign(
-              {
-                state: 'result' as const,
-                toolCallId,
-                toolName,
-                args: {},
-                result,
-              },
-              { isError },
-            ),
-          };
-          if (providerMetadata) {
-            toolInvocationPart.providerMetadata = providerMetadata;
-          }
-          state.currentMessage.content.parts.push(toolInvocationPart);
-        }
-        this.#session.emit({
-          type: 'tool_end',
-          toolCallId,
-          result,
-          isError,
-          ...(providerMetadata ? { providerMetadata } : {}),
+        this.applyToolOutcome(state, {
+          toolCallId: getString(toolResult.toolCallId) ?? '',
+          toolName: getString(toolResult.toolName) ?? '',
+          result: getDisplayTransform(chunk.metadata, 'output-available', toolResult.result),
+          isError: getBoolean(toolResult.isError, false),
+          providerMetadata: isProviderMetadata(toolResult.providerMetadata) ? toolResult.providerMetadata : undefined,
         });
-        this.#session.emit({ type: 'message_update', message: this.cloneMessage(state.currentMessage) });
         break;
       }
 
       case 'tool-error': {
         const toolError = getPayload(chunk);
-        const toolCallId = getString(toolError.toolCallId) ?? '';
-        this.#session.emit({
-          type: 'tool_end',
-          toolCallId,
-          result: getDisplayTransform(chunk.metadata, 'error', toolError.error),
+        // Error instances JSON-serialize to `{}`; keep the message so failure text survives SSE + persistence.
+        this.applyToolOutcome(state, {
+          toolCallId: getString(toolError.toolCallId) ?? '',
+          toolName: getString(toolError.toolName) ?? '',
+          result: getDisplayTransform(chunk.metadata, 'error', getErrorFromUnknown(toolError.error).message),
           isError: true,
+          providerMetadata: isProviderMetadata(toolError.providerMetadata) ? toolError.providerMetadata : undefined,
         });
+        break;
+      }
+
+      case 'tool-output-denied': {
+        const payload = getPayload(chunk);
+        const toolCallId = getString(payload.toolCallId) ?? '';
+        const toolName = getString(payload.toolName) ?? '';
+        const approval = getRecord(payload.approval);
+        const reason = getString(approval?.reason);
+        const approvalTransform = getTransformedToolPayload(chunk.metadata, 'display', 'approval');
+        const args = hasTransformedToolPayload(approvalTransform)
+          ? approvalTransform.transformed
+          : getDisplayTransform(chunk.metadata, 'input-available', payload.args);
+        const toolIndex = state.toolPartById.get(toolCallId);
+        const existing = toolIndex !== undefined ? state.currentMessage.content.parts[toolIndex] : undefined;
+        const toolInvocation = {
+          state: 'output-denied' as const,
+          toolCallId,
+          toolName,
+          args,
+          approval: {
+            id: getString(approval?.id) ?? '',
+            approved: false as const,
+            ...(reason ? { reason } : {}),
+          },
+        };
+
+        if (existing && existing.type === 'tool-invocation') {
+          existing.toolInvocation = Object.assign(existing.toolInvocation, toolInvocation);
+        } else {
+          state.currentMessage.content.parts.push({ type: 'tool-invocation', toolInvocation });
+        }
+
+        this.#session.emit({ type: 'tool_end', toolCallId, result: reason, isError: false });
+        this.#session.emit({ type: 'message_update', message: this.cloneMessage(state.currentMessage) });
         break;
       }
 
@@ -577,7 +700,14 @@ export class SessionRunEngine {
         const approval = await approvalPromise;
         this.#session.approval.clearToolName();
 
-        if (approval.decision === 'approve') {
+        // `session.abort()` releases a parked gate as a decline and defers the
+        // stream/signal teardown to us, so the decline can still be driven
+        // through the (live) agent run and persist an `output-denied` result.
+        // Once it lands we finish the teardown, which stops the run rather than
+        // letting the model continue past the denied call.
+        const deferredAbort = this.#session.run.isAbortRequested();
+
+        if (!deferredAbort && approval.decision === 'approve') {
           await this.#session.approveToolCall({
             toolCallId,
             requestContext: approval.requestContext ?? requestContext,
@@ -586,8 +716,20 @@ export class SessionRunEngine {
           await this.#session.declineToolCall({
             toolCallId,
             requestContext: approval.requestContext ?? requestContext,
-            declineContext: approval.declineContext,
+            declineContext: deferredAbort
+              ? { reason: ABORTED_BY_USER_REASON, message: ABORTED_BY_USER_REASON }
+              : approval.declineContext,
           });
+        }
+
+        if (deferredAbort) {
+          // The denial chunk the agent emits for this decline can never reach
+          // us: we are blocking the consumer loop that would read it, and the
+          // teardown below ends the loop. Settle the call locally so the
+          // display state shows the denied result instead of a call stuck
+          // mid-flight.
+          this.settleToolCallAsDenied(state, { toolCallId, toolName, args: toolArgs });
+          this.#session.completeDeferredAbort();
         }
         break;
       }
@@ -990,10 +1132,54 @@ export class SessionRunEngine {
         }
         break;
       }
+      case 'data-sandbox-exit': {
+        const d = getDataRecord(chunk);
+        const toolCallId = getString(d?.toolCallId);
+        const exitCode = getOptionalNumber(d?.exitCode);
+        if (toolCallId && exitCode !== undefined) {
+          this.#session.emit({
+            type: 'command_exit',
+            toolCallId,
+            exitCode,
+            success: getBoolean(d?.success, exitCode === 0),
+          });
+        }
+        break;
+      }
 
       default:
         break;
     }
+  }
+
+  /**
+   * Mark a tool call as denied on the in-flight assistant message and notify
+   * subscribers, mirroring what the `tool-output-denied` chunk would do. Used
+   * when the run is torn down before that chunk can be consumed (abort while a
+   * tool-approval gate is parked).
+   */
+  private settleToolCallAsDenied(
+    state: StreamState,
+    { toolCallId, toolName, args }: { toolCallId: string; toolName: string; args: unknown },
+  ): void {
+    const toolInvocation: MastraToolInvocationPart['toolInvocation'] = {
+      state: 'output-denied',
+      toolCallId,
+      toolName,
+      args,
+      approval: { id: toolCallId, approved: false, reason: ABORTED_BY_USER_REASON },
+    };
+
+    const toolIndex = state.toolPartById.get(toolCallId);
+    const existing = toolIndex !== undefined ? state.currentMessage.content.parts[toolIndex] : undefined;
+    if (existing && existing.type === 'tool-invocation') {
+      existing.toolInvocation = Object.assign(existing.toolInvocation, toolInvocation);
+    } else {
+      state.currentMessage.content.parts.push({ type: 'tool-invocation', toolInvocation });
+    }
+
+    this.#session.emit({ type: 'tool_end', toolCallId, result: ABORTED_BY_USER_REASON, isError: false });
+    this.#session.emit({ type: 'message_update', message: this.cloneMessage(state.currentMessage) });
   }
 
   private finishStreamState(state: StreamState): { message: MastraDBMessage; suspended?: boolean } {
@@ -1021,17 +1207,17 @@ export class SessionRunEngine {
         : aborted || this.#session.run.isAbortRequested()
           ? 'aborted'
           : 'complete';
-    this.#session.emit({ type: 'agent_end', reason });
+    await this.#session.finishAgentRun(reason);
     this.#session.run.reset();
     await this.#session.drainFollowUpQueue();
   }
 
   private async handleSubscribedStreamError(error: unknown): Promise<void> {
     if (error instanceof Error && error.name === 'AbortError') {
-      this.#session.emit({ type: 'agent_end', reason: 'aborted' });
+      await this.#session.finishAgentRun('aborted');
     } else {
       this.#session.emit({ type: 'error', error: getErrorFromUnknown(error) });
-      this.#session.emit({ type: 'agent_end', reason: 'error' });
+      await this.#session.finishAgentRun('error');
     }
     this.#session.stream.detach();
     this.#session.run.reset();
@@ -1040,20 +1226,25 @@ export class SessionRunEngine {
 
   async processSubscribedThreadStream(subscription: AgentThreadSubscription<StreamChunk>): Promise<void> {
     let currentRun: StreamState | undefined;
+    let requestContext!: RequestContext;
+    let bailed = false;
 
-    try {
+    const consume = async (): Promise<void> => {
       for await (const chunk of subscription.stream) {
+        if (bailed) return;
         if (!this.#session.stream.isCurrent({ subscription })) {
           subscription.unsubscribe();
           break;
         }
 
         if (!currentRun) {
+          const runId = ('runId' in chunk ? chunk.runId : undefined) ?? subscription.activeRunId();
           currentRun = this.createStreamState();
           this.#session.run.nextOperation();
           this.#session.run.ensureAbortController();
-          this.#session.run.setRunId({ runId: subscription.activeRunId() ?? ('runId' in chunk ? chunk.runId : null) });
+          this.#session.run.setRunId({ runId });
           this.#session.run.setTraceId({ traceId: null });
+          requestContext = await this.#machinery.buildRequestContext(subscription.__getCurrentRunRequestContext?.());
           this.#session.emit({ type: 'agent_start' });
         }
 
@@ -1062,7 +1253,6 @@ export class SessionRunEngine {
         }
 
         try {
-          const requestContext = await this.#machinery.buildRequestContext(this.#requestContext);
           const streamResult = await this.processStreamChunk(currentRun, chunk, requestContext);
           if (
             streamResult ||
@@ -1112,12 +1302,32 @@ export class SessionRunEngine {
           currentRun = undefined;
         }
       }
+    };
+
+    try {
+      const bailGuard = new AbortController();
+      try {
+        const outcome = await Promise.race([
+          consume(),
+          abortDeadline(this.#session.run, bailGuard.signal, ABORT_STREAM_GRACE_MS),
+        ]);
+        bailed = outcome === abortBailed;
+      } finally {
+        bailGuard.abort();
+      }
 
       // Graceful stream close without explicit terminal chunk.
       if (currentRun && this.#session.stream.isCurrent({ subscription })) {
         const streamResult = this.finishStreamState(currentRun);
         await this.finishSubscribedStreamRun({ suspended: streamResult.suspended });
         currentRun = undefined;
+      }
+
+      // An abort-deadline bail leaves the hung subscription undrained; detach
+      // it so the next message re-subscribes a fresh consumer (same reason as
+      // the abort-chunk path above).
+      if (bailed && this.#session.stream.isCurrent({ subscription })) {
+        this.#session.stream.detach();
       }
     } catch (error) {
       if (this.#session.stream.isCurrent({ subscription })) {

@@ -50,6 +50,11 @@ describe('pnpm v11 packageManager normalization', () => {
   it('writes the complete pnpm 11 workspace and build-policy configuration', async () => {
     const projectPath = await createPnpmProject();
 
-    expect(await fs.readFile(path.join(projectPath, 'pnpm-workspace.yaml'), 'utf8')).toBe(PNPM_WORKSPACE);
+    const workspace = await fs.readFile(path.join(projectPath, 'pnpm-workspace.yaml'), 'utf8');
+    expect(workspace).toBe(PNPM_WORKSPACE);
+    expect(workspace).toContain('  bufferutil: true');
+    expect(workspace).toContain('  protobufjs: true');
+    expect(workspace).toContain('  utf-8-validate: true');
+    expect(workspace).not.toContain('onlyBuiltDependencies');
   });
 });

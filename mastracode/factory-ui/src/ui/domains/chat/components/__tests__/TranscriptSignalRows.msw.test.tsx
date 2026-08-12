@@ -163,6 +163,27 @@ describe('TranscriptEntries signal rows', () => {
     expect(within(row).queryByRole('button')).not.toBeInTheDocument();
   });
 
+  it('marks a temporal gap as a separator and keeps the stamp out of the line', () => {
+    renderEntries([
+      {
+        kind: 'message',
+        id: 'sig-gap',
+        message: signalDBMessage({
+          id: 'sig-gap',
+          type: 'reactive',
+          tagName: 'system-reminder',
+          text: '1 hour 58 minutes later — 08/11/2026, 5:21 PM GMT+2',
+          attributes: { type: 'temporal-gap' },
+        }),
+      },
+    ]);
+
+    const gap = screen.getByRole('separator');
+    expect(gap).toHaveTextContent('1 hour 58 minutes later');
+    expect(gap).not.toHaveTextContent('5:21 PM');
+    expect(screen.queryByRole('group', { name: 'Signal: System reminder' })).not.toBeInTheDocument();
+  });
+
   it('keeps rendering persisted notification signals as notification rows', () => {
     const entry: TimelineEntry = {
       kind: 'message',

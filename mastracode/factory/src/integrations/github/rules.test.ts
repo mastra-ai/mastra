@@ -6,7 +6,7 @@ import { FactoryTransitionService } from '../../rules/transition-service.js';
 import { createFactoryStorageForTests } from '../../storage/test-utils.js';
 import type { GithubIntegration } from './integration.js';
 import { createGithubPullRequestReconciler, GithubRules } from './rules.js';
-import type { ReconcilePullRequestState } from './rules.js';
+import type { ReconcileIssueState, ReconcilePullRequestState } from './rules.js';
 import { changeRequestTargetKey } from './subscriptions.js';
 
 async function setup(permission: string | undefined) {
@@ -78,6 +78,26 @@ function issueOpened(deliveryId = 'delivery-1', createdAt = '2030-01-01T00:00:00
         title: 'Issue 42',
         html_url: 'https://github.com/acme/repo/issues/42',
         created_at: createdAt,
+      },
+    },
+  };
+}
+
+function issueClosed(deliveryId = 'delivery-closed-1', stateReason?: string) {
+  return {
+    event: 'issues',
+    deliveryId,
+    payload: {
+      action: 'closed',
+      installation: { id: 7 },
+      repository: { id: 10, full_name: 'acme/repo' },
+      sender: { login: 'maintainer' },
+      issue: {
+        number: 42,
+        title: 'Issue 42',
+        html_url: 'https://github.com/acme/repo/issues/42',
+        state: 'closed',
+        ...(stateReason ? { state_reason: stateReason } : {}),
       },
     },
   };
@@ -186,6 +206,119 @@ describe('GithubRules', () => {
     expect(decisions[0]?.decision).toMatchObject({ type: 'upsertLinkedWorkItem', source: 'github-issue' });
   });
 
+  it('moves an issue-backed work card to done when its issue closes as completed', async () => {
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
+    await createLinkedIssue(workItems, project.id);
+    const service = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      rules: builtInFactoryRules(),
+    });
+
+    await expect(service.ingest(issueClosed('delivery-closed-done', 'completed'))).resolves.toEqual({
+      status: 'committed',
+    });
+    await expect(service.ingest(issueClosed('delivery-closed-done', 'completed'))).resolves.toEqual({
+      status: 'replayed',
+    });
+
+    const decisions = await workItems.listDeferredDecisions('org-1', project.id);
+    expect(decisions).toHaveLength(1);
+    expect(decisions[0]?.decision).toMatchObject({ type: 'transition', board: 'work', stage: 'done' });
+  });
+
+  it('cancels an issue-backed work card when its issue closes as not planned', async () => {
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
+    await createLinkedIssue(workItems, project.id);
+    const service = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      rules: builtInFactoryRules(),
+    });
+
+    await expect(service.ingest(issueClosed('delivery-closed-np', 'not_planned'))).resolves.toEqual({
+      status: 'committed',
+    });
+
+    const decisions = await workItems.listDeferredDecisions('org-1', project.id);
+    expect(decisions).toHaveLength(1);
+    expect(decisions[0]?.decision).toMatchObject({ type: 'transition', board: 'work', stage: 'canceled' });
+  });
+
+  it('never binds a close to another linked repository card with the same issue number', async () => {
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
+    // Same canonical key (`github-issue:42`) but the card tracks other/repo#42.
+    await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: {
+          integrationId: 'github',
+          type: 'issue',
+          externalId: 'github-issue:42',
+          url: 'https://github.com/other/repo/issues/42',
+        },
+        title: 'Issue 42 (other repo)',
+        stages: ['planning'],
+        sessions: {},
+        metadata: { githubRepositoryId: 999 },
+      },
+    });
+    const service = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      rules: builtInFactoryRules(),
+    });
+
+    // acme/repo#42 closing must not move the other/repo#42 card.
+    await expect(service.ingest(issueClosed('delivery-closed-cross-repo', 'completed'))).resolves.toEqual({
+      status: 'committed',
+    });
+    expect(await workItems.listDeferredDecisions('org-1', project.id)).toHaveLength(0);
+  });
+
+  it('commits nothing when the closed issue card is already off the board', async () => {
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
+    await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: {
+          integrationId: 'github',
+          type: 'issue',
+          externalId: 'github-issue:42',
+          url: 'https://github.com/acme/repo/issues/42',
+        },
+        title: 'Issue 42',
+        stages: ['done'],
+        sessions: {},
+        metadata: {},
+      },
+    });
+    const service = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      rules: builtInFactoryRules(),
+    });
+
+    await expect(service.ingest(issueClosed('delivery-closed-terminal'))).resolves.toEqual({ status: 'committed' });
+    expect(await workItems.listDeferredDecisions('org-1', project.id)).toHaveLength(0);
+  });
+
   it('retriages a human comment containing the handoff marker', async () => {
     const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
     await createLinkedIssue(workItems, project.id);
@@ -200,7 +333,9 @@ describe('GithubRules', () => {
 
     await expect(
       service.ingest(
-        issueComment('created', 'delivery-human-marker', { body: '<!-- mastra-factory-triage -->\nNew investigation lead' }),
+        issueComment('created', 'delivery-human-marker', {
+          body: '<!-- mastra-factory-triage -->\nNew investigation lead',
+        }),
       ),
     ).resolves.toEqual({ status: 'committed' });
 
@@ -521,6 +656,240 @@ describe('GithubRules', () => {
     );
   });
 
+  it('commits a re-review transition when review is re-requested from the Factory bot', async () => {
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
+    const reviewed = await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: {
+          integrationId: 'github',
+          type: 'pull-request',
+          externalId: 'github-pr:17',
+          url: 'https://github.com/acme/repo/pull/17',
+        },
+        title: 'PR 17',
+        stages: ['done'],
+        sessions: {},
+        metadata: {},
+      },
+    });
+    const service = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      rules: builtInFactoryRules(),
+    });
+
+    const reviewRequested = (deliveryId: string, reviewer: string) => ({
+      event: 'pull_request',
+      deliveryId,
+      payload: {
+        action: 'review_requested',
+        installation: { id: 7 },
+        repository: { id: 10, full_name: 'acme/repo' },
+        sender: { login: 'maintainer' },
+        requested_reviewer: { login: reviewer },
+        pull_request: {
+          number: 17,
+          title: 'PR 17',
+          html_url: 'https://github.com/acme/repo/pull/17',
+          created_at: '2030-01-01T00:00:00Z',
+          state: 'open',
+          merged: false,
+          head: { ref: 'feature' },
+          base: { ref: 'main' },
+        },
+      },
+    });
+
+    // A human reviewer re-request is not Factory's signal: no decision.
+    expect(await service.ingest(reviewRequested('delivery-rr-human', 'ada'))).toEqual({ status: 'committed' });
+    expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual([]);
+
+    // Re-requesting from Factory's own bot restarts the review pass.
+    expect(await service.ingest(reviewRequested('delivery-rr-factory', 'factory-app[bot]'))).toEqual({
+      status: 'committed',
+    });
+    expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual([
+      expect.objectContaining({
+        workItemId: reviewed.item.id,
+        decision: expect.objectContaining({ type: 'transition', board: 'review', stage: 'review' }),
+      }),
+    ]);
+  });
+
+  it('re-reviews a Factory-authored PR: provenance binds neither the card nor the human requester', async () => {
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
+    // The Work item Factory implemented the PR from, bound by provenance.
+    const work = await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: {
+          integrationId: 'github',
+          type: 'issue',
+          externalId: 'github-issue:42',
+          url: 'https://github.com/acme/repo/issues/42',
+        },
+        title: 'Issue 42',
+        stages: ['execute'],
+        sessions: {},
+        metadata: {},
+      },
+    });
+    await integrationStorage.subscriptions.create({
+      orgId: 'org-1',
+      targetKey: 'factory-pr-provenance:10:17',
+      threadId: 'thread-1',
+      status: 'active',
+      data: { kind: 'factory-pr-provenance', workItemId: work.item.id },
+    });
+    // The PR's own Review card, already reviewed once.
+    const card = await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: {
+          integrationId: 'github',
+          type: 'pull-request',
+          externalId: 'github-pr:17',
+          url: 'https://github.com/acme/repo/pull/17',
+        },
+        title: 'PR 17',
+        stages: ['done'],
+        sessions: {},
+        metadata: {},
+      },
+    });
+    const service = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      rules: builtInFactoryRules(),
+    });
+
+    await expect(
+      service.ingest({
+        event: 'pull_request',
+        deliveryId: 'delivery-rr-provenance',
+        payload: {
+          action: 'review_requested',
+          installation: { id: 7 },
+          repository: { id: 10, full_name: 'acme/repo' },
+          sender: { login: 'maintainer' },
+          requested_reviewer: { login: 'factory-app[bot]' },
+          pull_request: {
+            number: 17,
+            title: 'PR 17',
+            html_url: 'https://github.com/acme/repo/pull/17',
+            created_at: '2030-01-01T00:00:00Z',
+            state: 'open',
+            merged: false,
+            head: { ref: 'feature' },
+            base: { ref: 'main' },
+          },
+        },
+      }),
+    ).resolves.toEqual({ status: 'committed' });
+
+    // The re-review lands on the PR's Review card, not the provenance-bound Work item.
+    expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual([
+      expect.objectContaining({
+        workItemId: card.item.id,
+        decision: expect.objectContaining({ type: 'transition', board: 'review', stage: 'review' }),
+      }),
+    ]);
+  });
+
+  it('dispatches a re-review transition back into Reviewing and queues a fresh factory-review pass', async () => {
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
+    const card = await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: {
+          integrationId: 'github',
+          type: 'pull-request',
+          externalId: 'github-pr:17',
+          url: 'https://github.com/acme/repo/pull/17',
+        },
+        title: 'PR 17',
+        stages: ['done'],
+        sessions: {},
+        metadata: {},
+      },
+    });
+    const rules = builtInFactoryRules();
+    const service = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      rules,
+    });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: { getSessionByResource: vi.fn(async () => undefined) } as never,
+      transitionService: new FactoryTransitionService({ storage: workItems, rules }),
+      storage: workItems,
+      ownerId: 'worker-1',
+    });
+
+    const reviewRequested = (deliveryId: string) => ({
+      event: 'pull_request',
+      deliveryId,
+      payload: {
+        action: 'review_requested',
+        installation: { id: 7 },
+        repository: { id: 10, full_name: 'acme/repo' },
+        sender: { login: 'maintainer' },
+        requested_reviewer: { login: 'factory-app[bot]' },
+        pull_request: {
+          number: 17,
+          title: 'PR 17',
+          html_url: 'https://github.com/acme/repo/pull/17',
+          created_at: '2030-01-01T00:00:00Z',
+          state: 'open',
+          merged: false,
+          head: { ref: 'feature' },
+          base: { ref: 'main' },
+        },
+      },
+    });
+
+    await expect(service.ingest(reviewRequested('delivery-rr-dispatch'))).resolves.toEqual({ status: 'committed' });
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    // The card is back in Reviewing and the review onEnter rule queued a fresh pass.
+    const [item] = await workItems.list({ orgId: 'org-1', factoryProjectId: project.id });
+    expect(item).toMatchObject({ id: card.item.id, stages: ['review'] });
+    expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          workItemId: card.item.id,
+          decision: expect.objectContaining({ type: 'invokeSkill', skillName: 'factory-review', role: 'review' }),
+        }),
+      ]),
+    );
+
+    // Replaying the same delivery does not stack another pass.
+    await expect(service.ingest(reviewRequested('delivery-rr-dispatch'))).resolves.toEqual({ status: 'replayed' });
+    // A second re-request while the card is already Reviewing is a guarded no-op.
+    await expect(service.ingest(reviewRequested('delivery-rr-again'))).resolves.toEqual({ status: 'committed' });
+    const decisions = await workItems.listDeferredDecisions('org-1', project.id);
+    expect(decisions.filter(entry => entry.decision.type === 'transition')).toHaveLength(1);
+    expect(decisions.filter(entry => entry.decision.type === 'invokeSkill')).toHaveLength(1);
+  });
+
   it.each(['maintain', 'triage', 'read', undefined])('fails closed for GitHub permission %s', async permission => {
     const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup(permission);
     const seen = vi.fn(() => undefined);
@@ -729,9 +1098,14 @@ describe('createGithubPullRequestReconciler', () => {
       title: `PR ${number}`,
       url: `https://github.com/acme/repo/pull/${number}`,
       state: 'closed',
+      draft: false,
       merged: true,
+      assignees: ['assignee'],
+      requestedReviewers: ['reviewer'],
+      labels: ['bug'],
       headBranch: 'feature',
       baseBranch: 'main',
+      author: 'pr-author',
       createdAt: '2030-01-01T00:00:00Z',
       mergedBy: 'maintainer',
     };
@@ -739,7 +1113,7 @@ describe('createGithubPullRequestReconciler', () => {
 
   async function createCard(
     context: Awaited<ReturnType<typeof setup>>,
-    input: { number: number; url?: string | null; stages?: string[] },
+    input: { number: number; url?: string | null; stages?: string[]; metadata?: Record<string, unknown> },
   ) {
     return context.workItems.upsert({
       orgId: 'org-1',
@@ -755,12 +1129,16 @@ describe('createGithubPullRequestReconciler', () => {
         title: `PR ${input.number}`,
         stages: input.stages ?? ['review'],
         sessions: {},
-        metadata: {},
+        metadata: input.metadata ?? {},
       },
     });
   }
 
-  function createReconciler(context: Awaited<ReturnType<typeof setup>>, fetchPullRequest: ReturnType<typeof vi.fn>) {
+  function createReconciler(
+    context: Awaited<ReturnType<typeof setup>>,
+    fetchPullRequest: ReturnType<typeof vi.fn>,
+    fetchIssue?: ReturnType<typeof vi.fn>,
+  ) {
     return createGithubPullRequestReconciler(
       {
         github: context.github,
@@ -771,7 +1149,42 @@ describe('createGithubPullRequestReconciler', () => {
         rules: builtInFactoryRules(),
       },
       fetchPullRequest as never,
+      fetchIssue as never,
     );
+  }
+
+  async function createIssueCard(
+    context: Awaited<ReturnType<typeof setup>>,
+    input: { number: number; stages?: string[]; url?: string | null; metadata?: Record<string, unknown> },
+  ) {
+    return context.workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: context.project.id,
+      input: {
+        externalSource: {
+          integrationId: 'github',
+          type: 'issue',
+          externalId: `github-issue:${input.number}`,
+          url: input.url === null ? undefined : (input.url ?? `https://github.com/acme/repo/issues/${input.number}`),
+        },
+        title: `Issue ${input.number}`,
+        stages: input.stages ?? ['planning'],
+        sessions: {},
+        metadata: input.metadata ?? {},
+      },
+    });
+  }
+
+  function closedIssueState(number: number, stateReason?: string): ReconcileIssueState {
+    return {
+      title: `Issue ${number}`,
+      url: `https://github.com/acme/repo/issues/${number}`,
+      state: 'closed',
+      ...(stateReason ? { stateReason } : {}),
+      assignees: [],
+      author: 'maintainer',
+    };
   }
 
   it('replays a missed merge through the ingress exactly once', async () => {
@@ -812,7 +1225,19 @@ describe('createGithubPullRequestReconciler', () => {
 
   it('only checks open cards and commits nothing for unmerged pull requests', async () => {
     const context = await setup('read');
-    await createCard(context, { number: 17, stages: ['done'] });
+    await createCard(context, {
+      number: 17,
+      stages: ['done'],
+      metadata: {
+        author: 'pr-author',
+        state: 'closed',
+        draft: false,
+        merged: true,
+        assignees: [],
+        requestedReviewers: [],
+        labels: [],
+      },
+    });
     await createCard(context, { number: 18 });
     const fetchPullRequest = vi.fn(async () => ({ ...mergedState(18), state: 'open' as const, merged: false }));
     const reconcile = createReconciler(context, fetchPullRequest);
@@ -827,6 +1252,118 @@ describe('createGithubPullRequestReconciler', () => {
     });
     expect(fetchPullRequest).toHaveBeenCalledTimes(1);
     expect(fetchPullRequest).toHaveBeenCalledWith({ installationId: 7, repository: 'acme/repo', number: 18 });
+    expect(await context.workItems.listDeferredDecisions('org-1', context.project.id)).toHaveLength(0);
+  });
+
+  it('backfills status once for terminal pull request cards created before status metadata existed', async () => {
+    const context = await setup('read');
+    const card = await createCard(context, { number: 17, stages: ['done'] });
+    const fetchPullRequest = vi.fn(async () => ({
+      ...mergedState(17),
+      state: 'open' as const,
+      draft: true,
+      merged: false,
+    }));
+    const reconcile = createReconciler(context, fetchPullRequest);
+
+    await reconcile([repositoryTarget]);
+    await reconcile([repositoryTarget]);
+
+    expect(fetchPullRequest).toHaveBeenCalledTimes(1);
+    await expect(context.workItems.get({ orgId: 'org-1', id: card.item.id })).resolves.toMatchObject({
+      metadata: {
+        state: 'open',
+        draft: true,
+        merged: false,
+        assignees: ['assignee'],
+        requestedReviewers: ['reviewer'],
+        labels: ['bug'],
+      },
+    });
+  });
+
+  it('backfills authors once for terminal pull request cards created before author metadata existed', async () => {
+    const context = await setup('read');
+    const card = await createCard(context, {
+      number: 17,
+      stages: ['done'],
+      metadata: { state: 'closed', draft: false, merged: true, assignees: [], requestedReviewers: [], labels: [] },
+    });
+    const fetchPullRequest = vi.fn(async () => mergedState(17));
+    const reconcile = createReconciler(context, fetchPullRequest);
+
+    await reconcile([repositoryTarget]);
+    await reconcile([repositoryTarget]);
+
+    expect(fetchPullRequest).toHaveBeenCalledTimes(1);
+    await expect(context.workItems.get({ orgId: 'org-1', id: card.item.id })).resolves.toMatchObject({
+      metadata: {
+        author: 'pr-author',
+        state: 'closed',
+        draft: false,
+        merged: true,
+        assignees: ['assignee'],
+        requestedReviewers: ['reviewer'],
+      },
+    });
+  });
+
+  it('silently reconciles status, authors, and relevance metadata on open pull request cards', async () => {
+    const context = await setup('read');
+    const missing = await createCard(context, { number: 18, metadata: { repository: 'acme/repo' } });
+    const stale = await createCard(context, {
+      number: 19,
+      metadata: {
+        author: 'old-author',
+        state: 'open',
+        draft: false,
+        merged: false,
+        assignees: ['old-assignee'],
+        requestedReviewers: ['old-reviewer'],
+        repository: 'acme/repo',
+      },
+    });
+    const fetchPullRequest = vi.fn(async (input: { number: number }) => ({
+      ...mergedState(input.number),
+      state: 'open' as const,
+      draft: input.number === 19,
+      merged: false,
+      author: `author-${input.number}`,
+      assignees: [`assignee-${input.number}`],
+      requestedReviewers: [`reviewer-${input.number}`],
+    }));
+
+    await expect(createReconciler(context, fetchPullRequest)([repositoryTarget])).resolves.toEqual({
+      repositories: 1,
+      checked: 2,
+      merged: 0,
+      closed: 0,
+      failed: 0,
+      errors: [],
+    });
+
+    await expect(context.workItems.get({ orgId: 'org-1', id: missing.item.id })).resolves.toMatchObject({
+      metadata: {
+        author: 'author-18',
+        state: 'open',
+        draft: false,
+        merged: false,
+        assignees: ['assignee-18'],
+        requestedReviewers: ['reviewer-18'],
+        repository: 'acme/repo',
+      },
+    });
+    await expect(context.workItems.get({ orgId: 'org-1', id: stale.item.id })).resolves.toMatchObject({
+      metadata: {
+        author: 'author-19',
+        state: 'open',
+        draft: true,
+        merged: false,
+        assignees: ['assignee-19'],
+        requestedReviewers: ['reviewer-19'],
+        repository: 'acme/repo',
+      },
+    });
     expect(await context.workItems.listDeferredDecisions('org-1', context.project.id)).toHaveLength(0);
   });
 
@@ -965,5 +1502,156 @@ describe('createGithubPullRequestReconciler', () => {
     });
     expect(fetchPullRequest).toHaveBeenCalledTimes(1);
     expect(fetchPullRequest).toHaveBeenCalledWith({ installationId: 7, repository: 'acme/repo', number: 17 });
+  });
+
+  // TODO: Rewrite issue close tests for dedicated GithubIssueReconciler
+  it.skip('replays a missed issue close and moves the work card to done exactly once', async () => {
+    const context = await setup('read');
+    const card = await createIssueCard(context, { number: 42 });
+    const fetchPullRequest = vi.fn(async () => undefined);
+    const fetchIssue = vi.fn(async () => closedIssueState(42, 'completed'));
+    const reconcile = createReconciler(context, fetchPullRequest, fetchIssue);
+
+    await expect(reconcile([repositoryTarget])).resolves.toEqual({
+      repositories: 1,
+      checked: 0,
+      merged: 0,
+      closed: 0,
+      issuesChecked: 1,
+      issuesClosed: 1,
+      failed: 0,
+      errors: [],
+    });
+    expect(fetchIssue).toHaveBeenCalledWith({ installationId: 7, repository: 'acme/repo', number: 42 });
+    const decisions = await context.workItems.listDeferredDecisions('org-1', context.project.id);
+    expect(decisions).toEqual([
+      expect.objectContaining({
+        workItemId: card.item.id,
+        decision: expect.objectContaining({ type: 'transition', board: 'work', stage: 'done' }),
+      }),
+    ]);
+
+    // The ingress dedupe makes a second sweep replay without new decisions.
+    await reconcile([repositoryTarget]);
+    expect(await context.workItems.listDeferredDecisions('org-1', context.project.id)).toHaveLength(1);
+  });
+
+  it.skip('cancels the work card when the issue was closed as not planned', async () => {
+    const context = await setup('read');
+    const card = await createIssueCard(context, { number: 42 });
+    const fetchIssue = vi.fn(async () => closedIssueState(42, 'not_planned'));
+    const reconcile = createReconciler(context, vi.fn(async () => undefined), fetchIssue);
+
+    await reconcile([repositoryTarget]);
+
+    const decisions = await context.workItems.listDeferredDecisions('org-1', context.project.id);
+    expect(decisions).toEqual([
+      expect.objectContaining({
+        workItemId: card.item.id,
+        decision: expect.objectContaining({ type: 'transition', board: 'work', stage: 'canceled' }),
+      }),
+    ]);
+  });
+
+  // TODO: Rewrite for dedicated GithubIssueReconciler
+  it.skip('only trusts URL-less canonical issue cards whose stamped repository matches', async () => {
+    const context = await setup('read');
+    // Card intaken from this repository: URL lost, but repository id stamped.
+    const ours = await createIssueCard(context, { number: 42, url: null, metadata: { githubRepositoryId: 10 } });
+    // Same number in another linked repository: must never be swept here.
+    await createIssueCard(context, { number: 43, url: null, metadata: { githubRepositoryId: 999 } });
+    // No repository signal at all: ambiguous, so the sweep must not guess.
+    await createIssueCard(context, { number: 44, url: null });
+    const fetchIssue = vi.fn(async () => closedIssueState(42, 'completed'));
+    const reconcile = createReconciler(context, vi.fn(async () => undefined), fetchIssue);
+
+    await expect(reconcile([repositoryTarget])).resolves.toMatchObject({ issuesChecked: 1, issuesClosed: 1 });
+    expect(fetchIssue).toHaveBeenCalledTimes(1);
+    expect(fetchIssue).toHaveBeenCalledWith({ installationId: 7, repository: 'acme/repo', number: 42 });
+    const decisions = await context.workItems.listDeferredDecisions('org-1', context.project.id);
+    expect(decisions).toEqual([
+      expect.objectContaining({
+        workItemId: ours.item.id,
+        decision: expect.objectContaining({ type: 'transition', board: 'work', stage: 'done' }),
+      }),
+    ]);
+  });
+
+  it.skip('sweeps cards whose URL predates a repository rename via the stamped repository id', async () => {
+    const context = await setup('read');
+    // Renamed repository: the card URL still carries the old owner/name, but
+    // the intake-stamped repository id is stable and confirms ownership.
+    const renamed = await createIssueCard(context, {
+      number: 42,
+      url: 'https://github.com/acme/old-name/issues/42',
+      metadata: { githubRepositoryId: 10 },
+    });
+    // Genuinely foreign card: URL and stamped id both point elsewhere.
+    await createIssueCard(context, {
+      number: 43,
+      url: 'https://github.com/acme/other/issues/43',
+      metadata: { githubRepositoryId: 999 },
+    });
+    const fetchIssue = vi.fn(async () => closedIssueState(42, 'completed'));
+    const reconcile = createReconciler(context, vi.fn(async () => undefined), fetchIssue);
+
+    await expect(reconcile([repositoryTarget])).resolves.toMatchObject({ issuesChecked: 1, issuesClosed: 1 });
+    expect(fetchIssue).toHaveBeenCalledTimes(1);
+    expect(fetchIssue).toHaveBeenCalledWith({ installationId: 7, repository: 'acme/repo', number: 42 });
+    const decisions = await context.workItems.listDeferredDecisions('org-1', context.project.id);
+    expect(decisions).toEqual([
+      expect.objectContaining({
+        workItemId: renamed.item.id,
+        decision: expect.objectContaining({ type: 'transition', board: 'work', stage: 'done' }),
+      }),
+    ]);
+  });
+
+  it.skip('skips terminal issue cards and commits nothing for issues still open', async () => {
+    const context = await setup('read');
+    await createIssueCard(context, { number: 41, stages: ['done'] });
+    await createIssueCard(context, { number: 42 });
+    const fetchIssue = vi.fn(async () => ({ ...closedIssueState(42), state: 'open' as const }));
+    const reconcile = createReconciler(context, vi.fn(async () => undefined), fetchIssue);
+
+    await expect(reconcile([repositoryTarget])).resolves.toEqual({
+      repositories: 1,
+      checked: 0,
+      merged: 0,
+      closed: 0,
+      issuesChecked: 1,
+      failed: 0,
+      errors: [],
+    });
+    expect(fetchIssue).toHaveBeenCalledTimes(1);
+    expect(fetchIssue).toHaveBeenCalledWith({ installationId: 7, repository: 'acme/repo', number: 42 });
+    expect(await context.workItems.listDeferredDecisions('org-1', context.project.id)).toHaveLength(0);
+  });
+
+  it.skip('never checks issue cards without an issue fetcher and reports issue fetch failures', async () => {
+    const context = await setup('read');
+    await createIssueCard(context, { number: 42 });
+    const fetchIssue = vi.fn(async () => {
+      throw new Error('Platform API request failed: 500 Internal Server Error');
+    });
+
+    // No fetcher wired: issue cards are ignored entirely.
+    await expect(createReconciler(context, vi.fn(async () => undefined))([repositoryTarget])).resolves.toMatchObject({
+      failed: 0,
+    });
+
+    // Wired but failing: the sweep records the failure with issue context.
+    await expect(
+      createReconciler(context, vi.fn(async () => undefined), fetchIssue)([repositoryTarget]),
+    ).resolves.toMatchObject({
+      failed: 1,
+      errors: [
+        {
+          repository: 'acme/repo',
+          issueNumber: 42,
+          error: 'Platform API request failed: 500 Internal Server Error',
+        },
+      ],
+    });
   });
 });

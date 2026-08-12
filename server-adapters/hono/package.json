@@ -1,6 +1,6 @@
 {
   "name": "@mastra/hono",
-  "version": "1.5.14-alpha.0",
+  "version": "1.6.0",
   "description": "Mastra Hono adapter for the server",
   "type": "module",
   "main": "dist/index.js",
@@ -33,8 +33,8 @@
     "ws": "^8.21.0"
   },
   "devDependencies": {
-    "@ai-sdk/openai": "^2.0.114",
-    "@hono/node-server": "^1.19.14",
+    "@ai-sdk/openai": "^2.0.115",
+    "@hono/node-server": "^2.0.0",
     "@hono/swagger-ui": "^0.5.3",
     "@internal/lint": "workspace:*",
     "@internal/server-adapter-test-utils": "workspace:*",

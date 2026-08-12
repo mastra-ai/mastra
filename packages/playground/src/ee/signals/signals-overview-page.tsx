@@ -1,28 +1,32 @@
 import { DateTimeRangePicker } from '@mastra/playground-ui/components/DateTimeRangePicker';
-import type { DateRangePreset } from '@mastra/playground-ui/components/DateTimeRangePicker';
-import { SignalsOverviewPage as SignalsEmptyState } from '@mastra/playground-ui/ee/signals';
-import { useState } from 'react';
+import {
+  SankeySignals,
+  SignalsErrorState,
+  SignalsLoadingSkeleton,
+  SignalsOverviewPage as SignalsEmptyState,
+  SIGNAL_PROCESSING_ORDER,
+  TraceIntelligenceProvider,
+  useEntityLearningProgress,
+} from '@mastra/playground-ui/ee/signals';
 
 import { Link } from '../../lib/link';
-import { useEntityLearningProgress } from './hooks';
-import { SankeySignals } from './sankey-signals';
-import { SignalsErrorState } from './signals-error-state';
-import { SignalsLoadingSkeleton } from './signals-loading-skeleton';
-import type { TraceSignalName } from './types';
 import { useSelectedThemeEntity } from './use-selected-theme-entity';
-
-const SIGNAL_ORDER: TraceSignalName[] = ['goal', 'outcome', 'behavior', 'sentiment'];
+import { useSignalsDateUrlState } from './use-signals-date-url-state';
 
 export function SignalsOverviewPage() {
+  return (
+    <TraceIntelligenceProvider cacheScope="oss-studio" LinkComponent={Link}>
+      <SignalsOverviewContent />
+    </TraceIntelligenceProvider>
+  );
+}
+
+function SignalsOverviewContent() {
   const { entitiesQuery, entity } = useSelectedThemeEntity();
-  const [datePreset, setDatePreset] = useState<DateRangePreset>('last-7d');
-  const [dateFrom, setDateFrom] = useState<Date | undefined>(() => new Date(Date.now() - 7 * 24 * 60 * 60 * 1000));
-  const [dateTo, setDateTo] = useState<Date>();
-  const handleDateChange = (value: Date | undefined, type: 'from' | 'to') => {
-    if (type === 'from') setDateFrom(value);
-    else setDateTo(value);
-  };
-  const signalNames = entity ? SIGNAL_ORDER.filter(signalName => entity.availableSignals.includes(signalName)) : [];
+  const url = useSignalsDateUrlState();
+  const signalNames = entity
+    ? SIGNAL_PROCESSING_ORDER.filter(signalName => entity.availableSignals.includes(signalName))
+    : [];
   const progressQuery = useEntityLearningProgress(
     entity?.entityId,
     entity?.entityType ?? 'agent',
@@ -49,19 +53,19 @@ export function SignalsOverviewPage() {
 
   return (
     <SankeySignals
-      key={`${entity.entityId}:${signalNames.join(',')}:${dateFrom?.toISOString() ?? 'open'}:${dateTo?.toISOString() ?? 'open'}`}
+      key={`${entity.entityId}:${signalNames.join(',')}:${url.selectedDateFrom?.toISOString() ?? 'open'}:${url.selectedDateTo?.toISOString() ?? 'open'}`}
       entityId={entity.entityId}
       entityType="agent"
       signalNames={signalNames}
-      dateFrom={dateFrom}
-      dateTo={dateTo}
+      dateFrom={url.selectedDateFrom}
+      dateTo={url.selectedDateTo}
       dateRangePicker={
         <DateTimeRangePicker
-          preset={datePreset}
-          onPresetChange={setDatePreset}
-          dateFrom={dateFrom}
-          dateTo={dateTo}
-          onDateChange={handleDateChange}
+          preset={url.datePreset}
+          onPresetChange={url.handleDatePresetChange}
+          dateFrom={url.selectedDateFrom}
+          dateTo={url.selectedDateTo}
+          onDateChange={url.handleDateChange}
           presets={['last-24h', 'last-3d', 'last-7d', 'last-14d', 'last-30d', 'custom']}
           size="sm"
         />

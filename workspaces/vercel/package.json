@@ -31,7 +31,7 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "@vercel/sandbox": "2.0.2"
+    "@vercel/sandbox": "2.9.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",

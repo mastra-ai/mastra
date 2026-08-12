@@ -4,15 +4,15 @@ import { MastraBase } from '@mastra/core/base';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { MCPServerBase } from '@mastra/core/mcp';
 import type { Tool } from '@mastra/core/tools';
-import { DEFAULT_REQUEST_TIMEOUT_MSEC } from '@modelcontextprotocol/sdk/shared/protocol.js';
+import { DEFAULT_REQUEST_TIMEOUT_MSEC } from '@modelcontextprotocol/client';
 import type {
   ElicitRequest,
   ElicitResult,
   ProgressNotification,
   Prompt,
   Resource,
-  ResourceTemplate,
-} from '@modelcontextprotocol/sdk/types.js';
+  ResourceTemplateType,
+} from '@modelcontextprotocol/client';
 import equal from 'fast-deep-equal';
 import type { OAuthClientInformationFull } from '../shared/oauth-types';
 import { UnauthorizedError } from '../shared/oauth-types';
@@ -23,6 +23,7 @@ import { createOAuthCallbackServer, getCallbackUrlCandidates } from './oauth-cal
 import type { OAuthCallbackServer } from './oauth-callback-server';
 import { MCPOAuthClientProvider } from './oauth-provider';
 import { MCPClientServerProxy } from './server-proxy';
+import type { SerializableMCPToolCatalog, SerializableMCPToolDefinition } from './types';
 
 const mcpClientInstances = new Map<string, InstanceType<typeof MCPClient>>();
 const TOOL_DISCOVERY_MAX_ATTEMPTS = 2;
@@ -355,8 +356,8 @@ To fix this you have three different options:
        * console.log(templates.weatherServer); // Array of resource templates
        * ```
        */
-      templates: async (): Promise<Record<string, ResourceTemplate[]>> => {
-        const allTemplates: Record<string, ResourceTemplate[]> = {};
+      templates: async (): Promise<Record<string, ResourceTemplateType[]>> => {
+        const allTemplates: Record<string, ResourceTemplateType[]> = {};
         const settled = await this.discoverAcrossServers(
           async serverName => (await this.getConnectedClientForServer(serverName)).resources.templates(),
           {
@@ -1154,6 +1155,139 @@ To fix this you have three different options:
     }
 
     return { toolsets: connectedToolsets, errors };
+  }
+
+  /**
+   * Discovers every configured server's tools as plain, serializable definitions.
+   *
+   * Unlike `listTools()`/`listToolsets()`, the result contains no functions or references to a
+   * live client, so it can be JSON-serialized and cached (Redis, a database, a build artifact)
+   * and reused by other processes. Rebuild an executable tool from a cached definition with
+   * {@link toolFromDefinition}, which does not reconnect.
+   *
+   * Definitions are grouped by server and keyed by the server's own tool name, without the
+   * `serverName_toolName` namespacing that `listTools()` applies.
+   *
+   * @example
+   * ```typescript
+   * // Once, at build time or on the first worker:
+   * const definitions = await mcp.listToolDefinitions();
+   * await cache.set('mcp-tools', JSON.stringify(definitions));
+   *
+   * // In every other worker, with no MCP connections opened:
+   * const definitions = JSON.parse(await cache.get('mcp-tools'));
+   * const tool = mcp.toolFromDefinition('weather', definitions.weather.getForecast);
+   * ```
+   */
+  public async listToolDefinitions(): Promise<SerializableMCPToolCatalog> {
+    const result = await this.listToolDefinitionsWithErrors();
+    return result.definitions;
+  }
+
+  /**
+   * Like {@link listToolDefinitions}, but also returns errors for servers that failed to
+   * connect instead of surfacing only the servers that succeeded.
+   *
+   * Useful when caching a catalog, since it lets you avoid persisting a partial manifest that
+   * silently omits a server which happened to be down at discovery time.
+   */
+  public async listToolDefinitionsWithErrors(): Promise<{
+    definitions: SerializableMCPToolCatalog;
+    errors: Record<string, string>;
+  }> {
+    this.addToInstanceCache();
+    const definitions: SerializableMCPToolCatalog = {};
+    const errors: Record<string, string> = {};
+
+    const settled = await this.discoverAcrossServers(
+      async serverName => {
+        const client = await this.getConnectedClientForServer(serverName);
+        return client.toolDefinitions();
+      },
+      {
+        errorId: 'MCP_CLIENT_GET_TOOL_DEFINITIONS_FAILED',
+        logMessage: 'Failed to list tool definitions from server:',
+      },
+    );
+
+    for (const { serverName, value, error } of settled) {
+      if (error !== undefined) {
+        errors[serverName] = error;
+        continue;
+      }
+      definitions[serverName] = value;
+    }
+
+    return { definitions, errors };
+  }
+
+  /**
+   * Rebuilds an executable Mastra tool from a cached {@link SerializableMCPToolDefinition}.
+   *
+   * No MCP connection is opened here — that is the point of the method. The underlying client
+   * connects lazily, the first time the returned tool is actually executed, so a worker can
+   * reconstruct an entire tool map at startup and only pay for connections to the servers whose
+   * tools the model really calls.
+   *
+   * The returned tool behaves exactly like one from `listTools()`: same strict-mode metadata,
+   * approval policy, structured content handling, in-band tool errors, progress metadata, abort
+   * signal support, and reconnect/retry behavior.
+   *
+   * @param serverName Name of the server the definition came from, as configured on this client.
+   * @param definition A definition previously obtained from {@link listToolDefinitions}.
+   */
+  public async toolFromDefinition({
+    serverName,
+    definition,
+  }: {
+    serverName: string;
+    definition: SerializableMCPToolDefinition;
+  }): Promise<Tool<any, any, any, any>> {
+    this.addToInstanceCache();
+    // getOrCreateClient constructs the client without connecting; connection is deferred to
+    // the tool's first execution.
+    const client = await this.getOrCreateClient(serverName, this.getServerConfig(serverName));
+    return client.toolFromDefinition({ definition });
+  }
+
+  /**
+   * Rebuilds an entire cached catalog into a namespaced tool map, without connecting.
+   *
+   * This is the cached counterpart to `listTools()`: it produces the same `serverName_toolName`
+   * keys, so an agent's tool map can be reconstructed on a cold start from a catalog in Redis
+   * and dropped straight into the agent, with connections opened lazily per tool call.
+   *
+   * Servers present in the catalog but no longer configured on this client are skipped, so a
+   * stale cached manifest degrades gracefully instead of throwing.
+   *
+   * @example
+   * ```typescript
+   * const definitions = JSON.parse(await cache.get('mcp-tools'));
+   * const agent = new Agent({ tools: await mcp.toolsFromDefinitions({ definitions }), ... });
+   * ```
+   */
+  public async toolsFromDefinitions({
+    definitions: catalog,
+  }: {
+    definitions: SerializableMCPToolCatalog;
+  }): Promise<Record<string, Tool<any, any, any, any>>> {
+    const configuredServers = new Set(Object.keys(this.serverConfigs));
+    const tools: Record<string, Tool<any, any, any, any>> = {};
+
+    for (const [serverName, definitions] of Object.entries(catalog)) {
+      if (!configuredServers.has(serverName)) {
+        this.logger.warn('Skipping cached MCP tool definitions for a server that is no longer configured', {
+          serverName,
+        });
+        continue;
+      }
+
+      for (const [toolName, definition] of Object.entries(definitions)) {
+        tools[`${serverName}_${toolName}`] = await this.toolFromDefinition({ serverName, definition });
+      }
+    }
+
+    return tools;
   }
 
   /**

@@ -35,6 +35,13 @@ export const agent = new Agent({
   name: 'Agent',
   description:
     'A general-purpose assistant that can research, manage tasks, work with local files, run approved commands, and create recurring schedules.',
+  metadata: {
+    suggestedPrompts: [
+      "What's the weather in Austin this weekend?",
+      "What's the SPCX stock price right now?",
+      'Build a Japanese sakura festival landing page.',
+    ],
+  },
   instructions: `You are a friendly starter agent for exploring what Mastra can do. Help the user try useful capabilities, build small projects, answer current questions, and shape this harness into a starting point for future work.
 
 Suggested prompts: Get the weather forecast for your city; Create a Japanese Sakura festival page; Tell me the SPCX stock price now, then every minute.

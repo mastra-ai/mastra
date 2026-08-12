@@ -215,9 +215,9 @@ function ColumnBody({
           </Txt>
           {loading ? (
             <Skeleton className="h-6 w-12 shrink-0 rounded-full" />
-          ) : (
+          ) : totalTaskCount > 0 ? (
             <ColumnTaskBadge count={taskCount} total={totalTaskCount} label={label} />
-          )}
+          ) : null}
         </div>
         {headerAction ? (
           <div className={cn('flex h-8 shrink-0 items-center', COLUMN_ACTION_REVEAL_CLASS)}>{headerAction}</div>

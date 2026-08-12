@@ -4,13 +4,18 @@ import type { WorkspaceSandbox } from '@mastra/core/workspace';
 
 import { createTarball, hashInstallInputs, uploadFile } from './engine.js';
 import { getInfoSafe, resolveRemoteDir, runInSandbox, shellQuote } from './shared.js';
-import type {
-  DeployWorkerToSandboxOptions,
-  SandboxDestroyResult,
-  SandboxWorkerDeployment,
-  SandboxWorkerInput,
-  SandboxWorkerOutput,
-  SandboxWorkerStatus,
+import {
+  SandboxWorkerCapabilityError,
+  type AttachWorkerDeploymentOptions,
+  type DeployWorkerToSandboxOptions,
+  type SandboxDestroyResult,
+  type SandboxWorkerDeployment,
+  type SandboxWorkerExecution,
+  type SandboxWorkerInput,
+  type SandboxWorkerOutput,
+  type SandboxWorkerResourceLimitCapability,
+  type SandboxWorkerResourceLimits,
+  type SandboxWorkerStatus,
 } from './types.js';
 
 const ARCHIVE = '.mastra-worker.tar.gz';
@@ -21,9 +26,24 @@ const ARTIFACT_LOCK = '.mastra-artifact-lock';
 const EXECUTION_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 const DEFAULT_INPUT_LIMIT = 16 * 1024 * 1024;
 const DEFAULT_OUTPUT_READ_LIMIT = 1024 * 1024;
+const RESOURCE_CAPABILITY_PREFIX = 'MASTRA_WORKER_CAPABILITY:';
 
-interface WorkerConfig {
+interface NormalizedResourceLimits {
+  cpuTimeSeconds?: number;
+  addressSpaceBytes?: number;
+  addressSpaceKilobytes?: number;
+  fileSizeBytes?: number;
+  fileSizeBlocks?: number;
+  openFiles?: number;
+}
+
+interface WorkerExecutionConfig {
   sandbox: WorkspaceSandbox;
+  resolveRemoteDir: () => Promise<string>;
+  terminationGraceMs: number;
+}
+
+interface WorkerConfig extends WorkerExecutionConfig {
   remoteDir: string;
   command: string;
   args: string[];
@@ -32,6 +52,7 @@ interface WorkerConfig {
   mode: 'worker' | 'job';
   startupTimeoutMs: number;
   executionTimeoutMs?: number;
+  resourceLimits?: NormalizedResourceLimits;
   terminationGraceMs: number;
   inputLimitBytes: number;
 }
@@ -50,14 +71,19 @@ export async function deployWorkerToSandbox(options: DeployWorkerToSandboxOption
     installCommand = 'npm install --omit=dev',
     startupTimeoutMs = 10_000,
     executionTimeoutMs,
+    resourceLimits: requestedResourceLimits,
     terminationGraceMs = 5_000,
     inputLimitBytes = DEFAULT_INPUT_LIMIT,
   } = options;
+
+  const resourceLimits = normalizeResourceLimits(requestedResourceLimits);
+  if (resourceLimits) await preflightResourceLimits(sandbox, resourceLimits);
 
   const remoteDir = await resolveRemoteDir(sandbox, options.remoteDir);
   const config: WorkerConfig = {
     sandbox,
     remoteDir,
+    resolveRemoteDir: async () => remoteDir,
     command,
     args,
     env,
@@ -65,6 +91,7 @@ export async function deployWorkerToSandbox(options: DeployWorkerToSandboxOption
     mode,
     startupTimeoutMs,
     executionTimeoutMs,
+    resourceLimits,
     terminationGraceMs,
     inputLimitBytes,
   };
@@ -105,6 +132,31 @@ export async function deployWorkerToSandbox(options: DeployWorkerToSandboxOption
   return createExecution(config, executionId, options.input);
 }
 
+/** Reattach to a persisted worker execution without its original launch configuration. */
+export async function attachWorkerDeployment(options: AttachWorkerDeploymentOptions): Promise<SandboxWorkerExecution> {
+  if (!options.sandbox.executeCommand) {
+    throw new Error(
+      `Sandbox provider "${options.sandbox.provider}" does not support executeCommand, which is required for worker deploys.`,
+    );
+  }
+  validateExecutionId(options.executionId);
+  if (
+    options.terminationGraceMs !== undefined &&
+    (!Number.isFinite(options.terminationGraceMs) || options.terminationGraceMs <= 0)
+  ) {
+    throw new Error('terminationGraceMs must be greater than zero.');
+  }
+
+  let remoteDir: string | undefined;
+  const config: WorkerExecutionConfig = {
+    sandbox: options.sandbox,
+    resolveRemoteDir: async () => (remoteDir ??= await resolveRemoteDir(options.sandbox, options.remoteDir)),
+    terminationGraceMs: options.terminationGraceMs ?? 5_000,
+  };
+  const info = await getInfoSafe(options.sandbox);
+  return execution(config, options.executionId, info?.id ?? options.sandbox.id, info?.timeoutAt);
+}
+
 function validateOptions(options: DeployWorkerToSandboxOptions): void {
   if (!options.sandbox.executeCommand) {
     throw new Error(
@@ -130,6 +182,23 @@ function validateOptions(options: DeployWorkerToSandboxOptions): void {
     if (value !== undefined && (!Number.isFinite(value) || value <= 0))
       throw new Error(`${name} must be greater than zero.`);
   }
+  const resourceLimits = options.resourceLimits;
+  if (resourceLimits) {
+    const knownLimits = new Set(['cpuTimeSeconds', 'addressSpaceBytes', 'fileSizeBytes', 'openFiles']);
+    for (const name of Object.keys(resourceLimits)) {
+      if (!knownLimits.has(name)) throw new Error(`Unknown worker resource limit: ${name}.`);
+    }
+    for (const [name, value] of [
+      ['cpuTimeSeconds', resourceLimits.cpuTimeSeconds],
+      ['addressSpaceBytes', resourceLimits.addressSpaceBytes],
+      ['fileSizeBytes', resourceLimits.fileSizeBytes],
+      ['openFiles', resourceLimits.openFiles],
+    ] as const) {
+      if (value !== undefined && (!Number.isSafeInteger(value) || value <= 0)) {
+        throw new Error(`Worker resourceLimits.${name} must be a positive safe integer.`);
+      }
+    }
+  }
 }
 
 function validateRelativePath(value: string, label: string): void {
@@ -140,6 +209,84 @@ function validateRelativePath(value: string, label: string): void {
 
 function validateInput(input: SandboxWorkerInput | undefined): void {
   if (input?.type === 'file') validateRelativePath(input.path, 'input file path');
+}
+
+function normalizeResourceLimits(
+  limits: SandboxWorkerResourceLimits | undefined,
+): NormalizedResourceLimits | undefined {
+  if (!limits || Object.values(limits).every(value => value === undefined)) return undefined;
+  return {
+    cpuTimeSeconds: limits.cpuTimeSeconds,
+    addressSpaceBytes: limits.addressSpaceBytes,
+    addressSpaceKilobytes:
+      limits.addressSpaceBytes === undefined ? undefined : Math.floor(limits.addressSpaceBytes / 1024),
+    fileSizeBytes: limits.fileSizeBytes,
+    fileSizeBlocks: limits.fileSizeBytes === undefined ? undefined : Math.floor(limits.fileSizeBytes / 512),
+    openFiles: limits.openFiles,
+  };
+}
+
+async function preflightResourceLimits(
+  sandbox: WorkspaceSandbox,
+  resourceLimits: NormalizedResourceLimits,
+): Promise<void> {
+  const checks: string[] = [];
+  if (resourceLimits.cpuTimeSeconds !== undefined) {
+    checks.push(`check_limit cpu_time -t ${resourceLimits.cpuTimeSeconds}`);
+  }
+  if (resourceLimits.addressSpaceKilobytes !== undefined) {
+    checks.push(`check_limit address_space -v ${resourceLimits.addressSpaceKilobytes}`);
+  }
+  if (resourceLimits.fileSizeBlocks !== undefined) {
+    checks.push(`check_limit file_size -f ${resourceLimits.fileSizeBlocks}`);
+  }
+  if (resourceLimits.openFiles !== undefined) {
+    checks.push(`check_limit open_files -n ${resourceLimits.openFiles}`);
+  }
+  if (resourceLimits.cpuTimeSeconds !== undefined) {
+    checks.push(`kill -l XCPU >/dev/null 2>&1 || fail cpu_signal`);
+  }
+  if (resourceLimits.fileSizeBytes !== undefined) {
+    checks.push(`kill -l XFSZ >/dev/null 2>&1 || fail file_size_signal`);
+  }
+
+  const script = `
+fail() {
+  printf '${RESOURCE_CAPABILITY_PREFIX}%s\\n' "$1" >&2
+  exit 1
+}
+check_limit() {
+  capability="$1"
+  flag="$2"
+  value="$3"
+  (
+    ulimit -S "$flag" "$value" >/dev/null 2>&1 || exit 1
+    ulimit -H "$flag" "$value" >/dev/null 2>&1 || exit 1
+    [ "$(ulimit -S "$flag")" = "$value" ] || exit 1
+    [ "$(ulimit -H "$flag")" = "$value" ] || exit 1
+    if ulimit -H "$flag" "$((value + 1))" >/dev/null 2>&1; then exit 1; fi
+  ) || fail "$capability"
+}
+[ "$(uname -s 2>/dev/null)" = Linux ] && [ -r /proc/self/stat ] || fail linux_proc
+command -v setsid >/dev/null 2>&1 || fail process_groups
+setsid sh -c 'kill -0 -$$ 2>/dev/null' || fail process_groups
+${checks.join('\n')}
+`;
+
+  let result;
+  try {
+    result = await runInSandbox(sandbox, script, { allowFailure: true, label: 'preflight worker resource limits' });
+  } catch (error) {
+    throw new SandboxWorkerCapabilityError('sandbox_command', undefined, { cause: error });
+  }
+  if (result.exitCode === 0) return;
+
+  const detail = `${result.stderr}\n${result.stdout}`;
+  const match = detail.match(new RegExp(`${RESOURCE_CAPABILITY_PREFIX}([a-z_]+)`));
+  const capability = (match?.[1] ?? 'sandbox_command') as SandboxWorkerResourceLimitCapability;
+  throw new SandboxWorkerCapabilityError(capability, undefined, {
+    cause: new Error(detail.trim() || 'Resource-limit preflight command failed.'),
+  });
 }
 
 async function acquireLock(
@@ -219,8 +366,9 @@ async function createExecution(
     throw workerPhaseError('launch', error);
   }
 
-  const startup = await waitForStartup(config, executionId, paths);
-  if (startup.state === 'timed_out') await cancelExecution(config, executionId, paths, 'startup');
+  const resolvePaths = async () => paths;
+  const startup = await waitForStartup(config, executionId, resolvePaths);
+  if (startup.state === 'timed_out') await cancelExecution(config, executionId, resolvePaths, 'startup');
   if (startup.state === 'failed' || startup.state === 'timed_out' || startup.state === 'provider_unavailable') {
     throw new Error(
       `Worker ${startup.state} during startup${'message' in startup && startup.message ? `: ${startup.message}` : ''}.`,
@@ -228,28 +376,39 @@ async function createExecution(
   }
 
   const info = await getInfoSafe(config.sandbox);
-  return deployment(config, executionId, paths, info?.id ?? config.sandbox.id ?? 'unknown', info?.timeoutAt);
+  return deployment(config, executionId, info?.id ?? config.sandbox.id ?? 'unknown', info?.timeoutAt);
 }
 
-function deployment(
-  config: WorkerConfig,
+function execution(
+  config: WorkerExecutionConfig,
   executionId: string,
-  paths: ReturnType<typeof executionPaths>,
   sandboxId: string,
   expiresAt?: Date,
-): SandboxWorkerDeployment {
+): SandboxWorkerExecution {
+  const resolvePaths = async () => executionPaths(await config.resolveRemoteDir(), executionId);
   return {
     sandboxId,
     executionId,
     expiresAt,
-    status: options => readWorkerStatus(config.sandbox, executionId, paths, options),
-    readOutput: (stream, options) => readOutput(config.sandbox, executionId, paths, stream, options),
-    cancel: () => cancelExecution(config, executionId, paths),
+    status: options => readWorkerStatus(config.sandbox, executionId, resolvePaths, options),
+    readOutput: (stream, options) => readOutput(config.sandbox, executionId, resolvePaths, stream, options),
+    cancel: () => cancelExecution(config, executionId, resolvePaths),
     stop: async () => {
       if (!config.sandbox.stop) throw new Error(`Sandbox provider "${config.sandbox.provider}" does not support stop.`);
       await config.sandbox.stop();
     },
     destroy: options => destroyWithRetry(config.sandbox, options),
+  };
+}
+
+function deployment(
+  config: WorkerConfig,
+  executionId: string,
+  sandboxId: string,
+  expiresAt?: Date,
+): SandboxWorkerDeployment {
+  return {
+    ...execution(config, executionId, sandboxId, expiresAt),
     relaunch: async options => {
       if (options.executionId === executionId) throw new Error('Relaunch requires a new executionId.');
       validateInput(options.input);
@@ -285,9 +444,50 @@ function buildExecutionScript(
     .join(' ');
   const executable = [shellQuote(config.command), ...config.args.map(shellQuote)].join(' ');
   const target = `${envPrefix ? `env ${envPrefix} ` : ''}${executable}`;
+  const limitCommands: string[] = [];
+  if (config.resourceLimits?.cpuTimeSeconds !== undefined) {
+    limitCommands.push(`ulimit -S -t ${config.resourceLimits.cpuTimeSeconds}`);
+    limitCommands.push(`ulimit -H -t ${config.resourceLimits.cpuTimeSeconds}`);
+  }
+  if (config.resourceLimits?.addressSpaceKilobytes !== undefined) {
+    limitCommands.push(`ulimit -S -v ${config.resourceLimits.addressSpaceKilobytes}`);
+    limitCommands.push(`ulimit -H -v ${config.resourceLimits.addressSpaceKilobytes}`);
+  }
+  if (config.resourceLimits?.fileSizeBlocks !== undefined) {
+    limitCommands.push(`ulimit -S -f ${config.resourceLimits.fileSizeBlocks}`);
+    limitCommands.push(`ulimit -H -f ${config.resourceLimits.fileSizeBlocks}`);
+  }
+  if (config.resourceLimits?.openFiles !== undefined) {
+    limitCommands.push(`ulimit -S -n ${config.resourceLimits.openFiles}`);
+    limitCommands.push(`ulimit -H -n ${config.resourceLimits.openFiles}`);
+  }
+  const workload = config.resourceLimits
+    ? `${limitCommands.map(command => `${command} || exit 125`).join('\n')}\nexec ${target}`
+    : `exec ${target}`;
   const graceAttempts = Math.max(1, Math.ceil(config.terminationGraceMs / 1000));
   const state = (value: string) =>
     `tmp=${shellQuote(`${paths.status}.tmp.$$`)}; printf '%s\\n' ${shellQuote(value)} > "$tmp"; mv "$tmp" ${shellQuote(paths.status)};`;
+  const normalExitStatus = `signal=''; if [ "$code" -gt 128 ]; then signal="SIG$((code - 128))"; fi; tmp=${shellQuote(
+    `${paths.status}.tmp.$$`,
+  )}; printf 'exited|%s|%s|%s\\n' "$execution_id" "$code" "$signal" > "$tmp"; mv "$tmp" ${shellQuote(paths.status)};`;
+  const resourceExitBranches: string[] = [];
+  if (config.resourceLimits?.cpuTimeSeconds !== undefined) {
+    resourceExitBranches.push(
+      `if xcpu="$(kill -l XCPU 2>/dev/null)" && [ -n "$xcpu" ] && [ "$code" -eq $((128 + xcpu)) ]; then ${state(
+        `resource_exhausted|${paths.executionId}|cpu|${config.resourceLimits.cpuTimeSeconds}|SIGXCPU`,
+      )}`,
+    );
+  }
+  if (config.resourceLimits?.fileSizeBytes !== undefined) {
+    resourceExitBranches.push(
+      `${resourceExitBranches.length ? 'elif' : 'if'} xfsz="$(kill -l XFSZ 2>/dev/null)" && [ -n "$xfsz" ] && [ "$code" -eq $((128 + xfsz)) ]; then ${state(
+        `resource_exhausted|${paths.executionId}|file_size|${config.resourceLimits.fileSizeBytes}|SIGXFSZ`,
+      )}`,
+    );
+  }
+  const resourceExitStatus = resourceExitBranches.length
+    ? `${resourceExitBranches.join(' ')} else ${normalExitStatus} fi`
+    : normalExitStatus;
 
   return [
     '#!/bin/sh',
@@ -299,7 +499,7 @@ function buildExecutionScript(
     `tokenfile=${shellQuote(paths.pidToken)}`,
     `: > "$stdout"; : > "$stderr"`,
     state(`starting|${paths.executionId}`),
-    `setsid sh -c ${shellQuote(`exec ${target}${stdinPath ? ` < ${shellQuote(stdinPath)}` : ''}`)} > "$stdout" 2> "$stderr" &`,
+    `setsid sh -c ${shellQuote(`${workload}${stdinPath ? ` < ${shellQuote(stdinPath)}` : ''}`)} > "$stdout" 2> "$stderr" &`,
     'child=$!',
     'printf %s "$child" > "$pidfile"',
     `if [ -r "/proc/$child/stat" ]; then awk '{print $22}' "/proc/$child/stat" > "$tokenfile"; else : > "$tokenfile"; fi`,
@@ -320,11 +520,7 @@ function buildExecutionScript(
     `current="$(cat ${shellQuote(paths.status)} 2>/dev/null || true)"`,
     `case "$current" in timed_out*) ;; *) if [ "$cancelled" -eq 1 ]; then ${state(
       `cancelled|${paths.executionId}|TERM`,
-    )} else signal=''; if [ "$code" -gt 128 ]; then signal="SIG$((code - 128))"; fi; tmp=${shellQuote(
-      `${paths.status}.tmp.$$`,
-    )}; printf 'exited|%s|%s|%s\\n' "$execution_id" "$code" "$signal" > "$tmp"; mv "$tmp" ${shellQuote(
-      paths.status,
-    )}; fi ;; esac`,
+    )} else ${resourceExitStatus} fi ;; esac`,
     'rm -f "$pidfile" "$tokenfile"',
     'exit "$code"',
   ].join('\n');
@@ -339,11 +535,11 @@ async function launchExecution(sandbox: WorkspaceSandbox, paths: ReturnType<type
 async function waitForStartup(
   config: WorkerConfig,
   executionId: string,
-  paths: ReturnType<typeof executionPaths>,
+  resolvePaths: () => Promise<ReturnType<typeof executionPaths>>,
 ): Promise<SandboxWorkerStatus> {
   const deadline = Date.now() + config.startupTimeoutMs;
   while (Date.now() < deadline) {
-    const status = await readWorkerStatus(config.sandbox, executionId, paths);
+    const status = await readWorkerStatus(config.sandbox, executionId, resolvePaths);
     if (status.state !== 'unknown' && status.state !== 'starting') return status;
     await new Promise(resolve => setTimeout(resolve, 100));
   }
@@ -353,7 +549,7 @@ async function waitForStartup(
 async function readWorkerStatus(
   sandbox: WorkspaceSandbox,
   executionId: string,
-  paths: ReturnType<typeof executionPaths>,
+  resolvePaths: () => Promise<ReturnType<typeof executionPaths>>,
   options?: { wake?: boolean },
 ): Promise<SandboxWorkerStatus> {
   const providerState = sandbox.status;
@@ -370,6 +566,7 @@ async function readWorkerStatus(
   }
 
   try {
+    const paths = await resolvePaths();
     const result = await runInSandbox(
       sandbox,
       [
@@ -400,7 +597,7 @@ async function readWorkerStatus(
 }
 
 function parseStatus(executionId: string, value: string): SandboxWorkerStatus {
-  const [state, recordedId, first, second] = value.split('|');
+  const [state, recordedId, first, second, third] = value.split('|');
   if (recordedId !== executionId || state === 'stale') return { state: 'unknown', executionId };
   if (state === 'starting') return { state, executionId };
   if (state === 'running') return { state, executionId };
@@ -409,6 +606,16 @@ function parseStatus(executionId: string, value: string): SandboxWorkerStatus {
     return Number.isInteger(exitCode)
       ? { state, executionId, exitCode, ...(second ? { signal: second } : {}) }
       : { state: 'unknown', executionId };
+  }
+  if (state === 'resource_exhausted') {
+    const limit = Number(second);
+    if (first === 'cpu' && Number.isSafeInteger(limit) && limit > 0 && third === 'SIGXCPU') {
+      return { state, executionId, resource: first, limit, signal: third };
+    }
+    if (first === 'file_size' && Number.isSafeInteger(limit) && limit > 0 && third === 'SIGXFSZ') {
+      return { state, executionId, resource: first, limit, signal: third };
+    }
+    return { state: 'unknown', executionId };
   }
   if (state === 'cancelled') return { state, executionId, ...(first ? { signal: first } : {}) };
   if (state === 'timed_out' && (first === 'startup' || first === 'execution')) {
@@ -421,13 +628,14 @@ function parseStatus(executionId: string, value: string): SandboxWorkerStatus {
 }
 
 async function cancelExecution(
-  config: WorkerConfig,
+  config: WorkerExecutionConfig,
   executionId: string,
-  paths: ReturnType<typeof executionPaths>,
+  resolvePaths: () => Promise<ReturnType<typeof executionPaths>>,
   timeoutPhase?: 'startup',
 ): Promise<SandboxWorkerStatus> {
-  const current = await readWorkerStatus(config.sandbox, executionId, paths);
+  const current = await readWorkerStatus(config.sandbox, executionId, resolvePaths);
   if (current.state !== 'running' && current.state !== 'starting') return current;
+  const paths = await resolvePaths();
   const attempts = Math.max(1, Math.ceil(config.terminationGraceMs / 1000));
   const terminal = timeoutPhase ? `timed_out|${executionId}|startup` : `cancelled|${executionId}|TERM`;
   await runInSandbox(
@@ -452,14 +660,15 @@ async function cancelExecution(
 async function readOutput(
   sandbox: WorkspaceSandbox,
   executionId: string,
-  paths: ReturnType<typeof executionPaths>,
+  resolvePaths: () => Promise<ReturnType<typeof executionPaths>>,
   stream: 'stdout' | 'stderr',
   options?: { offset?: number; maxBytes?: number },
 ): Promise<SandboxWorkerOutput> {
   const offset = Math.max(0, Math.floor(options?.offset ?? 0));
   const maxBytes = Math.max(1, Math.floor(options?.maxBytes ?? DEFAULT_OUTPUT_READ_LIMIT));
-  const path = stream === 'stdout' ? paths.stdout : paths.stderr;
   try {
+    const paths = await resolvePaths();
+    const path = stream === 'stdout' ? paths.stdout : paths.stderr;
     const result = await runInSandbox(
       sandbox,
       `size=$(wc -c < ${shellQuote(path)} 2>/dev/null || echo 0); printf '%s\\n' "$size"; tail -c +${offset + 1} ${shellQuote(
@@ -473,8 +682,8 @@ async function readOutput(
     const encoded = newline === -1 ? '' : result.stdout.slice(newline + 1).replace(/\s/g, '');
     const data = Buffer.from(encoded, 'base64');
     const nextOffset = offset + data.byteLength;
-    const status = await readWorkerStatus(sandbox, executionId, paths);
-    const terminal = ['exited', 'cancelled', 'timed_out', 'failed'].includes(status.state);
+    const status = await readWorkerStatus(sandbox, executionId, resolvePaths);
+    const terminal = ['exited', 'resource_exhausted', 'cancelled', 'timed_out', 'failed'].includes(status.state);
     const interrupted = status.state === 'provider_unavailable' || status.state === 'unknown';
     return {
       stream,

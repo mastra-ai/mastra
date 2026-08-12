@@ -160,7 +160,7 @@ The stream emits event types during workflow execution. Each event has a `type` 
 - **`workflow-step-start`**: A step begins execution
 - **`workflow-step-output`**: Custom output from a step
 - **`workflow-step-result`**: A step completes with results
-- **`workflow-finish`**: Workflow execution completes with usage statistics
+- **`workflow-finish`**: Workflow execution completes with usage statistics. For successful runs, `payload.finalWorkflowResult` carries the workflow's final result
 
 ## Related
 

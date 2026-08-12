@@ -1,6 +1,6 @@
 import type { MastraDBMessage } from '@mastra/core/agent-controller';
 import type { ReactNode } from 'react';
-import { useEffect, useReducer, useRef } from 'react';
+import { useEffect, useEffectEvent, useReducer, useState } from 'react';
 
 import { useAgentControllerTranscript } from '../hooks/useAgentControllerTranscript';
 import { initialChatRuntime, runtimeReducer } from '../services/runtime';
@@ -34,22 +34,13 @@ export function ChatTranscriptProvider({
     dispatchRuntime(event);
   };
 
-  // The history query seeds the transcript once at mount (via `initialMessages`).
-  // When the user loads more, the query grows its limit and refetches a larger
-  // newest-N window; feed each larger result to `prependOlder`, which keeps only
-  // the messages older than what is already on screen and prepends them. The
-  // first (mount) result is skipped because it already seeded the transcript.
-  const { prependOlder } = transcriptApi;
-  const seededRef = useRef(false);
+  // Merge is by id and idempotent — mount seed, grown load-more window and
+  // post-navigation revalidation all fold in through the same path.
+  const mergeWindow = useEffectEvent((messages: MastraDBMessage[]) => transcriptApi.mergeWindow(messages));
   useEffect(() => {
-    if (!seededRef.current) {
-      seededRef.current = true;
-      return;
-    }
     if (initialMessages && initialMessages.length > 0) {
-      prependOlder(initialMessages);
+      mergeWindow(initialMessages);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialMessages]);
 
   const loadMore: LoadMoreHistory = {

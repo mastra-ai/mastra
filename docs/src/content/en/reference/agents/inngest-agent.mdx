@@ -7,6 +7,12 @@ packages:
 
 # `createInngestAgent()`
 
+:::beta
+
+Breaking changes may occur without a major version bump until the API is stable.
+
+:::
+
 `createInngestAgent()` wraps an existing [`Agent`](/reference/agents/agent) with [Inngest](https://www.inngest.com/docs)-powered durable execution. Like [`createDurableAgent()`](/reference/agents/durable-agent#createdurableagentoptions), it streams events over [PubSub](/docs/server/pubsub) and supports resumable streams, but runs the agentic loop on Inngest's execution engine instead of in-process. Use it when a run must survive process restarts or run in a distributed environment.
 
 For in-process durable execution, use [`createDurableAgent()`](/reference/agents/durable-agent#createdurableagentoptions). For fire-and-forget execution on the built-in workflow engine, use [`createEventedAgent()`](/reference/agents/durable-agent#createeventedagentoptions).
@@ -607,5 +613,5 @@ export const { GET, POST, PUT } = serveNext({ mastra, inngest })
 
 - [DurableAgent reference](/reference/agents/durable-agent)
 - [Agent class](/reference/agents/agent)
-- [Inngest deployment guide](/guides/deployment/inngest)
+- [Inngest deployment guide](/integrations/deploy/inngest)
 - [PubSub](/docs/server/pubsub)

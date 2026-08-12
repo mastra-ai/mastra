@@ -46,8 +46,8 @@ then interact with elements using their refs (e.g., @e5).`,
   },
   {
     name: 'viewport',
-    type: '{ width: number; height: number }',
-    description: 'Browser viewport dimensions.',
+    type: "{ width: number; height: number } | 'window'",
+    description: "Browser viewport dimensions, or 'window' to match the real browser window instead of a fixed size.",
     isOptional: true,
     defaultValue: '{ width: 1280, height: 720 }',
   },
@@ -462,4 +462,4 @@ The `browser_snapshot` tool returns an accessibility tree with element refs like
 - [MastraBrowser](/reference/browser/mastra-browser): Base class reference
 - [StagehandBrowser](/reference/browser/stagehand-browser): AI-powered alternative
 - [Browser overview](/docs/browser/overview): Conceptual guide
-- [agent-browser guide](/docs/browser/agent-browser): Usage guide
+- [agent-browser guide](/integrations/browsers/agent-browser): Usage guide

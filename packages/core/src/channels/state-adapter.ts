@@ -58,9 +58,8 @@ export class MastraStateAdapter implements StateAdapter {
     // Find the Mastra thread mapped to this external thread ID and mark it
     const thread = await this.findThreadByExternalId(threadId);
     if (!thread) return; // Thread not yet mapped — subscribe will be a no-op
-    await this.memoryStore.updateThread({
+    await this.memoryStore.patchThread({
       id: thread.id,
-      title: thread.title ?? '',
       metadata: { ...thread.metadata, channel_subscribed: 'true' },
     });
   }
@@ -68,9 +67,8 @@ export class MastraStateAdapter implements StateAdapter {
   async unsubscribe(threadId: string): Promise<void> {
     const thread = await this.findThreadByExternalId(threadId);
     if (!thread) return;
-    await this.memoryStore.updateThread({
+    await this.memoryStore.patchThread({
       id: thread.id,
-      title: thread.title ?? '',
       metadata: { ...((thread.metadata ?? {}) as Record<string, unknown>), channel_subscribed: 'false' },
     });
   }

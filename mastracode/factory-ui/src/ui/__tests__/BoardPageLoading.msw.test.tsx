@@ -81,7 +81,7 @@ function stubBoardEndpoints() {
     http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
       HttpResponse.json({ enabled: false, connected: false, workspace: null }),
     ),
-    // Serves both the intake feed (no label) and the triage feed (auto-triaged label).
+    // Serves both the intake feed (no label) and the triage feed (status: auto-triaged label).
     http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/issues`, async () => {
       await issuesGate.promise;
       return HttpResponse.json({ issues: [], nextPage: null });

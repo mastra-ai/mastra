@@ -8,5 +8,5 @@ export * from './utils';
 export * from './scheduler';
 export * from './state-reader';
 export * from './create';
-export * from './stored';
+export * from './dynamic';
 export * from './predicate';

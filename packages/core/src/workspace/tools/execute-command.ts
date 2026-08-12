@@ -69,6 +69,30 @@ function extractTailPipe(command: string): { command: string; tail?: number } {
   return { command };
 }
 
+/** Format command streams consistently with get_process_output. */
+function formatCommandOutput(stdout: string, stderr: string): string[] {
+  const parts: string[] = [];
+
+  if (stdout && stderr) {
+    parts.push('stdout:', stdout, '', 'stderr:', stderr);
+  } else if (stdout) {
+    parts.push(stdout);
+  } else if (stderr) {
+    parts.push('stderr:', stderr);
+  }
+
+  return parts;
+}
+
+/** Append a terminal status after one blank line without altering streamed output. */
+function appendTerminalLine(parts: string[], terminalLine: string): string {
+  if (parts.length === 0) return terminalLine;
+
+  const output = parts.join('\n');
+  const separator = output.endsWith('\n\n') ? '' : output.endsWith('\n') ? '\n' : '\n\n';
+  return `${output}${separator}${terminalLine}`;
+}
+
 /** Shared execute function used by both foreground-only and background-capable tool variants. */
 async function executeCommand(input: Record<string, any>, context: any) {
   let { command, cwd, tail } = input;
@@ -241,12 +265,11 @@ async function executeCommand(input: Record<string, any>, context: any) {
     span.end({ success: result.success }, { exitCode: result.exitCode });
 
     if (!result.success) {
-      const parts = [
+      const parts = formatCommandOutput(
         await truncateOutput(result.stdout, tail, tokenLimit, tokenFrom),
         await truncateOutput(result.stderr, tail, tokenLimit, tokenFrom),
-      ].filter(Boolean);
-      parts.push(`Exit code: ${result.exitCode}`);
-      return parts.join('\n');
+      );
+      return appendTerminalLine(parts, `Exit code: ${result.exitCode}`);
     }
 
     return (await truncateOutput(result.stdout, tail, tokenLimit, tokenFrom)) || '(no output)';
@@ -261,13 +284,12 @@ async function executeCommand(input: Record<string, any>, context: any) {
       },
     });
     span.end({ success: false }, { exitCode: -1 });
-    const parts = [
+    const parts = formatCommandOutput(
       await truncateOutput(stdout, tail, tokenLimit, tokenFrom),
       await truncateOutput(stderr, tail, tokenLimit, tokenFrom),
-    ].filter(Boolean);
+    );
     const errorMessage = error instanceof Error ? error.message : String(error);
-    parts.push(`Error: ${errorMessage}`);
-    return parts.join('\n');
+    return appendTerminalLine(parts, `Error: ${errorMessage}`);
   }
 }
 
@@ -290,6 +312,7 @@ export const executeCommandTool = createTool({
   id: WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND,
   description: baseDescription,
   inputSchema: executeCommandInputSchema,
+  outputSchema: z.string(),
   execute: executeCommand,
   toModelOutput: sandboxToModelOutput,
 });
@@ -301,6 +324,7 @@ export const executeCommandWithBackgroundTool = createTool({
 
 Set background: true to run long-running commands (dev servers, watchers) without blocking. You'll get a PID to track the process.`,
   inputSchema: executeCommandWithBackgroundSchema,
+  outputSchema: z.string(),
   execute: executeCommand,
   toModelOutput: sandboxToModelOutput,
 });

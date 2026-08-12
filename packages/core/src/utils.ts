@@ -32,6 +32,17 @@ export { deepEqual } from './utils/deep-equal';
 export const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 /**
+ * Read a positive-integer environment variable (e.g. a TTL in ms). Unset, empty,
+ * non-numeric, fractional, or non-positive values fall back to `fallback`.
+ */
+export function readPositiveIntEnv(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+  const parsed = Number(raw);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+/**
  * Checks if a value is a plain object (not an array, function, Date, RegExp, etc.)
  */
 function isPlainObject(value: unknown): value is Record<string, unknown> {

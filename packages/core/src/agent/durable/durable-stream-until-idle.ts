@@ -63,17 +63,19 @@ export async function runDurableStreamUntilIdle<OUTPUT = undefined>(
         threadId: ctx.threadId,
         resourceId: ctx.resourceId,
         cleanup: ctx.forceClose,
-        abort: (reason?: unknown) => {
+        abort: async (reason?: unknown) => {
           // Fan the abort out to every inner DurableAgent.stream() that has been
           // spawned by the idle loop so far. `forceClose` then unwinds the outer
           // stream + idle timer.
-          for (const innerAbort of innerAborts) {
-            try {
-              innerAbort(reason);
-            } catch {
-              // ignore — best-effort abort across siblings
-            }
-          }
+          await Promise.all(
+            innerAborts.map(async innerAbort => {
+              try {
+                await innerAbort(reason);
+              } catch {
+                // ignore — best-effort abort across siblings
+              }
+            }),
+          );
           ctx.forceClose();
         },
       };
@@ -138,14 +140,16 @@ export async function runResumeDurableStreamUntilIdle<OUTPUT = undefined>(
         threadId: ctx.threadId,
         resourceId: ctx.resourceId,
         cleanup: ctx.forceClose,
-        abort: (reason?: unknown) => {
-          for (const innerAbort of innerAborts) {
-            try {
-              innerAbort(reason);
-            } catch {
-              // ignore
-            }
-          }
+        abort: async (reason?: unknown) => {
+          await Promise.all(
+            innerAborts.map(async innerAbort => {
+              try {
+                await innerAbort(reason);
+              } catch {
+                // ignore
+              }
+            }),
+          );
           ctx.forceClose();
         },
       };

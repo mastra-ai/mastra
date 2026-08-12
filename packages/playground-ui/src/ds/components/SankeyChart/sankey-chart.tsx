@@ -1,6 +1,5 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useState } from 'react';
 import type { ComponentProps, CSSProperties, KeyboardEvent } from 'react';
-import { createPortal } from 'react-dom';
 import { ResponsiveContainer, Sankey as RechartsSankey } from 'recharts';
 import {
   getSankeyChartCurveSelection,
@@ -10,17 +9,17 @@ import {
   truncateSankeyLabel,
 } from './sankey-chart-utils';
 import type {
-  FixedSankeyGeometry,
-  FixedSankeyLinkGeometry,
+  SankeyChartColumn,
   SankeyChartCurveSelection,
-  SankeyChartGraph,
-  SankeyChartLink,
   SankeyChartNodeSelection,
   SankeyLabelWidths,
 } from './sankey-chart-utils';
 import { useSankeyRenderContext } from './sankey-context';
+import { SankeyPortalTooltip } from './sankey-portal-tooltip';
 import { nodeColor, nodeColorVivid } from './sankeyColor';
 import { useSankeyChartMeasurements } from './use-sankey-chart-measurements';
+import { useSankeyGeometryTransition } from './use-sankey-geometry-transition';
+import { useSankeyHoverTooltip } from './use-sankey-hover-tooltip';
 import { Colors } from '@/ds/tokens';
 import { cn } from '@/lib/utils';
 
@@ -28,17 +27,6 @@ const NODE_LABEL_FONT_SIZE = 11;
 const COLUMN_LABEL_FONT_SIZE = 12;
 // pre-measurement cap, kept so wide charts read unchanged
 const NODE_LABEL_MAX_CHARACTERS = 23;
-const LAYOUT_ANIMATION_DURATION = '260ms';
-
-function prefersReducedMotion() {
-  return typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true;
-}
-
-type PreviousSankeyLayout = {
-  key: string;
-  graph: SankeyChartGraph;
-  geometry: FixedSankeyGeometry;
-};
 
 export type SankeyChartProps = {
   height?: CSSProperties['height'];
@@ -47,7 +35,11 @@ export type SankeyChartProps = {
   onCurveClick?: (selection: SankeyChartCurveSelection) => void;
   onNodeClick?: (selection: SankeyChartNodeSelection) => void;
   isNodeClickable?: (selection: SankeyChartNodeSelection) => boolean;
-  animateLayoutChanges?: boolean;
+  getColumnDescription?: (column: SankeyChartColumn) => string | undefined;
+  /** Suppress the built-in SVG column headers when the caller renders its own header row. */
+  hideColumnLabels?: boolean;
+  /** Animate fixed node and ribbon geometry when this perspective key changes. */
+  geometryTransitionKey?: string;
 };
 
 export function SankeyChart({
@@ -57,7 +49,9 @@ export function SankeyChart({
   onCurveClick,
   onNodeClick,
   isNodeClickable,
-  animateLayoutChanges = false,
+  getColumnDescription,
+  hideColumnLabels = false,
+  geometryTransitionKey,
 }: SankeyChartProps) {
   const { graph, enabledColumns, hueMap, usesFixedGeometry } = useSankeyRenderContext();
   const { chartContainerRef, fixedGeometry, labelWidths } = useSankeyChartMeasurements({
@@ -66,20 +60,10 @@ export function SankeyChart({
     margin,
     usesFixedGeometry,
   });
-  const layoutKey = enabledColumns.map(column => column.id).join(':');
-  const previousLayoutRef = useRef<PreviousSankeyLayout | undefined>(undefined);
-  const previousLayout = previousLayoutRef.current;
-  const shouldAnimateLayout = Boolean(
-    animateLayoutChanges &&
-    fixedGeometry &&
-    previousLayout &&
-    previousLayout.key !== layoutKey &&
-    !prefersReducedMotion(),
-  );
-  useEffect(() => {
-    if (!fixedGeometry) return;
-    previousLayoutRef.current = { key: layoutKey, graph, geometry: fixedGeometry };
-  }, [fixedGeometry, graph, layoutKey]);
+  const animatedGeometry = useSankeyGeometryTransition({
+    geometry: fixedGeometry,
+    transitionKey: geometryTransitionKey,
+  });
   const [hoveredSourceName, setHoveredSourceName] = useState<string>();
   const [focusedSourceName, setFocusedSourceName] = useState<string>();
   const activeSourceName = hoveredSourceName ?? focusedSourceName;
@@ -111,29 +95,17 @@ export function SankeyChart({
             initialDimension={{ width: 800, height: typeof height === 'number' ? height : 320 }}
           >
             <RechartsSankey
-              key={layoutKey}
               data={graph}
               nodeWidth={SANKEY_NODE_WIDTH}
               nodePadding={56}
               margin={margin}
               node={(props: SankeyNodeRendererProps) => {
                 const node = graph.nodes[props.index];
-                const showColumnLabel = node
-                  ? graph.nodes.findIndex(candidate => candidate.column.id === node.column.id) === props.index
-                  : false;
-                const nodeGeometry = node ? fixedGeometry?.nodes.get(node.id) : undefined;
-                const previousNodeGeometry =
-                  shouldAnimateLayout && node && previousLayout
-                    ? previousLayout.geometry.nodes.get(node.id)
-                    : undefined;
-                const animationFrom = previousNodeGeometry
-                  ? {
-                      x: previousNodeGeometry.x,
-                      y: previousNodeGeometry.y,
-                      visibleY: previousNodeGeometry.y,
-                      visibleHeight: previousNodeGeometry.height,
-                    }
-                  : undefined;
+                const showColumnLabel =
+                  !hideColumnLabels && node
+                    ? graph.nodes.findIndex(candidate => candidate.column.id === node.column.id) === props.index
+                    : false;
+                const nodeGeometry = node ? animatedGeometry?.nodes.get(node.id) : undefined;
                 const selection = node ? getSankeyChartNodeSelection(node) : undefined;
                 const clickable = Boolean(
                   onNodeClick && selection && (isNodeClickable === undefined || isNodeClickable(selection)),
@@ -141,12 +113,12 @@ export function SankeyChart({
                 return (
                   <SankeyNode
                     {...props}
-                    animationFrom={animationFrom}
                     x={nodeGeometry?.x ?? props.x}
                     y={nodeGeometry?.y ?? props.y}
                     height={nodeGeometry?.height ?? props.height}
                     hueMap={hueMap}
                     columnLabel={node?.column.label}
+                    columnDescription={node ? getColumnDescription?.(node.column) : undefined}
                     label={node?.label}
                     nodeValue={node?.displayValue}
                     layoutValue={nodeGeometry ? undefined : node ? nodeWeights.get(node.id) : undefined}
@@ -166,18 +138,13 @@ export function SankeyChart({
               }}
               link={(props: SankeyLinkRendererProps) => {
                 const link = graph.links[props.index];
-                const linkGeometry = link ? fixedGeometry?.links.get(link.id) : undefined;
+                const linkGeometry = link ? animatedGeometry?.links.get(link.id) : undefined;
                 const sourceX = linkGeometry?.sourceX ?? props.sourceX;
                 const targetX = linkGeometry?.targetX ?? props.targetX;
                 const fixedControlX = linkGeometry ? (sourceX + targetX) / 2 : undefined;
-                const animationFrom =
-                  shouldAnimateLayout && link && linkGeometry && previousLayout
-                    ? getPreviousLinkGeometry(link, linkGeometry, previousLayout)
-                    : undefined;
                 return (
                   <SankeyLink
                     {...props}
-                    animationFrom={animationFrom}
                     sourceX={sourceX}
                     targetX={targetX}
                     sourceControlX={fixedControlX ?? props.sourceControlX}
@@ -227,17 +194,10 @@ type SankeyLinkRendererProps = {
   payload: { source: { name?: string | number }; target: { name?: string | number } };
 };
 
-type SankeyNodeAnimationGeometry = {
-  x: number;
-  y: number;
-  visibleY: number;
-  visibleHeight: number;
-};
-
 type SankeyNodeProps = SankeyNodeRendererProps & {
-  animationFrom?: SankeyNodeAnimationGeometry;
   hueMap: Record<string, number>;
   columnLabel?: string;
+  columnDescription?: string;
   label?: string;
   nodeValue?: number;
   layoutValue?: number;
@@ -253,7 +213,6 @@ type SankeyNodeProps = SankeyNodeRendererProps & {
 };
 
 function SankeyNode({
-  animationFrom,
   x,
   y,
   width,
@@ -261,6 +220,7 @@ function SankeyNode({
   payload,
   hueMap,
   columnLabel,
+  columnDescription,
   label,
   nodeValue,
   layoutValue,
@@ -289,38 +249,16 @@ function SankeyNode({
   const visibleColumnLabel = columnLabel
     ? truncateSankeyLabel(columnLabel, { fontSize: COLUMN_LABEL_FONT_SIZE, maxWidth: nodeLabelWidth })
     : undefined;
-  const tooltipId = useId();
-  const [isHovered, setIsHovered] = useState(false);
-  const [isFocused, setIsFocused] = useState(false);
-  const [tooltipPosition, setTooltipPosition] = useState<{
-    left: number;
-    top: number;
-    placement: 'above' | 'below';
-  }>();
+  const tooltip = useSankeyHoverTooltip(description !== undefined);
   const numericValue = nodeValue ?? (typeof payload.value === 'number' ? payload.value : Number(payload.value));
   const value = Number.isFinite(numericValue) ? String(numericValue) : '';
   const percentage =
     columnTotal > 0 && Number.isFinite(numericValue) ? Math.round((numericValue / columnTotal) * 100) : 0;
   const visibleHeight = scaleSankeyDimension(height, numericValue, layoutValue);
   const visibleY = y + (height - visibleHeight) / 2;
-  const animationOffsetX = animationFrom ? animationFrom.x - x : undefined;
-  const hasHorizontalMotion = animationOffsetX !== undefined && animationOffsetX !== 0;
-  const hasVerticalMotion =
-    animationFrom && (animationFrom.visibleY !== visibleY || animationFrom.visibleHeight !== visibleHeight);
-  const hasLabelMotion = animationFrom && animationFrom.y !== y;
   const textAnchor = isFirstColumn ? 'start' : isLastColumn ? 'end' : 'middle';
   const labelX = isFirstColumn ? x : isLastColumn ? x + width : x + width / 2;
   const hue = hueMap[name] ?? 0;
-  const isTooltipVisible = Boolean(description && tooltipPosition && (isHovered || isFocused));
-  const showTooltipAt = (target: SVGGElement) => {
-    const rect = target.getBoundingClientRect();
-    const placement = rect.top < 120 ? 'below' : 'above';
-    setTooltipPosition({
-      left: Math.min(Math.max(rect.left, 16), Math.max(window.innerWidth - 336, 16)),
-      top: placement === 'above' ? rect.top - 8 : rect.bottom + 8,
-      placement,
-    });
-  };
   const handleKeyDown = (event: KeyboardEvent<SVGGElement>) => {
     if (event.key !== 'Enter' && event.key !== ' ') return;
     event.preventDefault();
@@ -330,34 +268,18 @@ function SankeyNode({
   return (
     <>
       {/* Rendered outside the interactive group so hovering the header never opens a theme tooltip. */}
-      {showColumnLabel && visibleColumnLabel ? (
-        <text
+      {showColumnLabel && visibleColumnLabel && columnLabel ? (
+        <SankeyColumnHeader
           x={labelX}
-          y={18}
           textAnchor={textAnchor}
           fill={nodeColor(hue)}
-          fontSize={COLUMN_LABEL_FONT_SIZE}
-          fontWeight={600}
-        >
-          {hasHorizontalMotion ? (
-            <animate
-              attributeName="x"
-              begin="0s"
-              calcMode="spline"
-              dur={LAYOUT_ANIMATION_DURATION}
-              fill="freeze"
-              from={labelX + animationOffsetX}
-              keySplines="0.2 0.8 0.2 1"
-              keyTimes="0;1"
-              to={labelX}
-            />
-          ) : null}
-          {visibleColumnLabel === columnLabel ? null : <title>{columnLabel}</title>}
-          {visibleColumnLabel}
-        </text>
+          label={visibleColumnLabel}
+          fullLabel={columnLabel}
+          description={columnDescription}
+        />
       ) : null}
       <g
-        aria-describedby={description ? tooltipId : undefined}
+        aria-describedby={description ? tooltip.id : undefined}
         aria-label={`${accessibleLabel}: ${value} ${numericValue === 1 ? 'trace' : 'traces'} (${percentage}%)`}
         className="focus-visible:[&>rect]:stroke-neutral6 outline-hidden focus-visible:[&>rect]:stroke-2"
         onClick={clickable ? onSelect : undefined}
@@ -365,69 +287,26 @@ function SankeyNode({
         role={clickable ? 'button' : undefined}
         onFocus={event => {
           onFocusChange(name);
-          setIsFocused(true);
-          showTooltipAt(event.currentTarget);
+          tooltip.showOnFocus(event.currentTarget);
         }}
         onBlur={() => {
           onFocusChange(undefined);
-          setIsFocused(false);
+          tooltip.hideOnBlur();
         }}
         onMouseEnter={event => {
           onHoverChange(name);
-          setIsHovered(true);
-          showTooltipAt(event.currentTarget);
+          tooltip.showOnHover(event.currentTarget);
         }}
         onMouseLeave={() => {
           onHoverChange(undefined);
-          setIsHovered(false);
+          tooltip.hideOnLeave();
         }}
         style={{ cursor: clickable ? 'pointer' : undefined }}
         tabIndex={0}
       >
-        {hasHorizontalMotion ? (
-          <animateTransform
-            attributeName="transform"
-            begin="0s"
-            calcMode="spline"
-            dur={LAYOUT_ANIMATION_DURATION}
-            fill="freeze"
-            from={`${animationOffsetX} 0`}
-            keySplines="0.2 0.8 0.2 1"
-            keyTimes="0;1"
-            to="0 0"
-            type="translate"
-          />
-        ) : null}
         {/* The custom tooltip covers described nodes; a native title there would stack a second popup. */}
         {description ? null : <title>{displayLabel}</title>}
-        <rect x={x} y={visibleY} width={width} height={visibleHeight} rx={3} fill={nodeColor(hue)}>
-          {hasVerticalMotion ? (
-            <>
-              <animate
-                attributeName="y"
-                begin="0s"
-                calcMode="spline"
-                dur={LAYOUT_ANIMATION_DURATION}
-                fill="freeze"
-                from={animationFrom.visibleY}
-                keySplines="0.2 0.8 0.2 1"
-                keyTimes="0;1"
-                to={visibleY}
-              />
-              <animate
-                attributeName="height"
-                begin="0s"
-                calcMode="spline"
-                dur={LAYOUT_ANIMATION_DURATION}
-                fill="freeze"
-                from={animationFrom.visibleHeight}
-                keySplines="0.2 0.8 0.2 1"
-                keyTimes="0;1"
-                to={visibleHeight}
-              />
-            </>
-          ) : null}
-        </rect>
+        <rect x={x} y={visibleY} width={width} height={visibleHeight} rx={3} fill={nodeColor(hue)} />
         <text
           x={labelX}
           y={y - 24}
@@ -436,59 +315,77 @@ function SankeyNode({
           fontSize={NODE_LABEL_FONT_SIZE}
           fontFamily="var(--font-mono)"
         >
-          {hasLabelMotion ? (
-            <animate
-              attributeName="y"
-              begin="0s"
-              calcMode="spline"
-              dur={LAYOUT_ANIMATION_DURATION}
-              fill="freeze"
-              from={animationFrom.y - 24}
-              keySplines="0.2 0.8 0.2 1"
-              keyTimes="0;1"
-              to={y - 24}
-            />
-          ) : null}
           {visibleLabel}
         </text>
         <text x={labelX} y={y - 8} textAnchor={textAnchor} fill={Colors.neutral3} fontSize={9.5}>
-          {hasLabelMotion ? (
-            <animate
-              attributeName="y"
-              begin="0s"
-              calcMode="spline"
-              dur={LAYOUT_ANIMATION_DURATION}
-              fill="freeze"
-              from={animationFrom.y - 8}
-              keySplines="0.2 0.8 0.2 1"
-              keyTimes="0;1"
-              to={y - 8}
-            />
-          ) : null}
           {value} ({percentage}%)
         </text>
       </g>
-      {description && isTooltipVisible && tooltipPosition
-        ? createPortal(
-            <div
-              aria-label={`${visibleDisplayLabel}: ${description}`}
-              className="border-border1 bg-surface5 text-neutral6 shadow-elevated pointer-events-none fixed z-50 rounded-md border p-2 text-xs leading-4"
-              id={tooltipId}
-              role="tooltip"
-              style={{
-                left: tooltipPosition.left,
-                maxWidth: 'min(20rem, calc(100vw - 2rem))',
-                top: tooltipPosition.top,
-                transform: tooltipPosition.placement === 'above' ? 'translateY(-100%)' : undefined,
-                width: 'max-content',
-              }}
-            >
-              <div className="font-medium">{visibleDisplayLabel}</div>
-              <div className="text-neutral4 whitespace-pre-wrap">{description}</div>
-            </div>,
-            document.body,
-          )
-        : null}
+      {description ? (
+        <SankeyPortalTooltip
+          id={tooltip.id}
+          title={visibleDisplayLabel}
+          description={description}
+          position={tooltip.position}
+          visible={tooltip.isVisible}
+        />
+      ) : null}
+    </>
+  );
+}
+
+/**
+ * Column header text. Inert for node tooltips, but when the caller supplies a
+ * column description it opens its own portal tooltip on hover or focus.
+ */
+function SankeyColumnHeader({
+  x,
+  textAnchor,
+  fill,
+  label,
+  fullLabel,
+  description,
+}: {
+  x: number;
+  textAnchor: 'start' | 'middle' | 'end';
+  fill: string;
+  label: string;
+  fullLabel: string;
+  description?: string;
+}) {
+  const tooltip = useSankeyHoverTooltip(description !== undefined);
+
+  return (
+    <>
+      <text
+        aria-describedby={description ? tooltip.id : undefined}
+        aria-label={description ? fullLabel : undefined}
+        role={description ? 'img' : undefined}
+        x={x}
+        y={18}
+        textAnchor={textAnchor}
+        fill={fill}
+        fontSize={COLUMN_LABEL_FONT_SIZE}
+        fontWeight={600}
+        tabIndex={description ? 0 : undefined}
+        onMouseEnter={description ? event => tooltip.showOnHover(event.currentTarget) : undefined}
+        onMouseLeave={description ? tooltip.hideOnLeave : undefined}
+        onFocus={description ? event => tooltip.showOnFocus(event.currentTarget) : undefined}
+        onBlur={description ? tooltip.hideOnBlur : undefined}
+      >
+        {/* The custom tooltip already names the column; a native title would stack a second popup. */}
+        {label === fullLabel || description ? null : <title>{fullLabel}</title>}
+        {label}
+      </text>
+      {description ? (
+        <SankeyPortalTooltip
+          id={tooltip.id}
+          title={fullLabel}
+          description={description}
+          position={tooltip.position}
+          visible={tooltip.isVisible}
+        />
+      ) : null}
     </>
   );
 }
@@ -498,63 +395,7 @@ function scaleSankeyDimension(size: number, displayValue: number | undefined, la
   return size * Math.min(Math.max(displayValue / layoutValue, 0), 1);
 }
 
-function getPreviousLinkGeometry(
-  link: SankeyChartLink,
-  currentGeometry: FixedSankeyLinkGeometry,
-  previousLayout: PreviousSankeyLayout,
-): FixedSankeyLinkGeometry | undefined {
-  const previousLinkGeometry = previousLayout.geometry.links.get(link.id);
-  if (previousLinkGeometry) return previousLinkGeometry;
-
-  const previousSource = previousLayout.geometry.nodes.get(link.sourceNode.id);
-  const previousTarget = previousLayout.geometry.nodes.get(link.targetNode.id);
-  if (!previousSource && !previousTarget) return undefined;
-
-  const sourceX = previousSource
-    ? previousSource.x + SANKEY_NODE_WIDTH
-    : (previousTarget?.x ?? currentGeometry.sourceX);
-  const targetX = previousTarget?.x ?? sourceX;
-  const sourceY = previousSource?.centerY ?? previousTarget?.centerY ?? currentGeometry.sourceY;
-  const targetY = previousTarget?.centerY ?? sourceY;
-
-  return {
-    sourceX,
-    targetX,
-    sourceY,
-    targetY,
-    sourceWidth: currentGeometry.sourceWidth,
-    targetWidth: currentGeometry.targetWidth,
-  };
-}
-
-type SankeyLinkPathGeometry = FixedSankeyLinkGeometry & {
-  sourceControlX: number;
-  targetControlX: number;
-};
-
-function buildSankeyLinkPath({
-  sourceX,
-  targetX,
-  sourceY,
-  targetY,
-  sourceControlX,
-  targetControlX,
-  sourceWidth,
-  targetWidth,
-}: SankeyLinkPathGeometry) {
-  const sourceHalfWidth = sourceWidth / 2;
-  const targetHalfWidth = targetWidth / 2;
-  return [
-    `M${sourceX},${sourceY - sourceHalfWidth}`,
-    `C${sourceControlX},${sourceY - sourceHalfWidth} ${targetControlX},${targetY - targetHalfWidth} ${targetX},${targetY - targetHalfWidth}`,
-    `L${targetX},${targetY + targetHalfWidth}`,
-    `C${targetControlX},${targetY + targetHalfWidth} ${sourceControlX},${sourceY + sourceHalfWidth} ${sourceX},${sourceY + sourceHalfWidth}`,
-    'Z',
-  ].join(' ');
-}
-
 type SankeyLinkProps = SankeyLinkRendererProps & {
-  animationFrom?: FixedSankeyLinkGeometry;
   hueMap: Record<string, number>;
   highlighted: boolean;
   displayValue?: number;
@@ -567,7 +408,6 @@ type SankeyLinkProps = SankeyLinkRendererProps & {
 };
 
 function SankeyLink({
-  animationFrom,
   sourceX,
   targetX,
   sourceY,
@@ -588,25 +428,15 @@ function SankeyLink({
   onSelect,
 }: SankeyLinkProps) {
   const visibleWidth = scaleSankeyDimension(linkWidth, displayValue, layoutValue);
-  const currentSourceWidth = Math.max(0, sourceWidth ?? visibleWidth);
-  const currentTargetWidth = Math.max(0, targetWidth ?? visibleWidth);
-  const path = buildSankeyLinkPath({
-    sourceX,
-    targetX,
-    sourceY,
-    targetY,
-    sourceControlX,
-    targetControlX,
-    sourceWidth: currentSourceWidth,
-    targetWidth: currentTargetWidth,
-  });
-  const animationFromPath = animationFrom
-    ? buildSankeyLinkPath({
-        ...animationFrom,
-        sourceControlX: (animationFrom.sourceX + animationFrom.targetX) / 2,
-        targetControlX: (animationFrom.sourceX + animationFrom.targetX) / 2,
-      })
-    : undefined;
+  const sourceHalfWidth = Math.max(0, sourceWidth ?? visibleWidth) / 2;
+  const targetHalfWidth = Math.max(0, targetWidth ?? visibleWidth) / 2;
+  const path = [
+    `M${sourceX},${sourceY - sourceHalfWidth}`,
+    `C${sourceControlX},${sourceY - sourceHalfWidth} ${targetControlX},${targetY - targetHalfWidth} ${targetX},${targetY - targetHalfWidth}`,
+    `L${targetX},${targetY + targetHalfWidth}`,
+    `C${targetControlX},${targetY + targetHalfWidth} ${sourceControlX},${sourceY + sourceHalfWidth} ${sourceX},${sourceY + sourceHalfWidth}`,
+    'Z',
+  ].join(' ');
   const sourceName = String(payload.source.name ?? '');
   const targetName = String(payload.target.name ?? '');
   const gradientId = `sankey-grad-${index}`;
@@ -642,21 +472,7 @@ function SankeyLink({
         onMouseEnter={() => onHoverChange(sourceName)}
         onMouseLeave={() => onHoverChange(undefined)}
         style={{ cursor: clickable ? 'pointer' : undefined, transition: 'fill-opacity 0.18s ease' }}
-      >
-        {animationFromPath ? (
-          <animate
-            attributeName="d"
-            begin="0s"
-            calcMode="spline"
-            dur={LAYOUT_ANIMATION_DURATION}
-            fill="freeze"
-            from={animationFromPath}
-            keySplines="0.2 0.8 0.2 1"
-            keyTimes="0;1"
-            to={path}
-          />
-        ) : null}
-      </path>
+      />
     </g>
   );
 }

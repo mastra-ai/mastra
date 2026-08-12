@@ -21,6 +21,8 @@ import {
 import { memo } from 'react';
 import type { ReactNode } from 'react';
 
+import { SkillMessage } from './SkillMessage';
+
 type ToolStatus = 'running' | 'done' | 'error';
 
 type ToolResponse = AskUserAnswer | PlanResume;
@@ -130,6 +132,12 @@ function ToolFactoryComponent({
   }
 
   if (!isTranscriptToolVisible(toolName)) return null;
+
+  if (toolName === 'skill') {
+    const name = stringValue(record(input)?.name);
+    const instructions = stringValue(output);
+    if (name && instructions) return <SkillMessage activation={{ name, instructions }} />;
+  }
 
   if (toolName === 'submit_plan') {
     const plan = planData(input);

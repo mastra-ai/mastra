@@ -11127,17 +11127,37 @@ describe('Full Async Buffering Flow', () => {
       messageCount: 20, // ~4000 tokens, well above the 2000 threshold
     });
 
-    // Step 0: no observation (step 0 never does sync observation)
-    await step(0);
+    // Step 0: since #16523, sync observation already fires here when pending
+    // tokens exceed the threshold — the messages are over-threshold from the start.
+    const listAfterStep0 = await step(0);
     await waitForAsyncOps();
     const callsAfterStep0 = observerCalls.length;
+    expect(callsAfterStep0).toBeGreaterThan(0);
 
-    // Step 1: pending tokens exceed threshold → sync observation MUST fire,
-    // even though bufferTokens is set and blockAfter is not configured.
+    // Add FRESH over-threshold messages so step 1 has something unobserved to
+    // observe — otherwise step 0 (which now observes) leaves nothing behind and
+    // the step > 0 half of this regression guard would be unreachable.
+    const freshFiller = 'The quick brown fox jumps over the lazy dog. '.repeat(10);
+    for (let i = 0; i < 20; i++) {
+      listAfterStep0.add(
+        {
+          id: `fresh-msg-${i}`,
+          role: i % 2 === 0 ? 'user' : 'assistant',
+          content: { format: 2, parts: [{ type: 'text', text: `Fresh ${i}: ${freshFiller}` }] },
+          type: 'text',
+          createdAt: new Date(Date.UTC(2025, 0, 1, 11, i)),
+          threadId,
+          resourceId,
+        } as any,
+        'memory',
+      );
+    }
+
+    // Step 1: the blockAfter gate must not have silently disabled sync
+    // observation — the regression this test guards is `if (!blockAfter) return
+    // false` disabling ALL sync observation at step > 0.
     await step(1);
     await waitForAsyncOps();
-
-    // The observer must have been called at step 1 (sync observation path)
     expect(observerCalls.length).toBeGreaterThan(callsAfterStep0);
 
     // Verify observations were actually persisted to the record
@@ -16954,36 +16974,54 @@ describe('Message ordering regressions', () => {
 
     s.addUserMessage('Tell me about React');
     await s.runStep(0);
+
+    // Since #16523, an over-threshold step 0 observes during runStep — snapshot
+    // the record state here so we can prove finalize adds NO side effects on top.
+    // Positive anchor first: the step-0 observation must actually have happened,
+    // otherwise the unchanged-state comparisons below hold vacuously ('' === '').
+    const recordAfterStep = await s.getOMRecord();
+    expect(recordAfterStep?.activeObservations).toBeTruthy();
+    expect(recordAfterStep?.lastObservedAt).toBeDefined();
+    const metadataAfterStep = await s.getOMMetadata();
+
     s.addAssistantMessage('React is a UI library.');
     await s.finalize();
 
     const record = await s.getOMRecord();
-    // observation must NOT have fired during finalize
-    expect(record?.activeObservations ?? '').toBe('');
-    expect(record?.lastObservedAt).toBeUndefined();
+    // observation must NOT have fired during finalize — state unchanged from the step
+    expect(record?.activeObservations ?? '').toBe(recordAfterStep?.activeObservations ?? '');
+    expect(record?.lastObservedAt).toEqual(recordAfterStep?.lastObservedAt);
 
     const omMetadata = await s.getOMMetadata();
-    expect(omMetadata?.currentTask).toBeUndefined();
-    expect(omMetadata?.suggestedResponse).toBeUndefined();
+    expect(omMetadata?.currentTask).toEqual(metadataAfterStep?.currentTask);
+    expect(omMetadata?.suggestedResponse).toEqual(metadataAfterStep?.suggestedResponse);
   });
 
   // ─── Test 2: deferred observation should happen at beginning of next turn ───
 
-  it('2 — deferred observation should happen at the beginning of the next turn', async () => {
+  it('2 — observation fires during a step (step 0 included since #16523), never during finalize', async () => {
     const s = await setupOrderingScenario({ messageTokens: 1 });
 
-    // Turn 1: single step
+    // Turn 1: single step. With messageTokens: 1 the user message alone exceeds
+    // the threshold, so since #16523 observation fires at step 0 of THIS turn
+    // instead of deferring to the next turn.
     s.addUserMessage('Hello');
     await s.runStep(0);
+
+    let record = await s.getOMRecord();
+    expect(record?.activeObservations).toBeTruthy();
+    expect(record?.lastObservedAt).toBeDefined();
+    const lastObservedAfterTurn1Step = record!.lastObservedAt;
+
+    // The assistant response lands after the step — finalize must not observe it.
     s.addAssistantMessage('Hi there');
     await s.finalize();
+    record = await s.getOMRecord();
+    expect(record?.lastObservedAt).toEqual(lastObservedAfterTurn1Step);
 
-    // After turn 1: no observation yet
-    let record = await s.getOMRecord();
-    expect(record?.activeObservations ?? '').toBe('');
-    expect(record?.lastObservedAt).toBeUndefined();
-
-    // Turn 2: multi-step (step 0 + step 1 triggers observation)
+    // Turn 2: the backlog (turn 1 assistant message + new user message) is
+    // observed at the next turn's steps, not before.
+    const observerSpy = vi.spyOn((s.om as any).observer, 'call');
     s.resetForNewTurn();
     s.addUserMessage('Follow-up');
     await s.runStep(0);
@@ -16992,10 +17030,15 @@ describe('Message ordering regressions', () => {
     s.addAssistantMessage('Here are results');
     await s.finalize();
 
-    // After turn 2 step 1: observation should have fired
     record = await s.getOMRecord();
     expect(record?.activeObservations).toBeTruthy();
     expect(record?.lastObservedAt).toBeDefined();
+    // Positive anchor: turn 2 must have called the observer — a timestamp
+    // comparison alone also holds when turn 2 never observes at all.
+    expect(observerSpy).toHaveBeenCalled();
+    expect(new Date(record!.lastObservedAt!).getTime()).toBeGreaterThanOrEqual(
+      new Date(lastObservedAfterTurn1Step!).getTime(),
+    );
   });
 
   // ─── Test 2b: next turn step 0 activates buffered chunks and loads correct context ───
@@ -17136,7 +17179,8 @@ describe('Message ordering regressions', () => {
       return ctx;
     };
 
-    // ── Turn 1: step 0 (no observation) → finalize → messages persist ──
+    // ── Turn 1: since #16523, an over-threshold step 0 observes immediately.
+    // The failing observer propagates (sync strategy rethrows) → abort throws.
     let ml = new MessageList({ threadId, resourceId });
     let processor = new ObservationalMemoryProcessor(om, createMemoryProvider(om));
 
@@ -17151,51 +17195,35 @@ describe('Message ordering regressions', () => {
       } as any,
       'input',
     );
-    await processor.processInputStep({
-      messageList: ml,
-      messages: [],
-      requestContext: makeCtx(),
-      stepNumber: 0,
-      state,
-      steps: [],
-      systemMessages: [],
-      model: failingModel as any,
-      retryCount: 0,
-      writer: mockWriter as any,
-      abort,
-    });
+    await expect(
+      processor.processInputStep({
+        messageList: ml,
+        messages: [],
+        requestContext: makeCtx(),
+        stepNumber: 0,
+        state,
+        steps: [],
+        systemMessages: [],
+        model: failingModel as any,
+        retryCount: 0,
+        writer: mockWriter as any,
+        abort,
+      }),
+    ).rejects.toThrow();
 
-    ml.add(
-      {
-        id: 'fail-assistant-1',
-        role: 'assistant',
-        content: { format: 2, parts: [{ type: 'text', text: 'Hi there' }] },
-        createdAt: new Date('2025-01-01T10:01:00Z'),
-        threadId,
-        resourceId,
-      } as any,
-      'response',
-    );
-    await processor.processOutputResult({
-      messageList: ml,
-      messages: ml.get.response.db(),
-      requestContext: makeCtx(),
-      state,
-      abort,
-      result: {} as any,
-      retryCount: 0,
-    });
-
-    // Verify Turn 1 messages persisted
+    // The user message was persisted *before* observation ran (persist-before-observe),
+    // so the failed observation must not have lost it — nor the seed messages.
     let result = await storage.listMessages({
       threadId,
       orderBy: { field: 'createdAt', direction: 'ASC' },
       perPage: false,
     });
     expect(result.messages.some(m => m.id === 'fail-user-1')).toBe(true);
-    expect(result.messages.some(m => m.id === 'fail-assistant-1')).toBe(true);
+    expect(result.messages.some(m => m.id === 'seed-0')).toBe(true);
+    expect(result.messages.some(m => m.id === 'seed-1')).toBe(true);
 
-    // ── Turn 2: step 0 → step 1 (observation fires, model fails → abort) ──
+    // ── Turn 2: fresh processor, same failure at step 0 → previously persisted
+    // messages must still survive across turns ──
     Object.keys(state).forEach(k => delete state[k]);
     ml = new MessageList({ threadId, resourceId });
     processor = new ObservationalMemoryProcessor(om, createMemoryProvider(om));
@@ -17211,27 +17239,12 @@ describe('Message ordering regressions', () => {
       } as any,
       'input',
     );
-    await processor.processInputStep({
-      messageList: ml,
-      messages: [],
-      requestContext: makeCtx(),
-      stepNumber: 0,
-      state,
-      steps: [],
-      systemMessages: [],
-      model: failingModel as any,
-      retryCount: 0,
-      writer: mockWriter as any,
-      abort,
-    });
-
-    // Step 1: threshold exceeded → sync observation fires → model throws → abort
     await expect(
       processor.processInputStep({
         messageList: ml,
         messages: [],
         requestContext: makeCtx(),
-        stepNumber: 1,
+        stepNumber: 0,
         state,
         steps: [],
         systemMessages: [],
@@ -17242,16 +17255,17 @@ describe('Message ordering regressions', () => {
       }),
     ).rejects.toThrow();
 
-    // Despite observation failure, all previously persisted messages must survive
+    // Despite repeated observation failures, all previously persisted messages survive
     result = await storage.listMessages({
       threadId,
       orderBy: { field: 'createdAt', direction: 'ASC' },
       perPage: false,
     });
     expect(result.messages.some(m => m.id === 'fail-user-1')).toBe(true);
-    expect(result.messages.some(m => m.id === 'fail-assistant-1')).toBe(true);
-    // Turn 2's user message was saved at step 1 *before* observation ran
+    // Turn 2's user message was saved *before* observation ran
     expect(result.messages.some(m => m.id === 'fail-user-2')).toBe(true);
+    expect(result.messages.some(m => m.id === 'seed-0')).toBe(true);
+    expect(result.messages.some(m => m.id === 'seed-1')).toBe(true);
   });
 
   // ─── Test 4: all messages present in storage after processOutputResult ───
@@ -17267,9 +17281,12 @@ describe('Message ordering regressions', () => {
     const stored = await s.getStoredMessages();
     const runtimeMessages = s.currentMessageList.get.all.db();
 
-    // Every non-system message from runtime must exist in storage by exact ID
+    // Every non-system message from runtime must exist in storage by exact ID.
+    // The synthetic 'om-continuation' hint is deliberately never persisted
+    // (every OM cleanup path skips it) — present here since #16523 because
+    // the over-threshold step 0 now observes.
     for (const msg of runtimeMessages) {
-      if (msg.role === 'system') continue;
+      if (msg.role === 'system' || msg.id === 'om-continuation') continue;
       const inStorage = stored.find(sm => sm.id === msg.id);
       expect(inStorage).toBeDefined();
     }
@@ -17447,5 +17464,478 @@ describe('Message ordering regressions', () => {
     // No duplicate IDs
     const ids = stored.map(m => m.id);
     expect(new Set(ids).size).toBe(ids.length);
+  });
+});
+
+describe('filterObservedMessages — tool-call/result pair preservation', () => {
+  it('keeps the tool-call message during marker pruning when its result is still unobserved', async () => {
+    const { MessageList } = await import('@mastra/core/agent');
+
+    const threadId = 'tool-pair-marker-thread';
+    const resourceId = 'tool-pair-marker-resource';
+    const messageList = new MessageList({ threadId, resourceId });
+
+    const t0 = new Date('2025-01-01T10:00:00.000Z');
+    const t1 = new Date('2025-01-01T10:00:01.000Z');
+
+    messageList.add(
+      {
+        id: 'tool-call-before-marker',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'call',
+                toolCallId: 'tc-marker-1',
+                toolName: 'test-tool',
+                args: {},
+              },
+            },
+          ],
+        },
+        createdAt: t0,
+      } as any,
+      'memory',
+    );
+
+    messageList.add(
+      {
+        id: 'marker-msg',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            { type: 'text', text: 'observed-prefix' },
+            { type: 'data-om-observation-end', data: { cycleId: 'marker-cycle' } },
+            { type: 'text', text: 'fresh-tail' },
+          ],
+        },
+        createdAt: t1,
+      } as any,
+      'memory',
+    );
+
+    messageList.add(
+      {
+        id: 'tool-result-after-marker',
+        threadId,
+        resourceId,
+        role: 'tool',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'tc-marker-1',
+                result: 'tool output',
+              },
+            },
+          ],
+        },
+        createdAt: new Date(t1.getTime() + 1),
+      } as any,
+      'memory',
+    );
+
+    filterObservedMessages({
+      messageList,
+      record: { observedMessageIds: ['tool-call-before-marker', 'marker-msg'] } as any,
+      useMarkerBoundaryPruning: true,
+    });
+
+    const remaining = messageList.get.all.db();
+    const remainingIds = remaining.map((m: any) => m.id);
+    const marker = remaining.find((m: any) => m.id === 'marker-msg');
+
+    expect(remainingIds).toContain('tool-call-before-marker');
+    expect(remainingIds).toContain('marker-msg');
+    expect(remainingIds).toContain('tool-result-after-marker');
+    expect(marker?.content?.parts?.map((part: any) => part.type)).toEqual(['text']);
+    expect(marker?.content?.parts?.[0]?.text).toBe('fresh-tail');
+  });
+
+  it('removes the tool-call message during marker pruning when its result was already observed before the marker', async () => {
+    const { MessageList } = await import('@mastra/core/agent');
+
+    const threadId = 'tool-pair-marker-observed-thread';
+    const resourceId = 'tool-pair-marker-observed-resource';
+    const messageList = new MessageList({ threadId, resourceId });
+
+    const t0 = new Date('2025-01-01T10:00:00.000Z');
+    const t1 = new Date('2025-01-01T10:00:01.000Z');
+    const t2 = new Date('2025-01-01T10:00:02.000Z');
+
+    messageList.add(
+      {
+        id: 'tool-call-before-observed-result',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'call',
+                toolCallId: 'tc-marker-2',
+                toolName: 'test-tool',
+                args: {},
+              },
+            },
+          ],
+        },
+        createdAt: t0,
+      } as any,
+      'memory',
+    );
+
+    messageList.add(
+      {
+        id: 'tool-result-before-marker',
+        threadId,
+        resourceId,
+        role: 'tool',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'tc-marker-2',
+                result: 'tool output',
+              },
+            },
+          ],
+        },
+        createdAt: t1,
+      } as any,
+      'memory',
+    );
+
+    messageList.add(
+      {
+        id: 'marker-msg-observed-result',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            { type: 'text', text: 'observed-prefix' },
+            { type: 'data-om-observation-end', data: { cycleId: 'marker-cycle-2' } },
+            { type: 'text', text: 'fresh-tail' },
+          ],
+        },
+        createdAt: t2,
+      } as any,
+      'memory',
+    );
+
+    filterObservedMessages({
+      messageList,
+      record: {
+        observedMessageIds: [
+          'tool-call-before-observed-result',
+          'tool-result-before-marker',
+          'marker-msg-observed-result',
+        ],
+      } as any,
+      useMarkerBoundaryPruning: true,
+    });
+
+    const remaining = messageList.get.all.db();
+    const remainingIds = remaining.map((m: any) => m.id);
+
+    expect(remainingIds).not.toContain('tool-call-before-observed-result');
+    expect(remainingIds).not.toContain('tool-result-before-marker');
+    expect(remainingIds).toEqual(['marker-msg-observed-result']);
+  });
+
+  it('keeps the tool-call message when its result is in an unobserved message', async () => {
+    const { MessageList } = await import('@mastra/core/agent');
+
+    const threadId = 'tool-pair-test-thread';
+    const resourceId = 'tool-pair-test-resource';
+    const messageList = new MessageList({ threadId, resourceId });
+
+    const t0 = new Date('2025-01-01T10:00:00.000Z');
+    const t1 = new Date('2025-01-01T10:00:01.000Z');
+
+    // Add observed message with tool call
+    messageList.add(
+      {
+        id: 'tool-call-msg',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'call',
+                toolCallId: 'tc-1',
+                toolName: 'test-tool',
+                args: {},
+              },
+            },
+          ],
+        },
+        createdAt: t0,
+      } as any,
+      'memory',
+    );
+
+    // Add unobserved message with tool result
+    messageList.add(
+      {
+        id: 'tool-result-msg',
+        threadId,
+        resourceId,
+        role: 'user',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'tc-1',
+                result: 'tool output',
+              },
+            },
+          ],
+        },
+        createdAt: t1,
+      } as any,
+      'memory',
+    );
+
+    filterObservedMessages({
+      messageList,
+      record: { observedMessageIds: ['tool-call-msg'] } as any,
+    });
+
+    const remaining = messageList.get.all.db();
+    const remainingIds = remaining.map((m: any) => m.id);
+
+    expect(remainingIds).toContain('tool-call-msg');
+  });
+
+  it('keeps the tool-call message when fallback cursor pruning would remove it', async () => {
+    const { MessageList } = await import('@mastra/core/agent');
+
+    const threadId = 'tool-pair-fallback-cursor-thread';
+    const resourceId = 'tool-pair-fallback-cursor-resource';
+    const messageList = new MessageList({ threadId, resourceId });
+
+    const t0 = new Date('2025-01-01T10:00:00.000Z');
+    const t1 = new Date('2025-01-01T10:00:01.000Z');
+    const t2 = new Date('2025-01-01T10:00:02.000Z');
+
+    messageList.add(
+      {
+        id: 'tool-call-before-cursor',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'call',
+                toolCallId: 'tc-cursor-1',
+                toolName: 'test-tool',
+                args: {},
+              },
+            },
+          ],
+        },
+        createdAt: t0,
+      } as any,
+      'memory',
+    );
+
+    messageList.add(
+      {
+        id: 'cursor-msg',
+        threadId,
+        resourceId,
+        role: 'user',
+        content: { format: 2, parts: [{ type: 'text', text: 'cursor' }] },
+        createdAt: t1,
+      } as any,
+      'memory',
+    );
+
+    messageList.add(
+      {
+        id: 'tool-result-after-cursor',
+        threadId,
+        resourceId,
+        role: 'tool',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'tc-cursor-1',
+                result: 'tool output',
+              },
+            },
+          ],
+        },
+        createdAt: t2,
+      } as any,
+      'memory',
+    );
+
+    filterObservedMessages({
+      messageList,
+      record: { observedMessageIds: ['cursor-msg'] } as any,
+      useMarkerBoundaryPruning: false,
+    });
+
+    const remainingIds = messageList.get.all.db().map((m: any) => m.id);
+
+    expect(remainingIds).toContain('tool-call-before-cursor');
+    expect(remainingIds).toContain('tool-result-after-cursor');
+    expect(remainingIds).not.toContain('cursor-msg');
+  });
+
+  it('keeps the tool-call message when fallback time pruning would remove it', async () => {
+    const { MessageList } = await import('@mastra/core/agent');
+
+    const threadId = 'tool-pair-fallback-time-thread';
+    const resourceId = 'tool-pair-fallback-time-resource';
+    const messageList = new MessageList({ threadId, resourceId });
+
+    const t0 = new Date('2025-01-01T10:00:00.000Z');
+    const t1 = new Date('2025-01-01T10:00:01.000Z');
+
+    messageList.add(
+      {
+        id: 'tool-call-before-last-observed',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'call',
+                toolCallId: 'tc-time-1',
+                toolName: 'test-tool',
+                args: {},
+              },
+            },
+          ],
+        },
+        createdAt: t0,
+      } as any,
+      'memory',
+    );
+
+    messageList.add(
+      {
+        id: 'tool-result-after-last-observed',
+        threadId,
+        resourceId,
+        role: 'tool',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'tc-time-1',
+                result: 'tool output',
+              },
+            },
+          ],
+        },
+        createdAt: t1,
+      } as any,
+      'memory',
+    );
+
+    filterObservedMessages({
+      messageList,
+      record: {
+        observedMessageIds: [],
+        lastObservedAt: t0,
+      } as any,
+      useMarkerBoundaryPruning: false,
+    });
+
+    const remainingIds = messageList.get.all.db().map((m: any) => m.id);
+
+    expect(remainingIds).toContain('tool-call-before-last-observed');
+    expect(remainingIds).toContain('tool-result-after-last-observed');
+  });
+
+  it('removes the tool-call message when no result is pending', async () => {
+    const { MessageList } = await import('@mastra/core/agent');
+
+    const threadId = 'tool-pair-no-result-thread';
+    const resourceId = 'tool-pair-no-result-resource';
+    const messageList = new MessageList({ threadId, resourceId });
+
+    const t0 = new Date('2025-01-01T10:00:00.000Z');
+
+    // Add observed message with tool call but no result
+    messageList.add(
+      {
+        id: 'tool-call-msg-alone',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'call',
+                toolCallId: 'tc-2',
+                toolName: 'test-tool',
+                args: {},
+              },
+            },
+          ],
+        },
+        createdAt: t0,
+      } as any,
+      'memory',
+    );
+
+    filterObservedMessages({
+      messageList,
+      record: { observedMessageIds: ['tool-call-msg-alone'] } as any,
+    });
+
+    const remaining = messageList.get.all.db();
+    const remainingIds = remaining.map((m: any) => m.id);
+
+    expect(remainingIds).not.toContain('tool-call-msg-alone');
   });
 });

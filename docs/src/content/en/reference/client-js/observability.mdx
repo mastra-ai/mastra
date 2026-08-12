@@ -46,6 +46,28 @@ console.log(`Total pages: ${traces.pagination.totalPages}`)
 const completeTrace = await mastraClient.getTrace(traces.spans[0].traceId)
 ```
 
+## Listing traces for a list view
+
+`listTracesLight()` returns the same rows as a trace list, without the `input`, `output` and `attributes` payloads. Each row carries a short `inputPreview` string instead, so a list can render a preview column without transferring the whole prompt.
+
+Prefer it whenever you are rendering many traces at once, and fetch the full record only when a row is opened:
+
+```typescript
+const list = await mastraClient.listTracesLight({
+  pagination: { page: 0, perPage: 25 },
+  filters: { entityType: 'agent' },
+})
+
+for (const span of list.spans) {
+  console.log(span.name, span.inputPreview)
+}
+
+// Fetch the full payload only for the trace the user selects
+const selected = await mastraClient.getTrace(list.spans[0].traceId)
+```
+
+It accepts the same filtering, ordering and delta-polling arguments as `listTraces()`. Use `listTraces()` when you actually need the full span payloads.
+
 ## Scoring traces
 
 Score specific traces using registered scorers for evaluation:

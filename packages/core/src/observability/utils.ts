@@ -108,7 +108,7 @@ export function executeWithContextSync<T>(params: { span?: AnySpan; fn: () => T 
  * @returns The created Span or undefined if tracing is disabled
  */
 export function getOrCreateSpan<T extends SpanType>(options: GetOrCreateSpanOptions<T>): Span<T> | undefined {
-  const { type, attributes, tracingContext, requestContext, tracingOptions, ...rest } = options;
+  const { type, attributes, tracingContext, requestContext, tracingOptions, resumedFromSpanId, ...rest } = options;
 
   const metadata = {
     ...(rest.metadata ?? {}),
@@ -137,7 +137,11 @@ export function getOrCreateSpan<T extends SpanType>(options: GetOrCreateSpanOpti
     requestContext,
     tracingOptions,
     traceId: tracingOptions?.traceId,
-    parentSpanId: tracingOptions?.parentSpanId,
+    // A resumed run's parent is the suspended span, a Mastra span in the trace.
+    parentSpanId: resumedFromSpanId,
+    // tracingOptions.parentSpanId is the public external-correlation channel;
+    // the id belongs to the caller's tracing system, not Mastra's own parentage.
+    externalParentSpanId: tracingOptions?.parentSpanId,
     customSamplerOptions: {
       requestContext,
       metadata,

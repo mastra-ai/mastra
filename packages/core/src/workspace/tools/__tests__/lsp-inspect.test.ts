@@ -216,6 +216,11 @@ describe('workspace_lsp_inspect', () => {
           source: 'typescript',
         },
         {
+          message: 'Diagnostic without severity',
+          range: { start: { line: 0, character: 0 } },
+          source: 'typescript',
+        },
+        {
           severity: 2,
           message: 'Unused variable bar',
           range: { start: { line: 1, character: 6 } },
@@ -248,6 +253,11 @@ describe('workspace_lsp_inspect', () => {
         {
           severity: 'error',
           message: "Type 'number' is not assignable to type 'string'.",
+          source: 'typescript',
+        },
+        {
+          severity: 'error',
+          message: 'Diagnostic without severity',
           source: 'typescript',
         },
       ],

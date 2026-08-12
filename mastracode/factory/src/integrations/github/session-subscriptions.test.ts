@@ -135,6 +135,14 @@ describe('GitHub subscription entry points', () => {
     expect(createGithubSubscriptionTools(requestContext, githubStub)).toEqual({});
   });
 
+  it('does not expose tools without an active thread', () => {
+    const requestContext = new RequestContext();
+    requestContext.set('user', { workosId: 'user-1', organizationId: 'org-1' });
+    requestContext.set('controller', { getState: () => ({ projectRepositoryId: 'project-repository-1' }) });
+
+    expect(createGithubSubscriptionTools(requestContext, githubStub)).toEqual({});
+  });
+
   it('mints repository access and injects the fresh token into the active sandbox', async () => {
     const requestContext = authenticatedRequestContext();
     const inject = vi.fn();

@@ -14,7 +14,7 @@ Message history is the most basic and important form of memory. It gives the LLM
 
 You can also retrieve message history to display past conversations in your UI.
 
-:::info
+:::note
 Each message belongs to a thread (the conversation) and a resource (the user or entity it's associated with). See [Threads and resources](#threads-and-resources) for more detail.
 :::
 
@@ -23,7 +23,7 @@ When you use memory with a client application, send **only the new message** fro
 
 Sending the full history is redundant because Mastra loads messages from storage, and it can cause message ordering bugs when client-side timestamps conflict with stored timestamps.
 
-For an AI SDK example, see [Using Mastra Memory](/guides/build-your-ui/ai-sdk-ui#using-mastra-memory).
+For an AI SDK example, see [Using Mastra Memory](/integrations/agentic-ui/ai-sdk-ui#using-mastra-memory).
 :::
 
 ## Threads and resources
@@ -107,7 +107,7 @@ When you call the agent, messages are automatically saved to the database. You c
   </TabItem>
 </Tabs>
 
-:::info
+:::note
 
 Threads and messages are created automatically when you call `agent.generate()` or `agent.stream()`, but you can also create them manually with [`createThread()`](/reference/memory/createThread) and [`saveMessages()`](/reference/memory/memory-class).
 

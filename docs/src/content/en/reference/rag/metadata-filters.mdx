@@ -2,12 +2,13 @@
 title: "Reference: Metadata filters | RAG"
 description: Documentation for metadata filtering capabilities in Mastra, which allow for precise querying of vector search results across different vector stores.
 packages:
+  - "@mastra/oracledb"
   - "@mastra/pg"
 ---
 
 # Metadata filters
 
-Mastra provides a unified metadata filtering syntax across all vector stores, based on MongoDB/Sift query syntax. Each vector store translates these filters into their native format.
+Mastra provides a unified metadata filtering syntax across all vector stores, based on MongoDB/Sift query syntax. Each vector store translates these filters into its native query format. For example, PgVector uses PostgreSQL JSONB predicates, while OracleDB stores metadata as Oracle JSON and compiles filters to `JSON_VALUE`, `JSON_EXISTS`, `REGEXP_LIKE`, and `LIKE` predicates with bound values.
 
 ## Basic example
 
@@ -94,13 +95,13 @@ const results = await store.query({
     name: '$all',
     description: 'Matches arrays containing all elements',
     example: '{ tags: { $all: ["urgent", "high"] } }',
-    supportedBy: ['Astra', 'Pinecone', 'Upstash', 'MongoDB'],
+    supportedBy: ['Astra', 'Pinecone', 'Upstash', 'MongoDB', 'OracleDB'],
   },
   {
     name: '$elemMatch',
     description: 'Matches array elements meeting criteria',
     example: '{ scores: { $elemMatch: { $gt: 80 } } }',
-    supportedBy: ['libSQL', 'PgVector', 'MongoDB'],
+    supportedBy: ['libSQL', 'PgVector', 'MongoDB', 'OracleDB'],
   },
 ]}
 />
@@ -124,13 +125,13 @@ const results = await store.query({
     name: '$not',
     description: 'Logical NOT',
     example: '{ price: { $not: { $lt: 100 } } }',
-    supportedBy: ['Astra', 'Qdrant', 'Upstash', 'PgVector', 'libSQL', 'MongoDB'],
+    supportedBy: ['Astra', 'Qdrant', 'Upstash', 'PgVector', 'libSQL', 'MongoDB', 'OracleDB'],
   },
   {
     name: '$nor',
     description: 'Logical NOR',
     example: '{ $nor: [{ status: "deleted" }, { archived: true }] }',
-    supportedBy: ['Qdrant', 'Upstash', 'PgVector', 'libSQL', 'MongoDB'],
+    supportedBy: ['Qdrant', 'Upstash', 'PgVector', 'libSQL', 'MongoDB', 'OracleDB'],
   },
 ]}
 />
@@ -154,19 +155,19 @@ const results = await store.query({
     name: '$contains',
     description: 'Text contains substring',
     example: '{ description: { $contains: "sale" } }',
-    supportedBy: ['Upstash', 'libSQL', 'PgVector'],
+    supportedBy: ['Upstash', 'libSQL', 'PgVector', 'OracleDB'],
   },
   {
     name: '$regex',
     description: 'Regular expression match',
     example: '{ name: { $regex: "^test" } }',
-    supportedBy: ['Qdrant', 'PgVector', 'Upstash', 'MongoDB'],
+    supportedBy: ['Qdrant', 'PgVector', 'Upstash', 'MongoDB', 'OracleDB'],
   },
   {
     name: '$size',
     description: 'Array length check',
-    example: '{ tags: { $size: { $gt: 2 } } }',
-    supportedBy: ['Astra', 'libSQL', 'PgVector', 'MongoDB'],
+    example: '{ tags: { $size: 3 } }',
+    supportedBy: ['Astra', 'libSQL', 'PgVector', 'MongoDB', 'OracleDB'],
   },
   {
     name: '$geo',
@@ -266,6 +267,14 @@ const results = await store.query({
 - Empty arrays in conditions are handled gracefully
 - Metadata is stored in a JSONB column for efficient querying
 
+### OracleDB
+
+- Metadata is stored as Oracle JSON alongside each `VECTOR` row
+- Scalar comparisons use `JSON_VALUE`, while array, existence, and element-match checks use `JSON_EXISTS`
+- `$regex` uses Oracle `REGEXP_LIKE`; string `$contains` uses case-insensitive `LIKE`
+- Nested fields are supported with dot notation and are converted to quoted Oracle JSON paths
+- User-provided metadata values are bound as parameters instead of interpolated into SQL
+
 ### PgVector
 
 - Full support for PostgreSQL's native JSON querying capabilities
@@ -353,6 +362,7 @@ const results = await store.query({
 - [Cloudflare Vectorize](/reference/vectors/vectorize)
 - [libSQL](/reference/vectors/libsql)
 - [MongoDB](/reference/vectors/mongodb)
+- [OracleDB](/reference/vectors/oracledb)
 - [PgStore](/reference/vectors/pg)
 - [Pinecone](/reference/vectors/pinecone)
 - [Qdrant](/reference/vectors/qdrant)
