@@ -670,7 +670,7 @@ function MessageBubble({
   onRespond: (toolCallId: string, resumeData: string | string[] | PlanResume, promptId: string) => void;
 }) {
   const messageParts = entry.message.content.parts ?? [];
-  const parts = messageParts.filter(isRenderablePart);
+  const parts = messageParts.filter(part => isRenderablePart(part, suspensions, entry.runtimeTools));
   const message =
     parts.length === messageParts.length
       ? entry.message
@@ -730,7 +730,6 @@ function MessageBubble({
       const runtime = entry.runtimeTools?.[toolCallId];
       const tool = toolFromInvocationPart(part, runtime);
       const suspension = suspensions.get(tool.toolCallId);
-      if (tool.toolName === 'ask_user' && tool.status === 'running' && !suspension) return null;
       return (
         <ToolFactory
           toolName={tool.toolName}
@@ -815,19 +814,35 @@ function terminalInvocationStatus(invocation: ToolInvocationPart['toolInvocation
 }
 
 /** Parts that draw something: step markers and blank prose leave empty bubbles and split runs of calls. */
-function isRenderablePart(part: MessageEntry['message']['content']['parts'][number]): boolean {
+function isRenderablePart(
+  part: MessageEntry['message']['content']['parts'][number],
+  suspensions: ReadonlyMap<string, SuspensionPrompt>,
+  runtimeTools: MessageEntry['runtimeTools'],
+): boolean {
   switch (part.type) {
     case 'text':
       return part.text.trim().length > 0;
     case 'reasoning':
       return part.reasoning.trim().length > 0;
     case 'tool-invocation':
-      return isTranscriptToolVisible(part.toolInvocation.toolName);
+      return isRenderableTool(part, suspensions, runtimeTools);
     case 'file':
       return true;
     default:
       return false;
   }
+}
+
+function isRenderableTool(
+  part: ToolInvocationPart,
+  suspensions: ReadonlyMap<string, SuspensionPrompt>,
+  runtimeTools: MessageEntry['runtimeTools'],
+): boolean {
+  const tool = toolFromInvocationPart(part, runtimeTools?.[part.toolInvocation.toolCallId]);
+  if (!isTranscriptToolVisible(tool.toolName)) return false;
+
+  const awaitingPrompt = tool.toolName === 'ask_user' && tool.status === 'running' && !suspensions.has(tool.toolCallId);
+  return !awaitingPrompt;
 }
 
 /** Tools whose own card carries the turn: a group row would swallow the prompt, the plan or the skill instructions. */

@@ -200,6 +200,20 @@ describe('TranscriptEntries tool rows', () => {
     expect(within(question).getByText('Which file should I edit?')).toBeInTheDocument();
   });
 
+  it('ignores an ask_user still waiting for its prompt so the run around it stays one group', () => {
+    renderEntries([
+      assistantMessage('msg-1', [
+        doneTool('call-1', 'view'),
+        doneTool('call-2', 'view'),
+        runningTool('call-3', 'ask_user', {}),
+        doneTool('call-4', 'view'),
+      ]),
+    ]);
+
+    expect(screen.getByRole('group', { name: 'Tool group: 3 steps' })).toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: 'Question from the agent' })).not.toBeInTheDocument();
+  });
+
   it('trusts the persisted result over a stale running overlay — a lost tool_end must not spin forever', () => {
     renderEntries([
       assistantMessage('msg-1', [doneTool('call-1', 'view')], {
