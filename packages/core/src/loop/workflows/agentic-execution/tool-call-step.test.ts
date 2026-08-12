@@ -1323,6 +1323,69 @@ describe('createToolCallStep suspension metadata cleanup on resume', () => {
     expect(message.content.metadata.suspendedTools).toHaveProperty('sibling-call-id');
   });
 
+  it('still recovers the delegated runId when a workflow tool is resumed with a falsy payload', async () => {
+    // The suspension entry carries the sub-run id a delegated tool must resume into. The lookup
+    // that reads it has to run for falsy resume payloads too, because the cleanup below then
+    // removes the entry: skipping it would silently start a fresh sub-run instead.
+    const message = {
+      id: 'assistant-suspended',
+      role: 'assistant' as const,
+      createdAt: new Date(0),
+      content: {
+        format: 2 as const,
+        metadata: {
+          suspendedTools: {
+            'wf-call-id': {
+              toolCallId: 'wf-call-id',
+              toolName: 'workflow-sub',
+              runId: 'parent-run-id',
+              delegatedRunId: 'sub-run-id',
+            },
+          },
+        } as Record<string, unknown>,
+        parts: [
+          {
+            type: 'tool-invocation' as const,
+            toolInvocation: {
+              state: 'call' as const,
+              toolCallId: 'wf-call-id',
+              toolName: 'workflow-sub',
+              args: {},
+            },
+          },
+        ],
+      },
+    };
+    const messageList = {
+      get: {
+        input: { aiV5: { model: () => [] } },
+        response: { db: () => [message] },
+        all: { db: () => [message], aiV5: { model: () => [] } },
+      },
+    } as unknown as MessageList;
+    const execute = vi.fn(async () => ({ done: true }));
+
+    const toolCallStep = createToolCallStep({
+      tools: { 'workflow-sub': { execute } } as ToolSet,
+      messageList,
+      controller,
+      runId: 'parent-run-id',
+      streamState,
+      _internal: { saveQueueManager: { flushMessages: vi.fn() }, threadId: 'thread-1' },
+    } as any);
+
+    await toolCallStep.execute({
+      ...makeBaseExecuteParams(vi.fn()),
+      writer: new ToolStream({ prefix: 'tool', callId: 'wf-call-id', name: 'workflow-sub', runId: 'parent-run-id' }),
+      inputData: { toolCallId: 'wf-call-id', toolName: 'workflow-sub', args: { resumeData: false } },
+    });
+
+    expect(execute).toHaveBeenCalledWith(
+      expect.objectContaining({ suspendedToolRunId: 'sub-run-id' }),
+      expect.objectContaining({ resumeData: false }),
+    );
+  });
+
   it('leaves suspendedTools intact for a plain (non-resume) tool call', async () => {
     const message = createSuspendedAssistantMessage('other-call-id', 'other-tool');
     const flushMessages = vi.fn();

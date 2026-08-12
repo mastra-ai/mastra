@@ -838,7 +838,10 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         //if resuming a subAgent or workflow tool, we want to find the runId from when it got suspended.
         // Also look up the runId when the LLM provided resumeData in args (isResumeToolCall)
         // but omitted suspendedToolRunId — without it, workflow tools start a fresh run and re-suspend.
-        const needsRunIdLookup = resumeDataToPassToToolOptions && (isAgentTool || isWorkflowTool);
+        // Nullish, not truthy, for the same reason as the cleanup gate below: a delegated tool can
+        // be resumed with `false` / `0` / `''`, and skipping the lookup there would start a fresh
+        // sub-run (and the cleanup below would drop the entry that could still recover the id).
+        const needsRunIdLookup = resumeDataToPassToToolOptions != null && (isAgentTool || isWorkflowTool);
         if (needsRunIdLookup) {
           // Primary source: the per-iteration workflow suspend payload, which carries the
           // suspended run id partitioned per tool call (resumeLabel = toolCallId). This is
