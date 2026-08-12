@@ -110,7 +110,7 @@ const config: Config = {
         id: 'guides',
         path: 'src/content/en/guides',
         routeBasePath: 'guides',
-        sidebarPath: './src/content/en/guides/sidebars.js',
+        sidebarPath: false,
         editUrl: 'https://github.com/mastra-ai/mastra/tree/main/docs',
         admonitions: ADMONITIONS_CONFIG,
         remarkPlugins: [...SHARED_REMARK_PLUGINS],

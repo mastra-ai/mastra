@@ -26,12 +26,6 @@ const SECTIONS: SectionConfig[] = [
     sidebarKey: 'docsSidebar',
   },
   {
-    name: 'guides',
-    contentDir: 'src/content/en/guides',
-    sidebarPath: 'src/content/en/guides/sidebars.js',
-    sidebarKey: 'guidesSidebar',
-  },
-  {
     name: 'integrations',
     contentDir: 'src/content/en/integrations',
     sidebarPath: 'src/content/en/integrations/sidebars.js',
@@ -52,7 +46,6 @@ const IGNORED_PATTERNS = [
   // Temp ignore for mastra-platform docs that are in the process of moving out of the docs
   /\/mastra-platform\/.*/,
   /\/agents\/networks/,
-  /\/guides\/agent-frameworks\/ai-sdk\.mdx$/,
   /\/license\.mdx$/,
 ]
 
