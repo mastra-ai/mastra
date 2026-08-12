@@ -196,12 +196,17 @@ describe('ThreadPage loading shell', () => {
       initialThreadId: 'thread-1',
       threads: [{ id: 'thread-1' }, { id: ROUTE_THREAD_ID }],
     });
+    let resolveEnsureStarted = () => {};
+    const ensureStarted = new Promise<void>(resolve => {
+      resolveEnsureStarted = resolve;
+    });
     let resolveEnsure = () => {};
     const ensureReady = new Promise<void>(resolve => {
       resolveEnsure = resolve;
     });
     server.use(
       http.post(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/ensure`, async () => {
+        resolveEnsureStarted();
         await ensureReady;
         return HttpResponse.json({ ok: true });
       }),
@@ -210,7 +215,7 @@ describe('ThreadPage loading shell', () => {
     sessionGate.resolve();
 
     expect(await screen.findByRole('status', { name: 'Preparing session' })).toBeInTheDocument();
-    await new Promise(resolve => setTimeout(resolve, 25));
+    await ensureStarted;
     expect(onSwitchThread).not.toHaveBeenCalled();
 
     resolveEnsure();

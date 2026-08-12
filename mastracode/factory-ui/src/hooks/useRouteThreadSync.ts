@@ -92,11 +92,11 @@ export function useRouteThreadSync() {
   });
 
   useEffect(() => {
+    latestRouteThreadId.current = routeThreadId;
+    if (!sessionEnabled || status !== 'ready' || !threadsQuery.isSuccess) return;
     const sessionKeyChanged = previousSessionKey.current !== undefined && previousSessionKey.current !== sessionKey;
     previousSessionKey.current = sessionKey;
-    latestRouteThreadId.current = routeThreadId;
-    if (!routeThreadId || !sessionEnabled || status !== 'ready' || !threadsQuery.isSuccess) return;
-    if (threadId === routeThreadId) return;
+    if (!routeThreadId || threadId === routeThreadId) return;
     switchToRouteThread(routeThreadId, sessionKeyChanged);
   }, [routeThreadId, sessionEnabled, sessionKey, status, threadId, threadsQuery.isSuccess, threadsQuery.data]);
 }

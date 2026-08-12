@@ -260,6 +260,9 @@ describe('ThreadPage eager render during /ensure', () => {
     await waitFor(() => expect(screen.getByText('Loading messages…')).toBeInTheDocument());
     expect(textarea.value).toBe('my draft prompt');
     expect(sendButton).toBeDisabled();
+    fireEvent.drop(composerRegion.querySelector('form') ?? composerRegion, { dataTransfer: { files: [image] } });
+    fireEvent.paste(textarea, { clipboardData: { files: [image] } });
+    expect(screen.queryByRole('button', { name: 'Remove image' })).not.toBeInTheDocument();
 
     // Once messages resolve, the loader unmounts, ring stops spinning,
     // placeholder reverts, Send tooltip clears, and Send becomes enabled.

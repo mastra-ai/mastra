@@ -100,7 +100,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const attachDisabled = onUserDraft || blocked || chatPreparing;
   const { images, setImages, fileInputRef, removeImage, onPaste, onDrop, onFileInputChange } = useComposerImages({
     onUserDraft,
-    disabled: sandboxPreparing,
+    disabled: chatPreparing,
   });
   const spotlightRef = useComposerSpotlight();
   const modeSwitchPendingRef = useRef(false);

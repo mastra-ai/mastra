@@ -90,12 +90,10 @@ export function ChatSessionConfigProvider({
   const resourceOverride = userScoped
     ? null
     : new URLSearchParams(typeof window === 'undefined' ? '' : window.location.search).get('resourceId');
-  const sandboxReady = userScoped
-    ? Boolean(storedSession) && !resolvingSession
-    : resourceOverride
-      ? Boolean(resourceOverride)
-      : ensureQuery.isSuccess && Boolean(storedSession) && !resolvingSession;
-  const sessionError = userScoped ? undefined : (ensureQuery.error ?? undefined);
+  const sandboxReady = resourceOverride
+    ? Boolean(resourceOverride)
+    : ensureQuery.isSuccess && Boolean(storedSession) && !resolvingSession;
+  const sessionError = ensureQuery.error ?? undefined;
   // `resourceReady` — safe to address the agent-controller session by
   // `resourceId` for reads/streaming as soon as server-side session metadata
   // resolves. Does NOT wait on `/ensure` — the agent-controller endpoints are

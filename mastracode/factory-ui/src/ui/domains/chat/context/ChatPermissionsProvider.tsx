@@ -14,7 +14,8 @@ interface ChatPermissionsProviderProps {
 }
 
 export function ChatPermissionsProvider({ children }: ChatPermissionsProviderProps) {
-  const { resourceId, projectPath, baseUrl, sessionEnabled, resourceReady, resourceEnabled } = useChatSessionContext();
+  const { resourceId, projectPath, baseUrl, sessionEnabled, resourceReady, resourceEnabled, sandboxPreparing } =
+    useChatSessionContext();
   const [pendingPermissionCategory, setPendingPermissionCategory] = useState<ToolCategory | null>(null);
   const commonArgs = {
     agentControllerId: AGENT_CONTROLLER_ID,
@@ -29,12 +30,12 @@ export function ChatPermissionsProvider({ children }: ChatPermissionsProviderPro
     ...commonArgs,
     enabled: resourceReady || (resourceEnabled && Boolean(resourceId)),
   });
-  // In-session writes wait for sandboxReady (= sessionEnabled). The existing
-  // resourceEnabled fallback remains for session-less factory Settings pages,
-  // where the factory-level controller resource is already addressable.
+  // In-session writes wait for sandboxReady (= sessionEnabled). Sessionless
+  // Settings pages keep the factory-level resource path, which has no sandbox
+  // preparation window to wait for.
   const setPermissionForCategoryMutation = useSetPermissionForCategoryMutation({
     ...commonArgs,
-    enabled: sessionEnabled || (resourceEnabled && Boolean(resourceId)),
+    enabled: sessionEnabled || (resourceEnabled && Boolean(resourceId) && !sandboxPreparing),
   });
 
   const setPermissionForCategory = async (category: ToolCategory, policy: PermissionPolicy) => {
