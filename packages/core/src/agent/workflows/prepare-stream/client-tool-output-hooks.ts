@@ -43,14 +43,15 @@ function getToolResult(part: unknown): ToolResult | undefined {
     // AI SDK v5 wraps tool output as `{ type: 'json' | 'text' | ..., value }`.
     // Only unwrap that exact wrapper shape; a client result that merely happens
     // to contain a `value` key must pass through untouched.
-    const output =
+    const isV5Wrapper =
       typeof value === 'object' &&
       value !== null &&
       'type' in value &&
       'value' in value &&
-      Object.keys(value).length === 2
-        ? (value as Record<string, unknown>).value
-        : value;
+      Object.keys(value).length === 2;
+    // `onOutput` is a success-only hook: skip v5 error result variants.
+    if (isV5Wrapper && (value.type === 'error-text' || value.type === 'error-json')) return;
+    const output = isV5Wrapper ? (value as Record<string, unknown>).value : value;
     return { toolCallId: record.toolCallId, toolName: record.toolName, output };
   }
 
@@ -113,7 +114,11 @@ export async function fireClientToolOutputHooks({
       try {
         await tool.onOutput({ ...result, abortSignal });
       } catch (error) {
-        logger?.error('Error calling onOutput', error);
+        logger?.error('Error calling client tool onOutput', {
+          error,
+          toolName: result.toolName,
+          toolCallId: result.toolCallId,
+        });
       }
     }
   }

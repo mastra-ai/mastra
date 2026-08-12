@@ -358,19 +358,73 @@ describe('fireClientToolOutputHooks', () => {
     expect(logger.error).toHaveBeenCalled();
   });
 
-  it('no-ops when no registered tool is an execute-less onOutput tool', async () => {
+  it('does not fire onOutput for AI SDK v5 error-text outputs', async () => {
+    const onOutput = vi.fn();
+    const tools = await buildAgentTools({ serverTools: { browserTool: browserToolWith(onOutput) } });
+
+    const messages = [
+      toolCallMessage('call-1'),
+      {
+        role: 'tool' as const,
+        content: [
+          {
+            type: 'tool-result' as const,
+            toolCallId: 'call-1',
+            toolName: 'browserTool',
+            output: { type: 'error-text' as const, value: 'client failed' },
+          },
+        ],
+      },
+    ];
+
+    await fireClientToolOutputHooks({ messages, tools });
+
+    expect(onOutput).not.toHaveBeenCalled();
+  });
+
+  it('does not fire onOutput for AI SDK v5 error-json outputs', async () => {
+    const onOutput = vi.fn();
+    const tools = await buildAgentTools({ serverTools: { browserTool: browserToolWith(onOutput) } });
+
+    const messages = [
+      toolCallMessage('call-1'),
+      {
+        role: 'tool' as const,
+        content: [
+          {
+            type: 'tool-result' as const,
+            toolCallId: 'call-1',
+            toolName: 'browserTool',
+            output: { type: 'error-json' as const, value: { code: 'E_FAIL' } },
+          },
+        ],
+      },
+    ];
+
+    await fireClientToolOutputHooks({ messages, tools });
+
+    expect(onOutput).not.toHaveBeenCalled();
+  });
+
+  it('no-ops without reading messages when no registered tool is an execute-less onOutput tool', async () => {
     const tools = await buildAgentTools({
       serverTools: {
         plain: createTool({ id: 'plain', description: 'no hooks', inputSchema: z.object({}) }),
       },
     });
 
-    const messageList = new MessageList();
-    const getInput = vi.spyOn(messageList.get, 'input', 'get');
+    // The messages input must not even be read when the tool precheck fails.
+    let read = false;
+    const messages = new Proxy([toolCallMessage('call-1', 'plain'), toolResultMessage('call-1', 'x', 'plain')], {
+      get(target, prop, receiver) {
+        read = true;
+        return Reflect.get(target, prop, receiver);
+      },
+    });
 
-    await fireClientToolOutputHooks({ messages: messageList.get.input.db(), tools });
+    await fireClientToolOutputHooks({ messages, tools });
 
-    expect(getInput).not.toHaveBeenCalled();
+    expect(read).toBe(false);
   });
 });
 
