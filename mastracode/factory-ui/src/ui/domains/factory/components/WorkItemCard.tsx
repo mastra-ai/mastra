@@ -67,7 +67,8 @@ function cardPrimaryAction({
   onCreateSession: (spec: { branch: string; threadTitle: string }) => void;
 }): CardPrimaryAction {
   if (proposal !== undefined) {
-    const label = runAction?.label ?? 'Start run';
+    const proposed = runSpec?.actions.find(action => action.role === proposal.role) ?? runAction;
+    const label = proposed?.label ?? 'Start run';
     return { label, ariaLabel: `${label} ${item.title}`, start: () => onApproveProposal(proposal.id) };
   }
   if (runSpec !== undefined && runAction !== undefined) {
