@@ -180,6 +180,7 @@ export class OtelBridge extends BaseExporter implements ObservabilityBridge {
     try {
       // Determine parent context
       let parentOtelContext = otelContext.active();
+      let usedPersistedParent = false;
 
       // Get external parent ID (walks up chain to find non-internal parent)
       const externalParentId = getExternalParentId(options);
@@ -205,6 +206,7 @@ export class OtelBridge extends BaseExporter implements ObservabilityBridge {
         };
         if (isSpanContextValid(candidate)) {
           parentOtelContext = otelTrace.setSpanContext(parentOtelContext, candidate);
+          usedPersistedParent = true;
         }
       }
 
@@ -249,8 +251,11 @@ export class OtelBridge extends BaseExporter implements ObservabilityBridge {
 
       // Declare which kind of parent was used: a span this bridge created for
       // a Mastra span is part of the Mastra trace, while anything else in the
-      // ambient OTEL context belongs to the external tracing system.
-      const parentIsMastraSpan = parentSpanId !== undefined && this.otelSpanMap.has(parentSpanId);
+      // ambient OTEL context belongs to the external tracing system. A parent
+      // restored from persisted state is a Mastra span in storage — it ended at
+      // suspend (possibly in another process), so it is absent from the live map.
+      const parentIsMastraSpan =
+        parentSpanId !== undefined && (this.otelSpanMap.has(parentSpanId) || usedPersistedParent);
 
       this.logger.debug(
         `[OtelBridge.createSpan] Created span [spanId=${spanId}] [traceId=${traceId}] ` +
