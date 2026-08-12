@@ -4,11 +4,11 @@ import { Spinner } from '@/ds/components/Spinner';
 export function getStatusIcon(status: string) {
   switch (status) {
     case 'running':
-      return <Spinner />;
+      return <Spinner aria-hidden role="presentation" />;
     case 'success':
-      return <CheckIcon />;
+      return <CheckIcon aria-hidden />;
     case 'failed':
-      return <XIcon />;
+      return <XIcon aria-hidden />;
     default:
       return null;
   }
