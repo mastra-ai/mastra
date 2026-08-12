@@ -268,7 +268,6 @@ async function assertExistingTablesCompatibleWithReplication(
   logger?: IMastraLogger,
 ): Promise<void> {
   if (!isReplicationConfigured(replication)) return;
-  if (replication.allowMixedEngines) return;
 
   try {
     const result = await client.query({
@@ -282,8 +281,7 @@ async function assertExistingTablesCompatibleWithReplication(
     if (localTable) {
       logger?.warn?.(
         `ClickHouse replication is enabled, but pre-existing observability table '${localTable.name}' uses local engine '${localTable.engine}'. ` +
-          `CREATE TABLE IF NOT EXISTS will leave existing tables untouched. ` +
-          `Set replication.allowMixedEngines to true to suppress this warning.`,
+          `CREATE TABLE IF NOT EXISTS will leave existing tables untouched.`,
       );
     }
   } catch {

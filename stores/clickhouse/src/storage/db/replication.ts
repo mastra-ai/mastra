@@ -8,8 +8,6 @@ export interface ClickhouseReplicationConfig {
   zookeeperPath?: string;
   /** Replica name. Supports ClickHouse macros like {replica}. */
   replicaName?: string;
-  /** When true, suppresses warnings when pre-existing local (non-replicated) tables are detected alongside replication configuration. */
-  allowMixedEngines?: boolean;
 }
 
 const DEFAULT_ZOOKEEPER_PATH = '/clickhouse/tables/{shard}/{database}/{table}';

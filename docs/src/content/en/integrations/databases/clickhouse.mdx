@@ -216,7 +216,7 @@ The same `client` form is accepted by `ObservabilityStorageClickhouse` and `Obse
   },
   {
     name: 'replication',
-    type: '{ cluster?: string; zookeeperPath?: string; replicaName?: string; allowMixedEngines?: boolean }',
+    type: '{ cluster?: string; zookeeperPath?: string; replicaName?: string }',
     description:
       'Opt-in replicated table configuration for multi-replica ClickHouse clusters. When set, Mastra creates replicated MergeTree tables. When `cluster` is set, Mastra also adds `ON CLUSTER` to Mastra-owned data definition language (DDL).',
     isOptional: true,
@@ -273,7 +273,7 @@ Set `cluster` to add `ON CLUSTER` to Mastra-owned DDL such as table creation, ma
 
 Manual maintenance such as `optimizeTable()` and `materializeTtl()` runs on every replica when `cluster` is set. These operations can be expensive on a large cluster. Prefer running them outside peak hours, and let routine merges happen on the background merge queue rather than triggering them on every restart.
 
-If existing Mastra tables use local `MergeTree` or `ReplacingMergeTree` engines, Mastra emits a warning during initialization when `replication` is configured (since `CREATE TABLE IF NOT EXISTS` will leave existing tables untouched). To suppress this warning when deliberately keeping existing local tables, set `allowMixedEngines: true` in `replication`. To migrate local tables to replicated engines, recreate the affected tables as `Replicated*` before enabling replication. To migrate safely, rename the local table, run `CREATE TABLE ... ENGINE = ReplicatedMergeTree(...) ON CLUSTER ...`, run `INSERT INTO ... SELECT * FROM <renamed_local>`, then drop `<renamed_local>`.
+If existing Mastra tables use local `MergeTree` or `ReplacingMergeTree` engines, Mastra emits a warning during initialization when `replication` is configured (since `CREATE TABLE IF NOT EXISTS` will leave existing tables untouched). To migrate local tables to replicated engines, recreate the affected tables as `Replicated*` before enabling replication. To migrate safely, rename the local table, run `CREATE TABLE ... ENGINE = ReplicatedMergeTree(...) ON CLUSTER ...`, run `INSERT INTO ... SELECT * FROM <renamed_local>`, then drop `<renamed_local>`.
 
 Don't set `replication` on ClickHouse Cloud. Cloud rewrites `MergeTree` to `SharedMergeTree` server-side, and explicit `ReplicatedMergeTree` engines produce incorrect DDL. `replication` is only for self-managed multi-replica clusters.
 

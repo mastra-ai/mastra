@@ -2157,33 +2157,6 @@ describe('ObservabilityStorageClickhouseVNext', () => {
       await expect(storage.init()).resolves.not.toThrow();
       expect(warnings.some(w => w.includes("pre-existing observability table 'mastra_ai_spans'"))).toBe(true);
     });
-
-    it('suppresses warning when allowMixedEngines is true', async () => {
-      const warnings: string[] = [];
-      const client = {
-        query: async ({ query }: { query: string }) => {
-          if (query.includes('system.tables')) {
-            return { json: async () => [{ name: 'mastra_ai_spans', engine: 'ReplacingMergeTree' }] };
-          }
-          return { json: async () => [] };
-        },
-        command: async () => {},
-      };
-      const logger = {
-        warn: (msg: string) => warnings.push(msg),
-        info: () => {},
-        error: () => {},
-        debug: () => {},
-      };
-      const storage = new ObservabilityStorageClickhouseVNext({
-        client: client as any,
-        replication: { cluster: 'cluster-a', allowMixedEngines: true },
-        logger: logger as any,
-      });
-
-      await expect(storage.init()).resolves.not.toThrow();
-      expect(warnings).toHaveLength(0);
-    });
   });
 
   // ==========================================================================

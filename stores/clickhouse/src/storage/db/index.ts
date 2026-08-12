@@ -190,7 +190,6 @@ export class ClickhouseDB extends MastraBase {
 
   private async assertExistingTableCompatibleWithReplication(tableName: string): Promise<void> {
     if (!isReplicationConfigured(this.replication)) return;
-    if (this.replication.allowMixedEngines) return;
 
     try {
       const result = await this.client.query({
@@ -203,8 +202,7 @@ export class ClickhouseDB extends MastraBase {
       if (localTables.length > 0) {
         this.logger?.warn?.(
           `ClickHouse replication is enabled, but pre-existing table '${tableName}' uses local engine '${localTables[0]?.engine}'. ` +
-            `CREATE TABLE IF NOT EXISTS will leave existing tables untouched. ` +
-            `Set replication.allowMixedEngines to true to suppress this warning.`,
+            `CREATE TABLE IF NOT EXISTS will leave existing tables untouched.`,
         );
       }
     } catch {
