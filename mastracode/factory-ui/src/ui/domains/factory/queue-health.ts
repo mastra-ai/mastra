@@ -100,6 +100,15 @@ function latestOpenEntryFor(open: WorkItemStageEntry[], stage: string): WorkItem
 }
 
 /**
+ * Cards the Factory ran: starting a run records its session on the row. Mirrors
+ * `hasFactoryRun` in `factory/metrics.ts` — the server module this one is the
+ * UI half of, and whose population the Overview header reports.
+ */
+function hasFactoryRun(item: QueueHealthWorkItem): boolean {
+  return Object.keys(item.sessions).length > 0;
+}
+
+/**
  * Aggregate work items into per-stage age buckets plus an active-work count.
  *
  * Aging is per-(item, stage): an item holding N open stages contributes one
@@ -107,6 +116,13 @@ function latestOpenEntryFor(open: WorkItemStageEntry[], stage: string): WorkItem
  * reflects the age of work *currently in that stage* (totals across bars may
  * exceed the unique-item count). A held stage with no open history entry
  * falls back to the item's `createdAt`.
+ *
+ * Only cards the Factory ran are charted, so the bars sum to the in-flight
+ * count above them. Filtering here rather than at the call site keeps the two
+ * halves of one screen from drifting apart: the integrations sync every issue
+ * and PR of a connected repo into the lanes, and those cards age forever
+ * without anyone working them — charting them pins the queue red on the
+ * upstream backlog rather than on work that is actually stuck.
  */
 export function computeQueueHealth(
   items: QueueHealthWorkItem[],
@@ -125,6 +141,8 @@ export function computeQueueHealth(
   const entries: QueueHealthEntry[] = [];
 
   for (const item of items) {
+    if (!hasFactoryRun(item)) continue;
+
     const inFlightStages = item.stages.filter(stage => !TERMINAL_STAGES.has(stage));
     if (inFlightStages.length === 0) continue;
 

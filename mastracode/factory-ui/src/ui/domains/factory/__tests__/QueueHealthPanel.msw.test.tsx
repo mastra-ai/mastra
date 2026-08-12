@@ -24,7 +24,7 @@ function card(id: string, title: string, enteredAt: string) {
     title,
     stages: ['triage'],
     stageHistory: [{ stage: 'triage', enteredAt, by: 'user-1' }],
-    sessions: {},
+    sessions: { execute: { sessionId: `session-${id}`, branch: 'factory/1', threadId: 'thread-1' } },
     metadata: null,
     revision: 1,
     createdAt: enteredAt,

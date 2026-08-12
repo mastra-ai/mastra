@@ -191,58 +191,63 @@ function stagesHeldAt(item: WorkItemRow, time: number): Set<string> {
   return held;
 }
 
-export function computeFactoryMetrics(
-  boardItems: WorkItemRow[],
-  opts: { windowStart: number; windowEnd: number },
-): FactoryMetrics {
-  const { windowStart, windowEnd } = opts;
-  const items = boardItems.filter(hasFactoryRun);
-  assertParsableHistory(items);
+type Window = { windowStart: number; windowEnd: number };
 
-  // ── Throughput + lead time (completions in window) ────────────────────────
+/**
+ * Completions per UTC day, plus one lead-time sample each. A completion is an
+ * entry *into* `done`, not the state of the card now: a card reopened today
+ * must not erase the day it shipped, and a card that shipped twice shipped
+ * twice. Days before the oldest card are left out rather than gap-filled with
+ * zeroes that would drag the daily average down.
+ */
+function completions(items: WorkItemRow[], { windowStart, windowEnd }: Window) {
   let earliestItem = Infinity;
   for (const item of items) earliestItem = Math.min(earliestItem, item.createdAt.getTime());
   const boardStart = Number.isFinite(earliestItem) ? utcDayStart(earliestItem) : -Infinity;
-  const firstDay = Math.max(utcDayStart(windowStart), boardStart);
 
-  const throughputByDay = new Map<string, number>();
-  for (let day = firstDay; day < windowEnd; day += DAY_MS) {
-    throughputByDay.set(utcDay(day), 0);
+  const byDay = new Map<string, number>();
+  for (let day = Math.max(utcDayStart(windowStart), boardStart); day < windowEnd; day += DAY_MS) {
+    byDay.set(utcDay(day), 0);
   }
-  // A completion is an entry *into* `done`, not the state of the card now: a
-  // card reopened today must not erase the day it shipped, and a card that
-  // shipped twice shipped twice.
+
   const leadSamples: number[] = [];
   for (const item of items) {
     for (const entry of item.stageHistory) {
       if (entry.stage !== DONE_STAGE) continue;
       const doneAt = parseTime(entry.enteredAt);
       if (doneAt < windowStart || doneAt >= windowEnd) continue;
-      const day = utcDay(doneAt);
-      throughputByDay.set(day, (throughputByDay.get(day) ?? 0) + 1);
+      byDay.set(utcDay(doneAt), (byDay.get(utcDay(doneAt)) ?? 0) + 1);
       leadSamples.push(Math.max(0, doneAt - item.createdAt.getTime()));
     }
   }
+  return { byDay, leadSamples };
+}
 
-  // ── Current in-flight count (window-independent) ──────────────────────────
-  let wipTotal = 0;
-  for (const item of items) {
-    if (item.stages.some(isPipelineStage)) wipTotal += 1;
-  }
+/** Cards holding at least one pipeline stage right now — window-independent. */
+function countInFlight(items: WorkItemRow[]): number {
+  return items.filter(item => item.stages.some(isPipelineStage)).length;
+}
 
-  // ── Demand mix (window) ───────────────────────────────────────────────────
-  const sourceCounts = new Map<string, number>();
+/** Where the window's cards came from, most common first. */
+function demandMix(items: WorkItemRow[], { windowStart, windowEnd }: Window): FactoryMetrics['sourceMix'] {
+  const counts = new Map<string, number>();
   for (const item of items) {
     const created = item.createdAt.getTime();
     if (created < windowStart || created >= windowEnd) continue;
     const source = item.externalSource ? `${item.externalSource.integrationId}:${item.externalSource.type}` : 'manual';
-    sourceCounts.set(source, (sourceCounts.get(source) ?? 0) + 1);
+    counts.set(source, (counts.get(source) ?? 0) + 1);
   }
+  return [...counts.entries()].map(([source, count]) => ({ source, count })).sort((a, b) => b.count - a.count);
+}
 
-  // ── Per-stage agent coverage (first visits that exited in window) ─────────
-  // Rows appear in insertion order of each stage's first counted exit; only
-  // pipeline stages get rows (intake and terminal stages have no pass through).
-  const coverageByStage = new Map<string, FactoryMetrics['agentCoverage'][number]>();
+/**
+ * How much of each stage's work an agent finished, counting a card's first
+ * visit to a stage once. Rows appear in insertion order of each stage's first
+ * counted exit; only pipeline stages get rows, since intake and terminal
+ * stages have no pass to hand over.
+ */
+function agentCoverage(items: WorkItemRow[], { windowStart, windowEnd }: Window): FactoryMetrics['agentCoverage'] {
+  const byStage = new Map<string, FactoryMetrics['agentCoverage'][number]>();
   for (const item of items) {
     const heldAtWindowEnd = stagesHeldAt(item, windowEnd);
     const visited = new Set<string>();
@@ -253,7 +258,8 @@ export function computeFactoryMetrics(
       if (entry.exitedAt === undefined) continue;
       const exited = parseTime(entry.exitedAt);
       if (exited < windowStart || exited >= windowEnd) continue;
-      let row = coverageByStage.get(entry.stage);
+
+      let row = byStage.get(entry.stage);
       if (!row) {
         row = {
           stage: entry.stage,
@@ -261,11 +267,12 @@ export function computeFactoryMetrics(
           byAgent: 0,
           outcomes: { done: 0, canceled: 0, reworked: 0, inFlight: 0 },
         };
-        coverageByStage.set(entry.stage, row);
+        byStage.set(entry.stage, row);
       }
       row.passes += 1;
       if (!isAgentActor(entry.exitedBy)) continue;
       row.byAgent += 1;
+
       const reworked = item.stageHistory.some(
         (later, j) => j > i && later.stage === entry.stage && parseTime(later.enteredAt) < windowEnd,
       );
@@ -275,10 +282,18 @@ export function computeFactoryMetrics(
       else row.outcomes.inFlight += 1;
     }
   }
+  return [...byStage.values()];
+}
+
+export function computeFactoryMetrics(boardItems: WorkItemRow[], window: Window): FactoryMetrics {
+  const items = boardItems.filter(hasFactoryRun);
+  assertParsableHistory(items);
+
+  const { byDay, leadSamples } = completions(items, window);
 
   return {
-    daysCovered: throughputByDay.size,
-    throughput: [...throughputByDay.entries()]
+    daysCovered: byDay.size,
+    throughput: [...byDay.entries()]
       .map(([date, count]) => ({ date, count }))
       .sort((a, b) => a.date.localeCompare(b.date)),
     leadTime: {
@@ -286,10 +301,8 @@ export function computeFactoryMetrics(
       p90Ms: percentile(leadSamples, 0.9),
       samples: leadSamples.length,
     },
-    wipTotal,
-    sourceMix: [...sourceCounts.entries()]
-      .map(([source, count]) => ({ source, count }))
-      .sort((a, b) => b.count - a.count),
-    agentCoverage: [...coverageByStage.values()],
+    wipTotal: countInFlight(items),
+    sourceMix: demandMix(items, window),
+    agentCoverage: agentCoverage(items, window),
   };
 }

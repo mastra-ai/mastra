@@ -24,7 +24,7 @@ function makeItem(overrides: Partial<QueueHealthWorkItem> = {}): QueueHealthWork
     url: null,
     stages: ['intake'],
     stageHistory: [],
-    sessions: {},
+    sessions: { work: { sessionId: `session-${nextId}`, branch: 'b', threadId: 't', startedBy: 'u1' } },
     metadata: {},
     revision: 1,
     createdAt: new Date(NOW.getTime() - 1000),
@@ -62,6 +62,15 @@ describe('computeQueueHealth', () => {
     expect(health.entries).toEqual([]);
   });
 
+  it('leaves out cards nobody ran, so the bars sum to the in-flight count', () => {
+    const ran = inStage('triage', 259200);
+    const synced = inStage('triage', 259200, { sessions: {} });
+    const health = computeQueueHealth([ran, synced], new Set(), DEFAULT, NOW);
+    const triage = health.stages.find(s => s.stage === 'triage')!;
+    expect(triage.total).toBe(1);
+    expect(health.entries.map(e => e.itemId)).toEqual([ran.id]);
+  });
+
   it('buckets an item by age with the >= boundary rule (exact boundary moves up)', () => {
     // 4h/24h/72h boundaries: [14400, 86400, 259200]
     const items = [
@@ -95,14 +104,14 @@ describe('computeQueueHealth', () => {
     expect(health.entries.find(e => e.stage === 'review')!.ageSeconds).toBe(259200);
   });
 
-  it('counts an entry active when the item has a session whose projectPath is active', () => {
+  it("counts an entry active when one of the item's sessions has a run in progress", () => {
     const active = inStage('execute', 100, {
-      sessions: { work: { sessionId: '/wt/a', branch: 'b', threadId: 't', startedBy: 'u1' } },
+      sessions: { work: { sessionId: 'session-running', branch: 'b', threadId: 't', startedBy: 'u1' } },
     });
     const idle = inStage('execute', 100, {
-      sessions: { work: { sessionId: '/wt/b', branch: 'b', threadId: 't', startedBy: 'u1' } },
+      sessions: { work: { sessionId: 'session-idle', branch: 'b', threadId: 't', startedBy: 'u1' } },
     });
-    const health = computeQueueHealth([active, idle], new Set(['/wt/a']), DEFAULT, NOW);
+    const health = computeQueueHealth([active, idle], new Set(['session-running']), DEFAULT, NOW);
     const execute = health.stages.find(s => s.stage === 'execute')!;
     expect(execute.total).toBe(2);
     expect(execute.activeCount).toBe(1);
