@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
 import { renderWithProviders } from '../../../../../../../e2e/ui/render';
@@ -76,7 +76,7 @@ describe('observational memory status', () => {
   });
 
   describe('when memory is idle', () => {
-    it('shows the budgets at rest, digits folded away', () => {
+    it('shows both budgets at rest', () => {
       const { container } = renderStatus({});
 
       expect(screen.getByRole('meter', { name: 'Message window until next observation' })).toHaveAttribute(
@@ -84,6 +84,16 @@ describe('observational memory status', () => {
         '14.9/30k',
       );
       expect(container.querySelector('[data-working]')).toBeNull();
+    });
+
+    it('opens both budgets and what they do from a single control', async () => {
+      renderStatus({});
+
+      fireEvent.click(screen.getByRole('button', { name: 'Memory budgets' }));
+
+      await waitFor(() => expect(screen.getByText(/read into memory as observations/)).toBeVisible());
+      expect(screen.getByText(/consolidated into a shorter reflection/)).toBeVisible();
+      expect(screen.getByText('12/40k')).toBeVisible();
     });
   });
 

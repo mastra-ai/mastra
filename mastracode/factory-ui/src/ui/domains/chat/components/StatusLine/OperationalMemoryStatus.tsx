@@ -1,4 +1,7 @@
-import { TokenBudget, formatCompactTokens } from '@mastra/playground-ui/components/TokenBudget';
+import { buttonVariants } from '@mastra/playground-ui/components/Button';
+import { Popover, PopoverContent, PopoverTrigger } from '@mastra/playground-ui/components/Popover';
+import { TokenBudget, TokenBudgetDetail, formatCompactTokens } from '@mastra/playground-ui/components/TokenBudget';
+import { cn } from '@mastra/playground-ui/utils/cn';
 
 import { useChatRuntime } from '../../context/useChatRuntime';
 import type { OMWork } from '../../services/runtime';
@@ -34,30 +37,56 @@ export function OperationalMemoryStatus() {
 
   if (!showMsg && !showMem) return null;
 
+  const messageTone = work.messages === 'blocking' ? 'warning' : 'messages';
+  const observationTone = work.observations === 'blocking' ? 'warning' : 'memory';
+
   return (
-    <>
-      {showMsg && (
-        <TokenBudget
-          description="When it fills, the conversation so far is read into memory as observations and leaves the message window."
-          hint={savingHint(om.projectedMessageRemoval)}
-          label={messageLabel[work.messages]}
-          threshold={om.threshold}
-          tokens={om.pendingTokens}
-          tone={work.messages === 'blocking' ? 'warning' : 'messages'}
-          working={work.messages !== 'idle'}
-        />
-      )}
-      {showMem && (
-        <TokenBudget
-          description="When it fills, the observations are consolidated into a shorter reflection the agent keeps working from."
-          hint={savingHint(om.projectedReflectionSavings)}
-          label={observationLabel[work.observations]}
-          threshold={om.reflectionThreshold}
-          tokens={om.observationTokens}
-          tone={work.observations === 'blocking' ? 'warning' : 'memory'}
-          working={work.observations !== 'idle'}
-        />
-      )}
-    </>
+    <Popover>
+      <PopoverTrigger
+        aria-label="Memory budgets"
+        className={cn(buttonVariants({ variant: 'ghost', size: 'xs' }), 'gap-3')}
+      >
+        {showMsg && (
+          <TokenBudget
+            label={messageLabel[work.messages]}
+            threshold={om.threshold}
+            tokens={om.pendingTokens}
+            tone={messageTone}
+            working={work.messages !== 'idle'}
+          />
+        )}
+        {showMem && (
+          <TokenBudget
+            label={observationLabel[work.observations]}
+            threshold={om.reflectionThreshold}
+            tokens={om.observationTokens}
+            tone={observationTone}
+            working={work.observations !== 'idle'}
+          />
+        )}
+      </PopoverTrigger>
+      <PopoverContent align="start" className="flex flex-col gap-3.5" side="top">
+        {showMsg && (
+          <TokenBudgetDetail
+            description="When it fills, the conversation so far is read into memory as observations and leaves the message window."
+            hint={savingHint(om.projectedMessageRemoval)}
+            label={messageLabel[work.messages]}
+            threshold={om.threshold}
+            tokens={om.pendingTokens}
+            tone={messageTone}
+          />
+        )}
+        {showMem && (
+          <TokenBudgetDetail
+            description="When it fills, the observations are consolidated into a shorter reflection the agent keeps working from."
+            hint={savingHint(om.projectedReflectionSavings)}
+            label={observationLabel[work.observations]}
+            threshold={om.reflectionThreshold}
+            tokens={om.observationTokens}
+            tone={observationTone}
+          />
+        )}
+      </PopoverContent>
+    </Popover>
   );
 }
