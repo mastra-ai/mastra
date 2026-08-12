@@ -562,20 +562,46 @@ describe('Tracing', () => {
         expect(attributes.backup.ssn).toBe('[SSN_1]');
       });
 
-      it('should evict least recently used trace state once the cap is exceeded', () => {
+      it('should evict the least recently used trace state once the cap is exceeded', () => {
         const processor = new SensitiveDataFilter({ redactionStyle: 'indexed' });
 
-        processor.process(makeSpan('trace-evicted', { attributes: { apiKey: 'sk-first' } }));
+        processor.process(makeSpan('trace-refreshed', { attributes: { apiKey: 'sk-refreshed-1' } }));
+        processor.process(makeSpan('trace-evicted', { attributes: { apiKey: 'sk-evicted-1' } }));
 
-        // Flood past the 1000-trace cap so 'trace-evicted' is dropped
-        for (let i = 0; i < 1000; i++) {
+        // Fill the cache to exactly the 1000-trace cap
+        for (let i = 0; i < 998; i++) {
           processor.process(makeSpan(`trace-flood-${i}`, { attributes: { apiKey: `sk-flood-${i}` } }));
         }
 
-        const revisited = processor.process(makeSpan('trace-evicted', { attributes: { apiKey: 'sk-second' } }))!;
+        // Refresh the oldest trace so LRU order differs from insertion (FIFO) order
+        processor.process(makeSpan('trace-refreshed', { attributes: { apiKey: 'sk-refreshed-2' } }));
 
-        // Fresh state: a new value starts back at _1 instead of continuing at _2
-        expect((revisited.attributes as any).apiKey).toBe('[APIKEY_1]');
+        // One more distinct trace pushes past the cap, evicting 'trace-evicted'
+        processor.process(makeSpan('trace-extra', { attributes: { apiKey: 'sk-extra' } }));
+
+        // Evicted trace starts a fresh mapping: a new value restarts at _1
+        const evicted = processor.process(makeSpan('trace-evicted', { attributes: { apiKey: 'sk-evicted-2' } }))!;
+        expect((evicted.attributes as any).apiKey).toBe('[APIKEY_1]');
+
+        // Refreshed trace kept its state: a third value continues at _3
+        const refreshed = processor.process(makeSpan('trace-refreshed', { attributes: { apiKey: 'sk-refreshed-3' } }))!;
+        expect((refreshed.attributes as any).apiKey).toBe('[APIKEY_3]');
+      });
+
+      it('should fall back to the full redaction token once the per-trace value cap is reached', () => {
+        const processor = new SensitiveDataFilter({ redactionStyle: 'indexed' });
+
+        // Fill one trace to exactly the 1000-value cap
+        for (let i = 0; i < 1000; i++) {
+          processor.process(makeSpan('trace-1', { attributes: { apiKey: `sk-${i}` } }));
+        }
+
+        const span = processor.process(makeSpan('trace-1', { attributes: { apiKey: 'sk-overflow', secret: 'sk-0' } }))!;
+
+        // New value beyond the cap falls back to the full token
+        expect((span.attributes as any).apiKey).toBe('[REDACTED]');
+        // Already-tracked values keep their assigned tokens
+        expect((span.attributes as any).secret).toBe('[APIKEY_1]');
       });
     });
 

@@ -18,6 +18,13 @@ interface IndexedRedactionState {
 const MAX_TRACKED_TRACES = 1000;
 
 /**
+ * Maximum number of unique values tracked per trace for indexed redaction.
+ * Once reached, new values fall back to the full redaction token while
+ * already-tracked values keep their assigned tokens.
+ */
+const MAX_TRACKED_VALUES_PER_TRACE = 1000;
+
+/**
  * Options for configuring the SensitiveDataFilter.
  */
 export interface SensitiveDataFilterOptions {
@@ -42,8 +49,11 @@ export interface SensitiveDataFilterOptions {
    * - "partial": show 3 characters from the start and end, redact the middle.
    * - "indexed": replace each unique value with a stable token derived from the
    *   matched field name, e.g. `[APIKEY_1]`. The same value maps to the same
-   *   token across all spans of a trace, so redacted values stay correlatable
-   *   without exposing the raw value. Mapping is scoped per trace.
+   *   token across the spans of a trace while the trace's mapping is retained,
+   *   so redacted values stay correlatable without exposing the raw value.
+   *   Mapping is scoped per trace and bounded: state is kept for the 1000 most
+   *   recently used traces, and each trace tracks up to 1000 unique values
+   *   (further new values fall back to the full redaction token).
    *
    * Default: "full"
    */
@@ -265,6 +275,9 @@ export class SensitiveDataFilter implements SpanOutputProcessor {
       const existing = indexedState.tokensByValue.get(valueKey);
       if (existing) {
         return existing;
+      }
+      if (indexedState.tokensByValue.size >= MAX_TRACKED_VALUES_PER_TRACE) {
+        return this.redactionToken;
       }
       const label = normKey.toUpperCase();
       const count = (indexedState.counters.get(label) ?? 0) + 1;
