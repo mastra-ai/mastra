@@ -86,8 +86,8 @@ function NewPageContent({
   const { transcript } = useChatTranscript();
   const location = useLocation();
   const routeErrorNotice = readRouteErrorNotice(location.state);
-  const noticeEntries = transcript.entries.filter(entry => entry.kind === 'notice');
-  const hasNotices = Boolean(routeErrorNotice) || noticeEntries.length > 0;
+  const statusEntries = transcript.entries.filter(entry => entry.kind === 'notice' || entry.kind === 'error');
+  const hasNotices = Boolean(routeErrorNotice) || statusEntries.length > 0;
 
   return (
     <div className="grid min-h-0 flex-1 place-items-center overflow-y-auto px-4 py-10 md:px-6">
@@ -101,7 +101,7 @@ function NewPageContent({
         {hasNotices && (
           <div className="flex w-full flex-col gap-4">
             {routeErrorNotice && <Notice variant="destructive">{routeErrorNotice}</Notice>}
-            <TranscriptEntries entries={noticeEntries} onApprove={() => undefined} onRespond={() => undefined} />
+            <TranscriptEntries entries={statusEntries} onApprove={() => undefined} onRespond={() => undefined} />
           </div>
         )}
       </div>

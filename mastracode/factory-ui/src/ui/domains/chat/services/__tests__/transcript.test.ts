@@ -810,9 +810,9 @@ describe('transcript reducer mergeWindow', () => {
 describe('transcript reducer error notices', () => {
   function errorNoticeText(event: Record<string, unknown>): string {
     const state = transcriptReducer(initialTranscript, { type: 'event', event: { type: 'error', ...event } });
-    const notice = state.entries.find(entry => entry.kind === 'notice');
-    if (!notice || notice.kind !== 'notice') throw new Error('expected a notice entry');
-    return notice.text;
+    const entry = state.entries.find(entry => entry.kind === 'error');
+    if (!entry || entry.kind !== 'error') throw new Error('expected an error entry');
+    return entry.text;
   }
 
   it('renders a string error payload verbatim', () => {
@@ -831,6 +831,55 @@ describe('transcript reducer error notices', () => {
 
   it('falls back to a generic hint when the payload is empty', () => {
     expect(errorNoticeText({ error: {} })).toBe('Run failed with an unknown error. Check the server logs for details.');
+  });
+});
+
+describe('a failure the controller is retrying', () => {
+  const attempt = (retryAttempt: number) => ({
+    type: 'event' as const,
+    event: {
+      type: 'error' as const,
+      error: { message: 'Service Unavailable' },
+      retryable: true,
+      retryDelay: 1000,
+      retryAttempt,
+      maxRetries: 10,
+    },
+  });
+
+  it('stays out of the transcript and reports the attempt instead', () => {
+    const state = transcriptReducer(initialTranscript, attempt(1));
+
+    expect(state.entries).toHaveLength(0);
+    expect(state.retry).toEqual({ text: 'Service Unavailable', attempt: 1, maxRetries: 10 });
+  });
+
+  it('replaces the previous attempt rather than stacking', () => {
+    const state = [attempt(1), attempt(2), attempt(3)].reduce(transcriptReducer, initialTranscript);
+
+    expect(state.entries).toHaveLength(0);
+    expect(state.retry?.attempt).toBe(3);
+  });
+
+  it('is retired as soon as the run produces output again', () => {
+    const retrying = transcriptReducer(initialTranscript, attempt(1));
+    const resumed = transcriptReducer(retrying, {
+      type: 'event',
+      event: { type: 'message_update', message: dbMessage('a1', 'assistant', [{ type: 'text', text: 'Back' }]) },
+    });
+
+    expect(resumed.retry).toBeUndefined();
+  });
+
+  it('becomes a transcript entry once the controller gives up', () => {
+    const retrying = transcriptReducer(initialTranscript, attempt(10));
+    const failed = transcriptReducer(retrying, {
+      type: 'event',
+      event: { type: 'error', error: { message: 'Service Unavailable' } },
+    });
+
+    expect(failed.retry).toBeUndefined();
+    expect(failed.entries).toMatchObject([{ kind: 'error', text: 'Service Unavailable' }]);
   });
 });
 

@@ -161,7 +161,16 @@ export type KnownAgentControllerEvent =
   | { type: 'workspace_status_changed'; status: string }
   // Notices.
   | { type: 'info'; message: string }
-  | { type: 'error'; error: { message?: string } | string; errorType?: string };
+  | {
+      type: 'error';
+      error: { message?: string } | string;
+      errorType?: string;
+      /** Set when the controller scheduled an automatic retry: the run is still alive. */
+      retryable?: boolean;
+      retryDelay?: number;
+      retryAttempt?: number;
+      maxRetries?: number;
+    };
 
 /** Any other agent controller event the SDK doesn't model explicitly. */
 export interface OtherAgentControllerEvent {

@@ -4,7 +4,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 
 import { useChatTranscript } from '../context/useChatTranscript';
 import { isTerminalInvocationState } from '../services/transcript';
-import type { TimelineEntry } from '../services/transcript';
+import type { RetrySnapshot, TimelineEntry } from '../services/transcript';
 import { isTranscriptToolVisible } from './ToolFactory';
 
 /**
@@ -53,17 +53,36 @@ function awaitingFirstOutput(entries: TimelineEntry[]): boolean {
 }
 
 /**
- * Covers the silence between sending and the run's first visible output. Everything after that
- * says its own state: a running tool sweeps its label, text arrives as it streams, and the
- * composer ring carries the rest.
+ * Covers the silence between sending and the run's first visible output, and the silence of a
+ * retry wait. Everything after that says its own state: a running tool sweeps its label, text
+ * arrives as it streams, and the composer ring carries the rest.
  */
 export function ActivityLine() {
   const { busy, transcript } = useChatTranscript();
-  if (!busy || !awaitingFirstOutput(transcript.entries)) return null;
+  if (!busy) return null;
+  // A stream that drops mid-wait never sends the event that would retire the
+  // line, so `busy` — reconciled against the session state — is what ends it.
+  if (transcript.retry) return <RetryLine retry={transcript.retry} />;
+  if (!awaitingFirstOutput(transcript.entries)) return null;
 
   return (
     <Txt as="p" variant="ui-sm" aria-hidden className="text-icon3 px-1.5 py-1">
       <Shimmer>Thinking</Shimmer>
+    </Txt>
+  );
+}
+
+/**
+ * A failure the controller is retrying on its own. It reads as work in progress, because it is:
+ * the sweep says the run is alive, the attempt count says how long it can keep trying, and the
+ * whole line disappears the moment output resumes.
+ */
+function RetryLine({ retry }: { retry: RetrySnapshot }) {
+  const progress = retry.attempt && retry.maxRetries ? ` ${retry.attempt}/${retry.maxRetries}` : '';
+
+  return (
+    <Txt as="p" variant="ui-sm" role="status" aria-live="polite" className="text-icon3 px-1.5 py-1">
+      <Shimmer>{`${retry.text} · retrying${progress}`}</Shimmer>
     </Txt>
   );
 }

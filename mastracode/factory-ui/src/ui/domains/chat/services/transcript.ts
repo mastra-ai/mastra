@@ -1,4 +1,9 @@
-import type { AgentControllerEvent, AgentControllerTaskSnapshot, AgentControllerOMProgress } from '@mastra/client-js';
+import type {
+  AgentControllerEvent,
+  AgentControllerTaskSnapshot,
+  AgentControllerOMProgress,
+  KnownAgentControllerEvent,
+} from '@mastra/client-js';
 import { isKnownAgentControllerEvent } from '@mastra/client-js';
 import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent-controller';
 
@@ -50,7 +55,17 @@ export interface MessageEntry {
 export interface NoticeEntry {
   kind: 'notice';
   id: string;
-  level: 'info' | 'error';
+  text: string;
+}
+
+/**
+ * A run that died. Only failures the controller could not recover from land
+ * here — a failure it is retrying is live state (`TranscriptState.retry`), not
+ * a fact of the conversation.
+ */
+export interface ErrorEntry {
+  kind: 'error';
+  id: string;
   text: string;
 }
 
@@ -111,6 +126,7 @@ export type PromptEntry = ApprovalPrompt | SuspensionPrompt;
 export type TimelineEntry =
   | MessageEntry
   | NoticeEntry
+  | ErrorEntry
   | PromptEntry
   | NotificationEntry
   | NotificationSummaryEntry
@@ -127,6 +143,13 @@ export interface UsageSnapshot {
 
 /** OM (observational memory) status. */
 export type OMPhase = 'idle' | 'observing' | 'reflecting' | 'buffering';
+
+/** The failure behind an automatic retry, as reported by the `error` event that scheduled it. */
+export interface RetrySnapshot {
+  text: string;
+  attempt?: number;
+  maxRetries?: number;
+}
 
 /** Goal evaluation snapshot from goal_evaluation events. */
 export interface GoalSnapshot {
@@ -163,6 +186,12 @@ export interface TranscriptState {
   workspaceReady?: boolean;
   /** Latest goal evaluation. */
   goal?: GoalSnapshot;
+  /**
+   * The failure the controller is currently retrying. Live state, not history:
+   * it is replaced by each further attempt and retired the moment the stream
+   * produces anything again.
+   */
+  retry?: RetrySnapshot;
   /** Current tokens/sec throughput (0 when idle). */
   tokensPerSec: number;
   /**
@@ -258,7 +287,7 @@ export function transcriptReducer(state: TranscriptState, action: Action): Trans
     case 'clearPending':
       return { ...state, pending: false };
     case 'localNotice':
-      return pushNotice(state, action.level, action.text);
+      return action.level === 'error' ? pushError(state, action.text) : pushNotice(state, action.text);
     case 'resolvePrompt':
       return { ...state, entries: state.entries.filter(e => !('id' in e) || e.id !== action.id) };
     case 'event':
@@ -268,8 +297,9 @@ export function transcriptReducer(state: TranscriptState, action: Action): Trans
   }
 }
 
-function applyEvent(state: TranscriptState, event: AgentControllerEvent): TranscriptState {
-  if (!isKnownAgentControllerEvent(event)) return state;
+function applyEvent(previous: TranscriptState, event: AgentControllerEvent): TranscriptState {
+  if (!isKnownAgentControllerEvent(event)) return previous;
+  const state = previous.retry && streamResumed(event) ? { ...previous, retry: undefined } : previous;
   switch (event.type) {
     case 'agent_start':
       // Reset the rate at the start of a new turn (not at the end) so the last
@@ -513,12 +543,36 @@ function applyEvent(state: TranscriptState, event: AgentControllerEvent): Transc
 
     // Notices.
     case 'info':
-      return pushNotice(state, 'info', event.message);
-    case 'error':
-      return pushNotice(state, 'error', describeErrorEvent(event));
+      return pushNotice(state, event.message);
+    case 'error': {
+      // A retryable error means the controller already scheduled another
+      // attempt, so it says how the live run is doing — not that it failed.
+      const text = describeErrorEvent(event);
+      if (event.retryable) {
+        return { ...state, retry: { text, attempt: event.retryAttempt, maxRetries: event.maxRetries } };
+      }
+      return pushError({ ...state, retry: undefined }, text);
+    }
 
     default:
       return state;
+  }
+}
+
+/** Anything the run emits once it is producing again, which retires the retry line. */
+function streamResumed(event: KnownAgentControllerEvent): boolean {
+  switch (event.type) {
+    case 'agent_start':
+    case 'agent_end':
+    case 'message_start':
+    case 'message_update':
+    case 'message_end':
+    case 'tool_input_start':
+    case 'tool_start':
+    case 'tool_end':
+      return true;
+    default:
+      return false;
   }
 }
 
@@ -1061,9 +1115,12 @@ function pushPrompt(state: TranscriptState, prompt: PromptEntry): TranscriptStat
   return { ...state, entries: [...state.entries, prompt] };
 }
 
-function pushNotice(state: TranscriptState, level: 'info' | 'error', text: string): TranscriptState {
-  return {
-    ...state,
-    entries: [...state.entries, { kind: 'notice', id: `notice-${Date.now()}-${noticeSeq++}`, level, text }],
-  };
+function pushNotice(state: TranscriptState, text: string): TranscriptState {
+  const id = `notice-${Date.now()}-${noticeSeq++}`;
+  return { ...state, entries: [...state.entries, { kind: 'notice', id, text }] };
+}
+
+function pushError(state: TranscriptState, text: string): TranscriptState {
+  const id = `error-${Date.now()}-${noticeSeq++}`;
+  return { ...state, entries: [...state.entries, { kind: 'error', id, text }] };
 }

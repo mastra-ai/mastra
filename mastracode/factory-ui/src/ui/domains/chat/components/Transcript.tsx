@@ -15,6 +15,7 @@ import { Bell, CircleDot, ExternalLink, Info, Layers, Slack } from 'lucide-react
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 
+import { ErrorRow } from './ErrorRow';
 import { PullRequestStatusIcon } from '../../factory/components/PullRequestStatusIcon';
 import { useChatSessionContext } from '../context/useChatSessionContext';
 import { useChatTranscript } from '../context/useChatTranscript';
@@ -559,6 +560,8 @@ export function TranscriptEntries({
         );
       case 'notice':
         return <NoticeCard entry={entry} />;
+      case 'error':
+        return <ErrorRow>{entry.text}</ErrorRow>;
       case 'approval':
         return <ApprovalCard prompt={entry} isSubmitting={isSubmitting} onApprove={onApprove} />;
       case 'notification':
@@ -1084,8 +1087,10 @@ function statusMetadata(entry: MessageEntry): StatusMetadata | undefined {
 }
 
 function StatusMetadataCard({ status }: { status: StatusMetadata }) {
+  if (status.level === 'error') return <ErrorRow>{status.text}</ErrorRow>;
+
   return (
-    <Notice className="my-2" variant={status.level === 'error' ? 'destructive' : 'info'}>
+    <Notice className="my-2" variant="info">
       {status.text}
     </Notice>
   );
@@ -1093,7 +1098,7 @@ function StatusMetadataCard({ status }: { status: StatusMetadata }) {
 
 function NoticeCard({ entry }: { entry: NoticeEntry }) {
   return (
-    <Notice className="my-2" variant={entry.level === 'error' ? 'destructive' : 'info'}>
+    <Notice className="my-2" variant="info">
       <div className="prose">
         <Markdown>{entry.text}</Markdown>
       </div>
