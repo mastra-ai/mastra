@@ -205,7 +205,7 @@ describe('TranscriptEntries tool rows', () => {
       assistantMessage('msg-1', [
         doneTool('call-1', 'view'),
         doneTool('call-2', 'view'),
-        runningTool('call-3', 'ask_user', {}),
+        runningTool('call-3', 'ask_user', { question: 'Which file should I edit?' }),
         doneTool('call-4', 'view'),
       ]),
     ]);
