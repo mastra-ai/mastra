@@ -1,5 +1,14 @@
 ---
-'@mastra/core': patch
+'@mastra/core': minor
 ---
 
-Expose per-message signal metadata to channel handlers so structured context follows both wake and active delivery paths.
+Added per-message Signal metadata to Channel handlers. Use `ctx.signalMetadata` to attach serializable, non-sensitive context that follows both idle and active message delivery:
+
+```typescript
+handlers: {
+  onDirectMessage: async (thread, message, defaultHandler, ctx) => {
+    ctx.signalMetadata.attachmentIds = ['file-1']
+    await defaultHandler(thread, message)
+  },
+}
+```

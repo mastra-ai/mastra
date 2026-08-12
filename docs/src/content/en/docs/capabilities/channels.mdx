@@ -175,6 +175,39 @@ In group conversations, Mastra prefixes each message with the sender's name and 
 [Bob (@U456DEF)]: I have a question too.
 ```
 
+## Per-message Signal metadata
+
+Use `signalMetadata` in a custom Channel handler to attach structured context to one inbound message. The metadata follows the message when it starts an idle run or joins an active run.
+
+The following example attaches registered file IDs before calling the default handler:
+
+```typescript title="src/mastra/agents/your-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { createSlackAdapter } from '@chat-adapter/slack'
+
+export const yourAgent = new Agent({
+  id: 'your-agent',
+  name: 'Your Agent',
+  instructions: 'You are a helpful assistant.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  channels: {
+    adapters: {
+      slack: createSlackAdapter(),
+    },
+    handlers: {
+      onDirectMessage: async (thread, message, defaultHandler, ctx) => {
+        ctx.signalMetadata.attachmentIds = ['file-1']
+        await defaultHandler(thread, message)
+      },
+    },
+  },
+})
+```
+
+Add only JSON-serializable, non-sensitive values. Signal metadata may be stored in memory or sent through a shared publish-subscribe transport. It isn't added to the model prompt.
+
+Use `requestContext` for run-scoped configuration, such as credentials for a message that starts a run. Use `signalMetadata` for context that must stay attached to one message, including messages delivered to an active run.
+
 ## Multimodal content
 
 Models like Gemini can process images, video, and audio natively. Combine `inlineMedia` and `inlineLinks` to let users share rich content with your agent across platforms:

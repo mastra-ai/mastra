@@ -1153,7 +1153,7 @@ describe('AgentChannels', () => {
       spy.mockRestore();
     });
 
-    it('carries handler signal metadata through an active delivery', async () => {
+    it('forwards handler signal metadata to sendMessage', async () => {
       const chatMod = await getChatModule();
       let registeredDMWrapper: ((thread: any, message: any) => unknown) | undefined;
       const spy = vi.spyOn(chatMod.Chat.prototype as any, 'onDirectMessage').mockImplementation((handler: any) => {

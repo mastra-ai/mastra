@@ -348,7 +348,7 @@ export interface ChannelHandlerContext {
    * through PubSub. Unlike run-level request context, it follows the message
    * through both idle `wake` and active `deliver` paths.
    */
-  signalMetadata: Record<string, unknown>;
+  readonly signalMetadata: Record<string, unknown>;
 }
 
 /**
