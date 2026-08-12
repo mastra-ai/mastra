@@ -22,7 +22,11 @@ function filterSummary({
 }) {
   if (isUnavailable) return 'Filters unavailable for this snapshot';
   if (filteredTraceCount === undefined) return 'Loading matching traces…';
-  if (selections.length === 1) {
+  const onlySelection = selections.length === 1 ? selections[0] : undefined;
+  if (onlySelection?.kind === 'noise') {
+    return `Showing the ${filteredTraceCount} of ${totalTraceCount} traces assigned to Noise`;
+  }
+  if (onlySelection) {
     return `Showing the ${filteredTraceCount} of ${totalTraceCount} traces that flow through this theme`;
   }
   return `Showing the ${filteredTraceCount} of ${totalTraceCount} traces that match these filters`;
@@ -65,7 +69,9 @@ export function ThemeFilterBanner({
         return (
           <button
             key={selection.signalName}
-            aria-label={selections.length === 1 ? 'Clear theme filter' : `Clear filter ${selectionLabel(selection)}`}
+            aria-label={
+              selections.length === 1 ? `Clear ${selection.kind} filter` : `Clear filter ${selectionLabel(selection)}`
+            }
             className="border-border1 bg-surface2 text-neutral6 hover:bg-surface4 flex items-center gap-1.5 rounded-full border py-1 pr-2 pl-2.5 text-xs font-medium transition-colors"
             onClick={() => onRemove(selection.signalName)}
             type="button"

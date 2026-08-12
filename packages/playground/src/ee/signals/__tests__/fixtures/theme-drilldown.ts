@@ -469,6 +469,7 @@ export const allThemePathsResponse = {
 
 export const fourSignalThemeFlowResponse = {
   ...drilldownThemeFlowResponse,
+  snapshot: fourSignalThemeSnapshotsResponse.snapshots[0],
   stages: [
     ...drilldownThemeFlowResponse.stages,
     {
@@ -529,6 +530,7 @@ export const fourSignalThemeFlowResponse = {
 
 export const fourSignalThemePathsResponse = {
   ...allThemePathsResponse,
+  snapshot: fourSignalThemeSnapshotsResponse.snapshots[0],
   signals: ['goal', 'outcome', 'behavior', 'sentiment'],
   themes: {
     ...allThemePathsResponse.themes,

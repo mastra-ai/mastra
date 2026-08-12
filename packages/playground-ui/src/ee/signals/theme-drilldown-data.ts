@@ -19,6 +19,24 @@ export interface ThemeSelectionStats {
   stageShare: number;
 }
 
+export function findSelectionStats(
+  flow: ThemeFlowResponse,
+  drillStack: ThemeSelection[],
+  selection: ThemeSelection | undefined,
+): ThemeSelectionStats | undefined {
+  if (!selection) return undefined;
+  if (drillStack.some(filter => filter.signalName === selection.signalName)) {
+    return { traceCount: flow.snapshot.traceCount, stageShare: flow.snapshot.traceCount > 0 ? 1 : 0 };
+  }
+  const stage = flow.stages.find(candidate => candidate.signalName === selection.signalName);
+  const node = stage?.nodes.find(candidate =>
+    selection.kind === 'theme'
+      ? candidate.kind === 'theme' && candidate.themeId === selection.themeId
+      : candidate.kind === 'noise',
+  );
+  return node ? { traceCount: node.traceCount, stageShare: node.stageShare } : { traceCount: 0, stageShare: 0 };
+}
+
 export function mergeVisibleSignalOrder(
   signalNames: TraceSignalName[],
   nextVisibleSignalNames: TraceSignalName[],

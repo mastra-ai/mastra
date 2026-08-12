@@ -10,13 +10,13 @@ export function useThemePaths(
   entityType: string,
   signalNames: TraceSignalName[],
   snapshotId: string | undefined,
-  enabled: boolean | string | undefined,
+  enabled: boolean | undefined,
 ) {
   const { cacheScope, request } = useTraceIntelligence();
   return useQuery({
     queryKey: ['entity-learning', cacheScope, entityType, entityId, 'theme-paths', signalNames, snapshotId],
     queryFn: () => fetchThemePaths(request, entityId, entityType, signalNames, requireSnapshotId(snapshotId)),
-    enabled: snapshotId !== undefined && Boolean(enabled),
+    enabled: snapshotId !== undefined && enabled === true,
     staleTime: 30_000,
   });
 }

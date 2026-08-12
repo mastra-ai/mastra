@@ -26,10 +26,11 @@ import { ThemeDetailPanel } from './theme-detail-panel';
 import {
   buildDrilledThemeFlow,
   findNoiseSelection,
+  findSelectionStats,
   findThemeSelection,
   mergeVisibleSignalOrder,
 } from './theme-drilldown-data';
-import type { SelectedTheme, ThemeSelection, ThemeSelectionStats } from './theme-drilldown-data';
+import type { SelectedTheme, ThemeSelection } from './theme-drilldown-data';
 import { ThemeFilterBanner } from './theme-filter-banner';
 import { ThemeLifelines } from './theme-lifelines';
 import { TraceIntelligenceExplainer } from './trace-intelligence-explainer';
@@ -60,24 +61,6 @@ const VIEW_DESCRIPTIONS: Record<SignalsViewMode, string> = {
   compare: 'Which themes grew, shrank, appeared, or disappeared between two points in time.',
   lifelines: "Each theme's share of traces across the whole selected range.",
 };
-
-function findSelectionStats(
-  flow: NonNullable<ReturnType<typeof buildDrilledThemeFlow>>,
-  drillStack: ThemeSelection[],
-  selection: ThemeSelection | undefined,
-): ThemeSelectionStats | undefined {
-  if (!selection) return undefined;
-  if (drillStack.some(filter => filter.signalName === selection.signalName)) {
-    return { traceCount: flow.snapshot.traceCount, stageShare: flow.snapshot.traceCount > 0 ? 1 : 0 };
-  }
-  const stage = flow.stages.find(candidate => candidate.signalName === selection.signalName);
-  const node = stage?.nodes.find(candidate =>
-    selection.kind === 'theme'
-      ? candidate.kind === 'theme' && candidate.themeId === selection.themeId
-      : candidate.kind === 'noise',
-  );
-  return node ? { traceCount: node.traceCount, stageShare: node.stageShare } : { traceCount: 0, stageShare: 0 };
-}
 
 export function SankeySignals({
   entityId,
@@ -304,11 +287,11 @@ export function SankeySignals({
     if (nextSelection.kind === 'theme') {
       setNoiseSignalName(undefined);
       setDetailSelection(nextSelection);
+      if (drillInAvailable) setDrillStack(current => [...current, nextSelection]);
     } else {
       setDetailSelection(undefined);
       setNoiseSignalName(nextSelection.signalName);
     }
-    if (drillInAvailable) setDrillStack(current => [...current, nextSelection]);
   };
   const drillInDisabledReason = drillInAvailable
     ? undefined
