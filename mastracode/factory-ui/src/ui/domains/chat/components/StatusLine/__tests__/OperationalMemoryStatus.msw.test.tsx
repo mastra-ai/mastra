@@ -29,6 +29,7 @@ function renderStatus(runtime: Partial<ChatRuntimeApi>) {
         bufferingMessages: false,
         bufferingObservations: false,
         tokensPerSec: 0,
+        tokensPerSecHistory: [],
         ...runtime,
       }}
     >
@@ -40,11 +41,15 @@ function renderStatus(runtime: Partial<ChatRuntimeApi>) {
 
 describe('observational memory status', () => {
   describe('when memory consolidates in the background', () => {
-    it('shimmers the budget it works on and stays silent otherwise', () => {
-      renderStatus({ bufferingObservations: true });
+    it('works the ring of the budget it acts on and stays silent otherwise', () => {
+      const { container } = renderStatus({ bufferingObservations: true });
 
-      const budget = screen.getByLabelText(/Consolidating observations in the background/);
-      expect(budget.parentElement?.querySelector('.shimmer-text')).not.toBeNull();
+      const working = container.querySelectorAll('[data-working]');
+
+      expect(working).toHaveLength(1);
+      expect(screen.getByLabelText(/Consolidating observations in the background/)).toContainElement(
+        working.item(0) as HTMLElement,
+      );
       expect(screen.queryByText('consolidating memory')).toBeNull();
     });
   });
@@ -54,7 +59,7 @@ describe('observational memory status', () => {
       renderStatus({ omPhase: 'reflecting' });
 
       expect(screen.getByText('consolidating memory')).toBeVisible();
-      expect(screen.getByLabelText('Consolidating observations')).toBeVisible();
+      expect(screen.getByLabelText('Consolidating observations, 12/40k')).toBeVisible();
     });
   });
 
@@ -68,11 +73,20 @@ describe('observational memory status', () => {
   });
 
   describe('when memory is idle', () => {
-    it('shows the budgets without movement', () => {
+    it('shows the budgets at rest, digits folded away', () => {
       const { container } = renderStatus({});
 
-      expect(screen.getByText('14.9/30k')).toBeVisible();
-      expect(container.querySelector('.shimmer-text')).toBeNull();
+      expect(screen.getByLabelText('Message window until next observation, 14.9/30k')).toBeVisible();
+      expect(container.querySelector('[data-working]')).toBeNull();
+    });
+  });
+
+  describe('when the model is decoding', () => {
+    it('plots the throughput the run has measured so far', () => {
+      const { container } = renderStatus({ tokensPerSec: 42, tokensPerSecHistory: [30, 38, 42] });
+
+      expect(screen.getByLabelText('42 tokens per second')).toBeVisible();
+      expect(container.querySelector('polyline')?.getAttribute('points')?.split(' ')).toHaveLength(3);
     });
   });
 });

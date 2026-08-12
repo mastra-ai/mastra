@@ -1,7 +1,5 @@
 ---
-'@mastra/playground-ui': patch
-'@mastra/client-js': patch
 '@mastra/factory': patch
 ---
 
-Replaced the raw `buffering`/`observing`/`reflecting` phase label in the Factory status line with a cue on the memory budget it acts on. Background memory work now shimmers the token counter it is working through — the message window or `mem` — and stays wordless, while a memory pass that holds the turn is named ("saving memory", "consolidating memory"). Hovering a counter explains what memory is doing to it.
+Replaced the raw `buffering`/`observing`/`reflecting` phase label in the Factory status line with two rings, one per memory budget: the message window and the accumulated observations. Each ring shows how full its budget is, and a highlight travels around the ring while memory works through it — background work reads as work instead of leaking an internal phase name. A memory pass that actually holds the turn still says so ("saving memory", "consolidating memory"), and decode throughput moved from `42 tok/s` to a small curve that shows whether the run is speeding up or stalling. Hovering the status line unfolds the exact numbers behind every metric.

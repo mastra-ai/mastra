@@ -68,6 +68,7 @@ describe('chat runtime reducer', () => {
     const queued = runtimeReducer(observing, { type: 'follow_up_queued', count: 2 });
 
     expect(queued.tokensPerSec).toBe(42);
+    expect(queued.tokensPerSecHistory).toEqual([42]);
     expect(queued.omPhase).toBe('observing');
     expect(queued.followUpCount).toBe(2);
 

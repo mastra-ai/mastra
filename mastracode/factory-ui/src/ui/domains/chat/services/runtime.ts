@@ -32,8 +32,12 @@ export interface ChatRuntimeState {
   bufferingObservations: boolean;
   goal?: GoalSnapshot;
   tokensPerSec: number;
+  /** Recent decode rates of this run, oldest first, for the throughput curve. */
+  tokensPerSecHistory: number[];
   _decodeStartedAt: number;
 }
+
+const RATE_SAMPLES = 12;
 
 export const initialChatRuntime: ChatRuntimeState = {
   followUpCount: 0,
@@ -41,6 +45,7 @@ export const initialChatRuntime: ChatRuntimeState = {
   bufferingMessages: false,
   bufferingObservations: false,
   tokensPerSec: 0,
+  tokensPerSecHistory: [],
   _decodeStartedAt: 0,
 };
 
@@ -69,7 +74,7 @@ export function runtimeReducer(state: ChatRuntimeState, event: AgentControllerEv
 
   switch (event.type) {
     case 'agent_start':
-      return { ...state, tokensPerSec: 0, _decodeStartedAt: 0 };
+      return { ...state, tokensPerSec: 0, tokensPerSecHistory: [], _decodeStartedAt: 0 };
     case 'agent_end':
       return { ...state, _decodeStartedAt: 0 };
     case 'message_start':
@@ -80,6 +85,7 @@ export function runtimeReducer(state: ChatRuntimeState, event: AgentControllerEv
       const usage = event.usage as UsageSnapshot;
       const stepTokens = (usage.completionTokens ?? 0) + (usage.reasoningTokens ?? 0);
       let tokensPerSec = state.tokensPerSec;
+      let tokensPerSecHistory = state.tokensPerSecHistory;
       if (state._decodeStartedAt > 0 && stepTokens > 0) {
         const decodeSeconds = Math.max((Date.now() - state._decodeStartedAt) / 1000, 0.001);
         const instantaneous = stepTokens / decodeSeconds;
@@ -87,8 +93,9 @@ export function runtimeReducer(state: ChatRuntimeState, event: AgentControllerEv
           state.tokensPerSec > 0
             ? Math.round(0.3 * instantaneous + 0.7 * state.tokensPerSec)
             : Math.round(instantaneous);
+        tokensPerSecHistory = [...state.tokensPerSecHistory, tokensPerSec].slice(-RATE_SAMPLES);
       }
-      return { ...state, usage, tokensPerSec, _decodeStartedAt: 0 };
+      return { ...state, usage, tokensPerSec, tokensPerSecHistory, _decodeStartedAt: 0 };
     }
     case 'display_state_changed':
       return {

@@ -1,0 +1,58 @@
+/* Ring gauge: the annulus is the track, the wedge is the fill, and while work
+ * runs a highlight travels around that wedge. Same reading as `shimmer-text` —
+ * the trait dims and the light passes through it — so nothing moves alongside
+ * the dial and nothing can be mistaken for a rendering glitch. */
+.token-budget-dial {
+  --token-budget-fill: 0;
+
+  position: relative;
+  display: inline-block;
+  flex: none;
+  inline-size: var(--token-budget-size, 0.875rem);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background-image: conic-gradient(color-mix(in oklab, currentcolor 22%, transparent) 0 360deg);
+  mask-image: radial-gradient(closest-side, transparent 58%, black 60%);
+}
+
+.token-budget-dial::before,
+.token-budget-dial::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  mask-image: conic-gradient(black 0 calc(var(--token-budget-fill) * 3.6deg), transparent 0);
+}
+
+.token-budget-dial::before {
+  background-color: currentcolor;
+}
+
+.token-budget-dial::after {
+  opacity: 0;
+  background-image: conic-gradient(transparent 0deg, currentcolor 60deg, transparent 120deg);
+}
+
+.token-budget-dial[data-working]::before {
+  background-color: color-mix(in oklab, currentcolor 32%, transparent);
+}
+
+.token-budget-dial[data-working]::after {
+  opacity: 1;
+  animation: token-budget-sweep 1.4s linear infinite;
+}
+
+@keyframes token-budget-sweep {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Without motion the highlight still has to distinguish work from rest, so it
+ * parks mid-wedge instead of disappearing. */
+@media (prefers-reduced-motion: reduce) {
+  .token-budget-dial[data-working]::after {
+    animation: none;
+    transform: rotate(140deg);
+  }
+}
