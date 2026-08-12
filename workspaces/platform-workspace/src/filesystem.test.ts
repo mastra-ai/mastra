@@ -38,6 +38,25 @@ describe('PlatformFilesystem', () => {
     expect(fetchMock.mock.calls[1]![1].method).toBeUndefined();
   });
 
+  it('uses the regional workspace proxy URL for filesystem requests', async () => {
+    vi.stubEnv('MASTRA_PLATFORM_REGION', 'us');
+    const fetchMock = vi.fn().mockResolvedValueOnce(response('hello', { status: 200 }));
+
+    const fs = new PlatformFilesystem({
+      accessToken: 'sk_test',
+      projectId: 'proj_123',
+      bucketName: 'dev-bucket',
+      fetch: fetchMock,
+    });
+    await fs._init();
+
+    await expect(fs.readFile('/dir/file.txt', { encoding: 'utf8' })).resolves.toBe('hello');
+
+    expect(String(fetchMock.mock.calls[0]![0])).toBe(
+      'https://workspaces.us.mastra.ai/v1/projects/proj_123/fs/dev-bucket/dir/file.txt',
+    );
+  });
+
   it('copies, moves, and creates directories with proxy operations', async () => {
     const fetchMock = vi.fn().mockResolvedValue(response(null, { status: 204 }));
     const fs = new PlatformFilesystem({
