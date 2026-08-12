@@ -9,7 +9,7 @@ import type {
 import type { SkillSource } from '@mastra/core/workspace';
 import { publishSkillFromSource } from '@mastra/core/workspace';
 
-import { CrudEditorNamespace } from './base';
+import { CrudEditorNamespace, getVersionedEntityById } from './base';
 import type { StorageAdapter } from './base';
 
 export class EditorSkillNamespace extends CrudEditorNamespace<
@@ -41,7 +41,8 @@ export class EditorSkillNamespace extends CrudEditorNamespace<
 
     return {
       create: input => store.create({ skill: input }),
-      getByIdResolved: (id, options) => store.getByIdResolved(id, options),
+      getByIdResolved: (id, options) =>
+        getVersionedEntityById(id, options, store.getByIdResolved.bind(store), store.getVersionByNumber.bind(store)),
       update: input => store.update(input),
       delete: id => store.delete(id),
       list: args => store.list(args),

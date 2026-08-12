@@ -5,6 +5,30 @@ import type { MastraEditor } from '../index';
 
 export type { GetByIdOptions };
 
+type VersionResolutionOptions =
+  | { status?: GetByIdOptions['status']; versionId?: never }
+  | { versionId: string; status?: never };
+
+/** Resolve editor version-number requests before delegating to versioned storage. */
+export async function getVersionedEntityById<TResolved>(
+  id: string,
+  options: GetByIdOptions | undefined,
+  getByIdResolved: (id: string, options?: VersionResolutionOptions) => Promise<TResolved | null>,
+  getVersionByNumber: (id: string, versionNumber: number) => Promise<{ id: string } | null>,
+): Promise<TResolved | null> {
+  if (options?.versionNumber !== undefined) {
+    const version = await getVersionByNumber(id, options.versionNumber);
+    if (!version) return null;
+    return getByIdResolved(id, { versionId: version.id });
+  }
+
+  if (options?.versionId) {
+    return getByIdResolved(id, { versionId: options.versionId });
+  }
+
+  return getByIdResolved(id, options?.status ? { status: options.status } : undefined);
+}
+
 /**
  * Adapter interface that bridges entity-specific storage method names
  * to a generic CRUD interface. Each CrudEditorNamespace subclass implements

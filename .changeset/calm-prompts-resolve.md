@@ -2,4 +2,4 @@
 '@mastra/editor': patch
 ---
 
-Fixed version-specific reads across editor namespaces and prevented prompt draft updates from changing cached published reads.
+After updating a prompt, default reads return the published version, while draft reads and reads for an explicit version return the requested version.

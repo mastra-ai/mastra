@@ -13,7 +13,7 @@ import type {
   StorageSandboxConfig,
 } from '@mastra/core/storage';
 
-import { CrudEditorNamespace } from './base';
+import { CrudEditorNamespace, getVersionedEntityById } from './base';
 import type { StorageAdapter } from './base';
 
 export class EditorWorkspaceNamespace extends CrudEditorNamespace<
@@ -274,7 +274,8 @@ export class EditorWorkspaceNamespace extends CrudEditorNamespace<
 
     return {
       create: input => store.create({ workspace: input }),
-      getByIdResolved: (id, options) => store.getByIdResolved(id, options),
+      getByIdResolved: (id, options) =>
+        getVersionedEntityById(id, options, store.getByIdResolved.bind(store), store.getVersionByNumber.bind(store)),
       update: input => store.update(input),
       delete: id => store.delete(id),
       list: args => store.list(args),

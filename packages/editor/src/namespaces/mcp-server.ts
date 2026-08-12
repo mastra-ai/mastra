@@ -12,7 +12,7 @@ import type {
   StorageToolConfig,
 } from '@mastra/core/storage';
 
-import { CrudEditorNamespace } from './base';
+import { CrudEditorNamespace, getVersionedEntityById } from './base';
 import type { StorageAdapter } from './base';
 
 export class EditorMCPServerNamespace extends CrudEditorNamespace<
@@ -150,7 +150,8 @@ export class EditorMCPServerNamespace extends CrudEditorNamespace<
 
     return {
       create: input => store.create({ mcpServer: input }),
-      getByIdResolved: (id, options) => store.getByIdResolved(id, options),
+      getByIdResolved: (id, options) =>
+        getVersionedEntityById(id, options, store.getByIdResolved.bind(store), store.getVersionByNumber.bind(store)),
       update: input => store.update(input),
       delete: id => store.delete(id),
       list: args => store.list(args),

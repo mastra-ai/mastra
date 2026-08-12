@@ -102,5 +102,8 @@ describe('EditorPromptNamespace', () => {
     const versionTwo = versions.versions.find(version => version.versionNumber === 2)!;
     const explicitVersion = await freshPrompt.getById('pinned-block', { versionId: versionTwo.id });
     expect(explicitVersion!.content).toBe('Draft content');
+
+    const numberedVersion = await freshPrompt.getById('pinned-block', { versionNumber: 2 });
+    expect(numberedVersion!.content).toBe('Draft content');
   });
 });
