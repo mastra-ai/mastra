@@ -47,8 +47,13 @@ export interface CostGuardOptions {
   /**
    * Maximum estimated cost allowed (e.g. 0.50 for $0.50 USD).
    * Uses the cost data from observability metrics.
+   *
+   * Accepts either a fixed number or a function of the request's
+   * RequestContext for per-request budgets (e.g. per-tier limits). If the
+   * function returns anything other than a finite positive number, the check
+   * is skipped for that request (fail-open) and a warning is logged.
    */
-  maxCost: number;
+  maxCost: number | ((requestContext?: RequestContext) => number);
 
   /**
    * Scope for cost tracking:
@@ -177,7 +182,7 @@ export class CostGuardProcessor implements Processor<'cost-guard', CostGuardTrip
   public readonly id = 'cost-guard';
   public readonly name = 'Cost Guard';
 
-  private maxCost: number;
+  private maxCost: number | ((requestContext?: RequestContext) => number);
   private scope: CostScope;
   private window: CostWindow;
   private strategy: 'block' | 'warn';
@@ -188,7 +193,7 @@ export class CostGuardProcessor implements Processor<'cost-guard', CostGuardTrip
   private logger?: IMastraLogger;
 
   constructor(options: CostGuardOptions) {
-    if (options.maxCost <= 0) {
+    if (typeof options.maxCost === 'number' && options.maxCost <= 0) {
       throw new Error('CostGuardProcessor requires maxCost to be a positive number');
     }
 
@@ -313,10 +318,25 @@ export class CostGuardProcessor implements Processor<'cost-guard', CostGuardTrip
     this.logger?.warn(`CostGuardProcessor: ${message}`);
   }
 
+  private resolveMaxCost(requestContext?: RequestContext): number | undefined {
+    if (typeof this.maxCost === 'number') return this.maxCost;
+    const value = this.maxCost(requestContext);
+    if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
+      this.logger?.warn('CostGuardProcessor: dynamic maxCost resolved to an invalid value; skipping check', {
+        value,
+      });
+      return undefined;
+    }
+    return value;
+  }
+
   async processInputStep(args: ProcessInputStepArgs<CostGuardTripwireMetadata>): Promise<void> {
     const traceId = args.tracing?.currentSpan?.traceId;
     const resolved = this.resolveScopeFilter(args.requestContext, traceId);
     if (!resolved) return;
+
+    const maxCost = this.resolveMaxCost(args.requestContext);
+    if (maxCost === undefined) return;
 
     const { filter, scopeKey } = resolved;
     const usage = await this.queryCost(filter);
@@ -325,8 +345,8 @@ export class CostGuardProcessor implements Processor<'cost-guard', CostGuardTrip
     const cost = usage.estimatedCost;
 
     // Hard limit
-    if (cost >= this.maxCost) {
-      const message = this.formatMessage(cost, this.maxCost);
+    if (cost >= maxCost) {
+      const message = this.formatMessage(cost, maxCost);
 
       if (this.strategy === 'warn') {
         // Fire the warning and onViolation at most once per request
@@ -334,7 +354,7 @@ export class CostGuardProcessor implements Processor<'cost-guard', CostGuardTrip
           args.state[WARNED_HARD_STATE_KEY] = true;
           await this.emitWarning(message, {
             usage: cost,
-            limit: this.maxCost,
+            limit: maxCost,
             totalUsage: usage,
             scope: this.scope,
             scopeKey,
@@ -349,7 +369,7 @@ export class CostGuardProcessor implements Processor<'cost-guard', CostGuardTrip
         metadata: {
           processorId: this.id,
           usage,
-          maxCost: this.maxCost,
+          maxCost,
           scope: this.scope,
           scopeKey,
         },
@@ -357,13 +377,13 @@ export class CostGuardProcessor implements Processor<'cost-guard', CostGuardTrip
     }
 
     // Soft threshold (cost < maxCost here)
-    if (this.warnAtPercent !== undefined && cost >= (this.maxCost * this.warnAtPercent) / 100) {
+    if (this.warnAtPercent !== undefined && cost >= (maxCost * this.warnAtPercent) / 100) {
       if (!args.state[WARNED_SOFT_STATE_KEY]) {
         args.state[WARNED_SOFT_STATE_KEY] = true;
-        const message = `Cost guard: estimated cost reached ${this.warnAtPercent}% of the limit (${this.formatNumber(cost)}/${this.formatNumber(this.maxCost)})`;
+        const message = `Cost guard: estimated cost reached ${this.warnAtPercent}% of the limit (${this.formatNumber(cost)}/${this.formatNumber(maxCost)})`;
         await this.emitWarning(message, {
           usage: cost,
-          limit: this.maxCost,
+          limit: maxCost,
           totalUsage: usage,
           scope: this.scope,
           scopeKey,

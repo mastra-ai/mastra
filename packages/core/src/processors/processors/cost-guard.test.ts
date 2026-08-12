@@ -1224,6 +1224,97 @@ describe('CostGuardProcessor', () => {
     });
   });
 
+  describe('dynamic maxCost', () => {
+    it('function maxCost receives the requestContext and drives block/allow', async () => {
+      const obsStorage = createMockObservabilityStorage({ inputCost: 0.4, outputCost: 0.2, costUnit: 'usd' });
+      const maxCostFn = vi.fn((requestContext?: RequestContext) =>
+        requestContext?.get('tier') === 'pro' ? 10.0 : 0.5,
+      );
+      const guard = new CostGuardProcessor({ maxCost: maxCostFn, scope: 'run' });
+      guard.__registerMastra(createMockMastra(obsStorage));
+
+      const requestContext = new RequestContext();
+      requestContext.set('tier', 'free');
+      const args = createInputStepArgs({
+        stepNumber: 1,
+        requestContext,
+        tracing: createMockTracing('trace-dyn-block') as any,
+      });
+
+      // cost 0.6 >= free-tier limit 0.5 → blocks
+      await expect(guard.processInputStep(args)).rejects.toThrow(TripWire);
+      expect(maxCostFn).toHaveBeenCalledWith(requestContext);
+    });
+
+    it('two requests with different context-derived limits produce different outcomes', async () => {
+      const obsStorage = createMockObservabilityStorage({ inputCost: 0.4, outputCost: 0.2, costUnit: 'usd' });
+      const guard = new CostGuardProcessor({
+        maxCost: (requestContext?: RequestContext) => (requestContext?.get('tier') === 'pro' ? 10.0 : 0.5),
+        scope: 'run',
+      });
+      guard.__registerMastra(createMockMastra(obsStorage));
+
+      const proContext = new RequestContext();
+      proContext.set('tier', 'pro');
+      const proArgs = createInputStepArgs({
+        stepNumber: 1,
+        requestContext: proContext,
+        tracing: createMockTracing('trace-dyn-pro') as any,
+      });
+      // Same cost 0.6 < pro-tier limit 10 → allows
+      await expect(guard.processInputStep(proArgs)).resolves.toBeUndefined();
+
+      const freeContext = new RequestContext();
+      freeContext.set('tier', 'free');
+      const freeArgs = createInputStepArgs({
+        stepNumber: 1,
+        requestContext: freeContext,
+        tracing: createMockTracing('trace-dyn-free') as any,
+      });
+      // cost 0.6 >= free-tier limit 0.5 → blocks
+      await expect(guard.processInputStep(freeArgs)).rejects.toThrow(TripWire);
+    });
+
+    it('tripwire metadata maxCost reflects the resolved value', async () => {
+      const obsStorage = createMockObservabilityStorage({ inputCost: 0.4, outputCost: 0.2, costUnit: 'usd' });
+      const guard = new CostGuardProcessor({ maxCost: () => 0.25, scope: 'run' });
+      guard.__registerMastra(createMockMastra(obsStorage));
+
+      const args = createInputStepArgs({
+        stepNumber: 1,
+        tracing: createMockTracing('trace-dyn-meta') as any,
+      });
+
+      try {
+        await guard.processInputStep(args);
+        expect.fail('Expected TripWire to be thrown');
+      } catch (error) {
+        const tripwire = error as TripWire<any>;
+        expect(tripwire.options.metadata.maxCost).toBe(0.25);
+      }
+    });
+
+    it.each([0, -1, NaN])('function returning %s → step proceeds, logger warned, no onViolation', async invalid => {
+      const obsStorage = createMockObservabilityStorage({ inputCost: 0.4, outputCost: 0.2, costUnit: 'usd' });
+      const guard = new CostGuardProcessor({ maxCost: () => invalid, scope: 'run' });
+      guard.__registerMastra(createMockMastra(obsStorage));
+      const onViolation = vi.fn();
+      guard.onViolation = onViolation;
+
+      const args = createInputStepArgs({
+        stepNumber: 1,
+        tracing: createMockTracing('trace-dyn-invalid') as any,
+      });
+
+      await expect(guard.processInputStep(args)).resolves.toBeUndefined();
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('dynamic maxCost resolved to an invalid value'),
+        expect.objectContaining({ value: invalid }),
+      );
+      expect(onViolation).not.toHaveBeenCalled();
+    });
+  });
+
   describe('hardening (single query, logger, precision)', () => {
     it('queries both token metric names in a single getMetricAggregate call', async () => {
       const obsStorage = createMockObservabilityStorage({ inputCost: 0.1, outputCost: 0.1, costUnit: 'usd' });
