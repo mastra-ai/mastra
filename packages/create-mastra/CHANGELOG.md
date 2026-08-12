@@ -1,5 +1,11 @@
 # create-mastra
 
+## 1.24.0-alpha.18
+
+### Patch Changes
+
+- Fixed generated projects to approve required pnpm native builds and externalize DuckDB bindings for experiment workers. ([#21301](https://github.com/mastra-ai/mastra/pull/21301))
+
 ## 1.24.0-alpha.17
 
 ## 1.24.0-alpha.16

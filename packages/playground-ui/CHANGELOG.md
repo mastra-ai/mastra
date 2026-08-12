@@ -1,5 +1,11 @@
 # @mastra/playground-ui
 
+## 48.0.0-alpha.18
+
+### Patch Changes
+
+- Fixed saved chat transcripts to open at the latest turn after asynchronously loaded history finishes layout. ([#21301](https://github.com/mastra-ai/mastra/pull/21301))
+
 ## 48.0.0-alpha.17
 
 ### Minor Changes

@@ -1,5 +1,13 @@
 # mastra
 
+## 1.24.0-alpha.18
+
+### Patch Changes
+
+- Fixed experiment worker artifacts to exclude generated local database state while preserving reproducible digests and unique build identities. ([#21301](https://github.com/mastra-ai/mastra/pull/21301))
+
+- Fixed generated projects to approve required pnpm native builds and externalize DuckDB bindings for experiment workers. ([#21301](https://github.com/mastra-ai/mastra/pull/21301))
+
 ## 1.24.0-alpha.17
 
 ### Minor Changes
