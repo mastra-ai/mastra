@@ -256,6 +256,7 @@ export class AgentChannels {
   protected async dispatchInboundMessage(args: {
     signalContents: AgentSignalContents;
     attributes: Record<string, string | undefined>;
+    signalMetadata: Record<string, unknown>;
     providerOptions: MastraProviderMetadata;
     requestContext: RequestContext;
     /** The mapped Mastra thread for the chat thread this message arrived on. */
@@ -264,12 +265,21 @@ export class AgentChannels {
     /** Set when the adapter can't render approval buttons, to avoid runs parking forever. */
     autoResumeSuspendedTools: true | undefined;
   }): Promise<void> {
-    const { signalContents, attributes, providerOptions, requestContext, memory, autoResumeSuspendedTools } = args;
+    const {
+      signalContents,
+      attributes,
+      signalMetadata,
+      providerOptions,
+      requestContext,
+      memory,
+      autoResumeSuspendedTools,
+    } = args;
 
     const result = this.agent.sendMessage(
       {
         contents: signalContents,
         attributes,
+        ...(Object.keys(signalMetadata).length > 0 ? { metadata: signalMetadata } : {}),
         providerOptions,
       },
       {
@@ -422,12 +432,13 @@ export class AgentChannels {
       // shared instance would leak that tenant into the next message's run.
       const beginMessage = () => {
         const requestContext = new RequestContext();
+        const signalMetadata: Record<string, unknown> = {};
         const defaultHandler = (chatThread: Thread, message: Message) =>
-          this.handleChatMessage(chatThread, message, mastra, requestContext);
+          this.handleChatMessage(chatThread, message, mastra, requestContext, signalMetadata);
         // Context handed to custom handlers so they can reach the resolved Mastra
         // instance without being injected with an external accessor, and
         // contribute to the request context the run will dispatch with.
-        const handlerContext: ChannelHandlerContext = { mastra, requestContext };
+        const handlerContext: ChannelHandlerContext = { mastra, requestContext, signalMetadata };
         return { defaultHandler, handlerContext };
       };
 
@@ -1010,9 +1021,10 @@ export class AgentChannels {
     message: Message,
     mastra: Mastra,
     requestContext: RequestContext,
+    signalMetadata: Record<string, unknown>,
   ): Promise<void> {
     try {
-      await this.processChatMessage(chatThread, message, mastra, requestContext);
+      await this.processChatMessage(chatThread, message, mastra, requestContext, signalMetadata);
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err));
       // A refused request is not a malfunction: the host decided this sender
@@ -1049,6 +1061,7 @@ export class AgentChannels {
     message: Message,
     mastra: Mastra,
     requestContext: RequestContext,
+    signalMetadata: Record<string, unknown> = {},
   ): Promise<void> {
     const platform = chatThread.adapter.name;
 
@@ -1276,6 +1289,7 @@ export class AgentChannels {
     await this.dispatchInboundMessage({
       signalContents,
       attributes,
+      signalMetadata,
       providerOptions,
       requestContext,
       thread: mastraThread,

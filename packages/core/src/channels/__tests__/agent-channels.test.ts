@@ -1079,10 +1079,14 @@ describe('AgentChannels', () => {
       await registeredDMWrapper!(chatThread, message);
 
       expect(onDirectMessage).toHaveBeenCalledTimes(1);
-      // 4th arg is the handler context carrying the resolved Mastra instance
-      // and the request context for the run this message will start.
+      // 4th arg is the per-message handler context carrying the resolved
+      // Mastra instance plus run-level and Signal-level context.
       const ctx = onDirectMessage.mock.calls[0]![3];
-      expect(ctx).toEqual({ mastra: mockMastra, requestContext: expect.any(RequestContext) });
+      expect(ctx).toEqual({
+        mastra: mockMastra,
+        requestContext: expect.any(RequestContext),
+        signalMetadata: {},
+      });
 
       spy.mockRestore();
     });
@@ -1149,7 +1153,41 @@ describe('AgentChannels', () => {
       spy.mockRestore();
     });
 
-    it('does not leak one message request context into the next', async () => {
+    it('carries handler signal metadata through an active delivery', async () => {
+      const chatMod = await getChatModule();
+      let registeredDMWrapper: ((thread: any, message: any) => unknown) | undefined;
+      const spy = vi.spyOn(chatMod.Chat.prototype as any, 'onDirectMessage').mockImplementation((handler: any) => {
+        registeredDMWrapper = handler;
+      });
+
+      const onDirectMessage = vi.fn(async (thread: any, msg: any, defaultHandler: any, ctx: any) => {
+        ctx.signalMetadata.attachments = [{ id: 'file-1', mediaType: 'application/pdf' }];
+        await defaultHandler(thread, msg);
+      });
+
+      const channels = new AgentChannels({
+        adapters: { discord: createMockAdapter('discord') },
+        handlers: { onDirectMessage },
+      });
+      channels.__setAgent(mockAgent);
+      await channels.initialize(makeMastra());
+
+      const chatThread = makeChatThread({ adapter: channels.adapters.discord });
+      await registeredDMWrapper!(chatThread, message);
+
+      expect(mockAgent.sendMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          metadata: {
+            attachments: [{ id: 'file-1', mediaType: 'application/pdf' }],
+          },
+        }),
+        expect.anything(),
+      );
+
+      spy.mockRestore();
+    });
+
+    it('does not leak one message handler context into the next', async () => {
       const chatMod = await getChatModule();
       let registeredDMWrapper: ((thread: any, message: any) => unknown) | undefined;
       const spy = vi.spyOn(chatMod.Chat.prototype as any, 'onDirectMessage').mockImplementation((handler: any) => {
@@ -1157,11 +1195,14 @@ describe('AgentChannels', () => {
       });
 
       const seen: (unknown | undefined)[] = [];
+      const seenSignalMetadata: (unknown | undefined)[] = [];
       const onDirectMessage = vi.fn(async (_thread: any, _msg: any, _defaultHandler: any, ctx: any) => {
         // Record what this message's context already carried on arrival, then
         // write a marker that must not survive into the next message.
         seen.push(ctx.requestContext.get('leak-marker'));
         ctx.requestContext.set('leak-marker', 'from-first-message');
+        seenSignalMetadata.push(ctx.signalMetadata['leak-marker']);
+        ctx.signalMetadata['leak-marker'] = 'from-first-message';
       });
 
       const channels = new AgentChannels({
@@ -1181,10 +1222,18 @@ describe('AgentChannels', () => {
       expect(seen[0]).toBeUndefined();
       // The second message must start clean — a shared context would carry the marker.
       expect(seen[1]).toBeUndefined();
+      expect(seenSignalMetadata).toEqual([undefined, undefined]);
 
-      const first = onDirectMessage.mock.calls[0]![3] as { requestContext: RequestContext };
-      const second = onDirectMessage.mock.calls[1]![3] as { requestContext: RequestContext };
+      const first = onDirectMessage.mock.calls[0]![3] as {
+        requestContext: RequestContext;
+        signalMetadata: Record<string, unknown>;
+      };
+      const second = onDirectMessage.mock.calls[1]![3] as {
+        requestContext: RequestContext;
+        signalMetadata: Record<string, unknown>;
+      };
       expect(first.requestContext).not.toBe(second.requestContext);
+      expect(first.signalMetadata).not.toBe(second.signalMetadata);
 
       spy.mockRestore();
     });
