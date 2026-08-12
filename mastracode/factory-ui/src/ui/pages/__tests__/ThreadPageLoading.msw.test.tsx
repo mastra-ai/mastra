@@ -187,9 +187,7 @@ describe('ThreadPage loading shell', () => {
     expect(within(header).getByRole('button', { name: 'Workspace files' })).toBeInTheDocument();
 
     messagesGate.resolve();
-    await waitFor(() =>
-      expect(screen.queryByRole('status', { name: 'Preparing session' })).not.toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.queryByRole('status', { name: 'Preparing session' })).not.toBeInTheDocument());
     expect(screen.getByRole('region', { name: 'Factory session' })).toBeInTheDocument();
   });
 
