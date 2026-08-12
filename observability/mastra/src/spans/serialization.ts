@@ -496,6 +496,10 @@ export function deepClean(value: any, options: DeepCleanOptions = DEFAULT_DEEP_C
       let keyCount = 0;
 
       for (const key of keys) {
+        if (stripSet.has(key)) {
+          continue;
+        }
+
         let rawValue: unknown;
         try {
           rawValue = (val as Record<string, unknown>)[key];

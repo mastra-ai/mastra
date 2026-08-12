@@ -952,6 +952,23 @@ describe('Span', () => {
       });
     });
 
+    it('should not read throwing getters for explicitly stripped keys', () => {
+      const input: Record<string, unknown> = {
+        visible: 'ok',
+      };
+
+      Object.defineProperty(input, 'secret', {
+        enumerable: true,
+        get() {
+          throw new Error('secret getter failed');
+        },
+      });
+
+      const result = deepClean(input, { ...DEFAULT_DEEP_CLEAN_OPTIONS, keysToStrip: ['secret'] });
+
+      expect(result).toEqual({ visible: 'ok' });
+    });
+
     it('should serialize Maps including nested and primitive/object values', () => {
       const inner = new Map<string, any>([['k', 'v']]);
       const map = new Map<any, any>([

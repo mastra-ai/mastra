@@ -2570,6 +2570,40 @@ describe('Tracing', () => {
       expect(endedEvent?.exportedSpan.metadata).toMatchObject({ environment: 'production' });
     });
 
+    it('injects the Mastra-pushed environment without reading metadata getters', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+      });
+      const metadata: Record<string, unknown> = {
+        tenantId: 'tenant-1',
+      };
+
+      Object.defineProperty(metadata, 'computed', {
+        enumerable: true,
+        get() {
+          throw new Error('computed metadata getter failed');
+        },
+      });
+
+      observability.__setMastraEnvironment('production');
+
+      const span = observability.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'test-agent',
+        attributes: { agentId: 'agent-1' },
+        tracingOptions: { metadata },
+      });
+
+      expect(span.metadata).toEqual({
+        tenantId: 'tenant-1',
+        computed: '[computed metadata getter failed]',
+        environment: 'production',
+      });
+      expect(span.getCorrelationContext().environment).toBe('production');
+    });
+
     it('lets per-span metadata.environment override the Mastra-pushed environment', () => {
       const observability = new DefaultObservabilityInstance({
         serviceName: 'test-service',

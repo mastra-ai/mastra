@@ -77,6 +77,29 @@ function mergeMetadata(parentMetadata: unknown, metadata: unknown): Record<strin
   }
 }
 
+function hasMetadataKey(metadata: unknown, key: string): boolean {
+  if (!metadata || typeof metadata !== 'object') {
+    return false;
+  }
+
+  try {
+    return Object.prototype.hasOwnProperty.call(Object.getOwnPropertyDescriptors(metadata), key);
+  } catch {
+    return true;
+  }
+}
+
+function injectEnvironmentMetadata(
+  metadata: unknown,
+  environment: string | undefined,
+): Record<string, any> | undefined {
+  if (environment === undefined || hasMetadataKey(metadata, 'environment')) {
+    return metadata as Record<string, any> | undefined;
+  }
+
+  return mergeMetadata(metadata, { environment });
+}
+
 // ============================================================================
 // Abstract Base Class
 // ============================================================================
@@ -250,12 +273,9 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
     // getCorrelationContext) is what lets the storage record-builders populate
     // the `environment` column on SpanRecord, which is then read by stored
     // score/feedback events via RecordedSpan / RecordedTrace.addScore.
-    const finalMetadata =
-      !options.parent &&
-      this.#mastraEnvironment !== undefined &&
-      (enrichedMetadata === undefined || enrichedMetadata.environment === undefined)
-        ? { ...(enrichedMetadata ?? {}), environment: this.#mastraEnvironment }
-        : enrichedMetadata;
+    const finalMetadata = !options.parent
+      ? injectEnvironmentMetadata(enrichedMetadata, this.#mastraEnvironment)
+      : enrichedMetadata;
 
     // Tags are only passed for root spans (no parent)
     const tags = !options.parent ? tracingOptions?.tags : undefined;
