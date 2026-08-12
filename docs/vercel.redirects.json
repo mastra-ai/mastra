@@ -1191,6 +1191,11 @@
       "permanent": true
     },
     {
+      "source": "/docs/voice",
+      "destination": "/reference/voice/overview",
+      "permanent": true
+    },
+    {
       "source": "/docs/voice/:path*",
       "destination": "/reference/voice/:path*",
       "permanent": true
@@ -1978,6 +1983,11 @@
     {
       "source": "/guides/guide/github-actions-pr-description",
       "destination": "https://mastra.ai/blog/automating-multi-language-pr-descriptions-in-github-actions",
+      "permanent": true
+    },
+    {
+      "source": "/guides/voice",
+      "destination": "/reference/voice/overview",
       "permanent": true
     },
     {

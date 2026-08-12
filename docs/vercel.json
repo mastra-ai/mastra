@@ -1206,6 +1206,11 @@
       "permanent": true
     },
     {
+      "source": "/docs/voice",
+      "destination": "/reference/voice/overview",
+      "permanent": true
+    },
+    {
       "source": "/docs/voice/:path*",
       "destination": "/reference/voice/:path*",
       "permanent": true
@@ -1993,6 +1998,11 @@
     {
       "source": "/guides/guide/github-actions-pr-description",
       "destination": "https://mastra.ai/blog/automating-multi-language-pr-descriptions-in-github-actions",
+      "permanent": true
+    },
+    {
+      "source": "/guides/voice",
+      "destination": "/reference/voice/overview",
       "permanent": true
     },
     {
@@ -2866,6 +2876,11 @@
       "permanent": true
     },
     {
+      "source": "/docs/voice/llms.txt",
+      "destination": "/reference/voice/overview/llms.txt",
+      "permanent": true
+    },
+    {
       "source": "/docs/voice/:path*/llms.txt",
       "destination": "/reference/voice/:path*/llms.txt",
       "permanent": true
@@ -3603,6 +3618,11 @@
     {
       "source": "/guides/getting-started/manual-install/llms.txt",
       "destination": "/reference/manual-install/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/guides/voice/llms.txt",
+      "destination": "/reference/voice/overview/llms.txt",
       "permanent": true
     },
     {
