@@ -30,9 +30,9 @@ export type CostScope = 'run' | 'resource' | 'thread' | 'user' | 'organization' 
 export type CostWindow = '1h' | '6h' | '24h' | '7d' | '30d' | '365d';
 
 /**
- * Cost usage summary for cost guard decisions
+ * Cost usage summary for cost control decisions
  */
-export interface CostGuardUsage {
+export interface CostControlUsage {
   estimatedCost: number | null;
   costUnit: string | null;
 }
@@ -41,7 +41,7 @@ export interface CostGuardUsage {
  * Per-provider/model cost breakdown entry attached to violations when
  * `includeBreakdown` is enabled.
  */
-export interface CostGuardBreakdownEntry {
+export interface CostControlBreakdownEntry {
   provider: string | null;
   model: string | null;
   estimatedCost: number | null;
@@ -49,11 +49,11 @@ export interface CostGuardBreakdownEntry {
 }
 
 /**
- * Metadata attached to the TripWire when the cost guard aborts
+ * Metadata attached to the TripWire when the cost control aborts
  */
-export interface CostGuardTripwireMetadata {
-  processorId: 'cost-guard';
-  usage: CostGuardUsage;
+export interface CostControlTripwireMetadata {
+  processorId: 'cost-control';
+  usage: CostControlUsage;
   maxCost: number;
   scope: CostScope;
   scopeKey?: string;
@@ -65,13 +65,13 @@ export interface CostGuardTripwireMetadata {
    * Per-provider/model cost breakdown. Present only when `includeBreakdown`
    * is enabled and the breakdown query succeeds.
    */
-  breakdown?: CostGuardBreakdownEntry[];
+  breakdown?: CostControlBreakdownEntry[];
 }
 
 /**
- * Configuration options for CostGuardProcessor
+ * Configuration options for CostControlProcessor
  */
-export interface CostGuardOptions {
+export interface CostControlOptions {
   /**
    * Maximum estimated cost allowed (e.g. 0.50 for $0.50 USD).
    * Uses the cost data from observability metrics.
@@ -141,12 +141,12 @@ export interface CostGuardOptions {
 }
 
 /**
- * Cost guard specific violation detail
+ * Cost control specific violation detail
  */
-export interface CostGuardViolationDetail {
+export interface CostControlViolationDetail {
   usage: number;
   limit: number;
-  totalUsage: CostGuardUsage;
+  totalUsage: CostControlUsage;
   scope: CostScope;
   scopeKey?: string;
   /**
@@ -158,17 +158,17 @@ export interface CostGuardViolationDetail {
    * Per-provider/model cost breakdown. Present only when `includeBreakdown`
    * is enabled and the breakdown query succeeds.
    */
-  breakdown?: CostGuardBreakdownEntry[];
+  breakdown?: CostControlBreakdownEntry[];
 }
 
 const TOKEN_TOTAL_METRIC_NAMES = ['mastra_model_total_input_tokens', 'mastra_model_total_output_tokens'];
 
 /**
- * Monotonic counter distinguishing CostGuardProcessor instances in per-request
+ * Monotonic counter distinguishing CostControlProcessor instances in per-request
  * dedup state keys. The runner keys the state bag by processor id, which is
- * hardcoded 'cost-guard', so multiple instances in one pipeline share a bag.
+ * hardcoded 'cost-control', so multiple instances in one pipeline share a bag.
  */
-let costGuardInstanceCounter = 0;
+let costControlInstanceCounter = 0;
 
 const WINDOW_MS: Record<CostWindow, number> = {
   '1h': 60 * 60 * 1000,
@@ -180,10 +180,10 @@ const WINDOW_MS: Record<CostWindow, number> = {
 };
 
 /**
- * CostGuardProcessor monitors cumulative estimated cost across the agentic loop,
+ * CostControlProcessor monitors cumulative estimated cost across the agentic loop,
  * blocking or warning when a configurable monetary limit is exceeded.
  *
- * **Important:** This is an approximate cost guard. Cost data is queried from
+ * **Important:** This is an approximate cost control. Cost data is queried from
  * observability storage, which persists metrics asynchronously via buffered exporters.
  * Fast-running agents may exceed the configured limit before metrics are available
  * for query. Treat `maxCost` as a best-effort threshold, not a hard ceiling.
@@ -212,24 +212,24 @@ const WINDOW_MS: Record<CostWindow, number> = {
  *
  * @example Resource-scoped cost limit (default):
  * ```typescript
- * new CostGuardProcessor({
+ * new CostControlProcessor({
  *   maxCost: 1.00,
  * })
  * ```
  *
  * @example Thread-scoped with 24h window:
  * ```typescript
- * new CostGuardProcessor({
+ * new CostControlProcessor({
  *   maxCost: 5.00,
  *   scope: 'thread',
  *   window: '24h',
  * })
  * ```
  *
- * @example With onViolation callback (warn strategy — detail is CostGuardViolationDetail;
+ * @example With onViolation callback (warn strategy — detail is CostControlViolationDetail;
  * with the block strategy the runner passes the TripWire metadata as detail instead):
  * ```typescript
- * const guard = new CostGuardProcessor({
+ * const guard = new CostControlProcessor({
  *   maxCost: 10.00,
  *   scope: 'resource',
  *   window: '30d',
@@ -240,9 +240,9 @@ const WINDOW_MS: Record<CostWindow, number> = {
  * };
  * ```
  */
-export class CostGuardProcessor implements Processor<'cost-guard', CostGuardTripwireMetadata> {
-  public readonly id = 'cost-guard';
-  public readonly name = 'Cost Guard';
+export class CostControlProcessor implements Processor<'cost-control', CostControlTripwireMetadata> {
+  public readonly id = 'cost-control';
+  public readonly name = 'Cost Control';
 
   private maxCost: number | ((requestContext?: RequestContext) => number);
   private scope: CostScope;
@@ -251,19 +251,19 @@ export class CostGuardProcessor implements Processor<'cost-guard', CostGuardTrip
   private messageTemplate: string;
   private warnAtPercent?: number;
   private includeBreakdown: boolean;
-  private readonly instanceKey = costGuardInstanceCounter++;
+  private readonly instanceKey = costControlInstanceCounter++;
   public onViolation?: (violation: ProcessorViolation) => void | Promise<void>;
   private observabilityStorage?: ObservabilityStorage;
   private logger?: IMastraLogger;
 
-  constructor(options: CostGuardOptions) {
+  constructor(options: CostControlOptions) {
     if (typeof options.maxCost === 'number' && (!Number.isFinite(options.maxCost) || options.maxCost <= 0)) {
-      throw new Error('CostGuardProcessor requires maxCost to be a finite positive number');
+      throw new Error('CostControlProcessor requires maxCost to be a finite positive number');
     }
 
     if (options.warnAtPercent !== undefined) {
       if (!Number.isFinite(options.warnAtPercent) || options.warnAtPercent <= 0 || options.warnAtPercent >= 100) {
-        throw new Error('CostGuardProcessor requires warnAtPercent to be a number between 0 and 100 (exclusive)');
+        throw new Error('CostControlProcessor requires warnAtPercent to be a number between 0 and 100 (exclusive)');
       }
       this.warnAtPercent = options.warnAtPercent;
     }
@@ -272,7 +272,7 @@ export class CostGuardProcessor implements Processor<'cost-guard', CostGuardTrip
     this.scope = options.scope ?? 'resource';
     this.window = options.window ?? '7d';
     this.strategy = options.strategy ?? 'block';
-    this.messageTemplate = options.message ?? 'Cost guard: estimated cost limit exceeded ({usage}/{limit})';
+    this.messageTemplate = options.message ?? 'Cost control: estimated cost limit exceeded ({usage}/{limit})';
     this.includeBreakdown = options.includeBreakdown ?? false;
   }
 
@@ -281,7 +281,7 @@ export class CostGuardProcessor implements Processor<'cost-guard', CostGuardTrip
     const obsStorage = storage?.stores?.observability;
     if (!obsStorage || typeof obsStorage.getMetricAggregate !== 'function') {
       throw new Error(
-        `CostGuardProcessor requires observability storage with getMetricAggregate support. ` +
+        `CostControlProcessor requires observability storage with getMetricAggregate support. ` +
           'Configure observability storage on your Mastra instance.',
       );
     }
@@ -354,7 +354,7 @@ export class CostGuardProcessor implements Processor<'cost-guard', CostGuardTrip
     return filters;
   }
 
-  private async queryCost(scopeFilter: Record<string, string>): Promise<CostGuardUsage> {
+  private async queryCost(scopeFilter: Record<string, string>): Promise<CostControlUsage> {
     if (!this.observabilityStorage) {
       return { estimatedCost: null, costUnit: null };
     }
@@ -374,7 +374,7 @@ export class CostGuardProcessor implements Processor<'cost-guard', CostGuardTrip
         costUnit: result.costUnit ?? null,
       };
     } catch (error) {
-      this.logger?.warn('CostGuardProcessor: cost query failed; allowing step (fail-open)', { error });
+      this.logger?.warn('CostControlProcessor: cost query failed; allowing step (fail-open)', { error });
       return { estimatedCost: null, costUnit: null };
     }
   }
@@ -384,7 +384,7 @@ export class CostGuardProcessor implements Processor<'cost-guard', CostGuardTrip
    * Only called when a violation trips and `includeBreakdown` is enabled.
    * Degrades to undefined on any error (e.g. stores without breakdown support).
    */
-  private async queryBreakdown(scopeFilter: Record<string, string>): Promise<CostGuardBreakdownEntry[] | undefined> {
+  private async queryBreakdown(scopeFilter: Record<string, string>): Promise<CostControlBreakdownEntry[] | undefined> {
     if (!this.observabilityStorage) return undefined;
     try {
       const result = await this.observabilityStorage.getMetricBreakdown({
@@ -401,7 +401,7 @@ export class CostGuardProcessor implements Processor<'cost-guard', CostGuardTrip
         costUnit: group.costUnit ?? null,
       }));
     } catch (error) {
-      this.logger?.debug('CostGuardProcessor: breakdown query failed; omitting breakdown', { error });
+      this.logger?.debug('CostControlProcessor: breakdown query failed; omitting breakdown', { error });
       return undefined;
     }
   }
@@ -417,7 +417,7 @@ export class CostGuardProcessor implements Processor<'cost-guard', CostGuardTrip
       .replace('{limit}', this.formatNumber(limit));
   }
 
-  private async emitWarning(message: string, detail: CostGuardViolationDetail): Promise<void> {
+  private async emitWarning(message: string, detail: CostControlViolationDetail): Promise<void> {
     if (this.onViolation) {
       try {
         await this.onViolation({
@@ -427,21 +427,21 @@ export class CostGuardProcessor implements Processor<'cost-guard', CostGuardTrip
         });
       } catch (error) {
         // onViolation errors should not prevent the guard from functioning
-        this.logger?.warn('CostGuardProcessor: onViolation callback threw', { error });
+        this.logger?.warn('CostControlProcessor: onViolation callback threw', { error });
       }
     }
-    this.logger?.warn(`CostGuardProcessor: ${message}`);
+    this.logger?.warn(`CostControlProcessor: ${message}`);
   }
 
   /**
    * Builds the per-request dedup state key. Includes a per-instance component
-   * so that multiple CostGuardProcessor instances in the same pipeline (which
+   * so that multiple CostControlProcessor instances in the same pipeline (which
    * share one state bag keyed by processor id) don't suppress each other's
    * warnings, and stays stable across steps even when a dynamic `maxCost`
    * resolves to different values per step.
    */
   private warnedStateKey(level: 'hard' | 'soft'): string {
-    return `costGuardWarned:${level}:${this.instanceKey}`;
+    return `costControlWarned:${level}:${this.instanceKey}`;
   }
 
   private resolveMaxCost(requestContext?: RequestContext): number | undefined {
@@ -450,11 +450,11 @@ export class CostGuardProcessor implements Processor<'cost-guard', CostGuardTrip
     try {
       value = this.maxCost(requestContext);
     } catch (error) {
-      this.logger?.warn('CostGuardProcessor: dynamic maxCost function threw; skipping check (fail-open)', { error });
+      this.logger?.warn('CostControlProcessor: dynamic maxCost function threw; skipping check (fail-open)', { error });
       return undefined;
     }
     if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
-      this.logger?.warn('CostGuardProcessor: dynamic maxCost resolved to an invalid value; skipping check', {
+      this.logger?.warn('CostControlProcessor: dynamic maxCost resolved to an invalid value; skipping check', {
         value,
       });
       return undefined;
@@ -462,7 +462,7 @@ export class CostGuardProcessor implements Processor<'cost-guard', CostGuardTrip
     return value;
   }
 
-  async processInputStep(args: ProcessInputStepArgs<CostGuardTripwireMetadata>): Promise<void> {
+  async processInputStep(args: ProcessInputStepArgs<CostControlTripwireMetadata>): Promise<void> {
     const traceId = args.tracing?.currentSpan?.traceId;
     const resolved = this.resolveScopeFilter(args.requestContext, traceId);
     if (!resolved) return;
@@ -520,7 +520,7 @@ export class CostGuardProcessor implements Processor<'cost-guard', CostGuardTrip
       const stateKey = this.warnedStateKey('soft');
       if (!args.state[stateKey]) {
         args.state[stateKey] = true;
-        const message = `Cost guard: estimated cost reached ${this.warnAtPercent}% of the limit (${this.formatNumber(cost)}/${this.formatNumber(maxCost)})`;
+        const message = `Cost control: estimated cost reached ${this.warnAtPercent}% of the limit (${this.formatNumber(cost)}/${this.formatNumber(maxCost)})`;
         const breakdown = this.includeBreakdown ? await this.queryBreakdown(filter) : undefined;
         await this.emitWarning(message, {
           usage: cost,
@@ -535,3 +535,39 @@ export class CostGuardProcessor implements Processor<'cost-guard', CostGuardTrip
     }
   }
 }
+
+/**
+ * @deprecated Use {@link CostControlProcessor} instead. `CostGuardProcessor` is an
+ * alias for the same class (including the `'cost-control'` id) and will be removed
+ * in a future major version.
+ */
+export const CostGuardProcessor = CostControlProcessor;
+/**
+ * @deprecated Use {@link CostControlProcessor} instead.
+ */
+export type CostGuardProcessor = CostControlProcessor;
+
+/**
+ * @deprecated Use {@link CostControlOptions} instead.
+ */
+export type CostGuardOptions = CostControlOptions;
+
+/**
+ * @deprecated Use {@link CostControlUsage} instead.
+ */
+export type CostGuardUsage = CostControlUsage;
+
+/**
+ * @deprecated Use {@link CostControlBreakdownEntry} instead.
+ */
+export type CostGuardBreakdownEntry = CostControlBreakdownEntry;
+
+/**
+ * @deprecated Use {@link CostControlTripwireMetadata} instead.
+ */
+export type CostGuardTripwireMetadata = CostControlTripwireMetadata;
+
+/**
+ * @deprecated Use {@link CostControlViolationDetail} instead.
+ */
+export type CostGuardViolationDetail = CostControlViolationDetail;

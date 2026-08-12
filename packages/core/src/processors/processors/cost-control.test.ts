@@ -6,7 +6,7 @@ import { EntityType } from '../../observability';
 import { RequestContext, MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../../request-context';
 import type { ObservabilityStorage } from '../../storage/domains';
 import type { ProcessInputStepArgs } from '../index';
-import { CostGuardProcessor } from './cost-guard';
+import { CostControlProcessor, CostGuardProcessor } from './cost-control';
 
 // Mock logger that implements all required methods
 const mockLogger: IMastraLogger = {
@@ -86,12 +86,12 @@ function createRunScopeGuard(
   obsStorage: ObservabilityStorage,
   opts?: { strategy?: 'block' | 'warn'; message?: string },
 ) {
-  const guard = new CostGuardProcessor({ maxCost, scope: 'run', ...opts });
+  const guard = new CostControlProcessor({ maxCost, scope: 'run', ...opts });
   (guard as any).observabilityStorage = obsStorage;
   return guard;
 }
 
-describe('CostGuardProcessor', () => {
+describe('CostControlProcessor', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     vi.clearAllMocks();
@@ -99,28 +99,28 @@ describe('CostGuardProcessor', () => {
 
   describe('constructor', () => {
     it('throws if maxCost is not positive', () => {
-      expect(() => new CostGuardProcessor({ maxCost: 0 })).toThrow('positive number');
-      expect(() => new CostGuardProcessor({ maxCost: -1 })).toThrow('positive number');
+      expect(() => new CostControlProcessor({ maxCost: 0 })).toThrow('positive number');
+      expect(() => new CostControlProcessor({ maxCost: -1 })).toThrow('positive number');
     });
 
     it('accepts valid maxCost', () => {
-      const guard = new CostGuardProcessor({ maxCost: 1.0 });
-      expect(guard.id).toBe('cost-guard');
-      expect(guard.name).toBe('Cost Guard');
+      const guard = new CostControlProcessor({ maxCost: 1.0 });
+      expect(guard.id).toBe('cost-control');
+      expect(guard.name).toBe('Cost Control');
     });
 
     it('defaults scope to resource', () => {
-      const guard = new CostGuardProcessor({ maxCost: 1.0 });
+      const guard = new CostControlProcessor({ maxCost: 1.0 });
       expect((guard as any).scope).toBe('resource');
     });
 
     it('defaults window to 7d', () => {
-      const guard = new CostGuardProcessor({ maxCost: 1.0 });
+      const guard = new CostControlProcessor({ maxCost: 1.0 });
       expect((guard as any).window).toBe('7d');
     });
 
     it('defaults strategy to block', () => {
-      const guard = new CostGuardProcessor({ maxCost: 1.0 });
+      const guard = new CostControlProcessor({ maxCost: 1.0 });
       expect((guard as any).strategy).toBe('block');
     });
   });
@@ -223,7 +223,7 @@ describe('CostGuardProcessor', () => {
         expect(error).toBeInstanceOf(TripWire);
         const tripwire = error as TripWire<any>;
         expect(tripwire.options.retry).toBe(false);
-        expect(tripwire.options.metadata.processorId).toBe('cost-guard');
+        expect(tripwire.options.metadata.processorId).toBe('cost-control');
         expect(tripwire.options.metadata.scope).toBe('run');
         expect(tripwire.options.metadata.maxCost).toBe(0.5);
         expect(tripwire.options.metadata.usage.estimatedCost).toBeCloseTo(0.6, 10);
@@ -236,7 +236,7 @@ describe('CostGuardProcessor', () => {
     it('logs warning through the Mastra logger instead of throwing', async () => {
       const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       const obsStorage = createMockObservabilityStorage({ inputCost: 0.4, outputCost: 0.2, costUnit: 'usd' });
-      const guard = new CostGuardProcessor({ maxCost: 0.5, scope: 'run', strategy: 'warn' });
+      const guard = new CostControlProcessor({ maxCost: 0.5, scope: 'run', strategy: 'warn' });
       guard.__registerMastra(createMockMastra(obsStorage));
 
       const args = createInputStepArgs({
@@ -245,7 +245,7 @@ describe('CostGuardProcessor', () => {
       });
 
       await expect(guard.processInputStep(args)).resolves.toBeUndefined();
-      expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining('CostGuardProcessor'));
+      expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining('CostControlProcessor'));
       expect(consoleSpy).not.toHaveBeenCalled();
 
       consoleSpy.mockRestore();
@@ -256,7 +256,7 @@ describe('CostGuardProcessor', () => {
     it('uses custom message template', async () => {
       const obsStorage = createMockObservabilityStorage({ inputCost: 0.4, outputCost: 0.2, costUnit: 'usd' });
 
-      const guard = new CostGuardProcessor({
+      const guard = new CostControlProcessor({
         maxCost: 0.5,
         scope: 'run',
         message: 'Budget exceeded: ${usage} of ${limit} allowed',
@@ -287,7 +287,7 @@ describe('CostGuardProcessor', () => {
         costUnit: 'usd',
       });
 
-      const guard = new CostGuardProcessor({
+      const guard = new CostControlProcessor({
         maxCost: 0.5,
         scope: 'resource',
       });
@@ -308,7 +308,7 @@ describe('CostGuardProcessor', () => {
     it('queries with correct resourceId filter', async () => {
       const obsStorage = createMockObservabilityStorage();
 
-      const guard = new CostGuardProcessor({
+      const guard = new CostControlProcessor({
         maxCost: 10.0,
         scope: 'resource',
       });
@@ -334,7 +334,7 @@ describe('CostGuardProcessor', () => {
     it('passes timestamp filter for time window', async () => {
       const obsStorage = createMockObservabilityStorage();
 
-      const guard = new CostGuardProcessor({
+      const guard = new CostControlProcessor({
         maxCost: 10.0,
         scope: 'resource',
         window: '24h',
@@ -372,7 +372,7 @@ describe('CostGuardProcessor', () => {
     it('uses default 7d window', async () => {
       const obsStorage = createMockObservabilityStorage();
 
-      const guard = new CostGuardProcessor({
+      const guard = new CostControlProcessor({
         maxCost: 10.0,
         scope: 'resource',
       });
@@ -402,7 +402,7 @@ describe('CostGuardProcessor', () => {
         costUnit: 'usd',
       });
 
-      const guard = new CostGuardProcessor({
+      const guard = new CostControlProcessor({
         maxCost: 1.0,
         scope: 'resource',
       });
@@ -424,7 +424,7 @@ describe('CostGuardProcessor', () => {
         costUnit: 'usd',
       });
 
-      const guard = new CostGuardProcessor({
+      const guard = new CostControlProcessor({
         maxCost: 0.5,
         scope: 'thread',
       });
@@ -445,7 +445,7 @@ describe('CostGuardProcessor', () => {
     it('queries with correct threadId filter', async () => {
       const obsStorage = createMockObservabilityStorage();
 
-      const guard = new CostGuardProcessor({
+      const guard = new CostControlProcessor({
         maxCost: 10.0,
         scope: 'thread',
       });
@@ -475,7 +475,7 @@ describe('CostGuardProcessor', () => {
         costUnit: 'usd',
       });
 
-      const guard = new CostGuardProcessor({
+      const guard = new CostControlProcessor({
         maxCost: 1.0,
         scope: 'thread',
       });
@@ -508,7 +508,7 @@ describe('CostGuardProcessor', () => {
       const mockMastra = createMockMastra(mockObsStorage);
 
       for (const scope of ['run', 'resource', 'thread'] as const) {
-        const guard = new CostGuardProcessor({ maxCost: 1.0, scope });
+        const guard = new CostControlProcessor({ maxCost: 1.0, scope });
         guard.__registerMastra(mockMastra);
         expect((guard as any).observabilityStorage).toBe(mockObsStorage);
       }
@@ -519,7 +519,7 @@ describe('CostGuardProcessor', () => {
         getStorage: () => ({ stores: {} }),
       } as any;
 
-      const guard = new CostGuardProcessor({ maxCost: 1.0 });
+      const guard = new CostControlProcessor({ maxCost: 1.0 });
       expect(() => guard.__registerMastra(mockMastra)).toThrow('observability storage');
     });
 
@@ -528,7 +528,7 @@ describe('CostGuardProcessor', () => {
         getStorage: () => undefined,
       } as any;
 
-      const guard = new CostGuardProcessor({ maxCost: 1.0, scope: 'thread' });
+      const guard = new CostControlProcessor({ maxCost: 1.0, scope: 'thread' });
       expect(() => guard.__registerMastra(mockMastra)).toThrow('observability storage');
     });
 
@@ -537,7 +537,7 @@ describe('CostGuardProcessor', () => {
         getStorage: () => ({ stores: { observability: { listMetrics: vi.fn() } } }),
       } as any;
 
-      const guard = new CostGuardProcessor({ maxCost: 1.0 });
+      const guard = new CostControlProcessor({ maxCost: 1.0 });
       expect(() => guard.__registerMastra(mockMastra)).toThrow('getMetricAggregate');
     });
   });
@@ -624,7 +624,7 @@ describe('CostGuardProcessor', () => {
       await guard.processInputStep(args);
       expect(onViolation).toHaveBeenCalledOnce();
       const violation = onViolation.mock.calls[0]![0];
-      expect(violation.processorId).toBe('cost-guard');
+      expect(violation.processorId).toBe('cost-control');
       expect(violation.message).toContain('cost limit exceeded');
       expect(violation.detail.limit).toBe(0.5);
       expect(violation.detail.usage).toBeCloseTo(0.6, 10);
@@ -644,7 +644,7 @@ describe('CostGuardProcessor', () => {
         costUnit: 'usd',
       });
 
-      const guard = new CostGuardProcessor({
+      const guard = new CostControlProcessor({
         maxCost: 1.0,
         scope: 'thread',
         strategy: 'warn',
@@ -719,7 +719,7 @@ describe('CostGuardProcessor', () => {
         expect.stringContaining('cost limit exceeded'),
         expect.objectContaining({
           retry: false,
-          metadata: expect.objectContaining({ processorId: 'cost-guard' }),
+          metadata: expect.objectContaining({ processorId: 'cost-control' }),
         }),
       );
     });
@@ -731,7 +731,7 @@ describe('CostGuardProcessor', () => {
         getMetricAggregate: vi.fn().mockRejectedValue(new Error('observability unavailable')),
       } as unknown as ObservabilityStorage;
 
-      const guard = new CostGuardProcessor({
+      const guard = new CostControlProcessor({
         maxCost: 1.0,
         scope: 'resource',
       });
@@ -754,7 +754,7 @@ describe('CostGuardProcessor', () => {
         getMetricAggregate: vi.fn().mockResolvedValue({ value: null, estimatedCost: null, costUnit: null }),
       } as unknown as ObservabilityStorage;
 
-      const guard = new CostGuardProcessor({
+      const guard = new CostControlProcessor({
         maxCost: 1.0,
         scope: 'resource',
       });
@@ -810,7 +810,7 @@ describe('CostGuardProcessor', () => {
       ];
 
       for (let i = 0; i < windows.length; i++) {
-        const guard = new CostGuardProcessor({
+        const guard = new CostControlProcessor({
           maxCost: 1.0,
           window: windows[i],
         });
@@ -822,7 +822,7 @@ describe('CostGuardProcessor', () => {
     });
 
     it('no observability storage set → query returns null (fail-open for run scope)', async () => {
-      const guard = new CostGuardProcessor({ maxCost: 0.01, scope: 'run' });
+      const guard = new CostControlProcessor({ maxCost: 0.01, scope: 'run' });
       // Not registered → no observability storage
 
       const args = createInputStepArgs({
@@ -843,7 +843,7 @@ describe('CostGuardProcessor', () => {
         costUnit: 'usd',
       });
 
-      const guard = new CostGuardProcessor({
+      const guard = new CostControlProcessor({
         maxCost: 0.5,
         scope: 'thread',
       });
@@ -878,7 +878,7 @@ describe('CostGuardProcessor', () => {
         costUnit: 'usd',
       });
 
-      const guard = new CostGuardProcessor({
+      const guard = new CostControlProcessor({
         maxCost: 0.5,
         scope: 'resource',
       });
@@ -909,7 +909,7 @@ describe('CostGuardProcessor', () => {
     it('reserved keys take precedence over MastraMemory context', async () => {
       const obsStorage = createMockObservabilityStorage();
 
-      const guard = new CostGuardProcessor({
+      const guard = new CostControlProcessor({
         maxCost: 10.0,
         scope: 'thread',
       });
@@ -940,7 +940,7 @@ describe('CostGuardProcessor', () => {
     it('resource reserved key takes precedence over MastraMemory resourceId', async () => {
       const obsStorage = createMockObservabilityStorage();
 
-      const guard = new CostGuardProcessor({
+      const guard = new CostControlProcessor({
         maxCost: 10.0,
         scope: 'resource',
       });
@@ -975,7 +975,7 @@ describe('CostGuardProcessor', () => {
         costUnit: 'usd',
       });
 
-      const guard = new CostGuardProcessor({
+      const guard = new CostControlProcessor({
         maxCost: 1.0,
         scope: 'thread',
       });
@@ -1011,7 +1011,7 @@ describe('CostGuardProcessor', () => {
         costUnit: 'usd',
       });
 
-      const guard = new CostGuardProcessor({
+      const guard = new CostControlProcessor({
         maxCost: 1.0,
         scope: 'resource',
       });
@@ -1047,7 +1047,7 @@ describe('CostGuardProcessor', () => {
         costUnit: 'usd',
       });
 
-      const guard = new CostGuardProcessor({
+      const guard = new CostControlProcessor({
         maxCost: 1.0,
         scope: 'thread',
       });
@@ -1067,7 +1067,7 @@ describe('CostGuardProcessor', () => {
         costUnit: 'usd',
       });
 
-      const guard = new CostGuardProcessor({
+      const guard = new CostControlProcessor({
         maxCost: 0.5,
         scope: 'run',
       });
@@ -1099,18 +1099,18 @@ describe('CostGuardProcessor', () => {
   describe('soft threshold (warnAtPercent) and once-per-run dedup', () => {
     it('constructor rejects invalid warnAtPercent values', () => {
       for (const warnAtPercent of [0, 100, 150, NaN]) {
-        expect(() => new CostGuardProcessor({ maxCost: 1.0, warnAtPercent })).toThrow('warnAtPercent');
+        expect(() => new CostControlProcessor({ maxCost: 1.0, warnAtPercent })).toThrow('warnAtPercent');
       }
     });
 
     it('constructor accepts valid warnAtPercent', () => {
-      expect(() => new CostGuardProcessor({ maxCost: 1.0, warnAtPercent: 80 })).not.toThrow();
+      expect(() => new CostControlProcessor({ maxCost: 1.0, warnAtPercent: 80 })).not.toThrow();
     });
 
     it('soft threshold fires onViolation with threshold soft and does not abort (block strategy)', async () => {
       // cost 0.45 >= 80% of 0.5 (0.4) but < 0.5
       const obsStorage = createMockObservabilityStorage({ inputCost: 0.25, outputCost: 0.2, costUnit: 'usd' });
-      const guard = new CostGuardProcessor({ maxCost: 0.5, scope: 'run', strategy: 'block', warnAtPercent: 80 });
+      const guard = new CostControlProcessor({ maxCost: 0.5, scope: 'run', strategy: 'block', warnAtPercent: 80 });
       guard.__registerMastra(createMockMastra(obsStorage));
       const onViolation = vi.fn();
       guard.onViolation = onViolation;
@@ -1128,7 +1128,7 @@ describe('CostGuardProcessor', () => {
 
     it('soft threshold fires onViolation with threshold soft and does not abort (warn strategy)', async () => {
       const obsStorage = createMockObservabilityStorage({ inputCost: 0.25, outputCost: 0.2, costUnit: 'usd' });
-      const guard = new CostGuardProcessor({ maxCost: 0.5, scope: 'run', strategy: 'warn', warnAtPercent: 80 });
+      const guard = new CostControlProcessor({ maxCost: 0.5, scope: 'run', strategy: 'warn', warnAtPercent: 80 });
       guard.__registerMastra(createMockMastra(obsStorage));
       const onViolation = vi.fn();
       guard.onViolation = onViolation;
@@ -1145,7 +1145,7 @@ describe('CostGuardProcessor', () => {
 
     it('soft warning fires once across multiple steps sharing the same state object', async () => {
       const obsStorage = createMockObservabilityStorage({ inputCost: 0.25, outputCost: 0.2, costUnit: 'usd' });
-      const guard = new CostGuardProcessor({ maxCost: 0.5, scope: 'run', warnAtPercent: 80 });
+      const guard = new CostControlProcessor({ maxCost: 0.5, scope: 'run', warnAtPercent: 80 });
       guard.__registerMastra(createMockMastra(obsStorage));
       const onViolation = vi.fn();
       guard.onViolation = onViolation;
@@ -1165,7 +1165,7 @@ describe('CostGuardProcessor', () => {
 
     it('hard warn-strategy violation fires log + onViolation once across steps sharing state', async () => {
       const obsStorage = createMockObservabilityStorage({ inputCost: 0.4, outputCost: 0.2, costUnit: 'usd' });
-      const guard = new CostGuardProcessor({ maxCost: 0.5, scope: 'run', strategy: 'warn' });
+      const guard = new CostControlProcessor({ maxCost: 0.5, scope: 'run', strategy: 'warn' });
       guard.__registerMastra(createMockMastra(obsStorage));
       const onViolation = vi.fn();
       guard.onViolation = onViolation;
@@ -1192,7 +1192,7 @@ describe('CostGuardProcessor', () => {
     it('cost below soft threshold: no callbacks, no logs', async () => {
       // cost 0.3 < 80% of 0.5 (0.4)
       const obsStorage = createMockObservabilityStorage({ inputCost: 0.1, outputCost: 0.2, costUnit: 'usd' });
-      const guard = new CostGuardProcessor({ maxCost: 0.5, scope: 'run', warnAtPercent: 80 });
+      const guard = new CostControlProcessor({ maxCost: 0.5, scope: 'run', warnAtPercent: 80 });
       guard.__registerMastra(createMockMastra(obsStorage));
       const onViolation = vi.fn();
       guard.onViolation = onViolation;
@@ -1209,7 +1209,7 @@ describe('CostGuardProcessor', () => {
 
     it('at exactly maxCost only the hard path fires', async () => {
       const obsStorage = createMockObservabilityStorage({ inputCost: 0.3, outputCost: 0.2, costUnit: 'usd' });
-      const guard = new CostGuardProcessor({ maxCost: 0.5, scope: 'run', strategy: 'warn', warnAtPercent: 80 });
+      const guard = new CostControlProcessor({ maxCost: 0.5, scope: 'run', strategy: 'warn', warnAtPercent: 80 });
       guard.__registerMastra(createMockMastra(obsStorage));
       const onViolation = vi.fn();
       guard.onViolation = onViolation;
@@ -1252,7 +1252,7 @@ describe('CostGuardProcessor', () => {
       const obsStorage = withBreakdown(
         createMockObservabilityStorage({ inputCost: 0.4, outputCost: 0.2, costUnit: 'usd' }),
       );
-      const guard = new CostGuardProcessor({ maxCost: 0.5, scope: 'run', strategy: 'warn', includeBreakdown: true });
+      const guard = new CostControlProcessor({ maxCost: 0.5, scope: 'run', strategy: 'warn', includeBreakdown: true });
       guard.__registerMastra(createMockMastra(obsStorage));
       const onViolation = vi.fn();
       guard.onViolation = onViolation;
@@ -1267,7 +1267,7 @@ describe('CostGuardProcessor', () => {
       const obsStorage = withBreakdown(
         createMockObservabilityStorage({ inputCost: 0.4, outputCost: 0.2, costUnit: 'usd' }),
       );
-      const guard = new CostGuardProcessor({ maxCost: 0.5, scope: 'run', includeBreakdown: true });
+      const guard = new CostControlProcessor({ maxCost: 0.5, scope: 'run', includeBreakdown: true });
       (guard as any).observabilityStorage = obsStorage;
 
       const args = createInputStepArgs({ stepNumber: 1, tracing: createMockTracing('trace-bd-block') as any });
@@ -1284,7 +1284,7 @@ describe('CostGuardProcessor', () => {
       const obsStorage = withBreakdown(
         createMockObservabilityStorage({ inputCost: 0.3, outputCost: 0.1, costUnit: 'usd' }),
       );
-      const guard = new CostGuardProcessor({
+      const guard = new CostControlProcessor({
         maxCost: 0.5,
         scope: 'run',
         warnAtPercent: 80,
@@ -1305,7 +1305,7 @@ describe('CostGuardProcessor', () => {
       const obsStorage = withBreakdown(
         createMockObservabilityStorage({ inputCost: 0.4, outputCost: 0.2, costUnit: 'usd' }),
       );
-      const guard = new CostGuardProcessor({ maxCost: 0.5, scope: 'run', strategy: 'warn', includeBreakdown: true });
+      const guard = new CostControlProcessor({ maxCost: 0.5, scope: 'run', strategy: 'warn', includeBreakdown: true });
       (guard as any).observabilityStorage = obsStorage;
 
       const args = createInputStepArgs({ stepNumber: 1, tracing: createMockTracing('trace-bd-filters') as any });
@@ -1324,7 +1324,7 @@ describe('CostGuardProcessor', () => {
       const obsStorage = withBreakdown(
         createMockObservabilityStorage({ inputCost: 0.4, outputCost: 0.2, costUnit: 'usd' }),
       );
-      const guard = new CostGuardProcessor({ maxCost: 0.5, scope: 'run', strategy: 'warn' });
+      const guard = new CostControlProcessor({ maxCost: 0.5, scope: 'run', strategy: 'warn' });
       guard.__registerMastra(createMockMastra(obsStorage));
 
       const args = createInputStepArgs({ stepNumber: 1, tracing: createMockTracing('trace-bd-off') as any });
@@ -1337,7 +1337,7 @@ describe('CostGuardProcessor', () => {
       const obsStorage = withBreakdown(
         createMockObservabilityStorage({ inputCost: 0.01, outputCost: 0.01, costUnit: 'usd' }),
       );
-      const guard = new CostGuardProcessor({ maxCost: 10.0, scope: 'run', includeBreakdown: true });
+      const guard = new CostControlProcessor({ maxCost: 10.0, scope: 'run', includeBreakdown: true });
       (guard as any).observabilityStorage = obsStorage;
 
       const args = createInputStepArgs({ stepNumber: 1, tracing: createMockTracing('trace-bd-happy') as any });
@@ -1353,7 +1353,7 @@ describe('CostGuardProcessor', () => {
           throw new Error('getMetricBreakdown not implemented');
         },
       );
-      const guard = new CostGuardProcessor({ maxCost: 0.5, scope: 'run', strategy: 'warn', includeBreakdown: true });
+      const guard = new CostControlProcessor({ maxCost: 0.5, scope: 'run', strategy: 'warn', includeBreakdown: true });
       guard.__registerMastra(createMockMastra(obsStorage));
       const onViolation = vi.fn();
       guard.onViolation = onViolation;
@@ -1364,7 +1364,7 @@ describe('CostGuardProcessor', () => {
       expect(onViolation).toHaveBeenCalledTimes(1);
       expect(onViolation.mock.calls[0]![0].detail.breakdown).toBeUndefined();
       expect(mockLogger.debug).toHaveBeenCalledWith(
-        'CostGuardProcessor: breakdown query failed; omitting breakdown',
+        'CostControlProcessor: breakdown query failed; omitting breakdown',
         expect.objectContaining({ error: expect.any(Error) }),
       );
     });
@@ -1376,7 +1376,7 @@ describe('CostGuardProcessor', () => {
           throw new Error('not implemented');
         },
       );
-      const guard = new CostGuardProcessor({ maxCost: 0.5, scope: 'run', includeBreakdown: true });
+      const guard = new CostControlProcessor({ maxCost: 0.5, scope: 'run', includeBreakdown: true });
       (guard as any).observabilityStorage = obsStorage;
 
       const args = createInputStepArgs({ stepNumber: 1, tracing: createMockTracing('trace-bd-err-block') as any });
@@ -1386,7 +1386,7 @@ describe('CostGuardProcessor', () => {
       } catch (error) {
         const tripwire = error as TripWire<any>;
         expect(tripwire.options.metadata.breakdown).toBeUndefined();
-        expect(tripwire.options.metadata.processorId).toBe('cost-guard');
+        expect(tripwire.options.metadata.processorId).toBe('cost-control');
       }
     });
 
@@ -1398,7 +1398,7 @@ describe('CostGuardProcessor', () => {
             groups: [{ dimensions: {}, value: 100, estimatedCost: null, costUnit: null }],
           }) as any,
       );
-      const guard = new CostGuardProcessor({ maxCost: 0.5, scope: 'run', strategy: 'warn', includeBreakdown: true });
+      const guard = new CostControlProcessor({ maxCost: 0.5, scope: 'run', strategy: 'warn', includeBreakdown: true });
       (guard as any).observabilityStorage = obsStorage;
       const onViolation = vi.fn();
       guard.onViolation = onViolation;
@@ -1423,7 +1423,7 @@ describe('CostGuardProcessor', () => {
       '$scope scope passes the $filterKey filter from RequestContext key $contextKey',
       async ({ scope, contextKey, filterKey, id }) => {
         const obsStorage = createMockObservabilityStorage({ inputCost: 0.05, outputCost: 0.05, costUnit: 'usd' });
-        const guard = new CostGuardProcessor({ maxCost: 10.0, scope });
+        const guard = new CostControlProcessor({ maxCost: 10.0, scope });
         (guard as any).observabilityStorage = obsStorage;
 
         const requestContext = new RequestContext();
@@ -1441,7 +1441,7 @@ describe('CostGuardProcessor', () => {
 
     it.each(scopeCases)('$scope scope applies the time window filter', async ({ scope, contextKey, id }) => {
       const obsStorage = createMockObservabilityStorage();
-      const guard = new CostGuardProcessor({ maxCost: 10.0, scope, window: '24h' });
+      const guard = new CostControlProcessor({ maxCost: 10.0, scope, window: '24h' });
       (guard as any).observabilityStorage = obsStorage;
 
       const requestContext = new RequestContext();
@@ -1459,7 +1459,7 @@ describe('CostGuardProcessor', () => {
       '$scope scope: missing RequestContext key → fail-open, no query, no onViolation',
       async ({ scope }) => {
         const obsStorage = createMockObservabilityStorage({ inputCost: 5, outputCost: 5, costUnit: 'usd' });
-        const guard = new CostGuardProcessor({ maxCost: 0.5, scope });
+        const guard = new CostControlProcessor({ maxCost: 0.5, scope });
         (guard as any).observabilityStorage = obsStorage;
         const onViolation = vi.fn();
         guard.onViolation = onViolation;
@@ -1474,7 +1474,7 @@ describe('CostGuardProcessor', () => {
 
     it('non-string RequestContext value → fail-open, no query', async () => {
       const obsStorage = createMockObservabilityStorage({ inputCost: 5, outputCost: 5, costUnit: 'usd' });
-      const guard = new CostGuardProcessor({ maxCost: 0.5, scope: 'user' });
+      const guard = new CostControlProcessor({ maxCost: 0.5, scope: 'user' });
       (guard as any).observabilityStorage = obsStorage;
 
       const requestContext = new RequestContext();
@@ -1487,7 +1487,7 @@ describe('CostGuardProcessor', () => {
 
     it('tripwire metadata carries the new scope and scopeKey', async () => {
       const obsStorage = createMockObservabilityStorage({ inputCost: 0.4, outputCost: 0.2, costUnit: 'usd' });
-      const guard = new CostGuardProcessor({ maxCost: 0.5, scope: 'user' });
+      const guard = new CostControlProcessor({ maxCost: 0.5, scope: 'user' });
       (guard as any).observabilityStorage = obsStorage;
 
       const requestContext = new RequestContext();
@@ -1506,7 +1506,7 @@ describe('CostGuardProcessor', () => {
 
     it('violation detail carries the new scope and scopeKey (warn strategy)', async () => {
       const obsStorage = createMockObservabilityStorage({ inputCost: 0.4, outputCost: 0.2, costUnit: 'usd' });
-      const guard = new CostGuardProcessor({ maxCost: 0.5, scope: 'organization', strategy: 'warn' });
+      const guard = new CostControlProcessor({ maxCost: 0.5, scope: 'organization', strategy: 'warn' });
       guard.__registerMastra(createMockMastra(obsStorage));
       const onViolation = vi.fn();
       guard.onViolation = onViolation;
@@ -1566,7 +1566,7 @@ describe('CostGuardProcessor', () => {
         ],
       });
 
-      const guard = new CostGuardProcessor({ maxCost: 0.5, scope: 'user' });
+      const guard = new CostControlProcessor({ maxCost: 0.5, scope: 'user' });
       (guard as any).observabilityStorage = observability;
 
       // user-a: 0.4 + 0.3 = 0.7 >= 0.5 → blocks
@@ -1591,7 +1591,7 @@ describe('CostGuardProcessor', () => {
       const maxCostFn = vi.fn((requestContext?: RequestContext) =>
         requestContext?.get('tier') === 'pro' ? 10.0 : 0.5,
       );
-      const guard = new CostGuardProcessor({ maxCost: maxCostFn, scope: 'run' });
+      const guard = new CostControlProcessor({ maxCost: maxCostFn, scope: 'run' });
       guard.__registerMastra(createMockMastra(obsStorage));
 
       const requestContext = new RequestContext();
@@ -1609,7 +1609,7 @@ describe('CostGuardProcessor', () => {
 
     it('two requests with different context-derived limits produce different outcomes', async () => {
       const obsStorage = createMockObservabilityStorage({ inputCost: 0.4, outputCost: 0.2, costUnit: 'usd' });
-      const guard = new CostGuardProcessor({
+      const guard = new CostControlProcessor({
         maxCost: (requestContext?: RequestContext) => (requestContext?.get('tier') === 'pro' ? 10.0 : 0.5),
         scope: 'run',
       });
@@ -1638,7 +1638,7 @@ describe('CostGuardProcessor', () => {
 
     it('tripwire metadata maxCost reflects the resolved value', async () => {
       const obsStorage = createMockObservabilityStorage({ inputCost: 0.4, outputCost: 0.2, costUnit: 'usd' });
-      const guard = new CostGuardProcessor({ maxCost: () => 0.25, scope: 'run' });
+      const guard = new CostControlProcessor({ maxCost: () => 0.25, scope: 'run' });
       guard.__registerMastra(createMockMastra(obsStorage));
 
       const args = createInputStepArgs({
@@ -1657,7 +1657,7 @@ describe('CostGuardProcessor', () => {
 
     it.each([0, -1, NaN])('function returning %s → step proceeds, logger warned, no onViolation', async invalid => {
       const obsStorage = createMockObservabilityStorage({ inputCost: 0.4, outputCost: 0.2, costUnit: 'usd' });
-      const guard = new CostGuardProcessor({ maxCost: () => invalid, scope: 'run' });
+      const guard = new CostControlProcessor({ maxCost: () => invalid, scope: 'run' });
       guard.__registerMastra(createMockMastra(obsStorage));
       const onViolation = vi.fn();
       guard.onViolation = onViolation;
@@ -1701,7 +1701,7 @@ describe('CostGuardProcessor', () => {
       const obsStorage = {
         getMetricAggregate: vi.fn().mockRejectedValue(new Error('storage down')),
       } as unknown as ObservabilityStorage;
-      const guard = new CostGuardProcessor({ maxCost: 0.5, scope: 'run' });
+      const guard = new CostControlProcessor({ maxCost: 0.5, scope: 'run' });
       guard.__registerMastra(createMockMastra(obsStorage));
 
       const args = createInputStepArgs({
@@ -1739,7 +1739,7 @@ describe('CostGuardProcessor', () => {
 
     it('logs a warning when onViolation throws and still logs the violation warning', async () => {
       const obsStorage = createMockObservabilityStorage({ inputCost: 0.4, outputCost: 0.2, costUnit: 'usd' });
-      const guard = new CostGuardProcessor({ maxCost: 0.5, scope: 'run', strategy: 'warn' });
+      const guard = new CostControlProcessor({ maxCost: 0.5, scope: 'run', strategy: 'warn' });
       guard.__registerMastra(createMockMastra(obsStorage));
       guard.onViolation = vi.fn().mockRejectedValue(new Error('callback boom'));
 
@@ -1759,17 +1759,17 @@ describe('CostGuardProcessor', () => {
 
   describe('review fixes', () => {
     it('constructor rejects NaN and Infinity maxCost', () => {
-      expect(() => new CostGuardProcessor({ maxCost: NaN })).toThrow('finite positive number');
-      expect(() => new CostGuardProcessor({ maxCost: Infinity })).toThrow('finite positive number');
+      expect(() => new CostControlProcessor({ maxCost: NaN })).toThrow('finite positive number');
+      expect(() => new CostControlProcessor({ maxCost: Infinity })).toThrow('finite positive number');
     });
 
     it('two guard instances sharing one state bag each fire their own warning', async () => {
       // The runner keys per-processor state by processor.id, which is
-      // hardcoded 'cost-guard' — two instances in one pipeline share a state
+      // hardcoded 'cost-control' — two instances in one pipeline share a state
       // bag. Their dedup keys must not collide.
       const obsStorage = createMockObservabilityStorage({ inputCost: 0.4, outputCost: 0.2, costUnit: 'usd' });
-      const lowGuard = new CostGuardProcessor({ maxCost: 0.5, scope: 'run', strategy: 'warn' });
-      const highGuard = new CostGuardProcessor({ maxCost: 0.55, scope: 'run', strategy: 'warn' });
+      const lowGuard = new CostControlProcessor({ maxCost: 0.5, scope: 'run', strategy: 'warn' });
+      const highGuard = new CostControlProcessor({ maxCost: 0.55, scope: 'run', strategy: 'warn' });
       lowGuard.__registerMastra(createMockMastra(obsStorage));
       highGuard.__registerMastra(createMockMastra(obsStorage));
       const lowViolation = vi.fn();
@@ -1790,8 +1790,8 @@ describe('CostGuardProcessor', () => {
       // Cost 0.6 against maxCost 1.0 crosses both the 50% and 55% soft
       // thresholds; each instance must fire despite the shared state bag.
       const obsStorage = createMockObservabilityStorage({ inputCost: 0.4, outputCost: 0.2, costUnit: 'usd' });
-      const fiftyGuard = new CostGuardProcessor({ maxCost: 1.0, scope: 'run', warnAtPercent: 50 });
-      const fiftyFiveGuard = new CostGuardProcessor({ maxCost: 1.0, scope: 'run', warnAtPercent: 55 });
+      const fiftyGuard = new CostControlProcessor({ maxCost: 1.0, scope: 'run', warnAtPercent: 50 });
+      const fiftyFiveGuard = new CostControlProcessor({ maxCost: 1.0, scope: 'run', warnAtPercent: 55 });
       fiftyGuard.__registerMastra(createMockMastra(obsStorage));
       fiftyFiveGuard.__registerMastra(createMockMastra(obsStorage));
       const fiftyViolation = vi.fn();
@@ -1811,7 +1811,7 @@ describe('CostGuardProcessor', () => {
     it('dedup stays once-per-request when a dynamic maxCost resolves differently per step', async () => {
       const obsStorage = createMockObservabilityStorage({ inputCost: 0.4, outputCost: 0.2, costUnit: 'usd' });
       let call = 0;
-      const guard = new CostGuardProcessor({
+      const guard = new CostControlProcessor({
         // Varies per step but always below the queried cost of 0.6
         maxCost: () => 0.5 + call++ * 0.01,
         scope: 'run',
@@ -1832,7 +1832,7 @@ describe('CostGuardProcessor', () => {
 
     it('two distinct state objects (two requests) each fire the warning once', async () => {
       const obsStorage = createMockObservabilityStorage({ inputCost: 0.4, outputCost: 0.2, costUnit: 'usd' });
-      const guard = new CostGuardProcessor({ maxCost: 0.5, scope: 'run', strategy: 'warn' });
+      const guard = new CostControlProcessor({ maxCost: 0.5, scope: 'run', strategy: 'warn' });
       guard.__registerMastra(createMockMastra(obsStorage));
       const onViolation = vi.fn();
       guard.onViolation = onViolation;
@@ -1850,7 +1850,7 @@ describe('CostGuardProcessor', () => {
 
     it('block tripwire metadata carries threshold: hard', async () => {
       const obsStorage = createMockObservabilityStorage({ inputCost: 0.4, outputCost: 0.2, costUnit: 'usd' });
-      const guard = new CostGuardProcessor({ maxCost: 0.5, scope: 'run' });
+      const guard = new CostControlProcessor({ maxCost: 0.5, scope: 'run' });
       guard.__registerMastra(createMockMastra(obsStorage));
 
       const args = createInputStepArgs({
@@ -1868,7 +1868,7 @@ describe('CostGuardProcessor', () => {
 
     it('throwing dynamic maxCost function fails open with a logged warning', async () => {
       const obsStorage = createMockObservabilityStorage({ inputCost: 0.4, outputCost: 0.2, costUnit: 'usd' });
-      const guard = new CostGuardProcessor({
+      const guard = new CostControlProcessor({
         maxCost: () => {
           throw new Error('tier lookup failed');
         },
@@ -1923,7 +1923,7 @@ describe('CostGuardProcessor', () => {
       });
 
       // Total is 0.3 exactly — a double-counting bug would report 0.6.
-      const allowGuard = new CostGuardProcessor({ maxCost: 0.35, scope: 'run' });
+      const allowGuard = new CostControlProcessor({ maxCost: 0.35, scope: 'run' });
       (allowGuard as any).observabilityStorage = observability;
       await expect(
         allowGuard.processInputStep(
@@ -1931,7 +1931,7 @@ describe('CostGuardProcessor', () => {
         ),
       ).resolves.toBeUndefined();
 
-      const blockGuard = new CostGuardProcessor({ maxCost: 0.25, scope: 'run' });
+      const blockGuard = new CostControlProcessor({ maxCost: 0.25, scope: 'run' });
       (blockGuard as any).observabilityStorage = observability;
       try {
         await blockGuard.processInputStep(
@@ -1942,6 +1942,23 @@ describe('CostGuardProcessor', () => {
         expect((error as TripWire<any>).message).toContain('0.3/0.25');
         expect((error as TripWire<any>).options.metadata.usage.estimatedCost).toBe(0.30000000000000004);
       }
+    });
+  });
+
+  describe('deprecated CostGuardProcessor alias', () => {
+    it('is the same class as CostControlProcessor with the cost-control id', async () => {
+      expect(CostGuardProcessor).toBe(CostControlProcessor);
+
+      const obsStorage = createMockObservabilityStorage({ inputCost: 0.4, outputCost: 0.4 });
+      const guard = new CostGuardProcessor({ maxCost: 0.5, scope: 'run' });
+      guard.__registerMastra(createMockMastra(obsStorage));
+      expect(guard.id).toBe('cost-control');
+      expect(guard).toBeInstanceOf(CostControlProcessor);
+
+      const tracing = createMockTracing('trace-alias');
+      await expect(
+        guard.processInputStep(createInputStepArgs({ stepNumber: 1, tracing: tracing as any })),
+      ).rejects.toThrow('0.8/0.5');
     });
   });
 });

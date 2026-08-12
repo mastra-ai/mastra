@@ -2,7 +2,11 @@
 '@mastra/core': minor
 ---
 
-Improved CostGuardProcessor and added new budgeting options.
+Renamed CostGuardProcessor to CostControlProcessor, hardened it, and added new budgeting options.
+
+**Rename**
+
+- `CostGuardProcessor` is now `CostControlProcessor` with processor id `'cost-control'`. The `CostGuardProcessor` export (and the `CostGuardOptions`, `CostGuardUsage`, `CostGuardBreakdownEntry`, `CostGuardTripwireMetadata`, and `CostGuardViolationDetail` types) remains available as a deprecated alias for the same class and will be removed in a future major version.
 
 **Improvements**
 
@@ -19,7 +23,7 @@ Improved CostGuardProcessor and added new budgeting options.
 - `includeBreakdown`: attaches a per-provider/model cost breakdown to violations.
 
 ```typescript
-const costGuard = new CostGuardProcessor({
+const costControl = new CostControlProcessor({
   maxCost: requestContext => (requestContext?.get('tier') === 'pro' ? 10.0 : 1.0),
   scope: 'user',
   warnAtPercent: 80,
