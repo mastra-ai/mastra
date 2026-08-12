@@ -23,5 +23,8 @@ export const server = setupServer(
   http.get('*/web/factory/projects', () => HttpResponse.json({ projects: [] })),
   http.get('*/web/factory/projects/:id/source-control-connections', () => HttpResponse.json({ connections: [] })),
   http.get('*/web/factory/projects/:id/audit', () => HttpResponse.json({ events: [], actors: {} })),
+  // Ambient run activity (polled wherever queue health renders); tests that
+  // assert on a running agent override it with `server.use(...)`.
+  http.get('*/web/factory/projects/:id/activity', () => HttpResponse.json({ runningSessionIds: [] })),
   http.get('*/web/github/projects/:projectRepositoryId/worktrees', () => HttpResponse.json({ worktrees: [] })),
 );

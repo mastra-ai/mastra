@@ -81,6 +81,20 @@ describe('QueueHealthPanel', () => {
     expect(screen.queryByRole('dialog', { name: /Critical tasks/ })).not.toBeInTheDocument();
   });
 
+  it('marks a card whose run is in flight', async () => {
+    const running = card('item-1', 'Card being worked', '2020-01-01T00:00:00.000Z');
+    running.sessions = { execute: { sessionId: 'session-1', branch: 'factory/1', threadId: 'thread-1' } };
+    server.use(
+      http.get('*/web/factory/projects/:id/activity', () => HttpResponse.json({ runningSessionIds: ['session-1'] })),
+    );
+    const user = userEvent.setup();
+    renderPanel([running]);
+
+    await user.click(await screen.findByRole('button', { name: 'Triage Critical: 1' }));
+
+    expect(await screen.findByRole('img', { name: 'Agent running' })).toBeInTheDocument();
+  });
+
   it('closes the cohort tasks on Escape', async () => {
     const user = userEvent.setup();
     renderPanel([card('item-1', 'Stalled card', '2020-01-01T00:00:00.000Z')]);

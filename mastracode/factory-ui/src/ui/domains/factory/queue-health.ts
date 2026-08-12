@@ -2,16 +2,14 @@
  * Client-side aggregation for the Overview page's queue-health chart.
  *
  * Pure, DB-free functions over `work_items` rows — mirrors the discipline of
- * the server-side `computeFactoryMetrics`, but lives in the UI layer because
- * its `activePaths` input (which worktrees currently have an active agent
- * session) is only available in the browser via `useWorkspaceActivity`. The
- * queue-health section feeds it the polled activity map; this module takes all inputs
- * and returns a plain shape, so it is unit-testable without a network or DOM.
+ * the server-side `computeFactoryMetrics`, but runs in the UI because the chart
+ * ages every card against "now" on each poll. This module takes all inputs and
+ * returns a plain shape, so it is unit-testable without a network or DOM.
  */
 
 import type { QueueHealthConfig } from '@mastra/factory/storage/domains/queue-health/base';
 import type { WorkItem, WorkItemStageEntry } from './services/workItems';
-import { BOARD_STAGES } from './stages';
+import { PIPELINE_STAGES } from './stages';
 
 /**
  * The row shape the aggregation reads. The client list endpoint serializes
@@ -102,21 +100,6 @@ function latestOpenEntryFor(open: WorkItemStageEntry[], stage: string): WorkItem
 }
 
 /**
- * Board stage ids in column order, minus the terminal stages and the
- * `intake` stage. Intake is intentionally hidden: the Board's Intake column
- * merges persisted `intake` cards with live GitHub/Linear candidates that have
- * no `work_items` row yet (they're materialized only when acted on), so this
- * aggregation — which reads persisted rows only — would silently undercount
- * intake and mislead. The chart therefore shows work that has *entered* the
- * pipeline (triage onward). To show intake again, remove the filter and merge
- * live candidates into the page (a deliberate follow-up with its own
- * age-semantics decision: upstream open-date vs. time-in-stage).
- */
-function chartStages(): string[] {
-  return BOARD_STAGES.map(s => s.id).filter(id => !TERMINAL_STAGES.has(id) && id !== 'intake');
-}
-
-/**
  * Aggregate work items into per-stage age buckets plus an active-work count.
  *
  * Aging is per-(item, stage): an item holding N open stages contributes one
@@ -127,7 +110,7 @@ function chartStages(): string[] {
  */
 export function computeQueueHealth(
   items: QueueHealthWorkItem[],
-  activePaths: ReadonlySet<string>,
+  activeSessions: ReadonlySet<string>,
   config: QueueHealthConfig,
   now: Date = new Date(),
 ): QueueHealth {
@@ -135,7 +118,7 @@ export function computeQueueHealth(
   const thresholds = config.thresholdsSeconds;
 
   const byStage = new Map<string, QueueHealthStage>();
-  for (const stage of chartStages()) {
+  for (const stage of PIPELINE_STAGES) {
     byStage.set(stage, { stage, total: 0, buckets: { green: 0, amber: 0, orange: 0, red: 0 }, activeCount: 0 });
   }
 
@@ -146,7 +129,7 @@ export function computeQueueHealth(
     if (inFlightStages.length === 0) continue;
 
     const open = openEntries(item);
-    const active = Object.values(item.sessions).some(ref => activePaths.has(ref.sessionId));
+    const active = Object.values(item.sessions).some(ref => activeSessions.has(ref.sessionId));
 
     for (const stage of inFlightStages) {
       const stageAgg = byStage.get(stage);

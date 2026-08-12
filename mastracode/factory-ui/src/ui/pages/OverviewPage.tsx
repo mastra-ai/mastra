@@ -4,24 +4,19 @@ import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Bot, Check, ChevronDown, CircleCheck, Clock3, Layers3, Workflow } from 'lucide-react';
+import { Bot, Check, ChevronDown, CircleCheck, Clock3, Layers3 } from 'lucide-react';
 import { useId, useMemo, useState, type ReactNode } from 'react';
 import { flushSync } from 'react-dom';
-import { useParams } from 'react-router';
 
-import { useApiConfig } from '../../api/config';
-import { useFactoryQuery } from '../../hooks/useFactories';
+import { useFactoryActivity } from '../../hooks/useFactoryActivity';
 import { useFactoryMetrics } from '../../hooks/useFactoryMetrics';
-import { useWorkspaceActivity } from '../../hooks/useWorkspaceActivity';
-import { useWorkspacesQuery } from '../../hooks/useWorkspaces';
 import { formatDuration } from '../../lib/date';
-import { AGENT_CONTROLLER_ID } from '../domains/chat/services/constants';
 import { DocumentFactoryPageShell } from '../domains/factory/components/FactoryPageShell';
 import { QueueHealthPanel } from '../domains/factory/components/QueueHealthPanel';
 import { ShareBar } from '../domains/factory/components/ShareBar';
 import { Sparkline } from '../domains/factory/components/Sparkline';
 import type { FactoryMetrics } from '../domains/factory/services/metrics';
-import { BOARD_STAGES, stageLabel, stageOrder } from '../domains/factory/stages';
+import { PIPELINE_STAGES, stageLabel, stageOrder } from '../domains/factory/stages';
 
 const DAY_MS = 86_400_000;
 
@@ -50,9 +45,6 @@ const SOURCE_LABELS: Record<string, string> = {
   manual: 'Manual',
 };
 
-/** Terminal stages have no "pass through", so they never get automation rows. */
-const TERMINAL_STAGE_IDS = new Set(['done', 'canceled']);
-
 const EM_DASH = '—';
 
 /** Both section titles, so "Now" and the range picker read as the same rank. */
@@ -71,7 +63,7 @@ function OverviewContent({ factoryProjectId }: { factoryProjectId: string | unde
   const [rangeDays, setRangeDays] = useState(DEFAULT_RANGE_DAYS);
   const range = useMemo(() => ({ from: shiftUtcDay(today, -(rangeDays - 1)), to: today }), [today, rangeDays]);
   const metricsQuery = useFactoryMetrics(factoryProjectId, range);
-  const agentsRunning = useAgentsRunningCount();
+  const agentsRunning = useFactoryActivity(factoryProjectId).size;
 
   if (metricsQuery.isError) {
     const message = metricsQuery.error instanceof Error ? metricsQuery.error.message : 'Failed to load metrics';
@@ -92,13 +84,13 @@ function OverviewContent({ factoryProjectId }: { factoryProjectId: string | unde
               icon={<Layers3 aria-hidden="true" />}
               label="In flight"
               value={String(metrics.wipTotal)}
-              detail="Items in non-terminal stages"
+              detail="Factory work past intake"
             />
             <Readout
               icon={<Bot aria-hidden="true" />}
               label="Agents running"
               value={String(agentsRunning)}
-              detail="Live across active worktrees"
+              detail="Sessions with a run in progress"
             />
           </dl>
         </div>
@@ -120,8 +112,11 @@ function OverviewContent({ factoryProjectId }: { factoryProjectId: string | unde
           <Block title="Work intake">
             <SourceMix metrics={metrics} />
           </Block>
-          <Block title="Automation coverage" note="First pass through each stage, handled end to end by automation.">
-            <StageAutomation metrics={metrics} />
+          <Block
+            title="Agent coverage"
+            note="First pass through each stage, finished by an agent rather than a person."
+          >
+            <AgentCoverage metrics={metrics} />
           </Block>
         </div>
       </section>
@@ -169,27 +164,6 @@ function RangePicker({ rangeDays, onSelect }: { rangeDays: number; onSelect: (da
   );
 }
 
-function useAgentsRunningCount(): number {
-  const { baseUrl } = useApiConfig();
-  const { factoryId } = useParams<{ factoryId: string }>();
-  const factoryQuery = useFactoryQuery(factoryId);
-  const repository = factoryQuery.data?.repositories[0];
-  const workspaces = useWorkspacesQuery(repository?.projectRepositoryId);
-  const workspaceSessions = workspaces.data?.workspaces ?? [];
-  // The factory-level session address is the factory project id, so read
-  // activity without materializing a sandbox for a page that only renders counts.
-  const resourceId = factoryQuery.data?.id;
-  const runningByPath = useWorkspaceActivity({
-    agentControllerId: AGENT_CONTROLLER_ID,
-    resourceId: resourceId ?? '',
-    scope: repository?.projectRepositoryId,
-    worktreePaths: workspaceSessions.map(workspace => workspace.sessionId),
-    baseUrl,
-    enabled: Boolean(resourceId && repository?.projectRepositoryId),
-  });
-  return Object.values(runningByPath).filter(Boolean).length;
-}
-
 function OverviewLoading() {
   return (
     <div
@@ -208,9 +182,6 @@ function OverviewLoading() {
 
 function Flow({ metrics }: { metrics: FactoryMetrics }) {
   const completed = metrics.throughput.reduce((sum, point) => sum + point.count, 0);
-  const automatedMoves = metrics.transitions.total - metrics.transitions.human;
-  const automationRate =
-    metrics.transitions.total === 0 ? EM_DASH : `${Math.round((automatedMoves / metrics.transitions.total) * 100)}%`;
 
   return (
     <dl className="m-0 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -223,16 +194,6 @@ function Flow({ metrics }: { metrics: FactoryMetrics }) {
           metrics.leadTime.p90Ms === null
             ? `${metrics.leadTime.samples} completed samples`
             : `p90 ${formatDuration(metrics.leadTime.p90Ms)} · ${metrics.leadTime.samples} samples`
-        }
-      />
-      <Readout
-        icon={<Workflow aria-hidden="true" />}
-        label="Automated moves"
-        value={automationRate}
-        detail={
-          metrics.transitions.total === 0
-            ? 'No stage moves in this window'
-            : `${automatedMoves} of ${metrics.transitions.total} stage moves`
         }
       />
     </dl>
@@ -343,27 +304,24 @@ function Readout({ icon, label, value, detail }: { icon: ReactNode; label: strin
   );
 }
 
-function StageAutomation({ metrics }: { metrics: FactoryMetrics }) {
-  // rows exist only for stages with ≥1 exit
-  if (metrics.stageAutomation.length === 0) {
+function AgentCoverage({ metrics }: { metrics: FactoryMetrics }) {
+  // rows exist only for stages with ≥1 finished pass
+  if (metrics.agentCoverage.length === 0) {
     return (
       <Txt as="p" variant="ui-sm" className="text-icon3 m-0">
         No completed stage passes in this window yet.
       </Txt>
     );
   }
-  const describe = (stage: string, automated: number, exits: number, pct: number | null, outcomes: string) =>
+  const describe = (stage: string, byAgent: number, passes: number, pct: number | null, outcomes: string) =>
     pct === null
       ? `${stageLabel(stage)}: no completed passes`
-      : `${stageLabel(stage)}: ${pct}% automated, ${automated} of ${exits} passes${outcomes ? ` — ${outcomes}` : ''}`;
+      : `${stageLabel(stage)}: ${pct}% agent-run, ${byAgent} of ${passes} passes${outcomes ? ` — ${outcomes}` : ''}`;
 
-  const rowsByStage = new Map(metrics.stageAutomation.map(row => [row.stage, row]));
+  const rowsByStage = new Map(metrics.agentCoverage.map(row => [row.stage, row]));
   // board stages in column order, then unknown ids last — same rule as stageOrder
-  const stageIds = new Set<string>();
-  for (const stage of BOARD_STAGES) {
-    if (!TERMINAL_STAGE_IDS.has(stage.id)) stageIds.add(stage.id);
-  }
-  for (const row of metrics.stageAutomation) {
+  const stageIds = new Set<string>(PIPELINE_STAGES);
+  for (const row of metrics.agentCoverage) {
     stageIds.add(row.stage);
   }
   const stages = [...stageIds].sort((a, b) => stageOrder(a) - stageOrder(b));
@@ -372,10 +330,10 @@ function StageAutomation({ metrics }: { metrics: FactoryMetrics }) {
     <ul className="m-0 flex list-none flex-col p-0">
       {stages.map(stage => {
         const row = rowsByStage.get(stage);
-        const exits = row?.exits ?? 0;
-        const automated = row?.automated ?? 0;
-        const pct = exits === 0 ? null : Math.round((automated / exits) * 100);
-        const outcomes = row && automated > 0 ? outcomeSummary(row.outcomes) : '';
+        const passes = row?.passes ?? 0;
+        const byAgent = row?.byAgent ?? 0;
+        const pct = passes === 0 ? null : Math.round((byAgent / passes) * 100);
+        const outcomes = row && byAgent > 0 ? outcomeSummary(row.outcomes) : '';
         return (
           <li
             key={stage}
@@ -390,10 +348,10 @@ function StageAutomation({ metrics }: { metrics: FactoryMetrics }) {
                   <div
                     role="img"
                     tabIndex={0}
-                    aria-label={describe(stage, automated, exits, pct, outcomes)}
+                    aria-label={describe(stage, byAgent, passes, pct, outcomes)}
                     className="bg-surface4 focus-visible:outline-accent1 h-2 overflow-hidden rounded-full focus-visible:outline-2 focus-visible:outline-offset-2"
                   >
-                    {pct !== null && automated > 0 ? (
+                    {pct !== null && byAgent > 0 ? (
                       <div
                         className="bg-chart-soft-1 h-full rounded-full transition-[width] duration-300"
                         style={{ width: `${Math.max(2, pct)}%` }}
@@ -403,7 +361,7 @@ function StageAutomation({ metrics }: { metrics: FactoryMetrics }) {
                 }
               />
               <TooltipContent>
-                {pct === null ? 'No completed passes' : `${automated} of ${exits} passes automated`}
+                {pct === null ? 'No completed passes' : `${byAgent} of ${passes} passes run by an agent`}
                 {outcomes ? ` · ${outcomes}` : ''}
               </TooltipContent>
             </Tooltip>
@@ -417,7 +375,7 @@ function StageAutomation({ metrics }: { metrics: FactoryMetrics }) {
   );
 }
 
-function outcomeSummary(outcomes: FactoryMetrics['stageAutomation'][number]['outcomes']): string {
+function outcomeSummary(outcomes: FactoryMetrics['agentCoverage'][number]['outcomes']): string {
   const parts: string[] = [];
   if (outcomes.done > 0) parts.push(`${outcomes.done} done`);
   if (outcomes.canceled > 0) parts.push(`${outcomes.canceled} canceled`);

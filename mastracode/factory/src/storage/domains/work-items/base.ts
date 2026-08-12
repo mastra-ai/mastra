@@ -50,29 +50,18 @@ export interface WorkItemStageEntry {
 }
 
 /**
- * Sentinel actor ids that mark a stage transition as automation-driven (vs a
- * human's WorkOS user id): generic sentinels plus the system ids the Factory
- * rules engine stamps (see `actorId` in factory/rules/transition-service.ts).
- * Metrics treat any other actor — including a missing `exitedBy` on
- * pre-existing entries — as human.
+ * Whether an actor id marks a move an agent run performed: the binding id the
+ * transition tool stamps (`agent:*`), or the rule that fires off a bound run's
+ * tool result (see `factory/rules/processor.ts`).
+ *
+ * Deliberately narrower than "not a human": the poller stamps
+ * `factory-rule-dispatcher` / `github:*` on every card it syncs from the
+ * upstream repo, so counting those as machine work reports the repo's activity
+ * as the Factory's and pins any such ratio near 100%.
  */
-export const AUTOMATION_ACTORS = new Set([
-  'factory',
-  'system',
-  'automation',
-  'factory-rule-dispatcher',
-  'factory-tool-result-rule',
-]);
-
-/**
- * Whether an actor id marks a transition no human performed on the Factory
- * board: a sentinel automation id, an agent binding (`agent:*`), or an
- * external-webhook actor (`github:*` — a human may have acted on GitHub, but
- * the board move itself was automated).
- */
-export function isAutomationActor(by: string | undefined): boolean {
+export function isAgentActor(by: string | undefined): boolean {
   if (by === undefined) return false;
-  return AUTOMATION_ACTORS.has(by) || by.startsWith('agent:') || by.startsWith('github:');
+  return by.startsWith('agent:') || by === 'factory-tool-result-rule';
 }
 
 export interface WorkItemSessionRef {

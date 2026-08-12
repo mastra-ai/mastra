@@ -15,6 +15,22 @@ export const BOARD_STAGES = [
 
 export type BoardStageId = (typeof BOARD_STAGES)[number]['id'];
 
+/**
+ * Stages that hold work in the pipeline, in column order — the board minus its
+ * terminal columns and minus `intake`.
+ *
+ * Intake is the inbox: the Board's Intake column merges persisted cards with
+ * live GitHub/Linear candidates that have no `work_items` row yet (they are
+ * materialized only when acted on), so any aggregation over persisted rows
+ * undercounts it. Surfaces that measure work therefore start at Triage. To show
+ * intake again, merge live candidates into the page first (a deliberate
+ * follow-up with its own age-semantics decision: upstream open-date vs.
+ * time-in-stage).
+ */
+export const PIPELINE_STAGES: BoardStageId[] = BOARD_STAGES.map(stage => stage.id).filter(
+  id => id !== 'intake' && id !== 'done' && id !== 'canceled',
+);
+
 /** UI label for a stage, falling back to the raw id for unknown stages. */
 export function stageLabel(stage: string): string {
   return BOARD_STAGES.find(s => s.id === stage)?.label ?? stage;

@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { builtInFactoryRules } from '../rules/defaults.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
+import type { FactoryRuleActor } from '../rules/types.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
 
 let auditRecorded: Array<Record<string, any>> = [];
@@ -44,6 +45,7 @@ function buildApp(
   user: { workosId: string; organizationId?: string } | null,
   startCoordinator?: { prepare: (input: any) => Promise<any> },
   requestContext?: RequestContext,
+  controller?: { getSessionByResource: (resourceId: string) => Promise<any> },
 ) {
   const app = new Hono();
   app.use('*', async (c, next) => {
@@ -61,6 +63,7 @@ function buildApp(
       queueHealth: seed.queueHealth,
       transitionService: new FactoryTransitionService({ rules: builtInFactoryRules(), storage: seed.workItems }),
       startCoordinator,
+      controller,
     }).routes(),
   );
   return app;
@@ -86,6 +89,9 @@ function json(method: string, path: string, body?: unknown, user: typeof orgUser
     ...(body !== undefined ? { headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) } : {}),
   });
 }
+
+/** Session of a started run — what makes a card the Factory's own work. */
+const run = { execute: { sessionId: 'session-1', branch: 'factory/1', threadId: 'thread-1' } };
 
 const createBody = (overrides: Record<string, unknown> = {}) => ({
   externalSource: {
@@ -627,9 +633,9 @@ describe('GET /web/factory/projects/:id/metrics', () => {
     expect((await bodyFor('?from=evil&to=evil')).daysCovered).toBe(30);
   });
 
-  it('aggregates the project board: throughput, WIP, transitions, and source mix', async () => {
+  it('aggregates the cards the Factory ran: throughput, WIP, and source mix', async () => {
     // One card completed today (intake → done), one still in intake.
-    const created = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody());
+    const created = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody({ sessions: run }));
     const { workItem } = await created.json();
     await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items/${workItem.id}/transition`, {
       board: 'work',
@@ -641,7 +647,13 @@ describe('GET /web/factory/projects/:id/metrics', () => {
     await json(
       'POST',
       `/web/factory/projects/${PROJECT_ID}/work-items`,
-      createBody({ externalSource: null, title: 'Manual card' }),
+      createBody({ externalSource: null, title: 'Manual card', sessions: run }),
+    );
+    // Synced from the repo, never run: not the Factory's work.
+    await json(
+      'POST',
+      `/web/factory/projects/${PROJECT_ID}/work-items`,
+      createBody({ externalSource: { integrationId: 'github', type: 'issue', externalId: '43' }, title: 'Upstream' }),
     );
 
     const to = new Date().toISOString().slice(0, 10);
@@ -650,20 +662,21 @@ describe('GET /web/factory/projects/:id/metrics', () => {
     expect(res.status).toBe(200);
     const { metrics } = await res.json();
 
-    // Both cards were filed today, so the series covers today alone.
+    // Both run cards were filed today, so the series covers today alone.
     expect(metrics.daysCovered).toBe(1);
     expect(metrics.throughput).toHaveLength(1);
     expect(metrics.throughput.reduce((sum: number, p: any) => sum + p.count, 0)).toBe(1);
     expect(metrics.leadTime.samples).toBe(1);
-    expect(metrics.wipTotal).toBe(1);
-    // Both cards landed in intake on creation; only the drag to done is a move.
-    expect(metrics.transitions).toEqual({ human: 1, total: 1 });
+    // The manual card sits in intake — queued, not in flight — and the synced
+    // card is out of the population entirely.
+    expect(metrics.wipTotal).toBe(0);
     expect(metrics.sourceMix).toEqual(
       expect.arrayContaining([
         { source: 'github:issue', count: 1 },
         { source: 'manual', count: 1 },
       ]),
     );
+    expect(metrics.sourceMix).toHaveLength(2);
   });
 
   it('returns zeroed metrics for an empty board', async () => {
@@ -672,16 +685,16 @@ describe('GET /web/factory/projects/:id/metrics', () => {
     expect(metrics.throughput).toHaveLength(30);
     expect(metrics.leadTime).toEqual({ medianMs: null, p90Ms: null, samples: 0 });
     expect(metrics.wipTotal).toBe(0);
-    expect(metrics.stageAutomation).toEqual([]);
+    expect(metrics.agentCoverage).toEqual([]);
   });
 
-  it('serves per-stage automation: automated triage pass vs human-approved planning', async () => {
-    // Human files the card, the rules engine runs triage (intake → triage →
-    // planning) through the governed path, then a human approves planning into done.
-    const created = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody());
+  it('serves per-stage coverage: agent-finished triage vs human-approved planning', async () => {
+    // The rules engine queues triage (intake → triage), the bound agent run
+    // finishes it (triage → planning), then a human approves planning into done.
+    const created = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody({ sessions: run }));
     const { workItem } = await created.json();
     const service = new FactoryTransitionService({ rules: builtInFactoryRules(), storage: seed.workItems });
-    const autoMove = (stage: 'triage' | 'planning', expectedRevision: number, identity: string) =>
+    const move = (stage: 'triage' | 'planning', expectedRevision: number, identity: string, actor: FactoryRuleActor) =>
       service.transition({
         orgId: 'org1',
         factoryProjectId: PROJECT_ID,
@@ -689,13 +702,19 @@ describe('GET /web/factory/projects/:id/metrics', () => {
         board: 'work',
         stage,
         expectedRevision,
-        actor: { type: 'system', id: 'factory-rule-dispatcher' },
+        actor,
         ingress: { type: 'rule', identity },
         cause: 'auto_triage',
       });
-    const triaged = await autoMove('triage', workItem.revision, 'auto-1');
+    const triaged = await move('triage', workItem.revision, 'auto-1', {
+      type: 'system',
+      id: 'factory-rule-dispatcher',
+    });
     expect(triaged.status).toBe('accepted');
-    const planned = await autoMove('planning', (triaged as { revision: number }).revision, 'auto-2');
+    const planned = await move('planning', (triaged as { revision: number }).revision, 'auto-2', {
+      type: 'agent',
+      bindingId: 'binding-1',
+    });
     expect(planned.status).toBe('accepted');
     const approved = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items/${workItem.id}/transition`, {
       board: 'work',
@@ -710,16 +729,73 @@ describe('GET /web/factory/projects/:id/metrics', () => {
     expect(res.status).toBe(200);
     const { metrics } = await res.json();
 
-    expect(metrics.stageAutomation).toEqual([
-      // Human-entered (creation), automation-exited → not automated.
-      { stage: 'intake', exits: 1, automated: 0, outcomes: { done: 0, canceled: 0, reworked: 0, inFlight: 0 } },
-      // Automation-entered and -exited, first visit → clean automated pass, item is done.
-      { stage: 'triage', exits: 1, automated: 1, outcomes: { done: 1, canceled: 0, reworked: 0, inFlight: 0 } },
-      // Automation-entered, human-exited → not automated.
-      { stage: 'planning', exits: 1, automated: 0, outcomes: { done: 0, canceled: 0, reworked: 0, inFlight: 0 } },
+    expect(metrics.agentCoverage).toEqual([
+      // Intake is the inbox — filing a card is not a pass through the pipeline.
+      // Exited by the agent run, first visit → the agent's pass, item is done.
+      { stage: 'triage', passes: 1, byAgent: 1, outcomes: { done: 1, canceled: 0, reworked: 0, inFlight: 0 } },
+      // Agent-entered, human-exited → the human finished this one.
+      { stage: 'planning', passes: 1, byAgent: 0, outcomes: { done: 0, canceled: 0, reworked: 0, inFlight: 0 } },
     ]);
-    // Global split matches: 3 moves after creation, 2 by automation.
-    expect(metrics.transitions).toEqual({ human: 1, total: 3 });
+  });
+});
+
+describe('GET /web/factory/projects/:id/activity', () => {
+  /** Bind a run to a card the way the start coordinator does. */
+  async function bindRun(sessionId: string) {
+    const prepared = await seed.workItems.prepareRunStart({
+      orgId: 'org1',
+      userId: 'u1',
+      factoryProjectId: PROJECT_ID,
+      workItem: { input: { title: `Work for ${sessionId}`, stages: ['execute'] } },
+      role: 'execute',
+      session: { sessionId, branch: `factory/${sessionId}`, threadId: `thread-${sessionId}` },
+      resourceId: sessionId,
+      kickoffKey: `kickoff-${sessionId}`,
+      kickoffMessage: null,
+    });
+    return prepared.binding;
+  }
+
+  function appWithRunning(running: ReadonlySet<string>) {
+    return buildApp(orgUser, undefined, undefined, {
+      getSessionByResource: async (resourceId: string) =>
+        running.has(resourceId) ? { run: { isRunning: () => true } } : undefined,
+    });
+  }
+
+  it('401s without a user and 404s for projects outside the org', async () => {
+    expect((await json('GET', `/web/factory/projects/${PROJECT_ID}/activity`, undefined, null)).status).toBe(401);
+
+    await seedProject('other-org');
+    expect((await json('GET', `/web/factory/projects/${PROJECT_ID}/activity`)).status).toBe(404);
+  });
+
+  it('reports the bound sessions whose run is in flight', async () => {
+    await bindRun('session-running');
+    await bindRun('session-idle');
+
+    const res = await appWithRunning(new Set(['session-running'])).request(
+      `/web/factory/projects/${PROJECT_ID}/activity`,
+    );
+
+    expect(res.status).toBe(200);
+    expect((await res.json()).runningSessionIds).toEqual(['session-running']);
+  });
+
+  it('reports nothing once a binding is revoked, even while the session runs', async () => {
+    const binding = await bindRun('session-running');
+    await seed.workItems.revokeRunBinding({
+      orgId: 'org1',
+      factoryProjectId: PROJECT_ID,
+      bindingId: binding.id,
+      revokedAt: new Date(),
+    });
+
+    const res = await appWithRunning(new Set(['session-running'])).request(
+      `/web/factory/projects/${PROJECT_ID}/activity`,
+    );
+
+    expect((await res.json()).runningSessionIds).toEqual([]);
   });
 });
 

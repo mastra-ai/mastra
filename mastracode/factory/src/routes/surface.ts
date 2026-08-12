@@ -450,6 +450,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           queueHealth: deps.domains.queueHealth,
           transitionService,
           startCoordinator,
+          controller: deps.controller,
         }).routes()
       : []),
   ];

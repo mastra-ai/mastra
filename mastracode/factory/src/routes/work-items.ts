@@ -7,6 +7,8 @@
  * the same cards while `created_by` / stage history record who acted.
  */
 
+import type { MastraCodeState } from '@mastra/code-sdk/schema';
+import type { AgentController } from '@mastra/core/agent-controller';
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
@@ -53,6 +55,8 @@ export interface WorkItemRoutesDeps extends RouteDependencies {
   transitionService?: Pick<FactoryTransitionService, 'transition' | 'ruleSetVersion'>;
   /** Coordinator that binds a Factory run before dispatching its kickoff. */
   startCoordinator?: Pick<FactoryStartCoordinator, 'prepare'>;
+  /** Live session registry, read to report which bound runs are in flight. */
+  controller?: Pick<AgentController<MastraCodeState>, 'getSessionByResource'>;
 }
 
 function loose(c: unknown): Context {
@@ -464,7 +468,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
 
   /** Build the Factory work-item routes as Mastra `apiRoutes`. */
   routes(): ApiRoute[] {
-    const { audit, workItems, queueHealth, transitionService, startCoordinator } = this.deps;
+    const { audit, workItems, queueHealth, transitionService, startCoordinator, controller } = this.deps;
     return [
       // ── List the org's work items for a project ─────────────────────────────
       registerApiRoute('/web/factory/projects/:id/work-items', {
@@ -500,6 +504,29 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
             factoryProjectId: resolved.factoryProjectId,
           });
           return c.json({ metrics: computeFactoryMetrics(items, { windowStart, windowEnd }) });
+        },
+      }),
+
+      // ── Which of the project's bound sessions have a run in flight ──────────
+      registerApiRoute('/web/factory/projects/:id/activity', {
+        method: 'GET',
+        requiresAuth: false,
+        handler: async c => {
+          const resolved = await this.#resolveProject(loose(c));
+          if ('response' in resolved) return resolved.response;
+          await workItems.ensureReady();
+          const bindings = await workItems.listRunBindings(resolved.orgId, resolved.factoryProjectId);
+          const runningSessionIds = new Set<string>();
+          for (const binding of bindings) {
+            if (binding.status !== 'active' || runningSessionIds.has(binding.sessionId)) continue;
+            // A run lives in the session the coordinator addressed by session id
+            // (`FactoryStartCoordinator.prepare`), so only that session can
+            // answer whether it is running — asking any other resource always
+            // says no.
+            const session = await controller?.getSessionByResource(binding.resourceId);
+            if (session?.run.isRunning()) runningSessionIds.add(binding.sessionId);
+          }
+          return c.json({ runningSessionIds: [...runningSessionIds] });
         },
       }),
 
