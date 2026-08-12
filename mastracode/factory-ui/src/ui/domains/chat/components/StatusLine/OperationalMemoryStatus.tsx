@@ -17,7 +17,7 @@ const observationLabel: Record<OMWork, string> = {
 };
 
 function savingHint(tokens: number): string | undefined {
-  return tokens > 0 ? `↓${formatCompactTokens(tokens)}k` : undefined;
+  return tokens > 0 ? `The pending pass frees ${formatCompactTokens(tokens)}k.` : undefined;
 }
 
 /**

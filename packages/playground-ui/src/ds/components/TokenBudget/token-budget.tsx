@@ -1,5 +1,6 @@
 import type { CSSProperties } from 'react';
 
+import { buttonVariants } from '../Button';
 import { Popover, PopoverContent, PopoverTrigger } from '../Popover';
 import { formatCompactTokens } from './format-tokens';
 import { cn } from '@/lib/utils';
@@ -28,7 +29,7 @@ export interface TokenBudgetProps {
   tone?: TokenBudgetTone;
   /** Runs the highlight around the ring while something fills or drains the budget. */
   working?: boolean;
-  /** Trailing note shown with the digits, e.g. the reduction a pending pass will bring. */
+  /** Note shown in the detail popover, e.g. what a pending pass will free. */
   hint?: string;
   className?: string;
 }
@@ -50,29 +51,23 @@ export function TokenBudget({
 
   return (
     <Popover>
-      <PopoverTrigger
-        className={cn(
-          'focus-visible:outline-accent1 inline-flex items-center rounded-sm tabular-nums hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2',
-          toneClass[tone],
-          className,
-        )}
-      >
+      <PopoverTrigger className={cn(buttonVariants({ variant: 'ghost', size: 'xs' }), 'gap-1.5', className)}>
         <span
           aria-label={label}
           aria-valuemax={threshold}
           aria-valuemin={0}
           aria-valuenow={tokens}
           aria-valuetext={value}
-          className="inline-flex items-center"
+          className={cn('inline-flex items-center gap-1.5 tabular-nums', toneClass[tone])}
           role="meter"
         >
           <span aria-hidden className="token-budget-dial" data-working={working || undefined} style={dialStyle} />
-          <span className="text-icon3 ps-1">
-            {formatCompactTokens(tokens)}
+          {/* Stacked so the pair costs the width of its widest half, not of both. */}
+          <span className="flex flex-col items-start leading-none">
+            <span className="text-icon3">{formatCompactTokens(tokens)}</span>
             <span className="text-icon2">/{formatCompactTokens(threshold)}k</span>
           </span>
         </span>
-        {hint && <span className="text-icon2 ps-1 italic">{hint}</span>}
       </PopoverTrigger>
       <PopoverContent align="start" className={cn('flex flex-col gap-2', toneClass[tone])} side="top">
         <p className="text-ui-sm text-icon5">{label}</p>
@@ -82,6 +77,7 @@ export function TokenBudget({
         <p className="text-ui-xs text-icon3 tabular-nums">
           {value} tokens · {fill}%
         </p>
+        {hint && <p className="text-ui-xs text-icon3">{hint}</p>}
         {description && <p className="text-ui-xs text-icon2">{description}</p>}
       </PopoverContent>
     </Popover>
