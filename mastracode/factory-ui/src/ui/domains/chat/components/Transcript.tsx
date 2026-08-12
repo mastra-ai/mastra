@@ -704,7 +704,9 @@ function MessageBubble({
       </div>
     ),
     Assistant: ({ children }) => (
-      <div className={cn(MESSAGE_HOVER, 'max-w-full')}>
+      // The trailing margin of the last part spaced this message from the next
+      // entry; the meta row inherits it as a gap unless it moves to the wrapper.
+      <div className={cn(MESSAGE_HOVER, 'max-w-full', prose && 'mb-3 [&>*:nth-last-child(2)]:mb-0')}>
         {children}
         {prose ? <MessageMeta text={prose} createdAt={entry.message.createdAt} align="start" /> : null}
       </div>

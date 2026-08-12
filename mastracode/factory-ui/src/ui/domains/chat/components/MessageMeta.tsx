@@ -13,7 +13,7 @@ export function MessageMeta({ text, createdAt, align }: { text: string; createdA
   return (
     <div
       className={cn(
-        'flex items-center gap-1 opacity-0 transition-opacity group-focus-within/message:opacity-100 group-hover/message:opacity-100',
+        'mt-1 flex items-center gap-1 opacity-0 transition-opacity group-focus-within/message:opacity-100 group-hover/message:opacity-100',
         align === 'end' && 'flex-row-reverse',
       )}
     >
