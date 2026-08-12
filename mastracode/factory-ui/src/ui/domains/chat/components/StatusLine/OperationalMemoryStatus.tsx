@@ -2,6 +2,7 @@ import { buttonVariants } from '@mastra/playground-ui/components/Button';
 import { Popover, PopoverContent, PopoverTrigger } from '@mastra/playground-ui/components/Popover';
 import { TokenBudget, TokenBudgetDetail } from '@mastra/playground-ui/components/TokenBudget';
 import { cn } from '@mastra/playground-ui/utils/cn';
+import { Brain, MessageSquare } from 'lucide-react';
 
 import { useChatRuntime } from '../../context/useChatRuntime';
 import type { OMWork } from '../../services/runtime';
@@ -65,6 +66,7 @@ export function OperationalMemoryStatus() {
         {showMsg && (
           <TokenBudgetDetail
             description="Read into memory once full"
+            icon={<MessageSquare />}
             label="Messages"
             projected={om.projectedMessageRemoval}
             threshold={om.threshold}
@@ -75,6 +77,7 @@ export function OperationalMemoryStatus() {
         {showMem && (
           <TokenBudgetDetail
             description="Consolidated into a reflection once full"
+            icon={<Brain />}
             label="Observations"
             projected={om.projectedReflectionSavings}
             threshold={om.reflectionThreshold}
