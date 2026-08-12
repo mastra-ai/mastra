@@ -13,7 +13,7 @@ It uses `processInputStep` to check the cost limit before each LLM call. Cost da
 
 For token-based limits, use `TokenLimiterProcessor` instead.
 
-> **Renamed from `CostGuardProcessor`.** The `CostGuardProcessor` export (and its `CostGuard*` option and detail types) remains available as a deprecated alias for the same class, including the `'token-cost-control'` processor id. The intermediate `CostControlProcessor` name is also available as a deprecated alias. Migrate imports to `TokenCostControl`.
+> **Renamed from `CostGuardProcessor`.** The `CostGuardProcessor` export (and its `CostGuard*` option and detail types) remains available as a deprecated alias for the same class, including the `'token-cost-control'` processor id. Migrate imports to `TokenCostControl`.
 
 Supports six scoping modes:
 

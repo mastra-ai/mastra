@@ -52,13 +52,7 @@ export {
   type TokenCostControlViolationDetail,
   type CostScope,
   type CostWindow,
-  // Deprecated aliases for earlier API names
-  CostControlProcessor,
-  type CostControlOptions,
-  type CostControlUsage,
-  type CostControlBreakdownEntry,
-  type CostControlTripwireMetadata,
-  type CostControlViolationDetail,
+  // Deprecated alias for the previous API name
   CostGuardProcessor,
   type CostGuardOptions,
   type CostGuardUsage,

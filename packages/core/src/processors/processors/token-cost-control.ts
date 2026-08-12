@@ -538,21 +538,6 @@ export class TokenCostControl implements Processor<'token-cost-control', TokenCo
   }
 }
 
-/** @deprecated Use {@link TokenCostControl} instead. */
-export const CostControlProcessor = TokenCostControl;
-/** @deprecated Use {@link TokenCostControl} instead. */
-export type CostControlProcessor = TokenCostControl;
-/** @deprecated Use {@link TokenCostControlOptions} instead. */
-export type CostControlOptions = TokenCostControlOptions;
-/** @deprecated Use {@link TokenCostControlUsage} instead. */
-export type CostControlUsage = TokenCostControlUsage;
-/** @deprecated Use {@link TokenCostControlBreakdownEntry} instead. */
-export type CostControlBreakdownEntry = TokenCostControlBreakdownEntry;
-/** @deprecated Use {@link TokenCostControlTripwireMetadata} instead. */
-export type CostControlTripwireMetadata = TokenCostControlTripwireMetadata;
-/** @deprecated Use {@link TokenCostControlViolationDetail} instead. */
-export type CostControlViolationDetail = TokenCostControlViolationDetail;
-
 /**
  * @deprecated Use {@link TokenCostControl} instead. `CostGuardProcessor` is an
  * alias for the same class (including the `'token-cost-control'` id) and will be removed

@@ -6,7 +6,7 @@ import { EntityType } from '../../observability';
 import { RequestContext, MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../../request-context';
 import type { ObservabilityStorage } from '../../storage/domains';
 import type { ProcessInputStepArgs } from '../index';
-import { CostControlProcessor, CostGuardProcessor, TokenCostControl } from './token-cost-control';
+import { CostGuardProcessor, TokenCostControl } from './token-cost-control';
 
 // Mock logger that implements all required methods
 const mockLogger: IMastraLogger = {
@@ -1945,15 +1945,12 @@ describe('TokenCostControl', () => {
     });
   });
 
-  describe('deprecated aliases', () => {
-    it.each([
-      ['CostControlProcessor', CostControlProcessor],
-      ['CostGuardProcessor', CostGuardProcessor],
-    ])('%s is the same class as TokenCostControl with the token-cost-control id', async (_name, Alias) => {
-      expect(Alias).toBe(TokenCostControl);
+  describe('deprecated alias', () => {
+    it('CostGuardProcessor is the same class as TokenCostControl with the token-cost-control id', async () => {
+      expect(CostGuardProcessor).toBe(TokenCostControl);
 
       const obsStorage = createMockObservabilityStorage({ inputCost: 0.4, outputCost: 0.4 });
-      const guard = new Alias({ maxCost: 0.5, scope: 'run' });
+      const guard = new CostGuardProcessor({ maxCost: 0.5, scope: 'run' });
       guard.__registerMastra(createMockMastra(obsStorage));
       expect(guard.id).toBe('token-cost-control');
       expect(guard).toBeInstanceOf(TokenCostControl);
