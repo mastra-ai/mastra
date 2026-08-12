@@ -462,6 +462,7 @@ describe('factory skills catalog route', () => {
     const names = skills.map(s => s.name);
     expect(names).toContain('factory-triage');
     expect(names).toContain('factory-plan');
+    expect(names).not.toContain('configure-factory-rules');
     const triage = skills.find(s => s.name === 'factory-triage')!;
     expect(triage.description.length).toBeGreaterThan(0);
     expect(triage.content).toContain('# Factory Triage');
