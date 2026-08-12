@@ -1231,6 +1231,11 @@
       "permanent": true
     },
     {
+      "source": "/docs/workspace/overview",
+      "destination": "/docs/workspace/sandbox",
+      "permanent": true
+    },
+    {
       "source": "/docs/editor/prompts/llms.txt",
       "destination": "/docs/editor/overview/llms.txt",
       "permanent": true
@@ -2103,6 +2108,11 @@
     {
       "source": "/reference/core/addStoredWorkflows/llms.txt",
       "destination": "/reference/core/addDynamicWorkflows/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/workspace/overview/llms.txt",
+      "destination": "/docs/workspace/sandbox/llms.txt",
       "permanent": true
     }
   ]

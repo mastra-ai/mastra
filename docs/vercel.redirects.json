@@ -1214,6 +1214,11 @@
       "source": "/reference/core/addStoredWorkflows",
       "destination": "/reference/core/addDynamicWorkflows",
       "permanent": true
+    },
+    {
+      "source": "/docs/workspace/overview",
+      "destination": "/docs/workspace/sandbox",
+      "permanent": true
     }
   ]
 }

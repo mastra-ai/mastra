@@ -278,17 +278,12 @@ const sidebars = {
           label: 'Sandbox',
           link: {
             type: 'doc',
-            id: 'workspace/overview',
+            id: 'workspace/sandbox',
           },
           customProps: {
             contextualSidebar: true,
           },
           items: [
-            {
-              type: 'doc',
-              id: 'workspace/sandbox',
-              label: 'Sandbox',
-            },
             {
               type: 'doc',
               id: 'workspace/filesystem',

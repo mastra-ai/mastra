@@ -1,6 +1,6 @@
 ---
-title: "Sandbox | Workspace"
-description: Configure sandbox providers to give agents command execution capabilities.
+title: "Sandbox"
+description: Give agents an isolated environment for working with files and running commands.
 packages:
   - "@mastra/core"
 ---
@@ -9,7 +9,7 @@ packages:
 
 **Added in:** `@mastra/core@1.1.0`
 
-Sandbox providers give agents the ability to execute shell commands. When you configure a sandbox on a workspace, agents can run commands as part of their tasks.
+A workspace gives an agent an isolated environment for working with files and running commands. The sandbox provides command execution. Add a filesystem, code inspection, search, or reusable skills as needed.
 
 A sandbox provider executes commands in a controlled environment:
 
@@ -68,10 +68,10 @@ Watch [Mastra remote sandboxes overview](https://www.youtube.com/watch?v=Ix2X-sj
 
 ## Quickstart
 
-Create a workspace with a sandbox and assign it to an agent. The agent can then execute shell commands:
+Create a workspace with a sandbox and register it with `Mastra`. For local development, point `LocalFilesystem` and `LocalSandbox` at the same directory so file tools and commands use the same files:
 
-```typescript title="src/mastra/agents/dev-agent.ts"
-import { Agent } from '@mastra/core/agent'
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
 import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace'
 
 const workspace = new Workspace({
@@ -83,18 +83,27 @@ const workspace = new Workspace({
   }),
 })
 
-const agent = new Agent({
-  id: 'dev-agent',
-  model: '__GATEWAY_OPENAI_MODEL__',
-  instructions: 'You are a helpful development assistant.',
+export const mastra = new Mastra({
   workspace,
 })
-
-// The agent now has the mastra_workspace_execute_command tool available
-const response = await agent.generate('Run `ls -la` in the workspace directory')
 ```
 
+All agents registered with this `Mastra` instance inherit the workspace and receive tools for its configured capabilities. Set `workspace` on an individual agent when it needs a different environment.
+
 See [`LocalSandbox` reference](/reference/workspace/local-sandbox) for configuration options including environment isolation and native OS sandboxing.
+
+## Configuration patterns
+
+Choose capabilities based on what the agent needs:
+
+| Need | Configuration | Learn more |
+| - | - | - |
+| Run commands | `sandbox` | [Agent tools](#agent-tools) |
+| Read and write files | `filesystem` | [Filesystem](/docs/workspace/filesystem) |
+| Work with local files and commands | `filesystem` and `sandbox` pointed at the same directory | [Sandbox and filesystem](#sandbox-and-filesystem) |
+| Access cloud storage from a sandbox | `mounts` and `sandbox` | [Mounts](/docs/workspace/filesystem#mounts-and-compositefilesystem) |
+| Inspect code with language servers | `lsp` with a compatible filesystem or sandbox | [LSP inspection](/docs/workspace/lsp) |
+| Search files or load reusable instructions | Search options or `skills` | [Search](/docs/workspace/search) and [Skills](/docs/workspace/skills) |
 
 ## Sandbox without a filesystem
 
@@ -157,7 +166,9 @@ Process handles support output streams, `wait()`, `kill()`, and, when the provid
 
 ## Lifecycle and persistence
 
-Sandbox provider objects passed directly to a workspace are owned by that workspace. `workspace.init()` starts them, and `workspace.destroy()` destroys them. Calling `mastra.shutdown()` destroys registered workspaces and their owned sandboxes.
+Sandbox provider objects passed directly to a workspace are owned by that workspace. Most providers initialize on first use, so calling `workspace.init()` is optional. Call it when you use a workspace outside Mastra or need to provision resources before the first agent request.
+
+Calling `workspace.destroy()` destroys its owned sandbox. Calling `mastra.shutdown()` destroys registered workspaces and closes their resources, including sandboxes, filesystem handles, language servers, and browsers.
 
 The meaning of `stop()` is provider-specific. It may pause existing compute or tear it down, and some providers preserve a snapshot as part of that operation. Files and processes aren't guaranteed to survive a stop. Application restarts and idle timeouts also have provider-specific persistence.
 
@@ -363,5 +374,4 @@ Extend `MastraSandbox` when you want the base lifecycle state management, mount 
 - [`ModalSandbox` reference](/reference/workspace/modal-sandbox)
 - [`VercelSandbox` reference](/reference/workspace/vercel-sandbox)
 - [`VercelServerlessSandbox` reference](/reference/workspace/vercel-serverless)
-- [Workspace overview](/docs/workspace/overview)
 - [Filesystem](/docs/workspace/filesystem)

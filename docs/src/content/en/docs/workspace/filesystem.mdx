@@ -197,7 +197,7 @@ Mount paths can't be nested, for example, you can't mount at both `/data` and `/
 - Use **`filesystem`** when you have a single storage provider and don't need to mount it into a sandbox. The agent gets file tools that operate directly against the provider.
 - Use **`mounts`** when you need cloud storage accessible inside a sandbox, or when you want to combine multiple providers. The workspace creates a CompositeFilesystem for file tools and FUSE-mounts the storage into the sandbox.
 
-For local development, you typically don't need `mounts`, a `LocalFilesystem` and `LocalSandbox` pointed at the same directory gives you both file tools and command execution on the same files. See [configuration patterns](/docs/workspace/overview#configuration-patterns) for more detail.
+For local development, you typically don't need `mounts`, a `LocalFilesystem` and `LocalSandbox` pointed at the same directory gives you both file tools and command execution on the same files. See [configuration patterns](/docs/workspace/sandbox#configuration-patterns) for more detail.
 
 ## Agent tools
 
@@ -316,5 +316,4 @@ const workspace = new Workspace({
 - [FilesSDKFilesystem reference](/reference/workspace/files-sdk-filesystem)
 - [AgentFSFilesystem reference](/reference/workspace/agentfs-filesystem)
 - [MesaFilesystem reference](/reference/workspace/mesa-filesystem)
-- [Workspace overview](/docs/workspace/overview)
 - [Sandbox](/docs/workspace/sandbox)
