@@ -72,6 +72,7 @@ function RulesContent({ factoryProjectId }: { factoryProjectId: string | undefin
   const retryDecision = useFactoryDecisionAction(factoryProjectId, 'retry');
   const approveDecision = useFactoryDecisionAction(factoryProjectId, 'approve');
   const dismissDecision = useFactoryDecisionAction(factoryProjectId, 'dismiss');
+  const mutationError = [retryDecision, approveDecision, dismissDecision].find(mutation => mutation.isError)?.error;
 
   if (decisionsQuery.isError) {
     const message =
@@ -107,6 +108,12 @@ function RulesContent({ factoryProjectId }: { factoryProjectId: string | undefin
         </ButtonsGroup>
       </div>
 
+      {mutationError !== undefined && (
+        <Notice variant="destructive">
+          {mutationError instanceof Error ? mutationError.message : 'Rule action failed'}
+        </Notice>
+      )}
+
       {decisionsQuery.isPending ? (
         <SkeletonRows label="Loading rule decisions" rows={4} rowClassName="h-16 w-full" />
       ) : decisions.length === 0 ? (
@@ -139,6 +146,7 @@ function RulesContent({ factoryProjectId }: { factoryProjectId: string | undefin
                     decision={decision}
                     retrying={retryDecision.isPending && retryDecision.variables === decision.id}
                     approving={approveDecision.isPending && approveDecision.variables === decision.id}
+                    dismissing={dismissDecision.isPending && dismissDecision.variables === decision.id}
                     onRetry={() => retryDecision.mutate(decision.id)}
                     onApprove={() => approveDecision.mutate(decision.id)}
                     onDismiss={() => dismissDecision.mutate(decision.id)}
@@ -168,6 +176,7 @@ function DecisionRow({
   decision,
   retrying,
   approving,
+  dismissing,
   onRetry,
   onApprove,
   onDismiss,
@@ -175,6 +184,7 @@ function DecisionRow({
   decision: FactoryDecisionSummary;
   retrying: boolean;
   approving: boolean;
+  dismissing: boolean;
   onRetry: () => void;
   onApprove: () => void;
   onDismiss: () => void;
@@ -227,10 +237,10 @@ function DecisionRow({
         </div>
         {decision.status === 'proposed' ? (
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="sm" onClick={onDismiss}>
-              Dismiss
+            <Button variant="ghost" size="sm" disabled={approving || dismissing} onClick={onDismiss}>
+              {dismissing ? 'Dismissing…' : 'Dismiss'}
             </Button>
-            <Button size="sm" disabled={approving} onClick={onApprove}>
+            <Button size="sm" disabled={approving || dismissing} onClick={onApprove}>
               {approving ? 'Starting…' : 'Run'}
             </Button>
           </div>
