@@ -7,9 +7,53 @@ packages:
 
 # Workspace skills
 
-**Added in:** `@mastra/core@1.1.0`
-
 Skills are reusable instructions that teach agents how to perform specific tasks. They follow the [Agent Skills specification](https://agentskills.io) - an open standard for packaging agent capabilities.
+
+:::note
+
+Workspace skills are discovered through a workspace and shared with every agent that uses it. To attach skills directly to one agent without requiring a workspace, use [agent skills](/docs/agents/skills).
+
+:::
+
+## When to use skills
+
+Use workspace skills when your agent needs to:
+
+- Follow repeatable instructions for specialized tasks
+- Load detailed guidance only when it becomes relevant
+- Share instructions, reference files, scripts, and assets across agents
+- Discover capabilities from one or more directories
+- Search skill content alongside other workspace content
+
+## Quickstart
+
+Create a skill with a `SKILL.md` file:
+
+```markdown title="workspace/skills/code-review/SKILL.md"
+---
+name: code-review
+description: Reviews code for bugs and readability issues
+---
+
+# Code review
+
+Check the code for bugs, missing error handling, and unclear naming.
+```
+
+Configure the skill directory on a workspace:
+
+```typescript title="src/mastra/workspaces.ts"
+import { Workspace, LocalFilesystem } from '@mastra/core/workspace'
+
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  skills: ['skills'],
+})
+```
+
+Agents that use this workspace can now discover and load the `code-review` skill when needed.
+
+## Skill structure
 
 A skill is a folder containing:
 
@@ -28,8 +72,6 @@ skills/
     scripts/
       lint.ts
 ```
-
-When skills are configured on a workspace, agents can discover and activate them during conversations.
 
 ## `SKILL.md` format
 
@@ -63,17 +105,6 @@ You are a code reviewer. When reviewing code:
 ```
 
 ## Configuring skills
-
-Enable skill discovery by setting the `skills` option on your workspace:
-
-```typescript title="src/mastra/workspaces.ts"
-import { Workspace, LocalFilesystem } from '@mastra/core/workspace'
-
-const workspace = new Workspace({
-  filesystem: new LocalFilesystem({ basePath: './workspace' }),
-  skills: ['skills'],
-})
-```
 
 You can specify multiple skill directories:
 

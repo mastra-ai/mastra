@@ -7,9 +7,39 @@ packages:
 
 # Search and indexing
 
-**Added in:** `@mastra/core@1.1.0`
-
 Search lets agents find relevant content in indexed workspace files. When an agent needs to answer a question or find information, it can search the indexed content instead of reading every file.
+
+Search works with both [`mounts`](/docs/workspace/filesystem#mounts) and a [workspace-only filesystem](/docs/workspace/filesystem#workspace-only-filesystem). With `mounts`, paths from every mounted filesystem are available through one composite filesystem. With `filesystem`, search uses that provider directly. In both cases, queries search the workspace index rather than reading live files on demand.
+
+## When to use search
+
+Use workspace search when your agent needs to:
+
+- Find exact terms, filenames, or error messages with BM25 keyword search
+- Find conceptually related content with vector search
+- Combine keyword and semantic results with hybrid search
+- Search a large set of files without reading each file in full
+- Index content from files, databases, or APIs
+
+## Quickstart
+
+Enable BM25 search, index content, and query it through the workspace:
+
+```typescript title="src/mastra/workspaces.ts"
+import { Workspace, LocalFilesystem } from '@mastra/core/workspace'
+
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  bm25: true,
+})
+
+await workspace.index('/docs/guide.md', 'Reset passwords from the account settings page.')
+
+const results = await workspace.search('password reset')
+console.log(results)
+```
+
+This configuration also gives agents tools for searching and indexing workspace content.
 
 ## How it works
 
@@ -186,6 +216,8 @@ Manual indexing is useful when:
 ### Auto-indexing
 
 Configure `autoIndexPaths` to automatically index files when the workspace initializes. Each entry can be a directory path (indexed recursively) or a glob pattern for selective indexing.
+
+`autoIndexPaths` works with a static `filesystem` or with `mounts`. For mounts, include the mount prefix in each path, such as `/docs/**/*.md`. Resolver-backed filesystems aren't auto-indexed during workspace initialization because the provider is only selected for a request; index their content manually instead.
 
 ```typescript
 const workspace = new Workspace({

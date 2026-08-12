@@ -52,14 +52,14 @@ const workspace = new Workspace({
     name: 'filesystem',
     type: 'WorkspaceFilesystem | WorkspaceFilesystemResolver',
     description:
-      'Filesystem provider instance, or a resolver function that receives `requestContext` and returns a filesystem per request. See [dynamic filesystem](/docs/workspace/filesystem#dynamic-filesystem).',
+      'Filesystem provider instance, or a resolver function that receives `requestContext` and returns a filesystem per request. See [multi-tenant filesystems](/docs/workspace/filesystem#multi-tenant-filesystems).',
     isOptional: true,
   },
   {
     name: 'sandbox',
     type: 'WorkspaceSandbox | WorkspaceSandboxResolver',
     description:
-      'Sandbox provider instance, or a resolver function that receives `requestContext` and returns a sandbox per request. See [dynamic sandbox](/docs/workspace/sandbox#dynamic-sandboxes).',
+      'Sandbox provider instance, or a resolver function that receives `requestContext` and returns a sandbox per request. See [multi-tenant sandboxes](/docs/workspace/sandbox#multi-tenant-sandboxes).',
     isOptional: true,
   },
   {
@@ -182,6 +182,17 @@ const workspace = new Workspace({
 ]}
 />
 
+For a resolver-backed sandbox, the default `'placeholder'` mode avoids provisioning a sandbox while workspace instructions are built. Set `instructions.dynamicSandbox` to `'resolve'` when the instructions must come from the resolved sandbox:
+
+```typescript
+const workspace = new Workspace({
+  sandbox: ({ requestContext }) => resolveSandbox(requestContext),
+  instructions: { dynamicSandbox: 'resolve' },
+})
+```
+
+This calls the resolver while building instructions. To describe a request-specific environment without provisioning it, pass a function that returns instruction text from `requestContext` instead.
+
 ## Tool configuration
 
 The `tools` option accepts a `WorkspaceToolsConfig` object that controls which workspace tools are enabled and their safety settings.
@@ -271,7 +282,7 @@ const workspace = new Workspace({
 })
 ```
 
-See [Filesystem tools](/docs/workspace/filesystem#agent-tools), [Sandbox tools](/docs/workspace/sandbox#agent-tools), [LSP inspection](/docs/workspace/lsp#tool-name-remapping), and [Search tools](/docs/workspace/search#agent-tools) for capability-specific configuration.
+See [Filesystem tools](/docs/workspace/filesystem#using-mounts), [Sandbox tools](/docs/workspace/sandbox#using-the-sandbox), [LSP inspection](/docs/workspace/lsp#tool-name-remapping), and [Search tools](/docs/workspace/search#agent-tools) for capability-specific configuration.
 
 ### Tool name remapping
 
@@ -714,7 +725,7 @@ Added when a filesystem is configured:
 | `mastra_workspace_mkdir` | Create a directory. Creates parent directories automatically if they don't exist. |
 | `mastra_workspace_grep` | Search file contents using regex patterns. Supports glob filtering, context lines, and case-insensitive search. |
 
-With a static filesystem, write tools (`write_file`, `edit_file`, `delete`, `mkdir`) are excluded when the filesystem is in read-only mode. With a [runtime-defined filesystem](/docs/workspace/filesystem#dynamic-filesystem), write tools are always included and read-only is enforced at runtime.
+With a static filesystem, write tools (`write_file`, `edit_file`, `delete`, `mkdir`) are excluded when the filesystem is in read-only mode. With a [runtime-defined filesystem](/docs/workspace/filesystem#multi-tenant-filesystems), write tools are always included and read-only is enforced at runtime.
 
 The `read_file` tool accepts `mediaTypes` and `maxMediaBytes` options to control which mime types are surfaced to the model as native media parts and how large those files can be:
 
@@ -763,7 +774,7 @@ Added when a sandbox is configured:
 | `mastra_workspace_get_process_output` | Get stdout, stderr, and status of a background process by PID. Accepts `tail` to limit output lines and `wait: true` to block until exit. Only available when the sandbox has a process manager. |
 | `mastra_workspace_kill_process` | Kill a background process by PID. Returns the last 50 lines of output. Only available when the sandbox has a process manager. |
 
-With a static sandbox, capability checks (`executeCommand`, `processes`) decide which tool variants are exposed. With a [runtime-defined sandbox](/docs/workspace/sandbox#dynamic-sandboxes), all sandbox tools are registered and the runtime throws a clear error if the resolved sandbox doesn't implement a requested capability.
+With a static sandbox, capability checks (`executeCommand`, `processes`) decide which tool variants are exposed. With a [runtime-defined sandbox](/docs/workspace/sandbox#multi-tenant-sandboxes), all sandbox tools are registered and the runtime throws a clear error if the resolved sandbox doesn't implement a requested capability.
 
 The `execute_command` tool accepts a `backgroundProcesses` option for lifecycle callbacks on background processes:
 
@@ -811,7 +822,7 @@ The `execute_command` tool accepts a `backgroundProcesses` option for lifecycle 
 ]}
 />
 
-See [Background process callbacks](/docs/workspace/sandbox#background-process-callbacks) for usage examples.
+See [Background processes](/docs/workspace/sandbox#background-processes) for callback examples.
 
 ### Search tools
 
