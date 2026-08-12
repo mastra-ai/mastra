@@ -209,7 +209,7 @@ export function ToolCard({ tool }: { tool: ToolCall }) {
     >
       <CollapsibleTrigger className={ROW_TRIGGER}>
         <TranscriptRow
-          icon={<Icon size={14} strokeWidth={1.75} aria-hidden className={failed ? 'text-error/80' : 'text-icon3'} />}
+          icon={<Icon size={14} strokeWidth={1.75} aria-hidden className={failed ? 'text-error/80' : 'text-icon2'} />}
           label={label}
           detail={detail}
           running={tool.status === 'running'}

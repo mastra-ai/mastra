@@ -1,5 +1,23 @@
 # @mastra/core
 
+## 1.59.0-alpha.0
+
+### Minor Changes
+
+- Fixed traces that start under an external parent span not appearing in Mastra Studio. Resumed agent and workflow runs keep their link to the suspended run's trace. ([#20499](https://github.com/mastra-ai/mastra/pull/20499))
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`088e41e`](https://github.com/mastra-ai/mastra/commit/088e41e434ed05f2c674b254f1034ec46a57a7be))
+
+- Fixed CoreToolBuilder dropping the `~standard.jsonSchema` adapter when injecting background/resume fields onto Zod v4 tool input schemas. Invalid tool calls now return structured validation errors instead of crashing during JSON Schema conversion. ([#21187](https://github.com/mastra-ai/mastra/pull/21187))
+
+- Fixed workflow watch events re-publishing stale step state, which could grow to megabytes per event. `workflow-step-start` events spread the step's previous result into their payload, so on loops (including durable agent runs) every start event shipped the previous iteration's `output` next to a byte-identical input `payload`. On Cloudflare Workers this made the request streaming a durable agent run exceed the 128 MB isolate memory limit and fail, even though the run itself kept executing. Watch events now only carry the fields describing the current transition: the input (`payload` or `resumePayload`), timestamps, and `status` on start events, plus the fresh result on `workflow-step-result` and `workflow-step-suspended` events. A step's prior `output`, `error`, and suspend state are no longer re-published on later events. Persisted run snapshots are unchanged. ([#20661](https://github.com/mastra-ai/mastra/pull/20661))
+
+- **Fixed** legacy Anthropic history that contains a thinking signature without its original thinking text is sanitized before replay, preventing invalid empty signed thinking blocks from being forwarded. ([#17602](https://github.com/mastra-ai/mastra/pull/17602))
+
+  Fixes #17457.
+
 ## 1.58.0
 
 ### Minor Changes

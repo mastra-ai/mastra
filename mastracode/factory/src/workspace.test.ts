@@ -269,7 +269,13 @@ describe('getFactoryWorkspace', () => {
     const assetRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'factory-skills');
     const assetNames = (await fs.readdir(assetRoot)).sort();
 
-    expect(assetNames).toEqual(['configure-factory-rules', 'factory-plan', 'factory-review', 'factory-triage']);
+    expect(assetNames).toEqual([
+      'configure-factory-rules',
+      'factory-plan',
+      'factory-rereview',
+      'factory-review',
+      'factory-triage',
+    ]);
     await Promise.all(
       assetNames.map(skillName => expect(fs.stat(path.join(assetRoot, skillName, 'SKILL.md'))).resolves.toBeDefined()),
     );
@@ -279,7 +285,7 @@ describe('getFactoryWorkspace', () => {
     const assetRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'factory-skills');
     const read = (skillName: string) => fs.readFile(path.join(assetRoot, skillName, 'SKILL.md'), 'utf8');
 
-    for (const skillName of ['factory-triage', 'factory-plan', 'factory-review']) {
+    for (const skillName of ['factory-triage', 'factory-plan', 'factory-review', 'factory-rereview']) {
       const prose = await read(skillName);
       // Terminal batched handoff + governed transition, never a mid-run human gate.
       expect(prose).toContain('factory_transition_work_item');
@@ -317,9 +323,9 @@ describe('getFactoryWorkspace', () => {
       'After a GitHub comment is posted or updated, reconcile the triage labels',
     );
     expect(labelReconciliationIndex).toBeGreaterThan(questionsIndex);
-    expect(triage).toContain('gh issue edit "$ISSUE" --add-label "auto-triaged"');
+    expect(triage).toContain('gh issue edit "$ISSUE" --add-label "status: auto-triaged"');
     expect(triage).toContain('gh issue edit "$ISSUE" --remove-label "status: needs triage"');
-    expect(triage).toContain('gh issue edit "$ISSUE" --add-label "needs-approval"');
+    expect(triage).toContain('gh issue edit "$ISSUE" --add-label "status: needs approval"');
     expect(triage).toContain('Apply only these label mutations.');
     expect(triage).toContain(
       'For Linear issues, use the same structured handoff without attempting GitHub publication or label mutations.',

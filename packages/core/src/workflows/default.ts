@@ -50,7 +50,7 @@ import type {
 } from './types';
 // Used by the per-type execute methods (executeAgent/executeTool/executeMapping)
 // to build a runnable step from a declarative entry.
-import { getSingleStepEntryId } from './utils';
+import { getSingleStepEntryId, omitPriorCompletionFields } from './utils';
 
 // Re-export ExecutionContext for backwards compatibility
 export type { ExecutionContext } from './types';
@@ -242,7 +242,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             payload: {
               id: params.step.id,
               stepCallId: params.stepCallId,
-              ...params.stepInfo,
+              ...omitPriorCompletionFields(params.stepInfo),
             },
           },
         });

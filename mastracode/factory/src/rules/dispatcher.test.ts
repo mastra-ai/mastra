@@ -55,6 +55,7 @@ function createSession(
       return { persisted: Promise.resolve(), accepted: notificationAccepted };
     },
   );
+  const abort = vi.fn(() => {});
   const session = {
     thread: {
       list: vi.fn(async () => []),
@@ -67,6 +68,7 @@ function createSession(
       requireId: vi.fn(() => threadId),
       listActiveMessages: vi.fn(async () => [...deliveredSignals].map(id => ({ id }))),
     },
+    abort,
     getWorkspace: () => ({
       skills: {
         maybeRefresh: vi.fn(async () => {}),
@@ -99,6 +101,7 @@ function createSession(
     sendNotificationSignal,
     consumeStream,
     emitAgentEnd,
+    abort,
     getAgentEndListenerCount: () => agentEndListeners.size,
   };
 }
@@ -658,6 +661,95 @@ describe('FactoryDecisionDispatcher', () => {
     expect(requestContext?.get('user')).toEqual({ workosId: 'user-1', organizationId: 'org-1' });
     expect(session.subscribe).toHaveBeenCalledTimes(1);
     expect(getAgentEndListenerCount()).toBe(0);
+  });
+
+  it('aborts the current run before kickoff when the invokeSkill decision sets cancelInFlight', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { item, transitionService } = await queueDecision(storage, {
+      type: 'invokeSkill',
+      role: 'work',
+      skillName: 'factory-review',
+      arguments: 'PR 42',
+      idempotencyKey: 'skill-cancel-1',
+      cancelInFlight: true,
+    });
+    const { controller, session, abort } = createSession();
+    await storage.prepareRunStart({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: PROJECT_ID,
+      workItem: {
+        id: item.id,
+        input: {
+          externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:1' },
+          title: 'Fix issue',
+          stages: ['execute'],
+          sessions: {},
+          metadata: {},
+        },
+      },
+      role: 'work',
+      session: { sessionId: 'session-1', branch: 'factory/issue-1', threadId: 'thread-1' },
+      resourceId: PROJECT_ID,
+      kickoffKey: 'kickoff-cancel',
+      kickoffMessage: null,
+    });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+      primeCredentials: vi.fn(async () => {}),
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    expect(abort).toHaveBeenCalledTimes(1);
+    expect(abort.mock.invocationCallOrder[0]!).toBeLessThan(session.sendSignal.mock.invocationCallOrder[0]!);
+    expect(session.sendSignal).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not abort the current run when the invokeSkill decision omits cancelInFlight', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { item, transitionService } = await queueDecision(storage, {
+      type: 'invokeSkill',
+      role: 'work',
+      skillName: 'factory-review',
+      arguments: 'PR 42',
+      idempotencyKey: 'skill-no-cancel-1',
+    });
+    const { controller, abort } = createSession();
+    await storage.prepareRunStart({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: PROJECT_ID,
+      workItem: {
+        id: item.id,
+        input: {
+          externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:1' },
+          title: 'Fix issue',
+          stages: ['execute'],
+          sessions: {},
+          metadata: {},
+        },
+      },
+      role: 'work',
+      session: { sessionId: 'session-1', branch: 'factory/issue-1', threadId: 'thread-1' },
+      resourceId: PROJECT_ID,
+      kickoffKey: 'kickoff-no-cancel',
+      kickoffMessage: null,
+    });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+      primeCredentials: vi.fn(async () => {}),
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    expect(abort).not.toHaveBeenCalled();
   });
 
   it('holds a wake dispatch slot until agent end before claiming another decision', async () => {

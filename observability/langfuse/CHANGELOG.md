@@ -1,5 +1,16 @@
 # @mastra/langfuse
 
+## 1.4.8-alpha.0
+
+### Patch Changes
+
+- Fixed Langfuse scores being ingested into the wrong environment. Scores submitted through the exporter's score pipeline (including `observability.addScore` and the deprecated `addScoreToTrace`) now carry the exporter's configured `environment`, matching the traces they belong to. Previously, with `new LangfuseExporter({ environment: 'production' })`, spans landed in `production` but their scores landed in the `default` environment, so environment-scoped views like the session list's Scores column and score analytics showed nothing. Fixes [#21315](https://github.com/mastra-ai/mastra/issues/21315) ([#21324](https://github.com/mastra-ai/mastra/pull/21324))
+
+- Updated dependencies [[`088e41e`](https://github.com/mastra-ai/mastra/commit/088e41e434ed05f2c674b254f1034ec46a57a7be), [`b2f0013`](https://github.com/mastra-ai/mastra/commit/b2f0013375588d40c03c13e843b99c0ff8872ca5), [`3b541ae`](https://github.com/mastra-ai/mastra/commit/3b541ae5d410c52b80a7e381d84d021cddb9a449), [`ae79e34`](https://github.com/mastra-ai/mastra/commit/ae79e34c0bd8674fc24c7524217bfc4a051c6136), [`a6c4399`](https://github.com/mastra-ai/mastra/commit/a6c4399763590b3dae21a2c81826e89a3b1deee4), [`ae79e34`](https://github.com/mastra-ai/mastra/commit/ae79e34c0bd8674fc24c7524217bfc4a051c6136)]:
+  - @mastra/core@1.59.0-alpha.0
+  - @mastra/observability@1.17.0-alpha.0
+  - @mastra/otel-exporter@1.3.8-alpha.0
+
 ## 1.4.7
 
 ### Patch Changes
