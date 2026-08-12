@@ -7,19 +7,16 @@ import type { ReactNode } from 'react';
 /** Shell of a clickable transcript row: hover surface, pointer, and the `group/row` hover scope. */
 export const ROW_TRIGGER = 'group/row hover:bg-neutral6/5 w-full cursor-pointer rounded-md text-left transition-colors';
 
-/** Body of an expanded row, hanging off a rail drawn from the centre of the leading slot. */
-export const ROW_RAIL = 'border-border1 ml-[14px] max-w-full min-w-0 border-l py-1.5 pr-1 pl-4';
+/** Body of an expanded row, hanging off a rail drawn from the centre of the leading slot and faded out at its foot. */
+export const ROW_RAIL =
+  "relative ml-[14px] max-w-full min-w-0 py-1.5 pr-1 pl-4 before:bg-border1 before:absolute before:inset-y-0 before:left-0 before:w-px before:content-[''] before:mask-b-from-[calc(100%-min(40%,80px))]";
 
 function Chevron({ expanded, className }: { expanded: boolean; className: string }) {
   // Nested, not a direct trigger child — the DS trigger rotates direct-child <svg> on open.
   return (
     <span
       aria-hidden
-      className={cn(
-        'flex shrink-0 items-center transition-[transform,color] duration-150',
-        expanded && 'rotate-90',
-        className,
-      )}
+      className={cn('flex shrink-0 items-center transition duration-150', expanded && 'rotate-90', className)}
     >
       <ChevronRight size={13} />
     </span>
@@ -58,7 +55,10 @@ export function TranscriptRow({ icon, label, detail, running, expanded, rule, tr
       {icon && expanded !== undefined && (
         <Chevron expanded={expanded} className="text-icon2 group-hover/row:text-icon4" />
       )}
-      <span aria-hidden className={cn('min-w-2 flex-1', rule && 'bg-border1 h-px')} />
+      <span
+        aria-hidden
+        className={cn('min-w-2 flex-1', rule && 'bg-border1 mask-r-from-[calc(100%-min(100%,160px))] h-px')}
+      />
       {trailing}
     </span>
   );
