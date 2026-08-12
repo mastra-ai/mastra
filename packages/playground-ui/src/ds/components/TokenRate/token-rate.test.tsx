@@ -8,25 +8,43 @@ afterEach(() => {
   cleanup();
 });
 
+function bars(container: HTMLElement) {
+  return [...container.querySelectorAll('rect')].map(bar => ({
+    x: Number(bar.getAttribute('x')),
+    height: Number(bar.getAttribute('height')),
+    y: Number(bar.getAttribute('y')),
+  }));
+}
+
 describe('TokenRate', () => {
-  it('plots one point per sample, ending at the right edge', () => {
-    const { container } = render(<TokenRate history={[10, 20, 40]} tokensPerSec={40} />);
+  it('scales height against a fixed ceiling, so a steady rate stays a steady height', () => {
+    const { container } = render(<TokenRate history={[60, 60]} tokensPerSec={60} />);
 
-    const points = container.querySelector('polyline')?.getAttribute('points')?.split(' ') ?? [];
+    const [first, second] = bars(container);
 
-    expect(points).toHaveLength(3);
-    expect(points[2].startsWith('30,')).toBe(true);
+    expect(first.height).toBe(6);
+    expect(second.height).toBe(6);
   });
 
-  it('still draws a line when a run has produced a single sample', () => {
-    const { container } = render(<TokenRate history={[12]} tokensPerSec={12} />);
+  it('keeps the waveform centred on the box', () => {
+    const { container } = render(<TokenRate history={[120, 6]} tokensPerSec={6} />);
 
-    expect(container.querySelector('polyline')?.getAttribute('points')).toBe('0,1.00 30,1.00');
+    for (const bar of bars(container)) {
+      expect(bar.y + bar.height / 2).toBe(6);
+    }
   });
 
-  it('names the rate for assistive tech while the digits stay folded', () => {
+  it('lands the newest sample at the right edge whatever the run has produced', () => {
+    const { container } = render(<TokenRate history={[40]} tokensPerSec={40} />);
+
+    expect(bars(container)).toHaveLength(1);
+    expect(bars(container)[0].x).toBe(33);
+  });
+
+  it('keeps the rate readable next to the waveform', () => {
     render(<TokenRate history={[10, 42]} tokensPerSec={42} />);
 
-    expect(screen.getByLabelText('42 tokens per second')).not.toBeNull();
+    expect(screen.getByText('42')).not.toBeNull();
+    expect(screen.getByText('tok/s')).not.toBeNull();
   });
 });

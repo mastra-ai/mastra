@@ -91,8 +91,8 @@ describe('observational memory status', () => {
     it('plots the throughput the run has measured so far', () => {
       const { container } = renderStatus({ tokensPerSec: 42, tokensPerSecHistory: [30, 38, 42] });
 
-      expect(screen.getByLabelText('42 tokens per second')).toBeVisible();
-      expect(container.querySelector('polyline')?.getAttribute('points')?.split(' ')).toHaveLength(3);
+      expect(screen.getByText('42')).toBeVisible();
+      expect(container.querySelectorAll('rect')).toHaveLength(3);
     });
   });
 });

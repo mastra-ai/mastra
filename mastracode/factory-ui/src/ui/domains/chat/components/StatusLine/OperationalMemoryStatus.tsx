@@ -38,6 +38,7 @@ export function OperationalMemoryStatus() {
     <>
       {showMsg && (
         <TokenBudget
+          description="When it fills, the conversation so far is read into memory as observations and leaves the message window."
           hint={savingHint(om.projectedMessageRemoval)}
           label={messageLabel[work.messages]}
           threshold={om.threshold}
@@ -48,6 +49,7 @@ export function OperationalMemoryStatus() {
       )}
       {showMem && (
         <TokenBudget
+          description="When it fills, the observations are consolidated into a shorter reflection the agent keeps working from."
           hint={savingHint(om.projectedReflectionSavings)}
           label={observationLabel[work.observations]}
           threshold={om.reflectionThreshold}
