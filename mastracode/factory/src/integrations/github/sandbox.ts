@@ -541,10 +541,11 @@ async function hasExistingCheckout(
 
 /**
  * Reset the git remote back to the tokenless URL. On a successful clone/pull the
- * workdir always has a `.git`, so a non-zero exit code here means the token may
- * still be persisted — surface it. On the failure path the workdir may not exist
- * (e.g. a failed clone), so a non-zero exit is tolerated — and never masks the
- * primary failure being thrown through the `finally`.
+ * workdir always has a `.git`, so any failure here means the token may still be
+ * persisted — surface it. On the failure path the workdir may not exist (e.g. a
+ * failed clone), and a missing directory makes providers that spawn with `cwd`
+ * throw rather than return a non-zero exit code; both outcomes are tolerated so
+ * neither masks the primary failure being thrown through the `finally`.
  */
 async function scrubRemote(
   sandbox: MaterializationSandbox,
@@ -552,11 +553,13 @@ async function scrubRemote(
   repoFullName: string,
   expectGitDir: boolean,
 ): Promise<void> {
-  const result = await sh(
-    sandbox,
-    `git -C ${shellQuote(workdir)} remote set-url origin ${shellQuote(cleanUrl(repoFullName))}`,
-  );
-  if (result.exitCode !== 0 && expectGitDir) {
+  const scrub = `git -C ${shellQuote(workdir)} remote set-url origin ${shellQuote(cleanUrl(repoFullName))}`;
+  if (!expectGitDir) {
+    await sh(sandbox, scrub).catch(() => undefined);
+    return;
+  }
+  const result = await sh(sandbox, scrub);
+  if (result.exitCode !== 0) {
     throw new MaterializeError(
       `Failed to scrub installation token from git remote: ${result.stderr.trim() || result.stdout.trim()}`,
       'pull-failed',

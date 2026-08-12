@@ -348,6 +348,22 @@ describe('materializeRepo', () => {
     expect(err.code).toBe('egress-blocked');
   });
 
+  it('surfaces the clone failure when the token scrub throws on a missing workdir', async () => {
+    const sandbox = new FakeSandbox(script => {
+      if (script === 'git --version') return OK;
+      if (script.includes('git clone')) {
+        return { exitCode: 128, stdout: '', stderr: 'fatal: unable to access: Could not resolve host: github.com' };
+      }
+      if (script.includes('remote set-url origin')) {
+        throw new Error('Command failed with ENOENT: The "cwd" option is invalid');
+      }
+      return OK;
+    });
+    const err = await materializeRepo(makeRow(), makeRepoInfo(), sandbox, 'tok').catch(e => e);
+    expect(err).toBeInstanceOf(MaterializeError);
+    expect(err.code).toBe('egress-blocked');
+  });
+
   it('refuses to run git when the default branch is not git-ref-safe', async () => {
     const sandbox = new FakeSandbox();
     const err = await materializeRepo(
