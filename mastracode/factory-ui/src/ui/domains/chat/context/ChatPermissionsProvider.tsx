@@ -14,20 +14,26 @@ interface ChatPermissionsProviderProps {
 }
 
 export function ChatPermissionsProvider({ children }: ChatPermissionsProviderProps) {
-  const { resourceId, projectPath, baseUrl, sessionEnabled, resourceEnabled } = useChatSessionContext();
+  const { resourceId, projectPath, baseUrl, sessionEnabled, resourceReady, resourceEnabled } = useChatSessionContext();
   const [pendingPermissionCategory, setPendingPermissionCategory] = useState<ToolCategory | null>(null);
-  const hookArgs = {
+  const commonArgs = {
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
     scope: projectPath,
     baseUrl,
-    // Workspace routes wait for their stored session; session-less factory
-    // surfaces (the routed Settings pages) address the factory-level session
-    // so tool permissions stay editable there.
-    enabled: sessionEnabled || (resourceEnabled && Boolean(resourceId)),
   };
-  const permissionsQuery = useAgentControllerPermissions(hookArgs);
-  const setPermissionForCategoryMutation = useSetPermissionForCategoryMutation(hookArgs);
+  // Read permissions as soon as the resource is addressable — the read is
+  // resource-keyed and does not require the sandbox. Session-less factory
+  // surfaces (routed Settings pages) still address the factory-level session.
+  const permissionsQuery = useAgentControllerPermissions({
+    ...commonArgs,
+    enabled: resourceReady || (resourceEnabled && Boolean(resourceId)),
+  });
+  // Writes touch the sandbox — keep on sandboxReady (= sessionEnabled).
+  const setPermissionForCategoryMutation = useSetPermissionForCategoryMutation({
+    ...commonArgs,
+    enabled: sessionEnabled || (resourceEnabled && Boolean(resourceId)),
+  });
 
   const setPermissionForCategory = async (category: ToolCategory, policy: PermissionPolicy) => {
     setPendingPermissionCategory(category);

@@ -8,7 +8,7 @@ import { useApiConfig } from '../../../../api/config';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { useAgentControllerThreadMessages } from '../../../../hooks/useAgentControllerThreadMessages';
 import { useFactoryQuery } from '../../../../hooks/useFactories';
-import { useEnsureMaterializedSandbox } from '../../../../hooks/useEnsureMaterializedSandbox';
+import { useEnsureMaterializedSandbox, useEnsureProgress } from '../../../../hooks/useEnsureMaterializedSandbox';
 import { useUserSessionQuery } from '../../../../hooks/useWorkspaces';
 import type { LinkedRepositoryPayload } from '../../workspaces/services/github';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
@@ -17,6 +17,7 @@ import { ChatModelsProvider } from './ChatModelsProvider';
 import { ChatModesProvider } from './ChatModesProvider';
 import { ChatSessionContext } from './ChatSessionContext';
 import { ChatTranscriptProvider } from './ChatTranscriptProvider';
+import { SessionPrepareSteps } from '../components/SessionPrepareSteps';
 import { useChatSessionContext } from './useChatSessionContext';
 
 interface ChatThreadMessagesApi {
@@ -77,12 +78,26 @@ export function ChatSessionConfigProvider({
   const resourceOverride = userScoped
     ? null
     : new URLSearchParams(typeof window === 'undefined' ? '' : window.location.search).get('resourceId');
-  const sessionEnabled = userScoped
+  const sandboxReady = userScoped
     ? Boolean(storedSession) && !resolvingSession
     : resourceOverride
       ? Boolean(resourceOverride)
       : ensureQuery.isSuccess && Boolean(storedSession) && !resolvingSession;
   const sessionError = userScoped ? undefined : (ensureQuery.error ?? undefined);
+  // `resourceReady` — safe to address the agent-controller session by
+  // `resourceId` for reads/streaming as soon as server-side session metadata
+  // resolves. Does NOT wait on `/ensure` — the agent-controller endpoints are
+  // keyed by resourceId, not by a live sandbox, so reads and thread lookups
+  // can parallelize with sandbox provisioning.
+  const resourceReady = userScoped
+    ? Boolean(storedSession) && !resolvingSession
+    : Boolean(resourceOverride) || (Boolean(storedSession) && !resolvingSession);
+  // `sandboxPreparing` — true only when we're actively inside a session and
+  // awaiting `/ensure`. Distinct from `!sandboxReady`, which is also false
+  // outside any session.
+  const sandboxPreparing = inSession && !sandboxReady && !sessionError;
+  const sandboxProgressQuery = useEnsureProgress(inSession ? repository?.projectRepositoryId : undefined);
+  const sandboxProgress = sandboxPreparing ? sandboxProgressQuery.data : undefined;
   // Outside a session the factory resource is addressable straight away (its id
   // is the factory project id); inside one we keep the original ordering and
   // wait for the workspace so resource reads follow materialization.
@@ -91,7 +106,13 @@ export function ChatSessionConfigProvider({
   const resourceEnabled = !isUserDraft && resourceAddressable;
   const value = {
     resourceId: resourceOverride ?? resourceId ?? '',
-    sessionEnabled,
+    // `sessionEnabled` retained as an alias for `sandboxReady` so existing
+    // mutation/display consumers don't need to be renamed in this change.
+    sessionEnabled: sandboxReady,
+    sandboxReady,
+    resourceReady,
+    sandboxPreparing,
+    sandboxProgress,
     resourceEnabled,
     sessionError,
     retrySession: sessionError ? () => void ensureQuery.refetch() : undefined,
@@ -129,14 +150,14 @@ export function ChatSessionBoundary({
   threadId?: string;
   deferUntilMessagesReady?: boolean;
 }) {
-  const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
+  const { resourceId, resourceReady, projectPath, baseUrl } = useChatSessionContext();
   const messagesQuery = useAgentControllerThreadMessages({
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
     scope: projectPath,
     threadId,
     baseUrl,
-    enabled: sessionEnabled && Boolean(threadId),
+    enabled: resourceReady && Boolean(threadId),
   });
   const messages = {
     threadId,
@@ -145,7 +166,11 @@ export function ChatSessionBoundary({
   };
 
   if (deferUntilMessagesReady && threadId && (messages.isPending || messages.error)) {
-    return <ChatMessageFeedback {...messages} />;
+    return (
+      <ChatThreadMessagesContext.Provider value={messages}>
+        <ChatMessageBoundary>{null}</ChatMessageBoundary>
+      </ChatThreadMessagesContext.Provider>
+    );
   }
 
   return (
@@ -174,33 +199,43 @@ export function ChatSessionBoundary({
 export function ChatMessageBoundary({ children }: { children: ReactNode }) {
   const value = useContext(ChatThreadMessagesContext);
   if (!value) throw new Error('ChatMessageBoundary must be used within a ChatSessionBoundary');
+  const { sessionError, sandboxPreparing } = useChatSessionContext();
 
-  if (value.isPending || value.error) return <ChatMessageFeedback {...value} />;
+  // A failed workspace preparation keeps the session disabled — surface the
+  // real failure instead of an eternal skeleton or a partial-state loader.
+  if (sessionError) return <ChatMessageFeedback />;
+
+  // Sandbox is still being provisioned/cloned. Show the step loader so the
+  // user knows what the server is doing right now, instead of stacked skeleton
+  // bars that carry no information.
+  if (sandboxPreparing) return <SessionPrepareSteps />;
+
+  // Sandbox is ready but the messages fetch is still in flight (a narrow
+  // window after `/ensure` resolves). Fall back to the classic skeleton — no
+  // useful step-loader phases to render here.
+  if (value.threadId && (value.isPending || value.error)) return <ChatMessageFallback {...value} />;
 
   return children;
 }
 
-function ChatMessageFeedback({ threadId, isPending, error }: ChatThreadMessagesApi) {
+function ChatMessageFeedback() {
   const { sessionError, retrySession } = useChatSessionContext();
+  if (!sessionError) return null;
+  return (
+    <div className="flex flex-col items-stretch gap-4">
+      <Notice variant="destructive">Failed to prepare the workspace: {sessionError.message}</Notice>
+      {retrySession && (
+        <div>
+          <Button variant="default" onClick={retrySession}>
+            Retry
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
 
-  // A failed workspace preparation keeps the session disabled, which leaves
-  // the messages query pending forever — surface the real failure instead of
-  // an eternal skeleton.
-  if (sessionError) {
-    return (
-      <div className="flex flex-col items-stretch gap-4">
-        <Notice variant="destructive">Failed to prepare the workspace: {sessionError.message}</Notice>
-        {retrySession && (
-          <div>
-            <Button variant="default" onClick={retrySession}>
-              Retry
-            </Button>
-          </div>
-        )}
-      </div>
-    );
-  }
-
+function ChatMessageFallback({ threadId, isPending, error }: ChatThreadMessagesApi) {
   if (threadId && isPending) {
     return (
       <div className="flex flex-col gap-4">
