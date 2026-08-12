@@ -357,7 +357,7 @@ MASTRA_STEP_EXECUTION_URL=http://api:4111/api
 
 Without this variable, the orchestration worker attempts to execute steps in its own process. That process doesn't have access to the full Mastra runtime in a split deployment.
 
-The endpoint uses the server's normal auth pipeline. If the API has an auth provider, set `MASTRA_WORKER_AUTH_TOKEN` to a bearer token that provider accepts. Mastra forwards the value as an `Authorization: Bearer` credential; it doesn't create or validate a separate worker secret. See [Worker authentication](/docs/server/auth/workers) for server configuration and other credential formats.
+The endpoint uses the server's normal auth pipeline. If the API has an auth provider, set `MASTRA_WORKER_AUTH_TOKEN` to a bearer token that provider accepts. Mastra forwards the value as an `Authorization: Bearer` credential. The configured auth provider validates the token. See [Worker authentication](/docs/server/auth/workers) for server configuration and other credential formats.
 
 ### Scale workers
 
@@ -379,7 +379,7 @@ Run exactly one scheduler worker. Multiple schedulers polling the same storage c
 
 ### Crash recovery
 
-A distributed PubSub backend persists unacknowledged events so orchestration and background task workers can resume processing after a restart. If the API is unavailable when the orchestration worker requests step execution, the request fails and the event is delivered again. This provides redelivery, not exactly-once execution.
+A distributed PubSub backend persists unacknowledged events so orchestration and background task workers can resume processing after a restart. If the API is unavailable when the orchestration worker requests step execution, the request fails and the event is delivered again. An event can be processed more than once, so handlers should be idempotent when possible.
 
 The scheduler calculates the next fire time from the current time after it restarts. It doesn't replay schedules that elapsed while it was unavailable.
 
