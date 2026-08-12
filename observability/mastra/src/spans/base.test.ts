@@ -915,6 +915,21 @@ describe('Span', () => {
       expect(result.$schema).toBe('[schema getter failed]');
     });
 
+    it('should return a serialization error when object key enumeration throws', () => {
+      const input = new Proxy(
+        {},
+        {
+          ownKeys() {
+            throw new Error('ownKeys failed');
+          },
+        },
+      );
+
+      const result = deepClean(input);
+
+      expect(result).toBe('[ownKeys failed]');
+    });
+
     it('should respect maxObjectKeys when a property getter throws', () => {
       const input: Record<string, unknown> = {
         first: 1,
@@ -1291,6 +1306,43 @@ describe('Span', () => {
       expect(chunkSpan?.metadata).toEqual({
         providerMetadata: { provider: { useful: true } },
         keep: 'chunk',
+      });
+    });
+
+    it('does not throw when model step metadata has throwing getters during construction', () => {
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test-tracing',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+      });
+      const metadata: Record<string, unknown> = {
+        keep: 'metadata',
+      };
+      Object.defineProperty(metadata, 'providerMetadata', {
+        enumerable: true,
+        get() {
+          throw new Error('provider metadata getter failed');
+        },
+      });
+
+      expect(() =>
+        tracing.startSpan({
+          type: SpanType.MODEL_STEP,
+          name: 'model-step-throwing-metadata',
+          attributes: { stepIndex: 0 },
+          metadata,
+        }),
+      ).not.toThrow();
+
+      const span = testExporter.events.find(
+        event =>
+          event.type === TracingEventType.SPAN_STARTED && event.exportedSpan.name === 'model-step-throwing-metadata',
+      )?.exportedSpan;
+
+      expect(span?.metadata).toEqual({
+        keep: 'metadata',
+        providerMetadata: '[provider metadata getter failed]',
       });
     });
   });

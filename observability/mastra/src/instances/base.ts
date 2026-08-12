@@ -43,6 +43,40 @@ import { resolveModelId } from '../model-id';
 import { NoOpSpan } from '../spans';
 import { addUsageStats } from '../usage';
 
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+
+  try {
+    const prototype = Object.getPrototypeOf(value);
+    return prototype === Object.prototype || prototype === null;
+  } catch {
+    return false;
+  }
+}
+
+function mergeMetadata(parentMetadata: unknown, metadata: unknown): Record<string, any> | undefined {
+  if (!parentMetadata) {
+    return metadata as Record<string, any> | undefined;
+  }
+  if (!metadata) {
+    return parentMetadata as Record<string, any> | undefined;
+  }
+  if (!isPlainRecord(parentMetadata) || !isPlainRecord(metadata)) {
+    return metadata as Record<string, any>;
+  }
+
+  try {
+    const merged: Record<string, unknown> = {};
+    Object.defineProperties(merged, Object.getOwnPropertyDescriptors(parentMetadata));
+    Object.defineProperties(merged, Object.getOwnPropertyDescriptors(metadata));
+    return merged;
+  } catch {
+    return metadata as Record<string, any>;
+  }
+}
+
 // ============================================================================
 // Abstract Base Class
 // ============================================================================
@@ -204,7 +238,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
 
     // Merge tracingOptions.metadata with span metadata (tracingOptions.metadata takes precedence for root spans)
     const tracingMetadata = !options.parent ? tracingOptions?.metadata : undefined;
-    const mergedMetadata = metadata || tracingMetadata ? { ...metadata, ...tracingMetadata } : undefined;
+    const mergedMetadata = mergeMetadata(metadata, tracingMetadata);
 
     // Extract metadata from RequestContext
     const enrichedMetadata = this.extractMetadataFromRequestContext(requestContext, mergedMetadata, traceState);
@@ -625,10 +659,8 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       return undefined;
     }
 
-    return {
-      ...extracted,
-      ...explicitMetadata, // Explicit metadata always wins
-    };
+    // Explicit metadata always wins.
+    return mergeMetadata(extracted, explicitMetadata);
   }
 
   /**

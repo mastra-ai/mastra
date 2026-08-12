@@ -487,7 +487,12 @@ export function deepClean(value: any, options: DeepCleanOptions = DEFAULT_DEEP_C
 
       // Handle objects - enforce key limit
       const cleaned: Record<string, any> = {};
-      const keys = Object.keys(val);
+      let keys: string[];
+      try {
+        keys = Object.keys(val);
+      } catch (error) {
+        return formatSerializationError(error);
+      }
       let keyCount = 0;
 
       for (const key of keys) {

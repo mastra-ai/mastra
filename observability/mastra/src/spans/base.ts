@@ -87,6 +87,27 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
   }
 }
 
+function mergeSpanMetadata(parentMetadata: unknown, metadata: unknown): unknown {
+  if (!parentMetadata) {
+    return metadata;
+  }
+  if (!metadata) {
+    return parentMetadata;
+  }
+  if (!isPlainRecord(parentMetadata) || !isPlainRecord(metadata)) {
+    return metadata;
+  }
+
+  try {
+    const merged: Record<string, unknown> = {};
+    Object.defineProperties(merged, Object.getOwnPropertyDescriptors(parentMetadata));
+    Object.defineProperties(merged, Object.getOwnPropertyDescriptors(metadata));
+    return merged;
+  } catch {
+    return metadata;
+  }
+}
+
 /**
  * Get the external parent span ID from CreateSpanOptions.
  *
@@ -219,9 +240,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     // getMetricsContext() (which structuredClone it), and non-filtered
     // child spans inherit it via options.parent?.metadata.
     this.metadata = deepClean(
-      this.prepareSpanMetadata(
-        options.parent?.metadata || options.metadata ? { ...options.parent?.metadata, ...options.metadata } : undefined,
-      ),
+      this.prepareSpanMetadata(mergeSpanMetadata(options.parent?.metadata, options.metadata)),
       this.deepCleanOptions,
     );
 
