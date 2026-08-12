@@ -153,17 +153,27 @@ export interface UpdateWorkItemInput {
   metadata?: Record<string, unknown>;
 }
 
+/**
+ * The board as of one read: its cards, plus the sessions running on them right
+ * then. Both come from the same response so a card and its run marker can
+ * never disagree.
+ */
+export interface BoardSnapshot {
+  workItems: WorkItem[];
+  runningSessionIds: string[];
+}
+
 /** List the org's work items for a Factory project. */
 export async function listWorkItems(
   baseUrl: string,
   factoryProjectId: string,
   signal?: AbortSignal,
-): Promise<WorkItem[]> {
-  const data = await requestJson<{ workItems: WireWorkItem[] }>(
+): Promise<BoardSnapshot> {
+  const data = await requestJson<{ workItems: WireWorkItem[]; runningSessionIds?: string[] }>(
     `${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/work-items`,
     { signal },
   );
-  return data.workItems.map(fromWireWorkItem);
+  return { workItems: data.workItems.map(fromWireWorkItem), runningSessionIds: data.runningSessionIds ?? [] };
 }
 
 /** Create a work item; the server upserts on its external source identity so repeats reuse the card. */

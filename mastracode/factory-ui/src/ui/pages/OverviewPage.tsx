@@ -8,8 +8,8 @@ import { Bot, Check, ChevronDown, CircleCheck, Clock3, Layers3 } from 'lucide-re
 import { useId, useMemo, useState, type ReactNode } from 'react';
 import { flushSync } from 'react-dom';
 
-import { useFactoryActivity } from '../../hooks/useFactoryActivity';
 import { useFactoryMetrics } from '../../hooks/useFactoryMetrics';
+import { useRunningSessions } from '../../hooks/useWorkItems';
 import { formatDuration } from '../../lib/date';
 import { DocumentFactoryPageShell } from '../domains/factory/components/FactoryPageShell';
 import { QueueHealthPanel } from '../domains/factory/components/QueueHealthPanel';
@@ -63,7 +63,7 @@ function OverviewContent({ factoryProjectId }: { factoryProjectId: string | unde
   const [rangeDays, setRangeDays] = useState(DEFAULT_RANGE_DAYS);
   const range = useMemo(() => ({ from: shiftUtcDay(today, -(rangeDays - 1)), to: today }), [today, rangeDays]);
   const metricsQuery = useFactoryMetrics(factoryProjectId, range);
-  const agentsRunning = useFactoryActivity(factoryProjectId).size;
+  const agentsRunning = useRunningSessions(factoryProjectId).size;
 
   if (metricsQuery.isError) {
     const message = metricsQuery.error instanceof Error ? metricsQuery.error.message : 'Failed to load metrics';

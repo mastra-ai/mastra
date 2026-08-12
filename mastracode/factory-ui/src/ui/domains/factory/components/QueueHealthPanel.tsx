@@ -5,9 +5,8 @@ import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useMemo, useState } from 'react';
 
-import { useFactoryActivity } from '../../../../hooks/useFactoryActivity';
 import { useQueueHealthThresholds } from '../../../../hooks/useQueueHealthThresholds';
-import { useWorkItemsQuery } from '../../../../hooks/useWorkItems';
+import { useRunningSessions, useWorkItemsQuery } from '../../../../hooks/useWorkItems';
 import type { QueueHealthSelection } from './QueueHealthChart';
 import { QueueHealthChart, formatAgeSeconds } from './QueueHealthChart';
 import type { AgeBucket, QueueHealth, QueueHealthEntry } from '../queue-health';
@@ -32,7 +31,7 @@ interface DrillDown {
 export function QueueHealthPanel({ factoryProjectId }: { factoryProjectId: string | undefined }) {
   const workItemsQuery = useWorkItemsQuery(factoryProjectId);
   const thresholdsQuery = useQueueHealthThresholds(factoryProjectId);
-  const activeSessions = useFactoryActivity(factoryProjectId);
+  const activeSessions = useRunningSessions(factoryProjectId);
   const [drillDown, setDrillDown] = useState<DrillDown | null>(null);
 
   const health = useMemo(() => {

@@ -1,4 +1,12 @@
-import { skipToken, useMutation, useMutationState, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { QueryClient, QueryKey } from '@tanstack/react-query';
+import {
+  queryOptions,
+  skipToken,
+  useMutation,
+  useMutationState,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
@@ -10,6 +18,7 @@ import {
   updateWorkItem,
 } from '../ui/domains/factory/services/workItems';
 import type {
+  BoardSnapshot,
   CreateWorkItemInput,
   FactoryBoard,
   FactoryStage,
@@ -22,10 +31,22 @@ function requireFactoryProjectId(factoryProjectId: string | undefined): string {
   return factoryProjectId;
 }
 
-/** The org's persisted work items (kanban cards) for a project. */
-export function useWorkItemsQuery(factoryProjectId: string | undefined) {
-  const { baseUrl } = useApiConfig();
-  return useQuery({
+/** Rewrite the cached board's cards, keeping the run activity read alongside them. */
+function patchCards(queryClient: QueryClient, listKey: QueryKey, patch: (cards: WorkItem[]) => WorkItem[]) {
+  queryClient.setQueryData<BoardSnapshot>(listKey, board => ({
+    runningSessionIds: board?.runningSessionIds ?? [],
+    workItems: patch(board?.workItems ?? []),
+  }));
+}
+
+// Module-level so React Query can cache each derived value instead of
+// rebuilding it (and, for the set, breaking referential equality) per render.
+const selectCards = (board: BoardSnapshot) => board.workItems;
+const selectRunningSessions = (board: BoardSnapshot): ReadonlySet<string> => new Set(board.runningSessionIds);
+const NO_RUNNING_SESSIONS: ReadonlySet<string> = new Set();
+
+function boardQueryOptions(baseUrl: string, factoryProjectId: string | undefined) {
+  return queryOptions({
     queryKey: queryKeys.workItems(factoryProjectId),
     queryFn: factoryProjectId ? ({ signal }) => listWorkItems(baseUrl, factoryProjectId, signal) : skipToken,
     // Relationships can be created by GitHub ingestion or another open tab.
@@ -35,6 +56,22 @@ export function useWorkItemsQuery(factoryProjectId: string | undefined) {
     // while the tab is hidden, so refresh immediately on return.
     refetchOnWindowFocus: true,
   });
+}
+
+/** The org's persisted work items (kanban cards) for a project. */
+export function useWorkItemsQuery(factoryProjectId: string | undefined) {
+  const { baseUrl } = useApiConfig();
+  return useQuery({ ...boardQueryOptions(baseUrl, factoryProjectId), select: selectCards });
+}
+
+/**
+ * Sessions with an agent run in flight, taken from the same read as the cards
+ * they belong to — a card and its run marker can never come from two polls.
+ */
+export function useRunningSessions(factoryProjectId: string | undefined): ReadonlySet<string> {
+  const { baseUrl } = useApiConfig();
+  const { data } = useQuery({ ...boardQueryOptions(baseUrl, factoryProjectId), select: selectRunningSessions });
+  return data ?? NO_RUNNING_SESSIONS;
 }
 
 /**
@@ -48,10 +85,10 @@ export function useUpsertWorkItemMutation(factoryProjectId: string | undefined) 
     mutationFn: (input: CreateWorkItemInput) =>
       createWorkItem(baseUrl, requireFactoryProjectId(factoryProjectId), input),
     onSuccess: item => {
-      queryClient.setQueryData<WorkItem[]>(queryKeys.workItems(factoryProjectId), existing => {
-        const rest = (existing ?? []).filter(i => i.id !== item.id);
-        return [item, ...rest];
-      });
+      patchCards(queryClient, queryKeys.workItems(factoryProjectId), cards => [
+        item,
+        ...cards.filter(i => i.id !== item.id),
+      ]);
     },
   });
 }
@@ -65,11 +102,10 @@ export function useUpdateWorkItemMutation(factoryProjectId: string | undefined) 
     mutationFn: ({ id, patch }: { id: string; patch: UpdateWorkItemInput }) => updateWorkItem(baseUrl, id, patch),
     onMutate: async ({ id, patch }) => {
       await queryClient.cancelQueries({ queryKey: listKey });
-      const previous = queryClient.getQueryData<WorkItem[]>(listKey);
+      const previous = queryClient.getQueryData<BoardSnapshot>(listKey);
       if (previous && patch.parentWorkItemId !== undefined) {
-        queryClient.setQueryData<WorkItem[]>(
-          listKey,
-          previous.map(item => (item.id === id ? { ...item, parentWorkItemId: patch.parentWorkItemId ?? null } : item)),
+        patchCards(queryClient, listKey, cards =>
+          cards.map(item => (item.id === id ? { ...item, parentWorkItemId: patch.parentWorkItemId ?? null } : item)),
         );
       }
       return { previous };
@@ -78,9 +114,7 @@ export function useUpdateWorkItemMutation(factoryProjectId: string | undefined) 
       if (context?.previous) queryClient.setQueryData(listKey, context.previous);
     },
     onSuccess: item => {
-      queryClient.setQueryData<WorkItem[]>(listKey, existing =>
-        (existing ?? []).map(i => (i.id === item.id ? item : i)),
-      );
+      patchCards(queryClient, listKey, cards => cards.map(i => (i.id === item.id ? item : i)));
     },
   });
 }
@@ -129,25 +163,27 @@ export function useTransitionWorkItemMutation(factoryProjectId: string | undefin
       }),
     onMutate: async ({ item, stage }) => {
       await queryClient.cancelQueries({ queryKey: listKey });
-      const previousItem = queryClient.getQueryData<WorkItem[]>(listKey)?.find(candidate => candidate.id === item.id);
-      queryClient.setQueryData<WorkItem[]>(listKey, existing =>
-        (existing ?? []).map(candidate => (candidate.id === item.id ? { ...candidate, stages: [stage] } : candidate)),
+      const previousItem = queryClient
+        .getQueryData<BoardSnapshot>(listKey)
+        ?.workItems.find(candidate => candidate.id === item.id);
+      patchCards(queryClient, listKey, cards =>
+        cards.map(candidate => (candidate.id === item.id ? { ...candidate, stages: [stage] } : candidate)),
       );
       return { previousItem };
     },
     onError: (_error, variables, context) => {
       const previousItem = context?.previousItem;
       if (!previousItem) return;
-      queryClient.setQueryData<WorkItem[]>(listKey, existing =>
-        (existing ?? []).map(item => {
+      patchCards(queryClient, listKey, cards =>
+        cards.map(item => {
           if (item.id !== variables.item.id || item.revision !== variables.item.revision) return item;
           return previousItem;
         }),
       );
     },
     onSuccess: (result, variables, context) => {
-      queryClient.setQueryData<WorkItem[]>(listKey, existing =>
-        (existing ?? []).map(item => {
+      patchCards(queryClient, listKey, cards =>
+        cards.map(item => {
           if (item.id !== variables.item.id || item.revision !== variables.item.revision) return item;
           if (result.status === 'rejected') return context?.previousItem ?? item;
           if (result.revision <= item.revision) return item;
@@ -191,13 +227,8 @@ export function useDeleteWorkItemMutation(factoryProjectId: string | undefined) 
     mutationFn: (id: string) => deleteWorkItem(baseUrl, id),
     onMutate: async id => {
       await queryClient.cancelQueries({ queryKey: listKey });
-      const previous = queryClient.getQueryData<WorkItem[]>(listKey);
-      if (previous) {
-        queryClient.setQueryData<WorkItem[]>(
-          listKey,
-          previous.filter(item => item.id !== id),
-        );
-      }
+      const previous = queryClient.getQueryData<BoardSnapshot>(listKey);
+      if (previous) patchCards(queryClient, listKey, cards => cards.filter(item => item.id !== id));
       return { previous };
     },
     onError: (_err, _id, context) => {

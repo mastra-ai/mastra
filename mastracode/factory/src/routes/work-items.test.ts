@@ -45,7 +45,7 @@ function buildApp(
   user: { workosId: string; organizationId?: string } | null,
   startCoordinator?: { prepare: (input: any) => Promise<any> },
   requestContext?: RequestContext,
-  controller?: { getSessionByResource: (resourceId: string) => Promise<any> },
+  running: ReadonlySet<string> = new Set(),
 ) {
   const app = new Hono();
   app.use('*', async (c, next) => {
@@ -63,7 +63,7 @@ function buildApp(
       queueHealth: seed.queueHealth,
       transitionService: new FactoryTransitionService({ rules: builtInFactoryRules(), storage: seed.workItems }),
       startCoordinator,
-      controller,
+      liveSessions: { isRunning: sessionId => running.has(sessionId) },
     }).routes(),
   );
   return app;
@@ -739,10 +739,9 @@ describe('GET /web/factory/projects/:id/metrics', () => {
   });
 });
 
-describe('GET /web/factory/projects/:id/activity', () => {
-  /** Bind a run to a card the way the start coordinator does. */
-  async function bindRun(sessionId: string) {
-    const prepared = await seed.workItems.prepareRunStart({
+describe('run activity on the work-item listing', () => {
+  async function startRun(sessionId: string) {
+    await seed.workItems.prepareRunStart({
       orgId: 'org1',
       userId: 'u1',
       factoryProjectId: PROJECT_ID,
@@ -753,46 +752,27 @@ describe('GET /web/factory/projects/:id/activity', () => {
       kickoffKey: `kickoff-${sessionId}`,
       kickoffMessage: null,
     });
-    return prepared.binding;
   }
 
-  function appWithRunning(running: ReadonlySet<string>) {
-    return buildApp(orgUser, undefined, undefined, {
-      getSessionByResource: async (resourceId: string) =>
-        running.has(resourceId) ? { run: { isRunning: () => true } } : undefined,
-    });
-  }
+  it('reports the listed cards whose session has a run in flight', async () => {
+    await startRun('session-running');
+    await startRun('session-idle');
 
-  it('401s without a user and 404s for projects outside the org', async () => {
-    expect((await json('GET', `/web/factory/projects/${PROJECT_ID}/activity`, undefined, null)).status).toBe(401);
-
-    await seedProject('other-org');
-    expect((await json('GET', `/web/factory/projects/${PROJECT_ID}/activity`)).status).toBe(404);
-  });
-
-  it('reports the bound sessions whose run is in flight', async () => {
-    await bindRun('session-running');
-    await bindRun('session-idle');
-
-    const res = await appWithRunning(new Set(['session-running'])).request(
-      `/web/factory/projects/${PROJECT_ID}/activity`,
+    const res = await buildApp(orgUser, undefined, undefined, new Set(['session-running'])).request(
+      `/web/factory/projects/${PROJECT_ID}/work-items`,
     );
 
     expect(res.status).toBe(200);
-    expect((await res.json()).runningSessionIds).toEqual(['session-running']);
+    const body = await res.json();
+    expect(body.workItems).toHaveLength(2);
+    expect(body.runningSessionIds).toEqual(['session-running']);
   });
 
-  it('reports nothing once a binding is revoked, even while the session runs', async () => {
-    const binding = await bindRun('session-running');
-    await seed.workItems.revokeRunBinding({
-      orgId: 'org1',
-      factoryProjectId: PROJECT_ID,
-      bindingId: binding.id,
-      revokedAt: new Date(),
-    });
+  it('reports no activity for a session that belongs to no card in the project', async () => {
+    await startRun('session-idle');
 
-    const res = await appWithRunning(new Set(['session-running'])).request(
-      `/web/factory/projects/${PROJECT_ID}/activity`,
+    const res = await buildApp(orgUser, undefined, undefined, new Set(['session-elsewhere'])).request(
+      `/web/factory/projects/${PROJECT_ID}/work-items`,
     );
 
     expect((await res.json()).runningSessionIds).toEqual([]);

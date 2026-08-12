@@ -62,7 +62,7 @@ describe('computeQueueHealth', () => {
     expect(health.entries).toEqual([]);
   });
 
-  it('leaves out cards nobody ran, so the bars sum to the in-flight count', () => {
+  it('leaves out cards nobody ran, charting the population the in-flight count reports', () => {
     const ran = inStage('triage', 259200);
     const synced = inStage('triage', 259200, { sessions: {} });
     const health = computeQueueHealth([ran, synced], new Set(), DEFAULT, NOW);

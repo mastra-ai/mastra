@@ -5,8 +5,10 @@ import { describe, expect, it } from 'vitest';
 import { server } from '../../../e2e/ui/msw-server';
 import { renderHookWithProviders, waitForMutationsIdle, TEST_BASE_URL } from '../../../e2e/ui/render';
 import { queryKeys } from '../../api/keys';
-import type { WorkItem } from '../../ui/domains/factory/services/workItems';
+import type { BoardSnapshot, WorkItem } from '../../ui/domains/factory/services/workItems';
 import { useTransitionWorkItemMutation } from '../useWorkItems';
+
+const board = (workItems: WorkItem[]): BoardSnapshot => ({ workItems, runningSessionIds: [] });
 
 const PROJECT_ID = 'project-1';
 const ITEM_ID = 'item-1';
@@ -57,18 +59,18 @@ describe('useTransitionWorkItemMutation', () => {
     const original = item(1, 'intake');
     const canonical = item(3, 'planning');
     const { result, client } = renderHookWithProviders(() => useTransitionWorkItemMutation(PROJECT_ID));
-    client.setQueryData(queryKeys.workItems(PROJECT_ID), [original]);
+    client.setQueryData(queryKeys.workItems(PROJECT_ID), board([original]));
 
     act(() => {
       result.current.mutate({ item: original, board: 'work', stage: 'triage' });
     });
     await waitFor(() => expect(result.current.isPending).toBe(true));
 
-    client.setQueryData(queryKeys.workItems(PROJECT_ID), [canonical]);
+    client.setQueryData(queryKeys.workItems(PROJECT_ID), board([canonical]));
     releaseResponse();
     await waitForMutationsIdle(client);
 
-    expect(client.getQueryData<WorkItem[]>(queryKeys.workItems(PROJECT_ID))).toEqual([canonical]);
+    expect(client.getQueryData<BoardSnapshot>(queryKeys.workItems(PROJECT_ID))).toEqual(board([canonical]));
   });
 
   it('exposes the destination stage of in-flight transitions and clears it on settle', async () => {
@@ -94,7 +96,7 @@ describe('useTransitionWorkItemMutation', () => {
 
     const original = item(1, 'triage');
     const { result, client } = renderHookWithProviders(() => useTransitionWorkItemMutation(PROJECT_ID));
-    client.setQueryData(queryKeys.workItems(PROJECT_ID), [original]);
+    client.setQueryData(queryKeys.workItems(PROJECT_ID), board([original]));
 
     act(() => {
       result.current.mutate({ item: original, board: 'work', stage: 'planning' });

@@ -99,11 +99,7 @@ function latestOpenEntryFor(open: WorkItemStageEntry[], stage: string): WorkItem
   return undefined;
 }
 
-/**
- * Cards the Factory ran: starting a run records its session on the row. Mirrors
- * `hasFactoryRun` in `factory/metrics.ts` — the server module this one is the
- * UI half of, and whose population the Overview header reports.
- */
+/** Cards the Factory ran: starting a run records its session on the row. */
 function hasFactoryRun(item: QueueHealthWorkItem): boolean {
   return Object.keys(item.sessions).length > 0;
 }
@@ -117,12 +113,12 @@ function hasFactoryRun(item: QueueHealthWorkItem): boolean {
  * exceed the unique-item count). A held stage with no open history entry
  * falls back to the item's `createdAt`.
  *
- * Only cards the Factory ran are charted, so the bars sum to the in-flight
- * count above them. Filtering here rather than at the call site keeps the two
- * halves of one screen from drifting apart: the integrations sync every issue
- * and PR of a connected repo into the lanes, and those cards age forever
- * without anyone working them — charting them pins the queue red on the
- * upstream backlog rather than on work that is actually stuck.
+ * Only cards the Factory ran are charted — the population the in-flight count
+ * above the chart reports, and the same rule `factory/metrics.ts` applies
+ * server-side. The integrations sync every issue and PR of a connected repo
+ * into the lanes, and those cards age forever without anyone working them, so
+ * charting them pins the queue red on the upstream backlog rather than on work
+ * that is actually stuck.
  */
 export function computeQueueHealth(
   items: QueueHealthWorkItem[],

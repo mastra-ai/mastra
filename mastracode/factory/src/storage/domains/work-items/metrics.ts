@@ -34,25 +34,21 @@ const CANCELED_STAGE = 'canceled';
  */
 const TERMINAL_STAGES = new Set([DONE_STAGE, CANCELED_STAGE]);
 
-/** Where synced cards land and wait to be picked up. */
 const INTAKE_STAGE = 'intake';
 
 /**
- * Whether a stage is pipeline work: the board's inbox and its terminal stages
- * are not. An intake card is queued, not in flight, and its "pass through" is
- * the poller filing it — nothing the Factory did.
+ * Pipeline work excludes the inbox as well as the terminal stages: an intake
+ * card is queued, not in flight, and its pass through is the poller filing it.
  */
 function isPipelineStage(stage: string): boolean {
   return !TERMINAL_STAGES.has(stage) && stage !== INTAKE_STAGE;
 }
 
 /**
- * Cards the Factory ran: starting a run records its session on the row.
- *
- * The integrations sync every issue and PR of a connected repo into the board,
- * and those cards outnumber the Factory's own work by an order of magnitude —
- * aggregating them reports the upstream repo's throughput, lead time and
- * automation as the Factory's.
+ * Cards the Factory ran: starting a run records its session on the row. The
+ * integrations sync every issue and PR of a connected repo into the board and
+ * those outnumber the Factory's own work by an order of magnitude, so counting
+ * them reports the upstream repo's flow as the Factory's.
  */
 function hasFactoryRun(item: WorkItemRow): boolean {
   return Object.keys(item.sessions).length > 0;
