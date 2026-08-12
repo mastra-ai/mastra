@@ -9,27 +9,16 @@
 
 import type { QueueHealthConfig } from '@mastra/factory/storage/domains/queue-health/base';
 
+import { requestJson } from './request';
+
 /** Fetch the org's age-threshold config for a project (defaults when unset). */
 export async function fetchQueueHealthThresholds(
   baseUrl: string,
   factoryProjectId: string,
 ): Promise<QueueHealthConfig> {
-  const res = await fetch(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/health/thresholds`, {
-    headers: { Accept: 'application/json' },
-    credentials: 'include',
-  });
-  if (!res.ok) {
-    let message = `Request failed (${res.status})`;
-    try {
-      const body = (await res.json()) as { error?: string; message?: string };
-      if (body.message) message = body.message;
-      else if (body.error) message = body.error;
-    } catch {
-      /* ignore non-JSON */
-    }
-    throw new Error(message);
-  }
   // The route serves the ordered boundary seconds (`{ thresholds: number[] }`).
-  const data = (await res.json()) as { thresholds: number[] };
+  const data = await requestJson<{ thresholds: number[] }>(
+    `${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/health/thresholds`,
+  );
   return { thresholdsSeconds: data.thresholds };
 }

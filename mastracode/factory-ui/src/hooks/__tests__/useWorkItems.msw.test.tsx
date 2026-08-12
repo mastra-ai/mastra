@@ -5,8 +5,10 @@ import { describe, expect, it } from 'vitest';
 import { server } from '../../../e2e/ui/msw-server';
 import { renderHookWithProviders, waitForMutationsIdle, TEST_BASE_URL } from '../../../e2e/ui/render';
 import { queryKeys } from '../../api/keys';
-import type { WorkItem } from '../../ui/domains/factory/services/workItems';
-import { useTransitionWorkItemMutation } from '../useWorkItems';
+import type { BoardSnapshot, WorkItem } from '../../ui/domains/factory/services/workItems';
+import { useDeleteWorkItemMutation, useRunningSessions, useTransitionWorkItemMutation } from '../useWorkItems';
+
+const board = (workItems: WorkItem[]): BoardSnapshot => ({ workItems, runningSessionIds: [] });
 
 const PROJECT_ID = 'project-1';
 const ITEM_ID = 'item-1';
@@ -57,18 +59,18 @@ describe('useTransitionWorkItemMutation', () => {
     const original = item(1, 'intake');
     const canonical = item(3, 'planning');
     const { result, client } = renderHookWithProviders(() => useTransitionWorkItemMutation(PROJECT_ID));
-    client.setQueryData(queryKeys.workItems(PROJECT_ID), [original]);
+    client.setQueryData(queryKeys.workItems(PROJECT_ID), board([original]));
 
     act(() => {
       result.current.mutate({ item: original, board: 'work', stage: 'triage' });
     });
     await waitFor(() => expect(result.current.isPending).toBe(true));
 
-    client.setQueryData(queryKeys.workItems(PROJECT_ID), [canonical]);
+    client.setQueryData(queryKeys.workItems(PROJECT_ID), board([canonical]));
     releaseResponse();
     await waitForMutationsIdle(client);
 
-    expect(client.getQueryData<WorkItem[]>(queryKeys.workItems(PROJECT_ID))).toEqual([canonical]);
+    expect(client.getQueryData<BoardSnapshot>(queryKeys.workItems(PROJECT_ID))).toEqual(board([canonical]));
   });
 
   it('exposes the destination stage of in-flight transitions and clears it on settle', async () => {
@@ -94,7 +96,7 @@ describe('useTransitionWorkItemMutation', () => {
 
     const original = item(1, 'triage');
     const { result, client } = renderHookWithProviders(() => useTransitionWorkItemMutation(PROJECT_ID));
-    client.setQueryData(queryKeys.workItems(PROJECT_ID), [original]);
+    client.setQueryData(queryKeys.workItems(PROJECT_ID), board([original]));
 
     act(() => {
       result.current.mutate({ item: original, board: 'work', stage: 'planning' });
@@ -104,5 +106,56 @@ describe('useTransitionWorkItemMutation', () => {
     releaseResponse();
     await waitForMutationsIdle(client);
     expect(result.current.pendingTransitions).toEqual([]);
+  });
+});
+
+describe('useDeleteWorkItemMutation', () => {
+  it('drops the deleted card and its running session from the board read', async () => {
+    // Wire shape of item(): the server sends factoryProjectId/externalSource,
+    // which listWorkItems maps back to the client fields.
+    const wireItem = {
+      id: ITEM_ID,
+      orgId: 'org-1',
+      createdBy: 'user-1',
+      factoryProjectId: PROJECT_ID,
+      externalSource: null,
+      parentWorkItemId: null,
+      title: 'Running card',
+      stages: ['execute'],
+      stageHistory: [],
+      sessions: {},
+      metadata: {},
+      revision: 1,
+      createdAt: '2026-07-18T00:00:00.000Z',
+      updatedAt: '2026-07-18T00:00:00.000Z',
+    };
+    let deleted = false;
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${PROJECT_ID}/work-items`, () =>
+        HttpResponse.json(
+          deleted
+            ? { workItems: [], runningSessionIds: [] }
+            : { workItems: [wireItem], runningSessionIds: ['session-1'] },
+        ),
+      ),
+      http.delete(`${TEST_BASE_URL}/web/factory/work-items/${ITEM_ID}`, () => {
+        deleted = true;
+        return HttpResponse.json({ ok: true });
+      }),
+    );
+
+    const { result, client } = renderHookWithProviders(() => ({
+      running: useRunningSessions(PROJECT_ID),
+      remove: useDeleteWorkItemMutation(PROJECT_ID),
+    }));
+    await waitFor(() => expect(result.current.running.has('session-1')).toBe(true));
+
+    act(() => {
+      result.current.remove.mutate(ITEM_ID);
+    });
+    await waitForMutationsIdle(client);
+
+    // The refetch after the delete reconciles the run markers, not the 5s poll.
+    await waitFor(() => expect(result.current.running.has('session-1')).toBe(false));
   });
 });
