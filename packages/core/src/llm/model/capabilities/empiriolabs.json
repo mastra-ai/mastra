@@ -24,6 +24,7 @@
     "qwen3-7-flash",
     "qwen3-7-plus",
     "qwen3-8-max",
+    "seed-2-0-code",
     "step-3-7-flash"
   ],
   "temperature": [
@@ -63,6 +64,7 @@
     "qwen3-7-plus",
     "qwen3-8-max",
     "qwen3-max",
+    "seed-2-0-code",
     "step-3-5-flash",
     "step-3-5-flash-2603",
     "step-3-7-flash"
@@ -107,6 +109,7 @@
     "qwen3-7-plus",
     "qwen3-8-max",
     "qwen3-max",
+    "seed-2-0-code",
     "step-3-5-flash",
     "step-3-5-flash-2603",
     "step-3-7-flash"

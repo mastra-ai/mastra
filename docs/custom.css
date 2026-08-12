@@ -1179,6 +1179,21 @@ article p {
 }
 
 @media (min-width: 62.25rem) {
+  html.plugin-id-integrations.docs-doc-id-index {
+    #doc-item-container {
+      max-width: 70rem;
+    }
+    [class*='docItemContainer'] {
+      max-width: 70rem;
+    }
+    div[data-name='doc-breadcrumbs-copy'] {
+      display: none;
+    }
+    h1 {
+      margin-top: 2rem;
+    }
+  }
+
   #doc-item-container {
     gap: 2rem;
   }

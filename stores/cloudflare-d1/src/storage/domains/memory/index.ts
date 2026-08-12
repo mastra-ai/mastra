@@ -79,6 +79,7 @@ function addSqliteMetadataValuePredicate(
 }
 
 export class MemoryStorageD1 extends MemoryStorage {
+  override readonly supportsPartialThreadUpdate = true;
   #db: D1DB;
 
   constructor(config: D1DomainConfig) {

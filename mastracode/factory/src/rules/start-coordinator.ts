@@ -65,7 +65,7 @@ async function resolveKickoffMessage(
   if (!invocation) return null;
   if (invocation.type === 'prompt') return invocation.prompt;
 
-  const skills = session.getWorkspace().skills;
+  const skills = session.getWorkspace()?.skills;
   await skills?.maybeRefresh();
   const skill = await skills?.get(invocation.skillName);
   if (!skill || skill['user-invocable'] === false) {

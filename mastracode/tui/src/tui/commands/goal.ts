@@ -329,22 +329,44 @@ async function startGoal(
   const { state } = ctx;
   const goalManager = state.goalManager;
 
-  if (state.pendingNewThread) {
-    await state.session.thread.create();
-    state.pendingNewThread = false;
+  // `thread_created` is dispatched through a serial async queue, so its handler
+  // runs later — during the `setGoal` await below. Without this flag already set
+  // it takes the `loadFromThreadMetadata` branch and nulls the goal we are about
+  // to set, and the save below then clears the stored objective. Must be decided
+  // before the create: afterwards `getId()` always returns the new thread.
+  const shouldPersistToCreatedThread = state.pendingNewThread || !state.session.thread.getId();
+  if (shouldPersistToCreatedThread) {
+    goalManager.persistOnNextThreadCreate();
   }
 
-  const shouldPersistToCreatedThread = !state.session.thread.getId();
-  const goal = await goalManager.setGoal(state, objective, judgeModelId, maxTurns);
+  // Arming the flag ahead of the create means any failure between here and a
+  // successful start would otherwise leave it armed for an unrelated later
+  // thread to consume. Disarm on every exit that isn't a started goal — but
+  // only when this call is the one that armed it.
+  let goal: Awaited<ReturnType<typeof goalManager.setGoal>>;
+  try {
+    if (state.pendingNewThread) {
+      await state.session.thread.create();
+      state.pendingNewThread = false;
+    }
+
+    goal = await goalManager.setGoal(state, objective, judgeModelId, maxTurns);
+  } catch (error) {
+    if (shouldPersistToCreatedThread) {
+      goalManager.consumePersistOnNextThreadCreate();
+    }
+    throw error;
+  }
+
   if (!goal) {
+    if (shouldPersistToCreatedThread) {
+      goalManager.consumePersistOnNextThreadCreate();
+    }
     ctx.showError('Failed to set goal.');
     return;
   }
 
   state.planStartedGoalId = undefined;
-  if (shouldPersistToCreatedThread) {
-    goalManager.persistOnNextThreadCreate();
-  }
   await goalManager.saveToThread(state);
   ctx.updateStatusLine();
 

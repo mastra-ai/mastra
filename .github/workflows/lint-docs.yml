@@ -22,8 +22,11 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 20
         with:
           fetch-depth: 0
+          # Partial clone: name-only diffs need trees, not blob contents.
+          filter: blob:none
 
       - name: Check for docs changes
         id: filter
@@ -42,8 +45,11 @@ jobs:
     steps:
       - name: Checkout PR branch
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 20
         with:
           fetch-depth: 0
+          # Partial clone: name-only diffs need trees, not blob contents.
+          filter: blob:none
 
       - name: Check for MDX changes
         id: mdx-changes
@@ -124,6 +130,7 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 20
 
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
@@ -192,8 +199,11 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 20
         with:
           fetch-depth: 0
+          # Partial clone: name-only diffs need trees, not blob contents.
+          filter: blob:none
 
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
