@@ -18,7 +18,9 @@
  * capabilities by implementing `FactoryIntegration` from outside the package.
  */
 
+import type { TypingStatusFn } from '@mastra/core/channels';
 import type { ApiRoute } from '@mastra/core/server';
+import type { SlackAdapterChannelConfig } from '@mastra/slack';
 
 import type { FactoryChannelsConfig, FactoryIntegration, IntegrationContext } from '../base.js';
 
@@ -50,6 +52,26 @@ export interface SlackIntegrationConfig {
   oidcRedirectBaseUrl?: string;
   /** SPA origin the post-connect redirect returns to. */
   uiOrigin?: string;
+  /** Overrides for the Slack channel adapter entry. */
+  adapterOptions?: SlackAdapterChannelConfig;
+}
+
+const factoryTypingStatus: TypingStatusFn = (chunk, ctx) => {
+  switch (chunk.type) {
+    case 'reasoning-delta':
+      return `is thinking${nextDots(ctx.currentStatus)}`;
+    case 'text-delta':
+      return 'is typing...';
+    case 'tool-call':
+      return `is working${nextDots(ctx.currentStatus)}`;
+    default:
+      return undefined;
+  }
+};
+
+function nextDots(currentStatus: string | undefined): string {
+  const dotCount = currentStatus?.match(/\.*$/)?.[0].length ?? 1;
+  return '.'.repeat(dotCount >= 5 ? 2 : dotCount + 1);
 }
 
 export class SlackIntegration implements FactoryIntegration {
@@ -95,6 +117,11 @@ export class SlackIntegration implements FactoryIntegration {
       sourceControl: sourceControlOwner,
       memorySettings: ctx.storage.memorySettings,
       workItems: ctx.rules?.workItems,
+      adapterOptions: {
+        toolDisplay: 'hidden',
+        typingStatus: factoryTypingStatus,
+        ...this.#config.adapterOptions,
+      },
     });
   }
 

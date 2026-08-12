@@ -29,6 +29,59 @@ describe('SlackIntegration.channels', () => {
     expect(config.resolveThreadId).toBeTypeOf('function');
   });
 
+  it('uses concise progress statuses by default', () => {
+    const integration = new SlackIntegration({ signingSecret: 'secret' });
+
+    const config = integration.channels(ctxWith());
+    const typingStatus = config.adapters.slack.typingStatus;
+
+    expect(typingStatus).toBeTypeOf('function');
+    if (typeof typingStatus !== 'function') throw new Error('Expected a typing status function');
+
+    const context = (currentStatus?: string) => ({ currentStatus, channelTools: new Set<string>() }) as any;
+
+    expect(typingStatus({ type: 'reasoning-delta' } as any, context())).toBe('is thinking..');
+    expect(typingStatus({ type: 'reasoning-delta' } as any, context('is thinking..'))).toBe('is thinking...');
+    expect(typingStatus({ type: 'text-delta' } as any, context())).toBe('is typing...');
+    expect(typingStatus({ type: 'tool-call', payload: { toolName: 'search' } } as any, context())).toBe('is working..');
+    expect(
+      typingStatus({ type: 'tool-call', payload: { toolName: 'search' } } as any, context('is working.....')),
+    ).toBe('is working..');
+  });
+
+  it('defaults streaming when an explicit undefined value is provided', () => {
+    const integration = new SlackIntegration({
+      signingSecret: 'secret',
+      adapterOptions: { streaming: undefined } as any,
+    });
+
+    const config = integration.channels(ctxWith());
+
+    expect(config.adapters.slack.streaming).toBe(true);
+  });
+
+  it('allows adapter options to override the defaults', () => {
+    const typingStatus = vi.fn(() => 'custom status');
+    const integration = new SlackIntegration({
+      signingSecret: 'secret',
+      adapterOptions: {
+        streaming: false,
+        toolDisplay: 'cards',
+        typingStatus,
+        textFormat: 'plain',
+      },
+    });
+
+    const config = integration.channels(ctxWith());
+
+    expect(config.adapters.slack).toMatchObject({
+      streaming: false,
+      toolDisplay: 'cards',
+      typingStatus,
+      textFormat: 'plain',
+    });
+  });
+
   it('reports repo-backed sessions when the context carries a source-control owner', () => {
     const integration = new SlackIntegration({ signingSecret: 'secret' });
 
