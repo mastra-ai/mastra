@@ -1,11 +1,27 @@
+import { Shimmer } from '@mastra/playground-ui/components/Shimmer';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { MessageSquareText } from 'lucide-react';
+import type { ReactNode } from 'react';
 
 import { useChatRuntime } from '../../context/useChatRuntime';
+import type { OMWork } from '../../services/runtime';
+import { omWork } from '../../services/runtime';
 
-const statusBudget = 'inline-flex items-center whitespace-nowrap text-icon3 tabular-nums';
-const slLabel = 'mr-1 text-icon2';
-const slBuffer = 'italic text-icon2';
+const statusBudget = 'inline-flex items-center whitespace-nowrap tabular-nums';
+const budgetTrigger =
+  'focus-visible:ring-accent1 text-icon2 mr-1 inline-flex shrink-0 items-center rounded-sm outline-hidden focus-visible:ring-2';
+
+const messageTooltip: Record<OMWork, string> = {
+  idle: 'Message window until next observation',
+  background: 'Saving the message window to memory in the background — no pause when it fills',
+  blocking: 'Saving the message window to memory',
+};
+
+const observationTooltip: Record<OMWork, string> = {
+  idle: 'Observations accumulated until next reflection',
+  background: 'Consolidating observations in the background — no pause when they fill',
+  blocking: 'Consolidating observations',
+};
 
 function fmtTokensValue(n: number): string {
   if (n <= 0) return '0';
@@ -24,12 +40,54 @@ function pctClass(percent: number): string {
   return 'text-icon3';
 }
 
+function Budget({
+  lead,
+  tooltip,
+  work,
+  percent,
+  tokens,
+  threshold,
+  saving,
+}: {
+  lead: ReactNode;
+  tooltip: string;
+  work: OMWork;
+  percent: number;
+  tokens: number;
+  threshold: number;
+  saving: number;
+}) {
+  const Tokens = work === 'idle' ? 'span' : Shimmer;
+
+  return (
+    <span className={`${statusBudget} ${pctClass(percent)}`}>
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <span aria-label={tooltip} className={budgetTrigger} tabIndex={0}>
+              {lead}
+            </span>
+          }
+        />
+        <TooltipContent>{tooltip}</TooltipContent>
+      </Tooltip>
+      <Tokens>
+        {fmtTokensValue(tokens)}/{fmtTokensThreshold(threshold)}
+        {saving > 0 && <span className="text-icon2 italic"> ↓{fmtTokensThreshold(saving)}</span>}
+      </Tokens>
+    </span>
+  );
+}
+
 /**
  * Observational-memory budgets: the message window until the next observation
- * and the observations accumulated until the next reflection.
+ * and the observations accumulated until the next reflection. Each shimmers
+ * while memory works on it.
  */
 export function OperationalMemoryStatus() {
-  const { omProgress: om } = useChatRuntime();
+  const runtime = useChatRuntime();
+  const om = runtime.omProgress;
+  const work = omWork(runtime);
   const showMsg = om && om.threshold > 0;
   const showMem = om && om.reflectionThreshold > 0 && om.observationTokens > 0;
 
@@ -38,38 +96,26 @@ export function OperationalMemoryStatus() {
   return (
     <>
       {showMsg && (
-        <span className={`${statusBudget} ${pctClass(om.thresholdPercent)}`}>
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <span
-                  aria-label="Message window until next observation"
-                  className="focus-visible:ring-accent1 mr-0.5 inline-flex size-4 shrink-0 items-center justify-center rounded-sm outline-hidden focus-visible:ring-2"
-                  tabIndex={0}
-                >
-                  <MessageSquareText aria-hidden size={13} className="text-icon2" />
-                </span>
-              }
-            />
-            <TooltipContent>Message window until next observation</TooltipContent>
-          </Tooltip>
-          {fmtTokensValue(om.pendingTokens)}/{fmtTokensThreshold(om.threshold)}
-          {om.projectedMessageRemoval > 0 && (
-            <span className={slBuffer}> ↓{fmtTokensThreshold(om.projectedMessageRemoval)}</span>
-          )}
-        </span>
+        <Budget
+          lead={<MessageSquareText aria-hidden size={13} />}
+          tooltip={messageTooltip[work.messages]}
+          work={work.messages}
+          percent={om.thresholdPercent}
+          tokens={om.pendingTokens}
+          threshold={om.threshold}
+          saving={om.projectedMessageRemoval}
+        />
       )}
       {showMem && (
-        <span
-          className={`${statusBudget} ${pctClass(om.reflectionThresholdPercent)}`}
-          title="Observations accumulated until next reflection"
-        >
-          <span className={slLabel}>mem</span> {fmtTokensValue(om.observationTokens)}/
-          {fmtTokensThreshold(om.reflectionThreshold)}
-          {om.projectedReflectionSavings > 0 && (
-            <span className={slBuffer}> ↓{fmtTokensThreshold(om.projectedReflectionSavings)}</span>
-          )}
-        </span>
+        <Budget
+          lead="mem"
+          tooltip={observationTooltip[work.observations]}
+          work={work.observations}
+          percent={om.reflectionThresholdPercent}
+          tokens={om.observationTokens}
+          threshold={om.reflectionThreshold}
+          saving={om.projectedReflectionSavings}
+        />
       )}
     </>
   );
