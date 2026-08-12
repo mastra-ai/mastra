@@ -241,18 +241,15 @@ describe('transcript reducer message entries', () => {
       },
     );
     state = transcriptReducer(state, { type: 'event', event: { type: 'message_end', message: firstAssistant } });
-    const decodeStartedAt = state._decodeStartedAt;
 
     for (const message of [reminder, summary]) {
       state = transcriptReducer(state, { type: 'event', event: { type: 'message_start', message } });
       expect(state.entries.at(-1)).toMatchObject({ kind: 'message', id: message.id, streaming: true });
       expect(state.pending).toBe(false);
-      expect(state._decodeStartedAt).toBe(decodeStartedAt);
 
       state = transcriptReducer(state, { type: 'event', event: { type: 'message_end', message } });
       expect(state.entries.at(-1)).toMatchObject({ kind: 'message', id: message.id, streaming: false });
       expect(state.pending).toBe(false);
-      expect(state._decodeStartedAt).toBe(decodeStartedAt);
     }
 
     state = transcriptReducer(state, {
@@ -294,7 +291,7 @@ describe('transcript reducer message entries', () => {
     expect(messageParts(state.entries[3])).toEqual([{ type: 'text', text: 'After signals' }]);
   });
 
-  it('keeps signal-only events from clearing pending or starting decode timing', () => {
+  it('keeps signal-only events from clearing pending', () => {
     const reminder = signalMessage({
       id: 'reminder-1',
       type: 'system-reminder',
@@ -313,7 +310,6 @@ describe('transcript reducer message entries', () => {
     });
 
     expect(ended.pending).toBe(true);
-    expect(ended._decodeStartedAt).toBe(0);
     expect(ended.entries).toHaveLength(1);
     expect(ended.entries[0]).toMatchObject({ id: 'reminder-1', streaming: false });
   });

@@ -1,5 +1,6 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type { ChatRuntimeState } from '../runtime';
 import { initialChatRuntime, omWork, runtimeReducer } from '../runtime';
 
 describe('chat runtime reducer', () => {
@@ -47,44 +48,58 @@ describe('chat runtime reducer', () => {
     expect(updated.usage).toMatchObject({ completionTokens: 55, totalTokens: 76 });
   });
 
-  it('measures a streamed assistant decode window and tracks active runtime work', () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date('2026-07-10T15:00:00Z'));
-
-    const streaming = runtimeReducer(initialChatRuntime, {
-      type: 'message_update',
-      message: {
-        id: 'assistant-1',
-        role: 'assistant',
-        content: { format: 2, parts: [{ type: 'text', text: 'Working' }] },
-      },
+  describe('throughput', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-07-10T15:00:00Z'));
     });
-    vi.advanceTimersByTime(1000);
-    const measured = runtimeReducer(streaming, {
-      type: 'usage_update',
-      usage: { completionTokens: 42, totalTokens: 42 },
+
+    afterEach(() => {
+      vi.useRealTimers();
     });
-    const observing = runtimeReducer(measured, { type: 'om_observation_start' });
-    const queued = runtimeReducer(observing, { type: 'follow_up_queued', count: 2 });
 
-    expect(queued.tokensPerSec).toBe(42);
-    expect(queued.tokensPerSecHistory).toEqual([42]);
-    expect(queued.omPhase).toBe('observing');
-    expect(queued.followUpCount).toBe(2);
+    it('measures decode speed on the streamed text and tracks active runtime work', () => {
+      const opened = streamText(runtimeReducer(initialChatRuntime, { type: 'agent_start' }), 'x'.repeat(20));
+      vi.advanceTimersByTime(1000);
+      const measured = streamText(opened, 'x'.repeat(220));
+      const observing = runtimeReducer(measured, { type: 'om_observation_start' });
+      const queued = runtimeReducer(observing, { type: 'follow_up_queued', count: 2 });
 
-    vi.useRealTimers();
-  });
+      expect(queued.tokensPerSec).toBe(50);
+      expect(queued.tokensPerSecHistory).toEqual([50]);
+      expect(queued.omPhase).toBe('observing');
+      expect(queued.followUpCount).toBe(2);
+    });
 
-  it('accepts persisted messages whose content uses the format-2 parts envelope', () => {
-    const event = {
-      type: 'message_update',
-      message: {
-        id: 'assistant-2',
-        role: 'assistant',
-        content: { format: 2, parts: [{ type: 'text', text: 'Working' }] },
-      },
-    } as Parameters<typeof runtimeReducer>[1];
+    it('holds a chunk too short to time instead of dividing it by a millisecond', () => {
+      const opened = streamText(runtimeReducer(initialChatRuntime, { type: 'agent_start' }), 'x'.repeat(20));
+      vi.advanceTimersByTime(5);
+      const burst = streamText(opened, 'x'.repeat(7000));
 
-    expect(runtimeReducer(initialChatRuntime, event)._decodeStartedAt).toBeGreaterThan(0);
+      expect(burst.tokensPerSec).toBe(0);
+      expect(burst.tokensPerSecHistory).toEqual([]);
+    });
+
+    it('drops the reading when the run ends, so an idle composer shows no throughput', () => {
+      const opened = streamText(runtimeReducer(initialChatRuntime, { type: 'agent_start' }), 'x'.repeat(20));
+      vi.advanceTimersByTime(1000);
+      const measured = streamText(opened, 'x'.repeat(220));
+      const ended = runtimeReducer(measured, { type: 'agent_end' });
+
+      expect(ended.tokensPerSec).toBe(0);
+      expect(ended.tokensPerSecHistory).toEqual([]);
+      expect(streamText(ended, 'x'.repeat(9000)).tokensPerSec).toBe(0);
+    });
   });
 });
+
+function streamText(state: ChatRuntimeState, text: string): ChatRuntimeState {
+  return runtimeReducer(state, {
+    type: 'message_update',
+    message: {
+      id: 'assistant-1',
+      role: 'assistant',
+      content: { format: 2, parts: [{ type: 'text', text }] },
+    },
+  });
+}

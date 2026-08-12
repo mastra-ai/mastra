@@ -34,10 +34,15 @@ export interface ChatRuntimeState {
   tokensPerSec: number;
   /** Recent decode rates of this run, oldest first, for the throughput curve. */
   tokensPerSecHistory: number[];
-  _decodeStartedAt: number;
+  /** Start of the open measurement window, 0 when no run is streaming. */
+  _sampledAt: number;
+  _streamedChars: number;
 }
 
 const RATE_SAMPLES = 12;
+const SAMPLE_SECONDS = 0.25;
+/* The stream carries text, not token counts; ~4 chars per token is close enough for a speed readout. */
+const CHARS_PER_TOKEN = 4;
 
 export const initialChatRuntime: ChatRuntimeState = {
   followUpCount: 0,
@@ -46,7 +51,8 @@ export const initialChatRuntime: ChatRuntimeState = {
   bufferingObservations: false,
   tokensPerSec: 0,
   tokensPerSecHistory: [],
-  _decodeStartedAt: 0,
+  _sampledAt: 0,
+  _streamedChars: 0,
 };
 
 export interface OMWorkByBudget {
@@ -74,29 +80,34 @@ export function runtimeReducer(state: ChatRuntimeState, event: AgentControllerEv
 
   switch (event.type) {
     case 'agent_start':
-      return { ...state, tokensPerSec: 0, tokensPerSecHistory: [], _decodeStartedAt: 0 };
+      return { ...state, tokensPerSec: 0, tokensPerSecHistory: [], _sampledAt: Date.now(), _streamedChars: 0 };
     case 'agent_end':
-      return { ...state, _decodeStartedAt: 0 };
+      return { ...state, tokensPerSec: 0, tokensPerSecHistory: [], _sampledAt: 0, _streamedChars: 0 };
     case 'message_start':
-    case 'message_update':
-      if (!hasAssistantText(event.message) || state._decodeStartedAt > 0) return state;
-      return { ...state, _decodeStartedAt: Date.now() };
-    case 'usage_update': {
-      const usage = event.usage as UsageSnapshot;
-      const stepTokens = (usage.completionTokens ?? 0) + (usage.reasoningTokens ?? 0);
-      let tokensPerSec = state.tokensPerSec;
-      let tokensPerSecHistory = state.tokensPerSecHistory;
-      if (state._decodeStartedAt > 0 && stepTokens > 0) {
-        const decodeSeconds = Math.max((Date.now() - state._decodeStartedAt) / 1000, 0.001);
-        const instantaneous = stepTokens / decodeSeconds;
-        tokensPerSec =
-          state.tokensPerSec > 0
-            ? Math.round(0.3 * instantaneous + 0.7 * state.tokensPerSec)
-            : Math.round(instantaneous);
-        tokensPerSecHistory = [...state.tokensPerSecHistory, tokensPerSec].slice(-RATE_SAMPLES);
+    case 'message_update': {
+      if (state._sampledAt === 0) return state;
+      const chars = decodedChars(event.message);
+      if (chars === 0) return state;
+      // A first text, or a shorter one than the last sample, is a new message: open a window instead of measuring one.
+      if (state._streamedChars === 0 || chars < state._streamedChars) {
+        return { ...state, _sampledAt: Date.now(), _streamedChars: chars };
       }
-      return { ...state, usage, tokensPerSec, tokensPerSecHistory, _decodeStartedAt: 0 };
+      const seconds = (Date.now() - state._sampledAt) / 1000;
+      if (chars === state._streamedChars || seconds < SAMPLE_SECONDS) return state;
+      const instantaneous = (chars - state._streamedChars) / CHARS_PER_TOKEN / seconds;
+      const tokensPerSec = Math.round(
+        state.tokensPerSec > 0 ? 0.3 * instantaneous + 0.7 * state.tokensPerSec : instantaneous,
+      );
+      return {
+        ...state,
+        tokensPerSec,
+        tokensPerSecHistory: [...state.tokensPerSecHistory, tokensPerSec].slice(-RATE_SAMPLES),
+        _sampledAt: Date.now(),
+        _streamedChars: chars,
+      };
     }
+    case 'usage_update':
+      return { ...state, usage: event.usage as UsageSnapshot };
     case 'display_state_changed':
       return {
         ...state,
@@ -145,7 +156,8 @@ interface RuntimeMessage {
   content: RuntimeMessagePart[] | { parts: RuntimeMessagePart[] };
 }
 
-function hasAssistantText(message: RuntimeMessage) {
+function decodedChars(message: RuntimeMessage) {
+  if (message.role !== 'assistant') return 0;
   const parts = Array.isArray(message.content) ? message.content : message.content.parts;
-  return message.role === 'assistant' && parts.some(part => part.type === 'text' && part.text?.trim());
+  return parts.reduce((total, part) => total + (part.text?.length ?? 0), 0);
 }
