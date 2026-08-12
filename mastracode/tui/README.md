@@ -13,6 +13,7 @@ Learn more in the [documentation](https://code.mastra.ai/) and [announcement pos
 - **OAuth login**: Authenticate with Anthropic (Claude Max) and OpenAI (ChatGPT Plus/Codex)
 - **Persistent conversations**: Threads are saved per-project and resume automatically
 - **Coding tools**: View files, edit code, run shell commands
+- **Dynamic workflows**: Build workflows through chat, then list, inspect, run, and delete them from the TUI
 - **Goals**: Pursue longer-running objectives with configurable judge models and goal-enabled commands/skills
 - **Plan persistence**: Approved plans are saved as markdown files for future reference
 - **Token tracking**: Monitor usage with persistent token counts per thread
@@ -102,6 +103,7 @@ Select a suggestion with arrow keys and press Tab to insert it.
 | `/sandbox`          | Manage allowed paths (add/remove dirs)                                      |
 | `/permissions`      | View/manage tool approval permissions                                       |
 | `/plugins`          | Install and manage trusted Mastra Code plugins                              |
+| `/workflows`        | List, inspect, run, and delete chat-built workflows                         |
 | `/settings`         | General settings (notifications, YOLO, etc.)                                |
 | `/yolo`             | Toggle YOLO mode (auto-approve all tools)                                   |
 | `/resource`         | Show/switch resource ID (tag for sharing)                                   |
@@ -111,6 +113,25 @@ Select a suggestion with arrow keys and press Tab to insert it.
 | `/setup`            | Re-run the interactive setup wizard                                         |
 | `/help`             | Show available commands                                                     |
 | `/exit`             | Exit the TUI                                                                |
+
+### Dynamic workflows
+
+Create a workflow by describing it in build-mode chat. For example:
+
+```text
+Build me a workflow that accepts a topic, researches it, and returns a concise summary.
+```
+
+Mastra Code discovers the registered agents, tools, and workflows, builds a complete workflow definition, validates it, and saves it for future sessions. Workflow creation is chat-driven; `/workflows` manages workflows that have already been saved.
+
+```text
+/workflows list
+/workflows show research-summary
+/workflows run research-summary {"topic":"dynamic workflows"}
+/workflows delete research-summary
+```
+
+Run `/workflows help` for the full command reference.
 
 ### Plugins
 

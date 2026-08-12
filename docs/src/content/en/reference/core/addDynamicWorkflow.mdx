@@ -54,7 +54,7 @@ const result = await run.start({ inputData: { name: 'Ada' } })
   content={[
   {
     name: 'def',
-    type: 'DynamicWorkflowGraph',
+    type: 'DynamicWorkflowGraph | WorkflowBuilderDefinitionInput',
     description:
       'The workflow definition: id, optional description and metadata, JSON Schema input/output schemas, optional state and request-context schemas, and the step graph.',
   },

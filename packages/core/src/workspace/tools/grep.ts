@@ -24,6 +24,7 @@ Usage:
 - Multiple file types: { pattern: "import", path: "**/*.{ts,tsx,js}" }
 - Multiple directories: { pattern: "TODO", path: "{src,lib}/**/*.ts" }
 - With context: { pattern: "function", contextLines: 2 }`,
+  outputSchema: z.string(),
   inputSchema: z.object({
     pattern: z.string().describe('Regex pattern to search for'),
     path: z

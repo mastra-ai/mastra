@@ -91,6 +91,19 @@ Each caller-provided execution ID gets isolated runtime state. Input is bounded 
 
 Dependency installs are serialized and cached using the artifact's `package.json`, supported lockfiles, and install command. `cancel()` sends TERM and then KILL to the process group when necessary. `stop()` snapshot-stops the provider sandbox without assuming process preservation. `relaunch({ executionId })` starts the recorded command under a new execution identity. `destroy()` retries permanent sandbox deletion and returns a typed result.
 
+A restarted supervisor can reconstruct an operational handle from the persisted sandbox and execution identities. The attached handle supports status, offset-based output reads, cancellation, stop, and destroy, but not relaunch because the original launch configuration isn't persisted.
+
+```typescript
+import { attachWorkerDeployment } from '@mastra/deployer-sandbox';
+import { VercelSandbox } from '@mastra/vercel';
+
+const sandbox = new VercelSandbox({ sandboxName: persistedSandboxId });
+const worker = await attachWorkerDeployment({ sandbox, executionId: persistedExecutionId });
+
+const status = await worker.status();
+const stdout = await worker.readOutput('stdout', { offset: persistedStdoutOffset });
+```
+
 Pass `wake: true` to resume a stopped server sandbox before returning — useful in a route handler that fronts the sandbox. If the server isn't healthy after the resume (some providers restore the filesystem but not processes), the wake relaunches it:
 
 ```typescript

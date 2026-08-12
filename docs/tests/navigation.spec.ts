@@ -72,7 +72,7 @@ test.describe('Tab switcher navigation', () => {
     // Click through remaining tabs
     const tabs = [
       { label: 'Models', expectedPath: '/models' },
-      { label: 'Guides', expectedPath: '/guides' },
+      { label: 'Integrations', expectedPath: '/integrations' },
       { label: 'Reference', expectedPath: '/reference' },
     ]
 
@@ -119,13 +119,13 @@ test.describe('Mobile docs dropdown', () => {
     const dropdownContent = page.locator('[data-slot="dropdown-menu-content"]')
     await expect(dropdownContent).toBeVisible({ timeout: 5000 })
 
-    // Click "Models" in the dropdown menu
-    const modelsItem = dropdownContent.locator('a', { hasText: 'Models' }).first()
-    await modelsItem.click()
+    // Click "Integrations" in the dropdown menu
+    const integrationsItem = dropdownContent.locator('a', { hasText: 'Integrations' }).first()
+    await integrationsItem.click()
     await page.waitForLoadState('networkidle')
 
-    // Should have navigated to /models
-    await expect(page).toHaveURL(/\/models/)
+    // Should have navigated to /integrations
+    await expect(page).toHaveURL(/\/integrations/)
 
     expect(getErrors(), 'JS errors during mobile docs dropdown navigation').toEqual([])
   })
@@ -684,10 +684,10 @@ test.describe('Contextual sidebar', () => {
   })
 })
 
-// ─── Admonitions and tabs on /guides/build-your-ui/ai-sdk-ui ──────────
+// ─── Admonitions and tabs on /integrations/agentic-ui/ai-sdk-ui ───────
 
 test.describe('Admonitions and tabs on AI SDK UI guide', () => {
-  const PAGE = '/guides/build-your-ui/ai-sdk-ui'
+  const PAGE = '/integrations/agentic-ui/ai-sdk-ui'
 
   test('admonitions are rendered and visible', async ({ page }) => {
     const getErrors = trackJsErrors(page)

@@ -235,7 +235,7 @@ function parseListPage(raw: string | undefined): number | null {
   return page >= 1 ? page : null;
 }
 
-const VALID_ISSUE_LABEL_FILTERS = new Set(['auto-triaged', 'needs-approval']);
+const VALID_ISSUE_LABEL_FILTERS = new Set(['status: auto-triaged', 'status: needs approval']);
 
 function parseIssueLabelFilter(raw: string | undefined): string | undefined | null {
   if (raw === undefined || raw === '') return undefined;
@@ -387,7 +387,7 @@ async function ingestPolledEvents(
  */
 export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[] {
   const routes: ApiRoute[] = [];
-  const { auth, fleet, storage, github, stateSigner, emitAudit } = options;
+  const { auth, fleet, storage, github, stateSigner, controller, emitAudit } = options;
   const diagnostics = () =>
     getGithubFeatureDiagnostics({ github, auth, appDbConfigured: storage !== undefined, stateSigner, fleet });
 
@@ -462,16 +462,23 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
         if (!input.resourceId || !input.projectPath) {
           throw new Error('GitHub issue triage requires an explicit Factory project repository');
         }
-        await github.addIssueLabels(input.installationId, input.repository, input.issueNumber, ['auto-triaged']);
+        await github.addIssueLabels(input.installationId, input.repository, input.issueNumber, [
+          'status: auto-triaged',
+        ]);
         if (input.labels.includes('status: needs triage')) {
-          await github.removeIssueLabel(input.installationId, input.repository, input.issueNumber, 'status: needs triage');
+          await github.removeIssueLabel(
+            input.installationId,
+            input.repository,
+            input.issueNumber,
+            'status: needs triage',
+          );
         }
         const labels = input.labels.filter(label => label !== 'status: needs triage');
         return runIssueTriage({
           ...input,
           defaultModelId:
             input.defaultModelId ?? (await resolveFactoryDefaultModelId(options.projects, input.resourceId)),
-          labels: labels.includes('auto-triaged') ? labels : [...labels, 'auto-triaged'],
+          labels: labels.includes('status: auto-triaged') ? labels : [...labels, 'status: auto-triaged'],
         });
       }
     : undefined;
@@ -1060,7 +1067,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
   );
 
   // ── Sessions / commit / push / PR ────────────────────────────────────────
-  routes.push(...buildProjectGitRoutes({ github, auth, fleet, emitAudit }));
+  routes.push(...buildProjectGitRoutes({ github, auth, fleet, controller, emitAudit }));
 
   return routes;
 }
@@ -1287,11 +1294,13 @@ function buildProjectGitRoutes({
   github,
   auth,
   fleet,
+  controller,
   emitAudit,
 }: {
   github: GithubIntegration;
   auth: RouteAuth;
   fleet: SandboxFleet;
+  controller?: MountedMastraCode['controller'];
   emitAudit?: AuditEmitter['emit'];
 }): ApiRoute[] {
   return [
@@ -1435,6 +1444,14 @@ function buildProjectGitRoutes({
         // a large repository — the caller must not sit through that for a
         // workspace that has already been removed.
         await github.sourceControlStorage.sessions.delete(session.id);
+        try {
+          await controller?.deleteSession({ resourceId: session.sessionId });
+        } catch (error) {
+          console.error('[GitHub Sessions] Failed to tear down live controller session', {
+            sessionId: session.sessionId,
+            error,
+          });
+        }
         void reclaimDeletedSessionSandbox({
           fleet,
           sourceControl: github.sourceControlStorage,

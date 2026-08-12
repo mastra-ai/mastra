@@ -31,11 +31,12 @@ export function isOpenAICompatibleObjectConfig(
         mastra?: Mastra;
       }) => MastraModelConfig | Promise<MastraModelConfig>),
 ): modelConfig is OpenAICompatibleConfig {
-  if (typeof modelConfig === 'object' && 'specificationVersion' in modelConfig) return false;
+  if (modelConfig === null || typeof modelConfig !== 'object') return false;
+  if ('specificationVersion' in modelConfig) return false;
   // Check for OpenAICompatibleConfig - it should have either:
   // 1. 'id' field (but NOT 'model' - that's ModelWithRetries)
   // 2. Both 'providerId' and 'modelId' fields
-  if (typeof modelConfig === 'object' && !('model' in modelConfig)) {
+  if (!('model' in modelConfig)) {
     if ('id' in modelConfig) return true;
     if ('providerId' in modelConfig && 'modelId' in modelConfig) return true;
   }
@@ -103,7 +104,7 @@ export async function resolveModelConfig(
   }
 
   // If it's already a LanguageModel, wrap it with the appropriate wrapper
-  if (typeof modelConfig === 'object' && 'specificationVersion' in modelConfig) {
+  if (modelConfig !== null && typeof modelConfig === 'object' && 'specificationVersion' in modelConfig) {
     if (modelConfig.specificationVersion === 'v2') {
       return new AISDKV5LanguageModel(modelConfig as LanguageModelV2);
     }

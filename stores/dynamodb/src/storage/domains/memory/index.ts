@@ -29,6 +29,7 @@ import { getTtlProps } from '../../ttl';
 import { deleteTableData } from '../utils';
 
 export class MemoryStorageDynamoDB extends MemoryStorage {
+  override readonly supportsPartialThreadUpdate = true;
   private service: Service<Record<string, any>>;
   private ttlConfig?: DynamoDBTtlConfig;
 

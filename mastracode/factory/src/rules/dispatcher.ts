@@ -46,6 +46,7 @@ interface DispatcherSession extends SkillSession {
     switch(input: { threadId: string }): Promise<unknown>;
     listActiveMessages(): Promise<Array<{ id: string }>>;
   };
+  abort(): void;
   sendSignal(
     input: { id: string; type: 'user'; tagName: 'user'; contents: string },
     options: { requestContext: RequestContext; requireDelivery?: boolean },
@@ -196,25 +197,29 @@ export class FactoryDecisionDispatcher {
     if (capacity <= 0) return [];
     const limit = Math.min(BATCH_SIZE, capacity);
     const leaseExpiresAt = new Date(now.getTime() + LEASE_MS);
-    const decisions = await this.#storage.claimDeferredDecisions({
+    // Starts are claimed before deferred decisions: a pending start is a user
+    // waiting on a brand-new session, while a deferred decision is a background
+    // continuation of one that is already running. A deep decision queue must
+    // never starve new sessions out of the tick.
+    const starts = await this.#storage.claimPendingStarts({
       ownerId: this.#ownerId,
       now,
       leaseExpiresAt,
       limit,
     });
-    const startsLimit = limit - decisions.length;
-    const starts =
-      startsLimit > 0
-        ? await this.#storage.claimPendingStarts({
+    const decisionsLimit = limit - starts.length;
+    const decisions =
+      decisionsLimit > 0
+        ? await this.#storage.claimDeferredDecisions({
             ownerId: this.#ownerId,
             now,
             leaseExpiresAt,
-            limit: startsLimit,
+            limit: decisionsLimit,
           })
         : [];
     return [
-      ...decisions.map(decision => this.#track(this.#dispatchDecision(decision, now))),
       ...starts.map(start => this.#track(this.#dispatchPendingStart(start, now))),
+      ...decisions.map(decision => this.#track(this.#dispatchDecision(decision, now))),
     ];
   }
 
@@ -346,6 +351,7 @@ export class FactoryDecisionDispatcher {
         await this.#switchThread(session, binding);
         const delivered = await session.thread.listActiveMessages();
         if (delivered.some(message => message.id === record.id)) return;
+        if (decision.cancelInFlight) session.abort();
         if (decision.precedingMessage) {
           await awaitNotification(
             await session.sendNotificationSignal(

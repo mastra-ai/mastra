@@ -428,6 +428,44 @@ const HistoryRailHarness = ({ messageIds }: { messageIds: string[] }) => (
   </MessageScrollerProvider>
 );
 
+const TurnHarness = ({ messageIds, replyIds = [] }: { messageIds: string[]; replyIds?: string[] }) => (
+  <MessageScrollerProvider defaultScrollPosition="last-anchor">
+    <MessageScrollerViewport data-testid="turn-viewport">
+      <MessageScrollerContent>
+        {messageIds.map(messageId => (
+          <MessageScrollerItem key={messageId} messageId={messageId} scrollAnchor>
+            <div>{messageId}</div>
+          </MessageScrollerItem>
+        ))}
+        {replyIds.map(replyId => (
+          <MessageScrollerItem key={replyId} messageId={replyId}>
+            <div>{replyId}</div>
+          </MessageScrollerItem>
+        ))}
+      </MessageScrollerContent>
+    </MessageScrollerViewport>
+  </MessageScrollerProvider>
+);
+
+const ReconciledTurnHarness = ({ messageId }: { messageId: string }) => (
+  <MessageScrollerProvider defaultScrollPosition="last-anchor">
+    <MessageScrollerViewport data-testid="reconciled-turn-viewport">
+      <MessageScrollerContent>
+        <MessageScrollerItem key="stable-turn" messageId={messageId} scrollAnchor>
+          <div>{messageId}</div>
+        </MessageScrollerItem>
+      </MessageScrollerContent>
+    </MessageScrollerViewport>
+  </MessageScrollerProvider>
+);
+
+const stubLayout = (tops: Record<string, number>) => {
+  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function () {
+    const top = this.dataset.messageId ? tops[this.dataset.messageId] : undefined;
+    return createRect({ top: top ?? 0 });
+  });
+};
+
 const contentResizeObserver = () => {
   const content = document.querySelector<HTMLElement>('[data-slot="message-scroller-content"]');
   if (!content) throw new Error('No scroller content');
@@ -555,6 +593,77 @@ describe('MessageScroller older history', () => {
     rerender(<HistoryHarness messageIds={['message-1', 'message-2', 'message-3']} onReachStart={onReachStart} />);
 
     expect(viewport.scrollTop).toBe(600);
+  });
+});
+
+describe('MessageScroller turn anchoring', () => {
+  it('opens an asynchronously loaded transcript at its latest turn after layout settles', () => {
+    let layoutReady = false;
+    const scheduledScrolls: FrameRequestCallback[] = [];
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation(callback => {
+      scheduledScrolls.push(callback);
+      return scheduledScrolls.length;
+    });
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      const top = layoutReady && this.dataset.messageId === 'message-1' ? 100 : 0;
+      if (layoutReady && this.dataset.messageId === 'message-2') return createRect({ top: 700 });
+      return createRect({ top });
+    });
+    const { rerender } = render(<TurnHarness messageIds={[]} />);
+
+    const viewport = screen.getByTestId('turn-viewport');
+    const scrollTo = installScrollTo(viewport);
+    setScrollMetrics(viewport, { scrollHeight: 1200, clientHeight: 400, scrollTop: 250 });
+
+    rerender(<TurnHarness messageIds={['message-1', 'message-2']} />);
+    expect(scrollTo).not.toHaveBeenCalled();
+
+    act(() => scheduledScrolls.shift()?.(0));
+    expect(scrollTo).not.toHaveBeenCalled();
+
+    layoutReady = true;
+    act(() => scheduledScrolls.shift()?.(16));
+
+    expect(scrollTo).toHaveBeenLastCalledWith({ top: 950, behavior: 'auto' });
+  });
+
+  it('parks a turn that opens below the ones already read at the top of the viewport', () => {
+    stubLayout({ 'message-2': 300 });
+    const { rerender } = render(<TurnHarness messageIds={['message-1']} />);
+
+    const viewport = screen.getByTestId('turn-viewport');
+    const scrollTo = installScrollTo(viewport);
+    setScrollMetrics(viewport, { scrollHeight: 1000, clientHeight: 400, scrollTop: 0 });
+
+    rerender(<TurnHarness messageIds={['message-1', 'message-2']} />);
+
+    expect(scrollTo).toHaveBeenLastCalledWith({ top: 300, behavior: 'smooth' });
+  });
+
+  it('does not re-anchor a turn when reconciliation replaces its message id', () => {
+    stubLayout({ 'client-message': 300, 'server-message': 300 });
+    const { rerender } = render(<ReconciledTurnHarness messageId="client-message" />);
+
+    const viewport = screen.getByTestId('reconciled-turn-viewport');
+    setScrollMetrics(viewport, { scrollHeight: 1000, clientHeight: 400, scrollTop: 300 });
+    const scrollTo = installScrollTo(viewport);
+
+    rerender(<ReconciledTurnHarness messageId="server-message" />);
+
+    expect(scrollTo).not.toHaveBeenCalled();
+  });
+
+  it('stays put while the reply streams in below the turn', () => {
+    stubLayout({ 'message-1': 300 });
+    const { rerender } = render(<TurnHarness messageIds={['message-1']} />);
+
+    const viewport = screen.getByTestId('turn-viewport');
+    setScrollMetrics(viewport, { scrollHeight: 1000, clientHeight: 400, scrollTop: 300 });
+    const scrollTo = installScrollTo(viewport);
+
+    rerender(<TurnHarness messageIds={['message-1']} replyIds={['reply-1']} />);
+
+    expect(scrollTo).not.toHaveBeenCalled();
   });
 });
 

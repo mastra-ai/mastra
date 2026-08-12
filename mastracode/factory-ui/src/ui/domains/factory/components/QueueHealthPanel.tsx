@@ -1,8 +1,8 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Notice } from '@mastra/playground-ui/components/Notice';
+import { Popover, PopoverContent } from '@mastra/playground-ui/components/Popover';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useParams } from 'react-router';
 
@@ -16,7 +16,7 @@ import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import type { QueueHealthSelection } from './QueueHealthChart';
 import { QueueHealthChart, formatAgeSeconds } from './QueueHealthChart';
 import type { AgeBucket, QueueHealth, QueueHealthEntry } from '../queue-health';
-import { AGE_BUCKETS, computeQueueHealth } from '../queue-health';
+import { computeQueueHealth } from '../queue-health';
 import { stageLabel } from '../stages';
 
 const BUCKET_LABEL: Record<AgeBucket, string> = {
@@ -28,20 +28,17 @@ const BUCKET_LABEL: Record<AgeBucket, string> = {
 
 const DEFAULT_THRESHOLDS = [14400, 86400, 259200];
 
-function worstCohort(health: QueueHealth): QueueHealthSelection | null {
-  for (let index = AGE_BUCKETS.length - 1; index >= 0; index--) {
-    const bucket = AGE_BUCKETS[index]!;
-    if (health.stages.some(stage => stage.buckets[bucket] > 0)) return { stage: null, bucket };
-  }
-  return null;
+/** An open drill-down is a cohort plus the cell it hangs off. */
+interface DrillDown {
+  selection: QueueHealthSelection;
+  anchor: HTMLElement;
 }
 
 export function QueueHealthPanel({ factoryProjectId }: { factoryProjectId: string | undefined }) {
   const workItemsQuery = useWorkItemsQuery(factoryProjectId);
   const thresholdsQuery = useQueueHealthThresholds(factoryProjectId);
   const activePaths = useActivePaths();
-  const [selected, setSelected] = useState<QueueHealthSelection | null>(null);
-  const [touched, setTouched] = useState(false);
+  const [drillDown, setDrillDown] = useState<DrillDown | null>(null);
 
   const health = useMemo(() => {
     const items = workItemsQuery.data ?? [];
@@ -56,44 +53,61 @@ export function QueueHealthPanel({ factoryProjectId }: { factoryProjectId: strin
     return <Notice variant="destructive">{(thresholdsQuery.error as Error).message}</Notice>;
   }
 
-  const thresholds = thresholdsQuery.data?.thresholdsSeconds ?? DEFAULT_THRESHOLDS;
-  const cohort = touched ? selected : worstCohort(health);
-  const drillDown = cohort
-    ? health.entries
-        .filter(entry => entry.bucket === cohort.bucket && (cohort.stage === null || entry.stage === cohort.stage))
-        .sort((a, b) => b.ageSeconds - a.ageSeconds)
-    : null;
+  if (!workItemsQuery.data || !thresholdsQuery.data) {
+    return (
+      <div role="status" aria-label="Loading queue health" className="flex flex-col gap-5">
+        <Skeleton className="h-10 w-full rounded-lg" />
+        <Skeleton className="h-24 w-full" />
+      </div>
+    );
+  }
+
+  const thresholds = thresholdsQuery.data.thresholdsSeconds;
+  const entries = drillDown ? cohortEntries(health, drillDown.selection) : [];
+  // Work items refetch on a timer: a cohort emptying unmounts the cell the
+  // popover hangs off, leaving the anchor detached.
+  if (drillDown && entries.length === 0) setDrillDown(null);
+  const cohort = drillDown?.selection ?? null;
 
   return (
-    <div className="flex flex-col gap-5">
-      {!workItemsQuery.data || !thresholdsQuery.data ? (
-        <div role="status" aria-label="Loading queue health" className="flex flex-col gap-5">
-          <Skeleton className="h-10 w-full rounded-lg" />
-          <Skeleton className="h-24 w-full" />
-        </div>
-      ) : (
-        <>
-          <QueueHealthChart
-            health={health}
-            thresholdsSeconds={thresholds}
-            selected={cohort}
-            onSelect={next => {
-              setTouched(true);
-              setSelected(next);
-            }}
-          />
-          <DrillDownList
-            selected={cohort}
-            entries={drillDown}
-            onClear={() => {
-              setTouched(true);
-              setSelected(null);
-            }}
-          />
-        </>
-      )}
-    </div>
+    <>
+      <QueueHealthChart
+        health={health}
+        thresholdsSeconds={thresholds}
+        selected={cohort}
+        onSelect={(selection, anchor) => setDrillDown(selection && anchor ? { selection, anchor } : null)}
+      />
+      <Popover
+        open={drillDown !== null}
+        onOpenChange={open => {
+          if (!open) setDrillDown(null);
+        }}
+      >
+        {drillDown ? (
+          <PopoverContent
+            anchor={drillDown.anchor}
+            side="bottom"
+            aria-label={`${cohortLabel(drillDown.selection)} tasks`}
+            className="w-80 p-0"
+          >
+            <CohortTasks selection={drillDown.selection} entries={entries} />
+          </PopoverContent>
+        ) : null}
+      </Popover>
+    </>
   );
+}
+
+function cohortLabel(selection: QueueHealthSelection): string {
+  return selection.stage === null
+    ? BUCKET_LABEL[selection.bucket]
+    : `${stageLabel(selection.stage)} · ${BUCKET_LABEL[selection.bucket]}`;
+}
+
+function cohortEntries(health: QueueHealth, selection: QueueHealthSelection): QueueHealthEntry[] {
+  return health.entries
+    .filter(entry => entry.bucket === selection.bucket && (selection.stage === null || entry.stage === selection.stage))
+    .sort((a, b) => b.ageSeconds - a.ageSeconds);
 }
 
 function useActivePaths(): ReadonlySet<string> {
@@ -117,83 +131,52 @@ function useActivePaths(): ReadonlySet<string> {
   return useMemo(() => new Set(Object.keys(runningByPath).filter(path => runningByPath[path])), [runningByPath]);
 }
 
-function DrillDownList({
-  selected,
-  entries,
-  onClear,
-}: {
-  selected: QueueHealthSelection | null;
-  entries: QueueHealthEntry[] | null;
-  onClear: () => void;
-}) {
-  if (!selected || !entries) return null;
-
-  const cohort =
-    selected.stage === null
-      ? BUCKET_LABEL[selected.bucket]
-      : `${stageLabel(selected.stage)} · ${BUCKET_LABEL[selected.bucket]}`;
-
+function CohortTasks({ selection, entries }: { selection: QueueHealthSelection; entries: QueueHealthEntry[] }) {
   return (
-    <div className="border-border1 flex flex-col gap-1 border-t pt-4">
-      <div className="flex items-center justify-between gap-3">
-        <Txt as="p" variant="ui-sm" className="text-icon5 m-0 font-medium">
-          {cohort}
-          <Txt as="span" variant="ui-xs" className="text-icon3 ml-2 font-normal">
-            {entries.length} {entries.length === 1 ? 'task' : 'tasks'}
-          </Txt>
+    <div className="flex max-h-80 flex-col">
+      <Txt as="p" variant="ui-sm" className="text-icon5 m-0 px-3 pt-3 pb-1 font-medium">
+        {cohortLabel(selection)}
+        <Txt as="span" variant="ui-xs" className="text-icon3 ml-2 font-normal">
+          {entries.length} {entries.length === 1 ? 'task' : 'tasks'}
         </Txt>
-        <button
-          type="button"
-          onClick={onClear}
-          aria-label="Clear selection"
-          className="text-icon3 hover:text-icon5 hover:bg-surface4 focus-visible:outline-accent1 -mr-1 flex size-6 shrink-0 items-center justify-center rounded-md transition-colors focus-visible:outline-2"
-        >
-          <X aria-hidden="true" className="size-3.5" />
-        </button>
-      </div>
+      </Txt>
 
-      {entries.length === 0 ? (
-        <Txt as="p" variant="ui-sm" className="text-icon3 m-0 py-2">
-          No tasks in this cohort.
-        </Txt>
-      ) : (
-        <ul className="m-0 flex list-none flex-col p-0">
-          {entries.map(entry => (
-            <li
-              key={`${entry.itemId}:${entry.stage}`}
-              // rule sits in the 1px gap below the row — rounded hover bg never meets it
-              className={`hover:bg-surface4 after:bg-border1 has-[a:focus-visible]:outline-accent1 relative -mx-2 mb-px flex min-w-0 items-center gap-3 rounded-md px-2 py-2 transition-colors after:absolute after:inset-x-2 after:-bottom-px after:h-px last:mb-0 last:after:hidden has-[a:focus-visible]:outline-2 ${entry.url ? 'cursor-pointer' : ''}`}
-            >
-              <span className="min-w-0 flex-1">
-                {entry.url ? (
-                  // stretched link — the whole row is the hit area
-                  <a
-                    href={entry.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-ui-sm text-icon5 hover:text-icon6 block truncate no-underline after:absolute after:inset-0 hover:underline focus-visible:outline-none"
-                  >
-                    {entry.title}
-                  </a>
-                ) : (
-                  <span className="text-ui-sm text-icon5 block truncate">{entry.title}</span>
-                )}
-                <Txt as="span" variant="ui-xs" className="text-icon3 mt-0.5 block">
-                  In stage {formatAgeSeconds(entry.ageSeconds)}
-                </Txt>
-              </span>
-              {entry.active ? (
-                <span
-                  role="img"
-                  aria-label="Agent running"
-                  className="bg-accent1 inline-flex size-1.5 shrink-0 rounded-full"
-                />
-              ) : null}
-              {selected.stage === null ? <Badge size="xs">{stageLabel(entry.stage)}</Badge> : null}
-            </li>
-          ))}
-        </ul>
-      )}
+      <ul className="m-0 flex list-none flex-col overflow-y-auto p-1 pt-0">
+        {entries.map(entry => (
+          <li
+            key={`${entry.itemId}:${entry.stage}`}
+            // rule sits in the 1px gap below the row — rounded hover bg never meets it
+            className={`hover:bg-surface4 after:bg-border1 has-[a:focus-visible]:outline-accent1 relative mb-px flex min-w-0 items-center gap-3 rounded-md px-2 py-2 transition-colors after:absolute after:inset-x-2 after:-bottom-px after:h-px last:mb-0 last:after:hidden has-[a:focus-visible]:outline-2 ${entry.url ? 'cursor-pointer' : ''}`}
+          >
+            <span className="min-w-0 flex-1">
+              {entry.url ? (
+                // stretched link — the whole row is the hit area
+                <a
+                  href={entry.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-ui-sm text-icon5 hover:text-icon6 block truncate no-underline after:absolute after:inset-0 hover:underline focus-visible:outline-none"
+                >
+                  {entry.title}
+                </a>
+              ) : (
+                <span className="text-ui-sm text-icon5 block truncate">{entry.title}</span>
+              )}
+              <Txt as="span" variant="ui-xs" className="text-icon3 mt-0.5 block">
+                In stage {formatAgeSeconds(entry.ageSeconds)}
+              </Txt>
+            </span>
+            {entry.active ? (
+              <span
+                role="img"
+                aria-label="Agent running"
+                className="bg-accent1 inline-flex size-1.5 shrink-0 rounded-full"
+              />
+            ) : null}
+            {selection.stage === null ? <Badge size="xs">{stageLabel(entry.stage)}</Badge> : null}
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

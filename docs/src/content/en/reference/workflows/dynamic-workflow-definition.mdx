@@ -141,6 +141,8 @@ Tool entries accept the same optional `description` and `options` fields as agen
 
 A `mapping` entry reshapes data. Its `mapConfig` is a JSON string that encodes an object. Each key becomes a key in the step output, and each descriptor defines one source.
 
+When you call [`Mastra.addDynamicWorkflow()`](/reference/core/addDynamicWorkflow) directly, `mapConfig` also accepts the object itself. Mastra encodes it to a JSON string before registering and storing the definition, so the persisted row is the same either way. A stored definition always carries the JSON string form.
+
 | Descriptor | Description |
 | - | - |
 | `{ "value": ... }` | A constant JSON value |

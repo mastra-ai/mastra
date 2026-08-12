@@ -403,6 +403,7 @@ Transforms:
 
 Pattern replace (for everything else):
   { pattern: "console.log($ARG)", replacement: "logger.debug($ARG)" }`,
+  outputSchema: z.string(),
   inputSchema: z.object({
     path: z.string().describe('The path to the file to edit'),
     pattern: z
