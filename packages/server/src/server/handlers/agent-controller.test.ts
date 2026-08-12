@@ -16,6 +16,7 @@ import {
   GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE,
   LIST_AGENT_CONTROLLER_MODES_ROUTE,
   LIST_AGENT_CONTROLLER_THREADS_ROUTE,
+  LIST_AGENT_CONTROLLER_RESOURCE_THREADS_ROUTE,
   SWITCH_AGENT_CONTROLLER_MODE_ROUTE,
   DELETE_AGENT_CONTROLLER_THREAD_ROUTE,
   RENAME_AGENT_CONTROLLER_THREAD_ROUTE,
@@ -785,6 +786,81 @@ describe('agent-controller routes', () => {
         expect(res.threads.filter(t => t.id !== busy.id).every(t => t.state === 'idle')).toBe(true);
       } finally {
         spy.mockRestore();
+      }
+    });
+  });
+
+  describe('LIST_AGENT_CONTROLLER_RESOURCE_THREADS_ROUTE', () => {
+    it('lists threads with run state without getting-or-creating a session', async () => {
+      // Seed threads through a real session first…
+      const controller = mastra.getAgentController('code')!;
+      const session = await controller.createSession({ resourceId: 'user-passive' });
+      await session.state.set({ projectPath: '/repo/worktree-a' } as any);
+      const busy = await session.thread.create({ title: 'busy' });
+      await session.thread.create({ title: 'calm' });
+
+      // …then observe passively. The route must never call createSession.
+      const createSpy = vi.spyOn(controller, 'createSession');
+      const stateSpy = vi
+        .spyOn(Agent.prototype, 'getActiveThreadRunId')
+        .mockImplementation(({ threadId }) => (threadId === busy.id ? 'run-1' : undefined));
+      try {
+        const res = (await LIST_AGENT_CONTROLLER_RESOURCE_THREADS_ROUTE.handler({
+          mastra,
+          controllerId: 'code',
+          resourceId: 'user-passive',
+        } as any)) as { threads: { id: string; title?: string; state?: string; tags?: Record<string, string> }[] };
+
+        expect(createSpy).not.toHaveBeenCalled();
+        expect(res.threads.length).toBeGreaterThanOrEqual(2);
+        expect(res.threads.find(t => t.id === busy.id)?.state).toBe('active');
+        expect(res.threads.filter(t => t.id !== busy.id).every(t => t.state === 'idle')).toBe(true);
+      } finally {
+        createSpy.mockRestore();
+        stateSpy.mockRestore();
+      }
+    });
+
+    it('supports the same tags scoping and limit as the session listing', async () => {
+      const controller = mastra.getAgentController('code')!;
+      const session = await controller.createSession({ resourceId: 'user-passive-tags' });
+      await session.state.set({ projectPath: '/repo/wt-a' } as any);
+      await session.thread.create({ title: 'a1' });
+      await session.thread.create({ title: 'a2' });
+      await session.state.set({ projectPath: '/repo/wt-b' } as any);
+      await session.thread.create({ title: 'b1' });
+
+      const onlyA = (await LIST_AGENT_CONTROLLER_RESOURCE_THREADS_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-passive-tags',
+        tags: { projectPath: '/repo/wt-a' },
+      } as any)) as { threads: { title?: string; tags?: Record<string, string> }[] };
+      expect(onlyA.threads.map(t => t.title).sort()).toEqual(['a1', 'a2']);
+      expect(onlyA.threads.every(t => t.tags?.projectPath === '/repo/wt-a')).toBe(true);
+
+      const limited = (await LIST_AGENT_CONTROLLER_RESOURCE_THREADS_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-passive-tags',
+        limit: 1,
+      } as any)) as { threads: { updatedAt?: string }[] };
+      expect(limited.threads.length).toBe(1);
+    });
+
+    it('returns an empty list for an unknown resource without creating anything', async () => {
+      const controller = mastra.getAgentController('code')!;
+      const createSpy = vi.spyOn(controller, 'createSession');
+      try {
+        const res = (await LIST_AGENT_CONTROLLER_RESOURCE_THREADS_ROUTE.handler({
+          mastra,
+          controllerId: 'code',
+          resourceId: 'never-seen-resource',
+        } as any)) as { threads: unknown[] };
+        expect(res.threads).toEqual([]);
+        expect(createSpy).not.toHaveBeenCalled();
+      } finally {
+        createSpy.mockRestore();
       }
     });
   });

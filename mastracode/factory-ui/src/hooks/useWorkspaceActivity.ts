@@ -1,11 +1,8 @@
 import type { AgentControllerThreadInfo } from '@mastra/client-js';
-import { useQuery } from '@tanstack/react-query';
+import { useQueries } from '@tanstack/react-query';
 
 import { queryKeys } from '../api/keys';
-import {
-  createAgentControllerClient,
-  requireAgentControllerSession,
-} from '../ui/domains/chat/services/agentControllerClient';
+import { createAgentControllerClient } from '../ui/domains/chat/services/agentControllerClient';
 
 /** How often workspace activity is re-checked while the tab is focused. */
 export const WORKSPACE_ACTIVITY_POLL_MS = 5000;
@@ -32,45 +29,47 @@ function isActiveWorkspaceThread(thread: AgentControllerThreadInfo, key: string)
 interface WorkspaceActivityOptions {
   agentControllerId: string;
   resourceId: string;
-  /** Session scope for the listing read — the active worktree's project path. */
-  scope: string | undefined;
   worktreePaths: string[];
   baseUrl?: string;
   enabled: boolean;
 }
 
 /**
- * The shared resource-wide thread listing behind the workspace hooks. Threads
- * are stamped with their worktree's `projectPath` tag and the server annotates
- * each with its run state (`active`/`idle`), so one poll covers every worktree
- * sharing the resourceId instead of a request per row.
+ * The shared thread listing behind the workspace hooks. Factory sessions are
+ * provisioned with their own session id as the memory resourceId (see
+ * FactoryStartCoordinator.prepare), so one resource-scoped poll from a page
+ * cannot see other rows' threads. Instead each worktree row is polled as its
+ * own resource via the passive listing — which never gets-or-creates a server
+ * session, so polling from the Board never brings a cold session online. The
+ * ambient resourceId is also polled to cover legacy `projectPath`-keyed
+ * personal worktree threads that live under the page's own resource.
  */
 function useWorkspaceThreadsQuery({
   agentControllerId,
   resourceId,
-  scope,
+  worktreePaths,
   baseUrl,
   enabled,
-}: Omit<WorkspaceActivityOptions, 'worktreePaths'>): AgentControllerThreadInfo[] {
-  const query = useQuery({
-    queryKey: queryKeys.agentControllerActivity(agentControllerId, resourceId),
-    queryFn: async () => {
-      // A thread listing spans the whole resource regardless of session scope,
-      // so read through the already-live active-worktree session rather than
-      // seeding a new one.
-      const { session } = createAgentControllerClient({
-        agentControllerId,
-        resourceId,
-        scope,
-        baseUrl,
-      });
-      return requireAgentControllerSession(session).listThreads();
-    },
-    enabled,
-    refetchInterval: WORKSPACE_ACTIVITY_POLL_MS,
-    retry: false,
+}: WorkspaceActivityOptions): AgentControllerThreadInfo[] {
+  const resourceIds = [...new Set([resourceId, ...worktreePaths])].filter(Boolean);
+  const queries = useQueries({
+    queries: resourceIds.map(id => ({
+      queryKey: queryKeys.agentControllerActivity(agentControllerId, id),
+      queryFn: async () => {
+        const { controller } = createAgentControllerClient({
+          agentControllerId,
+          resourceId: id,
+          baseUrl,
+        });
+        if (!controller) throw new Error('Agent controller client is not available');
+        return controller.listResourceThreads(id);
+      },
+      enabled,
+      refetchInterval: WORKSPACE_ACTIVITY_POLL_MS,
+      retry: false,
+    })),
   });
-  return query.data ?? [];
+  return queries.flatMap(query => query.data ?? []);
 }
 
 /** Reports which workspaces have an agent run in flight, from a single thread listing. */

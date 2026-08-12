@@ -63,7 +63,7 @@ function stubWith(tagsFor: (sessionId: string) => ThreadTags, states: Record<str
     http.get(`${TEST_BASE_URL}/web/factory/projects/${factoryId}/work-items`, () =>
       HttpResponse.json(fixtures.workItemsResponse),
     ),
-    http.get(`${TEST_BASE_URL}/api/agent-controller/code/sessions/${workSessionId}/threads`, () =>
+    http.get(`${TEST_BASE_URL}/api/agent-controller/code/resources/:resourceId/threads`, () =>
       HttpResponse.json(fixtures.threadsResponse),
     ),
   );

@@ -42,10 +42,11 @@ export function WorkspacesSection() {
   const activityOptions = {
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
-    scope: sessionId,
     worktreePaths: workspaceRows.map(workspace => workspace.sessionId),
     baseUrl,
-    enabled: sessionEnabled && Boolean(sessionId),
+    // Passive per-resource polling never creates sessions, so activity can be
+    // observed from any page — not just inside a live session.
+    enabled: true,
   };
   const runningByPath = useWorkspaceActivity(activityOptions);
   const titleByPath = useWorkspaceThreadTitles(activityOptions);

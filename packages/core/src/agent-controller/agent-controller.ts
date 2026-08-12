@@ -1188,6 +1188,31 @@ export class AgentController<TState = {}> {
     }));
   }
 
+  /**
+   * Passive, session-free listing of a resource's threads annotated with live
+   * run state. Reads thread rows straight from storage and resolves activity
+   * via the agent thread-stream runtime (keyed by resourceId + threadId, so it
+   * covers runs started by any session on the resource). Unlike reading
+   * through `createSession().thread.list()`, this never gets-or-creates a
+   * server session, so observers (e.g. a sidebar on a board view) can poll it
+   * without bringing cold sessions online.
+   */
+  async listResourceThreads({
+    resourceId,
+  }: {
+    resourceId: string;
+  }): Promise<Array<AgentControllerThread & { state: 'active' | 'idle' }>> {
+    await this.init();
+    const threads = await this.queryThreads({ resourceId });
+    // Any mode agent works for run-state lookup: the thread-stream runtime is
+    // shared and keyed by pubsub, which init() propagated to every mode agent.
+    const agent = this.propagateRuntimeServicesToAgent(this.getAgentForMode(this.#defaultMode));
+    return threads.map(thread => ({
+      ...thread,
+      state: agent.getActiveThreadRunId({ resourceId, threadId: thread.id }) ? ('active' as const) : ('idle' as const),
+    }));
+  }
+
   private async queryThreadMessages({
     threadId,
     limit,

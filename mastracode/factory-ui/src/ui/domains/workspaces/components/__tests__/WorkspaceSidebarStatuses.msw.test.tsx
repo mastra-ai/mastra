@@ -166,7 +166,7 @@ function stubWorkspaceStatuses({
     http.get(`${TEST_BASE_URL}/web/factory/projects/${factoryProjectId}/work-items`, () =>
       HttpResponse.json({ workItems: items }),
     ),
-    http.get(`${TEST_BASE_URL}/api/agent-controller/code/sessions/${resourceId}/threads`, () =>
+    http.get(`${TEST_BASE_URL}/api/agent-controller/code/resources/:resourceId/threads`, () =>
       HttpResponse.json({ threads }),
     ),
     http.get(`${TEST_BASE_URL}/web/github/subscriptions`, ({ request }) => {

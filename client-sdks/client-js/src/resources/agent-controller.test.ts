@@ -241,6 +241,22 @@ describe('AgentController Resource', () => {
     expect(JSON.parse(init.body as string)).toEqual({ threadId: 't-1' });
   });
 
+  it('passively lists resource threads without a session path', async () => {
+    mockJson({ threads: [{ id: 't-1', title: 'One', state: 'active' }] });
+    const threads = await client.getAgentController('code').listResourceThreads('user-1');
+    expect(threads).toEqual([{ id: 't-1', title: 'One', state: 'active' }]);
+    expect(lastCall()[0]).toBe('http://localhost:4111/api/agent-controller/code/resources/user-1/threads');
+
+    mockJson({ threads: [] });
+    await client
+      .getAgentController('code')
+      .listResourceThreads('user-1', { limit: 3, tags: { projectPath: '/repo/wt-a' } });
+    const url = new URL(lastCall()[0] as string);
+    expect(url.pathname).toBe('/api/agent-controller/code/resources/user-1/threads');
+    expect(url.searchParams.get('limit')).toBe('3');
+    expect(url.searchParams.get('tags')).toBe(JSON.stringify({ projectPath: '/repo/wt-a' }));
+  });
+
   it('hydrates message timestamps returned by listMessages without mutating the source payload', async () => {
     const sourceMessages = [
       {

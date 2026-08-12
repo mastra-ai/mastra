@@ -910,6 +910,69 @@ export const LIST_AGENT_CONTROLLER_THREADS_ROUTE = createRoute({
   },
 });
 
+export const LIST_AGENT_CONTROLLER_RESOURCE_THREADS_ROUTE = createRoute({
+  method: 'GET',
+  path: '/agent-controller/:controllerId/resources/:resourceId/threads',
+  responseType: 'json' as const,
+  pathParamSchema: sessionPathParams,
+  queryParamSchema: listThreadsQuerySchema,
+  responseSchema: listThreadsResponseSchema,
+  summary: 'List resource threads (passive)',
+  description:
+    'Passively lists the threads for a resource with live run state, without getting-or-creating a server session — safe for observers (e.g. a sidebar polling activity across sessions) that must not bring cold sessions online. Supports the same `limit` and `tags` filtering as the session-scoped listing.',
+  tags: ['AgentController'],
+  requiresAuth: true,
+  requiresPermission: 'agent-controller:read',
+  handler: async ({ mastra, controllerId, resourceId, limit, tags }) => {
+    try {
+      const controller = getAgentControllerOrThrow(mastra, controllerId);
+      // Older @mastra/core versions (below the peer floor with this method)
+      // cannot serve a passive listing; surface that clearly instead of
+      // falling back to a session-creating path.
+      if (typeof controller.listResourceThreads !== 'function') {
+        throw new HTTPException(501, { message: 'passive thread listing is not supported by this agent controller' });
+      }
+      const threads = await controller.listResourceThreads({ resourceId });
+      const getTags = (t: { metadata?: unknown }): Record<string, string> => {
+        const metadata = (t.metadata as Record<string, unknown> | undefined) ?? {};
+        const result: Record<string, string> = {};
+        for (const [key, value] of Object.entries(metadata)) {
+          if (typeof value === 'string' && !isReservedThreadMetadataKey(key)) result[key] = value;
+        }
+        return result;
+      };
+      // Same tag scoping semantics as the session-scoped listing: match every
+      // supplied tag against thread metadata, ignoring reserved internal keys.
+      const tagEntries = tags ? Object.entries(tags).filter(([key]) => !isReservedThreadMetadataKey(key)) : [];
+      const scoped =
+        tagEntries.length > 0
+          ? threads.filter(t => {
+              const metadata = (t.metadata as Record<string, unknown> | undefined) ?? {};
+              return tagEntries.every(([key, value]) => metadata[key] === value);
+            })
+          : threads;
+      const toTime = (t: { updatedAt?: Date; createdAt?: Date }) => (t.updatedAt ?? t.createdAt)?.getTime() ?? 0;
+      const sorted = [...scoped].sort((a, b) => toTime(b) - toTime(a));
+      const max = Number(limit);
+      const limited = Number.isFinite(max) && max > 0 ? sorted.slice(0, max) : sorted;
+      return {
+        threads: limited.map(t => {
+          const threadTags = getTags(t);
+          return {
+            id: t.id,
+            title: t.title,
+            tags: Object.keys(threadTags).length > 0 ? threadTags : undefined,
+            updatedAt: t.updatedAt instanceof Date ? t.updatedAt.toISOString() : undefined,
+            state: t.state,
+          };
+        }),
+      };
+    } catch (error) {
+      return handleError(error, 'error listing resource threads');
+    }
+  },
+});
+
 export const SEND_AGENT_CONTROLLER_NOTIFICATION_ROUTE = createRoute({
   method: 'POST',
   path: '/agent-controller/:controllerId/sessions/:resourceId/notifications',

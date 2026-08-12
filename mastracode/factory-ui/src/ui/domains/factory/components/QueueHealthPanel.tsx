@@ -123,10 +123,9 @@ function useActivePaths(): ReadonlySet<string> {
   const runningByPath = useWorkspaceActivity({
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId: resourceId ?? '',
-    scope: repository?.projectRepositoryId,
     worktreePaths: workspaceSessions.map(workspace => workspace.sessionId),
     baseUrl,
-    enabled: Boolean(resourceId && repository?.projectRepositoryId),
+    enabled: Boolean(resourceId),
   });
   return useMemo(() => new Set(Object.keys(runningByPath).filter(path => runningByPath[path])), [runningByPath]);
 }
