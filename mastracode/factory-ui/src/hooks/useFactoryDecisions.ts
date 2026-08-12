@@ -2,12 +2,12 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tansta
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
-import {
-  approveFactoryDecision,
-  fetchFactoryDecisions,
-  retryFactoryDecision,
+import { actOnFactoryDecision, fetchFactoryDecisions } from '../ui/domains/factory/services/decisions';
+import type {
+  FactoryDecisionAction,
+  FactoryDecisionPage,
+  FactoryDecisionStatus,
 } from '../ui/domains/factory/services/decisions';
-import type { FactoryDecisionPage, FactoryDecisionStatus } from '../ui/domains/factory/services/decisions';
 
 export function useFactoryDecisionStatus(githubProjectId: string | undefined, statuses: FactoryDecisionStatus[]) {
   const { baseUrl } = useApiConfig();
@@ -21,25 +21,17 @@ export function useFactoryDecisionStatus(githubProjectId: string | undefined, st
   });
 }
 
-/** Release a run a rule proposed while automatic runs are off. */
-export function useApproveFactoryDecision(githubProjectId: string | undefined) {
+/** Release, turn down, or requeue one queued effect. */
+export function useFactoryDecisionAction(githubProjectId: string | undefined, action: FactoryDecisionAction) {
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (decisionId: string) => approveFactoryDecision(baseUrl, githubProjectId!, decisionId),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['factory', 'decisions', githubProjectId ?? null] });
+    mutationFn: (decisionId: string) => {
+      if (!githubProjectId) throw new Error('Factory project is required');
+      return actOnFactoryDecision(baseUrl, githubProjectId, decisionId, action);
     },
-  });
-}
-
-export function useRetryFactoryDecision(githubProjectId: string | undefined) {
-  const { baseUrl } = useApiConfig();
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (decisionId: string) => retryFactoryDecision(baseUrl, githubProjectId!, decisionId),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['factory', 'decisions', githubProjectId ?? null] });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.factoryDecisionsRoot(githubProjectId) });
     },
   });
 }

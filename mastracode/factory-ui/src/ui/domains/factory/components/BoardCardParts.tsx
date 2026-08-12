@@ -41,40 +41,22 @@ export function CardTitleTooltip({ title, children }: { title: string; children:
 }
 
 function decisionStatusText(decision: FactoryDecisionSummary): string {
-  if (decision.status === 'proposed') return 'Run suggested';
   if (decision.status === 'pending') return `Rule effect pending · ${decision.type}`;
   if (decision.status === 'leased') return `Rule effect dispatching · ${decision.type} · attempt ${decision.attempts}`;
   if (decision.status === 'retry') return `Rule effect retrying · ${decision.type} · attempt ${decision.attempts}`;
   return decision.lastError ? `Rule effect failed: ${decision.lastError}` : `Rule effect failed · ${decision.type}`;
 }
 
-/** The rule effect the card waits on: a proposed run carries the button that releases it, a failed one the retry. */
+/** The rule effect the card waits on; a failed one carries its retry. */
 export function CardDecisionStatus({
   decision,
-  approving,
   retrying,
-  onApprove,
   onRetry,
 }: {
   decision: FactoryDecisionSummary;
-  approving: boolean;
   retrying: boolean;
-  onApprove: () => void;
   onRetry: () => void;
 }) {
-  if (decision.status === 'proposed') {
-    return (
-      <div className="flex items-center justify-between gap-2">
-        <span role="status" className="text-ui-xs text-icon4">
-          {decisionStatusText(decision)}
-        </span>
-        <Button type="button" size="sm" className="relative z-20" disabled={approving} onClick={onApprove}>
-          {approving ? 'Starting…' : 'Run'}
-        </Button>
-      </div>
-    );
-  }
-
   if (decision.status !== 'failed') {
     return (
       <span role="status" className="text-ui-xs text-icon4">

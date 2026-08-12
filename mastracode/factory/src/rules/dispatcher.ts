@@ -72,9 +72,8 @@ export interface FactoryDecisionDispatcherOptions {
    * answers `false`, `invokeSkill` effects are parked as `proposed` until
    * someone approves them; every other effect (transitions, linked-item
    * upserts, messages) still runs, so the board keeps mirroring reality.
-   * Omitted → runs start automatically, the behavior before the gate existed.
    */
-  isAutoRunEnabled?: (tenant: { orgId: string; factoryProjectId: string }) => Promise<boolean>;
+  isAutoRunEnabled: (tenant: { orgId: string; factoryProjectId: string }) => Promise<boolean>;
   reconcileToolResults?: () => Promise<void>;
   prepareBinding?: (input: FactoryBindingPreparationInput) => Promise<void>;
   primeCredentials?: (tenant: { orgId: string; userId: string }) => Promise<void>;
@@ -154,7 +153,7 @@ export class FactoryDecisionDispatcher {
   readonly #transitionService: Pick<FactoryTransitionService, 'transition'>;
   readonly #storage: WorkItemsStorage;
   readonly #ownerId: string;
-  readonly #isAutoRunEnabled?: (tenant: { orgId: string; factoryProjectId: string }) => Promise<boolean>;
+  readonly #isAutoRunEnabled: (tenant: { orgId: string; factoryProjectId: string }) => Promise<boolean>;
   readonly #reconcileToolResults?: () => Promise<void>;
   readonly #prepareBinding?: (input: FactoryBindingPreparationInput) => Promise<void>;
   readonly #primeCredentials?: (tenant: { orgId: string; userId: string }) => Promise<void>;
@@ -290,7 +289,7 @@ export class FactoryDecisionDispatcher {
 
   /** Starting an agent run spends the project's compute and executes its code — the one effect a human owns. */
   async #needsApproval(record: FactoryDeferredDecisionRecord, decision: FactoryCommitDecision): Promise<boolean> {
-    if (decision.type !== 'invokeSkill' || !this.#isAutoRunEnabled) return false;
+    if (decision.type !== 'invokeSkill' || record.approvedAt !== null) return false;
     return !(await this.#isAutoRunEnabled({ orgId: record.orgId, factoryProjectId: record.factoryProjectId }));
   }
 

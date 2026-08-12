@@ -75,8 +75,7 @@ function toFactoryProject(row: FactoryProjectDbRow): FactoryProject {
     description: row.description,
     defaultModelId: row.default_model_id,
     slackWorkItemsEnabled: row.slack_work_items_enabled,
-    // Rows written before the column existed read as undefined; unset means no automatic runs.
-    autoRunEnabled: Boolean(row.auto_run_enabled),
+    autoRunEnabled: row.auto_run_enabled,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

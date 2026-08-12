@@ -135,11 +135,11 @@ export interface FactoryRuleEvaluationRecord {
 }
 
 /**
- * `proposed` is the only non-terminal status the dispatcher never claims: the
- * effect is a run the Factory is not allowed to start on its own, parked until
- * someone approves it.
+ * `proposed` is a run the Factory may not start on its own: parked until
+ * someone approves it, and never claimed meanwhile. `dismissed` is the
+ * terminal end of a proposal nobody wanted.
  */
-export type FactoryDispatchStatus = 'pending' | 'proposed' | 'leased' | 'retry' | 'succeeded' | 'failed';
+export type FactoryDispatchStatus = 'pending' | 'proposed' | 'dismissed' | 'leased' | 'retry' | 'succeeded' | 'failed';
 
 export interface FactoryDeferredDecisionPageInput {
   orgId: string;
@@ -172,6 +172,8 @@ export interface FactoryDeferredDecisionRecord {
   leaseOwner: string | null;
   leaseExpiresAt: Date | null;
   lastError: string | null;
+  /** When a human released this run; set once, so the gate never parks it again. */
+  approvedAt: Date | null;
   completedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
@@ -603,6 +605,7 @@ const FACTORY_GOVERNANCE_SCHEMAS: CollectionSchema[] = [
       lease_owner: { type: 'text', nullable: true },
       lease_expires_at: { type: 'timestamp', nullable: true },
       last_error: { type: 'text', nullable: true },
+      approved_at: { type: 'timestamp', nullable: true },
       completed_at: { type: 'timestamp', nullable: true },
       created_at: { type: 'timestamp' },
       updated_at: { type: 'timestamp' },
@@ -725,6 +728,7 @@ function toDeferredDecision(row: GovernanceDbRow): FactoryDeferredDecisionRecord
     leaseOwner: (row.lease_owner as string | null) ?? null,
     leaseExpiresAt: (row.lease_expires_at as Date | null) ?? null,
     lastError: (row.last_error as string | null) ?? null,
+    approvedAt: (row.approved_at as Date | null) ?? null,
     completedAt: (row.completed_at as Date | null) ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at as Date,
@@ -1299,7 +1303,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         proposed = true;
         return {
           status: 'proposed',
-          // The claim that parked it consumed an attempt no effect was spent on.
+          // The claim that parked it spent no effect, so it costs no attempt.
           attempts: 0,
           lease_owner: null,
           lease_expires_at: null,
@@ -1317,17 +1321,40 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     decisionId: string,
     now: Date,
   ): Promise<FactoryDeferredDecisionRecord | null> {
-    let approved = false;
+    return this.#settleProposedDecision(
+      { orgId, factoryProjectId, decisionId },
+      { status: 'pending', attempts: 0, available_at: now, approved_at: now, updated_at: now },
+    );
+  }
+
+  /** Retire a proposal nobody wants: `dismissed` is terminal, so the run never happens. */
+  async dismissDeferredDecision(
+    orgId: string,
+    factoryProjectId: string,
+    decisionId: string,
+    now: Date,
+  ): Promise<FactoryDeferredDecisionRecord | null> {
+    return this.#settleProposedDecision(
+      { orgId, factoryProjectId, decisionId },
+      { status: 'dismissed', updated_at: now, completed_at: now },
+    );
+  }
+
+  async #settleProposedDecision(
+    { orgId, factoryProjectId, decisionId }: { orgId: string; factoryProjectId: string; decisionId: string },
+    patch: Partial<GovernanceDbRow>,
+  ): Promise<FactoryDeferredDecisionRecord | null> {
+    let settled = false;
     const row = await this.#db.updateAtomic<GovernanceDbRow>(
       'factory_deferred_decisions',
       { id: decisionId, org_id: orgId, factory_project_id: factoryProjectId },
       current => {
         if (current.status !== 'proposed') return null;
-        approved = true;
-        return { status: 'pending', attempts: 0, available_at: now, updated_at: now };
+        settled = true;
+        return patch;
       },
     );
-    return approved && row ? toDeferredDecision(row) : null;
+    return settled && row ? toDeferredDecision(row) : null;
   }
 
   /** Requeue the same idempotent terminal effect; non-failed decisions are never rerun. */
