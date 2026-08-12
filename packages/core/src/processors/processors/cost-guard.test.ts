@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { MessageList } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
 import type { IMastraLogger } from '../../logger';
+import { EntityType } from '../../observability';
 import { RequestContext, MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../../request-context';
 import type { ObservabilityStorage } from '../../storage/domains';
 import type { ProcessInputStepArgs } from '../index';
@@ -1221,6 +1222,179 @@ describe('CostGuardProcessor', () => {
       await expect(guard.processInputStep(args)).resolves.toBeUndefined();
       expect(onViolation).toHaveBeenCalledTimes(1);
       expect(onViolation.mock.calls[0]![0].detail.threshold).toBe('hard');
+    });
+  });
+
+  describe('user, organization, and session scopes', () => {
+    const scopeCases = [
+      { scope: 'user' as const, contextKey: 'userId', filterKey: 'userId', id: 'user-123' },
+      { scope: 'organization' as const, contextKey: 'organizationId', filterKey: 'organizationId', id: 'org-456' },
+      { scope: 'session' as const, contextKey: 'sessionId', filterKey: 'sessionId', id: 'session-789' },
+    ];
+
+    it.each(scopeCases)(
+      '$scope scope passes the $filterKey filter from RequestContext key $contextKey',
+      async ({ scope, contextKey, filterKey, id }) => {
+        const obsStorage = createMockObservabilityStorage({ inputCost: 0.05, outputCost: 0.05, costUnit: 'usd' });
+        const guard = new CostGuardProcessor({ maxCost: 10.0, scope });
+        (guard as any).observabilityStorage = obsStorage;
+
+        const requestContext = new RequestContext();
+        requestContext.set(contextKey, id);
+        const args = createInputStepArgs({ stepNumber: 1, requestContext });
+
+        await expect(guard.processInputStep(args)).resolves.toBeUndefined();
+        expect(obsStorage.getMetricAggregate).toHaveBeenCalledWith(
+          expect.objectContaining({
+            filters: expect.objectContaining({ [filterKey]: id }),
+          }),
+        );
+      },
+    );
+
+    it.each(scopeCases)('$scope scope applies the time window filter', async ({ scope, contextKey, id }) => {
+      const obsStorage = createMockObservabilityStorage();
+      const guard = new CostGuardProcessor({ maxCost: 10.0, scope, window: '24h' });
+      (guard as any).observabilityStorage = obsStorage;
+
+      const requestContext = new RequestContext();
+      requestContext.set(contextKey, id);
+      const args = createInputStepArgs({ stepNumber: 1, requestContext });
+
+      await guard.processInputStep(args);
+
+      const call = (obsStorage.getMetricAggregate as any).mock.calls[0][0];
+      expect(call.filters.timestamp).toBeDefined();
+      expect(call.filters.timestamp.start).toBeInstanceOf(Date);
+    });
+
+    it.each(scopeCases)(
+      '$scope scope: missing RequestContext key → fail-open, no query, no onViolation',
+      async ({ scope }) => {
+        const obsStorage = createMockObservabilityStorage({ inputCost: 5, outputCost: 5, costUnit: 'usd' });
+        const guard = new CostGuardProcessor({ maxCost: 0.5, scope });
+        (guard as any).observabilityStorage = obsStorage;
+        const onViolation = vi.fn();
+        guard.onViolation = onViolation;
+
+        const args = createInputStepArgs({ stepNumber: 1, requestContext: new RequestContext() });
+
+        await expect(guard.processInputStep(args)).resolves.toBeUndefined();
+        expect(obsStorage.getMetricAggregate).not.toHaveBeenCalled();
+        expect(onViolation).not.toHaveBeenCalled();
+      },
+    );
+
+    it('non-string RequestContext value → fail-open, no query', async () => {
+      const obsStorage = createMockObservabilityStorage({ inputCost: 5, outputCost: 5, costUnit: 'usd' });
+      const guard = new CostGuardProcessor({ maxCost: 0.5, scope: 'user' });
+      (guard as any).observabilityStorage = obsStorage;
+
+      const requestContext = new RequestContext();
+      requestContext.set('userId', 42);
+      const args = createInputStepArgs({ stepNumber: 1, requestContext });
+
+      await expect(guard.processInputStep(args)).resolves.toBeUndefined();
+      expect(obsStorage.getMetricAggregate).not.toHaveBeenCalled();
+    });
+
+    it('tripwire metadata carries the new scope and scopeKey', async () => {
+      const obsStorage = createMockObservabilityStorage({ inputCost: 0.4, outputCost: 0.2, costUnit: 'usd' });
+      const guard = new CostGuardProcessor({ maxCost: 0.5, scope: 'user' });
+      (guard as any).observabilityStorage = obsStorage;
+
+      const requestContext = new RequestContext();
+      requestContext.set('userId', 'user-meta');
+      const args = createInputStepArgs({ stepNumber: 1, requestContext });
+
+      try {
+        await guard.processInputStep(args);
+        expect.fail('Expected TripWire to be thrown');
+      } catch (error) {
+        const tripwire = error as TripWire<any>;
+        expect(tripwire.options.metadata.scope).toBe('user');
+        expect(tripwire.options.metadata.scopeKey).toBe('user:user-meta');
+      }
+    });
+
+    it('violation detail carries the new scope and scopeKey (warn strategy)', async () => {
+      const obsStorage = createMockObservabilityStorage({ inputCost: 0.4, outputCost: 0.2, costUnit: 'usd' });
+      const guard = new CostGuardProcessor({ maxCost: 0.5, scope: 'organization', strategy: 'warn' });
+      guard.__registerMastra(createMockMastra(obsStorage));
+      const onViolation = vi.fn();
+      guard.onViolation = onViolation;
+
+      const requestContext = new RequestContext();
+      requestContext.set('organizationId', 'org-detail');
+      const args = createInputStepArgs({ stepNumber: 1, requestContext });
+
+      await expect(guard.processInputStep(args)).resolves.toBeUndefined();
+      const detail = onViolation.mock.calls[0]![0].detail;
+      expect(detail.scope).toBe('organization');
+      expect(detail.scopeKey).toBe('organization:org-detail');
+    });
+
+    it('live-fire: user scope blocks the over-budget user and allows another user (real ObservabilityInMemory)', async () => {
+      const { InMemoryStore } = await import('../../storage/mock');
+      const observability = new InMemoryStore().stores.observability!;
+
+      await observability.batchCreateMetrics({
+        metrics: [
+          {
+            metricId: 'metric-user-a-input',
+            timestamp: new Date(),
+            name: 'mastra_model_total_input_tokens',
+            value: 1000,
+            traceId: 'trace-live-a',
+            entityType: EntityType.AGENT,
+            userId: 'user-a',
+            estimatedCost: 0.4,
+            costUnit: 'usd',
+            labels: {},
+          },
+          {
+            metricId: 'metric-user-a-output',
+            timestamp: new Date(),
+            name: 'mastra_model_total_output_tokens',
+            value: 500,
+            traceId: 'trace-live-a',
+            entityType: EntityType.AGENT,
+            userId: 'user-a',
+            estimatedCost: 0.3,
+            costUnit: 'usd',
+            labels: {},
+          },
+          {
+            metricId: 'metric-user-b-input',
+            timestamp: new Date(),
+            name: 'mastra_model_total_input_tokens',
+            value: 100,
+            traceId: 'trace-live-b',
+            entityType: EntityType.AGENT,
+            userId: 'user-b',
+            estimatedCost: 0.01,
+            costUnit: 'usd',
+            labels: {},
+          },
+        ],
+      });
+
+      const guard = new CostGuardProcessor({ maxCost: 0.5, scope: 'user' });
+      (guard as any).observabilityStorage = observability;
+
+      // user-a: 0.4 + 0.3 = 0.7 >= 0.5 → blocks
+      const contextA = new RequestContext();
+      contextA.set('userId', 'user-a');
+      await expect(
+        guard.processInputStep(createInputStepArgs({ stepNumber: 1, requestContext: contextA })),
+      ).rejects.toThrow(TripWire);
+
+      // user-b: 0.01 < 0.5 → allows
+      const contextB = new RequestContext();
+      contextB.set('userId', 'user-b');
+      await expect(
+        guard.processInputStep(createInputStepArgs({ stepNumber: 1, requestContext: contextB })),
+      ).resolves.toBeUndefined();
     });
   });
 

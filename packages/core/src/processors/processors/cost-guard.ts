@@ -12,12 +12,20 @@ import type { ProcessInputStepArgs, Processor, ProcessorViolation } from '../ind
  * - 'run': Only cost from the current agent run
  * - 'resource': Cumulative cost across runs for the same resourceId (default)
  * - 'thread': Cumulative cost across runs for the same threadId
+ * - 'user': Cumulative cost across runs for the same userId
+ * - 'organization': Cumulative cost across runs for the same organizationId
+ * - 'session': Cumulative cost across runs for the same sessionId
+ *
+ * The 'user', 'organization', and 'session' scopes read the plain
+ * RequestContext keys `userId` / `organizationId` / `sessionId` and only match
+ * metrics whose traces carry the corresponding span metadata. If the key is
+ * missing from the RequestContext, the check is skipped (fail-open).
  */
-export type CostScope = 'run' | 'resource' | 'thread';
+export type CostScope = 'run' | 'resource' | 'thread' | 'user' | 'organization' | 'session';
 
 /**
  * Named time windows for cost aggregation.
- * Only applicable to 'resource' and 'thread' scopes.
+ * Applicable to all scopes except 'run'.
  */
 export type CostWindow = '1h' | '6h' | '24h' | '7d' | '30d' | '365d';
 
@@ -60,11 +68,17 @@ export interface CostGuardOptions {
    * - 'run': Track cost within the current agent run only
    * - 'resource': Track cumulative cost per resourceId across runs (default)
    * - 'thread': Track cumulative cost per threadId across runs
+   * - 'user': Track cumulative cost per userId across runs (reads the plain
+   *   RequestContext key `userId`; requires traces annotated with userId metadata)
+   * - 'organization': Track cumulative cost per organizationId across runs
+   *   (RequestContext key `organizationId`; requires annotated traces)
+   * - 'session': Track cumulative cost per sessionId across runs
+   *   (RequestContext key `sessionId`; requires annotated traces)
    */
   scope?: CostScope;
 
   /**
-   * Time window for cost aggregation when using 'resource' or 'thread' scope.
+   * Time window for cost aggregation for all scopes except 'run'.
    * Defaults to '7d' (7 days). Only applicable to non-run scopes.
    * - '1h': Last hour
    * - '6h': Last 6 hours
@@ -140,9 +154,15 @@ const WINDOW_MS: Record<CostWindow, number> = {
  *
  * Uses `processInputStep` to check the cost limit before each LLM call.
  * Queries the observability storage APIs (`getMetricAggregate`) to retrieve
- * estimated cost. For 'resource' and 'thread' scopes, aggregates cost across
- * runs within a configurable time window (defaults to 7 days). For 'run' scope,
- * queries cost for the current trace.
+ * estimated cost. For the 'resource', 'thread', 'user', 'organization', and
+ * 'session' scopes, aggregates cost across runs within a configurable time
+ * window (defaults to 7 days). For 'run' scope, queries cost for the current
+ * trace.
+ *
+ * The 'user', 'organization', and 'session' scopes resolve their IDs from the
+ * plain RequestContext keys `userId` / `organizationId` / `sessionId` and only
+ * see metrics whose traces carry matching span metadata; unannotated traces
+ * are invisible to these scopes.
  *
  * For token-based limits, use `TokenLimiterProcessor` instead.
  *
@@ -249,6 +269,23 @@ export class CostGuardProcessor implements Processor<'cost-guard', CostGuardTrip
       const threadId = (requestContext?.get(MASTRA_THREAD_ID_KEY) as string | undefined) ?? memoryContext?.thread?.id;
       if (!threadId) return undefined;
       return { filter: { threadId }, scopeKey: `thread:${threadId}` };
+    }
+    // The user/organization/session scopes read plain RequestContext keys
+    // (documented convention — no reserved keys or memory-context fallback).
+    if (this.scope === 'user') {
+      const userId = requestContext?.get('userId');
+      if (typeof userId !== 'string' || !userId) return undefined;
+      return { filter: { userId }, scopeKey: `user:${userId}` };
+    }
+    if (this.scope === 'organization') {
+      const organizationId = requestContext?.get('organizationId');
+      if (typeof organizationId !== 'string' || !organizationId) return undefined;
+      return { filter: { organizationId }, scopeKey: `organization:${organizationId}` };
+    }
+    if (this.scope === 'session') {
+      const sessionId = requestContext?.get('sessionId');
+      if (typeof sessionId !== 'string' || !sessionId) return undefined;
+      return { filter: { sessionId }, scopeKey: `session:${sessionId}` };
     }
     return undefined;
   }
