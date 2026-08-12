@@ -616,15 +616,15 @@ describe('GET /web/factory/projects/:id/metrics', () => {
       (await (await json('GET', `/web/factory/projects/${PROJECT_ID}/metrics${query}`)).json()).metrics;
 
     // No params → default 30-day window.
-    expect((await bodyFor('')).windowDays).toBe(30);
+    expect((await bodyFor('')).daysCovered).toBe(30);
 
     // Explicit inclusive 7-calendar-day window.
     const to = new Date().toISOString().slice(0, 10);
     const from = new Date(Date.parse(`${to}T00:00:00.000Z`) - 6 * 86_400_000).toISOString().slice(0, 10);
-    expect((await bodyFor(`?from=${from}&to=${to}`)).windowDays).toBe(7);
+    expect((await bodyFor(`?from=${from}&to=${to}`)).daysCovered).toBe(7);
 
     // Malformed params fall back to the default.
-    expect((await bodyFor('?from=evil&to=evil')).windowDays).toBe(30);
+    expect((await bodyFor('?from=evil&to=evil')).daysCovered).toBe(30);
   });
 
   it('aggregates the project board: throughput, WIP, transitions, and source mix', async () => {
@@ -650,16 +650,14 @@ describe('GET /web/factory/projects/:id/metrics', () => {
     expect(res.status).toBe(200);
     const { metrics } = await res.json();
 
-    expect(metrics.windowDays).toBe(7);
-    expect(metrics.throughput).toHaveLength(7);
+    // Both cards were filed today, so the series covers today alone.
+    expect(metrics.daysCovered).toBe(1);
+    expect(metrics.throughput).toHaveLength(1);
     expect(metrics.throughput.reduce((sum: number, p: any) => sum + p.count, 0)).toBe(1);
-    expect(metrics.cycleTime.samples).toBe(1);
-    expect(Object.fromEntries(metrics.wip.map((w: any) => [w.stage, w.count]))).toEqual({ done: 1, intake: 1 });
+    expect(metrics.leadTime.samples).toBe(1);
     expect(metrics.wipTotal).toBe(1);
-    expect(metrics.agingWip).toHaveLength(1);
-    expect(metrics.agingWip[0]).toMatchObject({ title: 'Manual card', stage: 'intake' });
-    // intake entered (x2) + done entered = 3 stage moves, all by the test user.
-    expect(metrics.transitions).toEqual({ human: 3, total: 3 });
+    // Both cards landed in intake on creation; only the drag to done is a move.
+    expect(metrics.transitions).toEqual({ human: 1, total: 1 });
     expect(metrics.sourceMix).toEqual(
       expect.arrayContaining([
         { source: 'github:issue', count: 1 },
@@ -672,9 +670,8 @@ describe('GET /web/factory/projects/:id/metrics', () => {
     const res = await json('GET', `/web/factory/projects/${PROJECT_ID}/metrics`);
     const { metrics } = await res.json();
     expect(metrics.throughput).toHaveLength(30);
-    expect(metrics.cycleTime).toEqual({ medianMs: null, p90Ms: null, samples: 0 });
-    expect(metrics.wip).toEqual([]);
-    expect(metrics.agingWip).toEqual([]);
+    expect(metrics.leadTime).toEqual({ medianMs: null, p90Ms: null, samples: 0 });
+    expect(metrics.wipTotal).toBe(0);
     expect(metrics.stageAutomation).toEqual([]);
   });
 
@@ -721,8 +718,8 @@ describe('GET /web/factory/projects/:id/metrics', () => {
       // Automation-entered, human-exited → not automated.
       { stage: 'planning', exits: 1, automated: 0, outcomes: { done: 0, canceled: 0, reworked: 0, inFlight: 0 } },
     ]);
-    // Global split matches: 4 entered stages, 2 by automation.
-    expect(metrics.transitions).toEqual({ human: 2, total: 4 });
+    // Global split matches: 3 moves after creation, 2 by automation.
+    expect(metrics.transitions).toEqual({ human: 1, total: 3 });
   });
 });
 

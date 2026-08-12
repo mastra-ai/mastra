@@ -53,7 +53,7 @@ function renderEntries(entries: TimelineEntry[]) {
 }
 
 describe('TranscriptEntries tool rows', () => {
-  it('shows no status icon on success — only running and failed carry indicators', () => {
+  it('marks a running call busy instead of spinning, and leaves success unmarked', () => {
     renderEntries([
       assistantMessage('msg-1', [doneTool('call-1', 'view')]),
       assistantMessage('msg-2', [runningTool('call-2', 'execute_command', {})]),
@@ -75,10 +75,12 @@ describe('TranscriptEntries tool rows', () => {
     expect(screen.queryByLabelText('Done')).not.toBeInTheDocument();
     const doneRow = screen.getByRole('group', { name: 'Tool: view' });
     expect(within(doneRow).queryByRole('img')).not.toBeInTheDocument();
+    expect(doneRow).toHaveAttribute('aria-busy', 'false');
 
-    // Running keeps its spinner.
+    // Running carries no icon at all — the shimmering label is the cue.
     const runningRow = screen.getByRole('group', { name: 'Tool: execute_command' });
-    expect(within(runningRow).getByLabelText('Running')).toBeInTheDocument();
+    expect(runningRow).toHaveAttribute('aria-busy', 'true');
+    expect(within(runningRow).queryByRole('img')).not.toBeInTheDocument();
 
     // Failure keeps its red cross.
     const failedRow = screen.getByRole('group', { name: 'Tool: write_file' });
@@ -137,7 +139,7 @@ describe('TranscriptEntries tool rows', () => {
     expect(within(group).getByText('Run')).toBeInTheDocument();
     expect(within(group).getByText('pnpm test')).toBeInTheDocument();
     expect(within(group).getByText('3/4')).toBeInTheDocument();
-    expect(within(group).getByLabelText('Running')).toBeInTheDocument();
+    expect(group).toHaveAttribute('aria-busy', 'true');
   });
 
   it('does not group runs broken by prose', () => {
@@ -203,8 +205,8 @@ describe('TranscriptEntries tool rows', () => {
       }),
     ]);
 
-    expect(screen.queryByLabelText('Running')).not.toBeInTheDocument();
     const row = screen.getByRole('group', { name: 'Tool: view' });
+    expect(row).toHaveAttribute('aria-busy', 'false');
     expect(within(row).queryByRole('img')).not.toBeInTheDocument();
   });
 
@@ -225,7 +227,7 @@ describe('TranscriptEntries tool rows', () => {
 
     const row = screen.getByRole('group', { name: 'Tool: write_file' });
     expect(within(row).getByRole('img', { name: 'Failed' })).toBeInTheDocument();
-    expect(within(row).queryByLabelText('Running')).not.toBeInTheDocument();
+    expect(row).toHaveAttribute('aria-busy', 'false');
   });
 
   it.each(['output-error', 'output-denied'] as const)(
@@ -248,7 +250,7 @@ describe('TranscriptEntries tool rows', () => {
 
       const row = screen.getByRole('group', { name: 'Tool: write_file' });
       expect(within(row).getByRole('img', { name: 'Failed' })).toBeInTheDocument();
-      expect(within(row).queryByLabelText('Running')).not.toBeInTheDocument();
+      expect(row).toHaveAttribute('aria-busy', 'false');
     },
   );
 

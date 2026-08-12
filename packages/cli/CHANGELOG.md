@@ -1,5 +1,47 @@
 # mastra
 
+## 1.24.0-alpha.17
+
+### Minor Changes
+
+- Improved chat transcript scrolling so new prompts settle near the top while replies grow below without shifting the reading position. ([#21283](https://github.com/mastra-ai/mastra/pull/21283))
+
+### Patch Changes
+
+- Updated dependencies [[`296dc9a`](https://github.com/mastra-ai/mastra/commit/296dc9af29f3616e786c7825ec32e0df92d754c5), [`4a09a9c`](https://github.com/mastra-ai/mastra/commit/4a09a9c0474ef643558fcb5f0edc542b82f1cab0), [`1e83a47`](https://github.com/mastra-ai/mastra/commit/1e83a4734ab61ba5926af6793e3569a78b72ed37), [`ff28284`](https://github.com/mastra-ai/mastra/commit/ff2828416f14daff9d956e6a352fdaa23c950979), [`1670533`](https://github.com/mastra-ai/mastra/commit/1670533986f6bacf567746245348125e3a106448)]:
+  - @mastra/core@1.58.0-alpha.16
+  - @mastra/deployer@1.58.0-alpha.16
+
+## 1.24.0-alpha.16
+
+### Patch Changes
+
+- Updated dependencies [[`dc4a25d`](https://github.com/mastra-ai/mastra/commit/dc4a25d41af4e2fe97a816070eaec6aa963ab53b), [`dc4a25d`](https://github.com/mastra-ai/mastra/commit/dc4a25d41af4e2fe97a816070eaec6aa963ab53b)]:
+  - @mastra/core@1.58.0-alpha.15
+  - @mastra/deployer@1.58.0-alpha.15
+
+## 1.24.0-alpha.15
+
+### Patch Changes
+
+- Improved the Mastra Code chat transcript. Tool calls, system reminders and notifications now share one row shape, so hover, spacing and the disclosure arrow behave the same everywhere. A pause between two turns reads as a separator line carrying the elapsed time instead of a row that repeats itself when opened. A running tool sweeps its own label, and the standalone "Thinking" line now covers only the silence between sending a message and the run's first visible output. ([#21254](https://github.com/mastra-ai/mastra/pull/21254))
+
+- Fixed the Mastra Code session mode selector drifting out of sync: it now tracks the server-confirmed mode, keeps showing the target mode while a switch is in flight, and returns to the actual mode when a switch fails. ([#21218](https://github.com/mastra-ai/mastra/pull/21218))
+
+- Softened the chat composer in the Factory UI. Messages now fade out gradually as they scroll behind the composer instead of meeting a hard translucent edge, and they stay faintly visible below it so you can tell the conversation continues. ([#21260](https://github.com/mastra-ai/mastra/pull/21260))
+
+- Improved how user sessions start in Mastra Code. Opening a new session shows the chat immediately instead of a loader, and no longer creates anything on the server, so closing an empty composer leaves nothing behind. The first prompt creates the session, names it in the sidebar, and is sent straight away instead of waiting for the workspace to finish preparing. If creating the session fails, the prompt is kept so retrying reopens the same session rather than a duplicate. The composer shows the mode and model the session will start on — the Factory default model — and lets you pick others before sending, so the first run uses exactly what you chose. Deleting a session that is already gone from the server no longer reports an error. ([#20783](https://github.com/mastra-ai/mastra/pull/20783))
+
+- Fixed unknown slash commands in Mastra Code sessions showing a misleading error. Typing a command that does not exist now says so and keeps your text in the composer instead of discarding it. ([#20783](https://github.com/mastra-ai/mastra/pull/20783))
+
+- Improved new Mastra Code sessions: you can type right away while the Factory configuration loads (sending waits until the mode and model are known), a failed mode or model bind no longer loses your first prompt, and deleting another session no longer redirects the page you are viewing. ([#20783](https://github.com/mastra-ai/mastra/pull/20783))
+
+- Fixed `mastra deploy` (and `mastra studio deploy` / `mastra server deploy`) leaving `.npmrc` out of the uploaded artifact, which made installs of packages from private npm registries fail with 401 errors during remote builds. The `.npmrc` now ships with the artifact. Fixes [#21237](https://github.com/mastra-ai/mastra/issues/21237). ([#21239](https://github.com/mastra-ai/mastra/pull/21239))
+
+- Updated dependencies [[`210cb7a`](https://github.com/mastra-ai/mastra/commit/210cb7a167998c7bbf72cb3b93e6eb0563330239), [`5f798b3`](https://github.com/mastra-ai/mastra/commit/5f798b3362e9bdf4d690f85245606e146eef60b9), [`01a2943`](https://github.com/mastra-ai/mastra/commit/01a2943a7d886edefdff072bfa51f055bab54437), [`01a2943`](https://github.com/mastra-ai/mastra/commit/01a2943a7d886edefdff072bfa51f055bab54437), [`25ca73d`](https://github.com/mastra-ai/mastra/commit/25ca73d25dee7ce9f0ca72939e3a505c4db7257e), [`e1cead1`](https://github.com/mastra-ai/mastra/commit/e1cead17b5f3653cf00d2f90cc19b113119c02ba), [`01a2943`](https://github.com/mastra-ai/mastra/commit/01a2943a7d886edefdff072bfa51f055bab54437)]:
+  - @mastra/core@1.58.0-alpha.14
+  - @mastra/deployer@1.58.0-alpha.14
+
 ## 1.24.0-alpha.14
 
 ### Patch Changes

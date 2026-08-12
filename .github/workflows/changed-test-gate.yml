@@ -25,11 +25,13 @@ jobs:
     steps:
       - name: Checkout base
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
-        timeout-minutes: 5
+        timeout-minutes: 20
         with:
           persist-credentials: false
           ref: ${{ github.event.pull_request.base.sha }}
           fetch-depth: 0
+          # Partial clone: name-only diffs need trees, not blob contents.
+          filter: blob:none
 
       - name: Restore changed test files from PR head
         id: changed_tests

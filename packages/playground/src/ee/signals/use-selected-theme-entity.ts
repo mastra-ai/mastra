@@ -1,6 +1,5 @@
+import { useThemeEntities } from '@mastra/playground-ui/ee/signals';
 import { useSearchParams } from 'react-router';
-
-import { useThemeEntities } from './hooks';
 
 const AGENT_SEARCH_PARAM = 'agent';
 

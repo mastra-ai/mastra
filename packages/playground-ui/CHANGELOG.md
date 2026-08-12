@@ -1,5 +1,105 @@
 # @mastra/playground-ui
 
+## 48.0.0-alpha.17
+
+### Minor Changes
+
+- Added anchored turn positioning to `MessageScroller`. Newly added rows marked with `scrollAnchor` move toward the top of the viewport, while `defaultScrollPosition="last-anchor"` opens saved transcripts at their latest turn. ([#21283](https://github.com/mastra-ai/mastra/pull/21283))
+
+  Streaming replies can now grow beneath the current prompt without shifting the reading position. Completed replies retain that space until the next anchored turn arrives.
+
+  ```tsx
+  <MessageScrollerProvider defaultScrollPosition="last-anchor">
+    <MessageScrollerViewport>
+      <MessageScrollerContent>
+        <MessageScrollerItem messageId="turn-1" scrollAnchor>
+          <p>How do I deploy this workflow?</p>
+        </MessageScrollerItem>
+      </MessageScrollerContent>
+    </MessageScrollerViewport>
+  </MessageScrollerProvider>
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`296dc9a`](https://github.com/mastra-ai/mastra/commit/296dc9af29f3616e786c7825ec32e0df92d754c5), [`4a09a9c`](https://github.com/mastra-ai/mastra/commit/4a09a9c0474ef643558fcb5f0edc542b82f1cab0), [`1e83a47`](https://github.com/mastra-ai/mastra/commit/1e83a4734ab61ba5926af6793e3569a78b72ed37), [`ff28284`](https://github.com/mastra-ai/mastra/commit/ff2828416f14daff9d956e6a352fdaa23c950979), [`1670533`](https://github.com/mastra-ai/mastra/commit/1670533986f6bacf567746245348125e3a106448)]:
+  - @mastra/core@1.58.0-alpha.16
+  - @mastra/client-js@1.39.0-alpha.16
+  - @mastra/react@1.4.2-alpha.16
+
+## 48.0.0-alpha.16
+
+### Minor Changes
+
+- Export the Trace Intelligence experience with injectable request and navigation adapters so product hosts can render it outside OSS Studio. ([#21272](https://github.com/mastra-ai/mastra/pull/21272))
+
+  ```tsx
+  import { SankeySignals, TraceIntelligenceProvider } from '@mastra/playground-ui/ee/signals';
+
+  <TraceIntelligenceProvider
+    cacheScope={`${organizationId}:${projectId}`}
+    request={request}
+    getTraceHref={traceId => `/traces/${traceId}`}
+  >
+    <SankeySignals entityId={agentId} signalNames={signalNames} />
+  </TraceIntelligenceProvider>;
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`dc4a25d`](https://github.com/mastra-ai/mastra/commit/dc4a25d41af4e2fe97a816070eaec6aa963ab53b), [`dc4a25d`](https://github.com/mastra-ai/mastra/commit/dc4a25d41af4e2fe97a816070eaec6aa963ab53b)]:
+  - @mastra/memory@1.26.1-alpha.7
+  - @mastra/core@1.58.0-alpha.15
+  - @mastra/client-js@1.39.0-alpha.15
+  - @mastra/react@1.4.2-alpha.15
+
+## 48.0.0-alpha.15
+
+### Patch Changes
+
+- Improved how the chat transcript meets the composer in `ChatShell`. The dock used to sit on a flat translucent panel with a visible hard edge where it started. It now carries a masked veil that ramps in across the air above the composer and tops out behind the card, so messages dim progressively as they scroll under instead of hitting an edge. The veil never fully hides them, so you can still tell the conversation continues below the composer while you scroll. ([#21260](https://github.com/mastra-ai/mastra/pull/21260))
+
+  **Migrating a `--chat-veil` override**
+
+  `--chat-veil` is now an alpha percentage, not a colour: it feeds the veil's mask instead of painting a background. A colour override lands inside `rgb(0 0 0 / …)`, produces invalid CSS and silently drops the fade, so it has to be migrated.
+
+  ```tsx
+  // before
+  <ChatShell className="[--chat-veil:color-mix(in_oklab,var(--chat-surface)_70%,transparent)]" />
+
+  // after — how strong the veil ever gets
+  <ChatShell className="[--chat-veil:70%]" />
+  ```
+
+  **The room above the composer moved to the dock**
+
+  `--chat-fade` is new: the band of air above the composer the veil ramps in across, `1.5rem` by default. It takes over the top half of `--chat-gutter`, which now means the room below the composer only, and `ChatShell.Content` no longer carries bottom padding of its own. Anything rendering `Content` without a `ChatShell.Dock` under it has to supply that room itself.
+
+  ```tsx
+  <ChatShell.Content className="pb-3" />
+  ```
+
+- Fixed the shimmer that runs under streaming text. It now animates in every app that renders the `Shimmer` component, a short label sweeps at the same speed as a long one so labels side by side stay in step, and the sweep stops under `prefers-reduced-motion`. ([#21250](https://github.com/mastra-ai/mastra/pull/21250))
+
+- Reworked the streaming shimmer so it reads as a sweep instead of a blink. The highlight travels through the text's own color, so a muted label stays muted and only brightens as the band passes through it. Readers who prefer reduced motion see the text unanimated. ([#21254](https://github.com/mastra-ai/mastra/pull/21254))
+
+  ```tsx
+  <Txt className="text-icon3">
+    <Shimmer>Thinking</Shimmer>
+  </Txt>
+  ```
+
+- Softened the chat composer in the Factory UI. Messages now fade out gradually as they scroll behind the composer instead of meeting a hard translucent edge, and they stay faintly visible below it so you can tell the conversation continues. ([#21260](https://github.com/mastra-ai/mastra/pull/21260))
+
+- Added a dedicated icon and label for skill resolution spans in the trace view. They now show as "Skill" instead of falling back to "Other". ([#21232](https://github.com/mastra-ai/mastra/pull/21232))
+
+- Fixed the conversation timeline hover preview clipping its last line: the hidden element used to size the card measured the text at the wrong width, so a long prompt made the card too short for the reply underneath. ([#21251](https://github.com/mastra-ai/mastra/pull/21251))
+
+- Updated dependencies [[`210cb7a`](https://github.com/mastra-ai/mastra/commit/210cb7a167998c7bbf72cb3b93e6eb0563330239), [`5f798b3`](https://github.com/mastra-ai/mastra/commit/5f798b3362e9bdf4d690f85245606e146eef60b9), [`01a2943`](https://github.com/mastra-ai/mastra/commit/01a2943a7d886edefdff072bfa51f055bab54437), [`01a2943`](https://github.com/mastra-ai/mastra/commit/01a2943a7d886edefdff072bfa51f055bab54437), [`25ca73d`](https://github.com/mastra-ai/mastra/commit/25ca73d25dee7ce9f0ca72939e3a505c4db7257e), [`25ca73d`](https://github.com/mastra-ai/mastra/commit/25ca73d25dee7ce9f0ca72939e3a505c4db7257e), [`e1cead1`](https://github.com/mastra-ai/mastra/commit/e1cead17b5f3653cf00d2f90cc19b113119c02ba), [`01a2943`](https://github.com/mastra-ai/mastra/commit/01a2943a7d886edefdff072bfa51f055bab54437)]:
+  - @mastra/core@1.58.0-alpha.14
+  - @mastra/client-js@1.39.0-alpha.14
+  - @mastra/react@1.4.2-alpha.14
+
 ## 48.0.0-alpha.14
 
 ### Patch Changes
