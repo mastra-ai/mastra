@@ -904,7 +904,7 @@ For `StreamErrorRetryProcessor`, also set its `maxRetries` to the same value. It
 All processors expose an `onViolation` property that fires whenever a policy violation is detected, both when `abort()` is called (block strategy) and when a processor issues a warning (warn strategy). Use it for alerting, logging, or side effects without affecting the processor's main logic:
 
 ```typescript title="src/mastra/processors/violation-logging.ts"
-import { ModerationProcessor, CostControlProcessor } from '@mastra/core/processors'
+import { ModerationProcessor, TokenCostControl } from '@mastra/core/processors'
 
 const moderation = new ModerationProcessor({
   model: '__GATEWAY_OPENAI_MODEL_NANO__',
@@ -916,13 +916,13 @@ moderation.onViolation = ({ processorId, message, detail }) => {
   monitor.track('processor_violation', { processorId, message, detail })
 }
 
-const costControl = new CostControlProcessor({
+const tokenCostControl = new TokenCostControl({
   maxCost: 10.0,
   scope: 'resource',
   window: '30d',
 })
 
-costControl.onViolation = ({ processorId, message, detail }) => {
+tokenCostControl.onViolation = ({ processorId, message, detail }) => {
   alertSystem.notify(`[${processorId}] ${message}`)
 }
 ```

@@ -2042,7 +2042,12 @@
     },
     {
       "source": "/reference/processors/cost-guard-processor",
-      "destination": "/reference/processors/cost-control-processor",
+      "destination": "/reference/processors/token-cost-control",
+      "permanent": true
+    },
+    {
+      "source": "/reference/processors/cost-control-processor",
+      "destination": "/reference/processors/token-cost-control",
       "permanent": true
     }
   ]

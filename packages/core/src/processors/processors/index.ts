@@ -44,22 +44,28 @@ export {
 } from './system-prompt-scrubber';
 
 export {
+  TokenCostControl,
+  type TokenCostControlOptions,
+  type TokenCostControlUsage,
+  type TokenCostControlBreakdownEntry,
+  type TokenCostControlTripwireMetadata,
+  type TokenCostControlViolationDetail,
+  type CostScope,
+  type CostWindow,
+  // Deprecated aliases for earlier API names
   CostControlProcessor,
   type CostControlOptions,
   type CostControlUsage,
   type CostControlBreakdownEntry,
   type CostControlTripwireMetadata,
   type CostControlViolationDetail,
-  type CostScope,
-  type CostWindow,
-  // Deprecated aliases for the pre-rename API
   CostGuardProcessor,
   type CostGuardOptions,
   type CostGuardUsage,
   type CostGuardBreakdownEntry,
   type CostGuardTripwireMetadata,
   type CostGuardViolationDetail,
-} from './cost-control';
+} from './token-cost-control';
 
 export {
   RegexFilterProcessor,

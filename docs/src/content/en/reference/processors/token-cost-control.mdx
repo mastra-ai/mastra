@@ -1,19 +1,19 @@
 ---
-title: "Reference: CostControlProcessor | Processors"
-description: "API reference for CostControlProcessor, a processor that enforces monetary cost limits on agent runs."
+title: "Reference: TokenCostControl | Processors"
+description: "API reference for TokenCostControl, a processor that enforces monetary cost limits on agent runs."
 packages:
   - "@mastra/core"
 ---
 
-# CostControlProcessor
+# TokenCostControl
 
-The `CostControlProcessor` enforces monetary cost limits across the agentic loop, blocking or warning when a configurable cost threshold is exceeded.
+The `TokenCostControl` enforces monetary cost limits across the agentic loop, blocking or warning when a configurable cost threshold is exceeded.
 
 It uses `processInputStep` to check the cost limit before each LLM call. Cost data is queried from the observability storage APIs (`getMetricAggregate`) for all scopes. For all scopes except `run`, it aggregates cost across runs within a configurable time window (defaults to 7 days). For `run` scope, it queries cost for the current trace.
 
 For token-based limits, use `TokenLimiterProcessor` instead.
 
-> **Renamed from `CostGuardProcessor`.** The `CostGuardProcessor` export (and its `CostGuard*` option and detail types) remains available as a deprecated alias for the same class, including the `'cost-control'` processor id. Migrate imports to `CostControlProcessor`.
+> **Renamed from `CostGuardProcessor`.** The `CostGuardProcessor` export (and its `CostGuard*` option and detail types) remains available as a deprecated alias for the same class, including the `'token-cost-control'` processor id. The intermediate `CostControlProcessor` name is also available as a deprecated alias. Migrate imports to `TokenCostControl`.
 
 Supports six scoping modes:
 
@@ -33,9 +33,9 @@ Supports six scoping modes:
 Track cumulative cost per resource (default scope):
 
 ```typescript
-import { CostControlProcessor } from '@mastra/core/processors'
+import { TokenCostControl } from '@mastra/core/processors'
 
-const costControl = new CostControlProcessor({
+const tokenCostControl = new TokenCostControl({
   maxCost: 1.0,
 })
 ```
@@ -43,9 +43,9 @@ const costControl = new CostControlProcessor({
 Track cumulative cost per thread with a 24-hour window and a soft warning at 80% of the limit:
 
 ```typescript
-import { CostControlProcessor } from '@mastra/core/processors'
+import { TokenCostControl } from '@mastra/core/processors'
 
-const costControl = new CostControlProcessor({
+const tokenCostControl = new TokenCostControl({
   maxCost: 5.0,
   scope: 'thread',
   window: '24h',
@@ -56,9 +56,9 @@ const costControl = new CostControlProcessor({
 Use a per-tier budget by passing a function as `maxCost`:
 
 ```typescript
-import { CostControlProcessor } from '@mastra/core/processors'
+import { TokenCostControl } from '@mastra/core/processors'
 
-const costControl = new CostControlProcessor({
+const tokenCostControl = new TokenCostControl({
   maxCost: requestContext => (requestContext?.get('tier') === 'pro' ? 10.0 : 1.0),
   scope: 'user',
 })
@@ -68,9 +68,9 @@ Attach to an agent with an `onViolation` callback and a per-provider/model break
 
 ```typescript
 import { Agent } from '@mastra/core/agent'
-import { CostControlProcessor } from '@mastra/core/processors'
+import { TokenCostControl } from '@mastra/core/processors'
 
-const costControl = new CostControlProcessor({
+const tokenCostControl = new TokenCostControl({
   maxCost: 5.0,
   scope: 'resource',
   window: '30d',
@@ -78,7 +78,7 @@ const costControl = new CostControlProcessor({
   includeBreakdown: true,
 })
 
-costControl.onViolation = ({ detail }) => {
+tokenCostControl.onViolation = ({ detail }) => {
   console.log(
     `Cost ${detail.threshold} threshold for ${detail.scopeKey}: $${detail.usage}/$${detail.limit}`,
   )
@@ -91,7 +91,7 @@ const agent = new Agent({
   id: 'my-agent',
   name: 'my-agent',
   model: '__GATEWAY_OPENAI_MODEL_NANO__',
-  inputProcessors: [costControl],
+  inputProcessors: [tokenCostControl],
 })
 ```
 
@@ -160,13 +160,13 @@ const agent = new Agent({
   content={[
   {
     name: 'id',
-    type: "'cost-control'",
+    type: "'token-cost-control'",
     description: 'Processor identifier.',
     isOptional: false,
   },
   {
     name: 'name',
-    type: "'Cost Control'",
+    type: "'Token Cost Control'",
     description: 'Processor display name.',
     isOptional: false,
   },
@@ -174,7 +174,7 @@ const agent = new Agent({
     name: 'onViolation',
     type: '(violation: ProcessorViolation) => void | Promise<void>',
     description:
-      'Callback invoked when a cost violation is detected, regardless of strategy. For the warn strategy and for soft thresholds, the guard calls it with a CostControlViolationDetail (usage, limit, threshold, and optional breakdown) at most once per request per threshold level. For the block strategy, the processor runner invokes it with the TripWire metadata as the detail (see Error behavior). Use for side effects like alerting, logging to external systems, or emailing users. Errors thrown by this callback are caught and logged through the Mastra logger.',
+      'Callback invoked when a cost violation is detected, regardless of strategy. For the warn strategy and for soft thresholds, the guard calls it with a TokenCostControlViolationDetail (usage, limit, threshold, and optional breakdown) at most once per request per threshold level. For the block strategy, the processor runner invokes it with the TripWire metadata as the detail (see Error behavior). Use for side effects like alerting, logging to external systems, or emailing users. Errors thrown by this callback are caught and logged through the Mastra logger.',
     isOptional: true,
   },
   {
@@ -189,9 +189,9 @@ const agent = new Agent({
 
 ## Error behavior
 
-When the `block` strategy is active (default), `CostControlProcessor` calls `abort()` with `retry: false` when the cost limit is exceeded. The TripWire metadata includes:
+When the `block` strategy is active (default), `TokenCostControl` calls `abort()` with `retry: false` when the cost limit is exceeded. The TripWire metadata includes:
 
-- `processorId`: `'cost-control'`
+- `processorId`: `'token-cost-control'`
 - `usage`: Current cumulative usage (`estimatedCost`, `costUnit`)
 - `maxCost`: The resolved cost limit for the request
 - `scope`: The active scope

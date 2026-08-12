@@ -32,7 +32,7 @@ export type CostWindow = '1h' | '6h' | '24h' | '7d' | '30d' | '365d';
 /**
  * Cost usage summary for cost control decisions
  */
-export interface CostControlUsage {
+export interface TokenCostControlUsage {
   estimatedCost: number | null;
   costUnit: string | null;
 }
@@ -41,7 +41,7 @@ export interface CostControlUsage {
  * Per-provider/model cost breakdown entry attached to violations when
  * `includeBreakdown` is enabled.
  */
-export interface CostControlBreakdownEntry {
+export interface TokenCostControlBreakdownEntry {
   provider: string | null;
   model: string | null;
   estimatedCost: number | null;
@@ -51,9 +51,9 @@ export interface CostControlBreakdownEntry {
 /**
  * Metadata attached to the TripWire when the cost control aborts
  */
-export interface CostControlTripwireMetadata {
-  processorId: 'cost-control';
-  usage: CostControlUsage;
+export interface TokenCostControlTripwireMetadata {
+  processorId: 'token-cost-control';
+  usage: TokenCostControlUsage;
   maxCost: number;
   scope: CostScope;
   scopeKey?: string;
@@ -65,13 +65,13 @@ export interface CostControlTripwireMetadata {
    * Per-provider/model cost breakdown. Present only when `includeBreakdown`
    * is enabled and the breakdown query succeeds.
    */
-  breakdown?: CostControlBreakdownEntry[];
+  breakdown?: TokenCostControlBreakdownEntry[];
 }
 
 /**
- * Configuration options for CostControlProcessor
+ * Configuration options for TokenCostControl
  */
-export interface CostControlOptions {
+export interface TokenCostControlOptions {
   /**
    * Maximum estimated cost allowed (e.g. 0.50 for $0.50 USD).
    * Uses the cost data from observability metrics.
@@ -143,10 +143,10 @@ export interface CostControlOptions {
 /**
  * Cost control specific violation detail
  */
-export interface CostControlViolationDetail {
+export interface TokenCostControlViolationDetail {
   usage: number;
   limit: number;
-  totalUsage: CostControlUsage;
+  totalUsage: TokenCostControlUsage;
   scope: CostScope;
   scopeKey?: string;
   /**
@@ -158,17 +158,17 @@ export interface CostControlViolationDetail {
    * Per-provider/model cost breakdown. Present only when `includeBreakdown`
    * is enabled and the breakdown query succeeds.
    */
-  breakdown?: CostControlBreakdownEntry[];
+  breakdown?: TokenCostControlBreakdownEntry[];
 }
 
 const TOKEN_TOTAL_METRIC_NAMES = ['mastra_model_total_input_tokens', 'mastra_model_total_output_tokens'];
 
 /**
- * Monotonic counter distinguishing CostControlProcessor instances in per-request
+ * Monotonic counter distinguishing TokenCostControl instances in per-request
  * dedup state keys. The runner keys the state bag by processor id, which is
- * hardcoded 'cost-control', so multiple instances in one pipeline share a bag.
+ * hardcoded 'token-cost-control', so multiple instances in one pipeline share a bag.
  */
-let costControlInstanceCounter = 0;
+let tokenCostControlInstanceCounter = 0;
 
 const WINDOW_MS: Record<CostWindow, number> = {
   '1h': 60 * 60 * 1000,
@@ -180,7 +180,7 @@ const WINDOW_MS: Record<CostWindow, number> = {
 };
 
 /**
- * CostControlProcessor monitors cumulative estimated cost across the agentic loop,
+ * TokenCostControl monitors cumulative estimated cost across the agentic loop,
  * blocking or warning when a configurable monetary limit is exceeded.
  *
  * **Important:** This is an approximate cost control. Cost data is queried from
@@ -212,24 +212,24 @@ const WINDOW_MS: Record<CostWindow, number> = {
  *
  * @example Resource-scoped cost limit (default):
  * ```typescript
- * new CostControlProcessor({
+ * new TokenCostControl({
  *   maxCost: 1.00,
  * })
  * ```
  *
  * @example Thread-scoped with 24h window:
  * ```typescript
- * new CostControlProcessor({
+ * new TokenCostControl({
  *   maxCost: 5.00,
  *   scope: 'thread',
  *   window: '24h',
  * })
  * ```
  *
- * @example With onViolation callback (warn strategy — detail is CostControlViolationDetail;
+ * @example With onViolation callback (warn strategy — detail is TokenCostControlViolationDetail;
  * with the block strategy the runner passes the TripWire metadata as detail instead):
  * ```typescript
- * const guard = new CostControlProcessor({
+ * const guard = new TokenCostControl({
  *   maxCost: 10.00,
  *   scope: 'resource',
  *   window: '30d',
@@ -240,9 +240,9 @@ const WINDOW_MS: Record<CostWindow, number> = {
  * };
  * ```
  */
-export class CostControlProcessor implements Processor<'cost-control', CostControlTripwireMetadata> {
-  public readonly id = 'cost-control';
-  public readonly name = 'Cost Control';
+export class TokenCostControl implements Processor<'token-cost-control', TokenCostControlTripwireMetadata> {
+  public readonly id = 'token-cost-control';
+  public readonly name = 'Token Cost Control';
 
   private maxCost: number | ((requestContext?: RequestContext) => number);
   private scope: CostScope;
@@ -251,19 +251,19 @@ export class CostControlProcessor implements Processor<'cost-control', CostContr
   private messageTemplate: string;
   private warnAtPercent?: number;
   private includeBreakdown: boolean;
-  private readonly instanceKey = costControlInstanceCounter++;
+  private readonly instanceKey = tokenCostControlInstanceCounter++;
   public onViolation?: (violation: ProcessorViolation) => void | Promise<void>;
   private observabilityStorage?: ObservabilityStorage;
   private logger?: IMastraLogger;
 
-  constructor(options: CostControlOptions) {
+  constructor(options: TokenCostControlOptions) {
     if (typeof options.maxCost === 'number' && (!Number.isFinite(options.maxCost) || options.maxCost <= 0)) {
-      throw new Error('CostControlProcessor requires maxCost to be a finite positive number');
+      throw new Error('TokenCostControl requires maxCost to be a finite positive number');
     }
 
     if (options.warnAtPercent !== undefined) {
       if (!Number.isFinite(options.warnAtPercent) || options.warnAtPercent <= 0 || options.warnAtPercent >= 100) {
-        throw new Error('CostControlProcessor requires warnAtPercent to be a number between 0 and 100 (exclusive)');
+        throw new Error('TokenCostControl requires warnAtPercent to be a number between 0 and 100 (exclusive)');
       }
       this.warnAtPercent = options.warnAtPercent;
     }
@@ -281,7 +281,7 @@ export class CostControlProcessor implements Processor<'cost-control', CostContr
     const obsStorage = storage?.stores?.observability;
     if (!obsStorage || typeof obsStorage.getMetricAggregate !== 'function') {
       throw new Error(
-        `CostControlProcessor requires observability storage with getMetricAggregate support. ` +
+        `TokenCostControl requires observability storage with getMetricAggregate support. ` +
           'Configure observability storage on your Mastra instance.',
       );
     }
@@ -354,7 +354,7 @@ export class CostControlProcessor implements Processor<'cost-control', CostContr
     return filters;
   }
 
-  private async queryCost(scopeFilter: Record<string, string>): Promise<CostControlUsage> {
+  private async queryCost(scopeFilter: Record<string, string>): Promise<TokenCostControlUsage> {
     if (!this.observabilityStorage) {
       return { estimatedCost: null, costUnit: null };
     }
@@ -374,7 +374,7 @@ export class CostControlProcessor implements Processor<'cost-control', CostContr
         costUnit: result.costUnit ?? null,
       };
     } catch (error) {
-      this.logger?.warn('CostControlProcessor: cost query failed; allowing step (fail-open)', { error });
+      this.logger?.warn('TokenCostControl: cost query failed; allowing step (fail-open)', { error });
       return { estimatedCost: null, costUnit: null };
     }
   }
@@ -384,7 +384,9 @@ export class CostControlProcessor implements Processor<'cost-control', CostContr
    * Only called when a violation trips and `includeBreakdown` is enabled.
    * Degrades to undefined on any error (e.g. stores without breakdown support).
    */
-  private async queryBreakdown(scopeFilter: Record<string, string>): Promise<CostControlBreakdownEntry[] | undefined> {
+  private async queryBreakdown(
+    scopeFilter: Record<string, string>,
+  ): Promise<TokenCostControlBreakdownEntry[] | undefined> {
     if (!this.observabilityStorage) return undefined;
     try {
       const result = await this.observabilityStorage.getMetricBreakdown({
@@ -401,7 +403,7 @@ export class CostControlProcessor implements Processor<'cost-control', CostContr
         costUnit: group.costUnit ?? null,
       }));
     } catch (error) {
-      this.logger?.debug('CostControlProcessor: breakdown query failed; omitting breakdown', { error });
+      this.logger?.debug('TokenCostControl: breakdown query failed; omitting breakdown', { error });
       return undefined;
     }
   }
@@ -417,7 +419,7 @@ export class CostControlProcessor implements Processor<'cost-control', CostContr
       .replace('{limit}', this.formatNumber(limit));
   }
 
-  private async emitWarning(message: string, detail: CostControlViolationDetail): Promise<void> {
+  private async emitWarning(message: string, detail: TokenCostControlViolationDetail): Promise<void> {
     if (this.onViolation) {
       try {
         await this.onViolation({
@@ -427,21 +429,21 @@ export class CostControlProcessor implements Processor<'cost-control', CostContr
         });
       } catch (error) {
         // onViolation errors should not prevent the guard from functioning
-        this.logger?.warn('CostControlProcessor: onViolation callback threw', { error });
+        this.logger?.warn('TokenCostControl: onViolation callback threw', { error });
       }
     }
-    this.logger?.warn(`CostControlProcessor: ${message}`);
+    this.logger?.warn(`TokenCostControl: ${message}`);
   }
 
   /**
    * Builds the per-request dedup state key. Includes a per-instance component
-   * so that multiple CostControlProcessor instances in the same pipeline (which
+   * so that multiple TokenCostControl instances in the same pipeline (which
    * share one state bag keyed by processor id) don't suppress each other's
    * warnings, and stays stable across steps even when a dynamic `maxCost`
    * resolves to different values per step.
    */
   private warnedStateKey(level: 'hard' | 'soft'): string {
-    return `costControlWarned:${level}:${this.instanceKey}`;
+    return `tokenCostControlWarned:${level}:${this.instanceKey}`;
   }
 
   private resolveMaxCost(requestContext?: RequestContext): number | undefined {
@@ -450,11 +452,11 @@ export class CostControlProcessor implements Processor<'cost-control', CostContr
     try {
       value = this.maxCost(requestContext);
     } catch (error) {
-      this.logger?.warn('CostControlProcessor: dynamic maxCost function threw; skipping check (fail-open)', { error });
+      this.logger?.warn('TokenCostControl: dynamic maxCost function threw; skipping check (fail-open)', { error });
       return undefined;
     }
     if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
-      this.logger?.warn('CostControlProcessor: dynamic maxCost resolved to an invalid value; skipping check', {
+      this.logger?.warn('TokenCostControl: dynamic maxCost resolved to an invalid value; skipping check', {
         value,
       });
       return undefined;
@@ -462,7 +464,7 @@ export class CostControlProcessor implements Processor<'cost-control', CostContr
     return value;
   }
 
-  async processInputStep(args: ProcessInputStepArgs<CostControlTripwireMetadata>): Promise<void> {
+  async processInputStep(args: ProcessInputStepArgs<TokenCostControlTripwireMetadata>): Promise<void> {
     const traceId = args.tracing?.currentSpan?.traceId;
     const resolved = this.resolveScopeFilter(args.requestContext, traceId);
     if (!resolved) return;
@@ -536,38 +538,36 @@ export class CostControlProcessor implements Processor<'cost-control', CostContr
   }
 }
 
+/** @deprecated Use {@link TokenCostControl} instead. */
+export const CostControlProcessor = TokenCostControl;
+/** @deprecated Use {@link TokenCostControl} instead. */
+export type CostControlProcessor = TokenCostControl;
+/** @deprecated Use {@link TokenCostControlOptions} instead. */
+export type CostControlOptions = TokenCostControlOptions;
+/** @deprecated Use {@link TokenCostControlUsage} instead. */
+export type CostControlUsage = TokenCostControlUsage;
+/** @deprecated Use {@link TokenCostControlBreakdownEntry} instead. */
+export type CostControlBreakdownEntry = TokenCostControlBreakdownEntry;
+/** @deprecated Use {@link TokenCostControlTripwireMetadata} instead. */
+export type CostControlTripwireMetadata = TokenCostControlTripwireMetadata;
+/** @deprecated Use {@link TokenCostControlViolationDetail} instead. */
+export type CostControlViolationDetail = TokenCostControlViolationDetail;
+
 /**
- * @deprecated Use {@link CostControlProcessor} instead. `CostGuardProcessor` is an
- * alias for the same class (including the `'cost-control'` id) and will be removed
+ * @deprecated Use {@link TokenCostControl} instead. `CostGuardProcessor` is an
+ * alias for the same class (including the `'token-cost-control'` id) and will be removed
  * in a future major version.
  */
-export const CostGuardProcessor = CostControlProcessor;
-/**
- * @deprecated Use {@link CostControlProcessor} instead.
- */
-export type CostGuardProcessor = CostControlProcessor;
-
-/**
- * @deprecated Use {@link CostControlOptions} instead.
- */
-export type CostGuardOptions = CostControlOptions;
-
-/**
- * @deprecated Use {@link CostControlUsage} instead.
- */
-export type CostGuardUsage = CostControlUsage;
-
-/**
- * @deprecated Use {@link CostControlBreakdownEntry} instead.
- */
-export type CostGuardBreakdownEntry = CostControlBreakdownEntry;
-
-/**
- * @deprecated Use {@link CostControlTripwireMetadata} instead.
- */
-export type CostGuardTripwireMetadata = CostControlTripwireMetadata;
-
-/**
- * @deprecated Use {@link CostControlViolationDetail} instead.
- */
-export type CostGuardViolationDetail = CostControlViolationDetail;
+export const CostGuardProcessor = TokenCostControl;
+/** @deprecated Use {@link TokenCostControl} instead. */
+export type CostGuardProcessor = TokenCostControl;
+/** @deprecated Use {@link TokenCostControlOptions} instead. */
+export type CostGuardOptions = TokenCostControlOptions;
+/** @deprecated Use {@link TokenCostControlUsage} instead. */
+export type CostGuardUsage = TokenCostControlUsage;
+/** @deprecated Use {@link TokenCostControlBreakdownEntry} instead. */
+export type CostGuardBreakdownEntry = TokenCostControlBreakdownEntry;
+/** @deprecated Use {@link TokenCostControlTripwireMetadata} instead. */
+export type CostGuardTripwireMetadata = TokenCostControlTripwireMetadata;
+/** @deprecated Use {@link TokenCostControlViolationDetail} instead. */
+export type CostGuardViolationDetail = TokenCostControlViolationDetail;

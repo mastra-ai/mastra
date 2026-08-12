@@ -2,11 +2,11 @@
 '@mastra/core': minor
 ---
 
-Renamed CostGuardProcessor to CostControlProcessor, improved its reliability and diagnostics, and added new budgeting options.
+Renamed CostGuardProcessor to TokenCostControl, improved its reliability and diagnostics, and added new budgeting options.
 
 **Rename**
 
-- `CostGuardProcessor` is now `CostControlProcessor` with processor id `'cost-control'`. The `CostGuardProcessor` export (and the `CostGuardOptions`, `CostGuardUsage`, `CostGuardBreakdownEntry`, `CostGuardTripwireMetadata`, and `CostGuardViolationDetail` types) remains available as a deprecated alias for the same class and will be removed in a future major version.
+- `CostGuardProcessor` is now `TokenCostControl` with processor id `'token-cost-control'`. The `CostGuardProcessor` export (and the `CostGuardOptions`, `CostGuardUsage`, `CostGuardBreakdownEntry`, `CostGuardTripwireMetadata`, and `CostGuardViolationDetail` types) remains available as a deprecated alias for the same class and will be removed in a future major version.
 
 **Improvements**
 
@@ -23,7 +23,7 @@ Renamed CostGuardProcessor to CostControlProcessor, improved its reliability and
 - `includeBreakdown`: attaches a per-provider/model cost breakdown to violations.
 
 ```typescript
-const costControl = new CostControlProcessor({
+const tokenCostControl = new TokenCostControl({
   maxCost: requestContext => (requestContext?.get('tier') === 'pro' ? 10.0 : 1.0),
   scope: 'user',
   warnAtPercent: 80,
