@@ -1,5 +1,42 @@
 # @mastra/factory
 
+## 0.7.0-alpha.4
+
+### Minor Changes
+
+- Added Slack channel adapter options to `SlackIntegration` and made concise thinking, typing, and working statuses the default. ([#21381](https://github.com/mastra-ai/mastra/pull/21381))
+
+  ```ts
+  new SlackIntegration({
+    signingSecret,
+    adapterOptions: {
+      streaming: true,
+      toolDisplay: 'grouped',
+    },
+  });
+  ```
+
+### Patch Changes
+
+- Fixed a failed branch push being reported as a token cleanup error. When the push failed and the token cleanup failed too, the cleanup error replaced the push error, so a push blocked by the network was reported with an unrelated error code. The push error is now reported as-is with its own code, and the cleanup error is added to the end of its message. ([#21407](https://github.com/mastra-ai/mastra/pull/21407))
+
+- Send opaque acting-user subjects with Platform sandbox requests, including Factory creation and reattachment flows. ([#20754](https://github.com/mastra-ai/mastra/pull/20754))
+
+  ```typescript
+  import { PlatformSandbox } from '@mastra/platform-workspace';
+
+  const sandbox = new PlatformSandbox({
+    environmentId: 'env_abc',
+    actingUserId: auth.user.id,
+  });
+  ```
+
+- Fixed workspace completion sounds and activity indicators to remain synchronized when switching threads. Running indicators no longer require an open workspace session, so they stay live on the board and overview pages too. ([#21353](https://github.com/mastra-ai/mastra/pull/21353))
+
+- Updated dependencies [[`79dd7c2`](https://github.com/mastra-ai/mastra/commit/79dd7c261ee6be1fafedd4651959394db21d2cba), [`b9a28ec`](https://github.com/mastra-ai/mastra/commit/b9a28ecf7acdc0cb7a543d5b660f9fbee301df9a), [`be31796`](https://github.com/mastra-ai/mastra/commit/be3179624ad5f77cff5fa342cd08046bf7605283)]:
+  - @mastra/core@1.59.0-alpha.4
+  - @mastra/code-sdk@1.2.1-alpha.4
+
 ## 0.7.0-alpha.3
 
 ### Patch Changes
