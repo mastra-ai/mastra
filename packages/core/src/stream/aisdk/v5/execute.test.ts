@@ -175,6 +175,52 @@ describe('execute structured output prompt handling', () => {
     });
   });
 
+  it('normalizes reasoning-model strict schemas through compatibility layers', async () => {
+    let capturedResponseFormat: any;
+    const model = new MockLanguageModelV2({
+      doStream: async ({ responseFormat }: any) => {
+        capturedResponseFormat = responseFormat;
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-o4-mini', modelId: 'o4-mini', timestamp: new Date(0) },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: '{"name":"Mastra"}' },
+            { type: 'text-end', id: 'text-1' },
+            { type: 'finish', finishReason: 'stop', usage: testUsage, providerMetadata: undefined },
+          ]),
+          request: { body: '' },
+          response: { headers: {} },
+          warnings: [] as any[],
+        };
+      },
+    });
+    Object.assign(model, { provider: 'openai', modelId: 'o4-mini' });
+
+    const stream = execute({
+      runId: 'test-run-id-openai-reasoning-strict',
+      model: model as any,
+      inputMessages,
+      onResult: () => {},
+      methodType: 'stream',
+      structuredOutput: {
+        schema: z.object({ name: z.string().optional() }),
+      },
+    });
+    await readStream(stream);
+
+    expect(capturedResponseFormat).toMatchObject({
+      type: 'json',
+      schema: {
+        additionalProperties: false,
+        required: ['name'],
+        properties: {
+          name: { anyOf: [{ type: 'string' }, { type: 'null' }] },
+        },
+      },
+    });
+  });
+
   it('adds a user message for inline mode when no user message exists', async () => {
     let capturedPrompt: unknown;
     const model = new MockLanguageModelV2({

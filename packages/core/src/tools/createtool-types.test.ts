@@ -63,7 +63,7 @@ describe('createTool type improvements', () => {
 
     const result = await tool.execute!({}, undefined as never);
 
-    if ('error' in result && result.error) {
+    if (result && 'error' in result && result.error) {
       throw new Error('Unexpected validation error');
     }
 
