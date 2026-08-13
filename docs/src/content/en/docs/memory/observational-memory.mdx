@@ -930,6 +930,8 @@ Delivery is a state signal projected by a processor. When no snapshot is in the 
 
 `maxPins` (default 20) and `maxCharacters` (default 2000, total across the set) are enforced in the pin tools, so the set can't grow past its budget. Pins are off by default because their cost is per turn and permanent.
 
+Curator-maintained pins depend on reflection running. Hosts whose conversations rarely reach reflection can additionally set `pins.capturePinning` (off by default, even with `pins: true`) to let the capture agent mark a fact as pinned at observation time. Capture-time pins are intended for durable user preferences and hard constraints only; they write through the same budget-enforced path as curator pins, and an over-budget capture-time pin is dropped rather than failing the capture cycle. A custom capture schema is always used verbatim and never gains the pin field.
+
 ### Signals, costs, and failures
 
 Activity uses a bounded state signal with cache-key deduplication, so unchanged snapshots don't add another signal. Set `activity: false` to suppress routine snapshots. Failure states still emit so clients can surface background errors. Reminders use the reactive signal lane and remain quiet when no relevant knowledge is found.
