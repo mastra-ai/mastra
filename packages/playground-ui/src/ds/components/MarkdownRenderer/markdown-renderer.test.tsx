@@ -249,11 +249,16 @@ describe('MarkdownRenderer', () => {
     expect(container.querySelectorAll('.mastra-markdown-word')).toHaveLength(0);
   });
 
-  it('reveals the last word of a block once the reply moves past it', () => {
-    const { container } = render(<MarkdownRenderer streaming>{'First para.\n\nSecond'}</MarkdownRenderer>);
+  it('fades the word a block was holding once the reply moves past it', () => {
+    const { container, rerender } = render(<MarkdownRenderer streaming>{'First'}</MarkdownRenderer>);
+
+    const first = container.querySelector('.mastra-markdown-word-pending');
+
+    rerender(<MarkdownRenderer streaming>{'First\n\nSecond'}</MarkdownRenderer>);
 
     const held = [...container.querySelectorAll('.mastra-markdown-word-pending')].map(node => node.textContent);
 
+    expect(first?.className).toBe('mastra-markdown-word');
     expect(held).toEqual(['Second']);
   });
 

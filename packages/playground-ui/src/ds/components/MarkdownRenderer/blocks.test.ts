@@ -20,6 +20,10 @@ describe('splitBlocks', () => {
     expect(splitBlocks(markdown)).toHaveLength(blocks);
   });
 
+  it('reads a definition inside a fence as the code it is', () => {
+    expect(splitBlocks('```py\n[x]: int\n```\n\nAfter.')).toHaveLength(2);
+  });
+
   it.each([
     'Plain text with no break at all',
     'Para.\n\n- one\n- two\n\n## Heading\n\n```js\ncode\n```\n\nEnd.',

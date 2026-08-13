@@ -2,7 +2,7 @@ const FENCE_OPEN = /^ {0,3}(`{3,}|~{3,})/;
 const FENCE_CLOSE = /^ {0,3}(`{3,}|~{3,})[ \t]*$/;
 const LIST_ITEM = /^ {0,3}(?:[-*+]|\d{1,9}[.)])(?:[ \t]|$)/;
 const INDENTED = /^(?:\t| {2,})/;
-const DEFINITION = /^ {0,3}\[[^\]]+\]:/m;
+const DEFINITION = /^ {0,3}\[[^\]]+\]:/;
 
 function fenceOpenedBy(line: string): string | undefined {
   return FENCE_OPEN.exec(line)?.[1];
@@ -27,11 +27,9 @@ function startsBlock(line: string, inList: boolean): boolean {
  * Each rule only ever merges: over-merging costs a re-parse, while cutting a
  * construct in two changes what it renders as. Link reference and footnote
  * definitions resolve across blank lines, which no line-level rule can see, so
- * a text carrying one is left whole.
+ * reaching one outside a fence abandons the split for the whole text.
  */
 export function splitBlocks(markdown: string): string[] {
-  if (DEFINITION.test(markdown)) return [markdown];
-
   const lines = markdown.split('\n');
   const starts = [0];
   let fence: string | undefined;
@@ -49,6 +47,8 @@ export function splitBlocks(markdown: string): string[] {
       broken = started;
       continue;
     }
+
+    if (DEFINITION.test(line)) return [markdown];
 
     if (broken && startsBlock(line, inList)) {
       starts.push(index);
