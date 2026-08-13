@@ -29,18 +29,19 @@ export async function fetchWithAuthFailureHandling(
   url: string,
   options: RequestInit,
   maxRetries: number,
-): Promise<void> {
+  callerShouldRetry?: (response: Response) => boolean,
+): Promise<Response> {
   let authFailureStatus: number | undefined;
 
   try {
-    await fetchWithRetry(url, options, maxRetries, {
+    return await fetchWithRetry(url, options, maxRetries, {
       shouldRetryResponse: response => {
         if (isAuthFailureStatus(response.status)) {
           authFailureStatus = response.status;
           return false;
         }
 
-        return true;
+        return callerShouldRetry?.(response) ?? true;
       },
     });
   } catch (error) {

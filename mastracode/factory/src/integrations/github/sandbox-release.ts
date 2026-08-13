@@ -1,5 +1,5 @@
-import type { SandboxFleet } from '../../sandbox/fleet.js';
-import type { SourceControlStorageHandle } from '../../storage/domains/source-control/base.js';
+import type { MaterializationSandbox, SandboxFleet } from '../../sandbox/fleet.js';
+import type { SourceControlSession, SourceControlStorageHandle } from '../../storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from '../../storage/domains/work-items/base.js';
 import { recycleClaimedWorkdir } from './sandbox.js';
 
@@ -40,6 +40,60 @@ export async function cleanReleasedSandbox(options: {
     // Reaped, unreachable, or wedged — the claim-side recycle is the
     // correctness guarantee; this scrub is hygiene for idle VMs.
   }
+}
+
+/**
+ * Reclaim the sandbox a just-deleted user session was holding: return a remote
+ * VM to the reuse pool (scrubbed first), or tear a local/unpooled one down.
+ *
+ * Runs after the session row is already gone. Waking the VM and scrubbing a
+ * large checkout takes minutes, and none of it is something the caller can act
+ * on — the workspace has disappeared from their list either way. Nothing can
+ * claim the sandbox until `release` publishes it to the pool, so deferring the
+ * whole sequence preserves the scrub-before-reuse guarantee.
+ */
+export async function reclaimDeletedSessionSandbox(options: {
+  fleet: Pick<SandboxFleet, 'provider' | 'reattachSandbox' | 'teardownSandbox'>;
+  sourceControl: Pick<SourceControlStorageHandle, 'sandboxPool' | 'projectRepositories' | 'repositories'>;
+  session: Pick<SourceControlSession, 'orgId' | 'userId' | 'projectRepositoryId' | 'sandboxId' | 'sandboxWorkdir'>;
+}): Promise<void> {
+  const { fleet, sourceControl, session } = options;
+  if (!session.sandboxId) return;
+  if (fleet.provider !== 'local' && session.sandboxWorkdir) {
+    // Keep the remote VM alive: return it to the reuse pool so the next
+    // session for this repository link and user claims it (repo already
+    // cloned) instead of provisioning a fresh sandbox. Scrub the session's
+    // work off the VM first so it doesn't idle with stale branches or dirty
+    // state, and so nothing claims it mid-scrub.
+    await cleanReleasedSandbox({
+      fleet,
+      sourceControl,
+      orgId: session.orgId,
+      projectRepositoryId: session.projectRepositoryId,
+      sandboxId: session.sandboxId,
+      sandboxWorkdir: session.sandboxWorkdir,
+      actingUserId: session.userId,
+    });
+    await sourceControl.sandboxPool.release({
+      orgId: session.orgId,
+      projectRepositoryId: session.projectRepositoryId,
+      userId: session.userId,
+      sandboxId: session.sandboxId,
+      sandboxWorkdir: session.sandboxWorkdir,
+    });
+    return;
+  }
+  let sandbox: MaterializationSandbox | undefined;
+  try {
+    sandbox = await fleet.reattachSandbox(session.sandboxId, { actingUserId: session.userId });
+  } catch {
+    // The provider may already have reclaimed the sandbox.
+  }
+  // The session row is deleted, so there is no binding left to clear.
+  await fleet.teardownSandbox(
+    { sandboxId: session.sandboxId, setSandboxId: async () => {}, clear: async () => {} },
+    sandbox,
+  );
 }
 
 /**

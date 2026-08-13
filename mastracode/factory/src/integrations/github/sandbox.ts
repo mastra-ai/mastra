@@ -30,6 +30,7 @@ import type {
   ProjectRepositorySandbox,
   SourceControlStorageHandle,
 } from '../../storage/domains/source-control/base.js';
+import { timedPhase } from '../../timing.js';
 
 type SourceControlSandboxStorage = SourceControlStorageHandle['sandboxes'];
 type MaterializationStore = Pick<SourceControlSandboxStorage, 'markMaterialized'>;
@@ -181,6 +182,59 @@ async function shOnce(
   }
 }
 
+const GIT_TRANSFER_RETRIES = 2;
+const GIT_TRANSFER_RETRY_DELAY_MS = 2000;
+
+/**
+ * True when a git transfer died mid-flight rather than being refused.
+ *
+ * `sh` already retries transport errors the sandbox provider *throws*, but a
+ * git command that reaches the network and then loses it exits non-zero
+ * instead — so a single HTTP/2 framing glitch or dropped connection to
+ * github.com would otherwise permanently fail opening a workspace. These
+ * patterns all mean "the bytes stopped arriving", which says nothing about
+ * whether the operation would succeed if attempted again.
+ *
+ * Deliberately narrow: a refusal (bad credentials, missing repo, blocked
+ * egress) is terminal and must surface immediately rather than be retried into
+ * a slow failure.
+ */
+function isTransientGitFailure(result: SandboxCommandResult): boolean {
+  const output = `${result.stderr || ''}\n${result.stdout || ''}`;
+  return /HTTP2 framing layer|RPC failed; curl|RPC failed; HTTP 5\d\d|the remote end hung up unexpectedly|early EOF|unexpected disconnect|connection reset by peer|Recv failure|Send failure|GnuTLS recv error|TLS connection was non-properly terminated|502 Bad Gateway|503 Service Unavailable/i.test(
+    output,
+  );
+}
+
+/**
+ * Run a git command that only *reads* from the remote, retrying it when the
+ * transfer dies mid-flight. Restricted to read-only transfers on purpose:
+ * re-running a clone or a fetch is free, whereas re-running a push could
+ * duplicate work already accepted by the remote before the connection dropped.
+ *
+ * `beforeRetry` lets a call site clear whatever the aborted attempt left
+ * behind — a half-written clone directory blocks the next `git clone` outright.
+ */
+async function gitTransfer(
+  sandbox: MaterializationSandbox,
+  script: string,
+  options: ShOptions & { beforeRetry?: (attempt: number) => Promise<void> } = {},
+): Promise<SandboxCommandResult> {
+  const { beforeRetry, ...shOptions } = options;
+  const deadlineMs = Date.now() + (shOptions.timeoutMs ?? DEFAULT_COMMAND_TIMEOUT_MS);
+  for (let attempt = 0; ; attempt++) {
+    const result = await sh(sandbox, script, {
+      ...shOptions,
+      timeoutMs: Math.max(deadlineMs - Date.now(), 1),
+    });
+    if (result.exitCode === 0 || attempt >= GIT_TRANSFER_RETRIES || !isTransientGitFailure(result)) return result;
+    const delayMs = GIT_TRANSFER_RETRY_DELAY_MS * (attempt + 1);
+    if (deadlineMs - Date.now() <= delayMs) return result;
+    await new Promise(resolve => setTimeout(resolve, delayMs));
+    await beforeRetry?.(attempt + 1);
+  }
+}
+
 /** Error raised when the sandbox cannot materialize the repo (actionable). */
 export class MaterializeError extends Error {
   constructor(
@@ -218,13 +272,8 @@ export interface RepoMaterializeInfo {
   defaultBranch: string;
 }
 
-/**
- * Materialize the repo inside the user's sandbox. Clones on first open, pulls on
- * re-open. Always scrubs the install token from the remote afterwards and sets
- * `materialized_at` on the per-user sandbox binding row.
- *
- */
-export async function materializeRepo(options: {
+/** Options for {@link materializeRepo}. */
+export interface MaterializeRepoOptions {
   /** The per-(project,user) sandbox binding (provisioned via `ensureProjectSandbox`). */
   row: RepoMaterializationBinding;
   /** Repo metadata from the org-owned project row. */
@@ -235,7 +284,19 @@ export async function materializeRepo(options: {
   token: string;
   storage: MaterializationStore;
   onProgress?: ProgressFn;
-}): Promise<void> {
+}
+
+/**
+ * Materialize the repo inside the user's sandbox. Clones on first open, pulls on
+ * re-open. Always scrubs the install token from the remote afterwards and sets
+ * `materialized_at` on the per-user sandbox binding row.
+ *
+ */
+export async function materializeRepo(options: MaterializeRepoOptions): Promise<void> {
+  return timedPhase('workspace.materialize', () => materializeRepoImpl(options));
+}
+
+async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<void> {
   const { row: sandboxRow, repoInfo, sandbox, token, storage, onProgress } = options;
   const workdir = sandboxRow.sandboxWorkdir;
   const repo = repoInfo.repoFullName;
@@ -274,7 +335,7 @@ export async function materializeRepo(options: {
   // trusting the row.
   const alreadyMaterialized = await hasExistingCheckout(sandbox, workdir, repo);
 
-  let succeeded = false;
+  let tokenInRemote = false;
   try {
     if (!alreadyMaterialized) {
       // 2a. First open: shallow-clone the default branch into the workdir. A
@@ -284,14 +345,30 @@ export async function materializeRepo(options: {
         phase: 'cloning',
         message: `Cloning ${repo} (first open can take a minute)…`,
       });
-      const clone = await sh(
+      const clone = await gitTransfer(
         sandbox,
         `git clone --depth=1 --single-branch --branch ${shellQuote(repoInfo.defaultBranch)} ${shellQuote(authUrl)} ${shellQuote(workdir)}`,
-        { phase: 'repository clone' },
+        {
+          phase: 'repository clone',
+          beforeRetry: async attempt => {
+            reportProgress(onProgress, {
+              phase: 'cloning',
+              message: `Lost the connection to github.com — retrying the clone (attempt ${attempt + 1})…`,
+            });
+            // A clone that died partway leaves the destination non-empty, which
+            // git refuses to clone into. Clear it so the retry starts clean.
+            await sh(sandbox, `rm -rf ${shellQuote(workdir)}`);
+          },
+        },
       );
       if (clone.exitCode !== 0) {
+        // git can fail after creating the checkout ("Clone succeeded, but
+        // checkout failed") with the tokenized origin persisted — probe the
+        // disk instead of assuming the failed clone left nothing behind.
+        tokenInRemote = await hasGitDir(sandbox, workdir);
         throw classifyGitFailure(clone, 'clone-failed');
       }
+      tokenInRemote = true;
     } else {
       // 2b. Re-open: refresh remote to the token URL and fast-forward pull.
       reportProgress(onProgress, { phase: 'pulling', message: `Updating ${repo} to the latest changes…` });
@@ -299,31 +376,54 @@ export async function materializeRepo(options: {
       if (setUrl.exitCode !== 0) {
         throw new MaterializeError(`Failed to set git remote: ${setUrl.stderr}`, 'pull-failed');
       }
-      const pull = await sh(sandbox, `git -C ${shellQuote(workdir)} pull --ff-only`, { phase: 'repository pull' });
+      tokenInRemote = true;
+      const pull = await gitTransfer(sandbox, `git -C ${shellQuote(workdir)} pull --ff-only`, {
+        phase: 'repository pull',
+        beforeRetry: async attempt =>
+          reportProgress(onProgress, {
+            phase: 'pulling',
+            message: `Lost the connection to github.com — retrying the update (attempt ${attempt + 1})…`,
+          }),
+      });
       if (pull.exitCode !== 0) {
         if (!isBenignNonFastForward(pull)) {
           throw classifyGitFailure(pull, 'pull-failed');
         }
         // The workdir was left on a session's working branch that can't be
         // fast-forwarded (diverged from upstream, no upstream, or detached
-        // HEAD). That branch holds the session's local work — never rebase or
-        // reset it here. The checkout is still perfectly usable; leave it
-        // as-is and let the session reconcile with the remote itself.
+        // HEAD), or its configured upstream ref was deleted after merge.
+        // That checkout still holds usable work — never rebase or reset it
+        // here. Leave it as-is and let the session reconcile with the remote
+        // itself.
         reportProgress(onProgress, {
           phase: 'pulling',
-          message: 'Workspace has local changes that diverge from the remote — keeping them as-is.',
+          message: isDeletedUpstreamRef(pull)
+            ? 'Workspace could not be updated from its remote — keeping the existing checkout as-is.'
+            : 'Workspace has local changes that diverge from the remote — keeping them as-is.',
         });
       }
     }
-    succeeded = true;
-  } finally {
-    // 3. Always scrub the token from the remote so it isn't left in the VM's
-    // git config, even when the clone/pull above failed partway through. This
-    // is best-effort on the failure path (the workdir may not even exist, and
-    // a scrub error must never mask the primary failure); on the success path
-    // the scrub must succeed or we surface it.
-    await scrubRemote(sandbox, workdir, repo, succeeded);
+  } catch (primary) {
+    // 3a. The clone/pull failed — still scrub the token from the VM's git
+    // config. The scrub must never hide the actionable failure, but once the
+    // token reached the remote its own failure can't stay silent either:
+    // report both, primary cause and classification first.
+    try {
+      await scrubRemote(sandbox, workdir, repo, tokenInRemote);
+    } catch (scrubError) {
+      const primaryMessage = primary instanceof Error ? primary.message : String(primary);
+      const scrubMessage = scrubError instanceof Error ? scrubError.message : String(scrubError);
+      throw new MaterializeError(
+        `${primaryMessage} — additionally: ${scrubMessage}`,
+        primary instanceof MaterializeError ? primary.code : 'pull-failed',
+      );
+    }
+    throw primary;
   }
+
+  // 3b. Success — the token is in the remote and the workdir has a `.git`, so
+  // a failed scrub means the token may still be persisted: surface it.
+  await scrubRemote(sandbox, workdir, repo, tokenInRemote);
 
   // 4. Mark materialized.
   reportProgress(onProgress, { phase: 'finalizing', message: 'Finalizing workspace…' });
@@ -366,6 +466,14 @@ export async function recycleClaimedWorkdir(
 
 /** Check out a session's branch inside its isolated repository clone. */
 export async function checkoutSessionBranch(
+  sandbox: MaterializationSandbox,
+  workdir: string,
+  options: { branch: string; baseBranch: string; token: string; repoFullName: string },
+): Promise<void> {
+  return timedPhase('workspace.checkout', () => checkoutSessionBranchImpl(sandbox, workdir, options));
+}
+
+async function checkoutSessionBranchImpl(
   sandbox: MaterializationSandbox,
   workdir: string,
   {
@@ -451,29 +559,41 @@ async function hasExistingCheckout(
   return url.endsWith(`${suffix}.git`) || url.endsWith(suffix);
 }
 
+/** Probed without `git -C` so a missing workdir returns false instead of throwing. */
+async function hasGitDir(sandbox: MaterializationSandbox, workdir: string): Promise<boolean> {
+  const probe = await sh(sandbox, `test -d ${shellQuote(`${workdir}/.git`)}`).catch(() => null);
+  return probe?.exitCode === 0;
+}
+
 /**
- * Reset the git remote back to the tokenless URL. On a successful clone/pull the
- * workdir always has a `.git`, so a non-zero exit code here means the token may
- * still be persisted — surface it. On the failure path the workdir may not exist
- * (e.g. a failed clone), so a non-zero exit is tolerated — and never masks the
- * primary failure being thrown through the `finally`.
+ * Reset the git remote back to the tokenless URL. Strict when the token
+ * reached the remote: any failure — a non-zero exit or a provider throw —
+ * means the token may still be persisted, so it is thrown for the caller to
+ * surface. Best-effort when it never did: the workdir may not exist (e.g. a
+ * failed clone), which makes providers that spawn with `cwd` throw rather
+ * than return a non-zero exit code; both outcomes are tolerated so neither
+ * masks the primary failure.
  */
 async function scrubRemote(
   sandbox: MaterializationSandbox,
   workdir: string,
   repoFullName: string,
-  expectGitDir: boolean,
+  tokenInRemote: boolean,
 ): Promise<void> {
-  const result = await sh(
-    sandbox,
-    `git -C ${shellQuote(workdir)} remote set-url origin ${shellQuote(cleanUrl(repoFullName))}`,
-  );
-  if (result.exitCode !== 0 && expectGitDir) {
-    throw new MaterializeError(
-      `Failed to scrub installation token from git remote: ${result.stderr.trim() || result.stdout.trim()}`,
-      'pull-failed',
-    );
+  const scrub = `git -C ${shellQuote(workdir)} remote set-url origin ${shellQuote(cleanUrl(repoFullName))}`;
+  if (!tokenInRemote) {
+    await sh(sandbox, scrub).catch(() => undefined);
+    return;
   }
+  let failure: string;
+  try {
+    const result = await sh(sandbox, scrub);
+    if (result.exitCode === 0) return;
+    failure = result.stderr.trim() || result.stdout.trim();
+  } catch (error) {
+    failure = error instanceof Error ? error.message : String(error);
+  }
+  throw new MaterializeError(`Failed to scrub installation token from git remote: ${failure}`, 'pull-failed');
 }
 
 /**
@@ -484,15 +604,26 @@ async function scrubRemote(
  * are created from `FETCH_HEAD`), or a detached HEAD. A checkout can also
  * hold uncommitted or untracked files (a build or script run left residue,
  * or an older session worked directly in the shared checkout), which makes
- * git refuse the merge outright. In all of these cases the checkout is
- * intact and may hold real work; materialization must keep it as-is rather
- * than fail the workspace open — and must never discard the local state to
- * force the pull through.
+ * git refuse the merge outright. A checkout carrying `pull.rebase` in its git
+ * config refuses for the same reason but says so in rebase's words instead of
+ * merge's. After a PR merges with branch auto-delete, the configured upstream
+ * ref may also be gone (`no such ref was fetched` / `couldn't find remote ref`);
+ * there is nothing to pull and the checkout is still intact. In all of these
+ * cases materialization must keep it as-is rather than fail the workspace open
+ * — and must never discard the local state to force the pull through.
  */
+function isDeletedUpstreamRef(result: SandboxCommandResult): boolean {
+  const output = `${result.stderr || ''}\n${result.stdout || ''}`;
+  return /no such ref was fetched|couldn't find remote ref/i.test(output);
+}
+
 function isBenignNonFastForward(result: SandboxCommandResult): boolean {
   const output = `${result.stderr || ''}\n${result.stdout || ''}`;
-  return /Not possible to fast-forward|Diverging branches can't be fast-forwarded|no tracking information for the current branch|You are not currently on a branch|Your local changes to the following files would be overwritten by merge|untracked working tree files would be overwritten by merge/i.test(
-    output,
+  return (
+    isDeletedUpstreamRef(result) ||
+    /Not possible to fast-forward|Diverging branches can't be fast-forwarded|no tracking information for the current branch|You are not currently on a branch|Your local changes to the following files would be overwritten by merge|untracked working tree files would be overwritten by merge|cannot pull with rebase|cannot rebase: You have unstaged changes|Your index contains uncommitted changes/i.test(
+      output,
+    )
   );
 }
 
@@ -589,9 +720,9 @@ export async function configureGitIdentity(
  * token therefore only ever lives in the remote URL for the duration of the
  * operation and is never left in the VM's git config.
  *
- * On the success path the scrub must succeed (a leaked token is a hard error);
- * if it fails we surface it. On the failure path the scrub is best-effort but
- * still attempted, and the original operation error is rethrown.
+ * Once the tokenized URL is installed the scrub must succeed — a leaked token
+ * is a hard error that outranks even `fn`'s own failure. Only a failed
+ * set-url (the token never reached the remote) downgrades it to best-effort.
  */
 export async function withInstallToken<T>(
   sandbox: MaterializationSandbox,

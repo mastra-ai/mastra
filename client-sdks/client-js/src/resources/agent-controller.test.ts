@@ -2,7 +2,7 @@ import { RequestContext } from '@mastra/core/request-context';
 import { describe, expect, beforeEach, it, vi } from 'vitest';
 
 import { MastraClient } from '../client';
-import { agentControllerMessageText } from './agent-controller';
+import { agentControllerMessageText, isKnownAgentControllerEvent } from './agent-controller';
 import type { AgentControllerEvent, KnownAgentControllerEvent } from './agent-controller';
 
 global.fetch = vi.fn();
@@ -297,7 +297,9 @@ describe('AgentController Resource', () => {
       .getAgentController('code')
       .session('user-1')
       .subscribe({
-        onEvent: e => received.push(e as KnownAgentControllerEvent),
+        onEvent: e => {
+          if (isKnownAgentControllerEvent(e)) received.push(e);
+        },
       });
 
     // Allow the async pump to drain the (already-closed) stream.

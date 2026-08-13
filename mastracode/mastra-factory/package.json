@@ -1,6 +1,6 @@
 {
   "name": "create-factory",
-  "version": "0.1.5-alpha.7",
+  "version": "0.1.8-alpha.2",
   "description": "Create a Mastra Factory project: an agent-powered software delivery environment built on Mastra. Run `npm create factory` to scaffold and get started.",
   "type": "module",
   "license": "Apache-2.0",
@@ -45,7 +45,6 @@
     "commander": "^14.0.3",
     "mastra": "workspace:*",
     "picocolors": "^1.1.1",
-    "posthog-node": "^5.37.0",
     "tinyexec": "^1.2.4"
   },
   "devDependencies": {

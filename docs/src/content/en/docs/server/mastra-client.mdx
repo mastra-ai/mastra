@@ -1,5 +1,5 @@
 ---
-title: "Mastra client SDK | Server"
+title: "Mastra client | Server"
 description: "Learn how to set up and use the Mastra Client SDK"
 packages:
   - "@mastra/client-js"
@@ -7,7 +7,7 @@ packages:
   - "@mastra/react"
 ---
 
-# Mastra client SDK
+# Mastra client
 
 The Mastra Client SDK provides a concise and type-safe interface for interacting with your [Mastra Server](/docs/server/mastra-server) from your client environment.
 
@@ -60,15 +60,15 @@ The Mastra Client SDK exposes all resources served by the Mastra Server.
 - **[Logs](/reference/client-js/logs)**: View logs and debug system behavior.
 - **[Telemetry](/reference/client-js/telemetry)**: View app performance and trace activity.
 
-## Create and run stored workflows
+## Create and run dynamic workflows
 
-Use `upsertStoredWorkflow()` to create or replace a persisted workflow definition. A successful upsert validates the complete definition, registers it with the running Mastra instance, and makes it available through the standard workflow execution API.
+Use `upsertDynamicWorkflow()` to create or replace a persisted workflow definition. A successful upsert validates the complete definition and registers it with the running Mastra instance. The workflow then becomes available through the standard execution API.
 
-The following example creates a mapping workflow, reads the stored definition, runs it, and then deletes it:
+The following example shows the full lifecycle of a mapping workflow, from creation and inspection through execution and deletion:
 
-```typescript title="lib/stored-workflow.ts"
+```typescript title="lib/dynamic-workflow.ts"
 import { MastraClient } from '@mastra/client-js'
-import type { UpsertStoredWorkflowParams } from '@mastra/client-js'
+import type { UpsertDynamicWorkflowParams } from '@mastra/client-js'
 
 const client = new MastraClient({
   baseUrl: process.env.MASTRA_API_URL || 'http://localhost:4111',
@@ -96,27 +96,27 @@ const definition = {
       }),
     },
   ],
-} satisfies UpsertStoredWorkflowParams
+} satisfies UpsertDynamicWorkflowParams
 
-await client.upsertStoredWorkflow(definition)
+await client.upsertDynamicWorkflow(definition)
 
-const storedWorkflow = client.getStoredWorkflow(definition.id)
-const storedDefinition = await storedWorkflow.details()
+const dynamicWorkflow = client.getDynamicWorkflow(definition.id)
+const dynamicDefinition = await dynamicWorkflow.details()
 
-const workflow = client.getWorkflow(storedDefinition.id)
+const workflow = client.getWorkflow(dynamicDefinition.id)
 const run = await workflow.createRun()
 const result = await run.startAsync({ inputData: { name: 'Ada' } })
 
 console.log(result)
 
-await storedWorkflow.delete()
+await dynamicWorkflow.delete()
 ```
 
-Use `listStoredWorkflows()` to list persisted definitions. Calling `upsertStoredWorkflow()` again with the same `id` replaces the stored definition and live workflow registration.
+Use `listDynamicWorkflows()` to list persisted definitions. Calling `upsertDynamicWorkflow()` again with the same `id` replaces the stored definition and live workflow registration.
 
 :::warning
 
-Durable storage requires a configured storage adapter that supports the `workflowDefinitions` domain. Without that domain, Core can register a workflow in memory, but the server's stored-workflow API can't preserve it across restarts.
+Durable storage requires a configured storage adapter that supports the `workflowDefinitions` domain. Without that domain, Core can register a workflow in memory, but the server's dynamic-workflow API can't preserve it across restarts.
 
 Stored definitions support declarative agent, tool, mapping, nested workflow, parallel, foreach, sleep, sleep-until, conditional, and loop entries. They can't contain JavaScript closures. Conditional and loop logic must use the declarative predicate format, and referenced agents, tools, and nested workflows must already be registered.
 
@@ -144,7 +144,7 @@ const testAgent = async () => {
 }
 ```
 
-:::info
+:::note
 
 You can also call `.generate()` with an array of message objects that include `role` and `content`. Visit the [.generate() reference](/reference/client-js/agents#generate) for more information.
 
@@ -174,7 +174,7 @@ const testAgent = async () => {
 }
 ```
 
-:::info
+:::note
 
 You can also call `.stream()` with an array of message objects that include `role` and `content`. Visit the [.stream() reference](/reference/client-js/agents#stream) for more information.
 

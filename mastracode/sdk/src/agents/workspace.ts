@@ -317,6 +317,7 @@ export async function getDynamicWorkspace({
   const userLsp = loadSettings().lsp ?? {};
   const mcModulePath = join(dirname(fileURLToPath(import.meta.url)), '..');
   const lspConfig: LSPConfig = {
+    maxOpenClients: 4,
     ...userLsp,
     packageRunner: userLsp.packageRunner || detectPackageRunner(projectPath), // Detected runner is the fallback — user's packageRunner always wins
     searchPaths: [mcModulePath, ...(userLsp.searchPaths ?? [])],

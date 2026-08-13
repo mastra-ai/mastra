@@ -551,7 +551,7 @@ export const mastra = new Mastra({
 
 Text-to-speech providers for voice synthesis capabilities. Register voice providers to enable agents to convert text responses into spoken audio.
 
-Visit the [Voice documentation](/guides/voice/overview) to learn more.
+Visit the [Voice documentation](/reference/voice/overview) to learn more.
 
 :::note
 Most users configure voice directly on agents. This top-level configuration is for defining reusable voice providers that can be shared across multiple agents.
@@ -572,9 +572,9 @@ export const mastra = new Mastra({
 
 **Type:** `Record<string, MastraVector>`
 
-Vector stores for semantic search and embeddings. Used in RAG pipelines, similarity search, and other embedding-based features. Mastra supports multiple vector databases including Pinecone, PostgreSQL with pgvector, MongoDB, and more.
+Vector stores for semantic search and embeddings. Used in RAG pipelines, similarity search, and other embedding-based features. Mastra supports multiple vector databases including Pinecone, PostgreSQL with pgvector, OracleDB, MongoDB, and more.
 
-Visit the [RAG documentation](/guides/rag/overview) to learn more.
+Visit the [RAG documentation](/reference/rag/overview) to learn more.
 
 :::note
 Most users create vector stores directly when building RAG pipelines. This top-level configuration is for defining reusable vector store instances that can be shared across your application.
@@ -674,6 +674,25 @@ import { Mastra } from '@mastra/core'
 export const mastra = new Mastra({
   bundler: {
     sourcemap: true,
+  },
+})
+```
+
+### bundler.minify
+
+**Type:** `boolean`\
+**Default:** `false`
+
+Minifies the bundled output, stripping comments and whitespace and shortening local identifiers. Exported names are preserved.
+
+Off by default so build output stays readable and stack traces stay usable. Enable it when bundle size matters, such as packaging a container image for an on-prem deployment. `mastra dev` is never minified.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+
+export const mastra = new Mastra({
+  bundler: {
+    minify: true,
   },
 })
 ```
@@ -918,7 +937,7 @@ export const mastra = new Mastra({
 
 **Type:** `(err: Error, c: Context) => Response | Promise<Response>`
 
-Custom error handler called when an unhandled error occurs. Use this to customize error responses, log errors to external services like Sentry, or implement custom error formatting.
+Custom error handler called when an unhandled error occurs. Use this to customize error responses or log errors to external services such as Sentry. You can also implement custom error formatting.
 
 This hook is supported by all server adapters. The `c` parameter provides a Hono-compatible context object: for non-Hono adapters (Koa, Express, Fastify), a shim is provided with commonly used methods like `c.json()` and `c.req.path`.
 
@@ -947,7 +966,7 @@ export const mastra = new Mastra({
 
 **Type:** `(error: ZodError, context: 'query' | 'body' | 'path') => { status: number; body: unknown } | undefined`
 
-Custom handler called when a request fails Zod schema validation. Use this to customize validation error responses, change the status code, or format errors to match your API standards.
+Custom handler called when a request fails Zod schema validation. Use this to customize validation error responses and change the status code, or to format errors to match your API standards.
 
 Return a `{ status, body }` object to override the default `400` response, or `undefined` to use the default behavior. This hook is supported by all server adapters (Hono, Express, Fastify, Koa).
 
@@ -1003,7 +1022,7 @@ export const mastra = new Mastra({
 
 Base path for hosting [Studio](/docs/studio/overview). Use this to host the Studio on a sub-path of your existing application instead of the root.
 
-This is useful when integrating with existing applications, using authentication tools like Cloudflare Zero Trust that benefit from shared domains, or managing multiple services under a single domain.
+This is useful when integrating with existing applications or authentication tools such as Cloudflare Zero Trust that benefit from shared domains. It also supports managing multiple services under one domain.
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'

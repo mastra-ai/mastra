@@ -267,6 +267,40 @@ describe('MastraStorageExporter', () => {
           ]),
         });
       });
+
+      it('should store bridged root spans without their external parent', async () => {
+        mockObservabilityStore.observabilityStrategy = {
+          preferred: 'realtime',
+          supported: ['realtime', 'batch-with-updates', 'insert-only'],
+        };
+        const exporter = new MastraStorageExporter({ strategy: 'realtime', logger: mockLogger });
+        await exporter.init({ mastra: mockMastra });
+
+        const rootEvent = createMockEvent(TracingEventType.SPAN_STARTED, 'trace-1', 'root-span');
+        rootEvent.exportedSpan.isRootSpan = true;
+        rootEvent.exportedSpan.externalParentSpanId = 'external-parent';
+
+        const resumedRootEvent = createMockEvent(TracingEventType.SPAN_STARTED, 'trace-1', 'resumed-root-span');
+        resumedRootEvent.exportedSpan.isRootSpan = true;
+        resumedRootEvent.exportedSpan.parentSpanId = 'suspended-span';
+
+        const childEvent = createMockEvent(TracingEventType.SPAN_STARTED, 'trace-1', 'child-span');
+        childEvent.exportedSpan.isRootSpan = false;
+        childEvent.exportedSpan.parentSpanId = 'root-span';
+
+        await exporter.exportTracingEvent(rootEvent);
+        await exporter.exportTracingEvent(resumedRootEvent);
+        await exporter.exportTracingEvent(childEvent);
+
+        const records = mockObservabilityStore.batchCreateSpans.mock.calls.flatMap((call: any) => call[0].records);
+        expect(records).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ spanId: 'root-span', parentSpanId: null }),
+            expect.objectContaining({ spanId: 'resumed-root-span', parentSpanId: 'suspended-span' }),
+            expect.objectContaining({ spanId: 'child-span', parentSpanId: 'root-span' }),
+          ]),
+        );
+      });
     });
 
     describe('Batch-with-updates strategy', () => {

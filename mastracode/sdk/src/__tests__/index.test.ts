@@ -40,6 +40,22 @@ vi.mock('@mastra/core/coding-agent', () => ({
 
 const agentConstructorMock = vi.fn();
 
+/**
+ * Both processor lanes are functions so plugin contributions can change without
+ * rebuilding the agent — call them to read the array the next request would get.
+ */
+function resolveInputProcessors(): Array<{ id?: string }> {
+  const config = agentConstructorMock.mock.calls[0]?.[0] as { inputProcessors?: unknown } | undefined;
+  expect(typeof config?.inputProcessors).toBe('function');
+  return (config!.inputProcessors as () => Array<{ id?: string }>)();
+}
+
+function resolveOutputProcessors(): Array<{ id?: string }> {
+  const config = agentConstructorMock.mock.calls[0]?.[0] as { outputProcessors?: unknown } | undefined;
+  expect(typeof config?.outputProcessors).toBe('function');
+  return (config!.outputProcessors as () => Array<{ id?: string }>)();
+}
+
 const controllerConstructorMock = vi.fn();
 const loadSettingsMock = vi.fn();
 const getAvailableModePacksMock = vi.fn(() => []);
@@ -115,6 +131,16 @@ function createMockSettings() {
   };
 }
 
+/** Stand-in for the Mastra the controller builds on init(). */
+const mastraStub = {
+  startWorkers: vi.fn(async () => {}),
+  stopWorkers: vi.fn(async () => {}),
+  addProcessor: vi.fn((processor: { id: string; __registerMastra?: (mastra: unknown) => void }) => {
+    processor.__registerMastra?.(mastraStub);
+  }),
+  addProcessorConfiguration: vi.fn(),
+};
+
 vi.mock('@mastra/core/agent-controller', () => ({
   AgentController: class {
     constructor(config: unknown) {
@@ -122,7 +148,7 @@ vi.mock('@mastra/core/agent-controller', () => ({
     }
     async init() {}
     getMastra() {
-      return undefined;
+      return mastraStub;
     }
     async createSession() {
       return {
@@ -222,6 +248,10 @@ vi.mock('../agents/tools.js', () => ({
 vi.mock('../agents/workspace.js', () => ({
   getDynamicWorkspace: getDynamicWorkspaceMock,
   getGoalJudgeTools: vi.fn(),
+}));
+
+vi.mock('../workflows/register-primitives.js', () => ({
+  registerWorkflowBuilderPrimitives: vi.fn(async () => {}),
 }));
 
 vi.mock('../auth/storage.js', () => ({
@@ -554,7 +584,13 @@ describe('createMastraCode', () => {
     expect(getDynamicMemoryMock).not.toHaveBeenCalled();
     expect(getStorageConfigMock).toHaveBeenCalledWith(projectPath, expect.anything(), '.acme-code');
     expect(createMcpManagerMock).toHaveBeenCalledWith(projectPath, '.acme-code', undefined);
-    expect(hookManagerConstructorMock).toHaveBeenCalledWith(projectPath, 'session-init', '.acme-code', undefined);
+    expect(hookManagerConstructorMock).toHaveBeenCalledWith(
+      projectPath,
+      'session-init',
+      '.acme-code',
+      undefined,
+      undefined,
+    );
   });
 
   it('passes custom workspace config through to AgentController without using the default factory', async () => {
@@ -585,6 +621,9 @@ describe('createMastraCode', () => {
         { id: 'acme.plugin', status: 'active', toolNames: ['plugin_tool'], instructions: 'Use plugin policy.' },
       ]),
       getPluginTools: vi.fn(() => ({ plugin_tool: { id: 'plugin_tool' } })),
+      setRuntime: vi.fn(),
+      onReload: vi.fn(),
+      getPluginSignalProviders: vi.fn(() => []),
     };
 
     await createMastraCode({ pluginManager: pluginManager as any });
@@ -685,7 +724,13 @@ describe('createMastraCode', () => {
     expect(getResourceIdOverrideMock).toHaveBeenCalledWith(projectPath, '.acme-code');
     expect(getStorageConfigMock).toHaveBeenCalledWith(projectPath, expect.anything(), '.acme-code');
     expect(createMcpManagerMock).toHaveBeenCalledWith(projectPath, '.acme-code', undefined);
-    expect(hookManagerConstructorMock).toHaveBeenCalledWith(projectPath, 'session-init', '.acme-code', undefined);
+    expect(hookManagerConstructorMock).toHaveBeenCalledWith(
+      projectPath,
+      'session-init',
+      '.acme-code',
+      undefined,
+      undefined,
+    );
     const agentControllerConfig = controllerConstructorMock.mock.calls[0]?.[0] as
       | { initialState?: Record<string, unknown> }
       | undefined;
@@ -823,9 +868,9 @@ describe('createMastraCode', () => {
     await createMastraCode();
 
     expect(agentConstructorMock).toHaveBeenCalled();
-    const agentConfig = agentConstructorMock.mock.calls[0]?.[0] as
-      | { errorProcessors?: Array<{ id?: string }> }
-      | undefined;
+    const agentConfig = agentConstructorMock.mock.calls
+      .map(call => call[0] as { errorProcessors?: Array<{ id?: string }> } | undefined)
+      .find(config => config?.errorProcessors?.some(processor => processor.id === 'stream-error-retry-processor'));
     expect(agentConfig?.errorProcessors?.map(processor => processor.id)).toEqual([
       'provider-history-compat',
       'stream-error-retry-processor',
@@ -905,19 +950,201 @@ describe('createMastraCode', () => {
     const { createMastraCode } = await import('../index.js');
     const customProcessor = { id: 'embedding-reconciler', processInputStep: vi.fn() };
 
-    await createMastraCode({ inputProcessors: [customProcessor] });
+    // Plugins off: this asserts the no-plugin baseline, and the machine running
+    // the test may have real plugins installed that contribute processors.
+    await createMastraCode({ inputProcessors: [customProcessor], disablePlugins: true });
 
-    const agentConfig = agentConstructorMock.mock.calls[0]?.[0] as
-      | { inputProcessors?: Array<{ id?: string }> }
-      | undefined;
-    const processors = agentConfig?.inputProcessors ?? [];
+    const processors = resolveInputProcessors();
     expect(processors[0]).toBe(customProcessor);
+    // With no plugins installed the plugin slot is empty, so the order is
+    // exactly what it was before the lane existed.
     expect(processors.map(processor => processor.id)).toEqual([
       'embedding-reconciler',
       'plan-rejection-abort',
       'agents-md-injector',
       'provider-history-compat',
     ]);
+    expect(resolveOutputProcessors()).toEqual([]);
+  });
+
+  it('hands Mastra to configured input processors, which the function lane takes out of the Agent path', async () => {
+    const { createMastraCode } = await import('../index.js');
+    // A processor that needs Mastra to work — CostGuardProcessor reads
+    // observability storage in this hook and throws without it.
+    mastraStub.addProcessor.mockClear();
+    const registeredWith: unknown[] = [];
+    const needsMastra = {
+      id: 'needs-mastra',
+      processInputStep: vi.fn(),
+      __registerMastra: (mastra: unknown) => registeredWith.push(mastra),
+    };
+
+    await createMastraCode({ inputProcessors: [needsMastra], disablePlugins: true });
+
+    expect(registeredWith).toEqual([mastraStub]);
+    expect(mastraStub.addProcessorConfiguration).toHaveBeenCalledWith(needsMastra, 'code-agent', 'input');
+    // The built-ins go through the same path, as they did when the lane was an array.
+    expect(mastraStub.addProcessor.mock.calls.map(([processor]) => processor.id)).toEqual([
+      'needs-mastra',
+      'plan-rejection-abort',
+      'agents-md-injector',
+      'provider-history-compat',
+    ]);
+  });
+
+  it('resolves plugin processors last, in both lanes, without rebuilding the agent', async () => {
+    const { createMastraCode } = await import('../index.js');
+    const pluginInput = { id: 'acme-input', processInputStep: vi.fn() };
+    const pluginOutput = { id: 'acme-output', processOutputStep: vi.fn() };
+    let entries: {
+      input: Array<{ pluginId: string; value: unknown }>;
+      output: Array<{ pluginId: string; value: unknown }>;
+    } = {
+      input: [{ pluginId: 'acme.plugin', value: pluginInput }],
+      output: [{ pluginId: 'acme.plugin', value: pluginOutput }],
+    };
+    const pluginManager = {
+      reload: vi.fn(async () => [{ id: 'acme.plugin', status: 'active', toolNames: [] }]),
+      getPluginTools: vi.fn(() => ({})),
+      setRuntime: vi.fn(),
+      onReload: vi.fn(),
+      getPluginSignalProviders: vi.fn(() => []),
+      getPluginProcessors: vi.fn(() => entries),
+    };
+
+    await createMastraCode({ pluginManager: pluginManager as any });
+
+    // Plugin processors are the customization layer over Mastra Code's own
+    // scaffolding, so they run after it — last in each configured array.
+    expect(resolveInputProcessors().map(processor => processor.id)).toEqual([
+      'plan-rejection-abort',
+      'agents-md-injector',
+      'provider-history-compat',
+      'acme-input',
+    ]);
+    expect(resolveOutputProcessors()).toEqual([pluginOutput]);
+
+    // A plugin disabled or updated mid-session changes what the manager reports;
+    // the next request picks it up through the same agent.
+    entries = { input: [], output: [] };
+
+    expect(resolveInputProcessors().map(processor => processor.id)).toEqual([
+      'plan-rejection-abort',
+      'agents-md-injector',
+      'provider-history-compat',
+    ]);
+    expect(resolveOutputProcessors()).toEqual([]);
+  });
+
+  it('runs plugin signal providers through the lane, never the agent signals array', async () => {
+    const { SignalProvider } = await import('@mastra/core/signals');
+    const { createMastraCode } = await import('../index.js');
+
+    const inputProcessor = { id: 'acme-provider-input', processInputStep: ({ messages }: any) => messages };
+    const outputProcessor = { id: 'acme-provider-output', processOutputStep: ({ messages }: any) => messages };
+    class AcmeProvider extends SignalProvider<string> {
+      readonly id = 'acme-signals';
+      getInputProcessors() {
+        return [inputProcessor] as never;
+      }
+      getOutputProcessors() {
+        return [outputProcessor] as never;
+      }
+    }
+    const provider = new AcmeProvider();
+    const pluginManager = {
+      reload: vi.fn(async () => [{ id: 'acme.plugin', status: 'active', toolNames: [] }]),
+      getPluginTools: vi.fn(() => ({})),
+      setRuntime: vi.fn(),
+      onReload: vi.fn(),
+      getPluginSignalProviders: vi.fn(() => [{ pluginId: 'acme.plugin', versionStamp: 'v1', value: provider }]),
+      getPluginProcessors: vi.fn(() => ({ input: [], output: [] })),
+    };
+
+    const built = await createMastraCode({ pluginManager: pluginManager as any });
+
+    // A provider in the constructor's `signals` array is harvested into a
+    // closure that can never be undone, so plugin providers must stay out.
+    const agentConfig = agentConstructorMock.mock.calls[0]?.[0] as { signals?: Array<{ id?: string }> };
+    expect(agentConfig?.signals?.map(signal => signal.id)).not.toContain('acme-signals');
+
+    // Startup boots the controller, which is when the lane starts its providers
+    // and their processors join both lanes.
+    expect(provider.isConnected).toBe(true);
+    expect(resolveInputProcessors().map(processor => processor.id)).toEqual([
+      'plan-rejection-abort',
+      'agents-md-injector',
+      'provider-history-compat',
+      'acme-provider-input',
+    ]);
+    expect(resolveOutputProcessors()).toEqual([outputProcessor]);
+    expect(built.controller).toBeDefined();
+  });
+
+  it('stops plugin signal providers and stops listening for reloads on teardown', async () => {
+    const { SignalProvider } = await import('@mastra/core/signals');
+    const { createMastraCode } = await import('../index.js');
+
+    const inputProcessor = { id: 'acme-provider-input', processInputStep: ({ messages }: any) => messages };
+    class AcmeProvider extends SignalProvider<string> {
+      readonly id = 'acme-signals';
+      getInputProcessors() {
+        return [inputProcessor] as never;
+      }
+    }
+    const provider = new AcmeProvider();
+    const stop = vi.spyOn(provider, 'stop');
+    const unsubscribeReload = vi.fn();
+    const pluginManager = {
+      reload: vi.fn(async () => [{ id: 'acme.plugin', status: 'active', toolNames: [] }]),
+      getPluginTools: vi.fn(() => ({})),
+      setRuntime: vi.fn(),
+      onReload: vi.fn(() => unsubscribeReload),
+      getPluginSignalProviders: vi.fn(() => [{ pluginId: 'acme.plugin', versionStamp: 'v1', value: provider }]),
+      getPluginProcessors: vi.fn(() => ({ input: [], output: [] })),
+    };
+
+    const built = await createMastraCode({ pluginManager: pluginManager as any });
+    expect(provider.isConnected).toBe(true);
+
+    // A pluginManager can be shared across controllers, so it outlives this one:
+    // without teardown its providers keep polling and its reload listener keeps
+    // firing for a controller that is gone.
+    built.stopPluginSignalProviders();
+
+    expect(stop).toHaveBeenCalledTimes(1);
+    expect(unsubscribeReload).toHaveBeenCalledTimes(1);
+    expect(resolveInputProcessors().map(processor => processor.id)).not.toContain('acme-provider-input');
+  });
+
+  it('swallows a failing plugin processor read instead of throwing out of the lane', async () => {
+    const { createMastraCode } = await import('../index.js');
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const pluginManager = {
+      reload: vi.fn(async () => [{ id: 'acme.plugin', status: 'active', toolNames: [] }]),
+      getPluginTools: vi.fn(() => ({})),
+      setRuntime: vi.fn(),
+      onReload: vi.fn(),
+      getPluginSignalProviders: vi.fn(() => []),
+      getPluginProcessors: vi.fn(() => {
+        throw new Error('plugin blew up');
+      }),
+    };
+
+    await createMastraCode({ pluginManager: pluginManager as any });
+
+    // The lanes also run outside the request path, where a throw is swallowed
+    // into a debug log and the agent silently loses every processor.
+    expect(() => resolveInputProcessors()).not.toThrow();
+    expect(resolveInputProcessors().map(processor => processor.id)).toEqual([
+      'plan-rejection-abort',
+      'agents-md-injector',
+      'provider-history-compat',
+    ]);
+    expect(resolveOutputProcessors()).toEqual([]);
+    // Warned once, not once per request: this is the hot path.
+    expect(warn).toHaveBeenCalledTimes(1);
+    warn.mockRestore();
   });
 
   it('configures ProviderHistoryCompat for prompt and API error compatibility', async () => {
@@ -926,10 +1153,10 @@ describe('createMastraCode', () => {
     await createMastraCode();
 
     expect(agentConstructorMock).toHaveBeenCalled();
-    const agentConfig = agentConstructorMock.mock.calls[0]?.[0] as
-      | { inputProcessors?: Array<{ id?: string }>; errorProcessors?: Array<{ id?: string }> }
-      | undefined;
-    expect(agentConfig?.inputProcessors?.map(processor => processor.id)).toContain('provider-history-compat');
+    const agentConfig = agentConstructorMock.mock.calls
+      .map(call => call[0] as { errorProcessors?: Array<{ id?: string }> } | undefined)
+      .find(config => config?.errorProcessors?.some(processor => processor.id === 'provider-history-compat'));
+    expect(resolveInputProcessors().map(processor => processor.id)).toContain('provider-history-compat');
     expect(agentConfig?.errorProcessors?.map(processor => processor.id)).toContain('provider-history-compat');
   });
 
@@ -942,8 +1169,11 @@ describe('createMastraCode', () => {
 
     await createMastraCode({ disableGithubSignals: true });
 
-    const agentConfig = agentConstructorMock.mock.calls[0]?.[0] as { signals?: Array<{ id?: string }> } | undefined;
-    expect(agentConfig?.signals?.map(signal => signal.id)).not.toContain('github-signals');
+    const agentConfigs = agentConstructorMock.mock.calls.map(
+      call => call[0] as { signals?: Array<{ id?: string }> } | undefined,
+    );
+    const hasGithub = agentConfigs.some(config => config?.signals?.some(signal => signal.id === 'github-signals'));
+    expect(hasGithub).toBe(false);
   });
 
   it('configures GitHubSignals as a signal provider for local PR subscriptions', async () => {
@@ -960,8 +1190,10 @@ describe('createMastraCode', () => {
     await createMastraCode();
 
     expect(agentConstructorMock).toHaveBeenCalled();
-    const agentConfig = agentConstructorMock.mock.calls[0]?.[0] as { signals?: Array<{ id?: string }> } | undefined;
-    expect(agentConfig?.signals?.map(s => s.id)).toContain('github-signals');
+    const agentConfig = agentConstructorMock.mock.calls
+      .map(call => call[0] as { signals?: Array<{ id?: string }> } | undefined)
+      .find(config => config?.signals?.some(signal => signal.id === 'github-signals'));
+    expect(agentConfig?.signals?.map(signal => signal.id)).toContain('github-signals');
     expect(startPollingForThread).toHaveBeenCalledWith(
       { threadId: 'thread-1', resourceId: 'thread-resource' },
       { pollImmediately: true },

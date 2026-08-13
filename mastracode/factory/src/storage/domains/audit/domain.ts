@@ -1,6 +1,6 @@
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
 import type { RequestContext } from '@mastra/core/request-context';
-import type { ApiRoute } from '@mastra/core/server';
+import type { ApiRoute, IUserProvider } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
@@ -49,12 +49,66 @@ interface FactorySessionState {
   projectRepositoryId?: string;
 }
 
+export interface AuditActorProfile {
+  id: string;
+  name: string;
+  avatarUrl?: string;
+}
+
+/**
+ * Reserved metadata key on `AuditEventRow.metadata` that carries the acting
+ * human user's display name and avatar captured from the auth context at
+ * record time. Read back by `#resolveActorProfiles` so names/avatars work
+ * for every auth provider without requiring an `IUserProvider.getUser(id)`
+ * implementation — the Studio provider proxies through the shared API and
+ * cannot resolve arbitrary users by id.
+ */
+const ACTOR_PROFILE_METADATA_KEY = '__actorProfile';
+
+interface StoredActorProfile {
+  name?: string;
+  avatarUrl?: string;
+}
+
+function readStoredActorProfile(metadata: Record<string, unknown> | undefined): StoredActorProfile | undefined {
+  if (!metadata) return undefined;
+  const raw = metadata[ACTOR_PROFILE_METADATA_KEY];
+  if (!raw || typeof raw !== 'object') return undefined;
+  const profile = raw as Record<string, unknown>;
+  const name = typeof profile.name === 'string' && profile.name.trim() ? profile.name.trim() : undefined;
+  const avatarUrl =
+    typeof profile.avatarUrl === 'string' && profile.avatarUrl.trim() ? profile.avatarUrl.trim() : undefined;
+  if (!name && !avatarUrl) return undefined;
+  return { ...(name ? { name } : {}), ...(avatarUrl ? { avatarUrl } : {}) };
+}
+
+/** Read the auth gate's stashed user directly from the Hono context. */
+function readFactoryAuthUserFromContext(
+  context: Context,
+): { name?: string; email?: string; avatarUrl?: string } | undefined {
+  const user = context.get('factoryAuthUser') as { name?: string; email?: string; avatarUrl?: string } | undefined;
+  return user ?? undefined;
+}
+
+function buildActorProfileMetadata(user: {
+  name?: string;
+  email?: string;
+  avatarUrl?: string;
+}): StoredActorProfile | undefined {
+  const name = user.name?.trim() || user.email?.trim();
+  const avatarUrl = user.avatarUrl?.trim();
+  if (!name && !avatarUrl) return undefined;
+  return { ...(name ? { name } : {}), ...(avatarUrl ? { avatarUrl } : {}) };
+}
+
 export interface AuditDomainOptions {
   auth: RouteAuth;
   /** Audit storage domain handle. */
   audit: AuditStorage;
   /** Projects domain handle, used to scope the audit trail route. */
   projects: FactoryProjectsStorage;
+  /** Resolve persisted human actor ids to display names and profile images. */
+  users?: Pick<IUserProvider, 'getUser' | 'getUsers'>;
   /** Best-effort fan-out destinations notified after each recorded event. */
   sinks?: AuditSink[];
   /** Resolve the acting tenant for agent-emitted events from the request context. */
@@ -63,6 +117,14 @@ export interface AuditDomainOptions {
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_ACTION_FILTERS = 16;
+const MAX_ACTOR_PROFILES = 100;
+const AUTOMATION_ACTORS = new Set([
+  'factory',
+  'system',
+  'automation',
+  'factory-rule-dispatcher',
+  'factory-tool-result-rule',
+]);
 
 function loose(c: unknown): Context {
   return c as Context;
@@ -76,6 +138,23 @@ function parseActionsParam(raw: string | undefined): string[] | undefined {
     .filter(Boolean)
     .slice(0, MAX_ACTION_FILTERS);
   return actions.length > 0 ? actions : undefined;
+}
+
+function isHumanActorId(actorId: string | undefined): actorId is string {
+  if (!actorId) return false;
+  return !AUTOMATION_ACTORS.has(actorId) && !actorId.startsWith('agent:') && !actorId.startsWith('github:');
+}
+
+function parseActorIdsParam(raw: string | undefined): string[] {
+  if (!raw) return [];
+  return [
+    ...new Set(
+      raw
+        .split(',')
+        .map(actorId => actorId.trim())
+        .filter(isHumanActorId),
+    ),
+  ].slice(0, MAX_ACTOR_PROFILES);
 }
 
 function parseLimitParam(raw: string | undefined): number | undefined {
@@ -98,13 +177,15 @@ export class AuditDomain implements AuditEmitter, AuditAgentEmitter {
   readonly #auth: RouteAuth;
   readonly #audit: AuditStorage;
   readonly #projects: FactoryProjectsStorage;
+  readonly #users: AuditDomainOptions['users'];
   readonly #sinks: AuditSink[];
   readonly #agentTenant: AuditDomainOptions['agentTenant'];
 
-  constructor({ auth, audit, projects, sinks = [], agentTenant }: AuditDomainOptions) {
+  constructor({ auth, audit, projects, users, sinks = [], agentTenant }: AuditDomainOptions) {
     this.#auth = auth;
     this.#audit = audit;
     this.#projects = projects;
+    this.#users = users;
     this.#sinks = sinks;
     this.#agentTenant = agentTenant;
 
@@ -151,12 +232,17 @@ export class AuditDomain implements AuditEmitter, AuditAgentEmitter {
     try {
       const tenant = this.#auth.tenant(context);
       if (!tenant?.orgId) return;
+      const user = readFactoryAuthUserFromContext(context);
+      const actorProfile = user ? buildActorProfileMetadata(user) : undefined;
+      const metadata = actorProfile
+        ? { ...input.metadata, [ACTOR_PROFILE_METADATA_KEY]: actorProfile }
+        : input.metadata;
       await this.record({
         orgId: tenant.orgId,
         actorId: tenant.userId,
         action: input.action,
         targets: input.targets,
-        metadata: input.metadata,
+        metadata,
         factoryProjectId: input.factoryProjectId,
         projectRepositoryId: input.projectRepositoryId,
         context: auditRequestContext(context),
@@ -187,13 +273,20 @@ export class AuditDomain implements AuditEmitter, AuditAgentEmitter {
       const state = context?.getState();
       if (!orgId || !userId || !threadId || !state?.factoryProjectId) return;
 
+      const modeId = context.session.modeId?.trim();
+      const modelId = context.session.modelId?.trim();
       await this.record({
         orgId,
         actorId: `agent:${threadId}`,
         actorType: 'agent',
         action: input.action,
         targets: input.targets,
-        metadata: { ...input.metadata, startedBy: userId },
+        metadata: {
+          ...input.metadata,
+          startedBy: userId,
+          ...(modeId ? { agentName: `${modeId} agent` } : {}),
+          ...(modelId ? { modelId } : {}),
+        },
         factoryProjectId: state.factoryProjectId,
         projectRepositoryId: state.projectRepositoryId,
         context: {},
@@ -204,6 +297,63 @@ export class AuditDomain implements AuditEmitter, AuditAgentEmitter {
         error: err instanceof Error ? err.message : String(err),
       });
     }
+  }
+
+  async #resolveActorProfiles(
+    events: AuditEventRow[],
+    requestedActorIds: string[] = [],
+  ): Promise<Record<string, AuditActorProfile>> {
+    const humanActorIds = [
+      ...new Set(
+        [
+          ...requestedActorIds,
+          ...events.filter(event => event.actorType === 'human').map(event => event.actorId),
+        ].filter(isHumanActorId),
+      ),
+    ].slice(0, MAX_ACTOR_PROFILES);
+    if (humanActorIds.length === 0) return {};
+
+    // Prefer the profile stamped into event metadata at record time: it works
+    // regardless of the auth provider's ability to resolve a user by id
+    // (MastraAuthStudio's getUser() always returns null, WorkOS looks up by
+    // id but every provider stamps here uniformly).
+    const profiles: Record<string, AuditActorProfile> = {};
+    for (const event of events) {
+      if (event.actorType !== 'human') continue;
+      if (!isHumanActorId(event.actorId)) continue;
+      if (profiles[event.actorId]) continue;
+      const stored = readStoredActorProfile(event.metadata);
+      if (!stored?.name) continue;
+      profiles[event.actorId] = {
+        id: event.actorId,
+        name: stored.name,
+        ...(stored.avatarUrl ? { avatarUrl: stored.avatarUrl } : {}),
+      };
+    }
+
+    const unresolved = humanActorIds.filter(actorId => !profiles[actorId]);
+    if (unresolved.length === 0 || !this.#users) return profiles;
+
+    try {
+      const users = this.#users.getUsers
+        ? await this.#users.getUsers(unresolved)
+        : await Promise.all(unresolved.map(actorId => this.#users?.getUser(actorId) ?? null));
+      for (const [index, user] of users.entries()) {
+        if (!user) continue;
+        const name = user.name?.trim() || user.email?.trim() || user.id;
+        const actorId = unresolved[index] ?? user.id;
+        profiles[actorId] = {
+          id: user.id,
+          name,
+          ...(user.avatarUrl ? { avatarUrl: user.avatarUrl } : {}),
+        };
+      }
+    } catch (err) {
+      console.warn('[Audit] Failed to resolve audit actor profiles', {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+    return profiles;
   }
 
   routes(): ApiRoute[] {
@@ -229,7 +379,8 @@ export class AuditDomain implements AuditEmitter, AuditAgentEmitter {
             before: c.req.query('before') || undefined,
             limit: parseLimitParam(c.req.query('limit')),
           });
-          return c.json(page);
+          const actors = await this.#resolveActorProfiles(page.events, parseActorIdsParam(c.req.query('actorIds')));
+          return c.json({ ...page, actors });
         },
       }),
     ];

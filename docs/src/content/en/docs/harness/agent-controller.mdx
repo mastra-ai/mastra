@@ -1,0 +1,426 @@
+---
+title: "Agent Controller | Harness"
+description: "Build interactive agent applications with isolated sessions, persistent threads, modes, approvals, subagents, and channels."
+packages:
+  - "@mastra/core"
+---
+
+# Agent Controller
+
+:::beta
+
+Breaking changes may occur without a major version bump until the API is stable.
+
+:::
+
+`AgentController` is a shared runtime host for interactive agent applications. It coordinates modes, models, storage, workspaces, tool approvals, subagents, and channels. Each user or active task works through an isolated [`Session`](/reference/agent-controller/session).
+
+[Mastra Code](https://code.mastra.ai) and [Mastra Factory](https://factory.mastra.ai) are the flagship AgentController implementations. They're coding agents with multi-model support, persistent conversations, and plan-then-execute workflows. Read [Building a coding agent](https://mastra.ai/blog/building-a-coding-agent) for a step-by-step TUI guide.
+
+## When to use the Agent Controller
+
+Use the Agent Controller when your application needs:
+
+- Multiple agent modes that share one conversation thread (e.g., plan → build → review)
+- A control layer between your UI and the agent loop (model switching, state persistence, thread management)
+- Tool approval flows and permission policies for human-in-the-loop gating
+- Subagent orchestration to delegate focused subtasks with constrained tools
+- Persistent threads and selected thread settings across restarts, with isolated live state for each Session
+
+You could assemble all of this yourself on top of the [Agent class](/docs/agents/overview), which exposes the full agent loop, tools, and memory. The AgentController provides opinionated defaults for an ongoing session where the agent acts as a collaborator rather than a one-shot endpoint. Reach for the Agent class directly when you want full control or a request-response call. Reach for the AgentController when you want the collaborative-session model without building the runtime around it.
+
+## Quickstart
+
+Create the backing [`Agent`](/reference/agents/agent), storage, and [`Workspace`](/reference/workspace/workspace-class). Call [`controller.init()`](/reference/agent-controller/agent-controller-class#init) once, then use [`controller.createSession()`](/reference/agent-controller/agent-controller-class#createsessionoptions) to create a Session. Subscribe with [`session.subscribe()`](/reference/agent-controller/session#subscribelistener) and send work with [`session.sendMessage()`](/reference/agent-controller/session#sendmessage-content-files-requestcontext-):
+
+```typescript title="src/mastra/agent-controller.ts"
+import { Agent } from '@mastra/core/agent'
+import { AgentController } from '@mastra/core/agent-controller'
+import { LocalFilesystem, Workspace } from '@mastra/core/workspace'
+import { LibSQLStore } from '@mastra/libsql'
+
+const agent = new Agent({
+  id: 'assistant',
+  name: 'Assistant',
+  instructions: 'Help the user plan and complete tasks.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+})
+
+const controller = new AgentController({
+  id: 'assistant-controller',
+  agent,
+  storage: new LibSQLStore({
+    id: 'agent-controller-storage',
+    url: 'file:./mastra.db',
+  }),
+  workspace: new Workspace({
+    id: 'assistant-workspace',
+    filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  }),
+  modes: [
+    {
+      id: 'plan',
+      name: 'Plan',
+      metadata: { default: true },
+      instructions: 'Reason about the task before making changes.',
+    },
+    {
+      id: 'build',
+      name: 'Build',
+      instructions: 'Implement the approved plan.',
+    },
+  ],
+})
+
+await controller.init()
+
+const session = await controller.createSession({
+  resourceId: 'user-123',
+})
+
+const unsubscribe = session.subscribe(event => {
+  if (event.type === 'message_update') {
+    console.log(event.message)
+  }
+})
+
+await session.sendMessage({ content: 'Plan a small TypeScript CLI.' })
+unsubscribe()
+```
+
+Use the same controller for many Sessions. Don't store a current Session on the controller or route work through controller-level message methods.
+
+## Understand the runtime model
+
+The controller, Session, and thread have different lifetimes:
+
+- **Controller**: A shared host for configuration and runtime services. Initialize it once and reuse it.
+- **Session**: An isolated live runtime for one user, task, or concurrent work scope. It owns the active mode, model, state, event bus, run state, grants, and current thread binding.
+- **Thread**: A stored conversation containing messages and thread settings. Threads can survive controller and process recreation when you configure storage.
+
+A Session is live state. Arbitrary [`session.state`](/reference/agent-controller/session#state), permission grants, pending approvals, and active runs don't automatically survive process recreation. Thread messages and selected thread settings, including mode and per-mode model choices, can persist through storage.
+
+## Sessions and threads
+
+`createSession()` is get-or-create by `resourceId` and optional `scope`:
+
+```typescript
+const webSession = await controller.createSession({
+  resourceId: 'user-123',
+  scope: 'web',
+})
+
+const sameWebSession = await controller.createSession({
+  resourceId: 'user-123',
+  scope: 'web',
+})
+
+const workerSession = await controller.createSession({
+  resourceId: 'user-123',
+  scope: 'background-worker',
+})
+
+console.log(webSession === sameWebSession) // true
+console.log(webSession === workerSession) // false
+```
+
+Sessions with different scopes have separate event buses, run loops, state, mode and model selections, and current thread bindings. Their stored threads still belong to the shared `resourceId`.
+
+Pass `threadId` when the host must bind the Session to an exact thread. The controller switches to the existing thread or creates it with that ID when it's missing. This behavior also applies when `createSession()` returns a cached Session:
+
+```typescript
+const session = await controller.createSession({
+  resourceId: 'user-123',
+  scope: 'web',
+  threadId: 'support-ticket-42',
+})
+```
+
+Use [`session.thread.create()`](/reference/agent-controller/session#sessionthreadcreate-title-id-) and [`session.thread.switch()`](/reference/agent-controller/session#sessionthreadswitch-threadid-emitevent-) to move one live Session between conversations.
+
+## Switch modes and models
+
+Modes change the instructions and tools used by the shared backing agent without replacing the Session or thread. Configure mode-specific tools and visibility on the controller:
+
+```typescript
+const modes = [
+  {
+    id: 'plan',
+    name: 'Plan',
+    metadata: { default: true },
+    instructions: 'Investigate the task and propose a plan.',
+    additionalTools: { searchDocs },
+    availableTools: ['searchDocs', 'submit_plan'],
+    transitionsTo: 'build',
+  },
+  {
+    id: 'build',
+    name: 'Build',
+    instructions: 'Implement the approved plan.',
+  },
+]
+```
+
+`tools` and `additionalTools` are mutually exclusive inputs for adding mode-specific tools. When the controller has a shared backing agent, either input layers those tools onto the agent's tools. Use `availableTools` to restrict the final exposed tool names for a mode. Permission denies still take precedence over this allowlist.
+
+Switch the live Session with [`session.mode.switch()`](/reference/agent-controller/session#sessionmodeswitch-modeid-). Read the active mode with [`session.mode.get()`](/reference/agent-controller/session#sessionmodeget) or [`session.mode.resolve()`](/reference/agent-controller/session#sessionmoderesolve):
+
+```typescript
+await session.mode.switch({ modeId: 'build' })
+
+console.log(session.mode.get()) // "build"
+console.log(session.mode.resolve().instructions)
+```
+
+Switch models independently with [`session.model.switch()`](/reference/agent-controller/session#sessionmodelswitch-modelid-scope-modeid-), then read the active selection with [`session.model.get()`](/reference/agent-controller/session#sessionmodelget). Thread-scoped selections are stored per mode and restored when the Session returns to that mode:
+
+```typescript
+await session.model.switch({
+  modelId: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
+  scope: 'thread',
+})
+
+console.log(session.model.get())
+```
+
+Use `scope: 'global'` for an in-memory selection that shouldn't be written to thread settings.
+
+## Manage threads and state
+
+List stored conversations with [`session.thread.list()`](/reference/agent-controller/session#sessionthreadlistoptions):
+
+```typescript
+const thread = await session.thread.create({ title: 'Release planning' })
+const threads = await session.thread.list()
+
+await session.thread.switch({ threadId: thread.id })
+console.log(threads.length)
+```
+
+Use `session.state` for structured live state associated with the Session. Read it with [`session.state.get()`](/reference/agent-controller/session#sessionstateget) and write updates with [`session.state.set()`](/reference/agent-controller/session#sessionstatesetupdates). Define `stateSchema` and `initialState` on the controller when you need validation and defaults:
+
+```typescript
+console.log(session.state.get())
+
+await session.state.set({ activeProject: 'docs-site' })
+```
+
+`session.state.get()` returns a snapshot. `set()` validates and merges the update into the Session state. Treat this state as live Session data unless your host explicitly persists and restores it.
+
+## Approve tools and resume suspensions
+
+Permission policies decide whether a tool is allowed, denied, or sent to the UI for approval. Map custom tools to categories with `toolCategoryResolver` on the controller:
+
+```typescript
+const controller = new AgentController({
+  toolCategoryResolver: toolName => {
+    if (toolName === 'delete_project') return 'execute'
+    return null
+  },
+})
+```
+
+Configure category policies with [`session.permissions.setForCategory()`](/reference/agent-controller/session#sessionpermissionssetforcategory-category-policy-) and tool policies with [`session.permissions.setForTool()`](/reference/agent-controller/session#sessionpermissionssetfortool-toolname-policy-):
+
+```typescript
+await session.permissions.setForCategory({
+  category: 'execute',
+  policy: 'ask',
+})
+
+await session.permissions.setForTool({
+  toolName: 'delete_project',
+  policy: 'deny',
+})
+```
+
+When a policy resolves to `ask`, subscribe for the approval event and return the user's decision with [`session.respondToToolApproval()`](/reference/agent-controller/session#respondtotoolapproval-decision-toolcallid-requestcontext-declinecontext-):
+
+```typescript
+session.subscribe(event => {
+  if (event.type === 'tool_approval_required') {
+    session.respondToToolApproval({
+      toolCallId: event.toolCallId,
+      decision: 'approve',
+    })
+  }
+})
+```
+
+The `always_allow_category` decision grants the tool category for the rest of the live Session. Session grants aren't durable process-level permissions.
+
+Interactive tools such as [`ask_user`](/reference/tools/ask-user-tool) and [`submit_plan`](/reference/tools/submit-plan-tool) use resumable tool suspensions instead. Resume them with [`session.respondToToolSuspension()`](/reference/agent-controller/session#respondtotoolsuspension-resumedata-toolcallid-requestcontext-):
+
+```typescript
+session.subscribe(event => {
+  if (event.type === 'tool_suspended' && event.toolName === 'ask_user') {
+    void session.respondToToolSuspension({
+      toolCallId: event.toolCallId,
+      resumeData: 'Use SQLite.',
+    })
+  }
+})
+```
+
+For `submit_plan`, resume with `{ action: 'approved' }` or `{ action: 'rejected', feedback }`. An approved plan can switch to the mode configured by `transitionsTo` before the run continues.
+
+## Delegate to subagents
+
+Configure available subagent types on the controller. The built-in `subagent` tool can then delegate focused tasks using those definitions:
+
+```typescript
+const controller = new AgentController({
+  tools: {
+    searchDocs,
+  },
+  subagents: [
+    {
+      id: 'code-reviewer',
+      name: 'Code reviewer',
+      description: 'Review a change for correctness and regressions.',
+      instructions: 'Inspect the change and report actionable findings.',
+      allowedControllerTools: ['searchDocs'],
+      allowedWorkspaceTools: ['view', 'find_files'],
+      defaultModelId: '__GATEWAY_OPENAI_MODEL_MINI__',
+    },
+  ],
+})
+```
+
+A regular subagent starts with its configured instructions and constrained toolset. Set `forked: true` when the child should clone the parent thread and run with the parent agent's instructions and tools. Forked subagents preserve the parent prompt prefix, ignore the definition's instructions, tools, allowlists, and default model, and require memory on the controller.
+
+Use [`session.subagents.model.set()`](/reference/agent-controller/session#sessionsubagentsmodelset-modelid-agenttype-) to store one default subagent model or a model for a specific agent type. Read the selection with [`session.subagents.model.get()`](/reference/agent-controller/session#sessionsubagentsmodelget-agenttype-):
+
+```typescript
+await session.subagents.model.set({
+  modelId: '__GATEWAY_OPENAI_MODEL_MINI__',
+})
+
+await session.subagents.model.set({
+  agentType: 'code-reviewer',
+  modelId: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
+})
+
+const reviewerModel = session.subagents.model.get({
+  agentType: 'code-reviewer',
+})
+```
+
+These selections are written to thread settings. An agent-type selection takes precedence over the Session's default subagent model.
+
+## Connect chat channels
+
+Pass channel adapters to the controller and register it on a [`Mastra`](/reference/core/mastra-class) instance:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { AgentController } from '@mastra/core/agent-controller'
+import { createSlackAdapter } from '@chat-adapter/slack'
+
+const controller = new AgentController({
+  id: 'support-controller',
+  agent,
+  storage,
+  workspace,
+  modes,
+  channels: {
+    adapters: {
+      slack: createSlackAdapter(),
+    },
+    resolveResourceId: ({ thread, message, defaultResourceId }) => {
+      if (thread.isDM) return message.author.userId
+      return defaultResourceId
+    },
+    onSessionStart: async ({ session, thread }) => {
+      const plan = await billing.planFor(thread.resourceId)
+      await session.model.switch({ modelId: plan.modelId })
+    },
+  },
+})
+
+export const mastra = new Mastra({
+  agentControllers: { controller },
+  storage,
+})
+```
+
+Point each platform webhook at the controller-specific route:
+
+```text
+/api/agent-controllers/<CONTROLLER_ID>/channels/<PLATFORM>/webhook
+```
+
+Each external chat thread maps to one controller Session and Mastra thread. By default, new sessions use a resource ID derived from the adapter's chat-thread ID, prefixed with `channel:`. Use `resolveResourceId` to map direct messages to an existing application user or choose another memory owner. The callback only affects new threads. An existing thread keeps its stored resource ID.
+
+Channel sessions are created by the controller rather than by your code, so `onSessionStart` is where you configure them. It runs once per session, after the session is bound to its mapped thread and before the first message is handled. A channel session starts with controller defaults, so this is where you set its model and memory settings. Later messages in the same thread reuse the session and don't call it again. Errors are logged and swallowed so a session that can't be configured still answers the message.
+
+### Authorize and route channel sessions
+
+`onSessionStart` runs after the session exists and swallows errors, so it can't refuse a request. Use `resolveSession` when your host decides whether a session may exist. It replaces the built-in session creation and runs before any session exists. Throwing refuses the request before the controller creates a session or calls the model. Mastra logs the refusal and leaves the chat thread silent, so your authorization message never reaches the channel.
+
+```typescript
+channels: {
+  adapters: { slack: createSlackAdapter() },
+  resolveSession: async ({ controller, thread, requestContext }) => {
+    const install = await installs.authorize(requestContext.get('teamId'))
+
+    return controller.createSession({
+      resourceId: thread.resourceId,
+      scope: install.id,
+      ownerId: controller.id,
+      requestContext,
+    })
+  },
+}
+```
+
+Create the session under `thread.resourceId`. A session can only bind threads it owns, so use `resolveResourceId` if you want a different owner for the mapped thread. Sessions are get-or-create per `resourceId` and `scope`, so pass `scope` when one thread needs separate sessions per install or principal.
+
+Failures that aren't refusals (a storage outage, a bug in your resolver's dependencies) still post an error to the thread, so a broken bot doesn't look like a silent one. If you need to tell them apart in your own code, a refusal is a `ChannelSessionRejectedError` with the original error as its `cause`.
+
+`resolveSession` also runs when a user answers an approval card, with that action's request context, so a shared install revalidates the person approving rather than trusting the person who sent the original message.
+
+### Handle stale approvals
+
+An approval gate lives in memory, so every approval answered after a restart is stale. Mastra never runs the tool for a stale action. Use `onStaleToolApproval` to settle the attempt the user answered, instead of dropping it:
+
+```typescript
+channels: {
+  adapters: { slack: createSlackAdapter() },
+  onStaleToolApproval: async ({ decision, toolCallId, runId, memory }) => {
+    await runs.markInterrupted({ runId, toolCallId, decision, threadId: memory.thread })
+  },
+}
+```
+
+`runId` is the run the approval card was rendered for, which is the attempt the user answered and the one you settle against after a restart. The session's own run is passed separately as `currentRunId`, and is usually `null` or a different run by then.
+
+Controller channel sessions and auto-approval state are held in memory, so use a long-lived server. Pending approvals and live Session state don't survive process restarts. Adapters that can't render approval controls automatically run tools without an approval prompt so the run doesn't remain suspended.
+
+See [Channels](/docs/capabilities/channels) for adapter setup and platform-specific webhook configuration.
+
+## Connect a UI
+
+Subscribe to Session events for incremental updates. Read the reduced display state with [`session.displayState.get()`](/reference/agent-controller/session#sessiondisplaystateget) when the UI needs a complete render snapshot:
+
+```typescript
+const unsubscribe = session.subscribe(event => {
+  if (event.type === 'display_state_changed') {
+    render(event.displayState)
+  }
+})
+
+render(session.displayState.get())
+
+// Call when the UI disconnects.
+unsubscribe()
+```
+
+Subscriptions are isolated by Session. Events from another Session on the same controller aren't delivered to this listener. Read the [Building a coding agent](https://mastra.ai/blog/building-a-coding-agent) guide for a complete TUI example.
+
+## Related
+
+- [Agents](/docs/agents/overview)
+- [Workspace](/docs/workspace/overview)
+- [Observational memory](/docs/memory/observational-memory)
+- [Channels](/docs/capabilities/channels)

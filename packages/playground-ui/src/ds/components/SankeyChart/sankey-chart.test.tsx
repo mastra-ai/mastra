@@ -249,6 +249,56 @@ describe('SankeyChart', () => {
     });
   });
 
+  describe('when a fixed-geometry flow is disconnected in the middle', () => {
+    it('draws each ribbon between its own columns instead of spanning the chart', async () => {
+      // Links exist only for goal->outcome and behavior->sentiment. Depth-based
+      // layouts would push outcome and sentiment to the rightmost column,
+      // stretching both ribbons across the full chart width away from their
+      // fixed-position nodes.
+      render(
+        <Sankey
+          data={[
+            { goal: 'A', goalCount: 2, outcome: 'B', outcomeCount: 2, count: 2, layoutCount: 2 },
+            { behavior: 'C', behaviorCount: 14, sentiment: 'D', sentimentCount: 14, count: 14, layoutCount: 14 },
+          ]}
+          columns={[
+            { id: 'goal', label: 'Goal' },
+            { id: 'outcome', label: 'Outcome' },
+            { id: 'behavior', label: 'Behavior' },
+            { id: 'sentiment', label: 'Sentiment' },
+          ]}
+          getRecordWeight={record => Number(record.count)}
+          getRecordLayoutWeight={record => Number(record.layoutCount)}
+          getRecordNodeValue={(record, column) => Number(record[`${column.id}Count`])}
+        >
+          <SankeyChart />
+        </Sankey>,
+      );
+      await screen.findAllByText('Goal');
+
+      // fixed geometry: width 800, margins 160/160, node width 7
+      const left = 160;
+      const right = 800 - 160 - 7;
+      const pitch = (right - left) / 3;
+      const paths = [...document.querySelectorAll<SVGPathElement>('svg path[fill^="url(#sankey-grad"]')];
+      const endpoints = paths.map(path => {
+        const coordinates =
+          path
+            .getAttribute('d')
+            ?.match(/-?[\d.]+/g)
+            ?.map(Number) ?? [];
+        const xValues = coordinates.filter((_, index) => index % 2 === 0);
+        return { sourceX: xValues[0] ?? 0, targetX: xValues[3] ?? 0 };
+      });
+
+      expect(endpoints).toHaveLength(2);
+      expect(endpoints[0]?.sourceX).toBeCloseTo(left + 7, 0);
+      expect(endpoints[0]?.targetX).toBeCloseTo(left + pitch, 0);
+      expect(endpoints[1]?.sourceX).toBeCloseTo(left + pitch * 2 + 7, 0);
+      expect(endpoints[1]?.targetX).toBeCloseTo(right, 0);
+    });
+  });
+
   describe('when a node label includes a description', () => {
     const description =
       'Looks up relevant knowledge before responding, including all supporting context needed to explain a long theme description without clipping it.';
@@ -305,6 +355,30 @@ describe('SankeyChart', () => {
       expect(container.querySelector('svg path[fill-opacity]')?.getAttribute('fill-opacity')).toBe('0.75');
     });
 
+    it('shows only the custom tooltip, never a second native title popup', async () => {
+      renderDescribedNode();
+      const node = await screen.findByLabelText(nodeLabel);
+
+      fireEvent.mouseEnter(node);
+
+      expect(screen.getByRole('tooltip', { name: tooltipLabel })).not.toBeNull();
+      expect(node.querySelector('title')).toBeNull();
+    });
+
+    it('does not open the theme tooltip when the column header is hovered', async () => {
+      const { container } = renderDescribedNode();
+      await screen.findByLabelText(nodeLabel);
+      const header = [...container.querySelectorAll('svg text[font-size="12"]')].find(
+        label => label.textContent === 'Channel',
+      );
+      if (!header) throw new Error('Column header was not rendered');
+
+      fireEvent.mouseEnter(header);
+
+      expect(screen.queryByRole('tooltip')).toBeNull();
+      expect(screen.getByLabelText(nodeLabel).contains(header)).toBe(false);
+    });
+
     it('keeps the description and ribbons active when a hovered node loses focus', async () => {
       const { container } = renderDescribedNode();
       const node = await screen.findByLabelText(nodeLabel);
@@ -315,6 +389,96 @@ describe('SankeyChart', () => {
 
       expect(screen.getByRole('tooltip', { name: tooltipLabel })).not.toBeNull();
       expect(container.querySelector('svg path[fill-opacity]')?.getAttribute('fill-opacity')).toBe('0.75');
+    });
+  });
+
+  describe('when a column description is provided', () => {
+    function renderDescribedColumns() {
+      return render(
+        <Sankey data={data} columns={columns}>
+          <SankeyChart
+            getColumnDescription={column => (column.id === 'channel' ? 'Where the lead came from.' : undefined)}
+          />
+        </Sankey>,
+      );
+    }
+
+    function findColumnHeader(container: HTMLElement, label: string) {
+      const header = [...container.querySelectorAll('svg text[font-size="12"]')].find(
+        candidate => candidate.textContent === label,
+      );
+      if (!header) throw new Error(`Column header ${label} was not rendered`);
+      return header;
+    }
+
+    it('shows the description when the column header is hovered', async () => {
+      const { container } = renderDescribedColumns();
+      await screen.findAllByText('Channel');
+      const header = findColumnHeader(container, 'Channel');
+
+      fireEvent.mouseEnter(header);
+
+      expect(screen.getByRole('tooltip').textContent).toContain('Where the lead came from.');
+    });
+
+    it('shows the description when the named column header receives focus', async () => {
+      const { container } = renderDescribedColumns();
+      await screen.findAllByText('Channel');
+      const header = findColumnHeader(container, 'Channel');
+
+      fireEvent.focus(header);
+
+      expect(screen.getByRole('img', { name: 'Channel' })).toBe(header);
+      expect(screen.getByRole('tooltip').textContent).toContain('Where the lead came from.');
+    });
+
+    it('hides the description again when the header loses focus', async () => {
+      const { container } = renderDescribedColumns();
+      await screen.findAllByText('Channel');
+      const header = findColumnHeader(container, 'Channel');
+      fireEvent.focus(header);
+
+      fireEvent.blur(header);
+
+      expect(screen.queryByRole('tooltip')).toBeNull();
+    });
+
+    it('hides the description again when the pointer leaves the header', async () => {
+      const { container } = renderDescribedColumns();
+      await screen.findAllByText('Channel');
+      const header = findColumnHeader(container, 'Channel');
+      fireEvent.mouseEnter(header);
+
+      fireEvent.mouseLeave(header);
+
+      expect(screen.queryByRole('tooltip')).toBeNull();
+    });
+
+    it('keeps headers without a description inert', async () => {
+      const { container } = renderDescribedColumns();
+      await screen.findAllByText('Channel');
+      const header = findColumnHeader(container, 'Region');
+
+      fireEvent.mouseEnter(header);
+
+      expect(screen.queryByRole('tooltip')).toBeNull();
+    });
+  });
+
+  describe('when column labels are hidden', () => {
+    it('renders no column header text so callers can supply their own header row', async () => {
+      const { container } = render(
+        <Sankey data={data} columns={columns}>
+          <SankeyChart hideColumnLabels />
+        </Sankey>,
+      );
+
+      await screen.findByText('Search', { selector: 'text' });
+
+      const chartLabels = [...container.querySelectorAll('svg text')].map(element => element.textContent);
+      expect(chartLabels).not.toContain('Channel');
+      expect(chartLabels).not.toContain('Region');
+      expect(chartLabels).not.toContain('Outcome');
     });
   });
 
@@ -392,6 +556,31 @@ describe('SankeyChart', () => {
     expect(await screen.findAllByText('3 (75%)')).toHaveLength(2);
     expect(screen.getAllByText('2 (50%)')).toHaveLength(2);
     expect(screen.getAllByText('1 (25%)')).toHaveLength(2);
+  });
+
+  describe('when a later column outweighs the first column', () => {
+    it('keeps every node percentage within its own column total', async () => {
+      const inflatedData = [
+        { channel: 'Search', outcome: 'Won', channelValue: 18, outcomeValue: 23 },
+        { channel: 'Search', outcome: 'Lost', channelValue: 18, outcomeValue: 23 },
+      ];
+      render(
+        <Sankey
+          data={inflatedData}
+          columns={[
+            { id: 'channel', label: 'Channel' },
+            { id: 'outcome', label: 'Outcome' },
+          ]}
+          getRecordNodeValue={(record, column) => Number(record[`${column.id}Value`])}
+        >
+          <SankeyChart />
+        </Sankey>,
+      );
+
+      expect(await screen.findByLabelText('Search: 18 traces (100%)')).not.toBeNull();
+      expect(screen.getByLabelText('Won: 23 traces (50%)')).not.toBeNull();
+      expect(screen.getByLabelText('Lost: 23 traces (50%)')).not.toBeNull();
+    });
   });
 
   describe('when the caller provides chart margins', () => {

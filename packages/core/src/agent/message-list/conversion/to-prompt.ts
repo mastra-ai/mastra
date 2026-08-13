@@ -98,13 +98,26 @@ export function aiV4CoreMessageToV1PromptMessage(coreMessage: CoreMessageV4): La
         } else if (Buffer.isBuffer(part.image) || part.image instanceof ArrayBuffer) {
           processedImage = new Uint8Array(part.image);
         } else {
-          // part.image is a string - could be a URL, data URI, or raw base64
+          // part.image is a string - could be a URL, data URI, raw base64, or a
+          // provider file ID (e.g. OpenAI "file-...")
           const categorized = categorizeFileData(part.image, part.mimeType);
 
           if (categorized.type === 'raw') {
             // Raw base64 — keep as Uint8Array so providers receive raw bytes
             // and don't double-wrap in a data URI (e.g. Gemini inline_data.data)
             processedImage = new Uint8Array(Buffer.from(part.image, 'base64'));
+          } else if (categorized.type === 'providerFileId') {
+            // Provider file IDs (e.g. OpenAI "file-...") are not parseable URLs and
+            // can't be expressed as a V1 image part. Emit a file part instead so the
+            // ID survives untouched and providers can forward it by reference.
+            const { image: _image, type: _type, ...rest } = part;
+            roleContent[role].push({
+              ...rest,
+              type: 'file',
+              data: part.image,
+              mimeType: categorized.mimeType || 'application/octet-stream',
+            });
+            break;
           } else {
             processedImage = new URL(part.image);
           }
@@ -194,7 +207,12 @@ export function aiV5ModelMessageToV2PromptMessage(modelMessage: AIV5Type.ModelMe
 
   const role = modelMessage.role;
 
-  for (const part of modelMessage.content) {
+  for (const part of modelMessage.content ?? []) {
+    // Defensive: upstream rewrites (e.g. observational memory) have produced sparse
+    // content arrays in production. A hole here would crash the provider converter
+    // with an unattributable "Cannot read properties of undefined (reading 'type')".
+    if (!part || typeof part !== 'object') continue;
+
     const incompatibleMessage = `Saw incompatible message content part type ${part.type} for message role ${role}`;
 
     switch (part.type) {
@@ -232,6 +250,10 @@ export function aiV5ModelMessageToV2PromptMessage(modelMessage: AIV5Type.ModelMe
         roleContent[role].push({
           ...part,
           toolName: sanitizeToolName(part.toolName),
+          // Providers read `output.type` unguarded (e.g. @ai-sdk/openai-compatible).
+          // An output-less tool result (lost result chunk, OM rewrite) must still
+          // present a valid LanguageModelV2ToolResultOutput shape.
+          output: part.output ?? { type: 'json', value: null },
         });
         break;
       }

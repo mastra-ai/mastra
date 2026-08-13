@@ -6,11 +6,12 @@ packages:
   - "@mastra/libsql"
   - "@mastra/memory"
   - "@mastra/mongodb"
+  - "@mastra/oracledb"
   - "@mastra/pg"
   - "@mastra/upstash"
 ---
 
-# Working Memory
+# Working memory
 
 While [message history](/docs/memory/message-history) and [semantic recall](./semantic-recall) help agents remember conversations, working memory allows them to maintain persistent information about users across interactions.
 
@@ -143,6 +144,7 @@ Resource-scoped working memory requires specific storage adapters that support t
 
 - **libSQL** (`@mastra/libsql`)
 - **PostgreSQL** (`@mastra/pg`)
+- **OracleDB** (`@mastra/oracledb`)
 - **Upstash** (`@mastra/upstash`)
 - **MongoDB** (`@mastra/mongodb`)
 
@@ -232,7 +234,7 @@ const paragraphMemory = new Memory({
 
 ## Structured working memory
 
-Working memory can also be defined using a structured schema instead of a Markdown template. This allows you to specify the exact fields and types that should be tracked, using a [Standard JSON Schema](https://standardschema.dev/json-schema) ([Zod](https://zod.dev/), [Valibot](https://valibot.dev/), [ArkType](https://arktype.io/), etc.). When using a schema, the agent will see and update working memory as a JSON object matching your schema.
+Working memory can also be defined using a structured schema instead of a Markdown template. A [Standard JSON Schema](https://standardschema.dev/json-schema) ([Zod](https://zod.dev/), [Valibot](https://valibot.dev/), [ArkType](https://arktype.io/), etc.). When using a schema, the agent will see and update working memory as a JSON object matching your schema.
 
 **Requirement:** You must specify either `template` or `schema`, but not both.
 

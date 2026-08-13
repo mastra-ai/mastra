@@ -1,5 +1,7 @@
 import { createContext } from 'react';
 
+import type { PrepareProgress } from '../../workspaces/services/github';
+
 export interface FactorySessionState {
   factoryProjectId: string;
   projectRepositoryId?: string;
@@ -9,7 +11,33 @@ export interface FactorySessionState {
 
 export interface ChatSessionContextApi {
   resourceId: string;
+  /**
+   * Alias for `sandboxReady` retained for existing consumers. New code should
+   * use `sandboxReady` (mutations, runs) or `resourceReady` (reads/streaming)
+   * to make the gating intent explicit.
+   */
   sessionEnabled: boolean;
+  /**
+   * Server-side session metadata is resolved and the agent-controller
+   * resourceId is safe to address for reads/streaming. Does NOT wait on
+   * sandbox provisioning (`/ensure`).
+   */
+  resourceReady: boolean;
+  /**
+   * `/ensure` has succeeded and runs can execute in the sandbox. Gate any
+   * write/run consumer on this flag.
+   */
+  sandboxReady: boolean;
+  /**
+   * `/ensure` is in flight (or not yet started because deps aren't ready) for
+   * an in-session mount. UI should show a preparing affordance while true.
+   */
+  sandboxPreparing: boolean;
+  /**
+   * Latest SSE progress event from `/ensure`, or `undefined` before the first
+   * event arrives or when no preparation is in progress.
+   */
+  sandboxProgress: PrepareProgress | undefined;
   resourceEnabled: boolean;
   /**
    * Failure while preparing the session's workspace (sandbox provision /
@@ -28,6 +56,9 @@ export interface ChatSessionContextApi {
    * of binding to a fresh random-id thread the route can never find.
    */
   sessionThreadId?: string;
+  /** Workspace needs sandbox provision + clone before the controller can connect. */
+  workspacePending?: boolean;
+  draftSessionId?: string;
   factorySessionState?: FactorySessionState;
   baseUrl: string;
   /**

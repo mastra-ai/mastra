@@ -2,6 +2,7 @@ import type { AgentControllerRequestContext } from '@mastra/core/agent-controlle
 import type { RequestContext } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
+import { getFactoryAuthOrgId, getFactoryAuthUserFromContext, getFactoryAuthUserId } from '../../auth.js';
 import type {
   ProjectRepository,
   ProjectSourceControlConnection,
@@ -16,23 +17,18 @@ import { getRegisteredGithubPatKind, injectGithubToken } from './token-refresh.j
 type RepositorySessionState = { factoryProjectId?: string; projectRepositoryId?: string };
 
 /**
- * Minimal shape of the host-authenticated user placed on the request context
- * under the `user` key. Mirrors the host's auth user without importing it:
- * `workosId` (stable external id) wins over the row `id`, and `organizationId`
- * scopes org tenancy.
+ * The host-authenticated user placed on the request context under the `user`
+ * key, read through the host's own normalizer. A local mirror of that shape
+ * used to live here; it silently missed the provider shapes the normalizer
+ * knows about, which turned every subscription tool into a no-op for those
+ * users instead of an error anybody could see.
  */
-interface SessionAuthUser {
-  workosId?: string;
-  id?: string;
-  organizationId?: string;
+function sessionUserId(requestContext: RequestContext): string | undefined {
+  return getFactoryAuthUserId(getFactoryAuthUserFromContext(requestContext));
 }
 
-function sessionUserId(user: SessionAuthUser | undefined): string | undefined {
-  return user?.workosId ?? user?.id;
-}
-
-function sessionOrgId(user: SessionAuthUser | undefined): string | undefined {
-  return user?.organizationId;
+function sessionOrgId(requestContext: RequestContext): string | undefined {
+  return getFactoryAuthOrgId(getFactoryAuthUserFromContext(requestContext));
 }
 
 const pullRequestInputSchema = z.object({
@@ -67,17 +63,18 @@ function parsePullRequest(value: number | string, expectedRepo: string): number 
  */
 function isGithubProjectSession(requestContext: RequestContext): boolean {
   const context = requestContext.get('controller') as AgentControllerRequestContext<RepositorySessionState> | undefined;
-  const user = requestContext.get('user') as SessionAuthUser | undefined;
   return Boolean(
-    context?.threadId && context.getState().projectRepositoryId && sessionOrgId(user) && sessionUserId(user),
+    context?.threadId &&
+    context.getState().projectRepositoryId &&
+    sessionOrgId(requestContext) &&
+    sessionUserId(requestContext),
   );
 }
 
 async function resolveSessionTarget(requestContext: RequestContext, github: GithubIntegration): Promise<SessionTarget> {
   const context = requestContext.get('controller') as AgentControllerRequestContext<RepositorySessionState> | undefined;
-  const user = requestContext.get('user') as SessionAuthUser | undefined;
-  const orgId = sessionOrgId(user);
-  const userId = sessionUserId(user);
+  const orgId = sessionOrgId(requestContext);
+  const userId = sessionUserId(requestContext);
   const projectRepositoryId = context?.getState().projectRepositoryId;
   if (!context || !context.threadId || !projectRepositoryId || !orgId || !userId) {
     throw new Error('GitHub subscriptions require an authenticated repository session with an active thread.');
@@ -178,9 +175,7 @@ export async function refreshGithubToken(requestContext: RequestContext, github:
 }
 
 export function createGithubSubscriptionTools(requestContext: RequestContext, github: GithubIntegration) {
-  const context = requestContext.get('controller') as AgentControllerRequestContext<RepositorySessionState> | undefined;
-  const user = requestContext.get('user') as SessionAuthUser | undefined;
-  if (!context?.getState().projectRepositoryId || !sessionOrgId(user) || !sessionUserId(user)) return {};
+  if (!isGithubProjectSession(requestContext)) return {};
 
   return {
     github_refresh_token: createTool({

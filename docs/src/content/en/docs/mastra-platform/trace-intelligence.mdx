@@ -1,11 +1,11 @@
 ---
-title: "Trace Intelligence | Mastra platform"
+title: 'Trace Intelligence | Mastra platform'
 description: Find recurring goals, outcomes, behaviors, and sentiment across your agent traces with Trace Intelligence on Mastra platform.
 ---
 
 # Trace Intelligence on Mastra platform
 
-Trace Intelligence finds recurring patterns across your agent's interactions. It analyzes traces captured by Mastra Observability, produces trace signals for four dimensions, and clusters similar trace signals into themes.
+Trace Intelligence finds recurring patterns across your agent's interactions. It analyzes traces captured by Mastra Observability and produces trace signals for four dimensions. It then clusters similar trace signals into themes.
 
 Use Trace Intelligence to investigate questions such as:
 
@@ -32,7 +32,7 @@ Once Mastra enrolls the project, you don't need to change your agent definition 
 
 Trace Intelligence needs enough processed traces from one agent to identify recurring patterns. Initial themes are usually available after at least **100 completed traces** from that agent have been processed.
 
-The trace count under **Traces** can reach 100 before Trace Intelligence is ready because the analysis pipeline runs asynchronously. Processing can take several minutes after the threshold is reached. Traces that can't be analyzed don't contribute, so 100 is a minimum, not an exact UI trigger.
+The trace count under **Traces** can reach 100 before Trace Intelligence is ready because the analysis pipeline runs asynchronously. Processing can take several minutes after the threshold is reached. Traces that can't be analyzed don't contribute. As a result, 100 is a minimum rather than an exact UI trigger.
 
 Trace Intelligence updates automatically as more traces arrive. Studio needs themes for at least two trace signal types before it can display the relationship flow.
 
@@ -61,12 +61,9 @@ The flow chart connects themes in adjacent trace signal columns:
 
 The flow shows association, not causation or execution order. For example, a ribbon between a Goal and an Outcome means that both themes occurred in the same traces. It doesn't show that the goal caused the outcome.
 
-### Distributions, Other, and Noise
+### Other and Noise
 
-The cards below the flow show each trace signal's theme distribution:
-
-- **Trace count**: The number of distinct traces assigned to a theme in the selected snapshot.
-- **Stage share**: The percentage of analyzed traces for that trace signal assigned to the theme.
+Each node shows its trace count: the number of distinct traces assigned to that theme in the selected snapshot. A theme's details also state its share, for example "28 of 70 traces in this snapshot (40%)".
 
 Studio shows the most common themes for each trace signal type. It may combine smaller themes into **Other** to preserve totals without overcrowding the chart.
 
@@ -74,32 +71,31 @@ Studio shows the most common themes for each trace signal type. It may combine s
 
 ### Snapshots
 
-A snapshot is a moving analysis window over a set of traces. Snapshots can overlap, so don't add their trace counts together. Compare trace count and stage share together because traffic volume can change between windows.
+A snapshot is a moving analysis window over a set of traces. Snapshots can overlap, so don't add their trace counts together. Compare a theme's trace count and its share of the snapshot together because traffic volume can change between windows.
 
 A theme can persist, disappear, split, merge, or return across snapshots. Treat theme names and descriptions as generated summaries, not fixed taxonomies.
 
 ## Use the Trace Intelligence page
 
 1. Use the **Agent** selector to switch between agents with available analysis. An agent doesn't appear until its first themes are ready.
-1. Select a theme in the flow to filter every column to traces containing that theme.
-1. Select **View theme details** to inspect its description, trace count, stage share, generated examples, and history.
+1. Select a theme in the flow to open its details and filter every column to traces containing that theme.
+1. The details panel shows the theme's description, its share of the snapshot, paged example summaries, and a trend of its trace count over time.
 1. Select **Clear filter** to restore the complete flow.
 
 You can also:
 
-- Select a theme in a distribution card to open its details and generated example summaries.
-- Select **Noise** in a distribution card to inspect its distribution and generated example summaries.
-- Drag the distribution cards to reorder the trace signal columns and see a different relationship perspective.
+- Select **Noise** in the flow to inspect its share and generated example summaries.
+- Drag the column headers above the chart to reorder the trace signal columns and see a different relationship perspective.
 - Use the timeline to select a snapshot, or select **Play** to watch themes change over time.
-- Open a theme's history to see whether it persisted and how its coverage changed.
+- Switch to **Compare** to see which themes grew, shrank, entered the range, or left the range between two points in time, or **Lifelines** to follow each theme's share across the whole selected range.
 
-Filtering the flow by a theme is unavailable for snapshots with more than 2,000 traces. Choose another snapshot or clear the active filter to return to the full flow. Theme and Noise details remain available from the distribution cards.
+Filtering the flow by a theme is unavailable for snapshots with more than 2,000 traces. Selecting a theme still opens its details there without filtering the flow.
 
 ## Troubleshooting
 
 ### Intelligence isn't in the sidebar
 
-Confirm that Mastra enrolled the correct project, that you use the beta-compatible Mastra version, and that you redeployed Studio. The private beta doesn't support local Studio.
+Confirm that Mastra enrolled the correct project, that you use the beta-compatible Mastra version, and that you redeployed Studio because the private beta doesn't support local Studio.
 
 ### An agent is missing
 

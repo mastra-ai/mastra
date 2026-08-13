@@ -433,7 +433,7 @@ const results = await store.textQuery({
 
 ### `hybridQuery()`
 
-Runs a hybrid search that fuses vector similarity and full-text results using MongoDB's server-side `$rankFusion`. It requires MongoDB >= 8.0 and is generally available from 8.1. On 8.0.x, it may need a MongoDB support case to enable, and it runs where enabled, such as Atlas 8.0.x. A full-text search index must exist: it's auto-created for managed indexes, but for a bring-your-own collection you must call `createSearchIndex()` first (opt-in).
+Runs a hybrid search that fuses vector similarity and full-text results using MongoDB's server-side `$rankFusion`. It requires MongoDB >= 8.0 and is generally available from 8.1. On 8.0.x, it may require a MongoDB support case for enablement. It runs where enabled, including Atlas 8.0.x. A full-text search index must exist: it's auto-created for managed indexes, but for a bring-your-own collection you must call `createSearchIndex()` first (opt-in).
 
 <PropertiesTable
   content={[
@@ -543,7 +543,7 @@ interface IndexStats {
 Deletes a vector index. Behavior depends on how the index was created:
 
 - **Managed index** (created without `collectionName`): drops the entire collection and all its data.
-- **Bring-your-own index** (created with `collectionName`): drops the Atlas vectorSearch index and, if one was provisioned via `createSearchIndex()`, the companion full-text search index. The caller's operational collection and its documents are preserved. This store never drops a collection it didn't create.
+- **Bring-your-own index** (created with `collectionName`): drops the Atlas vectorSearch index. If `createSearchIndex()` provisioned a companion full-text search index, it drops that index too. The caller's operational collection and its documents are preserved. This store never drops a collection it didn't create.
 
 The BYO classification is recorded durably when the index is created, so it's applied correctly even by a different process (e.g. an index created by a setup job and later deleted by a long-lived service). Always pass the **logical index name** (the `indexName` used at `createIndex`), not the physical collection name.
 

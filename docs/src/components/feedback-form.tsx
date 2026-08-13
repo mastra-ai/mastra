@@ -181,7 +181,7 @@ export const FeedbackForm = ({ isOpen, onClose, currentPage }: FeedbackFormProps
                 variant="ghost"
                 size="sm"
                 onClick={onClose}
-                className="h-6 w-6 rounded-full p-0 transition-colors hover:bg-(--mastra-surface-3)"
+                className="h-6 w-6 rounded-xl p-0 transition-colors hover:bg-(--mastra-surface-3)"
               >
                 <CancelIcon className="h-4 w-4" />
               </Button>

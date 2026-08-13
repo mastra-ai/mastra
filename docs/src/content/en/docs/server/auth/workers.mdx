@@ -7,6 +7,12 @@ packages:
 
 # Workers
 
+:::beta
+
+Breaking changes may occur without a major version bump until the API is stable.
+
+:::
+
 When workers run in separate processes from the API, they communicate over HTTP. The orchestration worker calls the API's step execution endpoint to run workflow steps on the API server. Push-mode PubSub brokers (like Google Cloud Pub/Sub in push mode) can also deliver events directly to the API's event endpoint. This is a distinct integration path from pull-mode workers, which pull events from the broker themselves. Both HTTP endpoints require authentication when an auth provider is configured.
 
 ## How it works
@@ -139,6 +145,6 @@ Your auth provider's `authenticateToken` callback must recognize whatever creden
 
 - [Auth overview](/docs/server/auth): Available auth providers and how they work
 - [Token-based auth](/docs/server/auth/simple-auth): Token-to-user mapping authentication
-- [Worker deployment](/guides/deployment/mastra-workers): Set up split worker processes
+- [Worker deployment](/docs/deployment/workers): Set up split worker processes
 - [Workers reference](/reference/workers/overview): Configuration details for all worker types
 - [CLI reference](/reference/cli/mastra#mastra-worker-build): `mastra worker build` and `mastra worker start`

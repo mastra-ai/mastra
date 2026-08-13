@@ -53,6 +53,16 @@ Clean up sandbox resources. Called by `workspace.destroy()`.
 await sandbox.destroy()
 ```
 
+### `snapshot()`
+
+Persists the sandbox's current state when the provider supports snapshots. Other providers resolve without doing work.
+
+```typescript
+await sandbox.snapshot()
+```
+
+**Returns:** `Promise<void>`
+
 ### `executeCommand(command, args?, options?)`
 
 Execute a shell command.

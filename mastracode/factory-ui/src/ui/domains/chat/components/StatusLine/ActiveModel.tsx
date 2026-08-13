@@ -37,26 +37,31 @@ function formatModelName(id: string): string {
   return slug.split(/[-_]+/).filter(Boolean).map(titleCase).join(' ');
 }
 
-/** Current model id and whether its provider has usable credentials. */
 export function ActiveModel() {
-  const { kind } = useChatSessionContext();
-  const { activeModelId, setModel } = useChatModels();
+  const { kind, sessionEnabled, draftSessionId } = useChatSessionContext();
+  const { activeModelId, isLoading, error, setModel } = useChatModels();
   const { status } = useChatConnection();
   const modelsQuery = useAvailableModelsQuery();
   const [pendingModelId, setPendingModelId] = useState<string>();
 
-  // While the connection is still resolving there is no model id yet — show a
-  // placeholder instead of a misleading "No model" label.
-  if (!activeModelId && status === 'connecting') {
+  const selectedModelId = pendingModelId ?? activeModelId;
+  if (!selectedModelId && (isLoading || status === 'connecting')) {
     return <Skeleton aria-label="Loading model" className="h-3.5 w-24" />;
   }
+  if (!selectedModelId && error) {
+    return (
+      <span className="text-accent2" aria-label="Model unavailable" title={error.message}>
+        Model unavailable
+      </span>
+    );
+  }
 
-  const selectedModelId = pendingModelId ?? activeModelId;
   const label = selectedModelId ? formatModelName(selectedModelId) : 'No model';
   const notConfigured =
     Boolean(selectedModelId) && modelsQuery.isSuccess && !modelsQuery.data.some(model => model.id === selectedModelId);
+  const switchable = Boolean(draftSessionId) || (kind === 'factory' && sessionEnabled);
 
-  if (kind === 'factory' && modelsQuery.data?.length) {
+  if (switchable && modelsQuery.data?.length) {
     return (
       <Select
         value={selectedModelId}
@@ -68,7 +73,6 @@ export function ActiveModel() {
             () => setPendingModelId(undefined),
             (cause: unknown) => {
               setPendingModelId(undefined);
-              // failed switch must be loud — label alone just snaps back
               toast.error(cause instanceof Error ? cause.message : 'Failed to switch model');
             },
           );
@@ -102,7 +106,7 @@ export function ActiveModel() {
     <span
       className={notConfigured ? 'text-accent2' : 'text-neutral3'}
       aria-label={notConfigured ? `${label} is not configured` : undefined}
-      title={activeModelId}
+      title={selectedModelId}
     >
       {label}
       {notConfigured ? ' · not configured' : null}

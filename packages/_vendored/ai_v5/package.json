@@ -1,6 +1,6 @@
 {
   "name": "@internal/ai-sdk-v5",
-  "version": "0.0.66",
+  "version": "0.0.69",
   "description": "",
   "type": "module",
   "private": true,
@@ -38,7 +38,7 @@
   "author": "",
   "license": "Apache-2.0",
   "devDependencies": {
-    "@ai-sdk/gateway": "2.0.115",
+    "@ai-sdk/gateway": "2.0.120",
     "@ai-sdk/provider": "2.0.3",
     "@ai-sdk/provider-utils": "3.0.30",
     "@internal/lint": "workspace:*",
@@ -48,7 +48,7 @@
     "@types/json-schema": "^7.0.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "ai": "^5.0.216",
+    "ai": "^5.0.221",
     "eslint": "^10.7.0",
     "json-schema": "^0.4.0",
     "msw": "^2.12.11",

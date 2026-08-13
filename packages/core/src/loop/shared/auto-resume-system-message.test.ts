@@ -78,6 +78,32 @@ describe('extractSuspendedToolsFromMessages', () => {
     ]);
   });
 
+  it('uses the parent delegation identity for auto-resume while preserving inner approval details', () => {
+    const pending = {
+      'tc-1': {
+        toolCallId: 'tc-1',
+        toolName: 'charge-card',
+        args: { amountCents: 500 },
+        parentToolName: 'agent-billing',
+        parentArgs: { prompt: 'Charge the customer' },
+        runId: 'outer-run',
+        delegatedRunId: 'inner-run',
+      },
+    };
+    const messages = [makeAssistantMessage({ metadata: { pendingToolApprovals: pending } })];
+
+    expect(extractSuspendedToolsFromMessages(messages)).toEqual([
+      {
+        toolCallId: 'tc-1',
+        toolName: 'agent-billing',
+        args: { prompt: 'Charge the customer' },
+        approvalToolName: 'charge-card',
+        approvalArgs: { amountCents: 500 },
+        runId: 'inner-run',
+      },
+    ]);
+  });
+
   it('keeps runId untouched for non-delegated entries', () => {
     const pending = { 'tc-2': { toolCallId: 'tc-2', toolName: 'directTool', runId: 'run-1' } };
     const messages = [makeAssistantMessage({ metadata: { pendingToolApprovals: pending } })];

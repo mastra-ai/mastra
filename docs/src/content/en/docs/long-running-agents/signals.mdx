@@ -10,9 +10,9 @@ packages:
 
 **Added in:** `@mastra/core@1.39.0`
 
-:::experimental
+:::beta
 
-This feature is in beta. Breaking changes may occur without a major version bump until the API is stable.
+Breaking changes may occur without a major version bump until the API is stable.
 
 :::
 
@@ -161,11 +161,11 @@ Use XML-safe `tagName` and attribute names. They can contain letters, numbers, s
 
 #### Storage support
 
-Notification inbox storage is available in the storage adapters that support richer memory and signal workflows: [libSQL](/reference/storage/libsql), [PostgreSQL](/reference/storage/postgresql), and [MongoDB](/reference/storage/mongodb). These adapters expose notification records through `getStore('notifications')`.
+Notification inbox storage is available in the storage adapters that support richer memory and signal workflows: [libSQL](/integrations/databases/libsql), [PostgreSQL](/integrations/databases/postgresql), and [MongoDB](/integrations/databases/mongodb). These adapters expose notification records through `getStore('notifications')`.
 
 ### Send processor context
 
-Processors can send reactive signals during a run. A processor should inspect the chat history, react to a specific trigger, and avoid sending the same context more than once.
+Processors can send reactive signals during a run. A processor should inspect the chat history and react to a specific trigger without sending the same context more than once.
 
 The following example demonstrates a processor that injects `AGENTS.md` instructions after a tool call reads an `AGENTS.md` file.
 
@@ -364,7 +364,7 @@ Mastra still accepts legacy signal payloads such as `type: 'user-message'` and `
 - `type: 'user-message'`: Normalizes to `type: 'user'` and `tagName: 'user'`
 - `type: 'system-reminder'`: Normalizes to `type: 'reactive'` and `tagName: 'system-reminder'`
 
-Existing stored signal rows and older clients continue to load through the compatibility layer. New clients call the message routes when the server supports them; React's thread signal path falls back to the legacy `/signals` route when it detects an older server. Visit [Agent signals reference](/reference/agents/agent#thread-signals) for the full message, signal, and subscription types.
+Existing stored signal rows and older clients continue to load through the compatibility layer. New clients call the message routes when the server supports them. React's thread signal path falls back to the legacy `/signals` route when it detects an older server. Visit [Agent signals reference](/reference/agents/agent#thread-signals) for the full message, signal, and subscription types.
 
 ### Approve tool calls
 

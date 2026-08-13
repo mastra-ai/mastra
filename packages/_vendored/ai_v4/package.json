@@ -1,6 +1,6 @@
 {
   "name": "@internal/ai-sdk-v4",
-  "version": "0.0.66",
+  "version": "0.0.69",
   "description": "",
   "type": "module",
   "private": true,
@@ -29,7 +29,7 @@
     }
   },
   "scripts": {
-    "build": "tsdown --silent --config tsdown.config.ts",
+    "build": "tsdown --silent --config tsdown.config.ts && tsdown --silent --config tsdown.test.config.ts && tsx scripts/finalize-build.ts",
     "test": "vitest run",
     "lint": "oxlint . && eslint .",
     "lint:fix": "oxlint --fix . && eslint --fix ."
@@ -55,6 +55,7 @@
     "resolve.exports": "^2.0.3",
     "ts-morph": "^27.0.2",
     "tsdown": "0.22.9",
+    "tsx": "catalog:",
     "typescript": "catalog:"
   },
   "peerDependencies": {

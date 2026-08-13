@@ -29,7 +29,7 @@ Mastra provides a skill and a CLI to help your coding agent write high-quality M
 
 ### Mastra skill
 
-AI models may not have up-to-date knowledge of Mastra's APIs. Use the [Mastra skill](https://github.com/mastra-ai/skills) to give your coding agent implementation guidance, best practices, and instructions for fetching the latest Mastra documentation.
+AI models may not have up-to-date knowledge of Mastra's APIs. Use the [Mastra skill](https://github.com/mastra-ai/skills) to give your coding agent implementation guidance and best practices, including instructions for fetching the latest Mastra documentation.
 
 Install the skill manually with:
 
@@ -87,9 +87,11 @@ See the [project structure reference](/reference/project-structure) for the defa
 
 ## File-based agents
 
-:::experimental
+:::beta
 
-File-based agents are in beta and may change before they're stable.
+Breaking changes may occur without a major version bump until the API is stable.
+
+File-based discovery only runs through `mastra dev` or `mastra build`. If your app imports `mastra` directly, including through a web framework or server adapter, file-based agents aren't discovered. Register those agents in code or run Mastra as a separate server.
 
 :::
 

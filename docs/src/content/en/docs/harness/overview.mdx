@@ -1,0 +1,29 @@
+---
+title: "Harness"
+description: "Start, continue, update, and preserve agent work beyond a single request."
+packages:
+  - "@mastra/core"
+---
+
+# Harness
+
+A harness lets an agent pursue long-running, complex goals while keeping its work durable, visible, and steerable. It preserves progress across retries and interruptions, while giving people and other systems a way to inspect progress, add context, approve actions, redirect the agent, or stop it.
+
+Agent harnesses are useful wherever work continues over time. Common examples include coding agents that carry changes through CI and review, software factories (like [Mastra Factory](https://factory.mastra.ai)) that coordinate many tasks in parallel, SRE agents that adapt as incidents evolve, and go-to-market agents that respond as accounts, signals, and conversations change.
+
+In Mastra, harness refers to a set of capabilities for managing an agent beyond a single uninterrupted run. You can adopt these capabilities individually or combine them as needed.
+
+## When to use a harness
+
+Choose a starting point based on what the agent needs. You may use one capability or several.
+
+| If you want to | Start here | Why |
+| - | - | - |
+| Keep a run available through client disconnects or server restarts | [Durable Agents](/docs/long-running-agents/durable-agents) | Persist run state and let clients reconnect to its stream. |
+| Run slow tools, workflows, or subagents without blocking | [Background Tasks](/docs/long-running-agents/background-tasks) | Finish work asynchronously and return its result to the agent. |
+| Keep an agent working until it reaches an objective | [Goals](/docs/long-running-agents/goals) | Evaluate a thread-scoped objective until it's complete or reaches its run budget. |
+| Start work automatically at recurring times | [Schedules](/docs/long-running-agents/schedules) | Start isolated runs or send prompts into an existing thread on a cron schedule. |
+| Add context, redirect active work, or wake an idle thread | [Signals](/docs/long-running-agents/signals) | Deliver input now or hold it for the next turn. |
+| React to changes in GitHub, Slack, continuous integration, or another external system | [Signal Providers](/docs/long-running-agents/signal-providers) | Track subscriptions and forward matching events to agent threads. |
+| Build an interactive product with sessions, modes, state, approvals, and events | [AgentController](/docs/harness/agent-controller) | Host isolated sessions around a shared agent runtime. |
+| Let users steer, queue follow-up work, or stop an interactive run | [AgentController](/docs/harness/agent-controller) | Expose run controls through each session. |

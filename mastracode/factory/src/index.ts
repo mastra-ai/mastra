@@ -16,8 +16,8 @@ export type { StateSigner, StateTenant } from './state-signing.js';
 export { createFactoryRouteAuth } from './auth.js';
 export type { RouteAuth } from './routes/route.js';
 // The integration seam, so a host can implement `FactoryIntegration` from
-// outside this package — the contract's stated design for third parties, and
-// the path Slack takes (its `@mastra/slack`/`chat` deps live in the host).
+// outside this package — the contract's stated design for third parties.
+// Built-ins (GitHub, Linear, Slack) implement the same interface from inside.
 export type {
   FactoryIntegration,
   IntegrationContext,

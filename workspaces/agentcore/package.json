@@ -1,6 +1,6 @@
 {
   "name": "@mastra/agentcore",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "AWS Bedrock AgentCore Runtime sandbox provider for Mastra workspaces",
   "type": "module",
   "main": "dist/index.js",
@@ -31,7 +31,7 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "@aws-sdk/client-bedrock-agentcore": "^3.1058.0"
+    "@aws-sdk/client-bedrock-agentcore": "^3.1095.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",

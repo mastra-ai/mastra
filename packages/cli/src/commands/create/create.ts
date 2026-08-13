@@ -54,7 +54,7 @@ const DEFAULT_TEMPLATE: Template = {
   slug: 'template-agent-harness',
   agents: ['agent'],
   mcp: [],
-  tools: ['web-fetch'],
+  tools: [],
   networks: [],
   workflows: [],
 };
@@ -333,6 +333,7 @@ export const create = async (args: CreateOptions): Promise<void> => {
   process.on('SIGTERM', handleSigterm);
 
   let selectedApiKeyEnv: string | undefined;
+  let selectedApiKeyWritten = false;
   let materializationError: unknown;
 
   try {
@@ -366,6 +367,10 @@ export const create = async (args: CreateOptions): Promise<void> => {
           versionTag: versionTag ?? 'latest',
         });
         selectedApiKeyEnv = providerConfig.apiKeyEnv;
+        selectedApiKeyWritten = providerConfig.apiKeyWritten;
+        if (providerConfig.adaptationFailed) {
+          p.log.warn('Some provider setup could not be applied. Review the generated project before running it.');
+        }
         materializationController.signal.throwIfAborted();
       }
     }
@@ -484,7 +489,9 @@ export const create = async (args: CreateOptions): Promise<void> => {
 
   if (mode === 'managed') {
     const apiKeySummary = llmApiKey
-      ? `Your ${selectedApiKeyEnv} value was written to ${color.cyan('.env')}.`
+      ? selectedApiKeyWritten
+        ? `Your ${selectedApiKeyEnv} value was written to ${color.cyan('.env')}.`
+        : `Set ${selectedApiKeyEnv} in ${color.cyan('.env')} before starting.`
       : platformEnvWritten
         ? `Set ${selectedApiKeyEnv} in ${color.cyan('.env')} before starting.`
         : `Copy ${color.cyan('.env.example')} to ${color.cyan('.env')} and set ${selectedApiKeyEnv} before starting.`;

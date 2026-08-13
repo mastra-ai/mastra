@@ -18,12 +18,11 @@ const sidebars = {
       type: 'category',
       label: 'Gateways',
       collapsed: false,
+      link: {
+        type: 'doc',
+        id: 'gateways/index',
+      },
       items: [
-        {
-          type: 'doc',
-          id: 'gateways/index',
-          label: 'Gateways',
-        },
         {
           type: 'doc',
           id: 'gateways/custom-gateways',
@@ -38,6 +37,11 @@ const sidebars = {
           type: 'doc',
           id: 'gateways/mastra',
           label: 'Mastra',
+        },
+        {
+          type: 'doc',
+          id: 'gateways/neon',
+          label: 'Neon',
         },
         {
           type: 'doc',
@@ -60,12 +64,11 @@ const sidebars = {
       type: 'category',
       label: 'Providers',
       collapsed: false,
+      link: {
+        type: 'doc',
+        id: 'providers/index',
+      },
       items: [
-        {
-          type: 'doc',
-          id: 'providers/index',
-          label: 'Providers',
-        },
         {
           type: 'doc',
           id: 'providers/openai',
@@ -268,6 +271,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/coralbricks',
+          label: 'CoralBricks',
+        },
+        {
+          type: 'doc',
           id: 'providers/cortecs',
           label: 'Cortecs',
         },
@@ -315,6 +323,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/ebcloud',
           label: 'EBCloud',
+        },
+        {
+          type: 'doc',
+          id: 'providers/edenai',
+          label: 'Eden AI',
         },
         {
           type: 'doc',
@@ -498,6 +511,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/merge-gateway',
+          label: 'Merge Gateway',
+        },
+        {
+          type: 'doc',
           id: 'providers/meta',
           label: 'Meta',
         },
@@ -580,11 +598,6 @@ const sidebars = {
           type: 'doc',
           id: 'providers/nebius',
           label: 'Nebius Token Factory',
-        },
-        {
-          type: 'doc',
-          id: 'providers/neon',
-          label: 'Neon',
         },
         {
           type: 'doc',

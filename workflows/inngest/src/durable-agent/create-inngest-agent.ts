@@ -44,6 +44,7 @@ import {
   runDurableStreamUntilIdle,
   runResumeDurableStreamUntilIdle,
   globalRunRegistry,
+  publishAbortRequest,
 } from '@mastra/core/agent/durable';
 import type { AgentStepFinishEventData, AgentSuspendedEventData } from '@mastra/core/agent/durable';
 import type { MessageListInput } from '@mastra/core/agent/message-list';
@@ -251,8 +252,13 @@ export interface InngestAgentStreamResult<OUTPUT = undefined> {
    * durable LLM step short-circuits (when the step worker shares the same
    * process) and emits an ABORT event over pubsub so the consumer stream
    * closes. Safe to call after the run has already finished.
+   *
+   * Also publishes an abort request over pubsub, which is what stops work
+   * already running on a step worker — a different process from this one.
+   * Await the returned promise to know the request has been dispatched;
+   * ignoring it keeps the previous fire-and-forget behaviour.
    */
-  abort: (reason?: unknown) => void;
+  abort: (reason?: unknown) => Promise<void>;
 }
 
 /**
@@ -609,6 +615,31 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
     await emitErrorEvent(getPubsub(), runId, error);
   }
 
+  /**
+   * Stop a run in whichever worker is executing it.
+   *
+   * An Inngest agent's steps run on Inngest's infrastructure, essentially never
+   * in the process that called `stream()`. The local `AbortController` is
+   * therefore invisible to the step worker, and on its own `abort()` cannot
+   * stop anything. Publishing an abort request lets the worker flip its own
+   * controller and unwind the run gracefully, emitting the terminal stream
+   * event consumers wait on — which a hard workflow cancel would skip.
+   *
+   * Best-effort: the local abort has already happened, and a caller asking to
+   * stop a run should not get a rejection because the publish failed.
+   */
+  async function requestRemoteAbort(runId: string): Promise<void> {
+    try {
+      await publishAbortRequest(getPubsub(), runId);
+    } catch (error) {
+      mastra?.getLogger?.()?.warn?.('Failed to publish Inngest durable agent abort request', {
+        agentId,
+        runId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
   // Return the InngestAgent object (Agent methods are added by the Proxy below)
   const inngestAgent: Pick<
     InngestAgent<TOutput>,
@@ -830,10 +861,12 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         streamCleanup();
         finalizeGlobalRegistry();
       };
-      const abort = (reason?: unknown) => {
+      const abort = async (reason?: unknown) => {
         if (!abortController.signal.aborted) {
           abortController.abort(reason);
         }
+        // The step worker is a different process — see `requestRemoteAbort`.
+        await requestRemoteAbort(runId);
       };
       const result = {
         output,
@@ -1006,10 +1039,12 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
 
       existingEntry.workflowExecution = workflowExecution;
 
-      const abort = (reason?: unknown) => {
+      const abort = async (reason?: unknown) => {
         if (!abortController.signal.aborted) {
           abortController.abort(reason);
         }
+        // The step worker is a different process — see `requestRemoteAbort`.
+        await requestRemoteAbort(runId);
       };
 
       const cleanup = () => {
@@ -1079,13 +1114,12 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
 
       await ready;
 
-      // `observe()` is a read-only re-subscription — it does not own the run
-      // so it cannot abort the underlying workflow. We still expose `abort()`
-      // on the result for type parity with stream()/resume(); calling it
-      // closes the local subscription via cleanup but is a no-op against the
-      // running workflow.
-      const abort = (_reason?: unknown) => {
+      // `observe()` does not own the run, but it can still stop it: closing the
+      // local subscription and publishing an abort request, which reaches the
+      // worker actually executing it.
+      const abort = async (_reason?: unknown) => {
         streamCleanup();
+        await requestRemoteAbort(runId);
       };
 
       return {

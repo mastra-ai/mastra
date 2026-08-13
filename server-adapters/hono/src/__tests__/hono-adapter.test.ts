@@ -18,10 +18,11 @@ import {
 } from '@internal/server-adapter-test-utils';
 import { Mastra } from '@mastra/core';
 import { registerApiRoute } from '@mastra/core/server';
-import { MASTRA_IS_STUDIO_KEY } from '@mastra/server/server-adapter';
+import { MASTRA_IS_STUDIO_KEY, createRoute } from '@mastra/server/server-adapter';
 import type { ServerRoute } from '@mastra/server/server-adapter';
 import { Hono } from 'hono';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { z } from 'zod';
 import { MastraServer } from '../index';
 
 function sleep(ms: number): Promise<void> {
@@ -144,6 +145,144 @@ describe('Hono Server Adapter', () => {
         };
       }
     },
+  });
+
+  it('registers createRoute routes from server.apiRoutes with runtime validation', async () => {
+    const route = createRoute({
+      method: 'POST',
+      path: '/custom/validated',
+      responseType: 'json',
+      bodySchema: z.object({ name: z.string() }),
+      handler: async ({ name }) => ({ greeting: `Hello, ${name}` }),
+    });
+    const mastra = new Mastra({ logger: false, server: { apiRoutes: [route] } });
+    const app = new Hono();
+    const adapter = new MastraServer({ app, mastra });
+
+    await adapter.init();
+
+    const invalidResponse = await app.request('/custom/validated', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 42 }),
+    });
+    expect(invalidResponse.status).toBe(400);
+    await expect(invalidResponse.json()).resolves.toMatchObject({ error: 'Invalid request body' });
+
+    const validResponse = await app.request('/custom/validated', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'Ada' }),
+    });
+    expect(validResponse.status).toBe(200);
+    await expect(validResponse.json()).resolves.toEqual({ greeting: 'Hello, Ada' });
+  });
+
+  it('preserves streaming responses for createRoute routes from server.apiRoutes', async () => {
+    const route = createRoute({
+      method: 'GET',
+      path: '/custom/stream',
+      responseType: 'stream',
+      requiresAuth: false,
+      handler: async () =>
+        new ReadableStream({
+          start(controller) {
+            controller.enqueue('hello');
+            controller.close();
+          },
+        }),
+    });
+    const mastra = new Mastra({ logger: false, server: { apiRoutes: [route] } });
+    const app = new Hono();
+    const adapter = new MastraServer({ app, mastra });
+
+    await adapter.init();
+
+    const response = await app.request('/custom/stream');
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-type')).toContain('text/plain');
+    expect(await response.text()).toContain('hello');
+  });
+
+  it('applies auth to createRoute routes from server.apiRoutes', async () => {
+    const protectedRoute = createRoute({
+      method: 'GET',
+      path: '/custom/secure',
+      responseType: 'json',
+      requiresAuth: true,
+      handler: async () => ({ secret: true }),
+    });
+    const publicRoute = createRoute({
+      method: 'GET',
+      path: '/custom/open',
+      responseType: 'json',
+      requiresAuth: false,
+      handler: async () => ({ open: true }),
+    });
+
+    const mastra = new Mastra({ logger: false, server: { apiRoutes: [protectedRoute, publicRoute] } });
+    const originalGetServer = mastra.getServer.bind(mastra);
+    mastra.getServer = () =>
+      ({
+        ...originalGetServer(),
+        auth: {
+          authenticateToken: async (token: string) => (token === 'valid-token' ? { id: 'user-1' } : null),
+          authorize: async () => true,
+        },
+      }) as any;
+
+    const app = new Hono();
+    const adapter = new MastraServer({
+      app,
+      mastra,
+      customRouteAuthConfig: new Map([['GET:/custom/open', false]]),
+    });
+    await adapter.init();
+
+    const unauthenticated = await app.request('/custom/secure');
+    expect(unauthenticated.status).toBe(401);
+
+    const authenticated = await app.request('/custom/secure', {
+      headers: { Authorization: 'Bearer valid-token' },
+    });
+    expect(authenticated.status).toBe(200);
+    await expect(authenticated.json()).resolves.toEqual({ secret: true });
+
+    const open = await app.request('/custom/open');
+    expect(open.status).toBe(200);
+    await expect(open.json()).resolves.toEqual({ open: true });
+  });
+
+  it('includes createRoute routes from server.apiRoutes in the OpenAPI spec', async () => {
+    const route = createRoute({
+      method: 'POST',
+      path: '/custom/spec',
+      responseType: 'json',
+      bodySchema: z.object({ name: z.string() }),
+      responseSchema: z.object({ name: z.string() }),
+      tags: ['Custom'],
+      handler: async ({ name }) => ({ name }),
+    });
+    const mastra = new Mastra({ logger: false, server: { apiRoutes: [route] } });
+    const app = new Hono();
+    const adapter = new MastraServer({ app, mastra, openapiPath: '/openapi.json' });
+
+    await adapter.init();
+
+    const response = await app.request('/api/openapi.json');
+    expect(response.status).toBe(200);
+    const spec = await response.json();
+    const operation = spec.paths['/custom/spec'].post;
+    expect(spec.paths['/custom/spec'].servers).toEqual([{ url: '/' }]);
+    expect(operation.tags).toEqual(['Custom']);
+    expect(operation.requestBody.content['application/json'].schema).toMatchObject({
+      type: 'object',
+      required: ['name'],
+    });
+    expect(operation.responses['200'].content['application/json'].schema).toMatchObject({
+      type: 'object',
+      required: ['name'],
+    });
   });
 
   describe('SSE stream handshake', () => {
@@ -865,6 +1004,27 @@ describe('Hono Server Adapter', () => {
 
       expect(spec.paths['/external']).toBeDefined();
       expect(spec.paths['/external'].servers).toEqual([{ url: '/' }]);
+    });
+  });
+
+  describe('Channel webhook diagnostics', () => {
+    it('warns for an unregistered channel webhook when no custom API routes exist', async () => {
+      const mastra = new Mastra({ logger: false });
+      const warnSpy = vi.spyOn(mastra.getLogger(), 'warn');
+      const app = new Hono();
+      const adapter = new MastraServer({ app, mastra });
+
+      await adapter.init();
+
+      const response = await app.request('/api/agents/support/channels/slack/webhook', {
+        method: 'POST',
+      });
+
+      expect(response.status).toBe(404);
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('channels.adapters configuration'), {
+        agentId: 'support',
+        platform: 'slack',
+      });
     });
   });
 

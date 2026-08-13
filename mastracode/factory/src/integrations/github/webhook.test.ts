@@ -1,5 +1,5 @@
+import { RequestContext } from '@mastra/core/request-context';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { GithubIntegration } from './integration.js';
 import type { GithubSignalSubscriptionRow } from './subscriptions.js';
 
 const getRepositoryCollaboratorPermission = vi.fn<
@@ -10,10 +10,22 @@ const getRepositoryCollaboratorPermission = vi.fn<
     signal?: AbortSignal,
   ) => Promise<'admin' | 'maintain' | 'write' | 'triage' | 'read' | 'none' | undefined>
 >(async () => 'write');
-// Stub integration: dispatch consumes the injected instance for permission checks.
-const githubStub = { getRepositoryCollaboratorPermission } as unknown as GithubIntegration;
+
+function githubWithSessionRow(
+  row: FactorySessionOwner | null,
+  getBySessionId: (sessionId: string) => Promise<FactorySessionOwner | null> = async () => row,
+): GithubWebhookDispatchIntegration {
+  return {
+    // Every dispatch test overrides listSubscriptions/retireSubscription.
+    integrationStorage: {} as never,
+    getRepositoryCollaboratorPermission,
+    sourceControlStorage: { sessions: { getBySessionId } },
+  };
+}
+
+const githubStub = githubWithSessionRow(null);
 import { classifyGithubWebhook, dispatchGithubWebhook } from './webhook.js';
-import type { ParsedGithubWebhook } from './webhook.js';
+import type { FactorySessionOwner, GithubWebhookDispatchIntegration, ParsedGithubWebhook } from './webhook.js';
 
 function parsed(event: string, action: string, extra: Record<string, unknown> = {}): ParsedGithubWebhook {
   return {
@@ -184,7 +196,8 @@ describe('dispatchGithubWebhook', () => {
     const getSessionByResource = vi.fn(async (_resourceId: string, scope?: string) =>
       scope === '/worktrees/a' ? liveA : undefined,
     );
-    const createSession = vi.fn(async () => resumedB);
+    const createSession = vi.fn(async (_input: { requestContext: RequestContext }) => resumedB);
+    const getBySessionId = vi.fn(async () => ({ userId: 'user-1', orgId: 'org-1' }));
     const rows = [subscription('a', '/worktrees/a'), subscription('b', '/worktrees/b')];
 
     const result = await dispatchGithubWebhook(
@@ -195,6 +208,7 @@ describe('dispatchGithubWebhook', () => {
       }),
       {
         controller: { getSessionByResource, createSession } as never,
+        github: githubWithSessionRow({ userId: 'user-1', orgId: 'org-1' }, getBySessionId),
         listSubscriptions: async () => rows,
         isAuthorizedSender: async () => true,
       },
@@ -202,9 +216,13 @@ describe('dispatchGithubWebhook', () => {
 
     expect(result).toEqual({ delivered: 2, failed: 0, ignored: false });
     expect(getSessionByResource).toHaveBeenCalledWith('resource-1', '/worktrees/a');
+    expect(getBySessionId).toHaveBeenCalledOnce();
+    expect(getBySessionId).toHaveBeenCalledWith('session-b');
+    // Owner and identity both come from the Factory session row, not from the
+    // subscription's `ownerId` ('owner-1'), which matches no user.
     expect(createSession).toHaveBeenCalledWith({
       id: 'session-b',
-      ownerId: 'owner-1',
+      ownerId: 'user-1',
       resourceId: 'resource-1',
       scope: '/worktrees/b',
       tags: {
@@ -212,6 +230,11 @@ describe('dispatchGithubWebhook', () => {
         projectRepositoryId: 'project-repository-1',
         worktreePath: '/worktrees/b',
       },
+      requestContext: expect.any(RequestContext),
+    });
+    expect(createSession.mock.calls[0]![0]!.requestContext.get('user')).toEqual({
+      workosId: 'user-1',
+      organizationId: 'org-1',
     });
     expect(switchB).not.toHaveBeenCalled();
     expect(sendA).toHaveBeenCalledWith(
@@ -225,6 +248,25 @@ describe('dispatchGithubWebhook', () => {
       }),
     );
     expect(sendA.mock.calls[0]).toHaveLength(1);
+  });
+
+  it('fails the delivery instead of reviving a session it cannot attribute to a user', async () => {
+    const createSession = vi.fn();
+    const result = await dispatchGithubWebhook(
+      parsed('issue_comment', 'created', {
+        issue: { number: 34, pull_request: { url: 'https://api.github.test/pr/34' } },
+        pull_request: undefined,
+      }),
+      {
+        controller: { getSessionByResource: async () => undefined, createSession } as never,
+        github: githubWithSessionRow(null),
+        listSubscriptions: async () => [subscription('a', '/worktrees/a')],
+        isAuthorizedSender: async () => true,
+      },
+    );
+
+    expect(result).toEqual({ delivered: 0, failed: 1, ignored: false });
+    expect(createSession).not.toHaveBeenCalled();
   });
 
   it('switches an exact live scoped session to its subscribed thread', async () => {

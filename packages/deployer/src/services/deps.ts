@@ -3,8 +3,10 @@ import fsPromises from 'node:fs/promises';
 import path, { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { MastraBase } from '@mastra/core/base';
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { readJSON, writeJSON, ensureFile } from 'fs-extra/esm';
 import type { PackageJson } from 'type-fest';
+import { parse } from 'yaml';
 
 import { createChildProcessLogger } from '../deploy/log.js';
 
@@ -18,6 +20,7 @@ interface ArchitectureOptions {
 
 interface InstallOptions extends ArchitectureOptions {
   pnpmOverrides?: Record<string, string>;
+  pnpmNodeLinker?: 'hoisted';
 }
 
 const PNPM_CONFIG_KEYS_TO_COPY = new Set([
@@ -36,6 +39,49 @@ const PNPM_CONFIG_KEYS_TO_COPY = new Set([
 function getTopLevelYamlKey(line: string) {
   const match = /^(?!\s)([\w-]+):/.exec(line);
   return match?.[1];
+}
+
+function validatePnpmBuildApprovals(key: string, block: string): void {
+  if (key !== 'allowBuilds' && key !== 'onlyBuiltDependencies') return;
+
+  let value: unknown;
+  try {
+    value = (parse(block) as Record<string, unknown>)[key];
+  } catch (error) {
+    throw new MastraError(
+      {
+        id: 'DEPLOYER_INVALID_PNPM_BUILD_APPROVAL_CONFIG',
+        domain: ErrorDomain.DEPLOYER,
+        category: ErrorCategory.USER,
+        details: { key },
+        text: `Invalid pnpm ${key} configuration`,
+      },
+      error,
+    );
+  }
+
+  const invalidEntries =
+    key === 'allowBuilds'
+      ? value && typeof value === 'object' && !Array.isArray(value)
+        ? Object.entries(value).filter(
+            ([dependency, approval]) => dependency.trim().length === 0 || typeof approval !== 'boolean',
+          )
+        : [[key, value]]
+      : Array.isArray(value) &&
+          value.every(dependency => typeof dependency === 'string' && dependency.trim().length > 0)
+        ? []
+        : [[key, value]];
+
+  if (invalidEntries.length === 0) return;
+  const invalidEntryNames = invalidEntries.map(([entry]) => entry).join(', ');
+
+  throw new MastraError({
+    id: 'DEPLOYER_INVALID_PNPM_BUILD_APPROVAL_CONFIG',
+    domain: ErrorDomain.DEPLOYER,
+    category: ErrorCategory.USER,
+    details: { key, invalidEntries: invalidEntryNames },
+    text: `Invalid pnpm ${key} entries: ${invalidEntryNames}`,
+  });
 }
 
 export function copyPnpmWorkspaceSettings(source: string, options: InstallOptions = {}) {
@@ -62,6 +108,7 @@ export function copyPnpmWorkspaceSettings(source: string, options: InstallOption
 
     const block = lines.slice(start, index).join('\n').trimEnd();
     if (block) {
+      validatePnpmBuildApprovals(key, block);
       blocks.push(block);
     }
   }
@@ -89,6 +136,10 @@ export function copyPnpmWorkspaceSettings(source: string, options: InstallOption
         ),
       ].join('\n'),
     );
+  }
+
+  if (options.pnpmNodeLinker) {
+    blocks.push(`nodeLinker: ${options.pnpmNodeLinker}`);
   }
 
   return ["packages:\n  - '.'", ...blocks].join('\n\n') + '\n';
@@ -246,14 +297,20 @@ export class Deps extends MastraBase {
     dir = this.rootDir,
     architecture,
     pnpmOverrides,
-  }: { dir?: string; architecture?: ArchitectureOptions; pnpmOverrides?: Record<string, string> } = {}) {
+    pnpmNodeLinker,
+  }: {
+    dir?: string;
+    architecture?: ArchitectureOptions;
+    pnpmOverrides?: Record<string, string>;
+    pnpmNodeLinker?: 'hoisted';
+  } = {}) {
     const pm = this.packageManager;
     const installCommand = this.getPackageManagerCommand(pm, 'install');
     let args: string[] = [];
 
     switch (pm) {
       case 'pnpm':
-        await this.writePnpmConfig(dir, { ...architecture, pnpmOverrides });
+        await this.writePnpmConfig(dir, { ...architecture, pnpmOverrides, pnpmNodeLinker });
         break;
       case 'yarn':
         // similar to --ignore-workspace but for yarn
