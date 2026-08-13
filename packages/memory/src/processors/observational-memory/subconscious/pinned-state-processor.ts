@@ -150,15 +150,18 @@ export class PinnedStateProcessor implements Processor<typeof SUBCONSCIOUS_PINS_
   }
 
   // One entity resolve plus one paged fact read per turn; memoized on the
-  // request context so multiple steps in the same turn share one read.
+  // request context so multiple steps in the same turn share one read. The
+  // request context can outlive the turn, so the memo is only trusted after
+  // step 0: a new turn (step 0) always reads fresh and overwrites it.
   private async readPins(args: ComputeStateSignalArgs, scope: KnowledgeScope): Promise<PinEntry[] | undefined> {
-    const memo = args.requestContext?.get?.(MEMO_KEY) as PinEntry[] | undefined;
-    if (memo) return memo;
+    const stepNumber = typeof args.stepNumber === 'number' ? args.stepNumber : 0;
+    const memo = args.requestContext?.get?.(MEMO_KEY) as { atStep: number; entries: PinEntry[] } | undefined;
+    if (memo && stepNumber > memo.atStep) return memo.entries;
     const store = await this.deps.getKnowledgeStore();
     if (!store) return undefined;
     const { pins } = await listPinnedKnowledge({ store, scope });
     const entries = pins.map(pin => ({ id: pin.id, text: pin.text }));
-    args.requestContext?.set?.(MEMO_KEY, entries);
+    args.requestContext?.set?.(MEMO_KEY, { atStep: stepNumber, entries });
     return entries;
   }
 

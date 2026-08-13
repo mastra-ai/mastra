@@ -55,6 +55,23 @@ function deltaSignal(ops: PinDeltaOp[], pins: PinEntry[]) {
 }
 
 describe('PinnedStateProcessor', () => {
+  it('re-reads the store on a new turn even when the request context is reused', async () => {
+    const { tools, processor } = createHarness();
+    // Same request context across both turns, as real callers do.
+    const args = makeArgs();
+
+    // Turn 1, step 0: no pins yet, nothing emitted, but the empty read is memoized.
+    expect(await processor.computeStateSignal(args)).toBeUndefined();
+
+    // A pin lands between turns.
+    const pinned = await tools.knowledge_pin!.execute!({ text: 'fresh pin' } as any, {} as any);
+
+    // Turn 2, step 0 with the SAME request context: must read fresh, not serve the stale empty memo.
+    const result = await processor.computeStateSignal({ ...args, stepNumber: 0 } as any);
+    expect(result).toMatchObject({ mode: 'snapshot' });
+    expect(result!.contents).toContain(pinned.id);
+  });
+
   it('emits a snapshot on first emission when no snapshot is in the window', async () => {
     const { tools, processor } = createHarness();
     const pinned = await tools.knowledge_pin!.execute!({ text: 'Always speak French.' } as any, {} as any);
