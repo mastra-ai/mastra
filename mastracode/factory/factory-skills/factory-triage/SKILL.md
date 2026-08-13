@@ -150,7 +150,7 @@ Set `COMMENT_BODY` to the marker followed by the structured handoff. Update the 
 After a GitHub comment is posted or updated, reconcile the labels before the terminal transition:
 
 - Add `status: auto-triaged` for every GitHub issue: `gh issue edit "$ISSUE" --add-label "status: auto-triaged"`.
-- Remove `status: needs triage` when it appears in the labels fetched in Phase 1: `gh issue edit "$ISSUE" --remove-label "status: needs triage"`.
+- Remove `status: needs triage` whenever it is present, including when Phase 1 added it: `gh issue edit "$ISSUE" --remove-label "status: needs triage"`.
 - Add `status: needs approval` when `Route: Await approval`, or when the recommended next action needs maintainer approval or prep before someone should investigate, implement, close, or reject: `gh issue edit "$ISSUE" --add-label "status: needs approval"`.
 - Add the selected `effort:<level>` and `impact:<level>` labels from the handoff.
 - Remove only conflicting alternatives from these explicit labels: `effort:low`, `effort:medium`, `effort:high`, `impact:low`, `impact:medium`, and `impact:high`. On every initial run and refresh, keep exactly the selected effort label and exactly the selected impact label.
