@@ -113,6 +113,10 @@ export type KnownAgentControllerEvent =
       displayState: {
         isRunning?: boolean;
         omProgress?: AgentControllerOMProgress;
+        /** A buffered observation is running: the message window is being observed in the background. */
+        bufferingMessages?: boolean;
+        /** A buffered reflection is running: observations are being consolidated in the background. */
+        bufferingObservations?: boolean;
         tokenUsage?: Record<string, unknown>;
         /** Active tool executions keyed by toolCallId. */
         activeTools?: Record<string, ActiveToolState>;
