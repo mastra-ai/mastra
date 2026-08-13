@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@mastra/auth-workos':
+        specifier: link:../../auth/workos
+        version: link:../../auth/workos
       '@mastra/code-sdk':
         specifier: link:../sdk
         version: link:../sdk

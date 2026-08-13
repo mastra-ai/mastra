@@ -1,3 +1,7 @@
+import { promises as fs } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
 import { DEFAULT_OM_MODEL_ID } from '@mastra/code-sdk/constants';
 import { Hono } from 'hono';
@@ -1078,5 +1082,101 @@ describe('custom provider routes', () => {
   it('validates the payload', async () => {
     expect((await postProvider(buildApp(userA), { url: 'https://x.example' })).status).toBe(400);
     expect((await postProvider(buildApp(userA), { name: 'x', url: 'ftp://bad' })).status).toBe(400);
+  });
+});
+
+describe('thinking defaults routes', () => {
+  let settingsPath: string;
+  const controller = {
+    ...makeAgentController([{ provider: 'anthropic', hasApiKey: true }]),
+    listModes: () => [{ id: 'build' }, { id: 'plan' }, { id: 'fast' }],
+  };
+
+  function buildApp(
+    user: { workosId: string; organizationId?: string } | null,
+    opts: { authEnabled?: boolean; isOrganizationAdmin?: (orgId: string, userId: string) => Promise<boolean> } = {},
+  ) {
+    const app = new Hono();
+    app.use('*', async (c, next) => {
+      if (user) c.set('factoryAuthUser' as never, user as never);
+      await next();
+    });
+    mountApiRoutes(
+      app as any,
+      new ConfigRoutes({
+        auth: fakeRouteAuth({
+          enabled: opts.authEnabled !== false,
+          ...(opts.isOrganizationAdmin ? { isOrganizationAdmin: opts.isOrganizationAdmin } : {}),
+        }),
+        controller,
+        settingsPath,
+      }).routes(),
+    );
+    return app;
+  }
+
+  const userA = { workosId: 'user-a', organizationId: 'org1' };
+
+  const putThinking = (app: Hono, body: unknown) =>
+    app.request('/web/config/thinking', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+  beforeEach(async () => {
+    const dir = await fs.mkdtemp(join(tmpdir(), 'factory-thinking-'));
+    settingsPath = join(dir, 'settings.json');
+  });
+
+  it('reads the built-in defaults when no settings file exists', async () => {
+    const res = await buildApp(null, { authEnabled: false }).request('/web/config/thinking');
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      levels: ['off', 'low', 'medium', 'high', 'xhigh', 'max'],
+      globalDefault: 'off',
+      modeDefaults: {},
+      modes: ['build', 'plan', 'fast'],
+    });
+  });
+
+  it('round-trips global and per-mode defaults through the settings file', async () => {
+    const app = buildApp(null, { authEnabled: false });
+    const put = await putThinking(app, { globalDefault: 'high', modeDefaults: { plan: 'max' } });
+    expect(put.status).toBe(200);
+    expect(await put.json()).toEqual({ ok: true, globalDefault: 'high', modeDefaults: { plan: 'max' } });
+
+    const read = await app.request('/web/config/thinking');
+    expect(await read.json()).toMatchObject({ globalDefault: 'high', modeDefaults: { plan: 'max' } });
+  });
+
+  it('clears a per-mode default with null without touching others', async () => {
+    const app = buildApp(null, { authEnabled: false });
+    await putThinking(app, { modeDefaults: { plan: 'max', build: 'high' } });
+
+    const cleared = await putThinking(app, { modeDefaults: { plan: null } });
+    expect(await cleared.json()).toEqual({ ok: true, globalDefault: 'off', modeDefaults: { build: 'high' } });
+  });
+
+  it('rejects invalid levels, unknown modes, and non-object bodies', async () => {
+    const app = buildApp(null, { authEnabled: false });
+    expect((await putThinking(app, {})).status).toBe(400);
+    expect((await putThinking(app, null)).status).toBe(400);
+    expect((await putThinking(app, [])).status).toBe(400);
+    expect((await putThinking(app, { globalDefault: 'ultra' })).status).toBe(400);
+    expect((await putThinking(app, { modeDefaults: { build: 'ultra' } })).status).toBe(400);
+    expect((await putThinking(app, { modeDefaults: { plna: 'high' } })).status).toBe(400);
+    expect((await putThinking(app, { modeDefaults: ['high'] })).status).toBe(400);
+  });
+
+  it('rejects deployment-scoped writes in tenant mode', async () => {
+    const nonAdmin = buildApp(userA, { isOrganizationAdmin: async () => false });
+    expect((await putThinking(nonAdmin, { globalDefault: 'high' })).status).toBe(403);
+
+    const signedOut = buildApp(null);
+    expect((await putThinking(signedOut, { globalDefault: 'high' })).status).toBe(403);
+
+    const admin = buildApp(userA, { isOrganizationAdmin: async () => true });
+    expect((await putThinking(admin, { globalDefault: 'high' })).status).toBe(403);
   });
 });

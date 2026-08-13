@@ -3,8 +3,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   createChannelResourceIdResolver,
+  createChannelSessionStartHook,
   resolveChannelThreadId,
-  adaptSourceControlOwner,
   createHandlers,
   resolveLinkedSender,
   resolveFactoryForLink,
@@ -381,17 +381,23 @@ describe('handler dispatch gating', () => {
 });
 
 describe('repo-backed thread sessions (resolveResourceId)', () => {
-  function makeSourceControl({
-    existingSession = null as { sessionId: string } | null,
-    repo = { projectRepositoryId: 'pr-1', baseBranch: 'main' } as {
-      projectRepositoryId: string;
-      baseBranch: string;
-    } | null,
-  } = {}) {
+  // Shaped like the real `SourceControlStorageHandle` the Slack wiring now
+  // consumes directly: repo resolution is the shared factory-session helper,
+  // so the stub has to answer the same row lookups it makes.
+  function makeSourceControl({ existingSession = null as { sessionId: string } | null, hasRepo = true } = {}) {
     return {
-      resolveProjectRepository: vi.fn().mockResolvedValue(repo),
-      getSessionForBranch: vi.fn().mockResolvedValue(existingSession),
-      createSession: vi.fn().mockResolvedValue({ sessionId: 'us-new' }),
+      integrationId: 'github',
+      connections: {
+        list: vi.fn().mockResolvedValue([{ id: 'conn-gh', integrationId: 'github', createdByUserId: 'owner-1' }]),
+      },
+      projectRepositories: {
+        list: vi.fn().mockResolvedValue(hasRepo ? [{ id: 'pr-1', repositoryId: 'repo-1', branch: null }] : []),
+      },
+      repositories: { get: vi.fn().mockResolvedValue({ defaultBranch: 'main', slug: 'acme/app' }) },
+      sessions: {
+        getForBranch: vi.fn().mockResolvedValue(existingSession),
+        create: vi.fn().mockResolvedValue({ sessionId: 'us-new' }),
+      },
     };
   }
 
@@ -424,17 +430,34 @@ describe('repo-backed thread sessions (resolveResourceId)', () => {
 
     await expect(resolve(resolveArgs())).resolves.toBe('us-new');
 
-    expect(deps.sourceControl.resolveProjectRepository).toHaveBeenCalledWith({
+    expect(deps.sourceControl.connections.list).toHaveBeenCalledWith({
       orgId: 'org-1',
       factoryProjectId: 'fp-1',
     });
-    expect(deps.sourceControl.createSession).toHaveBeenCalledWith({
+    // Attributed to the Slack sender, not to whoever connected the repository.
+    expect(deps.sourceControl.sessions.create).toHaveBeenCalledWith({
+      sessionId: expect.any(String),
       projectRepositoryId: 'pr-1',
       orgId: 'org-1',
       userId: 'user-1',
       branch: 'slack/1700-42',
       baseBranch: 'main',
     });
+  });
+
+  // Top-level DM and channel conversations use the empty-threadTs thread form
+  // (`slack:D-1:`), which previously derived the invalid git ref `slack/` and
+  // made every top-level DM session fail its clone.
+  it.each([
+    { id: 'slack:D-1:', branch: 'slack/D-1' },
+    { id: 'slack:C-1:', branch: 'slack/C-1' },
+  ])('a top-level conversation thread (empty threadTs) derives its branch from the channel id ($id)', async ({ id, branch }) => {
+    const deps = makeResolverDeps();
+    const resolve = createChannelResourceIdResolver(deps as any);
+
+    await expect(resolve(resolveArgs({ id }))).resolves.toBe('us-new');
+
+    expect(deps.sourceControl.sessions.create).toHaveBeenCalledWith(expect.objectContaining({ branch }));
   });
 
   it('a repeat message on the same thread reuses the existing session, no second row', async () => {
@@ -444,12 +467,12 @@ describe('repo-backed thread sessions (resolveResourceId)', () => {
 
     await expect(resolve(resolveArgs())).resolves.toBe('us-existing');
 
-    expect(sourceControl.getSessionForBranch).toHaveBeenCalledWith({
+    expect(sourceControl.sessions.getForBranch).toHaveBeenCalledWith({
       projectRepositoryId: 'pr-1',
       userId: 'user-1',
       branch: 'slack/1700-42',
     });
-    expect(sourceControl.createSession).not.toHaveBeenCalled();
+    expect(sourceControl.sessions.create).not.toHaveBeenCalled();
   });
 
   it('no sourceControl → chat-only channel resourceId', async () => {
@@ -460,12 +483,12 @@ describe('repo-backed thread sessions (resolveResourceId)', () => {
   });
 
   it('a factory without a repository falls back to a chat-only session', async () => {
-    const sourceControl = makeSourceControl({ repo: null });
+    const sourceControl = makeSourceControl({ hasRepo: false });
     const deps = makeResolverDeps({ sourceControl });
     const resolve = createChannelResourceIdResolver(deps as any);
 
     await expect(resolve(resolveArgs())).resolves.toBe('channel:slack:C-1:1700.42');
-    expect(sourceControl.createSession).not.toHaveBeenCalled();
+    expect(sourceControl.sessions.create).not.toHaveBeenCalled();
   });
 
   it('an unlinked sender stays chat-only and creates no session row', async () => {
@@ -474,14 +497,14 @@ describe('repo-backed thread sessions (resolveResourceId)', () => {
     const resolve = createChannelResourceIdResolver(deps as any);
 
     await expect(resolve(resolveArgs())).resolves.toBe('channel:slack:C-1:1700.42');
-    expect(sourceControl.resolveProjectRepository).not.toHaveBeenCalled();
-    expect(sourceControl.createSession).not.toHaveBeenCalled();
+    expect(sourceControl.connections.list).not.toHaveBeenCalled();
+    expect(sourceControl.sessions.create).not.toHaveBeenCalled();
   });
 
   it('a source-control failure falls back to chat-only instead of dropping the message', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const sourceControl = makeSourceControl();
-    sourceControl.createSession.mockRejectedValue(new Error('db down'));
+    sourceControl.sessions.create.mockRejectedValue(new Error('db down'));
     const deps = makeResolverDeps({ sourceControl });
     const resolve = createChannelResourceIdResolver(deps as any);
 
@@ -752,102 +775,113 @@ describe('Slack thread work-item creation', () => {
 });
 
 /**
- * The adapter between the factory's source-control storage handle and the
- * narrow surface the Slack handlers consume. Most of it delegates, but repo
- * resolution encodes real policy — which connection counts, which repo, and
- * what the base branch is — so it gets tested against a stubbed owner rather
- * than through the handlers, which stub the adapted surface instead.
+ * Sessions created by the channel machinery are configured here or nowhere.
+ * Without this hook a Slack session runs on the SDK's built-in mode default
+ * (`openai/gpt-5.5`), so a factory pointed at any other provider fails every
+ * message with a missing-credentials error.
  */
-describe('adaptSourceControlOwner', () => {
-  function makeOwner({
-    connections = [{ id: 'conn-gh', integrationId: 'github' }],
-    projectRepositories = [{ id: 'pr-1', repositoryId: 'repo-1', branch: null }] as Array<{
-      id: string;
-      repositoryId: string;
-      branch?: string | null;
-    }>,
-    repository = { defaultBranch: 'main' } as { defaultBranch: string } | null,
-  } = {}) {
+describe('session start (onSessionStart)', () => {
+  function makeSession({ persistedModeModel = null as string | null, mode = 'build' } = {}) {
+    const settings = new Map<string, unknown>();
+    if (persistedModeModel) settings.set(`modeModelId_${mode}`, persistedModeModel);
     return {
-      integrationId: 'github',
-      connections: { list: vi.fn().mockResolvedValue(connections) },
-      projectRepositories: { list: vi.fn().mockResolvedValue(projectRepositories) },
-      repositories: { get: vi.fn().mockResolvedValue(repository) },
-      sessions: {
-        getForBranch: vi.fn().mockResolvedValue({ sessionId: 'us-existing' }),
-        create: vi.fn(input => Promise.resolve({ sessionId: input.sessionId })),
+      mode: { get: () => mode },
+      thread: {
+        getSetting: vi.fn(async ({ key }: { key: string }) => settings.get(key) ?? null),
       },
+      model: { switch: vi.fn(async () => {}) },
+      om: {
+        observer: { switchModel: vi.fn(async () => {}) },
+        reflector: { switchModel: vi.fn(async () => {}) },
+      },
+      state: { set: vi.fn(async () => {}) },
     };
   }
 
-  const resolveArgs = { orgId: 'org-1', factoryProjectId: 'fp-1' };
-
-  it('resolves the first repository linked to the owner-owned connection, defaulting the base branch to the repo default', async () => {
-    const owner = makeOwner();
-
-    const result = await adaptSourceControlOwner(owner as any).resolveProjectRepository(resolveArgs);
-
-    expect(result).toEqual({ projectRepositoryId: 'pr-1', baseBranch: 'main' });
-    expect(owner.projectRepositories.list).toHaveBeenCalledWith({ orgId: 'org-1', connectionId: 'conn-gh' });
-    expect(owner.repositories.get).toHaveBeenCalledWith({ orgId: 'org-1', id: 'repo-1' });
-  });
-
-  it('prefers the branch pinned on the project repository over the repository default', async () => {
-    const owner = makeOwner({ projectRepositories: [{ id: 'pr-1', repositoryId: 'repo-1', branch: 'develop' }] });
-
-    const result = await adaptSourceControlOwner(owner as any).resolveProjectRepository(resolveArgs);
-
-    expect(result).toEqual({ projectRepositoryId: 'pr-1', baseBranch: 'develop' });
-  });
-
-  // A project can carry connections for several integrations; only the one
-  // belonging to this owner can back a session.
-  it('ignores connections belonging to other integrations', async () => {
-    const owner = makeOwner({ connections: [{ id: 'conn-linear', integrationId: 'linear' }] });
-
-    expect(await adaptSourceControlOwner(owner as any).resolveProjectRepository(resolveArgs)).toBeNull();
-    expect(owner.projectRepositories.list).not.toHaveBeenCalled();
-  });
-
-  it('resolves nothing when the connection has no linked repository', async () => {
-    const owner = makeOwner({ projectRepositories: [] });
-
-    expect(await adaptSourceControlOwner(owner as any).resolveProjectRepository(resolveArgs)).toBeNull();
-    expect(owner.repositories.get).not.toHaveBeenCalled();
-  });
-
-  it('resolves nothing when the linked repository row is missing', async () => {
-    const owner = makeOwner({ repository: null });
-
-    expect(await adaptSourceControlOwner(owner as any).resolveProjectRepository(resolveArgs)).toBeNull();
-  });
-
-  it('delegates branch lookup to the owner unchanged', async () => {
-    const owner = makeOwner();
-    const args = { projectRepositoryId: 'pr-1', userId: 'user-1', branch: 'slack/thread-1' };
-
-    const session = await adaptSourceControlOwner(owner as any).getSessionForBranch(args);
-
-    expect(session).toEqual({ sessionId: 'us-existing' });
-    expect(owner.sessions.getForBranch).toHaveBeenCalledWith(args);
-  });
-
-  // The storage handle requires a session id the caller shouldn't invent, so
-  // the adapter mints one.
-  it('mints a session id when creating a session', async () => {
-    const owner = makeOwner();
-    const args = {
-      projectRepositoryId: 'pr-1',
-      orgId: 'org-1',
-      userId: 'user-1',
-      branch: 'slack/thread-1',
-      baseBranch: 'main',
+  function makeStartDeps({
+    defaultModelId = 'anthropic/claude-opus-5' as string | null,
+    session = { orgId: 'org-1', userId: 'user-1', projectRepositoryId: 'pr-1' } as Record<string, string> | null,
+    memoryRecord = null as Record<string, unknown> | null,
+  } = {}) {
+    return {
+      projects: { getById: vi.fn(async () => ({ id: 'fp-1', defaultModelId })) } as any,
+      sourceControl: {
+        sessions: { getBySessionId: vi.fn(async () => session) },
+        projectRepositories: { get: vi.fn(async () => ({ id: 'pr-1', connectionId: 'conn-gh' })) },
+        connections: { get: vi.fn(async () => ({ id: 'conn-gh', factoryProjectId: 'fp-1' })) },
+      } as any,
+      memorySettings: { get: vi.fn(async () => memoryRecord) } as any,
     };
+  }
 
-    const session = await adaptSourceControlOwner(owner as any).createSession(args);
+  const startArgs = (session: unknown, resourceId = 'us-1') => ({
+    session: session as any,
+    thread: { id: resourceId, resourceId },
+  });
 
-    expect(owner.sessions.create).toHaveBeenCalledWith(expect.objectContaining(args));
-    expect(session.sessionId).toEqual(expect.any(String));
-    expect(session.sessionId).not.toHaveLength(0);
+  it('a repo-backed session adopts the factory default model instead of the SDK default', async () => {
+    const deps = makeStartDeps();
+    const { model, ...rest } = makeSession();
+    const session = { model, ...rest };
+
+    await createChannelSessionStartHook(deps as any)(startArgs(session) as any);
+
+    expect(session.model.switch).toHaveBeenCalledWith({ modelId: 'anthropic/claude-opus-5' });
+    // Resolved from the session row, not from anything held in memory, so it
+    // works on a thread created before this process started.
+    expect(deps.sourceControl.sessions.getBySessionId).toHaveBeenCalledWith('us-1');
+    expect(deps.projects.getById).toHaveBeenCalledWith({ id: 'fp-1' });
+  });
+
+  it('applies the owner observational-memory settings, matching the web kickoff', async () => {
+    const deps = makeStartDeps({ memoryRecord: { observerModelId: 'openai/gpt-5.4-mini', observationThreshold: 111 } });
+    const session = makeSession();
+
+    await createChannelSessionStartHook(deps as any)(startArgs(session) as any);
+
+    expect(deps.memorySettings.get).toHaveBeenCalledWith({ orgId: 'org-1', userId: 'user-1' });
+    expect(session.om.observer.switchModel).toHaveBeenCalledWith({ modelId: 'openai/gpt-5.4-mini' });
+    expect(session.state.set).toHaveBeenCalledWith(expect.objectContaining({ observationThreshold: 111 }));
+  });
+
+  // The durable record of a deliberate choice: either an earlier start or the
+  // user's own switch. Re-applying the factory default over it would undo the
+  // user's selection every time the process restarts.
+  it('leaves a session alone when its mode already has a model persisted on the thread', async () => {
+    const deps = makeStartDeps();
+    const session = makeSession({ persistedModeModel: 'anthropic/claude-fable-5' });
+
+    await createChannelSessionStartHook(deps as any)(startArgs(session) as any);
+
+    expect(session.model.switch).not.toHaveBeenCalled();
+    expect(deps.sourceControl.sessions.getBySessionId).not.toHaveBeenCalled();
+  });
+
+  it('skips chat-only threads, whose resourceId names no project', async () => {
+    const deps = makeStartDeps();
+    const session = makeSession();
+
+    await createChannelSessionStartHook(deps as any)(startArgs(session, 'channel:slack:C-1:1700.42') as any);
+
+    expect(session.model.switch).not.toHaveBeenCalled();
+    expect(deps.sourceControl.sessions.getBySessionId).not.toHaveBeenCalled();
+  });
+
+  it('configures nothing when the session row is gone', async () => {
+    const deps = makeStartDeps({ session: null });
+    const session = makeSession();
+
+    await createChannelSessionStartHook(deps as any)(startArgs(session) as any);
+
+    expect(session.model.switch).not.toHaveBeenCalled();
+  });
+
+  it('leaves the session on its default when the factory has no default model', async () => {
+    const deps = makeStartDeps({ defaultModelId: null });
+    const session = makeSession();
+
+    await createChannelSessionStartHook(deps as any)(startArgs(session) as any);
+
+    expect(session.model.switch).not.toHaveBeenCalled();
   });
 });

@@ -9,9 +9,9 @@ packages:
 
 **Added in:** `@mastra/core@1.38.0`
 
-:::experimental
+:::beta
 
-This feature is in beta. Breaking changes may occur without a major version bump until the API is stable.
+Breaking changes may occur without a major version bump until the API is stable.
 
 :::
 
@@ -143,7 +143,7 @@ The generated code for `sales_code` can't call an inventory tool, and the revers
 
 ## Remote sandboxes
 
-By default, code mode uses a transport that writes the program to the host filesystem and runs `node` against it. That works for `LocalSandbox`, which shares the host, but not for remote sandboxes that run in their own micro-VM (such as [E2B](/reference/workspace/e2b-sandbox)), where the host paths don't exist.
+By default, code mode uses a transport that writes the program to the host filesystem and runs `node` against it. That works for `LocalSandbox`, which shares the host, but not for remote sandboxes that run in their own micro-VM (such as [E2B](/integrations/sandboxes/e2b)), where the host paths don't exist.
 
 Remote sandboxes need a transport that writes the program into the sandbox filesystem. For E2B, pass the included `E2BCodeModeTransport` as the second argument to `createCodeMode`:
 
@@ -173,9 +173,24 @@ const { tool, instructions } = createCodeMode(
 
 `isolated-vm` is a native addon, and on Node.js 20 and later the host process must be started with the `--no-node-snapshot` flag. See the [IsolatedVmCodeModeTransport reference](/reference/tools/isolated-vm-transport) for setup details.
 
+When the host can't install native addons or set Node.js flags, which is common on serverless platforms, use [`QuickJsCodeModeTransport`](/reference/tools/quickjs-transport) from `@mastra/quickjs` instead. It gives the same in-process boundary using a QuickJS runtime compiled to WebAssembly, at the cost of slower execution:
+
+```typescript
+import { createCodeMode } from '@mastra/core/tools'
+import { QuickJsCodeModeTransport } from '@mastra/quickjs'
+
+const { tool, instructions } = createCodeMode(
+  { tools }, // no sandbox needed
+  new QuickJsCodeModeTransport({ memoryLimitMb: 128 }),
+)
+```
+
+See [Choosing a transport](/reference/tools/quickjs-transport#choosing-a-transport) for a side-by-side comparison.
+
 ## Related
 
 - [createCodeMode() reference](/reference/tools/create-code-mode)
 - [IsolatedVmCodeModeTransport reference](/reference/tools/isolated-vm-transport)
+- [QuickJsCodeModeTransport reference](/reference/tools/quickjs-transport)
 - [Tools](/docs/agents/using-tools)
 - [Workspace overview](/docs/workspace/overview)

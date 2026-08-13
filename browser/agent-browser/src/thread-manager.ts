@@ -5,7 +5,7 @@
  * BrowserManager capabilities (newWindow, switchTo, closeTab).
  */
 
-import { ThreadManager } from '@mastra/core/browser';
+import { ThreadManager, resolveLaunchViewport } from '@mastra/core/browser';
 import type { BrowserState, ThreadSession, ThreadManagerConfig } from '@mastra/core/browser';
 import { BrowserManager } from 'agent-browser';
 import type { BrowserLaunchOptions } from 'agent-browser';
@@ -84,7 +84,7 @@ export class AgentBrowserThreadManager extends ThreadManager<BrowserManager> {
 
       const launchOptions: BrowserLaunchOptions & { cdpHeaders?: Record<string, string> } = {
         headless: this.browserConfig.headless,
-        viewport: this.browserConfig.viewport,
+        ...resolveLaunchViewport(this.browserConfig.viewport),
         profile: this.browserConfig.profile,
         executablePath: this.browserConfig.executablePath,
         storageState: this.browserConfig.storageState,

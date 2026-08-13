@@ -6333,6 +6333,142 @@ describe('Agent Tests', () => {
   agentTests({ version: 'v2' });
 });
 
+describe('sub-agent tool input schema coercion', () => {
+  function createSupervisorModel(argsJson: string) {
+    let call = 0;
+    return new MockLanguageModelV2({
+      doStream: async () => {
+        call++;
+        if (call === 1) {
+          return {
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start' as const, warnings: [] },
+              { type: 'response-metadata' as const, id: 'id-0', modelId: 'mock', timestamp: new Date(0) },
+              { type: 'tool-call' as const, toolCallId: 'tc-1', toolName: 'agent-child', input: argsJson },
+              {
+                type: 'finish' as const,
+                finishReason: 'tool-calls' as const,
+                usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+              },
+            ]),
+          };
+        }
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start' as const, warnings: [] },
+            { type: 'response-metadata' as const, id: 'id-1', modelId: 'mock', timestamp: new Date(0) },
+            { type: 'text-start' as const, id: 't1' },
+            { type: 'text-delta' as const, id: 't1', delta: 'done' },
+            { type: 'text-end' as const, id: 't1' },
+            {
+              type: 'finish' as const,
+              finishReason: 'stop' as const,
+              usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+            },
+          ]),
+        };
+      },
+    });
+  }
+
+  function createChildModel(invocations: string[]) {
+    return new MockLanguageModelV2({
+      doStream: async () => {
+        invocations.push('child-ran');
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start' as const, warnings: [] },
+            { type: 'response-metadata' as const, id: 'c-0', modelId: 'mock', timestamp: new Date(0) },
+            { type: 'text-start' as const, id: 'c1' },
+            { type: 'text-delta' as const, id: 'c1', delta: 'child answer' },
+            { type: 'text-end' as const, id: 'c1' },
+            {
+              type: 'finish' as const,
+              finishReason: 'stop' as const,
+              usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+            },
+          ]),
+        };
+      },
+    });
+  }
+
+  async function runDelegation(argsJson: string) {
+    const invocations: string[] = [];
+    const child = new Agent({
+      name: 'child',
+      description: 'A child agent',
+      instructions: 'You answer questions.',
+      model: createChildModel(invocations),
+    });
+    const supervisor = new Agent({
+      name: 'supervisor',
+      instructions: 'Delegate to child.',
+      model: createSupervisorModel(argsJson),
+      agents: { child },
+    });
+
+    const stream = await supervisor.stream('delegate please');
+    const chunks: any[] = [];
+    for await (const c of stream.fullStream) chunks.push(c);
+
+    const toolResults = chunks.filter(c => c.type === 'tool-result');
+    return { invocations, toolResults };
+  }
+
+  it('coerces maxSteps from string to number (LLMs often emit strings)', async () => {
+    const r = await runDelegation(JSON.stringify({ prompt: 'hello', maxSteps: '10' }));
+    expect(r.invocations).toContain('child-ran');
+    expect(r.toolResults[0]?.payload?.result?.text).toBe('child answer');
+  });
+
+  it('accepts maxSteps as number', async () => {
+    const r = await runDelegation(JSON.stringify({ prompt: 'hello', maxSteps: 10 }));
+    expect(r.invocations).toContain('child-ran');
+    expect(r.toolResults[0]?.payload?.result?.text).toBe('child answer');
+  });
+
+  it('allows null maxSteps', async () => {
+    const r = await runDelegation(JSON.stringify({ prompt: 'hello', maxSteps: null }));
+    expect(r.invocations).toContain('child-ran');
+  });
+
+  it('allows omitted maxSteps', async () => {
+    const r = await runDelegation(JSON.stringify({ prompt: 'hello' }));
+    expect(r.invocations).toContain('child-ran');
+  });
+
+  it('rejects non-integer maxSteps', async () => {
+    const r = await runDelegation(JSON.stringify({ prompt: 'hello', maxSteps: 5.5 }));
+    expect(r.invocations).not.toContain('child-ran');
+    expect(r.toolResults[0]?.payload?.result?.error).toBe(true);
+  });
+
+  it('rejects non-integer maxSteps sent as a string', async () => {
+    const r = await runDelegation(JSON.stringify({ prompt: 'hello', maxSteps: '5.5' }));
+    expect(r.invocations).not.toContain('child-ran');
+    expect(r.toolResults[0]?.payload?.result?.error).toBe(true);
+  });
+
+  it('rejects maxSteps below minimum of 3', async () => {
+    const r = await runDelegation(JSON.stringify({ prompt: 'hello', maxSteps: 1 }));
+    expect(r.invocations).not.toContain('child-ran');
+    expect(r.toolResults[0]?.payload?.result?.error).toBe(true);
+  });
+
+  it('rejects maxSteps below minimum of 3 sent as a string', async () => {
+    const r = await runDelegation(JSON.stringify({ prompt: 'hello', maxSteps: '1' }));
+    expect(r.invocations).not.toContain('child-ran');
+    expect(r.toolResults[0]?.payload?.result?.error).toBe(true);
+  });
+
+  it('rejects non-numeric string maxSteps', async () => {
+    const r = await runDelegation(JSON.stringify({ prompt: 'hello', maxSteps: 'ten' }));
+    expect(r.invocations).not.toContain('child-ran');
+    expect(r.toolResults[0]?.payload?.result?.error).toBe(true);
+  });
+});
+
 //     it('should accept and execute both Mastra and Vercel tools in Agent constructor', async () => {
 //       const mastraExecute = vi.fn().mockResolvedValue({ result: 'mastra' });
 //       const vercelExecute = vi.fn().mockResolvedValue({ result: 'vercel' });

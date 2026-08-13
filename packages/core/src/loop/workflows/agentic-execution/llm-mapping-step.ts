@@ -347,7 +347,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
           error?: unknown;
           providerMetadata?: Record<string, unknown>;
         },
-        phase: 'output-available' | 'error',
+        phase: 'output-available' | 'error' | 'approval',
       ): Promise<ChunkType<OUTPUT>> {
         const stepTools = readScoped(scopeCtx, STEP_TOOLS_KEY, 'stepTools') as ToolSet | undefined;
         const tool =
@@ -460,11 +460,13 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
         // will see them on the next turn. This handles both tool-not-found errors
         // (hallucinated tool names) and tool execution errors (tool throws).
         //
-        // Check for pending HITL tool calls (tools with no result and no error).
-        // In mixed turns with errors and pending HITL tools,
-        // the HITL suspension path should take priority over continuing the loop.
+        // Check for pending HITL tool calls (no result and no error); in mixed turns these
+        // take priority over continuing the loop. Exclude aborted calls: they also lack a
+        // result/error but were cancelled, not awaiting input, so they must not count as a
+        // suspension or be recorded as a result (see tool-call-step.ts). Denied approvals are
+        // resolved, not pending, so they are excluded too.
         const hasPendingHITL = inputData.some(
-          tc => tc.result === undefined && !tc.error && !tc.providerExecuted && !isDeniedApproval(tc),
+          tc => tc.result === undefined && !tc.error && !tc.aborted && !tc.providerExecuted && !isDeniedApproval(tc),
         );
 
         if (errorResults?.length > 0 && !hasPendingHITL) {
@@ -595,8 +597,15 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
         const stepsForToolResults = (initialResult?.output?.steps ?? []) as Array<StepResult<ToolSet>>;
         for (const toolCall of inputData) {
           // A declined approval has no `result`: persist it as `output-denied` with the approval
-          // decision (rather than skipping it as a deferred call) and emit no tool-result chunk.
+          // decision (rather than skipping it as a deferred call) and enqueue a terminal
+          // `tool-output-denied` chunk so live stream clients resolve the pending tool call
+          // (issue #20880). Persistence alone is not enough — without this enqueue the UI hangs.
           if (isDeniedApproval(toolCall)) {
+            const approval = {
+              id: toolCall.approval!.id,
+              approved: false as const,
+              reason: toolCall.approval!.reason,
+            };
             rest.messageList.updateToolInvocation({
               type: 'tool-invocation' as const,
               toolInvocation: {
@@ -604,13 +613,27 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
                 toolCallId: toolCall.toolCallId,
                 toolName: sanitizeToolName(toolCall.toolName),
                 args: toolCall.args,
-                approval: {
-                  id: toolCall.approval!.id,
-                  approved: false,
-                  reason: toolCall.approval!.reason,
-                },
+                approval,
               },
             });
+
+            const chunk = await transformToolChunk(
+              {
+                type: 'tool-output-denied',
+                runId: rest.runId,
+                from: ChunkFrom.AGENT,
+                payload: {
+                  toolCallId: toolCall.toolCallId,
+                  toolName: toolCall.toolName,
+                  args: toolCall.args,
+                  approval,
+                },
+              },
+              toolCall,
+              'approval',
+            );
+            const processed = await processAndEnqueueChunk(chunk);
+            if (processed) await rest.options?.onChunk?.(processed);
             continue;
           }
 

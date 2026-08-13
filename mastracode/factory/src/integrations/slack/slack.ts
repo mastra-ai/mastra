@@ -4,6 +4,7 @@ import type {
   ChannelHandler,
   ChannelHandlerContext,
   ChannelHandlers,
+  ChannelSessionStart,
   ResolveResourceId,
   ResolveThreadId,
 } from '@mastra/core/channels';
@@ -11,12 +12,20 @@ import type { Mastra } from '@mastra/core/mastra';
 import { createSlackAdapter } from '@mastra/slack';
 import { Card, CardText, Actions, LinkButton } from 'chat';
 
+import {
+  hydrateFactorySession,
+  resolveFactoryDefaultModelId,
+  resolveFactoryProjectForSession,
+  resolveFactorySourceRepository,
+} from '../../session/factory-session.js';
 import type {
   ChannelAccountLink,
   ChannelAccountLinkKey,
   ChannelIdentityStorage,
 } from '../../storage/domains/channel-identity/base.js';
+import type { MemorySettingsStorage } from '../../storage/domains/memory-settings/base.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
+import type { SourceControlStorageHandle } from '../../storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from '../../storage/domains/work-items/base.js';
 import type { FactoryChannelsConfig } from '../base.js';
 
@@ -48,14 +57,22 @@ interface SlackChannelDeps {
    */
   projects?: FactoryProjectsStorage;
   /**
-   * Narrow source-control surface used to make new Slack threads repo-backed:
-   * when the sender is linked and their factory has a repository, the thread's
-   * resourceId becomes a Factory user-session id (repo cloned on a
-   * `slack/{threadTs}` branch) instead of the chat-only `channel:...` id.
-   * Absent (no source-control integration registered) → chat-only sessions as
-   * before.
+   * Storage handle of the integration that owns source control
+   * (`IntegrationContext.storage.sourceControlOwner`). Used to make new Slack
+   * threads repo-backed: when the sender is linked and their factory has a
+   * repository, the thread's resourceId becomes a Factory user-session id (repo
+   * cloned on a `slack/{threadTs}` branch) instead of the chat-only
+   * `channel:...` id. It also lets a started session read back the project it
+   * belongs to. Nothing here is provider-specific — the connection is matched
+   * by the handle's own `integrationId`. Absent (no source-control integration
+   * registered) → chat-only sessions as before.
    */
-  sourceControl?: SlackSourceControl;
+  sourceControl?: SourceControlStorageHandle;
+  /**
+   * Observational-memory settings domain. When provided, a repo-backed session
+   * adopts its owner's memory settings on start, matching the web kickoff.
+   */
+  memorySettings?: MemorySettingsStorage;
   /**
    * Factory work-items domain. When provided, a dispatched new-session thread
    * (DM or mention) upserts a Work-board card in Building (`execute`) carrying
@@ -63,101 +80,6 @@ interface SlackChannelDeps {
    * session. Best-effort — a failure never blocks the run. Unset → no card.
    */
   workItems?: WorkItemsStorage;
-}
-
-/**
- * The slice of the source-control owner's storage the Slack wiring needs.
- * Structural (not the storage types themselves) so slack.ts stays decoupled
- * from the owning integration's module graph and tests can stub it.
- */
-export interface SlackSourceControl {
-  /**
-   * Resolve the factory's linked repository — first repo on the factory's
-   * source-control connection, the same single-repo assumption the web kickoff
-   * makes.
-   */
-  resolveProjectRepository(args: {
-    orgId: string;
-    factoryProjectId: string;
-  }): Promise<{ projectRepositoryId: string; baseBranch: string } | null>;
-  /** Look up an existing user session for a repo branch (idempotent reuse). */
-  getSessionForBranch(args: {
-    projectRepositoryId: string;
-    userId: string;
-    branch: string;
-  }): Promise<{ sessionId: string } | null>;
-  /** Create the durable user-session row the workspace factory materializes. */
-  createSession(args: {
-    projectRepositoryId: string;
-    orgId: string;
-    userId: string;
-    branch: string;
-    baseBranch: string;
-  }): Promise<{ sessionId: string }>;
-}
-
-/**
- * Structural slice of the source-control owner's storage handle
- * (`IntegrationContext.storage.sourceControlOwner`, a `SourceControlStorageHandle`)
- * the adapter reads. Structural so slack.ts stays decoupled from the storage
- * module graph and tests can stub it. The handle is bound during
- * `factory.prepare()`; all access here is lazy (request time).
- */
-interface SourceControlOwnerSlice {
-  integrationId: string;
-  connections: {
-    list(args: { orgId: string; factoryProjectId: string }): Promise<Array<{ id: string; integrationId: string }>>;
-  };
-  projectRepositories: {
-    list(args: {
-      orgId: string;
-      connectionId: string;
-    }): Promise<Array<{ id: string; repositoryId: string; branch?: string | null }>>;
-  };
-  repositories: {
-    get(args: { orgId: string; id: string }): Promise<{ defaultBranch: string } | null>;
-  };
-  sessions: {
-    getForBranch(args: {
-      projectRepositoryId: string;
-      userId: string;
-      branch: string;
-    }): Promise<{ sessionId: string } | null>;
-    create(input: {
-      sessionId: string;
-      projectRepositoryId: string;
-      orgId: string;
-      userId: string;
-      branch: string;
-      baseBranch: string;
-    }): Promise<{ sessionId: string }>;
-  };
-}
-
-/**
- * Adapt the source-control owner's storage handle into the
- * {@link SlackSourceControl} surface. Nothing here is GitHub-specific — the
- * owner is whichever integration owns source control, matched by its own
- * `integrationId`. Repo resolution mirrors the factory's own
- * `ensureFactoryRuleSession`: the owner's connection on the factory → its
- * first linked repository → pinned branch or repo default as the base.
- */
-export function adaptSourceControlOwner(owner: SourceControlOwnerSlice): SlackSourceControl {
-  return {
-    async resolveProjectRepository({ orgId, factoryProjectId }) {
-      const connections = await owner.connections.list({ orgId, factoryProjectId });
-      const connection = connections.find(candidate => candidate.integrationId === owner.integrationId);
-      if (!connection) return null;
-      const projectRepositories = await owner.projectRepositories.list({ orgId, connectionId: connection.id });
-      const first = projectRepositories[0];
-      if (!first) return null;
-      const repository = await owner.repositories.get({ orgId, id: first.repositoryId });
-      if (!repository) return null;
-      return { projectRepositoryId: first.id, baseBranch: first.branch ?? repository.defaultBranch };
-    },
-    getSessionForBranch: args => owner.sessions.getForBranch(args),
-    createSession: args => owner.sessions.create({ sessionId: randomUUID(), ...args }),
-  };
 }
 
 /**
@@ -350,10 +272,16 @@ export async function resolveFactoryForLink({
  * outside the sandbox git-ref allow-list (`[A-Za-z0-9_./-]`, and `.` for
  * readability) mapped to `-`. `thread.id` is `{channelId}:{threadTs}`
  * (platform-prefixed on handler threads) — the trailing segment is the ts.
+ *
+ * Top-level DM and channel conversations use the empty-threadTs thread form,
+ * so the trailing segment can be empty; a bare `slack/` is not a valid git
+ * ref. Fall back to the last non-empty segment (the channel id): one
+ * deterministic branch per top-level conversation.
  */
 function threadBranch(threadId: string): string {
-  const ts = threadId.split(':').at(-1) ?? threadId;
-  return `slack/${ts.replace(/[^A-Za-z0-9_/-]/g, '-')}`;
+  const segments = threadId.split(':');
+  const tail = segments.findLast(segment => segment.length > 0) ?? threadId;
+  return `slack/${tail.replace(/[^A-Za-z0-9_/-]/g, '-')}`;
 }
 
 /**
@@ -401,17 +329,20 @@ export function createChannelResourceIdResolver(deps: SlackChannelDeps): Resolve
       }
       if (!factoryProjectId) return chatOnlyResourceId;
 
-      const repo = await sourceControl.resolveProjectRepository({ orgId, factoryProjectId });
-      if (!repo) return chatOnlyResourceId;
+      const repo = await resolveFactorySourceRepository({ sourceControl, orgId, factoryProjectId });
+      if (!repo.found) return chatOnlyResourceId;
 
       const branch = threadBranch(thread.id);
-      const existing = await sourceControl.getSessionForBranch({
+      // Attributed to the Slack sender, not to whoever connected the repository:
+      // unlike an autonomous rule run, a Slack thread has a real interactive user.
+      const existing = await sourceControl.sessions.getForBranch({
         projectRepositoryId: repo.projectRepositoryId,
         userId: link.userId,
         branch,
       });
       if (existing) return existing.sessionId;
-      const session = await sourceControl.createSession({
+      const session = await sourceControl.sessions.create({
+        sessionId: randomUUID(),
         projectRepositoryId: repo.projectRepositoryId,
         orgId,
         userId: link.userId,
@@ -438,6 +369,46 @@ export function createChannelResourceIdResolver(deps: SlackChannelDeps): Resolve
  */
 export const resolveChannelThreadId: ResolveThreadId = ({ resourceId, defaultThreadId }) =>
   resourceId.startsWith('channel:') ? defaultThreadId : resourceId;
+
+/**
+ * Apply the factory's configuration to a Slack-created session the first time
+ * its thread reaches the controller.
+ *
+ * Without this a Slack session runs on the SDK's built-in mode default
+ * (`openai/gpt-5.5`), so a factory configured for any other provider fails every
+ * message with a missing-credentials error. The web kickoff has always applied
+ * the factory default; this brings Slack to the same footing.
+ *
+ * Only repo-backed threads are configured. Their resourceId IS the Factory
+ * session id, which the source-control rows turn back into a project — a
+ * chat-only `channel:...` id names no project, so there is nothing to read.
+ *
+ * Skips a session whose mode already has a model persisted on the thread. That
+ * is the durable record of a deliberate choice — either an earlier start or a
+ * user's own switch — and re-applying the factory default over it would undo
+ * the user's selection every time the process restarts.
+ */
+export function createChannelSessionStartHook(deps: SlackChannelDeps): ChannelSessionStart {
+  const { projects, sourceControl, memorySettings } = deps;
+  return async ({ session, thread }) => {
+    if (!projects || !sourceControl) return;
+    if (thread.resourceId.startsWith('channel:')) return;
+
+    const modeModelKey = `modeModelId_${session.mode.get()}`;
+    if (await session.thread.getSetting({ key: modeModelKey })) return;
+
+    const owner = await resolveFactoryProjectForSession({ sourceControl, sessionId: thread.resourceId });
+    if (!owner) return;
+
+    const defaultModelId = await resolveFactoryDefaultModelId(projects, owner.factoryProjectId);
+    await hydrateFactorySession(session, {
+      orgId: owner.orgId,
+      userId: owner.userId,
+      defaultModelId,
+      memorySettings,
+    });
+  };
+}
 
 /**
  * The internal Mastra thread the framework created for a channel conversation.
@@ -709,5 +680,8 @@ export function createSlackChannelsConfig(deps: SlackChannelDeps & { slack: Slac
     // resourceId, which is what makes the controller session repo-backed.
     resolveResourceId: createChannelResourceIdResolver(deps),
     resolveThreadId: resolveChannelThreadId,
+    // Those sessions are created by the channel machinery, not the web kickoff,
+    // so this is where they pick up the factory's configuration.
+    onSessionStart: createChannelSessionStartHook(deps),
   };
 }

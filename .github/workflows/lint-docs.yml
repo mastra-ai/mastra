@@ -22,8 +22,11 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 20
         with:
           fetch-depth: 0
+          # Partial clone: name-only diffs need trees, not blob contents.
+          filter: blob:none
 
       - name: Check for docs changes
         id: filter
@@ -42,8 +45,11 @@ jobs:
     steps:
       - name: Checkout PR branch
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 20
         with:
           fetch-depth: 0
+          # Partial clone: name-only diffs need trees, not blob contents.
+          filter: blob:none
 
       - name: Check for MDX changes
         id: mdx-changes
@@ -124,6 +130,7 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 20
 
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
@@ -192,8 +199,11 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 20
         with:
           fetch-depth: 0
+          # Partial clone: name-only diffs need trees, not blob contents.
+          filter: blob:none
 
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
@@ -211,9 +221,24 @@ jobs:
 
       - name: Check for MDX changes
         id: mdx-changes
+        shell: bash
         run: |
-          if git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }} | grep -q '\.mdx$'; then
+          set -euo pipefail
+          mapfile -t files < <(
+            git diff --name-only --diff-filter=ACMRT \
+              "${{ github.event.pull_request.base.sha }}" \
+              "${{ github.event.pull_request.head.sha }}" \
+              -- \
+              docs/src/content/en/docs \
+              docs/src/content/en/integrations \
+              docs/src/content/en/reference \
+              | grep '\.mdx$' || true
+          )
+
+          if [ "${#files[@]}" -gt 0 ]; then
             echo "has_changes=true" >> $GITHUB_OUTPUT
+            printf '%s\n' "${files[@]}" | jq -R -s -c 'split("\n")[:-1]' \
+              | sed 's/^/files=/' >> $GITHUB_OUTPUT
           else
             echo "has_changes=false" >> $GITHUB_OUTPUT
           fi
@@ -246,6 +271,10 @@ jobs:
         uses: vale-cli/vale-action@85f9f7f2c5f449ac0ae5b66662961bae3f77ca6a
         with:
           version: 3.13.1 # TODO: Update to newer version
-          files: '["docs/src/content/en/docs", "docs/src/content/en/guides", "docs/src/content/en/reference"]'
+          files: ${{ steps.mdx-changes.outputs.files }}
+          # The default "added" filter downloads the PR diff through the GitHub
+          # API, which rejects diffs larger than 20,000 lines. The files input is
+          # already limited to changed MDX files by the local git diff above.
+          filter_mode: nofilter
           vale_flags: '--config=.vale-ci.ini --minAlertLevel=error'
           fail_on_error: true

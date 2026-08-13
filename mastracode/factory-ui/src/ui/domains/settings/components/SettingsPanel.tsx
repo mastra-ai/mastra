@@ -20,12 +20,14 @@ import { CustomProvidersSection } from './CustomProvidersSection';
 import { SettingsHeader } from './SettingsHeader';
 import { FactoryManagementSection } from './FactoryManagementSection';
 import { FactoryDefaultModelSection } from './FactoryDefaultModelSection';
+import { FactorySkillsSection } from './FactorySkillsSection';
 import { IntakeSection } from './IntakeSection';
 import { ModelPacksSection } from './ModelPacksSection';
 import { RepositoriesSection } from './RepositoriesSection';
 import { SettingsCard } from './SettingsCard';
 import { SettingsSubsection } from './SettingsSubsection';
 import { OMSection } from './OMSection';
+import { ThinkingDefaultsSection } from './ThinkingDefaultsSection';
 import { ProviderAccessSection } from './ProviderAccessSection';
 import { BehaviorSettings, GeneralSettings, ModelSettings } from './SettingsPanel.parts';
 
@@ -95,6 +97,14 @@ export function SettingsPanel() {
                 />
               </SettingsCard>
             </SettingsSubsection>
+            <SettingsSubsection
+              title="Thinking defaults"
+              description="Reasoning-effort applied to runs without a session override — including automated Factory runs. The session thinking level above takes precedence."
+            >
+              <SettingsCard>
+                <ThinkingDefaultsSection />
+              </SettingsCard>
+            </SettingsSubsection>
             <SettingsSubsection title="Provider access">
               <SettingsCard className="p-4">
                 <ProviderAccessSection />
@@ -123,6 +133,7 @@ export function SettingsPanel() {
             </SettingsSubsection>
           </div>
         )}
+        {section === 'skills' && <FactorySkillsSection />}
         {section === 'behavior' && (
           <BehaviorSettings
             settings={settings}

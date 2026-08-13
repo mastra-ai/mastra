@@ -10,13 +10,51 @@ import type { AuditEventPage } from '../ui/domains/factory/services/audit';
  * UI's action-group filter key; `actions` the concrete action list it maps to
  * (undefined = all actions).
  */
-export function useAuditEvents(factoryProjectId: string | undefined, group: string, actions: string[] | undefined) {
+export function useAuditEvents(
+  factoryProjectId: string | undefined,
+  group: string,
+  actions: string[] | undefined,
+  limit?: number,
+  actorIds: string[] = [],
+) {
   const { baseUrl } = useApiConfig();
+  const actorKey = [...actorIds].sort().join(',');
   return useInfiniteQuery({
-    queryKey: queryKeys.factoryAudit(factoryProjectId, group),
-    queryFn: ({ pageParam }) => fetchAuditEvents(baseUrl, factoryProjectId!, { actions, before: pageParam }),
+    queryKey: queryKeys.factoryAudit(factoryProjectId, group, actorKey),
+    queryFn: ({ pageParam }) =>
+      fetchAuditEvents(baseUrl, factoryProjectId!, { actions, actorIds, before: pageParam, limit }),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage: AuditEventPage) => lastPage.nextCursor,
+    enabled: Boolean(factoryProjectId),
+    staleTime: 15_000,
+  });
+}
+
+/** Load the complete project audit history for board-card attribution. */
+export function useCompleteAuditEvents(
+  factoryProjectId: string | undefined,
+  group: string,
+  limit: number,
+  actorIds: string[] = [],
+) {
+  const { baseUrl } = useApiConfig();
+  const actorKey = [...actorIds].sort().join(',');
+  return useQuery({
+    queryKey: queryKeys.factoryAudit(factoryProjectId, `${group}:complete`, actorKey),
+    queryFn: async (): Promise<AuditEventPage> => {
+      const events: AuditEventPage['events'] = [];
+      const actors: AuditEventPage['actors'] = {};
+      let before: string | undefined;
+
+      do {
+        const page = await fetchAuditEvents(baseUrl, factoryProjectId!, { actorIds, before, limit });
+        events.push(...page.events);
+        for (const [actorId, actor] of Object.entries(page.actors)) actors[actorId] ??= actor;
+        before = page.nextCursor;
+      } while (before);
+
+      return { events, actors };
+    },
     enabled: Boolean(factoryProjectId),
     staleTime: 15_000,
   });

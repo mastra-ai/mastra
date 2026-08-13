@@ -7,18 +7,20 @@ import type { FactoryStorage } from '@mastra/core/storage';
 
 import type { FactoryIntegration, IntegrationContext } from '../integrations/base.js';
 import { getGithubFeatureDiagnostics } from '../integrations/github/config.js';
-import { ensureFactoryRuleSession } from '../integrations/github/factory-session.js';
 import type { GithubIntegration } from '../integrations/github/integration.js';
 import type { FactoryBindingPreparationInput } from '../rules/dispatcher.js';
 import { FactoryStartCoordinator } from '../rules/start-coordinator.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
 import type { FactoryRules } from '../rules/types.js';
 import type { SandboxFleet } from '../sandbox/fleet.js';
+import { ensureFactorySourceSession, resolveFactoryDefaultModelId } from '../session/factory-session.js';
+import { LiveSessions } from '../session/live-sessions.js';
 import type { StateSigner } from '../state-signing.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
 import type { ChannelIdentityStorage } from '../storage/domains/channel-identity/base.js';
 import type { ModelCredentialsStorage } from '../storage/domains/credentials/base.js';
 import type { CustomProvidersStorage } from '../storage/domains/custom-providers/base.js';
+import type { FilesystemStorage } from '../storage/domains/filesystem/base.js';
 import type { IntakeStorage } from '../storage/domains/intake/base.js';
 import type { IntegrationStorage } from '../storage/domains/integrations/base.js';
 import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
@@ -65,6 +67,7 @@ export interface FactoryApiRoutesDeps {
     modelCredentials: ModelCredentialsStorage;
     memorySettings: MemorySettingsStorage;
     customProviders: CustomProvidersStorage;
+    filesystem: FilesystemStorage;
     modelPacks: ModelPacksStorage;
     projects: FactoryProjectsStorage;
     queueHealth: QueueHealthStorage;
@@ -148,19 +151,30 @@ export function factoryRuleBranch(item: FactoryBindingPreparationInput['item']):
   ) {
     return `factory/pr-${pullRequestNumber}`;
   }
-  throw new Error('Factory skill invocation requires a GitHub issue or pull request number.');
+  if (item.externalSource?.integrationId === 'linear' && typeof metadata.identifier === 'string') {
+    return `factory/linear-${metadata.identifier.toLowerCase()}`;
+  }
+  throw new Error('Factory skill invocation requires a supported issue or pull request identifier.');
 }
 
-async function prepareFactoryRuleBinding(
+/**
+ * Start a factory run for a rule binding: ensure the source-control session the
+ * coordinator requires, then hand it to `prepare` along with the factory's
+ * default model. Exported for tests — this is the autonomous entry point with no
+ * browser and no interactive user, so nothing else would catch a regression in
+ * what it forwards.
+ */
+export async function prepareFactoryRuleBinding(
   github: GithubIntegration,
   coordinator: FactoryStartCoordinator,
+  projects: FactoryProjectsStorage,
   input: FactoryBindingPreparationInput,
 ): Promise<void> {
   const branch = factoryRuleBranch(input.item);
   const repositorySlug =
     typeof input.item.metadata?.repository === 'string' ? input.item.metadata.repository : undefined;
-  const preparedSession = await ensureFactoryRuleSession({
-    github,
+  const preparedSession = await ensureFactorySourceSession({
+    sourceControl: github.sourceControlStorage,
     orgId: input.record.orgId,
     factoryProjectId: input.record.factoryProjectId,
     repositorySlug,
@@ -174,6 +188,7 @@ async function prepareFactoryRuleBinding(
     userId: preparedSession.userId,
     factoryProjectId: input.record.factoryProjectId,
     sessionId: preparedSession.sessionId,
+    defaultModelId: await resolveFactoryDefaultModelId(projects, input.record.factoryProjectId),
     threadTitle: `${input.role === 'review' ? 'PR' : 'Issue'}: ${input.item.title}`,
     kickoffKey: input.record.id,
     destinationStage: destinationStage as 'intake' | 'triage' | 'planning' | 'execute' | 'review' | 'done',
@@ -207,7 +222,10 @@ export function buildIntegrationContext(
     emitAudit?: AuditEmitter['emit'];
     rules: FactoryRules;
     factoryReady: boolean;
-    domains: Pick<FactoryApiRoutesDeps['domains'], 'projects' | 'intake' | 'workItems' | 'channelIdentity'>;
+    domains: Pick<
+      FactoryApiRoutesDeps['domains'],
+      'projects' | 'intake' | 'workItems' | 'channelIdentity' | 'memorySettings'
+    >;
     /**
      * Stable id of the registered source-control-owning integration (today:
      * `'github'` when registered). Every call site must derive and pass it so
@@ -233,6 +251,7 @@ export function buildIntegrationContext(
       projects: deps.domains.projects,
       intake: deps.domains.intake,
       channelIdentity: deps.domains.channelIdentity,
+      memorySettings: deps.domains.memorySettings,
     },
     ...(deps.factoryReady ? { rules: { config: deps.rules, workItems: deps.domains.workItems } } : {}),
     ...(deps.emitAudit ? { hooks: { emitAudit: deps.emitAudit } } : {}),
@@ -370,7 +389,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       ...(githubIntegration
         ? {
             prepareBinding: (input: FactoryBindingPreparationInput) =>
-              prepareFactoryRuleBinding(githubIntegration, startCoordinator, input),
+              prepareFactoryRuleBinding(githubIntegration, startCoordinator, deps.domains.projects, input),
           }
         : {}),
     });
@@ -383,6 +402,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
         auth: deps.auth,
         fleet: deps.fleet,
         sessions: deps.sourceControlStorage.forIntegration('github').sessions,
+        filesystem: deps.domains.filesystem,
       },
     }),
     ...new ConfigRoutes({
@@ -431,6 +451,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           queueHealth: deps.domains.queueHealth,
           transitionService,
           startCoordinator,
+          liveSessions: new LiveSessions(deps.controller),
         }).routes()
       : []),
   ];

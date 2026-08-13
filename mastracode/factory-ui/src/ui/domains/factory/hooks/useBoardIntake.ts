@@ -51,25 +51,34 @@ export function useBoardIntake({
   const [selected, setSelected] = useState<IntakeSource>(review ? 'github-prs' : 'github');
   const active: IntakeSource | undefined = available.includes(selected) ? selected : available[0];
 
-  // Only the active intake feed fetches; the other feeds load on switch.
-  const issues = useProjectIssuesQuery(active === 'github' ? projectRepositoryId : undefined);
+  // Fetch every configured source so teammate filters can include provider identities
+  // even when a different intake feed is visible. Only the active feed affects loading.
+  const issues = useProjectIssuesQuery(!review && githubIntakeActive ? projectRepositoryId : undefined);
   const triageIssues = useProjectIssuesQuery(active === 'github' ? projectRepositoryId : undefined, AUTO_TRIAGED_LABEL);
-  const pulls = useProjectPullRequestsQuery(active === 'github-prs' ? projectRepositoryId : undefined);
-  const linearIssues = useLinearIssuesQuery(active === 'linear' ? factoryProjectId : undefined);
+  const pulls = useProjectPullRequestsQuery(review ? projectRepositoryId : undefined);
+  const linearIssues = useLinearIssuesQuery(!review && linearReady ? factoryProjectId : undefined);
 
+  const intakeIssues = useMemo(
+    () => (issues.data ?? []).filter(issue => !hasLabel(issue.labels, AUTO_TRIAGED_LABEL)),
+    [issues.data],
+  );
+  const participantCandidates = useMemo(
+    () =>
+      review
+        ? (pulls.data ?? []).map(pullRequestCandidate)
+        : [...(issues.data ?? []).map(issueCandidate), ...(linearIssues.data ?? []).map(linearCandidate)],
+    [issues.data, pulls.data, linearIssues.data, review],
+  );
   const candidates = useMemo(() => {
-    const intakeIssues = (active === 'github' ? (issues.data ?? []) : []).filter(
-      issue => !hasLabel(issue.labels, AUTO_TRIAGED_LABEL),
-    );
     const all: BoardCandidate[] = review
-      ? (pulls.data ?? []).map(pullRequestCandidate)
-      : [
-          ...intakeIssues.map(issueCandidate),
-          ...(active === 'github' ? (triageIssues.data ?? []).map(issueCandidate) : []),
-          ...(active === 'linear' ? (linearIssues.data ?? []).map(linearCandidate) : []),
-        ];
+      ? participantCandidates
+      : active === 'linear'
+        ? (linearIssues.data ?? []).map(linearCandidate)
+        : active === 'github'
+          ? [...intakeIssues.map(issueCandidate), ...(triageIssues.data ?? []).map(issueCandidate)]
+          : [];
     return all.filter(candidate => !knownSourceKeys.has(candidate.sourceKey));
-  }, [knownSourceKeys, issues.data, triageIssues.data, pulls.data, linearIssues.data, active, review]);
+  }, [knownSourceKeys, participantCandidates, intakeIssues, triageIssues.data, linearIssues.data, active, review]);
 
   return {
     available,
@@ -77,6 +86,7 @@ export function useBoardIntake({
     showSwitch: available.length > 1,
     select: setSelected,
     candidates,
+    participantCandidates,
     issues,
     pulls,
     linearIssues,

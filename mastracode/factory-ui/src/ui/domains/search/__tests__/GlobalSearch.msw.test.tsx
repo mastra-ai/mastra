@@ -231,6 +231,7 @@ function stubSearchApi(options: StubSearchOptions = {}): SearchRequestState {
           headers: { 'content-type': 'text/event-stream' },
         }),
     ),
+    http.post(`${AGENT_CONTROLLER_API}/sessions/:resourceId/thread`, () => HttpResponse.json({ ok: true })),
     http.post(`${AGENT_CONTROLLER_API}/sessions/:resourceId/abort`, () => {
       state.abortRequests += 1;
       return HttpResponse.json({});
@@ -342,9 +343,9 @@ describe('Global search', () => {
     expect(screen.getByText('Mastra Factory')).toBeInTheDocument();
     expect(screen.getByText('Docs Factory')).toBeInTheDocument();
     for (const label of [
+      'Overview',
       'Work',
       'Review',
-      'Metrics',
       'Rules',
       'Audit log',
       'Preferences',

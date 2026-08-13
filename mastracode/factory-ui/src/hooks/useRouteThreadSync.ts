@@ -12,7 +12,7 @@ import { useSwitchAgentControllerThreadMutation } from './useAgentControllerThre
 import { useAgentControllerThreads } from './useAgentControllerThreads';
 
 export function useRouteThreadSync() {
-  const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
+  const { resourceId, sessionEnabled, resourceReady, projectPath, baseUrl } = useChatSessionContext();
   const { status, threadId } = useChatConnection();
   const { pushNotice } = useChatTranscript();
   const threadsQuery = useAgentControllerThreads({
@@ -20,13 +20,15 @@ export function useRouteThreadSync() {
     resourceId,
     scope: projectPath,
     baseUrl,
-    enabled: sessionEnabled,
+    enabled: resourceReady,
   });
   const switchThreadMutation = useSwitchAgentControllerThreadMutation({
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
     scope: projectPath,
     baseUrl,
+    // Thread-switch is a mutation that talks to the sandbox — keep it on
+    // sandboxReady (= sessionEnabled) so it never fires before /ensure lands.
     enabled: sessionEnabled,
   });
   const navigate = useNavigate();
@@ -36,7 +38,10 @@ export function useRouteThreadSync() {
     resourceId,
     scope: projectPath,
     baseUrl,
-    enabled: sessionEnabled,
+    // The session client is used for prefetch reads (listMessages) inside the
+    // fallback-for-scope-change branch — safe to build as soon as the resource
+    // is addressable.
+    enabled: resourceReady,
   });
   const { factoryId, threadId: routeThreadId } = useParams<{ factoryId: string; threadId: string }>();
   const latestRouteThreadId = useRef<string | undefined>(undefined);
@@ -87,11 +92,11 @@ export function useRouteThreadSync() {
   });
 
   useEffect(() => {
+    latestRouteThreadId.current = routeThreadId;
+    if (!sessionEnabled || status !== 'ready' || !threadsQuery.isSuccess) return;
     const sessionKeyChanged = previousSessionKey.current !== undefined && previousSessionKey.current !== sessionKey;
     previousSessionKey.current = sessionKey;
-    latestRouteThreadId.current = routeThreadId;
-    if (!routeThreadId || status !== 'ready' || !threadsQuery.isSuccess) return;
-    if (threadId === routeThreadId) return;
+    if (!routeThreadId || threadId === routeThreadId) return;
     switchToRouteThread(routeThreadId, sessionKeyChanged);
-  }, [routeThreadId, sessionKey, status, threadId, threadsQuery.isSuccess, threadsQuery.data]);
+  }, [routeThreadId, sessionEnabled, sessionKey, status, threadId, threadsQuery.isSuccess, threadsQuery.data]);
 }

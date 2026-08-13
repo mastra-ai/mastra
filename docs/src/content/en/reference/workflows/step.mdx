@@ -307,6 +307,19 @@ const agentStep = createStep(testAgent, {
     ],
   },
   {
+    name: 'scorers',
+    type: 'MastraScorers | (({ requestContext }) => MastraScorers | Promise<MastraScorers>)',
+    description:
+      "Scorers that run automatically after the step completes successfully. Each scorer evaluates the step's own input and output, and the results are stored and attached to the step's trace. Provide a map of `{ [name]: { scorer, sampling? } }`, or a function that returns one. Scoring runs asynchronously and doesn't block the workflow. See [Scoring step output](#scoring-step-output).",
+    required: false,
+  },
+  {
+    name: 'retries',
+    type: 'number',
+    description: "Number of times to retry the step's `execute` function if it throws.",
+    required: false,
+  },
+  {
     name: 'metadata',
     type: 'Record<string, any>',
     description:
@@ -315,6 +328,44 @@ const agentStep = createStep(testAgent, {
   },
 ]}
 />
+
+## Scoring step output
+
+Attach `scorers` to a step to evaluate that step's output automatically, at the point it runs, instead of only scoring the workflow's final answer. This is useful for multi-step and RAG workflows, where you want to see which step degraded quality, for example whether a retrieval step returned relevant chunks before later steps reason over them.
+
+Each scorer receives the step's own `input` and `output`. Scoring runs asynchronously after the step succeeds, and the result is stored against the step's trace. Use `sampling` to control how often a scorer runs.
+
+The following example attaches a scorer to a retrieval step so every execution is scored:
+
+```typescript title="src/mastra/workflows/rag-workflow.ts" prettier:false
+import { createStep } from '@mastra/core/workflows'
+import { z } from 'zod'
+import { retrievalRelevanceScorer } from '../scorers/retrieval-relevance'
+
+const retrievalStep = createStep({
+  id: 'retrieval',
+  inputSchema: z.object({ query: z.string() }),
+  outputSchema: z.object({ query: z.string(), chunks: z.array(z.string()) }),
+  scorers: {
+    retrievalRelevance: {
+      scorer: retrievalRelevanceScorer(),
+      sampling: { type: 'ratio', rate: 1 },
+    },
+  },
+  execute: async ({ inputData }) => {
+    const chunks = await retrieve(inputData.query)
+    return { query: inputData.query, chunks }
+  },
+})
+```
+
+Attach a scorer to each step you want to measure to build per-step scores across a multi-step workflow. Because scoring is scoped to a single step, you don't need a dedicated cross-step metric to see where quality changes.
+
+Agent and tool steps added with [`Workflow.agent()`](/reference/workflows/workflow-methods/agent) and [`Workflow.tool()`](/reference/workflows/workflow-methods/tool) accept the same `scorers` option in their step options.
+
+:::note
+Visit the [Scorers overview](/docs/evals/overview) to learn how live evaluations run and where results are stored, and [Custom scorers](/docs/evals/custom-scorers) to build your own.
+:::
 
 ## Related
 

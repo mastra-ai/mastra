@@ -94,6 +94,19 @@ describe('collectToolMocks', () => {
     expect(collectToolMocks(steps)).toEqual([{ toolName: 'noArgs', args: {}, output: { ok: true } }]);
   });
 
+  it('defaults a missing toolResult to null so the mock survives JSON serialization', () => {
+    // `toolResult` is optional on tool_call steps (failed/suspended calls or
+    // non-record outputs). `JSON.stringify` drops `undefined` keys and the
+    // server schema requires `output` (zod v4: missing key fails with
+    // "expected nonoptional, received undefined"), so we persist `null`.
+    const steps: TrajectoryStep[] = [{ name: "tool: 'flaky'", stepType: 'tool_call', toolArgs: { id: 1 } }];
+
+    const [mock] = collectToolMocks(steps);
+    expect(mock).toEqual({ toolName: 'flaky', args: { id: 1 }, output: null });
+    expect('output' in mock!).toBe(true);
+    expect(JSON.parse(JSON.stringify(mock))).toEqual({ toolName: 'flaky', args: { id: 1 }, output: null });
+  });
+
   it('returns an empty array for undefined or empty steps', () => {
     expect(collectToolMocks(undefined)).toEqual([]);
     expect(collectToolMocks([])).toEqual([]);

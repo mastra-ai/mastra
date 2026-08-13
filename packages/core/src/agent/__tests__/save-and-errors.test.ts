@@ -1,12 +1,17 @@
 import { simulateReadableStream, MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { APICallError } from '@internal/ai-sdk-v5';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import {
+  convertArrayToReadableStream as convertArrayToReadableStreamV3,
+  MockLanguageModelV3,
+} from '@internal/ai-v6/test';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { MastraError } from '../../error';
 import type { IMastraLogger } from '../../logger';
 import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory/mock';
+import type { ChunkType } from '../../stream/types';
 import { createTool } from '../../tools';
 import { Agent } from '../agent';
 import type { MastraDBMessage } from '../message-list';
@@ -1799,6 +1804,31 @@ describe('savePerStep should persist messages during step execution (issue #1398
  * Datadog) that wait for the root span to end never emitted the trace.
  */
 describe('AGENT_RUN span must be ended on LLM errors', () => {
+  const v3Usage = {
+    inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
+    outputTokens: { total: 302, text: 302, reasoning: undefined },
+  };
+
+  // A provider that ends the stream with finishReason 'error' and never enqueues an
+  // error part — the shape Google produces for MALFORMED_FUNCTION_CALL.
+  function finishReasonErrorModelV3(finishReason: { unified: 'error'; raw?: string }) {
+    return new MockLanguageModelV3({
+      doGenerate: async () => ({
+        content: [],
+        finishReason,
+        usage: v3Usage,
+        warnings: [],
+      }),
+      doStream: async () => ({
+        stream: convertArrayToReadableStreamV3([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+          { type: 'finish', finishReason, usage: v3Usage },
+        ]),
+      }),
+    });
+  }
+
   function createMockModelSpanTracker() {
     return {
       getTracingContext: vi.fn(() => ({})),
@@ -1981,6 +2011,105 @@ describe('AGENT_RUN span must be ended on LLM errors', () => {
     } finally {
       spy.mockRestore();
     }
+  });
+
+  it('should emit an error chunk to the client when the stream finishes with finishReason error but no error payload', async () => {
+    const onErrorCalls: { error: Error }[] = [];
+
+    const agent = new Agent({
+      id: 'test-client-visible-finish-error',
+      name: 'Test Client Visible Finish Error',
+      model: finishReasonErrorModelV3({ unified: 'error', raw: 'MALFORMED_FUNCTION_CALL' }),
+      instructions: 'You are a helpful assistant.',
+    });
+
+    const output = await agent.stream('Hello', {
+      modelSettings: { maxRetries: 0 },
+      onError: (payload: { error: Error }) => onErrorCalls.push(payload),
+    });
+
+    const chunks: ChunkType[] = [];
+    for await (const chunk of output.fullStream) {
+      chunks.push(chunk);
+    }
+
+    const errorChunks = chunks.filter(chunk => chunk.type === 'error');
+    expect(errorChunks).toHaveLength(1);
+
+    const emitted = (errorChunks[0] as { payload: { error: MastraError } }).payload.error;
+    expect(emitted).toBeInstanceOf(MastraError);
+    expect(emitted.message).toBe(
+      'Agent stream finished with finishReason "error" (provider reported "MALFORMED_FUNCTION_CALL") but no error payload was provided',
+    );
+    expect(emitted.details).toMatchObject({ rawFinishReason: 'MALFORMED_FUNCTION_CALL' });
+
+    // The error must reach onError, not just the server log
+    expect(onErrorCalls).toHaveLength(1);
+    expect(onErrorCalls[0].error.message).toBe(emitted.message);
+
+    // The finish chunk still reports the terminal reason
+    const finishChunk = chunks.find(chunk => chunk.type === 'finish') as
+      | { payload: { stepResult: { reason: string } } }
+      | undefined;
+    expect(finishChunk?.payload.stepResult.reason).toBe('error');
+  });
+
+  it('should preserve the provider raw finish reason on the finish chunk', async () => {
+    const agent = new Agent({
+      id: 'test-raw-finish-reason',
+      name: 'Test Raw Finish Reason',
+      model: finishReasonErrorModelV3({ unified: 'error', raw: 'MALFORMED_FUNCTION_CALL' }),
+      instructions: 'You are a helpful assistant.',
+    });
+
+    const output = await agent.stream('Hello', { modelSettings: { maxRetries: 0 } });
+
+    const chunks: ChunkType[] = [];
+    for await (const chunk of output.fullStream) {
+      chunks.push(chunk);
+    }
+
+    const stepFinish = chunks.find(chunk => chunk.type === 'step-finish') as
+      | { payload: { stepResult: { reason: string; rawReason?: string } } }
+      | undefined;
+    expect(stepFinish?.payload.stepResult.reason).toBe('error');
+    expect(stepFinish?.payload.stepResult.rawReason).toBe('MALFORMED_FUNCTION_CALL');
+  });
+
+  it('should not emit an error chunk when the stream finishes normally', async () => {
+    const agent = new Agent({
+      id: 'test-no-spurious-error-chunk',
+      name: 'Test No Spurious Error Chunk',
+      model: new MockLanguageModelV3({
+        doGenerate: async () => ({
+          content: [{ type: 'text', text: 'Hello there' }],
+          finishReason: { unified: 'stop', raw: 'STOP' },
+          usage: v3Usage,
+          warnings: [],
+        }),
+        doStream: async () => ({
+          stream: convertArrayToReadableStreamV3([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Hello there' },
+            { type: 'text-end', id: 'text-1' },
+            { type: 'finish', finishReason: { unified: 'stop', raw: 'STOP' }, usage: v3Usage },
+          ]),
+        }),
+      }),
+      instructions: 'You are a helpful assistant.',
+    });
+
+    const output = await agent.stream('Hello', { modelSettings: { maxRetries: 0 } });
+
+    const chunks: ChunkType[] = [];
+    for await (const chunk of output.fullStream) {
+      chunks.push(chunk);
+    }
+
+    expect(chunks.filter(chunk => chunk.type === 'error')).toHaveLength(0);
+    expect(await output.text).toBe('Hello there');
   });
 
   it('should end the AGENT_RUN span when the model stream emits an error chunk mid-stream', async () => {

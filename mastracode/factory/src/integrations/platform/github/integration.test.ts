@@ -750,9 +750,54 @@ describe('PlatformGithubIntegration', () => {
       mode: 'platform',
       endpointHost: 'platform.example.com',
       polling: { enabled: true },
-      reconcile: { enabled: true },
+      reconcile: {
+        pullRequests: { enabled: true },
+        issues: { enabled: true },
+      },
     });
     expect(JSON.stringify(integration.diagnostics())).not.toContain(config.accessToken);
+  });
+
+  it('maps pull request relevance from the Platform reconcile response', async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValueOnce(
+      json({
+        title: 'Ship intake',
+        html_url: 'https://github.com/acme/app/pull/34',
+        state: 'closed',
+        draft: false,
+        merged: true,
+        created_at: '2026-07-01T00:00:00Z',
+        user: { login: 'ada' },
+        assignees: [{ login: 'linus' }],
+        requested_reviewers: [{ login: 'margaret' }],
+        labels: [{ name: 'bug' }, 'urgent'],
+        merged_by: { login: 'grace' },
+        head: { ref: 'feat/intake' },
+        base: { ref: 'main' },
+      }),
+    );
+    const integration = createIntegration(fetchImpl);
+
+    await expect(
+      integration.fetchPullRequestState({ installationId: 7, repository: 'acme/app', number: 34 }),
+    ).resolves.toEqual({
+      title: 'Ship intake',
+      url: 'https://github.com/acme/app/pull/34',
+      state: 'closed',
+      draft: false,
+      merged: true,
+      assignees: ['linus'],
+      requestedReviewers: ['margaret'],
+      labels: ['bug', 'urgent'],
+      headBranch: 'feat/intake',
+      baseBranch: 'main',
+      author: 'ada',
+      createdAt: '2026-07-01T00:00:00Z',
+      mergedBy: 'grace',
+    });
+    expect(String(fetchImpl.mock.calls[0]?.[0])).toBe(
+      'https://platform.example.com/v1/server/github/repos/acme/app/pulls/34',
+    );
   });
 
   it('attaches GitHub rules to polled issue ingress', async () => {
@@ -1057,11 +1102,14 @@ describe('PlatformGithubIntegration', () => {
       mode: 'platform',
       endpointHost: 'platform.example.com',
       polling: { enabled: false, intervalMs: 9_000 },
-      reconcile: { enabled: false },
+      reconcile: {
+        pullRequests: { enabled: false },
+        issues: { enabled: false },
+      },
     });
   });
 
-  it('keeps the reconcile worker alive when polling is disabled but reconcile stays enabled', () => {
+  it('keeps the reconciliation worker alive when polling is disabled', () => {
     vi.stubEnv('MASTRA_PLATFORM_GITHUB_POLLING_ENABLED', 'false');
     const integration = createIntegration();
 
@@ -1069,7 +1117,26 @@ describe('PlatformGithubIntegration', () => {
     expect(workers).toHaveLength(1);
     expect(integration.diagnostics()).toMatchObject({
       polling: { enabled: false },
-      reconcile: { enabled: true },
+      reconcile: {
+        pullRequests: { enabled: true },
+        issues: { enabled: true },
+      },
+    });
+  });
+
+  it('allows issue reconciliation to override a disabled legacy reconcile switch', () => {
+    vi.stubEnv('MASTRA_PLATFORM_GITHUB_POLLING_ENABLED', 'false');
+    vi.stubEnv('MASTRA_PLATFORM_GITHUB_RECONCILE_ENABLED', 'false');
+    vi.stubEnv('MASTRACODE_PLATFORM_GITHUB_ISSUE_RECONCILE_ENABLED', 'true');
+    const integration = createIntegration();
+
+    const workers = integration.workers({ controller: {}, storage: { generic: {} } } as unknown as IntegrationContext);
+    expect(workers).toHaveLength(1);
+    expect(integration.diagnostics()).toMatchObject({
+      reconcile: {
+        pullRequests: { enabled: false },
+        issues: { enabled: true },
+      },
     });
   });
 
@@ -1282,7 +1349,7 @@ describe('PlatformGithubIntegration', () => {
       const fetchImpl = vi.fn<typeof fetch>(async input => {
         const url = String(input);
         // addIssueLabels calls the platform label endpoint
-        if (url.includes('/labels')) return json({ labels: ['auto-triaged'] });
+        if (url.includes('/labels')) return json({ labels: ['status: auto-triaged'] });
         throw new Error(`Unexpected fetch: ${url}`);
       });
       // Stub fetch BEFORE constructing the integration — PlatformApiClient

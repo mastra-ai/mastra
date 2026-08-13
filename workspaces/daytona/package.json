@@ -1,6 +1,6 @@
 {
   "name": "@mastra/daytona",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Daytona cloud sandbox provider for Mastra workspaces",
   "type": "module",
   "main": "dist/index.js",
@@ -31,7 +31,7 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "@daytonaio/sdk": "^0.143.0"
+    "@daytonaio/sdk": "^0.201.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",

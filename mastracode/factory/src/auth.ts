@@ -45,6 +45,8 @@ export interface FactoryAuthUser {
   id?: string;
   email?: string;
   name?: string;
+  /** Provider-supplied profile picture URL, when the auth provider exposes one. */
+  avatarUrl?: string;
   /**
    * Organization id. The org is the top-level tenant: it owns the GitHub
    * App installation and connected projects, while each user inside the org gets
@@ -112,6 +114,25 @@ export function getFactoryAuthUser(c: Context): FactoryAuthUser | undefined {
   return c.get(FACTORY_AUTH_USER_KEY) as FactoryAuthUser | undefined;
 }
 
+/**
+ * Read the authenticated user off a request context, normalizing whatever the
+ * active auth provider put there.
+ *
+ * The server's auth layer writes the provider's `authenticateToken` result into
+ * the request context's `user` slot verbatim, so the value's shape follows the
+ * provider: WorkOS writes a flat user, better-auth writes a `{ session, user }`
+ * wrapper whose org lives on the session. Reading that slot as a
+ * {@link FactoryAuthUser} therefore yields `undefined` for both the id and the
+ * org under better-auth, which reads as "this session belongs to somebody else"
+ * at every ownership check. Normalize on the way in instead.
+ */
+export function getFactoryAuthUserFromContext(
+  requestContext: { get: (key: string) => unknown } | undefined,
+): FactoryAuthUser | undefined {
+  if (!requestContext || typeof requestContext.get !== 'function') return undefined;
+  return toFactoryAuthUser(requestContext.get('user')) ?? undefined;
+}
+
 /** Resolve the stable user id from an authenticated user shape. */
 export function getFactoryAuthUserId(user: FactoryAuthUser | undefined): string | undefined {
   return user?.workosId ?? user?.id;
@@ -170,15 +191,19 @@ function toFactoryAuthUser(result: unknown): FactoryAuthUser | null {
   if (!result || typeof result !== 'object') return null;
   const record = result as Record<string, unknown>;
 
-  // Session-shaped results: { session, user }.
+  // Session-shaped results: { session, user }. A result carrying both halves and
+  // top-level identity fields is read as session-shaped: the session half is the
+  // authenticated one, and preferring it keeps the org and the id from coming
+  // from two different places.
   if (record.user && typeof record.user === 'object' && record.session && typeof record.session === 'object') {
-    const user = record.user as { id?: unknown; email?: unknown; name?: unknown };
+    const user = record.user as { id?: unknown; email?: unknown; name?: unknown; avatarUrl?: unknown };
     const session = record.session as { activeOrganizationId?: unknown };
     if (typeof user.id !== 'string') return null;
     return {
       id: user.id,
       email: typeof user.email === 'string' ? user.email : undefined,
       name: typeof user.name === 'string' ? user.name : undefined,
+      avatarUrl: typeof user.avatarUrl === 'string' ? user.avatarUrl : undefined,
       organizationId: typeof session.activeOrganizationId === 'string' ? session.activeOrganizationId : undefined,
     };
   }
@@ -189,6 +214,7 @@ function toFactoryAuthUser(result: unknown): FactoryAuthUser | null {
     workosId?: unknown;
     email?: unknown;
     name?: unknown;
+    avatarUrl?: unknown;
     organizationId?: unknown;
   };
   const id = typeof flat.id === 'string' ? flat.id : undefined;
@@ -199,6 +225,7 @@ function toFactoryAuthUser(result: unknown): FactoryAuthUser | null {
     workosId,
     email: typeof flat.email === 'string' ? flat.email : undefined,
     name: typeof flat.name === 'string' ? flat.name : undefined,
+    avatarUrl: typeof flat.avatarUrl === 'string' ? flat.avatarUrl : undefined,
     organizationId: typeof flat.organizationId === 'string' ? flat.organizationId : undefined,
   };
 }
@@ -525,6 +552,16 @@ function providerAuthRoutes(provider: IMastraAuthProvider, publicUrl?: string): 
           const cookieReturnTo = sanitizeReturnTo(readReturnToCookie(c));
           const returnTo = cookieReturnTo !== '/' ? cookieReturnTo : stateReturnTo;
           c.header('Set-Cookie', clearReturnToCookieHeader(), { append: true });
+          const idpError = c.req.query('error');
+          if (idpError) {
+            // IdP denial (e.g. access_denied for a non-org-member): bouncing to
+            // /auth/login would re-enter the IdP in a redirect loop.
+            const query = new URLSearchParams({ error: idpError.slice(0, 64) });
+            const description = c.req.query('error_description');
+            if (description) query.set('error_description', description.slice(0, 256));
+            if (returnTo !== '/') query.set('returnTo', returnTo);
+            return c.redirect(`/signin?${query.toString()}`);
+          }
           if (!code) {
             return c.redirect('/auth/login');
           }
@@ -715,6 +752,12 @@ export function createFactoryAuthGate(provider: IMastraAuthProvider) {
     // connect-route.ts.
     if (c.req.method === 'GET' && (path === '/connect/slack' || path.startsWith('/connect/slack/'))) {
       return next();
+    }
+    // The platform's deploy-auth flow lands IdP denials on `/login`
+    // (`error=access_denied&error_description=...`); the SPA serves sign-in at
+    // `/signin`, so forward the query there instead of burying it in returnTo.
+    if (c.req.method === 'GET' && path === '/login') {
+      return c.redirect(`/signin${new URL(c.req.url).search}`);
     }
     // The SPA sign-in page, its static bundle, and browser-fetched metadata
     // must be reachable while signed out; no user is stashed, so `/api/*`

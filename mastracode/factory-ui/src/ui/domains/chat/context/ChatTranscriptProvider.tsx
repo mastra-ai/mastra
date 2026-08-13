@@ -1,6 +1,6 @@
 import type { MastraDBMessage } from '@mastra/core/agent-controller';
 import type { ReactNode } from 'react';
-import { useEffect, useEffectEvent, useReducer } from 'react';
+import { useEffect, useEffectEvent, useReducer, useState } from 'react';
 
 import { useAgentControllerTranscript } from '../hooks/useAgentControllerTranscript';
 import { initialChatRuntime, runtimeReducer } from '../services/runtime';
@@ -69,6 +69,8 @@ function ChatRuntimeValueProvider({ children, runtime }: { children: ReactNode; 
         followUpCount: runtime.followUpCount,
         omProgress: runtime.omProgress ?? state?.omProgress,
         omPhase: runtime.omPhase,
+        bufferingMessages: runtime.bufferingMessages,
+        bufferingObservations: runtime.bufferingObservations,
         goal: runtime.goal,
         tokensPerSec: runtime.tokensPerSec,
       }}

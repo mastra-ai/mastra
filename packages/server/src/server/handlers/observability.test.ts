@@ -781,6 +781,78 @@ describe('Observability Handlers', () => {
         mockObservabilityStore.listTracesLight = original;
       }
     });
+
+    it('should allow delta mode when the store advertises support', async () => {
+      const deltaResponse = {
+        spans: [],
+        delta: { limit: 10, hasMore: false },
+        deltaCursor: 'cursor-1',
+      };
+
+      (mockObservabilityStore.getFeatures as ReturnType<typeof vi.fn>).mockReturnValue(['delta-polling']);
+      (mockObservabilityStore.listTracesLight as ReturnType<typeof vi.fn>).mockResolvedValue(deltaResponse);
+
+      const result = await LIST_TRACES_LIGHT_ROUTE.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
+        mode: 'delta',
+        after: 'cursor-0',
+        limit: 10,
+      });
+
+      expect(result).toEqual(deltaResponse);
+      expect(mockObservabilityStore.listTracesLight).toHaveBeenCalledWith({
+        mode: 'delta',
+        filters: {},
+        after: 'cursor-0',
+        limit: 10,
+      });
+      expect(mockObservabilityStore.listTraces).not.toHaveBeenCalled();
+    });
+
+    it('should reject delta mode when the store does not advertise delta support', async () => {
+      (mockObservabilityStore.getFeatures as ReturnType<typeof vi.fn>).mockReturnValue([]);
+
+      await expect(
+        LIST_TRACES_LIGHT_ROUTE.handler({
+          ...createTestServerContext({ mastra: mockMastra }),
+          mode: 'delta',
+          after: 'cursor-0',
+          limit: 10,
+        }),
+      ).rejects.toThrow();
+
+      expect(mockObservabilityStore.listTracesLight).not.toHaveBeenCalled();
+    });
+
+    it('falls back to delta on listTraces when the store predates listTracesLight', async () => {
+      const deltaResponse = { spans: [], delta: { limit: 10, hasMore: false }, deltaCursor: 'cursor-1' };
+
+      (mockObservabilityStore.getFeatures as ReturnType<typeof vi.fn>).mockReturnValue(['delta-polling']);
+      (mockObservabilityStore.listTraces as ReturnType<typeof vi.fn>).mockResolvedValue(deltaResponse);
+
+      const original = mockObservabilityStore.listTracesLight;
+      // @ts-expect-error - intentionally remove method to simulate old core
+      delete mockObservabilityStore.listTracesLight;
+
+      try {
+        const result = await LIST_TRACES_LIGHT_ROUTE.handler({
+          ...createTestServerContext({ mastra: mockMastra }),
+          mode: 'delta',
+          after: 'cursor-0',
+          limit: 10,
+        });
+
+        expect(result).toEqual(deltaResponse);
+        expect(mockObservabilityStore.listTraces).toHaveBeenCalledWith({
+          mode: 'delta',
+          filters: {},
+          after: 'cursor-0',
+          limit: 10,
+        });
+      } finally {
+        mockObservabilityStore.listTracesLight = original;
+      }
+    });
   });
 
   describe('LIST_BRANCHES_ROUTE', () => {

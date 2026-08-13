@@ -37,7 +37,7 @@ Also ensure that the PR description clearly describes the problem and solution.
 ### Do you intend to add a new feature or change an existing one?
 
 - Open a [feature request](https://github.com/mastra-ai/mastra/issues/new?template=feature_request.yml) and wait for feedback from the Mastra maintainers
-- Assuming you get positive feedback, raise a pull request against your fork/branch to track the development of the feature and discuss the implementation.
+- A Pull Request can only be opened for feature requests when there is no "status: needs triage" or "status: needs approval" label. If an Issue still has those labels, the PR will automatically be closed.
 
 ### Want to improve documentation?
 

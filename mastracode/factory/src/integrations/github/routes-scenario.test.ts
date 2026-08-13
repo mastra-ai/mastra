@@ -597,6 +597,7 @@ describe('S2: concurrent pushes', () => {
       orgId,
       userId,
       branch: 'feat/x',
+      title: null,
       baseBranch: 'main',
       sandboxId: `sb-${id}`,
       sandboxWorkdir: `/workspace/${id}`,

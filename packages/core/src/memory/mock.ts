@@ -186,12 +186,12 @@ export class MockMemory extends MastraMemory {
     metadata,
   }: {
     id: string;
-    title: string;
-    metadata: Record<string, unknown>;
+    title?: string;
+    metadata?: Record<string, unknown>;
     memoryConfig?: MemoryConfigInternal;
   }): Promise<StorageThreadType> {
     const memoryStorage = await this.getMemoryStore();
-    return memoryStorage.updateThread({ id, title, metadata });
+    return memoryStorage.patchThread({ id, title, metadata });
   }
 
   async deleteThread(threadId: string) {

@@ -7,6 +7,7 @@ import type { StructuredOutputOptions } from '../../../agent';
 import type { MessageList } from '../../../agent/message-list';
 import { TripWire } from '../../../agent/trip-wire';
 import { isSupportedLanguageModel, supportedLanguageModelSpecifications } from '../../../agent/utils';
+import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
 import { getErrorFromUnknown } from '../../../error/utils.js';
 import { mergeProviderOptions } from '../../../llm/model/provider-options';
 import { ModelRouterLanguageModel } from '../../../llm/model/router';
@@ -22,7 +23,7 @@ import type {
   ObservabilityContext,
   TracingContext,
 } from '../../../observability';
-import { executeWithContextSync, getStepAvailableToolNames } from '../../../observability/utils';
+import { executeWithContextSync, getRootExportSpan, getStepAvailableToolNames } from '../../../observability/utils';
 import type {
   CachedLLMStepResponse,
   InputProcessorOrWorkflow,
@@ -400,6 +401,7 @@ async function addToolPayloadTransformToChunk<OUTPUT>(
 function buildResponseModelMetadata(
   runState: AgenticRunState,
   model?: { provider?: string; modelId?: string },
+  tracingContext?: TracingContext,
 ): { metadata: Record<string, unknown> } | undefined {
   const metadata: Record<string, unknown> = {};
   const modelId = model?.modelId ?? runState.state.responseMetadata?.modelId;
@@ -410,6 +412,16 @@ function buildResponseModelMetadata(
 
   if (model?.provider) {
     metadata.provider = model.provider;
+  }
+
+  // Correlate the persisted message with its trace (#19891). Message rows carry no
+  // traceId column and spans carry no messageId, so this metadata is the only link
+  // between a stored assistant message and the trace that produced it. Use the same
+  // root export span the stream result uses for its own traceId so both agree.
+  const traceId = getRootExportSpan(tracingContext?.currentSpan)?.externalTraceId;
+
+  if (traceId) {
+    metadata.traceId = traceId;
   }
 
   return Object.keys(metadata).length > 0 ? { metadata } : undefined;
@@ -816,11 +828,12 @@ async function processOutputStream<OUTPUT = undefined>({
         break;
       }
 
-      case 'finish':
+      case 'finish': {
         runState.setState({
           providerOptions: chunk.payload.metadata?.providerMetadata ?? chunk.payload.providerMetadata,
           stepResult: {
             reason: chunk.payload.reason,
+            rawReason: chunk.payload.stepResult.rawReason,
             logprobs: chunk.payload.logprobs,
             warnings: responseFromModel.warnings,
             totalUsage: chunk.payload.totalUsage,
@@ -830,7 +843,41 @@ async function processOutputStream<OUTPUT = undefined>({
             request: responseFromModel.request,
           },
         });
+
+        // A provider can end the stream with finishReason 'error' without ever enqueueing
+        // an error part (e.g. Google reports MALFORMED_FUNCTION_CALL this way). Without a
+        // synthesized error the run would close silently: no error chunk, no onError, and
+        // callers could not tell this apart from a turn that simply produced no text.
+        // Route it through the same deferred-error path as a real error part so error
+        // processors still get a chance to intercept and retry.
+        if (chunk.payload.stepResult.reason === 'error' && !runState.state.hasErrored) {
+          const rawReason = chunk.payload.stepResult.rawReason;
+          const syntheticError = new MastraError({
+            id: 'AGENT_STREAM_ERROR',
+            text: rawReason
+              ? `Agent stream finished with finishReason "error" (provider reported "${rawReason}") but no error payload was provided`
+              : 'Agent stream finished with finishReason "error" but no error payload was provided',
+            domain: ErrorDomain.AGENT,
+            category: ErrorCategory.SYSTEM,
+            details: {
+              runId: chunk.runId,
+              ...(rawReason && { rawFinishReason: rawReason }),
+            },
+          });
+
+          runState.setState({
+            hasErrored: true,
+            apiError: syntheticError,
+            deferredErrorChunk: {
+              type: 'error',
+              runId: chunk.runId,
+              from: chunk.from,
+              payload: { error: syntheticError },
+            },
+          });
+        }
         break;
+      }
 
       case 'error':
         if (isAbortError(chunk.payload.error) && options?.abortSignal?.aborted) {
@@ -1716,7 +1763,11 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           const builtMessages = buildMessagesFromChunks({
             chunks: collectedChunks,
             messageId: currentStep.messageId,
-            responseModelMetadata: buildResponseModelMetadata(runState, currentStep.model),
+            responseModelMetadata: buildResponseModelMetadata(
+              runState,
+              currentStep.model,
+              modelSpanTracker?.getTracingContext() ?? tracingContext,
+            ),
             tools: currentStep.tools,
           });
           for (const msg of builtMessages) {
@@ -2335,6 +2386,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         messageId: outputStream.messageId,
         stepResult: {
           reason: stepReason,
+          ...(runState.state.stepResult?.rawReason && { rawReason: runState.state.stepResult.rawReason }),
           warnings,
           isContinued: shouldContinue,
           // Pass retry metadata for tracking

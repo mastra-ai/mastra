@@ -298,4 +298,47 @@ describe('updateWorkingMemoryTool schema validation (issue #17301)', () => {
     expect('issues' in resolved && resolved.issues).toBeFalsy();
     expect(resolved.value).toEqual({ memory: { name: 'Grace', age: 42 } });
   });
+
+  describe('null padding from strict-mode providers', () => {
+    const makePartialTool = () =>
+      updateWorkingMemoryTool({
+        workingMemory: {
+          enabled: true,
+          schema: z.object({
+            people: z.array(z.string()).optional(),
+            work: z.object({ company: z.string() }).optional(),
+          }),
+        },
+      } as any);
+
+    it('drops nulls for optional fields in the wrapped payload', async () => {
+      const inputSchema = makePartialTool().inputSchema as any;
+      const resolved = await inputSchema['~standard'].validate({
+        memory: { people: null, work: { company: 'TechStartup Inc' } },
+      });
+
+      expect('issues' in resolved && resolved.issues).toBeFalsy();
+      expect(resolved.value).toEqual({ memory: { work: { company: 'TechStartup Inc' } } });
+    });
+
+    it('drops nulls for optional fields in the unwrapped payload', async () => {
+      const inputSchema = makePartialTool().inputSchema as any;
+      const resolved = await inputSchema['~standard'].validate({
+        people: null,
+        work: { company: 'TechStartup Inc' },
+      });
+
+      expect('issues' in resolved && resolved.issues).toBeFalsy();
+      expect(resolved.value).toEqual({ memory: { work: { company: 'TechStartup Inc' } } });
+    });
+  });
+});
+
+describe('deepMergeWorkingMemory undefined padding', () => {
+  it('leaves existing values untouched when the update sends undefined', () => {
+    const existing = { people: ['Alice', 'Bob'], work: { company: 'Old Co' } };
+    const merged = deepMergeWorkingMemory(existing, { people: undefined, work: { company: 'TechStartup Inc' } });
+
+    expect(merged).toEqual({ people: ['Alice', 'Bob'], work: { company: 'TechStartup Inc' } });
+  });
 });

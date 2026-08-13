@@ -1,5 +1,5 @@
 ---
-title: "Subagents | Capabilities"
+title: "Subagents"
 description: Learn how to coordinate multiple agents with delegation hooks, iteration monitoring, message filtering, and task completion scoring.
 packages:
   - "@mastra/core"
@@ -24,7 +24,7 @@ Common use cases:
 
 :::note
 
-A parent agent that coordinates subagents is often called a supervisor. The supervisor pattern is one approach to building multi-agent systems in Mastra. For other patterns, read the [conceptual overview](/guides/concepts/multi-agent-systems).
+A parent agent that coordinates subagents is often called a supervisor. The supervisor pattern is one approach to building multi-agent systems in Mastra. For other patterns, read the [conceptual overview](/docs/guides/multi-agent-systems).
 
 :::
 
@@ -123,6 +123,24 @@ The `context` object includes:
 | `primitiveId` | The ID of the subagent being delegated to |
 | `prompt` | The prompt the parent agent is sending |
 | `iteration` | Current iteration number |
+| `requestContext` | The request context the subagent run will receive |
+
+### Request context at the delegation boundary
+
+Each delegation receives a request context whose entries are shallowly copied from the parent run, excluding run-scoped identity keys. Setting or deleting entries during the subagent run doesn't affect the parent's context. Set entries on `context.requestContext` in `onDelegationStart` to pass values to the delegated run:
+
+```typescript title="src/mastra/agents/parent-agent.ts"
+const stream = await parentAgent.stream('Research AI trends', {
+  maxSteps: 10,
+  delegation: {
+    onDelegationStart: async context => {
+      context.requestContext.set('audience', 'technical')
+    },
+  },
+})
+```
+
+The subagent reads these entries in its tools and dynamic configuration, such as `instructions: ({ requestContext }) => ...`. See [Request Context](/docs/server/request-context) for details. Values must be JSON-serializable to work with durable agents.
 
 ### `onDelegationComplete`
 
@@ -130,6 +148,9 @@ Called after a delegation finishes. Use it to inspect results or provide feedbac
 
 - `context.bail()`: Stop the parent agent's loop immediately
 - Return `{ feedback: '...' }`: Add feedback that gets saved to the parent agent's memory and is visible to subsequent iterations
+- Return `{ resultText: '...' }`: Replace the tool result text the parent model sees for this delegation, within the current run
+
+Use `resultText` when the subagent's own result would mislead the parent immediately. For example, a subagent that stops on a tool-calls step returns empty text, which the parent model reads as a successful but empty delegation. Unlike `feedback`, which only reaches the model on the next turn, `resultText` changes what the parent reasons on right away.
 
 ```typescript title="src/mastra/agents/parent-agent.ts"
 const stream = await parentAgent.stream('Research AI trends', {
@@ -442,11 +463,11 @@ Version overrides propagate automatically through delegation. See [Subagent vers
 
 - [Background tasks](/docs/long-running-agents/background-tasks)
 - [Subagent versioning](/reference/editor/versioning#sub-agent-versioning)
-- [Guide: Research coordinator](/guides/guide/research-coordinator)
+- [Guide: Research coordinator](https://mastra.ai/blog/build-a-research-coordinator-with-supervisor-agents)
 - [Agent.stream() reference](/reference/streaming/agents/stream)
 - [Agent.streamUntilIdle() reference](/reference/streaming/agents/streamUntilIdle)
 - [Agent.generate() reference](/reference/agents/generate)
 - [Agent approval](/docs/agents/agent-approval)
 - [Memory in multi-agent systems](/docs/memory/overview#memory-in-multi-agent-systems)
-- [Concept: Multi-agent systems](/guides/concepts/multi-agent-systems)
+- [Concept: Multi-agent systems](/docs/guides/multi-agent-systems)
 - 📹 [Mastra supervisor agents workshop](https://www.youtube.com/watch?v=FNb2fL9WhQg\&t=1872s)

@@ -331,7 +331,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
           this.mastra.getLogger()?.error('Error writing datastream response', {
             error: err instanceof Error ? { message: err.message, stack: err.stack } : err,
           });
-          void reader.cancel('response write error');
+          void reader.cancel('response write error').catch(() => {});
         };
         response.once('error', onResError);
 
@@ -620,7 +620,8 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
   }
 
   async registerCustomApiRoutes(): Promise<void> {
-    if (!(await this.buildCustomRouteHandler())) return;
+    const routes = await this.registerSchemaApiRoutes();
+    if (!(await this.buildCustomRouteHandler(routes))) return;
 
     this.app.use(async (req: Request, res: Response, next: NextFunction) => {
       // Check if this request matches a protected custom route and run auth

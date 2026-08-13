@@ -23,6 +23,10 @@ function trustedGithubActor(context: Pick<FactoryStageRuleContext, 'actor'>): bo
   return context.actor.type === 'github' && context.actor.trusted;
 }
 
+function githubActorLogin(context: Pick<FactoryStageRuleContext, 'actor'>): string | undefined {
+  return context.actor.type === 'github' ? context.actor.login : undefined;
+}
+
 function invokeIssueInvestigation(context: FactoryStageRuleContext) {
   return {
     type: 'invokeSkill',
@@ -89,12 +93,24 @@ function planWorkItem(context: FactoryStageRuleContext) {
 }
 
 function reviewPullRequest(context: FactoryStageRuleContext) {
+  // A re-entry into Review (from any post-intake stage) supersedes whichever
+  // review pass previously ran on this card: cancel any in-flight run before
+  // dispatching a fresh one so we don't burn tokens on the stale pass and race
+  // two agents on the same card. Cancellation is safe when nothing is in flight.
+  const supersedes = context.fromStage !== 'intake';
+  // The re-review skill only applies when a prior review pass actually completed
+  // (the card is returning from `done`). A cancelled first-time review that
+  // re-enters Review from `review` itself still has no prior pass to reconcile —
+  // it gets the regular factory-review skill.
+  const priorReviewCompleted = context.fromStage === 'done';
+  const skillName = priorReviewCompleted ? 'factory-rereview' : 'factory-review';
   return {
     type: 'invokeSkill',
-    idempotencyKey: `${context.ingress.id}:factory-review`,
+    idempotencyKey: `${context.ingress.id}:${skillName}`,
     role: 'review',
-    skillName: 'factory-review',
+    skillName,
     arguments: context.item.url ? `GitHub pull request (${context.item.url})` : context.item.title,
+    ...(supersedes ? { cancelInFlight: true } : {}),
   } as const;
 }
 
@@ -151,6 +167,32 @@ function issueOpened(context: FactoryGithubRuleContext) {
     metadata: {
       githubRepositoryId: context.repository.id,
       githubIssueNumber: context.issue.number,
+      ...(githubActorLogin(context) ? { author: githubActorLogin(context) } : {}),
+      assignees: context.issue.assignees ?? [],
+      labels: context.issue.labels ?? [],
+    },
+  } as const;
+}
+
+function issueClosed(context: FactoryGithubRuleContext) {
+  if (!context.item || context.item.source !== 'github-issue' || !context.issue) return;
+  if (context.board !== 'work') return;
+  // Already off the board: nothing to reconcile.
+  if (context.item.stages.some(stage => stage === 'done' || stage === 'canceled')) return;
+  // Issue closure is a repository fact, not third-party input — no actor trust
+  // gate. `not_planned` (and `duplicate`) means abandoned, everything else is
+  // completed work.
+  const canceled = context.issue.stateReason === 'not_planned' || context.issue.stateReason === 'duplicate';
+  return {
+    type: 'transition',
+    idempotencyKey: `${context.ingress.id}:issue-closed`,
+    board: 'work',
+    stage: canceled ? 'canceled' : 'done',
+    message: {
+      text:
+        `GitHub issue #${context.issue.number} was closed` +
+        `${context.issue.stateReason ? ` (${context.issue.stateReason})` : ''}; ` +
+        `this Work card was moved to ${canceled ? 'Canceled' : 'Done'}.`,
     },
   } as const;
 }
@@ -173,8 +215,15 @@ function pullRequestOpened(context: FactoryGithubRuleContext) {
       githubRepositoryId: context.repository.id,
       githubPullRequestNumber: context.pullRequest.number,
       factoryAuthored: context.actor.type === 'github' && context.actor.factoryAuthored,
+      state: context.pullRequest.state,
+      draft: context.pullRequest.draft,
+      merged: context.pullRequest.merged,
+      assignees: context.pullRequest.assignees ?? [],
+      requestedReviewers: context.pullRequest.requestedReviewers ?? [],
+      labels: context.pullRequest.labels ?? [],
       headBranch: context.pullRequest.headBranch,
       baseBranch: context.pullRequest.baseBranch,
+      ...(githubActorLogin(context) ? { author: githubActorLogin(context) } : {}),
     },
   } as const;
 }
@@ -228,6 +277,40 @@ function pullRequestClosed(context: FactoryGithubRuleContext) {
   } as const;
 }
 
+function reReviewRequestedPullRequest(context: FactoryGithubRuleContext) {
+  // Only a review re-requested *from Factory's own bot* restarts the review —
+  // requesting a human reviewer is not Factory's signal.
+  if (!context.item || context.board !== 'review' || !context.reviewRequest?.factoryReviewer) return;
+  if (!context.pullRequest || context.pullRequest.state !== 'open' || context.pullRequest.merged) return;
+  // Trusted (write/admin) requesters only: re-entering review checks out and
+  // executes PR code, the same bar pullRequestOpened applies to auto-review.
+  if (!trustedGithubActor(context)) return;
+  if (context.actor.type === 'github' && context.actor.factoryAuthored) return;
+  // Already in Reviewing: a review pass is pending or running; re-entering
+  // would be a same-stage no-op anyway (stage rules only fire on change).
+  if (context.item.stages.length === 1 && context.item.stages[0] === 'review') return;
+  return {
+    type: 'transition',
+    idempotencyKey: `${context.ingress.id}:re-review-requested`,
+    board: 'review',
+    stage: 'review',
+  } as const;
+}
+
+function reReviewUpdatedPullRequest(context: FactoryGithubRuleContext) {
+  if (!context.item || context.board !== 'review') return;
+  if (!context.pullRequest || context.pullRequest.state !== 'open' || context.pullRequest.merged) return;
+  // Intake and Reviewing have not completed a review pass yet. Only a push to a
+  // card that already left Reviewing should start a fresh pass.
+  if (context.item.stages.some(stage => stage === 'intake' || stage === 'review')) return;
+  return {
+    type: 'transition',
+    idempotencyKey: `${context.ingress.id}:re-review-updated`,
+    board: 'review',
+    stage: 'review',
+  } as const;
+}
+
 function linearIssueObserved(context: FactoryLinearRuleContext) {
   if (context.item) return;
   return {
@@ -241,12 +324,36 @@ function linearIssueObserved(context: FactoryLinearRuleContext) {
     stage: 'triage',
     metadata: {
       linearIssueId: context.issue.id,
-      linearIssueIdentifier: context.issue.identifier,
+      identifier: context.issue.identifier,
       linearState: context.issue.state,
       linearStateType: context.issue.stateType,
       linearPriority: context.issue.priorityLabel,
       linearAssignee: context.issue.assignee,
+      linearCreator: context.issue.creator,
       linearTeam: context.issue.team,
+      labels: [...context.issue.labels] as string[],
+      ...(context.issue.assignee ? { assignee: context.issue.assignee } : {}),
+      ...(context.issue.creator ? { creator: context.issue.creator, author: context.issue.creator } : {}),
+    },
+  } as const;
+}
+
+function linearIssueClosed(context: FactoryLinearRuleContext) {
+  if (!context.item || context.item.source !== 'linear-issue') return;
+  if (context.board !== 'work') return;
+  // Already off the board: nothing to reconcile.
+  if (context.item.stages.some(stage => stage === 'done' || stage === 'canceled')) return;
+  // Only terminal state types trigger close.
+  const stateType = context.issue.stateType;
+  if (stateType !== 'completed' && stateType !== 'canceled') return;
+  const canceled = stateType === 'canceled';
+  return {
+    type: 'transition',
+    idempotencyKey: `${context.ingress.id}:issue-closed`,
+    board: 'work',
+    stage: canceled ? 'canceled' : 'done',
+    message: {
+      text: `Linear issue ${context.issue.identifier} was ${canceled ? 'canceled' : 'completed'}; this Work card was moved to ${canceled ? 'Canceled' : 'Done'}.`,
     },
   } as const;
 }
@@ -268,14 +375,17 @@ const BUILT_IN_DEFAULTS: FactoryRulesOverrides = {
   github: {
     issueOpened: { onEvent: issueOpened },
     issueEdited: { onEvent: retriageGithubIssue },
+    issueClosed: { onEvent: issueClosed },
     issueCommentCreated: { onEvent: retriageGithubIssue },
     issueCommentEdited: { onEvent: retriageGithubIssue },
     issueCommentDeleted: { onEvent: retriageGithubIssue },
     pullRequestOpened: { onEvent: pullRequestOpened },
+    pullRequestUpdated: { onEvent: reReviewUpdatedPullRequest },
+    pullRequestReviewRequested: { onEvent: reReviewRequestedPullRequest },
     pullRequestMerged: { onEvent: pullRequestMerged },
     pullRequestClosed: { onEvent: pullRequestClosed },
   },
-  linear: { issueObserved: { onEvent: linearIssueObserved } },
+  linear: { issueObserved: { onEvent: linearIssueObserved }, issueClosed: { onEvent: linearIssueClosed } },
 };
 
 function mergeBoardRules(

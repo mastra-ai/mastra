@@ -7,6 +7,12 @@ packages:
 
 # Processors
 
+:::beta
+
+Breaking changes may occur without a major version bump until the API is stable.
+
+:::
+
 A file-based agent discovers [processors](/docs/agents/processors) from its `processors/` directory. Use this page for the file-based convention; use the processors guide for built-in processors, custom processors, streaming behavior, and advanced patterns.
 
 Files under `processors/input/` run before messages reach the model. Files under `processors/output/` run after the model responds. Each file default-exports one [`Processor`](/reference/processors/processor-interface), and the filename becomes its discovery key.

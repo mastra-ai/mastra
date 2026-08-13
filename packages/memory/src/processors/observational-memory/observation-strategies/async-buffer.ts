@@ -178,9 +178,9 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
             ...(metadataUpdate.extracted ?? {}),
           },
         });
-        await this.storage.updateThread({
+        await this.storage.patchThread({
           id: threadId,
-          title: shouldUpdateThreadTitle ? newTitle : (thread.title ?? ''),
+          ...(shouldUpdateThreadTitle ? { title: newTitle } : {}),
           metadata: newMetadata,
         });
 

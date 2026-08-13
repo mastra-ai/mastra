@@ -345,6 +345,41 @@ describe('Dataset', () => {
     await new Promise(r => setTimeout(r, 500));
   });
 
+  it('startExperimentAsync persists provenance and grouping before execution', async () => {
+    await ds.addItem({ input: { prompt: 'Hello' } });
+
+    const { experimentId } = await ds.startExperimentAsync({
+      task: async () => 'ok',
+      scorers: [],
+      provenance: {
+        source: 'github',
+        sourceId: 'mastra-ai/mastra',
+        sourceVersion: 'abc123',
+      },
+      grouping: {
+        experimentSetId: 'set-1',
+        comparisonId: 'comparison-1',
+        variantId: 'variant-a',
+        trialIndex: 0,
+      },
+    });
+
+    const experiment = await experimentsStorage.getExperimentById({ id: experimentId });
+    expect(experiment).toMatchObject({
+      provenance: {
+        source: 'github',
+        sourceId: 'mastra-ai/mastra',
+        sourceVersion: 'abc123',
+      },
+      experimentSetId: 'set-1',
+      comparisonId: 'comparison-1',
+      variantId: 'variant-a',
+      trialIndex: 0,
+    });
+
+    await new Promise(r => setTimeout(r, 500));
+  });
+
   it('startExperimentAsync emits ordered events without experiment persistence', async () => {
     await ds.addItem({ input: { prompt: 'Hello' } });
     await ds.addItem({ input: { prompt: 'World' } });

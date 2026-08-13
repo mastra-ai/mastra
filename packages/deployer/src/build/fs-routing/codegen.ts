@@ -41,6 +41,16 @@ async function emitAgentEntry(
     lines.push(`import ${memoryIdent} from ${JSON.stringify(agent.memoryPath)};`);
   }
 
+  // `instructions.ts` is imported rather than inlined, so it can compute its
+  // prompt or export a runtime-resolved function. That also puts it in the
+  // bundler's module graph, which is what makes dev hot reload work without the
+  // watcher tracking it explicitly (unlike `instructions.md`).
+  let instructionsIdent: string | undefined;
+  if (agent.instructionsModulePath) {
+    instructionsIdent = sanitizeIdentifier(`${agent.name}_instructions`, 'instructions', idPath);
+    lines.push(`import ${instructionsIdent} from ${JSON.stringify(agent.instructionsModulePath)};`);
+  }
+
   for (let t = 0; t < agent.tools.length; t++) {
     const tool = agent.tools[t]!;
     const ident = sanitizeIdentifier(`${agent.name}_${tool.key}`, 'tool', `${idPath}_${t}`);
@@ -132,6 +142,9 @@ async function emitAgentEntry(
   if (agent.configPath) {
     entryFields.push(`config: ${configIdent}`);
   }
+  if (instructionsIdent) {
+    entryFields.push(`instructions: ${instructionsIdent}`);
+  }
   if (instructionsMd !== undefined) {
     entryFields.push(`instructionsMd: ${JSON.stringify(instructionsMd)}`);
   }
@@ -177,9 +190,9 @@ async function emitAgentEntry(
 /**
  * Generate the source of a wrapper module that:
  * 1. imports the user's real Mastra entry,
- * 2. imports each discovered `config.ts`, `tools/*.ts`, `skills/*.ts`
- *    (`createSkill(...)` modules), `workspace.ts`, and `memory.ts`, inlining
- *    packaged `SKILL.md` skills,
+ * 2. imports each discovered `config.ts`, `instructions.ts`, `tools/*.ts`,
+ *    `skills/*.ts` (`createSkill(...)` modules), `workspace.ts`, and
+ *    `memory.ts`, inlining packaged `SKILL.md` skills,
  * 3. assembles `Agent` instances via `assembleAgentFromFsEntry`, wiring any
  *    declared `subagents/` into the parent (nested up to `MAX_FS_SUBAGENT_DEPTH`),
  * 4. registers them onto the user's `mastra` instance (code-registered agents
@@ -188,7 +201,8 @@ async function emitAgentEntry(
  *    replacement for the original `#mastra` target.
  *
  * `instructions.md` is read into the generated wrapper. In dev, the CLI watcher
- * regenerates that wrapper when the markdown file changes.
+ * regenerates that wrapper when the markdown file changes. `instructions.ts` is
+ * imported instead, so the bundler already tracks it through the module graph.
  *
  * @param userEntry slash-normalized absolute path to the user's mastra entry.
  * @param agents discovered fs-routed agents (absolute, slash-normalized paths).

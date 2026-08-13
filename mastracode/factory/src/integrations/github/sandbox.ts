@@ -30,6 +30,7 @@ import type {
   ProjectRepositorySandbox,
   SourceControlStorageHandle,
 } from '../../storage/domains/source-control/base.js';
+import { timedPhase } from '../../timing.js';
 
 type SourceControlSandboxStorage = SourceControlStorageHandle['sandboxes'];
 type MaterializationStore = Pick<SourceControlSandboxStorage, 'markMaterialized'>;
@@ -179,6 +180,59 @@ async function shOnce(
   }
 }
 
+const GIT_TRANSFER_RETRIES = 2;
+const GIT_TRANSFER_RETRY_DELAY_MS = 2000;
+
+/**
+ * True when a git transfer died mid-flight rather than being refused.
+ *
+ * `sh` already retries transport errors the sandbox provider *throws*, but a
+ * git command that reaches the network and then loses it exits non-zero
+ * instead — so a single HTTP/2 framing glitch or dropped connection to
+ * github.com would otherwise permanently fail opening a workspace. These
+ * patterns all mean "the bytes stopped arriving", which says nothing about
+ * whether the operation would succeed if attempted again.
+ *
+ * Deliberately narrow: a refusal (bad credentials, missing repo, blocked
+ * egress) is terminal and must surface immediately rather than be retried into
+ * a slow failure.
+ */
+function isTransientGitFailure(result: SandboxCommandResult): boolean {
+  const output = `${result.stderr || ''}\n${result.stdout || ''}`;
+  return /HTTP2 framing layer|RPC failed; curl|RPC failed; HTTP 5\d\d|the remote end hung up unexpectedly|early EOF|unexpected disconnect|connection reset by peer|Recv failure|Send failure|GnuTLS recv error|TLS connection was non-properly terminated|502 Bad Gateway|503 Service Unavailable/i.test(
+    output,
+  );
+}
+
+/**
+ * Run a git command that only *reads* from the remote, retrying it when the
+ * transfer dies mid-flight. Restricted to read-only transfers on purpose:
+ * re-running a clone or a fetch is free, whereas re-running a push could
+ * duplicate work already accepted by the remote before the connection dropped.
+ *
+ * `beforeRetry` lets a call site clear whatever the aborted attempt left
+ * behind — a half-written clone directory blocks the next `git clone` outright.
+ */
+async function gitTransfer(
+  sandbox: MaterializationSandbox,
+  script: string,
+  options: ShOptions & { beforeRetry?: (attempt: number) => Promise<void> } = {},
+): Promise<SandboxCommandResult> {
+  const { beforeRetry, ...shOptions } = options;
+  const deadlineMs = Date.now() + (shOptions.timeoutMs ?? DEFAULT_COMMAND_TIMEOUT_MS);
+  for (let attempt = 0; ; attempt++) {
+    const result = await sh(sandbox, script, {
+      ...shOptions,
+      timeoutMs: Math.max(deadlineMs - Date.now(), 1),
+    });
+    if (result.exitCode === 0 || attempt >= GIT_TRANSFER_RETRIES || !isTransientGitFailure(result)) return result;
+    const delayMs = GIT_TRANSFER_RETRY_DELAY_MS * (attempt + 1);
+    if (deadlineMs - Date.now() <= delayMs) return result;
+    await new Promise(resolve => setTimeout(resolve, delayMs));
+    await beforeRetry?.(attempt + 1);
+  }
+}
+
 /** Error raised when the sandbox cannot materialize the repo (actionable). */
 export class MaterializeError extends Error {
   constructor(
@@ -216,13 +270,8 @@ export interface RepoMaterializeInfo {
   defaultBranch: string;
 }
 
-/**
- * Materialize the repo inside the user's sandbox. Clones on first open, pulls on
- * re-open. Always scrubs the install token from the remote afterwards and sets
- * `materialized_at` on the per-user sandbox binding row.
- *
- */
-export async function materializeRepo(options: {
+/** Options for {@link materializeRepo}. */
+export interface MaterializeRepoOptions {
   /** The per-(project,user) sandbox binding (provisioned via `ensureProjectSandbox`). */
   row: RepoMaterializationBinding;
   /** Repo metadata from the org-owned project row. */
@@ -233,7 +282,19 @@ export async function materializeRepo(options: {
   token: string;
   storage: MaterializationStore;
   onProgress?: ProgressFn;
-}): Promise<void> {
+}
+
+/**
+ * Materialize the repo inside the user's sandbox. Clones on first open, pulls on
+ * re-open. Always scrubs the install token from the remote afterwards and sets
+ * `materialized_at` on the per-user sandbox binding row.
+ *
+ */
+export async function materializeRepo(options: MaterializeRepoOptions): Promise<void> {
+  return timedPhase('workspace.materialize', () => materializeRepoImpl(options));
+}
+
+async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<void> {
   const { row: sandboxRow, repoInfo, sandbox, token, storage, onProgress } = options;
   const workdir = sandboxRow.sandboxWorkdir;
   const repo = repoInfo.repoFullName;
@@ -282,10 +343,21 @@ export async function materializeRepo(options: {
         phase: 'cloning',
         message: `Cloning ${repo} (first open can take a minute)…`,
       });
-      const clone = await sh(
+      const clone = await gitTransfer(
         sandbox,
         `git clone --depth=1 --single-branch --branch ${shellQuote(repoInfo.defaultBranch)} ${shellQuote(authUrl)} ${shellQuote(workdir)}`,
-        { phase: 'repository clone' },
+        {
+          phase: 'repository clone',
+          beforeRetry: async attempt => {
+            reportProgress(onProgress, {
+              phase: 'cloning',
+              message: `Lost the connection to github.com — retrying the clone (attempt ${attempt + 1})…`,
+            });
+            // A clone that died partway leaves the destination non-empty, which
+            // git refuses to clone into. Clear it so the retry starts clean.
+            await sh(sandbox, `rm -rf ${shellQuote(workdir)}`);
+          },
+        },
       );
       if (clone.exitCode !== 0) {
         throw classifyGitFailure(clone, 'clone-failed');
@@ -297,19 +369,29 @@ export async function materializeRepo(options: {
       if (setUrl.exitCode !== 0) {
         throw new MaterializeError(`Failed to set git remote: ${setUrl.stderr}`, 'pull-failed');
       }
-      const pull = await sh(sandbox, `git -C ${shellQuote(workdir)} pull --ff-only`, { phase: 'repository pull' });
+      const pull = await gitTransfer(sandbox, `git -C ${shellQuote(workdir)} pull --ff-only`, {
+        phase: 'repository pull',
+        beforeRetry: async attempt =>
+          reportProgress(onProgress, {
+            phase: 'pulling',
+            message: `Lost the connection to github.com — retrying the update (attempt ${attempt + 1})…`,
+          }),
+      });
       if (pull.exitCode !== 0) {
         if (!isBenignNonFastForward(pull)) {
           throw classifyGitFailure(pull, 'pull-failed');
         }
         // The workdir was left on a session's working branch that can't be
         // fast-forwarded (diverged from upstream, no upstream, or detached
-        // HEAD). That branch holds the session's local work — never rebase or
-        // reset it here. The checkout is still perfectly usable; leave it
-        // as-is and let the session reconcile with the remote itself.
+        // HEAD), or its configured upstream ref was deleted after merge.
+        // That checkout still holds usable work — never rebase or reset it
+        // here. Leave it as-is and let the session reconcile with the remote
+        // itself.
         reportProgress(onProgress, {
           phase: 'pulling',
-          message: 'Workspace has local changes that diverge from the remote — keeping them as-is.',
+          message: isDeletedUpstreamRef(pull)
+            ? 'Workspace could not be updated from its remote — keeping the existing checkout as-is.'
+            : 'Workspace has local changes that diverge from the remote — keeping them as-is.',
         });
       }
     }
@@ -364,6 +446,14 @@ export async function recycleClaimedWorkdir(
 
 /** Check out a session's branch inside its isolated repository clone. */
 export async function checkoutSessionBranch(
+  sandbox: MaterializationSandbox,
+  workdir: string,
+  options: { branch: string; baseBranch: string; token: string; repoFullName: string },
+): Promise<void> {
+  return timedPhase('workspace.checkout', () => checkoutSessionBranchImpl(sandbox, workdir, options));
+}
+
+async function checkoutSessionBranchImpl(
   sandbox: MaterializationSandbox,
   workdir: string,
   {
@@ -482,15 +572,26 @@ async function scrubRemote(
  * are created from `FETCH_HEAD`), or a detached HEAD. A checkout can also
  * hold uncommitted or untracked files (a build or script run left residue,
  * or an older session worked directly in the shared checkout), which makes
- * git refuse the merge outright. In all of these cases the checkout is
- * intact and may hold real work; materialization must keep it as-is rather
- * than fail the workspace open — and must never discard the local state to
- * force the pull through.
+ * git refuse the merge outright. A checkout carrying `pull.rebase` in its git
+ * config refuses for the same reason but says so in rebase's words instead of
+ * merge's. After a PR merges with branch auto-delete, the configured upstream
+ * ref may also be gone (`no such ref was fetched` / `couldn't find remote ref`);
+ * there is nothing to pull and the checkout is still intact. In all of these
+ * cases materialization must keep it as-is rather than fail the workspace open
+ * — and must never discard the local state to force the pull through.
  */
+function isDeletedUpstreamRef(result: SandboxCommandResult): boolean {
+  const output = `${result.stderr || ''}\n${result.stdout || ''}`;
+  return /no such ref was fetched|couldn't find remote ref/i.test(output);
+}
+
 function isBenignNonFastForward(result: SandboxCommandResult): boolean {
   const output = `${result.stderr || ''}\n${result.stdout || ''}`;
-  return /Not possible to fast-forward|Diverging branches can't be fast-forwarded|no tracking information for the current branch|You are not currently on a branch|Your local changes to the following files would be overwritten by merge|untracked working tree files would be overwritten by merge/i.test(
-    output,
+  return (
+    isDeletedUpstreamRef(result) ||
+    /Not possible to fast-forward|Diverging branches can't be fast-forwarded|no tracking information for the current branch|You are not currently on a branch|Your local changes to the following files would be overwritten by merge|untracked working tree files would be overwritten by merge|cannot pull with rebase|cannot rebase: You have unstaged changes|Your index contains uncommitted changes/i.test(
+      output,
+    )
   );
 }
 

@@ -212,7 +212,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
     const cancelReader = (reason: string) => {
       if (readerCanceled) return;
       readerCanceled = true;
-      void reader.cancel(reason);
+      void reader.cancel(reason).catch(() => {});
     };
     const cancelReaderOnResponseClose = () => cancelReader('request aborted');
     const cancelReaderOnRequestClose = () => {
@@ -399,7 +399,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         const cancelReader = (reason: string) => {
           if (readerCanceled) return;
           readerCanceled = true;
-          void reader.cancel(reason);
+          void reader.cancel(reason).catch(() => {});
         };
 
         const cancelReaderOnResponseClose = () => cancelReader('request aborted');
@@ -750,9 +750,8 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
   }
 
   async registerCustomApiRoutes(): Promise<void> {
-    if (!(await this.buildCustomRouteHandler())) return;
-
-    const routes = this.customApiRoutes ?? this.mastra.getServer()?.apiRoutes ?? [];
+    const routes = await this.registerSchemaApiRoutes();
+    if (!(await this.buildCustomRouteHandler(routes))) return;
 
     for (const route of routes) {
       // Create pseudo ServerRoute for auth checking

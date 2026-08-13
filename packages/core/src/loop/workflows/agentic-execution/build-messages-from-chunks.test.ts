@@ -136,6 +136,22 @@ describe('buildMessagesFromChunks', () => {
     });
   });
 
+  it('should preserve Anthropic signed reasoning text in the primary reasoning field', () => {
+    const result = parts([
+      { type: 'reasoning-start', payload: { id: 'r1' } },
+      { type: 'reasoning-delta', payload: { id: 'r1', text: 'Signed ' } },
+      { type: 'reasoning-delta', payload: { id: 'r1', text: 'thinking.' } },
+      { type: 'reasoning-end', payload: { id: 'r1', providerMetadata: { anthropic: { signature: 'sig' } } } },
+    ]);
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({
+      type: 'reasoning',
+      reasoning: 'Signed thinking.',
+      details: [{ type: 'text', text: 'Signed thinking.' }],
+      providerMetadata: { anthropic: { signature: 'sig' } },
+    });
+  });
+
   it('should emit empty reasoning parts (needed for OpenAI item_reference)', () => {
     const result = parts([
       { type: 'reasoning-start', payload: { id: 'r1' } },
@@ -262,6 +278,222 @@ describe('buildMessagesFromChunks', () => {
         args: { q: 'test' },
         result: { answer: '42' },
       },
+    });
+  });
+
+  it('should merge tool-call + tool-error into a single output-error part', () => {
+    const result = parts([
+      {
+        type: 'tool-call',
+        payload: {
+          toolCallId: 'tc1',
+          toolName: 'myTool',
+          args: { q: 'test' },
+          providerExecuted: true,
+        },
+      },
+      {
+        type: 'tool-error',
+        payload: {
+          toolCallId: 'tc1',
+          toolName: 'myTool',
+          args: { q: 'test' },
+          error: new Error('Provider tool failed'),
+          providerExecuted: true,
+        },
+      },
+    ]);
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({
+      type: 'tool-invocation',
+      toolInvocation: {
+        state: 'output-error',
+        toolCallId: 'tc1',
+        toolName: 'myTool',
+        args: { q: 'test' },
+        errorText: 'Provider tool failed',
+      },
+      providerExecuted: true,
+    });
+  });
+
+  it('should preserve string tool-error messages', () => {
+    const result = parts([
+      {
+        type: 'tool-call',
+        payload: {
+          toolCallId: 'tc1',
+          toolName: 'myTool',
+          args: { q: 'test' },
+          providerExecuted: true,
+        },
+      },
+      {
+        type: 'tool-error',
+        payload: {
+          toolCallId: 'tc1',
+          toolName: 'myTool',
+          args: { q: 'test' },
+          error: 'boom',
+          providerExecuted: true,
+        },
+      },
+    ]);
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({
+      type: 'tool-invocation',
+      toolInvocation: {
+        state: 'output-error',
+        toolCallId: 'tc1',
+        toolName: 'myTool',
+        args: { q: 'test' },
+        errorText: 'boom',
+      },
+      providerExecuted: true,
+    });
+  });
+
+  it('should preserve plain-object tool-error messages', () => {
+    const result = parts([
+      {
+        type: 'tool-call',
+        payload: {
+          toolCallId: 'tc1',
+          toolName: 'myTool',
+          args: { q: 'test' },
+          providerExecuted: true,
+        },
+      },
+      {
+        type: 'tool-error',
+        payload: {
+          toolCallId: 'tc1',
+          toolName: 'myTool',
+          args: { q: 'test' },
+          error: { message: 'Provider object failure' },
+          providerExecuted: true,
+        },
+      },
+    ]);
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({
+      type: 'tool-invocation',
+      toolInvocation: {
+        state: 'output-error',
+        toolCallId: 'tc1',
+        toolName: 'myTool',
+        args: { q: 'test' },
+        errorText: 'Provider object failure',
+      },
+      providerExecuted: true,
+    });
+  });
+
+  it('should fall back for falsy tool errors', () => {
+    const result = parts([
+      {
+        type: 'tool-call',
+        payload: {
+          toolCallId: 'tc1',
+          toolName: 'myTool',
+          args: { q: 'test' },
+          providerExecuted: true,
+        },
+      },
+      {
+        type: 'tool-error',
+        payload: {
+          toolCallId: 'tc1',
+          toolName: 'myTool',
+          args: { q: 'test' },
+          error: null,
+          providerExecuted: true,
+        },
+      },
+    ]);
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({
+      type: 'tool-invocation',
+      toolInvocation: {
+        state: 'output-error',
+        toolCallId: 'tc1',
+        toolName: 'myTool',
+        args: { q: 'test' },
+        errorText: 'Tool execution failed',
+      },
+      providerExecuted: true,
+    });
+  });
+
+  it('should fall back for whitespace-only tool error strings', () => {
+    const result = parts([
+      {
+        type: 'tool-call',
+        payload: {
+          toolCallId: 'tc1',
+          toolName: 'myTool',
+          args: { q: 'test' },
+          providerExecuted: true,
+        },
+      },
+      {
+        type: 'tool-error',
+        payload: {
+          toolCallId: 'tc1',
+          toolName: 'myTool',
+          args: { q: 'test' },
+          error: '   ',
+          providerExecuted: true,
+        },
+      },
+    ]);
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({
+      type: 'tool-invocation',
+      toolInvocation: {
+        state: 'output-error',
+        toolCallId: 'tc1',
+        toolName: 'myTool',
+        args: { q: 'test' },
+        errorText: 'Tool execution failed',
+      },
+      providerExecuted: true,
+    });
+  });
+
+  it('should fall back for Error instances without usable messages', () => {
+    const result = parts([
+      {
+        type: 'tool-call',
+        payload: {
+          toolCallId: 'tc1',
+          toolName: 'myTool',
+          args: { q: 'test' },
+          providerExecuted: true,
+        },
+      },
+      {
+        type: 'tool-error',
+        payload: {
+          toolCallId: 'tc1',
+          toolName: 'myTool',
+          args: { q: 'test' },
+          error: new Error(''),
+          providerExecuted: true,
+        },
+      },
+    ]);
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({
+      type: 'tool-invocation',
+      toolInvocation: {
+        state: 'output-error',
+        toolCallId: 'tc1',
+        toolName: 'myTool',
+        args: { q: 'test' },
+        errorText: 'Tool execution failed',
+      },
+      providerExecuted: true,
     });
   });
 

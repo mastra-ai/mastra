@@ -18,12 +18,11 @@ const sidebars = {
       type: 'category',
       label: 'Gateways',
       collapsed: false,
+      link: {
+        type: 'doc',
+        id: 'gateways/index',
+      },
       items: [
-        {
-          type: 'doc',
-          id: 'gateways/index',
-          label: 'Gateways',
-        },
         {
           type: 'doc',
           id: 'gateways/custom-gateways',
@@ -65,12 +64,11 @@ const sidebars = {
       type: 'category',
       label: 'Providers',
       collapsed: false,
+      link: {
+        type: 'doc',
+        id: 'providers/index',
+      },
       items: [
-        {
-          type: 'doc',
-          id: 'providers/index',
-          label: 'Providers',
-        },
         {
           type: 'doc',
           id: 'providers/openai',
@@ -273,6 +271,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/coralbricks',
+          label: 'CoralBricks',
+        },
+        {
+          type: 'doc',
           id: 'providers/cortecs',
           label: 'Cortecs',
         },
@@ -320,6 +323,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/ebcloud',
           label: 'EBCloud',
+        },
+        {
+          type: 'doc',
+          id: 'providers/edenai',
+          label: 'Eden AI',
         },
         {
           type: 'doc',
@@ -500,6 +508,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/meganova',
           label: 'Meganova',
+        },
+        {
+          type: 'doc',
+          id: 'providers/merge-gateway',
+          label: 'Merge Gateway',
         },
         {
           type: 'doc',

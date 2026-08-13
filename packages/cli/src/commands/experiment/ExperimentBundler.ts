@@ -1,8 +1,9 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { readFile, readdir, writeFile } from 'node:fs/promises';
-import { join, relative } from 'node:path';
+import { lstat, readFile, readdir, readlink, rm, writeFile } from 'node:fs/promises';
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import type { Config } from '@mastra/core/mastra';
 import { FileService } from '@mastra/deployer/build';
 import { Bundler } from '@mastra/deployer/bundler';
 import { shouldSkipDotenvLoading } from '../utils.js';
@@ -21,8 +22,12 @@ export interface ExperimentWorkerArtifactManifest {
   protocol: { versions: string[]; framing: 'ndjson'; datasetCanonicalizationVersion: string };
   launch: { executable: string; arguments: string[]; workingDirectory: string };
   dependencies: { manifest: string; lockfile?: string };
-  artifact: { digestAlgorithm: 'sha256'; contentDigest: string; excludes: ['experiment-worker-manifest.json'] };
-  files: Array<{ path: string; sha256: string }>;
+  artifact: {
+    digestAlgorithm: 'sha256';
+    contentDigest: string;
+    excludes: ['experiment-worker-manifest.json', 'node_modules'];
+  };
+  files: Array<{ path: string; sha256: string; type?: 'file' | 'symlink'; target?: string }>;
 }
 
 export class ExperimentBundler extends Bundler {
@@ -31,6 +36,7 @@ export class ExperimentBundler extends Bundler {
     protocolVersion: EXPERIMENT_WORKER_PROTOCOL_VERSION,
     datasetCanonicalizationVersion: EXPERIMENT_DATASET_CANONICALIZATION_VERSION,
   };
+  protected pnpmNodeLinker = 'hoisted' as const;
 
   constructor() {
     super('ExperimentWorker');
@@ -47,6 +53,19 @@ export class ExperimentBundler extends Bundler {
     }
   }
 
+  protected async getUserBundlerOptions(
+    mastraEntryFile: string,
+    outputDirectory: string,
+  ): Promise<NonNullable<Config['bundler']>> {
+    const bundlerOptions = await super.getUserBundlerOptions(mastraEntryFile, outputDirectory);
+    if (!Array.isArray(bundlerOptions.externals)) return bundlerOptions;
+
+    return {
+      ...bundlerOptions,
+      dynamicPackages: [...new Set([...(bundlerOptions.dynamicPackages ?? []), ...bundlerOptions.externals])],
+    };
+  }
+
   async bundle(
     entryFile: string,
     outputDirectory: string,
@@ -55,7 +74,21 @@ export class ExperimentBundler extends Bundler {
     await this._bundle(this.getEntry(), entryFile, { outputDirectory, projectRoot });
   }
 
+  protected override async installDependencies(
+    outputDirectory: string,
+    rootDir?: string,
+    pnpmOverrides?: Record<string, string>,
+  ): Promise<void> {
+    await super.installDependencies(outputDirectory, rootDir, pnpmOverrides);
+    await removePnpmInstallMetadata(join(outputDirectory, this.outputDir));
+  }
+
   async writeArtifactManifest(outputDirectory: string, cliVersion: string): Promise<void> {
+    await Promise.all([
+      removePnpmInstallMetadata(outputDirectory),
+      removeLocalStorageArtifacts(outputDirectory),
+      rm(join(outputDirectory, this.analyzeOutputDir), { recursive: true, force: true }),
+    ]);
     const files = await collectFileDigests(outputDirectory);
     const lockfileNames = new Set(['package-lock.json', 'pnpm-lock.yaml', 'yarn.lock', 'bun.lock', 'bun.lockb']);
     const lockfile = files.find(file => lockfileNames.has(file.path))?.path;
@@ -76,7 +109,7 @@ export class ExperimentBundler extends Bundler {
       artifact: {
         digestAlgorithm: 'sha256',
         contentDigest,
-        excludes: ['experiment-worker-manifest.json'],
+        excludes: ['experiment-worker-manifest.json', 'node_modules'],
       },
       files,
     };
@@ -86,19 +119,29 @@ export class ExperimentBundler extends Bundler {
   protected getEntry(): string {
     const runtimePath = resolveRuntimePath();
     return `
+import { readFile } from 'node:fs/promises';
 import { runExperimentWorker } from ${JSON.stringify(runtimePath)};
 
 console.log = (...args) => console.error(...args);
 console.info = (...args) => console.error(...args);
 console.debug = (...args) => console.error(...args);
-const [{ runExperiment }, { mastra }] = await Promise.all([
+const [{ runExperiment }, mastraModule] = await Promise.all([
   import('@mastra/core/datasets'),
   import('#mastra'),
 ]);
+const { mastra } = mastraModule;
+if (!mastra) throw new Error("#mastra does not provide an export named 'mastra'");
+const artifactManifest = JSON.parse(
+  await readFile(new URL('./experiment-worker-manifest.json', import.meta.url), 'utf8'),
+);
 const exitCode = await runExperimentWorker({
   mastra,
   runExperiment,
-  build: ${JSON.stringify(this.buildIdentity)},
+  build: {
+    buildId: artifactManifest.build.buildId,
+    protocolVersion: artifactManifest.protocol.versions[0],
+    datasetCanonicalizationVersion: artifactManifest.protocol.datasetCanonicalizationVersion,
+  },
 });
 await Promise.race([
   new Promise(resolve => process.stdout.end(resolve)),
@@ -118,23 +161,95 @@ export function resolveRuntimePath(
   return fileURLToPath(new URL('./commands/experiment/runtime.js', moduleUrl));
 }
 
-async function collectFileDigests(root: string): Promise<Array<{ path: string; sha256: string }>> {
-  const files: Array<{ path: string; sha256: string }> = [];
-  const visit = async (directory: string) => {
+type ArtifactFileDigest = { path: string; sha256: string; type?: 'file' | 'symlink'; target?: string };
+
+const LOCAL_STORAGE_ARTIFACT_PATTERN = /(?:\.db(?:-.+)?|\.duckdb(?:\.wal)?|\.sqlite(?:-.+)?)$/;
+
+export async function removeLocalStorageArtifacts(root: string): Promise<void> {
+  const visit = async (directory: string): Promise<void> => {
     const entries = await readdir(directory, { withFileTypes: true });
-    for (const entry of entries.sort((left, right) => (left.name < right.name ? -1 : left.name > right.name ? 1 : 0))) {
-      const fullPath = join(directory, entry.name);
-      if (entry.isDirectory()) {
+    await Promise.all(
+      entries.map(async entry => {
+        const entryPath = join(directory, entry.name);
+        if (entry.isDirectory()) {
+          if (entry.name !== 'node_modules') await visit(entryPath);
+          return;
+        }
+        if (LOCAL_STORAGE_ARTIFACT_PATTERN.test(entry.name)) {
+          await rm(entryPath, { force: true });
+        }
+      }),
+    );
+  };
+
+  await visit(root);
+}
+
+export async function removePnpmInstallMetadata(root: string): Promise<void> {
+  const nodeModules = join(root, 'node_modules');
+  await Promise.all([
+    ...['.pnpm', '.modules.yaml', '.pnpm-workspace-state-v1.json'].map(name =>
+      rm(join(nodeModules, name), { recursive: true, force: true }),
+    ),
+    rm(join(root, 'preflight-local-paths.json'), { force: true }),
+    rm(join(root, 'preflight-metadata.json'), { force: true }),
+  ]);
+
+  const visit = async (directory: string): Promise<void> => {
+    let entries;
+    try {
+      entries = await readdir(directory, { withFileTypes: true });
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
+      throw error;
+    }
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const entryPath = join(directory, entry.name);
+      if (entry.name === '.bin') await rm(entryPath, { recursive: true, force: true });
+      else await visit(entryPath);
+    }
+  };
+  await visit(nodeModules);
+}
+
+async function collectFileDigests(root: string): Promise<ArtifactFileDigest[]> {
+  const files: ArtifactFileDigest[] = [];
+  const visit = async (directory: string) => {
+    const entries = await readdir(directory);
+    for (const name of entries.sort((left, right) => (left < right ? -1 : left > right ? 1 : 0))) {
+      const fullPath = join(directory, name);
+      const artifactPath = relative(root, fullPath).replaceAll('\\', '/');
+      if (artifactPath === 'experiment-worker-manifest.json' || artifactPath === 'node_modules') continue;
+
+      const stats = await lstat(fullPath);
+      if (stats.isDirectory()) {
         await visit(fullPath);
-      } else {
-        const artifactPath = relative(root, fullPath).replaceAll('\\', '/');
-        if (artifactPath === 'experiment-worker-manifest.json') continue;
+      } else if (stats.isFile()) {
         files.push({
           path: artifactPath,
           sha256: createHash('sha256')
             .update(await readFile(fullPath))
             .digest('hex'),
         });
+      } else if (stats.isSymbolicLink()) {
+        const target = await readlink(fullPath);
+        if (isAbsolute(target)) {
+          throw new Error(`Experiment worker artifacts cannot contain absolute symlinks: ${artifactPath}`);
+        }
+        const resolvedTarget = resolve(dirname(fullPath), target);
+        const artifactTarget = relative(root, resolvedTarget);
+        if (artifactTarget === '..' || artifactTarget.startsWith(`..${sep}`) || isAbsolute(artifactTarget)) {
+          throw new Error(`Experiment worker artifacts cannot contain escaping symlinks: ${artifactPath}`);
+        }
+        files.push({
+          path: artifactPath,
+          type: 'symlink',
+          target,
+          sha256: createHash('sha256').update(target).digest('hex'),
+        });
+      } else {
+        throw new Error(`Unsupported artifact file type: ${artifactPath}`);
       }
     }
   };
