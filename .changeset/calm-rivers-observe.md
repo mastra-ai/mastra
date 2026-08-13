@@ -2,4 +2,4 @@
 '@mastra/memory': patch
 ---
 
-Fixed observational memory returning success after partial buffered activation while the live unobserved message tail was still above the observation threshold. `runThresholdObservation()` now re-checks pending tokens after activation and continues with synchronous `observe()` when needed (#19767).
+Fixed an issue where observational memory could skip observation when activated buffered content left later messages above the observation threshold (#19767).
