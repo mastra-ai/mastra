@@ -908,6 +908,8 @@ const subconscious = new Subconscious({
 
 Knowledge uses the scope chain `org → resource → thread`. Reads include the current scope and visible ancestors but exclude sibling-thread data. `maxScope` is a mechanical ceiling: neither agents nor tools can promote a fact above it.
 
+By default the resource rung comes from the run's `resourceId`. Setting `knowledgeResourceId` on the request context overrides the resource rung across all Subconscious scope resolution, letting a host share one knowledge graph across many runs, for example scoping knowledge to a project instead of a session. When the key is absent, behavior is unchanged.
+
 Entities provide identity. Facts contain scoped prose, provenance, capture time, and an optional event time. Pages are curated documents with wikilinks, but they aren't graph entities. `knowledge_search` combines lexical and semantic ranking, while `knowledge_read` and `knowledge_browse` retrieve records, mentions, and backlinks within the caller's scope.
 
 Curator removal soft-deletes facts. Normal reads and search exclude deleted facts. Restoration is available only through the application storage API, not through agent tools.
