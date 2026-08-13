@@ -54,6 +54,7 @@ await voyage.v4lite.doEmbed({ values: ['...'] }); // voyage-4-lite (1M batch tok
 await voyage.large.doEmbed({ values: ['...'] }); // voyage-3-large
 await voyage.v35.doEmbed({ values: ['...'] }); // voyage-3.5
 await voyage.v35lite.doEmbed({ values: ['...'] }); // voyage-3.5-lite
+await voyage.code4.doEmbed({ values: ['...'] }); // voyage-code-4
 await voyage.code.doEmbed({ values: ['...'] }); // voyage-code-3
 await voyage.finance.doEmbed({ values: ['...'] }); // voyage-finance-2
 await voyage.law.doEmbed({ values: ['...'] }); // voyage-law-2
@@ -190,6 +191,7 @@ console.log(grouped.embeddingsByDocument); // [[[...], [...]], [[...]]]
 | `voyage-3-large`   | Best quality, multilingual              | 256/512/1024/2048 | 120k         |
 | `voyage-3.5`       | Balanced quality/speed                  | 256/512/1024/2048 | 320k         |
 | `voyage-3.5-lite`  | Lowest latency/cost                     | 256/512/1024/2048 | 1M           |
+| `voyage-code-4`    | Code retrieval, latest generation       | 256/512/1024/2048 | 32k          |
 | `voyage-code-3`    | Code retrieval                          | 256/512/1024/2048 | 32k          |
 | `voyage-finance-2` | Finance domain                          | 1024              | 32k          |
 | `voyage-law-2`     | Legal domain                            | 1024              | 32k          |
@@ -334,6 +336,7 @@ type VoyageTextModel =
   | 'voyage-3-large'
   | 'voyage-3.5'
   | 'voyage-3.5-lite'
+  | 'voyage-code-4'
   | 'voyage-code-3'
   | 'voyage-finance-2'
   | 'voyage-law-2';
