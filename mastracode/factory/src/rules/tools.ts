@@ -7,6 +7,7 @@ import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import type { FactorySessionSourceLookup } from './binding-context.js';
 import { resolveFactorySessionAddress } from './binding-context.js';
 import type { FactoryTransitionService } from './transition-service.js';
+import { currentStage } from './transition-service.js';
 import { FACTORY_RULE_STAGES } from './types.js';
 import type { FactoryRuleBoard } from './types.js';
 
@@ -103,6 +104,9 @@ export async function createFactoryTransitionTools(options: {
           }
         ).memory;
         if (memory?.runCuration && result.status === 'accepted') {
+          // `stage` is the destination; the phase being LEFT is the item's stage
+          // before the transition (captured from the pre-transition read above).
+          const exitedStage = currentStage(item.stages) ?? stage;
           void (async () => {
             try {
               const threadId = execution.agent?.threadId;
@@ -112,7 +116,7 @@ export async function createFactoryTransitionTools(options: {
                 threadId,
                 resourceId: resourceId ?? threadId,
                 requestContext: execution.requestContext,
-                prompt: `Now that the work item has left the ${stage} phase: is there anything from this phase worth remembering — a durable project memory, or something worth pinning?`,
+                prompt: `Now that the work item has left the ${exitedStage} phase: is there anything from this phase worth remembering — a durable project memory, or something worth pinning?`,
               });
               // Outcomes: ran | no-op (empty worklist) | skipped (in flight) | no-model.
               console.debug(`[factory:transition-curate] thread=${threadId} stage=${stage} outcome=${outcome}`);

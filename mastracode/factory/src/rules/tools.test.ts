@@ -212,7 +212,7 @@ describe('factory_transition_work_item', () => {
       threadId: 'thread-1',
       resourceId: 'resource-1',
       requestContext: context,
-      prompt: expect.stringContaining('left the planning phase'),
+      prompt: expect.stringContaining('left the intake phase'),
     });
     // The curation must run under a request context that carries the org identity.
     const passedContext = runCuration.mock.calls[0]![0].requestContext;
