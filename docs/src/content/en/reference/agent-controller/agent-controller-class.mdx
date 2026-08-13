@@ -408,7 +408,7 @@ Returns: `Promise<Session<TState> | undefined>`
 
 Subscribe to process-local notifications after `createSession()` materializes a new live session. Listener errors are isolated and don't prevent other listeners from running. Call the returned function to unsubscribe.
 
-By default listeners are fire-and-forget. Pass `{ blocking: true }` to make `createSession()` await the listener before resolving the new session, so the host can prepare session state before the caller can start a run. Blocking listeners run sequentially in registration order, before fire-and-forget listeners are notified. A blocking listener must not call `createSession()` for the same `(resourceId, scope)` pair — that call would await its own hydration and deadlock.
+By default listeners are fire-and-forget. Pass `{ blocking: true }` to make `createSession()` await the listener before resolving the new session, so the host can prepare session state before the caller can start a run. Blocking listeners run sequentially in registration order, before fire-and-forget listeners are notified. A blocking listener must not call `createSession()` for the same `(resourceId, scope)` pair. That call would await its own hydration and deadlock.
 
 ```typescript
 const unsubscribe = controller.onSessionCreated(
