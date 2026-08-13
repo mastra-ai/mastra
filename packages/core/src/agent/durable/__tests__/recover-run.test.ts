@@ -28,6 +28,8 @@ import type { DurableAgent } from '../durable-agent';
 import { globalRunRegistry } from '../run-registry';
 import { emitChunkEvent, emitFinishEvent } from '../stream-adapter';
 
+const RECOVERY_LEASE_RENEW_INTERVAL_MS_FOR_TEST = 10_000;
+
 function makeSnapshot(runId: string, status: WorkflowRunStatus, agentId: string): WorkflowRunState {
   return {
     runId,
@@ -248,11 +250,78 @@ describe('DurableAgent.recover(runId)', () => {
       expect(registerRun).toHaveBeenCalledTimes(1);
       expect(firstCreateRun).toHaveBeenCalledTimes(1);
       expect(secondWorkflow.createRun).not.toHaveBeenCalled();
+
+      releaseRestart();
+      await globalRunRegistry.get(runId)?.workflowExecution;
+      firstRecovery.cleanup();
+      firstRecovery = undefined;
+
+      const secondRecovery = await secondAgent.recover(runId);
+      await globalRunRegistry.get(runId)?.workflowExecution;
+      expect(secondWorkflow.createRun).toHaveBeenCalledTimes(1);
+      expect(registerRun).toHaveBeenCalledTimes(2);
+      secondRecovery.cleanup();
     } finally {
       releaseRestart();
       await globalRunRegistry.get(runId)?.workflowExecution?.catch(() => {});
       firstRecovery?.cleanup();
       registerRun.mockRestore();
+    }
+  });
+
+  it('retries a transient recovery-lease renewal error without aborting the run', async () => {
+    vi.useFakeTimers();
+    const runId = 'run-renewal-retry';
+    const retryStore = new InMemoryStore();
+    const retryPubsub = new EventEmitterPubSub();
+    const actualRenewLease = retryPubsub.renewLease.bind(retryPubsub);
+    let rejectFirstRecoveryRenewal = true;
+    const renewLease = vi.spyOn(retryPubsub, 'renewLease').mockImplementation(async (key, owner, ttlMs) => {
+      if (key.startsWith('mastra:durable-agent-recovery:') && rejectFirstRecoveryRenewal) {
+        rejectFirstRecoveryRenewal = false;
+        throw new Error('temporary lease backend error');
+      }
+      return actualRenewLease(key, owner, ttlMs);
+    });
+    const recoveryRenewalCalls = () =>
+      renewLease.mock.calls.filter(([key]) => key.startsWith('mastra:durable-agent-recovery:'));
+    const { agent: retryAgent } = createDurableWithStore('agent-renewal', retryStore, retryPubsub);
+    await seed(retryStore, runId, 'running', 'agent-renewal');
+
+    let markRestartStarted!: () => void;
+    const restartStarted = new Promise<void>(resolve => {
+      markRestartStarted = resolve;
+    });
+    let releaseRestart!: () => void;
+    const restartGate = new Promise<void>(resolve => {
+      releaseRestart = resolve;
+    });
+    const restart = vi.fn(async () => {
+      markRestartStarted();
+      await restartGate;
+      return { status: 'suspended' as const };
+    });
+    vi.spyOn(retryAgent, 'getWorkflow').mockReturnValue({
+      createRun: vi.fn(async () => ({ restart, runId })),
+    } as any);
+    let recovery: Awaited<ReturnType<typeof retryAgent.recover>> | undefined;
+
+    try {
+      recovery = await retryAgent.recover(runId);
+      await restartStarted;
+
+      await vi.advanceTimersByTimeAsync(RECOVERY_LEASE_RENEW_INTERVAL_MS_FOR_TEST);
+      expect(recoveryRenewalCalls()).toHaveLength(1);
+      expect(globalRunRegistry.get(runId)?.abortController?.signal.aborted).toBe(false);
+
+      await vi.advanceTimersByTimeAsync(RECOVERY_LEASE_RENEW_INTERVAL_MS_FOR_TEST);
+      expect(recoveryRenewalCalls()).toHaveLength(2);
+      expect(globalRunRegistry.get(runId)?.abortController?.signal.aborted).toBe(false);
+    } finally {
+      releaseRestart();
+      await globalRunRegistry.get(runId)?.workflowExecution?.catch(() => {});
+      recovery?.cleanup();
+      vi.useRealTimers();
     }
   });
 

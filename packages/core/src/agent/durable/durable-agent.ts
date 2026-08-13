@@ -29,6 +29,7 @@ import { runDurableStreamUntilIdle, runResumeDurableStreamUntilIdle } from './du
 import { prepareForDurableExecution } from './preparation';
 import { endRunSpansWithError, ExtendedRunRegistry, globalRunRegistry } from './run-registry';
 import { createDurableAgentStream, emitChunkEvent, emitErrorEvent } from './stream-adapter';
+import type { DurableAgentStreamResult as DurableStreamAdapterResult } from './stream-adapter';
 import type { AgentStepFinishEventData, AgentSuspendedEventData, DurableAgenticWorkflowInput } from './types';
 import { createDurableAgenticWorkflow } from './workflows';
 
@@ -564,6 +565,7 @@ export class DurableAgent<
 
     let released = false;
     let renewalInFlight = false;
+    let leaseExpiresAt = Date.now() + RECOVERY_LEASE_TTL_MS;
     const stopOnLeaseLoss = (cause?: unknown) => {
       if (released || abortController.signal.aborted) return;
       const error = new MastraError(
@@ -580,14 +582,31 @@ export class DurableAgent<
       this.#mastra?.getLogger?.()?.error?.(error.message);
     };
     const renewalTimer = setInterval(() => {
-      if (released || renewalInFlight) return;
+      if (released) return;
+      if (Date.now() >= leaseExpiresAt) {
+        stopOnLeaseLoss();
+        return;
+      }
+      if (renewalInFlight) return;
       renewalInFlight = true;
       void provider
         .renewLease(key, owner, RECOVERY_LEASE_TTL_MS)
         .then(renewed => {
-          if (!renewed) stopOnLeaseLoss();
+          if (renewed) {
+            leaseExpiresAt = Date.now() + RECOVERY_LEASE_TTL_MS;
+            return;
+          }
+          stopOnLeaseLoss();
         })
-        .catch(stopOnLeaseLoss)
+        .catch(cause => {
+          if (Date.now() >= leaseExpiresAt) {
+            stopOnLeaseLoss(cause);
+            return;
+          }
+          this.#mastra
+            ?.getLogger?.()
+            ?.warn?.(`[DurableAgent] recover(${runId}) lease renewal failed, retrying: ${cause}`);
+        })
         .finally(() => {
           renewalInFlight = false;
         });
@@ -606,6 +625,96 @@ export class DurableAgent<
           ?.warn?.(`[DurableAgent] recover(${runId}) failed to release recovery lease: ${error}`);
       }
     };
+  }
+
+  /**
+   * Rebuild and register the stream for a claimed recovery attempt. Rolls back
+   * every partial registration and releases the claim if setup fails.
+   */
+  async #setupRecoveredStream({
+    runId,
+    workflowInput,
+    requestContext,
+    threadId,
+    resourceId,
+    messageList,
+    registryEntry,
+    options,
+    scheduleAutoCleanup,
+    releaseRecoveryLease,
+  }: {
+    runId: string;
+    workflowInput: DurableAgenticWorkflowInput;
+    requestContext: RequestContext;
+    threadId?: string;
+    resourceId?: string;
+    messageList: MessageList;
+    registryEntry: any;
+    options?: DurableAgentRecoverOptions<TOutput>;
+    scheduleAutoCleanup: () => void;
+    releaseRecoveryLease: () => Promise<void>;
+  }): Promise<DurableStreamAdapterResult<TOutput>> {
+    let streamCleanup: (() => void) | undefined;
+    try {
+      this.#runRegistry.registerWithMessageList(runId, registryEntry, messageList, { threadId, resourceId });
+      globalRunRegistry.set(runId, { ...registryEntry, messageList });
+
+      // Persistent backends may retain chunks from the pre-crash segment.
+      const recoverOffset = await this.#getPubsubOffset(runId);
+      const stream = createDurableAgentStream<TOutput>({
+        pubsub: this.pubsub,
+        runId,
+        messageId: workflowInput.messageId ?? crypto.randomUUID(),
+        model: {
+          modelId: workflowInput.modelConfig?.modelId,
+          provider: workflowInput.modelConfig?.provider,
+          version: 'v3',
+        },
+        threadId,
+        resourceId,
+        offset: recoverOffset,
+        onChunk: options?.onChunk,
+        experimentalTransform: options?.experimentalTransform,
+        onStepFinish: options?.onStepFinish,
+        onFinish: options?.onFinish,
+        onStreamFinished: scheduleAutoCleanup,
+        onError: async error => {
+          await options?.onError?.(error);
+          scheduleAutoCleanup();
+        },
+        onSuspended: options?.onSuspended,
+        // Keep recovered runs observable if they suspend again so a later
+        // resume or recovery can pick them up.
+        messageList,
+      });
+      streamCleanup = stream.cleanup;
+
+      const recoverStreamOptions: AgentExecutionOptions<TOutput> = {
+        runId,
+        requestContext,
+        ...(threadId
+          ? {
+              memory: {
+                thread: threadId,
+                ...(resourceId ? { resource: resourceId } : {}),
+              },
+            }
+          : {}),
+      } as AgentExecutionOptions<TOutput>;
+      await agentThreadStreamRuntime.registerRun(
+        this as unknown as Agent<any, any, any, any>,
+        stream.output,
+        recoverStreamOptions,
+        this.getPubSub(),
+      );
+      return stream;
+    } catch (error) {
+      streamCleanup?.();
+      this.#runRegistry.cleanup(runId);
+      globalRunRegistry.delete(runId);
+      await releaseRecoveryLease();
+      throw error;
+    }
   }
 
   /**
@@ -2060,82 +2169,24 @@ export class DurableAgent<
       }, this.#cleanupTimeoutMs);
     };
 
-    // 8. Build and register the recovered stream only after claiming exclusive
-    //    recovery ownership. Any setup failure releases the claim and removes
-    //    partial local state so a later recovery attempt can retry safely.
-    let setupStreamCleanup: (() => void) | undefined;
+    // 8. Register the reconstructed state and recovered stream only after
+    //    claiming exclusive recovery ownership.
     const {
       output,
       cleanup: streamCleanup,
       ready,
-    } = await (async () => {
-      try {
-        this.#runRegistry.registerWithMessageList(runId, registryEntry, messageList, { threadId, resourceId });
-        globalRunRegistry.set(runId, { ...registryEntry, messageList });
-
-        // Skip pubsub events broadcast before recovery started. Persistent
-        // backends may retain chunks from the pre-crash segment.
-        const recoverOffset = await this.#getPubsubOffset(runId);
-        const stream = createDurableAgentStream<TOutput>({
-          pubsub: this.pubsub,
-          runId,
-          messageId: workflowInput.messageId ?? crypto.randomUUID(),
-          model: {
-            modelId: workflowInput.modelConfig?.modelId,
-            provider: workflowInput.modelConfig?.provider,
-            version: 'v3',
-          },
-          threadId,
-          resourceId,
-          offset: recoverOffset,
-          onChunk: options?.onChunk,
-          experimentalTransform: options?.experimentalTransform,
-          onStepFinish: options?.onStepFinish,
-          onFinish: options?.onFinish,
-          onStreamFinished: scheduleAutoCleanup,
-          onError: async error => {
-            await options?.onError?.(error);
-            scheduleAutoCleanup();
-          },
-          onSuspended: options?.onSuspended,
-          // Recovered runs use the default `closeOnSuspend: false` — a run that
-          // suspends again should stay observable so a later resume/recover can
-          // pick it up. Callers wanting to close on suspend can call `cleanup()`
-          // from `onSuspended`.
-          messageList,
-        });
-        setupStreamCleanup = stream.cleanup;
-
-        // 10. Register the recovered run before restarting its workflow. A client
-        //     reconnecting with only the thread target must learn which run now
-        //     owns the thread before recovered chunks can be published.
-        const recoverStreamOptions: AgentExecutionOptions<TOutput> = {
-          runId,
-          requestContext,
-          ...(threadId
-            ? {
-                memory: {
-                  thread: threadId,
-                  ...(resourceId ? { resource: resourceId } : {}),
-                },
-              }
-            : {}),
-        } as AgentExecutionOptions<TOutput>;
-        await agentThreadStreamRuntime.registerRun(
-          this as unknown as Agent<any, any, any, any>,
-          stream.output,
-          recoverStreamOptions,
-          this.getPubSub(),
-        );
-        return stream;
-      } catch (error) {
-        setupStreamCleanup?.();
-        this.#runRegistry.cleanup(runId);
-        globalRunRegistry.delete(runId);
-        await releaseRecoveryLease();
-        throw error;
-      }
-    })();
+    } = await this.#setupRecoveredStream({
+      runId,
+      workflowInput,
+      requestContext,
+      threadId,
+      resourceId,
+      messageList,
+      registryEntry,
+      options,
+      scheduleAutoCleanup,
+      releaseRecoveryLease,
+    });
 
     // 9. Re-drive the workflow from the persisted snapshot in the background
     //     and delete snapshot rows on non-suspended terminals (same contract
@@ -2144,29 +2195,31 @@ export class DurableAgent<
     //     the returned `workflowExecution` (e.g. `recoverActiveRuns()`) see
     //     the raw rejection so they can classify the run as failed.
     const workflow = this.getWorkflow();
-    const workflowExecution = ready.then(async () => {
-      try {
-        const run = await workflow.createRun({ runId, pubsub: this.pubsub });
-        const result = await run.restart({
-          requestContext,
-          ...createObservabilityContext({ currentSpan: recoverAgentSpan }),
-        } as any);
-        // Snapshot cleanup runs for every non-suspended terminal (success or
-        // failed) so storage stays bounded — mirrors the start()/resume()
-        // contract.
-        if (result?.status && result.status !== 'suspended') {
-          await this.deleteRunSnapshots(runId);
-        }
-        if (result?.status === 'failed') {
-          const error = new Error((result as any).error?.message || 'Workflow recover failed');
-          void this.emitError(runId, error);
+    const workflowExecution = ready
+      .then(async () => {
+        try {
+          const run = await workflow.createRun({ runId, pubsub: this.pubsub });
+          const result = await run.restart({
+            requestContext,
+            ...createObservabilityContext({ currentSpan: recoverAgentSpan }),
+          } as any);
+          // Snapshot cleanup runs for every non-suspended terminal (success or
+          // failed) so storage stays bounded — mirrors the start()/resume()
+          // contract.
+          if (result?.status && result.status !== 'suspended') {
+            await this.deleteRunSnapshots(runId);
+          }
+          if (result?.status === 'failed') {
+            const error = new Error((result as any).error?.message || 'Workflow recover failed');
+            void this.emitError(runId, error);
+            throw error;
+          }
+        } catch (error) {
+          void this.emitError(runId, error as Error);
           throw error;
         }
-      } catch (error) {
-        void this.emitError(runId, error as Error);
-        throw error;
-      }
-    });
+      })
+      .finally(releaseRecoveryLease);
     const trackedRecoverEntry = globalRunRegistry.get(runId);
     if (trackedRecoverEntry) {
       trackedRecoverEntry.workflowExecution = workflowExecution;
@@ -2176,7 +2229,6 @@ export class DurableAgent<
     // workflow promise). Errors are already surfaced through `emitError` /
     // the stream's `onError` callback.
     workflowExecution.catch(() => {});
-    void workflowExecution.finally(releaseRecoveryLease).catch(() => {});
 
     const cleanup = () => {
       if (autoCleanupTimer) {
