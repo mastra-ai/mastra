@@ -918,11 +918,15 @@ Reminders are reactive: they surface knowledge only when the remind agent judges
 
 ```typescript title="src/mastra/memory.ts"
 const subconscious = new Subconscious({
-  pins: { maxCharacters: 2000 },
+  pins: { maxPins: 20, maxCharacters: 2000 },
 })
 ```
 
-When enabled, the curator maintains a reserved `pinned-knowledge` page in its default scope and its body is delivered on every turn as a snapshot state signal. Unchanged pins reuse their cache key, so a stable pin set costs nothing after the first turn. `maxCharacters` defaults to 2000 and is enforced on the write path, so the curator can't grow the page past its budget. Pins are off by default because their cost is per turn and permanent.
+A pin is a knowledge fact on a reserved entity, so each pin has a stable id, its own scope, and provenance. The curator maintains the set with `knowledge_pin`, `knowledge_edit_pin`, and `knowledge_unpin`. Unpinning soft-deletes the fact; editing replaces it under a new id, since facts are append-only.
+
+Delivery is a state signal projected by a processor. When no snapshot is in the visible context (first emission, or observational memory evicted it) the full set is emitted as a `<pinned-knowledge>` snapshot; a change while a snapshot is visible emits a `<pinned-knowledge-update>` delta carrying only that change; an unchanged turn emits nothing, so a stable pin set costs nothing after the first turn. Unpinning the last pin emits an empty snapshot so the lane clears rather than replaying stale content.
+
+`maxPins` (default 20) and `maxCharacters` (default 2000, total across the set) are enforced in the pin tools, so the set cannot grow past its budget. Pins are off by default because their cost is per turn and permanent.
 
 ### Signals, costs, and failures
 
