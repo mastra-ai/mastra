@@ -32,8 +32,6 @@ export type {
   AgentControllerSessionState,
   AgentControllerSessionSettings,
   AgentControllerOMProgress,
-  OMStatus,
-  OMBufferedStatus,
   AgentControllerModeInfo,
   AgentControllerThreadInfo,
   AgentControllerTaskSnapshot,

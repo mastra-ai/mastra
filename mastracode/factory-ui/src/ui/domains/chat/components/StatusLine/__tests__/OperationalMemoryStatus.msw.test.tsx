@@ -30,7 +30,6 @@ function renderStatus(runtime: Partial<ChatRuntimeApi>) {
         bufferingMessages: false,
         bufferingObservations: false,
         tokensPerSec: 0,
-        tokensPerSecHistory: [],
         ...runtime,
       }}
     >
@@ -122,20 +121,6 @@ describe('observational memory status', () => {
 
       await waitFor(() => expect(screen.getByText('−6k')).toBeVisible());
       expect(screen.getByText('−3k')).toBeVisible();
-    });
-  });
-
-  describe('when the model is decoding', () => {
-    it('plots the throughput the run has measured so far', () => {
-      renderStatus({ tokensPerSec: 42, tokensPerSecHistory: [30, 38, 42] });
-
-      expect(screen.getByText('42')).toBeVisible();
-    });
-
-    it('holds the throughput slot before a run has measured anything, so the strip cannot jump', () => {
-      renderStatus({ tokensPerSec: 0, tokensPerSecHistory: [] });
-
-      expect(screen.getByText('tok/s')).toBeVisible();
     });
   });
 });

@@ -73,7 +73,6 @@ function ChatRuntimeValueProvider({ children, runtime }: { children: ReactNode; 
         bufferingObservations: runtime.bufferingObservations,
         goal: runtime.goal,
         tokensPerSec: runtime.tokensPerSec,
-        tokensPerSecHistory: runtime.tokensPerSecHistory,
       }}
     >
       {children}

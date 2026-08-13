@@ -6,7 +6,6 @@ import type {
   OMBufferedStatus,
   OMStatus,
 } from '@mastra/core/agent-controller';
-export type { OMBufferedStatus, OMStatus } from '@mastra/core/agent-controller';
 export type { MastraDBMessage, MastraMessageContentV2, MastraMessagePart } from '@mastra/core/agent-controller';
 import type { RequestContext } from '@mastra/core/request-context';
 

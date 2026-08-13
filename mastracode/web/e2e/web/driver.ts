@@ -1,8 +1,6 @@
 import { MastraClient, isKnownAgentControllerEvent } from '@mastra/client-js';
 import type { PlanResume, SendNotificationInput } from '@mastra/client-js';
 
-import { initialChatRuntime, runtimeReducer } from '../../../factory-ui/src/ui/domains/chat/services/runtime';
-import type { ChatRuntimeState } from '../../../factory-ui/src/ui/domains/chat/services/runtime';
 import {
   createInitialTranscript,
   initialTranscript,
@@ -33,8 +31,6 @@ import type {
 export interface ScenarioDriver {
   /** Current folded transcript (what the UI would render). */
   state: () => TranscriptState;
-  /** Runtime telemetry the status line renders: throughput, memory budgets, goal. */
-  runtime: () => ChatRuntimeState;
   /**
    * Session-level mode/model, mirroring what the app's session-state layer
    * (ChatModes/ChatModels providers) renders in the status line. Kept in sync
@@ -105,7 +101,6 @@ export async function createDriver(opts: {
   const session = controller.session(opts.resourceId);
 
   let state: TranscriptState = initialTranscript;
-  let runtime: ChatRuntimeState = initialChatRuntime;
   const apply = (next: TranscriptState) => {
     state = next;
   };
@@ -134,7 +129,6 @@ export async function createDriver(opts: {
           running = false;
         }
       }
-      runtime = runtimeReducer(runtime, event);
       apply(transcriptReducer(state, { type: 'event', event }));
     },
     onError: () => {},
@@ -155,7 +149,6 @@ export async function createDriver(opts: {
 
   return {
     state: () => state,
-    runtime: () => runtime,
     sessionState: () => sessionState,
     running: () => running,
     text,
