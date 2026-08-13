@@ -179,23 +179,46 @@ describe('ThreadPage loading shell', () => {
     sessionGate.resolve();
 
     const header = await screen.findByRole('region', { name: 'Factory session' });
-    expect(await screen.findByLabelText('Loading messages')).toBeInTheDocument();
+    // The messages-loading window is now covered by the session-prepare step
+    // loader (with "Loading messages" as its active tail step) rather than
+    // the old skeleton bars — keeps the composer's spinning ring meaningful
+    // across the whole preparing window.
+    expect(await screen.findByRole('status', { name: 'Preparing session' })).toBeInTheDocument();
     expect(within(header).getByRole('button', { name: 'Workspace files' })).toBeInTheDocument();
 
     messagesGate.resolve();
-    await waitFor(() => expect(screen.queryByLabelText('Loading messages')).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByRole('status', { name: 'Preparing session' })).not.toBeInTheDocument());
     expect(screen.getByRole('region', { name: 'Factory session' })).toBeInTheDocument();
   });
 
-  it('synchronizes the route while thread messages are still loading', async () => {
+  it('waits for sandbox readiness before synchronizing an existing route thread', async () => {
     const { sessionGate, onSwitchThread } = stubThreadRoute({
       initialThreadId: 'thread-1',
       threads: [{ id: 'thread-1' }, { id: ROUTE_THREAD_ID }],
     });
+    let resolveEnsureStarted = () => {};
+    const ensureStarted = new Promise<void>(resolve => {
+      resolveEnsureStarted = resolve;
+    });
+    let resolveEnsure = () => {};
+    const ensureReady = new Promise<void>(resolve => {
+      resolveEnsure = resolve;
+    });
+    server.use(
+      http.post(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/ensure`, async () => {
+        resolveEnsureStarted();
+        await ensureReady;
+        return HttpResponse.json({ ok: true });
+      }),
+    );
     renderThreadRoute(`/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/${ROUTE_THREAD_ID}`);
     sessionGate.resolve();
 
-    expect(await screen.findByLabelText('Loading messages')).toBeInTheDocument();
+    expect(await screen.findByRole('status', { name: 'Preparing session' })).toBeInTheDocument();
+    await ensureStarted;
+    expect(onSwitchThread).not.toHaveBeenCalled();
+
+    resolveEnsure();
     await waitFor(() => expect(onSwitchThread).toHaveBeenCalledWith(ROUTE_THREAD_ID));
   });
 });

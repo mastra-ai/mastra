@@ -395,7 +395,7 @@ export class AgentChannels {
             'Channels require storage to be configured on the Mastra instance. Configure a storage provider like LibSQLStore.',
           );
         }
-        this.stateAdapter = new MastraStateAdapter(memoryStore);
+        this.stateAdapter = new MastraStateAdapter(memoryStore, () => this.getOwnerId());
         this.log('info', 'Using MastraStateAdapter (subscriptions persist across restarts)');
       }
 
@@ -1052,6 +1052,20 @@ export class AgentChannels {
   ): Promise<void> {
     const platform = chatThread.adapter.name;
 
+    // Some adapters lift platform side-channel events (read receipts, delivery
+    // acks) into inbound messages carrying no text and no attachments. Running
+    // the agent on nothing still produces a reply, which produces another
+    // receipt, which wakes the agent again — a self-sustaining loop. There is
+    // nothing to answer here, so drop it before any thread, memory, or run
+    // work happens. Custom handlers run ahead of this and still see the
+    // message if they want it.
+    if (this.isContentlessMessage(message)) {
+      this.log('debug', `[${platform}] Skipping message with no text and no attachments`, {
+        messageId: message.id,
+      });
+      return;
+    }
+
     // Map to a Mastra thread for memory/history.
     // chatThread.id encodes channel + threadTs, so it's stable per conversation:
     // each Slack thread (including top-level DM, DM thread reply, channel mention, and
@@ -1271,6 +1285,14 @@ export class AgentChannels {
       },
       autoResumeSuspendedTools: canRenderApprovalButtons ? undefined : true,
     });
+  }
+
+  /** A message with neither text nor attachments gives the agent nothing to run on. */
+  private isContentlessMessage(message: Message): boolean {
+    if (message.attachments?.length) return false;
+    if (message.text?.trim()) return false;
+    const richText = message.formatted ? chatModule().stringifyMarkdown(message.formatted).trim() : '';
+    return !richText;
   }
 
   /**
@@ -1515,18 +1537,59 @@ export class AgentChannels {
       );
     }
 
-    const metadata = {
+    const legacyMetadata = {
       channel_platform: platform,
       channel_externalThreadId: externalThreadId,
       channel_externalChannelId: channelId,
     };
 
-    const { threads } = await memoryStore.listThreads({
+    const ownerId = this.getOwnerId();
+    if (ownerId === null) {
+      // No owner bound yet - scoping is impossible; behave exactly as before
+      // and never stamp a null owner id.
+      const { threads } = await memoryStore.listThreads({
+        filter: { metadata: legacyMetadata },
+        perPage: 1,
+      });
+      return { thread: threads[0], memoryStore, metadata: legacyMetadata };
+    }
+
+    const metadata = { ...legacyMetadata, channel_ownerId: ownerId };
+
+    // Primary lookup: threads already scoped to this agent.
+    const { threads: scoped } = await memoryStore.listThreads({
       filter: { metadata },
       perPage: 1,
     });
+    if (scoped[0]) return { thread: scoped[0], memoryStore, metadata };
 
-    return { thread: threads[0], memoryStore, metadata };
+    // Legacy fallback: pre-upgrade threads carry no channel_ownerId. Metadata
+    // filters match subsets, so this query also returns threads claimed by
+    // OTHER agents - post-filter to unclaimed rows only, oldest first so
+    // adoption deterministically picks the original thread. If a conversation
+    // somehow accumulates more than 10 candidate rows, an unclaimed one past
+    // the page could be missed and a fresh thread created - acceptable
+    // degradation.
+    const { threads: candidates } = await memoryStore.listThreads({
+      filter: { metadata: legacyMetadata },
+      perPage: 10,
+      orderBy: { field: 'createdAt', direction: 'ASC' },
+    });
+    const unclaimed = candidates.find(candidate => {
+      const candidateMeta = (candidate.metadata ?? {}) as Record<string, unknown>;
+      return !('channel_ownerId' in candidateMeta);
+    });
+    if (unclaimed) {
+      // Lazily adopt the legacy thread: the first agent to touch it claims it
+      // by stamping its own id, preserving all existing metadata.
+      const claimed = await memoryStore.patchThread({
+        id: unclaimed.id,
+        metadata: { ...((unclaimed.metadata ?? {}) as Record<string, unknown>), channel_ownerId: ownerId },
+      });
+      return { thread: claimed, memoryStore, metadata };
+    }
+
+    return { thread: undefined, memoryStore, metadata };
   }
 
   /**

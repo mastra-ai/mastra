@@ -1,11 +1,11 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ArrowLeft } from 'lucide-react';
 
 import type { WorkspaceFile } from '../../../../api/types';
 import { CopyIcon } from '../../../ui/icons';
 import { highlightCode, languageForPath } from '../../../ui/highlight';
-import { Markdown } from '../../../ui/Markdown';
 
 function formatBytes(size: number) {
   if (size < 1024) return `${size} B`;
@@ -74,7 +74,7 @@ export function WorkspaceFileViewer({ filePath, file, isLoading, error, onBack }
         {file?.contentType === 'unsupported' ? (
           <Txt className="text-icon3">This file type cannot be previewed as text.</Txt>
         ) : null}
-        {file?.contentType === 'text' && isMarkdown ? <Markdown className="max-w-none">{content}</Markdown> : null}
+        {file?.contentType === 'text' && isMarkdown ? <MarkdownRenderer>{content}</MarkdownRenderer> : null}
         {file?.contentType === 'text' && !isMarkdown ? (
           <pre className="border-border1 bg-surface2 text-icon6 m-0 overflow-x-auto rounded-md border p-3 font-mono text-xs leading-relaxed">
             <code dangerouslySetInnerHTML={{ __html: highlightCode(content, language) }} />
