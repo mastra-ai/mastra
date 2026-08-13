@@ -1558,8 +1558,7 @@ describe('issues route', () => {
     });
     expect(addIssueLabels).toHaveBeenCalledWith(7, 'octo/hello', 12, ['status: auto-triaged']);
     expect(addIssueLabels).toHaveBeenCalledOnce();
-    expect(removeIssueLabel).toHaveBeenCalledWith(7, 'octo/hello', 12, 'status: needs triage');
-    expect(removeIssueLabel).toHaveBeenCalledOnce();
+    expect(removeIssueLabel).not.toHaveBeenCalled();
     expect(runIssueTriage).toHaveBeenCalledWith({
       repository: 'octo/hello',
       issueNumber: 12,

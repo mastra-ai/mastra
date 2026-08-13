@@ -472,14 +472,6 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
         await github.addIssueLabels(input.installationId, input.repository, input.issueNumber, [
           'status: auto-triaged',
         ]);
-        if (input.labels.includes('status: needs triage')) {
-          await github.removeIssueLabel(
-            input.installationId,
-            input.repository,
-            input.issueNumber,
-            'status: needs triage',
-          );
-        }
         return result;
       }
     : undefined;
