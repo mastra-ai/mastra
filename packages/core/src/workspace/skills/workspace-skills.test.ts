@@ -2684,6 +2684,45 @@ Premium instructions.
       expect(premiumResult.map(s => s.name).sort()).toEqual(['basic-skill', 'premium-skill']);
     });
 
+    it('should keep request-bound views isolated when contexts are interleaved', async () => {
+      const filesystem = createMockFilesystem({
+        'skills/basic/basic-skill/SKILL.md': BASIC_SKILL_MD,
+        'skills/premium/premium-skill/SKILL.md': PREMIUM_SKILL_MD,
+      });
+      const searchEngine = createMockSearchEngine();
+      const requestContext = (tier: string) => ({
+        get: (key: string) => (key === 'userTier' ? tier : undefined),
+      });
+
+      const skills = new WorkspaceSkillsImpl({
+        source: filesystem,
+        searchEngine,
+        skills: ctx => {
+          const tier = (ctx.requestContext as ReturnType<typeof requestContext>)?.get('userTier');
+          return tier === 'premium' ? ['skills/basic', 'skills/premium'] : ['skills/basic'];
+        },
+      });
+
+      // Resolve different path sets concurrently to exercise independent
+      // discovery and shared search-index writes.
+      const [premiumView, basicView] = await Promise.all([
+        skills.forContext({ requestContext: requestContext('premium') as never }),
+        skills.forContext({ requestContext: requestContext('basic') as never }),
+      ]);
+      expect(await premiumView.has('premium-skill')).toBe(true);
+      expect(await basicView.has('premium-skill')).toBe(false);
+
+      // A second request must not replace the first request's skill map or search view.
+      expect(await premiumView.has('premium-skill')).toBe(true);
+      expect(await basicView.search('Premium')).toEqual([]);
+      expect((await premiumView.search('Premium')).map(result => result.skillName)).toEqual(['premium-skill']);
+
+      // Equivalent path sets reuse the immutable view instead of repeating discovery.
+      await expect(skills.forContext({ requestContext: requestContext('premium') as never })).resolves.toBe(
+        premiumView,
+      );
+    });
+
     it('should detect when dynamic paths change and trigger refresh', async () => {
       const filesystem = createMockFilesystem({
         'skills/path-a/skill-a/SKILL.md': BASIC_SKILL_MD.replace('basic-skill', 'skill-a'),

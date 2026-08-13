@@ -144,6 +144,14 @@ class MergedWorkspaceSkills implements WorkspaceSkills {
     this.#secondary = secondary;
   }
 
+  async forContext(context: { requestContext?: RequestContext }): Promise<WorkspaceSkills> {
+    const [primary, secondary] = await Promise.all([
+      this.#primary.forContext ? this.#primary.forContext(context) : this.#primary,
+      this.#secondary.forContext ? this.#secondary.forContext(context) : this.#secondary,
+    ]);
+    return new MergedWorkspaceSkills(primary, secondary);
+  }
+
   async list() {
     const primaryList = await this.#primary.list();
     const secondaryList = await this.#secondary.list();

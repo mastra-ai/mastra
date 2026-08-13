@@ -237,7 +237,10 @@ export class SkillSearchProcessor implements Processor<'skill-search'> {
     const { tools, messageList } = args;
     const threadId = this.getThreadId(args);
     const threadState = this.getThreadState(threadId);
-    const skills = this.skills;
+    const rootSkills = this.skills;
+    const skills = rootSkills?.forContext
+      ? await rootSkills.forContext({ requestContext: args.requestContext })
+      : rootSkills;
 
     if (!skills) {
       return { tools };

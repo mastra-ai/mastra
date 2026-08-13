@@ -46,6 +46,17 @@ interface InternalSkill extends Skill {
   indexableContent: string;
 }
 
+interface SharedSkillIndexRegistry {
+  instances: Set<WorkspaceSkillsImpl>;
+}
+
+interface WorkspaceSkillsImplInternalConfig {
+  /** Namespace search document IDs so request-scoped views cannot remove each other's entries. */
+  indexNamespace?: string;
+  /** Registry shared by request-scoped views that use the same search engine. */
+  indexRegistry?: SharedSkillIndexRegistry;
+}
+
 // =============================================================================
 // WorkspaceSkillsImpl
 // =============================================================================
@@ -88,6 +99,12 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
   readonly #validateOnLoad: boolean;
   readonly #assertAvailable?: () => void;
   readonly #checkSkillFileMtime: boolean;
+  readonly #indexNamespace: string;
+  readonly #indexRegistry: SharedSkillIndexRegistry;
+
+  /** Immutable views keyed by the canonical path set returned for a request context. */
+  #contextViews: Map<string, Promise<WorkspaceSkillsImpl>> = new Map();
+  #nextContextViewId = 0;
 
   /** Map of skill name -> array of candidates (supports same-named skills from different sources) */
   #skills: Map<string, InternalSkill[]> = new Map();
@@ -113,18 +130,69 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
   static readonly GLOB_RESOLVE_INTERVAL = 5_000; // Re-walk glob dirs every 5s
   static readonly STALENESS_CHECK_COOLDOWN = 2_000; // Skip staleness check for 2s after discovery
 
-  constructor(config: WorkspaceSkillsImplConfig) {
+  constructor(config: WorkspaceSkillsImplConfig, internal: WorkspaceSkillsImplInternalConfig = {}) {
     this.#source = config.source;
     this.#skillsResolver = config.skills;
     this.#searchEngine = config.searchEngine;
     this.#validateOnLoad = config.validateOnLoad ?? true;
     this.#assertAvailable = config.assertAvailable;
     this.#checkSkillFileMtime = config.checkSkillFileMtime ?? false;
+    this.#indexNamespace = internal.indexNamespace ?? '';
+    this.#indexRegistry = internal.indexRegistry ?? { instances: new Set() };
+    this.#indexRegistry.instances.add(this);
   }
 
   // ===========================================================================
   // Discovery
   // ===========================================================================
+
+  /**
+   * Resolve an immutable skills view for a request context.
+   *
+   * Dynamic resolvers are evaluated once when selecting the view. Views are
+   * cached by canonical path set, so one request cannot replace another
+   * request's discovered skills while an agent turn is in progress.
+   */
+  async forContext(context: SkillsContext): Promise<WorkspaceSkills> {
+    if (Array.isArray(this.#skillsResolver)) {
+      return this;
+    }
+
+    const resolvedPaths = await this.#resolvePaths(context);
+    const canonicalPaths = [...resolvedPaths].sort();
+    const cacheKey = JSON.stringify(canonicalPaths);
+
+    let pendingView = this.#contextViews.get(cacheKey);
+    if (!pendingView) {
+      const viewId = ++this.#nextContextViewId;
+      pendingView = (async () => {
+        const view = new WorkspaceSkillsImpl(
+          {
+            source: this.#source,
+            skills: canonicalPaths,
+            searchEngine: this.#searchEngine,
+            validateOnLoad: this.#validateOnLoad,
+            assertAvailable: this.#assertAvailable,
+            checkSkillFileMtime: this.#checkSkillFileMtime,
+          },
+          {
+            indexNamespace: `${this.#indexNamespace || 'context'}-${viewId}`,
+            indexRegistry: this.#indexRegistry,
+          },
+        );
+        await view.maybeRefresh();
+        return view;
+      })();
+      this.#contextViews.set(cacheKey, pendingView);
+      pendingView.catch(() => {
+        if (this.#contextViews.get(cacheKey) === pendingView) {
+          this.#contextViews.delete(cacheKey);
+        }
+      });
+    }
+
+    return pendingView;
+  }
 
   async list(): Promise<SkillMetadata[]> {
     await this.#ensureInitialized();
@@ -439,9 +507,16 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
 
     // Ask the search engine for enough rows to survive post-search filtering and
     // canonical alias de-duplication before applying the final topK.
-    const totalIndexedDocuments = [...this.#skills.values()].reduce(
-      (count, candidates) =>
-        count + candidates.reduce((skillCount, skill) => skillCount + 1 + skill.references.length, 0),
+    // The search engine is shared by request-scoped views. Ask for enough rows
+    // to survive filtering documents that belong only to another view.
+    const totalIndexedDocuments = [...this.#indexRegistry.instances].reduce(
+      (total, instance) =>
+        total +
+        [...instance.#skills.values()].reduce(
+          (count, candidates) =>
+            count + candidates.reduce((skillCount, skill) => skillCount + 1 + skill.references.length, 0),
+          0,
+        ),
       0,
     );
     const expandedTopK = Math.max(skillNames ? topK * 3 : topK, totalIndexedDocuments);
@@ -1137,7 +1212,10 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
   async #removeSkillFromIndex(skill: InternalSkill): Promise<void> {
     if (!this.#searchEngine?.remove) return;
 
-    const ids = [`skill:${skill.path}:SKILL.md`, ...skill.references.map(r => `skill:${skill.path}:${r}`)];
+    const ids = [
+      this.#getSearchDocumentId(skill.path, 'SKILL.md'),
+      ...skill.references.map(r => this.#getSearchDocumentId(skill.path, r)),
+    ];
     for (const id of ids) {
       try {
         await this.#searchEngine.remove(id);
@@ -1167,7 +1245,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
 
     // Index the main skill instructions
     await this.#searchEngine.index({
-      id: `skill:${skill.path}:SKILL.md`,
+      id: this.#getSearchDocumentId(skill.path, 'SKILL.md'),
       content: skill.instructions,
       metadata: {
         skillPath: skill.path,
@@ -1183,7 +1261,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
           const rawContent = await this.#source.readFile(fullPath);
           const content = typeof rawContent === 'string' ? rawContent : rawContent.toString('utf-8');
           await this.#searchEngine!.index({
-            id: `skill:${skill.path}:${refPath}`,
+            id: this.#getSearchDocumentId(skill.path, refPath),
             content,
             metadata: {
               skillPath: skill.path,
@@ -1195,6 +1273,11 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
         }
       }),
     );
+  }
+
+  #getSearchDocumentId(skillPath: string, source: string): string {
+    const namespace = this.#indexNamespace ? `${this.#indexNamespace}:` : '';
+    return `skill:${namespace}${skillPath}:${source}`;
   }
 
   /**

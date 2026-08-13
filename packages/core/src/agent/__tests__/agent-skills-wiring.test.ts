@@ -343,6 +343,56 @@ describe('Agent-level skills wiring', () => {
 
       expect(resolver).toHaveBeenCalledTimes(2);
     });
+
+    it('uses request-bound workspace skill views for programmatic access', async () => {
+      const premiumSkill: Skill = {
+        name: 'premium-skill',
+        description: 'Only available to premium requests.',
+        instructions: 'Use premium instructions.',
+        path: '/skills/premium-skill',
+        source: { type: 'local', projectPath: '/skills/premium-skill' },
+        references: [],
+        scripts: [],
+        assets: [],
+      };
+      const basicView = createMockWorkspaceSkills();
+      const premiumView = createMockWorkspaceSkills();
+      premiumView.get = vi
+        .fn()
+        .mockImplementation((name: string) => Promise.resolve(name === premiumSkill.name ? premiumSkill : null));
+      premiumView.list = vi.fn().mockResolvedValue([
+        mockWorkspaceSkillMeta,
+        {
+          name: premiumSkill.name,
+          path: premiumSkill.path,
+          description: premiumSkill.description,
+        },
+      ]);
+
+      const rootSkills = createMockWorkspaceSkills();
+      rootSkills.forContext = vi.fn(async ({ requestContext }) =>
+        requestContext?.get('userTier') === 'premium' ? premiumView : basicView,
+      );
+
+      const agent = new Agent({
+        id: 'dynamic-workspace-skills',
+        instructions: 'You have request-scoped workspace skills.',
+        model: mockModel,
+        workspace: {
+          skills: rootSkills,
+          getToolsConfig: () => undefined,
+          filesystem: undefined,
+          sandbox: undefined,
+        } as unknown as Workspace,
+      });
+      const premiumContext = new RequestContext([['userTier', 'premium']]);
+      const basicContext = new RequestContext([['userTier', 'basic']]);
+
+      await expect(agent.getSkill('premium-skill', { requestContext: premiumContext })).resolves.toBe(premiumSkill);
+      await expect(agent.getSkill('premium-skill', { requestContext: basicContext })).resolves.toBeNull();
+      await expect(agent.getSkill('premium-skill', { requestContext: premiumContext })).resolves.toBe(premiumSkill);
+      expect(rootSkills.forContext).toHaveBeenCalledTimes(3);
+    });
   });
 
   describe('tracing context for dynamic resolvers', () => {

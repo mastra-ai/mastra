@@ -1330,7 +1330,10 @@ export class Agent<
 
     // Resolve workspace-level skills (if configured)
     const workspace = workspaceOverride ?? (await this.getWorkspace({ requestContext: rc }));
-    const workspaceSkills = workspace?.skills;
+    const workspaceSkillsRoot = workspace?.skills;
+    const workspaceSkills = workspaceSkillsRoot?.forContext
+      ? await workspaceSkillsRoot.forContext({ requestContext: rc })
+      : workspaceSkillsRoot;
 
     // Merge if both exist (agent skills win on name conflicts)
     if (agentSkills && workspaceSkills) {

@@ -232,6 +232,16 @@ export interface WorkspaceSkills {
   // ===========================================================================
 
   /**
+   * Resolve a request-bound view when skills paths depend on request context.
+   *
+   * The returned view remains stable for the duration of the request even if
+   * another request resolves a different path set. Implementations with only
+   * static skills may return themselves. Optional for custom implementations;
+   * callers fall back to maybeRefresh when it is not provided.
+   */
+  forContext?(context: SkillsContext): Promise<WorkspaceSkills>;
+
+  /**
    * List discovered skills as canonical metadata entries.
    *
    * Alias paths that resolve to the same underlying skill are de-duplicated.
