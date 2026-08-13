@@ -176,6 +176,181 @@ describe('factory_transition_work_item', () => {
     });
   });
 
+  it('fires a fire-and-forget reflection on the session thread after an accepted transition', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const prepared = await prepareBoundItem(storage);
+    const transition = vi.fn(async () => ({
+      status: 'accepted' as const,
+      transitionId: 'transition-1',
+      itemId: prepared.item.id,
+      revision: 2,
+      stage: 'planning' as const,
+      decisions: [],
+    }));
+    const context = requestContext();
+    const tools = await createFactoryTransitionTools({
+      requestContext: context,
+      storage,
+      transitionService: { transition },
+    });
+
+    const reflect = vi.fn(async () => ({ reflected: true }));
+    const memory = { omEngine: Promise.resolve({ reflect }) };
+
+    const result = await (tools.factory_transition_work_item as ExecutableTool).execute(
+      { stage: 'planning', expectedRevision: 1, rationale: 'Done planning.' },
+      {
+        requestContext: context,
+        memory,
+        agent: { toolCallId: 'tool-call-1', threadId: 'thread-1', resourceId: 'resource-1' },
+      },
+    );
+
+    expect(result).toMatchObject({ status: 'accepted' });
+    await vi.waitFor(() => expect(reflect).toHaveBeenCalledTimes(1));
+    expect(reflect).toHaveBeenCalledWith('thread-1', 'resource-1', undefined, context);
+  });
+
+  it('contains reflect failures so the transition still returns the accepted result', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const prepared = await prepareBoundItem(storage);
+    const transition = vi.fn(async () => ({
+      status: 'accepted' as const,
+      transitionId: 'transition-1',
+      itemId: prepared.item.id,
+      revision: 2,
+      stage: 'planning' as const,
+      decisions: [],
+    }));
+    const context = requestContext();
+    const tools = await createFactoryTransitionTools({
+      requestContext: context,
+      storage,
+      transitionService: { transition },
+    });
+
+    const reflect = vi.fn(async () => {
+      throw new Error('reflector exploded');
+    });
+    const memory = { omEngine: Promise.resolve({ reflect }) };
+
+    const result = await (tools.factory_transition_work_item as ExecutableTool).execute(
+      { stage: 'planning', expectedRevision: 1, rationale: 'Done planning.' },
+      {
+        requestContext: context,
+        memory,
+        agent: { toolCallId: 'tool-call-1', threadId: 'thread-1', resourceId: 'resource-1' },
+      },
+    );
+
+    expect(result).toMatchObject({ status: 'accepted' });
+    await vi.waitFor(() => expect(reflect).toHaveBeenCalledTimes(1));
+  });
+
+  it('works without memory on the execution context', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const prepared = await prepareBoundItem(storage);
+    const transition = vi.fn(async () => ({
+      status: 'accepted' as const,
+      transitionId: 'transition-1',
+      itemId: prepared.item.id,
+      revision: 2,
+      stage: 'planning' as const,
+      decisions: [],
+    }));
+    const context = requestContext();
+    const tools = await createFactoryTransitionTools({
+      requestContext: context,
+      storage,
+      transitionService: { transition },
+    });
+
+    const result = await execute(tools.factory_transition_work_item as ExecutableTool, context, {
+      stage: 'planning',
+      expectedRevision: 1,
+      rationale: 'Done planning.',
+    });
+
+    expect(result).toMatchObject({ status: 'accepted' });
+  });
+
+  it('does not reflect when the transition result is not accepted', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const prepared = await prepareBoundItem(storage);
+    const transition = vi.fn(async () => ({
+      status: 'rejected' as const,
+      reason: 'invalid_transition' as const,
+      itemId: prepared.item.id,
+      message: 'no',
+    }));
+    const context = requestContext();
+    const tools = await createFactoryTransitionTools({
+      requestContext: context,
+      storage,
+      transitionService: { transition: transition as never },
+    });
+
+    const reflect = vi.fn(async () => ({ reflected: true }));
+    const memory = { omEngine: Promise.resolve({ reflect }) };
+
+    const result = await (tools.factory_transition_work_item as ExecutableTool).execute(
+      { stage: 'planning', expectedRevision: 1, rationale: 'Done planning.' },
+      {
+        requestContext: context,
+        memory,
+        agent: { toolCallId: 'tool-call-1', threadId: 'thread-1', resourceId: 'resource-1' },
+      },
+    );
+
+    expect(result).toMatchObject({ status: 'rejected' });
+    // Give any stray fire-and-forget a beat to fire before asserting it never did.
+    await new Promise(resolve => setTimeout(resolve, 20));
+    expect(reflect).not.toHaveBeenCalled();
+  });
+
+  it('returns the transition result without awaiting the reflect promise', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const prepared = await prepareBoundItem(storage);
+    const transition = vi.fn(async () => ({
+      status: 'accepted' as const,
+      transitionId: 'transition-1',
+      itemId: prepared.item.id,
+      revision: 2,
+      stage: 'planning' as const,
+      decisions: [],
+    }));
+    const context = requestContext();
+    const tools = await createFactoryTransitionTools({
+      requestContext: context,
+      storage,
+      transitionService: { transition },
+    });
+
+    let releaseReflect!: () => void;
+    const held = new Promise<{ reflected: boolean }>(resolve => {
+      releaseReflect = () => resolve({ reflected: true });
+    });
+    const reflect = vi.fn(() => held);
+    const memory = { omEngine: Promise.resolve({ reflect }) };
+
+    try {
+      const result = await (tools.factory_transition_work_item as ExecutableTool).execute(
+        { stage: 'planning', expectedRevision: 1, rationale: 'Done planning.' },
+        {
+          requestContext: context,
+          memory,
+          agent: { toolCallId: 'tool-call-1', threadId: 'thread-1', resourceId: 'resource-1' },
+        },
+      );
+
+      // The transition resolved while reflect is still pending — non-blocking proven.
+      expect(result).toMatchObject({ status: 'accepted' });
+      await vi.waitFor(() => expect(reflect).toHaveBeenCalledTimes(1));
+    } finally {
+      releaseReflect();
+    }
+  });
+
   it('rechecks authority at execution and rejects revoked or replaced bindings', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const prepared = await prepareBoundItem(storage);

@@ -72,7 +72,7 @@ export async function createFactoryTransitionTools(options: {
         const item = await options.storage.get({ orgId: binding.orgId, id: binding.workItemId });
         if (!item) throw new Error('Bound Factory work item not found.');
 
-        return options.transitionService.transition({
+        const result = await options.transitionService.transition({
           orgId: binding.orgId,
           factoryProjectId: binding.factoryProjectId,
           workItemId: binding.workItemId,
@@ -83,6 +83,44 @@ export async function createFactoryTransitionTools(options: {
           ingress: { type: 'agent', identity: `${binding.id}:${toolCallId}` },
           cause: rationale,
         });
+
+        // A phase boundary is the natural moment to compress what the session
+        // observed: fire a reflection+curation cycle on the session's thread.
+        // Fire-and-forget with contained errors — a reflect failure must never
+        // fail or delay the transition. Empty phases no-op inside om.reflect.
+        const memory = (execution as { memory?: { omEngine?: Promise<unknown> } }).memory;
+        if (memory && result.status === 'accepted') {
+          void (async () => {
+            try {
+              const om = (await memory.omEngine) as {
+                reflect?: (
+                  threadId: string,
+                  resourceId?: string,
+                  prompt?: string,
+                  requestContext?: RequestContext,
+                ) => Promise<{ reflected: boolean }>;
+              } | null;
+              if (!om?.reflect) return;
+              const threadId = execution.agent?.threadId;
+              const resourceId = execution.agent?.resourceId;
+              if (!threadId) return;
+              const outcome = await om.reflect(threadId, resourceId, undefined, execution.requestContext);
+              // Three outcomes matter for observability: reflected, skipped
+              // (a reflection already in flight holds the lock), or no active
+              // observations. om.reflect logs skip/stale internally; record
+              // the boolean here so factory logs distinguish fired vs not.
+              console.debug(
+                `[factory:transition-reflect] thread=${threadId} stage=${stage} reflected=${outcome?.reflected === true}`,
+              );
+            } catch (error) {
+              console.debug(
+                `[factory:transition-reflect] thread=${execution.agent?.threadId ?? 'unknown'} stage=${stage} failed: ${error instanceof Error ? error.message : String(error)}`,
+              );
+            }
+          })();
+        }
+
+        return result;
       },
     }),
   };
