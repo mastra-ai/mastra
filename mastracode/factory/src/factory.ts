@@ -750,6 +750,11 @@ export class MastraFactory {
                 transitionService: runtimeTransitionService,
                 storage: storage.getDomain<WorkItemsStorage>('work-items'),
                 maxInFlight: this.#config.dispatcher?.maxInFlight,
+                isAutoRunEnabled: async ({ orgId, factoryProjectId }) => {
+                  await factoryProjectsStorage.ensureReady();
+                  const project = await factoryProjectsStorage.get({ orgId, id: factoryProjectId });
+                  return project?.autoRunEnabled ?? false;
+                },
                 reconcileToolResults: () => factoryProcessor?.reconcileAllBoundThreads() ?? Promise.resolve(),
                 prepareBinding,
                 primeCredentials: tenant => primeTenantCredentials({ tenant, credentials: modelCredentialsStorage }),

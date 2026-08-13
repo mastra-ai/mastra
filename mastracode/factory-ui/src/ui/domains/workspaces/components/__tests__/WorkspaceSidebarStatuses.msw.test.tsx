@@ -215,6 +215,10 @@ function renderSection() {
         value={{
           resourceId,
           sessionEnabled: true,
+          resourceReady: true,
+          sandboxReady: true,
+          sandboxPreparing: false,
+          sandboxProgress: undefined,
           resourceEnabled: true,
           factorySessionState: { factoryProjectId, projectRepositoryId },
           baseUrl: TEST_BASE_URL,

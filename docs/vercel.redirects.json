@@ -27,7 +27,7 @@
     },
     {
       "source": "/docs/observability/tracing/exporters/cloud",
-      "destination": "/docs/observability/integrations/exporters/mastra-platform",
+      "destination": "/docs/mastra-platform/observability",
       "permanent": true
     },
     {
@@ -1988,6 +1988,21 @@
     {
       "source": "/guides/guide/github-actions-pr-description",
       "destination": "https://mastra.ai/blog/automating-multi-language-pr-descriptions-in-github-actions",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/integrations/processors/sensitive-data-filter",
+      "destination": "/reference/observability/tracing/processors/sensitive-data-filter",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/integrations/exporters/mastra-platform",
+      "destination": "/docs/mastra-platform/observability",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/integrations/overview",
+      "destination": "/integrations",
       "permanent": true
     },
     {

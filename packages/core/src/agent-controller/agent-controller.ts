@@ -300,7 +300,11 @@ export class AgentController<TState = {}> {
     }
   }
 
-  /** Subscribe to process-local notifications after live sessions are torn down. */
+  /**
+   * Subscribe to process-local notifications after live sessions are torn
+   * down. Fires even when teardown cleanup fails — the session is
+   * deregistered either way.
+   */
   onSessionDeleted(listener: AgentControllerSessionDeletedListener<TState>): () => void {
     this.#sessionDeletedListeners.push(listener);
     return () => {
@@ -745,9 +749,11 @@ export class AgentController<TState = {}> {
       try {
         await session.thread.clearAndReleaseLock();
       } finally {
+        // Notify inside the finally: even when lock release fails the session
+        // is deregistered for good, and listeners mirror the registry.
         await this.#dropSessionFromRegistry(registryKey, session);
+        this.#notifySessionDeleted(session);
       }
-      this.#notifySessionDeleted(session);
     })();
     // Waiters only need to know when teardown finished, not why it failed.
     // Without this, a clearAndReleaseLock rejection would propagate to every

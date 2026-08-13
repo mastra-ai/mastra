@@ -41,6 +41,9 @@ export const queryKeys = {
     ['factory', 'metrics', githubProjectId ?? null, from, to] as const,
   factoryHealthThresholds: (githubProjectId: string | undefined) =>
     ['factory', 'health-thresholds', githubProjectId ?? null] as const,
+  /** Every decision list for a project, whatever status filter it was fetched with. */
+  factoryDecisionsRoot: (githubProjectId: string | undefined) =>
+    ['factory', 'decisions', githubProjectId ?? null] as const,
   factoryDecisions: (githubProjectId: string | undefined, statusKey: string) =>
     ['factory', 'decisions', githubProjectId ?? null, statusKey] as const,
   factoryAudit: (githubProjectId: string | undefined, group: string, actorKey?: string) =>
@@ -60,6 +63,7 @@ export const queryKeys = {
   modelPacksAll: () => ['model-packs'] as const,
   om: (resourceId: string | undefined) => ['om', resourceId ?? null] as const,
   thinkingConfig: () => ['thinking-config'] as const,
+  factorySkills: () => ['factory', 'skills'] as const,
   fsList: (path: string | undefined) => ['fs-list', path ?? null] as const,
   artifactsList: (path: string | undefined) => ['artifacts-list', path ?? null] as const,
   workspaceRenderedList: (workspacePath: string | undefined, renderedRoot: string | undefined) =>
