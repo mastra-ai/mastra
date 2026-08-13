@@ -216,6 +216,7 @@ describe('getDynamicMemory', () => {
       maxScope: 'resource',
       pins: { capturePinning: true },
       curationCadence: 3,
+      maxSteps: 25,
     });
   });
 
