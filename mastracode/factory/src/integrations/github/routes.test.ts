@@ -1530,8 +1530,6 @@ describe('issues route', () => {
     expect(res.status).toBe(502);
     expect(await res.json()).toMatchObject({ error: 'github_fetch_failed', message: 'GitHub unavailable' });
   });
-
-
 });
 
 describe('prs route', () => {

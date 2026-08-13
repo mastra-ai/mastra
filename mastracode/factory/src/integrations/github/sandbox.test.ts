@@ -348,6 +348,82 @@ describe('materializeRepo', () => {
     expect(err.code).toBe('egress-blocked');
   });
 
+  it('surfaces the clone failure when the token scrub throws on a missing workdir', async () => {
+    const sandbox = new FakeSandbox(script => {
+      if (script === 'git --version') return OK;
+      if (script.includes('git clone')) {
+        return { exitCode: 128, stdout: '', stderr: 'fatal: unable to access: Could not resolve host: github.com' };
+      }
+      if (script.startsWith('test -d')) return { exitCode: 1, stdout: '', stderr: '' };
+      if (script.includes('remote set-url origin')) {
+        throw new Error('Command failed with ENOENT: The "cwd" option is invalid');
+      }
+      return OK;
+    });
+    const err = await materializeRepo(makeRow(), makeRepoInfo(), sandbox, 'tok').catch(e => e);
+    expect(err).toBeInstanceOf(MaterializeError);
+    expect(err.code).toBe('egress-blocked');
+    expect(err.message).not.toContain('additionally');
+  });
+
+  it('reports a failed scrub when the failed clone left the checkout behind', async () => {
+    const sandbox = new FakeSandbox(script => {
+      if (script === 'git --version') return OK;
+      if (script.includes('git clone')) {
+        return { exitCode: 128, stdout: '', stderr: 'warning: Clone succeeded, but checkout failed.' };
+      }
+      if (script.startsWith('test -d')) return OK;
+      if (script.includes('remote set-url origin')) {
+        return { exitCode: 255, stdout: '', stderr: 'error: could not lock config file .git/config' };
+      }
+      return OK;
+    });
+    const err = await materializeRepo(makeRow(), makeRepoInfo(), sandbox, 'tok-secret').catch(e => e);
+    expect(err).toBeInstanceOf(MaterializeError);
+    expect(err.code).toBe('clone-failed');
+    expect(err.message).toMatch(/checkout failed.*Failed to scrub installation token/s);
+  });
+
+  it('surfaces a failed scrub over the pull failure once the token reached the remote', async () => {
+    const sandbox = new FakeSandbox(script => {
+      if (script.includes('remote get-url origin')) {
+        return { exitCode: 0, stdout: 'https://github.com/octocat/hello.git\n', stderr: '' };
+      }
+      if (script.includes('pull --ff-only')) {
+        return { exitCode: 128, stdout: '', stderr: 'fatal: unable to access: Could not resolve host: github.com' };
+      }
+      // The scrub resets to the tokenless URL; only the auth set-url carries the token.
+      if (script.includes('remote set-url origin') && !script.includes('x-access-token')) {
+        return { exitCode: 255, stdout: '', stderr: 'error: could not lock config file .git/config' };
+      }
+      return OK;
+    });
+    const err = await materializeRepo(makeRow(), makeRepoInfo(), sandbox, 'tok-secret').catch(e => e);
+    expect(err).toBeInstanceOf(MaterializeError);
+    expect(err.code).toBe('egress-blocked');
+    expect(err.message).toContain('Failed to scrub installation token');
+  });
+
+  it('surfaces a throwing scrub as a token error once the token reached the remote', async () => {
+    const sandbox = new FakeSandbox(script => {
+      if (script.includes('remote get-url origin')) {
+        return { exitCode: 0, stdout: 'https://github.com/octocat/hello.git\n', stderr: '' };
+      }
+      if (script.includes('pull --ff-only')) {
+        return { exitCode: 128, stdout: '', stderr: 'fatal: unable to access: Could not resolve host: github.com' };
+      }
+      if (script.includes('remote set-url origin') && !script.includes('x-access-token')) {
+        throw new Error('sandbox connection lost');
+      }
+      return OK;
+    });
+    const err = await materializeRepo(makeRow(), makeRepoInfo(), sandbox, 'tok-secret').catch(e => e);
+    expect(err).toBeInstanceOf(MaterializeError);
+    expect(err.code).toBe('egress-blocked');
+    expect(err.message).toContain('Failed to scrub installation token');
+    expect(err.message).toContain('sandbox connection lost');
+  });
+
   it('refuses to run git when the default branch is not git-ref-safe', async () => {
     const sandbox = new FakeSandbox();
     const err = await materializeRepo(
@@ -584,10 +660,11 @@ describe('materializeRepo', () => {
     expect(dbUpdates.some(u => 'materializedAt' in u)).toBe(false);
   });
 
-  it('surfaces the pull failure (not the scrub failure) when both fail', async () => {
-    // Regression: the scrub in the `finally` used to throw over the in-flight
-    // clone/pull error, hiding the actionable failure (e.g. "cannot change to
-    // <workdir>") behind "Failed to scrub installation token".
+  it('reports the pull failure first and the scrub failure alongside when both fail', async () => {
+    // Regression: the scrub used to throw over the in-flight clone/pull
+    // error, hiding the actionable failure behind "Failed to scrub
+    // installation token". The pull failure keeps the lead — but the token
+    // reached the remote, so the failed scrub is reported too, not swallowed.
     const sandbox = new FakeSandbox(script => {
       if (script === 'git --version') return OK;
       if (script.includes('remote get-url origin')) {
@@ -606,8 +683,8 @@ describe('materializeRepo', () => {
       e => e,
     );
     expect(err).toBeInstanceOf(MaterializeError);
-    expect(String(err.message)).toContain('not a fast-forward');
-    expect(String(err.message)).not.toContain('scrub');
+    expect(err.code).toBe('pull-failed');
+    expect(String(err.message)).toMatch(/not a fast-forward.*Failed to scrub installation token/s);
   });
 
   it('surfaces a scrub failure on the success path when the remote reset fails', async () => {

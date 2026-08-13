@@ -1,5 +1,22 @@
 # @mastra/memory
 
+## 1.26.2-alpha.1
+
+### Patch Changes
+
+- Corrected the `observation.blockAfter` and `reflection.blockAfter` configuration documentation shown in editors. Crossing `observation.blockAfter` lets buffered activation overshoot the retention target; it does not force a blocking observation. The documented value ranges now match the runtime: values from 1 up to (but not including) 100 multiply the base threshold, and values of 100 or more are absolute token counts that must be greater than the base threshold. ([#21215](https://github.com/mastra-ai/mastra/pull/21215))
+
+- Added continuation support to the Observational Memory `recall` tool. When a single message part is larger than the result budget, the result now includes `nextCharOffset` and a note explaining how to fetch the next chunk, so oversized parts can be read across multiple calls instead of returning the same truncated prefix every time. ([#19821](https://github.com/mastra-ai/mastra/pull/19821))
+
+  ```json
+  { "mode": "messages", "cursor": "<message-id>", "partIndex": 0, "detail": "high", "charOffset": 8000 }
+  ```
+
+  Fixes [#19817](https://github.com/mastra-ai/mastra/issues/19817).
+
+- Updated dependencies [[`898bba4`](https://github.com/mastra-ai/mastra/commit/898bba46d4806dd255a44e5dc3a3d5827eaefdfe), [`f9aab1c`](https://github.com/mastra-ai/mastra/commit/f9aab1cfc3fda03238a7fd7bd8b794e07497878c), [`e31421b`](https://github.com/mastra-ai/mastra/commit/e31421bc9c11c03c6e74f447ecb5820000e2b9d7), [`aece0e7`](https://github.com/mastra-ai/mastra/commit/aece0e7cb124ae1eb1230689b887f5554b9a0bf0)]:
+  - @mastra/core@1.59.0-alpha.2
+
 ## 1.26.2-alpha.0
 
 ### Patch Changes
