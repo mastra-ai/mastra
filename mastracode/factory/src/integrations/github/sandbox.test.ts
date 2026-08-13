@@ -354,6 +354,7 @@ describe('materializeRepo', () => {
       if (script.includes('git clone')) {
         return { exitCode: 128, stdout: '', stderr: 'fatal: unable to access: Could not resolve host: github.com' };
       }
+      if (script.startsWith('test -d')) return { exitCode: 1, stdout: '', stderr: '' };
       if (script.includes('remote set-url origin')) {
         throw new Error('Command failed with ENOENT: The "cwd" option is invalid');
       }
@@ -362,6 +363,25 @@ describe('materializeRepo', () => {
     const err = await materializeRepo(makeRow(), makeRepoInfo(), sandbox, 'tok').catch(e => e);
     expect(err).toBeInstanceOf(MaterializeError);
     expect(err.code).toBe('egress-blocked');
+    expect(err.message).not.toContain('additionally');
+  });
+
+  it('reports a failed scrub when the failed clone left the checkout behind', async () => {
+    const sandbox = new FakeSandbox(script => {
+      if (script === 'git --version') return OK;
+      if (script.includes('git clone')) {
+        return { exitCode: 128, stdout: '', stderr: 'warning: Clone succeeded, but checkout failed.' };
+      }
+      if (script.startsWith('test -d')) return OK;
+      if (script.includes('remote set-url origin')) {
+        return { exitCode: 255, stdout: '', stderr: 'error: could not lock config file .git/config' };
+      }
+      return OK;
+    });
+    const err = await materializeRepo(makeRow(), makeRepoInfo(), sandbox, 'tok-secret').catch(e => e);
+    expect(err).toBeInstanceOf(MaterializeError);
+    expect(err.code).toBe('clone-failed');
+    expect(err.message).toMatch(/checkout failed.*Failed to scrub installation token/s);
   });
 
   it('surfaces a failed scrub over the pull failure once the token reached the remote', async () => {

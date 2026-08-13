@@ -360,6 +360,10 @@ async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<voi
         },
       );
       if (clone.exitCode !== 0) {
+        // git can fail after creating the checkout ("Clone succeeded, but
+        // checkout failed") with the tokenized origin persisted — probe the
+        // disk instead of assuming the failed clone left nothing behind.
+        tokenInRemote = await hasGitDir(sandbox, workdir);
         throw classifyGitFailure(clone, 'clone-failed');
       }
       tokenInRemote = true;
@@ -551,6 +555,12 @@ async function hasExistingCheckout(
   const url = result.stdout.trim().toLowerCase();
   const suffix = `github.com/${repoFullName.toLowerCase()}`;
   return url.endsWith(`${suffix}.git`) || url.endsWith(suffix);
+}
+
+/** Probed without `git -C` so a missing workdir returns false instead of throwing. */
+async function hasGitDir(sandbox: MaterializationSandbox, workdir: string): Promise<boolean> {
+  const probe = await sh(sandbox, `test -d ${shellQuote(`${workdir}/.git`)}`).catch(() => null);
+  return probe?.exitCode === 0;
 }
 
 /**
