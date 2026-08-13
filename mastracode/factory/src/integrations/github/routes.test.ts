@@ -1673,6 +1673,7 @@ describe('Factory session routes', () => {
       branch: 'feat/x',
       baseBranch: 'main',
       title: null,
+      visibility: 'org',
       sandboxId: null,
       sandboxWorkdir: null,
     });

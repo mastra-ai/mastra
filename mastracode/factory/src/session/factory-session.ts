@@ -185,6 +185,7 @@ export async function ensureFactorySourceSession(
     userId,
     branch,
     baseBranch: resolved.baseBranch,
+    visibility: 'org',
   });
   return {
     sessionId: session.sessionId,

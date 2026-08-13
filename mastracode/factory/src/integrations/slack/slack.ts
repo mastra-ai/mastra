@@ -348,6 +348,8 @@ export function createChannelResourceIdResolver(deps: SlackChannelDeps): Resolve
         userId: link.userId,
         branch,
         baseBranch: repo.baseBranch,
+        // DMs are the only private origin; channel threads are org-visible.
+        visibility: thread.isDM ? 'private' : 'org',
       });
       return session.sessionId;
     } catch (error) {
