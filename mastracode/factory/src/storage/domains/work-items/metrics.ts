@@ -2,16 +2,16 @@
  * Aggregation math for the Factory Overview page.
  *
  * Pure functions over `work_items` rows — throughput, lead time, in-flight
- * count, demand mix and per-stage automation, all read from the server-appended
- * `stageHistory` log. Keeping this DB-free makes the math unit testable and lets
- * the route stay a thin shell.
+ * count, demand mix and per-stage agent coverage, all read from the
+ * server-appended `stageHistory` log. Keeping this DB-free makes the math unit
+ * testable and lets the route stay a thin shell.
  *
  * Everything windowed is counted as an event that happened inside the window,
  * never as "the state the board happens to be in now", so re-querying a past
  * window always returns the same numbers.
  */
 
-import { isAutomationActor } from './base.js';
+import { isAgentActor } from './base.js';
 import type { WorkItemRow } from './base.js';
 
 /** Default window span (days) when the request omits or malforms the range. */
@@ -34,6 +34,31 @@ const CANCELED_STAGE = 'canceled';
  */
 const TERMINAL_STAGES = new Set([DONE_STAGE, CANCELED_STAGE]);
 
+const INTAKE_STAGE = 'intake';
+
+/**
+ * Pipeline work excludes the inbox as well as the terminal stages: an intake
+ * card is queued, not in flight, and its pass through is the poller filing it.
+ */
+function isPipelineStage(stage: string): boolean {
+  return !TERMINAL_STAGES.has(stage) && stage !== INTAKE_STAGE;
+}
+
+/**
+ * Cards the Factory ran: starting a run records its session on the row. The
+ * integrations sync every issue and PR of a connected repo into the board and
+ * those outnumber the Factory's own work by an order of magnitude, so counting
+ * them reports the upstream repo's flow as the Factory's.
+ */
+function hasFactoryRun(item: WorkItemRow): boolean {
+  return Object.keys(item.sessions).length > 0;
+}
+
+/**
+ * Flow metrics over the cards the Factory ran ({@link hasFactoryRun}) — synced
+ * upstream issues and PRs nobody started a run on are not the Factory's work
+ * and are excluded from every field below.
+ */
 export interface FactoryMetrics {
   /**
    * Days the series covers: the requested window clipped to the board's life.
@@ -45,32 +70,33 @@ export interface FactoryMetrics {
   throughput: { date: string; count: number }[];
   /** Card creation → `done` for every completion that landed in the window. */
   leadTime: { medianMs: number | null; p90Ms: number | null; samples: number };
-  /** Distinct in-flight cards (at least one non-terminal stage). */
+  /** Distinct cards in a pipeline stage — past intake, not yet terminal. */
   wipTotal: number;
   /** Cards created in the window, by source. */
   sourceMix: { source: string; count: number }[];
-  /** Stage moves in the window, card creation excluded: human-performed vs total. */
-  transitions: { human: number; total: number };
-  /** Per-stage automation over first visits that ended in the window. */
-  stageAutomation: {
+  /** Per-stage agent coverage over first visits that ended in the window. */
+  agentCoverage: {
     stage: string;
     /**
      * First visits to this stage that ended in the window. Repeat visits are
      * excluded from both sides: they are rework, already reported as such, and
-     * counting them in the denominator alone caps a fully automated stage below
+     * counting them in the denominator alone caps a fully agent-run stage below
      * 100%.
      */
-    exits: number;
+    passes: number;
     /**
-     * Of those: passes entered *and* exited by an automation actor. Missing
-     * `exitedBy` (entries written before exit stamping) counts as human.
+     * Of those: passes an agent finished (`exitedBy` is an agent actor). The
+     * entry actor is not required — the rules engine is what queues a card into
+     * a stage, so demanding both ends would report 0% for stages agents run
+     * end to end. Missing `exitedBy` (entries written before exit stamping)
+     * does not count.
      */
-    automated: number;
+    byAgent: number;
     /**
-     * Outcomes of the automated passes' items as of the window's end, mutually
-     * exclusive, first match wins: `reworked` (a later visit to the same stage
-     * — deliberately outranks `done`: a pass that needed a redo is an
-     * automation failure even if the item eventually merged), then `done`, then
+     * Outcomes of the agent-finished passes' items as of the window's end,
+     * mutually exclusive, first match wins: `reworked` (a later visit to the
+     * same stage — deliberately outranks `done`: a pass that needed a redo is a
+     * failed pass even if the item eventually merged), then `done`, then
      * `canceled`, then `inFlight`.
      */
     outcomes: { done: number; canceled: number; reworked: number; inFlight: number };
@@ -161,95 +187,88 @@ function stagesHeldAt(item: WorkItemRow, time: number): Set<string> {
   return held;
 }
 
-export function computeFactoryMetrics(
-  items: WorkItemRow[],
-  opts: { windowStart: number; windowEnd: number },
-): FactoryMetrics {
-  const { windowStart, windowEnd } = opts;
-  assertParsableHistory(items);
+type Window = { windowStart: number; windowEnd: number };
 
-  // ── Throughput + lead time (completions in window) ────────────────────────
+/**
+ * Completions per UTC day, plus one lead-time sample each. A completion is an
+ * entry *into* `done`, not the state of the card now: a card reopened today
+ * must not erase the day it shipped, and a card that shipped twice shipped
+ * twice. Days before the oldest card are left out rather than gap-filled with
+ * zeroes that would drag the daily average down.
+ */
+function completions(items: WorkItemRow[], { windowStart, windowEnd }: Window) {
   let earliestItem = Infinity;
   for (const item of items) earliestItem = Math.min(earliestItem, item.createdAt.getTime());
   const boardStart = Number.isFinite(earliestItem) ? utcDayStart(earliestItem) : -Infinity;
-  const firstDay = Math.max(utcDayStart(windowStart), boardStart);
 
-  const throughputByDay = new Map<string, number>();
-  for (let day = firstDay; day < windowEnd; day += DAY_MS) {
-    throughputByDay.set(utcDay(day), 0);
+  const byDay = new Map<string, number>();
+  for (let day = Math.max(utcDayStart(windowStart), boardStart); day < windowEnd; day += DAY_MS) {
+    byDay.set(utcDay(day), 0);
   }
-  // A completion is an entry *into* `done`, not the state of the card now: a
-  // card reopened today must not erase the day it shipped, and a card that
-  // shipped twice shipped twice.
+
   const leadSamples: number[] = [];
   for (const item of items) {
     for (const entry of item.stageHistory) {
       if (entry.stage !== DONE_STAGE) continue;
       const doneAt = parseTime(entry.enteredAt);
       if (doneAt < windowStart || doneAt >= windowEnd) continue;
-      const day = utcDay(doneAt);
-      throughputByDay.set(day, (throughputByDay.get(day) ?? 0) + 1);
+      byDay.set(utcDay(doneAt), (byDay.get(utcDay(doneAt)) ?? 0) + 1);
       leadSamples.push(Math.max(0, doneAt - item.createdAt.getTime()));
     }
   }
+  return { byDay, leadSamples };
+}
 
-  // ── Current in-flight count (window-independent) ──────────────────────────
-  let wipTotal = 0;
-  for (const item of items) {
-    if (item.stages.some(stage => !TERMINAL_STAGES.has(stage))) wipTotal += 1;
-  }
+/** Cards holding at least one pipeline stage right now — window-independent. */
+function countInFlight(items: WorkItemRow[]): number {
+  return items.filter(item => item.stages.some(isPipelineStage)).length;
+}
 
-  // ── Demand mix + transitions (window) ─────────────────────────────────────
-  const sourceCounts = new Map<string, number>();
-  let transitionsTotal = 0;
-  let transitionsHuman = 0;
+/** Where the window's cards came from, most common first. */
+function demandMix(items: WorkItemRow[], { windowStart, windowEnd }: Window): FactoryMetrics['sourceMix'] {
+  const counts = new Map<string, number>();
   for (const item of items) {
     const created = item.createdAt.getTime();
-    if (created >= windowStart && created < windowEnd) {
-      const source = item.externalSource
-        ? `${item.externalSource.integrationId}:${item.externalSource.type}`
-        : 'manual';
-      sourceCounts.set(source, (sourceCounts.get(source) ?? 0) + 1);
-    }
-    // The first entry is where the card landed on creation, not a move —
-    // counting it credits every webhook-synced card as an automated transition.
-    for (let i = 1; i < item.stageHistory.length; i++) {
-      const entry = item.stageHistory[i]!;
-      const entered = parseTime(entry.enteredAt);
-      if (entered < windowStart || entered >= windowEnd) continue;
-      transitionsTotal += 1;
-      if (!isAutomationActor(entry.by)) transitionsHuman += 1;
-    }
+    if (created < windowStart || created >= windowEnd) continue;
+    const source = item.externalSource ? `${item.externalSource.integrationId}:${item.externalSource.type}` : 'manual';
+    counts.set(source, (counts.get(source) ?? 0) + 1);
   }
+  return [...counts.entries()].map(([source, count]) => ({ source, count })).sort((a, b) => b.count - a.count);
+}
 
-  // ── Per-stage automation (first visits that exited in window) ─────────────
-  // Rows appear in insertion order of each stage's first counted exit;
-  // terminal stages never get rows (they have no meaningful "pass through").
-  const automationByStage = new Map<string, FactoryMetrics['stageAutomation'][number]>();
+/**
+ * How much of each stage's work an agent finished, counting a card's first
+ * visit to a stage once. Rows appear in insertion order of each stage's first
+ * counted exit; only pipeline stages get rows, since intake and terminal
+ * stages have no pass to hand over.
+ */
+function agentCoverage(items: WorkItemRow[], { windowStart, windowEnd }: Window): FactoryMetrics['agentCoverage'] {
+  const byStage = new Map<string, FactoryMetrics['agentCoverage'][number]>();
   for (const item of items) {
     const heldAtWindowEnd = stagesHeldAt(item, windowEnd);
     const visited = new Set<string>();
     for (let i = 0; i < item.stageHistory.length; i++) {
       const entry = item.stageHistory[i]!;
-      if (TERMINAL_STAGES.has(entry.stage) || visited.has(entry.stage)) continue;
+      if (!isPipelineStage(entry.stage) || visited.has(entry.stage)) continue;
       visited.add(entry.stage);
       if (entry.exitedAt === undefined) continue;
       const exited = parseTime(entry.exitedAt);
       if (exited < windowStart || exited >= windowEnd) continue;
-      let row = automationByStage.get(entry.stage);
+
+      let row = byStage.get(entry.stage);
       if (!row) {
         row = {
           stage: entry.stage,
-          exits: 0,
-          automated: 0,
+          passes: 0,
+          byAgent: 0,
           outcomes: { done: 0, canceled: 0, reworked: 0, inFlight: 0 },
         };
-        automationByStage.set(entry.stage, row);
+        byStage.set(entry.stage, row);
       }
-      row.exits += 1;
-      // Missing `exitedBy` → human-exited → not an automated pass.
-      if (!isAutomationActor(entry.by) || !isAutomationActor(entry.exitedBy)) continue;
-      row.automated += 1;
+      row.passes += 1;
+      if (!isAgentActor(entry.exitedBy)) continue;
+      row.byAgent += 1;
+
       const reworked = item.stageHistory.some(
         (later, j) => j > i && later.stage === entry.stage && parseTime(later.enteredAt) < windowEnd,
       );
@@ -259,10 +278,18 @@ export function computeFactoryMetrics(
       else row.outcomes.inFlight += 1;
     }
   }
+  return [...byStage.values()];
+}
+
+export function computeFactoryMetrics(boardItems: WorkItemRow[], window: Window): FactoryMetrics {
+  const items = boardItems.filter(hasFactoryRun);
+  assertParsableHistory(items);
+
+  const { byDay, leadSamples } = completions(items, window);
 
   return {
-    daysCovered: throughputByDay.size,
-    throughput: [...throughputByDay.entries()]
+    daysCovered: byDay.size,
+    throughput: [...byDay.entries()]
       .map(([date, count]) => ({ date, count }))
       .sort((a, b) => a.date.localeCompare(b.date)),
     leadTime: {
@@ -270,11 +297,8 @@ export function computeFactoryMetrics(
       p90Ms: percentile(leadSamples, 0.9),
       samples: leadSamples.length,
     },
-    wipTotal,
-    sourceMix: [...sourceCounts.entries()]
-      .map(([source, count]) => ({ source, count }))
-      .sort((a, b) => b.count - a.count),
-    transitions: { human: transitionsHuman, total: transitionsTotal },
-    stageAutomation: [...automationByStage.values()],
+    wipTotal: countInFlight(items),
+    sourceMix: demandMix(items, window),
+    agentCoverage: agentCoverage(items, window),
   };
 }

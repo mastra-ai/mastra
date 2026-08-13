@@ -46,6 +46,23 @@ describe('observeSessionCheckpoint', () => {
     await expect(listeners[0]!({ type: 'agent_end', reason: 'complete' })).resolves.toBeUndefined();
   });
 
+  it('skips sandboxes that do not implement snapshot', async () => {
+    const { listeners } = createSession();
+    const session: CheckpointCaptureSession = {
+      getWorkspace: () => ({ sandbox: {} as { snapshot(): Promise<void> } }),
+      onBeforeAgentEnd: listener => {
+        listeners.push(listener);
+        return () => {};
+      },
+    };
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    observeSessionCheckpoint(session);
+
+    await expect(listeners[0]!({ type: 'agent_end', reason: 'complete' })).resolves.toBeUndefined();
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
   it('logs and swallows snapshot failures', async () => {
     const failure = new Error('snapshot unavailable');
     const { session, listeners } = createSession(vi.fn().mockRejectedValue(failure));

@@ -1,5 +1,5 @@
 ---
-title: "Subagents | Capabilities"
+title: "Subagents"
 description: Learn how to coordinate multiple agents with delegation hooks, iteration monitoring, message filtering, and task completion scoring.
 packages:
   - "@mastra/core"
@@ -150,7 +150,7 @@ Called after a delegation finishes. Use it to inspect results or provide feedbac
 - Return `{ feedback: '...' }`: Add feedback that gets saved to the parent agent's memory and is visible to subsequent iterations
 - Return `{ resultText: '...' }`: Replace the tool result text the parent model sees for this delegation, within the current run
 
-Use `resultText` when the subagent's own result would mislead the parent immediately. For example, a subagent that stops on a tool-calls step returns empty text, which the parent model reads as a successful but empty delegation. Unlike `feedback`, which only reaches the model on the next turn, `resultText` changes what the parent reasons on right away.
+Use `resultText` when the subagent's own result would mislead the parent immediately. For example, a subagent that stops on a tool-calls step returns empty text. The parent model reads this as a successful but empty delegation. Unlike `feedback`, which only reaches the model on the next turn, `resultText` changes what the parent reasons on right away.
 
 ```typescript title="src/mastra/agents/parent-agent.ts"
 const stream = await parentAgent.stream('Research AI trends', {
@@ -251,7 +251,7 @@ const stream = await parentAgent.stream('Research AI trends', {
 })
 ```
 
-Return `{ continue: true }` to keep iterating, or `{ continue: false }` to stop. Include optional `feedback` to inject guidance into the conversation. When `feedback` is combined with `continue: false`, the model may get one final turn to produce a text response incorporating the feedback, but only if the current iteration is still active (e.g., after tool calls), otherwise no extra turn is granted.
+Return `{ continue: true }` to keep iterating, or `{ continue: false }` to stop. Include optional `feedback` to inject guidance into the conversation. When `feedback` is combined with `continue: false`, the model may get one final turn for a text response that incorporates the feedback. The extra turn is granted only while the current iteration is active (e.g., after tool calls).
 
 ## Memory isolation
 
@@ -463,7 +463,7 @@ Version overrides propagate automatically through delegation. See [Subagent vers
 
 - [Background tasks](/docs/long-running-agents/background-tasks)
 - [Subagent versioning](/reference/editor/versioning#sub-agent-versioning)
-- [Guide: Research coordinator](/guides/guide/research-coordinator)
+- [Guide: Research coordinator](https://mastra.ai/blog/build-a-research-coordinator-with-supervisor-agents)
 - [Agent.stream() reference](/reference/streaming/agents/stream)
 - [Agent.streamUntilIdle() reference](/reference/streaming/agents/streamUntilIdle)
 - [Agent.generate() reference](/reference/agents/generate)

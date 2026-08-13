@@ -326,6 +326,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/edenai',
+          label: 'Eden AI',
+        },
+        {
+          type: 'doc',
           id: 'providers/empiriolabs',
           label: 'EmpirioLabs AI',
         },
@@ -503,6 +508,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/meganova',
           label: 'Meganova',
+        },
+        {
+          type: 'doc',
+          id: 'providers/merge-gateway',
+          label: 'Merge Gateway',
         },
         {
           type: 'doc',

@@ -24,7 +24,7 @@ function card(id: string, title: string, enteredAt: string) {
     title,
     stages: ['triage'],
     stageHistory: [{ stage: 'triage', enteredAt, by: 'user-1' }],
-    sessions: {},
+    sessions: { execute: { sessionId: `session-${id}`, branch: 'factory/1', threadId: 'thread-1' } },
     metadata: null,
     revision: 1,
     createdAt: enteredAt,
@@ -32,10 +32,10 @@ function card(id: string, title: string, enteredAt: string) {
   };
 }
 
-function renderPanel(initial: ReturnType<typeof card>[]) {
+function renderPanel(initial: ReturnType<typeof card>[], runningSessionIds: string[] = []) {
   let workItems = initial;
   server.use(
-    http.get('*/web/factory/projects/:id/work-items', () => HttpResponse.json({ workItems })),
+    http.get('*/web/factory/projects/:id/work-items', () => HttpResponse.json({ workItems, runningSessionIds })),
     http.get('*/web/factory/projects/:id/health/thresholds', () => HttpResponse.json({ thresholds: THRESHOLDS })),
   );
   const rendered = renderWithProviders(
@@ -79,6 +79,17 @@ describe('QueueHealthPanel', () => {
 
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Triage Critical: 1' })).not.toBeInTheDocument());
     expect(screen.queryByRole('dialog', { name: /Critical tasks/ })).not.toBeInTheDocument();
+  });
+
+  it('marks a card whose run is in flight', async () => {
+    const running = card('item-1', 'Card being worked', '2020-01-01T00:00:00.000Z');
+    running.sessions = { execute: { sessionId: 'session-1', branch: 'factory/1', threadId: 'thread-1' } };
+    const user = userEvent.setup();
+    renderPanel([running], ['session-1']);
+
+    await user.click(await screen.findByRole('button', { name: 'Triage Critical: 1' }));
+
+    expect(await screen.findByRole('img', { name: 'Agent running' })).toBeInTheDocument();
   });
 
   it('closes the cohort tasks on Escape', async () => {

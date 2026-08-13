@@ -9,7 +9,10 @@ export interface UsageSnapshot {
   [key: string]: unknown;
 }
 
-export type OMPhase = 'idle' | 'observing' | 'reflecting' | 'buffering';
+export type OMPhase = 'idle' | 'observing' | 'reflecting';
+
+/** Memory work on one budget: none, in the background, or with the turn on hold. */
+export type OMWork = 'idle' | 'background' | 'blocking';
 
 export interface GoalSnapshot {
   objective: string;
@@ -25,6 +28,8 @@ export interface ChatRuntimeState {
   followUpCount: number;
   omProgress?: AgentControllerOMProgress;
   omPhase: OMPhase;
+  bufferingMessages: boolean;
+  bufferingObservations: boolean;
   goal?: GoalSnapshot;
   tokensPerSec: number;
   _decodeStartedAt: number;
@@ -33,9 +38,31 @@ export interface ChatRuntimeState {
 export const initialChatRuntime: ChatRuntimeState = {
   followUpCount: 0,
   omPhase: 'idle',
+  bufferingMessages: false,
+  bufferingObservations: false,
   tokensPerSec: 0,
   _decodeStartedAt: 0,
 };
+
+export interface OMWorkByBudget {
+  messages: OMWork;
+  observations: OMWork;
+}
+
+function budgetWork(buffering: boolean, blocking: boolean): OMWork {
+  if (buffering) return 'background';
+  return blocking ? 'blocking' : 'idle';
+}
+
+/** Buffering is level-triggered from the display state, so it outranks the start events a background retry also emits. */
+export function omWork(
+  state: Pick<ChatRuntimeState, 'omPhase' | 'bufferingMessages' | 'bufferingObservations'>,
+): OMWorkByBudget {
+  return {
+    messages: budgetWork(state.bufferingMessages, state.omPhase === 'observing'),
+    observations: budgetWork(state.bufferingObservations, state.omPhase === 'reflecting'),
+  };
+}
 
 export function runtimeReducer(state: ChatRuntimeState, event: AgentControllerEvent): ChatRuntimeState {
   if (!isKnownAgentControllerEvent(event)) return state;
@@ -68,6 +95,8 @@ export function runtimeReducer(state: ChatRuntimeState, event: AgentControllerEv
         ...state,
         omProgress: event.displayState.omProgress ?? state.omProgress,
         usage: (event.displayState.tokenUsage as UsageSnapshot | undefined) ?? state.usage,
+        bufferingMessages: event.displayState.bufferingMessages ?? state.bufferingMessages,
+        bufferingObservations: event.displayState.bufferingObservations ?? state.bufferingObservations,
       };
     case 'goal_evaluation':
       return {
@@ -89,13 +118,9 @@ export function runtimeReducer(state: ChatRuntimeState, event: AgentControllerEv
     case 'om_observation_failed':
     case 'om_reflection_end':
     case 'om_reflection_failed':
-    case 'om_buffering_end':
-    case 'om_buffering_failed':
       return { ...state, omPhase: 'idle' };
     case 'om_reflection_start':
       return { ...state, omPhase: 'reflecting' };
-    case 'om_buffering_start':
-      return { ...state, omPhase: 'buffering' };
     case 'om_activation':
       return event.enabled ? state : { ...state, omPhase: 'idle' };
     default:

@@ -299,25 +299,9 @@ const sidebars = {
           ],
         },
         {
-          type: 'category',
+          type: 'doc',
+          id: 'browser/overview',
           label: 'Browser',
-          link: {
-            type: 'doc',
-            id: 'browser/overview',
-          },
-          customProps: {
-            contextualSidebar: true,
-          },
-          items: [
-            {
-              type: 'doc',
-              id: 'browser/recording',
-              label: 'Recording',
-              customProps: {
-                tags: ['new'],
-              },
-            },
-          ],
         },
         {
           type: 'category',
@@ -580,42 +564,9 @@ const sidebars = {
               label: 'Feedback',
             },
             {
-              type: 'category',
-              label: 'Integrations',
-              items: [
-                {
-                  type: 'doc',
-                  id: 'observability/integrations/overview',
-                  label: 'Overview',
-                },
-                {
-                  type: 'category',
-                  label: 'Exporters',
-                  items: [
-                    {
-                      type: 'doc',
-                      id: 'observability/integrations/exporters/mastra-storage',
-                      label: 'Mastra Storage',
-                    },
-                    {
-                      type: 'doc',
-                      id: 'observability/integrations/exporters/mastra-platform',
-                      label: 'Mastra Platform',
-                    },
-                  ],
-                },
-                {
-                  type: 'category',
-                  label: 'Processors',
-                  items: [
-                    {
-                      type: 'doc',
-                      id: 'observability/integrations/processors/sensitive-data-filter',
-                      label: 'SensitiveDataFilter',
-                    },
-                  ],
-                },
-              ],
+              type: 'doc',
+              id: 'observability/integrations/exporters/mastra-storage',
+              label: 'Storage',
             },
           ],
         },
@@ -737,86 +688,81 @@ const sidebars = {
   ],
   platformSidebar: [
     {
-      type: 'category',
-      label: 'Mastra Platform',
-      items: [
-        {
-          type: 'doc',
-          id: 'mastra-platform/overview',
-          label: 'Overview',
-        },
-        {
-          type: 'doc',
-          id: 'mastra-platform/deploy',
-          label: 'Deploy',
-          customProps: {
-            tags: ['new'],
-          },
-        },
-        {
-          type: 'doc',
-          id: 'mastra-platform/environments',
-          label: 'Environments',
-          customProps: {
-            tags: ['new'],
-          },
-        },
-        {
-          type: 'doc',
-          id: 'mastra-platform/regions',
-          label: 'Regions',
-          customProps: {
-            tags: ['new'],
-          },
-        },
-        {
-          type: 'doc',
-          id: 'mastra-platform/observability',
-          label: 'Observability',
-        },
-        {
-          type: 'doc',
-          id: 'mastra-platform/trace-intelligence',
-          label: 'Trace Intelligence',
-          customProps: {
-            tags: ['new'],
-          },
-        },
-        {
-          type: 'doc',
-          id: 'mastra-platform/studio',
-          label: 'Studio',
-        },
-        {
-          type: 'doc',
-          id: 'mastra-platform/server',
-          label: 'Server',
-        },
-        {
-          type: 'doc',
-          id: 'mastra-platform/github',
-          label: 'GitHub integration',
-        },
-        {
-          type: 'doc',
-          id: 'mastra-platform/database',
-          label: 'Hosted databases',
-        },
-        {
-          type: 'doc',
-          id: 'mastra-platform/workspaces',
-          label: 'Workspaces',
-          customProps: {
-            tags: ['new'],
-          },
-        },
-        {
-          type: 'doc',
-          id: 'mastra-platform/configuration',
-          label: 'Configuration',
-        },
-      ],
+      type: 'doc',
+      id: 'mastra-platform/overview',
+      label: 'Overview',
     },
+    {
+      type: 'doc',
+      id: 'mastra-platform/deploy',
+      label: 'Deploy',
+      customProps: {
+        tags: ['new'],
+      },
+    },
+    {
+      type: 'doc',
+      id: 'mastra-platform/environments',
+      label: 'Environments',
+      customProps: {
+        tags: ['new'],
+      },
+    },
+    {
+      type: 'doc',
+      id: 'mastra-platform/regions',
+      label: 'Regions',
+      customProps: {
+        tags: ['new'],
+      },
+    },
+    {
+      type: 'doc',
+      id: 'mastra-platform/observability',
+      label: 'Observability',
+    },
+    {
+      type: 'doc',
+      id: 'mastra-platform/trace-intelligence',
+      label: 'Trace Intelligence',
+      customProps: {
+        tags: ['new'],
+      },
+    },
+    {
+      type: 'doc',
+      id: 'mastra-platform/studio',
+      label: 'Studio',
+    },
+    {
+      type: 'doc',
+      id: 'mastra-platform/server',
+      label: 'Server',
+    },
+    {
+      type: 'doc',
+      id: 'mastra-platform/github',
+      label: 'GitHub integration',
+    },
+    {
+      type: 'doc',
+      id: 'mastra-platform/database',
+      label: 'Hosted databases',
+    },
+    {
+      type: 'doc',
+      id: 'mastra-platform/workspaces',
+      label: 'Workspaces',
+      customProps: {
+        tags: ['new'],
+      },
+    },
+    {
+      type: 'doc',
+      id: 'mastra-platform/configuration',
+      label: 'Configuration',
+    },
+    { type: 'doc', id: 'mastra-platform/api', label: 'API Reference' },
   ],
 }
 

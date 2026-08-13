@@ -1,5 +1,5 @@
 import { createPrivateKey, generateKeyPairSync } from 'node:crypto';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi, afterEach } from 'vitest';
 
 import { fakeRouteAuth } from '../../routes/test-utils.js';
 import { SandboxFleet } from '../../sandbox/fleet.js';
@@ -601,9 +601,10 @@ describe('GithubIntegration merge reconciler', () => {
 });
 
 describe('GithubIntegration workers', () => {
-  it('registers a single reconcile worker that folds PR and issue sweeps', () => {
-    const github = new GithubIntegration(validConfig());
-    const context = {
+  const originalEnv = { ...process.env };
+
+  function context() {
+    return {
       controller: {},
       storage: {
         generic: {},
@@ -616,7 +617,33 @@ describe('GithubIntegration workers', () => {
       },
       rules: { config: {}, workItems: {} },
     } as any;
+  }
 
-    expect(github.workers(context).map(worker => worker.name)).toEqual(['github-pull-request-reconcile']);
+  afterEach(() => {
+    for (const key of Object.keys(process.env)) {
+      if (!(key in originalEnv)) delete process.env[key];
+    }
+    Object.assign(process.env, originalEnv);
+  });
+
+  it('registers a single reconcile worker that folds PR and issue sweeps', () => {
+    const github = new GithubIntegration(validConfig());
+    expect(github.workers(context()).map(worker => worker.name)).toEqual(['github-pull-request-reconcile']);
+  });
+
+  it('allows issue reconciliation when legacy reconciliation is disabled', () => {
+    process.env.MASTRACODE_GITHUB_RECONCILE_ENABLED = 'false';
+    process.env.MASTRACODE_GITHUB_ISSUE_RECONCILE_ENABLED = 'true';
+    const github = new GithubIntegration(validConfig());
+
+    expect(github.workers(context()).map(worker => worker.name)).toEqual(['github-pull-request-reconcile']);
+  });
+
+  it('does not register a worker when both child reconcilers are disabled', () => {
+    process.env.MASTRACODE_GITHUB_PR_RECONCILE_ENABLED = 'false';
+    process.env.MASTRACODE_GITHUB_ISSUE_RECONCILE_ENABLED = 'false';
+    const github = new GithubIntegration(validConfig());
+
+    expect(github.workers(context())).toEqual([]);
   });
 });

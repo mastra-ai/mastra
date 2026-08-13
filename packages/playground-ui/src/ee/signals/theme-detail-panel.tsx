@@ -4,7 +4,7 @@ import { EXAMPLES_PAGE_SIZE, ExamplesPager } from './examples-pager';
 import { useThemeDetail, useThemeExamples, useThemeHistory } from './hooks';
 import { getSignalHue } from './signal-colors';
 import { formatSnapshotDate, shareSentence, SIGNAL_DESCRIPTIONS } from './signal-formatting';
-import type { ThemeSelection } from './theme-drilldown-data';
+import type { SelectedTheme, ThemeSelection, ThemeSelectionStats } from './theme-drilldown-data';
 import { chronologicalHistoryPoints, themeTrendDirection } from './theme-trend';
 import { ThemeTrendChart } from './theme-trend-chart';
 import { TraceInsightView } from './trace-insight-view';
@@ -24,7 +24,9 @@ interface ThemeDetailPanelProps {
   entityType: string;
   snapshotId: string;
   snapshotTotal: number;
-  selection: ThemeSelection | undefined;
+  selection: SelectedTheme | undefined;
+  filters?: ThemeSelection[];
+  filteredStats?: ThemeSelectionStats;
   onClose: () => void;
 }
 
@@ -34,9 +36,14 @@ export function ThemeDetailPanel({
   snapshotId,
   snapshotTotal,
   selection,
+  filters = [],
+  filteredStats,
   onClose,
 }: ThemeDetailPanelProps) {
-  const examplesContextKey = `${snapshotId}:${selection?.signalName ?? ''}:${selection?.themeId ?? ''}`;
+  const filterKey = filters
+    .map(filter => `${filter.signalName}:${filter.kind === 'theme' ? filter.themeId : 'noise'}`)
+    .join(',');
+  const examplesContextKey = `${snapshotId}:${selection?.signalName ?? ''}:${selection?.themeId ?? ''}:${filterKey}`;
   const [examplesPage, setExamplesPage] = useState(() => ({ contextKey: examplesContextKey, offset: 0 }));
   const examplesOffset = examplesPage.contextKey === examplesContextKey ? examplesPage.offset : 0;
   const [insightTraceId, setInsightTraceId] = useState<string>();
@@ -55,6 +62,7 @@ export function ThemeDetailPanel({
     selection?.themeId,
     EXAMPLES_PAGE_SIZE,
     examplesOffset,
+    filters,
   );
   const historyQuery = useThemeHistory(
     entityId,
@@ -123,7 +131,10 @@ export function ThemeDetailPanel({
                       {detailQuery.data.theme.description ?? 'No description available.'}
                     </p>
                     <p className="text-neutral5 mt-3 font-mono text-sm tabular-nums">
-                      {shareSentence(detailQuery.data.theme.traceCount, detailQuery.data.theme.coverage)}
+                      {shareSentence(
+                        filteredStats?.traceCount ?? detailQuery.data.theme.traceCount,
+                        filteredStats?.stageShare ?? detailQuery.data.theme.coverage,
+                      )}
                     </p>
                   </section>
 
@@ -157,7 +168,7 @@ export function ThemeDetailPanel({
                           </ul>
                         )}
                         <ExamplesPager
-                          traceCount={detailQuery.data.theme.traceCount}
+                          traceCount={filteredStats?.traceCount ?? detailQuery.data.theme.traceCount}
                           offset={examplesOffset}
                           onOffsetChange={offset => setExamplesPage({ contextKey: examplesContextKey, offset })}
                         />

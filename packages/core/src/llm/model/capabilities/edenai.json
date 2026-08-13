@@ -1,0 +1,46 @@
+{
+  "attachment": [
+    "anthropic/claude-opus-5",
+    "anthropic/claude-sonnet-5",
+    "anthropic/claude-sonnet-latest",
+    "google/gemini-3.6-flash",
+    "mistral/mistral-large-2512",
+    "moonshot/kimi-k3",
+    "openai/gpt-4o-mini",
+    "openai/gpt-5.6-luna",
+    "openai/gpt-5.6-sol",
+    "openai/gpt-5.6-terra",
+    "vertex/gemini-3.6-flash",
+    "vertex/gemini-3.6-flash@eu",
+    "xai/grok-4.5"
+  ],
+  "temperature": [
+    "deepinfra/openai/gpt-oss-120b",
+    "deepseek/deepseek-v4-pro",
+    "google/gemini-3.6-flash",
+    "mistral/mistral-large-2512",
+    "openai/gpt-4o-mini",
+    "vertex/gemini-3.6-flash",
+    "vertex/gemini-3.6-flash@eu",
+    "xai/grok-4.5",
+    "zai/glm-5.2"
+  ],
+  "structuredOutput": [
+    "anthropic/claude-opus-5",
+    "anthropic/claude-sonnet-5",
+    "anthropic/claude-sonnet-latest",
+    "deepinfra/openai/gpt-oss-120b",
+    "deepseek/deepseek-v4-pro",
+    "google/gemini-3.6-flash",
+    "mistral/mistral-large-2512",
+    "moonshot/kimi-k3",
+    "openai/gpt-4o-mini",
+    "openai/gpt-5.6-luna",
+    "openai/gpt-5.6-sol",
+    "openai/gpt-5.6-terra",
+    "vertex/gemini-3.6-flash",
+    "vertex/gemini-3.6-flash@eu",
+    "xai/grok-4.5",
+    "zai/glm-5.2"
+  ]
+}

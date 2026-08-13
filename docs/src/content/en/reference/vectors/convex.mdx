@@ -11,7 +11,7 @@ The `ConvexVector` class provides vector storage and similarity search using [Co
 
 :::warning[Development-scale search]
 
-`ConvexVector` reads matching vectors through the Mastra storage handler, filters in JavaScript, computes cosine similarity, sorts results, and returns the top matches. Use it for local development, tests, and small datasets.
+`ConvexVector` reads matching vectors through the Mastra storage handler and filters them in JavaScript. It then computes cosine similarity and sorts the results before returning the top matches. Use it for local development, tests, and small datasets.
 
 For production vector search on Convex, use `ConvexNativeVector`. It uses the Convex native `vectorSearch` API, which requires a deployed Convex vector index and a Convex action.
 

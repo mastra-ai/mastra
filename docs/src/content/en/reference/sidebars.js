@@ -84,6 +84,7 @@ const sidebars = {
       label: 'AI SDK',
       collapsed: true,
       items: [
+        { type: 'doc', id: 'ai-sdk/overview', label: 'Overview' },
         { type: 'doc', id: 'ai-sdk/chat-route', label: 'chatRoute()' },
         { type: 'doc', id: 'ai-sdk/handle-chat-stream', label: 'handleChatStream()' },
         { type: 'doc', id: 'ai-sdk/handle-network-stream', label: 'handleNetworkStream()' },
@@ -382,12 +383,6 @@ const sidebars = {
         { type: 'doc', id: 'file-based-agents/workflows', label: 'Workflows' },
         { type: 'doc', id: 'file-based-agents/workspace', label: 'Workspace' },
       ],
-    },
-    {
-      type: 'category',
-      label: 'Mastra platform',
-      collapsed: true,
-      items: [{ type: 'doc', id: 'mastra-platform/api', label: 'API Reference' }],
     },
     {
       type: 'category',
@@ -881,9 +876,13 @@ const sidebars = {
       label: 'Voice',
       collapsed: true,
       items: [
+        { type: 'doc', id: 'voice/overview', label: 'Overview' },
         { type: 'doc', id: 'voice/composite-voice', label: 'Composite Voice' },
         { type: 'doc', id: 'voice/voice.events', label: 'Events' },
         { type: 'doc', id: 'voice/mastra-voice', label: 'Mastra Voice' },
+        { type: 'doc', id: 'voice/speech-to-speech', label: 'Speech to Speech' },
+        { type: 'doc', id: 'voice/speech-to-text', label: 'Speech to Text' },
+        { type: 'doc', id: 'voice/text-to-speech', label: 'Text to Speech' },
         { type: 'doc', id: 'voice/voice.addInstructions', label: '.addInstructions()' },
         { type: 'doc', id: 'voice/voice.addTools', label: '.addTools()' },
         { type: 'doc', id: 'voice/voice.answer', label: '.answer()' },

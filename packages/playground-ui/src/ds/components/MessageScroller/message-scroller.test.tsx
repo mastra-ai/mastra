@@ -597,6 +597,36 @@ describe('MessageScroller older history', () => {
 });
 
 describe('MessageScroller turn anchoring', () => {
+  it('opens an asynchronously loaded transcript at its latest turn after layout settles', () => {
+    let layoutReady = false;
+    const scheduledScrolls: FrameRequestCallback[] = [];
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation(callback => {
+      scheduledScrolls.push(callback);
+      return scheduledScrolls.length;
+    });
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      const top = layoutReady && this.dataset.messageId === 'message-1' ? 100 : 0;
+      if (layoutReady && this.dataset.messageId === 'message-2') return createRect({ top: 700 });
+      return createRect({ top });
+    });
+    const { rerender } = render(<TurnHarness messageIds={[]} />);
+
+    const viewport = screen.getByTestId('turn-viewport');
+    const scrollTo = installScrollTo(viewport);
+    setScrollMetrics(viewport, { scrollHeight: 1200, clientHeight: 400, scrollTop: 250 });
+
+    rerender(<TurnHarness messageIds={['message-1', 'message-2']} />);
+    expect(scrollTo).not.toHaveBeenCalled();
+
+    act(() => scheduledScrolls.shift()?.(0));
+    expect(scrollTo).not.toHaveBeenCalled();
+
+    layoutReady = true;
+    act(() => scheduledScrolls.shift()?.(16));
+
+    expect(scrollTo).toHaveBeenLastCalledWith({ top: 950, behavior: 'auto' });
+  });
+
   it('parks a turn that opens below the ones already read at the top of the viewport', () => {
     stubLayout({ 'message-2': 300 });
     const { rerender } = render(<TurnHarness messageIds={['message-1']} />);
