@@ -183,7 +183,7 @@ Force-flushes any buffered LLM Observability data to Datadog without shutting do
 async shutdown(): Promise<void>
 ```
 
-Force-finishes any APM spans that weren't properly closed, flushes pending LLM Observability data, disables the LLM Observability integration, and clears all internal state.
+Force-finishes any APM spans that weren't properly closed and flushes pending LLM Observability data. It then disables the integration and clears all internal state.
 
 ## Usage examples
 
