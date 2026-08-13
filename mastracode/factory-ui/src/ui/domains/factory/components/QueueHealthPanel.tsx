@@ -104,7 +104,6 @@ function cohortEntries(health: QueueHealth, selection: QueueHealthSelection): Qu
     .sort((a, b) => b.ageSeconds - a.ageSeconds);
 }
 
-
 function CohortTasks({ selection, entries }: { selection: QueueHealthSelection; entries: QueueHealthEntry[] }) {
   return (
     <div className="flex max-h-80 flex-col">
