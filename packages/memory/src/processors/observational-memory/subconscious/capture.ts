@@ -70,7 +70,8 @@ Facts must be grounded in the conversation, concise, and written as prose. Do no
 Wrap every named entity mentioned in fact text in [[wikilinks]].
 Set a fact scope only when the conversation establishes where it applies. Use org for organization-wide facts, resource for facts shared across this resource's conversations, and thread for conversation-private facts.
 Omit scope when uncertain; omitted fact scopes stay private to the current thread.
-Emit when only when the conversation anchors the referred time. Resolve relative dates against the current date and use ISO 8601.`;
+Emit when only when the conversation anchors the referred time. Resolve relative dates against the current date and use ISO 8601.
+Capture what was learned through the work, not what the session was told: skip facts that merely restate standing instructions, configured rules, or the text of the task or issue the session was handed. The exception is an explicit request from the user to remember something, which is always captured even when it duplicates an existing instruction.`;
 
 const CAPTURE_REASON_INSTRUCTIONS = `When a fact is worth keeping for a non-obvious reason, set reason to one short sentence explaining why it is worth remembering (and for pinned facts, why it must stay in context).`;
 

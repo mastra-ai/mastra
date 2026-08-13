@@ -474,6 +474,22 @@ describe('Subconscious capture-time pinning', () => {
     expect(PINNED_INSTRUCTIONS).toContain('costly to rediscover');
   });
 
+  it('tells capture to skip restated instructions but always honor explicit user requests to remember', async () => {
+    const extractor = new SubconsciousCaptureExtractor({ defaultScope: 'resource', learnedGuidance: false });
+    const requestContext = new RequestContext();
+    requestContext.set('organizationId', 'acme');
+    const resolved = await extractor.resolve({
+      source: 'observer',
+      threadId: 'alpha',
+      resourceId: 'user-42',
+      requestContext,
+    } as any);
+    expect(resolved.instructions).toContain('Capture what was learned through the work, not what the session was told');
+    expect(resolved.instructions).toContain(
+      'explicit request from the user to remember something, which is always captured',
+    );
+  });
+
   it('uses a custom capture schema verbatim, never augmenting it with the pin flag', () => {
     const custom = z.object({
       entities: z.array(
