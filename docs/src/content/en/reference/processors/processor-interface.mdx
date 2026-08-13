@@ -249,7 +249,7 @@ function getText(message: MastraDBMessage): string {
 
 Key points:
 
-- `message.content.parts` is the primary source. A single message can contain multiple parts, including non-text parts such as tool calls, tool results, and file parts. Filter by `part.type === 'text'` before reading `part.text`.
+- `message.content.parts` is the primary source. A single message can contain multiple parts. Non-text parts include tool calls and tool results, plus file parts. Filter by `part.type === 'text'` before reading `part.text`.
 - `message.content.content` is a flattened string kept for backward compatibility. Use it only as a fallback when `parts` is empty or missing.
 - `message.content` itself is never a plain string on `MastraDBMessage`. Legacy `CoreMessage` shapes may be strings, but processors always receive `MastraDBMessage`.
 
@@ -568,7 +568,7 @@ System messages are **reset to their original values** at the start of each step
 #### Use cases
 
 - Dynamic model switching based on step number or context
-- Disabling tools after a certain number of steps
+- Disabling tools after a configured number of steps
 - Dynamically adding or replacing tools based on conversation context
 - Transforming message part types between providers (e.g., `reasoning` → `thinking` for Anthropic)
 - Modifying messages based on step number or accumulated context

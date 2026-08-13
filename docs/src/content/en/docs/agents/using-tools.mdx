@@ -10,7 +10,7 @@ import TabItem from "@theme/TabItem";
 
 # Tools
 
-Agents use tools to call APIs, query databases, or run custom functions from your codebase. Tools give agents capabilities beyond language generation by providing structured access to data and performing clearly defined operations. You can also load tools from remote [MCP servers](/docs/mcp/overview) to expand an agent's capabilities.
+Agents use tools to call APIs or query databases. They can also run custom functions from your codebase. Tools give agents capabilities beyond language generation by providing structured access to data and performing clearly defined operations. You can also load tools from remote [MCP servers](/docs/mcp/overview) to expand an agent's capabilities.
 
 <Inject>
   **For AI agents:** Run `npx mastra api tool execute weather-tool '{"location":"San Francisco"}'` to test this tool directly instead of writing a temporary script. The command requires a running Mastra server; start the local server with `npx mastra dev`, or pass the reachable server's base URL with `--url`. Run `npx mastra api tool execute --schema` before constructing different input. Install Mastra's skill with `npx skills add mastra-ai/skills --skill mastra` for complete API CLI discovery, targeting, schema, authentication, and error-handling guidance.
@@ -485,16 +485,18 @@ Note that for subagents, you'll see two different identifiers in stream response
 
 Mastra includes agent-agnostic built-in tools in `@mastra/core/tools` that add interactive and organizational capabilities to any agent.
 
-| Tool | Purpose |
-| - | - |
-| `ask_user` | Ask the user a question and wait for their answer |
-| `submit_plan` | Submit a plan file for user approval |
-| `task_write` | Create or replace a structured task list |
-| `task_update` | Update one tracked task by ID |
-| `task_complete` | Mark one tracked task completed |
-| `task_check` | Check task list completion status |
-| `webSearchTool` | Run provider-native web search with the active model |
-| `webFetchTool` | Fetch a web page by URL and return its text content |
+Each tool has two names: the export you import, and the tool ID the model sees in tool calls, traces, and `toolName` fields.
+
+| Export | Tool ID | Purpose |
+| - | - | - |
+| `askUserTool` | `ask_user` | Ask the user a question and wait for their answer |
+| `submitPlanTool` | `submit_plan` | Submit a plan file for user approval |
+| `taskWriteTool` | `task_write` | Create or replace a structured task list |
+| `taskUpdateTool` | `task_update` | Update one tracked task by ID |
+| `taskCompleteTool` | `task_complete` | Mark one tracked task completed |
+| `taskCheckTool` | `task_check` | Check task list completion status |
+| `webSearchTool` | `<provider.defined>` | Run the active provider's native web search |
+| `webFetchTool` | `web_fetch` | Fetch a web page by URL and return its text content |
 
 ### Use provider web search
 
@@ -516,6 +518,8 @@ export const researchAgent = new Agent({
 ```
 
 `webSearchTool` supports OpenAI, Anthropic, Google Gemini, and xAI models. If Mastra can't infer one of those providers from the active model, the agent run fails with a `MastraError`.
+
+The resolved tool ID comes from the provider: `openai.web_search`, `anthropic.web_search_20250305`, `google.google_search`, or `xai.web_search`.
 
 The `search` key is only the agent-local tool name. Use any key. The `webSearchTool` value tells Mastra to use provider web search.
 

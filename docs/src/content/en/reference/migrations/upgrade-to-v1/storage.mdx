@@ -108,7 +108,7 @@ USING snapshot::jsonb;
 
 ### Storage composition in `MastraCompositeStore`
 
-`MastraCompositeStore` can now compose storage domains from different adapters. Use it when you need different databases for different purposes - for example, PostgreSQL for memory and workflows, but a specialized database for observability.
+`MastraCompositeStore` can now compose storage domains from different adapters. Use it when different purposes require different databases, such as PostgreSQL for memory and workflows with a specialized database for observability.
 
 ```typescript
 import { MastraCompositeStore } from '@mastra/core/storage'
@@ -423,7 +423,7 @@ To migrate, use the memory store, remove format parameters, and update code to w
 + const saved = saveResult?.messages; // MastraDBMessage[]
 ```
 
-### Vector store API from positional to named arguments
+### Vector store API from positional arguments to arguments by name
 
 All vector store methods now use an arguments object instead of positional arguments. This makes each value's purpose visible at the call site and lets method signatures evolve without relying on argument order.
 
@@ -467,7 +467,7 @@ To migrate, rename the methods and pass an arguments object.
 
 ### PGVector constructor from connection string to object
 
-The PGVector constructor now requires object parameters instead of a connection string. This change provides a more consistent API across all storage adapters.
+The PGVector constructor now requires object parameters instead of a connection string. Object parameters align the API across storage adapters.
 
 To migrate, pass the connection string as an object property.
 
@@ -529,7 +529,7 @@ npx @mastra/codemod@latest v1/storage-postgres-schema-name .
 
 ### Score storage methods to `listScoresBy*` pattern
 
-Score storage APIs have been renamed to follow the `listScoresBy*` pattern. This change provides consistency with the broader API naming conventions.
+Score storage APIs have been renamed to follow the `listScoresBy*` pattern. The new names follow the broader API naming conventions.
 
 To migrate, update method names from `getScores` to `listScoresByScorerId` and related variants.
 
@@ -545,7 +545,7 @@ To migrate, update method names from `getScores` to `listScoresByScorerId` and r
 
 ### Non-paginated storage functions
 
-Non-paginated storage functions have been removed in favor of paginated versions. All list operations now use pagination, though you can fetch all records with `perPage: false`. This change provides consistency across the API and prevents accidental loading of large datasets.
+Non-paginated storage functions have been removed in favor of paginated versions. All list operations now use pagination, though you can fetch all records with `perPage: false`. Pagination aligns list operations across the API and prevents accidental loading of large datasets.
 
 To migrate, use paginated methods via domain stores. For fetching all records, use `perPage: false`.
 

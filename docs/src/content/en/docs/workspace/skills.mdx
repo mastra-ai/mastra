@@ -141,7 +141,7 @@ When multiple skill directories contain a skill with the same name, all of them 
 When the agent activates a skill by name, tie-breaking determines which one is returned:
 
 1. **Source-type priority**: local skills take precedence over managed (`.mastra/`) skills, which take precedence over external (`node_modules/`) skills.
-1. **Unresolvable conflicts throw**: if two skills share the same name and the same source type (for example, two local skills both named `brand-guidelines`), `get()` throws an error. Rename one or move it to a different source type to resolve the conflict.
+1. **Unresolvable conflicts throw**: if two skills share the same name and the same source type (for example, two local skills that both use the name `brand-guidelines`), `get()` throws an error. Rename one or move it to a different source type to resolve the conflict.
 1. **Path escape hatch**: the agent can pass a skill's full path instead of its name to activate a specific skill, bypassing tie-breaking entirely.
 
 ```typescript title="Example: local skill shadows an external package skill"
