@@ -181,7 +181,7 @@ export async function enforceThreadAccess({
   effectiveResourceId,
   permission = MastraFGAPermissions.MEMORY_READ,
 }: {
-  mastra: any;
+  mastra: Mastra;
   requestContext?: RequestContext;
   threadId: string;
   thread?: { resourceId?: string | null } | null;
