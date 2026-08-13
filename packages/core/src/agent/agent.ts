@@ -173,6 +173,7 @@ import type { CreatedAgentSignal } from './signals';
 import { runStreamUntilIdle, runResumeStreamUntilIdle } from './stream-until-idle';
 import type { SubAgent } from './subagent';
 import { agentThreadStreamRuntime } from './thread-stream-runtime';
+import type { ActiveThreadRun } from './thread-stream-runtime';
 import { TripWire } from './trip-wire';
 import type {
   AgentConfig,
@@ -4479,6 +4480,7 @@ export class Agent<
     const assignedTools = await this.listTools({ requestContext, resolveWebSearch: false });
 
     const assignedToolEntries = Object.entries(assignedTools || {});
+    const model = activeModel ?? (assignedToolEntries.length > 0 ? await this.getModel({ requestContext }) : undefined);
 
     const assignedCoreToolEntries = await Promise.all(
       assignedToolEntries.map(async ([k, tool]) => {
@@ -4486,7 +4488,6 @@ export class Agent<
           return;
         }
 
-        const model = activeModel ?? (await this.getModel({ requestContext }));
         const toolToConvert = isWebSearchTool(tool)
           ? createWebSearchProviderTool(normalizeWebSearchProvider(model))
           : tool;
@@ -6983,9 +6984,16 @@ export class Agent<
         ? {
             ...options.tracingOptions,
             traceId: effectiveTraceId,
-            parentSpanId: shouldUsePersistedParentSpan ? persistedTracingContext?.spanId : userProvidedParentSpanId,
           }
         : options.tracingOptions;
+
+    // The persisted resume link travels separately from tracingOptions:
+    // tracingOptions.parentSpanId is reserved for external correlation ids,
+    // while the suspended span's id is a Mastra span present in storage.
+    const resumedFromSpanId =
+      isResume && persistedTracingContext?.traceId && shouldUsePersistedParentSpan
+        ? persistedTracingContext.spanId
+        : undefined;
 
     const spanInput = isResume
       ? this.#getResumeSpanInput(resumeContext.resumeData, suspendedToolInfo)
@@ -7021,6 +7029,7 @@ export class Agent<
       tracingContext: options.tracingContext,
       requestContext,
       mastra: this.#mastra,
+      resumedFromSpanId,
     });
 
     const memory = await this.getMemory({ requestContext });
@@ -7723,6 +7732,10 @@ export class Agent<
 
   getActiveThreadRunId(options: AgentSubscribeToThreadOptions): string | undefined {
     return agentThreadStreamRuntime.getActiveThreadRunId(options, this.getPubSub());
+  }
+
+  listActiveThreadRuns(): ActiveThreadRun[] {
+    return agentThreadStreamRuntime.listActiveThreadRuns(this.getPubSub());
   }
 
   /**

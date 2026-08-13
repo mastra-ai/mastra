@@ -47,6 +47,7 @@ import { githubSignalsPollingInboxScenario } from './github-signals-polling-inbo
 import { githubSignalsUnsubscribeReloadScenario } from './github-signals-unsubscribe-reload.js';
 import { goalApiErrorStopsLoopScenario } from './goal-api-error-stops-loop.js';
 import { goalDurationToolApprovalScenario } from './goal-duration-tool-approval.js';
+import { goalFreshThreadPersistenceScenario } from './goal-fresh-thread-persistence.js';
 import { goalJudgeOmModelIsolationScenario } from './goal-judge-om-model-isolation.js';
 import { goalJudgeSingleRenderScenario } from './goal-judge-single-render.js';
 import { headlessMcpToolAvailabilityScenario } from './headless-mcp-tool-availability.js';
@@ -162,6 +163,7 @@ import { updateStartupPromptScenario } from './update-startup-prompt.js';
 import { visibleCommandsScenario } from './visible-commands.js';
 import { webSearchRenderingScenario } from './web-search-rendering.js';
 import { workIdleStatusScenario } from './work-idle-status.js';
+import { workflowsCommandScenario } from './workflows-command.js';
 import { workspaceCommandsScenario } from './workspace-commands.js';
 import { workspacePlanModeToolsScenario } from './workspace-plan-mode-tools.js';
 import { workspaceToolNamesScenario } from './workspace-tool-names.js';
@@ -221,6 +223,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'github-signals-unsubscribe-reload': githubSignalsUnsubscribeReloadScenario,
   'goal-api-error-stops-loop': goalApiErrorStopsLoopScenario,
   'goal-duration-tool-approval': goalDurationToolApprovalScenario,
+  'goal-fresh-thread-persistence': goalFreshThreadPersistenceScenario,
   'goal-judge-om-model-isolation': goalJudgeOmModelIsolationScenario,
   'goal-judge-single-render': goalJudgeSingleRenderScenario,
   'controller-api-config': controllerApiConfigScenario,
@@ -334,6 +337,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'workspace-plan-mode-tools': workspacePlanModeToolsScenario,
   'workspace-tool-names': workspaceToolNamesScenario,
   'workspace-tool-output-rendering': workspaceToolOutputRenderingScenario,
+  'workflows-command': workflowsCommandScenario,
   'work-idle-status': workIdleStatusScenario,
   'resourceid-drift-prompt-accept': resourceidDriftPromptAcceptScenario,
   'resourceid-drift-prompt-decline': resourceidDriftPromptDeclineScenario,

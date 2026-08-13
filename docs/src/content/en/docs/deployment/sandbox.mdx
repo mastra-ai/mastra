@@ -1,11 +1,11 @@
 ---
-title: "Deploy to a sandbox | Deployment"
+title: "Sandbox | Deploy"
 description: "Deploy a Mastra server into an ephemeral workspace sandbox and get a live public URL."
 packages:
   - "@mastra/deployer-sandbox"
 ---
 
-# Deploy to a sandbox
+# Sandbox
 
 `@mastra/deployer-sandbox` deploys a full Mastra server, including Studio, into an ephemeral workspace sandbox and returns a live public URL. Repeat deployments can finish faster because the deployer skips dependency installation.
 
@@ -54,7 +54,7 @@ export const mastra = new Mastra({
 })
 ```
 
-Two Vercel-specific requirements:
+Vercel has two additional requirements:
 
 - `timeout` can't exceed the maximum sandbox lifetime of your plan, 45 minutes on Pro. A higher value fails the deploy with a 400 from the Vercel API.
 - Declare the server port in `ports`. Vercel exposes only ports declared at creation, unlike E2B and Daytona.

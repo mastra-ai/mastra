@@ -223,15 +223,19 @@ export abstract class MastraSandbox extends MastraBase implements WorkspaceSandb
           this.logger.debug('Executing command', { sandbox: this.name, command: fullCommand, cwd: opts?.cwd });
 
           const handle = await pm.spawn(fullCommand, { ...opts, maxRetainedBytes: opts?.maxRetainedBytes ?? Infinity });
-          const result = await handle.wait();
+          try {
+            const result = await handle.wait();
 
-          this.logger.debug('Command completed', {
-            sandbox: this.name,
-            exitCode: result.exitCode,
-            duration: result.executionTimeMs,
-          });
+            this.logger.debug('Command completed', {
+              sandbox: this.name,
+              exitCode: result.exitCode,
+              duration: result.executionTimeMs,
+            });
 
-          return { ...result, command: fullCommand };
+            return { ...result, command: fullCommand };
+          } finally {
+            pm.release(handle.pid);
+          }
         };
       }
     }

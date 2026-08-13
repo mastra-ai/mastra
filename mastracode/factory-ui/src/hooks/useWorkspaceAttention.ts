@@ -10,12 +10,17 @@ import { playDoneSound } from '../ui/domains/settings/services/doneSound';
  * the user opens that workspace again. Attention also clears on its own when a new run starts in
  * the workspace, so a solid dot never coexists with a blinking one.
  */
-export function useWorkspaceAttention(runningByPath: Record<string, boolean>): {
+export function useWorkspaceAttention(
+  runningByPath: Record<string, boolean>,
+  onRunsFinished?: () => void,
+): {
   attentionByPath: Record<string, boolean>;
   clearAttention: (path: string) => void;
 } {
   const previousRef = useRef<Record<string, boolean>>({});
   const [needsAttention, setNeedsAttention] = useState<ReadonlySet<string>>(new Set());
+  const onRunsFinishedRef = useRef(onRunsFinished);
+  onRunsFinishedRef.current = onRunsFinished;
 
   useEffect(() => {
     const previous = previousRef.current;
@@ -34,7 +39,10 @@ export function useWorkspaceAttention(runningByPath: Record<string, boolean>): {
       const unchanged = next.size === current.size && [...next].every(path => current.has(path));
       return unchanged ? current : next;
     });
-    if (finished.length > 0) playDoneSound();
+    if (finished.length > 0) {
+      playDoneSound();
+      onRunsFinishedRef.current?.();
+    }
   }, [runningByPath]);
 
   const clearAttention = useCallback((path: string) => {

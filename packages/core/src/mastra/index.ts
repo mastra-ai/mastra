@@ -74,6 +74,7 @@ import { OrchestrationWorker, SchedulerWorker, BackgroundTaskWorker } from '../w
 import type { MastraWorker, WorkerDeps } from '../worker';
 import type { AnyWorkflow, Workflow } from '../workflows';
 import { normalizeWorkflowBuilderDefinition } from '../workflows/builder';
+import type { WorkflowBuilderDefinitionInput } from '../workflows/builder';
 import type { DynamicWorkflowGraph, WorkflowRegistryIndex, WorkflowRegistrySchemas } from '../workflows/dynamic';
 import {
   assertValidDynamicWorkflow,
@@ -4795,7 +4796,7 @@ export class Mastra<
    * await run.start({ inputData: { location: 'Helsinki' } });
    * ```
    */
-  public async addDynamicWorkflow(def: DynamicWorkflowGraph): Promise<void> {
+  public async addDynamicWorkflow(def: DynamicWorkflowGraph | WorkflowBuilderDefinitionInput): Promise<void> {
     await this.addDynamicWorkflows([def]);
   }
 
@@ -4829,7 +4830,9 @@ export class Mastra<
    * ]);
    * ```
    */
-  public async addDynamicWorkflows(defs: readonly DynamicWorkflowGraph[]): Promise<void> {
+  public async addDynamicWorkflows(
+    defs: readonly (DynamicWorkflowGraph | WorkflowBuilderDefinitionInput)[],
+  ): Promise<void> {
     if (defs.length === 0) return;
 
     const seen = new Set<string>();
@@ -4846,10 +4849,10 @@ export class Mastra<
     // Normalization coerces the wire shape; one validation call per member
     // covers structure, JSON-Schema keywords, references, and schema-flow.
     const members = defs.map(def => ({
-      def,
       normalized: normalizeWorkflowBuilderDefinition({
         id: def.id,
         description: def.description,
+        metadata: def.metadata,
         inputSchema: def.inputSchema,
         outputSchema: def.outputSchema,
         stateSchema: def.stateSchema,
@@ -4861,7 +4864,7 @@ export class Mastra<
     // Members may nest each other, so the index every member validates against
     // is the live registries plus the bundle itself — not the registry alone.
     const index = this.#buildWorkflowRegistryIndex();
-    const bundleIds = new Set(members.map(member => member.def.id));
+    const bundleIds = new Set(members.map(member => member.normalized.id));
     for (const { normalized } of members) {
       (index.workflows ??= {})[normalized.id] = {
         inputSchema: normalized.inputSchema,
@@ -4875,13 +4878,13 @@ export class Mastra<
     // Hydration resolves nested workflows through the live registry, so a
     // member cannot be hydrated before the bundle members it nests.
     const ordered: typeof members = [];
-    const remaining = new Map(members.map(member => [member.def.id, member] as const));
+    const remaining = new Map(members.map(member => [member.normalized.id, member] as const));
     const hydrated = new Set<string>();
     let progress = true;
     while (remaining.size > 0 && progress) {
       progress = false;
       for (const [id, member] of Array.from(remaining)) {
-        const pending = Array.from(collectNestedWorkflowIds(member.def.graph)).filter(
+        const pending = Array.from(collectNestedWorkflowIds(member.normalized.graph)).filter(
           dependency => dependency !== id && bundleIds.has(dependency) && !hydrated.has(dependency),
         );
         if (pending.length > 0) continue;
@@ -4904,9 +4907,9 @@ export class Mastra<
     const registry = this.#workflows as Record<string, AnyWorkflow>;
     const priorWorkflows = new Map<string, AnyWorkflow | undefined>();
     const priorHiddenKeys = new Set<string>();
-    for (const { def } of ordered) {
-      priorWorkflows.set(def.id, registry[def.id]);
-      if (this.#hiddenWorkflowKeys.has(def.id)) priorHiddenKeys.add(def.id);
+    for (const { normalized } of ordered) {
+      priorWorkflows.set(normalized.id, registry[normalized.id]);
+      if (this.#hiddenWorkflowKeys.has(normalized.id)) priorHiddenKeys.add(normalized.id);
     }
     const restoreRegistry = () => {
       for (const [id, prior] of priorWorkflows) {
@@ -4917,23 +4920,23 @@ export class Mastra<
     };
 
     try {
-      for (const { def } of ordered) {
-        const { workflow } = await rehydrateWorkflow(def, this);
-        this.#replaceDynamicWorkflow(workflow as AnyWorkflow, def.id);
+      for (const { normalized } of ordered) {
+        const { workflow } = await rehydrateWorkflow(normalized, this);
+        this.#replaceDynamicWorkflow(workflow as AnyWorkflow, normalized.id);
       }
 
       const store = await this.#storage?.getStore('workflowDefinitions');
       if (store) {
-        for (const { def } of ordered) {
+        for (const { normalized } of ordered) {
           await store.upsert({
-            id: def.id,
-            description: def.description,
-            metadata: def.metadata,
-            inputSchema: def.inputSchema,
-            outputSchema: def.outputSchema,
-            stateSchema: def.stateSchema,
-            requestContextSchema: def.requestContextSchema,
-            graph: def.graph,
+            id: normalized.id,
+            description: normalized.description,
+            metadata: normalized.metadata,
+            inputSchema: normalized.inputSchema,
+            outputSchema: normalized.outputSchema,
+            stateSchema: normalized.stateSchema,
+            requestContextSchema: normalized.requestContextSchema,
+            graph: normalized.graph,
           });
         }
       }

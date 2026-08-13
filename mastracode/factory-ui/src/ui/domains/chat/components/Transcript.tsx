@@ -4,8 +4,10 @@ import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
 import { Input } from '@mastra/playground-ui/components/Input';
+import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { MessageScrollerItem } from '@mastra/playground-ui/components/MessageScroller';
 import { Notice } from '@mastra/playground-ui/components/Notice';
+import { startsUserTurn } from '@mastra/playground-ui/components/ThreadRail';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { MessageFactory } from '@mastra/react/ui';
@@ -23,11 +25,11 @@ import {
 } from '../../../../hooks/useAgentControllerRunMutations';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { isTerminalInvocationState } from '../services/transcript';
+import { MESSAGE_HOVER, MessageMeta } from './MessageMeta';
 import { ToolCard } from './tool/ToolCard';
 import { ToolGroup, TOOL_GROUP_MIN } from './tool/ToolGroup';
 import { isTranscriptToolVisible, ToolFactory } from './ToolFactory';
 import { ROW_RAIL, ROW_TRIGGER, TranscriptRow } from './TranscriptRow';
-import { Markdown } from '../../../ui/Markdown';
 
 import type {
   ApprovalPrompt,
@@ -67,6 +69,13 @@ function stringify(v: unknown): string {
   } catch {
     return String(v);
   }
+}
+
+function messageText(parts: MessageEntry['message']['content']['parts']): string {
+  return parts
+    .flatMap(part => (part.type === 'text' ? [part.text] : []))
+    .join('\n\n')
+    .trim();
 }
 
 function lastSegment(id: string): string {
@@ -490,7 +499,7 @@ function SignalRow({ kind, label, message }: { kind: string; label: string; mess
 // Transcript
 // ---------------------------------------------------------------------------
 
-export function Transcript() {
+export function Transcript({ tail }: { tail?: ReactNode }) {
   const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
   const { transcript, resolvePrompt } = useChatTranscript();
   const hookArgs = {
@@ -518,6 +527,7 @@ export function Transcript() {
       isSubmitting={approveMutation.isPending || respondMutation.isPending}
       onApprove={onApprove}
       onRespond={onRespond}
+      tail={tail}
     />
   );
 }
@@ -527,11 +537,14 @@ export function TranscriptEntries({
   isSubmitting = false,
   onApprove,
   onRespond,
+  tail,
 }: {
   entries: TimelineEntry[];
   isSubmitting?: boolean;
   onApprove: (toolCallId: string, approved: boolean, promptId: string) => void;
   onRespond: (toolCallId: string, resumeData: string | string[] | PlanResume, promptId: string) => void;
+  /** Rendered inside the live turn (the activity line), so the reserved room stays under it. */
+  tail?: ReactNode;
 }) {
   const suspensions = new Map(
     entries.flatMap(entry => (entry.kind === 'suspension' ? [[entry.toolCallId, entry] as const] : [])),
@@ -571,25 +584,44 @@ export function TranscriptEntries({
     }
   };
 
+  const turnGroups: { key: string; entries: TimelineEntry[]; opensTurn: boolean }[] = [];
+  for (const entry of entries) {
+    const opensTurn = entry.kind === 'message' && startsUserTurn(entry.message);
+    if (opensTurn || turnGroups.length === 0) turnGroups.push({ key: entry.id, entries: [], opensTurn });
+    turnGroups.at(-1)?.entries.push(entry);
+  }
+
   return (
     <>
-      {entries.map(entry => {
-        const rendered = renderEntry(entry);
-        if (!rendered) return null;
-
+      {turnGroups.map((group, index) => {
+        const isLiveTurn = index === turnGroups.length - 1;
         return (
-          <MessageScrollerItem
-            key={entry.id}
-            messageId={entry.id}
-            scrollAnchor={entry.kind === 'message' && entry.message.role === 'user'}
-            // Estimated off-screen heights would make the prepend anchor restore
-            // the wrong offset — measure the real thing.
-            className="[content-visibility:visible]"
-          >
-            {rendered}
-          </MessageScrollerItem>
+          // The room a fresh turn scrolls up into is this min-height: pure layout,
+          // filled by the streaming reply. It stays after the run — collapsing it
+          // would shift the reader — and moves to the next turn with the anchor scroll.
+          <div key={group.key} className={cn('flex flex-col', isLiveTurn && group.opensTurn && 'min-h-[50cqh]')}>
+            {group.entries.map(entry => {
+              const rendered = renderEntry(entry);
+              if (!rendered) return null;
+
+              return (
+                <MessageScrollerItem
+                  key={entry.id}
+                  messageId={entry.id}
+                  scrollAnchor={entry.kind === 'message' && startsUserTurn(entry.message)}
+                  // Estimated off-screen heights would make the prepend anchor restore
+                  // the wrong offset — measure the real thing.
+                  className="[content-visibility:visible]"
+                >
+                  {rendered}
+                </MessageScrollerItem>
+              );
+            })}
+            {isLiveTurn && tail}
+          </div>
         );
       })}
+      {turnGroups.length === 0 && tail}
     </>
   );
 }
@@ -646,37 +678,39 @@ function MessageBubble({
   onRespond: (toolCallId: string, resumeData: string | string[] | PlanResume, promptId: string) => void;
 }) {
   const messageParts = entry.message.content.parts ?? [];
-  const parts = messageParts.filter(
-    part => part.type !== 'tool-invocation' || isTranscriptToolVisible(part.toolInvocation.toolName),
-  );
+  const parts = messageParts.filter(part => isRenderablePart(part, suspensions, entry.runtimeTools));
   const message =
     parts.length === messageParts.length
       ? entry.message
       : { ...entry.message, content: { ...entry.message.content, parts } };
-  const hasRenderablePart = parts.some(
-    part =>
-      (part.type === 'text' && part.text.trim().length > 0) ||
-      (part.type === 'reasoning' && part.reasoning.trim().length > 0) ||
-      part.type === 'tool-invocation' ||
-      part.type === 'file',
-  );
+  const hasRenderablePart = parts.length > 0;
 
   const toolGroups = collectToolGroups(parts, suspensions, entry.runtimeTools);
   const origin = channelOrigin(entry);
+  const prose = messageText(parts);
   const roles: MessageRoleRenderers = {
     User: ({ children }) => (
-      <div className="my-3 flex w-full flex-col items-end">
+      <div className={cn(MESSAGE_HOVER, 'my-3 ml-auto flex w-fit max-w-[70%] flex-col items-end')}>
         <div
-          className={`text-text1 max-w-[70%] rounded-xl px-4 py-2 break-words ${
-            entry.steer ? 'bg-warning1/10' : 'bg-surface3'
-          }`}
+          className={cn(
+            'text-text1 rounded-xl px-4 py-2 break-words',
+            entry.steer ? 'bg-warning1/10' : 'bg-neutral6/5',
+          )}
         >
           {children}
         </div>
         {origin && <ChannelOriginBadge origin={origin} />}
+        {prose ? <MessageMeta text={prose} createdAt={entry.message.createdAt} align="end" /> : null}
       </div>
     ),
-    Assistant: ({ children }) => <div className="max-w-full">{children}</div>,
+    Assistant: ({ children }) => (
+      // The trailing margin of the last part spaced this message from the next
+      // entry; the meta row inherits it as a gap unless it moves to the wrapper.
+      <div className={cn(MESSAGE_HOVER, 'max-w-full', prose && 'mb-3 [&>*:nth-last-child(2)]:mb-0')}>
+        {children}
+        {prose ? <MessageMeta text={prose} createdAt={entry.message.createdAt} align="start" /> : null}
+      </div>
+    ),
     System: ({ children }) => <div className="text-ui-sm text-icon3">{children}</div>,
     Signal: ({ children }) => <div className="text-ui-sm text-icon3">{children}</div>,
   };
@@ -685,24 +719,18 @@ function MessageBubble({
     Text: (part: TextPart) => {
       if (entry.message.role === 'user') {
         const activation = parseSkillActivation(part.text);
-        return activation ? (
-          <SkillMessage activation={activation} />
-        ) : (
-          <div className="prose">
-            <Markdown>{part.text}</Markdown>
-          </div>
-        );
+        return activation ? <SkillMessage activation={activation} /> : <MarkdownRenderer>{part.text}</MarkdownRenderer>;
       }
 
       return (
-        <div className="prose my-3">
-          <Markdown>{part.text}</Markdown>
-        </div>
+        <MarkdownRenderer className="my-3" streaming={entry.streaming}>
+          {part.text}
+        </MarkdownRenderer>
       );
     },
     Reasoning: (part: ReasoningPart) => (
-      <div className="border-border1 text-ui-sm text-icon3 my-1.5 border-l-2 pl-2.5 italic [&_p]:my-0.5">
-        <Markdown>{part.reasoning}</Markdown>
+      <div className="border-border1 my-1.5 border-l-2 pl-2.5 italic [&_p]:my-0.5">
+        <MarkdownRenderer className="text-ui-sm text-icon3">{part.reasoning}</MarkdownRenderer>
       </div>
     ),
     ToolInvocation: (part: ToolInvocationPart) => {
@@ -714,7 +742,6 @@ function MessageBubble({
       const runtime = entry.runtimeTools?.[toolCallId];
       const tool = toolFromInvocationPart(part, runtime);
       const suspension = suspensions.get(tool.toolCallId);
-      if (tool.toolName === 'ask_user' && tool.status === 'running' && !suspension) return null;
       return (
         <ToolFactory
           toolName={tool.toolName}
@@ -798,11 +825,45 @@ function terminalInvocationStatus(invocation: ToolInvocationPart['toolInvocation
   return 'isError' in invocation && invocation.isError === true ? 'error' : 'done';
 }
 
+/** Parts that draw something: step markers and blank prose leave empty bubbles and split runs of calls. */
+function isRenderablePart(
+  part: MessageEntry['message']['content']['parts'][number],
+  suspensions: ReadonlyMap<string, SuspensionPrompt>,
+  runtimeTools: MessageEntry['runtimeTools'],
+): boolean {
+  switch (part.type) {
+    case 'text':
+      return part.text.trim().length > 0;
+    case 'reasoning':
+      return part.reasoning.trim().length > 0;
+    case 'tool-invocation':
+      return isRenderableTool(part, suspensions, runtimeTools);
+    case 'file':
+      return true;
+    default:
+      return false;
+  }
+}
+
+function isRenderableTool(
+  part: ToolInvocationPart,
+  suspensions: ReadonlyMap<string, SuspensionPrompt>,
+  runtimeTools: MessageEntry['runtimeTools'],
+): boolean {
+  const tool = toolFromInvocationPart(part, runtimeTools?.[part.toolInvocation.toolCallId]);
+  if (!isTranscriptToolVisible(tool.toolName)) return false;
+
+  const awaitingPrompt = tool.toolName === 'ask_user' && tool.status === 'running' && !suspensions.has(tool.toolCallId);
+  return !awaitingPrompt;
+}
+
+/** Tools whose own card carries the turn: a group row would swallow the prompt, the plan or the skill instructions. */
+const UNGROUPABLE_TOOLS = new Set(['ask_user', 'submit_plan', 'skill']);
+
 /**
  * Collapse runs of {@link TOOL_GROUP_MIN}+ consecutive plain tool calls into
- * groups keyed by their first toolCallId. Interactive tools (ask_user,
- * submit_plan, suspended calls) break a run — their prompt cards must render
- * inline, never swallowed by a group.
+ * groups keyed by their first toolCallId. Suspended calls break a run too —
+ * their prompt must render inline.
  */
 function collectToolGroups(
   parts: MessageEntry['message']['content']['parts'],
@@ -824,8 +885,7 @@ function collectToolGroups(
   for (const part of parts) {
     const groupable =
       part.type === 'tool-invocation' &&
-      part.toolInvocation.toolName !== 'ask_user' &&
-      part.toolInvocation.toolName !== 'submit_plan' &&
+      !UNGROUPABLE_TOOLS.has(part.toolInvocation.toolName) &&
       !suspensions.has(part.toolInvocation.toolCallId);
     if (groupable) {
       run.push(toolFromInvocationPart(part, runtimeTools?.[part.toolInvocation.toolCallId]));
@@ -1070,9 +1130,7 @@ function StatusMetadataCard({ status }: { status: StatusMetadata }) {
 function NoticeCard({ entry }: { entry: NoticeEntry }) {
   return (
     <Notice className="my-2" variant={entry.level === 'error' ? 'destructive' : 'info'}>
-      <div className="prose">
-        <Markdown>{entry.text}</Markdown>
-      </div>
+      <MarkdownRenderer className="text-current">{entry.text}</MarkdownRenderer>
     </Notice>
   );
 }
