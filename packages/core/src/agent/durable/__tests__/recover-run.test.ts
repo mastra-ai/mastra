@@ -23,6 +23,7 @@ import { DurableStepIds } from '../constants';
 import { createDurableAgent } from '../create-durable-agent';
 import type { DurableAgent } from '../durable-agent';
 import { globalRunRegistry } from '../run-registry';
+import { emitChunkEvent, emitFinishEvent } from '../stream-adapter';
 
 function makeSnapshot(runId: string, status: WorkflowRunStatus, agentId: string): WorkflowRunState {
   return {
@@ -113,6 +114,19 @@ async function readSnapshot(store: InMemoryStore, workflowName: string, runId: s
   return workflows.getWorkflowRunById({ runId, workflowName });
 }
 
+async function readThreadRun(stream: AsyncIterable<any>) {
+  let runId: string | undefined;
+  let text = '';
+  for await (const part of stream) {
+    runId ??= part.runId;
+    if (part.type === 'text-delta') text += part.payload.text;
+    if (part.type === 'finish' || part.type === 'error' || part.type === 'abort') {
+      return { runId, text, terminal: part.type };
+    }
+  }
+  throw new Error('Thread subscription ended without a terminal event');
+}
+
 describe('DurableAgent.recover(runId)', () => {
   let agent: DurableAgent;
   let store: InMemoryStore;
@@ -156,6 +170,42 @@ describe('DurableAgent.recover(runId)', () => {
     // stream terminates immediately.
     await globalRunRegistry.get('run-stream')?.workflowExecution;
     result.cleanup();
+  });
+
+  it('announces a recovered run to a fresh thread subscriber before replaying output', async () => {
+    const runId = 'run-thread-reconnect';
+    await seed(store, runId, 'running', 'agent-A');
+
+    const restart = vi.fn(async () => {
+      await emitChunkEvent(agent.pubsub, runId, {
+        type: 'text-delta',
+        runId,
+        from: 'AGENT',
+        payload: { text: 'recovered output' },
+      } as any);
+      await emitFinishEvent(agent.pubsub, runId, {
+        output: { text: 'recovered output', steps: [] },
+        stepResult: { reason: 'stop' },
+      } as any);
+      return { status: 'success' as const };
+    });
+    const createRun = vi.fn(async () => ({ restart, runId }));
+    const deleteWorkflowRunById = vi.fn(async () => {});
+    vi.spyOn(agent, 'getWorkflow').mockReturnValue({ createRun, restart, deleteWorkflowRunById } as any);
+
+    const subscription = await agent.subscribeToThread({ threadId: 't', resourceId: 'r' });
+    const threadRun = readThreadRun(subscription.stream);
+    const recovered = await agent.recover(runId);
+
+    await expect(threadRun).resolves.toEqual({
+      runId,
+      text: 'recovered output',
+      terminal: 'finish',
+    });
+
+    await globalRunRegistry.get(runId)?.workflowExecution;
+    recovered.cleanup();
+    subscription.unsubscribe();
   });
 
   it('deletes both AGENTIC_LOOP and AGENTIC_EXECUTION snapshot rows on success', async () => {

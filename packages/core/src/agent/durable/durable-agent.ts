@@ -2009,7 +2009,29 @@ export class DurableAgent<
       messageList,
     });
 
-    // 10. Re-drive the workflow from the persisted snapshot in the background
+    // 10. Register the recovered run before restarting its workflow. A client
+    //     reconnecting with only the thread target must learn which run now
+    //     owns the thread before recovered chunks can be published.
+    const recoverStreamOptions: AgentExecutionOptions<TOutput> = {
+      runId,
+      requestContext,
+      ...(threadId
+        ? {
+            memory: {
+              thread: threadId,
+              ...(resourceId ? { resource: resourceId } : {}),
+            },
+          }
+        : {}),
+    } as AgentExecutionOptions<TOutput>;
+    await agentThreadStreamRuntime.registerRun(
+      this as unknown as Agent<any, any, any, any>,
+      output,
+      recoverStreamOptions,
+      this.getPubSub(),
+    );
+
+    // 11. Re-drive the workflow from the persisted snapshot in the background
     //     and delete snapshot rows on non-suspended terminals (same contract
     //     as start()/resume()). Errors are also broadcast via `emitError` so
     //     observers on the pubsub topic see the failure. Callers who await
