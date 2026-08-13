@@ -360,7 +360,6 @@ vi.mock('../utils/storage-factory.js', () => ({
 
 vi.mock('../utils/thread-lock.js', () => ({
   acquireThreadLock: vi.fn(),
-  tryAcquireThreadLock: vi.fn(() => true),
   releaseThreadLock: vi.fn(),
 }));
 
@@ -772,32 +771,6 @@ describe('createMastraCode', () => {
     await expect(createMastraCode({ crossProcessPubSub: true })).rejects.toThrow(
       'crossProcessPubSub requires a pubsub instance',
     );
-  });
-
-  it('keeps thread locks enabled for configured PubSub unless cross-process mode is explicit', async () => {
-    const pubsub = {} as any;
-    const { createMastraCode } = await import('../index.js');
-
-    await createMastraCode({ pubsub, unixSocketPubSub: true });
-
-    const agentControllerConfig = controllerConstructorMock.mock.calls.at(-1)?.[0] as
-      | { pubsub?: unknown; threadLock?: unknown }
-      | undefined;
-    expect(agentControllerConfig?.pubsub).toBe(pubsub);
-    expect(agentControllerConfig?.threadLock).toBeDefined();
-  });
-
-  it('skips thread locks for configured PubSub when cross-process mode is explicit', async () => {
-    const pubsub = {} as any;
-    const { createMastraCode } = await import('../index.js');
-
-    await createMastraCode({ pubsub, crossProcessPubSub: true });
-
-    const agentControllerConfig = controllerConstructorMock.mock.calls.at(-1)?.[0] as
-      | { pubsub?: unknown; threadLock?: unknown }
-      | undefined;
-    expect(agentControllerConfig?.pubsub).toBe(pubsub);
-    expect(agentControllerConfig?.threadLock).toBeUndefined();
   });
 
   it('restores the current thread caveman observation setting at startup', async () => {

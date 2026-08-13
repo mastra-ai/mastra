@@ -8,6 +8,9 @@ const createSessionCalls = vi.hoisted<Array<{ id?: string; ownerId?: string; res
 // which settings.json values were seeded into session state.
 const controllerInitialStates = vi.hoisted<Array<Record<string, unknown>>>(() => []);
 
+// Captures full AgentController constructor configs for thread-lock wiring tests.
+const controllerConstructorConfigs = vi.hoisted<Array<Record<string, unknown>>>(() => []);
+
 vi.mock('@mastra/core/llm', () => ({
   MastraModelGateway: class {},
   GatewayRegistry: {
@@ -30,7 +33,10 @@ vi.mock('@mastra/core/agent-controller', () => ({
       resourceId?: string;
       initialState?: Record<string, unknown>;
       intervalHandlers?: Array<{ immediate?: boolean; handler: () => unknown }>;
+      pubsub?: unknown;
+      threadLock?: unknown;
     }) {
+      controllerConstructorConfigs.push(config as Record<string, unknown>);
       controllerInitialStates.push(config.initialState ?? {});
       for (const interval of config.intervalHandlers ?? []) {
         if (interval.immediate !== false) void interval.handler();
@@ -353,6 +359,34 @@ describe('settings.json OM seeding', () => {
       vi.mocked(resolveOmRoleModel).mockReturnValue('');
       vi.mocked(loadSettings).mockReturnValue(baseSettings);
     }
+  });
+});
+
+describe('createMastraCode thread lock wiring', () => {
+  beforeEach(() => {
+    controllerConstructorConfigs.length = 0;
+  });
+
+  it('keeps thread locks enabled for configured PubSub unless cross-process mode is explicit', async () => {
+    const pubsub = {} as Record<string, never>;
+    const { createMastraCode } = await import('./index.js');
+
+    await createMastraCode({ pubsub: pubsub as never, unixSocketPubSub: true });
+
+    const agentControllerConfig = controllerConstructorConfigs.at(-1);
+    expect(agentControllerConfig?.pubsub).toBe(pubsub);
+    expect(agentControllerConfig?.threadLock).toBeDefined();
+  });
+
+  it('skips thread locks for configured PubSub when cross-process mode is explicit', async () => {
+    const pubsub = {} as Record<string, never>;
+    const { createMastraCode } = await import('./index.js');
+
+    await createMastraCode({ pubsub: pubsub as never, crossProcessPubSub: true });
+
+    const agentControllerConfig = controllerConstructorConfigs.at(-1);
+    expect(agentControllerConfig?.pubsub).toBe(pubsub);
+    expect(agentControllerConfig?.threadLock).toBeUndefined();
   });
 });
 
