@@ -4,7 +4,7 @@ import type { Intake, IntakeIssueDetail } from '../capabilities/intake.js';
 import { builtInFactoryRules } from '../rules/defaults.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { createGithubIssueReconciler } from './github/issue-reconciler.js';
-import type { ReconcileIssueState } from './github/rules.js';
+import type { GithubIssueFetcher, ReconcileIssueState } from './github/rules.js';
 import type { LinearIntegration } from './linear/integration.js';
 import { attachLinearIssueReconciler } from './linear/issue-reconciler.js';
 
@@ -38,6 +38,7 @@ async function githubSetup(input: {
   metadata?: Record<string, unknown>;
   externalId?: string;
   url?: string;
+  fetchIssue?: GithubIssueFetcher;
 } = {}) {
   const seeded = await createFactoryStorageForTests();
   const project = await seeded.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Factory' } });
@@ -93,7 +94,7 @@ async function githubSetup(input: {
       storage: seeded.workItems,
       rules: builtInFactoryRules(),
     },
-    vi.fn(),
+    input.fetchIssue ?? vi.fn(),
   );
   return { ...seeded, project, sourceControl, workItem, reconciler };
 }
@@ -112,84 +113,45 @@ function githubState(overrides: Partial<ReconcileIssueState> = {}): ReconcileIss
 
 describe('issue reconcilers', () => {
   it('reconciles only scoped GitHub issue cards and refreshes metadata', async () => {
-    const setup = await githubSetup({ metadata: { assignees: ['old'] } });
     const fetchIssue = vi.fn().mockResolvedValue(githubState());
-    const reconcile = createGithubIssueReconciler(
-      {
-        github: { getRepositoryCollaboratorPermission: vi.fn() },
-        sourceControl: setup.sourceControl,
-        integrationStorage: setup.integrations.forIntegration('github'),
-        projects: setup.projects,
-        storage: setup.workItems,
-        rules: builtInFactoryRules(),
-      },
-      fetchIssue,
-    );
+    const setup = await githubSetup({ metadata: { assignees: ['old'] }, fetchIssue });
 
-    await expect(reconcile([repository])).resolves.toMatchObject({ repositories: 1, checked: 1, updated: 1, failed: 0 });
+    await expect(setup.reconciler([repository])).resolves.toMatchObject({ repositories: 1, checked: 1, updated: 1, failed: 0 });
     expect(fetchIssue).toHaveBeenCalledWith({ installationId: 7, repository: 'acme/repo', number: 42 });
     const [updated] = await setup.workItems.list({ orgId: 'org-1', factoryProjectId: setup.project.id });
     expect(updated?.metadata).toMatchObject({ author: 'octocat', assignees: ['hubot', 'monalisa'], labels: ['bug'] });
   });
 
   it('replays a stable GitHub close through rules ingress without a direct metadata write', async () => {
-    const setup = await githubSetup();
+    const setup = await githubSetup({
+      fetchIssue: vi.fn().mockResolvedValue(githubState({ state: 'closed', stateReason: 'not_planned' })),
+    });
     const update = vi.spyOn(setup.workItems, 'update');
-    const reconcile = createGithubIssueReconciler(
-      {
-        github: { getRepositoryCollaboratorPermission: vi.fn() },
-        sourceControl: setup.sourceControl,
-        integrationStorage: setup.integrations.forIntegration('github'),
-        projects: setup.projects,
-        storage: setup.workItems,
-        rules: builtInFactoryRules(),
-      },
-      vi.fn().mockResolvedValue(githubState({ state: 'closed', stateReason: 'not_planned' })),
-    );
 
-    await expect(reconcile([repository])).resolves.toMatchObject({ checked: 1, closed: 1, updated: 0 });
-    await expect(reconcile([repository])).resolves.toMatchObject({ checked: 1, closed: 1, updated: 0 });
+    await expect(setup.reconciler([repository])).resolves.toMatchObject({ checked: 1, closed: 1, updated: 0 });
+    await expect(setup.reconciler([repository])).resolves.toMatchObject({ checked: 1, closed: 1, updated: 0 });
     expect(update).not.toHaveBeenCalled();
     const decisions = await setup.workItems.listDeferredDecisions('org-1', setup.project.id);
     expect(decisions).toHaveLength(1);
     expect(decisions[0]?.decision).toMatchObject({ type: 'transition', stage: 'canceled' });
   });
 
-  it('skips terminal and unrelated GitHub cards, preserves undefined provider metadata, and isolates failures', async () => {
-    const terminal = await githubSetup({ stages: ['done'] });
+  it('skips terminal GitHub cards and preserves undefined provider metadata', async () => {
     const terminalFetch = vi.fn();
-    const terminalReconcile = createGithubIssueReconciler(
-      {
-        github: { getRepositoryCollaboratorPermission: vi.fn() },
-        sourceControl: terminal.sourceControl,
-        integrationStorage: terminal.integrations.forIntegration('github'),
-        projects: terminal.projects,
-        storage: terminal.workItems,
-        rules: builtInFactoryRules(),
-      },
-      terminalFetch,
-    );
-    await expect(terminalReconcile([repository])).resolves.toMatchObject({ checked: 0 });
+    const terminal = await githubSetup({ stages: ['done'], fetchIssue: terminalFetch });
+    await expect(terminal.reconciler([repository])).resolves.toMatchObject({ checked: 0 });
     expect(terminalFetch).not.toHaveBeenCalled();
 
-    const setup = await githubSetup({ metadata: { author: 'stored author', labels: ['stored'] } });
-    const reconcile = createGithubIssueReconciler(
-      {
-        github: { getRepositoryCollaboratorPermission: vi.fn() },
-        sourceControl: setup.sourceControl,
-        integrationStorage: setup.integrations.forIntegration('github'),
-        projects: setup.projects,
-        storage: setup.workItems,
-        rules: builtInFactoryRules(),
-      },
-      vi.fn().mockResolvedValue(githubState({ author: undefined, labels: undefined, assignees: ['new'] })),
-    );
-    await expect(reconcile([repository])).resolves.toMatchObject({ updated: 1, failed: 0 });
+    const setup = await githubSetup({
+      metadata: { author: 'stored author', labels: ['stored'] },
+      fetchIssue: vi.fn().mockResolvedValue(githubState({ author: undefined, labels: undefined, assignees: ['new'] })),
+    });
+    await expect(setup.reconciler([repository])).resolves.toMatchObject({ updated: 1, failed: 0 });
     const [updated] = await setup.workItems.list({ orgId: 'org-1', factoryProjectId: setup.project.id });
     expect(updated?.metadata).toMatchObject({ author: 'stored author', labels: ['stored'], assignees: ['new'] });
   });
 
-  it('replays completed and canceled Linear issues through rules ingress', async () => {
+  it('replays canceled Linear issues through rules ingress', async () => {
     const seeded = await createFactoryStorageForTests();
     const project = await seeded.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Factory' } });
     await seeded.workItems.upsert({
