@@ -164,6 +164,15 @@ function formatRoute(route: Pick<ServerRoute, 'method' | 'path'>): string {
   return `${route.method} ${route.path}`;
 }
 
+/** A schema-aware custom route created by `createRoute()`. */
+type SchemaCustomApiRoute = Extract<ApiRoute, { readonly _mastraSchemaRoute: true }>;
+/** A Hono-style custom route created by `registerApiRoute()`. */
+type HonoCustomApiRoute = Exclude<ApiRoute, SchemaCustomApiRoute>;
+
+function isSchemaApiRoute(route: ApiRoute): route is SchemaCustomApiRoute {
+  return '_mastraSchemaRoute' in route && route._mastraSchemaRoute === true;
+}
+
 function getFGAProvider(mastra: any, requestContext?: RequestContext): IFGAProvider | undefined {
   // If we have request context, check auth mode to determine which FGA provider to use
   if (requestContext) {
@@ -927,6 +936,34 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     // using their framework-specific middleware.
   }
 
+  /** Ensures every custom route has an auth entry without overriding supplied values. */
+  private initializeCustomRouteAuthConfig(routes: ApiRoute[]): void {
+    this.customRouteAuthConfig ??= new Map();
+    for (const route of routes) {
+      const routeKey = `${route.method}:${route.path}`;
+      if (!this.customRouteAuthConfig.has(routeKey)) {
+        this.customRouteAuthConfig.set(routeKey, route.requiresAuth !== false);
+      }
+    }
+  }
+
+  /**
+   * Registers schema-aware custom routes through the adapter's native route pipeline.
+   * Returns the remaining Hono-style routes for the custom-route bridge.
+   */
+  protected async registerSchemaApiRoutes(): Promise<HonoCustomApiRoute[]> {
+    const routes = this.customApiRoutes ?? this.mastra.getServer()?.apiRoutes ?? [];
+    this.validateCustomRoutePaths(routes);
+    this.initializeCustomRouteAuthConfig(routes);
+
+    const schemaRoutes = routes.filter(isSchemaApiRoute);
+    for (const route of schemaRoutes) {
+      await this.registerRoute(this.app, route as unknown as ServerRoute, { prefix: '' });
+    }
+
+    return routes.filter((route): route is HonoCustomApiRoute => !isSchemaApiRoute(route));
+  }
+
   /**
    * Validates that no custom route path collides with the built-in route prefix.
    * Throws if any route path starts with the server's `apiPrefix`.
@@ -951,9 +988,8 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
    * Stores the handler on this instance for use by handleCustomRouteRequest().
    * Returns true if custom routes were found and registered.
    */
-  protected async buildCustomRouteHandler(): Promise<boolean> {
-    const routes = this.customApiRoutes ?? this.mastra.getServer()?.apiRoutes;
-    if (!routes || routes.length === 0) return false;
+  protected async buildCustomRouteHandler(routes: HonoCustomApiRoute[]): Promise<boolean> {
+    if (routes.length === 0) return false;
 
     const NOT_FOUND_HEADER = 'x-mastra-custom-route-not-found';
     const mastra = this.mastra;
@@ -986,8 +1022,6 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       });
       return c.json({ error: 'Internal Server Error' }, 500);
     });
-
-    this.validateCustomRoutePaths(routes);
 
     // Register each custom route
     for (const route of routes) {

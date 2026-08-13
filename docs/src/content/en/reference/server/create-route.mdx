@@ -146,9 +146,35 @@ handler: async params => {
 
 ## Return value
 
-Returns a `ServerRoute` object that can be registered with an adapter.
+Returns a `ServerRoute` object that can be registered with an adapter or passed to `server.apiRoutes` on the `Mastra` instance.
 
 ## Examples
+
+### Register through `server.apiRoutes`
+
+Routes created with `createRoute()` can be passed to `server.apiRoutes`. The adapter registers them with runtime validation, typed handler parameters, and generated OpenAPI metadata. See [Custom API routes](/docs/server/custom-api-routes) for details.
+
+```typescript
+import { Mastra } from '@mastra/core'
+import { createRoute } from '@mastra/server/server-adapter'
+import { z } from 'zod'
+
+const createItemRoute = createRoute({
+  method: 'POST',
+  path: '/items',
+  responseType: 'json',
+  bodySchema: z.object({
+    name: z.string(),
+  }),
+  handler: async ({ name }) => ({ id: 'new-id', name }),
+})
+
+export const mastra = new Mastra({
+  server: {
+    apiRoutes: [createItemRoute],
+  },
+})
+```
 
 ### GET route with path params
 

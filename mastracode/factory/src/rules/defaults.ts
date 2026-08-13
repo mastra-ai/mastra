@@ -93,12 +93,24 @@ function planWorkItem(context: FactoryStageRuleContext) {
 }
 
 function reviewPullRequest(context: FactoryStageRuleContext) {
+  // A re-entry into Review (from any post-intake stage) supersedes whichever
+  // review pass previously ran on this card: cancel any in-flight run before
+  // dispatching a fresh one so we don't burn tokens on the stale pass and race
+  // two agents on the same card. Cancellation is safe when nothing is in flight.
+  const supersedes = context.fromStage !== 'intake';
+  // The re-review skill only applies when a prior review pass actually completed
+  // (the card is returning from `done`). A cancelled first-time review that
+  // re-enters Review from `review` itself still has no prior pass to reconcile —
+  // it gets the regular factory-review skill.
+  const priorReviewCompleted = context.fromStage === 'done';
+  const skillName = priorReviewCompleted ? 'factory-rereview' : 'factory-review';
   return {
     type: 'invokeSkill',
-    idempotencyKey: `${context.ingress.id}:factory-review`,
+    idempotencyKey: `${context.ingress.id}:${skillName}`,
     role: 'review',
-    skillName: 'factory-review',
+    skillName,
     arguments: context.item.url ? `GitHub pull request (${context.item.url})` : context.item.title,
+    ...(supersedes ? { cancelInFlight: true } : {}),
   } as const;
 }
 
@@ -285,6 +297,20 @@ function reReviewRequestedPullRequest(context: FactoryGithubRuleContext) {
   } as const;
 }
 
+function reReviewUpdatedPullRequest(context: FactoryGithubRuleContext) {
+  if (!context.item || context.board !== 'review') return;
+  if (!context.pullRequest || context.pullRequest.state !== 'open' || context.pullRequest.merged) return;
+  // Intake and Reviewing have not completed a review pass yet. Only a push to a
+  // card that already left Reviewing should start a fresh pass.
+  if (context.item.stages.some(stage => stage === 'intake' || stage === 'review')) return;
+  return {
+    type: 'transition',
+    idempotencyKey: `${context.ingress.id}:re-review-updated`,
+    board: 'review',
+    stage: 'review',
+  } as const;
+}
+
 function linearIssueObserved(context: FactoryLinearRuleContext) {
   if (context.item) return;
   return {
@@ -354,6 +380,7 @@ const BUILT_IN_DEFAULTS: FactoryRulesOverrides = {
     issueCommentEdited: { onEvent: retriageGithubIssue },
     issueCommentDeleted: { onEvent: retriageGithubIssue },
     pullRequestOpened: { onEvent: pullRequestOpened },
+    pullRequestUpdated: { onEvent: reReviewUpdatedPullRequest },
     pullRequestReviewRequested: { onEvent: reReviewRequestedPullRequest },
     pullRequestMerged: { onEvent: pullRequestMerged },
     pullRequestClosed: { onEvent: pullRequestClosed },

@@ -750,7 +750,10 @@ describe('PlatformGithubIntegration', () => {
       mode: 'platform',
       endpointHost: 'platform.example.com',
       polling: { enabled: true },
-      reconcile: { enabled: true },
+      reconcile: {
+        pullRequests: { enabled: true },
+        issues: { enabled: true },
+      },
     });
     expect(JSON.stringify(integration.diagnostics())).not.toContain(config.accessToken);
   });
@@ -1099,11 +1102,14 @@ describe('PlatformGithubIntegration', () => {
       mode: 'platform',
       endpointHost: 'platform.example.com',
       polling: { enabled: false, intervalMs: 9_000 },
-      reconcile: { enabled: false },
+      reconcile: {
+        pullRequests: { enabled: false },
+        issues: { enabled: false },
+      },
     });
   });
 
-  it('keeps the reconcile worker alive when polling is disabled but reconcile stays enabled', () => {
+  it('keeps the reconciliation worker alive when polling is disabled', () => {
     vi.stubEnv('MASTRA_PLATFORM_GITHUB_POLLING_ENABLED', 'false');
     const integration = createIntegration();
 
@@ -1111,7 +1117,26 @@ describe('PlatformGithubIntegration', () => {
     expect(workers).toHaveLength(1);
     expect(integration.diagnostics()).toMatchObject({
       polling: { enabled: false },
-      reconcile: { enabled: true },
+      reconcile: {
+        pullRequests: { enabled: true },
+        issues: { enabled: true },
+      },
+    });
+  });
+
+  it('allows issue reconciliation to override a disabled legacy reconcile switch', () => {
+    vi.stubEnv('MASTRA_PLATFORM_GITHUB_POLLING_ENABLED', 'false');
+    vi.stubEnv('MASTRA_PLATFORM_GITHUB_RECONCILE_ENABLED', 'false');
+    vi.stubEnv('MASTRACODE_PLATFORM_GITHUB_ISSUE_RECONCILE_ENABLED', 'true');
+    const integration = createIntegration();
+
+    const workers = integration.workers({ controller: {}, storage: { generic: {} } } as unknown as IntegrationContext);
+    expect(workers).toHaveLength(1);
+    expect(integration.diagnostics()).toMatchObject({
+      reconcile: {
+        pullRequests: { enabled: false },
+        issues: { enabled: true },
+      },
     });
   });
 
@@ -1324,7 +1349,7 @@ describe('PlatformGithubIntegration', () => {
       const fetchImpl = vi.fn<typeof fetch>(async input => {
         const url = String(input);
         // addIssueLabels calls the platform label endpoint
-        if (url.includes('/labels')) return json({ labels: ['auto-triaged'] });
+        if (url.includes('/labels')) return json({ labels: ['status: auto-triaged'] });
         throw new Error(`Unexpected fetch: ${url}`);
       });
       // Stub fetch BEFORE constructing the integration — PlatformApiClient

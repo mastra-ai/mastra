@@ -4,6 +4,7 @@ description: "Expose additional HTTP endpoints from your Mastra server."
 packages:
   - "@mastra/core"
   - "@mastra/ai-sdk"
+  - "@mastra/server"
 ---
 
 # Custom API routes
@@ -40,6 +41,41 @@ curl http://localhost:4111/my-custom-route
 ```
 
 Each route's handler receives the Hono `Context`. Within the handler you can access the `Mastra` instance to fetch or call agents and workflows.
+
+## Schema validation
+
+Use [`createRoute()`](/reference/server/create-route) in `apiRoutes` to parse and validate path parameters, query parameters, and request bodies with Zod. The schemas also infer the handler parameters and generate OpenAPI metadata.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { createRoute } from '@mastra/server/server-adapter'
+import { z } from 'zod'
+
+const createItemRoute = createRoute({
+  method: 'POST',
+  path: '/items',
+  responseType: 'json',
+  bodySchema: z.object({
+    name: z.string().min(1),
+  }),
+  responseSchema: z.object({
+    id: z.string(),
+    name: z.string(),
+  }),
+  handler: async ({ name }) => ({
+    id: crypto.randomUUID(),
+    name,
+  }),
+})
+
+export const mastra = new Mastra({
+  server: {
+    apiRoutes: [createItemRoute],
+  },
+})
+```
+
+By default, Mastra returns a `400` response when validation fails. The `onValidationError` callback can override the status and response body. Validated values and the `Mastra` server context are passed directly to the handler.
 
 ## Middleware
 

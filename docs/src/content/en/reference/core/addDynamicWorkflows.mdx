@@ -7,9 +7,9 @@ packages:
 
 # Mastra.addDynamicWorkflows()
 
-:::experimental
+:::beta
 
-Dynamic workflows are in beta. Breaking changes may occur without a major version bump until the API is stable.
+Breaking changes may occur without a major version bump until the API is stable.
 
 :::
 
@@ -34,7 +34,7 @@ await mastra.addDynamicWorkflows([
   content={[
   {
     name: 'defs',
-    type: 'readonly DynamicWorkflowGraph[]',
+    type: 'readonly (DynamicWorkflowGraph | WorkflowBuilderDefinitionInput)[]',
     description:
       'The workflow definitions to add. Nested-workflow references may resolve against the live registries or against other members of the same bundle.',
   },

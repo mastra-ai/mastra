@@ -124,6 +124,19 @@ describe('mountFactoryAuth gate (enabled)', () => {
     expect(await res.text()).toBe('ok');
   });
 
+  it('forwards the platform deploy-auth /login landing to /signin with its query intact', async () => {
+    mockAuthenticate.mockResolvedValue(null);
+    const { app } = buildApp();
+
+    const res = await app.request('/login?error=access_denied&error_description=You%20do%20not%20have%20access', {
+      headers: { Accept: 'text/html' },
+    });
+    expect(res.status).toBe(302);
+    expect(res.headers.get('location')).toBe(
+      '/signin?error=access_denied&error_description=You%20do%20not%20have%20access',
+    );
+  });
+
   it('lets unauthenticated requests fetch static assets and metadata needed by the sign-in page', async () => {
     mockAuthenticate.mockResolvedValue(null);
     const { app } = buildApp();
@@ -389,6 +402,19 @@ describe('mountFactoryAuth /auth routes (enabled)', () => {
     const res = await app.request('/auth/callback');
     expect(res.status).toBe(302);
     expect(res.headers.get('location')).toBe('/auth/login');
+    expect(mockHandleCallback).not.toHaveBeenCalled();
+  });
+
+  it('surfaces an IdP denial on /signin, keeping the intended destination for a retry', async () => {
+    const { app } = buildApp();
+    const state = `uuid-1|${encodeURIComponent('/dashboard')}`;
+    const res = await app.request(
+      `/auth/callback?error=access_denied&error_description=You%20do%20not%20have%20access&state=${state}`,
+    );
+    expect(res.status).toBe(302);
+    expect(res.headers.get('location')).toBe(
+      '/signin?error=access_denied&error_description=You+do+not+have+access&returnTo=%2Fdashboard',
+    );
     expect(mockHandleCallback).not.toHaveBeenCalled();
   });
 

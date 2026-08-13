@@ -27,7 +27,11 @@ const ACTION_GROUPS = [
       'factory.work_item.transition_rejected',
     ],
   },
-  { key: 'runs', label: 'Runs', actions: ['factory.run.started', 'factory.triage.started'] },
+  {
+    key: 'runs',
+    label: 'Runs',
+    actions: ['factory.run.started', 'factory.run.approved', 'factory.run.dismissed', 'factory.triage.started'],
+  },
   { key: 'worktrees', label: 'Worktrees', actions: ['factory.worktree.created', 'factory.worktree.deleted'] },
   { key: 'git', label: 'Git', actions: ['factory.git.commit', 'factory.git.push', 'factory.git.pr_opened'] },
   {

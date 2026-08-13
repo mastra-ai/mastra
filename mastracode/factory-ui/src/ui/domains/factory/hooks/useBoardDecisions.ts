@@ -1,26 +1,36 @@
 import { useMemo } from 'react';
 
-import { useFactoryDecisionStatus, useRetryFactoryDecision } from '../../../../hooks/useFactoryDecisions';
+import { useFactoryDecisionAction, useFactoryDecisionStatus } from '../../../../hooks/useFactoryDecisions';
 import type { FactoryDecisionStatus, FactoryDecisionSummary } from '../services/decisions';
 
-const ACTIVE_STATUSES: FactoryDecisionStatus[] = ['pending', 'leased', 'retry', 'failed'];
+const BOARD_STATUSES: FactoryDecisionStatus[] = ['pending', 'proposed', 'leased', 'retry', 'failed'];
 
-/** Rule effects still in flight for the board's cards, and the retry behind a failed one. */
+/** Runs proposed on the board's cards, and the effects already in flight behind them. */
 export function useBoardDecisions(factoryProjectId: string) {
-  const status = useFactoryDecisionStatus(factoryProjectId, ACTIVE_STATUSES);
-  const retry = useRetryFactoryDecision(factoryProjectId);
+  const status = useFactoryDecisionStatus(factoryProjectId, BOARD_STATUSES);
+  const approve = useFactoryDecisionAction(factoryProjectId, 'approve');
+  const dismiss = useFactoryDecisionAction(factoryProjectId, 'dismiss');
+  const retry = useFactoryDecisionAction(factoryProjectId, 'retry');
 
-  const byItem = useMemo(() => {
-    const decisions = new Map<string, FactoryDecisionSummary>();
+  const { proposalByItem, effectByItem } = useMemo(() => {
+    const proposals = new Map<string, FactoryDecisionSummary>();
+    const effects = new Map<string, FactoryDecisionSummary>();
     for (const decision of status.data?.decisions ?? []) {
-      if (decision.workItemId && !decisions.has(decision.workItemId)) decisions.set(decision.workItemId, decision);
+      if (!decision.workItemId) continue;
+      const bucket = decision.status === 'proposed' ? proposals : effects;
+      if (!bucket.has(decision.workItemId)) bucket.set(decision.workItemId, decision);
     }
-    return decisions;
+    return { proposalByItem: proposals, effectByItem: effects };
   }, [status.data]);
 
   return {
-    byItem,
+    proposalByItem,
+    effectByItem,
+    approvingId: approve.isPending ? approve.variables : undefined,
+    approve: (decisionId: string) => approve.mutate(decisionId),
+    dismiss: (decisionId: string) => dismiss.mutate(decisionId),
     retryingId: retry.isPending ? retry.variables : undefined,
     retry: (decisionId: string) => retry.mutate(decisionId),
+    error: [approve, dismiss, retry].find(mutation => mutation.isError)?.error,
   };
 }

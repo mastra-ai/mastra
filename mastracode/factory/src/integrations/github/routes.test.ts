@@ -1493,18 +1493,22 @@ describe('issues route', () => {
     expect(listRepoOpenIssues).toHaveBeenCalledWith(7, 'octo/hello', 2, { label: undefined });
   });
 
-  it('forwards the auto-triaged label filter', async () => {
+  it('forwards the status: auto-triaged label filter', async () => {
     seedMaterializedProject();
-    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/issues?label=auto-triaged');
+    const res = await buildApp({ workosId: 'u1' }).request(
+      '/web/github/projects/p1/issues?label=status%3A%20auto-triaged',
+    );
     expect(res.status).toBe(200);
-    expect(listRepoOpenIssues).toHaveBeenCalledWith(7, 'octo/hello', 1, { label: 'auto-triaged' });
+    expect(listRepoOpenIssues).toHaveBeenCalledWith(7, 'octo/hello', 1, { label: 'status: auto-triaged' });
   });
 
-  it('forwards the needs-approval label filter', async () => {
+  it('forwards the status: needs approval label filter', async () => {
     seedMaterializedProject();
-    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/issues?label=needs-approval');
+    const res = await buildApp({ workosId: 'u1' }).request(
+      '/web/github/projects/p1/issues?label=status%3A%20needs%20approval',
+    );
     expect(res.status).toBe(200);
-    expect(listRepoOpenIssues).toHaveBeenCalledWith(7, 'octo/hello', 1, { label: 'needs-approval' });
+    expect(listRepoOpenIssues).toHaveBeenCalledWith(7, 'octo/hello', 1, { label: 'status: needs approval' });
   });
 
   it('400s on an unsupported label filter', async () => {
@@ -1541,7 +1545,7 @@ describe('issues route', () => {
         body: JSON.stringify({
           title: 'Fix flaky test',
           url: 'https://github.com/octo/hello/issues/12',
-          labels: ['bug', 'auto-triaged', 'status: needs triage', ''],
+          labels: ['bug', 'status: auto-triaged', 'status: needs triage', ''],
         }),
       },
     );
@@ -1552,7 +1556,7 @@ describe('issues route', () => {
       projectPath: '/workspace/worktrees/factory-issue-12-aeab418d',
       branch: 'factory/issue-12',
     });
-    expect(addIssueLabels).toHaveBeenCalledWith(7, 'octo/hello', 12, ['auto-triaged']);
+    expect(addIssueLabels).toHaveBeenCalledWith(7, 'octo/hello', 12, ['status: auto-triaged']);
     expect(addIssueLabels).toHaveBeenCalledOnce();
     expect(removeIssueLabel).toHaveBeenCalledWith(7, 'octo/hello', 12, 'status: needs triage');
     expect(removeIssueLabel).toHaveBeenCalledOnce();
@@ -1561,13 +1565,33 @@ describe('issues route', () => {
       issueNumber: 12,
       issueTitle: 'Fix flaky test',
       issueUrl: 'https://github.com/octo/hello/issues/12',
-      labels: ['bug', 'auto-triaged'],
+      labels: ['bug', 'status: auto-triaged'],
       installationId: 7,
       resourceId: 'factory-p1',
       projectPath: '/workspace/worktrees/factory-issue-12-aeab418d',
       branch: 'factory/issue-12',
       defaultModelId: undefined,
     });
+  });
+
+  it('keeps GitHub triage labels unchanged when triage fails', async () => {
+    seedMaterializedProject();
+    const runIssueTriage = vi.fn(async () => {
+      throw new Error('triage failed');
+    });
+    const res = await buildApp({ workosId: 'u1' }, { runIssueTriage }).request('/web/github/projects/p1/issues/5/triage', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        title: 'Keep labels retryable',
+        url: 'https://github.com/octo/hello/issues/5',
+        labels: ['status: needs triage'],
+      }),
+    });
+
+    expect(res.status).toBe(500);
+    expect(addIssueLabels).not.toHaveBeenCalled();
+    expect(removeIssueLabel).not.toHaveBeenCalled();
   });
 
   it('normalises labels through the shared wrapper and resolves the default model', async () => {
@@ -1588,12 +1612,12 @@ describe('issues route', () => {
     expect(res.status).toBe(202);
     // The wrapper calls addIssueLabels exactly once (no duplicate from the handler).
     expect(addIssueLabels).toHaveBeenCalledOnce();
-    expect(addIssueLabels).toHaveBeenCalledWith(7, 'octo/hello', 5, ['auto-triaged']);
+    expect(addIssueLabels).toHaveBeenCalledWith(7, 'octo/hello', 5, ['status: auto-triaged']);
     expect(removeIssueLabel).not.toHaveBeenCalled();
-    // The runner receives labels with 'auto-triaged' appended by the wrapper.
+    // The wrapper ensures the runner receives the canonical 'status: auto-triaged' label.
     expect(runIssueTriage).toHaveBeenCalledWith(
       expect.objectContaining({
-        labels: ['enhancement', 'auto-triaged'],
+        labels: ['enhancement', 'status: auto-triaged'],
         defaultModelId: undefined,
       }),
     );
@@ -1944,6 +1968,69 @@ describe('Factory session routes', () => {
     const deleted = await app.request(`/web/user-sessions/${sessionId}`, { method: 'DELETE' });
     expect(deleted.status).toBe(200);
     expect(tables.sessions).toHaveLength(0);
+  });
+
+  it('tears down the live controller session after deleting its row and before reclaiming its sandbox', async () => {
+    seedMaterializedProject();
+    const controller = { deleteSession: vi.fn(async () => {}) } as any;
+    const app = buildApp({ workosId: 'u1' }, { controller });
+    const created = await postJson(app, '/web/github/projects/p1/sessions', { branch: 'feat/x' });
+    const sessionId = (await created.json()).session.sessionId;
+    Object.assign(
+      tables.sessions.find(row => row.sessionId === sessionId)!,
+      {
+        sandboxId: 'sb-live',
+        sandboxWorkdir: '/workspace/hello',
+      },
+    );
+    controller.deleteSession.mockImplementation(async () => {
+      expect(tables.sessions).toHaveLength(0);
+      expect(reattachSandbox).not.toHaveBeenCalled();
+    });
+
+    const deleted = await app.request(`/web/user-sessions/${sessionId}`, { method: 'DELETE' });
+
+    expect(deleted.status).toBe(200);
+    expect(controller.deleteSession).toHaveBeenCalledWith({ resourceId: sessionId });
+    await vi.waitFor(() => expect(reattachSandbox).toHaveBeenCalledWith('sb-live'));
+  });
+
+  it('does not tear down a controller session for an unauthorized deletion', async () => {
+    seedMaterializedProject();
+    const controller = { deleteSession: vi.fn() } as any;
+    const ownerApp = buildApp({ workosId: 'u1' }, { controller });
+    const created = await postJson(ownerApp, '/web/github/projects/p1/sessions', { branch: 'feat/x' });
+    const sessionId = (await created.json()).session.sessionId;
+
+    const response = await buildApp({ workosId: 'u2' }, { controller }).request(`/web/user-sessions/${sessionId}`, {
+      method: 'DELETE',
+    });
+
+    expect(response.status).toBe(404);
+    expect(controller.deleteSession).not.toHaveBeenCalled();
+  });
+
+  it('continues sandbox reclamation and returns success when controller teardown fails', async () => {
+    seedMaterializedProject();
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const controller = { deleteSession: vi.fn(async () => Promise.reject(new Error('teardown failed'))) } as any;
+    const app = buildApp({ workosId: 'u1' }, { controller });
+    const created = await postJson(app, '/web/github/projects/p1/sessions', { branch: 'feat/x' });
+    const sessionId = (await created.json()).session.sessionId;
+    Object.assign(
+      tables.sessions.find(row => row.sessionId === sessionId)!,
+      {
+        sandboxId: 'sb-live',
+        sandboxWorkdir: '/workspace/hello',
+      },
+    );
+
+    const deleted = await app.request(`/web/user-sessions/${sessionId}`, { method: 'DELETE' });
+
+    expect(deleted.status).toBe(200);
+    expect(tables.sessions).toHaveLength(0);
+    await vi.waitFor(() => expect(reattachSandbox).toHaveBeenCalledWith('sb-live'));
+    error.mockRestore();
   });
 
   it('returns a remote session sandbox to the reuse pool on delete instead of destroying it', async () => {

@@ -438,6 +438,62 @@ describe('SourceControlStorage', () => {
     );
   });
 
+  it('records first_message_at write-once via markFirstMessage', async () => {
+    const project = await createProject();
+    const link = await linkRepository({ factoryProjectId: project.id });
+    const session = await github.sessions.create({
+      sessionId: '00000000-0000-4000-8000-000000000003',
+      projectRepositoryId: link.id,
+      orgId: 'org-1',
+      userId: 'user-1',
+      branch: 'user/session-00000000-0000-4000-8000-000000000003',
+      baseBranch: 'main',
+    });
+    expect(session.firstMessageAt).toBeNull();
+
+    await github.sessions.markFirstMessage({ sessionId: session.sessionId });
+    const marked = await github.sessions.getBySessionId(session.sessionId);
+    expect(marked?.firstMessageAt).toBeInstanceOf(Date);
+
+    // A later call must not move the timestamp: the guarded update only
+    // matches rows where the column is still NULL.
+    await new Promise(resolve => setTimeout(resolve, 5));
+    await github.sessions.markFirstMessage({ sessionId: session.sessionId });
+    const again = await github.sessions.getBySessionId(session.sessionId);
+    expect(again?.firstMessageAt?.getTime()).toBe(marked!.firstMessageAt!.getTime());
+
+    // Sessions without a source-control row are a zero-row no-op.
+    await expect(github.sessions.markFirstMessage({ sessionId: 'missing-session' })).resolves.toBeUndefined();
+  });
+
+  it('records first_meaningful_exec_at write-once via markFirstMeaningfulExec', async () => {
+    const project = await createProject();
+    const link = await linkRepository({ factoryProjectId: project.id });
+    const session = await github.sessions.create({
+      sessionId: '00000000-0000-4000-8000-000000000004',
+      projectRepositoryId: link.id,
+      orgId: 'org-1',
+      userId: 'user-1',
+      branch: 'user/session-00000000-0000-4000-8000-000000000004',
+      baseBranch: 'main',
+    });
+    expect(session.firstMeaningfulExecAt).toBeNull();
+
+    await github.sessions.markFirstMeaningfulExec({ sessionId: session.sessionId });
+    const marked = await github.sessions.getBySessionId(session.sessionId);
+    expect(marked?.firstMeaningfulExecAt).toBeInstanceOf(Date);
+
+    // A later call must not move the timestamp: the guarded update only
+    // matches rows where the column is still NULL.
+    await new Promise(resolve => setTimeout(resolve, 5));
+    await github.sessions.markFirstMeaningfulExec({ sessionId: session.sessionId });
+    const again = await github.sessions.getBySessionId(session.sessionId);
+    expect(again?.firstMeaningfulExecAt?.getTime()).toBe(marked!.firstMeaningfulExecAt!.getTime());
+
+    // Sessions without a source-control row are a zero-row no-op.
+    await expect(github.sessions.markFirstMeaningfulExec({ sessionId: 'missing-session' })).resolves.toBeUndefined();
+  });
+
   it('clears every owned source-control collection', async () => {
     const project = await createProject();
     const link = await linkRepository({ factoryProjectId: project.id });

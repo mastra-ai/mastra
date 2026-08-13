@@ -19,9 +19,9 @@ import { RootGuards } from './domains/auth/components/RootGuards';
 import { AuditPage } from './pages/AuditPage';
 import { ReviewBoardPage, WorkBoardPage } from './pages/BoardPage';
 import { CreateFactoryPage } from './pages/CreateFactoryPage';
-import { MetricsPage } from './pages/MetricsPage';
 import { NewPage } from './pages/NewPage';
 import { OnboardingPage } from './pages/OnboardingPage';
+import { OverviewPage } from './pages/OverviewPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { SlackConnectionPage } from './pages/SlackConnectionPage';
 import { RulesPage } from './pages/RulesPage';
@@ -59,6 +59,12 @@ function RootLanding() {
 
 function FactoryHomeRedirect() {
   return <Navigate to="work" replace />;
+}
+
+/** `/metrics` shipped before the page became the Overview — keep old links alive. */
+function MetricsRedirect() {
+  const { factoryId } = useParams<{ factoryId: string }>();
+  return <Navigate to={`/factories/${factoryId}/overview`} replace />;
 }
 
 /**
@@ -135,6 +141,11 @@ export function createAppRoutes(): RouteObject[] {
               ],
             },
             {
+              path: 'user/new/:draftSessionId',
+              element: <Chat />,
+              children: [{ index: true, element: <NewPage /> }],
+            },
+            {
               path: 'user/threads/:threadId',
               element: <Chat />,
               children: [{ index: true, element: <ThreadPage /> }],
@@ -145,7 +156,8 @@ export function createAppRoutes(): RouteObject[] {
                 { path: 'new', element: <NewPage /> },
                 { path: 'work', element: <WorkBoardPage /> },
                 { path: 'review', element: <ReviewBoardPage /> },
-                { path: 'metrics', element: <MetricsPage /> },
+                { path: 'overview', element: <OverviewPage /> },
+                { path: 'metrics', element: <MetricsRedirect /> },
                 { path: 'rules', element: <RulesPage /> },
                 { path: 'audit', element: <AuditPage /> },
                 {

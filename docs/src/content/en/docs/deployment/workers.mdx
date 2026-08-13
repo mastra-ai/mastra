@@ -1,5 +1,5 @@
 ---
-title: "Workers | Deployment"
+title: "Workers | Deploy"
 description: "Separate background processing from the API layer by running workflow execution, cron schedules, and background tasks in dedicated worker processes."
 packages:
   - "@mastra/core"
@@ -14,9 +14,9 @@ import TabItem from '@theme/TabItem'
 
 # Workers
 
-:::experimental
+:::beta
 
-This feature is in beta. The API is stable enough for production use, but some details may change. See [known limitations](#known-limitations) for current gaps.
+Breaking changes may occur without a major version bump until the API is stable. See [known limitations](#known-limitations) for current gaps.
 
 :::
 
@@ -124,7 +124,23 @@ Run the same build artifact in multiple containers, each with a different [`MAST
 
 Split deployments require a distributed PubSub backend ([`RedisStreamsPubSub`](/reference/pubsub/redis-streams) or [`GoogleCloudPubSub`](/reference/pubsub/google-cloud-pubsub)), a shared [storage backend](/reference/workers/overview#supported-storage-backends), and network connectivity between the orchestration worker and the API.
 
-The [worker deployment guide](/guides/deployment/mastra-workers) walks through this setup with Docker Compose and Kubernetes examples.
+### Select workers
+
+Set [`MASTRA_WORKERS`](/reference/workers/overview#mastra_workers) to control which workers run in each process:
+
+| Value | Behavior |
+| - | - |
+| `false` | Disable all workers. Use this for the API process in a fully split deployment. |
+| `orchestration` | Start the orchestration worker. |
+| `scheduler` | Start the scheduler worker. |
+| `backgroundTasks` | Start the background task worker. |
+| `orchestration,backgroundTasks` | Start multiple workers from a comma-separated allowlist. |
+
+You can also pass a worker name to the CLI. The command sets `MASTRA_WORKERS` in the spawned process:
+
+```bash
+mastra worker start orchestration
+```
 
 ## Network architecture
 
@@ -138,6 +154,237 @@ In a split deployment:
 
 All three worker types (orchestration, scheduler, background task) sit behind the API on a private network. They share access to the PubSub backend and storage database but never receive traffic directly from clients. If a worker-related feature needs an HTTP route (for example, token minting for a voice integration), that route runs on the API server, not on the worker process.
 
+## Deploy split workers
+
+Build the API and worker artifacts:
+
+```bash
+mastra build
+mastra worker build --output-dir .mastra/worker
+```
+
+`mastra build` creates the API artifact in `.mastra/output/`. [`mastra worker build`](/reference/cli/mastra#mastra-worker-build) creates a worker artifact in `.mastra/worker/`. The following Dockerfile accepts either directory:
+
+```dockerfile title="Dockerfile"
+FROM node:22-alpine
+
+ARG MASTRA_OUTPUT=.mastra/output
+
+WORKDIR /app
+
+COPY ${MASTRA_OUTPUT}/package.json ${MASTRA_OUTPUT}/.npmrc* ./
+RUN npm install --omit=dev
+
+COPY ${MASTRA_OUTPUT}/ .
+
+EXPOSE 4111
+CMD ["node", "index.mjs"]
+```
+
+See [Deploy a Mastra server](/docs/deployment/mastra-server) for more information about the build output.
+
+### Docker Compose
+
+The following configuration runs PostgreSQL, Redis, the API, and one process for each worker type. Every process uses shared infrastructure, and the worker processes use the worker artifact.
+
+```yaml title="docker-compose.yml"
+x-worker: &worker
+  build:
+    context: .
+    args:
+      MASTRA_OUTPUT: .mastra/worker
+
+x-mastra-environment: &shared-environment
+  DATABASE_URL: postgres://mastra:${POSTGRES_PASSWORD}@postgres:5432/mastra
+  REDIS_URL: redis://redis:6379
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: mastra
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: mastra
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U mastra']
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      args:
+        MASTRA_OUTPUT: .mastra/output
+    ports:
+      - '4111:4111'
+    environment:
+      <<: *shared-environment
+      WORKER_TOKEN: ${WORKER_TOKEN}
+      MASTRA_WORKERS: 'false'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://localhost:4111/api/agents']
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  orchestration-worker:
+    <<: *worker
+    environment:
+      <<: *shared-environment
+      MASTRA_WORKERS: orchestration
+      MASTRA_STEP_EXECUTION_URL: http://api:4111/api
+      MASTRA_WORKER_AUTH_TOKEN: ${WORKER_TOKEN}
+    depends_on:
+      api:
+        condition: service_healthy
+
+  scheduler-worker:
+    <<: *worker
+    environment:
+      <<: *shared-environment
+      MASTRA_WORKERS: scheduler
+    depends_on:
+      api:
+        condition: service_healthy
+
+  background-task-worker:
+    <<: *worker
+    environment:
+      <<: *shared-environment
+      MASTRA_WORKERS: backgroundTasks
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+```
+
+Set the secrets next to `docker-compose.yml`, along with any model provider credentials your application needs:
+
+```bash title=".env"
+POSTGRES_PASSWORD=your-secure-password
+WORKER_TOKEN=your-shared-secret-token
+```
+
+Configure the API auth provider to accept `WORKER_TOKEN` before exposing the deployment. The orchestration worker sends the same value through `MASTRA_WORKER_AUTH_TOKEN`. The scheduler and background task workers don't call the step execution endpoint in this pull-based topology, so they don't need that variable.
+
+Start the stack and verify that the containers and API are available:
+
+```bash
+docker compose up -d
+docker compose ps
+curl http://localhost:4111/api/agents
+```
+
+### Kubernetes
+
+Create separate Deployments for the API, orchestration worker, scheduler worker, and background task worker. Use the same image and Secret for each Deployment. Set only the role-specific environment variables directly on each container.
+
+The orchestration worker Deployment has the following shape:
+
+```yaml title="k8s/orchestration-worker.yaml"
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: orchestration-worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: orchestration-worker
+  template:
+    metadata:
+      labels:
+        app: orchestration-worker
+    spec:
+      containers:
+        - name: worker
+          image: your-registry/mastra-workers:latest
+          env:
+            - name: MASTRA_WORKERS
+              value: orchestration
+            - name: MASTRA_STEP_EXECUTION_URL
+              value: http://api:4111/api
+          envFrom:
+            - secretRef:
+                name: mastra-secrets
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+```
+
+Use `MASTRA_WORKERS: scheduler` and `MASTRA_WORKERS: backgroundTasks` for the other worker Deployments. Set `MASTRA_WORKERS: 'false'` on the API Deployment and expose the API with a Service. Give every process access to the same database and PubSub backend. Configure the API auth provider with a worker token, then expose that token to the orchestration worker as `MASTRA_WORKER_AUTH_TOKEN`. See [Deploy Mastra to Kubernetes](/integrations/deploy/kubernetes) for the base Kubernetes resources.
+
+Apply the manifests, then verify the pods and API:
+
+```bash
+kubectl apply -f k8s/
+kubectl get pods
+kubectl port-forward svc/api 4111:4111
+```
+
+In a separate terminal, request an API route:
+
+```bash
+curl http://localhost:4111/api/agents
+```
+
+### Step execution URL
+
+In a fully split deployment, the orchestration worker delegates workflow step execution to the API over HTTP. Set `MASTRA_STEP_EXECUTION_URL` to the API's internal URL, including the `/api` prefix:
+
+```bash
+MASTRA_STEP_EXECUTION_URL=http://api:4111/api
+```
+
+Without this variable, the orchestration worker attempts to execute steps in its own process. That process doesn't have access to the full Mastra runtime in a split deployment.
+
+The endpoint uses the server's normal auth pipeline. If the API has an auth provider, set `MASTRA_WORKER_AUTH_TOKEN` to a bearer token that provider accepts. Mastra forwards the value as an `Authorization: Bearer` credential. The configured auth provider validates the token. See [Worker authentication](/docs/server/auth/workers) for server configuration and other credential formats.
+
+### Scale workers
+
+The orchestration and background task workers can scale horizontally. PubSub consumer groups distribute events across their instances:
+
+```bash
+docker compose up -d --scale orchestration-worker=3
+docker compose up -d --scale background-task-worker=2
+```
+
+For Kubernetes, change the Deployment replica count manually or use a HorizontalPodAutoscaler:
+
+```bash
+kubectl scale deployment/orchestration-worker --replicas=3
+kubectl scale deployment/background-task-worker --replicas=2
+```
+
+Run exactly one scheduler worker. Multiple schedulers polling the same storage can publish duplicate events for a schedule.
+
+### Crash recovery
+
+A distributed PubSub backend persists unacknowledged events so orchestration and background task workers can resume processing after a restart. If the API is unavailable when the orchestration worker requests step execution, the request fails and the event is delivered again. An event can be processed more than once, so handlers should be idempotent when possible.
+
+The scheduler calculates the next fire time from the current time after it restarts. It doesn't replay schedules that elapsed while it was unavailable.
+
+If the API crashes while a step is executing, that work can be lost and the workflow run can remain in a `running` state. See [known limitations](#known-limitations) and [durable agent crash recovery](/docs/long-running-agents/durable-agents#crash-recovery).
+
 ## Known limitations
 
 - **No dead-letter queue**: Failed events are nacked and retried, but there's no DLQ for events that fail after all retries.
@@ -147,7 +394,6 @@ All three worker types (orchestration, scheduler, background task) sit behind th
 
 ## Related
 
-- [Worker deployment guide](/guides/deployment/mastra-workers): Docker Compose and Kubernetes examples
 - [Worker authentication](/docs/server/auth/workers): Secure worker-to-API communication
 - [Workers reference](/reference/workers/overview): Details about worker environment variables and types, with a list of supported storage backends
 - [CLI reference](/reference/cli/mastra#mastra-worker-build): `mastra worker build` and `mastra worker start`

@@ -49,6 +49,7 @@ function inPlaceholders(count: number, startIndex = 1): string {
   return Array.from({ length: count }, (_, i) => `$${i + startIndex}`).join(', ');
 }
 export class MemoryDSQL extends MemoryStorage {
+  override readonly supportsPartialThreadUpdate = true;
   #db: DsqlDB;
   #schema: string;
   #skipDefaultIndexes?: boolean;

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TaskList } from './task-list';
 import type { TaskListItem } from './task-list';
@@ -67,6 +67,53 @@ describe('TaskList', () => {
         />,
       );
       expect(Element.prototype.scrollIntoView).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('when the list is collapsed', () => {
+    const collapse = () => fireEvent.click(screen.getByRole('button'));
+
+    it('hides the tasks while keeping the completion count', () => {
+      render(<TaskList tasks={mixedTasks} />);
+      collapse();
+
+      expect(screen.queryByText('Inspect code')).toBeNull();
+      expect(screen.queryByText('Build package')).toBeNull();
+      expect(screen.getByText('1/3 completed')).toBeTruthy();
+    });
+
+    it('summarizes the active task in place of the title', () => {
+      render(<TaskList tasks={mixedTasks} />);
+      collapse();
+
+      expect(screen.getByText('Adding tests')).toBeTruthy();
+      expect(screen.getByLabelText('In progress')).toBeTruthy();
+      expect(screen.queryByText('Tasks')).toBeNull();
+    });
+
+    it('summarizes the next pending task when nothing is in progress', () => {
+      render(<TaskList tasks={mixedTasks.map(task => ({ ...task, status: 'pending' }))} />);
+      collapse();
+
+      expect(screen.getByText('Inspect code')).toBeTruthy();
+      expect(screen.queryByText('Add tests')).toBeNull();
+    });
+
+    it('keeps the title when every task is completed', () => {
+      render(<TaskList tasks={completedTasks} hideWhenComplete={false} />);
+      collapse();
+
+      expect(screen.getByText('Tasks')).toBeTruthy();
+    });
+
+    it('restores the tasks when expanded again', () => {
+      render(<TaskList tasks={mixedTasks} defaultOpen={false} />);
+      expect(screen.queryByText('Inspect code')).toBeNull();
+
+      fireEvent.click(screen.getByRole('button'));
+
+      expect(screen.getByText('Inspect code')).toBeTruthy();
+      expect(Element.prototype.scrollIntoView).toHaveBeenCalled();
     });
   });
 

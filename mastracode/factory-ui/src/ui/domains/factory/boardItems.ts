@@ -1,8 +1,8 @@
 import { relativeTime } from '../../../lib/date/relativeTime';
 import type { WorkItem, WorkItemSessionRef, WorkItemSource } from './services/workItems';
 
-export const AUTO_TRIAGED_LABEL = 'auto-triaged';
-export const NEEDS_APPROVAL_LABEL = 'needs-approval';
+export const AUTO_TRIAGED_LABEL = 'status: auto-triaged';
+export const NEEDS_APPROVAL_LABEL = 'status: needs approval';
 export const HIDDEN_CARD_LABELS = new Set([AUTO_TRIAGED_LABEL, NEEDS_APPROVAL_LABEL]);
 
 export const SOURCE_LABELS: Record<WorkItemSource, string> = {

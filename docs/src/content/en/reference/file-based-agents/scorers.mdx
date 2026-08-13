@@ -7,6 +7,12 @@ packages:
 
 # Scorers
 
+:::beta
+
+Breaking changes may occur without a major version bump until the API is stable.
+
+:::
+
 A file-based agent discovers [scorers](/docs/evals/overview) from its `scorers/` directory. Use this page for the file-based convention; use the scorers guide for built-in scorers, custom scorers, and sampling.
 
 Each file under `scorers/` default-exports one scorer, and the filename becomes its key. The default export is either a [`MastraScorer`](/reference/evals/create-scorer) or a `{ scorer, sampling }` entry.

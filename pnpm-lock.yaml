@@ -2376,9 +2376,6 @@ importers:
       lucide-react:
         specifier: ^0.474.0
         version: 0.474.0(react@19.2.7)
-      marked:
-        specifier: ^15.0.0
-        version: 15.0.12
       react:
         specifier: 'catalog:'
         version: 19.2.7
@@ -5988,12 +5985,6 @@ importers:
       zod-from-json-schema:
         specifier: ^0.5.2
         version: 0.5.2
-      zod-from-json-schema-v3:
-        specifier: npm:zod-from-json-schema@^0.0.5
-        version: zod-from-json-schema@0.0.5
-      zod-to-json-schema:
-        specifier: ^3.25.1
-        version: 3.25.2(zod@4.4.3)
     devDependencies:
       '@ai-sdk/anthropic':
         specifier: ^3.0.103
@@ -6064,6 +6055,12 @@ importers:
       zod:
         specifier: 'catalog:'
         version: 4.4.3
+      zod-from-json-schema-v3:
+        specifier: npm:zod-from-json-schema@^0.0.5
+        version: zod-from-json-schema@0.0.5
+      zod-to-json-schema:
+        specifier: ^3.25.2
+        version: 3.25.2(zod@4.4.3)
       zod-v3:
         specifier: npm:zod@^3.25.76
         version: zod@3.25.76
@@ -26873,10 +26870,6 @@ packages:
 
   markdown-table@3.0.4:
     resolution: {integrity: sha512-wiYz4+JrLyb/DqW2hkFJxP7Vd7JuTDm77fvbM8VfEQdmSMqcImWeeRbHwZjBjIFki/VaMK2BhFi7oUUZeM5bqw==}
-
-  marked@15.0.12:
-    resolution: {integrity: sha512-8dD6FusOQSrpv9Z1rdNMdlSgQOIP880DHqnohobOmYLElGEqAL/JvxvuxZO16r4HtjTlfPRDC1hbvxC9dPN2nA==}
-    engines: {node: '>= 18'}
 
   marked@16.4.2:
     resolution: {integrity: sha512-TI3V8YYWvkVf3KJe1dRkpnjs68JUPyEa5vjKrp1XEEJUAOaQc+Qj+L1qWbPd0SJuAdQkFU0h73sXXqwDYxsiDA==}
@@ -52481,8 +52474,6 @@ snapshots:
   markdown-extensions@2.0.0: {}
 
   markdown-table@3.0.4: {}
-
-  marked@15.0.12: {}
 
   marked@16.4.2: {}
 

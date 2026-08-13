@@ -1,25 +1,25 @@
 ---
-title: "AgentController | Harness"
+title: "Agent Controller | Harness"
 description: "Build interactive agent applications with isolated sessions, persistent threads, modes, approvals, subagents, and channels."
 packages:
   - "@mastra/core"
 ---
 
-# AgentController
+# Agent Controller
 
-:::experimental
+:::beta
 
-The [`AgentController`](/reference/agent-controller/agent-controller-class) feature is in beta stage and subject to breaking changes in minor versions until it graduates from its beta status.
+Breaking changes may occur without a major version bump until the API is stable.
 
 :::
 
 `AgentController` is a shared runtime host for interactive agent applications. It coordinates modes, models, storage, workspaces, tool approvals, subagents, and channels. Each user or active task works through an isolated [`Session`](/reference/agent-controller/session).
 
-[Mastra Code](https://code.mastra.ai) is the flagship AgentController implementation. It's a terminal-based coding agent with multi-model support, persistent conversations, and plan-then-execute workflows. Read [Building a coding agent](/guides/guide/coding-agent) for a step-by-step guide.
+[Mastra Code](https://code.mastra.ai) and [Mastra Factory](https://factory.mastra.ai) are the flagship AgentController implementations. They're coding agents with multi-model support, persistent conversations, and plan-then-execute workflows. Read [Building a coding agent](https://mastra.ai/blog/building-a-coding-agent) for a step-by-step TUI guide.
 
-## When to use the AgentController
+## When to use the Agent Controller
 
-Use the AgentController when your application needs:
+Use the Agent Controller when your application needs:
 
 - Multiple agent modes that share one conversation thread (e.g., plan → build → review)
 - A control layer between your UI and the agent loop (model switching, state persistence, thread management)
@@ -397,7 +397,7 @@ channels: {
 
 Controller channel sessions and auto-approval state are held in memory, so use a long-lived server. Pending approvals and live Session state don't survive process restarts. Adapters that can't render approval controls automatically run tools without an approval prompt so the run doesn't remain suspended.
 
-See [Channels](/docs/capabilities/channels/overview) for adapter setup and platform-specific webhook configuration.
+See [Channels](/docs/capabilities/channels) for adapter setup and platform-specific webhook configuration.
 
 ## Connect a UI
 
@@ -416,11 +416,11 @@ render(session.displayState.get())
 unsubscribe()
 ```
 
-Subscriptions are isolated by Session. Events from another Session on the same controller aren't delivered to this listener. Read the [Building a coding agent](/guides/guide/coding-agent) guide for a complete TUI example.
+Subscriptions are isolated by Session. Events from another Session on the same controller aren't delivered to this listener. Read the [Building a coding agent](https://mastra.ai/blog/building-a-coding-agent) guide for a complete TUI example.
 
 ## Related
 
 - [Agents](/docs/agents/overview)
 - [Workspace](/docs/workspace/overview)
 - [Observational memory](/docs/memory/observational-memory)
-- [Channels](/docs/capabilities/channels/overview)
+- [Channels](/docs/capabilities/channels)

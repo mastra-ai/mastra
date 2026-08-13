@@ -46,28 +46,6 @@ export type BundlerConfig = {
    * ```
    */
   dynamicPackages?: string[];
-  /**
-   * Additional process entries to emit alongside the server bundle, as a map of
-   * output name to source path relative to your Mastra directory.
-   *
-   * Each entry becomes its own `<name>.mjs` in the build output, sharing the
-   * output directory, `package.json`, and installed dependencies with the server.
-   * Use this for long-running processes that run beside the server rather than
-   * inside it — a LiveKit voice worker, for example.
-   *
-   * Entry names may contain `/` to nest the output, but cannot be `index`
-   * (the server bundle), `tools` (the tool aggregator), or start with `tools/`
-   * (tool bundles).
-   *
-   * @example
-   * ```typescript
-   * bundler: {
-   *   entries: { 'voice-worker': './voice-worker.ts' }
-   * }
-   * // emits .mastra/output/voice-worker.mjs
-   * ```
-   */
-  entries?: Record<string, string>;
 
   [key: symbol]: boolean | undefined;
 };

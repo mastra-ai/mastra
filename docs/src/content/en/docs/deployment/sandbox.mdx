@@ -1,11 +1,11 @@
 ---
-title: "Deploy to a sandbox | Deployment"
+title: "Sandbox | Deploy"
 description: "Deploy a Mastra server into an ephemeral workspace sandbox and get a live public URL."
 packages:
   - "@mastra/deployer-sandbox"
 ---
 
-# Deploy to a sandbox
+# Sandbox
 
 `@mastra/deployer-sandbox` deploys a full Mastra server, including Studio, into an ephemeral workspace sandbox and returns a live public URL. Repeat deployments can finish faster because the deployer skips dependency installation.
 
@@ -22,9 +22,9 @@ Sandboxes have provider-enforced runtime caps and expire. For production hosting
 
 The deployer works with any workspace sandbox that supports networking (public port URLs):
 
-- [Vercel Sandbox](/reference/workspace/vercel-sandbox) (`@mastra/vercel`)
-- [E2B](/reference/workspace/e2b-sandbox) (`@mastra/e2b`)
-- [Daytona](/reference/workspace/daytona-sandbox) (`@mastra/daytona`)
+- [Vercel Sandbox](/integrations/sandboxes/vercel#vercel-sandbox) (`@mastra/vercel`)
+- [E2B](/integrations/sandboxes/e2b) (`@mastra/e2b`)
+- [Daytona](/integrations/sandboxes/daytona) (`@mastra/daytona`)
 
 Provider authors can add support by implementing the optional `networking` capability on [`WorkspaceSandbox`](/reference/workspace/sandbox).
 
