@@ -506,4 +506,15 @@ describe('Subconscious capture-time pinning', () => {
     expect(resolved.instructions).not.toContain('set reason');
     expect(resolved.instructions).not.toContain('pin: true');
   });
+
+  it('includes the reason instruction on the default schemas', async () => {
+    const extractor = new SubconsciousCaptureExtractor({
+      defaultScope: 'resource',
+      learnedGuidance: false,
+      pins: pinsOn,
+    });
+    const memory = new Memory({ storage: new InMemoryStore() });
+    const resolved = await extractor.resolve(createContext(memory, { entities: [] }));
+    expect(resolved.instructions).toContain('set reason to one short sentence');
+  });
 });

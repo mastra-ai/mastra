@@ -119,10 +119,12 @@ export async function createFactoryTransitionTools(options: {
                 prompt: `Now that the work item has left the ${exitedStage} phase: is there anything from this phase worth remembering — a durable project memory, or something worth pinning?`,
               });
               // Outcomes: ran | no-op (empty worklist) | skipped (in flight) | no-model.
-              console.debug(`[factory:transition-curate] thread=${threadId} stage=${stage} outcome=${outcome}`);
+              console.debug(
+                `[factory:transition-curate] thread=${threadId} from=${exitedStage} to=${stage} outcome=${outcome}`,
+              );
             } catch (error) {
               console.debug(
-                `[factory:transition-curate] thread=${execution.agent?.threadId ?? 'unknown'} stage=${stage} failed: ${error instanceof Error ? error.message : String(error)}`,
+                `[factory:transition-curate] thread=${execution.agent?.threadId ?? 'unknown'} from=${exitedStage} to=${stage} failed: ${error instanceof Error ? error.message : String(error)}`,
               );
             }
           })();
