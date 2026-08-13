@@ -46,8 +46,6 @@ import type {
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../../base.js';
 import type { GithubIntegration, GithubRepositoryPermission, RepoSummary } from '../../github/integration.js';
 import { attachGithubIssueReconciler } from '../../github/issue-reconciler.js';
-import type { GithubIssueTriageInput, GithubIssueTriageResult } from '../../github/issue-triage.js';
-import { runGithubIssueTriage } from '../../github/issue-triage.js';
 import { reconcileInterval, reconciliationEnabled } from '../../github/reconciliation-config.js';
 import { buildGithubRoutes } from '../../github/routes.js';
 import { attachGithubReconciler, attachGithubRules } from '../../github/rules.js';
@@ -206,7 +204,6 @@ export class PlatformGithubIntegration implements FactoryIntegration {
   readonly #installationReposCache = new Map<number, { repos: RepoSummary[]; expiresAt: number }>();
   /** `orgId:repositoryId` → cached repository access (TTL-bounded). */
   readonly #repositoryAccessCache = new Map<string, { access: RepositoryAccess; expiresAt: number }>();
-  readonly #runIssueTriage?: (input: GithubIssueTriageInput) => Promise<GithubIssueTriageResult>;
 
   readonly intake: Intake = {
     resolveIntakeDispatch: input => this.#resolveIntakeDispatch(input),
@@ -454,7 +451,6 @@ export class PlatformGithubIntegration implements FactoryIntegration {
 
   constructor(
     options: {
-      runIssueTriage?: (input: GithubIssueTriageInput) => Promise<GithubIssueTriageResult>;
       /** GitHub App slug used to recognize Factory's own webhook writes. */
       slug?: string;
     } = {},
@@ -479,7 +475,6 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       reconcileInterval(process.env.MASTRACODE_PLATFORM_GITHUB_PR_RECONCILE_INTERVAL_MS) ?? legacyReconcileIntervalMs;
     this.#issueReconcileIntervalMs =
       reconcileInterval(process.env.MASTRACODE_PLATFORM_GITHUB_ISSUE_RECONCILE_INTERVAL_MS) ?? legacyReconcileIntervalMs;
-    this.#runIssueTriage = options.runIssueTriage;
   }
 
   /** GitHub App slug when the deployment explicitly provides it. */
@@ -552,9 +547,6 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         projects: ctx.storage.projects,
         emitAudit: ctx.hooks?.emitAudit,
         ingestFactoryEvent,
-        runIssueTriage:
-          this.#runIssueTriage ??
-          (ctx.controller ? input => runGithubIssueTriage({ controller: ctx.controller!, input }) : undefined),
       }).filter(
         route =>
           route.path !== '/web/github/status' &&
