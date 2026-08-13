@@ -554,6 +554,13 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
       return agent;
     }
 
+    // A resolved record can still carry no instructions (e.g. a version published before any
+    // were written). That leaves an editor-owned agent with its empty code default just like the
+    // unresolved cases above, so it must fail closed here too.
+    if (instructionsOwnedByEditor && (storedConfig.instructions === undefined || storedConfig.instructions === null)) {
+      failClosed('the stored agent configuration has no instructions');
+    }
+
     // Fork the agent so overrides don't mutate the singleton instance
     const fork = agent.__fork();
 
