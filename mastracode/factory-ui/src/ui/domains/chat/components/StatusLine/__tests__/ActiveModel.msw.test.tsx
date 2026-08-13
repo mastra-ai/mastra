@@ -16,6 +16,10 @@ import { ActiveModel } from '../ActiveModel';
 const factorySession: ChatSessionContextApi = {
   resourceId: 'session-1',
   sessionEnabled: true,
+  resourceReady: true,
+  sandboxReady: true,
+  sandboxPreparing: false,
+  sandboxProgress: undefined,
   resourceEnabled: true,
   baseUrl: TEST_BASE_URL,
   kind: 'factory',
@@ -41,7 +45,9 @@ function renderActiveModel({
   setModel?: (modelId: string) => Promise<void>;
 }) {
   return renderWithProviders(
-    <ChatSessionContext.Provider value={{ ...factorySession, kind, sessionEnabled, draftSessionId }}>
+    <ChatSessionContext.Provider
+      value={{ ...factorySession, kind, sessionEnabled, sandboxReady: sessionEnabled, draftSessionId }}
+    >
       <ChatConnectionContext.Provider value={{ status }}>
         <ChatModelsContext.Provider value={{ activeModelId, isLoading: modelLoading, error: modelError, setModel }}>
           <ActiveModel />

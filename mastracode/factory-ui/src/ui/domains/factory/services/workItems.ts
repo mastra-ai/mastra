@@ -6,6 +6,8 @@
  * org-wide, so every member of the org reads and moves the same cards.
  */
 
+import { requestJson } from './request';
+
 export type WorkItemSource = 'github-issue' | 'github-pr' | 'linear-issue' | 'slack-thread' | 'manual';
 
 export interface WorkItemSessionRef {
@@ -151,24 +153,14 @@ export interface UpdateWorkItemInput {
   metadata?: Record<string, unknown>;
 }
 
-async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, {
-    headers: { Accept: 'application/json', ...(init?.body ? { 'content-type': 'application/json' } : {}) },
-    credentials: 'include',
-    ...init,
-  });
-  if (!res.ok) {
-    let message = `Request failed (${res.status})`;
-    try {
-      const body = (await res.json()) as { error?: string; message?: string };
-      if (body.message) message = body.message;
-      else if (body.error) message = body.error;
-    } catch {
-      /* ignore non-JSON */
-    }
-    throw new Error(message);
-  }
-  return (await res.json()) as T;
+/**
+ * The board as of one read: its cards, plus the sessions running on them right
+ * then. Both come from the same response so a card and its run marker can
+ * never disagree.
+ */
+export interface BoardSnapshot {
+  workItems: WorkItem[];
+  runningSessionIds: string[];
 }
 
 /** List the org's work items for a Factory project. */
@@ -176,12 +168,12 @@ export async function listWorkItems(
   baseUrl: string,
   factoryProjectId: string,
   signal?: AbortSignal,
-): Promise<WorkItem[]> {
-  const data = await requestJson<{ workItems: WireWorkItem[] }>(
+): Promise<BoardSnapshot> {
+  const data = await requestJson<{ workItems: WireWorkItem[]; runningSessionIds?: string[] }>(
     `${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/work-items`,
     { signal },
   );
-  return data.workItems.map(fromWireWorkItem);
+  return { workItems: data.workItems.map(fromWireWorkItem), runningSessionIds: data.runningSessionIds ?? [] };
 }
 
 /** Create a work item; the server upserts on its external source identity so repeats reuse the card. */

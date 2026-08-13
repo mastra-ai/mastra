@@ -6983,9 +6983,16 @@ export class Agent<
         ? {
             ...options.tracingOptions,
             traceId: effectiveTraceId,
-            parentSpanId: shouldUsePersistedParentSpan ? persistedTracingContext?.spanId : userProvidedParentSpanId,
           }
         : options.tracingOptions;
+
+    // The persisted resume link travels separately from tracingOptions:
+    // tracingOptions.parentSpanId is reserved for external correlation ids,
+    // while the suspended span's id is a Mastra span present in storage.
+    const resumedFromSpanId =
+      isResume && persistedTracingContext?.traceId && shouldUsePersistedParentSpan
+        ? persistedTracingContext.spanId
+        : undefined;
 
     const spanInput = isResume
       ? this.#getResumeSpanInput(resumeContext.resumeData, suspendedToolInfo)
@@ -7021,6 +7028,7 @@ export class Agent<
       tracingContext: options.tracingContext,
       requestContext,
       mastra: this.#mastra,
+      resumedFromSpanId,
     });
 
     const memory = await this.getMemory({ requestContext });

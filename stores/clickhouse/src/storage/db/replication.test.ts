@@ -170,19 +170,25 @@ ORDER BY id`;
 
   it('checks existing tables before emitting replicated CREATE TABLE DDL', async () => {
     const queries: string[] = [];
+    const commands: string[] = [];
     const client = {
       query: async ({ query }: { query: string }) => {
         queries.push(query);
         return { json: async () => [] };
+      },
+      command: async ({ query }: { query: string }) => {
+        commands.push(query);
       },
     };
     const db = new ClickhouseDB({ client: client as any, ttl: undefined, replication: { cluster: 'cluster-a' } });
 
     await db.createTable({ tableName: TABLE_SPANS, schema: TABLE_SCHEMAS[TABLE_SPANS] });
 
+    expect(queries).toHaveLength(1);
     expect(queries[0]).toContain('FROM system.tables');
-    expect(queries[1]).toContain(`CREATE TABLE IF NOT EXISTS ${TABLE_SPANS} ON CLUSTER 'cluster-a'`);
-    expect(queries[1]).toContain(
+    expect(commands).toHaveLength(1);
+    expect(commands[0]).toContain(`CREATE TABLE IF NOT EXISTS ${TABLE_SPANS} ON CLUSTER 'cluster-a'`);
+    expect(commands[0]).toContain(
       "ENGINE = ReplicatedReplacingMergeTree('/clickhouse/tables/{shard}/{database}/{table}', '{replica}', updatedAt)",
     );
   });

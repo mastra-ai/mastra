@@ -11,7 +11,6 @@ import type { GithubRepositoryPermission } from '../../github/integration.js';
 import type { GithubIssueReconciler } from '../../github/issue-reconciler.js';
 import type { GithubPullRequestReconciler, ReconcileRepository } from '../../github/rules.js';
 import { listPullRequestSubscriptionsForWebhook, retirePullRequestSubscription } from '../../github/subscriptions.js';
-import type { GithubSubscriptionStorage } from '../../github/subscriptions.js';
 import { dispatchGithubWebhook } from '../../github/webhook.js';
 import type {
   GithubWebhookDispatchIntegration,
@@ -404,7 +403,7 @@ export class PlatformGithubEventWorker extends MastraWorker {
           });
           continue;
         }
-        if (isFactoryClosureEvent(parsed)) {
+        if (isFactoryIngestedEvent(parsed)) {
           await this.#ingestFactoryEvent?.(parsed);
         }
         const result = await this.#dispatch(parsed, {
@@ -417,6 +416,7 @@ export class PlatformGithubEventWorker extends MastraWorker {
           isAuthorizedSender: notification => this.#isAuthorizedSender(notification),
           onTargetError: (subscription, error) => {
             this.deps?.logger.error('Platform GitHub event delivery failed for a subscription', {
+              deliveryId: event.deliveryId,
               subscriptionId: subscription.id,
               resourceId: subscription.resourceId,
               threadId: subscription.threadId,
@@ -425,9 +425,12 @@ export class PlatformGithubEventWorker extends MastraWorker {
           },
         });
         if (result.failed > 0) {
-          throw new Error(
-            `Platform GitHub event ${event.deliveryId} failed for ${result.failed} subscribed target(s).`,
-          );
+          this.deps?.logger.warn('Platform GitHub event completed with failed subscription deliveries', {
+            repositoryId,
+            deliveryId: event.deliveryId,
+            delivered: result.delivered,
+            failed: result.failed,
+          });
         }
       }
 
@@ -483,8 +486,21 @@ function normalizeSettings(value: PlatformGithubEventWorkerSettings | null): Pla
   return { version: 1, repositories: { ...value.repositories } };
 }
 
-function isFactoryClosureEvent(event: ParsedGithubWebhook): boolean {
-  return (event.event === 'issues' || event.event === 'pull_request') && event.payload.action === 'closed';
+// Events the polling worker forwards to the factory rules engine. Closures
+// let the reconciler finalize cards; `synchronize` and `review_requested` on a
+// pull request are the two triggers the review board's re-review path listens
+// for. Direct-webhook consumers ingest every parsed event; the platform path
+// gates because most other events (comments, reviews, edits) only interest the
+// subscription dispatcher, not the factory rules.
+function isFactoryIngestedEvent(event: ParsedGithubWebhook): boolean {
+  if ((event.event === 'issues' || event.event === 'pull_request') && event.payload.action === 'closed') {
+    return true;
+  }
+  if (event.event === 'pull_request') {
+    const action = event.payload.action;
+    if (action === 'synchronize' || action === 'review_requested') return true;
+  }
+  return false;
 }
 
 function parseEvent(event: EventLogEntry): ParsedGithubWebhook | null {

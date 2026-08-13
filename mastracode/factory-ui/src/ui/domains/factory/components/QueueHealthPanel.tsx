@@ -4,15 +4,9 @@ import { Popover, PopoverContent } from '@mastra/playground-ui/components/Popove
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useMemo, useState } from 'react';
-import { useParams } from 'react-router';
 
-import { useApiConfig } from '../../../../api/config';
-import { useFactoryQuery } from '../../../../hooks/useFactories';
 import { useQueueHealthThresholds } from '../../../../hooks/useQueueHealthThresholds';
-import { useWorkItemsQuery } from '../../../../hooks/useWorkItems';
-import { useWorkspaceActivity } from '../../../../hooks/useWorkspaceActivity';
-import { useWorkspacesQuery } from '../../../../hooks/useWorkspaces';
-import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
+import { useRunningSessions, useWorkItemsQuery } from '../../../../hooks/useWorkItems';
 import type { QueueHealthSelection } from './QueueHealthChart';
 import { QueueHealthChart, formatAgeSeconds } from './QueueHealthChart';
 import type { AgeBucket, QueueHealth, QueueHealthEntry } from '../queue-health';
@@ -37,14 +31,14 @@ interface DrillDown {
 export function QueueHealthPanel({ factoryProjectId }: { factoryProjectId: string | undefined }) {
   const workItemsQuery = useWorkItemsQuery(factoryProjectId);
   const thresholdsQuery = useQueueHealthThresholds(factoryProjectId);
-  const activePaths = useActivePaths();
+  const activeSessions = useRunningSessions(factoryProjectId);
   const [drillDown, setDrillDown] = useState<DrillDown | null>(null);
 
   const health = useMemo(() => {
     const items = workItemsQuery.data ?? [];
     const config = thresholdsQuery.data ?? { thresholdsSeconds: DEFAULT_THRESHOLDS };
-    return computeQueueHealth(items, activePaths, config, new Date());
-  }, [workItemsQuery.data, activePaths, thresholdsQuery.data]);
+    return computeQueueHealth(items, activeSessions, config, new Date());
+  }, [workItemsQuery.data, activeSessions, thresholdsQuery.data]);
 
   if (workItemsQuery.isError) {
     return <Notice variant="destructive">{(workItemsQuery.error as Error).message}</Notice>;
@@ -108,27 +102,6 @@ function cohortEntries(health: QueueHealth, selection: QueueHealthSelection): Qu
   return health.entries
     .filter(entry => entry.bucket === selection.bucket && (selection.stage === null || entry.stage === selection.stage))
     .sort((a, b) => b.ageSeconds - a.ageSeconds);
-}
-
-function useActivePaths(): ReadonlySet<string> {
-  const { baseUrl } = useApiConfig();
-  const { factoryId } = useParams<{ factoryId: string }>();
-  const factoryQuery = useFactoryQuery(factoryId);
-  const repository = factoryQuery.data?.repositories[0];
-  const workspaces = useWorkspacesQuery(repository?.projectRepositoryId);
-  const workspaceSessions = workspaces.data?.workspaces ?? [];
-  // The factory-level session address is the factory project id, so read
-  // activity without materializing a sandbox for a page that only renders counts.
-  const resourceId = factoryQuery.data?.id;
-  const runningByPath = useWorkspaceActivity({
-    agentControllerId: AGENT_CONTROLLER_ID,
-    resourceId: resourceId ?? '',
-    scope: repository?.projectRepositoryId,
-    worktreePaths: workspaceSessions.map(workspace => workspace.sessionId),
-    baseUrl,
-    enabled: Boolean(resourceId && repository?.projectRepositoryId),
-  });
-  return useMemo(() => new Set(Object.keys(runningByPath).filter(path => runningByPath[path])), [runningByPath]);
 }
 
 function CohortTasks({ selection, entries }: { selection: QueueHealthSelection; entries: QueueHealthEntry[] }) {

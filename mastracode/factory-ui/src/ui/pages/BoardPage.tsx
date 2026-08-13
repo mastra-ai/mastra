@@ -13,6 +13,7 @@ import { INTAKE_SOURCES, stageContentCount } from '../domains/factory/boardCandi
 import type { IntakeSource } from '../domains/factory/boardCandidates';
 import { boardLoadingStages, boardStages, itemAppearsInStage } from '../domains/factory/boardStages';
 import type { BoardKind } from '../domains/factory/boardStages';
+import { BoardAutoRunToggle } from '../domains/factory/components/BoardAutoRunToggle';
 import { BoardColumn } from '../domains/factory/components/BoardColumn';
 import { BoardColumnEmptyState } from '../domains/factory/components/BoardColumnEmptyState';
 import { BoardRelevanceFilters } from '../domains/factory/components/BoardRelevanceFilters';
@@ -219,7 +220,7 @@ function BoardContent({
         workItemMatchesLabels(item, selectedLabels, liveCandidate)
       );
     });
-  const mutationError = runs.error ?? items.mutationError;
+  const mutationError = runs.error ?? decisions.error ?? items.mutationError;
   const visibleWorkItems = new Set(stages.flatMap(stage => workItemsForStage(stage.id)));
   const unfilteredVisibleWorkItems = new Set(stages.flatMap(stage => unfilteredWorkItemsForStage(stage.id)));
   const totalTaskCount = visibleWorkItems.size + filteredCandidates.length;
@@ -234,19 +235,22 @@ function BoardContent({
           {mutationError instanceof Error ? mutationError.message : 'Board action failed'}
         </Notice>
       )}
-      <BoardRelevanceFilters
-        kind={kind}
-        participants={participants}
-        selectedParticipantId={selectedParticipantId}
-        selectedTypes={selectedRelevanceTypes}
-        availableLabels={availableLabels}
-        selectedLabels={selectedLabels}
-        currentUserId={auth.data?.user?.userId}
-        onParticipantChange={setParticipant}
-        onTypeChange={setRelevanceType}
-        onLabelChange={setLabel}
-        onReset={resetFilters}
-      />
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <BoardRelevanceFilters
+          kind={kind}
+          participants={participants}
+          selectedParticipantId={selectedParticipantId}
+          selectedTypes={selectedRelevanceTypes}
+          availableLabels={availableLabels}
+          selectedLabels={selectedLabels}
+          currentUserId={auth.data?.user?.userId}
+          onParticipantChange={setParticipant}
+          onTypeChange={setRelevanceType}
+          onLabelChange={setLabel}
+          onReset={resetFilters}
+        />
+        <BoardAutoRunToggle factoryProjectId={factoryProjectId} enabled={factory.autoRunEnabled ?? false} />
+      </div>
       <ScrollArea
         viewportRef={scroll.containerRef}
         orientation="horizontal"
@@ -320,8 +324,12 @@ function BoardContent({
                     preparing={runs.preparingFor(item.id)}
                     evaluatingStage={items.evaluatingStages.get(item.id)}
                     transitionReason={items.transitionReasons[item.id]}
-                    decision={decisions.byItem.get(item.id)}
+                    decision={decisions.effectByItem.get(item.id)}
+                    proposal={decisions.proposalByItem.get(item.id)}
+                    approvingDecisionId={decisions.approvingId}
                     retryingDecisionId={decisions.retryingId}
+                    onApproveProposal={decisions.approve}
+                    onDismissProposal={decisions.dismiss}
                     onRetryDecision={decisions.retry}
                     pendingRunRoles={runs.pendingRolesFor(item.id)}
                     onCreateSession={() => void runs.openOrCreateSession(item, stage.id)}

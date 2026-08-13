@@ -583,7 +583,7 @@ export class ClickhouseDB extends MastraBase {
           `;
       }
 
-      await this.client.query({
+      await this.client.command({
         query: applyReplicationToDDL(sql, this.replication),
         clickhouse_settings: {
           // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
@@ -639,7 +639,7 @@ export class ClickhouseDB extends MastraBase {
           const alterSql =
             `ALTER TABLE ${tableName} ADD COLUMN IF NOT EXISTS "${columnName}" ${sqlType} ${defaultValue}`.trim();
 
-          await this.client.query({
+          await this.client.command({
             query: addOnClusterToDDL(alterSql, this.replication),
           });
           this.logger?.debug?.(`Added column ${columnName} to table ${tableName}`);
@@ -693,7 +693,7 @@ export class ClickhouseDB extends MastraBase {
 
   async dropTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
     try {
-      await this.client.query({
+      await this.client.command({
         query: addOnClusterToDDL(`DROP TABLE IF EXISTS ${tableName}`, this.replication),
       });
     } catch (error: any) {

@@ -142,6 +142,7 @@ describe('defaultFactoryRules', () => {
     expect(rules.github.issueCommentEdited?.onEvent).toBeTypeOf('function');
     expect(rules.github.issueCommentDeleted?.onEvent).toBeTypeOf('function');
     expect(rules.github.pullRequestOpened?.onEvent).toBeTypeOf('function');
+    expect(rules.github.pullRequestUpdated?.onEvent).toBeTypeOf('function');
     expect(rules.github.pullRequestReviewRequested?.onEvent).toBeTypeOf('function');
     expect(rules.github.pullRequestMerged?.onEvent).toBeTypeOf('function');
     expect(rules.linear.issueObserved?.onEvent).toBeTypeOf('function');
@@ -272,11 +273,51 @@ describe('defaultFactoryRules', () => {
       fromStage: 'intake',
       toStage: 'review',
     } as FactoryStageRuleContext;
-    expect(await rule?.(context)).toMatchObject({
+    const decision = await rule?.(context);
+    expect(decision).toMatchObject({
       type: 'invokeSkill',
       role: 'review',
       skillName: 'factory-review',
       arguments: 'GitHub pull request (https://github.test/acme/repo/issues/42)',
+    });
+    // Human-triggered review passes must not cancel any in-flight run.
+    expect(decision).not.toHaveProperty('cancelInFlight');
+  });
+
+  it('cancels an in-flight review pass and dispatches factory-rereview when a push into an already-reviewed PR restarts Review', async () => {
+    const rule = defaultFactoryRules({ version: 'deployment-7' }).review.review?.pullRequest?.onEnter;
+    const context = {
+      ...stageContext({ type: 'github', login: 'author', trusted: true, factoryAuthored: false }, 'review'),
+      cause: 'github.pullRequestUpdated',
+      stage: 'review',
+      fromStage: 'done',
+      toStage: 'review',
+    } as FactoryStageRuleContext;
+    expect(await rule?.(context)).toMatchObject({
+      type: 'invokeSkill',
+      role: 'review',
+      skillName: 'factory-rereview',
+      cancelInFlight: true,
+    });
+  });
+
+  it('cancels an in-flight review pass but stays on factory-review when the re-entry did not follow a completed pass', async () => {
+    // A first-time review that was superseded before it finished re-enters
+    // Review from Review itself. There is no prior published review to
+    // reconcile against, so the fresh pass is a regular factory-review — the
+    // cancellation just clears the aborted in-flight run.
+    const rule = defaultFactoryRules({ version: 'deployment-7' }).review.review?.pullRequest?.onEnter;
+    const context = {
+      ...stageContext({ type: 'human', id: 'user-1' }, 'review'),
+      stage: 'review',
+      fromStage: 'review',
+      toStage: 'review',
+    } as FactoryStageRuleContext;
+    expect(await rule?.(context)).toMatchObject({
+      type: 'invokeSkill',
+      role: 'review',
+      skillName: 'factory-review',
+      cancelInFlight: true,
     });
   });
 
@@ -399,6 +440,63 @@ describe('defaultFactoryRules', () => {
       const closed = reReviewContext();
       closed.pullRequest = { ...closed.pullRequest!, state: 'closed' };
       const merged = reReviewContext();
+      merged.pullRequest = { ...merged.pullRequest!, merged: true };
+      expect(await rule?.(closed)).toBeUndefined();
+      expect(await rule?.(merged)).toBeUndefined();
+    });
+  });
+
+  describe('pullRequestUpdated', () => {
+    const prItem = {
+      ...item,
+      source: 'github-pr' as const,
+      sourceKey: 'github-pr:17',
+      title: 'PR 17',
+      url: 'https://github.test/acme/repo/pull/17',
+      stages: ['done'],
+    };
+
+    function pushContext(overrides: Partial<FactoryGithubRuleContext> = {}): FactoryGithubRuleContext {
+      return {
+        ...githubContext('pullRequestUpdated'),
+        item: prItem,
+        board: 'review',
+        itemRevision: 5,
+        ...overrides,
+      };
+    }
+
+    it('re-enters Review when a push arrives for a PR whose card already finished Reviewing', async () => {
+      const rule = defaultFactoryRules({ version: 'deployment-7' }).github.pullRequestUpdated?.onEvent;
+      expect(await rule?.(pushContext())).toMatchObject({
+        type: 'transition',
+        idempotencyKey: 'delivery-1:re-review-updated',
+        board: 'review',
+        stage: 'review',
+      });
+    });
+
+    it('does nothing when the PR is still in Intake or Reviewing, is unlinked, or is not on the Review board', async () => {
+      const rule = defaultFactoryRules({ version: 'deployment-7' }).github.pullRequestUpdated?.onEvent;
+      for (const context of [
+        // Card is still in intake — a review pass has not started yet.
+        pushContext({ item: { ...prItem, stages: ['intake'] } }),
+        // Card is already back in review — waking the pending pass would double-fire.
+        pushContext({ item: { ...prItem, stages: ['review'] } }),
+        // No linked Review card to move.
+        pushContext({ item: undefined, board: undefined, itemRevision: undefined }),
+        // Card exists but is bound to the Work board (not a PR review card).
+        pushContext({ item: { ...prItem, source: 'github-issue', stages: ['done'] }, board: 'work' }),
+      ]) {
+        expect(await rule?.(context)).toBeUndefined();
+      }
+    });
+
+    it('ignores push events on closed or merged pull requests', async () => {
+      const rule = defaultFactoryRules({ version: 'deployment-7' }).github.pullRequestUpdated?.onEvent;
+      const closed = pushContext();
+      closed.pullRequest = { ...closed.pullRequest!, state: 'closed' };
+      const merged = pushContext();
       merged.pullRequest = { ...merged.pullRequest!, merged: true };
       expect(await rule?.(closed)).toBeUndefined();
       expect(await rule?.(merged)).toBeUndefined();

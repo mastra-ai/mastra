@@ -73,7 +73,6 @@ test.describe('Tab switcher navigation', () => {
     const tabs = [
       { label: 'Models', expectedPath: '/models' },
       { label: 'Integrations', expectedPath: '/integrations' },
-      { label: 'Guides', expectedPath: '/guides' },
       { label: 'Reference', expectedPath: '/reference' },
     ]
 
