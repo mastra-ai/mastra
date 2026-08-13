@@ -25,5 +25,8 @@ import { createMastraCodeWorkflowBuilderAgent } from '@mastra/code-sdk/agents/wo
 const workflowBuilder = createMastraCodeWorkflowBuilderAgent({
   model: 'openai/gpt-5.6-sol',
   accessPolicy: workflowAccessPolicy,
+  additionalSurfaceInstructions: 'Include the host presentation metadata required for each saved workflow.',
 });
 ```
+
+Additional surface instructions are appended after Mastra's shared authoring playbook and Mastra Code's persistence policy; they cannot replace either contract.

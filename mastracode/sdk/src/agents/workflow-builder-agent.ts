@@ -24,10 +24,15 @@ export interface CreateMastraCodeWorkflowBuilderAgentOptions extends CreateWorkf
    * Mastra Code controller session. Defaults to Mastra Code's session model.
    */
   model?: WorkflowBuilderAgentOptions<'workflow-builder'>['model'];
+  /**
+   * Host-specific authoring guidance appended after Mastra's shared playbook
+   * and Mastra Code's persistence policy. It cannot replace either contract.
+   */
+  additionalSurfaceInstructions?: string;
 }
 
 export function createMastraCodeWorkflowBuilderAgent(options: CreateMastraCodeWorkflowBuilderAgentOptions = {}) {
-  const { model = getDynamicModel, ...workflowToolOptions } = options;
+  const { model = getDynamicModel, additionalSurfaceInstructions, ...workflowToolOptions } = options;
   const workflowTools = createWorkflowAuthoringTools(workflowToolOptions);
   return createWorkflowBuilderAgent({
     id: 'workflow-builder',
@@ -82,7 +87,7 @@ Your fourth tool is \`save-workflow\`, which persists and live-registers a defin
 4. Wait for the tool result. Success means exactly that \`save-workflow\` returned \`{ ok: true, id }\`; at that point the workflow is persisted and live-registered.
 5. If the tool rejects the definition, do not claim success. Use the returned diagnostics and authoritative discovery to correct every named issue, rerun the shared pre-action check, and make one sequential corrected complete save attempt. Do not rationalize a registry mismatch as a missing engine feature.
 6. After success, follow the shared summary rules and end with the concrete run command \`/workflows run <id> {…}\` for the requested workflow. If you saved helper workflows, name them so the user knows they now exist in the registry.
-`,
+${additionalSurfaceInstructions ? `\n${additionalSurfaceInstructions}` : ''}`,
     // The default is the same dynamic resolver as mastracode's main code-agent.
     // Hosts without a controller session can supply any native Agent model
     // value or request-context resolver through the factory option.

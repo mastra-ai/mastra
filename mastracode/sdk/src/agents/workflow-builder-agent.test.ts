@@ -54,7 +54,17 @@ describe('workflowBuilderAgent', () => {
     const agent = createMastraCodeWorkflowBuilderAgent({
       model,
       accessPolicy: { resolveAuthorId },
+      additionalSurfaceInstructions: '# Host presentation contract\n\nKeep presentation metadata child-simple.',
     });
+
+    const instructions = await agent.getInstructions();
+    expect(instructions).toContain('# Composition procedure');
+    expect(instructions).toContain('# Mastra Code authoring policy');
+    expect(instructions).toContain('# Mastra Code execution and response protocol');
+    expect(instructions).toContain('# Host presentation contract\n\nKeep presentation metadata child-simple.');
+    expect(instructions.indexOf('# Host presentation contract')).toBeGreaterThan(
+      instructions.indexOf('# Mastra Code execution and response protocol'),
+    );
 
     await expect(agent.getModel({ requestContext })).resolves.toMatchObject({
       modelId: hostModel.modelId,
