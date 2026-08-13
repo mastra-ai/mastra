@@ -209,12 +209,13 @@ async function getSandboxWorkspace({
   // the base checkout. Falls back to the repo root when no worktree is active.
   const boundWorkdir = worktreePath || workdir;
 
-  // Include the sandbox id *and* worktree path in the reuse key: a new sandbox
-  // (e.g. the previous one expired) or a different worktree must each get a
-  // fresh Workspace/ProcessManager instead of reusing one bound to a stale
-  // sandbox or the wrong working tree.
+  // Include the sandbox id, worktree path, and acting user in the reuse key: a
+  // new sandbox, different worktree, or different caller must each get a fresh
+  // Workspace/ProcessManager instead of reusing one bound to stale resources or
+  // another user's PlatformSandbox credentials.
   const extensionId = skillExtension ? `-${skillExtension.id}` : '';
-  const workspaceId = `${WORKSPACE_ID_PREFIX}-repository-${projectRepositoryId}-${sandboxId}-${boundWorkdir}${extensionId}`;
+  const actingUserScope = actingUserId ? `-user-${encodeURIComponent(actingUserId)}` : '';
+  const workspaceId = `${WORKSPACE_ID_PREFIX}-repository-${projectRepositoryId}-${sandboxId}-${boundWorkdir}${extensionId}${actingUserScope}`;
 
   // Reuse the existing remote workspace if already registered (preserves the
   // reattached sandbox + ProcessManager state across re-opens).
