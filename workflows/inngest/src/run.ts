@@ -22,6 +22,7 @@ import type {
 import { NonRetriableError } from 'inngest';
 import type { Inngest } from 'inngest';
 import { subscribe } from 'inngest/realtime';
+import { buildDurableResumeFields, buildDurableTriggerFields } from './durable-event-signals';
 import type { InngestEngineType } from './types';
 
 export class InngestRun<
@@ -367,8 +368,7 @@ export class InngestRun<
         resourceId: this.resourceId,
         outputOptions: args.outputOptions,
         tracingOptions: args.tracingOptions,
-        requestContext: args.requestContext ? Object.fromEntries(args.requestContext.entries()) : {},
-        actor: args.actor,
+        ...buildDurableTriggerFields({ requestContext: args.requestContext, actor: args.actor }),
         perStep: args.perStep,
       },
     });
@@ -439,8 +439,7 @@ export class InngestRun<
         outputOptions,
         tracingOptions,
         format,
-        requestContext: requestContext ? Object.fromEntries(requestContext.entries()) : {},
-        actor,
+        ...buildDurableTriggerFields({ requestContext, actor }),
         perStep,
       },
     });
@@ -543,11 +542,6 @@ export class InngestRun<
 
     const resumeDataToUse = await this._validateResumeData(params.resumeData, suspendedStep);
 
-    // Merge persisted requestContext from snapshot with any new values from params
-    const persistedRequestContext = (snapshot as any)?.requestContext ?? {};
-    const newRequestContext = params.requestContext ? Object.fromEntries(params.requestContext.entries()) : {};
-    const mergedRequestContext = { ...persistedRequestContext, ...newRequestContext };
-
     // Mark the snapshot as 'running' before sending the event so that
     // snapshot-based polling doesn't return the stale suspended/paused result.
     await workflowsStore.persistWorkflowSnapshot({
@@ -579,14 +573,11 @@ export class InngestRun<
             resumePayload: resumeDataToUse,
             resumePath: steps?.[0] ? (snapshot?.suspendedPaths?.[steps?.[0]] as any) : undefined,
           },
-          requestContext: mergedRequestContext,
-          // `actor` is a per-call trust signal, not rehydrated from the snapshot like
-          // `requestContext` is above. This intentionally matches the default engine,
-          // which passes `actor: params.actor` on resume and never reads it from the
-          // snapshot (see packages/core/src/workflows/workflow.ts `_resume`). The caller
-          // (a trusted background system) re-supplies `actor` on each resume; we never
-          // persist a membership-bypass signal into durable storage.
-          actor: params.actor,
+          ...buildDurableResumeFields({
+            persistedRequestContext: (snapshot as any)?.requestContext,
+            requestContext: params.requestContext,
+            actor: params.actor,
+          }),
           perStep: params.perStep,
         },
       });
@@ -828,8 +819,7 @@ export class InngestRun<
           timeTravel: timeTravelData,
           tracingOptions: params.tracingOptions,
           outputOptions: params.outputOptions,
-          requestContext: params.requestContext ? Object.fromEntries(params.requestContext.entries()) : {},
-          actor: params.actor,
+          ...buildDurableTriggerFields({ requestContext: params.requestContext, actor: params.actor }),
           perStep: params.perStep,
         },
       });
