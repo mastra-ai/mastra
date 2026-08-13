@@ -1,3 +1,4 @@
+import zlib from 'node:zlib';
 import { ErrorDomain, ErrorCategory, MastraError } from '@mastra/core/error';
 import {
   createStorageErrorId,
@@ -21,6 +22,54 @@ import type { MongoDBConnector } from '../../connectors/MongoDBConnector';
 import { resolveMongoDBConfig } from '../../db';
 import { resolveTargets, runPrune } from '../../retention';
 import type { MongoDBDomainConfig, MongoDBIndexConfig } from '../../types';
+
+const GZIP_PREFIX = '__gz:';
+
+export function compressSnapshot(snapshot: any): any {
+  if (snapshot == null) return snapshot;
+
+  if (typeof snapshot === 'string' && snapshot.startsWith(GZIP_PREFIX)) {
+    return snapshot;
+  }
+
+  const jsonStr = typeof snapshot === 'string' ? snapshot : JSON.stringify(snapshot);
+
+  // Compress if larger than 256KB to shrink BSON size and avoid MongoDB 16MB document limit
+  if (jsonStr.length > 256 * 1024) {
+    const compressed = zlib.gzipSync(Buffer.from(jsonStr, 'utf-8'));
+    return `${GZIP_PREFIX}${compressed.toString('base64')}`;
+  }
+
+  if (typeof snapshot === 'string') {
+    try {
+      return JSON.parse(snapshot);
+    } catch {
+      return snapshot;
+    }
+  }
+
+  return snapshot;
+}
+
+export function decompressSnapshot(snapshot: any): any {
+  if (snapshot == null) return snapshot;
+
+  if (typeof snapshot === 'string') {
+    if (snapshot.startsWith(GZIP_PREFIX)) {
+      try {
+        const base64Data = snapshot.slice(GZIP_PREFIX.length);
+        const buffer = Buffer.from(base64Data, 'base64');
+        const decompressed = zlib.gunzipSync(buffer).toString('utf-8');
+        return JSON.parse(decompressed);
+      } catch {
+        return safelyParseJSON(snapshot);
+      }
+    }
+    return safelyParseJSON(snapshot);
+  }
+
+  return snapshot;
+}
 
 export class WorkflowsStorageMongoDB extends WorkflowsStorage {
   #connector: MongoDBConnector;
@@ -82,6 +131,7 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
       { collection: TABLE_WORKFLOW_SNAPSHOT, keys: { resourceId: 1 } },
       { collection: TABLE_WORKFLOW_SNAPSHOT, keys: { createdAt: -1 } },
       { collection: TABLE_WORKFLOW_SNAPSHOT, keys: { 'snapshot.status': 1 } },
+      { collection: TABLE_WORKFLOW_SNAPSHOT, keys: { status: 1 } },
     ];
   }
 
@@ -145,62 +195,59 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
       const collection = await this.getCollection(TABLE_WORKFLOW_SNAPSHOT);
       const now = new Date();
 
-      // Default snapshot structure for new entries
-      const defaultSnapshot = {
-        context: {},
-        activePaths: [],
-        timestamp: Date.now(),
-        suspendedPaths: {},
-        activeStepsPath: {},
-        resumeLabels: {},
-        serializedStepGraph: [],
-        status: 'pending',
-        value: {},
-        waitingPaths: {},
-        runId: runId,
-        requestContext: {},
+      const existingDoc = await collection.findOne({ workflow_name: workflowName, run_id: runId });
+      let currentSnapshot: any = existingDoc ? decompressSnapshot(existingDoc.snapshot) : null;
+
+      if (!currentSnapshot) {
+        currentSnapshot = {
+          context: {},
+          activePaths: [],
+          timestamp: Date.now(),
+          suspendedPaths: {},
+          activeStepsPath: {},
+          resumeLabels: {},
+          serializedStepGraph: [],
+          status: 'pending',
+          value: {},
+          waitingPaths: {},
+          runId: runId,
+          requestContext: {},
+        };
+      }
+
+      currentSnapshot.context = {
+        ...(currentSnapshot.context || {}),
+        [stepId]: result,
       };
 
-      // Use findOneAndUpdate with aggregation pipeline for atomic read-modify-write
-      // This ensures concurrent updates don't overwrite each other
-      const updatedDoc = await collection.findOneAndUpdate(
+      if (requestContext) {
+        currentSnapshot.requestContext = {
+          ...(currentSnapshot.requestContext || {}),
+          ...requestContext,
+        };
+      }
+
+      const processedSnapshot = compressSnapshot(currentSnapshot);
+      const status = currentSnapshot.status || 'pending';
+
+      await collection.updateOne(
         { workflow_name: workflowName, run_id: runId },
-        [
-          {
-            $set: {
-              workflow_name: workflowName,
-              run_id: runId,
-              // If snapshot doesn't exist, use default; otherwise merge
-              snapshot: {
-                $mergeObjects: [
-                  // Start with default snapshot if document is new
-                  { $ifNull: ['$snapshot', defaultSnapshot] },
-                  // Merge the new context entry
-                  {
-                    context: {
-                      $mergeObjects: [{ $ifNull: [{ $ifNull: ['$snapshot.context', {}] }, {}] }, { [stepId]: result }],
-                    },
-                  },
-                  // Merge the new request context
-                  {
-                    requestContext: {
-                      $mergeObjects: [{ $ifNull: [{ $ifNull: ['$snapshot.requestContext', {}] }, {}] }, requestContext],
-                    },
-                  },
-                ],
-              },
-              updatedAt: now,
-              // Only set createdAt if it doesn't exist
-              createdAt: { $ifNull: ['$createdAt', now] },
-            },
+        {
+          $set: {
+            workflow_name: workflowName,
+            run_id: runId,
+            snapshot: processedSnapshot,
+            status,
+            updatedAt: now,
           },
-        ],
-        { upsert: true, returnDocument: 'after' },
+          $setOnInsert: {
+            createdAt: now,
+          },
+        },
+        { upsert: true },
       );
 
-      const snapshot =
-        typeof updatedDoc?.snapshot === 'string' ? JSON.parse(updatedDoc.snapshot) : updatedDoc?.snapshot;
-      return snapshot?.context || {};
+      return currentSnapshot.context || {};
     } catch (error) {
       throw new MastraError(
         {
@@ -217,6 +264,7 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
       );
     }
   }
+
   async updateWorkflowState({
     workflowName,
     runId,
@@ -229,30 +277,13 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
     try {
       const collection = await this.getCollection(TABLE_WORKFLOW_SNAPSHOT);
 
-      // Use findOneAndUpdate with aggregation pipeline for atomic read-modify-write
-      // This ensures concurrent updates don't overwrite each other
-      const updatedDoc = await collection.findOneAndUpdate(
-        { workflow_name: workflowName, run_id: runId },
-        [
-          {
-            $set: {
-              snapshot: {
-                $mergeObjects: ['$snapshot', opts],
-              },
-              updatedAt: new Date(),
-            },
-          },
-        ],
-        { returnDocument: 'after' },
-      );
-
-      if (!updatedDoc) {
+      const existingDoc = await collection.findOne({ workflow_name: workflowName, run_id: runId });
+      if (!existingDoc) {
         return undefined;
       }
 
-      const snapshot = typeof updatedDoc.snapshot === 'string' ? JSON.parse(updatedDoc.snapshot) : updatedDoc.snapshot;
-
-      if (!snapshot?.context) {
+      const currentSnapshot = decompressSnapshot(existingDoc.snapshot);
+      if (!currentSnapshot || typeof currentSnapshot !== 'object' || !currentSnapshot.context) {
         throw new MastraError({
           id: createStorageErrorId('MONGODB', 'UPDATE_WORKFLOW_STATE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
@@ -262,7 +293,26 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
         });
       }
 
-      return snapshot;
+      const mergedSnapshot = {
+        ...currentSnapshot,
+        ...opts,
+      };
+
+      const processedSnapshot = compressSnapshot(mergedSnapshot);
+      const status = mergedSnapshot.status || currentSnapshot.status;
+
+      await collection.updateOne(
+        { workflow_name: workflowName, run_id: runId },
+        {
+          $set: {
+            snapshot: processedSnapshot,
+            status,
+            updatedAt: new Date(),
+          },
+        },
+      );
+
+      return mergedSnapshot;
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
@@ -298,6 +348,7 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
     try {
       const now = new Date();
       const collection = await this.getCollection(TABLE_WORKFLOW_SNAPSHOT);
+      const processedSnapshot = compressSnapshot(snapshot);
       await collection.updateOne(
         { workflow_name: workflowName, run_id: runId },
         {
@@ -305,7 +356,8 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
             workflow_name: workflowName,
             run_id: runId,
             resourceId,
-            snapshot,
+            snapshot: processedSnapshot,
+            status: snapshot?.status,
             updatedAt: updatedAt ?? now,
           },
           $setOnInsert: {
@@ -345,7 +397,7 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
         return null;
       }
 
-      return typeof result.snapshot === 'string' ? safelyParseJSON(result.snapshot as string) : result.snapshot;
+      return decompressSnapshot(result.snapshot);
     } catch (error) {
       throw new MastraError(
         {
@@ -367,7 +419,7 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
         query['workflow_name'] = options.workflowName;
       }
       if (options.status) {
-        query['snapshot.status'] = options.status;
+        query['$or'] = [{ 'snapshot.status': options.status }, { status: options.status }];
       }
       if (options.fromDate) {
         query['createdAt'] = { $gte: options.fromDate };
@@ -484,14 +536,12 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
   }
 
   private parseWorkflowRun(row: any): WorkflowRun {
-    let parsedSnapshot: WorkflowRunState | string = row.snapshot as string;
-    if (typeof parsedSnapshot === 'string') {
-      try {
-        parsedSnapshot = typeof row.snapshot === 'string' ? safelyParseJSON(row.snapshot as string) : row.snapshot;
-      } catch (e) {
-        // If parsing fails, return the raw snapshot string
-        this.logger.warn(`Failed to parse snapshot for workflow ${row.workflow_name}: ${e}`);
-      }
+    let parsedSnapshot: WorkflowRunState | string = row.snapshot;
+    try {
+      parsedSnapshot = decompressSnapshot(row.snapshot);
+    } catch (e) {
+      // If parsing fails, return the raw snapshot string
+      this.logger.warn(`Failed to parse snapshot for workflow ${row.workflow_name}: ${e}`);
     }
 
     return {
