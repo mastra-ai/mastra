@@ -106,7 +106,7 @@ export function LifelineRow({
               onSelect={
                 themeId === undefined
                   ? undefined
-                  : () => onThemeSelect({ signalName, themeId, label: row.label }, point.snapshotIndex)
+                  : () => onThemeSelect({ kind: 'theme', signalName, themeId, label: row.label }, point.snapshotIndex)
               }
             />
           );

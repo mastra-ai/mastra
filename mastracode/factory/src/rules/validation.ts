@@ -270,7 +270,7 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
     case 'invokeSkill': {
       assertExactKeys(
         value,
-        ['type', 'idempotencyKey', 'role', 'skillName', 'arguments', 'precedingMessage'],
+        ['type', 'idempotencyKey', 'role', 'skillName', 'arguments', 'precedingMessage', 'cancelInFlight'],
         'Factory invoke skill decision',
       );
       const args = optionalBoundedString(value.arguments, 'Factory skill arguments', MAX_ARGUMENTS_LENGTH);
@@ -279,6 +279,9 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
         'Factory skill preceding message',
         MAX_MESSAGE_LENGTH,
       );
+      if (value.cancelInFlight !== undefined && typeof value.cancelInFlight !== 'boolean') {
+        throw new FactoryRuleValidationError('Factory skill cancelInFlight must be a boolean.');
+      }
       return {
         type,
         ...commonCommitFields(value),
@@ -286,6 +289,7 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
         skillName: boundedString(value.skillName, 'Factory skill name', MAX_SKILL_NAME_LENGTH, SKILL_NAME_RE),
         ...(args ? { arguments: args } : {}),
         ...(precedingMessage ? { precedingMessage } : {}),
+        ...(value.cancelInFlight === true ? { cancelInFlight: true } : {}),
       };
     }
     case 'sendMessage': {

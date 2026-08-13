@@ -42,7 +42,7 @@
     },
     {
       "source": "/docs/observability/tracing/exporters/cloud",
-      "destination": "/docs/observability/integrations/exporters/mastra-platform",
+      "destination": "/docs/mastra-platform/observability",
       "permanent": true
     },
     {
@@ -167,7 +167,7 @@
     },
     {
       "source": "/docs/getting-started/installation",
-      "destination": "/guides/getting-started/quickstart",
+      "destination": "/docs",
       "permanent": true
     },
     {
@@ -192,7 +192,7 @@
     },
     {
       "source": "/docs/agents/adding-voice",
-      "destination": "/guides/voice/overview",
+      "destination": "/reference/voice/overview",
       "permanent": true
     },
     {
@@ -297,12 +297,12 @@
     },
     {
       "source": "/guides/quickstarts/standalone-server",
-      "destination": "/guides/getting-started/quickstart",
+      "destination": "/docs",
       "permanent": true
     },
     {
       "source": "/docs/getting-started/quickstart",
-      "destination": "/guides/getting-started/quickstart",
+      "destination": "/docs",
       "permanent": true
     },
     {
@@ -1206,8 +1206,13 @@
       "permanent": true
     },
     {
+      "source": "/docs/voice",
+      "destination": "/reference/voice/overview",
+      "permanent": true
+    },
+    {
       "source": "/docs/voice/:path*",
-      "destination": "/guides/voice/:path*",
+      "destination": "/reference/voice/:path*",
       "permanent": true
     },
     {
@@ -2001,6 +2006,56 @@
       "permanent": true
     },
     {
+      "source": "/docs/observability/integrations/processors/sensitive-data-filter",
+      "destination": "/reference/observability/tracing/processors/sensitive-data-filter",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/integrations/exporters/mastra-platform",
+      "destination": "/docs/mastra-platform/observability",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/integrations/overview",
+      "destination": "/integrations",
+      "permanent": true
+    },
+    {
+      "source": "/guides/voice",
+      "destination": "/reference/voice/overview",
+      "permanent": true
+    },
+    {
+      "source": "/guides/voice/:path*",
+      "destination": "/reference/voice/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/guides/getting-started/quickstart",
+      "destination": "/docs",
+      "permanent": true
+    },
+    {
+      "source": "/guides",
+      "destination": "/docs",
+      "permanent": true
+    },
+    {
+      "source": "/guides/deployment/mastra-workers",
+      "destination": "/docs/deployment/workers",
+      "permanent": true
+    },
+    {
+      "source": "/guides/agent-frameworks/ai-sdk",
+      "destination": "/reference/ai-sdk/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/browser/recording",
+      "destination": "/docs/browser/overview#record-browser-sessions",
+      "permanent": true
+    },
+    {
       "source": "/docs/editor/prompts/llms.txt",
       "destination": "/docs/editor/overview/llms.txt",
       "permanent": true
@@ -2027,7 +2082,7 @@
     },
     {
       "source": "/docs/observability/tracing/exporters/cloud/llms.txt",
-      "destination": "/docs/observability/integrations/exporters/mastra-platform/llms.txt",
+      "destination": "/docs/mastra-platform/observability/llms.txt",
       "permanent": true
     },
     {
@@ -2147,7 +2202,7 @@
     },
     {
       "source": "/docs/getting-started/installation/llms.txt",
-      "destination": "/guides/getting-started/quickstart/llms.txt",
+      "destination": "/docs/llms.txt",
       "permanent": true
     },
     {
@@ -2157,7 +2212,7 @@
     },
     {
       "source": "/docs/agents/adding-voice/llms.txt",
-      "destination": "/guides/voice/overview/llms.txt",
+      "destination": "/reference/voice/overview/llms.txt",
       "permanent": true
     },
     {
@@ -2252,12 +2307,12 @@
     },
     {
       "source": "/guides/quickstarts/standalone-server/llms.txt",
-      "destination": "/guides/getting-started/quickstart/llms.txt",
+      "destination": "/docs/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/getting-started/quickstart/llms.txt",
-      "destination": "/guides/getting-started/quickstart/llms.txt",
+      "destination": "/docs/llms.txt",
       "permanent": true
     },
     {
@@ -2851,8 +2906,13 @@
       "permanent": true
     },
     {
+      "source": "/docs/voice/llms.txt",
+      "destination": "/reference/voice/overview/llms.txt",
+      "permanent": true
+    },
+    {
       "source": "/docs/voice/:path*/llms.txt",
-      "destination": "/guides/voice/:path*/llms.txt",
+      "destination": "/reference/voice/:path*/llms.txt",
       "permanent": true
     },
     {
@@ -3593,6 +3653,56 @@
     {
       "source": "/reference/mastra-platform/api/llms.txt",
       "destination": "/docs/mastra-platform/api/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/integrations/processors/sensitive-data-filter/llms.txt",
+      "destination": "/reference/observability/tracing/processors/sensitive-data-filter/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/integrations/exporters/mastra-platform/llms.txt",
+      "destination": "/docs/mastra-platform/observability/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/integrations/overview/llms.txt",
+      "destination": "/integrations/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/guides/voice/llms.txt",
+      "destination": "/reference/voice/overview/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/guides/voice/:path*/llms.txt",
+      "destination": "/reference/voice/:path*/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/guides/getting-started/quickstart/llms.txt",
+      "destination": "/docs/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/guides/llms.txt",
+      "destination": "/docs/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/guides/deployment/mastra-workers/llms.txt",
+      "destination": "/docs/deployment/workers/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/guides/agent-frameworks/ai-sdk/llms.txt",
+      "destination": "/reference/ai-sdk/overview/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/browser/recording/llms.txt",
+      "destination": "/docs/browser/overview/llms.txt",
       "permanent": true
     }
   ]

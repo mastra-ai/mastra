@@ -1008,11 +1008,15 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                   const outputResult: OutputResult = {
                     text: self.#bufferedText.join(''),
                     usage: chunk.payload.output.usage as LanguageModelUsage,
-                    finishReason: self.#finishReason || 'unknown',
+                    finishReason: self.#status === 'failed' ? 'error' : self.#finishReason || 'unknown',
                     steps: [...self.#bufferedSteps] as LLMStepResult[],
                   };
 
-                  if (self.#status !== 'failed' && self.#status !== 'canceled') {
+                  // Output processors must still run on failed streams so user-configured
+                  // processors (and onFinish consumers) observe error terminals. Only
+                  // canceled (aborted) streams skip the pass. Orphan-input protection for
+                  // failed turns lives in MessageHistory.processOutputResult.
+                  if (self.#status !== 'canceled') {
                     self.messageList = await self.processorRunner.runOutputProcessors(
                       self.messageList,
                       resolveObservabilityContext(options),
