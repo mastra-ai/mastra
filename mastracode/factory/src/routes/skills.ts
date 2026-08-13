@@ -4,6 +4,7 @@ import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
+import { listFactorySkills } from '../skills/catalog.js';
 import { resolveSkillInvocation, SkillInvocationError } from '../skills/service.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { RouteDependencies } from './route.js';
@@ -181,7 +182,24 @@ export class SkillRoutes extends Route<SkillRoutesDeps> {
       }
     };
 
+    const handleFactorySkillsList = async (context: unknown) => {
+      const c = loose(context);
+      const { auth } = this.deps;
+      if (auth.enabled()) {
+        await auth.ensureUser(c);
+        if (!auth.tenant(c)) {
+          return c.json({ error: 'unauthorized', message: 'Authentication required.' }, 401);
+        }
+      }
+      return c.json({ skills: await listFactorySkills() });
+    };
+
     return [
+      registerApiRoute('/web/factory/skills', {
+        method: 'GET',
+        requiresAuth: false,
+        handler: context => handleFactorySkillsList(context),
+      }),
       registerApiRoute('/web/agent-controller/:controllerId/skills/prepare', {
         method: 'POST',
         requiresAuth: false,

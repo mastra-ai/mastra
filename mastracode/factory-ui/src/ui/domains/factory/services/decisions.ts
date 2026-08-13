@@ -1,10 +1,16 @@
-export type FactoryDecisionStatus = 'pending' | 'leased' | 'retry' | 'succeeded' | 'failed';
+/** `proposed`: a run waiting for someone to release it. `dismissed`: one turned down, so it never runs. */
+export type FactoryDecisionStatus = 'pending' | 'proposed' | 'dismissed' | 'leased' | 'retry' | 'succeeded' | 'failed';
+
+/** What a person can do to a queued effect from the board or the Rules page. */
+export type FactoryDecisionAction = 'approve' | 'dismiss' | 'retry';
 
 export interface FactoryDecisionSummary {
   id: string;
   evaluationId: string;
   workItemId: string | null;
   type: string;
+  /** Session slot a proposed run fills, so the card can name what it starts. */
+  role: string | null;
   status: FactoryDecisionStatus;
   attempts: number;
   lastError: string | null;
@@ -47,13 +53,14 @@ export async function fetchFactoryDecisions(
   return (await response.json()) as FactoryDecisionPage;
 }
 
-export async function retryFactoryDecision(
+export async function actOnFactoryDecision(
   baseUrl: string,
   githubProjectId: string,
   decisionId: string,
+  action: FactoryDecisionAction,
 ): Promise<{ decision: FactoryDecisionSummary }> {
   const response = await fetch(
-    `${baseUrl}/web/factory/projects/${encodeURIComponent(githubProjectId)}/decisions/${encodeURIComponent(decisionId)}/retry`,
+    `${baseUrl}/web/factory/projects/${encodeURIComponent(githubProjectId)}/decisions/${encodeURIComponent(decisionId)}/${action}`,
     { method: 'POST', headers: { Accept: 'application/json' }, credentials: 'include' },
   );
   if (!response.ok) return throwRequestError(response);

@@ -84,7 +84,7 @@ describe('Factory rule resolution', () => {
     expect(resolveFactoryToolRule(rules, 'unknown_tool')).toBeUndefined();
     expect(resolveFactoryGithubRule(rules, 'pullRequestMerged')).toBe(onEvent);
     expect(resolveFactoryGithubRule(rules, 'issueOpened')).toEqual(expect.any(Function));
-    expect(resolveFactoryGithubRule(rules, 'pullRequestUpdated')).toBeUndefined();
+    expect(resolveFactoryGithubRule(rules, 'pullRequestUpdated')).toEqual(expect.any(Function));
     expect(resolveFactoryLinearRule(rules, 'issueObserved')).toBe(onLinearEvent);
   });
 });

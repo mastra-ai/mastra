@@ -73,6 +73,7 @@ function buildSpannerMessageMetadataFilter(metadataFilter: StorageMetadataFilter
  * (the durable state surface used by `@mastra/memory`).
  */
 export class MemorySpanner extends MemoryStorage {
+  override readonly supportsPartialThreadUpdate = true;
   private database: Database;
   private db: SpannerDB;
   private readonly skipDefaultIndexes?: boolean;

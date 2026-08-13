@@ -1026,8 +1026,12 @@ export class MastraTUI {
   private beginLifecycleRun(): void {
     const hookMgr = this.state.hookManager;
     if (!hookMgr) return;
-    const runId = randomUUID();
-    hookMgr.setRunId(runId);
+    // Reuse a run id set at receipt time (runPermissionHooksForEvent) so the
+    // PermissionRequest hook fired before the queued agent_start carries the
+    // same id as subsequent hooks in this run.
+    if (!hookMgr.getRunId()) {
+      hookMgr.setRunId(randomUUID());
+    }
     hookMgr.runAgentStart().catch(() => {});
   }
 

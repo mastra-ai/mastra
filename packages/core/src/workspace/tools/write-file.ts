@@ -8,6 +8,7 @@ import { startWorkspaceSpan } from './tracing';
 export const writeFileTool = createTool({
   id: WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE,
   description: 'Write content to a file in the workspace filesystem. Creates parent directories if needed.',
+  outputSchema: z.string(),
   inputSchema: z.object({
     path: z.string().describe('The path where to write the file (e.g., "data/output.txt")'),
     content: z.string().describe('The content to write to the file'),

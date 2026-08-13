@@ -20,14 +20,14 @@ Use this shape:
 
 ```mdx
 ---
-title: '$CATEGORY overview'
+title: '$CATEGORY'
 description: 'One to two sentences describing what this topic covers.'
 packages:
   - '@mastra/core'
   - '@mastra/<module>'
 ---
 
-# $CATEGORY overview
+# $CATEGORY
 
 One to two sentence intro. Say what the category does and why it matters.
 
@@ -57,7 +57,7 @@ Add short H2 sections only for category-wide topics like storage, debugging, or 
 
 Rules:
 
-- title must be $CATEGORY overview
+- title must be $CATEGORY
 - opening paragraph must be one or two sentences
 - every standard page in the category should be linked from the page
 - if one sub-topic needs more than two paragraphs, move it to its own standard page

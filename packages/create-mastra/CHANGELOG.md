@@ -1,5 +1,32 @@
 # create-mastra
 
+## 1.25.0-alpha.1
+
+## 1.24.1-alpha.0
+
+## 1.24.0
+
+### Patch Changes
+
+- Fixed generated projects to approve required pnpm native builds and externalize DuckDB bindings for experiment workers. ([#21301](https://github.com/mastra-ai/mastra/pull/21301))
+
+- dependencies updates: ([#19783](https://github.com/mastra-ai/mastra/pull/19783))
+  - Updated dependency [`posthog-node@^5.46.1` ↗︎](https://www.npmjs.com/package/posthog-node/v/5.46.1) (from `^5.37.0`, in `dependencies`)
+
+## 1.24.0-alpha.18
+
+### Patch Changes
+
+- Fixed generated projects to approve required pnpm native builds and externalize DuckDB bindings for experiment workers. ([#21301](https://github.com/mastra-ai/mastra/pull/21301))
+
+## 1.24.0-alpha.17
+
+## 1.24.0-alpha.16
+
+## 1.24.0-alpha.15
+
+## 1.24.0-alpha.14
+
 ## 1.24.0-alpha.13
 
 ## 1.24.0-alpha.12

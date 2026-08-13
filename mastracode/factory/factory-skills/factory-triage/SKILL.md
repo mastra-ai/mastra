@@ -51,6 +51,8 @@ Form the verdict. First, is the issue what it appears to be — genuine bug, con
 
 When multiple explanations remain plausible, pick the one the evidence best supports, record the ranking and why as an assumption, and list what would discriminate between them. Do not present candidates and wait — decide and move.
 
+For `mastra-ai/mastra`, add `@mastra/core` only when the issue reports broken existing behavior and its primary fix traces to `packages/core` or the published package. A core mention or stack frame is not enough; skip features, adjacent packages, and uncertain ownership.
+
 ## Output contract
 
 Write one concise **handoff** for whoever plans the fix. It must begin with the existing marker and then this classification header, followed by the detailed investigation:
@@ -107,11 +109,19 @@ Set `COMMENT_BODY` to the marker followed by the structured handoff. Update the 
 
 After a GitHub comment is posted or updated, reconcile the triage labels before the terminal transition:
 
-- Add `auto-triaged` for every GitHub issue: `gh issue edit "$ISSUE" --add-label "auto-triaged"`.
+- Add `status: auto-triaged` for every GitHub issue: `gh issue edit "$ISSUE" --add-label "status: auto-triaged"`.
 - Remove `status: needs triage` when it appears in the labels fetched in Phase 1: `gh issue edit "$ISSUE" --remove-label "status: needs triage"`.
-- Add `needs-approval` when `Route: Await approval`, or when the recommended next action needs maintainer approval or prep before someone should investigate, implement, close, or reject: `gh issue edit "$ISSUE" --add-label "needs-approval"`.
+- Add `status: needs approval` when `Route: Await approval`, or when the recommended next action needs maintainer approval or prep before someone should investigate, implement, close, or reject: `gh issue edit "$ISSUE" --add-label "status: needs approval"`.
+- For confirmed direct core bugs in `mastra-ai/mastra`, ensure `@mastra/core` exists before adding it; never remove it:
 
-Apply only these label mutations. Do not remove `needs-approval` merely because a later refresh has a different route. For Linear issues, use the same structured handoff without attempting GitHub publication or label mutations.
+  ```bash
+  if ! gh label list --repo mastra-ai/mastra --limit 1000 --json name --jq '.[].name' | grep -Fxq '@mastra/core'; then
+    gh label create '@mastra/core' --repo mastra-ai/mastra --color '1D76DB' --description 'Issues whose primary fix belongs in @mastra/core'
+  fi
+  gh issue edit "$ISSUE" --repo mastra-ai/mastra --add-label '@mastra/core'
+  ```
+
+Apply only these label mutations. Do not remove `status: needs approval` merely because a later refresh has a different route. For Linear issues, use the same structured handoff without attempting GitHub publication or label mutations.
 
 Post the same handoff as your final conversation message. Take the current stage and `expectedRevision` from the `factory-phase` signal.
 
