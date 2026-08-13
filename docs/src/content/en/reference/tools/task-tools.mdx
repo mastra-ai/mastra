@@ -30,7 +30,7 @@ const agent = new Agent({
 })
 ```
 
-Or import the tools directly:
+Or import the tools directly. `taskWriteTool`, `taskUpdateTool`, `taskCompleteTool`, and `taskCheckTool` are the export names; `task_write`, `task_update`, `task_complete`, and `task_check` are the tool IDs the model sees in tool calls and traces:
 
 ```typescript title="src/mastra/agents/index.ts"
 import { taskWriteTool, taskUpdateTool, taskCompleteTool, taskCheckTool } from '@mastra/core/tools'
