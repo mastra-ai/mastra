@@ -7,7 +7,7 @@ packages:
 
 # Mastra.getWorkflow()
 
-The `.getWorkflow()` method is used to retrieve a workflow by its registration key. This method provides full TypeScript type inference for workflow input and output schemas.
+The `.getWorkflow()` method is used to retrieve a workflow by its registration key. The method provides full TypeScript type inference for workflow input and output schemas.
 
 ## Usage example
 
@@ -24,7 +24,7 @@ await run.startAsync({
 
 ## Type inference
 
-For best TypeScript support, use `getWorkflow()` with the workflow's **registration key** (the key used when adding the workflow to Mastra). This provides full type inference for:
+For best TypeScript support, use `getWorkflow()` with the workflow's **registration key** (the key used when adding the workflow to Mastra). The registration key provides full type inference for:
 
 - Input data schemas
 - Output data schemas

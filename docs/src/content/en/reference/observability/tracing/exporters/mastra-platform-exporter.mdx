@@ -276,7 +276,7 @@ The probe timer doesn't keep the Node.js process alive, so short-lived and serve
 ### Signal Processing
 
 - `exportTracingEvent()` only exports `SPAN_ENDED` tracing events
-- `onLogEvent()`, `onMetricEvent()`, `onScoreEvent()`, and `onFeedbackEvent()` buffer every event they receive for their respective signal type
+- `onLogEvent()`, `onMetricEvent()`, `onScoreEvent()`, and `onFeedbackEvent()` buffer every event they receive for that signal type
 - All supported signal batches are uploaded to their matching publish endpoints during `flush()` and `shutdown()`
 
 ## Span wire format
