@@ -170,6 +170,16 @@ describe('MarkdownRenderer', () => {
     expect(container.querySelector('.mastra-markdown-word-pending')?.textContent).toBe('a');
   });
 
+  it('holds back a trailing word that markup splits in two', () => {
+    const { container } = render(<MarkdownRenderer streaming>{'Say Hel**lo**'}</MarkdownRenderer>);
+
+    const held = [...container.querySelectorAll('.mastra-markdown-word-pending')].map(node => node.textContent);
+    const landed = [...container.querySelectorAll('.mastra-markdown-word')].map(node => node.textContent);
+
+    expect(held).toEqual(['Hel', 'lo']);
+    expect(landed).toEqual(['Say']);
+  });
+
   it('marks only the freshly landed tail of a long reply', () => {
     const reply = Array.from({ length: 60 }, (_, index) => `word${index}`).join(' ');
 
@@ -184,25 +194,28 @@ describe('MarkdownRenderer', () => {
   });
 
   it('leaves a streamed code fence whole', () => {
-    render(
+    const { container } = render(
       <TooltipProvider>
         <MarkdownRenderer streaming>{'```ts\nconst ok = true;\n```'}</MarkdownRenderer>
       </TooltipProvider>,
     );
 
     expect(screen.getByText('const ok = true;')).toBeDefined();
+    expect(container.querySelectorAll('.mastra-markdown-word, .mastra-markdown-word-pending')).toHaveLength(0);
   });
 
   it('leaves the words already on screen in place when more text arrives', () => {
     const { container, rerender } = render(<MarkdownRenderer streaming>{'Hello there'}</MarkdownRenderer>);
 
     const [hello] = container.querySelectorAll('.mastra-markdown-word');
+    const there = container.querySelector('.mastra-markdown-word-pending');
 
     rerender(<MarkdownRenderer streaming>{'Hello there, friend'}</MarkdownRenderer>);
 
     const words = container.querySelectorAll('.mastra-markdown-word');
 
     expect(words[0]).toBe(hello);
+    expect(words[1]).toBe(there);
     expect([...words].map(node => node.textContent)).toEqual(['Hello', 'there,']);
   });
 
