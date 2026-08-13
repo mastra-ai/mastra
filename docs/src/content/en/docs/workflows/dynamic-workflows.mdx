@@ -138,7 +138,9 @@ Applications don't need direct access to the `Mastra` instance to manage dynamic
 - [Client SDK workflows API](/reference/client-js/workflows): Call `upsertDynamicWorkflow()` from a JavaScript or TypeScript client.
 - [Server routes](/reference/server/routes): Send definitions to `POST /api/stored/workflows`.
 
-On authenticated servers, dynamic-workflow management requires the `stored-workflows:read` and `stored-workflows:write` permissions. Running the registered workflow requires `workflows:execute`.
+On authenticated servers, listing, reading, and upserting dynamic workflows derives the author from the server-owned request context. Regular callers can only list, read, and replace their own definitions. Callers with `stored-workflows:admin` can inspect every definition and can replace an owned definition without changing its author. Definitions created before ownership metadata was available are hidden from regular callers and read-only for admins.
+
+These management routes still require `stored-workflows:read` or `stored-workflows:write`. Deletion and execution aren't owner-scoped yet. Running the registered workflow requires `workflows:execute`, but this permission doesn't establish tenant ownership by itself.
 
 ### Persist definitions
 
@@ -156,7 +158,7 @@ await mastra.addDynamicWorkflow(untrustedDefinition, {
 })
 ```
 
-Mastra stores `authorId` with the definition in the same write. Once set, the author is immutable: replacing the definition without `authorId` retains its stored author, while using a different author fails with an ownership conflict. This metadata doesn't enforce access control. Authorize the caller before registration and before later reads, updates, deletion, or execution.
+Mastra stores `authorId` with the definition in the same write. Once set, the author is immutable: replacing the definition without `authorId` retains its stored author, while using a different author fails with an ownership conflict. The authenticated server's list, get, and upsert routes enforce this ownership. Direct Core calls, deletion, execution, and nested workflow references still require application-level authorization.
 
 ## Related
 
