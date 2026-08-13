@@ -1850,6 +1850,24 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           // `error`-level entry for an AbortError.
           if (isAbortError(error) && options?.abortSignal?.aborted) {
             logger?.debug?.('LLM execution aborted', { runId });
+
+            // processOutputStream threw before buildMessagesFromChunks ran, so hydrate
+            // messageList from whatever text was already buffered for the client.
+            const partialText = outputStream._getImmediateText();
+            if (partialText) {
+              const hasAssistant = messageList.get.response.db().some(m => m.role === 'assistant');
+              if (!hasAssistant) {
+                messageList.add(
+                  {
+                    id: currentStep.messageId,
+                    role: 'assistant',
+                    content: [{ type: 'text', text: partialText }],
+                  },
+                  'response',
+                );
+              }
+            }
+
             await options?.onAbort?.({
               steps: inputData?.output?.steps ?? [],
             });

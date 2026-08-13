@@ -735,9 +735,9 @@ describe('MastraModelOutput', () => {
       expect(finishPayload).toMatchObject({
         finishReason: 'aborted',
       });
-      // Empty defaults keep the aborted callback payload contract-complete without
-      // reconstructing partial buffered state from a mid-flight canceled stream.
-      expect(finishPayload.text).toBe('');
+      // Partial text already buffered before abort is included so callers can opt in
+      // to persist it (persistPartialOnAbort). Other fields stay empty defaults.
+      expect(finishPayload.text).toBe('partial answer');
       expect(finishPayload.toolCalls).toEqual([]);
       expect(finishPayload.toolResults).toEqual([]);
       expect(finishPayload.steps).toEqual([]);

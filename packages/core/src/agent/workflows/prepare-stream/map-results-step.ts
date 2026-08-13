@@ -10,6 +10,7 @@ import { StructuredOutputProcessor } from '../../../processors';
 import type { RequestContext } from '../../../request-context';
 import type { Step } from '../../../workflows/step';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
+import type { MessageList } from '../../message-list';
 import type { SaveQueueManager } from '../../save-queue';
 import { getModelOutputForTripwire } from '../../trip-wire';
 import type { AgentMethodType } from '../../types';
@@ -23,6 +24,35 @@ import {
   PROCESSOR_STATES_KEY,
 } from './run-scope-keys';
 import type { AgentCapabilities, PrepareMemoryStepOutput, PrepareToolsStepOutput } from './schema';
+
+/**
+ * Resolve non-empty assistant text for abort persistence. Prefer the onFinish
+ * payload text (streamed buffer); fall back to response messages already on the
+ * shared MessageList when the aborted payload text is empty.
+ */
+function getPartialAssistantText(payload: { text?: string }, messageList: MessageList): string {
+  if (typeof payload.text === 'string' && payload.text.trim().length > 0) {
+    return payload.text;
+  }
+
+  return messageList.get.response
+    .db()
+    .filter(m => m.role === 'assistant')
+    .map(m => {
+      if (typeof m.content?.content === 'string') {
+        return m.content.content;
+      }
+      if (Array.isArray(m.content?.parts)) {
+        return m.content.parts
+          .filter((p): p is { type: 'text'; text: string } => p.type === 'text' && typeof p.text === 'string')
+          .map(p => p.text)
+          .join('');
+      }
+      return '';
+    })
+    .join('')
+    .trim();
+}
 
 interface MapResultsStepOptions<OUTPUT = undefined> {
   capabilities: AgentCapabilities;
@@ -307,26 +337,72 @@ export function createMapResultsStep<OUTPUT = undefined>({
           }
 
           if (payload.finishReason === 'aborted') {
-            agentSpan?.end({
-              output: {
-                status: 'aborted',
-                reason: 'abort',
-              },
-            });
+            // Optionally persist partial output if the caller opted in and
+            // non-empty text was already streamed to the client. MessageHistory
+            // skips canceled streams, so we also flush via saveQueueManager.
+            const partialText = getPartialAssistantText(payload, messageList);
+            if (options.persistPartialOnAbort && partialText) {
+              try {
+                await capabilities.executeOnFinish({
+                  result: { ...payload, text: partialText },
+                  outputText: partialText,
+                  thread: result.thread,
+                  threadId: result.threadId,
+                  readOnlyMemory: memoryConfig?.readOnly,
+                  resourceId,
+                  memoryConfig,
+                  requestContext,
+                  agentSpan,
+                  runId,
+                  messageList,
+                  threadExists: memoryData.threadExists || threadCreatedByStep,
+                  structuredOutput: !!options.structuredOutput?.schema,
+                  overrideScorers: options.scorers,
+                  onTitleGenerated: options.memory?.onTitleGenerated,
+                  waitUntil: options.serverless?.waitUntil,
+                });
+
+                if (saveQueueManager && result.threadId && !memoryConfig?.readOnly) {
+                  await saveQueueManager.flushMessages(messageList, result.threadId, memoryConfig);
+                }
+              } catch (e) {
+                capabilities.logger.error('Error saving partial memory on abort', {
+                  error: e,
+                  runId,
+                });
+                agentSpan?.end({
+                  output: {
+                    status: 'aborted',
+                    reason: 'abort',
+                  },
+                });
+              }
+            } else {
+              agentSpan?.end({
+                output: {
+                  status: 'aborted',
+                  reason: 'abort',
+                },
+              });
+            }
             return;
           }
 
-          // Skip memory persistence when the abort signal has fired.
+          // Skip memory persistence when the abort signal has fired unless
+          // the caller explicitly opted in via persistPartialOnAbort.
           // The LLM response may have continued after the caller disconnected,
-          // and we should not persist a partial or full response for an aborted request.
+          // and by default we do not persist a partial or full response for an
+          // aborted request.
           const aborted = options.abortSignal?.aborted;
+          const partialText = getPartialAssistantText(payload, messageList);
+          const shouldPersist = !aborted || (options.persistPartialOnAbort === true && partialText.length > 0);
 
-          if (!aborted) {
+          if (shouldPersist) {
             try {
               const outputText =
                 options.structuredOutput?.schema && payload.object != null
                   ? JSON.stringify(payload.object)
-                  : (payload.text ?? '');
+                  : partialText || payload.text || '';
 
               await capabilities.executeOnFinish({
                 result: payload,
@@ -346,6 +422,12 @@ export function createMapResultsStep<OUTPUT = undefined>({
                 onTitleGenerated: options.memory?.onTitleGenerated,
                 waitUntil: options.serverless?.waitUntil,
               });
+
+              // MessageHistory skips canceled streams; when aborting with the
+              // opt-in flag, flush any buffered messages that were not saved.
+              if (aborted && saveQueueManager && result.threadId && !memoryConfig?.readOnly) {
+                await saveQueueManager.flushMessages(messageList, result.threadId, memoryConfig);
+              }
             } catch (e) {
               capabilities.logger.error('Error saving memory on finish', {
                 error: e,
@@ -368,6 +450,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
               agentSpan?.error({ error: spanError, endSpan: true });
             }
           } else {
+            // Aborted and persistPartialOnAbort not set (or no text) — skip memory, just end span.
             agentSpan?.end();
           }
 

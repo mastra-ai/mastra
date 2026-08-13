@@ -1848,13 +1848,13 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
   }
 
   #createAbortedOnFinishPayload(): MastraOnFinishCallbackArgs<OUTPUT> {
-    // Abort flow invokes options?.onFinish so map-results-step.ts can close the AGENT_RUN span.
-    // That span path only reads finishReason. The remaining LLMStepResult fields are empty
-    // defaults to satisfy the MastraOnFinishCallback shape without reconstructing partial
-    // buffered state from a stream that was canceled mid-flight.
+    // Abort flow invokes options?.onFinish so map-results-step.ts can close the AGENT_RUN span
+    // and optionally persist partial output via persistPartialOnAbort. Include whatever text
+    // was already buffered/streamed before cancellation so callers can opt in to saving it.
+    const text = this.#bufferedText.join('');
     return {
       finishReason: 'aborted',
-      text: '',
+      text,
       reasoning: [],
       reasoningText: undefined,
       sources: [],
