@@ -230,19 +230,20 @@ export class SkillRoutes extends Route<SkillRoutesDeps> {
         return c.json({ error: 'invalid_request', message: 'Invalid JSON body.' }, 400);
       }
       const body = rawBody as { description?: unknown; content?: unknown } | null;
-      const description = body?.description;
+      const rawDescription = body?.description;
       const content = body?.content;
       if (
-        typeof description !== 'string' ||
-        description.length === 0 ||
-        description.length > MAX_OVERRIDE_DESCRIPTION_LENGTH ||
-        description.includes('\n') ||
+        typeof rawDescription !== 'string' ||
+        rawDescription.trim().length === 0 ||
+        rawDescription.length > MAX_OVERRIDE_DESCRIPTION_LENGTH ||
+        /[\r\n]/.test(rawDescription) ||
         typeof content !== 'string' ||
         content.trim().length === 0 ||
         content.length > MAX_OVERRIDE_CONTENT_LENGTH
       ) {
         return c.json({ error: 'invalid_request', message: 'Invalid skill override.' }, 400);
       }
+      const description = rawDescription.trim();
       const record = await skillOverrides.upsert({ orgId: org.orgId, name, description, content });
       return c.json({
         skill: { name: record.name, description: record.description, content: record.content, isCustomized: true },

@@ -30,9 +30,10 @@ function SkillEditor({ skill }: { skill: FactorySkillInfo }) {
   const update = useUpdateFactorySkillMutation();
   const reset = useResetFactorySkillMutation();
 
-  const dirty = description !== skill.description || content !== skill.content;
+  const savedDescription = description.trim();
+  const dirty = savedDescription !== skill.description || content !== skill.content;
   const busy = update.isPending || reset.isPending;
-  const canSave = dirty && description.trim().length > 0 && content.trim().length > 0 && !busy;
+  const canSave = dirty && savedDescription.length > 0 && content.trim().length > 0 && !busy;
   const error = update.error ?? reset.error;
 
   return (
@@ -70,7 +71,7 @@ function SkillEditor({ skill }: { skill: FactorySkillInfo }) {
         <Button
           variant="primary"
           disabled={!canSave}
-          onClick={() => update.mutate({ name: skill.name, description: description.trim(), content })}
+          onClick={() => update.mutate({ name: skill.name, description: savedDescription, content })}
         >
           {update.isPending ? 'Saving…' : 'Save'}
         </Button>

@@ -4,7 +4,7 @@ import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
-import { TEST_BASE_URL, renderWithProviders } from '../../../../../../e2e/ui/render';
+import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import type { FactorySkillsResponse, UpdateFactorySkillBody } from '../../../../../api/types';
 import { FactorySkillsSection } from '../FactorySkillsSection';
 
@@ -109,7 +109,7 @@ describe('FactorySkillsSection', () => {
     );
 
     const user = userEvent.setup();
-    renderWithProviders(<FactorySkillsSection />);
+    const { client } = renderWithProviders(<FactorySkillsSection />);
 
     await user.click(await screen.findByRole('button', { name: /Triage/ }));
     const instructions = await screen.findByLabelText('factory-triage instructions');
@@ -117,7 +117,8 @@ describe('FactorySkillsSection', () => {
     await user.type(instructions, '# Custom triage');
     await user.click(screen.getByRole('button', { name: 'Save' }));
 
-    await waitFor(() => expect(saved?.content).toBe('# Custom triage'));
+    await waitForMutationsIdle(client);
+    expect(saved?.content).toBe('# Custom triage');
     expect(await screen.findByText('Customized')).toBeInTheDocument();
     expect(await screen.findByRole('button', { name: 'Reset to default' })).toBeInTheDocument();
   });
@@ -135,13 +136,14 @@ describe('FactorySkillsSection', () => {
     );
 
     const user = userEvent.setup();
-    renderWithProviders(<FactorySkillsSection />);
+    const { client } = renderWithProviders(<FactorySkillsSection />);
 
     expect(await screen.findByText('Customized')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: /Triage/ }));
     await user.click(await screen.findByRole('button', { name: 'Reset to default' }));
 
-    await waitFor(() => expect(resetCalled).toBe(true));
+    await waitForMutationsIdle(client);
+    expect(resetCalled).toBe(true);
     await waitFor(() => expect(screen.queryByText('Customized')).not.toBeInTheDocument());
     expect(screen.getByLabelText('factory-triage instructions')).toHaveValue(
       '# Triage\n\nTrace history and diagnose the root cause.',

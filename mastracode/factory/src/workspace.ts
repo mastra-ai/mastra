@@ -151,17 +151,26 @@ class FactorySkillSource implements SkillSource {
     return FACTORY_SKILL_NAMES.has(name) ? name : undefined;
   }
 
-  async #override(factoryPath: string): Promise<FactorySkillOverride | null> {
-    if (!this.#resolveOverride) return null;
+  /**
+   * Short-lived cache: the skill loader calls `stat` then `readFile` for each
+   * factory skill in one burst, and one storage read per skill per burst is
+   * enough. The TTL stays short because workspaces (and this source) are
+   * reused across requests, and user edits must show up on the next read.
+   */
+  readonly #overrideCache = new Map<string, { at: number; value: Promise<FactorySkillOverride | null> }>();
+  static readonly #OVERRIDE_CACHE_TTL_MS = 2_000;
+
+  #override(factoryPath: string): Promise<FactorySkillOverride | null> {
+    if (!this.#resolveOverride) return Promise.resolve(null);
     const name = this.#overridableSkillName(factoryPath);
-    if (!name) return null;
-    try {
-      return await this.#resolveOverride(name);
-    } catch {
-      // Storage hiccups fall back to the bundled default instead of breaking
-      // skill activation.
-      return null;
-    }
+    if (!name) return Promise.resolve(null);
+    const cached = this.#overrideCache.get(name);
+    if (cached && Date.now() - cached.at < FactorySkillSource.#OVERRIDE_CACHE_TTL_MS) return cached.value;
+    // Storage hiccups fall back to the bundled default instead of breaking
+    // skill activation.
+    const value = this.#resolveOverride(name).catch(() => null);
+    this.#overrideCache.set(name, { at: Date.now(), value });
+    return value;
   }
 
   exists(skillPath: string): Promise<boolean> {

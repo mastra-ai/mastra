@@ -539,11 +539,13 @@ describe('factory skill override routes', () => {
     });
 
   it('rejects unauthenticated save/reset when auth is enabled', async () => {
-    const { app } = createOverridesApp({ authEnabled: true });
+    const { app, overrides } = createOverridesApp({ authEnabled: true });
     const put = await putOverride(app, 'factory-triage', { description: 'd', content: 'c' });
     const del = await app.request('/web/factory/skills/factory-triage', { method: 'DELETE' });
     expect(put.status).toBe(401);
     expect(del.status).toBe(401);
+    expect(overrides.upsert).not.toHaveBeenCalled();
+    expect(overrides.delete).not.toHaveBeenCalled();
   });
 
   it('rejects unknown skill names', async () => {
@@ -557,6 +559,7 @@ describe('factory skill override routes', () => {
   it('rejects invalid override bodies', async () => {
     const { app } = createOverridesApp();
     expect((await putOverride(app, 'factory-triage', { description: '', content: 'c' })).status).toBe(400);
+    expect((await putOverride(app, 'factory-triage', { description: '   ', content: 'c' })).status).toBe(400);
     expect((await putOverride(app, 'factory-triage', { description: 'd', content: '   ' })).status).toBe(400);
     expect((await putOverride(app, 'factory-triage', { description: 'multi\nline', content: 'c' })).status).toBe(400);
     expect((await putOverride(app, 'factory-triage', {})).status).toBe(400);
