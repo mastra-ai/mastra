@@ -265,6 +265,89 @@ describe('buildMessagesFromChunks', () => {
     });
   });
 
+  it('should preserve both call and result itemIds when a Responses provider assigns each side its own id', () => {
+    // OpenAI hosted tool_search (Responses API) emits a tool-call chunk carrying
+    // the call item id (tsc_…) and a tool-result chunk carrying the output item
+    // id (tso_…). Replay needs BOTH ids — losing the call id makes the next
+    // request reference the same item twice ("Duplicate item found").
+    const result = parts([
+      {
+        type: 'tool-call',
+        payload: {
+          toolCallId: 'tc1',
+          toolName: 'tool_search',
+          args: { queries: ['cache'] },
+          providerExecuted: true,
+          providerMetadata: { openai: { itemId: 'tsc_1' } },
+        },
+      },
+      {
+        type: 'tool-result',
+        payload: {
+          toolCallId: 'tc1',
+          toolName: 'tool_search',
+          args: { queries: ['cache'] },
+          result: { tools: ['get_block'] },
+          providerExecuted: true,
+          providerMetadata: { openai: { itemId: 'tso_1' } },
+        },
+      },
+    ]);
+    expect(result).toHaveLength(1);
+    expect((result[0] as any).providerMetadata).toEqual({
+      openai: { itemId: 'tsc_1', resultItemId: 'tso_1' },
+    });
+  });
+
+  it('should keep the result metadata as-is when call and result share the same itemId', () => {
+    const result = parts([
+      {
+        type: 'tool-call',
+        payload: {
+          toolCallId: 'ws1',
+          toolName: 'web_search_call',
+          args: { query: 'news' },
+          providerExecuted: true,
+          providerMetadata: { openai: { itemId: 'ws_1' } },
+        },
+      },
+      {
+        type: 'tool-result',
+        payload: {
+          toolCallId: 'ws1',
+          toolName: 'web_search_call',
+          args: { query: 'news' },
+          result: { status: 'completed' },
+          providerExecuted: true,
+          providerMetadata: { openai: { itemId: 'ws_1' } },
+        },
+      },
+    ]);
+    expect(result).toHaveLength(1);
+    expect((result[0] as any).providerMetadata).toEqual({ openai: { itemId: 'ws_1' } });
+  });
+
+  it('should not add itemId metadata when neither chunk carries any (web_search shape)', () => {
+    const result = parts([
+      {
+        type: 'tool-call',
+        payload: { toolCallId: 'ws1', toolName: 'web_search', args: { query: 'news' }, providerExecuted: true },
+      },
+      {
+        type: 'tool-result',
+        payload: {
+          toolCallId: 'ws1',
+          toolName: 'web_search',
+          args: { query: 'news' },
+          result: { status: 'completed' },
+          providerExecuted: true,
+        },
+      },
+    ]);
+    expect(result).toHaveLength(1);
+    expect((result[0] as any).providerMetadata).toBeUndefined();
+  });
+
   it('should merge tool-call + tool-error into a single output-error part', () => {
     const result = parts([
       {
