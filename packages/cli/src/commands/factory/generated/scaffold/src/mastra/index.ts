@@ -19,22 +19,22 @@
 
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { MastraAuthWorkos } from '@mastra/auth-workos';
+import { getDatabasePath } from '@mastra/code-sdk/utils/project';
+import { DEFAULT_RETENTION } from '@mastra/code-sdk/utils/storage-maintenance';
 import { Mastra } from '@mastra/core/mastra';
+import type { IMastraAuthProvider } from '@mastra/core/server';
 import { LocalSandbox } from '@mastra/core/workspace';
+import { MastraFactory } from '@mastra/factory';
+import { GithubIntegration } from '@mastra/factory/integrations/github/integration';
+import { LinearIntegration } from '@mastra/factory/integrations/linear/integration';
+import { SlackIntegration } from '@mastra/factory/integrations/slack/integration';
+import { defaultFactoryRules } from '@mastra/factory/rules/defaults';
+import type { FactoryStageRuleContext } from '@mastra/factory/rules/types';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { PgVector, PgFactoryStorage } from '@mastra/pg';
 import { InProcessSandboxAddressRegistry, PlatformSandbox } from '@mastra/platform-workspace';
 import { RedisStreamsPubSub } from '@mastra/redis-streams';
-import { getDatabasePath } from '@mastra/code-sdk/utils/project';
-import { DEFAULT_RETENTION } from '@mastra/code-sdk/utils/storage-maintenance';
-import { MastraAuthWorkos } from '@mastra/auth-workos';
-import { MastraFactory } from '@mastra/factory';
-import { defaultFactoryRules } from '@mastra/factory/rules/defaults';
-import type { FactoryStageRuleContext } from '@mastra/factory/rules/types';
-import { GithubIntegration } from '@mastra/factory/integrations/github/integration';
-import { LinearIntegration } from '@mastra/factory/integrations/linear/integration';
-import { SlackIntegration } from '@mastra/factory/integrations/slack/integration';
-import type { IMastraAuthProvider } from '@mastra/core/server';
 
 /**
  * Parse a positive-integer env knob; anything else means "use the default".
