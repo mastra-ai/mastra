@@ -8,7 +8,9 @@
  * 2. `execute` — must call `mastra.addDynamicWorkflow` with the normalized
  *    canonical shape, so the SDK and Core schemas agree end-to-end.
  */
+import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
+import { InMemoryStore } from '@mastra/core/storage';
 import { describe, it, expect, vi } from 'vitest';
 import { createSaveWorkflowTool, saveWorkflowTool } from '../save-workflow.js';
 
@@ -51,6 +53,13 @@ const loopGraphWithPredicate = {
       predicate: { op: 'gte', left: { path: 'inputData.count' }, right: { literal: 3 } },
     },
   ],
+};
+
+const mappingGraph = {
+  id: 'wf-owned',
+  inputSchema: { type: 'object', properties: { value: { type: 'string' } }, required: ['value'] },
+  outputSchema: { type: 'object', properties: { value: { type: 'string' } }, required: ['value'] },
+  graph: [{ type: 'mapping', id: 'echo-value', mapConfig: { value: { initData: true, path: 'value' } } }],
 };
 
 describe('save-workflow — input schema', () => {
@@ -210,6 +219,32 @@ describe('createSaveWorkflowTool — authorization', () => {
     ).resolves.toEqual({ ok: true, id: 'wf-loop' });
     expect(authorize).toHaveBeenCalledWith(expect.objectContaining({ authorId: 'tenant-a', requestContext }));
     expect(addDynamicWorkflow).toHaveBeenCalledWith(loopGraphWithPredicate, { authorId: 'tenant-a' });
+  });
+
+  it('persists the trusted policy author through Mastra storage', async () => {
+    const requestContext = new RequestContext();
+    requestContext.set('verifiedAuthorId', 'tenant-a');
+    const mastra = new Mastra({
+      logger: false,
+      storage: new InMemoryStore({ id: 'save-workflow-owner' }),
+    });
+    const tool = createSaveWorkflowTool({
+      accessPolicy: {
+        resolveAuthorId: ({ requestContext }) => requestContext.get('verifiedAuthorId') as string,
+      },
+    });
+
+    await expect((tool as any).execute(mappingGraph, { mastra, requestContext })).resolves.toEqual({
+      ok: true,
+      id: 'wf-owned',
+    });
+
+    await expect(
+      mastra
+        .getStorage()
+        ?.getStore('workflowDefinitions')
+        .then(store => store?.get('wf-owned')),
+    ).resolves.toMatchObject({ id: 'wf-owned', authorId: 'tenant-a' });
   });
 
   it('does not mutate storage when the access policy cannot resolve a caller', async () => {
