@@ -1326,30 +1326,45 @@ describe('ChatChannelOutputProcessor', () => {
         [
           { type: 'tool-call', payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' } } },
           { type: 'tool-call-approval', payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' } } },
+          {
+            type: 'tool-result',
+            payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' }, result: 'sunny' },
+          },
         ],
         chatThread,
       );
 
       // Ordinary tool output stays hidden, but the approval card is still
       // posted so the user can approve or deny the pending call.
-      expect(calls.filter(c => c.kind === 'post')).toHaveLength(1);
+      const posts = calls.filter(c => c.kind === 'post');
+      expect(posts).toHaveLength(1);
+      expect(calls.filter(c => c.kind === 'editMessage')).toHaveLength(0);
+      expect(JSON.stringify((posts[0] as Extract<Call, { kind: 'post' }>).arg)).toContain('tool_approve:t1');
+      expect(JSON.stringify((posts[0] as Extract<Call, { kind: 'post' }>).arg)).toContain('tool_deny:t1');
     });
 
     it('falls back to the approval card when a custom tool renderer returns undefined', async () => {
+      const toolDisplay = vi.fn(() => undefined);
       const { channels, calls, chatThread } = makeChannels({
         streaming: false,
-        toolDisplay: () => undefined,
+        toolDisplay,
       });
       await drive(
         channels,
         [
           { type: 'tool-call', payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' } } },
           { type: 'tool-call-approval', payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' } } },
+          {
+            type: 'tool-result',
+            payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' }, result: 'sunny' },
+          },
         ],
         chatThread,
       );
 
+      expect(toolDisplay.mock.calls.some(([event]) => event.kind === 'approval')).toBe(true);
       expect(calls.filter(c => c.kind === 'post')).toHaveLength(1);
+      expect(calls.filter(c => c.kind === 'editMessage')).toHaveLength(0);
     });
 
     it('posts running card on tool-call and edits it with the result on tool-result', async () => {
