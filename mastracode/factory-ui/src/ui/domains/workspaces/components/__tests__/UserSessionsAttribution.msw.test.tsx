@@ -1,4 +1,5 @@
 import { screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { describe, expect, it } from 'vitest';
@@ -72,7 +73,7 @@ function renderSection() {
 }
 
 describe('user session attribution', () => {
-  it('sorts the viewer\'s own sessions first and marks sessions owned by others', async () => {
+  it("sorts the viewer's own sessions first and marks sessions owned by others", async () => {
     // The server lists the other user's org-visible session before the
     // viewer's own; the sidebar must re-order and attribute it.
     stubSessions(
@@ -93,8 +94,31 @@ describe('user session attribution', () => {
     expect(labels).toEqual(['mine', 'alpha']);
 
     // The non-owned session carries its owner marker; the viewer's own does not.
+    expect(rows[0]).toBeInTheDocument();
     expect(screen.getByLabelText('Started by user-owner-1')).toBeInTheDocument();
-    expect(rows[0]).not.toContainElement(screen.queryByLabelText('Started by user-viewer-9'));
     expect(screen.queryByLabelText('Started by user-viewer-9')).not.toBeInTheDocument();
+  });
+
+  it('offers delete only on the viewer-owned session', async () => {
+    // The DELETE route is owner-only and 404s for non-owners, and the delete
+    // service treats 404 as an idempotent success, so a non-owned row must not
+    // offer a delete action that would fake-succeed.
+    stubSessions(
+      [
+        userSession({ id: 'row-other', sessionId: 'sess-other', userId: 'user-owner-1', branch: 'user/alpha' }),
+        userSession({ id: 'row-mine', sessionId: 'sess-mine', userId: 'user-viewer-9', branch: 'user/mine' }),
+      ],
+      'user-viewer-9',
+    );
+
+    renderSection();
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole('button', { name: 'Session actions for alpha' }));
+    expect(screen.queryByRole('menuitem', { name: 'Delete' })).not.toBeInTheDocument();
+    await user.keyboard('{Escape}');
+
+    await user.click(screen.getByRole('button', { name: 'Session actions for mine' }));
+    expect(await screen.findByRole('menuitem', { name: 'Delete' })).toBeInTheDocument();
   });
 });

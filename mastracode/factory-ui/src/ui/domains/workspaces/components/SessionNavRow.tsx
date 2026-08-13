@@ -55,7 +55,8 @@ export function SessionNavRow({
   pinned?: boolean;
   onSelect: () => void;
   onPinChange: (pinned: boolean) => void;
-  onDelete: () => void;
+  /** Omit on sessions the viewer does not own: the server only lets owners delete. */
+  onDelete?: () => void;
 }) {
   const anchor = useRef<HTMLLIElement>(null);
   const button = (
@@ -152,7 +153,7 @@ function SessionActionsMenu({
   disabled: boolean;
   pinned: boolean;
   onPinChange: (pinned: boolean) => void;
-  onDelete: () => void;
+  onDelete?: () => void;
 }) {
   return (
     <DropdownMenu>
@@ -175,10 +176,12 @@ function SessionActionsMenu({
           {pinned ? <PinOff /> : <Pin />}
           {pinned ? 'Unpin' : 'Pin session'}
         </DropdownMenu.Item>
-        <DropdownMenu.Item variant="destructive" onClick={onDelete}>
-          <Trash2 />
-          Delete
-        </DropdownMenu.Item>
+        {onDelete ? (
+          <DropdownMenu.Item variant="destructive" onClick={onDelete}>
+            <Trash2 />
+            Delete
+          </DropdownMenu.Item>
+        ) : null}
       </DropdownMenu.Content>
     </DropdownMenu>
   );

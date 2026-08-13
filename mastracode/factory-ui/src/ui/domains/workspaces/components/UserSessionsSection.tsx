@@ -117,7 +117,11 @@ export function UserSessionsSection() {
                 pinned={pinnedSessions.has(session.sessionId)}
                 onSelect={() => void navigate(url)}
                 onPinChange={pinned => setPinned(session.sessionId, pinned)}
-                onDelete={() => setConfirmDelete(session)}
+                // The DELETE route is owner-only and 404s for non-owners, which
+                // deleteUserSession treats as an idempotent success; offering
+                // delete on a known non-owned row would fake-succeed and the
+                // row would reappear. Unknown viewer (auth disabled) keeps it.
+                onDelete={viewerUserId && !isOwn(session) ? undefined : () => setConfirmDelete(session)}
               />
             );
           })}
