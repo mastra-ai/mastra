@@ -101,9 +101,14 @@ The definition uses JSON Schema because it must survive a JSON round trip. The `
 A definition can come from any source that produces JSON. For example, an API route can accept a definition created by a visual editor and register it directly:
 
 ```typescript
+const authenticatedUser = await authenticate(request)
 const definition = await request.json()
-await mastra.addDynamicWorkflow(definition)
+await mastra.addDynamicWorkflow(definition, {
+  authorId: authenticatedUser.id,
+})
 ```
+
+Derive `authorId` from verified server identity. Never accept it from the submitted workflow definition.
 
 ### Register dependencies first
 
