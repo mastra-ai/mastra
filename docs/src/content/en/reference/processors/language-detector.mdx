@@ -108,7 +108,7 @@ const processor = new LanguageDetector({
             name: 'translationQuality',
             type: "'speed' | 'quality' | 'balanced'",
             description:
-              'Deprecated and has no effect. The value is accepted but never reaches the detection agent, so it changes neither the prompt nor any request setting. Use `providerOptions` to trade speed for accuracy.',
+              'Deprecated. This option previously selected prompt-level "Quality Level" guidance, but that behavior was removed when the detection and translation prompts were streamlined. The option now has no effect. For model-specific speed and quality controls, use `providerOptions` when your provider supports them.',
             isOptional: true,
           },
           {

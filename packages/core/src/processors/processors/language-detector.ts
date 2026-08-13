@@ -94,11 +94,12 @@ export interface LanguageDetectorOptions extends LastMessageOnlyOption {
   includeDetectionDetails?: boolean;
 
   /**
-   * @deprecated Has no effect. The value is accepted but never reaches the detection agent, so it
-   * changes neither the prompt nor any request setting. Existing configurations keep type-checking.
+   * @deprecated Previously selected prompt-level "Quality Level" guidance, but that behavior was
+   * removed when the detection and translation prompts were streamlined. This option now has no
+   * effect, but existing configurations keep type-checking.
    *
-   * To trade speed for accuracy, use `providerOptions`, for example
-   * `{ openai: { reasoningEffort: 'low' } }`.
+   * For model-specific speed and quality controls, use `providerOptions` when supported by your
+   * provider, for example `{ openai: { reasoningEffort: 'low' } }`.
    */
   translationQuality?: 'speed' | 'quality' | 'balanced';
 
