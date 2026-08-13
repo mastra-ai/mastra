@@ -320,6 +320,12 @@ describe('getFactoryWorkspace', () => {
     expect(triage).toContain('gh issue edit "$ISSUE" --add-label "auto-triaged"');
     expect(triage).toContain('gh issue edit "$ISSUE" --remove-label "status: needs triage"');
     expect(triage).toContain('gh issue edit "$ISSUE" --add-label "needs-approval"');
+    expect(triage).toContain("gh label list --repo mastra-ai/mastra --limit 1000 --json name --jq '.[].name'");
+    expect(triage).toContain("gh label create '@mastra/core' --repo mastra-ai/mastra");
+    expect(triage).toContain('gh issue edit "$ISSUE" --repo mastra-ai/mastra --add-label \'@mastra/core\'');
+    expect(triage.indexOf("gh label create '@mastra/core'")).toBeLessThan(
+      triage.indexOf('gh issue edit "$ISSUE" --repo mastra-ai/mastra --add-label \'@mastra/core\''),
+    );
     expect(triage).toContain('Apply only these label mutations.');
     expect(triage).toContain(
       'For Linear issues, use the same structured handoff without attempting GitHub publication or label mutations.',
