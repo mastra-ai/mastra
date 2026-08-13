@@ -48,7 +48,6 @@ import type {
 } from '../../capabilities/version-control.js';
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../base.js';
 import { attachGithubIssueReconciler } from './issue-reconciler.js';
-import { runGithubIssueTriage } from './issue-triage.js';
 import { GithubReconcileWorker } from './reconcile-worker.js';
 import { reconcileInterval, reconciliationEnabled } from './reconciliation-config.js';
 import { buildGithubRoutes } from './routes.js';
@@ -1114,9 +1113,6 @@ export class GithubIntegration implements FactoryIntegration {
       stateSigner: ctx.stateSigner,
       baseUrl: ctx.baseUrl,
       controller: ctx.controller,
-      runIssueTriage: ctx.controller
-        ? input => runGithubIssueTriage({ controller: ctx.controller!, input })
-        : undefined,
       emitAudit: ctx.hooks?.emitAudit,
       projects: ctx.storage.projects,
       ingestFactoryEvent,
