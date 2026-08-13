@@ -5,7 +5,10 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router';
 
-import { useWorkspaceActivity, useWorkspaceThreadTitles } from '../../../../hooks/useWorkspaceActivity';
+import { useQueryClient } from '@tanstack/react-query';
+
+import { queryKeys } from '../../../../api/keys';
+import { useWorkspaceActivity } from '../../../../hooks/useWorkspaceActivity';
 import { useWorkspaceAttention } from '../../../../hooks/useWorkspaceAttention';
 import { useWorkItemsQuery } from '../../../../hooks/useWorkItems';
 import { useWorkspacePullRequestMerges } from '../../../../hooks/useWorkspacePullRequestMerges';
@@ -39,17 +42,18 @@ export function WorkspacesSection() {
   const { pinnedSessions, setPinned } = usePinnedSessions();
   const workItems = useWorkItemsQuery(factoryId);
   const workspaceRows = workspaces.data?.workspaces ?? [];
-  const activityOptions = {
+  const workspaceIds = workspaceRows.map(workspace => workspace.sessionId);
+  const runningByPath = useWorkspaceActivity({
     agentControllerId: AGENT_CONTROLLER_ID,
-    resourceId,
-    scope: sessionId,
-    worktreePaths: workspaceRows.map(workspace => workspace.sessionId),
+    workspaceIds,
     baseUrl,
-    enabled: sessionEnabled && Boolean(sessionId),
-  };
-  const runningByPath = useWorkspaceActivity(activityOptions);
-  const titleByPath = useWorkspaceThreadTitles(activityOptions);
-  const { attentionByPath, clearAttention } = useWorkspaceAttention(runningByPath);
+  });
+  const queryClient = useQueryClient();
+  // The server re-derives session titles at the end of a run.
+  const { attentionByPath, clearAttention } = useWorkspaceAttention(
+    runningByPath,
+    () => void queryClient.invalidateQueries({ queryKey: queryKeys.sessions(projectRepositoryId) }),
+  );
 
   const allWorkItems = workItems.data ?? [];
   const workItemByPath = new Map(
@@ -79,7 +83,7 @@ export function WorkspacesSection() {
       {
         workspace,
         url: `/factories/${factoryId}/workspaces/${workspace.sessionId}`,
-        label: titleByPath[workspace.sessionId],
+        label: workspace.title,
         active,
         running,
         attention: attentionByPath[workspace.sessionId] === true,
