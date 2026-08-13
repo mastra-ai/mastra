@@ -377,6 +377,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
       capturedAt: new Date(),
       when: input.when ? new Date(input.when) : undefined,
       maxScope: input.maxScope,
+      metadata: input.metadata,
     };
     if (this.#db.knowledgeFacts.has(fact.id)) throw new Error(`Knowledge fact already exists: ${fact.id}`);
     this.#db.knowledgeFacts.set(fact.id, fact);

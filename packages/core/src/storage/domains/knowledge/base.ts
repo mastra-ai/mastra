@@ -49,6 +49,8 @@ export interface KnowledgeFact {
   capturedAt: Date;
   when?: Date;
   maxScope?: KnowledgeScopeLevel;
+  /** Free-form provenance, e.g. the capture agent's reasoning for keeping or pinning the fact. */
+  metadata?: Record<string, unknown>;
   deletedAt?: Date;
   deletedBy?: string;
 }
@@ -131,6 +133,7 @@ export interface AppendKnowledgeFactInput {
   sourceThreadId: string;
   when?: Date;
   maxScope?: KnowledgeScopeLevel;
+  metadata?: Record<string, unknown>;
   resolutionScope: KnowledgeScope;
   defaultScope: KnowledgeScope;
 }

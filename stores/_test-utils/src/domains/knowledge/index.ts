@@ -78,6 +78,32 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       expect(nextPagePage[0]!.id).not.toBe(pagePage[0]!.id);
     });
 
+    it('persists optional fact metadata and returns it on reads', async () => {
+      const jane = await store.createEntity({ name: 'Jane meta', kind: 'person', scope: resource });
+      const withMetadata = await store.appendFact({
+        parentEntityId: jane.id,
+        text: 'Prefers tabs.',
+        scope: resource,
+        sourceThreadId: 't1',
+        metadata: { reason: 'Durable style preference stated explicitly.' },
+        resolutionScope: thread,
+        defaultScope: resource,
+      });
+      const withoutMetadata = await store.appendFact({
+        parentEntityId: jane.id,
+        text: 'Likes coffee.',
+        scope: resource,
+        sourceThreadId: 't1',
+        resolutionScope: thread,
+        defaultScope: resource,
+      });
+      expect(withMetadata.metadata).toEqual({ reason: 'Durable style preference stated explicitly.' });
+      expect((await store.getFact({ id: withMetadata.id }))?.metadata).toEqual({
+        reason: 'Durable style preference stated explicitly.',
+      });
+      expect((await store.getFact({ id: withoutMetadata.id }))?.metadata).toBeUndefined();
+    });
+
     it('maintains mentions and soft deletes without losing them', async () => {
       const jane = await store.createEntity({ name: 'Jane', kind: 'person', scope: resource });
       const marco = await store.createEntity({ name: 'Marco', kind: 'person', scope: resource });

@@ -28,6 +28,35 @@ describe('InMemoryKnowledgeStorage', () => {
     await expect(store.createEntity({ name: 'bad', kind: 'page', scope: resource })).rejects.toThrow('reserved');
   });
 
+  it('persists optional fact metadata and returns it on reads', async () => {
+    const store = createStore();
+    const jane = await store.createEntity({ name: 'Jane', kind: 'person', scope: resource });
+    const withMetadata = await store.appendFact({
+      parentEntityId: jane.id,
+      text: 'Prefers tabs.',
+      scope: thread,
+      sourceThreadId: 't1',
+      metadata: { reason: 'Durable style preference stated explicitly.' },
+      resolutionScope: thread,
+      defaultScope: resource,
+    });
+    const withoutMetadata = await store.appendFact({
+      parentEntityId: jane.id,
+      text: 'Likes coffee.',
+      scope: thread,
+      sourceThreadId: 't1',
+      resolutionScope: thread,
+      defaultScope: resource,
+    });
+
+    expect(withMetadata.metadata).toEqual({ reason: 'Durable style preference stated explicitly.' });
+    expect(withoutMetadata.metadata).toBeUndefined();
+    expect((await store.getFact({ id: withMetadata.id }))?.metadata).toEqual({
+      reason: 'Durable style preference stated explicitly.',
+    });
+    expect((await store.getFact({ id: withoutMetadata.id }))?.metadata).toBeUndefined();
+  });
+
   it('resolves names from narrow to broad scope without crossing siblings', async () => {
     const store = createStore();
     const broad = await store.createEntity({ name: 'Jane', kind: 'person', scope: org });

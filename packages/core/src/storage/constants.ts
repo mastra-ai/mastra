@@ -680,6 +680,7 @@ export const KNOWLEDGE_FACTS_SCHEMA: Record<string, StorageColumn> = {
   capturedAt: { type: 'timestamp', nullable: false },
   when: { type: 'timestamp', nullable: true },
   maxScope: { type: 'text', nullable: true },
+  metadata: { type: 'jsonb', nullable: true },
   deletedAt: { type: 'timestamp', nullable: true },
   deletedBy: { type: 'text', nullable: true },
 };

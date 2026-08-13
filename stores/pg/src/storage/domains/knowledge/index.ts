@@ -185,6 +185,7 @@ function parseFact(row: Record<string, unknown>): KnowledgeFact {
     capturedAt: toDate(row.capturedAt),
     when: optionalDate(row.when),
     maxScope: row.maxScope == null ? undefined : (String(row.maxScope) as KnowledgeFact['maxScope']),
+    metadata: row.metadata == null ? undefined : parseJson<Record<string, unknown>>(row.metadata),
     deletedAt: optionalDate(row.deletedAt),
     deletedBy: row.deletedBy == null ? undefined : String(row.deletedBy),
   };
@@ -668,9 +669,10 @@ export class KnowledgePG extends KnowledgeStorage {
         capturedAt: new Date(),
         when: input.when ? new Date(input.when) : undefined,
         maxScope: input.maxScope,
+        metadata: input.metadata,
       };
       await tx.execute({
-        sql: `INSERT INTO "${TABLE_KNOWLEDGE_FACTS}" (id,parentEntityId,text,scope,scopeKey,sourceThreadId,capturedAt,"when",maxScope,deletedAt,deletedBy) VALUES (?,?,?,jsonb(?),?,?,?,?,?,NULL,NULL)`,
+        sql: `INSERT INTO "${TABLE_KNOWLEDGE_FACTS}" (id,parentEntityId,text,scope,scopeKey,sourceThreadId,capturedAt,"when",maxScope,metadata,deletedAt,deletedBy) VALUES (?,?,?,jsonb(?),?,?,?,?,?,jsonb(?),NULL,NULL)`,
         args: [
           fact.id,
           fact.parentEntityId,
@@ -681,6 +683,7 @@ export class KnowledgePG extends KnowledgeStorage {
           fact.capturedAt.toISOString(),
           fact.when?.toISOString() ?? null,
           fact.maxScope ?? null,
+          fact.metadata ? JSON.stringify(fact.metadata) : null,
         ],
       });
       await this.#replaceMentions(tx, 'fact', fact.id, fact.text, resolutionScope, defaultScope);
