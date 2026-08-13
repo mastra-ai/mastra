@@ -41,4 +41,24 @@ describe('WorkflowsInMemory persistWorkflowSnapshot', () => {
     expect(new Date(second!.createdAt).getTime()).toBe(createdAtBefore);
     expect(new Date(second!.updatedAt).getTime()).toBeGreaterThan(createdAtBefore);
   });
+
+  it('claims a suspended run only once', async () => {
+    const store = new InMemoryStore();
+    const workflows = (await store.getStore('workflows'))!;
+    const workflowName = 'wf';
+    const runId = 'run-claim';
+    const snapshot = makeSnapshot(runId, 'suspended');
+
+    await workflows.persistWorkflowSnapshot({ workflowName, runId, snapshot });
+
+    const [first, second] = await Promise.all([
+      workflows.claimWorkflowResume({ workflowName, runId, expectedTimestamp: snapshot.timestamp }),
+      workflows.claimWorkflowResume({ workflowName, runId, expectedTimestamp: snapshot.timestamp }),
+    ]);
+
+    expect([first.claimed, second.claimed].filter(Boolean)).toHaveLength(1);
+    expect(first.supported).toBe(true);
+    expect(second.supported).toBe(true);
+    expect((await workflows.loadWorkflowSnapshot({ workflowName, runId }))?.status).toBe('running');
+  });
 });

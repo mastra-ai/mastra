@@ -2398,6 +2398,16 @@ export class EventedRun<
 
     const resumeDataToUse = await this._validateResumeData(params.resumeData, suspendedStep);
 
+    const resumeClaim = await workflowsStore.claimWorkflowResume({
+      workflowName: this.workflowId,
+      runId: this.runId,
+      expectedTimestamp: snapshot.timestamp,
+    });
+
+    if (resumeClaim.supported && !resumeClaim.claimed) {
+      throw new Error('This workflow run is already being resumed or has changed since it was loaded');
+    }
+
     if (!this.mastra?.pubsub) {
       throw new Error('Mastra instance with pubsub is required for workflow execution');
     }

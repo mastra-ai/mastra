@@ -1353,6 +1353,7 @@ describe('concurrent stream close', () => {
   }
 
   it('closes both outputs when two resumeStream calls race for the same run', async () => {
+    let finalStepExecutions = 0;
     const suspending = createStep({
       id: 'suspending-step',
       inputSchema: z.object({}),
@@ -1366,7 +1367,10 @@ describe('concurrent stream close', () => {
       id: 'final-step',
       inputSchema: z.object({ result: z.string() }),
       outputSchema: z.object({ result: z.string() }),
-      execute: async () => ({ result: 'done' }),
+      execute: async () => {
+        finalStepExecutions += 1;
+        return { result: 'done' };
+      },
     });
 
     const workflow = createWorkflow({
@@ -1399,8 +1403,8 @@ describe('concurrent stream close', () => {
 
     expect(firstDrain.closed).toBe(true);
     expect(secondDrain.closed).toBe(true);
-    expect(firstDrain.types).toContain('workflow-finish');
-    expect(secondDrain.types).toContain('workflow-finish');
+    expect([firstDrain, secondDrain].filter(drain => drain.types.includes('workflow-finish'))).toHaveLength(1);
+    expect(finalStepExecutions).toBe(1);
   });
 
   it('closes both outputs when two timeTravelStream calls race for the same run', async () => {

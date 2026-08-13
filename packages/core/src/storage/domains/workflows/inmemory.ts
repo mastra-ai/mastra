@@ -1,6 +1,8 @@
 import type { StepResult, WorkflowRunState } from '../../../workflows';
 import { normalizePerPage } from '../../base';
 import type {
+  ClaimWorkflowResumeOptions,
+  ClaimWorkflowResumeResult,
   StorageWorkflowRun,
   WorkflowRun,
   WorkflowRuns,
@@ -177,6 +179,31 @@ export class WorkflowsInMemory extends WorkflowsStorage {
 
   supportsConcurrentUpdates(): boolean {
     return true;
+  }
+
+  async claimWorkflowResume({
+    workflowName,
+    runId,
+    expectedTimestamp,
+  }: ClaimWorkflowResumeOptions): Promise<ClaimWorkflowResumeResult> {
+    const key = this.getWorkflowKey(workflowName, runId);
+    const run = this.db.workflows.get(key);
+
+    if (!run) {
+      return { supported: true, claimed: false };
+    }
+
+    const snapshot = typeof run.snapshot === 'string' ? JSON.parse(run.snapshot) : run.snapshot;
+    if (!snapshot || snapshot.status !== 'suspended' || snapshot.timestamp !== expectedTimestamp) {
+      return { supported: true, claimed: false };
+    }
+
+    this.db.workflows.set(key, {
+      ...run,
+      snapshot: { ...snapshot, status: 'running' },
+    });
+
+    return { supported: true, claimed: true };
   }
 
   async dangerouslyClearAll(): Promise<void> {

@@ -8,6 +8,8 @@ import {
   createStorageErrorId,
 } from '@mastra/core/storage';
 import type {
+  ClaimWorkflowResumeOptions,
+  ClaimWorkflowResumeResult,
   UpdateWorkflowStateOptions,
   StorageListWorkflowRunsInput,
   WorkflowRun,
@@ -87,6 +89,52 @@ export class WorkflowsPG extends WorkflowsStorage {
 
   supportsConcurrentUpdates(): boolean {
     return true;
+  }
+
+  async claimWorkflowResume({
+    workflowName,
+    runId,
+    expectedTimestamp,
+  }: ClaimWorkflowResumeOptions): Promise<ClaimWorkflowResumeResult> {
+    try {
+      return await this.#db.client.tx(async t => {
+        const tableName = getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) });
+        const result = await t.oneOrNone<{ snapshot: WorkflowRunState | string }>(
+          `SELECT snapshot FROM ${tableName} WHERE workflow_name = $1 AND run_id = $2 FOR UPDATE`,
+          [workflowName, runId],
+        );
+
+        if (!result) {
+          return { supported: true, claimed: false };
+        }
+
+        const snapshot = typeof result.snapshot === 'string' ? JSON.parse(result.snapshot) : result.snapshot;
+        if (!snapshot || snapshot.status !== 'suspended' || snapshot.timestamp !== expectedTimestamp) {
+          return { supported: true, claimed: false };
+        }
+
+        const updatedSnapshot = { ...snapshot, status: 'running' as const };
+        const now = new Date();
+        await t.none(
+          `UPDATE ${tableName}
+           SET snapshot = $1, "updatedAt" = $2, "updatedAtZ" = $3
+           WHERE workflow_name = $4 AND run_id = $5`,
+          [sanitizeJsonForPg(JSON.stringify(updatedSnapshot)), now, now, workflowName, runId],
+        );
+
+        return { supported: true, claimed: true };
+      });
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('PG', 'CLAIM_WORKFLOW_RESUME', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { workflowName, runId },
+        },
+        error,
+      );
+    }
   }
 
   private parseWorkflowRun(row: Record<string, any>): WorkflowRun {

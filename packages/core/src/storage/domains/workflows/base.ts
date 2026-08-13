@@ -1,5 +1,12 @@
 import type { StepResult, WorkflowRunState } from '../../../workflows';
-import type { UpdateWorkflowStateOptions, WorkflowRun, WorkflowRuns, StorageListWorkflowRunsInput } from '../../types';
+import type {
+  ClaimWorkflowResumeOptions,
+  ClaimWorkflowResumeResult,
+  UpdateWorkflowStateOptions,
+  WorkflowRun,
+  WorkflowRuns,
+  StorageListWorkflowRunsInput,
+} from '../../types';
 import { StorageDomain } from '../base';
 
 export abstract class WorkflowsStorage extends StorageDomain {
@@ -11,6 +18,14 @@ export abstract class WorkflowsStorage extends StorageDomain {
   }
 
   abstract supportsConcurrentUpdates(): boolean;
+
+  /**
+   * Atomically claims a suspended run for resumption when the storage supports it.
+   * Stores that cannot provide a compare-and-set operation return `supported: false`.
+   */
+  async claimWorkflowResume(_: ClaimWorkflowResumeOptions): Promise<ClaimWorkflowResumeResult> {
+    return { supported: false, claimed: false };
+  }
 
   abstract updateWorkflowResults({
     workflowName,

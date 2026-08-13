@@ -4327,6 +4327,16 @@ export class Run<
 
     const resumeDataToUse = await this._validateResumeData(params.resumeData, suspendedStep);
 
+    const resumeClaim = await workflowsStore?.claimWorkflowResume({
+      workflowName: this.workflowId,
+      runId: this.runId,
+      expectedTimestamp: snapshot.timestamp,
+    });
+
+    if (resumeClaim?.supported && !resumeClaim.claimed) {
+      throw new Error('This workflow run is already being resumed or has changed since it was loaded');
+    }
+
     let requestContextInput;
     if (params.retryCount && params.retryCount > 0 && params.requestContext) {
       requestContextInput = (params.requestContext as RequestContext).get('__mastraWorflowInputData');

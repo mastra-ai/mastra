@@ -33,6 +33,17 @@ export interface WorkflowRuns {
   total: number;
 }
 
+export interface ClaimWorkflowResumeOptions {
+  workflowName: string;
+  runId: string;
+  expectedTimestamp: number;
+}
+
+export interface ClaimWorkflowResumeResult {
+  supported: boolean;
+  claimed: boolean;
+}
+
 export interface StorageWorkflowRun {
   workflow_name: string;
   run_id: string;
