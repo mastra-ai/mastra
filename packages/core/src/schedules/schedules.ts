@@ -275,6 +275,7 @@ export class Schedules {
         id: 'SCHEDULES_MISSING_TARGET_ID',
         domain: ErrorDomain.AGENT,
         category: ErrorCategory.USER,
+        details: { status: 400 },
         text: 'schedules.create requires `agentId` or `workflowId`.',
       });
     }
@@ -284,6 +285,7 @@ export class Schedules {
         id: 'SCHEDULES_MISSING_RESOURCE_ID',
         domain: ErrorDomain.AGENT,
         category: ErrorCategory.USER,
+        details: { status: 400 },
         text: 'schedules.create requires `resourceId` when `threadId` is set.',
       });
     }
@@ -298,6 +300,7 @@ export class Schedules {
           id: 'SCHEDULES_THREADLESS_OPTIONS',
           domain: ErrorDomain.AGENT,
           category: ErrorCategory.USER,
+          details: { status: 400 },
           text: `schedules.create: ${offenders.join(', ')} require a threadId.`,
         });
       }
@@ -398,6 +401,7 @@ export class Schedules {
         id: 'SCHEDULES_ID_EXISTS',
         domain: ErrorDomain.AGENT,
         category: ErrorCategory.USER,
+        details: { status: 409 },
         text: `schedules.create: a schedule with id "${id}" already exists. Use update() to modify it or choose a different id.`,
       });
     }
@@ -441,6 +445,7 @@ export class Schedules {
         id: 'SCHEDULES_NOT_FOUND',
         domain: ErrorDomain.AGENT,
         category: ErrorCategory.USER,
+        details: { status: 404 },
         text: `Schedule "${id}" not found.`,
       });
     }
@@ -495,6 +500,7 @@ export class Schedules {
           id: 'SCHEDULES_THREADLESS_OPTIONS',
           domain: ErrorDomain.AGENT,
           category: ErrorCategory.USER,
+          details: { status: 400 },
           text: `schedules.update: ${offenders.join(', ')} require a threadId.`,
         });
       }
@@ -530,6 +536,7 @@ export class Schedules {
         id: 'SCHEDULES_INVALID_WORKFLOW_PATCH',
         domain: ErrorDomain.AGENT,
         category: ErrorCategory.USER,
+        details: { status: 400 },
         text: `schedules.update: ${offenders.join(', ')} only apply to agent schedules.`,
       });
     }
@@ -557,6 +564,7 @@ export class Schedules {
         id: 'SCHEDULES_NOT_FOUND',
         domain: ErrorDomain.AGENT,
         category: ErrorCategory.USER,
+        details: { status: 404 },
         text: `Schedule "${id}" not found.`,
       });
     }
@@ -573,6 +581,7 @@ export class Schedules {
         id: 'SCHEDULES_NOT_FOUND',
         domain: ErrorDomain.AGENT,
         category: ErrorCategory.USER,
+        details: { status: 404 },
         text: `Schedule "${id}" not found.`,
       });
     }
@@ -592,6 +601,7 @@ export class Schedules {
         id: 'SCHEDULES_NOT_FOUND',
         domain: ErrorDomain.AGENT,
         category: ErrorCategory.USER,
+        details: { status: 404 },
         text: `Schedule "${id}" not found.`,
       });
     }
