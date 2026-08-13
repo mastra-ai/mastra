@@ -87,6 +87,7 @@ import { MemorySettingsStorage } from './storage/domains/memory-settings/base.js
 import { ModelPacksStorage } from './storage/domains/model-packs/base.js';
 import { FactoryProjectsStorage } from './storage/domains/projects/base.js';
 import { QueueHealthStorage } from './storage/domains/queue-health/base.js';
+import { SkillOverridesStorage } from './storage/domains/skill-overrides/base.js';
 import { SourceControlStorage } from './storage/domains/source-control/base.js';
 import { WorkItemsStorage } from './storage/domains/work-items/base.js';
 import { timedPhase } from './timing.js';
@@ -392,6 +393,8 @@ export class MastraFactory {
     // Reverse index from a platform sender (Slack/Discord/...) to a Mastra
     // tenant, so inbound channel events can resolve the sender's model creds.
     const channelIdentityStorage = storage.registerDomain(new ChannelIdentityStorage());
+    // User-customized overrides of the bundled Factory skills.
+    const skillOverridesStorage = storage.registerDomain(new SkillOverridesStorage());
     // Every app-table domain handle the route builders and integrations need,
     // threaded explicitly (no service locator).
     const domains = {
@@ -405,6 +408,7 @@ export class MastraFactory {
       queueHealth: queueHealthStorage,
       workItems: workItemsStorage,
       channelIdentity: channelIdentityStorage,
+      skillOverrides: skillOverridesStorage,
     };
     // Assigned once the fleet and integrations exist below; the routes only
     // dereference it at request time, so the late assignment is safe.
@@ -669,6 +673,7 @@ export class MastraFactory {
           ...(this.#config.sandbox ? { sandbox: this.#config.sandbox } : {}),
           ...(githubIntegration ? { github: githubIntegration } : {}),
           ...(workItemsStorage ? { workItems: workItemsStorage } : {}),
+          skillOverrides: skillOverridesStorage,
           fleet,
           workspaceRegistry,
         }),

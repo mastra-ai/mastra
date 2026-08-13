@@ -6,13 +6,18 @@ import type { Context } from 'hono';
 
 import { listFactorySkills } from '../skills/catalog.js';
 import { resolveSkillInvocation, SkillInvocationError } from '../skills/service.js';
+import type { SkillOverridesStorage } from '../storage/domains/skill-overrides/base.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
+import { FACTORY_SKILL_NAMES } from '../workspace.js';
+import { tenantOrgId } from './provider-credentials.js';
 import type { RouteDependencies } from './route.js';
 import { Route } from './route.js';
 
 const MAX_RESOURCE_ID_LENGTH = 512;
 const MAX_SCOPE_LENGTH = 2048;
 const MAX_ARGUMENTS_LENGTH = 16_384;
+const MAX_OVERRIDE_DESCRIPTION_LENGTH = 1024;
+const MAX_OVERRIDE_CONTENT_LENGTH = 262_144;
 const SKILL_NAME_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -36,6 +41,7 @@ export interface SkillRoutesDeps extends RouteDependencies {
   controller: Pick<AgentController<MastraCodeState>, 'getSessionByResource'>;
   sourceControlStorage?: SourceControlStorageHandle;
   ensureSourceControlReady?: () => Promise<void>;
+  skillOverrides?: Pick<SkillOverridesStorage, 'get' | 'list' | 'upsert' | 'delete'>;
   authorizeSessionAddress?: (
     context: Context,
     address: { resourceId: string; projectRepositoryId?: string; scope?: string },
@@ -182,16 +188,85 @@ export class SkillRoutes extends Route<SkillRoutesDeps> {
       }
     };
 
+    const { skillOverrides } = this.deps;
+
+    // Resolve the org the skill overrides are scoped under, or an error
+    // response. Mirrors the org-scoped settings routes: tenant org in auth
+    // mode, sentinel `local` org otherwise.
+    const resolveOverrideOrg = async (c: Context): Promise<{ orgId: string } | { error: Response }> => {
+      const { auth } = this.deps;
+      if (!auth.enabled()) return { orgId: 'local' };
+      await auth.ensureUser(c);
+      const tenant = auth.tenant(c);
+      if (!tenant) {
+        return { error: c.json({ error: 'unauthorized', message: 'Authentication required.' }, 401) };
+      }
+      return { orgId: tenantOrgId(tenant) };
+    };
+
     const handleFactorySkillsList = async (context: unknown) => {
       const c = loose(context);
-      const { auth } = this.deps;
-      if (auth.enabled()) {
-        await auth.ensureUser(c);
-        if (!auth.tenant(c)) {
-          return c.json({ error: 'unauthorized', message: 'Authentication required.' }, 401);
-        }
+      const org = await resolveOverrideOrg(c);
+      if ('error' in org) return org.error;
+      const overrides = skillOverrides ? await skillOverrides.list({ orgId: org.orgId }) : [];
+      return c.json({ skills: await listFactorySkills(overrides) });
+    };
+
+    const handleFactorySkillUpdate = async (context: unknown) => {
+      const c = loose(context);
+      const org = await resolveOverrideOrg(c);
+      if ('error' in org) return org.error;
+      if (!skillOverrides) {
+        return c.json({ error: 'unavailable', message: 'Skill customization is not available.' }, 503);
       }
-      return c.json({ skills: await listFactorySkills() });
+      const name = c.req.param('name');
+      if (!name || !FACTORY_SKILL_NAMES.has(name)) {
+        return c.json({ error: 'skill_not_found', message: 'Unknown factory skill.' }, 404);
+      }
+      let rawBody: unknown;
+      try {
+        rawBody = await c.req.json();
+      } catch {
+        return c.json({ error: 'invalid_request', message: 'Invalid JSON body.' }, 400);
+      }
+      const body = rawBody as { description?: unknown; content?: unknown } | null;
+      const description = body?.description;
+      const content = body?.content;
+      if (
+        typeof description !== 'string' ||
+        description.length === 0 ||
+        description.length > MAX_OVERRIDE_DESCRIPTION_LENGTH ||
+        description.includes('\n') ||
+        typeof content !== 'string' ||
+        content.trim().length === 0 ||
+        content.length > MAX_OVERRIDE_CONTENT_LENGTH
+      ) {
+        return c.json({ error: 'invalid_request', message: 'Invalid skill override.' }, 400);
+      }
+      const record = await skillOverrides.upsert({ orgId: org.orgId, name, description, content });
+      return c.json({
+        skill: { name: record.name, description: record.description, content: record.content, isCustomized: true },
+      });
+    };
+
+    const handleFactorySkillReset = async (context: unknown) => {
+      const c = loose(context);
+      const org = await resolveOverrideOrg(c);
+      if ('error' in org) return org.error;
+      if (!skillOverrides) {
+        return c.json({ error: 'unavailable', message: 'Skill customization is not available.' }, 503);
+      }
+      const name = c.req.param('name');
+      if (!name || !FACTORY_SKILL_NAMES.has(name)) {
+        return c.json({ error: 'skill_not_found', message: 'Unknown factory skill.' }, 404);
+      }
+      await skillOverrides.delete({ orgId: org.orgId, name });
+      const skills = await listFactorySkills();
+      const skill = skills.find(entry => entry.name === name);
+      if (!skill) {
+        return c.json({ error: 'skill_not_found', message: 'Unknown factory skill.' }, 404);
+      }
+      return c.json({ skill });
     };
 
     return [
@@ -199,6 +274,16 @@ export class SkillRoutes extends Route<SkillRoutesDeps> {
         method: 'GET',
         requiresAuth: false,
         handler: context => handleFactorySkillsList(context),
+      }),
+      registerApiRoute('/web/factory/skills/:name', {
+        method: 'PUT',
+        requiresAuth: false,
+        handler: context => handleFactorySkillUpdate(context),
+      }),
+      registerApiRoute('/web/factory/skills/:name', {
+        method: 'DELETE',
+        requiresAuth: false,
+        handler: context => handleFactorySkillReset(context),
       }),
       registerApiRoute('/web/agent-controller/:controllerId/skills/prepare', {
         method: 'POST',

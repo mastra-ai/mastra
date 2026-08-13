@@ -475,3 +475,158 @@ describe('factory skills catalog route', () => {
     expect(response.status).toBe(200);
   });
 });
+
+describe('factory skill override routes', () => {
+  function createInMemoryOverrides() {
+    const rows = new Map<string, { name: string; description: string; content: string }>();
+    return {
+      rows,
+      get: vi.fn(async ({ orgId, name }: { orgId: string; name: string }) => {
+        const row = rows.get(`${orgId}:${name}`);
+        return row ? ({ orgId, ...row, createdAt: new Date(), updatedAt: new Date() } as never) : null;
+      }),
+      list: vi.fn(async ({ orgId }: { orgId: string }) =>
+        [...rows.entries()]
+          .filter(([key]) => key.startsWith(`${orgId}:`))
+          .map(([, row]) => ({ orgId, ...row, createdAt: new Date(), updatedAt: new Date() }) as never),
+      ),
+      upsert: vi.fn(
+        async ({
+          orgId,
+          name,
+          description,
+          content,
+        }: {
+          orgId: string;
+          name: string;
+          description: string;
+          content: string;
+        }) => {
+          rows.set(`${orgId}:${name}`, { name, description, content });
+          return { orgId, name, description, content, createdAt: new Date(), updatedAt: new Date() } as never;
+        },
+      ),
+      delete: vi.fn(async ({ orgId, name }: { orgId: string; name: string }) => rows.delete(`${orgId}:${name}`)),
+    };
+  }
+
+  function createOverridesApp(options: { authEnabled?: boolean; user?: TestAuthUser } = {}) {
+    const overrides = createInMemoryOverrides();
+    const app = new Hono();
+    if (options.user) {
+      app.use('*', async (c, next) => {
+        c.set('factoryAuthUser' as never, options.user as never);
+        await next();
+      });
+    }
+    mountApiRoutes(
+      app as never,
+      new SkillRoutes({
+        auth: fakeRouteAuth({ enabled: options.authEnabled ?? false }),
+        controllerId: 'code',
+        controller: { getSessionByResource: vi.fn(async () => undefined) } as never,
+        skillOverrides: overrides,
+      }).routes(),
+    );
+    return { app, overrides };
+  }
+
+  const putOverride = (app: Hono, name: string, body: unknown) =>
+    app.request(`/web/factory/skills/${name}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+  it('rejects unauthenticated save/reset when auth is enabled', async () => {
+    const { app } = createOverridesApp({ authEnabled: true });
+    const put = await putOverride(app, 'factory-triage', { description: 'd', content: 'c' });
+    const del = await app.request('/web/factory/skills/factory-triage', { method: 'DELETE' });
+    expect(put.status).toBe(401);
+    expect(del.status).toBe(401);
+  });
+
+  it('rejects unknown skill names', async () => {
+    const { app } = createOverridesApp();
+    const put = await putOverride(app, 'not-a-skill', { description: 'd', content: 'c' });
+    const del = await app.request('/web/factory/skills/not-a-skill', { method: 'DELETE' });
+    expect(put.status).toBe(404);
+    expect(del.status).toBe(404);
+  });
+
+  it('rejects invalid override bodies', async () => {
+    const { app } = createOverridesApp();
+    expect((await putOverride(app, 'factory-triage', { description: '', content: 'c' })).status).toBe(400);
+    expect((await putOverride(app, 'factory-triage', { description: 'd', content: '   ' })).status).toBe(400);
+    expect((await putOverride(app, 'factory-triage', { description: 'multi\nline', content: 'c' })).status).toBe(400);
+    expect((await putOverride(app, 'factory-triage', {})).status).toBe(400);
+  });
+
+  it('saves an override and surfaces it as customized in the catalog', async () => {
+    const { app, overrides } = createOverridesApp();
+    const put = await putOverride(app, 'factory-triage', { description: 'Custom desc', content: '# Custom body' });
+    expect(put.status).toBe(200);
+    expect(await put.json()).toEqual({
+      skill: { name: 'factory-triage', description: 'Custom desc', content: '# Custom body', isCustomized: true },
+    });
+    expect(overrides.upsert).toHaveBeenCalledWith({
+      orgId: 'local',
+      name: 'factory-triage',
+      description: 'Custom desc',
+      content: '# Custom body',
+    });
+
+    const list = await app.request('/web/factory/skills');
+    const { skills } = (await list.json()) as {
+      skills: { name: string; description: string; content: string; isCustomized: boolean }[];
+    };
+    const triage = skills.find(s => s.name === 'factory-triage')!;
+    expect(triage).toMatchObject({ description: 'Custom desc', content: '# Custom body', isCustomized: true });
+    expect(skills.find(s => s.name === 'factory-plan')!.isCustomized).toBe(false);
+  });
+
+  it('resets an override back to the bundled default', async () => {
+    const { app, overrides } = createOverridesApp();
+    await putOverride(app, 'factory-triage', { description: 'Custom desc', content: '# Custom body' });
+
+    const del = await app.request('/web/factory/skills/factory-triage', { method: 'DELETE' });
+    expect(del.status).toBe(200);
+    const { skill } = (await del.json()) as {
+      skill: { name: string; description: string; content: string; isCustomized: boolean };
+    };
+    expect(skill.name).toBe('factory-triage');
+    expect(skill.isCustomized).toBe(false);
+    expect(skill.content).toContain('# Factory Triage');
+    expect(overrides.delete).toHaveBeenCalledWith({ orgId: 'local', name: 'factory-triage' });
+
+    const list = await app.request('/web/factory/skills');
+    const { skills } = (await list.json()) as { skills: { name: string; isCustomized: boolean }[] };
+    expect(skills.find(s => s.name === 'factory-triage')!.isCustomized).toBe(false);
+  });
+
+  it('scopes overrides under the tenant org when auth is enabled', async () => {
+    const { app, overrides } = createOverridesApp({
+      authEnabled: true,
+      user: { workosId: 'user-1', organizationId: 'org-1' },
+    });
+    const put = await putOverride(app, 'factory-plan', { description: 'Org desc', content: '# Org body' });
+    expect(put.status).toBe(200);
+    expect(overrides.upsert).toHaveBeenCalledWith(expect.objectContaining({ name: 'factory-plan' }));
+    const [[args]] = overrides.upsert.mock.calls;
+    expect(args.orgId).not.toBe('local');
+  });
+
+  it('returns 503 when override storage is not configured', async () => {
+    const app = new Hono();
+    mountApiRoutes(
+      app as never,
+      new SkillRoutes({
+        auth: fakeRouteAuth({ enabled: false }),
+        controllerId: 'code',
+        controller: { getSessionByResource: vi.fn(async () => undefined) } as never,
+      }).routes(),
+    );
+    const put = await putOverride(app, 'factory-triage', { description: 'd', content: 'c' });
+    expect(put.status).toBe(503);
+  });
+});

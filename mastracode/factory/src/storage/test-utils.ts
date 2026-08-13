@@ -17,6 +17,7 @@ import { MemorySettingsStorage } from './domains/memory-settings/base.js';
 import { ModelPacksStorage } from './domains/model-packs/base.js';
 import { FactoryProjectsStorage } from './domains/projects/base.js';
 import { QueueHealthStorage } from './domains/queue-health/base.js';
+import { SkillOverridesStorage } from './domains/skill-overrides/base.js';
 import { SourceControlStorage } from './domains/source-control/base.js';
 import { WorkItemsStorage } from './domains/work-items/base.js';
 
@@ -34,6 +35,7 @@ export interface FactoryStorageTestSeed {
   customProviders: CustomProvidersStorage;
   queueHealth: QueueHealthStorage;
   channelIdentity: ChannelIdentityStorage;
+  skillOverrides: SkillOverridesStorage;
 }
 
 /**
@@ -55,6 +57,7 @@ export async function createFactoryStorageForTests(): Promise<FactoryStorageTest
   const customProviders = storage.registerDomain(new CustomProvidersStorage());
   const queueHealth = storage.registerDomain(new QueueHealthStorage());
   const channelIdentity = storage.registerDomain(new ChannelIdentityStorage());
+  const skillOverrides = storage.registerDomain(new SkillOverridesStorage());
   await storage.init();
   onTestFinished(() => storage.close());
   return {
@@ -71,5 +74,6 @@ export async function createFactoryStorageForTests(): Promise<FactoryStorageTest
     customProviders,
     queueHealth,
     channelIdentity,
+    skillOverrides,
   };
 }
