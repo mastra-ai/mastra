@@ -772,9 +772,14 @@ describe('agent-controller routes', () => {
       const session = await mastra.getAgentController('code')!.createSession({ resourceId: 'user-state' });
       const busy = await session.thread.create({ title: 'busy' });
 
+      // Handler reads active state from the controller-wide active-run
+      // registry (same source as the `active-runs` endpoint) instead of
+      // resolving a per-session agent, so mock that instead of the per-agent
+      // `getActiveThreadRunId`. Semantics are identical: a thread is active
+      // iff a run is registered for its resourceId + threadId.
       const spy = vi
-        .spyOn(Agent.prototype, 'getActiveThreadRunId')
-        .mockImplementation(({ threadId }) => (threadId === busy.id ? 'run-1' : undefined));
+        .spyOn(Agent.prototype, 'listActiveThreadRuns')
+        .mockReturnValue([{ runId: 'run-1', resourceId: 'user-state', threadId: busy.id }]);
       try {
         const res = (await LIST_AGENT_CONTROLLER_THREADS_ROUTE.handler({
           mastra,

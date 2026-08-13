@@ -1110,7 +1110,14 @@ export class AgentController<TState = {}> {
     }
   }
 
-  private async queryThreadById({ threadId }: { threadId: string }): Promise<AgentControllerThread | null> {
+  /**
+   * Read a single thread by id directly from storage, without constructing a
+   * {@link Session}. Read-only server endpoints use this so a GET request for a
+   * thread doesn't spin up a workspace/sandbox as a side effect of session
+   * creation. Returns `null` when the thread doesn't exist or no storage is
+   * configured.
+   */
+  async queryThreadById({ threadId }: { threadId: string }): Promise<AgentControllerThread | null> {
     if (!this.#resolveStorage()) return null;
     const memoryStorage = await this.getMemoryStorage();
     const thread = await memoryStorage.getThreadById({ threadId });
@@ -1125,7 +1132,12 @@ export class AgentController<TState = {}> {
     };
   }
 
-  private async queryThreads({
+  /**
+   * List threads directly from storage, without constructing a {@link Session}.
+   * Read-only server endpoints use this so a GET on `/threads` doesn't spin up
+   * a workspace/sandbox as a side effect of session creation.
+   */
+  async queryThreads({
     resourceId,
     includeForkedSubagents,
     metadata,
@@ -1166,13 +1178,13 @@ export class AgentController<TState = {}> {
     }));
   }
 
-  private async queryThreadMessages({
-    threadId,
-    limit,
-  }: {
-    threadId: string;
-    limit?: number;
-  }): Promise<MastraDBMessage[]> {
+  /**
+   * List messages for a thread directly from storage, without constructing a
+   * {@link Session}. Read-only server endpoints use this so a GET on a thread's
+   * messages doesn't spin up a workspace/sandbox as a side effect of session
+   * creation.
+   */
+  async queryThreadMessages({ threadId, limit }: { threadId: string; limit?: number }): Promise<MastraDBMessage[]> {
     if (!this.#resolveStorage()) return [];
 
     const memoryStorage = await this.getMemoryStorage();
