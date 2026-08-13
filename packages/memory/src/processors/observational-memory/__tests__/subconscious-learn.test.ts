@@ -59,6 +59,49 @@ async function seed(memory: Memory) {
 }
 
 describe('Subconscious learner', () => {
+  describe('model resolution', () => {
+    it('runs on the observational memory model when no main agent is available', async () => {
+      const memory = new Memory({ storage: new InMemoryStore() });
+      const { second } = await seed(memory);
+      const generate = vi
+        .spyOn(Agent.prototype, 'generate')
+        .mockResolvedValueOnce({ text: `<learning-complete through="${second.id}" />` } as any);
+      const handler = createLearnerHandler(memory, resolved(), memory, { omModel: 'openai/om-model' });
+      const ctx = context();
+      delete ctx.mainAgent;
+
+      await handler(ctx);
+      expect(generate).toHaveBeenCalledOnce();
+      generate.mockRestore();
+    });
+
+    it('prefers the per-agent model over the observational memory model', async () => {
+      const memory = new Memory({ storage: new InMemoryStore() });
+      const { second } = await seed(memory);
+      const generate = vi
+        .spyOn(Agent.prototype, 'generate')
+        .mockResolvedValueOnce({ text: `<learning-complete through="${second.id}" />` } as any);
+      const config = resolved();
+      config.reflection[0]!.model = 'per-agent/model' as any;
+      const handler = createLearnerHandler(memory, config, memory, { omModel: 'openai/om-model' });
+      const ctx = context();
+
+      await handler(ctx);
+      expect(ctx.mainAgent.getModel).toHaveBeenCalledWith(expect.objectContaining({ modelConfig: 'per-agent/model' }));
+      generate.mockRestore();
+    });
+
+    it('keeps the existing throw when no model source is available', async () => {
+      const memory = new Memory({ storage: new InMemoryStore() });
+      await seed(memory);
+      const handler = createLearnerHandler(memory, resolved(), memory);
+      const ctx = context();
+      delete ctx.mainAgent;
+
+      await expect(handler(ctx)).rejects.toThrow('requires the main agent');
+    });
+  });
+
   it('runs curator before learner while isolating either failure', async () => {
     const calls: string[] = [];
     const curate = vi.fn(async () => {

@@ -363,7 +363,7 @@ export class Memory extends MastraMemory {
     const extract = observation.extract ?? [];
     const existingSlugs = new Set(extract.map(extractor => extractor.slug));
     const subconsciousExtractors = omConfig.subconscious
-      .createObservationExtractors()
+      .createObservationExtractors(observation.model ?? omConfig.model)
       .filter(extractor => !existingSlugs.has(extractor.slug));
 
     return {
@@ -1859,15 +1859,18 @@ ${workingMemory}`;
         omConfig.subconscious instanceof Subconscious
           ? (() => {
               const resolved = omConfig.subconscious.resolved;
+              const omModel = omConfig.observation?.model ?? omConfig.model;
               const curate = createCuratorHandler(
                 this,
                 resolved,
                 new Memory({ storage: this.storage, options: { observationalMemory: false } }),
+                { omModel },
               );
               const learn = createLearnerHandler(
                 this,
                 resolved,
                 new Memory({ storage: this.storage, options: { observationalMemory: false } }),
+                { omModel },
               );
               return composeReflectionAgentHandlers([curate, learn]);
             })()

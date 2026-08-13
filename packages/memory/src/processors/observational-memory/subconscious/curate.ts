@@ -3,10 +3,11 @@ import type { KnowledgeScope, KnowledgeStorage } from '@mastra/core/storage';
 import { canonicalizeKnowledgeScope } from '@mastra/core/storage';
 
 import type { Memory } from '../../..';
-import type { ReflectionCommittedContext } from '../types';
+import type { ObservationalMemoryModel, ReflectionCommittedContext } from '../types';
 import { publishSubconsciousActivity, publishSubconsciousError } from './activity';
 import { createKnowledgeTools } from './knowledge-tools';
 import { createKnowledgeWriteTools } from './knowledge-write-tools';
+import { resolveSubconsciousAgentModel } from './model';
 import { createPinnedTools } from './pinned';
 import { resolveKnowledgeResourceId } from './scope';
 import type { ResolvedSubconsciousAgent, ResolvedSubconsciousConfig } from './types';
@@ -53,6 +54,7 @@ export function createCuratorHandler(
   memory: Memory,
   subconscious: ResolvedSubconsciousConfig,
   curatorMemory = memory,
+  options?: { omModel?: ObservationalMemoryModel },
 ): (context: ReflectionCommittedContext) => Promise<void> {
   const config = subconscious.reflection.find(agent => agent.name === CURATION_AGENT);
   if (!config) return async () => {};
@@ -69,7 +71,15 @@ export function createCuratorHandler(
       const worklist = await readWorklist(store, context.parentThreadId, scope, cursor?.lastFactId);
       if (!worklist.facts.length && !context.observations.trim()) return;
 
-      const agent = await createCuratorAgent(memory, curatorMemory, context, scope, config, subconscious);
+      const agent = await createCuratorAgent(
+        memory,
+        curatorMemory,
+        context,
+        scope,
+        config,
+        subconscious,
+        options?.omModel,
+      );
       const result = await agent.generate(
         `Parent thread: ${context.parentThreadId}\nCurrent time: ${new Date().toISOString()}\nWorklist truncated: ${worklist.hasMore}\n\nCommitted pre-reflection observations:\n${context.observations}\n\nNew fact worklist:\n${JSON.stringify(worklist.facts)}`,
         {
@@ -120,12 +130,15 @@ async function createCuratorAgent(
   scope: KnowledgeScope,
   config: ResolvedSubconsciousAgent,
   subconscious: ResolvedSubconsciousConfig,
+  omModel?: ObservationalMemoryModel,
 ): Promise<Agent> {
-  if (!context.mainAgent) throw new Error('Subconscious curate requires the main agent to resolve its model.');
-  const model = await context.mainAgent.getModel({
+  const model = await resolveSubconsciousAgentModel({
+    config,
+    omModel,
+    mainAgent: context.mainAgent,
     requestContext: context.requestContext,
-    ...(config.model ? { modelConfig: config.model } : {}),
   });
+  if (!model) throw new Error('Subconscious curate requires the main agent to resolve its model.');
   return new Agent({
     id: `subconscious-curate-${context.parentThreadId}`,
     name: 'Subconscious Curate',

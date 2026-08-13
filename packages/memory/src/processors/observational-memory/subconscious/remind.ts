@@ -3,8 +3,10 @@ import type { KnowledgeScope, KnowledgeStorage, SearchKnowledgeResult } from '@m
 import { canonicalizeKnowledgeScope } from '@mastra/core/storage';
 
 import { Extractor } from '../extractor';
+import type { ObservationalMemoryModel } from '../types';
 import { publishSubconsciousActivity } from './activity';
 import { createKnowledgeTools } from './knowledge-tools';
+import { resolveSubconsciousAgentModel } from './model';
 import { resolveKnowledgeResourceId } from './scope';
 import type { ResolvedSubconsciousAgent } from './types';
 
@@ -71,13 +73,13 @@ async function findReminderSources(
 }
 
 export class SubconsciousRemindExtractor extends Extractor<string> {
-  constructor(config: ResolvedSubconsciousAgent) {
+  constructor(config: ResolvedSubconsciousAgent, omModel?: ObservationalMemoryModel) {
     super({
       name: 'Remind',
       mode: 'hook',
       metadataKeyPath: false,
       onExtracted: async context => {
-        if (!context.rawObservations?.trim() || !context.memory || !context.mainAgent || !context.sendSignal) {
+        if (!context.rawObservations?.trim() || !context.memory || !context.sendSignal) {
           return;
         }
 
@@ -88,10 +90,13 @@ export class SubconsciousRemindExtractor extends Extractor<string> {
           store = await context.memory.storage.getStore('knowledge');
           if (!store) throw new Error('Subconscious remind requires a configured knowledge storage domain.');
           const sources = await findReminderSources(store, scope, context.rawObservations);
-          const model = await context.mainAgent.getModel({
+          const model = await resolveSubconsciousAgentModel({
+            config,
+            omModel,
+            mainAgent: context.mainAgent,
             requestContext: context.requestContext,
-            ...(config.model ? { modelConfig: config.model } : {}),
           });
+          if (!model) return;
           const agent = new Agent({
             id: `subconscious-remind-${context.threadId}`,
             name: 'Subconscious Remind',

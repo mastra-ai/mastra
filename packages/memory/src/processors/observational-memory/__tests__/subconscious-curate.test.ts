@@ -122,4 +122,61 @@ describe('Subconscious curator', () => {
       }),
     );
   });
+
+  describe('model resolution', () => {
+    async function seedFact(memory: Memory) {
+      const store = (await memory.storage.getStore('knowledge'))!;
+      const entity = await store.createEntity({ name: 'Project Atlas', kind: 'project', scope });
+      return store.appendFact({
+        parentEntityId: entity.id,
+        text: 'Atlas launches soon.',
+        scope,
+        sourceThreadId: 'alpha',
+        resolutionScope: scope,
+        defaultScope: scope,
+      });
+    }
+
+    it('runs on the observational memory model when no main agent is available', async () => {
+      const memory = new Memory({ storage: new InMemoryStore() });
+      const fact = await seedFact(memory);
+      const generate = vi
+        .spyOn(Agent.prototype, 'generate')
+        .mockResolvedValueOnce({ text: `<curation-complete through="${fact.id}" />` } as any);
+      generate.mockClear();
+      const handler = createCuratorHandler(memory, resolved(), memory, { omModel: 'openai/om-model' });
+      const ctx = context();
+      delete ctx.mainAgent;
+
+      await handler(ctx);
+      expect(generate).toHaveBeenCalledOnce();
+      generate.mockRestore();
+    });
+
+    it('prefers the per-agent model over the observational memory model', async () => {
+      const memory = new Memory({ storage: new InMemoryStore() });
+      const fact = await seedFact(memory);
+      const generate = vi
+        .spyOn(Agent.prototype, 'generate')
+        .mockResolvedValueOnce({ text: `<curation-complete through="${fact.id}" />` } as any);
+      const config = resolved();
+      config.reflection[0]!.model = 'per-agent/model' as any;
+      const handler = createCuratorHandler(memory, config, memory, { omModel: 'openai/om-model' });
+      const ctx = context();
+
+      await handler(ctx);
+      expect(ctx.mainAgent.getModel).toHaveBeenCalledWith(expect.objectContaining({ modelConfig: 'per-agent/model' }));
+      generate.mockRestore();
+    });
+
+    it('keeps the existing throw when no model source is available', async () => {
+      const memory = new Memory({ storage: new InMemoryStore() });
+      await seedFact(memory);
+      const handler = createCuratorHandler(memory, resolved(), memory);
+      const ctx = context();
+      delete ctx.mainAgent;
+
+      await expect(handler(ctx)).rejects.toThrow('requires the main agent');
+    });
+  });
 });

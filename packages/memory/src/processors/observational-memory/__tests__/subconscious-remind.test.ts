@@ -142,6 +142,58 @@ describe('Subconscious remind', () => {
     expect(context.sendSignal).not.toHaveBeenCalled();
   });
 
+  it('runs on the observational memory model when no main agent is available', async () => {
+    const extractor = new SubconsciousRemindExtractor(
+      { name: 'remind', maxSteps: 3, builtIn: true },
+      createModel('Project Atlas launches January 15.') as any,
+    );
+    const context = createContext('unused');
+    delete (context as any).mainAgent;
+    const store = await context.memory.storage.getStore('knowledge');
+    const entity = await store.createEntity({
+      name: 'Project Atlas',
+      kind: 'project',
+      scope: ['org:acme', 'resource:user-42'],
+    });
+    const fact = await store.appendFact({
+      parentEntityId: entity.id,
+      text: 'Project Atlas launches January 15.',
+      scope: ['org:acme', 'resource:user-42'],
+      sourceThreadId: 'alpha',
+      resolutionScope: ['org:acme', 'resource:user-42', 'thread:alpha'],
+      defaultScope: ['org:acme', 'resource:user-42'],
+    });
+
+    const result = await applyExtractorHooks({
+      source: 'observer',
+      extractors: [extractor],
+      rawObservations: 'The user is scheduling Project Atlas.',
+      ...context,
+    });
+
+    expect(result.failures).toBeUndefined();
+    expect(context.sendSignal).toHaveBeenCalledOnce();
+    expect(context.sendSignal).toHaveBeenCalledWith(
+      expect.objectContaining({ tagName: 'remembered', contents: expect.stringContaining(fact.id) }),
+    );
+  });
+
+  it('stays silent when no main agent and no observational memory model are available', async () => {
+    const extractor = new SubconsciousRemindExtractor({ name: 'remind', maxSteps: 3, builtIn: true });
+    const context = createContext('unused');
+    delete (context as any).mainAgent;
+
+    const result = await applyExtractorHooks({
+      source: 'observer',
+      extractors: [extractor],
+      rawObservations: 'The user is scheduling Project Atlas.',
+      ...context,
+    });
+
+    expect(result.failures).toBeUndefined();
+    expect(context.sendSignal).not.toHaveBeenCalled();
+  });
+
   it('isolates reminder failures from the observation lifecycle', async () => {
     const extractor = new SubconsciousRemindExtractor({
       name: 'remind',
