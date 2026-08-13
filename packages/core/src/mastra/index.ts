@@ -99,6 +99,21 @@ import { createRunScope } from './run-scope';
 import type { VersionOverrides, VersionSelector } from './types';
 
 /**
+ * Trusted metadata applied while a dynamic workflow is persisted.
+ *
+ * Keep these values outside the JSON workflow definition when that definition
+ * comes from an untrusted authoring surface. This metadata is persisted with
+ * the definition but does not itself enforce authorization.
+ */
+export interface DynamicWorkflowRegistrationOptions {
+  /**
+   * Verified identity responsible for the stored definition. Callers must
+   * authorize this value before registration.
+   */
+  authorId?: string;
+}
+
+/**
  * Creates an error for when a null/undefined value is passed to an add* method.
  * This commonly occurs when config is spread ({ ...config }) and the original
  * object had getters or non-enumerable properties.
@@ -4796,8 +4811,11 @@ export class Mastra<
    * await run.start({ inputData: { location: 'Helsinki' } });
    * ```
    */
-  public async addDynamicWorkflow(def: DynamicWorkflowGraph | WorkflowBuilderDefinitionInput): Promise<void> {
-    await this.addDynamicWorkflows([def]);
+  public async addDynamicWorkflow(
+    def: DynamicWorkflowGraph | WorkflowBuilderDefinitionInput,
+    options?: DynamicWorkflowRegistrationOptions,
+  ): Promise<void> {
+    await this.addDynamicWorkflows([def], options);
   }
 
   /**
@@ -4832,6 +4850,7 @@ export class Mastra<
    */
   public async addDynamicWorkflows(
     defs: readonly (DynamicWorkflowGraph | WorkflowBuilderDefinitionInput)[],
+    options?: DynamicWorkflowRegistrationOptions,
   ): Promise<void> {
     if (defs.length === 0) return;
 
@@ -4937,6 +4956,7 @@ export class Mastra<
             stateSchema: normalized.stateSchema,
             requestContextSchema: normalized.requestContextSchema,
             graph: normalized.graph,
+            ...(options?.authorId !== undefined ? { authorId: options.authorId } : {}),
           });
         }
       }

@@ -22,10 +22,15 @@ The whole bundle is validated up front. Members are then registered in dependenc
 ## Usage example
 
 ```typescript
-await mastra.addDynamicWorkflows([
-  helperDefinition, // nested by the root — order in the array doesn't matter
-  rootDefinition, // graph contains { type: 'workflow', workflowId: helperDefinition.id }
-])
+await mastra.addDynamicWorkflows(
+  [
+    helperDefinition, // nested by the root — order in the array doesn't matter
+    rootDefinition, // graph contains { type: 'workflow', workflowId: helperDefinition.id }
+  ],
+  {
+    authorId: authenticatedUser.id,
+  },
+)
 ```
 
 ## Parameters
@@ -38,6 +43,13 @@ await mastra.addDynamicWorkflows([
     description:
       'The workflow definitions to add. Nested-workflow references may resolve against the live registries or against other members of the same bundle.',
   },
+  {
+    name: 'options',
+    type: 'DynamicWorkflowRegistrationOptions',
+    description:
+      'Trusted persistence metadata applied to every definition in the bundle. Use `authorId` for a verified author identity that must not come from a workflow definition.',
+    isOptional: true,
+  },
 ]}
 />
 
@@ -48,6 +60,7 @@ A promise that resolves once every member is validated, registered, and persiste
 ## Behavior
 
 - References resolve against the instance's registries union the bundle's own IDs, so a root may nest a helper introduced in the same call. Registration order is derived from the dependency graph, not the array order.
+- `options.authorId` is stored with every bundle member. It records a verified author but doesn't restrict reads, writes, or execution by itself. Enforce access before calling this method.
 - A rejected bundle registers nothing. Duplicate IDs, invalid members, and dependency cycles are detected before anything is mutated, and if registration or persistence fails partway, the in-memory registry is restored to its prior state.
 - Storage writes happen last. A storage-level failure mid-bundle can leave some rows written, but the registry is still rolled back and the orphaned rows are inert until the next boot.
 

@@ -262,6 +262,42 @@ describe('Mastra.addDynamicWorkflows', () => {
     ]);
   });
 
+  it('persists one trusted author for every member outside the workflow definitions', async () => {
+    const storage = new InMemoryStore({ id: 'bundle-author' });
+    const mastra = new Mastra({ logger: false, tools: { 'lookup-customer': lookupCustomer } as any, storage });
+
+    const untrustedHelper = {
+      ...helperDefinition('lookup-first-customer', 'email1'),
+      authorId: 'forged-author',
+    };
+
+    await mastra.addDynamicWorkflows(
+      [untrustedHelper, helperDefinition('lookup-second-customer', 'email2'), rootDefinition],
+      { authorId: 'verified-author' },
+    );
+
+    const store = (await storage.getStore('workflowDefinitions'))!;
+    const { definitions } = await store.list({ status: 'active' });
+
+    expect(definitions).toHaveLength(3);
+    expect(definitions.every(definition => definition.authorId === 'verified-author')).toBe(true);
+  });
+
+  it('preserves an existing author when a trusted author is omitted on replacement', async () => {
+    const storage = new InMemoryStore({ id: 'bundle-author-preserved' });
+    const mastra = new Mastra({ logger: false, tools: { 'lookup-customer': lookupCustomer } as any, storage });
+
+    await mastra.addDynamicWorkflow(helperDefinition('lookup-first-customer', 'email1'), {
+      authorId: 'verified-author',
+    });
+    await mastra.addDynamicWorkflow(helperDefinition('lookup-first-customer', 'email2'));
+
+    const store = (await storage.getStore('workflowDefinitions'))!;
+    const definition = await store.get('lookup-first-customer');
+
+    expect(definition?.authorId).toBe('verified-author');
+  });
+
   it('is a no-op for an empty bundle', async () => {
     const mastra = createMastra('bundle-empty');
     await expect(mastra.addDynamicWorkflows([])).resolves.toBeUndefined();
