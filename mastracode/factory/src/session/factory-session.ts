@@ -1,11 +1,14 @@
 import { randomUUID } from 'node:crypto';
 
-import { resolveProviderOMDefault } from '@mastra/code-sdk/onboarding/packs';
+import {
+  DEFAULT_OBS_THRESHOLD as DEFAULT_OBSERVATION_THRESHOLD,
+  DEFAULT_REF_THRESHOLD as DEFAULT_REFLECTION_THRESHOLD,
+} from '@mastra/code-sdk/constants';
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentController } from '@mastra/core/agent-controller';
 
 import { factoryMemorySettingsUserId } from '../storage/domains/memory-settings/base.js';
-import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
+import type { MemorySettingsRecord, MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import {
   SourceControlConnectionNotFoundError,
@@ -308,6 +311,24 @@ export async function ensureFactorySourceSession(
   };
 }
 
+export async function applyMemorySettingsToSession(
+  session: FactorySession,
+  record: MemorySettingsRecord | null,
+): Promise<void> {
+  await session.om.observer.switchSelection({
+    selection: record?.observerModelId ? { mode: 'model', modelId: record.observerModelId } : { mode: 'auto' },
+  });
+  await session.om.reflector.switchSelection({
+    selection: record?.reflectorModelId ? { mode: 'model', modelId: record.reflectorModelId } : { mode: 'auto' },
+  });
+
+  await session.state.set({
+    observationThreshold: record?.observationThreshold ?? DEFAULT_OBSERVATION_THRESHOLD,
+    reflectionThreshold: record?.reflectionThreshold ?? DEFAULT_REFLECTION_THRESHOLD,
+    observeAttachments: record?.observeAttachments ?? 'auto',
+  });
+}
+
 export interface HydrateFactorySessionArgs {
   orgId: string;
   /**
@@ -327,8 +348,8 @@ export interface HydrateFactorySessionArgs {
 }
 
 /**
- * Apply a factory project's configuration to a freshly created session:
- * observational-memory settings, then the project's default model.
+ * Apply a factory project's configuration to a session on every run:
+ * the project's default model first, then the caller's observational-memory settings.
  *
  * Both steps are best-effort. A retired model id or an unreachable settings row
  * must not sink a run that is otherwise ready — the session simply keeps the
@@ -338,31 +359,27 @@ export async function hydrateFactorySession(session: FactorySession, args: Hydra
   // The org rung knowledge curation scopes on. Seeded first so it lands even if
   // a later best-effort step fails; an empty org marks the session unresolved.
   await seedSessionOrg(session, args.orgId);
-  try {
-    const record =
-      args.memorySettings && args.factoryProjectId
-        ? await args.memorySettings.get({
-            orgId: args.orgId,
-            userId: factoryMemorySettingsUserId(args.factoryProjectId),
-          })
-        : null;
-    // Without a stored row, fall back to the low-cost OM model of the factory
-    // default model's provider — a factory connected only to Anthropic should
-    // not observe with the (uncredentialed) built-in Google default.
-    const provider = args.defaultModelId?.split('/')[0];
-    const fallbackOmModelId = provider ? resolveProviderOMDefault(provider, args.defaultModelId).modelId : undefined;
-    await applyStoredMemorySettings(session, record, fallbackOmModelId);
-  } catch (error) {
-    console.warn('[Factory Start] Failed to apply observational-memory settings', {
-      error: error instanceof Error ? error.message : String(error),
-    });
-  }
+
   if (args.defaultModelId) {
     try {
       await session.model.switch({ modelId: args.defaultModelId });
     } catch (error) {
       console.warn('[Factory Start] Failed to apply factory default model', {
         modelId: args.defaultModelId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  if (args.memorySettings && args.factoryProjectId) {
+    try {
+      const record = await args.memorySettings.get({
+        orgId: args.orgId,
+        userId: factoryMemorySettingsUserId(args.factoryProjectId),
+      });
+      await applyMemorySettingsToSession(session, record);
+    } catch (error) {
+      console.warn('[Factory Start] Failed to apply observational-memory settings', {
         error: error instanceof Error ? error.message : String(error),
       });
     }

@@ -63,34 +63,25 @@ describe('MemorySettingsStorage', () => {
     }
   });
 
-  it('fills a knob only while it is still unset', async () => {
+  it('resets one model role to auto without changing the other role', async () => {
     const seed = await createFactoryStorageForTests();
 
-    // First explicit observer switch pins the reflector's current model.
-    const first = await seed.memorySettings.patch({
+    await seed.memorySettings.patch({
       orgId: 'org-1',
       userId: 'user-1',
-      patch: { observerModelId: 'google/gemini-3-flash' },
-      fillIfUnset: { reflectorModelId: 'anthropic/claude-haiku-4-5' },
+      patch: {
+        observerModelId: 'google/gemini-3-flash',
+        reflectorModelId: 'anthropic/claude-haiku-4-5',
+      },
     });
-    expect(first.reflectorModelId).toBe('anthropic/claude-haiku-4-5');
+    const updated = await seed.memorySettings.patch({
+      orgId: 'org-1',
+      userId: 'user-1',
+      patch: { observerModelId: null },
+    });
 
-    // A later fill never overwrites the now-set value.
-    const second = await seed.memorySettings.patch({
-      orgId: 'org-1',
-      userId: 'user-1',
-      patch: { observerModelId: 'openai/gpt-5-mini' },
-      fillIfUnset: { reflectorModelId: 'deepseek/deepseek-v3' },
-    });
-    expect(second.reflectorModelId).toBe('anthropic/claude-haiku-4-5');
-
-    // An explicit patch of the knob still wins over its own fill.
-    const third = await seed.memorySettings.patch({
-      orgId: 'org-1',
-      userId: 'user-1',
-      patch: { reflectorModelId: 'deepseek/deepseek-v3' },
-    });
-    expect(third.reflectorModelId).toBe('deepseek/deepseek-v3');
+    expect(updated.observerModelId).toBeNull();
+    expect(updated.reflectorModelId).toBe('anthropic/claude-haiku-4-5');
   });
 
   it('resolves concurrent first writes without losing either patch', async () => {

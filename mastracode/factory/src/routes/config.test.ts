@@ -908,12 +908,22 @@ describe('OM routes with a tenant', () => {
       observer: 'google/gemini-3-flash',
       reflector: 'anthropic/claude-haiku-4-5',
     };
+    const roleSelections: Record<'observer' | 'reflector', { mode: 'auto' } | { mode: 'model'; modelId: string }> = {
+      observer: { mode: 'auto' },
+      reflector: { mode: 'auto' },
+    };
     const state: Record<string, unknown> = {};
     const role = (name: 'observer' | 'reflector') => ({
-      modelId: () => roleModels[name],
+      selection: () => roleSelections[name],
+      modelId: () => (roleSelections[name].mode === 'auto' ? DEFAULT_OM_MODEL_ID : roleModels[name]),
       threshold: () => undefined,
       switchModel: async ({ modelId }: { modelId: string }) => {
+        roleSelections[name] = { mode: 'model', modelId };
         roleModels[name] = modelId;
+      },
+      switchSelection: async ({ selection }: { selection: { mode: 'auto' } | { mode: 'model'; modelId: string } }) => {
+        roleSelections[name] = selection;
+        roleModels[name] = selection.mode === 'model' ? selection.modelId : DEFAULT_OM_MODEL_ID;
       },
     });
     return {
@@ -933,10 +943,17 @@ describe('OM routes with a tenant', () => {
 
   function buildApp(
     session: ReturnType<typeof makeOmSession> | null,
-    opts: { withStorage?: boolean; authEnabled?: boolean; provider?: string } = {},
+    opts: {
+      withStorage?: boolean;
+      authEnabled?: boolean;
+      provider?: string;
+      defaultModelId?: string;
+      withCustomProviders?: boolean;
+    } = {},
   ) {
     const controller = {
       ...makeAgentController([{ provider: opts.provider ?? 'anthropic', hasApiKey: true }]),
+      listModes: () => [{ id: 'build', defaultModelId: opts.defaultModelId }],
       getSessionByResource: async () => session ?? undefined,
     };
     const app = new Hono();
@@ -953,6 +970,7 @@ describe('OM routes with a tenant', () => {
         controller,
         modelCredentials: seed.credentials,
         ...(opts.withStorage === false ? {} : { memorySettings: seed.memorySettings, factoryProjects: seed.projects }),
+        ...(opts.withCustomProviders ? { customProviders: seed.customProviders } : {}),
       }).routes(),
     );
     return app;
@@ -980,43 +998,54 @@ describe('OM routes with a tenant', () => {
     });
   });
 
-  it('seeds provider-specific OM defaults without an active session', async () => {
-    const res = await postJson(buildApp(makeOmSession()), '/web/config/om/provider-defaults', {
-      providerId: 'anthropic',
-      factoryModelId: 'anthropic/claude-fable-5',
-    });
+  it('resolves sessionless auto roles from the Factory default model', async () => {
+    const res = await buildApp(null, { defaultModelId: 'openai/gpt-5.6' }).request('/web/config/om');
 
     expect(res.status).toBe(200);
     expect((await res.json()).config).toMatchObject({
-      observerModelId: 'anthropic/claude-haiku-4-5',
-      reflectorModelId: 'anthropic/claude-haiku-4-5',
-    });
-    await expect(seed.memorySettings.get({ orgId: 'org1', userId: 'user-a' })).resolves.toMatchObject({
-      observerModelId: 'anthropic/claude-haiku-4-5',
-      reflectorModelId: 'anthropic/claude-haiku-4-5',
+      observer: { selection: { mode: 'auto' }, effectiveModelId: 'openai/gpt-5.4-mini' },
+      reflector: { selection: { mode: 'auto' }, effectiveModelId: 'openai/gpt-5.4-mini' },
     });
   });
 
-  it('seeds provider-specific OM defaults into the factory-scoped row when factoryId is given', async () => {
-    const project = await seed.projects.create({ orgId: 'org1', userId: 'user-a', input: { name: 'Factory One' } });
+  it('reports caller-visible custom providers as available', async () => {
+    await seed.customProviders.upsert({
+      orgId: 'org1',
+      userId: 'user-a',
+      input: {
+        providerId: 'acme',
+        name: 'Acme',
+        url: 'https://llm.acme.dev/v1',
+        apiKey: 'sk-acme',
+        models: ['fast-1'],
+      },
+    });
+    await seed.memorySettings.patch({
+      orgId: 'org1',
+      userId: 'user-a',
+      patch: { observerModelId: 'acme/fast-1' },
+    });
+
+    const res = await buildApp(null, { withCustomProviders: true }).request('/web/config/om');
+
+    expect(res.status).toBe(200);
+    expect((await res.json()).config.observer).toMatchObject({
+      selection: { mode: 'model', modelId: 'acme/fast-1' },
+      effectiveModelId: 'acme/fast-1',
+      providerStatus: 'available',
+    });
+  });
+
+  it('validates provider reachability without materializing auto role models', async () => {
     const res = await postJson(buildApp(makeOmSession()), '/web/config/om/provider-defaults', {
       providerId: 'anthropic',
-      factoryModelId: 'anthropic/claude-fable-5',
-      factoryId: project.id,
     });
 
     expect(res.status).toBe(200);
     expect((await res.json()).config).toMatchObject({
-      observerModelId: 'anthropic/claude-haiku-4-5',
-      reflectorModelId: 'anthropic/claude-haiku-4-5',
+      observer: { selection: { mode: 'auto' } },
+      reflector: { selection: { mode: 'auto' } },
     });
-    await expect(
-      seed.memorySettings.get({ orgId: 'org1', userId: factoryMemorySettingsUserId(project.id) }),
-    ).resolves.toMatchObject({
-      observerModelId: 'anthropic/claude-haiku-4-5',
-      reflectorModelId: 'anthropic/claude-haiku-4-5',
-    });
-    // The personal row must remain untouched.
     await expect(seed.memorySettings.get({ orgId: 'org1', userId: 'user-a' })).resolves.toBeNull();
   });
 
@@ -1029,7 +1058,6 @@ describe('OM routes with a tenant', () => {
 
     const write = await postJson(app, '/web/config/om/provider-defaults', {
       providerId: 'anthropic',
-      factoryModelId: 'anthropic/claude-fable-5',
       factoryId: foreign.id,
     });
     expect(write.status).toBe(404);
@@ -1038,61 +1066,7 @@ describe('OM routes with a tenant', () => {
     ).resolves.toBeNull();
   });
 
-  it('reads the OpenAI OM default through a Codex credential', async () => {
-    await seed.credentials.setCredential({ orgId: 'org1', userId: 'user-a' }, 'openai-codex', {
-      type: 'api_key',
-      key: 'sk-openai',
-    });
-
-    const res = await postJson(buildApp(makeOmSession(), { provider: 'openai' }), '/web/config/om/provider-defaults', {
-      providerId: 'openai',
-      factoryModelId: 'openai/gpt-5.6',
-    });
-
-    expect(res.status).toBe(200);
-    expect((await res.json()).config).toMatchObject({
-      observerModelId: 'openai/gpt-5.4-mini',
-      reflectorModelId: 'openai/gpt-5.4-mini',
-    });
-  });
-
-  it('prefers the low-cost OM pack over the selected factory model', async () => {
-    await seed.credentials.setCredential({ orgId: 'org1', userId: 'user-a' }, 'google', {
-      type: 'api_key',
-      key: 'sk-google',
-    });
-
-    const res = await postJson(buildApp(makeOmSession(), { provider: 'google' }), '/web/config/om/provider-defaults', {
-      providerId: 'google',
-      factoryModelId: 'google/gemini-3.5-pro',
-    });
-
-    expect(res.status).toBe(200);
-    expect((await res.json()).config).toMatchObject({
-      observerModelId: 'google/gemini-3.5-flash',
-      reflectorModelId: 'google/gemini-3.5-flash',
-    });
-  });
-
-  it('keeps the selected factory model for providers without an OM pack', async () => {
-    await seed.credentials.setCredential({ orgId: 'org1', userId: 'user-a' }, 'xai', {
-      type: 'api_key',
-      key: 'sk-xai',
-    });
-
-    const res = await postJson(buildApp(makeOmSession(), { provider: 'xai' }), '/web/config/om/provider-defaults', {
-      providerId: 'xai',
-      factoryModelId: 'xai/grok-4.5',
-    });
-
-    expect(res.status).toBe(200);
-    expect((await res.json()).config).toMatchObject({
-      observerModelId: 'xai/grok-4.5',
-      reflectorModelId: 'xai/grok-4.5',
-    });
-  });
-
-  it('does not overwrite OM models that the user already selected', async () => {
+  it('does not overwrite an explicit role or materialize the other role on provider connect', async () => {
     await seed.memorySettings.patch({
       orgId: 'org1',
       userId: 'user-a',
@@ -1101,17 +1075,16 @@ describe('OM routes with a tenant', () => {
 
     const res = await postJson(buildApp(makeOmSession()), '/web/config/om/provider-defaults', {
       providerId: 'anthropic',
-      factoryModelId: 'anthropic/claude-fable-5',
     });
 
     expect(res.status).toBe(200);
     await expect(seed.memorySettings.get({ orgId: 'org1', userId: 'user-a' })).resolves.toMatchObject({
       observerModelId: 'anthropic/claude-fable-5',
-      reflectorModelId: 'anthropic/claude-haiku-4-5',
+      reflectorModelId: null,
     });
   });
 
-  it('persists a role model switch to the memory-settings domain, snapshotting the other role', async () => {
+  it('persists a role model switch without materializing the other auto role', async () => {
     const session = makeOmSession();
     const res = await putJson(buildApp(session), '/web/config/om/observer/model', {
       resourceId: 'r1',
@@ -1123,12 +1096,11 @@ describe('OM routes with a tenant', () => {
     const stored = await seed.memorySettings.get({ orgId: 'org1', userId: 'user-a' });
     expect(stored).toMatchObject({
       observerModelId: 'anthropic/claude-fable-5',
-      // The reflector's current model is pinned so a restart doesn't drift it.
-      reflectorModelId: 'anthropic/claude-haiku-4-5',
+      reflectorModelId: null,
     });
   });
 
-  it('does not overwrite an explicitly stored other-role model on later switches', async () => {
+  it('keeps independently selected role models on later switches', async () => {
     const session = makeOmSession();
     const app = buildApp(session);
     await putJson(app, '/web/config/om/reflector/model', { resourceId: 'r1', modelId: 'openai/gpt-5.6' });

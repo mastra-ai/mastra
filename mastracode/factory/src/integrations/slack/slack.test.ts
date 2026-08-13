@@ -945,6 +945,11 @@ describe('session start (onSessionStart)', () => {
       switchModel: vi.fn(async ({ modelId }: { modelId: string }) => {
         current = modelId;
       }),
+      switchSelection: vi.fn(
+        async ({ selection }: { selection: { mode: 'auto' } | { mode: 'model'; modelId: string } }) => {
+          if (selection.mode === 'model') current = selection.modelId;
+        },
+      ),
     };
   }
 
@@ -1089,7 +1094,10 @@ describe('session start (onSessionStart)', () => {
     await createChannelSessionStartHook(deps as any)(startArgs(session) as any);
 
     expect(deps.memorySettings.get).toHaveBeenCalledWith({ orgId: 'org-1', userId: 'factory-project:fp-1' });
-    expect(session.om.observer.switchModel).toHaveBeenCalledWith({ modelId: 'openai/gpt-5.4-mini' });
+    expect(session.om.observer.switchSelection).toHaveBeenCalledWith({
+      selection: { mode: 'model', modelId: 'openai/gpt-5.4-mini' },
+    });
+    expect(session.om.reflector.switchSelection).toHaveBeenCalledWith({ selection: { mode: 'auto' } });
     expect(session.state.set).toHaveBeenCalledWith(expect.objectContaining({ observationThreshold: 111 }));
     // The sender's own row is read too, and an absent one simply leaves the
     // project's configuration in place.

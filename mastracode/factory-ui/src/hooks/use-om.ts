@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
-import type { OMResponse, ProviderOMDefaultsResponse, UpdateOMResponse } from '../api/types';
+import type { OMResponse, UpdateOMResponse } from '../api/types';
 
 /**
  * Observational Memory config (mirrors the TUI `/om` command). Settings are
@@ -31,41 +31,16 @@ export function useOMQuery(resourceId: string | undefined, scope?: string, facto
   });
 }
 
-export function useApplyProviderOMDefaults() {
-  const { client } = useApiConfig();
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: ({
-      providerId,
-      factoryModelId,
-      factoryId,
-    }: {
-      providerId: string;
-      factoryModelId: string;
-      factoryId?: string;
-    }) =>
-      client.post<ProviderOMDefaultsResponse>('/web/config/om/provider-defaults', {
-        providerId,
-        factoryModelId,
-        ...(factoryId ? { factoryId } : {}),
-      }),
-    onSuccess: (response, { factoryId }) =>
-      queryClient.setQueryData<OMResponse>(queryKeys.om(undefined, factoryId), { config: response.config }),
-  });
-}
-
 type OMRole = 'observer' | 'reflector';
 
-export interface UpdateOMModelArgs {
-  modelId: string;
-}
+export type UpdateOMModelArgs = { modelId: string } | { selection: 'auto' };
 
 export function useUpdateOMModel(resourceId: string | undefined, role: OMRole, scope?: string, factoryId?: string) {
   const { client } = useApiConfig();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ modelId }: UpdateOMModelArgs) =>
-      client.put<UpdateOMResponse>(`/web/config/om/${role}/model`, { resourceId, modelId, scope, factoryId }),
+    mutationFn: (selection: UpdateOMModelArgs) =>
+      client.put<UpdateOMResponse>(`/web/config/om/${role}/model`, { resourceId, scope, factoryId, ...selection }),
     onSuccess: res => queryClient.setQueryData<OMResponse>(queryKeys.om(resourceId, factoryId), { config: res.config }),
   });
 }
