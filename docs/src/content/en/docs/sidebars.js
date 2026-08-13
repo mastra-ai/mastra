@@ -289,7 +289,7 @@ const sidebars = {
             {
               type: 'doc',
               id: 'workspace/lsp',
-              label: 'LSP Inspection',
+              label: 'LSP',
             },
           ],
         },
