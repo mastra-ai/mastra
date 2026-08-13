@@ -95,8 +95,8 @@ describe('Subconscious remind', () => {
       parentEntityId: entity.id,
       text: 'Project Atlas launches January 15.',
       scope: ['org:acme', 'resource:user-42'],
-      sourceThreadId: 'alpha',
-      resolutionScope: ['org:acme', 'resource:user-42', 'thread:alpha'],
+      sourceThreadId: 'beta',
+      resolutionScope: ['org:acme', 'resource:user-42', 'thread:beta'],
       defaultScope: ['org:acme', 'resource:user-42'],
     });
 
@@ -159,8 +159,8 @@ describe('Subconscious remind', () => {
       parentEntityId: entity.id,
       text: 'Project Atlas launches January 15.',
       scope: ['org:acme', 'resource:user-42'],
-      sourceThreadId: 'alpha',
-      resolutionScope: ['org:acme', 'resource:user-42', 'thread:alpha'],
+      sourceThreadId: 'beta',
+      resolutionScope: ['org:acme', 'resource:user-42', 'thread:beta'],
       defaultScope: ['org:acme', 'resource:user-42'],
     });
 
@@ -176,6 +176,126 @@ describe('Subconscious remind', () => {
     expect(context.sendSignal).toHaveBeenCalledWith(
       expect.objectContaining({ tagName: 'remembered', contents: expect.stringContaining(fact.id) }),
     );
+  });
+
+  it("does not echo the thread's own freshly captured facts back as reminders", async () => {
+    const extractor = new SubconsciousRemindExtractor({
+      name: 'remind',
+      maxSteps: 3,
+      builtIn: true,
+    });
+    const context = createContext('The launch happens January 15.');
+    const store = await context.memory.storage.getStore('knowledge');
+    const entity = await store.createEntity({
+      name: 'Zeta initiative',
+      kind: 'program',
+      scope: ['org:acme', 'resource:user-42'],
+    });
+    // Captured by THIS thread, moments ago: the reminder must not whisper it back.
+    await store.appendFact({
+      parentEntityId: entity.id,
+      text: 'The launch happens January 15.',
+      scope: ['org:acme', 'resource:user-42'],
+      sourceThreadId: 'alpha',
+      resolutionScope: ['org:acme', 'resource:user-42', 'thread:alpha'],
+      defaultScope: ['org:acme', 'resource:user-42'],
+    });
+
+    const result = await applyExtractorHooks({
+      source: 'observer',
+      extractors: [extractor],
+      rawObservations: 'The user is scheduling the launch.',
+      ...context,
+    });
+
+    expect(result.failures).toBeUndefined();
+    expect(context.sendSignal).not.toHaveBeenCalled();
+  });
+
+  it("still reminds about the thread's own older facts once they age past the fresh window", async () => {
+    vi.useFakeTimers();
+    try {
+      const extractor = new SubconsciousRemindExtractor({
+        name: 'remind',
+        maxSteps: 3,
+        builtIn: true,
+      });
+      const context = createContext('The launch happens January 15.');
+      const store = await context.memory.storage.getStore('knowledge');
+      const entity = await store.createEntity({
+        name: 'Zeta initiative',
+        kind: 'program',
+        scope: ['org:acme', 'resource:user-42'],
+      });
+      const fact = await store.appendFact({
+        parentEntityId: entity.id,
+        text: 'The launch happens January 15.',
+        scope: ['org:acme', 'resource:user-42'],
+        sourceThreadId: 'alpha',
+        resolutionScope: ['org:acme', 'resource:user-42', 'thread:alpha'],
+        defaultScope: ['org:acme', 'resource:user-42'],
+      });
+
+      vi.advanceTimersByTime(31 * 60 * 1000);
+
+      const result = await applyExtractorHooks({
+        source: 'observer',
+        extractors: [extractor],
+        rawObservations: 'The user is scheduling the launch.',
+        ...context,
+      });
+
+      expect(result.failures).toBeUndefined();
+      expect(context.sendSignal).toHaveBeenCalledOnce();
+      expect(context.sendSignal).toHaveBeenCalledWith(
+        expect.objectContaining({ tagName: 'remembered', contents: expect.stringContaining(fact.id) }),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('shows the reminder agent the recent messages so it can skip what is already visible', async () => {
+    const { Agent } = await import('@mastra/core/agent');
+    const generateSpy = vi.spyOn(Agent.prototype, 'generate' as any);
+    generateSpy.mockClear();
+    try {
+      const extractor = new SubconsciousRemindExtractor({
+        name: 'remind',
+        maxSteps: 3,
+        builtIn: true,
+      });
+      const context = createContext('<no-reminder />');
+      const store = await context.memory.storage.getStore('knowledge');
+      const entity = await store.createEntity({
+        name: 'Moon weather',
+        kind: 'topic',
+        scope: ['org:acme', 'resource:user-42'],
+      });
+      await store.appendFact({
+        parentEntityId: entity.id,
+        text: 'The moon has no weather to speak of.',
+        scope: ['org:acme', 'resource:user-42'],
+        sourceThreadId: 'beta',
+        resolutionScope: ['org:acme', 'resource:user-42', 'thread:beta'],
+        defaultScope: ['org:acme', 'resource:user-42'],
+      });
+
+      await applyExtractorHooks({
+        source: 'observer',
+        extractors: [extractor],
+        rawObservations: 'The user asked about the weather on the moon.',
+        recentMessages: 'user: what is the weather like on the moon?',
+        ...context,
+      });
+
+      expect(generateSpy).toHaveBeenCalledOnce();
+      const prompt = generateSpy.mock.calls[0]?.[0] as string;
+      expect(prompt).toContain('user: what is the weather like on the moon?');
+      expect(prompt).toContain('already visible');
+    } finally {
+      generateSpy.mockRestore();
+    }
   });
 
   it('stays silent when no main agent and no observational memory model are available', async () => {
@@ -203,6 +323,20 @@ describe('Subconscious remind', () => {
     const context = createContext('unused');
     context.mainAgent.getModel = vi.fn(async () => {
       throw new Error('reminder provider unavailable');
+    });
+    const store = await context.memory.storage.getStore('knowledge');
+    const entity = await store.createEntity({
+      name: 'Project Atlas',
+      kind: 'project',
+      scope: ['org:acme', 'resource:user-42'],
+    });
+    await store.appendFact({
+      parentEntityId: entity.id,
+      text: 'Project Atlas launches January 15.',
+      scope: ['org:acme', 'resource:user-42'],
+      sourceThreadId: 'beta',
+      resolutionScope: ['org:acme', 'resource:user-42', 'thread:beta'],
+      defaultScope: ['org:acme', 'resource:user-42'],
     });
 
     const result = await applyExtractorHooks({
