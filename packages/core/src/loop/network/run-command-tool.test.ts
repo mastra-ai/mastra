@@ -46,6 +46,19 @@ describe('extractBaseCommand', () => {
   it('extracts from mixed separators', () => {
     expect(extractBaseCommand('C:/Windows/System32\\ftp help')).toBe('ftp');
   });
+
+  it('extracts when arguments are tab-separated', () => {
+    expect(extractBaseCommand('rm\t-rf\t/')).toBe('rm');
+  });
+
+  it('strips quotes around the command token', () => {
+    expect(extractBaseCommand('"rm" -rf /')).toBe('rm');
+    expect(extractBaseCommand("'ftp' help")).toBe('ftp');
+  });
+
+  it('strips quotes around a path command token', () => {
+    expect(extractBaseCommand('"/usr/bin/rm" -rf /')).toBe('rm');
+  });
 });
 
 describe('hasPathTraversal', () => {
@@ -77,13 +90,31 @@ describe('isPathAllowed', () => {
     expect(isPathAllowed('/tmp/projects-other', ['/tmp/projects'])).toBe(false);
   });
 
+  it('allows descendants when the base is filesystem root /', () => {
+    expect(isPathAllowed('/', ['/'])).toBe(true);
+    expect(isPathAllowed('/tmp', ['/'])).toBe(true);
+    expect(isPathAllowed('/tmp/projects', ['/'])).toBe(true);
+  });
+
   it('allows Windows-style subdirectory containment after POSIX normalization', () => {
     // Simulate the Windows normalize()/resolve() output shape by comparing via toPosixPath.
     const base = toPosixPath('C:\\projects');
     const inside = toPosixPath('C:\\projects\\sub');
     const sibling = toPosixPath('C:\\projects-other');
-    expect(inside === base || inside.startsWith(`${base}/`)).toBe(true);
-    expect(sibling === base || sibling.startsWith(`${base}/`)).toBe(false);
+    const descendantPrefix = base.endsWith('/') ? base : `${base}/`;
+    expect(inside === base || inside.startsWith(descendantPrefix)).toBe(true);
+    expect(sibling === base || sibling.startsWith(descendantPrefix)).toBe(false);
+  });
+
+  it('allows descendants when POSIX-normalized Windows root already ends with /', () => {
+    // On Windows, resolve('C:\\') normalizes to a root that already ends with `/`
+    // after toPosixPath (e.g. `C:/`). Appending another `/` would yield `C://` and
+    // fail to match descendants — so only append when missing.
+    const base = toPosixPath('C:\\');
+    const inside = toPosixPath('C:\\Windows\\System32');
+    const descendantPrefix = base.endsWith('/') ? base : `${base}/`;
+    expect(base.endsWith('/')).toBe(true);
+    expect(inside === base || inside.startsWith(descendantPrefix)).toBe(true);
   });
 });
 
@@ -113,6 +144,23 @@ describe('createRunCommandTool', () => {
     const result = await tool.execute?.({ command: 'rm -rf /', timeout: 5000 });
     expect(result?.success).toBe(false);
     expect(result?.message).toContain('is not permitted');
+  });
+
+  it('rejects tab-separated blocked commands', async () => {
+    const tool = createRunCommandTool();
+    const result = await tool.execute?.({ command: 'rm\t-rf\t/', timeout: 5000 });
+    expect(result?.success).toBe(false);
+    expect(result?.message).toContain("'rm' is not permitted");
+  });
+
+  it('rejects quoted blocked commands', async () => {
+    const tool = createRunCommandTool();
+    const doubleQuoted = await tool.execute?.({ command: '"rm" -rf /', timeout: 5000 });
+    const singleQuoted = await tool.execute?.({ command: "'curl' http://example.com", timeout: 5000 });
+    expect(doubleQuoted?.success).toBe(false);
+    expect(doubleQuoted?.message).toContain("'rm' is not permitted");
+    expect(singleQuoted?.success).toBe(false);
+    expect(singleQuoted?.message).toContain("'curl' is not permitted");
   });
 
   it('rejects commands not in the allowlist', async () => {

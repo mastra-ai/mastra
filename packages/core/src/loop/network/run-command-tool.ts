@@ -156,7 +156,9 @@ export function isPathAllowed(targetPath: string, allowedBasePaths: string[]): b
   const normalizedTarget = toPosixPath(normalize(resolve(targetPath)));
   return allowedBasePaths.some(basePath => {
     const normalizedBase = toPosixPath(normalize(resolve(basePath)));
-    return normalizedTarget === normalizedBase || normalizedTarget.startsWith(`${normalizedBase}/`);
+    // Only append `/` when the base does not already end with one (root `/` or `C:/`).
+    const descendantPrefix = normalizedBase.endsWith('/') ? normalizedBase : `${normalizedBase}/`;
+    return normalizedTarget === normalizedBase || normalizedTarget.startsWith(descendantPrefix);
   });
 }
 
@@ -168,8 +170,11 @@ export function isPathAllowed(targetPath: string, allowedBasePaths: string[]): b
  */
 export function extractBaseCommand(command: string): string {
   const trimmed = command.trim();
-  const firstSpace = trimmed.indexOf(' ');
-  const baseCmd = firstSpace === -1 ? trimmed : trimmed.substring(0, firstSpace);
+  // Split on any whitespace so tabs (and other non-space whitespace) cannot
+  // bypass blocked/allowed command checks that only looked for spaces.
+  const firstToken = trimmed.split(/\s+/, 1)[0] ?? '';
+  // Strip quotes so forms like `"rm"` / `'ftp'` cannot evade allow/block lists.
+  const baseCmd = firstToken.replaceAll(/['"]/g, '');
   // Handle paths like /usr/bin/git → git or C:\tools\git.exe → git.exe
   const lastSlash = Math.max(baseCmd.lastIndexOf('/'), baseCmd.lastIndexOf('\\'));
   return lastSlash === -1 ? baseCmd : baseCmd.substring(lastSlash + 1);

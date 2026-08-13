@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Fixed run-command-tool path containment on Windows. (#21074)
+Fixed Windows working-directory checks so commands stay in configured directories. (#21074)
