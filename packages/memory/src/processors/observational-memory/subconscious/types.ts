@@ -17,6 +17,8 @@ export interface SubconsciousCaptureOutput {
       text: string;
       scope?: KnowledgeScopeLevel;
       when?: string;
+      /** One short sentence: why the fact is worth keeping (or must stay pinned). Stored as fact metadata. */
+      reason?: string;
       /** Present only when capture-time pinning is enabled; routes the fact to the pin set. */
       pin?: boolean;
     }>;

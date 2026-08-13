@@ -28,14 +28,15 @@ export const subconsciousCaptureSchema = z.object({
           text: z.string().trim().min(1),
           scope: z.enum(['org', 'resource', 'thread']).optional(),
           when: z.string().trim().min(1).optional(),
+          reason: z.string().trim().min(1).optional(),
         }),
       ),
     }),
   ),
 });
 
-// Advertised to the model ONLY when capture-time pinning is enabled; the flag-off
-// default schema above must stay byte-for-byte identical to its historical shape.
+// Advertised to the model ONLY when capture-time pinning is enabled; apart from
+// the pin flag it must stay identical to the default schema above.
 const subconsciousCapturePinningSchema = z.object({
   entities: z.array(
     z.object({
@@ -51,6 +52,7 @@ const subconsciousCapturePinningSchema = z.object({
           text: z.string().trim().min(1),
           scope: z.enum(['org', 'resource', 'thread']).optional(),
           when: z.string().trim().min(1).optional(),
+          reason: z.string().trim().min(1).optional(),
           pin: z.boolean().optional(),
         }),
       ),
@@ -68,7 +70,8 @@ Facts must be grounded in the conversation, concise, and written as prose. Do no
 Wrap every named entity mentioned in fact text in [[wikilinks]].
 Set a fact scope only when the conversation establishes where it applies. Use org for organization-wide facts, resource for facts shared across this resource's conversations, and thread for conversation-private facts.
 Omit scope when uncertain; omitted fact scopes stay private to the current thread.
-Emit when only when the conversation anchors the referred time. Resolve relative dates against the current date and use ISO 8601.`;
+Emit when only when the conversation anchors the referred time. Resolve relative dates against the current date and use ISO 8601.
+When a fact is worth keeping for a non-obvious reason, set reason to one short sentence explaining why it is worth remembering (and for pinned facts, why it must stay in context).`;
 
 function clampScope(level: KnowledgeScopeLevel, ceiling?: KnowledgeScopeLevel): KnowledgeScopeLevel {
   return ceiling && SCOPE_ORDER[level] < SCOPE_ORDER[ceiling] ? ceiling : level;
@@ -159,6 +162,7 @@ export class SubconsciousCaptureExtractor extends Extractor<SubconsciousCaptureO
                 },
                 extractedFact.text,
                 extractedFact.scope,
+                extractedFact.reason ? { reason: extractedFact.reason } : undefined,
               );
             } catch (error) {
               droppedPins.push(`Capture-time pin dropped: ${error instanceof Error ? error.message : String(error)}`);
@@ -173,6 +177,7 @@ export class SubconsciousCaptureExtractor extends Extractor<SubconsciousCaptureO
             sourceThreadId: context.threadId,
             when: parseWhen(extractedFact.when),
             maxScope: options.maxScope,
+            metadata: extractedFact.reason ? { reason: extractedFact.reason } : undefined,
             resolutionScope: scopeContext,
             defaultScope: entityScope,
           });

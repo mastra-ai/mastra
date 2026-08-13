@@ -130,6 +130,30 @@ describe('Subconscious pinned knowledge', () => {
     expect(pins[0]!.text).toBe('Speak French. Loudly.');
   });
 
+  it('stores a pin reason as fact metadata and carries it forward through edits', async () => {
+    const memory = createMemory();
+    const tools = createTools(memory);
+    const pinned = await tools.knowledge_pin!.execute!(
+      { text: 'Never force push.', reason: 'Standing safety rule; violating it destroys history.' } as any,
+      {} as any,
+    );
+    expect(pinned.metadata).toEqual({ reason: 'Standing safety rule; violating it destroys history.' });
+
+    // Edit without a new reason carries the old metadata forward.
+    const edited = await tools.knowledge_edit_pin!.execute!(
+      { factId: pinned.id, text: 'Never force push to shared branches.' } as any,
+      {} as any,
+    );
+    expect(edited.metadata).toEqual({ reason: 'Standing safety rule; violating it destroys history.' });
+
+    // Edit with a new reason replaces the old one.
+    const reReasoned = await tools.knowledge_edit_pin!.execute!(
+      { factId: edited.id, text: 'Never force push, ever.', reason: 'Updated after the incident.' } as any,
+      {} as any,
+    );
+    expect(reReasoned.metadata).toEqual({ reason: 'Updated after the incident.' });
+  });
+
   it('rejects an over-budget pin naming the character limit, and an over-count pin naming the pin limit', async () => {
     const memory = createMemory();
     const tools = createTools(memory, { maxCharacters: 40, maxPins: 1 });

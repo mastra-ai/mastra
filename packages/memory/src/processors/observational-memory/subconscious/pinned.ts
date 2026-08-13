@@ -149,6 +149,7 @@ export async function writePinnedFact(
   options: PinnedToolsOptions,
   text: string,
   level?: KnowledgeScopeLevel,
+  metadata?: Record<string, unknown>,
 ): Promise<KnowledgeFact> {
   const { pins } = await listPinnedKnowledge({ store, scope: options.scope });
   assertBudget(options, pins, text);
@@ -159,6 +160,7 @@ export async function writePinnedFact(
     scope: resolveWriteScope(options, level),
     sourceThreadId: options.sourceThreadId,
     maxScope: options.maxScope,
+    metadata,
     resolutionScope: options.scope,
     defaultScope: expandKnowledgeScope(options.scope, options.defaultScope),
   });
@@ -202,14 +204,25 @@ export function createPinnedTools(
         properties: {
           text: { type: 'string', minLength: 1 },
           scope: scopeLevelSchema,
+          reason: {
+            type: 'string',
+            minLength: 1,
+            description: 'One short sentence: why this must stay in context permanently.',
+          },
         },
         required: ['text'],
         additionalProperties: false,
       } satisfies JSONSchema7,
       execute: async input => {
-        const value = input as { text: string; scope?: KnowledgeScopeLevel };
+        const value = input as { text: string; scope?: KnowledgeScopeLevel; reason?: string };
         const store = await getStore(memory);
-        return writePinnedFact(store, options, value.text, value.scope);
+        return writePinnedFact(
+          store,
+          options,
+          value.text,
+          value.scope,
+          value.reason ? { reason: value.reason } : undefined,
+        );
       },
     }),
     knowledge_unpin: createTool({
@@ -235,12 +248,17 @@ export function createPinnedTools(
         properties: {
           factId: { type: 'string', minLength: 1 },
           text: { type: 'string', minLength: 1 },
+          reason: {
+            type: 'string',
+            minLength: 1,
+            description: 'One short sentence: why this must stay in context permanently.',
+          },
         },
         required: ['factId', 'text'],
         additionalProperties: false,
       } satisfies JSONSchema7,
       execute: async input => {
-        const value = input as { factId: string; text: string };
+        const value = input as { factId: string; text: string; reason?: string };
         const store = await getStore(memory);
         const fact = await requirePin(store, value.factId, options);
         const { pins } = await listPinnedKnowledge({ store, scope: options.scope });
@@ -252,6 +270,9 @@ export function createPinnedTools(
           scope: fact.scope,
           sourceThreadId: options.sourceThreadId,
           maxScope: fact.maxScope,
+          // The edit re-appends from the old fact, so provenance carries forward;
+          // a newly supplied reason replaces the old one.
+          metadata: value.reason ? { ...fact.metadata, reason: value.reason } : fact.metadata,
           resolutionScope: options.scope,
           defaultScope: expandKnowledgeScope(options.scope, options.defaultScope),
         });

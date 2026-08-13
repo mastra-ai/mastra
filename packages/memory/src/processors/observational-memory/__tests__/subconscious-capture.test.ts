@@ -346,6 +346,45 @@ describe('Subconscious capture-time pinning', () => {
     expect(facts.facts.map(fact => fact.text)).toEqual(['Asked about the deploy runbook.']);
   });
 
+  it('stores the capture reason as fact metadata on regular and pinned facts', async () => {
+    const memory = new Memory({ storage: new InMemoryStore() });
+    const extractor = new SubconsciousCaptureExtractor({
+      defaultScope: 'resource',
+      learnedGuidance: false,
+      pins: pinsOn,
+    });
+    const context = createContext(memory, {
+      entities: [
+        {
+          name: 'User Preferences',
+          kind: 'person',
+          facts: [
+            {
+              text: 'Prefers voice-first replies.',
+              pin: true,
+              reason: 'Stated as a standing preference; must apply every session.',
+            },
+            { text: 'Asked about the deploy runbook.', reason: 'Recurring topic worth remembering.' },
+            { text: 'Mentioned the weather.' },
+          ],
+        },
+      ],
+    });
+
+    await extractor.onExtracted?.({ ...context, extractor });
+
+    const store = (await memory.storage.getStore('knowledge'))!;
+    const threadScope = ['org:acme', 'resource:user-42', 'thread:alpha'];
+    const { pins } = await listPinnedKnowledge({ store, scope: threadScope });
+    expect(pins[0]!.metadata).toEqual({ reason: 'Stated as a standing preference; must apply every session.' });
+
+    const entity = await store.resolveEntity({ name: 'User Preferences', scope: threadScope });
+    const facts = (await store.factsAbout({ entityId: entity!.id, scope: threadScope })).facts;
+    const byText = new Map(facts.map(fact => [fact.text, fact.metadata]));
+    expect(byText.get('Asked about the deploy runbook.')).toEqual({ reason: 'Recurring topic worth remembering.' });
+    expect(byText.get('Mentioned the weather.')).toBeUndefined();
+  });
+
   it('drops an over-budget pin without failing the extraction cycle', async () => {
     const memory = new Memory({ storage: new InMemoryStore() });
     const extractor = new SubconsciousCaptureExtractor({
