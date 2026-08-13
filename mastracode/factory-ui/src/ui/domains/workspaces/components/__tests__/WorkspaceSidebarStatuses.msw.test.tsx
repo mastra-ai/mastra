@@ -21,6 +21,7 @@ const workSession: FactoryUserSession = {
   projectRepositoryId,
   orgId: 'org-1',
   userId: 'user-1',
+  visibility: 'org' as const,
   title: 'Implement loader',
   branch: 'factory/issue-24',
   baseBranch: 'main',

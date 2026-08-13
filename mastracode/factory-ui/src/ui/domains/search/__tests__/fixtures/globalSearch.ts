@@ -62,6 +62,7 @@ function createSession(
     projectRepositoryId,
     orgId: 'org-search',
     userId: 'user-search',
+    visibility: 'org',
     branch,
     baseBranch: 'main',
     sandboxId: `sandbox-${sessionId}`,

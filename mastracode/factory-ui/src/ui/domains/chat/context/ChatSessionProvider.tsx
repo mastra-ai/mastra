@@ -93,7 +93,9 @@ export function ChatSessionConfigProvider({
   const sandboxReady = resourceOverride
     ? Boolean(resourceOverride)
     : ensureQuery.isSuccess && Boolean(storedSession) && !resolvingSession;
-  const sessionError = ensureQuery.error ?? undefined;
+  // A denied or missing session (404 from the session query) must surface the
+  // error state, not the eternal preparing loader.
+  const sessionError = ensureQuery.error ?? sessionQuery.error ?? undefined;
   // `resourceReady` — safe to address the agent-controller session by
   // `resourceId` for reads/streaming as soon as server-side session metadata
   // resolves. Does NOT wait on `/ensure` — the agent-controller endpoints are
@@ -125,7 +127,12 @@ export function ChatSessionConfigProvider({
     sandboxProgress,
     resourceEnabled,
     sessionError,
-    retrySession: sessionError ? () => void ensureQuery.refetch() : undefined,
+    retrySession: sessionError
+      ? () => {
+          void ensureQuery.refetch();
+          if (sessionQuery.isError) void sessionQuery.refetch();
+        }
+      : undefined,
     projectPath,
     sessionThreadId: storedSession?.sessionId,
     workspacePending: storedSession !== undefined && !storedSession.materializedAt,
@@ -232,9 +239,16 @@ export function ChatMessageBoundary({ children }: { children: ReactNode }) {
 function ChatMessageFeedback() {
   const { sessionError, retrySession } = useChatSessionContext();
   if (!sessionError) return null;
+  // The server intentionally returns the same 404 for a missing session and a
+  // private one owned by someone else, so the message covers both.
+  const notFound = (sessionError as { status?: number }).status === 404;
   return (
     <div className="flex flex-col items-stretch gap-4">
-      <Notice variant="destructive">Failed to prepare the workspace: {sessionError.message}</Notice>
+      <Notice variant="destructive">
+        {notFound
+          ? 'This session was not found or is private to another user.'
+          : `Failed to prepare the workspace: ${sessionError.message}`}
+      </Notice>
       {retrySession && (
         <div>
           <Button variant="default" onClick={retrySession}>
