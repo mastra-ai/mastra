@@ -333,6 +333,20 @@ describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
       expect(packageJson.dependencies?.nodemailer).toBe('^7.0.0');
     });
 
+    // This stays in the monorepo E2E suite because it builds the generated fixture and validates its output manifest.
+    it('should keep default and user-configured externals in the output manifest', async () => {
+      const packageJsonPath = join(fixturePath, 'apps', 'custom', '.mastra', 'output', 'package.json');
+      const packageJson = JSON.parse(await readFile(packageJsonPath, 'utf-8'));
+
+      expect(packageJson.dependencies).toEqual(
+        expect.objectContaining({
+          '@mastra/core': expect.any(String),
+          bcrypt: expect.any(String),
+          typescript: expect.any(String),
+        }),
+      );
+    });
+
     afterAll(async () => {
       if (proc) {
         try {
