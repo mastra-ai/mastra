@@ -24,6 +24,7 @@ class TestProcessHandle extends ProcessHandle {
   async wait(_options?: {
     onStdout?: (data: string) => void;
     onStderr?: (data: string) => void;
+    abortSignal?: AbortSignal;
   }): Promise<CommandResult> {
     return this.waitPromise;
   }
