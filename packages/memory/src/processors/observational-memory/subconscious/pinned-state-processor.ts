@@ -104,7 +104,7 @@ function renderPins(pins: PinEntry[]): string {
 
 function renderDelta(ops: PinDeltaOp[]): string {
   const lines = ops.map(op =>
-    op.op === 'remove' ? `  − removed {id: ${op.id}}` : `  + {id: ${op.pin.id}} ${op.pin.text}`,
+    op.op === 'remove' ? `  - removed {id: ${op.id}}` : `  + {id: ${op.pin.id}} ${op.pin.text}`,
   );
   return `\n${lines.join('\n')}\n`;
 }
@@ -155,13 +155,19 @@ export class PinnedStateProcessor implements Processor<typeof SUBCONSCIOUS_PINS_
   // step 0: a new turn (step 0) always reads fresh and overwrites it.
   private async readPins(args: ComputeStateSignalArgs, scope: KnowledgeScope): Promise<PinEntry[] | undefined> {
     const stepNumber = typeof args.stepNumber === 'number' ? args.stepNumber : 0;
-    const memo = args.requestContext?.get?.(MEMO_KEY) as { atStep: number; entries: PinEntry[] } | undefined;
-    if (memo && stepNumber > memo.atStep) return memo.entries;
+    const scopeKey = scope.join('/');
+    const memo = args.requestContext?.get?.(MEMO_KEY) as
+      | { atStep: number; scopeKey: string; entries: PinEntry[] }
+      | undefined;
+    // A request context can be shared across turns and even across threads, so
+    // the memo is only trusted for later steps of the same turn AND the same
+    // resolved scope.
+    if (memo && memo.scopeKey === scopeKey && stepNumber > memo.atStep) return memo.entries;
     const store = await this.deps.getKnowledgeStore();
     if (!store) return undefined;
     const { pins } = await listPinnedKnowledge({ store, scope });
     const entries = pins.map(pin => ({ id: pin.id, text: pin.text }));
-    args.requestContext?.set?.(MEMO_KEY, { atStep: stepNumber, entries });
+    args.requestContext?.set?.(MEMO_KEY, { atStep: stepNumber, scopeKey, entries });
     return entries;
   }
 

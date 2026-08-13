@@ -49,6 +49,28 @@ describe('Subconscious pinned knowledge', () => {
     expect(() => new Subconscious({ pins: { maxPins: 0 } })).toThrow(/maxPins/);
   });
 
+  it('clamps org-level writes to the resource level so pins never outrun the reserved entity', async () => {
+    const memory = createMemory();
+    const tools = createTools(memory, { defaultScope: 'org' });
+    const explicit = await tools.knowledge_pin!.execute!({ text: 'explicit default' } as any, {} as any);
+    expect(explicit.scope).toEqual(resourceScope);
+    // An explicit org request is rejected by the tool schema: no second pin lands.
+    await tools.knowledge_pin!.execute!({ text: 'org ask', scope: 'org' } as any, {} as any).catch(() => undefined);
+    const { pins } = await listPinnedKnowledge({ store: await getStore(memory), scope: threadScope });
+    expect(pins.map(pin => pin.text)).toEqual(['explicit default']);
+  });
+
+  it('honors a thread maxScope ceiling: the reserved entity itself is created at the thread level', async () => {
+    const memory = createMemory();
+    const tools = createTools(memory, { defaultScope: 'thread', maxScope: 'thread' });
+    const pinned = await tools.knowledge_pin!.execute!({ text: 'thread ceiling pin' } as any, {} as any);
+    const store = await getStore(memory);
+    const entity = await store.getEntity(pinned.parentEntityId);
+    expect(entity!.scope).toEqual(threadScope);
+    const { pins } = await listPinnedKnowledge({ store, scope: threadScope });
+    expect(pins.map(pin => pin.id)).toEqual([pinned.id]);
+  });
+
   it('pins a fact and assembles it into the pin set', async () => {
     const memory = createMemory();
     const tools = createTools(memory);
@@ -103,7 +125,7 @@ describe('Subconscious pinned knowledge', () => {
     );
     await tools.knowledge_pin!.execute!({ text: 'short' } as any, {} as any);
     await expect(tools.knowledge_pin!.execute!({ text: 'one too many' } as any, {} as any)).rejects.toThrow(
-      /at most 1 pins/,
+      /at most 1/,
     );
   });
 

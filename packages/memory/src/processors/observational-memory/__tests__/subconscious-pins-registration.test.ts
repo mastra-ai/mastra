@@ -31,10 +31,17 @@ describe('PinnedStateProcessor registration', () => {
     expect(processors.some(p => p.id === SUBCONSCIOUS_PINS_STATE_ID)).toBe(false);
   });
 
-  it('is not double-added when the user already configured one with the same id', async () => {
-    const memory = createMemory(new Subconscious({ pins: true }));
-    const userProcessor = { id: SUBCONSCIOUS_PINS_STATE_ID, processInput: (args: any) => args } as any;
-    const processors = await memory.getInputProcessors([userProcessor]);
-    expect(processors.filter(p => p.id === SUBCONSCIOUS_PINS_STATE_ID)).toHaveLength(0);
+  it('attaches exactly one pinned processor, skipping auto-attach only on a matching user-supplied id', async () => {
+    // Different user id: the gate must still attach its own pinned processor.
+    const withOther = createMemory(new Subconscious({ pins: true }));
+    const otherProcessor = { id: 'user-custom-processor', processInput: (args: any) => args } as any;
+    const attached = await withOther.getInputProcessors([otherProcessor]);
+    expect(attached.filter(p => p.id === SUBCONSCIOUS_PINS_STATE_ID)).toHaveLength(1);
+
+    // Same id: the gate must skip its own so the user's wins.
+    const withSame = createMemory(new Subconscious({ pins: true }));
+    const sameId = { id: SUBCONSCIOUS_PINS_STATE_ID, processInput: (args: any) => args } as any;
+    const skipped = await withSame.getInputProcessors([sameId]);
+    expect(skipped.filter(p => p.id === SUBCONSCIOUS_PINS_STATE_ID)).toHaveLength(0);
   });
 });

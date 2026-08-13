@@ -72,6 +72,32 @@ describe('PinnedStateProcessor', () => {
     expect(result!.contents).toContain(pinned.id);
   });
 
+  it('serves the memoized read for later steps of the same turn and same scope', async () => {
+    const { tools, processor } = createHarness();
+    await tools.knowledge_pin!.execute!({ text: 'memo pin' } as any, {} as any);
+    const args = makeArgs({ stepNumber: 0 } as any);
+
+    const first = await processor.computeStateSignal(args);
+    expect(first).toMatchObject({ mode: 'snapshot' });
+
+    // A pin lands mid-turn; step 1 must still see the step-0 read (one store read per turn).
+    await tools.knowledge_pin!.execute!({ text: 'mid-turn pin' } as any, {} as any);
+    const midTurn = await processor.computeStateSignal({
+      ...args,
+      stepNumber: 1,
+      contextWindow: { hasSnapshot: true },
+      lastSnapshot: snapshotSignal((first as any).value.pins),
+    } as any);
+    expect(midTurn).toBeUndefined();
+
+    // A different scope on the same request context must not reuse the memo.
+    const otherContext = makeArgs({ stepNumber: 1, threadId: 'beta' } as any);
+    (otherContext as any).requestContext = (args as any).requestContext;
+    const otherScope = await processor.computeStateSignal(otherContext);
+    expect(otherScope).toMatchObject({ mode: 'snapshot' });
+    expect(otherScope!.contents).toContain('mid-turn pin');
+  });
+
   it('emits a snapshot on first emission when no snapshot is in the window', async () => {
     const { tools, processor } = createHarness();
     const pinned = await tools.knowledge_pin!.execute!({ text: 'Always speak French.' } as any, {} as any);

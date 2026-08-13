@@ -41,21 +41,33 @@ export interface PinnedToolsOptions {
   maxCharacters: number;
 }
 
-function pinnedEntityScope(scope: KnowledgeScope): KnowledgeScope {
-  return expandKnowledgeScope(scope, PINNED_ENTITY_SCOPE_LEVEL);
+// The entity sits at the resource level unless a `maxScope` ceiling narrows it
+// to the thread; creating a resource-level record under a thread ceiling would
+// bypass the ceiling.
+function pinnedEntityScope(scope: KnowledgeScope, maxScope?: KnowledgeScopeLevel): KnowledgeScope {
+  const level = maxScope === 'thread' ? 'thread' : PINNED_ENTITY_SCOPE_LEVEL;
+  return expandKnowledgeScope(scope, level);
 }
 
+// Resolution walks every visible scope level (nearest first), so the entity is
+// found wherever it was created rather than only at one fixed level.
 async function resolvePinnedEntityId(store: KnowledgeStorage, scope: KnowledgeScope): Promise<string | undefined> {
-  const entity = await store.getEntityByName({ name: PINNED_ENTITY_NAME, scope: pinnedEntityScope(scope) });
+  const entity = await store.resolveEntity({ name: PINNED_ENTITY_NAME, scope });
   return entity?.id;
 }
 
-/** Idempotent upsert: `createEntity` returns the existing record on a (name, scope) collision. */
-async function ensurePinnedEntityId(store: KnowledgeStorage, scope: KnowledgeScope): Promise<string> {
+/** Reuse the entity wherever it is visible; otherwise create it. `createEntity` is an idempotent upsert on (name, scope). */
+async function ensurePinnedEntityId(
+  store: KnowledgeStorage,
+  scope: KnowledgeScope,
+  maxScope?: KnowledgeScopeLevel,
+): Promise<string> {
+  const existing = await resolvePinnedEntityId(store, scope);
+  if (existing) return existing;
   const entity = await store.createEntity({
     name: PINNED_ENTITY_NAME,
     kind: PINNED_ENTITY_KIND,
-    scope: pinnedEntityScope(scope),
+    scope: pinnedEntityScope(scope, maxScope),
   });
   return entity.id;
 }
@@ -100,20 +112,27 @@ function assertBudget(
 ): void {
   const kept = replacing ? pins.filter(pin => pin.id !== replacing.id) : pins;
   if (!replacing && kept.length >= options.maxPins) {
-    throw new Error(`Pin limit reached: at most ${options.maxPins} pins. Unpin something first.`);
+    throw new Error(`Pin limit reached: the set holds at most ${options.maxPins}. Unpin something first.`);
   }
   if (totalCharacters(kept) + incomingText.length > options.maxCharacters) {
     throw new Error(`Pin budget exceeded: the pin set is limited to ${options.maxCharacters} characters in total.`);
   }
 }
 
+// Pins cannot be written broader than the resource level: the reserved entity
+// is anchored at (or below) the resource, and an org-scoped pin would only be
+// resolvable from the resource that created it, which is a silent-loss trap.
+function clampPinLevel(level: KnowledgeScopeLevel): KnowledgeScopeLevel {
+  return level === 'org' ? 'resource' : level;
+}
+
 function resolveWriteScope(options: PinnedToolsOptions, level?: KnowledgeScopeLevel): KnowledgeScope {
-  const scope = expandKnowledgeScope(options.scope, level ?? options.defaultScope);
+  const scope = expandKnowledgeScope(options.scope, clampPinLevel(level ?? options.defaultScope));
   assertKnowledgeScopeWithinCeiling(scope, options.maxScope);
   return scope;
 }
 
-const scopeLevelSchema: JSONSchema7 = { type: 'string', enum: ['org', 'resource', 'thread'] };
+const scopeLevelSchema: JSONSchema7 = { type: 'string', enum: ['resource', 'thread'] };
 
 async function getStore(memory: PinnedMemory): Promise<KnowledgeStorage> {
   const store = await memory.storage.getStore('knowledge');
@@ -162,7 +181,7 @@ export function createPinnedTools(
         const store = await getStore(memory);
         const { pins } = await listPinnedKnowledge({ store, scope: options.scope });
         assertBudget(options, pins, value.text);
-        const entityId = await ensurePinnedEntityId(store, options.scope);
+        const entityId = await ensurePinnedEntityId(store, options.scope, options.maxScope);
         return store.appendFact({
           parentEntityId: entityId,
           text: value.text,
