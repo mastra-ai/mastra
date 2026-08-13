@@ -76,6 +76,7 @@ export abstract class SandboxProcessManager<TSandbox extends MastraSandbox = Mas
       }
       await this.sandbox.ensureRunning();
       const handle = await impl.spawn(...args);
+      this._dismissed.delete(handle.pid);
       handle.command = args[0];
 
       // Wire abort signal to handle.kill() so all providers get abort support automatically.

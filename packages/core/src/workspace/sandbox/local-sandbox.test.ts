@@ -299,8 +299,9 @@ describe('LocalSandbox', () => {
     it('should release the completed foreground process handle', async () => {
       if (os.platform() === 'win32') return; // Uses POSIX commands
 
-      await sandbox.executeCommand!('echo', ['released']);
+      const result = await sandbox.executeCommand!('echo', ['released']);
 
+      expect(result.stdout.trim()).toBe('released');
       await expect(sandbox.processes!.list()).resolves.toEqual([]);
     });
 
