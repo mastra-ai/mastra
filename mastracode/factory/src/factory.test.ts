@@ -16,6 +16,9 @@ import type * as surfaceModule from './routes/surface.js';
 import type * as tenantCredentialsModule from './routes/tenant-credentials.js';
 import { defaultFactoryRules, DEFAULT_FACTORY_RULE_VERSION } from './rules/defaults.js';
 import type * as dispatcherModule from './rules/dispatcher.js';
+import type { MemorySettingsStorage } from './storage/domains/memory-settings/base.js';
+import type { FactoryProjectsStorage } from './storage/domains/projects/base.js';
+import type { SourceControlStorage } from './storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from './storage/domains/work-items/base.js';
 import { getFactoryWorkspace } from './workspace.js';
 /** A real in-memory FactoryStorage with init spied for boot-order assertions. */
@@ -185,6 +188,75 @@ describe('MastraFactory.prepare', () => {
     // The overlapping call must not double-run one-time adapter init.
     expect(auth.init).toHaveBeenCalledOnce();
     expect(prepareMock).toHaveBeenCalledOnce();
+  });
+
+  it('registers a blocking session-created listener that seeds stored OM settings', async () => {
+    const storage = fakeStorage();
+    const factory = new MastraFactory({ storage });
+    await factory.prepare();
+
+    const blockingCall = controllerMock.onSessionCreated.mock.calls.find(
+      call => (call[1] as { blocking?: boolean } | undefined)?.blocking === true,
+    );
+    expect(blockingCall).toBeDefined();
+
+    // Seed the owner's web session row and stored memory settings through the
+    // same storage domains the factory registered.
+    await storage.init();
+    const sourceControl = storage.getDomain<SourceControlStorage>('source-control').forIntegration('github');
+    const project = await storage
+      .getDomain<FactoryProjectsStorage>('projects')
+      .create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Mastra' } });
+    const installation = await sourceControl.installations.upsert({
+      orgId: 'org-1',
+      connectedByUserId: 'user-1',
+      externalId: '123',
+    });
+    const repository = await sourceControl.repositories.upsert({
+      orgId: 'org-1',
+      input: { installationId: installation.id, externalId: '456', slug: 'mastra-ai/mastra', defaultBranch: 'main' },
+    });
+    const connection = await sourceControl.connections.create({
+      orgId: 'org-1',
+      factoryProjectId: project.id,
+      installationId: installation.id,
+      createdByUserId: 'user-1',
+    });
+    const projectRepository = await sourceControl.projectRepositories.link({
+      orgId: 'org-1',
+      connectionId: connection.id,
+      repositoryId: repository.id,
+      createdByUserId: 'user-1',
+      sandboxProvider: 'local',
+      sandboxWorkdir: '/sandbox/mastra',
+    });
+    await sourceControl.sessions.create({
+      sessionId: 'session-1',
+      projectRepositoryId: projectRepository.id,
+      orgId: 'org-1',
+      userId: 'user-1',
+      branch: 'user/session-1',
+      baseBranch: 'main',
+    });
+    await storage.getDomain<MemorySettingsStorage>('memory-settings').patch({
+      orgId: 'org-1',
+      userId: 'user-1',
+      patch: { observerModelId: 'anthropic/claude-haiku-4-5', reflectorModelId: 'anthropic/claude-haiku-4-5' },
+    });
+
+    const session = {
+      identity: { getResourceId: () => 'session-1' },
+      om: {
+        observer: { modelId: () => undefined, switchModel: vi.fn().mockResolvedValue(undefined) },
+        reflector: { modelId: () => undefined, switchModel: vi.fn().mockResolvedValue(undefined) },
+      },
+      state: { get: () => ({}), set: vi.fn().mockResolvedValue(undefined) },
+    };
+
+    await (blockingCall![0] as (session: unknown) => Promise<void>)(session);
+
+    expect(session.om.observer.switchModel).toHaveBeenCalledWith({ modelId: 'anthropic/claude-haiku-4-5' });
+    expect(session.om.reflector.switchModel).toHaveBeenCalledWith({ modelId: 'anthropic/claude-haiku-4-5' });
   });
 
   it('constructs an enabled sandbox fleet from the configured machine', async () => {

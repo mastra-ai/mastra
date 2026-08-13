@@ -39,6 +39,7 @@ import type {
   AgentControllerRequestContext,
   AgentControllerRequestStateUpdater,
   AgentControllerSessionCreatedListener,
+  AgentControllerSessionCreatedOptions,
   AgentControllerSessionDeletedListener,
   AgentControllerThread,
   ModelAuthStatus,
@@ -197,7 +198,10 @@ export class AgentController<TState = {}> {
    * that session's model/mode/state instead of an arbitrary one.
    */
   readonly #sessionsByResource = new Map<string, Promise<Session<TState>>>();
-  readonly #sessionCreatedListeners: AgentControllerSessionCreatedListener<TState>[] = [];
+  readonly #sessionCreatedListeners: Array<{
+    listener: AgentControllerSessionCreatedListener<TState>;
+    blocking: boolean;
+  }> = [];
   readonly #sessionDeletedListeners: AgentControllerSessionDeletedListener<TState>[] = [];
   /**
    * In-progress deletions keyed by registry key, so {@link createSession} can
@@ -276,19 +280,45 @@ export class AgentController<TState = {}> {
   /**
    * Subscribe to process-local notifications for newly materialized sessions.
    * Cached `createSession()` calls do not notify listeners again.
+   *
+   * Async listeners are fire-and-forget by default. Pass `blocking: true` to
+   * make `createSession()` await the listener before resolving — for setup that
+   * must land before the caller can start a run (e.g. seeding session state
+   * from storage). Blocking listeners run sequentially in registration order,
+   * before fire-and-forget listeners are notified. Failures are isolated and
+   * logged, never thrown — session creation stays best-effort with respect to
+   * listener setup. A blocking listener must not call `createSession()` for
+   * the same `(resourceId, scope)` it is initializing: that lookup awaits the
+   * in-flight creation that is awaiting the listener, which deadlocks.
    */
-  onSessionCreated(listener: AgentControllerSessionCreatedListener<TState>): () => void {
-    this.#sessionCreatedListeners.push(listener);
+  onSessionCreated(
+    listener: AgentControllerSessionCreatedListener<TState>,
+    options?: AgentControllerSessionCreatedOptions,
+  ): () => void {
+    const entry = { listener, blocking: options?.blocking === true };
+    this.#sessionCreatedListeners.push(entry);
     return () => {
-      const index = this.#sessionCreatedListeners.indexOf(listener);
+      const index = this.#sessionCreatedListeners.indexOf(entry);
       if (index !== -1) {
         this.#sessionCreatedListeners.splice(index, 1);
       }
     };
   }
 
-  #notifySessionCreated(session: Session<TState>): void {
-    for (const listener of [...this.#sessionCreatedListeners]) {
+  async #notifySessionCreated(session: Session<TState>): Promise<void> {
+    const entries = [...this.#sessionCreatedListeners];
+    // Blocking listeners complete sequentially, in registration order, before
+    // fire-and-forget listeners can observe the session.
+    for (const { listener, blocking } of entries) {
+      if (!blocking) continue;
+      try {
+        await listener(session);
+      } catch (error) {
+        console.error('Error in session-created listener:', error);
+      }
+    }
+    for (const { listener, blocking } of entries) {
+      if (blocking) continue;
       try {
         const result = listener(session);
         if (result && typeof result === 'object' && 'catch' in result) {
@@ -706,7 +736,7 @@ export class AgentController<TState = {}> {
       }
     }
 
-    this.#notifySessionCreated(session);
+    await this.#notifySessionCreated(session);
     return session;
   }
 
