@@ -888,7 +888,7 @@ export const LIST_AGENT_CONTROLLER_THREADS_ROUTE = createRoute({
       // Session. `createSession` triggers workspace/sandbox initialization
       // (5–17s stall, cost per provisioned sandbox) as a side effect — reads
       // shouldn't pay that. Session creation happens on the write path.
-      await controller.init();
+      // `queryThreads` lazily initializes storage (not workspace) on its own.
       const threads = await controller.queryThreads({ resourceId });
       // A thread's metadata mixes the session scoping tags (stamped at creation,
       // e.g. `projectPath`) with internal session bookkeeping that
@@ -1153,7 +1153,7 @@ export const LIST_AGENT_CONTROLLER_THREAD_MESSAGES_ROUTE = createRoute({
       // Read-only route: query storage directly instead of constructing a
       // Session. Session creation would trigger workspace/sandbox
       // initialization as a side effect; reads should never pay that cost.
-      await controller.init();
+      // The query methods lazily initialize storage (not workspace) on their own.
       // The route is authorized for the URL's resourceId, but `threadId` is
       // otherwise unscoped. Verify the thread belongs to this resource so a
       // caller can't peek at another resource's messages by guessing an id
