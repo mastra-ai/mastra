@@ -114,7 +114,7 @@ Find the existing marker-owned comment deterministically; never use `gh issue co
 export FACTORY_COMMENT_AUTHOR=$(gh api user --jq .login)
 COMMENT_ID=$(gh api --paginate "repos/$OWNER/$REPO/issues/$ISSUE/comments" \
   --jq '.[] | select(.user.login == env.FACTORY_COMMENT_AUTHOR and (.body | contains("<!-- mastra-factory-triage -->"))) | .id' | sort -n | head -n1)
-if [ -n "$COMMENT_ID" ]; thenhttps://github.com/mastra-ai/mastra/pull/21401/conflict?name=mastracode%252Ffactory%252Fsrc%252Fworkspace.test.ts&ancestor_oid=1c57f730bbd4d58a0f273485c2d24f2cac7c7c24&base_oid=6a2eb941a15ded90730b761e9d8ba1fb42010eb4&head_oid=2362f011ec3a13de8d7eb976ae043d8fe1f8d877
+if [ -n "$COMMENT_ID" ]; then
   gh api --method PATCH "repos/$OWNER/$REPO/issues/comments/$COMMENT_ID" -f body="$COMMENT_BODY"
 else
   gh api --method POST "repos/$OWNER/$REPO/issues/$ISSUE/comments" -f body="$COMMENT_BODY"
