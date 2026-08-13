@@ -314,27 +314,29 @@ export const customerTool = createTool({
     customerId: z.string(),
   }),
   outputSchema: z.object({
-    apiKey: z.string(),
+    ssn: z.string(),
   }),
-  execute: async () => {
+  execute: async ({ customerId }) => {
+    // const response = await fetch(`https://your-crm.example.com/customers/${customerId}`)
+    // const { ssn } = await response.json()
     return {
-      apiKey: 'secret-value',
+      ssn: '123-45-6789',
     }
   },
   // highlight-start
   transform: {
     display: {
-      output: () => ({ apiKey: '***' }),
+      output: () => ({ ssn: '***-**-****' }),
     },
     transcript: {
-      output: () => ({ apiKey: '***' }),
+      output: () => ({ ssn: '***-**-****' }),
     },
   },
   // highlight-end
 })
 ```
 
-Your application code still receives `apiKey: 'secret-value'` from the tool. Browser-facing streams get the `display` output, and user-visible transcript messages get the `transcript` output.
+Your application code still receives the raw `ssn` from the tool. Browser-facing streams get the `display` output, and user-visible transcript messages get the `transcript` output.
 
 For more phases, including `input`, `inputDelta`, `error`, `approval`, `suspend`, and `resume`, see the [`createTool()` reference](/reference/tools/create-tool#example-with-transform). For shared rules across several tools, configure the agent-level `transform` policy in the [`Agent` constructor](/reference/agents/agent#constructor-parameters).
 
