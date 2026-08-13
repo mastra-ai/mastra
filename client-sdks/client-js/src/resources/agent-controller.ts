@@ -3,8 +3,6 @@ import type {
   ActiveToolState,
   MastraDBMessage,
   MastraMessagePart,
-  OMBufferedStatus,
-  OMStatus,
 } from '@mastra/core/agent-controller';
 export type { MastraDBMessage, MastraMessageContentV2, MastraMessagePart } from '@mastra/core/agent-controller';
 import type { RequestContext } from '@mastra/core/request-context';
@@ -40,21 +38,15 @@ export interface AgentControllerInfo {
  * (accumulated observations before a reflection fires).
  */
 export interface AgentControllerOMProgress {
-  status: OMStatus;
+  status: string;
   pendingTokens: number;
   threshold: number;
   thresholdPercent: number;
   observationTokens: number;
   reflectionThreshold: number;
   reflectionThresholdPercent: number;
-  /** Session-state route only: the projections flattened out of `buffered`. */
-  projectedMessageRemoval?: number;
-  projectedReflectionSavings?: number;
-  /** Event stream only: the buffered passes the route's projections are derived from. */
-  buffered?: {
-    observations: { status: OMBufferedStatus; projectedMessageRemoval: number; observationTokens: number };
-    reflection: { status: OMBufferedStatus; inputObservationTokens: number; observationTokens: number };
-  };
+  projectedMessageRemoval: number;
+  projectedReflectionSavings: number;
 }
 
 /**

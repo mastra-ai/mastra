@@ -105,22 +105,5 @@ describe('observational memory status', () => {
       expect(screen.getByText('Consolidated into a reflection once full')).toBeVisible();
       expect(screen.getAllByText('/40k')).toHaveLength(2);
     });
-
-    it('reads the pending savings off the buffered passes the event stream sends', async () => {
-      renderStatus({
-        omProgress: {
-          ...omProgress,
-          buffered: {
-            observations: { status: 'running', projectedMessageRemoval: 6_000, observationTokens: 800 },
-            reflection: { status: 'running', inputObservationTokens: 12_000, observationTokens: 9_000 },
-          },
-        },
-      });
-
-      fireEvent.click(screen.getByRole('button', { name: /^Memory budgets:/ }));
-
-      await waitFor(() => expect(screen.getByText('−6k')).toBeVisible());
-      expect(screen.getByText('−3k')).toBeVisible();
-    });
   });
 });

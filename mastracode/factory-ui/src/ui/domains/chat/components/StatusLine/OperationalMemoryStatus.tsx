@@ -1,4 +1,3 @@
-import type { AgentControllerOMProgress } from '@mastra/client-js';
 import { buttonVariants } from '@mastra/playground-ui/components/Button';
 import { Popover, PopoverContent, PopoverTrigger } from '@mastra/playground-ui/components/Popover';
 import { formatCompactTokens, TokenBudget, TokenBudgetDetail } from '@mastra/playground-ui/components/TokenBudget';
@@ -20,17 +19,6 @@ const observationLabel: Record<OMWork, string> = {
   background: 'Consolidating observations in the background',
   blocking: 'Consolidating observations',
 };
-
-/** The event stream carries the buffered passes; the session-state route carries them already flattened. */
-function messageRemoval(om: AgentControllerOMProgress) {
-  return Math.max(0, om.buffered?.observations.projectedMessageRemoval ?? om.projectedMessageRemoval ?? 0);
-}
-
-function reflectionSavings(om: AgentControllerOMProgress) {
-  const reflection = om.buffered?.reflection;
-  if (!reflection) return Math.max(0, om.projectedReflectionSavings ?? 0);
-  return Math.max(0, reflection.inputObservationTokens - reflection.observationTokens);
-}
 
 function reading(tokens: number, threshold: number) {
   return `${formatCompactTokens(tokens)} of ${formatCompactTokens(threshold)}k`;
@@ -89,7 +77,6 @@ export function OperationalMemoryStatus() {
             description="Read into memory once full"
             icon={<MessageSquare />}
             label="Messages"
-            projected={messageRemoval(om)}
             threshold={om.threshold}
             tokens={om.pendingTokens}
             tone={messageTone}
@@ -100,7 +87,6 @@ export function OperationalMemoryStatus() {
             description="Consolidated into a reflection once full"
             icon={<Brain />}
             label="Observations"
-            projected={reflectionSavings(om)}
             threshold={om.reflectionThreshold}
             tokens={om.observationTokens}
             tone={observationTone}
