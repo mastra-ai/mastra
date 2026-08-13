@@ -84,37 +84,41 @@ export async function createFactoryTransitionTools(options: {
           cause: rationale,
         });
 
-        // A phase boundary is the natural moment to compress what the session
-        // observed: fire a reflection+curation cycle on the session's thread.
-        // Fire-and-forget with contained errors — a reflect failure must never
-        // fail or delay the transition. Empty phases no-op inside om.reflect.
-        const memory = (execution as { memory?: { omEngine?: Promise<unknown> } }).memory;
-        if (memory && result.status === 'accepted') {
+        // A phase EXIT is the natural moment to ask what was worth keeping:
+        // run the subconscious curator directly on the session's thread.
+        // Fire-and-forget with contained errors — a curation failure must
+        // never fail or delay the transition. Empty phases report no-op.
+        // Cast because `memory` is runtime-present but absent from the public
+        // tool execution context type; @mastra/memory is not a factory dep.
+        const memory = (
+          execution as {
+            memory?: {
+              runCuration?: (options: {
+                threadId: string;
+                resourceId: string;
+                requestContext?: RequestContext;
+                prompt?: string;
+              }) => Promise<{ outcome: string }>;
+            };
+          }
+        ).memory;
+        if (memory?.runCuration && result.status === 'accepted') {
           void (async () => {
             try {
-              const om = (await memory.omEngine) as {
-                reflect?: (
-                  threadId: string,
-                  resourceId?: string,
-                  prompt?: string,
-                  requestContext?: RequestContext,
-                ) => Promise<{ reflected: boolean }>;
-              } | null;
-              if (!om?.reflect) return;
               const threadId = execution.agent?.threadId;
               const resourceId = execution.agent?.resourceId;
               if (!threadId) return;
-              const outcome = await om.reflect(threadId, resourceId, undefined, execution.requestContext);
-              // Three outcomes matter for observability: reflected, skipped
-              // (a reflection already in flight holds the lock), or no active
-              // observations. om.reflect logs skip/stale internally; record
-              // the boolean here so factory logs distinguish fired vs not.
-              console.debug(
-                `[factory:transition-reflect] thread=${threadId} stage=${stage} reflected=${outcome?.reflected === true}`,
-              );
+              const { outcome } = await memory.runCuration!({
+                threadId,
+                resourceId: resourceId ?? threadId,
+                requestContext: execution.requestContext,
+                prompt: `Now that the work item has left the ${stage} phase: is there anything from this phase worth remembering — a durable project memory, or something worth pinning?`,
+              });
+              // Outcomes: ran | no-op (empty worklist) | skipped (in flight) | no-model.
+              console.debug(`[factory:transition-curate] thread=${threadId} stage=${stage} outcome=${outcome}`);
             } catch (error) {
               console.debug(
-                `[factory:transition-reflect] thread=${execution.agent?.threadId ?? 'unknown'} stage=${stage} failed: ${error instanceof Error ? error.message : String(error)}`,
+                `[factory:transition-curate] thread=${execution.agent?.threadId ?? 'unknown'} stage=${stage} failed: ${error instanceof Error ? error.message : String(error)}`,
               );
             }
           })();

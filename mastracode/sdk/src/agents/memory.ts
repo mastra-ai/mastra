@@ -140,6 +140,9 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
                 // Capture-time pinning is a factory-only opinion; every other
                 // client keeps plain curator-maintained pins.
                 pins: isFactory ? { capturePinning: true } : true,
+                // Factory sessions run the curator every 3 observation runs;
+                // other clients leave the cadence trigger dormant.
+                ...(isFactory ? { curationCadence: 3 } : {}),
               })
             : undefined,
           scope: omScope,

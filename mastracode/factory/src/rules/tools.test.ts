@@ -176,7 +176,7 @@ describe('factory_transition_work_item', () => {
     });
   });
 
-  it('fires a fire-and-forget reflection on the session thread after an accepted transition', async () => {
+  it('fires a fire-and-forget curation on the session thread after an accepted transition', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const prepared = await prepareBoundItem(storage);
     const transition = vi.fn(async () => ({
@@ -194,8 +194,8 @@ describe('factory_transition_work_item', () => {
       transitionService: { transition },
     });
 
-    const reflect = vi.fn(async () => ({ reflected: true }));
-    const memory = { omEngine: Promise.resolve({ reflect }) };
+    const runCuration = vi.fn(async () => ({ outcome: 'ran' }));
+    const memory = { runCuration };
 
     const result = await (tools.factory_transition_work_item as ExecutableTool).execute(
       { stage: 'planning', expectedRevision: 1, rationale: 'Done planning.' },
@@ -207,11 +207,19 @@ describe('factory_transition_work_item', () => {
     );
 
     expect(result).toMatchObject({ status: 'accepted' });
-    await vi.waitFor(() => expect(reflect).toHaveBeenCalledTimes(1));
-    expect(reflect).toHaveBeenCalledWith('thread-1', 'resource-1', undefined, context);
+    await vi.waitFor(() => expect(runCuration).toHaveBeenCalledTimes(1));
+    expect(runCuration).toHaveBeenCalledWith({
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      requestContext: context,
+      prompt: expect.stringContaining('left the planning phase'),
+    });
+    // The curation must run under a request context that carries the org identity.
+    const passedContext = runCuration.mock.calls[0]![0].requestContext;
+    expect(passedContext?.get('user')).toMatchObject({ organizationId: expect.any(String) });
   });
 
-  it('contains reflect failures so the transition still returns the accepted result', async () => {
+  it('contains curation failures so the transition still returns the accepted result', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const prepared = await prepareBoundItem(storage);
     const transition = vi.fn(async () => ({
@@ -229,10 +237,10 @@ describe('factory_transition_work_item', () => {
       transitionService: { transition },
     });
 
-    const reflect = vi.fn(async () => {
-      throw new Error('reflector exploded');
+    const runCuration = vi.fn(async () => {
+      throw new Error('curator exploded');
     });
-    const memory = { omEngine: Promise.resolve({ reflect }) };
+    const memory = { runCuration };
 
     const result = await (tools.factory_transition_work_item as ExecutableTool).execute(
       { stage: 'planning', expectedRevision: 1, rationale: 'Done planning.' },
@@ -244,7 +252,7 @@ describe('factory_transition_work_item', () => {
     );
 
     expect(result).toMatchObject({ status: 'accepted' });
-    await vi.waitFor(() => expect(reflect).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(runCuration).toHaveBeenCalledTimes(1));
   });
 
   it('works without memory on the execution context', async () => {
@@ -274,7 +282,7 @@ describe('factory_transition_work_item', () => {
     expect(result).toMatchObject({ status: 'accepted' });
   });
 
-  it('does not reflect when the transition result is not accepted', async () => {
+  it('does not curate when the transition result is not accepted', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const prepared = await prepareBoundItem(storage);
     const transition = vi.fn(async () => ({
@@ -290,8 +298,8 @@ describe('factory_transition_work_item', () => {
       transitionService: { transition: transition as never },
     });
 
-    const reflect = vi.fn(async () => ({ reflected: true }));
-    const memory = { omEngine: Promise.resolve({ reflect }) };
+    const runCuration = vi.fn(async () => ({ outcome: 'ran' }));
+    const memory = { runCuration };
 
     const result = await (tools.factory_transition_work_item as ExecutableTool).execute(
       { stage: 'planning', expectedRevision: 1, rationale: 'Done planning.' },
@@ -305,10 +313,10 @@ describe('factory_transition_work_item', () => {
     expect(result).toMatchObject({ status: 'rejected' });
     // Give any stray fire-and-forget a beat to fire before asserting it never did.
     await new Promise(resolve => setTimeout(resolve, 20));
-    expect(reflect).not.toHaveBeenCalled();
+    expect(runCuration).not.toHaveBeenCalled();
   });
 
-  it('returns the transition result without awaiting the reflect promise', async () => {
+  it('returns the transition result without awaiting the curation promise', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const prepared = await prepareBoundItem(storage);
     const transition = vi.fn(async () => ({
@@ -326,12 +334,12 @@ describe('factory_transition_work_item', () => {
       transitionService: { transition },
     });
 
-    let releaseReflect!: () => void;
-    const held = new Promise<{ reflected: boolean }>(resolve => {
-      releaseReflect = () => resolve({ reflected: true });
+    let releaseCuration!: () => void;
+    const held = new Promise<{ outcome: string }>(resolve => {
+      releaseCuration = () => resolve({ outcome: 'ran' });
     });
-    const reflect = vi.fn(() => held);
-    const memory = { omEngine: Promise.resolve({ reflect }) };
+    const runCuration = vi.fn(() => held);
+    const memory = { runCuration };
 
     try {
       const result = await (tools.factory_transition_work_item as ExecutableTool).execute(
@@ -343,11 +351,11 @@ describe('factory_transition_work_item', () => {
         },
       );
 
-      // The transition resolved while reflect is still pending — non-blocking proven.
+      // The transition resolved while curation is still pending — non-blocking proven.
       expect(result).toMatchObject({ status: 'accepted' });
-      await vi.waitFor(() => expect(reflect).toHaveBeenCalledTimes(1));
+      await vi.waitFor(() => expect(runCuration).toHaveBeenCalledTimes(1));
     } finally {
-      releaseReflect();
+      releaseCuration();
     }
   });
 

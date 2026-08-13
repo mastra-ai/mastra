@@ -204,7 +204,7 @@ describe('getDynamicMemory', () => {
     expect(requestContext.get('knowledgeResourceId')).toBe('project-1');
   });
 
-  it('enables capture-time pinning only for factory sessions', async () => {
+  it('enables capture-time pinning and the curation cadence only for factory sessions', async () => {
     const vector = { vector: true };
     const { config } = await createMemoryConfig(
       { projectPath: '/tmp/project', factoryProjectId: 'project-1' },
@@ -215,6 +215,7 @@ describe('getDynamicMemory', () => {
       defaultScope: 'resource',
       maxScope: 'resource',
       pins: { capturePinning: true },
+      curationCadence: 3,
     });
   });
 
