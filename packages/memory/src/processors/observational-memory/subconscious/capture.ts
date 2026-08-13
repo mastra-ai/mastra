@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { Extractor } from '../extractor';
 import type { ExtractorOnExtractedContext, ExtractorRuntimeContext } from '../extractor';
 import { publishSubconsciousActivity } from './activity';
+import { resolveKnowledgeResourceId } from './scope';
 import type { SubconsciousCaptureConfig, SubconsciousCaptureOutput, SubconsciousDefaultCapture } from './types';
 
 const CAPTURE_GUIDANCE_PAGE = 'capture-guidance';
@@ -53,13 +54,14 @@ function requireScopeContext(context: ExtractorRuntimeContext): KnowledgeScope {
       'Subconscious requires requestContext.organizationId to derive scoped knowledge. Set organizationId on the request context for this conversation.',
     );
   }
-  if (!context.resourceId) {
+  const resourceId = resolveKnowledgeResourceId(context.requestContext, context.resourceId);
+  if (!resourceId) {
     throw new Error('Subconscious requires resourceId to derive scoped knowledge.');
   }
   if (!context.threadId) {
     throw new Error('Subconscious requires threadId to derive scoped knowledge.');
   }
-  return [`org:${organizationId}`, `resource:${context.resourceId}`, `thread:${context.threadId}`];
+  return [`org:${organizationId}`, `resource:${resourceId}`, `thread:${context.threadId}`];
 }
 
 async function getKnowledgeStore(context: ExtractorRuntimeContext): Promise<KnowledgeStorage> {

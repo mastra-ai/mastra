@@ -8,6 +8,7 @@ import { publishSubconsciousActivity, publishSubconsciousError } from './activit
 import { createKnowledgeTools } from './knowledge-tools';
 import { createKnowledgeWriteTools } from './knowledge-write-tools';
 import { createPinnedTools } from './pinned';
+import { resolveKnowledgeResourceId } from './scope';
 import type { ResolvedSubconsciousAgent, ResolvedSubconsciousConfig } from './types';
 
 const CURATION_AGENT = 'curate';
@@ -26,7 +27,7 @@ function resolveScope(context: ReflectionCommittedContext): KnowledgeScope {
   }
   return canonicalizeKnowledgeScope([
     `org:${organizationId}`,
-    `resource:${context.resourceId}`,
+    `resource:${resolveKnowledgeResourceId(context.requestContext, context.resourceId)}`,
     `thread:${context.parentThreadId}`,
   ]);
 }

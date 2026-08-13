@@ -5,6 +5,7 @@ import { canonicalizeKnowledgeScope } from '@mastra/core/storage';
 import { Extractor } from '../extractor';
 import { publishSubconsciousActivity } from './activity';
 import { createKnowledgeTools } from './knowledge-tools';
+import { resolveKnowledgeResourceId } from './scope';
 import type { ResolvedSubconsciousAgent } from './types';
 
 const NO_REMINDER = '<no-reminder />';
@@ -23,15 +24,12 @@ function resolveScope(context: {
   if (typeof organizationId !== 'string' || !organizationId.trim()) {
     throw new Error('Subconscious remind requires organizationId in the request context.');
   }
-  if (!context.resourceId) {
+  const resourceId = resolveKnowledgeResourceId(context.requestContext, context.resourceId);
+  if (!resourceId) {
     throw new Error('Subconscious remind requires a resourceId.');
   }
 
-  return canonicalizeKnowledgeScope([
-    `org:${organizationId}`,
-    `resource:${context.resourceId}`,
-    `thread:${context.threadId}`,
-  ]);
+  return canonicalizeKnowledgeScope([`org:${organizationId}`, `resource:${resourceId}`, `thread:${context.threadId}`]);
 }
 
 const REMINDER_QUERY_STOP_WORDS = new Set([

@@ -25,6 +25,7 @@ import type { KnowledgeScope, KnowledgeStorage } from '@mastra/core/storage';
 import { canonicalizeKnowledgeScope } from '@mastra/core/storage';
 
 import { listPinnedKnowledge, PINNED_DELTA_TAG, PINNED_SNAPSHOT_TAG, SUBCONSCIOUS_PINS_STATE_ID } from './pinned';
+import { resolveKnowledgeResourceId } from './scope';
 
 export interface PinEntry {
   id: string;
@@ -141,12 +142,9 @@ export class PinnedStateProcessor implements Processor<typeof SUBCONSCIOUS_PINS_
   private resolveScope(args: ComputeStateSignalArgs): KnowledgeScope | undefined {
     const organizationId = args.requestContext?.get?.('organizationId');
     if (typeof organizationId !== 'string' || !organizationId.trim()) return undefined;
-    if (!args.resourceId) return undefined;
-    return canonicalizeKnowledgeScope([
-      `org:${organizationId}`,
-      `resource:${args.resourceId}`,
-      `thread:${args.threadId}`,
-    ]);
+    const resourceId = resolveKnowledgeResourceId(args.requestContext, args.resourceId);
+    if (!resourceId) return undefined;
+    return canonicalizeKnowledgeScope([`org:${organizationId}`, `resource:${resourceId}`, `thread:${args.threadId}`]);
   }
 
   // One entity resolve plus one paged fact read per turn; memoized on the

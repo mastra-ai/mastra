@@ -12,6 +12,7 @@ import type { ReflectionCommittedContext } from '../types';
 import { publishSubconsciousActivity, publishSubconsciousError } from './activity';
 import { createKnowledgeTools } from './knowledge-tools';
 import { createKnowledgeWriteTools } from './knowledge-write-tools';
+import { resolveKnowledgeResourceId } from './scope';
 import type { ResolvedSubconsciousAgent, ResolvedSubconsciousConfig } from './types';
 
 const LEARN_AGENT = 'learn';
@@ -33,7 +34,7 @@ function resolveScope(context: ReflectionCommittedContext): KnowledgeScope {
   }
   return canonicalizeKnowledgeScope([
     `org:${organizationId}`,
-    `resource:${context.resourceId}`,
+    `resource:${resolveKnowledgeResourceId(context.requestContext, context.resourceId)}`,
     `thread:${context.parentThreadId}`,
   ]);
 }

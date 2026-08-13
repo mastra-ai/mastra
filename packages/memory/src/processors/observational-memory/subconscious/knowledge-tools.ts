@@ -11,6 +11,7 @@ import type { ToolAction } from '@mastra/core/tools';
 import { createTool } from '@mastra/core/tools';
 import type { JSONSchema7 } from 'json-schema';
 
+import { resolveKnowledgeResourceId } from './scope';
 import type { KnowledgeSemanticIndexCoordinator } from './semantic-index';
 
 const DEFAULT_LIMIT = 10;
@@ -30,7 +31,7 @@ type KnowledgeToolContext = {
 
 function resolveScope(context: KnowledgeToolContext | undefined): KnowledgeScope {
   const organizationId = context?.requestContext?.get('organizationId');
-  const resourceId = context?.agent?.resourceId;
+  const resourceId = resolveKnowledgeResourceId(context?.requestContext, context?.agent?.resourceId);
   const threadId = context?.agent?.threadId;
   if (typeof organizationId !== 'string' || !organizationId.trim()) {
     throw new Error('Knowledge tools require requestContext.organizationId.');
