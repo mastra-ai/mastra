@@ -213,6 +213,23 @@ describe('execute_command tool', () => {
         expect(result).toContain('line 500');
       });
 
+      it('accepts tail as a numeric string, like timeout', async () => {
+        const sandbox = createMockSandbox({
+          executeCommand: vi.fn().mockResolvedValue({
+            success: true,
+            exitCode: 0,
+            stdout: longOutput,
+            stderr: '',
+            executionTimeMs: 5,
+          }),
+        });
+        const ctx = createContext(sandbox);
+        const result = await executeCommandTool.execute({ command: 'seq 500', tail: '10' as any }, ctx);
+        expect(result).toContain('[showing last 10 of 500 lines]');
+        expect(result).toContain('line 491');
+        expect(result).toContain('line 500');
+      });
+
       it('tail applies to both stdout and stderr on failure', async () => {
         const longStderr = Array.from({ length: 50 }, (_, i) => `err ${i + 1}`).join('\n');
         const sandbox = createMockSandbox({
@@ -378,6 +395,25 @@ describe('get_process_output tool', () => {
     const ctx = createContext(sandbox);
     const result = await getProcessOutputTool.execute({ pid: 'session-abc' }, ctx);
     expect(result).toContain('string pid output');
+  });
+
+  it('accepts tail as a numeric string', async () => {
+    const handle = createMockHandle({
+      pid: '13',
+      stdout: Array.from({ length: 50 }, (_, i) => `line ${i + 1}`).join('\n'),
+      stderr: '',
+      exitCode: undefined,
+    });
+    const sandbox = createMockSandbox({
+      processes: {
+        get: vi.fn().mockResolvedValue(handle),
+      },
+    });
+    const ctx = createContext(sandbox);
+    const result = await getProcessOutputTool.execute({ pid: '13', tail: '5' as any }, ctx);
+    expect(result).toContain('[showing last 5 of 50 lines]');
+    expect(result).toContain('line 46');
+    expect(result).toContain('line 50');
   });
 
   it('returns output and exit code for already-exited process (no wait)', async () => {
