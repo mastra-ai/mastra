@@ -87,6 +87,16 @@ function nextDots(currentStatus: string | undefined): string {
   return '.'.repeat(dotCount >= 5 ? 2 : dotCount + 1);
 }
 
+/**
+ * Drops keys the caller set to `undefined` so spreading the overrides cannot
+ * erase the Factory defaults they sit on top of.
+ */
+function adapterOverrides(options: SlackAdapterChannelConfig | undefined): SlackAdapterChannelConfig {
+  return Object.fromEntries(
+    Object.entries(options ?? {}).filter(([, value]) => value !== undefined),
+  ) as SlackAdapterChannelConfig;
+}
+
 export class SlackIntegration implements FactoryIntegration {
   readonly id = 'slack';
   /**
@@ -133,7 +143,7 @@ export class SlackIntegration implements FactoryIntegration {
       adapterOptions: {
         toolDisplay: 'hidden',
         typingStatus: factoryTypingStatus,
-        ...this.#config.adapterOptions,
+        ...adapterOverrides(this.#config.adapterOptions),
       },
     });
   }

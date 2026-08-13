@@ -60,6 +60,29 @@ describe('SlackIntegration.channels', () => {
     expect(config.adapters.slack.streaming).toBe(true);
   });
 
+  it('keeps the Factory defaults when toolDisplay and typingStatus are explicitly undefined', () => {
+    const integration = new SlackIntegration({
+      signingSecret: 'secret',
+      adapterOptions: { toolDisplay: undefined, typingStatus: undefined } as any,
+    });
+
+    const config = integration.channels(ctxWith());
+
+    expect(config.adapters.slack.toolDisplay).toBe('hidden');
+    expect(config.adapters.slack.typingStatus).toBeTypeOf('function');
+  });
+
+  it('preserves an explicit typingStatus: false override', () => {
+    const integration = new SlackIntegration({
+      signingSecret: 'secret',
+      adapterOptions: { typingStatus: false },
+    });
+
+    const config = integration.channels(ctxWith());
+
+    expect(config.adapters.slack.typingStatus).toBe(false);
+  });
+
   it('allows adapter options to override the defaults', () => {
     const typingStatus = vi.fn(() => 'custom status');
     const integration = new SlackIntegration({
