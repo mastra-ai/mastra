@@ -26,7 +26,7 @@ Gauge the people involved: the author's merged-PR/issue counts (`gh pr list --au
 
 If the issue is vague, do not stop to ask for clarification. Investigate the most plausible reading of it, record that reading as an assumption, and note what extra information from the reporter would firm it up as an open question.
 
-At the end of this phase, please add a small summary to the issue as stated below.
+At the end of this phase, publish a small summary to the source issue as stated below. For GitHub issues, locate the oldest current-identity comment containing the `<!-- mastra-factory-triage -->` marker and update it; create a new pending summary only when no such comment exists. Use the deterministic lookup in Phase 5. For Linear issues, publish the pending summary through Linear.
 
 ```markdown
 <!-- mastra-factory-triage -->
