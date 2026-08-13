@@ -22,7 +22,7 @@ import { InMemoryStore } from '../../../storage';
 import type { WorkflowRunState, WorkflowRunStatus } from '../../../workflows/types';
 import { Agent } from '../../agent';
 import { agentThreadStreamRuntime } from '../../thread-stream-runtime';
-import { DurableStepIds } from '../constants';
+import { AGENT_STREAM_TOPIC, DurableStepIds } from '../constants';
 import { createDurableAgent } from '../create-durable-agent';
 import type { DurableAgent } from '../durable-agent';
 import { globalRunRegistry } from '../run-registry';
@@ -435,5 +435,30 @@ describe('DurableAgent.recover(runId)', () => {
     cleanup();
 
     expect(seenError?.message).toBe('workflow blew up');
+  });
+
+  it('reports a subscription setup failure via the pubsub error stream', async () => {
+    const runId = 'run-ready-fail';
+    const failingStore = new InMemoryStore();
+    const failingPubsub = new EventEmitterPubSub();
+    const actualSubscribeFromOffset = failingPubsub.subscribeFromOffset.bind(failingPubsub);
+    vi.spyOn(failingPubsub, 'subscribeFromOffset').mockImplementation((topic, offset, callback) => {
+      if (topic === AGENT_STREAM_TOPIC(runId)) {
+        return Promise.reject(new Error('pubsub subscription failed'));
+      }
+      return actualSubscribeFromOffset(topic, offset, callback);
+    });
+    const { agent: failingAgent } = createDurableWithStore('agent-ready-fail', failingStore, failingPubsub);
+    await seed(failingStore, runId, 'running', 'agent-ready-fail');
+    const workflow = stubWorkflow(failingAgent, 'success');
+    const emitError = vi.spyOn(failingAgent as any, 'emitError').mockResolvedValue(undefined);
+
+    const recovered = await failingAgent.recover(runId);
+    const workflowExecution = globalRunRegistry.get(runId)?.workflowExecution;
+
+    await expect(workflowExecution).rejects.toThrow('pubsub subscription failed');
+    expect(emitError).toHaveBeenCalledWith(runId, expect.objectContaining({ message: 'pubsub subscription failed' }));
+    expect(workflow.createRun).not.toHaveBeenCalled();
+    recovered.cleanup();
   });
 });

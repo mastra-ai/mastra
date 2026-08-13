@@ -2195,7 +2195,11 @@ export class DurableAgent<
     //     the returned `workflowExecution` (e.g. `recoverActiveRuns()`) see
     //     the raw rejection so they can classify the run as failed.
     const workflow = this.getWorkflow();
-    const workflowExecution = ready
+    const readyForRestart = ready.catch(error => {
+      void this.emitError(runId, error as Error);
+      throw error;
+    });
+    const workflowExecution = readyForRestart
       .then(async () => {
         try {
           const run = await workflow.createRun({ runId, pubsub: this.pubsub });
