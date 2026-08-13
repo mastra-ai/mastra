@@ -406,7 +406,7 @@ const ensureProjectSandbox = vi.fn(
 const materializeRepo = vi.fn(async (opts: { onProgress?: (e: any) => void }) => {
   opts.onProgress?.({ phase: 'cloning', message: 'Cloning octo/hello…' });
 });
-const reattachSandbox = vi.fn(async (_id: string) => ({ id: 'sb' }));
+const reattachSandbox = vi.fn(async (_id: string, _options?: { actingUserId?: string }) => ({ id: 'sb' }));
 const recycleClaimedWorkdir = vi.fn(async (_sb: any, _workdir: string, _defaultBranch: string) => {});
 const ensureWorktree = vi.fn(async (_sb: any, _workdir: string, opts: { branch: string; baseBranch: string }) => ({
   worktreePath: `/workspace/hello/../worktrees/${opts.branch}`,
@@ -430,7 +430,7 @@ const fleet = {
     return sandboxEnabled ? 'railway' : 'none';
   },
   computeWorkdir: (repo: string) => `/workspace/${repo.split('/').pop()}`,
-  reattachSandbox: (id: string) => reattachSandbox(id),
+  reattachSandbox: (id: string, options?: { actingUserId?: string }) => reattachSandbox(id, options),
 } as unknown as SandboxFleet;
 vi.mock('./sandbox', () => {
   class MaterializeError extends Error {
@@ -1928,7 +1928,9 @@ describe('Factory session routes', () => {
 
     expect(deleted.status).toBe(200);
     expect(controller.deleteSession).toHaveBeenCalledWith({ resourceId: sessionId });
-    await vi.waitFor(() => expect(reattachSandbox).toHaveBeenCalledWith('sb-live'));
+    await vi.waitFor(() =>
+      expect(reattachSandbox).toHaveBeenCalledWith('sb-live', { actingUserId: 'u1' }),
+    );
   });
 
   it('does not tear down a controller session for an unauthorized deletion', async () => {
@@ -1965,7 +1967,9 @@ describe('Factory session routes', () => {
 
     expect(deleted.status).toBe(200);
     expect(tables.sessions).toHaveLength(0);
-    await vi.waitFor(() => expect(reattachSandbox).toHaveBeenCalledWith('sb-live'));
+    await vi.waitFor(() =>
+      expect(reattachSandbox).toHaveBeenCalledWith('sb-live', { actingUserId: 'u1' }),
+    );
     error.mockRestore();
   });
 
@@ -1989,7 +1993,7 @@ describe('Factory session routes', () => {
     // The VM stays alive for the next session, but the released session's
     // work is scrubbed off it before it enters the pool.
     await vi.waitFor(() => {
-      expect(reattachSandbox).toHaveBeenCalledWith('sb-live');
+      expect(reattachSandbox).toHaveBeenCalledWith('sb-live', { actingUserId: 'u1' });
       expect(recycleClaimedWorkdir).toHaveBeenCalledWith(expect.anything(), '/workspace/hello', 'main');
       expect(sourceControlStorage.sandboxPoolRows).toEqual([
         expect.objectContaining({

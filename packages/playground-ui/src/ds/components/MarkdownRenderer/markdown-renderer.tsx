@@ -4,6 +4,7 @@ import Markdown from 'react-markdown';
 import type { Components, ExtraProps } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
+import { rehypeWordSpans } from './word-spans';
 import { CodeBlock } from '@/ds/components/CodeBlock';
 import { cn } from '@/lib/utils';
 
@@ -15,6 +16,8 @@ export interface MarkdownRendererProps {
   children: string;
   className?: string;
   externalLinkTarget?: MarkdownExternalLinkTarget;
+  /** The text is still being written: fade each word in as it lands. */
+  streaming?: boolean;
 }
 
 /**
@@ -30,12 +33,14 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
   children,
   className,
   externalLinkTarget = 'tab',
+  streaming = false,
 }: MarkdownRendererProps) {
   return (
     <Markdown
-      remarkPlugins={[remarkGfm]}
+      remarkPlugins={REMARK_PLUGINS}
+      rehypePlugins={streaming ? WORD_SPAN_PLUGINS : undefined}
       components={externalLinkTarget === 'window' ? WINDOW_COMPONENTS : COMPONENTS}
-      className={cn('mastra-markdown', className)}
+      className={cn('mastra-markdown', streaming && 'mastra-markdown-streaming', className)}
     >
       {decodeEscapedNewlines(children)}
     </Markdown>
@@ -114,6 +119,9 @@ function markdownLink(externalLinkTarget: MarkdownExternalLinkTarget): NonNullab
     );
   };
 }
+
+const REMARK_PLUGINS = [remarkGfm];
+const WORD_SPAN_PLUGINS = [rehypeWordSpans];
 
 // Elements are listed one by one: react-markdown also passes its `node`, which
 // React would forward to the DOM as a stray attribute. Everything else is
