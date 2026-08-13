@@ -472,6 +472,7 @@ describe('factory_transition_work_item', () => {
     expect(sessions.getBySessionId).toHaveBeenCalledWith('resource-1');
     expect(setState).toHaveBeenCalledWith({
       factoryProjectId: PROJECT_ID,
+      factoryOrgId: 'org-1',
       projectRepositoryId: 'repo-1',
       untrustedCheckout: true,
       baseRef: 'main',
@@ -501,7 +502,11 @@ describe('factory_transition_work_item', () => {
     });
 
     expect(tools).toHaveProperty('factory_transition_work_item');
-    expect(setState).toHaveBeenCalledWith({ factoryProjectId: PROJECT_ID, untrustedCheckout: true });
+    expect(setState).toHaveBeenCalledWith({
+      factoryProjectId: PROJECT_ID,
+      factoryOrgId: 'org-1',
+      untrustedCheckout: true,
+    });
   });
 
   it('keeps untrustedCheckout when only the session lookup fails during enrichment', async () => {
@@ -519,7 +524,11 @@ describe('factory_transition_work_item', () => {
 
     expect(tools).toHaveProperty('factory_transition_work_item');
     expect(getBySessionId).toHaveBeenCalled();
-    expect(setState).toHaveBeenCalledWith({ factoryProjectId: PROJECT_ID, untrustedCheckout: true });
+    expect(setState).toHaveBeenCalledWith({
+      factoryProjectId: PROJECT_ID,
+      factoryOrgId: 'org-1',
+      untrustedCheckout: true,
+    });
   });
 
   it('recovers a work binding without marking the checkout untrusted', async () => {
@@ -535,7 +544,7 @@ describe('factory_transition_work_item', () => {
     });
 
     expect(tools).toHaveProperty('factory_transition_work_item');
-    expect(setState).toHaveBeenCalledWith({ factoryProjectId: PROJECT_ID });
+    expect(setState).toHaveBeenCalledWith({ factoryProjectId: PROJECT_ID, factoryOrgId: 'org-1' });
   });
 
   it('exposes nothing on crash-resume when no active binding matches the thread', async () => {

@@ -83,8 +83,16 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
   return ({ requestContext }: { requestContext: RequestContext }) => {
     const controller = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeState> | undefined;
     const state = controller?.getState() as MastraCodeState | undefined;
+    // Factory seeds the authoritative org id into session state; prefer it.
+    // The session owner is a USER id — mapping it into organizationId is only
+    // the legacy fallback for clients (TUI/studio) that never set factoryOrgId.
+    const factoryOrgId = state?.factoryOrgId;
     const ownerId = controller?.session.ownerId;
-    if (ownerId) requestContext.set('organizationId', ownerId);
+    if (typeof factoryOrgId === 'string' && factoryOrgId.trim()) {
+      requestContext.set('organizationId', factoryOrgId);
+    } else if (ownerId) {
+      requestContext.set('organizationId', ownerId);
+    }
     // Factory runs share one knowledge graph per project: anchor the
     // subconscious knowledge scope's resource rung on the project id.
     const factoryProjectId = state?.factoryProjectId;

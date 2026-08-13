@@ -180,6 +180,21 @@ describe('getDynamicMemory', () => {
     expect(requestContext.get('knowledgeResourceId')).toBeUndefined();
   });
 
+  it('prefers the factory org id from session state over the session owner for organizationId', async () => {
+    const { requestContext } = await createMemoryConfig({
+      projectPath: '/tmp/project',
+      factoryProjectId: 'project-1',
+      factoryOrgId: 'org-real',
+    });
+    expect(requestContext.set).toHaveBeenCalledWith('organizationId', 'org-real');
+    expect(requestContext.get('organizationId')).toBe('org-real');
+  });
+
+  it('falls back to the session owner for organizationId when no factory org id exists', async () => {
+    const { requestContext } = await createMemoryConfig({ projectPath: '/tmp/project' });
+    expect(requestContext.get('organizationId')).toBe('mastracode-owner');
+  });
+
   it('anchors the knowledge scope on the factory project id when present', async () => {
     const { requestContext } = await createMemoryConfig({
       projectPath: '/tmp/project',

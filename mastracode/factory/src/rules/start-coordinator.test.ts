@@ -328,6 +328,7 @@ describe('FactoryStartCoordinator', () => {
     expect(session.state.set).toHaveBeenCalledWith({
       factoryProjectId: PROJECT_ID,
       projectRepositoryId: 'project-repository-1',
+      factoryOrgId: 'org-1',
     });
     expect(session.thread.list).not.toHaveBeenCalled();
     expect(session.thread.switch).not.toHaveBeenCalled();
@@ -355,6 +356,7 @@ describe('FactoryStartCoordinator', () => {
     expect(session.state.set).toHaveBeenCalledWith({
       factoryProjectId: PROJECT_ID,
       projectRepositoryId: 'project-repository-1',
+      factoryOrgId: 'org-1',
       untrustedCheckout: true,
       baseRef: 'main',
     });
@@ -385,6 +387,7 @@ describe('FactoryStartCoordinator', () => {
       expect(session.state.set).toHaveBeenCalledWith({
         factoryProjectId: PROJECT_ID,
         projectRepositoryId: 'project-repository-1',
+        factoryOrgId: 'org-1',
         untrustedCheckout: true,
         baseRef: 'main',
       });
@@ -407,6 +410,7 @@ describe('FactoryStartCoordinator', () => {
     expect(session.state.set).toHaveBeenCalledWith({
       factoryProjectId: PROJECT_ID,
       projectRepositoryId: 'project-repository-1',
+      factoryOrgId: 'org-1',
       untrustedCheckout: true,
       baseRef: 'release-1.x',
     });
@@ -427,6 +431,7 @@ describe('FactoryStartCoordinator', () => {
     expect(session.state.set).toHaveBeenCalledWith({
       factoryProjectId: PROJECT_ID,
       projectRepositoryId: 'project-repository-1',
+      factoryOrgId: 'org-1',
     });
   });
 
