@@ -52,7 +52,20 @@ export interface SlackIntegrationConfig {
   oidcRedirectBaseUrl?: string;
   /** SPA origin the post-connect redirect returns to. */
   uiOrigin?: string;
-  /** Overrides for the Slack channel adapter entry. */
+  /**
+   * Overrides for the Slack channel adapter entry.
+   *
+   * @example
+   * ```ts
+   * new SlackIntegration({
+   *   signingSecret,
+   *   adapterOptions: {
+   *     streaming: true,
+   *     toolDisplay: 'grouped',
+   *   },
+   * });
+   * ```
+   */
   adapterOptions?: SlackAdapterChannelConfig;
 }
 
