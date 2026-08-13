@@ -99,6 +99,75 @@ describe('MastraAuthBetterAuth', () => {
       });
     });
 
+    it('resolves activeOrganizationId from an existing membership when the session has none', async () => {
+      mockAuth.api.getSession.mockResolvedValue({
+        session: { ...mockSession, activeOrganizationId: null },
+        user: mockUser,
+      });
+      const findMany = vi.fn(async () => [{ organizationId: 'org_member' }]);
+      const auth = new MastraAuthBetterAuth({
+        auth: { ...mockAuth, $context: Promise.resolve({ authCookies: { sessionToken: { name: 'better-auth.session_token' } }, adapter: { findMany } }) } as any,
+      });
+
+      const result = await auth.authenticateToken('test-token', mockRawRequest());
+
+      expect(result?.session.activeOrganizationId).toBe('org_member');
+      expect(result?.user).toEqual(mockUser);
+      expect(findMany).toHaveBeenCalledWith({
+        model: 'member',
+        where: [{ field: 'userId', value: mockUser.id }],
+      });
+    });
+
+    it('keeps an explicitly set activeOrganizationId without a membership lookup', async () => {
+      mockAuth.api.getSession.mockResolvedValue({
+        session: { ...mockSession, activeOrganizationId: 'org_chosen' },
+        user: mockUser,
+      });
+      const findMany = vi.fn(async () => [{ organizationId: 'org_member' }]);
+      const auth = new MastraAuthBetterAuth({
+        auth: { ...mockAuth, $context: Promise.resolve({ authCookies: { sessionToken: { name: 'better-auth.session_token' } }, adapter: { findMany } }) } as any,
+      });
+
+      const result = await auth.authenticateToken('test-token', mockRawRequest());
+
+      expect(result?.session.activeOrganizationId).toBe('org_chosen');
+      expect(findMany).not.toHaveBeenCalled();
+    });
+
+    it('still authenticates when no membership exists', async () => {
+      mockAuth.api.getSession.mockResolvedValue({
+        session: { ...mockSession, activeOrganizationId: null },
+        user: mockUser,
+      });
+      const auth = new MastraAuthBetterAuth({
+        auth: { ...mockAuth, $context: Promise.resolve({ authCookies: { sessionToken: { name: 'better-auth.session_token' } }, adapter: { findMany: vi.fn(async () => []) } }) } as any,
+      });
+
+      const result = await auth.authenticateToken('test-token', mockRawRequest());
+
+      expect(result?.session.activeOrganizationId).toBeNull();
+      expect(result?.user).toEqual(mockUser);
+    });
+
+    it('still authenticates when the membership lookup fails', async () => {
+      mockAuth.api.getSession.mockResolvedValue({
+        session: { ...mockSession, activeOrganizationId: null },
+        user: mockUser,
+      });
+      const auth = new MastraAuthBetterAuth({
+        auth: {
+          ...mockAuth,
+          $context: Promise.resolve({ authCookies: { sessionToken: { name: 'better-auth.session_token' } }, adapter: { findMany: vi.fn(async () => Promise.reject(new Error('db down'))) } }),
+        } as any,
+      });
+
+      const result = await auth.authenticateToken('test-token', mockRawRequest());
+
+      expect(result?.session.activeOrganizationId).toBeNull();
+      expect(result?.user).toEqual(mockUser);
+    });
+
     it('should return null when session is not found', async () => {
       mockAuth.api.getSession.mockResolvedValue(null);
 
