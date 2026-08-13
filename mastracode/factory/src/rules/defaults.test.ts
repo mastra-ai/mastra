@@ -301,6 +301,19 @@ describe('defaultFactoryRules', () => {
     },
   );
 
+  it('does not duplicate investigation when a GitHub issue enters Triage through a governed run', async () => {
+    const rule = defaultFactoryRules({ version: 'deployment-7' }).work.triage?.issue?.onEnter;
+    const context = {
+      ...stageContext({ type: 'human', id: 'user-1' }, 'work'),
+      cause: 'run_start',
+      stage: 'triage',
+      fromStage: 'intake',
+      toStage: 'triage',
+    } as FactoryStageRuleContext;
+
+    expect(await rule?.(context)).toBeUndefined();
+  });
+
   it('does not duplicate investigation when a new GitHub issue is materialized into Triage', async () => {
     const rule = defaultFactoryRules({ version: 'deployment-7' }).work.triage?.issue?.onEnter;
     const context = {

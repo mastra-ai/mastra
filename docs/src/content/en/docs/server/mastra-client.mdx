@@ -62,7 +62,7 @@ The Mastra Client SDK exposes all resources served by the Mastra Server.
 
 ## Create and run dynamic workflows
 
-Use `upsertDynamicWorkflow()` to create or replace a persisted workflow definition. A successful upsert validates the complete definition, registers it with the running Mastra instance, and makes it available through the standard workflow execution API.
+Use `upsertDynamicWorkflow()` to create or replace a persisted workflow definition. A successful upsert validates the complete definition and registers it with the running Mastra instance. The workflow then becomes available through the standard execution API.
 
 The following example shows the full lifecycle of a mapping workflow, from creation and inspection through execution and deletion:
 
