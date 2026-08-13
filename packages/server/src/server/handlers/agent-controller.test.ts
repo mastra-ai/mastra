@@ -555,11 +555,11 @@ describe('agent-controller routes', () => {
       ];
       session.displayState.restoreTasks(tasks);
 
-      const res = (await GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE.handler({
+      const res = await GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE.handler({
         mastra,
         controllerId: 'code',
         resourceId: 'user-1',
-      } as any)) as { tasks: typeof tasks };
+      } as Parameters<typeof GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE.handler>[0]);
 
       expect(res.tasks).toEqual(tasks);
     });

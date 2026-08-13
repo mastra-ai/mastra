@@ -20044,6 +20044,12 @@ export type GetAgentControllerControllerIdSessionsResourceId_Response = {
   modeId: string;
   modelId: string;
   running?: boolean | undefined;
+  tasks: {
+    id: string;
+    content: string;
+    status: 'pending' | 'in_progress' | 'completed';
+    activeForm: string;
+  }[];
   omProgress?:
     | {
         status: string;
