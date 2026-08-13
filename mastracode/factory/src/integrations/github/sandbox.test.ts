@@ -950,6 +950,24 @@ describe('withInstallToken', () => {
     expect(scrub).not.toContain('tok-secret');
   });
 
+  it('rethrows the error fn threw when the scrub also fails', async () => {
+    const sandbox = new FakeSandbox(script =>
+      script.includes('remote set-url origin') && !script.includes('x-access-token')
+        ? { exitCode: 255, stdout: '', stderr: 'error: could not lock config file .git/config' }
+        : OK,
+    );
+    const primary = new WorktreeError('git worktree add failed', 'worktree-failed');
+
+    const err = await withInstallToken(sandbox, '/workspace/hello', 'octocat/hello', 'tok-secret', async () => {
+      throw primary;
+    }).catch(e => e);
+
+    // Routes map WorktreeError and MaterializeError to different responses.
+    expect(err).toBe(primary);
+    expect(err.code).toBe('worktree-failed');
+    expect(err.message).toMatch(/git worktree add failed.*Failed to scrub installation token/s);
+  });
+
   it('rejects a malformed repo full name before touching the remote', async () => {
     const sandbox = new FakeSandbox();
     const err = await withInstallToken(sandbox, '/workspace/hello', 'evil; whoami', 'tok', async () => undefined).catch(

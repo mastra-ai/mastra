@@ -2,4 +2,4 @@
 '@mastra/factory': patch
 ---
 
-Fixed a failed branch push being reported as the wrong error when token cleanup also failed. The cleanup error used to replace the push error entirely, so a push blocked by network egress surfaced as a token-cleanup failure with an unrelated classification. The push failure now keeps the lead and its classification, with the cleanup failure reported alongside.
+Fixed a failed branch push being reported as a token cleanup error. When the push failed and the token cleanup failed too, the cleanup error replaced the push error, so a push blocked by the network was reported with an unrelated error code. The push error is now reported as-is with its own code, and the cleanup error is added to the end of its message.

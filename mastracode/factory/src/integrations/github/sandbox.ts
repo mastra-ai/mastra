@@ -585,9 +585,10 @@ async function scrubRemote(
 }
 
 /**
- * Scrub after `primary` already failed and return the error to throw: the
- * primary keeps the lead and its classification, a failed scrub is appended
- * to it instead of masking it.
+ * Scrub after `primary` already failed and return the error to throw. A failed
+ * scrub is appended to `primary` rather than replacing it, so the caller gets
+ * the error it would have had without the scrub — same class, same `code` —
+ * carrying the leaked-token warning in its message.
  */
 async function scrubbedFailure(
   sandbox: MaterializationSandbox,
@@ -599,15 +600,15 @@ async function scrubbedFailure(
 ): Promise<unknown> {
   try {
     await scrubRemote(sandbox, workdir, repoFullName, tokenInRemote);
+    return primary;
   } catch (scrubError) {
-    const primaryMessage = primary instanceof Error ? primary.message : String(primary);
     const scrubMessage = scrubError instanceof Error ? scrubError.message : String(scrubError);
-    return new MaterializeError(
-      `${primaryMessage} — additionally: ${scrubMessage}`,
-      primary instanceof MaterializeError ? primary.code : fallback,
-    );
+    if (!(primary instanceof Error)) {
+      return new MaterializeError(`${String(primary)} — additionally: ${scrubMessage}`, fallback);
+    }
+    primary.message = `${primary.message} — additionally: ${scrubMessage}`;
+    return primary;
   }
-  return primary;
 }
 
 /**
@@ -736,9 +737,9 @@ export async function configureGitIdentity(
  *
  * Once the tokenized URL is installed a failed scrub may leave the token
  * persisted, so it is always surfaced: on its own after a successful `fn`,
- * appended after `fn`'s own failure otherwise — the primary failure keeps the
- * lead and its classification. Only a failed set-url (the token never reached
- * the remote) downgrades the scrub to best-effort.
+ * appended to `fn`'s own error otherwise — `fn`'s error is never replaced.
+ * Only a failed set-url (the token never reached the remote) downgrades the
+ * scrub to best-effort.
  */
 export async function withInstallToken<T>(
   sandbox: MaterializationSandbox,
