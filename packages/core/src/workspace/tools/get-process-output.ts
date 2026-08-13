@@ -12,6 +12,7 @@ export const getProcessOutputTool = createTool({
 
 Use this after starting a background command with execute_command (background: true) to check if the process is still running and read its output.`,
   toModelOutput: sandboxToModelOutput,
+  outputSchema: z.string(),
   inputSchema: z.object({
     pid: z.string().describe('The process ID returned when the background command was started'),
     tail: z
@@ -58,9 +59,14 @@ Use this after starting a background command with execute_command (background: t
         });
       }
 
-      // If wait requested, block until process exits with streaming callbacks
+      // If wait requested, block until process exits with streaming callbacks.
+      // The run's abortSignal is forwarded so aborting the run (e.g. a user
+      // stop) interrupts a blocking wait instead of outliving the turn: the
+      // handle kills the process on abort, mirroring the spawn-time
+      // `abortSignal` convention.
       if (shouldWait && handle.exitCode === undefined) {
         const result = await handle.wait({
+          abortSignal: context?.abortSignal,
           onStdout: context?.writer
             ? async (data: string) => {
                 await context.writer!.custom({

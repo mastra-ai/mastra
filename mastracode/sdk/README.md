@@ -57,6 +57,28 @@ const prepared = await prepareAgentControllerMount({
 
 Configured processors run before Mastra Code's built-in input processors. Keep processor instances stateless because the mounted agent shares them across sessions and runs.
 
+## Dynamic workflows
+
+The local controller registers the Workflow Builder before workers start. In build mode, users can ask the code agent to create a workflow in natural language. The builder discovers registered agents, tools, and workflows, validates a complete definition, then persists and registers it immediately.
+
+Use the workflow service to manage saved workflows from a custom SDK surface:
+
+```ts
+import { deleteWorkflow, getWorkflow, listWorkflows, runWorkflow } from '@mastra/code-sdk/workflows/service';
+
+const { workflows } = await listWorkflows(mastra);
+const firstWorkflow = workflows[0];
+if (!firstWorkflow) throw new Error('No Dynamic Workflows are available.');
+
+const definition = await getWorkflow(mastra, firstWorkflow.id);
+if (!definition) throw new Error(`Workflow "${firstWorkflow.id}" was not found.`);
+
+const result = await runWorkflow(mastra, definition.id, { topic: 'dynamic workflows' });
+await deleteWorkflow(mastra, definition.id);
+```
+
+Pass the session request context to `runWorkflow` when workflow agent steps need the session-selected model. You can also pass an event callback as the fifth argument to render workflow step progress.
+
 Deep modules are available as subpath imports, e.g.:
 
 ```ts

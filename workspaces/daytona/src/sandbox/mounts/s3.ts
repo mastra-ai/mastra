@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import type { FilesystemMountConfig } from '@mastra/core/workspace';
 
 import { shellQuote } from '../../utils/shell-quote';
-import { LOG_PREFIX, validateBucketName, validateEndpoint, validatePrefix } from './types';
+import { LOG_PREFIX, validateEndpoint, validatePrefix, validateS3BucketName } from './types';
 import type { MountContext } from './types';
 
 /**
@@ -41,7 +41,7 @@ export interface DaytonaS3MountConfig extends FilesystemMountConfig {
 export async function mountS3(mountPath: string, config: DaytonaS3MountConfig, ctx: MountContext): Promise<void> {
   const { run, writeFile, logger } = ctx;
 
-  validateBucketName(config.bucket);
+  validateS3BucketName(config.bucket);
   if (config.endpoint) {
     validateEndpoint(config.endpoint);
   }

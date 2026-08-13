@@ -73,7 +73,6 @@ test.describe('Tab switcher navigation', () => {
     const tabs = [
       { label: 'Models', expectedPath: '/models' },
       { label: 'Integrations', expectedPath: '/integrations' },
-      { label: 'Guides', expectedPath: '/guides' },
       { label: 'Reference', expectedPath: '/reference' },
     ]
 
@@ -396,36 +395,32 @@ test.describe('Contextual sidebar', () => {
     expect(getErrors(), 'JS errors during contextual sidebar navigation').toEqual([])
   })
 
-  test('desktop: resets sidebar scrolling when switching panes', async ({ page, isMobile }) => {
+  test('desktop: restores root sidebar scrolling when leaving a contextual pane', async ({ page, isMobile }) => {
     test.skip(isMobile, 'Desktop sidebar not rendered on mobile')
     await page.setViewportSize({ width: 1200, height: 360 })
 
     await page.goto('/docs', { waitUntil: 'domcontentloaded' })
     const rootPane = visibleSidebarPane(page, 'root')
-    const agentsLink = await expectContextualCategoryRootLink(rootPane)
-    const rootScrollTop = await rootPane.evaluate(element => {
-      element.scrollTop = element.scrollHeight
-      return element.scrollTop
+    const guidesLink = rootPane.getByRole('link', { name: 'Guides', exact: true })
+    await expect(guidesLink).toBeVisible()
+    const rootScrollTop = await guidesLink.evaluate(element => {
+      element.scrollIntoView({ block: 'center' })
+      return element.closest('nav')?.scrollTop ?? 0
     })
     expect(rootScrollTop).toBeGreaterThan(0)
 
-    await agentsLink.evaluate((element: HTMLAnchorElement) => element.click())
+    await guidesLink.evaluate((element: HTMLAnchorElement) => element.click())
     const contextualPane = visibleSidebarPane(page, 'contextual')
     await expect(contextualPane).toBeVisible()
     await expect.poll(() => contextualPane.evaluate(element => element.scrollTop)).toBe(0)
-
-    const contextualScrollTop = await contextualPane.evaluate(element => {
-      element.scrollTop = element.scrollHeight
-      return element.scrollTop
-    })
-    expect(contextualScrollTop).toBeGreaterThan(0)
 
     await contextualPane
       .getByRole('button', { name: 'Back to global sidebar' })
       .evaluate((element: HTMLButtonElement) => element.click())
     const restoredRootPane = visibleSidebarPane(page, 'root')
     await expect(restoredRootPane).toBeVisible()
-    await expect.poll(() => restoredRootPane.evaluate(element => element.scrollTop)).toBe(0)
+    await expect.poll(() => restoredRootPane.evaluate(element => element.scrollTop)).toBe(rootScrollTop)
+    await expect(restoredRootPane.getByRole('link', { name: 'Guides', exact: true })).toBeInViewport()
 
     await page.setViewportSize({ width: 1200, height: 480 })
     await page.goto('/docs/observability/overview', { waitUntil: 'domcontentloaded' })

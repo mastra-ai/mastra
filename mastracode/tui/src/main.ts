@@ -164,13 +164,10 @@ const asyncCleanup = async () => {
     // Best-effort — the process is exiting.
   }
   const closeSignalsPubSub = (signalsPubSub as { close?: () => Promise<void> | void } | undefined)?.close;
-  await Promise.allSettled([
-    mcpManager?.disconnect(),
-    controller?.getMastra()?.stopWorkers(),
-    controller?.stopIntervals(),
-    closeSignalsPubSub?.(),
-    analytics?.shutdown(),
-  ]);
+  await Promise.allSettled([mcpManager?.disconnect(), controller?.stopIntervals(), closeSignalsPubSub?.()]);
+  // Mastra owns the workspaces and must destroy them to stop retained language
+  // servers before storage is closed.
+  await Promise.allSettled([controller?.getMastra()?.shutdown(), analytics?.shutdown()]);
   // Checkpoint WAL and close the local storage connection after all producers
   // and timers are quiesced. Idempotent — repeated signals (SIGINT then SIGHUP)
   // close only once. LibSQLStore.close()/LibSQLVector.close() truncate the WAL

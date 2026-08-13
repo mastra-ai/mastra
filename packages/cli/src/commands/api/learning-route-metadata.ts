@@ -31,6 +31,15 @@ const snapshotIdSchema = {
     'Opaque snapshot ID from `learning snapshots`. Send it back unchanged with the same entity and signal selection.',
 } as const;
 
+const filterThemesSchema = {
+  type: 'string',
+  minLength: 1,
+  pattern:
+    '^(?!.*(?:^|,)(goal|sentiment|behavior|outcome):(noise|[0-9]+)(?:,[^,]+)*,\\1:)(goal|sentiment|behavior|outcome):(noise|[0-9]+)(,(goal|sentiment|behavior|outcome):(noise|[0-9]+)){0,3}$',
+  description:
+    'Optional AND filters for examples: 1-4 comma-separated entries with unique signals, using signalName:themeId or signalName:noise.',
+} as const;
+
 const entityIdParamSchema = {
   type: 'object',
   properties: { entityId: { type: 'string', description: 'Entity ID from `learning entities`' } },
@@ -111,7 +120,7 @@ export const LEARNING_ROUTE_METADATA = {
     method: 'GET',
     path: '/learning/entities/:entityId/themes/:themeId/examples',
     pathParams: ['entityId', 'themeId'],
-    queryParams: ['entityType', 'limit', 'offset', 'signalName', 'snapshotId'],
+    queryParams: ['entityType', 'filterThemes', 'limit', 'offset', 'signalName', 'snapshotId'],
     bodyParams: [],
     hasQuery: true,
     hasBody: false,
@@ -141,7 +150,7 @@ export const LEARNING_ROUTE_METADATA = {
     method: 'GET',
     path: '/learning/entities/:entityId/noise/examples',
     pathParams: ['entityId'],
-    queryParams: ['entityType', 'limit', 'offset', 'signalName', 'snapshotId'],
+    queryParams: ['entityType', 'filterThemes', 'limit', 'offset', 'signalName', 'snapshotId'],
     bodyParams: [],
     hasQuery: true,
     hasBody: false,
@@ -245,6 +254,7 @@ export const LEARNING_ROUTE_SCHEMAS: Record<
         snapshotId: snapshotIdSchema,
         limit: { type: 'integer', minimum: 1, maximum: 100 },
         offset: { type: 'integer', minimum: 0, maximum: 100000 },
+        filterThemes: filterThemesSchema,
       },
       required: ['entityType', 'signalName', 'snapshotId'],
     },
@@ -284,6 +294,7 @@ export const LEARNING_ROUTE_SCHEMAS: Record<
         snapshotId: snapshotIdSchema,
         limit: { type: 'integer', minimum: 1, maximum: 100 },
         offset: { type: 'integer', minimum: 0, maximum: 100000 },
+        filterThemes: filterThemesSchema,
       },
       required: ['entityType', 'signalName', 'snapshotId'],
     },

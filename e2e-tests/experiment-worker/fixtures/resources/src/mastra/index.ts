@@ -349,13 +349,18 @@ const lspStep = createStep({
     await writeFile(filePath, inputData.source);
     const query = await lspWorkspace.lsp?.prepareQuery(filePath);
     if (!query) throw new Error('TypeScript language server was not available');
-    const hover = await query.client.queryHover(query.uri, { line: 1, character: 8 });
-    const diagnostics = await lspWorkspace.lsp?.getDiagnostics(filePath, inputData.source);
-    return {
-      serverName: query.serverName,
-      hover: JSON.stringify(hover),
-      diagnosticCount: diagnostics?.length ?? 0,
-    };
+    try {
+      const hover = await query.client.queryHover(query.uri, { line: 1, character: 8 });
+      const diagnostics = await lspWorkspace.lsp?.getDiagnostics(filePath, inputData.source);
+      return {
+        serverName: query.serverName,
+        hover: JSON.stringify(hover),
+        diagnosticCount: diagnostics?.length ?? 0,
+      };
+    } finally {
+      query.client.notifyClose(filePath);
+      query.release();
+    }
   },
 });
 

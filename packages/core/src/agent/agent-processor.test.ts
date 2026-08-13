@@ -972,6 +972,47 @@ describe('Input and Output Processors', () => {
       expectNoSensitiveMarker(fullOutput.response.uiMessages, 'fullOutput.response.uiMessages');
     });
 
+    it('should run output processors when the provider throws', async () => {
+      let processorRan = false;
+      let seenFinishReason: string | undefined;
+
+      class ObservingProcessor implements Processor {
+        readonly id = 'observing-processor';
+        readonly name = 'Observing Processor';
+
+        async processOutputResult({ messages, result }) {
+          processorRan = true;
+          seenFinishReason = result?.finishReason;
+          return messages;
+        }
+      }
+
+      const agent = new Agent({
+        id: 'provider-error-processor-agent',
+        name: 'Provider Error Processor Agent',
+        instructions: 'You are a helpful assistant.',
+        model: new MockLanguageModelV2({
+          doStream: async () => {
+            throw new Error('provider exploded');
+          },
+        }),
+        outputProcessors: [new ObservingProcessor()],
+      });
+
+      const stream = await agent.stream('Hello');
+      // Drain the stream; the provider error terminates it.
+      try {
+        for await (const _ of stream.fullStream) {
+        }
+      } catch {
+        // stream consumption may rethrow the provider error
+      }
+      await stream.getFullOutput().catch(() => {});
+
+      expect(processorRan).toBe(true);
+      expect(seenFinishReason).toBe('error');
+    });
+
     it('should process text chunks through output processors in real-time', async () => {
       class TestOutputProcessor implements Processor {
         readonly id = 'test-output-processor';

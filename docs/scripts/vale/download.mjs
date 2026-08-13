@@ -8,7 +8,7 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 
 const isWindows = process.platform === 'win32'
-const VALE_VERSION = '3.13.1'
+const VALE_VERSION = '3.17.1'
 const OUTPUT_PATH = join(__dirname, 'bin')
 const OUTPUT_BIN = join(OUTPUT_PATH, isWindows ? 'vale.exe' : 'vale')
 
@@ -37,6 +37,17 @@ function getReleaseUrl() {
   const platform = getPlatform()
   const ext = isWindows ? '.zip' : '.tar.gz'
   return `https://github.com/errata-ai/vale/releases/download/v${VALE_VERSION}/vale_${VALE_VERSION}_${platform}${ext}`
+}
+
+function getInstalledVersion() {
+  if (!existsSync(OUTPUT_BIN)) return undefined
+
+  try {
+    const output = execFileSync(OUTPUT_BIN, ['--version'], { encoding: 'utf8' })
+    return output.match(/vale version (\S+)/)?.[1]
+  } catch {
+    return undefined
+  }
 }
 
 async function downloadAndExtract() {
@@ -69,8 +80,16 @@ if (!existsSync(OUTPUT_PATH)) {
   mkdirSync(OUTPUT_PATH, { recursive: true })
 }
 
-if (!existsSync(OUTPUT_BIN)) {
-  await downloadAndExtract()
+const installedVersion = getInstalledVersion()
+
+if (installedVersion === VALE_VERSION) {
+  console.log(`Vale ${VALE_VERSION} already exists at ${OUTPUT_BIN}`)
 } else {
-  console.log(`Vale already exists at ${OUTPUT_BIN}`)
+  if (installedVersion) {
+    console.log(`Updating Vale from ${installedVersion} to ${VALE_VERSION}`)
+  } else if (existsSync(OUTPUT_BIN)) {
+    console.log(`Replacing Vale binary with version ${VALE_VERSION}`)
+  }
+
+  await downloadAndExtract()
 }

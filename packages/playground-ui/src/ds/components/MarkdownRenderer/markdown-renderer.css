@@ -1,0 +1,213 @@
+/* Markdown typography. Plain CSS rather than one React wrapper per element:
+ * markers, task lists and tables need selectors no `[&_x]` class string carries
+ * readably. Declared in `@layer components`, so a surface that needs another
+ * tone or size overrides it with a utility on the renderer itself.
+ *
+ * A component stylesheet can load before the app's Tailwind entry, and the
+ * first sheet to name a layer fixes its rank. Restating the full order keeps
+ * preflight from winning over these rules whichever one lands first. */
+@layer properties, theme, base, components, utilities;
+
+@layer components {
+  .mastra-markdown {
+    color: var(--neutral5);
+    font-size: var(--text-ui-md);
+    line-height: 1.7;
+    overflow-wrap: break-word;
+  }
+
+  .mastra-markdown > :first-child {
+    margin-top: 0;
+  }
+
+  .mastra-markdown > :last-child {
+    margin-bottom: 0;
+  }
+
+  /* `pre-wrap` keeps single newlines as line breaks, the way chat authors expect. */
+  .mastra-markdown p {
+    margin: 0.7em 0;
+    white-space: pre-wrap;
+  }
+
+  .mastra-markdown :is(h1, h2, h3, h4, h5, h6) {
+    margin: 1.6em 0 0.6em;
+    color: var(--neutral6);
+    font-weight: 600;
+    letter-spacing: -0.012em;
+    line-height: 1.35;
+  }
+
+  .mastra-markdown h1 {
+    font-size: 1.3em;
+  }
+
+  .mastra-markdown h2 {
+    font-size: 1.15em;
+  }
+
+  .mastra-markdown h3 {
+    font-size: 1.05em;
+  }
+
+  .mastra-markdown :is(h4, h5, h6) {
+    font-size: 1em;
+  }
+
+  .mastra-markdown strong {
+    color: var(--neutral6);
+    font-weight: 600;
+  }
+
+  .mastra-markdown em {
+    font-style: italic;
+  }
+
+  .mastra-markdown del {
+    color: var(--neutral3);
+    text-decoration: line-through;
+  }
+
+  .mastra-markdown a {
+    color: var(--accent1);
+    text-decoration: underline;
+    text-decoration-color: color-mix(in oklab, var(--accent1) 30%, transparent);
+    text-underline-offset: 0.15em;
+  }
+
+  .mastra-markdown a:hover {
+    text-decoration-color: currentcolor;
+  }
+
+  /* Tailwind's preflight drops list markers; markdown is the one place we want
+   * them back, per nesting level. */
+  .mastra-markdown :is(ul, ol) {
+    margin: 0.7em 0;
+    padding-left: 1.35em;
+  }
+
+  .mastra-markdown ul {
+    list-style: disc;
+  }
+
+  .mastra-markdown ol {
+    list-style: decimal;
+  }
+
+  .mastra-markdown ul ul {
+    list-style: circle;
+  }
+
+  .mastra-markdown ul ul ul {
+    list-style: square;
+  }
+
+  .mastra-markdown :is(ul, ol) :is(ul, ol) {
+    margin: 0.3em 0;
+  }
+
+  .mastra-markdown li {
+    margin: 0.3em 0;
+  }
+
+  .mastra-markdown li::marker {
+    color: var(--neutral3);
+  }
+
+  .mastra-markdown li > p {
+    margin: 0.3em 0;
+  }
+
+  .mastra-markdown .contains-task-list {
+    padding-left: 0.15em;
+    list-style: none;
+  }
+
+  .mastra-markdown .task-list-item input {
+    margin-right: 0.5em;
+    accent-color: var(--accent1);
+  }
+
+  .mastra-markdown blockquote {
+    margin: 0.9em 0;
+    border-left: 2px solid var(--border2);
+    padding-left: 0.9em;
+    color: var(--neutral4);
+  }
+
+  .mastra-markdown hr {
+    margin: 1.5em 0;
+    border: 0;
+    border-top: 1px solid var(--border1);
+  }
+
+  /* Fenced blocks render through the design-system CodeBlock, so this only ever
+   * matches inline spans. */
+  .mastra-markdown :not(pre) > code {
+    border-radius: 4px;
+    background: var(--surface-overlay-strong);
+    padding: 0.1em 0.35em;
+    color: var(--neutral6);
+    font-family: var(--font-mono);
+    font-size: 0.875em;
+  }
+
+  .mastra-markdown table {
+    display: block;
+    overflow-x: auto;
+    width: max-content;
+    max-width: 100%;
+    margin: 0.9em 0;
+    border-collapse: collapse;
+    font-size: 0.95em;
+  }
+
+  .mastra-markdown :is(th, td) {
+    border: 1px solid var(--border1);
+    padding: 0.4em 0.7em;
+    text-align: left;
+  }
+
+  .mastra-markdown th {
+    background: var(--surface-overlay-soft);
+    color: var(--neutral6);
+    font-weight: 600;
+  }
+
+  .mastra-markdown img {
+    max-width: 100%;
+    border-radius: 8px;
+  }
+
+  /* Streamed words. The animation runs when a word lands, so re-parsing the
+   * growing text lights up only what is new. No transform: it is ignored on
+   * inline elements. `backwards` so no `blur(0)` survives — a word left on the
+   * filtered raster path antialiases unlike the settled text replacing it. */
+  .mastra-markdown-streaming .mastra-markdown-word {
+    animation: mastra-markdown-word-in 180ms cubic-bezier(0.2, 0, 0, 1) backwards;
+  }
+
+  /* The word still being typed. It holds its width so revealing it shifts
+   * nothing; gaining the class above is what starts its fade. */
+  .mastra-markdown-streaming .mastra-markdown-word-pending {
+    opacity: 0;
+  }
+
+  @keyframes mastra-markdown-word-in {
+    from {
+      opacity: 0;
+      filter: blur(3px);
+    }
+
+    to {
+      opacity: 1;
+      filter: blur(0);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .mastra-markdown-streaming .mastra-markdown-word {
+      animation: none;
+    }
+  }
+}
