@@ -17561,6 +17561,25 @@ describe('Message ordering regressions', () => {
     expect(result.messages.some(m => m.id === 'seed-1')).toBe(true);
   });
 
+  it('om-continuation stays live but is excluded from synchronous persistence', async () => {
+    const s = await setupOrderingScenario({ messageTokens: 1 });
+
+    const firstUserId = s.addUserMessage('Start a conversation that activates observations');
+    await s.runStep(0);
+    expect(s.currentMessageList.get.all.db().map(m => m.id)).toContain('om-continuation');
+
+    const secondUserId = s.addUserMessage('Continue after observational context is injected');
+    await s.runStep(1);
+
+    const liveIds = s.currentMessageList.get.all.db().map(m => m.id);
+    const storedIds = (await s.getStoredMessages()).map(m => m.id);
+
+    expect(liveIds).toContain('om-continuation');
+    expect(storedIds).toContain(firstUserId);
+    expect(storedIds).toContain(secondUserId);
+    expect(storedIds).not.toContain('om-continuation');
+  });
+
   // ─── Test 4: all messages present in storage after processOutputResult ───
 
   it('4 — all messages present in storage immediately after processOutputResult', async () => {
