@@ -150,7 +150,7 @@ Returns: `boolean`
 
 #### `handleWebhook(request)`
 
-Process an incoming webhook request. Extracts the resource ID from the payload, finds matching subscriptions, builds a notification for each, and calls `notify()`.
+Process an incoming webhook request. Extracts the resource ID from the payload and finds matching subscriptions. It builds a notification for each subscription and calls `notify()`.
 
 ```typescript prettier:false
 const result = await webhookProvider.handleWebhook({
