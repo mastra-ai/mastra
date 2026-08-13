@@ -169,7 +169,12 @@ export class MastraAuthBetterAuth
   #ownsInstance = false;
   /** Once-per-process migration latch; reset on failure so a later call retries. */
   #migrated: Promise<void> | undefined;
-  /** In-process `userId → orgId` cache so hosts can call `ensureOrganization` per request. */
+  /**
+   * In-process `userId → orgId` cache, shared by `ensureOrganization` and the
+   * `authenticateToken` default-org resolution. Only successes are cached, so
+   * membership-less users re-run the lookup per request, and a user removed
+   * from their org keeps the cached value for the process lifetime.
+   */
   #orgCache = new Map<string, string>();
   /** Set from `init()`: cross-origin SPA deploys need SameSite=None; Secure cookies. */
   #crossSite = false;
@@ -331,6 +336,44 @@ export class MastraAuthBetterAuth
   // ============================================
 
   /**
+   * Read-only half of org resolution: the user's oldest existing membership,
+   * cached in `#orgCache`. Never creates anything. Ordered by `createdAt` so
+   * the resolved default is stable across processes for multi-org users.
+   */
+  async #findMembershipOrgId(ctx: BetterAuthContext, userId: string): Promise<string | undefined> {
+    const memberships = (await ctx.adapter.findMany({
+      model: 'member',
+      where: [{ field: 'userId', value: userId }],
+      sortBy: { field: 'createdAt', direction: 'asc' },
+    })) as MemberRow[];
+    const orgId = memberships.find(m => m.organizationId)?.organizationId;
+    if (orgId) this.#orgCache.set(userId, orgId);
+    return orgId;
+  }
+
+  /**
+   * Resolve the organization a session should act under when better-auth's
+   * `activeOrganizationId` was never set (nothing in this provider or a
+   * default sign-in flow calls the organization plugin's `setActive`).
+   * Read-only and best-effort: an existing membership or nothing.
+   *
+   * Callers must run `#ensureDbReady` first (authenticateToken does); this
+   * method deliberately swallows failures, so an unmigrated DB would
+   * otherwise fail silently.
+   */
+  async #resolveActiveOrganizationId(userId: string): Promise<string | undefined> {
+    const cached = this.#orgCache.get(userId);
+    if (cached) return cached;
+    try {
+      const ctx = await this.getAuthContext();
+      if (!ctx) return undefined;
+      return await this.#findMembershipOrgId(ctx, userId);
+    } catch {
+      return undefined;
+    }
+  }
+
+  /**
    * Ensure the user belongs to an organization, mirroring the WorkOS
    * personal-org bootstrap on better-auth's organization tables:
    * ≥1 membership → first org id; 0 → create a personal org with an
@@ -345,38 +388,6 @@ export class MastraAuthBetterAuth
    *
    * Best-effort: any failure is swallowed and leaves the user no-org.
    */
-  /**
-   * Read-only half of org resolution: the user's first existing membership,
-   * cached in `#orgCache`. Never creates anything.
-   */
-  async #findMembershipOrgId(ctx: BetterAuthContext, userId: string): Promise<string | undefined> {
-    const memberships = (await ctx.adapter.findMany({
-      model: 'member',
-      where: [{ field: 'userId', value: userId }],
-    })) as MemberRow[];
-    const orgId = memberships.find(m => m.organizationId)?.organizationId;
-    if (orgId) this.#orgCache.set(userId, orgId);
-    return orgId;
-  }
-
-  /**
-   * Resolve the organization a session should act under when better-auth's
-   * `activeOrganizationId` was never set (nothing in this provider or a
-   * default sign-in flow calls the organization plugin's `setActive`).
-   * Read-only and best-effort: an existing membership or nothing.
-   */
-  async #resolveActiveOrganizationId(userId: string): Promise<string | undefined> {
-    const cached = this.#orgCache.get(userId);
-    if (cached) return cached;
-    try {
-      const ctx = await this.getAuthContext();
-      if (!ctx) return undefined;
-      return await this.#findMembershipOrgId(ctx, userId);
-    } catch {
-      return undefined;
-    }
-  }
-
   async ensureOrganization(userId: string): Promise<string | undefined> {
     const cached = this.#orgCache.get(userId);
     if (cached) return cached;
