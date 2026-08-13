@@ -109,6 +109,7 @@ function factFromDocument(row: Document): KnowledgeFact {
     capturedAt: new Date(row.capturedAt),
     when: row.when ? new Date(row.when) : undefined,
     maxScope: row.maxScope ?? undefined,
+    metadata: row.metadata ?? undefined,
     deletedAt: row.deletedAt ? new Date(row.deletedAt) : undefined,
     deletedBy: row.deletedBy ?? undefined,
   };
@@ -318,7 +319,9 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
       }
       const mentions = await this.#mentions();
       const affected = await mentions.find({ recordId: source.id }, sessionOptions(session)).toArray();
-      const movedFacts = await (await this.#facts())
+      const movedFacts = await (
+        await this.#facts()
+      )
         .find({ parentEntityId: source.id }, sessionOptions(session))
         .toArray();
       const updated = await (
@@ -485,6 +488,7 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
         capturedAt: new Date(),
         when: input.when,
         maxScope: input.maxScope,
+        metadata: input.metadata,
       };
       await (
         await this.#facts()
@@ -494,6 +498,7 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
           scopeKey: knowledgeScopeKey(scope),
           when: fact.when ?? null,
           maxScope: fact.maxScope ?? null,
+          metadata: fact.metadata ?? null,
           deletedAt: null,
           deletedBy: null,
         },
