@@ -64,16 +64,18 @@ describe('Span.endTree', () => {
     expect(endedIds()).toEqual([tool.id, step.id, root.id]);
   });
 
-  it('applies the given options to the span it is called on only', () => {
+  it('applies the given options to every span it closes', () => {
     const tracing = createInstance();
 
     const root = tracing.startSpan({ type: SpanType.WORKFLOW_RUN, name: 'root' });
     const step = root.createChildSpan({ type: SpanType.WORKFLOW_STEP, name: 'step' });
+    const tool = step.createChildSpan({ type: SpanType.TOOL_CALL, name: 'tool' });
 
     root.endTree({ attributes: { status: 'canceled' } });
 
     expect(root.attributes?.status).toBe('canceled');
-    expect(step.attributes?.status).toBeUndefined();
+    expect(step.attributes?.status).toBe('canceled');
+    expect((tool.attributes as Record<string, unknown>)?.status).toBe('canceled');
   });
 
   it('leaves already-ended descendants untouched', () => {
@@ -86,12 +88,13 @@ describe('Span.endTree', () => {
     done.end({ attributes: { status: 'success' } });
     const doneEndTime = done.endTime;
 
-    root.endTree();
+    root.endTree({ attributes: { status: 'canceled' } });
 
     expect(done.endTime).toBe(doneEndTime);
     expect(done.attributes?.status).toBe('success');
     expect(endedIds().filter(id => id === done.id)).toHaveLength(1);
     expect(open.endTime).toBeInstanceOf(Date);
+    expect(open.attributes?.status).toBe('canceled');
   });
 
   it('does not re-end the span it is called on', () => {
@@ -119,8 +122,14 @@ describe('Span.endTree', () => {
     step.error({ error: new Error('late failure') });
 
     expect(step.endTime).toBe(endTime);
-    expect(step.attributes?.status).toBeUndefined();
+    expect(step.attributes?.status).toBe('canceled');
     expect(endedIds().filter(id => id === step.id)).toHaveLength(1);
+
+    const exported = testExporter.events.find(
+      event => event.type === TracingEventType.SPAN_ENDED && event.exportedSpan.id === step.id,
+    )?.exportedSpan;
+    expect(exported?.attributes).toMatchObject({ status: 'canceled' });
+    expect(exported?.errorInfo).toBeUndefined();
   });
 
   it('closes descendants of spans dropped by excludeSpanTypes', () => {

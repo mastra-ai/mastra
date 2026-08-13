@@ -121,6 +121,12 @@ describe('workflow run cancellation tracing', () => {
     const root = endedSpans().find(span => span.isRootSpan);
     expect(root?.type).toBe(SpanType.WORKFLOW_RUN);
     expect(root?.attributes).toMatchObject({ status: 'canceled' });
+
+    const deaf = endedSpans().find(span => span.name === "workflow step: 'deaf'");
+    expect(deaf?.attributes).toMatchObject({ status: 'canceled' });
+
+    const quick = endedSpans().find(span => span.name === "workflow step: 'quick'");
+    expect(quick?.attributes).toMatchObject({ status: 'success' });
   });
 
   it('emits one end per span when the step honours abortSignal', async () => {
@@ -192,13 +198,13 @@ describe('workflow run cancellation tracing', () => {
     expectParentsPresent();
   });
 
-  it('closes the tree on the evented engine', async () => {
-    const eventedWorkflow = createEventedWorkflow({ id: 'evented', inputSchema: empty, outputSchema: empty })
+  const buildEventedMastra = (id: string) => {
+    const eventedWorkflow = createEventedWorkflow({ id, inputSchema: empty, outputSchema: empty })
       .then(quickStep)
       .then(deafStep)
       .commit();
 
-    const mastra = new Mastra({
+    return new Mastra({
       logger: false,
       storage: new MockStore(),
       pubsub: new EventEmitterPubSub(),
@@ -207,6 +213,10 @@ describe('workflow run cancellation tracing', () => {
         configs: { default: { serviceName: 'workflow-cancel-tracing', exporters: [exporter] } },
       }),
     });
+  };
+
+  it('closes the tree on the evented engine', async () => {
+    const mastra = buildEventedMastra('evented');
     await mastra.startWorkers();
 
     try {
@@ -222,6 +232,28 @@ describe('workflow run cancellation tracing', () => {
 
       const root = endedSpans().find(span => span.isRootSpan);
       expect(root?.attributes).toMatchObject({ status: 'canceled' });
+
+      const deaf = endedSpans().find(span => span.name === "workflow step: 'deaf'");
+      expect(deaf?.attributes).toMatchObject({ status: 'canceled' });
+    } finally {
+      await mastra.stopWorkers();
+    }
+  });
+
+  it('leaves nothing open when an evented startAsync run is canceled', async () => {
+    const mastra = buildEventedMastra('eventedAsync');
+    await mastra.startWorkers();
+
+    try {
+      const run = await mastra.getWorkflow('eventedWorkflow').createRun();
+      await run.startAsync({ inputData: {} });
+      await tick(500);
+      await run.cancel();
+      await tick(200);
+
+      expectNoDanglingSpans();
+      expectSingleEndPerSpan();
+      expectParentsPresent();
     } finally {
       await mastra.stopWorkers();
     }

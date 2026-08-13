@@ -81,6 +81,9 @@ export class DefaultSpan<TType extends SpanType> extends BaseSpan<TType> {
     if (this.isEvent) {
       return;
     }
+    if (this.endTime) {
+      return;
+    }
     this.endTime = new Date();
     this.detachFromParent();
     // Metadata is always updated (read by correlation/logger/metrics contexts).

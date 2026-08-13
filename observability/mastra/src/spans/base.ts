@@ -257,16 +257,14 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
   /** End the span */
   abstract end(options?: EndSpanOptions<TType>): void;
 
-  /** End the span and any descendant spans that are still open */
+  /** End the span and any descendant spans that are still open, applying `options` to each */
   endTree(options?: EndSpanOptions<TType>): void {
     if (this.#openChildren) {
       for (const child of [...this.#openChildren]) {
-        child.endTree();
+        child.endTree(options as EndSpanOptions<any>);
       }
     }
-    if (!this.endTime) {
-      this.end(options);
-    }
+    this.end(options);
   }
 
   /** Release this span from its parent's open-child set once it has ended */
