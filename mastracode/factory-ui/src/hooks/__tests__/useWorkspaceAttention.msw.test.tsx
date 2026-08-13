@@ -12,58 +12,33 @@ const workSessionId = 'session-work';
 const reviewSessionId = 'session-review';
 const workspaceIds = [workSessionId, reviewSessionId];
 
-function useActivityAttention({ resourceId, workspaceIds }: { resourceId: string; workspaceIds: string[] }) {
+function useActivityAttention({ workspaceIds }: { workspaceIds: string[] }) {
   const runningByPath = useWorkspaceActivity({
     agentControllerId: controllerId,
-    resourceId,
     workspaceIds,
     baseUrl: TEST_BASE_URL,
-    enabled: true,
   });
   return { runningByPath, ...useWorkspaceAttention(runningByPath) };
 }
 
-function stubActiveWorkRun() {
-  server.use(
-    http.get(`${TEST_BASE_URL}/api/agent-controller/${controllerId}/active-runs`, () =>
-      HttpResponse.json({ runs: [{ runId: 'run-1', resourceId: workSessionId, threadId: workSessionId }] }),
-    ),
-  );
-}
-
 describe('workspace completion state', () => {
-  describe('when the user switches to another session while a run remains active', () => {
-    it('keeps the run active without requesting attention', async () => {
-      stubActiveWorkRun();
-
-      const { result, rerender } = renderHookWithProviders(props => useActivityAttention(props), {
-        initialProps: { resourceId: workSessionId, workspaceIds },
-      });
-
-      await waitFor(() => expect(result.current.runningByPath[workSessionId]).toBe(true));
-
-      rerender({ resourceId: reviewSessionId, workspaceIds });
-
-      await waitFor(() => expect(result.current.runningByPath[reviewSessionId]).toBe(false));
-      expect(result.current.runningByPath[workSessionId]).toBe(true);
-      expect(result.current.attentionByPath[workSessionId]).not.toBe(true);
-    });
-  });
-
   describe('when a workspace appears while a run remains active', () => {
     it('keeps the run active without requesting attention', async () => {
-      stubActiveWorkRun();
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/agent-controller/${controllerId}/active-runs`, () =>
+          HttpResponse.json({ runs: [{ runId: 'run-1', resourceId: workSessionId, threadId: workSessionId }] }),
+        ),
+      );
       const extraSessionId = 'session-extra';
 
       const { result, rerender } = renderHookWithProviders(props => useActivityAttention(props), {
-        initialProps: { resourceId: workSessionId, workspaceIds },
+        initialProps: { workspaceIds },
       });
 
       await waitFor(() => expect(result.current.runningByPath[workSessionId]).toBe(true));
 
-      rerender({ resourceId: workSessionId, workspaceIds: [...workspaceIds, extraSessionId] });
+      rerender({ workspaceIds: [...workspaceIds, extraSessionId] });
 
-      expect(result.current.runningByPath[workSessionId]).toBe(true);
       await waitFor(() => expect(result.current.runningByPath[extraSessionId]).toBe(false));
       expect(result.current.runningByPath[workSessionId]).toBe(true);
       expect(result.current.attentionByPath[workSessionId]).not.toBe(true);

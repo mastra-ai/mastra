@@ -51,11 +51,18 @@ function stubWith(activeSessionIds: string[]) {
 }
 
 function renderSection() {
+  return renderAt(
+    '/factories/:factoryId/workspaces/:sessionId/threads/:threadId',
+    `/factories/${factoryId}/workspaces/${workSessionId}/threads/${workSessionId}`,
+  );
+}
+
+function renderAt(path: string, entry: string) {
   return renderWithProviders(
-    <MemoryRouter initialEntries={[`/factories/${factoryId}/workspaces/${workSessionId}/threads/${workSessionId}`]}>
+    <MemoryRouter initialEntries={[entry]}>
       <Routes>
         <Route
-          path="/factories/:factoryId/workspaces/:sessionId/threads/:threadId"
+          path={path}
           element={
             <ChatSessionConfigProvider>
               <WorkspacesSection />
@@ -88,6 +95,14 @@ describe('Workspace activity indicators', () => {
     const row = (await screen.findByRole('button', { name: workName })).closest('li');
     assert(row);
     expect(within(row).queryByRole('status', { name: `Agent working in ${workName}` })).not.toBeInTheDocument();
+  });
+
+  it('lights the dot on a page that has no workspace session open', async () => {
+    stubWith([workSessionId]);
+
+    renderAt('/factories/:factoryId/work', `/factories/${factoryId}/work`);
+
+    expect(await screen.findByRole('status', { name: `Agent working in ${workName}` })).toBeInTheDocument();
   });
 
   it('labels the row with the session title rather than the branch', async () => {

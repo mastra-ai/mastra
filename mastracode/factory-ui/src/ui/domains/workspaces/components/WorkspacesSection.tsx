@@ -43,14 +43,11 @@ export function WorkspacesSection() {
   const workItems = useWorkItemsQuery(factoryId);
   const workspaceRows = workspaces.data?.workspaces ?? [];
   const workspaceIds = workspaceRows.map(workspace => workspace.sessionId);
-  const activityOptions = {
+  const runningByPath = useWorkspaceActivity({
     agentControllerId: AGENT_CONTROLLER_ID,
-    resourceId,
     workspaceIds,
     baseUrl,
-    enabled: sessionEnabled && Boolean(sessionId),
-  };
-  const runningByPath = useWorkspaceActivity(activityOptions);
+  });
   const queryClient = useQueryClient();
   // The server re-derives session titles at the end of a run.
   const { attentionByPath, clearAttention } = useWorkspaceAttention(

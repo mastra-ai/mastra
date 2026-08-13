@@ -8,27 +8,23 @@ export const WORKSPACE_ACTIVITY_POLL_MS = 5000;
 
 interface WorkspaceActivityOptions {
   agentControllerId: string;
-  resourceId: string;
   workspaceIds: string[];
   baseUrl?: string;
-  enabled: boolean;
 }
 
 /** Which workspaces have a run in flight. Factory binds one resource per session, so the row key is the run's resourceId. */
 export function useWorkspaceActivity({
   agentControllerId,
-  resourceId,
   workspaceIds,
   baseUrl,
-  enabled,
 }: WorkspaceActivityOptions): Record<string, boolean> {
   const query = useQuery({
     queryKey: queryKeys.agentControllerActivity(agentControllerId),
     queryFn: async () => {
-      const { controller } = createAgentControllerClient({ agentControllerId, resourceId, baseUrl });
+      const { controller } = createAgentControllerClient({ agentControllerId, baseUrl });
       return requireAgentController(controller).listActiveRuns();
     },
-    enabled,
+    enabled: workspaceIds.length > 0,
     refetchInterval: WORKSPACE_ACTIVITY_POLL_MS,
     retry: false,
   });
