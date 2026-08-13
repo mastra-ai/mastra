@@ -4855,6 +4855,9 @@ export class Mastra<
    *   before anything is mutated.
    * - If hydration or persistence fails partway, the in-memory registry is
    *   restored to its prior state.
+   * - Registrations are serialized on this Mastra instance through validation,
+   *   hydration, and persistence so one caller's rollback cannot undo another
+   *   caller's accepted live registration.
    * - Storage writes happen last. A storage-level failure mid-bundle is the
    *   one residual window where rows can be partially written; the registry is
    *   still rolled back, and the orphaned rows are inert until the next boot.
@@ -4901,6 +4904,13 @@ export class Mastra<
           graph: def.graph,
         }),
       }));
+
+      const store = await this.#storage?.getStore('workflowDefinitions');
+      if (options?.authorId !== undefined && !store) {
+        throw new Error(
+          'A workflowDefinitions storage domain is required when registering an authored dynamic workflow.',
+        );
+      }
 
       // Members may nest each other, so the index every member validates against
       // is the live registries plus the bundle itself — not the registry alone.
@@ -4966,7 +4976,6 @@ export class Mastra<
           this.#replaceDynamicWorkflow(workflow as AnyWorkflow, normalized.id);
         }
 
-        const store = await this.#storage?.getStore('workflowDefinitions');
         if (store) {
           for (const { normalized } of ordered) {
             await store.upsert({

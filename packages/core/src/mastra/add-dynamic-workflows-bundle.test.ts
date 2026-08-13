@@ -283,6 +283,22 @@ describe('Mastra.addDynamicWorkflows', () => {
     expect(definitions.every(definition => definition.authorId === 'verified-author')).toBe(true);
   });
 
+  it('rejects an authored bundle before live registration when workflow definition storage is unavailable', async () => {
+    const storage = new InMemoryStore({ id: 'bundle-author-no-definition-store' });
+    const getStore = storage.getStore.bind(storage);
+    storage.getStore = (async domain =>
+      domain === 'workflowDefinitions' ? undefined : getStore(domain)) as typeof storage.getStore;
+    const mastra = new Mastra({ logger: false, tools: { 'lookup-customer': lookupCustomer } as any, storage });
+
+    await expect(
+      mastra.addDynamicWorkflow(helperDefinition('lookup-first-customer', 'email1'), {
+        authorId: 'verified-author',
+      }),
+    ).rejects.toThrow(/workflowDefinitions storage domain is required/);
+
+    expect(() => mastra.getWorkflow('lookup-first-customer')).toThrow();
+  });
+
   it('preserves an existing author when a trusted author is omitted on replacement', async () => {
     const storage = new InMemoryStore({ id: 'bundle-author-preserved' });
     const mastra = new Mastra({ logger: false, tools: { 'lookup-customer': lookupCustomer } as any, storage });
