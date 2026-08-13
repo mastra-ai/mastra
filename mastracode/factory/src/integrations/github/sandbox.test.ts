@@ -997,6 +997,22 @@ describe('pushBranch', () => {
     expect(scrub).not.toContain('tok-secret');
   });
 
+  it('keeps the push failure and its classification when the scrub also fails', async () => {
+    const sandbox = new FakeSandbox(script => {
+      if (script.includes('push -u origin')) {
+        return { exitCode: 128, stdout: '', stderr: 'fatal: unable to access: Could not resolve host: github.com' };
+      }
+      if (script.includes('remote set-url origin') && !script.includes('x-access-token')) {
+        return { exitCode: 255, stdout: '', stderr: 'error: could not lock config file .git/config' };
+      }
+      return OK;
+    });
+    const err = await pushBranch(sandbox, '/workspace/hello', 'feat/x', 'tok-secret', 'octocat/hello').catch(e => e);
+    expect(err).toBeInstanceOf(MaterializeError);
+    expect(err.code).toBe('egress-blocked');
+    expect(err.message).toMatch(/could not reach github\.com.*Failed to scrub installation token/s);
+  });
+
   it('classifies an egress failure during push', async () => {
     const sandbox = new FakeSandbox(script =>
       script.includes('push -u origin')
