@@ -3,17 +3,46 @@ import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import { useState } from 'react';
 import { MemoryRouter } from 'react-router';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 
 import type { AuthenticatedCapabilities, PublicAuthCapabilities } from '../../types';
 import { AuthRequired } from '../auth-required';
-import type { StudioConfig } from '@/domains/configuration/types';
-import { StudioConfigContext } from '@/domains/configuration/context/studio-config-state';
+import {
+  MASTRA_STUDIO_CONFIG_LOCAL_STORAGE_KEY,
+  StudioConfigProvider,
+} from '@/domains/configuration/context/studio-config-context';
+import { useStudioConfig } from '@/domains/configuration/context/studio-config-state';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
+
+// Node 24+ ships an experimental global `localStorage` that shadows jsdom's
+// and is unusable without --localstorage-file. Install an in-memory Storage
+// when the environment does not provide a working one.
+const hasWorkingLocalStorage = () => {
+  try {
+    window.localStorage.getItem('probe');
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+if (!hasWorkingLocalStorage()) {
+  const store = new Map<string, string>();
+  const localStorageStub = {
+    getItem: (key: string) => store.get(key) ?? null,
+    setItem: (key: string, value: string) => void store.set(key, String(value)),
+    removeItem: (key: string) => void store.delete(key),
+    clear: () => store.clear(),
+    key: (index: number) => [...store.keys()][index] ?? null,
+    get length() {
+      return store.size;
+    },
+  };
+  Object.defineProperty(globalThis, 'localStorage', { value: localStorageStub, configurable: true });
+}
 
 const noLoginMethodCapabilities: PublicAuthCapabilities = {
   enabled: true,
@@ -29,39 +58,35 @@ const authenticatedCapabilities: AuthenticatedCapabilities = {
 };
 
 /**
- * Mirrors the app wiring: the studio config lives in state, the Mastra client
- * reads its headers from that state, and setConfig updates it. Saving headers
- * on the blocked screen must therefore change the headers the capabilities
- * refetch carries.
+ * Mirrors the app wiring: the real configuration provider owns the studio
+ * config, and the Mastra client reads its headers from that config. Headers
+ * saved on the blocked screen must therefore travel through the real
+ * persistence flow before the capabilities refetch picks them up.
  */
-const Harness = ({ onSetConfig }: { onSetConfig?: (partial: Partial<StudioConfig>) => void }) => {
-  const [config, setConfigState] = useState<StudioConfig>({ baseUrl: BASE_URL, headers: {}, apiPrefix: '/api' });
+const Harness = () => {
+  const { baseUrl, headers, apiPrefix, isLoading } = useStudioConfig();
 
-  const setConfig = (partial: Partial<StudioConfig>) => {
-    onSetConfig?.(partial);
-    setConfigState(prev => ({ ...prev, ...partial }));
-  };
+  if (isLoading) return null;
 
   return (
-    <MastraReactProvider baseUrl={config.baseUrl} headers={config.headers} apiPrefix={config.apiPrefix}>
-      <StudioConfigContext.Provider value={{ ...config, isLoading: false, setConfig }}>
-        <AuthRequired>
-          <div>protected content</div>
-        </AuthRequired>
-      </StudioConfigContext.Provider>
+    <MastraReactProvider baseUrl={baseUrl} headers={headers} apiPrefix={apiPrefix}>
+      <AuthRequired>
+        <div>protected content</div>
+      </AuthRequired>
     </MastraReactProvider>
   );
 };
 
-const renderAuthRequiredAt = async (
-  pathname: string,
-  { onSetConfig }: { onSetConfig?: (partial: Partial<StudioConfig>) => void } = {},
-) => {
+const renderAuthRequiredAt = async (pathname: string) => {
+  server.use(http.get(`${BASE_URL}/`, () => HttpResponse.json({ status: 'ok' })));
+
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={queryClient}>
       <MemoryRouter initialEntries={[pathname]}>
-        <Harness onSetConfig={onSetConfig} />
+        <StudioConfigProvider endpoint={BASE_URL}>
+          <Harness />
+        </StudioConfigProvider>
       </MemoryRouter>
     </QueryClientProvider>,
   );
@@ -75,7 +100,16 @@ const renderAuthRequiredAt = async (
 };
 
 const useNoLoginMethodHandler = () => {
-  server.use(http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json(noLoginMethodCapabilities)));
+  const capabilityRequests: (string | null)[] = [];
+
+  server.use(
+    http.get(`${BASE_URL}/api/auth/capabilities`, ({ request }) => {
+      capabilityRequests.push(request.headers.get('authorization'));
+      return HttpResponse.json(noLoginMethodCapabilities);
+    }),
+  );
+
+  return capabilityRequests;
 };
 
 /**
@@ -83,14 +117,20 @@ const useNoLoginMethodHandler = () => {
  * authenticated afterwards. This is how a JWT provider behaves.
  */
 const useHeaderGatedHandler = (authorization: string) => {
+  const capabilityRequests: (string | null)[] = [];
+
   server.use(
     http.get(`${BASE_URL}/api/auth/capabilities`, ({ request }) => {
+      capabilityRequests.push(request.headers.get('authorization'));
       if (request.headers.get('authorization') === authorization) {
         return HttpResponse.json(authenticatedCapabilities);
       }
       return HttpResponse.json(noLoginMethodCapabilities);
     }),
+    http.get(`${BASE_URL}/api/auth/permissions/patterns`, () => HttpResponse.json([])),
   );
+
+  return capabilityRequests;
 };
 
 const saveAuthorizationHeader = (value: string) => {
@@ -102,6 +142,7 @@ const saveAuthorizationHeader = (value: string) => {
 
 afterEach(() => {
   cleanup();
+  localStorage.clear();
   delete (window as Partial<Window>).MASTRA_CLOUD_API_ENDPOINT;
 });
 
@@ -149,29 +190,35 @@ describe('AuthRequired', () => {
     });
 
     describe('when the user saves an authorization header on the blocked screen', () => {
-      it('updates the studio config and keeps the stored base URL and API prefix', async () => {
+      it('persists the header and keeps the stored base URL and API prefix', async () => {
         useNoLoginMethodHandler();
-        const onSetConfig = vi.fn();
 
-        await renderAuthRequiredAt('/agents', { onSetConfig });
+        await renderAuthRequiredAt('/agents');
         saveAuthorizationHeader('Bearer token');
 
-        expect(onSetConfig).toHaveBeenCalledWith({
-          headers: { Authorization: 'Bearer token' },
-          baseUrl: BASE_URL,
-          apiPrefix: '/api',
+        await waitFor(() => {
+          const stored = JSON.parse(localStorage.getItem(MASTRA_STUDIO_CONFIG_LOCAL_STORAGE_KEY)!);
+          expect(stored).toMatchObject({
+            headers: { Authorization: 'Bearer token' },
+            baseUrl: BASE_URL,
+            apiPrefix: '/api',
+          });
         });
       });
 
-      it('refetches capabilities with the new header and unlocks children', async () => {
-        useHeaderGatedHandler('Bearer token');
+      it('refetches capabilities with the persisted header and unlocks children', async () => {
+        const capabilityRequests = useHeaderGatedHandler('Bearer token');
 
         await renderAuthRequiredAt('/agents');
         expect(screen.queryByText('protected content')).toBeNull();
+        // The first request carries no header, so a refetch that still used the
+        // previous client would repeat that and keep the user blocked.
+        expect(capabilityRequests).toEqual([null]);
 
         saveAuthorizationHeader('Bearer token');
 
         await waitFor(() => expect(screen.getByText('protected content')).toBeDefined());
+        expect(capabilityRequests).toContain('Bearer token');
       });
     });
   });
