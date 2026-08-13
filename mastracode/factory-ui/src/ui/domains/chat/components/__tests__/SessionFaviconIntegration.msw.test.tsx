@@ -19,7 +19,7 @@ function renderDeferredThread() {
         <Route
           path="/factories/:factoryId/user/threads/:threadId"
           element={
-            <MainSidebarProvider storageKey="favicon-starting-test">
+            <MainSidebarProvider storageKey="favicon-integration-test">
               <ChatSessionTestProvider threadId={SESSION_ID} userScoped>
                 <OverlaysProvider>
                   <div data-testid="thread-body">ready</div>
@@ -37,14 +37,14 @@ beforeEach(() => {
   document.head.innerHTML = '<link rel="icon" type="image/svg+xml" href="/mastra.svg">';
 });
 
-describe('Session favicon tracks the session prepare stepper', () => {
+describe('Session favicon tracks the session lifecycle', () => {
   describe('when the session prepare stepper is showing', () => {
-    it('shows the orange starting indicator', async () => {
+    it('shows the purple initializing indicator', async () => {
       const session = stubPreparingSession({ ensurePending: true });
       renderDeferredThread();
 
       await waitFor(() => expect(screen.getByTestId('session-prepare-steps')).toBeInTheDocument());
-      expect(faviconHref()).toBe('/favicon-session-starting.svg');
+      expect(faviconHref()).toBe('/favicon-session-initializing.svg');
 
       session.finishEnsure();
       session.finishWorkspace();
@@ -52,7 +52,7 @@ describe('Session favicon tracks the session prepare stepper', () => {
   });
 
   describe('when the workspace is ready and the agent is idle', () => {
-    it('flips to the completion indicator', async () => {
+    it('flips to the blue awaiting-user indicator', async () => {
       const session = stubPreparingSession();
       const { client } = renderDeferredThread();
 
@@ -61,7 +61,7 @@ describe('Session favicon tracks the session prepare stepper', () => {
       await waitFor(() => expect(screen.getByTestId('thread-body')).toBeInTheDocument());
 
       expect(screen.queryByTestId('session-prepare-steps')).not.toBeInTheDocument();
-      await waitFor(() => expect(faviconHref()).toBe('/favicon-session-complete.svg'));
+      await waitFor(() => expect(faviconHref()).toBe('/favicon-session-awaiting.svg'));
     });
   });
 });

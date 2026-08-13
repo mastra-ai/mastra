@@ -17,7 +17,7 @@ import { ChatModelsProvider } from './ChatModelsProvider';
 import { ChatModesProvider } from './ChatModesProvider';
 import { ChatSessionContext } from './ChatSessionContext';
 import { ChatTranscriptProvider } from './ChatTranscriptProvider';
-import { SessionFaviconStarting } from '../components/SessionFavicon';
+import { SessionFaviconInitializing } from '../components/SessionFavicon';
 import { SessionPrepareSteps } from '../components/SessionPrepareSteps';
 import { useChatSessionContext } from './useChatSessionContext';
 
@@ -226,7 +226,7 @@ export function ChatMessageBoundary({ children }: { children: ReactNode }) {
   if (sandboxPreparing || messagesInitializing) {
     return (
       <>
-        <SessionFaviconStarting />
+        <SessionFaviconInitializing />
         <SessionPrepareSteps />
       </>
     );

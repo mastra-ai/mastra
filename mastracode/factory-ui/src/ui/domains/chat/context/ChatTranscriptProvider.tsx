@@ -7,11 +7,13 @@ import { initialChatRuntime, runtimeReducer } from '../services/runtime';
 import type { ChatRuntimeState } from '../services/runtime';
 import type { TranscriptState } from '../services/transcript';
 import { SessionFavicon } from '../components/SessionFavicon';
+import type { SessionFaviconState } from '../components/SessionFavicon';
 import { ChatConnectionProvider } from './ChatConnectionProvider';
 import { ChatRuntimeContext } from './ChatRuntimeContext';
 import { ChatTranscriptContext } from './ChatTranscriptContext';
 import type { ChatTranscriptApi, LoadMoreHistory } from './ChatTranscriptContext';
 import { useChatConnection } from './useChatConnection';
+import { useChatSessionContext } from './useChatSessionContext';
 
 export function ChatTranscriptProvider({
   children,
@@ -93,6 +95,7 @@ function ChatTranscriptValueProvider({
   loadMore: LoadMoreHistory;
 }) {
   const connection = useChatConnection();
+  const { sessionError } = useChatSessionContext();
   const { transcript, reset, localUser, resolvePrompt, clearPending, pushNotice } = transcriptApi;
   const effectiveThreadId = transcript.threadId ?? threadId ?? connection.createdThreadId;
 
@@ -114,9 +117,17 @@ function ChatTranscriptValueProvider({
     loadMore,
   };
 
+  const faviconState: SessionFaviconState | null = !effectiveThreadId
+    ? null
+    : sessionError || connection.status === 'error'
+      ? 'error'
+      : busy
+        ? 'working'
+        : 'awaiting';
+
   return (
     <ChatTranscriptContext.Provider value={transcriptValue}>
-      <SessionFavicon sessionOpen={Boolean(effectiveThreadId)} busy={busy} />
+      <SessionFavicon state={faviconState} />
       {children}
     </ChatTranscriptContext.Provider>
   );

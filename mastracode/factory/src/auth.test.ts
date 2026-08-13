@@ -145,9 +145,10 @@ describe('mountFactoryAuth gate (enabled)', () => {
       '/assets/app.js',
       '/manifest.webmanifest',
       '/mastra.svg',
-      '/favicon-session-starting.svg',
+      '/favicon-session-initializing.svg',
       '/favicon-session-working.svg',
-      '/favicon-session-complete.svg',
+      '/favicon-session-awaiting.svg',
+      '/favicon-session-error.svg',
     ]) {
       const res = await app.request(path, { headers: { Accept: '*/*' } });
       expect(res.status).toBe(200);
