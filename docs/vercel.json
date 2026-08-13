@@ -2056,6 +2056,11 @@
       "permanent": true
     },
     {
+      "source": "/reference/processors/cost-guard-processor",
+      "destination": "/reference/processors/token-cost-control",
+      "permanent": true
+    },
+    {
       "source": "/docs/editor/prompts/llms.txt",
       "destination": "/docs/editor/overview/llms.txt",
       "permanent": true
@@ -3703,6 +3708,11 @@
     {
       "source": "/docs/browser/recording/llms.txt",
       "destination": "/docs/browser/overview/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/reference/processors/cost-guard-processor/llms.txt",
+      "destination": "/reference/processors/token-cost-control/llms.txt",
       "permanent": true
     }
   ]

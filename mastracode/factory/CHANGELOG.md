@@ -1,5 +1,35 @@
 # @mastra/factory
 
+## 0.7.0-alpha.2
+
+### Minor Changes
+
+- Added independent GitHub issue and pull request reconciliation controls for Factory, with legacy reconciliation settings preserved as fallbacks. Added Linear issue reconciliation aliases and automatically move linked work cards to Done or Canceled when upstream issues close. ([#21342](https://github.com/mastra-ai/mastra/pull/21342))
+
+  For example, run GitHub issue reconciliation every minute while leaving pull-request reconciliation at its existing cadence:
+
+  ```sh
+  MASTRACODE_GITHUB_ISSUE_RECONCILE_INTERVAL_MS=60000
+  ```
+
+### Patch Changes
+
+- Route GitHub issue investigation through Factory rules and the bundled `factory-triage` skill instead of the legacy triage runner. ([#21413](https://github.com/mastra-ai/mastra/pull/21413))
+
+- Replaced the raw `buffering`/`observing`/`reflecting` phase label in the Factory status line with two rings, one per memory budget: the message window and the accumulated observations. Each ring shows how full its budget is, and a highlight travels around the ring while memory works through it — background work reads as work instead of leaking an internal phase name. A memory pass that actually holds the turn still says so ("saving memory", "consolidating memory"). Both rings sit in one control, and clicking it opens both budgets in full: an icon each in the budget's own colour, the figures, and a line saying what reaching the threshold sets off. The control speaks both readings to assistive tech, which a button otherwise hides. ([#21366](https://github.com/mastra-ai/mastra/pull/21366))
+
+  A background pass now shows on the budget it actually acts on, rather than as one word shared by both.
+
+- Improved Factory issue investigations with effort and impact labels. ([#21401](https://github.com/mastra-ai/mastra/pull/21401))
+
+- Improved Factory issue triage to label confirmed direct @mastra/core bugs. ([#21179](https://github.com/mastra-ai/mastra/pull/21179))
+
+- Improved work session preparation feedback across light and dark themes. ([#21382](https://github.com/mastra-ai/mastra/pull/21382))
+
+- Updated dependencies [[`898bba4`](https://github.com/mastra-ai/mastra/commit/898bba46d4806dd255a44e5dc3a3d5827eaefdfe), [`f9aab1c`](https://github.com/mastra-ai/mastra/commit/f9aab1cfc3fda03238a7fd7bd8b794e07497878c), [`e31421b`](https://github.com/mastra-ai/mastra/commit/e31421bc9c11c03c6e74f447ecb5820000e2b9d7), [`aece0e7`](https://github.com/mastra-ai/mastra/commit/aece0e7cb124ae1eb1230689b887f5554b9a0bf0)]:
+  - @mastra/core@1.59.0-alpha.2
+  - @mastra/code-sdk@1.2.1-alpha.2
+
 ## 0.7.0-alpha.1
 
 ### Minor Changes
