@@ -318,7 +318,6 @@ export interface AgentControllerThreadInfo {
   state?: 'active' | 'idle';
 }
 
-/** An in-flight run reported by `AgentController.listActiveRuns()`. */
 export interface AgentControllerActiveRun {
   runId: string;
   resourceId?: string;
@@ -1000,11 +999,7 @@ export class AgentController extends BaseResource {
     return body.models;
   }
 
-  /**
-   * List every run currently in flight on this controller, across all
-   * resources. A cheap in-memory read on the server, suited to polling
-   * activity indicators.
-   */
+  /** List the runs in flight on this controller, across all resources. */
   async listActiveRuns(): Promise<AgentControllerActiveRun[]> {
     const body = await this.request<{ runs: AgentControllerActiveRun[] }>(`${this.basePath()}/active-runs`);
     return body.runs;

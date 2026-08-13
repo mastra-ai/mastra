@@ -446,6 +446,12 @@ export class AgentThreadStreamRuntime {
     return [resourceId ?? '', threadId].join(AGENT_THREAD_KEY_SEPARATOR);
   }
 
+  #parseThreadKey(key: string): { resourceId?: string; threadId: string } {
+    const separator = key.indexOf(AGENT_THREAD_KEY_SEPARATOR);
+    const resourceId = key.slice(0, separator);
+    return { resourceId: resourceId || undefined, threadId: key.slice(separator + AGENT_THREAD_KEY_SEPARATOR.length) };
+  }
+
   #threadTopic(key: string): string {
     return `${AGENT_THREAD_STREAM_TOPIC_PREFIX}.${encodeURIComponent(key)}`;
   }
@@ -787,17 +793,14 @@ export class AgentThreadStreamRuntime {
     return activeRunId;
   }
 
-  /** Every thread-blocking run in flight, with the same predicate as {@link getActiveThreadRunId}. */
+  /** Same predicate as {@link getActiveThreadRunId}, over every tracked thread. */
   listActiveThreadRuns(pubsub?: PubSub): ActiveThreadRun[] {
     const state = this.#getState(pubsub);
     const runs: ActiveThreadRun[] = [];
     for (const [key, runId] of state.activeThreadRunIds) {
       const record = state.threadRunsById.get(runId);
       if (record && !this.#isThreadBlockingRun(state, record)) continue;
-      const separatorIndex = key.indexOf(AGENT_THREAD_KEY_SEPARATOR);
-      const resourceId = key.slice(0, separatorIndex);
-      const threadId = key.slice(separatorIndex + AGENT_THREAD_KEY_SEPARATOR.length);
-      runs.push({ runId, resourceId: resourceId || undefined, threadId });
+      runs.push({ runId, ...this.#parseThreadKey(key) });
     }
     return runs;
   }

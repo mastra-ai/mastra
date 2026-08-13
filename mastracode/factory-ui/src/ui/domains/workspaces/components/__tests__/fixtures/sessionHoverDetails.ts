@@ -151,7 +151,6 @@ export function createSessionHoverDetailsFixtures(updatedAt: string) {
     currentSessionResponse: { session: workWorkspace },
     ensureResponse,
     workItemsResponse: { workItems: workItems.map(toWireWorkItem) },
-    // The work session has a run in flight; the review session is idle.
     activeRunsResponse: { runs: [{ runId: 'run-work', resourceId: workSessionId, threadId: workSessionId }] },
   };
 }

@@ -1,11 +1,3 @@
-/**
- * BDD coverage for the sidebar activity indicators.
- *
- * A row is running when the controller's active-run list holds a run whose
- * `resourceId` is the row's session id (factory binds one resource per
- * session). Labels come from the session listing's server-derived title, with
- * the branch as fallback.
- */
 import assert from 'node:assert';
 
 import { screen, within } from '@testing-library/react';

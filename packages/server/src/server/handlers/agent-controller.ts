@@ -854,7 +854,7 @@ export const LIST_AGENT_CONTROLLER_ACTIVE_RUNS_ROUTE = createRoute({
   responseSchema: listActiveRunsResponseSchema,
   summary: 'List active controller runs',
   description:
-    'Lists every in-flight run on the controller across all resources, from the in-process run tracking. A pure read: no session is created or touched. Suited to polling activity indicators.',
+    'Lists the runs in flight on the controller across all resources, without creating or touching a session.',
   tags: ['AgentController'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:read',

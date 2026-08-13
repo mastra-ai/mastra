@@ -1426,10 +1426,7 @@ export class AgentController<TState = {}> {
     return this.propagateRuntimeServicesToAgent(this.getAgentForMode(mode), session);
   }
 
-  /**
-   * Every in-flight run on this controller, across all resources. Mode agents
-   * share one pubsub, so any propagated agent sees the whole runtime state.
-   */
+  /** Mode agents share one pubsub, so any of them sees every run on the controller. */
   listActiveThreadRuns(): ActiveThreadRun[] {
     return this.propagateRuntimeServicesToAgent(this.getAgentForMode(this.#defaultMode)).listActiveThreadRuns();
   }

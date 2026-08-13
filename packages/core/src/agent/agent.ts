@@ -7734,10 +7734,6 @@ export class Agent<
     return agentThreadStreamRuntime.getActiveThreadRunId(options, this.getPubSub());
   }
 
-  /**
-   * Lists every in-flight run started by the current process, across all
-   * resources and threads. Same runtime tracking as {@link getActiveThreadRunId}.
-   */
   listActiveThreadRuns(): ActiveThreadRun[] {
     return agentThreadStreamRuntime.listActiveThreadRuns(this.getPubSub());
   }

@@ -14,13 +14,7 @@ interface WorkspaceActivityOptions {
   enabled: boolean;
 }
 
-/**
- * Which workspaces have an agent run in flight, from one controller-wide poll
- * of the server's in-memory active-run list. A row is running when an active
- * run belongs to its session's resource. The query identity is constant, so
- * neither navigation nor workspace-set changes can reset it (a reset reads as
- * every run flipping idle for one render and fires completion sounds).
- */
+/** Which workspaces have a run in flight. Factory binds one resource per session, so the row key is the run's resourceId. */
 export function useWorkspaceActivity({
   agentControllerId,
   resourceId,

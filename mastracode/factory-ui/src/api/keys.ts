@@ -105,8 +105,7 @@ export const queryKeys = {
     resourceId: string | undefined,
     projectPath: string | undefined,
   ) => [...queryKeys.agentControllerConnection(agentControllerId, resourceId, projectPath), 'state'] as const,
-  // Constant per controller: navigation and workspace-set changes must never
-  // reset this query (a reset reads as every run flipping idle for a render).
+  // No session in the key: a reset on navigation reads as every run going idle, and fires completion sounds.
   agentControllerActivity: (agentControllerId: string | undefined) =>
     ['agent-controller', agentControllerId ?? null, 'activity'] as const,
   agentControllerSettings: (

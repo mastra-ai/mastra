@@ -52,7 +52,7 @@ export function WorkspacesSection() {
   };
   const runningByPath = useWorkspaceActivity(activityOptions);
   const queryClient = useQueryClient();
-  // A run finishing is when the server (re)derives the session's title.
+  // The server re-derives session titles at the end of a run.
   const { attentionByPath, clearAttention } = useWorkspaceAttention(
     runningByPath,
     () => void queryClient.invalidateQueries({ queryKey: queryKeys.sessions(projectRepositoryId) }),
