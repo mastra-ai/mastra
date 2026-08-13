@@ -18,12 +18,43 @@ describe('mapWorkflowStreamChunkToWatchResult', () => {
       status: 'success',
       output: { images: ['one.png', 'two.png'] },
     });
-    const finished = reduce(stepFinished, 'workflow-finish', { workflowStatus: 'success' });
+    const finished = reduce(stepFinished, 'workflow-finish', {
+      workflowStatus: 'success',
+      finalWorkflowResult: { images: ['one.png', 'two.png'] },
+    });
 
     expect(finished).toMatchObject({
       status: 'success',
       result: { images: ['one.png', 'two.png'] },
       steps: { generate: { status: 'success' } },
+    });
+  });
+
+  it.each([
+    ['is still running', undefined],
+    ['completes later', { id: 'step-b', status: 'success', output: { value: 'done' } }],
+  ])('preserves the failing parallel step error when a later step %s', (_scenario, laterStepResult) => {
+    const error = new Error('step A failed');
+    const stepAStarted = reduce({ status: 'running', steps: {} }, 'workflow-step-start', {
+      id: 'step-a',
+      status: 'running',
+    });
+    const stepBStarted = reduce(stepAStarted, 'workflow-step-start', { id: 'step-b', status: 'running' });
+    const stepAFailed = reduce(stepBStarted, 'workflow-step-result', {
+      id: 'step-a',
+      status: 'failed',
+      error,
+    });
+    const beforeFinish = laterStepResult ? reduce(stepAFailed, 'workflow-step-result', laterStepResult) : stepAFailed;
+    const finished = reduce(beforeFinish, 'workflow-finish', { workflowStatus: 'failed', metadata: {} });
+
+    expect(finished).toMatchObject({
+      status: 'failed',
+      error,
+      steps: {
+        'step-a': { status: 'failed', error },
+        'step-b': { status: laterStepResult ? 'success' : 'running' },
+      },
     });
   });
 

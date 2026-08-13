@@ -21,14 +21,16 @@ export const mapWorkflowStreamChunkToWatchResult = (
   if (chunk.type === 'workflow-finish') {
     const finalStatus = chunk.payload.workflowStatus;
     const prevSteps = prev?.steps ?? {};
-    const lastStep = Object.values(prevSteps).pop();
+    const failedStep = Object.values(prevSteps).find(step => step?.status === 'failed');
+    const failureError =
+      chunk.payload.metadata?.error ?? (failedStep?.status === 'failed' ? failedStep.error : undefined);
     return {
       ...prev,
       status: chunk.payload.workflowStatus,
-      ...(finalStatus === 'success' && lastStep?.status === 'success'
-        ? { result: lastStep?.output }
-        : finalStatus === 'failed' && lastStep?.status === 'failed'
-          ? { error: lastStep?.error }
+      ...(finalStatus === 'success'
+        ? { result: chunk.payload.finalWorkflowResult }
+        : finalStatus === 'failed' && failureError
+          ? { error: failureError }
           : finalStatus === 'tripwire' && chunk.payload.tripwire
             ? { tripwire: chunk.payload.tripwire }
             : {}),
