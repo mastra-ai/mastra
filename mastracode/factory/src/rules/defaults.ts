@@ -38,7 +38,10 @@ function invokeIssueInvestigation(context: FactoryStageRuleContext) {
 }
 
 function investigateTriagedIssue(context: FactoryStageRuleContext) {
-  if (context.cause === 'linked_item_materialized' && context.fromStage === 'intake' && context.toStage === 'triage') {
+  if (
+    context.cause === 'run_start' ||
+    (context.cause === 'linked_item_materialized' && context.fromStage === 'intake' && context.toStage === 'triage')
+  ) {
     return;
   }
   return invokeIssueInvestigation(context);
@@ -70,6 +73,7 @@ function retriageGithubIssue(context: FactoryGithubRuleContext) {
 }
 
 function investigateTriagedLinearIssue(context: FactoryStageRuleContext) {
+  if (context.cause === 'run_start') return;
   const identifier = context.item.sourceKey?.startsWith('linear:')
     ? context.item.sourceKey.slice('linear:'.length)
     : context.item.title;
@@ -160,10 +164,7 @@ function issueOpened(context: FactoryGithubRuleContext) {
     sourceKey: `github-issue:${context.issue.number}`,
     title: context.issue.title,
     url: context.issue.url,
-    stage:
-      trustedGithubActor(context) && createdAfterFactory(context.issue.createdAt, context.factory.createdAt)
-        ? 'triage'
-        : 'intake',
+    stage: 'intake',
     metadata: {
       githubRepositoryId: context.repository.id,
       githubIssueNumber: context.issue.number,
@@ -321,7 +322,7 @@ function linearIssueObserved(context: FactoryLinearRuleContext) {
     sourceKey: `linear:${context.issue.identifier}`,
     title: `${context.issue.identifier}: ${context.issue.title}`,
     url: context.issue.url,
-    stage: 'triage',
+    stage: 'intake',
     metadata: {
       linearIssueId: context.issue.id,
       identifier: context.issue.identifier,

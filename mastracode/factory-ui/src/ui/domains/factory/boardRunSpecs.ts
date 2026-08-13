@@ -12,7 +12,7 @@ export const RUN_PHASE_LABELS: Record<FactoryRunPhase, string> = {
 /**
  * One agent run a card or candidate can start, and the lane it lands the card
  * in. Cards offer several: e.g. an issue can be investigated (understand it →
- * Planning) or built right away (implement it → Building). All of an item's
+ * Triage) or built right away (implement it → Building). All of an item's
  * runs share one branch/worktree, so a later run continues the same
  * conversation as a follow-up.
  */
@@ -46,14 +46,14 @@ export function guidedPrompt(base: string, instructions: string): string {
   return `${base}\n\nGuidance for this run: ${instructions}`;
 }
 
-/** Investigate (understand → Planning) + Build (implement → Building) runs for an issue. */
+/** Investigate (understand → Triage) + Build (implement → Building) runs for an issue. */
 export function issueRunActions(ref: string, extra?: { context?: string }): RunAction[] {
   const context = extra?.context ? `\n\n${extra.context}` : '';
   return [
     {
       label: 'Investigate',
-      role: 'plan',
-      stage: 'planning',
+      role: 'triage',
+      stage: 'triage',
       invocation: {
         type: 'skill',
         skillName: 'factory-triage',
@@ -102,7 +102,7 @@ export const LINEAR_FETCH_HINT = `Start by fetching the issue's full details (de
 
 /**
  * The runs a persisted card can start, derived from its source + metadata.
- * Issues can be investigated (→ Planning) or built (→ Building); PRs get a
+ * Issues can be investigated (→ Triage) or built (→ Building); PRs get a
  * review run. Manual cards (or cards missing the needed metadata) can't
  * start runs.
  */
