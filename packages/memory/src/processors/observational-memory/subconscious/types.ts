@@ -17,6 +17,8 @@ export interface SubconsciousCaptureOutput {
       text: string;
       scope?: KnowledgeScopeLevel;
       when?: string;
+      /** Present only when capture-time pinning is enabled; routes the fact to the pin set. */
+      pin?: boolean;
     }>;
   }>;
 }
@@ -91,8 +93,11 @@ export interface SubconsciousConfig {
   /**
    * Opt in to a curator-maintained pinned knowledge page that is delivered on every turn.
    * Off by default: the cost of a pin is per turn and permanent.
+   * `capturePinning` (off by default, even with `pins: true`) additionally lets the capture
+   * agent pin at observation time; capture-time pins are for durable user preferences and
+   * hard constraints only and share the same budget.
    */
-  pins?: boolean | { maxPins?: number; maxCharacters?: number };
+  pins?: boolean | { maxPins?: number; maxCharacters?: number; capturePinning?: boolean };
   maxSteps?: number;
 }
 
@@ -113,5 +118,5 @@ export interface ResolvedSubconsciousConfig {
   learnedGuidance: boolean;
   tools: boolean;
   activity: false | { recentUpdates: number };
-  pins: false | { maxPins: number; maxCharacters: number };
+  pins: false | { maxPins: number; maxCharacters: number; capturePinning: boolean };
 }

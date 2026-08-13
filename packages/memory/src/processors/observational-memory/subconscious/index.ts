@@ -98,6 +98,7 @@ export class Subconscious {
             maxPins: (config.pins === true ? undefined : config.pins.maxPins) ?? DEFAULT_MAX_PINS,
             maxCharacters:
               (config.pins === true ? undefined : config.pins.maxCharacters) ?? DEFAULT_PINNED_MAX_CHARACTERS,
+            capturePinning: (config.pins === true ? undefined : config.pins.capturePinning) ?? false,
           };
     if (pins !== false) {
       if (!Number.isInteger(pins.maxPins) || pins.maxPins < 1) {
@@ -143,6 +144,7 @@ export class Subconscious {
             maxScope: this.resolved.maxScope,
             learnedGuidance: this.resolved.learnedGuidance,
             activityRecentUpdates: this.resolved.activity === false ? undefined : this.resolved.activity.recentUpdates,
+            pins: this.resolved.pins,
           }),
         );
       } else if (name === 'remind') {

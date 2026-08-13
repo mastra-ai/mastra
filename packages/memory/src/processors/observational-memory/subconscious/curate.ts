@@ -18,7 +18,7 @@ Use the read tools to inspect existing entities, facts, mentions, backlinks, and
 
 Process the worklist in ID order. Your final response must end with <curation-complete through="FACT_ID" /> using the ID of the last fact you fully processed. If you cannot finish the batch, acknowledge only the last fact you did finish. Do not emit a completion marker when no fact was fully processed.`;
 
-const PINNED_INSTRUCTIONS = `Maintain the pin set with knowledge_pin, knowledge_edit_pin, and knowledge_unpin. Pinned entries are delivered to the main agent on every turn, so they cost tokens permanently and must stay short. Pin only knowledge that should apply without being asked for, such as standing instructions, durable preferences, and hard constraints. Unpin an entry as soon as it stops being unconditionally true. Everything a reminder can surface on demand does not belong in the pin set.`;
+export const PINNED_INSTRUCTIONS = `Maintain the pin set with knowledge_pin, knowledge_edit_pin, and knowledge_unpin. Pinned entries are delivered to the main agent on every turn, so they cost tokens permanently and must stay short. Pin only knowledge that should apply without being asked for, such as standing instructions, durable preferences, and hard constraints. Pin only knowledge that is BOTH costly to rediscover AND not the kind of thing a future agent would think to search for; anything a reminder can surface on demand does not belong in the pin set. Unpin an entry as soon as it stops being unconditionally true.`;
 
 function resolveScope(context: ReflectionCommittedContext): KnowledgeScope {
   const organizationId = context.requestContext?.get('organizationId');

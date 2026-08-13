@@ -1,7 +1,10 @@
+import { readFileSync } from 'node:fs';
+
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import type { MastraEmbeddingModel, MastraVector } from '@mastra/core/vector';
 import { describe, expect, it, vi } from 'vitest';
+import { z } from 'zod';
 
 import { Memory } from '../../../index';
 import {
@@ -11,6 +14,8 @@ import {
   subconsciousCaptureSchema,
 } from '../subconscious';
 import type { SubconsciousCaptureHook, SubconsciousCaptureOutput } from '../subconscious';
+import { PINNED_INSTRUCTIONS } from '../subconscious/curate';
+import { listPinnedKnowledge } from '../subconscious/pinned';
 
 function createContext(memory: Memory, current: SubconsciousCaptureOutput) {
   const requestContext = new RequestContext();
@@ -302,5 +307,109 @@ describe('Knowledge semantic indexing', () => {
     expect(await knowledge.listSemanticOutbox({ status: 'pending' })).toHaveLength(1);
     expect(await coordinator.drain(['org:acme'])).toBe(1);
     expect((await knowledge.listSemanticOutbox({ status: 'completed' }))[0]).toMatchObject({ attempts: 2 });
+  });
+});
+
+describe('Subconscious capture-time pinning', () => {
+  const pinsOn = { maxPins: 20, maxCharacters: 2_000, capturePinning: true } as const;
+
+  it('routes pin-marked facts onto the reserved pinned entity within budget', async () => {
+    const memory = new Memory({ storage: new InMemoryStore() });
+    const extractor = new SubconsciousCaptureExtractor({
+      defaultScope: 'resource',
+      learnedGuidance: false,
+      pins: pinsOn,
+    });
+    const context = createContext(memory, {
+      entities: [
+        {
+          name: 'User Preferences',
+          kind: 'person',
+          facts: [
+            { text: 'Prefers voice-first replies.', scope: 'resource', pin: true },
+            { text: 'Asked about the deploy runbook.' },
+          ],
+        },
+      ],
+    });
+
+    await extractor.onExtracted?.({ ...context, extractor });
+
+    const store = (await memory.storage.getStore('knowledge'))!;
+    const threadScope = ['org:acme', 'resource:user-42', 'thread:alpha'];
+    const { pins } = await listPinnedKnowledge({ store, scope: threadScope });
+    expect(pins.map(pin => pin.text)).toEqual(['Prefers voice-first replies.']);
+
+    // No dual write: the pinned text lives only on the reserved entity.
+    const entity = await store.resolveEntity({ name: 'User Preferences', scope: threadScope });
+    const facts = await store.factsAbout({ entityId: entity!.id, scope: threadScope });
+    expect(facts.facts.map(fact => fact.text)).toEqual(['Asked about the deploy runbook.']);
+  });
+
+  it('drops an over-budget pin without failing the extraction cycle', async () => {
+    const memory = new Memory({ storage: new InMemoryStore() });
+    const extractor = new SubconsciousCaptureExtractor({
+      defaultScope: 'resource',
+      learnedGuidance: false,
+      pins: { maxPins: 20, maxCharacters: 10, capturePinning: true },
+    });
+    const context = createContext(memory, {
+      entities: [
+        {
+          name: 'User Preferences',
+          kind: 'person',
+          facts: [
+            { text: 'This pin text is far beyond the ten character budget.', pin: true },
+            { text: 'A regular fact that must survive.' },
+          ],
+        },
+      ],
+    });
+
+    await expect(extractor.onExtracted?.({ ...context, extractor })).resolves.toBeDefined();
+
+    const store = (await memory.storage.getStore('knowledge'))!;
+    const threadScope = ['org:acme', 'resource:user-42', 'thread:alpha'];
+    const { pins } = await listPinnedKnowledge({ store, scope: threadScope });
+    expect(pins).toHaveLength(0);
+    const entity = await store.resolveEntity({ name: 'User Preferences', scope: threadScope });
+    const facts = await store.factsAbout({ entityId: entity!.id, scope: threadScope });
+    expect(facts.facts.map(fact => fact.text)).toEqual(['A regular fact that must survive.']);
+  });
+
+  it('leaves the capture schema and instructions byte-for-byte unchanged when the flag is off', async () => {
+    const snapshot = JSON.parse(
+      readFileSync(new URL('./__fixtures__/capture-flag-off-snapshot.json', import.meta.url), 'utf8'),
+    );
+    const extractor = new SubconsciousCaptureExtractor({ defaultScope: 'resource', learnedGuidance: false });
+    const requestContext = new RequestContext();
+    requestContext.set('organizationId', 'acme');
+    const resolved = await extractor.resolve({
+      source: 'observer',
+      threadId: 'alpha',
+      resourceId: 'user-42',
+      requestContext,
+    } as any);
+    expect(z.toJSONSchema(extractor.schema)).toEqual(snapshot.schema);
+    expect(resolved.instructions).toBe(snapshot.instructions);
+  });
+
+  it('keeps the curator pin test anchored on rediscovery cost', () => {
+    expect(PINNED_INSTRUCTIONS).toContain('costly to rediscover');
+  });
+
+  it('uses a custom capture schema verbatim, never augmenting it with the pin flag', () => {
+    const custom = z.object({
+      entities: z.array(
+        z.object({ name: z.string(), kind: z.string(), facts: z.array(z.object({ text: z.string() })) }),
+      ),
+    });
+    const extractor = new SubconsciousCaptureExtractor({
+      defaultScope: 'resource',
+      learnedGuidance: false,
+      pins: pinsOn,
+      config: { name: 'capture', schema: custom as any },
+    });
+    expect(extractor.schema).toBe(custom);
   });
 });

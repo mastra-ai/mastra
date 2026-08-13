@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { Extractor } from '../extractor';
 import type { ExtractorOnExtractedContext, ExtractorRuntimeContext } from '../extractor';
 import { publishSubconsciousActivity } from './activity';
+import { writePinnedFact } from './pinned';
 import { resolveKnowledgeResourceId } from './scope';
 import type { SubconsciousCaptureConfig, SubconsciousCaptureOutput, SubconsciousDefaultCapture } from './types';
 
@@ -32,6 +33,32 @@ export const subconsciousCaptureSchema = z.object({
     }),
   ),
 });
+
+// Advertised to the model ONLY when capture-time pinning is enabled; the flag-off
+// default schema above must stay byte-for-byte identical to its historical shape.
+const subconsciousCapturePinningSchema = z.object({
+  entities: z.array(
+    z.object({
+      name: z.string().trim().min(1),
+      kind: z
+        .string()
+        .trim()
+        .min(1)
+        .refine(kind => kind.trim().toLocaleLowerCase() !== 'page', 'Entity kind "page" is reserved'),
+      scope: z.enum(['org', 'resource', 'thread']).optional(),
+      facts: z.array(
+        z.object({
+          text: z.string().trim().min(1),
+          scope: z.enum(['org', 'resource', 'thread']).optional(),
+          when: z.string().trim().min(1).optional(),
+          pin: z.boolean().optional(),
+        }),
+      ),
+    }),
+  ),
+});
+
+const CAPTURE_PINNING_INSTRUCTIONS = `Mark pin: true only for durable user preferences or hard constraints that should apply in every future session without being asked for.`;
 
 const CAPTURE_INSTRUCTIONS = `Extract durable, explicitly stated knowledge from the observations.
 Return entities with short stable names, a freeform kind, and facts nested under the entity each fact is about.
@@ -88,13 +115,20 @@ export interface CaptureExtractorOptions {
   maxScope?: KnowledgeScopeLevel;
   learnedGuidance: boolean;
   activityRecentUpdates?: number;
+  /** Resolved pins config; capture-time pinning activates only when `capturePinning` is true. */
+  pins?: false | { maxPins: number; maxCharacters: number; capturePinning: boolean };
 }
 
 export class SubconsciousCaptureExtractor extends Extractor<SubconsciousCaptureOutput> {
   constructor(options: CaptureExtractorOptions) {
+    const capturePinning = options.pins !== false && options.pins !== undefined && options.pins.capturePinning;
+    // Dropped-pin notes per extraction call, surfaced through the activity publish.
+    const pinNotes = new WeakMap<object, string[]>();
+
     const defaultImplementation: SubconsciousDefaultCapture = async context => {
       const scopeContext = requireScopeContext(context);
       const store = await getKnowledgeStore(context);
+      const droppedPins: string[] = [];
 
       for (const extractedEntity of context.current.entities) {
         const entityScope = expandKnowledgeScope(
@@ -107,6 +141,28 @@ export class SubconsciousCaptureExtractor extends Extractor<SubconsciousCaptureO
           scope: entityScope,
         });
         for (const extractedFact of extractedEntity.facts) {
+          if (capturePinning && (extractedFact as { pin?: boolean }).pin === true && options.pins) {
+            // Pinned facts write ONLY through the shared pinned path (no dual write);
+            // an over-budget pin is dropped with a note, never a failed cycle.
+            try {
+              await writePinnedFact(
+                store,
+                {
+                  scope: scopeContext,
+                  sourceThreadId: context.threadId,
+                  defaultScope: options.defaultScope,
+                  maxScope: options.maxScope,
+                  maxPins: options.pins.maxPins,
+                  maxCharacters: options.pins.maxCharacters,
+                },
+                extractedFact.text,
+                extractedFact.scope,
+              );
+            } catch (error) {
+              droppedPins.push(`Capture-time pin dropped: ${error instanceof Error ? error.message : String(error)}`);
+            }
+            continue;
+          }
           const factLevel = clampScope(extractedFact.scope ?? 'thread', options.maxScope);
           await store.appendFact({
             parentEntityId: entity.id,
@@ -120,15 +176,23 @@ export class SubconsciousCaptureExtractor extends Extractor<SubconsciousCaptureO
           });
         }
       }
+      if (droppedPins.length) pinNotes.set(context, droppedPins);
     };
 
     super({
       name: 'Capture',
       includePreviousExtraction: false,
       metadataKeyPath: false,
-      schema: (options.config?.schema ?? subconsciousCaptureSchema) as z.ZodType<SubconsciousCaptureOutput>,
+      schema: (options.config?.schema ??
+        (capturePinning
+          ? subconsciousCapturePinningSchema
+          : subconsciousCaptureSchema)) as z.ZodType<SubconsciousCaptureOutput>,
       instructions: async context => {
-        const sections = [CAPTURE_INSTRUCTIONS, options.config?.instructions?.trim()];
+        const sections = [
+          CAPTURE_INSTRUCTIONS,
+          capturePinning && !options.config?.schema ? CAPTURE_PINNING_INSTRUCTIONS : undefined,
+          options.config?.instructions?.trim(),
+        ];
         if (options.learnedGuidance) {
           const scopeContext = requireScopeContext(context);
           const store = await getKnowledgeStore(context);
@@ -161,7 +225,7 @@ export class SubconsciousCaptureExtractor extends Extractor<SubconsciousCaptureO
           const result = options.config?.onExtracted
             ? await options.config.onExtracted({ ...context, defaultImplementation })
             : await defaultImplementation(context);
-          await publishActivity();
+          await publishActivity(pinNotes.get(context));
           return result ?? context.current;
         } catch (error) {
           await publishActivity([error instanceof Error ? error.message : String(error)]).catch(() => {});

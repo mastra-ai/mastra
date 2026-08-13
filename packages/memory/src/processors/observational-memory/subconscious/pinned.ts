@@ -139,6 +139,31 @@ function resolveWriteScope(options: PinnedToolsOptions, level?: KnowledgeScopeLe
 
 const scopeLevelSchema: JSONSchema7 = { type: 'string', enum: ['resource', 'thread'] };
 
+/**
+ * Shared pinned-fact write path: budget check, reserved-entity upsert, scoped append.
+ * Used by the knowledge_pin tool and by capture-time pinning so the budget is enforced
+ * in exactly one place. Module-internal; not part of the subconscious barrel surface.
+ */
+export async function writePinnedFact(
+  store: KnowledgeStorage,
+  options: PinnedToolsOptions,
+  text: string,
+  level?: KnowledgeScopeLevel,
+): Promise<KnowledgeFact> {
+  const { pins } = await listPinnedKnowledge({ store, scope: options.scope });
+  assertBudget(options, pins, text);
+  const entityId = await ensurePinnedEntityId(store, options.scope, options.maxScope);
+  return store.appendFact({
+    parentEntityId: entityId,
+    text,
+    scope: resolveWriteScope(options, level),
+    sourceThreadId: options.sourceThreadId,
+    maxScope: options.maxScope,
+    resolutionScope: options.scope,
+    defaultScope: expandKnowledgeScope(options.scope, options.defaultScope),
+  });
+}
+
 async function getStore(memory: PinnedMemory): Promise<KnowledgeStorage> {
   const store = await memory.storage.getStore('knowledge');
   if (!store) throw new Error('Pinned knowledge requires a configured knowledge storage domain.');
@@ -184,18 +209,7 @@ export function createPinnedTools(
       execute: async input => {
         const value = input as { text: string; scope?: KnowledgeScopeLevel };
         const store = await getStore(memory);
-        const { pins } = await listPinnedKnowledge({ store, scope: options.scope });
-        assertBudget(options, pins, value.text);
-        const entityId = await ensurePinnedEntityId(store, options.scope, options.maxScope);
-        return store.appendFact({
-          parentEntityId: entityId,
-          text: value.text,
-          scope: resolveWriteScope(options, value.scope),
-          sourceThreadId: options.sourceThreadId,
-          maxScope: options.maxScope,
-          resolutionScope: options.scope,
-          defaultScope: expandKnowledgeScope(options.scope, options.defaultScope),
-        });
+        return writePinnedFact(store, options, value.text, value.scope);
       },
     }),
     knowledge_unpin: createTool({
