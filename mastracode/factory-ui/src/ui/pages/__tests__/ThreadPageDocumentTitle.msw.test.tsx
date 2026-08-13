@@ -166,7 +166,7 @@ describe('ThreadPage document title', () => {
     await waitFor(() => expect(document.title).toBe('Investigate Pricing Bug | Mastra Factory'));
   });
 
-  it('falls back to the thread title for issue-backed work sessions (no PR number)', async () => {
+  it('shows the issue number for GitHub issue-backed work sessions', async () => {
     stubBase({
       workItems: [
         {
@@ -197,7 +197,41 @@ describe('ThreadPage document title', () => {
     });
     renderRoute(`/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/${THREAD_ID}`);
 
-    await waitFor(() => expect(document.title).toBe('Fix flaky login | Mastra Factory'));
+    await waitFor(() => expect(document.title).toBe('#42 | Mastra Factory'));
+  });
+
+  it('shows the team key for Linear issue-backed work sessions', async () => {
+    stubBase({
+      workItems: [
+        {
+          id: 'wi-3',
+          orgId: 'org-1',
+          createdBy: 'user-1',
+          factoryProjectId: FACTORY_ID,
+          externalSource: {
+            integrationId: 'linear',
+            type: 'issue',
+            externalId: 'COR-210',
+            url: 'https://linear.app/acme/issue/COR-210',
+          },
+          parentWorkItemId: null,
+          title: 'Ship pricing v2',
+          stages: ['execute'],
+          stageHistory: [],
+          sessions: {
+            [SESSION_ID]: { sessionId: SESSION_ID, branch: 'factory/pr-1567', threadId: THREAD_ID, startedBy: 'user-1' },
+          },
+          metadata: { identifier: 'COR-210' },
+          revision: 1,
+          createdAt: '2026-07-29T00:00:00.000Z',
+          updatedAt: '2026-07-29T00:00:00.000Z',
+        },
+      ],
+      threads: [{ id: THREAD_ID, title: 'A thread title Linear should win over' }],
+    });
+    renderRoute(`/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/${THREAD_ID}`);
+
+    await waitFor(() => expect(document.title).toBe('COR-210 | Mastra Factory'));
   });
 
   it('leaves the default title when the thread has no title yet', async () => {
