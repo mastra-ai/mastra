@@ -1,4 +1,4 @@
-import type { AgentControllerEvent, AgentControllerTaskSnapshot, AgentControllerOMProgress } from '@mastra/client-js';
+import type { AgentControllerEvent, AgentControllerTaskSnapshot } from '@mastra/client-js';
 import { isKnownAgentControllerEvent } from '@mastra/client-js';
 import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent-controller';
 
@@ -155,8 +155,6 @@ export interface TranscriptState {
   usage?: UsageSnapshot;
   /** Number of queued follow-up messages. */
   followUpCount: number;
-  /** OM progress for the status line (msg/mem budgets), from display_state_changed. */
-  omProgress?: AgentControllerOMProgress;
   /** Observational memory phase. */
   omPhase: OMPhase;
   /** Whether the workspace is ready. */
@@ -203,7 +201,6 @@ type Action =
   | {
       type: 'reset';
       threadId?: string;
-      omProgress?: AgentControllerOMProgress;
       usage?: UsageSnapshot;
     };
 
@@ -230,7 +227,6 @@ export function transcriptReducer(state: TranscriptState, action: Action): Trans
       return {
         ...initialTranscript,
         threadId: action.threadId,
-        omProgress: action.omProgress,
         usage: action.usage,
       };
     case 'localUser':
@@ -470,13 +466,11 @@ function applyEvent(state: TranscriptState, event: AgentControllerEvent): Transc
       };
     }
 
-    // Canonical display-state snapshot — carries the status-line figures
-    // (OM msg/mem budgets and cumulative token usage).
+    // Canonical display-state snapshot — carries the cumulative token usage.
     case 'display_state_changed': {
       const ds = event.displayState;
       return {
         ...state,
-        omProgress: ds.omProgress ?? state.omProgress,
         usage: (ds.tokenUsage as UsageSnapshot | undefined) ?? state.usage,
       };
     }
@@ -547,19 +541,16 @@ function describeErrorEvent(event: { error: { message?: string } | string; error
 export function createInitialTranscript({
   messages = [],
   threadId,
-  omProgress,
   usage,
 }: {
   messages?: MastraDBMessage[];
   threadId?: string;
-  omProgress?: AgentControllerOMProgress;
   usage?: UsageSnapshot;
 } = {}): TranscriptState {
   return {
     ...initialTranscript,
     entries: messagesToEntries(messages),
     threadId,
-    omProgress,
     usage,
   };
 }

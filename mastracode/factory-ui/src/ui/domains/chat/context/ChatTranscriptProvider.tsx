@@ -97,7 +97,6 @@ function ChatTranscriptValueProvider({
   const effectiveTranscript: TranscriptState = {
     ...transcript,
     threadId: transcript.threadId ?? threadId ?? connection.createdThreadId,
-    omProgress: transcript.omProgress ?? connection.state?.omProgress,
     usage: transcript.usage ?? connection.state?.tokenUsage,
   };
   const busy = connection.state?.running === true || effectiveTranscript.pending;

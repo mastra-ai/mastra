@@ -1,3 +1,5 @@
+import { defaultOMProgressState } from '@mastra/core/agent-controller';
+import type { OMProgressState } from '@mastra/core/agent-controller';
 import { describe, expect, it, vi } from 'vitest';
 
 import { initialChatRuntime, omWork, runtimeReducer } from '../runtime';
@@ -20,20 +22,30 @@ describe('chat runtime reducer', () => {
   });
 
   it('keeps display-state telemetry available until newer usage arrives', () => {
+    const omProgress: OMProgressState = {
+      ...defaultOMProgressState(),
+      pendingTokens: 320,
+      threshold: 1000,
+      thresholdPercent: 32,
+      observationTokens: 900,
+      reflectionThreshold: 2000,
+      reflectionThresholdPercent: 45,
+      buffered: {
+        observations: {
+          status: 'running',
+          chunks: 1,
+          messageTokens: 260,
+          projectedMessageRemoval: 120,
+          observationTokens: 40,
+        },
+        reflection: { status: 'running', inputObservationTokens: 900, observationTokens: 300 },
+      },
+    };
+
     const displayState = runtimeReducer(initialChatRuntime, {
       type: 'display_state_changed',
       displayState: {
-        omProgress: {
-          status: 'idle',
-          pendingTokens: 320,
-          threshold: 1000,
-          thresholdPercent: 32,
-          observationTokens: 0,
-          reflectionThreshold: 2000,
-          reflectionThresholdPercent: 0,
-          projectedMessageRemoval: 0,
-          projectedReflectionSavings: 0,
-        },
+        omProgress,
         tokenUsage: { promptTokens: 21, completionTokens: 34, totalTokens: 55 },
       },
     });
@@ -45,6 +57,32 @@ describe('chat runtime reducer', () => {
 
     expect(updated.omProgress?.pendingTokens).toBe(320);
     expect(updated.usage).toMatchObject({ completionTokens: 55, totalTokens: 76 });
+  });
+
+  // The stream carries the full progress state; only the session-state route sends the
+  // flat one. Reading the pending pass off the wrong shape is how it went missing before.
+  it('keeps a pending pass readable off the streamed progress state', () => {
+    const streamed = runtimeReducer(initialChatRuntime, {
+      type: 'display_state_changed',
+      displayState: {
+        omProgress: {
+          ...defaultOMProgressState(),
+          buffered: {
+            observations: {
+              status: 'running',
+              chunks: 2,
+              messageTokens: 8_000,
+              projectedMessageRemoval: 7_400,
+              observationTokens: 600,
+            },
+            reflection: { status: 'running', inputObservationTokens: 9_000, observationTokens: 2_500 },
+          },
+        },
+      },
+    });
+
+    expect(streamed.omProgress?.projectedMessageRemoval).toBe(7_400);
+    expect(streamed.omProgress?.projectedReflectionSavings).toBe(6_500);
   });
 
   it('measures a streamed assistant decode window and tracks active runtime work', () => {

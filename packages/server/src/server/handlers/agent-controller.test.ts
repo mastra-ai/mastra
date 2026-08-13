@@ -1,5 +1,5 @@
 import { Agent } from '@mastra/core/agent';
-import { AgentController } from '@mastra/core/agent-controller';
+import { AgentController, omProgressSummary } from '@mastra/core/agent-controller';
 import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
@@ -556,6 +556,46 @@ describe('agent-controller routes', () => {
         resourceId: 'user-1',
       } as any)) as { running?: boolean };
       expect(res.running).toBe(true);
+    });
+
+    // This route flattens the OM display state by hand because @mastra/core may only be
+    // imported for types here. Pin it to the shape core defines, so the two cannot drift.
+    it('flattens omProgress exactly as core does', async () => {
+      const controller = mastra.getAgentController('code')!;
+      await controller.init();
+      const session = await controller.createSession({ resourceId: 'user-om', id: 'user-om', ownerId: controller.id });
+      session.displayState.apply({
+        type: 'om_status',
+        windows: {
+          active: {
+            messages: { tokens: 15_000, threshold: 30_000 },
+            observations: { tokens: 8_000, threshold: 40_000 },
+          },
+          buffered: {
+            observations: {
+              status: 'running',
+              chunks: 1,
+              messageTokens: 12_000,
+              projectedMessageRemoval: 9_000,
+              observationTokens: 400,
+            },
+            reflection: { status: 'running', inputObservationTokens: 8_000, observationTokens: 2_000 },
+          },
+        },
+        recordId: 'r1',
+        threadId: 't1',
+        stepNumber: 3,
+        generationCount: 2,
+      });
+
+      const res = (await GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-om',
+      } as any)) as { omProgress?: Record<string, unknown> };
+      expect(res.omProgress).toEqual(omProgressSummary(session.displayState.get().omProgress));
+      expect(res.omProgress?.projectedMessageRemoval).toBe(9_000);
+      expect(res.omProgress?.projectedReflectionSavings).toBe(6_000);
     });
   });
 

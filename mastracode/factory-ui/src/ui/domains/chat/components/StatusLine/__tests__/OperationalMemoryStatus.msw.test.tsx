@@ -116,4 +116,14 @@ describe('observational memory status', () => {
       expect(screen.getAllByText('/40k')).toHaveLength(2);
     });
   });
+
+  describe('when a pass is pending on a budget', () => {
+    it('shows how much of the open budget it will free', async () => {
+      renderStatus({ omProgress: { ...omProgress, projectedMessageRemoval: 7_400 } });
+
+      fireEvent.click(screen.getByRole('button', { name: /^Memory budgets:/ }));
+
+      await waitFor(() => expect(screen.getByText('−7.4k')).toBeVisible());
+    });
+  });
 });

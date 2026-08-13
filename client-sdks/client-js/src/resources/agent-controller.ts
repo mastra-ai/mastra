@@ -3,8 +3,15 @@ import type {
   ActiveToolState,
   MastraDBMessage,
   MastraMessagePart,
+  OMProgressState,
+  OMProgressSummary,
 } from '@mastra/core/agent-controller';
-export type { MastraDBMessage, MastraMessageContentV2, MastraMessagePart } from '@mastra/core/agent-controller';
+export type {
+  MastraDBMessage,
+  MastraMessageContentV2,
+  MastraMessagePart,
+  OMProgressState,
+} from '@mastra/core/agent-controller';
 import type { RequestContext } from '@mastra/core/request-context';
 
 import type { ClientOptions } from '../types';
@@ -30,24 +37,8 @@ export interface AgentControllerInfo {
   id: string;
 }
 
-/**
- * Status-line relevant slice of observational-memory progress, mirroring the
- * TUI status line. `msg` reads `pendingTokens/threshold ↓projectedMessageRemoval`
- * (the active message window before an observation fires); `mem` reads
- * `observationTokens/reflectionThreshold ↓projectedReflectionSavings`
- * (accumulated observations before a reflection fires).
- */
-export interface AgentControllerOMProgress {
-  status: string;
-  pendingTokens: number;
-  threshold: number;
-  thresholdPercent: number;
-  observationTokens: number;
-  reflectionThreshold: number;
-  reflectionThresholdPercent: number;
-  projectedMessageRemoval: number;
-  projectedReflectionSavings: number;
-}
+/** What `session.state()` returns: the flat status-line slice. The event stream carries `OMProgressState` instead. */
+export type AgentControllerOMProgress = OMProgressSummary;
 
 /**
  * AgentController events the SDK types explicitly. This is a discriminated union, so
@@ -112,7 +103,7 @@ export type KnownAgentControllerEvent =
       type: 'display_state_changed';
       displayState: {
         isRunning?: boolean;
-        omProgress?: AgentControllerOMProgress;
+        omProgress?: OMProgressState;
         /** A buffered observation is running: the message window is being observed in the background. */
         bufferingMessages?: boolean;
         /** A buffered reflection is running: observations are being consolidated in the background. */

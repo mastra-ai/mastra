@@ -570,6 +570,40 @@ export interface OMProgressState {
   preReflectionTokens: number;
 }
 
+/**
+ * The status-line slice of `OMProgressState`: both budgets with their pending pass
+ * already resolved into a token figure, so a client renders it without the buffered
+ * bookkeeping behind it.
+ */
+export interface OMProgressSummary {
+  status: OMStatus;
+  pendingTokens: number;
+  threshold: number;
+  thresholdPercent: number;
+  observationTokens: number;
+  reflectionThreshold: number;
+  reflectionThresholdPercent: number;
+  /** Tokens the next observation will remove from the message window. */
+  projectedMessageRemoval: number;
+  /** Tokens the next reflection is projected to save. */
+  projectedReflectionSavings: number;
+}
+
+export function omProgressSummary(om: OMProgressState): OMProgressSummary {
+  const { observations, reflection } = om.buffered;
+  return {
+    status: om.status,
+    pendingTokens: om.pendingTokens,
+    threshold: om.threshold,
+    thresholdPercent: om.thresholdPercent,
+    observationTokens: om.observationTokens,
+    reflectionThreshold: om.reflectionThreshold,
+    reflectionThresholdPercent: om.reflectionThresholdPercent,
+    projectedMessageRemoval: observations.projectedMessageRemoval,
+    projectedReflectionSavings: Math.max(0, reflection.inputObservationTokens - reflection.observationTokens),
+  };
+}
+
 // =============================================================================
 // Display State
 // =============================================================================

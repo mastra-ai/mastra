@@ -77,6 +77,7 @@ export function OperationalMemoryStatus() {
             description="Read into memory once full"
             icon={<MessageSquare />}
             label="Messages"
+            projected={om.projectedMessageRemoval}
             threshold={om.threshold}
             tokens={om.pendingTokens}
             tone={messageTone}
@@ -87,6 +88,7 @@ export function OperationalMemoryStatus() {
             description="Consolidated into a reflection once full"
             icon={<Brain />}
             label="Observations"
+            projected={om.projectedReflectionSavings}
             threshold={om.reflectionThreshold}
             tokens={om.observationTokens}
             tone={observationTone}
