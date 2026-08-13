@@ -91,7 +91,10 @@ async function dropFreshOwnFacts(
       if (source.type !== 'fact') return true;
       const fact = await store.getFact({ id: source.id }).catch(() => null);
       if (!fact) return true;
-      const isOwnThread = fact.sourceThreadId === threadId;
+      // Facts written by the thread's own subconscious sub-agents (curate, learn, capture)
+      // carry a `subconscious:<threadId>:<agent>` source — they are this thread's too.
+      const isOwnThread =
+        fact.sourceThreadId === threadId || fact.sourceThreadId.startsWith(`subconscious:${threadId}:`);
       const isFresh = Date.now() - new Date(fact.capturedAt).getTime() < FRESH_OWN_FACT_WINDOW_MS;
       return !(isOwnThread && isFresh);
     }),

@@ -212,6 +212,40 @@ describe('Subconscious remind', () => {
     expect(context.sendSignal).not.toHaveBeenCalled();
   });
 
+  it("does not echo fresh facts written by the thread's own subconscious sub-agents", async () => {
+    const extractor = new SubconsciousRemindExtractor({
+      name: 'remind',
+      maxSteps: 3,
+      builtIn: true,
+    });
+    const context = createContext('The launch happens January 15.');
+    const store = await context.memory.storage.getStore('knowledge');
+    const entity = await store.createEntity({
+      name: 'Zeta initiative',
+      kind: 'program',
+      scope: ['org:acme', 'resource:user-42'],
+    });
+    // Written moments ago by this thread's own curator sub-thread.
+    await store.appendFact({
+      parentEntityId: entity.id,
+      text: 'The launch happens January 15.',
+      scope: ['org:acme', 'resource:user-42'],
+      sourceThreadId: 'subconscious:alpha:curate',
+      resolutionScope: ['org:acme', 'resource:user-42', 'thread:alpha'],
+      defaultScope: ['org:acme', 'resource:user-42'],
+    });
+
+    const result = await applyExtractorHooks({
+      source: 'observer',
+      extractors: [extractor],
+      rawObservations: 'The user is scheduling the launch.',
+      ...context,
+    });
+
+    expect(result.failures).toBeUndefined();
+    expect(context.sendSignal).not.toHaveBeenCalled();
+  });
+
   it("still reminds about the thread's own older facts once they age past the fresh window", async () => {
     vi.useFakeTimers();
     try {
