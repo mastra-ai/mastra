@@ -147,6 +147,45 @@ describe('Span Filtering', () => {
       expect(orphans).toEqual([]);
     });
 
+    it('carries the root external parent when reparenting collapses to it', () => {
+      // When the trace root itself is excluded, descendants export at the
+      // root's position. The root's external parent (ambient OTel) must
+      // travel with them as externalParentSpanId — never as the stored
+      // parent, which would point outside Mastra storage.
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+        excludeSpanTypes: [SpanType.WORKFLOW_RUN],
+      });
+
+      const rootSpan = tracing.startSpan({
+        type: SpanType.WORKFLOW_RUN,
+        name: 'workflow-under-otel',
+        tracingOptions: { parentSpanId: 'ffff0000ffff0000' },
+      });
+      const stepSpan = rootSpan.createChildSpan({
+        type: SpanType.WORKFLOW_STEP,
+        name: 'step',
+      });
+      const toolSpan = stepSpan.createChildSpan({
+        type: SpanType.TOOL_CALL,
+        name: "tool: 'my_tool'",
+        attributes: { toolId: 'my_tool', toolType: 'function' },
+      });
+
+      expect((rootSpan as any).isExcluded).toBe(true);
+
+      // Collapsed to the root's position — no stored parent, external id travels
+      expect(stepSpan.exportSpan().parentSpanId).toBeUndefined();
+      expect(stepSpan.exportSpan().externalParentSpanId).toBe('ffff0000ffff0000');
+
+      // A child with an exported Mastra parent keeps that parent
+      expect(toolSpan.exportSpan().parentSpanId).toBe(stepSpan.id);
+      expect(toolSpan.exportSpan().externalParentSpanId).toBeUndefined();
+    });
+
     it('should export all spans when excludeSpanTypes is empty', () => {
       const tracing = new DefaultObservabilityInstance({
         serviceName: 'test',

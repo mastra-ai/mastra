@@ -1,0 +1,166 @@
+---
+title: "Neon Postgres | Database"
+description: "Use Neon Postgres as a Mastra storage and vector backend."
+packages:
+  - "@mastra/core"
+  - "@mastra/pg"
+---
+
+# Neon Postgres
+
+[Neon](https://neon.com) is a managed PostgreSQL service. Mastra connects to Neon through [`PostgresStore`](/integrations/databases/postgresql), which uses the Node.js `pg` driver. Neon doesn't require a separate Mastra storage package.
+
+## Quickstart
+
+Create a Neon project, then copy its [pooled connection string](https://neon.com/docs/connect/connect-from-any-app) into `DATABASE_URL`.
+
+Install the PostgreSQL storage package:
+
+```bash npm2yarn
+npm install @mastra/pg@latest
+```
+
+Pass the pooled connection string to `PostgresStore`:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra'
+import { PostgresStore } from '@mastra/pg'
+
+export const mastra = new Mastra({
+  storage: new PostgresStore({
+    id: 'neon-storage',
+    connectionString: process.env.DATABASE_URL!,
+  }),
+})
+```
+
+On startup, Mastra calls `storage.init()` and creates its tables and indexes in Neon.
+
+## Set up Neon with the CLI
+
+The Neon CLI requires Node.js 20.19 or newer.
+
+Install the [Neon CLI](https://neon.com/docs/cli/install):
+
+```bash npm2yarn
+npm install -g neon
+```
+
+From your project directory, link an existing Neon project or create one:
+
+```bash
+neon link
+```
+
+`neon link` signs you in and writes project context to `.neon`. It also pulls the current branch's environment variables. Run `neon env pull` again whenever you need to refresh them:
+
+```bash
+neon env pull
+```
+
+The command writes `DATABASE_URL` and `DATABASE_URL_UNPOOLED` to `.env.local` or to `.env` when that file already exists.
+
+### Add `neon.ts`
+
+To manage branch settings in the repository, create a [`neon.ts`](https://neon.com/docs/reference/neon-ts) file:
+
+```bash
+neon config init
+```
+
+This installs `@neon/config` and `@neon/env` and creates a starter config. For example, the following policy expires new non-default branches after seven days:
+
+```typescript title="neon.ts"
+import { defineConfig } from '@neon/config/v1'
+
+export default defineConfig({
+  branch: branch => {
+    if (branch.isDefault) {
+      return {}
+    }
+
+    if (!branch.exists) {
+      return { ttl: '7d' }
+    }
+
+    return {}
+  },
+})
+```
+
+Apply the config:
+
+```bash
+neon deploy
+```
+
+## Install Neon agent skills
+
+Install the [`neon` and `neon-postgres` agent skills](https://neon.com/docs/ai/agent-skills) from your project directory:
+
+```bash npm2yarn
+npx skills add neondatabase/agent-skills --skill neon --skill neon-postgres -y
+```
+
+The skills give compatible coding agents Neon setup instructions and Postgres-specific guidance.
+
+## Production connections
+
+Neon provides direct and pooled connection strings:
+
+- `DATABASE_URL` uses Neon's pooled endpoint. Use it for normal application traffic.
+- `DATABASE_URL_UNPOOLED` connects directly to Postgres. Use it for administrative tasks or schema changes that run outside the application.
+
+For most applications, use the pooled `DATABASE_URL` shown in the quickstart and let Mastra initialize the schema at startup. `PostgresStore` supports initialization through a transaction-pooled connection.
+
+### Separate schema initialization
+
+If the runtime database role shouldn't create tables or indexes, initialize the schema during deployment with the direct connection:
+
+```typescript title="scripts/init-storage.ts"
+import { PostgresStore } from '@mastra/pg'
+
+const storage = new PostgresStore({
+  id: 'neon-storage-init',
+  connectionString: process.env.DATABASE_URL_UNPOOLED!,
+})
+
+try {
+  await storage.init()
+} finally {
+  await storage.close()
+}
+```
+
+After the schema exists, use the pooled connection at runtime and disable automatic initialization:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra'
+import { PostgresStore } from '@mastra/pg'
+
+export const mastra = new Mastra({
+  storage: new PostgresStore({
+    id: 'neon-storage',
+    connectionString: process.env.DATABASE_URL!,
+    disableInit: true,
+  }),
+})
+```
+
+See [Neon connection pooling](https://neon.com/docs/connect/connection-pooling) for details.
+
+## Vector search
+
+Neon supports the [`pgvector` extension](https://neon.com/docs/extensions/pgvector). Use the direct `DATABASE_URL_UNPOOLED` connection while creating the extension and indexes. After setup, configure [`PgVector`](/reference/vectors/pg) with the pooled connection for runtime queries:
+
+```typescript
+import { PgVector } from '@mastra/pg'
+
+const vector = new PgVector({
+  id: 'neon-vector',
+  connectionString: process.env.DATABASE_URL!,
+  disableInit: true,
+})
+```
+
+Setting `disableInit: true` prevents the runtime process from creating or changing the extension, tables and indexes.

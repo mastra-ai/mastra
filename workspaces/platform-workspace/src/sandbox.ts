@@ -458,6 +458,7 @@ export class PlatformSandbox extends MastraSandbox {
       ...(id !== undefined && { id }),
       accessToken: this._client.accessToken,
       projectId: this._client.projectId,
+      actingUserId: options.actingUserId ?? this._client.actingUserId,
       ...(this._client.sessionId !== undefined && { sessionId: this._client.sessionId }),
       ...(this._client.threadId !== undefined && { threadId: this._client.threadId }),
       fetch: this._client.fetch,
@@ -814,6 +815,11 @@ export class PlatformSandbox extends MastraSandbox {
     // or reattach) will re-populate the entry from the workspace-proxy's
     // response.
     this._addressRegistry?.delete(destroyedSandboxId);
+  }
+
+  /** Persist the configured recovery checkpoint when available. */
+  async snapshot(): Promise<void> {
+    await this.captureCheckpoint();
   }
 
   /**

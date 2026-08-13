@@ -113,6 +113,10 @@ export type KnownAgentControllerEvent =
       displayState: {
         isRunning?: boolean;
         omProgress?: AgentControllerOMProgress;
+        /** A buffered observation is running: the message window is being observed in the background. */
+        bufferingMessages?: boolean;
+        /** A buffered reflection is running: observations are being consolidated in the background. */
+        bufferingObservations?: boolean;
         tokenUsage?: Record<string, unknown>;
         /** Active tool executions keyed by toolCallId. */
         activeTools?: Record<string, ActiveToolState>;
@@ -312,6 +316,12 @@ export interface AgentControllerThreadInfo {
    * activity across every worktree/scope sharing the resourceId.
    */
   state?: 'active' | 'idle';
+}
+
+export interface AgentControllerActiveRun {
+  runId: string;
+  resourceId?: string;
+  threadId: string;
 }
 
 export interface AgentControllerAvailableModel {
@@ -987,6 +997,12 @@ export class AgentController extends BaseResource {
   async listModels(): Promise<AgentControllerAvailableModel[]> {
     const body = await this.request<{ models: AgentControllerAvailableModel[] }>(`${this.basePath()}/models`);
     return body.models;
+  }
+
+  /** List the runs in flight on this controller, across all resources. */
+  async listActiveRuns(): Promise<AgentControllerActiveRun[]> {
+    const body = await this.request<{ runs: AgentControllerActiveRun[] }>(`${this.basePath()}/active-runs`);
+    return body.runs;
   }
 
   /** Get workspace status for this agent controller. */

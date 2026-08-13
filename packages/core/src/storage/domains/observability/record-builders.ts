@@ -168,6 +168,9 @@ export function buildCreateSpanRecord(span: AnyExportedSpan): CreateSpanRecord {
   return {
     traceId: span.traceId,
     spanId: span.id,
+    // Mastra storage detects trace roots by a null parentSpanId, so only a Mastra
+    // parent belongs here. A span's externalParentSpanId is intentionally not
+    // persisted, so a run started under an external parent stays a trace root.
     parentSpanId: span.parentSpanId ?? null,
     name: span.name,
 

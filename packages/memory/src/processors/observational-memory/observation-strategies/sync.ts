@@ -212,7 +212,7 @@ export class SyncObservationStrategy extends ObservationStrategy {
         },
         lastObservedMessageCursor: getLastObservedMessageCursor(messages),
       });
-      await this.storage.updateThread({
+      await this.storage.patchThread({
         id: threadId,
         ...(shouldUpdateThreadTitle ? { title: newTitle } : {}),
         metadata: newMetadata,

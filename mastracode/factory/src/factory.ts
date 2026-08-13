@@ -40,7 +40,6 @@ import {
 } from './auth.js';
 import type { FactoryIntegration, IntegrationPostToolContext, IntegrationTools } from './integrations/base.js';
 import type { GithubIntegration } from './integrations/github/integration.js';
-import type { GithubIssueTriageInput, GithubIssueTriageResult } from './integrations/github/issue-triage.js';
 import { recordFactoryPullRequestProvenance } from './integrations/github/provenance.js';
 import { releaseWorkItemSandboxes } from './integrations/github/sandbox-release.js';
 import { PlatformGithubIntegration } from './integrations/platform/github/integration.js';
@@ -64,7 +63,9 @@ import { assertFactoryRules } from './rules/validation.js';
 import { SandboxFleet } from './sandbox/fleet.js';
 import { registerSandboxReattach } from './sandbox/reattach.js';
 import { handleServerError } from './server-error.js';
+import { observeSessionCheckpoint } from './session/checkpoint-capture.js';
 import { observeSessionFilesystem } from './session/filesystem-capture.js';
+import { observeSessionFirstExec } from './session/first-exec-capture.js';
 import { observeSessionFirstMessage } from './session/first-message-capture.js';
 import { createSpaStaticMiddleware, resolveUiDistDir } from './spa-static.js';
 import { createStateSigner } from './state-signing.js';
@@ -171,15 +172,10 @@ export interface MastraFactoryConfig {
   rules?: FactoryRules;
 
   /**
-   * Platform-specific overrides. When the Platform-backed GitHub integration
-   * is active, it derives a `runIssueTriage` runner from the mounted
-   * controller automatically. An explicit `runIssueTriage` here takes
-   * precedence over the controller-derived default. `githubAppSlug` identifies
-   * Factory's own GitHub App writes so their webhook deliveries do not retrigger
-   * triage.
+   * Platform-specific overrides. `githubAppSlug` identifies Factory's own
+   * GitHub App writes so their webhook deliveries do not retrigger triage.
    */
   platform?: {
-    runIssueTriage?: (input: GithubIssueTriageInput) => Promise<GithubIssueTriageResult>;
     githubAppSlug?: string;
   };
 }
@@ -353,12 +349,7 @@ export class MastraFactory {
     const integrations = [...(this.#config.integrations ?? [])];
     if (hasPlatformSecretKey()) {
       if (!integrations.some(integration => integration.id === 'github')) {
-        integrations.push(
-          new PlatformGithubIntegration({
-            runIssueTriage: this.#config.platform?.runIssueTriage,
-            slug: this.#config.platform?.githubAppSlug,
-          }),
-        );
+        integrations.push(new PlatformGithubIntegration({ slug: this.#config.platform?.githubAppSlug }));
       }
       if (!integrations.some(integration => integration.id === 'linear')) {
         integrations.push(new PlatformLinearIntegration());
@@ -748,6 +739,11 @@ export class MastraFactory {
                 transitionService: runtimeTransitionService,
                 storage: storage.getDomain<WorkItemsStorage>('work-items'),
                 maxInFlight: this.#config.dispatcher?.maxInFlight,
+                isAutoRunEnabled: async ({ orgId, factoryProjectId }) => {
+                  await factoryProjectsStorage.ensureReady();
+                  const project = await factoryProjectsStorage.get({ orgId, id: factoryProjectId });
+                  return project?.autoRunEnabled ?? false;
+                },
                 reconcileToolResults: () => factoryProcessor?.reconcileAllBoundThreads() ?? Promise.resolve(),
                 prepareBinding,
                 primeCredentials: tenant => primeTenantCredentials({ tenant, credentials: modelCredentialsStorage }),
@@ -816,7 +812,11 @@ export class MastraFactory {
         filesystem: filesystemStorage,
         sourceControl: sourceControlStorage.forIntegration('github'),
       });
+      observeSessionCheckpoint(session);
       observeSessionFirstMessage(session, {
+        sourceControl: sourceControlStorage.forIntegration('github'),
+      });
+      observeSessionFirstExec(session, {
         sourceControl: sourceControlStorage.forIntegration('github'),
       });
     });

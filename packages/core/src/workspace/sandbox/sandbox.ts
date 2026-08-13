@@ -106,6 +106,8 @@ export interface SandboxCloneOptions {
    * Providers without checkpoint support may ignore this option.
    */
   checkpointName?: string;
+  /** Opaque user subject attributed to provider requests for this clone. */
+  actingUserId?: string;
 }
 
 // =============================================================================
@@ -137,6 +139,12 @@ export interface WorkspaceSandbox extends SandboxLifecycle<SandboxInfo> {
 
   /** Provider type identifier */
   readonly provider: string;
+
+  /**
+   * Persist the sandbox's current state when the provider supports snapshots.
+   * Providers without snapshot support resolve without performing work.
+   */
+  snapshot(): Promise<void>;
 
   /**
    * Get instructions describing how this sandbox works.

@@ -24,7 +24,7 @@ export function useCreateUserSessionMutation() {
   const { baseUrl } = useApiConfig();
   return useMutation({
     mutationFn: ({ projectRepositoryId, branch, baseBranch }: CreateUserSessionVariables) =>
-      createUserSession(baseUrl, projectRepositoryId, branch, baseBranch),
+      createUserSession(baseUrl, projectRepositoryId, { branch, baseBranch }),
   });
 }
 

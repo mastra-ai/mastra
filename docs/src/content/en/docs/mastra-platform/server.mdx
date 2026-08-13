@@ -10,7 +10,7 @@ import StepItem from "@site/src/components/StepItem";
 
 Server on Mastra platform is a production deployment target that runs your Mastra application as an API server. Use it when you want the platform to build, deploy, host, and manage your Mastra server.
 
-You get a stable API endpoint, environment variable management, custom domain support, and deploy history out of the box.
+You get a stable API endpoint with environment variable management and custom domain support, plus deploy history out of the box.
 
 :::note
 `mastra server deploy` is the earlier split deploy path. New projects should use the unified [`mastra deploy`](/docs/mastra-platform/deploy) command, which adds preflight validation, environments, and CLI-managed databases.
@@ -18,7 +18,7 @@ You get a stable API endpoint, environment variable management, custom domain su
 
 :::note
 
-Server deploy provisions hosted storage automatically. If you override storage with [LibSQLStore](/reference/storage/libsql) and a file URL, switch to a remotely hosted database because Mastra platform uses an ephemeral filesystem.
+Server deploy provisions hosted storage automatically. If you override storage with [LibSQLStore](/integrations/databases/libsql) and a file URL, switch to a remotely hosted database because Mastra platform uses an ephemeral filesystem.
 
 :::
 
@@ -67,7 +67,7 @@ Server deploy provisions hosted storage automatically. If you override storage w
 
 ## Deploy lifecycle
 
-A deploy transitions through **queued → uploading → building → deploying → running** (or **failed**, **cancelled**, **crashed**, or **stopped**). Only one build runs per project at a time. If multiple deploys queue up, only the latest proceeds and the rest are cancelled. Builds running longer than 15 minutes are automatically failed. The first deploy provisions infrastructure and seeds environment variables from your local `.env`. Your server URL remains stable across deploys.
+A deploy transitions through **queued → uploading → building → deploying → running** (or **failed**, **cancelled**, **crashed**, or **stopped**). A project runs one build at a time. When multiple deploys queue up, the latest proceeds and the rest are cancelled. Builds running longer than 15 minutes are automatically failed. The first deploy provisions infrastructure and seeds environment variables from your local `.env`. Your server URL remains stable across deploys.
 
 ## Idle behavior
 

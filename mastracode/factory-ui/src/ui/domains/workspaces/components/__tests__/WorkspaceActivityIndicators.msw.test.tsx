@@ -1,17 +1,5 @@
-/**
- * BDD coverage for the sidebar activity indicators.
- *
- * These rows match a thread to a workspace by tag. Factory review/work threads
- * are stamped with `factorySessionId` (the session id, which is also the
- * sidebar row key), but the matcher only ever read `projectPath` — and
- * `projectPath` now holds the sandbox workdir filesystem path rather than the
- * session id. Nothing matched, so the green "agent working" dot never lit and
- * rows fell back to branch names instead of the PR/issue title.
- *
- * Both keys are exercised here: the `factorySessionId` shape factory sessions
- * actually carry, and the legacy `projectPath` shape personal worktree sessions
- * still use.
- */
+import assert from 'node:assert';
+
 import { screen, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
@@ -26,23 +14,12 @@ import {
   factoryId,
   projectRepositoryId,
   reviewName,
-  reviewSessionId,
   workName,
   workSessionId,
 } from './fixtures/sessionHoverDetails';
 
-/** The sandbox workdir now stamped on `projectPath` — never equal to a row key. */
-const SANDBOX_WORKDIR = '/workspace/mastra';
-
-type ThreadTags = Record<string, string>;
-
-function stubWith(tagsFor: (sessionId: string) => ThreadTags, states: Record<string, 'active' | 'idle'>) {
+function stubWith(activeSessionIds: string[]) {
   const fixtures = createSessionHoverDetailsFixtures(new Date().toISOString());
-
-  fixtures.threadsResponse.threads = fixtures.threadsResponse.threads.map(thread => {
-    const sessionId = thread.id;
-    return { ...thread, tags: tagsFor(sessionId), state: states[sessionId] ?? 'idle' };
-  });
 
   server.use(
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () => HttpResponse.json(fixtures.projectsResponse)),
@@ -61,18 +38,31 @@ function stubWith(tagsFor: (sessionId: string) => ThreadTags, states: Record<str
     http.get(`${TEST_BASE_URL}/web/factory/projects/${factoryId}/work-items`, () =>
       HttpResponse.json(fixtures.workItemsResponse),
     ),
-    http.get(`${TEST_BASE_URL}/api/agent-controller/code/sessions/${workSessionId}/threads`, () =>
-      HttpResponse.json(fixtures.threadsResponse),
+    http.get(`${TEST_BASE_URL}/api/agent-controller/code/active-runs`, () =>
+      HttpResponse.json({
+        runs: activeSessionIds.map(sessionId => ({
+          runId: `run-${sessionId}`,
+          resourceId: sessionId,
+          threadId: sessionId,
+        })),
+      }),
     ),
   );
 }
 
 function renderSection() {
+  return renderAt(
+    '/factories/:factoryId/workspaces/:sessionId/threads/:threadId',
+    `/factories/${factoryId}/workspaces/${workSessionId}/threads/${workSessionId}`,
+  );
+}
+
+function renderAt(path: string, entry: string) {
   return renderWithProviders(
-    <MemoryRouter initialEntries={[`/factories/${factoryId}/workspaces/${workSessionId}/threads/${workSessionId}`]}>
+    <MemoryRouter initialEntries={[entry]}>
       <Routes>
         <Route
-          path="/factories/:factoryId/workspaces/:sessionId/threads/:threadId"
+          path={path}
           element={
             <ChatSessionConfigProvider>
               <WorkspacesSection />
@@ -85,54 +75,42 @@ function renderSection() {
 }
 
 describe('Workspace activity indicators', () => {
-  it('lights the running dot for a factory thread tagged with factorySessionId', async () => {
-    // The real factory shape: matched by `factorySessionId`, while `projectPath`
-    // points at the sandbox workdir and matches no row key at all.
-    stubWith(sessionId => ({ factorySessionId: sessionId, projectPath: SANDBOX_WORKDIR }), {
-      [workSessionId]: 'active',
-      [reviewSessionId]: 'idle',
-    });
+  it('lights the running dot for a session with an active run', async () => {
+    stubWith([workSessionId]);
 
     renderSection();
 
-    expect(await screen.findByRole('status', { name: `Agent working in ${workName}` })).toBeInTheDocument();
+    const dot = await screen.findByRole('status', { name: `Agent working in ${workName}` });
+    const actions = screen.getByRole('button', { name: `Session actions for ${workName}` });
+    // Same trailing slot: the menu takes the dot's place on hover instead of covering the label.
+    expect(dot.parentElement).toBe(actions.parentElement);
   });
 
-  it('leaves an idle factory thread without a running dot', async () => {
-    stubWith(sessionId => ({ factorySessionId: sessionId, projectPath: SANDBOX_WORKDIR }), {
-      [workSessionId]: 'idle',
-      [reviewSessionId]: 'idle',
-    });
+  it('leaves a session without an active run undotted', async () => {
+    stubWith([]);
 
     renderSection();
 
     // The row must exist before the absence of its dot means anything.
-    const row = await screen.findByRole('button', { name: workName });
+    const row = (await screen.findByRole('button', { name: workName })).closest('li');
+    assert(row);
     expect(within(row).queryByRole('status', { name: `Agent working in ${workName}` })).not.toBeInTheDocument();
   });
 
-  it('labels the row with the thread title rather than the branch', async () => {
-    stubWith(sessionId => ({ factorySessionId: sessionId, projectPath: SANDBOX_WORKDIR }), {
-      [workSessionId]: 'active',
-      [reviewSessionId]: 'idle',
-    });
+  it('lights the dot on a page that has no workspace session open', async () => {
+    stubWith([workSessionId]);
+
+    renderAt('/factories/:factoryId/work', `/factories/${factoryId}/work`);
+
+    expect(await screen.findByRole('status', { name: `Agent working in ${workName}` })).toBeInTheDocument();
+  });
+
+  it('labels the row with the session title rather than the branch', async () => {
+    stubWith([workSessionId]);
 
     renderSection();
 
     expect(await screen.findByRole('button', { name: reviewName })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'factory/pr-99-authentication-refresh' })).not.toBeInTheDocument();
-  });
-
-  it('still matches legacy sessions keyed by projectPath', async () => {
-    // Personal/local worktree sessions predate `factorySessionId`; the
-    // `projectPath` fallback must keep them working.
-    stubWith(sessionId => ({ projectPath: sessionId }), {
-      [workSessionId]: 'active',
-      [reviewSessionId]: 'idle',
-    });
-
-    renderSection();
-
-    expect(await screen.findByRole('status', { name: `Agent working in ${workName}` })).toBeInTheDocument();
   });
 });

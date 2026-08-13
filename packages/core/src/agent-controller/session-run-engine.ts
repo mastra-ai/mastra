@@ -96,7 +96,8 @@ type StreamChunk =
   | StreamDataChunk<'data-om-thread-update'>
   | StreamDataChunk<'data-mastracode-tool-progress'>
   | StreamDataChunk<'data-sandbox-stdout'>
-  | StreamDataChunk<'data-sandbox-stderr'>;
+  | StreamDataChunk<'data-sandbox-stderr'>
+  | StreamDataChunk<'data-sandbox-exit'>;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -251,15 +252,10 @@ type StreamState = {
 export class SessionRunEngine {
   readonly #session: Session;
   readonly #machinery: SessionMachinery;
-  #requestContext?: RequestContext;
 
   constructor(session: Session, machinery: SessionMachinery) {
     this.#session = session;
     this.#machinery = machinery;
-  }
-
-  setRequestContext(requestContext?: RequestContext): void {
-    if (requestContext) this.#requestContext = requestContext;
   }
 
   private createEmptyAssistantMessage(): MastraDBMessage {
@@ -415,7 +411,8 @@ export class SessionRunEngine {
   }
 
   /**
-   * Process a stream response (shared between sendMessage and tool approval).
+   * Process a stream response. Production runs stream through
+   * `processSubscribedThreadStream`; only tests call this entry directly.
    */
   async processStream(
     response: { fullStream: AsyncIterable<StreamChunk> },
@@ -1135,6 +1132,20 @@ export class SessionRunEngine {
         }
         break;
       }
+      case 'data-sandbox-exit': {
+        const d = getDataRecord(chunk);
+        const toolCallId = getString(d?.toolCallId);
+        const exitCode = getOptionalNumber(d?.exitCode);
+        if (toolCallId && exitCode !== undefined) {
+          this.#session.emit({
+            type: 'command_exit',
+            toolCallId,
+            exitCode,
+            success: getBoolean(d?.success, exitCode === 0),
+          });
+        }
+        break;
+      }
 
       default:
         break;
@@ -1215,6 +1226,7 @@ export class SessionRunEngine {
 
   async processSubscribedThreadStream(subscription: AgentThreadSubscription<StreamChunk>): Promise<void> {
     let currentRun: StreamState | undefined;
+    let requestContext!: RequestContext;
     let bailed = false;
 
     const consume = async (): Promise<void> => {
@@ -1226,11 +1238,13 @@ export class SessionRunEngine {
         }
 
         if (!currentRun) {
+          const runId = ('runId' in chunk ? chunk.runId : undefined) ?? subscription.activeRunId();
           currentRun = this.createStreamState();
           this.#session.run.nextOperation();
           this.#session.run.ensureAbortController();
-          this.#session.run.setRunId({ runId: subscription.activeRunId() ?? ('runId' in chunk ? chunk.runId : null) });
+          this.#session.run.setRunId({ runId });
           this.#session.run.setTraceId({ traceId: null });
+          requestContext = await this.#machinery.buildRequestContext(subscription.__getCurrentRunRequestContext?.());
           this.#session.emit({ type: 'agent_start' });
         }
 
@@ -1239,7 +1253,6 @@ export class SessionRunEngine {
         }
 
         try {
-          const requestContext = await this.#machinery.buildRequestContext(this.#requestContext);
           const streamResult = await this.processStreamChunk(currentRun, chunk, requestContext);
           if (
             streamResult ||
