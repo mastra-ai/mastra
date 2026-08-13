@@ -4,7 +4,7 @@ import { Spinner } from '@/ds/components/Spinner';
 export function getStatusIcon(status: string) {
   switch (status) {
     case 'running':
-      return <Spinner aria-hidden role="presentation" />;
+      return <Spinner size="sm" aria-hidden />;
     case 'success':
       return <CheckIcon aria-hidden />;
     case 'failed':
@@ -19,5 +19,4 @@ export type ProcessStep = {
   status: string;
   description: string;
   title: string;
-  isActive: boolean;
 };

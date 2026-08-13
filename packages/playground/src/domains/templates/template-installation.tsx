@@ -65,7 +65,6 @@ export function TemplateInstallation({ name, streamResult, runId, workflowInfo }
     status: stepData?.status,
     description: stepData?.description,
     title: stepId.charAt(0).toUpperCase() + stepId.slice(1).replace(/-/g, ' '),
-    isActive: currentStep?.id === stepId,
   }));
 
   return (

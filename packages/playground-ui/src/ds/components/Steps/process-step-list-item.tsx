@@ -6,24 +6,13 @@ import { cn } from '@/lib/utils';
 type ProcessStepListItemVariant = 'default' | 'plain';
 
 export type ProcessStepListItemProps = {
-  stepId: string;
   step: ProcessStep;
   isActive: boolean;
   position: number;
   variant?: ProcessStepListItemVariant;
 };
 
-function formatStepTitle(stepId: string): string {
-  return stepId.charAt(0).toUpperCase() + stepId.slice(1).replace(/-/g, ' ');
-}
-
-export function ProcessStepListItem({
-  stepId,
-  step,
-  isActive,
-  position,
-  variant = 'default',
-}: ProcessStepListItemProps) {
+export function ProcessStepListItem({ step, isActive, position, variant = 'default' }: ProcessStepListItemProps) {
   return (
     <div
       className={cn(
@@ -51,7 +40,7 @@ export function ProcessStepListItem({
               'text-neutral3': !isActive && step.status !== 'success',
             })}
           >
-            {formatStepTitle(stepId)}
+            {step.title}
           </h4>
           {step.description && (
             <p className={cn('-mt-0.5 text-ui-md text-neutral2', { truncate: variant === 'plain' })}>

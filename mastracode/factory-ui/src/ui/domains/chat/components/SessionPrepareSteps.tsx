@@ -5,9 +5,13 @@ import type { PrepareProgress } from '../../workspaces/services/github';
 import { useChatMessagesInitializing } from '../context/ChatSessionProvider';
 import { useChatSessionContext } from '../context/useChatSessionContext';
 
-const GROUP_ORDER = ['preparing-sandbox', 'cloning-repository', 'starting-session'] as const;
+const GROUPS = [
+  { id: 'preparing-sandbox', title: 'Preparing sandbox' },
+  { id: 'cloning-repository', title: 'Cloning repository' },
+  { id: 'starting-session', title: 'Starting session' },
+] as const;
 
-type GroupId = (typeof GROUP_ORDER)[number];
+type GroupId = (typeof GROUPS)[number]['id'];
 
 const PHASE_TO_GROUP: Record<PrepareProgress['phase'], GroupId> = {
   reattaching: 'preparing-sandbox',
@@ -59,19 +63,17 @@ export function SessionPrepareSteps() {
   const loadingMessages = !sandboxPreparing && messagesInitializing;
 
   const activeGroup = getActiveGroup(observedGroup, loadingMessages);
-  const activeIndex = GROUP_ORDER.indexOf(activeGroup);
+  const activeIndex = GROUPS.findIndex(group => group.id === activeGroup);
 
-  const items: Array<{ step: ProcessStep; position: number }> = GROUP_ORDER.map((id, index) => {
+  const items: Array<{ step: ProcessStep; position: number }> = GROUPS.map((group, index) => {
     const status = getStepStatus(index, activeIndex);
-    const isActive = status === 'running';
 
     return {
       position: index + 1,
       step: {
-        id,
+        id: group.id,
+        title: group.title,
         status,
-        isActive,
-        title: id,
         description: getStepDescription(status, loadingMessages, activeDescription),
       },
     };
@@ -87,13 +89,7 @@ export function SessionPrepareSteps() {
       <div className="flex w-full max-w-md flex-col gap-1">
         {items.map(({ step, position }) => (
           <div key={step.id} data-testid="session-prepare-step" data-status={step.status}>
-            <ProcessStepListItem
-              stepId={step.id}
-              step={step}
-              isActive={step.isActive}
-              position={position}
-              variant="plain"
-            />
+            <ProcessStepListItem step={step} isActive={step.status === 'running'} position={position} variant="plain" />
           </div>
         ))}
       </div>

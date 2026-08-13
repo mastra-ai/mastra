@@ -15,27 +15,27 @@ export default meta;
 type Story = StoryObj<typeof ProcessStepList>;
 
 const pendingSteps: ProcessStep[] = [
-  { id: 'setup', status: 'pending', description: 'Initialize the project', title: 'Setup', isActive: false },
-  { id: 'configure', status: 'pending', description: 'Configure settings', title: 'Configure', isActive: false },
-  { id: 'deploy', status: 'pending', description: 'Deploy to production', title: 'Deploy', isActive: false },
+  { id: 'setup', status: 'pending', description: 'Initialize the project', title: 'Setup' },
+  { id: 'configure', status: 'pending', description: 'Configure settings', title: 'Configure' },
+  { id: 'deploy', status: 'pending', description: 'Deploy to production', title: 'Deploy' },
 ];
 
 const inProgressSteps: ProcessStep[] = [
-  { id: 'setup', status: 'success', description: 'Initialize the project', title: 'Setup', isActive: false },
-  { id: 'configure', status: 'running', description: 'Configure settings', title: 'Configure', isActive: true },
-  { id: 'deploy', status: 'pending', description: 'Deploy to production', title: 'Deploy', isActive: false },
+  { id: 'setup', status: 'success', description: 'Initialize the project', title: 'Setup' },
+  { id: 'configure', status: 'running', description: 'Configure settings', title: 'Configure' },
+  { id: 'deploy', status: 'pending', description: 'Deploy to production', title: 'Deploy' },
 ];
 
 const completedSteps: ProcessStep[] = [
-  { id: 'setup', status: 'success', description: 'Initialize the project', title: 'Setup', isActive: false },
-  { id: 'configure', status: 'success', description: 'Configure settings', title: 'Configure', isActive: false },
-  { id: 'deploy', status: 'success', description: 'Deploy to production', title: 'Deploy', isActive: false },
+  { id: 'setup', status: 'success', description: 'Initialize the project', title: 'Setup' },
+  { id: 'configure', status: 'success', description: 'Configure settings', title: 'Configure' },
+  { id: 'deploy', status: 'success', description: 'Deploy to production', title: 'Deploy' },
 ];
 
 const failedSteps: ProcessStep[] = [
-  { id: 'setup', status: 'success', description: 'Initialize the project', title: 'Setup', isActive: false },
-  { id: 'configure', status: 'failed', description: 'Configure settings', title: 'Configure', isActive: false },
-  { id: 'deploy', status: 'pending', description: 'Deploy to production', title: 'Deploy', isActive: false },
+  { id: 'setup', status: 'success', description: 'Initialize the project', title: 'Setup' },
+  { id: 'configure', status: 'failed', description: 'Configure settings', title: 'Configure' },
+  { id: 'deploy', status: 'pending', description: 'Deploy to production', title: 'Deploy' },
 ];
 
 export const Default: Story = {
@@ -62,9 +62,8 @@ export const PlainEmbedded: Story = {
       {inProgressSteps.map((step, index) => (
         <ProcessStepListItem
           key={step.id}
-          stepId={step.id}
           step={step}
-          isActive={step.isActive}
+          isActive={step.status === 'running'}
           position={index + 1}
           variant="plain"
         />
@@ -90,26 +89,25 @@ export const WithFailure: Story = {
 export const ManySteps: Story = {
   args: {
     steps: [
-      { id: 'init', status: 'success', description: 'Initialize', title: 'Init', isActive: false },
-      { id: 'validate', status: 'success', description: 'Validate inputs', title: 'Validate', isActive: false },
-      { id: 'process', status: 'running', description: 'Process data', title: 'Process', isActive: true },
-      { id: 'transform', status: 'pending', description: 'Transform results', title: 'Transform', isActive: false },
-      { id: 'output', status: 'pending', description: 'Generate output', title: 'Output', isActive: false },
-      { id: 'cleanup', status: 'pending', description: 'Clean up resources', title: 'Cleanup', isActive: false },
+      { id: 'init', status: 'success', description: 'Initialize', title: 'Init' },
+      { id: 'validate', status: 'success', description: 'Validate inputs', title: 'Validate' },
+      { id: 'process', status: 'running', description: 'Process data', title: 'Process' },
+      { id: 'transform', status: 'pending', description: 'Transform results', title: 'Transform' },
+      { id: 'output', status: 'pending', description: 'Generate output', title: 'Output' },
+      { id: 'cleanup', status: 'pending', description: 'Clean up resources', title: 'Cleanup' },
     ],
     currentStep: {
       id: 'process',
       status: 'running',
       description: 'Process data',
       title: 'Process',
-      isActive: true,
     },
   },
 };
 
 export const SingleStep: Story = {
   args: {
-    steps: [{ id: 'single-task', status: 'running', description: 'Processing...', title: 'Task', isActive: true }],
-    currentStep: { id: 'single-task', status: 'running', description: 'Processing...', title: 'Task', isActive: true },
+    steps: [{ id: 'single-task', status: 'running', description: 'Processing...', title: 'Task' }],
+    currentStep: { id: 'single-task', status: 'running', description: 'Processing...', title: 'Task' },
   },
 };
