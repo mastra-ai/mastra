@@ -299,6 +299,8 @@ describe('getFactoryWorkspace', () => {
     const typeIndex = triage.indexOf('**Type:**');
     const routeIndex = triage.indexOf('**Route:**');
     const severityIndex = triage.indexOf('**Severity:**');
+    const effortIndex = triage.indexOf('**Effort:**');
+    const impactIndex = triage.indexOf('**Impact:**');
     const confidenceIndex = triage.indexOf('**Confidence:**');
     const nextStepIndex = triage.indexOf('**Next step:**');
     const understandingIndex = triage.indexOf('### Understanding');
@@ -309,23 +311,38 @@ describe('getFactoryWorkspace', () => {
     expect(typeIndex).toBeGreaterThan(markerIndex);
     expect(routeIndex).toBeGreaterThan(typeIndex);
     expect(severityIndex).toBeGreaterThan(routeIndex);
-    expect(confidenceIndex).toBeGreaterThan(severityIndex);
+    expect(effortIndex).toBeGreaterThan(severityIndex);
+    expect(impactIndex).toBeGreaterThan(effortIndex);
+    expect(confidenceIndex).toBeGreaterThan(impactIndex);
     expect(nextStepIndex).toBeGreaterThan(confidenceIndex);
     expect(understandingIndex).toBeGreaterThan(nextStepIndex);
     expect(assumptionsIndex).toBeGreaterThan(understandingIndex);
     expect(questionsIndex).toBeGreaterThan(assumptionsIndex);
     expect(triage).toContain('Severity guide:');
+    expect(triage).toContain('Effort guide:');
+    expect(triage).toContain('Impact guide:');
+    expect(triage).toContain(
+      'Effort estimates the implementation scope; impact estimates the user or business consequence.',
+    );
+    expect(triage).toContain('including independent effort and impact estimates, on every refresh');
     expect(triage).toContain('Plan fix');
     expect(triage).toContain('Await approval');
     expect(triage).toContain('No transition / refresh');
     expect(triage).toContain('Keep the issue in its current initial stage until manually moved to planning.');
     const labelReconciliationIndex = triage.indexOf(
-      'After a GitHub comment is posted or updated, reconcile the triage labels',
+      'After a GitHub comment is posted or updated, reconcile the labels',
     );
     expect(labelReconciliationIndex).toBeGreaterThan(questionsIndex);
     expect(triage).toContain('gh issue edit "$ISSUE" --add-label "status: auto-triaged"');
     expect(triage).toContain('gh issue edit "$ISSUE" --remove-label "status: needs triage"');
     expect(triage).toContain('gh issue edit "$ISSUE" --add-label "status: needs approval"');
+    for (const label of ['effort:low', 'effort:medium', 'effort:high', 'impact:low', 'impact:medium', 'impact:high']) {
+      expect(triage).toContain(label);
+    }
+    expect(triage).toContain('Add the selected `effort:<level>` and `impact:<level>` labels from the handoff.');
+    expect(triage).toContain('Remove only conflicting alternatives from these explicit labels');
+    expect(triage).toContain('On every initial run and refresh, keep exactly the selected effort label');
+    expect(triage).toContain('Do not add, remove, or derive any `trio-*` labels');
     expect(triage).toContain('Apply only these label mutations.');
     expect(triage).toContain(
       'For Linear issues, use the same structured handoff without attempting GitHub publication or label mutations.',
