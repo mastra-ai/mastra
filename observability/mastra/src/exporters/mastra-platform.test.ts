@@ -2028,7 +2028,7 @@ describe('MastraPlatformExporter', () => {
         // Exactly one warn despite both signal responses being 402s
         expect(warnSpy).toHaveBeenCalledTimes(1);
         expect(warnSpy).toHaveBeenCalledWith(
-          'Mastra observability paused: quota exhausted, dropping telemetry and probing every 300s',
+          'Mastra observability export paused: platform quota exhausted (OBSERVABILITY_QUOTA_EXCEEDED). Dropping telemetry and retrying in 300 seconds. Check Platform billing/usage to restore telemetry.',
         );
 
         // All five signal types are dropped while paused, memory stays bounded

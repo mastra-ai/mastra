@@ -707,7 +707,7 @@ export class MastraPlatformExporter extends BaseExporter {
     this.resetBuffer();
 
     this.logger.warn(
-      `Mastra observability paused: quota exhausted, dropping telemetry and probing every ${retryAfterSeconds}s`,
+      `Mastra observability export paused: platform quota exhausted (OBSERVABILITY_QUOTA_EXCEEDED). Dropping telemetry and retrying in ${retryAfterSeconds} seconds. Check Platform billing/usage to restore telemetry.`,
     );
 
     this.scheduleQuotaProbe();
