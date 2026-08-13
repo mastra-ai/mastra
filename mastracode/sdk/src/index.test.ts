@@ -373,9 +373,13 @@ describe('createMastraCode thread lock wiring', () => {
 
     await createMastraCode({ pubsub: pubsub as never, unixSocketPubSub: true });
 
-    const agentControllerConfig = controllerConstructorConfigs.at(-1);
+    const agentControllerConfig = controllerConstructorConfigs.at(-1) as
+      | { pubsub?: unknown; threadLock?: { tryAcquire?: (threadId: string) => boolean } }
+      | undefined;
     expect(agentControllerConfig?.pubsub).toBe(pubsub);
     expect(agentControllerConfig?.threadLock).toBeDefined();
+    expect(agentControllerConfig?.threadLock?.tryAcquire).toEqual(expect.any(Function));
+    expect(agentControllerConfig?.threadLock?.tryAcquire?.('thread-id')).toBe(true);
   });
 
   it('skips thread locks for configured PubSub when cross-process mode is explicit', async () => {
