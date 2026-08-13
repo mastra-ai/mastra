@@ -2,4 +2,4 @@
 '@mastra/clickhouse': patch
 ---
 
-Fixed ClickHouse observability so Studio shows Metrics by advertising metrics and logs capabilities (#21435).
+Studio now shows Metrics and Logs when you use ClickHouse storage. (#21435)

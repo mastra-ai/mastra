@@ -2,4 +2,4 @@
 '@mastra/duckdb': patch
 ---
 
-Fixed DuckDB observability so Studio shows Metrics by advertising metrics and logs capabilities (#21435).
+Studio now shows Metrics and Logs when you use DuckDB storage. (#21435)

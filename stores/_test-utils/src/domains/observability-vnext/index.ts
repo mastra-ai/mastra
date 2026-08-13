@@ -844,7 +844,13 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
         coreFeatures.delete('observability-delta-polling');
 
         try {
-          expect(storage.getFeatures()?.includes('delta-polling')).toBeFalsy();
+          const features = storage.getFeatures();
+          // Adapters that advertise capabilities keep metrics+logs when the flag is off
+          // (InMemory returns undefined instead of an empty/base list).
+          if (features !== undefined) {
+            expect(features).toEqual(['metrics', 'logs']);
+          }
+          expect(features?.includes('delta-polling')).toBeFalsy();
 
           const page = await storage.listLogs({});
           expect(page.deltaCursor).toBeUndefined();
