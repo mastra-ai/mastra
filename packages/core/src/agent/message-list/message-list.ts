@@ -43,6 +43,7 @@ import type {
 } from './state';
 import type { AIV5Type, AIV5ResponseMessage, AIV6Type, MessageInput, MessageListInput } from './types';
 import { ensureGeminiCompatibleMessages } from './utils/provider-compat';
+import { preserveResponseItemIdsOnMerge } from './utils/response-item-metadata';
 import { stampPart } from './utils/stamp-part';
 
 function isSignalDataMessage<T extends { role: string; parts: Array<{ type: string }> }>(message: T): boolean {
@@ -1292,7 +1293,10 @@ export class MessageList {
                   ? { ...existing, ...values }
                   : values;
             }
-            return merged as AIV5Type.ProviderMetadata;
+            // When the call and result carry different Responses item ids
+            // (e.g. OpenAI hosted tool_search: tsc_… call / tso_… output),
+            // keep both so next-turn replay can reference each item.
+            return preserveResponseItemIdsOnMerge(original, incoming, merged) as AIV5Type.ProviderMetadata;
           })()
         : undefined;
 

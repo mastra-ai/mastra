@@ -11,6 +11,7 @@ import type {
   MastraToolInvocationPart,
 } from '../state/types';
 import type { AIV5Type, AIV6Type, MessageSource } from '../types';
+import { getResponseResultProviderMetadata } from '../utils/response-item-metadata';
 import { sanitizeToolName } from '../utils/tool-name';
 import { AIV5Adapter } from './AIV5Adapter';
 
@@ -586,6 +587,11 @@ export class AIV6Adapter {
             },
             {
               preliminary: part.preliminary,
+              // AIV6 has a dedicated slot for result-side metadata; surface the
+              // result's Responses item id there when it differs from the call's.
+              resultProviderMetadata: getResponseResultProviderMetadata(
+                part.providerMetadata as Record<string, unknown> | undefined,
+              ),
               approval:
                 part.toolInvocation.approval?.approved === true
                   ? {
