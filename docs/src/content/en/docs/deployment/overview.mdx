@@ -9,7 +9,7 @@ import { IntegrationGrid } from '@site/src/components/integrations/grid';
 
 # Deploy
 
-Mastra applications can be deployed to any Node.js-compatible environment. You can deploy a Mastra server, integrate with an existing web framework, deploy to cloud providers, or use [Mastra platform](/docs/mastra-platform/overview) for observability, Studio, and server deployment.
+Mastra applications can be deployed to any Node.js-compatible environment. You can deploy a Mastra server or integrate with an existing web framework. Other options include cloud providers and [Mastra platform](/docs/mastra-platform/overview) for observability, Studio, and server deployment.
 
 ## Runtime support
 
@@ -70,10 +70,10 @@ Use these guides when adding Mastra to an existing Next.js or Astro application.
 
 ## Workflow runners
 
-Mastra workflows run using the built-in execution engine by default. For production workloads requiring managed infrastructure, workflows can also be deployed to specialized platforms like [Inngest](https://www.inngest.com) that provide step memoization, automatic retries, and real-time monitoring.
+Mastra workflows run using the built-in execution engine by default. For production workloads requiring managed infrastructure, workflows can also be deployed to specialized platforms like [Inngest](https://www.inngest.com) that provide step memoization and automatic retries, with real-time monitoring.
 
 Visit the [Workflow Runners guide](/docs/deployment/workflow-runners) for execution options and the [Inngest deployment guide](/integrations/deploy/inngest) for setup instructions.
 
 ## Workers
 
-For production deployments, Mastra can run workflow orchestration, cron scheduling, and background tool execution in dedicated worker processes separate from the API server. This lets you scale each concern independently and isolate failures. See [Workers](/docs/deployment/workers) for details.
+For production deployments, Mastra can run workflow orchestration and cron scheduling, along with background tool execution in dedicated worker processes separate from the API server. This lets you scale each concern independently and isolate failures. See [Workers](/docs/deployment/workers) for details.

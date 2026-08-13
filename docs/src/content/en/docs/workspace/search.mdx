@@ -100,7 +100,7 @@ When the provider supports batching (for example, OpenAI's `embedMany`), pass an
 The following example replaces the single-text embedder with a batched one. The embedder function takes an array and returns an array of embeddings in the same order, plus carries two extra properties:
 
 - `batch: true`: marks the function as batch-capable. Without this property, Mastra calls it one text at a time.
-- `maxBatchSize`: the largest array the provider accepts in one call. Mastra splits larger requests into chunks of this size and sends them in parallel. Set this to your provider's documented limit (for example, 2048 for OpenAI, 96 for Cohere, 128 for Voyage). Omit it to send every pending text in one request.
+- `maxBatchSize`: the largest array the provider accepts in one call. Mastra splits larger requests into chunks of this size and sends them in parallel. Set this to your provider's documented limit. For example, OpenAI accepts 2048 and Cohere accepts 96. Voyage accepts 128. Omit it to send every pending text in one request.
 
 ```typescript title="src/mastra/workspaces.ts"
 import { Workspace, LocalFilesystem } from '@mastra/core/workspace'

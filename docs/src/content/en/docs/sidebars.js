@@ -299,25 +299,9 @@ const sidebars = {
           ],
         },
         {
-          type: 'category',
+          type: 'doc',
+          id: 'browser/overview',
           label: 'Browser',
-          link: {
-            type: 'doc',
-            id: 'browser/overview',
-          },
-          customProps: {
-            contextualSidebar: true,
-          },
-          items: [
-            {
-              type: 'doc',
-              id: 'browser/recording',
-              label: 'Recording',
-              customProps: {
-                tags: ['new'],
-              },
-            },
-          ],
         },
         {
           type: 'category',

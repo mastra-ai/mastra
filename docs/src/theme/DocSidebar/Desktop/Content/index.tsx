@@ -4,6 +4,7 @@ import { prefersReducedMotion, ThemeClassNames } from '@docusaurus/theme-common'
 import { useAnnouncementBar, useScrollPosition } from '@docusaurus/theme-common/internal'
 import { translate } from '@docusaurus/Translate'
 import DocSidebarItems from '@theme/DocSidebarItems'
+import type { PropSidebarItem } from '@docusaurus/plugin-content-docs'
 import type { Props } from '@theme/DocSidebar/Desktop/Content'
 import VersionControl from '@site/src/components/version-control'
 import ContextualContent from '../../ContextualContent'
@@ -30,7 +31,7 @@ export default function DocSidebarDesktopContent({ path, sidebar, className }: P
   const showAnnouncementBar = useShowAnnouncementBar()
   const navigationRef = useRef<HTMLElement>(null)
   const versionControlRef = useRef<HTMLDivElement>(null)
-  const { activateSidebar, clearSidebar, resolveSidebar } = useContextualSidebar()
+  const { activateSidebar, clearSidebar, resolveSidebar, rootScrollState } = useContextualSidebar()
   const contextualSidebar = resolveSidebar(sidebar)
   const [exitingContextualSidebar, setExitingContextualSidebar] = useState<typeof contextualSidebar>()
   const renderedContextualSidebar = contextualSidebar ?? exitingContextualSidebar
@@ -40,13 +41,20 @@ export default function DocSidebarDesktopContent({ path, sidebar, className }: P
   const shouldAnimateContextualEntry = previousPaneKey.current === 'root' && paneKey !== 'root'
 
   useLayoutEffect(() => {
-    if (previousPaneKey.current !== paneKey) {
-      if (navigationRef.current) {
-        navigationRef.current.scrollTop = 0
+    const navigation = navigationRef.current
+    const previousPane = previousPaneKey.current
+    if (!navigation || previousPane === paneKey) return
+
+    if (paneKey === 'root') {
+      if (rootScrollState.current.restorePending) {
+        navigation.scrollTop = rootScrollState.current.scrollTop
+        rootScrollState.current.restorePending = false
       }
-      previousPaneKey.current = paneKey
+    } else {
+      navigation.scrollTop = 0
     }
-  }, [paneKey])
+    previousPaneKey.current = paneKey
+  }, [paneKey, rootScrollState])
 
   useLayoutEffect(() => {
     const navigation = navigationRef.current
@@ -92,6 +100,15 @@ export default function DocSidebarDesktopContent({ path, sidebar, className }: P
   const finishContextualExit = () => {
     setExitingContextualSidebar(undefined)
     requestAnimationFrame(() => navigationRef.current?.focus())
+  }
+
+  const handleRootItemClick = (item: PropSidebarItem) => {
+    if (item.type === 'category' && item.customProps?.contextualSidebar === true && navigationRef.current) {
+      rootScrollState.current = {
+        restorePending: true,
+        scrollTop: navigationRef.current.scrollTop,
+      }
+    }
   }
 
   const handleBack = () => {
@@ -140,7 +157,7 @@ export default function DocSidebarDesktopContent({ path, sidebar, className }: P
           aria-hidden={contextualSidebar ? true : undefined}
           inert={contextualSidebar ? true : undefined}
         >
-          <DocSidebarItems items={sidebar} activePath={path} level={1} />
+          <DocSidebarItems items={sidebar} activePath={path} level={1} onItemClick={handleRootItemClick} />
         </ul>
         {renderedContextualSidebar && (
           <ContextualContent

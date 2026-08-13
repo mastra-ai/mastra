@@ -4,7 +4,6 @@ import type { NotificationPriority } from '@mastra/core/notifications';
 import { RequestContext } from '@mastra/core/request-context';
 import type { Context } from 'hono';
 import type { GithubIntegration, GithubRepositoryPermission } from './integration.js';
-import type { GithubIssueTriageInput, GithubIssueTriageResult } from './issue-triage.js';
 import { listPullRequestSubscriptionsForWebhook, retirePullRequestSubscription } from './subscriptions.js';
 import type {
   GithubSignalSubscriptionRow,
@@ -12,13 +11,9 @@ import type {
   GithubWebhookPullRequestTarget,
 } from './subscriptions.js';
 
-export type GithubIssueTriageRunInput = GithubIssueTriageInput;
-export type GithubIssueTriageRunResult = GithubIssueTriageResult;
-
 export interface GithubWebhookHandlerOptions {
   /** Integration providing webhook-secret verification + collaborator permission checks. */
   github: GithubIntegration;
-  runIssueTriage?: (input: GithubIssueTriageRunInput) => Promise<GithubIssueTriageRunResult>;
   ingestFactoryEvent?: (event: ParsedGithubWebhook) => Promise<unknown>;
 }
 
