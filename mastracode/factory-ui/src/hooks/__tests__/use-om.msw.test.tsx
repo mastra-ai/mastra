@@ -96,7 +96,17 @@ describe('useUpdateOMModel', () => {
       server.use(
         http.get(URL, () => HttpResponse.json(omResponse())),
         http.put(`${URL}/observer/model`, () =>
-          HttpResponse.json({ ok: true, config: omResponse({ observerModelId: 'p/new-observer' }).config }),
+          HttpResponse.json({
+            ok: true,
+            config: omResponse({
+              observer: {
+                selection: { mode: 'model', modelId: 'p/new-observer' },
+                effectiveModelId: 'p/new-observer',
+                providerStatus: 'available',
+              },
+              observerModelId: 'p/new-observer',
+            }).config,
+          }),
         ),
       );
 
@@ -112,7 +122,48 @@ describe('useUpdateOMModel', () => {
       });
       await waitForMutationsIdle(client);
 
-      expect(result.current.query.data?.config.observerModelId).toBe('p/new-observer');
+      expect(result.current.query.data?.config.observer.effectiveModelId).toBe('p/new-observer');
+    });
+  });
+
+  describe('when a role is reset to auto', () => {
+    it('PUTs auto intent and caches the effective concrete model returned by the server', async () => {
+      let putBody: unknown;
+      server.use(
+        http.get(URL, () => HttpResponse.json(omResponse())),
+        http.put(`${URL}/reflector/model`, async ({ request }) => {
+          putBody = await request.json();
+          return HttpResponse.json({
+            ok: true,
+            config: omResponse({
+              reflector: {
+                selection: { mode: 'auto' },
+                effectiveModelId: 'openai/gpt-5.4-mini',
+                providerStatus: 'available',
+              },
+              reflectorModelId: 'openai/gpt-5.4-mini',
+            }).config,
+          });
+        }),
+      );
+
+      const { result, client } = renderHookWithProviders(() => ({
+        query: useOMQuery('res-1'),
+        update: useUpdateOMModel('res-1', 'reflector'),
+      }));
+
+      await waitFor(() => expect(result.current.query.isSuccess).toBe(true));
+      await act(async () => {
+        await result.current.update.mutateAsync({ selection: 'auto' });
+      });
+      await waitForMutationsIdle(client);
+
+      expect(putBody).toEqual({ resourceId: 'res-1', selection: 'auto' });
+      expect(result.current.query.data?.config.reflector).toEqual({
+        selection: { mode: 'auto' },
+        effectiveModelId: 'openai/gpt-5.4-mini',
+        providerStatus: 'available',
+      });
     });
   });
 });

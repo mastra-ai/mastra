@@ -132,6 +132,46 @@ function stateArgs(context: RequestContext, overrides: Record<string, unknown> =
 }
 
 describe('FactoryPhaseStateProcessor', () => {
+  it('reconciles caller memory settings before each bound model step', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    await prepare(storage);
+    const reconcileMemorySettings = vi.fn(async () => undefined);
+    const processor = new FactoryPhaseStateProcessor({
+      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      storage,
+      reconcileMemorySettings,
+    });
+    const context = requestContext();
+
+    await processor.processInputStep(inputArgs(context, []));
+    await processor.processInputStep(inputArgs(context, []));
+
+    expect(reconcileMemorySettings).toHaveBeenCalledTimes(2);
+    expect(reconcileMemorySettings).toHaveBeenCalledWith({
+      requestContext: context,
+      binding: expect.objectContaining({ orgId: 'org-1', role: 'work', resourceId: 'resource-1' }),
+    });
+  });
+
+  it('keeps model processing fail-soft when memory settings reconciliation fails', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    await prepare(storage);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const processor = new FactoryPhaseStateProcessor({
+      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      storage,
+      reconcileMemorySettings: vi.fn(async () => {
+        throw new Error('storage unavailable');
+      }),
+    });
+
+    await expect(processor.processInputStep(inputArgs(requestContext(), []))).resolves.toBeUndefined();
+    expect(warn).toHaveBeenCalledWith('[Factory Memory Settings] Failed to reconcile settings for run', {
+      error: 'storage unavailable',
+    });
+    warn.mockRestore();
+  });
+
   it('ingests completed tool results once using binding, message, and tool-call identity', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     await prepare(storage);

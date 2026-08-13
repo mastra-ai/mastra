@@ -856,6 +856,23 @@ export class MastraFactory {
           configVersion,
           storage: workItemsStorage,
           boards: this.#boards,
+          reconcileMemorySettings: async ({ requestContext, binding }) => {
+            const context = requestContext?.get('controller') as { resourceId?: string; scope?: string } | undefined;
+            if (!context?.resourceId) return;
+            const user = getFactoryAuthUserFromContext(requestContext);
+            let userId = getFactoryAuthUserId(user) ?? (binding.orgId === 'local' ? 'local' : undefined);
+            if (!userId && storage.isDomainReady('source-control')) {
+              const sourceSession = await sourceControlStorage
+                .forIntegration('github')
+                .sessions.getBySessionId(binding.sessionId);
+              userId = sourceSession?.userId;
+            }
+            if (!userId) return;
+            const session = await prepared?.base.controller.getSessionByResource(context.resourceId, context.scope);
+            if (!session) return;
+            const record = await memorySettingsStorage.get({ orgId: binding.orgId, userId });
+            await applyMemorySettingsToSession(session, record);
+          },
           ...(transitionService ? { transitionService } : {}),
           ...(githubIntegration
             ? {

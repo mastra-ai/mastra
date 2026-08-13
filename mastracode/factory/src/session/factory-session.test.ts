@@ -51,8 +51,14 @@ function createSessionDouble() {
   const calls: string[] = [];
   const session = {
     om: {
-      observer: { modelId: () => undefined, switchModel: vi.fn(async () => void calls.push('observer')) },
-      reflector: { modelId: () => undefined, switchModel: vi.fn(async () => void calls.push('reflector')) },
+      observer: {
+        switchModel: vi.fn(async () => void calls.push('observer')),
+        switchSelection: vi.fn(async () => void calls.push('observer')),
+      },
+      reflector: {
+        switchModel: vi.fn(async () => void calls.push('reflector')),
+        switchSelection: vi.fn(async () => void calls.push('reflector')),
+      },
     },
     state: { get: () => ({}), set: vi.fn(async () => void calls.push('state')) },
     model: { switch: vi.fn(async () => void calls.push('model')) },
@@ -255,8 +261,10 @@ describe('hydrateFactorySession', () => {
     });
 
     expect(memorySettings.get).toHaveBeenCalledWith({ orgId: 'org-1', userId: 'factory-project:proj-1' });
-    expect(double.om.observer.switchModel).toHaveBeenCalledWith({ modelId: 'anthropic/claude-fable-5' });
-    expect(double.om.reflector.switchModel).toHaveBeenCalledWith({ modelId: 'anthropic/claude-opus-5' });
+    expect(double.om.observer.switchSelection).toHaveBeenCalledWith({
+      selection: { mode: 'model', modelId: 'anthropic/claude-fable-5' },
+    });
+    expect(double.om.reflector.switchSelection).toHaveBeenCalledWith({ selection: { mode: 'auto' } });
     expect(double.state.set).toHaveBeenCalledWith({
       observationThreshold: 3,
       reflectionThreshold: 7,
@@ -266,25 +274,39 @@ describe('hydrateFactorySession', () => {
     for (const agentType of ['explore', 'plan', 'execute']) {
       expect(double.subagents.model.set).toHaveBeenCalledWith({ modelId: 'anthropic/claude-opus-5', agentType });
     }
+    expect(double.model.switch.mock.invocationCallOrder[0]).toBeLessThan(
+      double.om.observer.switchSelection.mock.invocationCallOrder[0]!,
+    );
   });
 
-  it('can derive the memory fallback from a user model without changing the factory run model', async () => {
+  it('resets null model roles to auto and clears stale explicit session state', async () => {
     const { session, double } = createSessionDouble();
-    const memorySettings = { get: vi.fn(async () => null) };
+    const memorySettings = {
+      get: vi.fn(async () => ({
+        observerModelId: null,
+        reflectorModelId: 'openai/gpt-5.4-mini',
+        observationThreshold: null,
+        reflectionThreshold: null,
+        observeAttachments: null,
+      })),
+    };
 
     await hydrateFactorySession(session, {
       orgId: 'org-1',
       factoryProjectId: 'proj-1',
-      defaultModelId: 'openai/gpt-5.6',
-      observationalMemoryModelId: 'deepseek/deepseek-chat',
+      defaultModelId: 'anthropic/claude-opus-5',
       memorySettings: memorySettings as never,
     });
 
-    expect(double.om.observer.switchModel).toHaveBeenCalledWith({ modelId: 'deepseek/deepseek-v4-flash' });
-    expect(double.om.reflector.switchModel).toHaveBeenCalledWith({ modelId: 'deepseek/deepseek-v4-flash' });
-    expect(double.om.observer.switchModel).not.toHaveBeenCalledWith({ modelId: 'openai/gpt-5.4-mini' });
-    expect(double.om.reflector.switchModel).not.toHaveBeenCalledWith({ modelId: 'openai/gpt-5.4-mini' });
-    expect(double.model.switch).toHaveBeenCalledWith('openai/gpt-5.6');
+    expect(double.om.observer.switchSelection).toHaveBeenCalledWith({ selection: { mode: 'auto' } });
+    expect(double.om.reflector.switchSelection).toHaveBeenCalledWith({
+      selection: { mode: 'model', modelId: 'openai/gpt-5.4-mini' },
+    });
+    expect(double.state.set).toHaveBeenCalledWith({
+      observationThreshold: 30_000,
+      reflectionThreshold: 40_000,
+      observeAttachments: 'auto',
+    });
   });
 
   it('leaves the session on its default model when the project has none', async () => {
