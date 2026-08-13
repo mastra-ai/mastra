@@ -696,14 +696,29 @@ export class AgentController<TState = {}> {
         return scopeEntries.every(([key, value]) => metadata[key] === value);
       });
 
-      if (candidates.length === 0) {
-        await session.thread.create();
-      } else {
-        const mostRecent = [...candidates].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())[0]!;
-        await this.config.threadLock?.acquire(mostRecent.id);
-        session.thread.set({ threadId: mostRecent.id });
+      const byRecency = [...candidates].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+      const threadLock = this.config.threadLock;
+      let selectedThread: AgentControllerThread | undefined;
+
+      if (threadLock?.tryAcquire) {
+        for (const candidate of byRecency) {
+          if (await threadLock.tryAcquire(candidate.id)) {
+            selectedThread = candidate;
+            break;
+          }
+        }
+      } else if (byRecency[0]) {
+        // no non-throwing probe available — contention stays fatal, as before tryAcquire existed
+        await threadLock?.acquire(byRecency[0].id);
+        selectedThread = byRecency[0];
+      }
+
+      if (selectedThread) {
+        session.thread.set({ threadId: selectedThread.id });
         await session.thread.loadMetadata();
         await session.thread.ensureCurrentSubscription();
+      } else {
+        await session.thread.create();
       }
     }
 
