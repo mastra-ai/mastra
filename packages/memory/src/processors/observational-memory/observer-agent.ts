@@ -389,13 +389,6 @@ function hasContinuationSection(extractors: readonly Extractor<any>[] | undefine
   return extractors === undefined || extractors.some(extractor => extractor.slug === slug);
 }
 
-/** Render section names as a readable English list: "a", "a and b", "a, b, and c". */
-function formatSectionList(sections: readonly string[]): string {
-  if (sections.length <= 1) return sections[0] ?? '';
-  if (sections.length === 2) return `${sections[0]} and ${sections[1]}`;
-  return `${sections.slice(0, -1).join(', ')}, and ${sections[sections.length - 1]}`;
-}
-
 /**
  * Build the closing guidance about continuation sections, naming only the sections the
  * prompt actually defines. Without this the prompt can reference `<current-task>` or
@@ -431,13 +424,23 @@ export function buildObserverSystemPrompt(
 ): string {
   const outputFormat = buildObserverOutputFormat(extractors);
   const customInstructions = instruction ? `\n\n=== CUSTOM INSTRUCTIONS ===\n\n${instruction}` : '';
+  // `undefined` extractors = legacy caller that never opted into extractors; both built-in
+  // continuation sections stay enabled on that path.
+  const currentTaskEnabled = extractors === undefined || extractors.some(extractor => extractor.slug === 'current-task');
+  const suggestedResponseEnabled =
+    extractors === undefined || extractors.some(extractor => extractor.slug === 'suggested-response');
   const multiThreadSections = [
     'observations',
-    ...(hasContinuationSection(extractors, 'current-task') ? ['current-task'] : []),
-    ...(hasContinuationSection(extractors, 'suggested-response') ? ['suggested-response'] : []),
+    ...(currentTaskEnabled ? ['current-task'] : []),
+    ...(suggestedResponseEnabled ? ['suggested-response'] : []),
     ...(includeThreadTitle ? ['thread-title'] : []),
   ];
-  const multiThreadTitleInstruction = ` Each thread's ${formatSectionList(multiThreadSections)} should be nested inside a <thread id="..."> block within <observations>.`;
+  // Grammatical list for any combination: "a", "a and b", "a, b, and c".
+  const multiThreadSectionList =
+    multiThreadSections.length <= 2
+      ? multiThreadSections.join(' and ')
+      : `${multiThreadSections.slice(0, -1).join(', ')}, and ${multiThreadSections[multiThreadSections.length - 1]}`;
+  const multiThreadTitleInstruction = ` Each thread's ${multiThreadSectionList} should be nested inside a <thread id="..."> block within <observations>.`;
   const multiThreadTitleExample = includeThreadTitle
     ? `
 <thread-title>Feature X implementation</thread-title>`
@@ -446,20 +449,6 @@ export function buildObserverSystemPrompt(
     ? `
 <thread-title>Deployment setup</thread-title>`
     : '';
-  // Only demonstrate the continuation sections the prompt actually asks for, otherwise the
-  // example contradicts the instructions whenever a section is disabled.
-  const buildThreadExample = (currentTask: string, suggestedResponse: string, titleExample: string): string => {
-    const sections = [
-      ...(hasContinuationSection(extractors, 'current-task')
-        ? [`\n\n<current-task>\n${currentTask}\n</current-task>`]
-        : []),
-      ...(hasContinuationSection(extractors, 'suggested-response')
-        ? [`\n\n<suggested-response>\n${suggestedResponse}\n</suggested-response>`]
-        : []),
-    ];
-    return `${sections.join('')}${titleExample}`;
-  };
-
   if (multiThread) {
     return `You are the memory consciousness of an AI assistant. Your observations will be the ONLY information the assistant has about past interactions with this user.
 
@@ -486,20 +475,44 @@ For multi-thread output, wrap each thread's observations like this:
 <thread id="thread_id_1">
 Date: Dec 4, 2025
 * 🔴 (14:30) User prefers direct answers
-* 🔴 (14:31) Working on feature X${buildThreadExample(
-      'What the agent is currently working on in this thread',
-      "Hint for the agent's next message in this thread",
-      multiThreadTitleExample,
-    )}
+* 🔴 (14:31) Working on feature X${
+      currentTaskEnabled
+        ? `
+
+<current-task>
+What the agent is currently working on in this thread
+</current-task>`
+        : ''
+    }${
+      suggestedResponseEnabled
+        ? `
+
+<suggested-response>
+Hint for the agent's next message in this thread
+</suggested-response>`
+        : ''
+    }${multiThreadTitleExample}
 </thread>
 
 <thread id="thread_id_2">
 Date: Dec 5, 2025
-* 🔴 (09:15) User asked about deployment${buildThreadExample(
-      'Current task for this thread',
-      'Suggested response for this thread',
-      multiThreadSecondTitleExample,
-    )}
+* 🔴 (09:15) User asked about deployment${
+      currentTaskEnabled
+        ? `
+
+<current-task>
+Current task for this thread
+</current-task>`
+        : ''
+    }${
+      suggestedResponseEnabled
+        ? `
+
+<suggested-response>
+Suggested response for this thread
+</suggested-response>`
+        : ''
+    }${multiThreadSecondTitleExample}
 </thread>
 </observations>
 
