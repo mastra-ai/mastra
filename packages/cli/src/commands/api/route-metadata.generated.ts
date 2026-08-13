@@ -5995,6 +5995,7 @@ export const API_ROUTE_METADATA = {
     ],
     "queryParams": [
       "limit",
+      "resourceIds",
       "sessionScope",
       "tags"
     ],

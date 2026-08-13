@@ -1,5 +1,5 @@
 import type { AgentControllerThreadInfo } from '@mastra/client-js';
-import { useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 
 import { queryKeys } from '../api/keys';
 import {
@@ -55,9 +55,13 @@ function useWorkspaceThreadsQuery({
       });
       return requireAgentControllerSession(session).listThreads({ resourceIds: workspaceIds });
     },
-    enabled,
+    enabled: enabled && workspaceIds.length > 0,
     refetchInterval: WORKSPACE_ACTIVITY_POLL_MS,
     retry: false,
+    // A workspace appearing or leaving changes the query key; without a
+    // placeholder the swap would read as every run flipping idle for one
+    // render and fire completion sounds.
+    placeholderData: keepPreviousData,
   });
   return query.data ?? [];
 }

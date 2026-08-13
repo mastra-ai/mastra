@@ -858,7 +858,7 @@ export const LIST_AGENT_CONTROLLER_THREADS_ROUTE = createRoute({
       const requestedResourceIds =
         resourceIds === undefined ? undefined : Array.isArray(resourceIds) ? resourceIds : [resourceIds];
       const threads = requestedResourceIds
-        ? await session.thread.list({ allResources: true })
+        ? await session.thread.list({ resourceIds: requestedResourceIds })
         : await session.thread.list();
       // A thread's metadata mixes the session scoping tags (stamped at creation,
       // e.g. `projectPath`) with internal session bookkeeping that
@@ -874,18 +874,14 @@ export const LIST_AGENT_CONTROLLER_THREADS_ROUTE = createRoute({
         }
         return result;
       };
-      const requestedResources = requestedResourceIds ? new Set(requestedResourceIds) : undefined;
-      const scopedByResource = requestedResources
-        ? threads.filter(thread => requestedResources.has(thread.resourceId))
-        : threads;
       const tagEntries = tags ? Object.entries(tags).filter(([key]) => !isReservedThreadMetadataKey(key)) : [];
       const scoped =
         tagEntries.length > 0
-          ? scopedByResource.filter(t => {
+          ? threads.filter(t => {
               const metadata = (t.metadata as Record<string, unknown> | undefined) ?? {};
               return tagEntries.every(([key, value]) => metadata[key] === value);
             })
-          : scopedByResource;
+          : threads;
       const toTime = (t: { updatedAt?: Date; createdAt?: Date }) => (t.updatedAt ?? t.createdAt)?.getTime() ?? 0;
       const sorted = [...scoped].sort((a, b) => toTime(b) - toTime(a));
       const max = Number(limit);

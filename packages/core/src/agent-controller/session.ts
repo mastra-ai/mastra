@@ -385,17 +385,32 @@ export class SessionThread {
   // Data domain: reads/queries scoped to this session, backed by host storage.
   // ---------------------------------------------------------------------------
 
-  /** List this session's threads (its own resource by default, or all resources). */
+  /** List this session's threads (its own resource by default, specific resources, or all). */
   async list(options?: {
     allResources?: boolean;
+    /** Restrict the listing to these resources, as indexed per-resource reads. */
+    resourceIds?: string[];
     includeForkedSubagents?: boolean;
     metadata?: Record<string, unknown>;
   }): Promise<AgentControllerThread[]> {
-    if (!this.#store) {
+    const store = this.#store;
+    if (!store) {
       return [];
     }
+    if (options?.resourceIds) {
+      const lists = await Promise.all(
+        [...new Set(options.resourceIds)].map(resourceId =>
+          store.listThreads({
+            resourceId,
+            includeForkedSubagents: options.includeForkedSubagents,
+            metadata: options.metadata,
+          }),
+        ),
+      );
+      return lists.flat();
+    }
     const resourceId = options?.allResources ? undefined : this.#getResourceId();
-    const threads = await this.#store.listThreads({
+    const threads = await store.listThreads({
       resourceId,
       includeForkedSubagents: options?.includeForkedSubagents,
       metadata: options?.metadata,
