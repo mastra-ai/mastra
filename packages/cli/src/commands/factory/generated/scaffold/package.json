@@ -16,11 +16,11 @@
   },
   "dependencies": {
     "@mastra/auth-workos": "^1.6.4",
-    "@mastra/code-sdk": "1.2.1-alpha.1",
-    "@mastra/core": "1.59.0-alpha.1",
-    "@mastra/factory": "0.7.0-alpha.1",
+    "@mastra/code-sdk": "1.2.1-alpha.2",
+    "@mastra/core": "1.59.0-alpha.2",
+    "@mastra/factory": "0.7.0-alpha.2",
     "@mastra/libsql": "^1.20.0",
-    "@mastra/memory": "1.26.2-alpha.0",
+    "@mastra/memory": "1.26.2-alpha.1",
     "@mastra/pg": "^1.20.0",
     "@mastra/platform-workspace": "^1.2.0",
     "@mastra/redis-streams": "^0.3.0",
@@ -28,7 +28,7 @@
   },
   "devDependencies": {
     "@types/node": "22.20.1",
-    "mastra": "1.25.0-alpha.1",
+    "mastra": "1.25.0-alpha.2",
     "varlock": "^1.9.0",
     "typescript": "^5.9.2"
   },
