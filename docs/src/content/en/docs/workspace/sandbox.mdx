@@ -256,10 +256,10 @@ Sandbox scope depends on where you assign the workspace and whether you use a re
 
 | Configuration | Sandbox scope |
 | - | - |
-| Mastra-level workspace | Shared by agents that inherit the workspace from the Mastra instance. |
-| Agent-level workspace | Shared by all requests handled by that agent instance. |
-| Resource-scoped resolver | One sandbox per resource, shared across requests with the same resource ID. |
-| Thread-scoped resolver | One sandbox per memory thread, shared across requests in that thread. |
+| Mastra-level workspace | Agents that inherit the workspace from the Mastra instance use the same sandbox. |
+| Agent-level workspace | Every request handled by that agent instance uses the same sandbox. |
+| Resource-scoped resolver | The resolver caches one sandbox for each resource ID. |
+| Thread-scoped resolver | A memory thread keeps its sandbox across requests in that thread. |
 
 A static sandbox isn't automatically scoped to the current resource or memory thread. For resource or thread scope, use a resolver and set `sandboxCacheKey` to the corresponding ID. See [Multi-tenant sandboxes](#multi-tenant-sandboxes).
 
@@ -321,7 +321,7 @@ const sandbox = new DaytonaSandbox({
 
 Daytona applies these settings when it creates the sandbox. It also supports CIDR rules through `networkAllowList`. See the [Daytona integration page](/integrations/sandboxes/daytona) for full configuration details.
 
-Environment variables passed to a sandbox or command are available to code running there. Mastra doesn't provide a backend-neutral credential broker that keeps secrets outside the sandbox while authorizing its requests. Pass only the credentials the command needs, scope them to the task, and follow the selected backend's secret-management guidance.
+Environment variables passed to a sandbox or command are available to code running there. Mastra doesn't provide a backend-neutral credential broker that keeps secrets outside the sandbox while authorizing its requests. Give the command only the credentials it needs, scoped to the task. Follow the selected backend's secret-management guidance.
 
 For example, pass a read-only token to the command that needs it instead of configuring it for every command in the sandbox:
 

@@ -42,7 +42,7 @@ Use a workspace-only filesystem when you want to:
 
 For example, a real-estate agent could read travel-policy documents from an S3 bucket or Google Drive folder and use them while answering questions. The agent can search and read those files without needing a sandbox to execute commands against them.
 
-A data agent could also download reports from Google Drive with file tools, pass their contents to a sandbox for analysis and presentation generation, then upload the finished presentation for the team. This works even when the sandbox backend can't mount Google Drive because the agent transfers the input and output between the filesystem and sandbox.
+A data agent could also download reports from Google Drive with file tools. It can pass their contents to a sandbox for analysis and presentation generation, then upload the finished presentation for the team. This works even when the sandbox backend can't mount Google Drive because the agent transfers the input and output between the filesystem and sandbox.
 
 ## Supported filesystems
 
@@ -201,7 +201,7 @@ const workspace = new Workspace({
 })
 ```
 
-The agent receives the same file tools listed under [Using mounts](#using-mounts), plus sandbox command tools. It can use both in one task. For example, given "Format `draft.md` with Prettier and save it as `formatted.md`", the agent can:
+The agent receives the same file tools listed under [Using mounts](#using-mounts), plus sandbox command tools. It can use both in one task. For the prompt "Format `draft.md` with Prettier and save it as `formatted.md`", the agent can:
 
 1. Read `draft.md` from Google Drive with `read_file`.
 1. Pass the returned content to `execute_command`, for example by piping it into Prettier.
