@@ -463,8 +463,12 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
   };
 
   readonly sessions = {
-    list: async ({ projectRepositoryId, userId }: { projectRepositoryId: string; userId: string }) =>
-      this.sessionsRows.filter(row => row.projectRepositoryId === projectRepositoryId && row.userId === userId),
+    list: async ({ projectRepositoryId, viewerUserId }: { projectRepositoryId: string; viewerUserId: string }) =>
+      this.sessionsRows.filter(
+        row =>
+          row.projectRepositoryId === projectRepositoryId &&
+          (row.visibility !== 'private' || row.userId === viewerUserId),
+      ),
     getBySessionId: async (sessionId: string): Promise<SourceControlSession | null> =>
       this.sessionsRows.find(row => row.sessionId === sessionId) ?? null,
     getForBranch: async ({

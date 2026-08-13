@@ -1192,7 +1192,10 @@ function buildProjectGitRoutes({
           ? await resolveProjectRepository({ github, orgId, projectRepositoryId })
           : null;
         if (!project) return c.json({ error: 'Project repository not found' }, 404);
-        const sessions = await github.sourceControlStorage.sessions.list({ projectRepositoryId: project.id, userId });
+        const sessions = await github.sourceControlStorage.sessions.list({
+          projectRepositoryId: project.id,
+          viewerUserId: userId,
+        });
         return c.json({ sessions });
       },
     }),
@@ -1299,7 +1302,13 @@ function buildProjectGitRoutes({
         const resolved = await resolveOrgTenant(loose(c), auth);
         if ('response' in resolved) return resolved.response;
         const session = await github.sourceControlStorage.sessions.getBySessionId(c.req.param('sessionId'));
-        if (!session || session.orgId !== resolved.tenant.orgId || session.userId !== resolved.tenant.userId) {
+        // Private sessions 404 (not 403) for non-owners so their IDs do not
+        // leak existence; the body must match the genuinely-missing case.
+        if (
+          !session ||
+          session.orgId !== resolved.tenant.orgId ||
+          (session.visibility === 'private' && session.userId !== resolved.tenant.userId)
+        ) {
           return c.json({ error: 'Session not found' }, 404);
         }
         return c.json({ session });

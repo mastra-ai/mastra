@@ -481,7 +481,11 @@ export interface SourceControlStorageHandle {
     delete(args: { projectRepositoryId: string; userId: string; branch: string }): Promise<void>;
   };
   readonly sessions: {
-    list(args: { projectRepositoryId: string; userId: string }): Promise<SourceControlSession[]>;
+    /**
+     * Viewer-aware listing: every org-visible session for the repository
+     * (regardless of owner) plus the viewer's own private sessions.
+     */
+    list(args: { projectRepositoryId: string; viewerUserId: string }): Promise<SourceControlSession[]>;
     getBySessionId(sessionId: string): Promise<SourceControlSession | null>;
     getForBranch(args: {
       projectRepositoryId: string;
@@ -1222,14 +1226,13 @@ export class SourceControlStorage extends FactoryStorageDomain {
         },
       },
       sessions: {
-        list: async ({ projectRepositoryId, userId }) => {
+        list: async ({ projectRepositoryId, viewerUserId }) => {
           if (!(await getProjectRepositoryById(projectRepositoryId))) return [];
-          return (
-            await db().findMany<SessionDbRow>(SESSIONS, {
-              project_repository_id: projectRepositoryId,
-              user_id: userId,
-            })
-          ).map(toSession);
+          const rows = await db().findMany<SessionDbRow>(SESSIONS, {
+            project_repository_id: projectRepositoryId,
+          });
+          // Org-visible sessions (NULL counts as org) plus the viewer's own.
+          return rows.filter(row => row.visibility !== 'private' || row.user_id === viewerUserId).map(toSession);
         },
         getBySessionId: async sessionId => {
           const row = await db().findOne<SessionDbRow>(SESSIONS, { session_id: sessionId });
