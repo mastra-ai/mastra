@@ -462,6 +462,13 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
         if (!input.resourceId || !input.projectPath) {
           throw new Error('GitHub issue triage requires an explicit Factory project repository');
         }
+        const labels = input.labels.filter(label => label !== 'status: needs triage');
+        const result = await runIssueTriage({
+          ...input,
+          defaultModelId:
+            input.defaultModelId ?? (await resolveFactoryDefaultModelId(options.projects, input.resourceId)),
+          labels: labels.includes('status: auto-triaged') ? labels : [...labels, 'status: auto-triaged'],
+        });
         await github.addIssueLabels(input.installationId, input.repository, input.issueNumber, [
           'status: auto-triaged',
         ]);
@@ -473,13 +480,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
             'status: needs triage',
           );
         }
-        const labels = input.labels.filter(label => label !== 'status: needs triage');
-        return runIssueTriage({
-          ...input,
-          defaultModelId:
-            input.defaultModelId ?? (await resolveFactoryDefaultModelId(options.projects, input.resourceId)),
-          labels: labels.includes('status: auto-triaged') ? labels : [...labels, 'status: auto-triaged'],
-        });
+        return result;
       }
     : undefined;
 

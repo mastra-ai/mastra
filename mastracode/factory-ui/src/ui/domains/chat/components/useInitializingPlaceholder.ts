@@ -9,14 +9,6 @@ function getReducedMotionQuery(): MediaQueryList | undefined {
   return window.matchMedia(REDUCED_MOTION_QUERY);
 }
 
-/**
- * Placeholder text for the composer while `/ensure` is in flight and the user
- * has not yet started drafting. Returns `undefined` when the ticker should be
- * off — the caller falls back to its normal placeholder.
- *
- * Kept component-local by design (do not lift into a shared context — a 500ms
- * tick in a shared provider would re-render every consumer).
- */
 export function useInitializingPlaceholder(sandboxPreparing: boolean, isEmpty: boolean): string | undefined {
   const active = sandboxPreparing && isEmpty;
   const [tick, setTick] = useState(0);

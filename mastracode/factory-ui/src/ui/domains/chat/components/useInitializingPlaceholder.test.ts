@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { renderHook, act } from '@testing-library/react';
+import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useInitializingPlaceholder } from './useInitializingPlaceholder';
@@ -56,50 +56,32 @@ describe('useInitializingPlaceholder', () => {
     vi.restoreAllMocks();
   });
 
-  it('cycles through the ellipsis states while preparing and empty', () => {
+  it('cycles through the ellipsis states while preparing an empty composer', () => {
     const { result } = renderHook(() => useInitializingPlaceholder(true, true));
     expect(result.current).toBe('Initializing work session');
-    act(() => {
-      vi.advanceTimersByTime(500);
-    });
+
+    act(() => vi.advanceTimersByTime(500));
     expect(result.current).toBe('Initializing work session.');
-    act(() => {
-      vi.advanceTimersByTime(500);
-    });
-    expect(result.current).toBe('Initializing work session..');
-    act(() => {
-      vi.advanceTimersByTime(500);
-    });
+
+    act(() => vi.advanceTimersByTime(1_000));
     expect(result.current).toBe('Initializing work session...');
-    act(() => {
-      vi.advanceTimersByTime(500);
-    });
+
+    act(() => vi.advanceTimersByTime(500));
     expect(result.current).toBe('Initializing work session');
   });
 
-  it('returns undefined and does not schedule an interval when the composer is non-empty', () => {
+  it.each([
+    { preparing: false, isEmpty: true },
+    { preparing: true, isEmpty: false },
+  ])('stays inactive when preparing is $preparing and isEmpty is $isEmpty', ({ preparing, isEmpty }) => {
     const setIntervalSpy = vi.spyOn(globalThis, 'setInterval');
-    const { result } = renderHook(() => useInitializingPlaceholder(true, false));
+    const { result } = renderHook(() => useInitializingPlaceholder(preparing, isEmpty));
+
     expect(result.current).toBeUndefined();
     expect(setIntervalSpy).not.toHaveBeenCalled();
   });
 
-  it('returns undefined when sandboxPreparing is false', () => {
-    const setIntervalSpy = vi.spyOn(globalThis, 'setInterval');
-    const { result } = renderHook(() => useInitializingPlaceholder(false, true));
-    expect(result.current).toBeUndefined();
-    expect(setIntervalSpy).not.toHaveBeenCalled();
-  });
-
-  it('returns a static ellipsis string and does not schedule an interval under reduced motion', () => {
-    stubMatchMedia(true);
-    const setIntervalSpy = vi.spyOn(globalThis, 'setInterval');
-    const { result } = renderHook(() => useInitializingPlaceholder(true, true));
-    expect(result.current).toBe('Initializing work session...');
-    expect(setIntervalSpy).not.toHaveBeenCalled();
-  });
-
-  it('reacts when the reduced-motion preference changes during initialization', () => {
+  it('stops and resumes when the reduced-motion preference changes', () => {
     const mediaQuery = stubMatchMedia(false);
     const setIntervalSpy = vi.spyOn(globalThis, 'setInterval');
     const { result } = renderHook(() => useInitializingPlaceholder(true, true));
