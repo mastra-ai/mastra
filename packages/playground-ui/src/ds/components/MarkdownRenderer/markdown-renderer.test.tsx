@@ -1,4 +1,8 @@
 // @vitest-environment jsdom
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -148,7 +152,35 @@ describe('MarkdownRenderer', () => {
 
     const words = [...container.querySelectorAll('.mastra-markdown-word')].map(node => node.textContent);
 
-    expect(words).toEqual(['Two', 'bold', 'words']);
+    expect(words).toEqual(['Two', 'bold']);
+    expect(container.querySelector('.mastra-markdown-word-pending')?.textContent).toBe('words');
+  });
+
+  it('fades a word once it is whole rather than as its characters land', () => {
+    const { container, rerender } = render(<MarkdownRenderer streaming>{'Hello wor'}</MarkdownRenderer>);
+
+    const growing = container.querySelector('.mastra-markdown-word-pending');
+
+    expect(growing?.textContent).toBe('wor');
+
+    rerender(<MarkdownRenderer streaming>{'Hello world a'}</MarkdownRenderer>);
+
+    expect(growing?.textContent).toBe('world');
+    expect(growing?.className).toBe('mastra-markdown-word');
+    expect(container.querySelector('.mastra-markdown-word-pending')?.textContent).toBe('a');
+  });
+
+  it('marks only the freshly landed tail of a long reply', () => {
+    const reply = Array.from({ length: 60 }, (_, index) => `word${index}`).join(' ');
+
+    const { container } = render(<MarkdownRenderer streaming>{reply}</MarkdownRenderer>);
+
+    const marked = [...container.querySelectorAll('.mastra-markdown-word')].map(node => node.textContent);
+    const landed = reply.split(' ').slice(0, -1);
+
+    expect(marked.length).toBeGreaterThan(0);
+    expect(marked.length).toBeLessThan(landed.length);
+    expect(marked).toEqual(landed.slice(-marked.length));
   });
 
   it('leaves a streamed code fence whole', () => {
@@ -171,6 +203,13 @@ describe('MarkdownRenderer', () => {
     const words = container.querySelectorAll('.mastra-markdown-word');
 
     expect(words[0]).toBe(hello);
-    expect([...words].map(node => node.textContent)).toEqual(['Hello', 'there,', 'friend']);
+    expect([...words].map(node => node.textContent)).toEqual(['Hello', 'there,']);
+  });
+
+  it('never sets a text-wrap style that re-breaks lines already on screen', () => {
+    const css = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'markdown-renderer.css'), 'utf8');
+
+    expect(css).toContain('.mastra-markdown {');
+    expect(css).not.toMatch(/text-wrap(-style)?:\s*(pretty|balance)/);
   });
 });
