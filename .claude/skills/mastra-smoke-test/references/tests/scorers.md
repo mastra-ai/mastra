@@ -69,8 +69,10 @@ curl -s http://localhost:4111/api/scores/scorers | jq 'keys'
 
 Pass: returns an object keyed by scorer id (`weather-scorer`,
 `translation-quality-scorer`, etc.) for the scorers declared in the
-project. Empty `{}` is only acceptable if the project genuinely declares
-none.
+project. Each value is an entry whose scorer configuration is nested under
+`.scorer.config`, alongside `agentIds`, `agentNames`, `workflowIds`,
+`isRegistered`, and `source`. Empty `{}` is only acceptable if the project
+genuinely declares none.
 
 **2. Get a single scorer's config**
 
@@ -78,9 +80,9 @@ none.
 curl -s http://localhost:4111/api/scores/scorers/<scorerId> | jq '.'
 ```
 
-Pass: returns a non-null object with `config` and the agents/workflows it
-is attached to. `null` means the id is wrong or the scorer is not
-registered.
+Pass: returns a non-null entry with the scorer configuration at
+`.scorer.config` and its associations in `agentIds`, `agentNames`, and
+`workflowIds`. `null` means the id is wrong or the scorer is not registered.
 
 **3. Trigger scoring by running an agent / workflow, then read scores**
 

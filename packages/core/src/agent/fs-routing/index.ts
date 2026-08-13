@@ -325,7 +325,7 @@ function assembleAtDepth(entry: FsAgentEntry, depth: number, options?: { onWarn?
 
   const mergedTools = mergeTools(name, tools, config.tools, onWarn);
   const mergedSkills = mergeSkills(name, skills, config.skills, onWarn);
-  const mergedWorkspace = mergeWorkspace(name, workspace, config.workspace, defaultWorkspaceBasePath, onWarn);
+  const mergedWorkspace = mergeWorkspace(name, workspace, config, defaultWorkspaceBasePath, onWarn);
   const mergedMemory = mergeMemory(name, memory, config.memory, onWarn);
   const mergedAgents = mergeSubAgents(name, subagents, config.agents, mergedTools, depth, options);
   const mergedInputProcessors = mergeProcessors(name, 'input', inputProcessors, config.inputProcessors, onWarn);
@@ -684,7 +684,8 @@ function mergeSubAgents(
  * Resolve the workspace for a file-based agent.
  *
  * Precedence (explicit > convention > default):
- * - `config.workspace` (from `config.ts`) wins over everything.
+ * - A `config.workspace` key (from `config.ts`) wins over everything. An
+ *   explicit `workspace: undefined` disables the workspace.
  * - `workspace.ts`'s default export wins over the convention default.
  * - Otherwise, when `defaultWorkspaceBasePath` is provided, a default
  *   `Workspace` (contained `LocalFilesystem` + `LocalSandbox`) is created so
@@ -694,15 +695,15 @@ function mergeSubAgents(
 function mergeWorkspace(
   name: string,
   fsWorkspace: AnyWorkspace | undefined,
-  configWorkspace: FsAgentConfig['workspace'],
+  config: Pick<FsAgentConfig, 'workspace'>,
   defaultWorkspaceBasePath: string | undefined,
   onWarn: (message: string) => void,
 ): FsAgentConfig['workspace'] | undefined {
-  if (configWorkspace !== undefined) {
+  if (Object.hasOwn(config, 'workspace')) {
     if (fsWorkspace !== undefined) {
       onWarn(`Agent "${name}": workspace defined in both config.ts and workspace.ts; config.workspace wins.`);
     }
-    return configWorkspace;
+    return config.workspace;
   }
 
   if (fsWorkspace !== undefined) {

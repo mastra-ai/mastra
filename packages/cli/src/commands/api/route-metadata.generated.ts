@@ -5950,6 +5950,21 @@ export const API_ROUTE_METADATA = {
       "listProperty": "models"
     }
   },
+  "GET /agent-controller/:controllerId/active-runs": {
+    "method": "GET",
+    "path": "/agent-controller/:controllerId/active-runs",
+    "pathParams": [
+      "controllerId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "runs"
+    }
+  },
   "POST /agent-controller/:controllerId/sessions": {
     "method": "POST",
     "path": "/agent-controller/:controllerId/sessions",

@@ -1,0 +1,196 @@
+---
+title: Chunking and embedding documents | RAG
+description: Guide on chunking and embedding documents in Mastra for efficient processing and retrieval.
+packages:
+  - "@mastra/core"
+  - "@mastra/pg"
+  - "@mastra/rag"
+---
+
+# Chunking and embedding documents
+
+Before processing, create a MDocument instance from your content. You can initialize it from different formats:
+
+```ts
+import { MDocument } from '@mastra/rag'
+
+const doc = MDocument.fromText('Your plain text content...')
+const docFromHTML = MDocument.fromHTML('<html>Your HTML content...</html>')
+const docFromMarkdown = MDocument.fromMarkdown('# Your Markdown content...')
+const docFromJSON = MDocument.fromJSON(`{ "key": "value" }`)
+```
+
+## Document processing
+
+Use `chunk` to split documents into manageable pieces. Mastra supports multiple chunking strategies optimized for different document types:
+
+- `recursive`: Smart splitting based on content structure
+- `character`: Simple character-based splits
+- `token`: Token-aware splitting
+- `markdown`: Markdown-aware splitting
+- `semantic-markdown`: Markdown splitting based on related header families
+- `html`: HTML structure-aware splitting
+- `json`: JSON structure-aware splitting
+- `latex`: LaTeX structure-aware splitting
+- `sentence`: Sentence-aware splitting
+
+:::note
+Each strategy accepts different parameters optimized for its chunking approach.
+:::
+
+Here's an example of how to use the `recursive` strategy:
+
+```ts
+const chunks = await doc.chunk({
+  strategy: 'recursive',
+  maxSize: 512,
+  overlap: 50,
+  separators: ['\n'],
+  extract: {
+    metadata: true, // Optionally extract metadata
+  },
+})
+```
+
+For text where preserving sentence structure is important, here's an example of how to use the `sentence` strategy:
+
+```ts
+const chunks = await doc.chunk({
+  strategy: 'sentence',
+  maxSize: 450,
+  minSize: 50,
+  overlap: 0,
+  sentenceEnders: ['.'],
+})
+```
+
+For markdown documents where preserving the semantic relationships between sections is important, here's an example of how to use the `semantic-markdown` strategy:
+
+```ts
+const chunks = await doc.chunk({
+  strategy: 'semantic-markdown',
+  joinThreshold: 500,
+  modelName: '__AI_SDK_OPENAI_MODEL_BASE__',
+})
+```
+
+:::note
+Metadata extraction may use LLM calls, so ensure your API key is set.
+:::
+
+We go deeper into chunking strategies in our [`chunk()` reference documentation](/reference/rag/chunk).
+
+## Embedding generation
+
+Transform chunks into embeddings using your preferred provider. Mastra supports embedding models through the model router.
+
+### Using the Model Router
+
+The simplest way is to use Mastra's model router with `provider/model` strings:
+
+```ts
+import { ModelRouterEmbeddingModel } from '@mastra/core/llm'
+import { embedMany } from 'ai'
+
+const { embeddings } = await embedMany({
+  model: new ModelRouterEmbeddingModel('__GATEWAY_OPENAI_EMBEDDING_MODEL__'),
+  values: chunks.map(chunk => chunk.text),
+})
+```
+
+Mastra supports OpenAI and Google embedding models. For a complete list of supported embedding models, see the [embeddings reference](/reference/rag/embeddings).
+
+The model router automatically handles API key detection from environment variables.
+
+The embedding functions return vectors, arrays of numbers representing the semantic meaning of your text, ready for similarity searches in your vector database.
+
+### Configuring Embedding Dimensions
+
+Embedding models typically output vectors with a fixed number of dimensions (e.g., 1536 for OpenAI's `__AI_SDK_OPENAI_EMBEDDING_MODEL__`).
+Some models support reducing this dimensionality, which can help:
+
+- Decrease storage requirements in vector databases
+- Reduce computational costs for similarity searches
+
+Here are some supported models:
+
+OpenAI (text-embedding-3 models):
+
+```ts
+import { ModelRouterEmbeddingModel } from '@mastra/core/llm'
+
+const { embeddings } = await embedMany({
+  model: new ModelRouterEmbeddingModel('__GATEWAY_OPENAI_EMBEDDING_MODEL__'),
+  options: {
+    dimensions: 256, // Only supported in text-embedding-3 and later
+  },
+  values: chunks.map(chunk => chunk.text),
+})
+```
+
+Google (text-embedding-001):
+
+```ts
+const { embeddings } = await embedMany({
+  model: google('gemini-embedding-001', {
+    outputDimensionality: 256, // Truncates excessive values from the end
+  }),
+  values: chunks.map(chunk => chunk.text),
+})
+```
+
+:::important[Vector Database Compatibility]
+When storing embeddings, configure the vector database index to match the output size of your embedding model to avoid errors or data corruption from mismatched dimensions.
+:::
+
+## Example: Complete pipeline
+
+Here's an example showing document processing, embedding generation, and vector storage:
+
+```ts
+import { ModelRouterEmbeddingModel } from '@mastra/core/llm'
+import { PgVector } from '@mastra/pg'
+import { MDocument } from '@mastra/rag'
+import { embedMany } from 'ai'
+
+const doc = MDocument.fromText(`
+  Climate change poses significant challenges to global agriculture.
+  Rising temperatures and changing precipitation patterns affect crop yields.
+`)
+
+const chunks = await doc.chunk({
+  strategy: 'recursive',
+  maxSize: 256,
+  overlap: 50,
+})
+
+const { embeddings } = await embedMany({
+  model: new ModelRouterEmbeddingModel('__GATEWAY_OPENAI_EMBEDDING_MODEL__'),
+  values: chunks.map(chunk => chunk.text),
+})
+
+const vectorStore = new PgVector({
+  id: 'pg-vector',
+  connectionString: process.env.POSTGRES_CONNECTION_STRING,
+})
+
+await vectorStore.createIndex({
+  indexName: 'embeddings',
+  dimension: 1536,
+})
+
+await vectorStore.upsert({
+  indexName: 'embeddings',
+  vectors: embeddings,
+})
+```
+
+For more examples of different chunking strategies and embedding configurations, see:
+
+- [Chunk Reference](/reference/rag/chunk)
+- [Embeddings Reference](/reference/rag/embeddings)
+
+For more details on vector databases and embeddings, see:
+
+- [Vector Databases](./vector-databases)
+- [Embedding API Reference](/reference/rag/embeddings)

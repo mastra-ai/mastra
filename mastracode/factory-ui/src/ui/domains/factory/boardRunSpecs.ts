@@ -46,14 +46,16 @@ export function guidedPrompt(base: string, instructions: string): string {
   return `${base}\n\nGuidance for this run: ${instructions}`;
 }
 
-/** Investigate (understand → Planning) + Build (implement → Building) runs for an issue. */
-export function issueRunActions(ref: string, extra?: { context?: string }): RunAction[] {
+/** Investigate an issue, then Build it when needed. */
+export function issueRunActions(ref: string, extra?: { context?: string; triage?: boolean }): RunAction[] {
   const context = extra?.context ? `\n\n${extra.context}` : '';
+  const role = extra?.triage ? 'triage' : 'plan';
+  const stage = extra?.triage ? 'triage' : 'planning';
   return [
     {
       label: 'Investigate',
-      role: 'plan',
-      stage: 'planning',
+      role,
+      stage,
       invocation: {
         type: 'skill',
         skillName: 'factory-triage',
@@ -115,7 +117,7 @@ export function itemRunSpec(item: WorkItem): ItemRunSpec | undefined {
     return {
       branch: `factory/issue-${githubNumber}`,
       threadTitle: needsApproval ? `Triage #${githubNumber}: ${item.title}` : `Issue #${githubNumber}: ${item.title}`,
-      actions: needsApproval ? [approvalRunAction(ref, githubNumber)] : issueRunActions(ref),
+      actions: needsApproval ? [approvalRunAction(ref, githubNumber)] : issueRunActions(ref, { triage: true }),
     };
   }
   if (item.source === 'linear-issue' && typeof meta.identifier === 'string') {

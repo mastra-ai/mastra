@@ -22,8 +22,11 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 20
         with:
           fetch-depth: 0
+          # Partial clone: name-only diffs need trees, not blob contents.
+          filter: blob:none
 
       - name: Check for docs changes
         id: filter
@@ -42,8 +45,11 @@ jobs:
     steps:
       - name: Checkout PR branch
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 20
         with:
           fetch-depth: 0
+          # Partial clone: name-only diffs need trees, not blob contents.
+          filter: blob:none
 
       - name: Check for MDX changes
         id: mdx-changes
@@ -124,6 +130,7 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 20
 
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
@@ -192,8 +199,11 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 20
         with:
           fetch-depth: 0
+          # Partial clone: name-only diffs need trees, not blob contents.
+          filter: blob:none
 
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
@@ -220,7 +230,7 @@ jobs:
               "${{ github.event.pull_request.head.sha }}" \
               -- \
               docs/src/content/en/docs \
-              docs/src/content/en/guides \
+              docs/src/content/en/integrations \
               docs/src/content/en/reference \
               | grep '\.mdx$' || true
           )
@@ -260,7 +270,7 @@ jobs:
         if: steps.mdx-changes.outputs.has_changes == 'true'
         uses: vale-cli/vale-action@85f9f7f2c5f449ac0ae5b66662961bae3f77ca6a
         with:
-          version: 3.13.1 # TODO: Update to newer version
+          version: 3.17.1
           files: ${{ steps.mdx-changes.outputs.files }}
           # The default "added" filter downloads the PR diff through the GitHub
           # API, which rejects diffs larger than 20,000 lines. The files input is

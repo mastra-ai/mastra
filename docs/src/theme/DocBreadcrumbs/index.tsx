@@ -20,7 +20,7 @@ export default function DocBreadcrumbs(): ReactNode {
   }
 
   return (
-    <div className="mb-8 flex flex-wrap items-center justify-between gap-2">
+    <div data-name="doc-breadcrumbs-copy" className="mb-8 flex flex-wrap items-center justify-between gap-2">
       <DocBreadcrumbsStructuredData breadcrumbs={breadcrumbs} />
       <nav
         className={clsx(ThemeClassNames.docs.docBreadcrumbs, styles.breadcrumbsContainer)}

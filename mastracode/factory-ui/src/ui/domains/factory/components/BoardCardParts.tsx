@@ -1,8 +1,12 @@
+import { Badge } from '@mastra/playground-ui/components/Badge';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { cn } from '@mastra/playground-ui/utils/cn';
+import { TriangleAlert } from 'lucide-react';
 import type { ReactElement } from 'react';
 
 import { HIDDEN_CARD_LABELS, SOURCE_LABELS } from '../boardItems';
+import type { FactoryDecisionSummary } from '../services/decisions';
 import type { WorkItemSource } from '../services/workItems';
 
 export function SourceTitle({ source, title }: { source: WorkItemSource; title: string }) {
@@ -33,6 +37,60 @@ export function CardTitleTooltip({ title, children }: { title: string; children:
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>
+  );
+}
+
+function decisionStatusText(decision: FactoryDecisionSummary): string {
+  if (decision.status === 'pending') return `Rule effect pending · ${decision.type}`;
+  if (decision.status === 'leased') return `Rule effect dispatching · ${decision.type} · attempt ${decision.attempts}`;
+  if (decision.status === 'retry') return `Rule effect retrying · ${decision.type} · attempt ${decision.attempts}`;
+  return decision.lastError ? `Rule effect failed: ${decision.lastError}` : `Rule effect failed · ${decision.type}`;
+}
+
+/** The rule effect the card waits on; a failed one carries its retry. */
+export function CardDecisionStatus({
+  decision,
+  retrying,
+  onRetry,
+}: {
+  decision: FactoryDecisionSummary;
+  retrying: boolean;
+  onRetry: () => void;
+}) {
+  if (decision.status !== 'failed') {
+    return (
+      <span role="status" className="text-ui-xs text-icon4">
+        {decisionStatusText(decision)}
+      </span>
+    );
+  }
+
+  return (
+    <div className="flex items-center justify-between gap-2">
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <Badge
+              variant="error"
+              size="xs"
+              icon={<TriangleAlert aria-hidden />}
+              role="alert"
+              aria-label={decisionStatusText(decision)}
+              tabIndex={0}
+              className="focus-visible:ring-accent1 relative z-20 cursor-help outline-hidden focus-visible:ring-2"
+            >
+              Error
+            </Badge>
+          }
+        />
+        <TooltipContent side="top" className="max-w-80">
+          <span className="wrap-anywhere whitespace-pre-wrap">{decisionStatusText(decision)}</span>
+        </TooltipContent>
+      </Tooltip>
+      <Button type="button" variant="outline" size="sm" className="relative z-20" disabled={retrying} onClick={onRetry}>
+        {retrying ? 'Retrying…' : 'Retry'}
+      </Button>
+    </div>
   );
 }
 

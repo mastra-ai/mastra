@@ -18,7 +18,9 @@ export function FactoryLayout() {
   if (isError) {
     return (
       <div className="bg-surface1 grid h-dvh w-full place-items-center px-4">
-        <Notice variant="destructive">Could not load factories. Check the server connection and reload.</Notice>
+        <Notice variant="destructive" className="w-full max-w-md">
+          Could not load factories. Check the server connection and reload.
+        </Notice>
       </div>
     );
   }
