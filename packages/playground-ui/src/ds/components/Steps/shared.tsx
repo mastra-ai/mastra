@@ -19,4 +19,5 @@ export type ProcessStep = {
   status: string;
   description: string;
   title: string;
+  isActive: boolean;
 };

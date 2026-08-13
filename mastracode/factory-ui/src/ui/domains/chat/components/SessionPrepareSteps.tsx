@@ -74,6 +74,7 @@ export function SessionPrepareSteps() {
         id: group.id,
         title: group.title,
         status,
+        isActive: status === 'running',
         description: getStepDescription(status, loadingMessages, activeDescription),
       },
     };
@@ -89,7 +90,7 @@ export function SessionPrepareSteps() {
       <div className="flex w-full max-w-md flex-col gap-1">
         {items.map(({ step, position }) => (
           <div key={step.id} data-testid="session-prepare-step" data-status={step.status}>
-            <ProcessStepListItem step={step} isActive={step.status === 'running'} position={position} variant="plain" />
+            <ProcessStepListItem step={step} isActive={step.isActive} position={position} variant="plain" />
           </div>
         ))}
       </div>

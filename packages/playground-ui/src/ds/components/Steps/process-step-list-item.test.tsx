@@ -14,6 +14,7 @@ const step: ProcessStep = {
   status: 'running',
   title: 'Cloning repository',
   description: 'Fetching updates…',
+  isActive: true,
 };
 
 const cardOf = (title: string) => screen.getByRole('heading', { name: title }).closest('.rounded-lg');

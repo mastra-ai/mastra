@@ -6,6 +6,8 @@ import { cn } from '@/lib/utils';
 type ProcessStepListItemVariant = 'default' | 'plain';
 
 export type ProcessStepListItemProps = {
+  /** @deprecated Ignored — the heading comes from `step.title`. */
+  stepId?: string;
   step: ProcessStep;
   isActive: boolean;
   position: number;
