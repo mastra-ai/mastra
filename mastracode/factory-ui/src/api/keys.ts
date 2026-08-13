@@ -105,10 +105,10 @@ export const queryKeys = {
     resourceId: string | undefined,
     projectPath: string | undefined,
   ) => [...queryKeys.agentControllerConnection(agentControllerId, resourceId, projectPath), 'state'] as const,
-  // This is a lightweight activity poll, not session state to invalidate.
-  // Sorted so reordering the visible workspaces doesn't change query identity.
-  agentControllerActivity: (agentControllerId: string | undefined, resourceIds: string[]) =>
-    ['agent-controller', agentControllerId ?? null, 'activity', ...[...resourceIds].sort()] as const,
+  // Constant per controller: navigation and workspace-set changes must never
+  // reset this query (a reset reads as every run flipping idle for a render).
+  agentControllerActivity: (agentControllerId: string | undefined) =>
+    ['agent-controller', agentControllerId ?? null, 'activity'] as const,
   agentControllerSettings: (
     agentControllerId: string | undefined,
     resourceId: string | undefined,

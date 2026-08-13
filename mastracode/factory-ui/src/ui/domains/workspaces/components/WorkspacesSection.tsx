@@ -5,7 +5,10 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router';
 
-import { useWorkspaceActivity, useWorkspaceThreadTitles } from '../../../../hooks/useWorkspaceActivity';
+import { useQueryClient } from '@tanstack/react-query';
+
+import { queryKeys } from '../../../../api/keys';
+import { useWorkspaceActivity } from '../../../../hooks/useWorkspaceActivity';
 import { useWorkspaceAttention } from '../../../../hooks/useWorkspaceAttention';
 import { useWorkItemsQuery } from '../../../../hooks/useWorkItems';
 import { useWorkspacePullRequestMerges } from '../../../../hooks/useWorkspacePullRequestMerges';
@@ -48,8 +51,12 @@ export function WorkspacesSection() {
     enabled: sessionEnabled && Boolean(sessionId),
   };
   const runningByPath = useWorkspaceActivity(activityOptions);
-  const titleByPath = useWorkspaceThreadTitles(activityOptions);
-  const { attentionByPath, clearAttention } = useWorkspaceAttention(runningByPath);
+  const queryClient = useQueryClient();
+  // A run finishing is when the server (re)derives the session's title.
+  const { attentionByPath, clearAttention } = useWorkspaceAttention(
+    runningByPath,
+    () => void queryClient.invalidateQueries({ queryKey: queryKeys.sessions(projectRepositoryId) }),
+  );
 
   const allWorkItems = workItems.data ?? [];
   const workItemByPath = new Map(
@@ -79,7 +86,7 @@ export function WorkspacesSection() {
       {
         workspace,
         url: `/factories/${factoryId}/workspaces/${workspace.sessionId}`,
-        label: titleByPath[workspace.sessionId],
+        label: workspace.title,
         active,
         running,
         attention: attentionByPath[workspace.sessionId] === true,

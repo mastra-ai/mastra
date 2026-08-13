@@ -3,10 +3,9 @@
 '@mastra/server': minor
 ---
 
-Added multi-resource thread listing for agent controller sessions.
+Added an active-runs listing for agent controllers. It reports every run currently in flight on the controller from in-memory tracking — a cheap read suited to polling activity indicators, with no session created as a side effect.
 
 ```ts
-const threads = await session.listThreads({
-  resourceIds: ['workspace-a', 'workspace-b'],
-});
+const runs = await client.getAgentController('code').listActiveRuns();
+// [{ runId: 'run-1', resourceId: 'workspace-a', threadId: 'thread-1' }]
 ```

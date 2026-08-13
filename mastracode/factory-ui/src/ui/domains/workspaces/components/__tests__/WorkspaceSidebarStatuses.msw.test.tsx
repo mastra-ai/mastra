@@ -21,6 +21,7 @@ const workSession: FactoryUserSession = {
   projectRepositoryId,
   orgId: 'org-1',
   userId: 'user-1',
+  title: 'Implement loader',
   branch: 'factory/issue-24',
   baseBranch: 'main',
   sandboxId: null,
@@ -34,6 +35,7 @@ const reviewSession: FactoryUserSession = {
   ...workSession,
   id: 'workspace-row-2',
   sessionId: 'review-session',
+  title: 'Review loader',
   branch: 'factory/pr-202',
   createdAt: '2026-07-21T00:00:00.000Z',
   updatedAt: '2026-07-21T00:00:00.000Z',
@@ -66,15 +68,6 @@ interface WireWorkItemFixture {
   sessions: Record<string, WorkItemSessionRef>;
   metadata: Record<string, unknown>;
   revision: number;
-  createdAt: string;
-  updatedAt: string;
-}
-
-interface ControllerThreadFixture {
-  id: string;
-  title: string;
-  state: 'active' | 'idle';
-  tags: { projectPath: string };
   createdAt: string;
   updatedAt: string;
 }
@@ -134,29 +127,13 @@ function pullRequestSubscription(
   };
 }
 
-function controllerThread(
-  session: FactoryUserSession,
-  threadId: string,
-  title: string,
-  state: 'active' | 'idle',
-): ControllerThreadFixture {
-  return {
-    id: threadId,
-    title,
-    state,
-    tags: { projectPath: session.sessionId },
-    createdAt: session.createdAt,
-    updatedAt: session.updatedAt,
-  };
-}
-
 function stubWorkspaceStatuses({
   items,
-  threads,
+  activeSessionIds,
   subscriptionsBySession,
 }: {
   items: WireWorkItemFixture[];
-  threads: ControllerThreadFixture[];
+  activeSessionIds: string[];
   subscriptionsBySession: Record<string, PullRequestSubscription[]>;
 }) {
   server.use(
@@ -166,13 +143,15 @@ function stubWorkspaceStatuses({
     http.get(`${TEST_BASE_URL}/web/factory/projects/${factoryProjectId}/work-items`, () =>
       HttpResponse.json({ workItems: items }),
     ),
-    http.get(`${TEST_BASE_URL}/api/agent-controller/code/sessions/${resourceId}/threads`, ({ request }) => {
-      expect(new URL(request.url).searchParams.getAll('resourceIds')).toEqual([
-        workSession.sessionId,
-        reviewSession.sessionId,
-      ]);
-      return HttpResponse.json({ threads });
-    }),
+    http.get(`${TEST_BASE_URL}/api/agent-controller/code/active-runs`, () =>
+      HttpResponse.json({
+        runs: activeSessionIds.map(sessionId => ({
+          runId: `run-${sessionId}`,
+          resourceId: sessionId,
+          threadId: `${sessionId}-thread`,
+        })),
+      }),
+    ),
     http.get(`${TEST_BASE_URL}/web/github/subscriptions`, ({ request }) => {
       const url = new URL(request.url);
       const threadId = url.searchParams.get('threadId');
@@ -255,10 +234,7 @@ describe('Workspace sidebar statuses', () => {
   it('shows the running status dot instead of a merged icon while the agent is active', async () => {
     stubWorkspaceStatuses({
       items: baseItems(true),
-      threads: [
-        controllerThread(workSession, 'work-thread', 'Implement loader', 'active'),
-        controllerThread(reviewSession, 'review-thread', 'Review loader', 'idle'),
-      ],
+      activeSessionIds: [workSession.sessionId],
       subscriptionsBySession: {
         'work-thread:work-session': [pullRequestSubscription(202, 'merged')],
         'review-thread:review-session': [pullRequestSubscription(202, 'merged')],
@@ -276,10 +252,7 @@ describe('Workspace sidebar statuses', () => {
     async ({ status, knownMerged, expectedMerged }) => {
       stubWorkspaceStatuses({
         items: baseItems(knownMerged),
-        threads: [
-          controllerThread(workSession, 'work-thread', 'Implement loader', 'idle'),
-          controllerThread(reviewSession, 'review-thread', 'Review loader', 'idle'),
-        ],
+        activeSessionIds: [],
         subscriptionsBySession: {
           'work-thread:work-session': [pullRequestSubscription(202, status)],
           'review-thread:review-session': [pullRequestSubscription(202, status)],
@@ -329,10 +302,7 @@ describe('Workspace sidebar statuses', () => {
       const subscriptions = [pullRequestSubscription(201, 'merged'), pullRequestSubscription(202, newestStatus)];
       stubWorkspaceStatuses({
         items: [workItem, olderReview, newerReview],
-        threads: [
-          controllerThread(workSession, 'work-thread', 'Implement loader', 'idle'),
-          controllerThread(reviewSession, 'review-thread', 'Review loader', 'idle'),
-        ],
+        activeSessionIds: [],
         subscriptionsBySession: {
           'work-thread:work-session': subscriptions,
           'review-thread:review-session': subscriptions,

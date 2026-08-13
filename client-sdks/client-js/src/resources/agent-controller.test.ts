@@ -223,21 +223,29 @@ describe('AgentController Resource', () => {
     expect(threads).toEqual([{ id: 't-1', title: 'One' }]);
     expect(lastCall()[0]).toBe('http://localhost:4111/api/agent-controller/code/sessions/user-1/threads');
 
+    // `tags` is JSON-encoded into the query string so worktrees sharing a
+    // resourceId can scope the listing to their own threads.
     mockJson({ threads: [{ id: 't-1', title: 'One', tags: { projectPath: '/repo/wt-a' } }] });
     const scoped = await client
       .getAgentController('code')
       .session('user-1')
-      .listThreads({ tags: { projectPath: '/repo/wt-a' }, resourceIds: ['user-1', 'user-2'] });
+      .listThreads({ tags: { projectPath: '/repo/wt-a' } });
     expect(scoped).toEqual([{ id: 't-1', title: 'One', tags: { projectPath: '/repo/wt-a' } }]);
     const scopedUrl = new URL(lastCall()[0] as string);
     expect(scopedUrl.searchParams.get('tags')).toBe(JSON.stringify({ projectPath: '/repo/wt-a' }));
-    expect(scopedUrl.searchParams.getAll('resourceIds')).toEqual(['user-1', 'user-2']);
 
     mockJson({ ok: true });
     await client.getAgentController('code').session('user-1').switchThread('t-1');
     const [url, init] = lastCall();
     expect(url).toBe('http://localhost:4111/api/agent-controller/code/sessions/user-1/thread');
     expect(JSON.parse(init.body as string)).toEqual({ threadId: 't-1' });
+  });
+
+  it('lists active runs controller-wide', async () => {
+    mockJson({ runs: [{ runId: 'run-1', resourceId: 'user-1', threadId: 't-1' }] });
+    const runs = await client.getAgentController('code').listActiveRuns();
+    expect(runs).toEqual([{ runId: 'run-1', resourceId: 'user-1', threadId: 't-1' }]);
+    expect(lastCall()[0]).toBe('http://localhost:4111/api/agent-controller/code/active-runs');
   });
 
   it('hydrates message timestamps returned by listMessages without mutating the source payload', async () => {

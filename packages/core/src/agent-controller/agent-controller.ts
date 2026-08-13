@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import { Agent } from '../agent';
 import type { MastraDBMessage, MastraMessageContentV2 } from '../agent/message-list/state/types';
+import type { ActiveThreadRun } from '../agent/thread-stream-runtime';
 import type { AgentInstructions, ToolsInput, ToolsetsInput } from '../agent/types';
 import type { MastraBrowser } from '../browser/browser';
 import { AgentControllerChannels } from '../channels/agent-controller-channels';
@@ -1423,6 +1424,14 @@ export class AgentController<TState = {}> {
     const mode = session.mode.resolve();
 
     return this.propagateRuntimeServicesToAgent(this.getAgentForMode(mode), session);
+  }
+
+  /**
+   * Every in-flight run on this controller, across all resources. Mode agents
+   * share one pubsub, so any propagated agent sees the whole runtime state.
+   */
+  listActiveThreadRuns(): ActiveThreadRun[] {
+    return this.propagateRuntimeServicesToAgent(this.getAgentForMode(this.#defaultMode)).listActiveThreadRuns();
   }
 
   /**

@@ -314,6 +314,13 @@ export interface AgentControllerThreadInfo {
   state?: 'active' | 'idle';
 }
 
+/** An in-flight run reported by `AgentController.listActiveRuns()`. */
+export interface AgentControllerActiveRun {
+  runId: string;
+  resourceId?: string;
+  threadId: string;
+}
+
 export interface AgentControllerAvailableModel {
   id: string;
   provider: string;
@@ -792,15 +799,20 @@ export class AgentControllerSession extends BaseResource {
     });
   }
 
-  /** List threads newest first, optionally matching tags or specific resources. */
+  /**
+   * List the session's threads, newest first. Pass `limit` to cap the count
+   * (e.g. for a sidebar) and `tags` to scope to threads matching every tag —
+   * necessary when one resourceId is shared across git worktrees of the same
+   * repo (e.g. `{ tags: { projectPath } }` so each worktree sees only its own
+   * threads). Passing a bare number is shorthand for `{ limit }`.
+   */
   async listThreads(
-    options?: number | { limit?: number; tags?: Record<string, string>; resourceIds?: string[] },
+    options?: number | { limit?: number; tags?: Record<string, string> },
   ): Promise<AgentControllerThreadInfo[]> {
     const opts = typeof options === 'number' ? { limit: options } : (options ?? {});
     const params = new URLSearchParams();
     if (opts.limit != null) params.set('limit', String(opts.limit));
     if (opts.tags && Object.keys(opts.tags).length > 0) params.set('tags', JSON.stringify(opts.tags));
-    for (const resourceId of opts.resourceIds ?? []) params.append('resourceIds', resourceId);
     const query = params.toString() ? `?${params.toString()}` : '';
     const body = await this.request<{ threads: AgentControllerThreadInfo[] }>(
       this.url(`${this.base()}/threads${query}`),
@@ -982,6 +994,16 @@ export class AgentController extends BaseResource {
   async listModels(): Promise<AgentControllerAvailableModel[]> {
     const body = await this.request<{ models: AgentControllerAvailableModel[] }>(`${this.basePath()}/models`);
     return body.models;
+  }
+
+  /**
+   * List every run currently in flight on this controller, across all
+   * resources. A cheap in-memory read on the server, suited to polling
+   * activity indicators.
+   */
+  async listActiveRuns(): Promise<AgentControllerActiveRun[]> {
+    const body = await this.request<{ runs: AgentControllerActiveRun[] }>(`${this.basePath()}/active-runs`);
+    return body.runs;
   }
 
   /** Get workspace status for this agent controller. */

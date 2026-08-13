@@ -15,6 +15,7 @@ import {
   STREAM_AGENT_CONTROLLER_SESSION_ROUTE,
   GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE,
   LIST_AGENT_CONTROLLER_MODES_ROUTE,
+  LIST_AGENT_CONTROLLER_ACTIVE_RUNS_ROUTE,
   LIST_AGENT_CONTROLLER_THREADS_ROUTE,
   SWITCH_AGENT_CONTROLLER_MODE_ROUTE,
   DELETE_AGENT_CONTROLLER_THREAD_ROUTE,
@@ -760,37 +761,6 @@ describe('agent-controller routes', () => {
       expect(all.threads.length).toBeGreaterThanOrEqual(3);
     });
 
-    it('lists threads across requested resources without rebinding the current session', async () => {
-      const controller = mastra.getAgentController('code')!;
-      const current = await controller.createSession({ resourceId: 'workspace-a', id: 'workspace-a' });
-      const other = await controller.createSession({ resourceId: 'workspace-b', id: 'workspace-b' });
-      const currentThread = await current.thread.create({ title: 'workspace a' });
-      const otherThread = await other.thread.create({ title: 'workspace b' });
-
-      const spy = vi
-        .spyOn(Agent.prototype, 'getActiveThreadRunId')
-        .mockImplementation(({ resourceId, threadId }) =>
-          resourceId === 'workspace-a' && threadId === currentThread.id ? 'run-1' : undefined,
-        );
-      try {
-        const res = (await LIST_AGENT_CONTROLLER_THREADS_ROUTE.handler({
-          mastra,
-          controllerId: 'code',
-          resourceId: 'workspace-b',
-          resourceIds: ['workspace-a', 'workspace-b'],
-        } as any)) as { threads: { id: string; resourceId?: string; state?: string }[] };
-
-        expect(res.threads).toEqual(
-          expect.arrayContaining([
-            expect.objectContaining({ id: currentThread.id, resourceId: 'workspace-a', state: 'active' }),
-            expect.objectContaining({ id: otherThread.id, resourceId: 'workspace-b', state: 'idle' }),
-          ]),
-        );
-      } finally {
-        spy.mockRestore();
-      }
-    });
-
     it('annotates each thread with its run state (active while a run executes, idle otherwise)', async () => {
       // Thread state comes from the agent thread-stream runtime — the same
       // per-thread active/idle tracking the signals `ifIdle` path uses.
@@ -816,6 +786,26 @@ describe('agent-controller routes', () => {
         expect(res.threads.filter(t => t.id !== busy.id).every(t => t.state === 'idle')).toBe(true);
       } finally {
         spy.mockRestore();
+      }
+    });
+
+    it('lists active runs controller-wide without creating a session', async () => {
+      const controller = mastra.getAgentController('code')!;
+      const createSession = vi.spyOn(controller, 'createSession');
+      const spy = vi
+        .spyOn(Agent.prototype, 'listActiveThreadRuns')
+        .mockReturnValue([{ runId: 'run-1', resourceId: 'workspace-a', threadId: 'thread-a' }]);
+      try {
+        const res = await LIST_AGENT_CONTROLLER_ACTIVE_RUNS_ROUTE.handler({
+          mastra,
+          controllerId: 'code',
+        } as any);
+
+        expect(res).toEqual({ runs: [{ runId: 'run-1', resourceId: 'workspace-a', threadId: 'thread-a' }] });
+        expect(createSession).not.toHaveBeenCalled();
+      } finally {
+        spy.mockRestore();
+        createSession.mockRestore();
       }
     });
   });

@@ -209,7 +209,6 @@ const listMessagesQuerySchema = z.object({ limit: z.coerce.number().optional(), 
 const listThreadsQuerySchema = z.object({
   limit: z.coerce.number().optional(),
   sessionScope: z.string().optional(),
-  resourceIds: z.union([z.string(), z.array(z.string())]).optional(),
   tags: z
     .preprocess(value => {
       if (typeof value !== 'string' || value.length === 0) return undefined;
@@ -291,7 +290,6 @@ const listThreadsResponseSchema = z.object({
     z.object({
       id: z.string(),
       title: z.string().optional(),
-      resourceId: z.string().optional(),
       updatedAt: z.string().optional(),
       /** The session scoping tags stamped on this thread (e.g. `{ projectPath }`). */
       tags: z.record(z.string(), z.string()).optional(),
@@ -838,6 +836,38 @@ export const LIST_AGENT_CONTROLLER_MODES_ROUTE = createRoute({
   },
 });
 
+const listActiveRunsResponseSchema = z.object({
+  runs: z.array(
+    z.object({
+      runId: z.string(),
+      resourceId: z.string().optional(),
+      threadId: z.string(),
+    }),
+  ),
+});
+
+export const LIST_AGENT_CONTROLLER_ACTIVE_RUNS_ROUTE = createRoute({
+  method: 'GET',
+  path: '/agent-controller/:controllerId/active-runs',
+  responseType: 'json' as const,
+  pathParamSchema: controllerIdPathParams,
+  responseSchema: listActiveRunsResponseSchema,
+  summary: 'List active controller runs',
+  description:
+    'Lists every in-flight run on the controller across all resources, from the in-process run tracking. A pure read: no session is created or touched. Suited to polling activity indicators.',
+  tags: ['AgentController'],
+  requiresAuth: true,
+  requiresPermission: 'agent-controller:read',
+  handler: async ({ mastra, controllerId }) => {
+    try {
+      const controller = getAgentControllerOrThrow(mastra, controllerId);
+      return { runs: controller.listActiveThreadRuns() };
+    } catch (error) {
+      return handleError(error, 'error listing active controller runs');
+    }
+  },
+});
+
 export const LIST_AGENT_CONTROLLER_THREADS_ROUTE = createRoute({
   method: 'GET',
   path: '/agent-controller/:controllerId/sessions/:resourceId/threads',
@@ -851,15 +881,11 @@ export const LIST_AGENT_CONTROLLER_THREADS_ROUTE = createRoute({
   tags: ['AgentController'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:read',
-  handler: async ({ mastra, controllerId, resourceId, sessionScope, limit, tags, resourceIds, requestContext }) => {
+  handler: async ({ mastra, controllerId, resourceId, sessionScope, limit, tags, requestContext }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const session = await getSession(controller, resourceId, { scope: sessionScope }, requestContext);
-      const requestedResourceIds =
-        resourceIds === undefined ? undefined : Array.isArray(resourceIds) ? resourceIds : [resourceIds];
-      const threads = requestedResourceIds
-        ? await session.thread.list({ resourceIds: requestedResourceIds })
-        : await session.thread.list();
+      const threads = await session.thread.list();
       // A thread's metadata mixes the session scoping tags (stamped at creation,
       // e.g. `projectPath`) with internal session bookkeeping that
       // `Session.loadMetadata()` reads back (selected model/mode, observer/
@@ -874,6 +900,12 @@ export const LIST_AGENT_CONTROLLER_THREADS_ROUTE = createRoute({
         }
         return result;
       };
+      // A single resourceId can be shared across git worktrees of the same repo
+      // (the id is derived from the git URL). When tags are supplied, scope to
+      // threads whose metadata matches every tag and drop the rest, so worktree A
+      // never shows worktree B's threads. Mirrors the controller's tag-aware
+      // selection and the TUI's worktree-strict listing. Reserved internal keys
+      // are ignored as filter tags so callers can't match on session bookkeeping.
       const tagEntries = tags ? Object.entries(tags).filter(([key]) => !isReservedThreadMetadataKey(key)) : [];
       const scoped =
         tagEntries.length > 0
@@ -898,12 +930,9 @@ export const LIST_AGENT_CONTROLLER_THREADS_ROUTE = createRoute({
           return {
             id: t.id,
             title: t.title,
-            resourceId: t.resourceId,
             tags: Object.keys(threadTags).length > 0 ? threadTags : undefined,
             updatedAt: t.updatedAt instanceof Date ? t.updatedAt.toISOString() : undefined,
-            state: agent.getActiveThreadRunId({ resourceId: t.resourceId, threadId: t.id })
-              ? ('active' as const)
-              : ('idle' as const),
+            state: agent.getActiveThreadRunId({ resourceId, threadId: t.id }) ? ('active' as const) : ('idle' as const),
           };
         }),
       };

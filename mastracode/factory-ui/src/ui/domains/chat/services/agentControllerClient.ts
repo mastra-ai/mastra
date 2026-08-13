@@ -32,6 +32,11 @@ export function requireAgentControllerSession(session: AgentControllerSession | 
   return session;
 }
 
+export function requireAgentController(controller: AgentController | null) {
+  if (!controller) throw new Error('Agent controller client is not available');
+  return controller;
+}
+
 export function createAgentControllerClient({
   agentControllerId,
   resourceId,

@@ -173,6 +173,7 @@ import type { CreatedAgentSignal } from './signals';
 import { runStreamUntilIdle, runResumeStreamUntilIdle } from './stream-until-idle';
 import type { SubAgent } from './subagent';
 import { agentThreadStreamRuntime } from './thread-stream-runtime';
+import type { ActiveThreadRun } from './thread-stream-runtime';
 import { TripWire } from './trip-wire';
 import type {
   AgentConfig,
@@ -7731,6 +7732,14 @@ export class Agent<
 
   getActiveThreadRunId(options: AgentSubscribeToThreadOptions): string | undefined {
     return agentThreadStreamRuntime.getActiveThreadRunId(options, this.getPubSub());
+  }
+
+  /**
+   * Lists every in-flight run started by the current process, across all
+   * resources and threads. Same runtime tracking as {@link getActiveThreadRunId}.
+   */
+  listActiveThreadRuns(): ActiveThreadRun[] {
+    return agentThreadStreamRuntime.listActiveThreadRuns(this.getPubSub());
   }
 
   /**

@@ -106,27 +106,6 @@ describe('AgentController listThreads — forked subagent filter', () => {
     expect(threads.map(t => t.id)).toEqual(['a-normal']);
   });
 
-  it('scopes to the requested resourceIds, deduplicated, forks still hidden', async () => {
-    const controller = createController('rid-5');
-    await controller.init();
-    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
-    // Drop the auto-created starter thread so assertions see only seeded threads.
-    await session.thread.delete({ threadId: session.thread.getId()! });
-
-    await writeThreadDirect(controller, { id: 'own', resourceId: 'rid-5' });
-    await writeThreadDirect(controller, { id: 'other', resourceId: 'rid-other' });
-    await writeThreadDirect(controller, { id: 'excluded', resourceId: 'rid-excluded' });
-    await writeThreadDirect(controller, {
-      id: 'other-fork',
-      resourceId: 'rid-other',
-      metadata: { forkedSubagent: true },
-    });
-
-    const threads = await session.thread.list({ resourceIds: ['rid-5', 'rid-other', 'rid-other'] });
-
-    expect(threads.map(t => t.id).sort()).toEqual(['other', 'own']);
-  });
-
   it('does not filter threads where forkedSubagent is falsy or missing', async () => {
     // Defensive: only `forkedSubagent === true` should hide a thread.
     const controller = createController('rid-4');
