@@ -9,8 +9,23 @@ import { loadSettings, saveSettings } from './settings.js';
 
 /** Whether the user has already chosen any persisted OM model or pack. */
 export function hasExplicitOMConfiguration(settings: GlobalSettings): boolean {
-  const { activeOmPackId, omModelOverride, observerModelOverride, reflectorModelOverride } = settings.models;
-  if (omModelOverride || observerModelOverride || reflectorModelOverride) return true;
+  const {
+    activeOmPackId,
+    omModelOverride,
+    observerModelOverride,
+    observerModelSelection,
+    reflectorModelOverride,
+    reflectorModelSelection,
+  } = settings.models;
+  if (
+    omModelOverride ||
+    observerModelOverride ||
+    observerModelSelection?.mode === 'model' ||
+    reflectorModelOverride ||
+    reflectorModelSelection?.mode === 'model'
+  ) {
+    return true;
+  }
 
   // 'custom' without a model is what onboarding persists when no provider was
   // reachable — a forced non-choice, not a preference worth preserving.
@@ -42,20 +57,27 @@ export function applyOmRoleOverride(
   settings: GlobalSettings,
   role: 'observer' | 'reflector',
   modelId: string,
-  otherRoleCurrentModelId: string | null,
+  _otherRoleCurrentModelId?: string | null,
 ): void {
-  const wasBuiltinPack = settings.models.activeOmPackId !== null && settings.models.activeOmPackId !== 'custom';
-
   if (role === 'observer') {
-    if (wasBuiltinPack && otherRoleCurrentModelId && !settings.models.reflectorModelOverride) {
-      settings.models.reflectorModelOverride = otherRoleCurrentModelId;
-    }
     settings.models.observerModelOverride = modelId;
+    settings.models.observerModelSelection = { mode: 'model', modelId };
   } else {
-    if (wasBuiltinPack && otherRoleCurrentModelId && !settings.models.observerModelOverride) {
-      settings.models.observerModelOverride = otherRoleCurrentModelId;
-    }
     settings.models.reflectorModelOverride = modelId;
+    settings.models.reflectorModelSelection = { mode: 'model', modelId };
+  }
+
+  settings.models.activeOmPackId = 'custom';
+}
+
+/** Reset one persisted OM role to dynamic auto selection without touching the other role. */
+export function applyOmRoleAuto(settings: GlobalSettings, role: 'observer' | 'reflector'): void {
+  if (role === 'observer') {
+    settings.models.observerModelOverride = null;
+    settings.models.observerModelSelection = { mode: 'auto' };
+  } else {
+    settings.models.reflectorModelOverride = null;
+    settings.models.reflectorModelSelection = { mode: 'auto' };
   }
 
   settings.models.activeOmPackId = 'custom';

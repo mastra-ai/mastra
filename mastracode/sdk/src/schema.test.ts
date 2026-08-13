@@ -59,6 +59,23 @@ describe('stateSchema', () => {
     // The schema strips unknown keys on parse; a factoryOrgId missing from the
     // schema is silently discarded and the memory seam falls back to ownerId.
     expect(parsed.factoryOrgId).toBe('FOdo4tqL98ibdYH8uhLXs0mZrDDE5Uiw');
+  it('defaults fresh OM roles to auto without materializing model IDs', () => {
+    const parsed = stateSchema.parse({});
+
+    expect(parsed.observerModelId).toBeUndefined();
+    expect(parsed.reflectorModelId).toBeUndefined();
+    expect(parsed.observerModelSelection).toEqual({ mode: 'auto' });
+    expect(parsed.reflectorModelSelection).toEqual({ mode: 'auto' });
+  });
+
+  it('treats legacy concrete OM model IDs as explicit selections', () => {
+    const parsed = stateSchema.parse({
+      observerModelId: 'openai/gpt-5.4-mini',
+      reflectorModelId: 'anthropic/claude-haiku-4-5',
+    });
+
+    expect(parsed.observerModelSelection).toEqual({ mode: 'model', modelId: 'openai/gpt-5.4-mini' });
+    expect(parsed.reflectorModelSelection).toEqual({ mode: 'model', modelId: 'anthropic/claude-haiku-4-5' });
   });
 
   // Regression: /browser status compares the persisted active snapshot against the

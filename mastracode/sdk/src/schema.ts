@@ -1,5 +1,6 @@
+import type { OMModelSelection } from '@mastra/core/agent-controller';
 import { z } from 'zod';
-import { DEFAULT_CONFIG_DIR, DEFAULT_OM_MODEL_ID } from './constants.js';
+import { DEFAULT_CONFIG_DIR } from './constants.js';
 import { THINKING_LEVEL_VALUES } from './thinking.js';
 import type { ThinkingLevelSetting } from './thinking.js';
 
@@ -55,8 +56,10 @@ export interface MastraCodeState {
   homeDir?: string;
   gitBranch?: string;
   lastCommand?: string;
-  observerModelId: string;
-  reflectorModelId: string;
+  observerModelId?: string;
+  reflectorModelId?: string;
+  observerModelSelection: OMModelSelection;
+  reflectorModelSelection: OMModelSelection;
   observationThreshold: number;
   reflectionThreshold: number;
   cavemanObservations: boolean;
@@ -157,9 +160,16 @@ export const stateSchema = z.object({
   homeDir: z.string().optional(),
   gitBranch: z.string().optional(),
   lastCommand: z.string().optional(),
-  // Observational Memory model settings
-  observerModelId: z.string().default(DEFAULT_OM_MODEL_ID),
-  reflectorModelId: z.string().default(DEFAULT_OM_MODEL_ID),
+  // Observational Memory model settings. Concrete IDs are legacy/explicit
+  // compatibility fields; fresh sessions preserve auto selection intent.
+  observerModelId: z.string().optional(),
+  reflectorModelId: z.string().optional(),
+  observerModelSelection: z
+    .union([z.object({ mode: z.literal('auto') }), z.object({ mode: z.literal('model'), modelId: z.string() })])
+    .optional(),
+  reflectorModelSelection: z
+    .union([z.object({ mode: z.literal('auto') }), z.object({ mode: z.literal('model'), modelId: z.string() })])
+    .optional(),
   // Observational Memory threshold settings
   observationThreshold: z.number().default(30_000),
   reflectionThreshold: z.number().default(40_000),
@@ -273,4 +283,14 @@ export const stateSchema = z.object({
       viaCodexOAuth: z.boolean(),
     })
     .optional(),
-});
+}).transform(state => ({
+  ...state,
+  observerModelSelection:
+    state.observerModelSelection ??
+    (state.observerModelId ? { mode: 'model' as const, modelId: state.observerModelId } : { mode: 'auto' as const }),
+  reflectorModelSelection:
+    state.reflectorModelSelection ??
+    (state.reflectorModelId
+      ? { mode: 'model' as const, modelId: state.reflectorModelId }
+      : { mode: 'auto' as const }),
+}));

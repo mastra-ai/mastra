@@ -94,7 +94,12 @@ function createRequestContext(state: Record<string, unknown>, sessionId = 'sessi
       'controller',
       {
         getState,
-        session: { id: sessionId, ownerId: 'mastracode-owner', state: { get: getState } },
+        session: {
+          id: sessionId,
+          ownerId: 'mastracode-owner',
+          modelId: (state.currentModelId as string | undefined) ?? '',
+          state: { get: getState },
+        },
       },
     ],
   ]);
@@ -404,6 +409,84 @@ describe('getDynamicMemory', () => {
     // A factory-conditional config must not be cross-served from the cache.
     expect(factoryMemory).not.toBe(nonFactoryMemory);
     expect(memoryConstructorMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('resolves auto roles from the active main model on every invocation', async () => {
+    const state: Record<string, unknown> = {
+      observerModelSelection: { mode: 'auto' },
+      reflectorModelSelection: { mode: 'auto' },
+    };
+    const getState = () => state;
+    let modelId = 'anthropic/claude-opus-4-8';
+    const attributes = new Map<string, unknown>();
+    const requestContext = {
+      get: vi.fn((key: string) =>
+        key === 'controller'
+          ? {
+              getState,
+              session: {
+                get modelId() {
+                  return modelId;
+                },
+                state: { get: getState },
+              },
+            }
+          : attributes.get(key),
+      ),
+      set: vi.fn((key: string, value: unknown) => attributes.set(key, value)),
+    } as RequestContextStub;
+    const { config } = await createMemoryConfig(state);
+    const om = config.options.observationalMemory;
+
+    expect(om.observation.model({ requestContext })).toEqual({ modelId: 'anthropic/claude-haiku-4-5' });
+    expect(om.reflection.model({ requestContext })).toEqual({ modelId: 'anthropic/claude-haiku-4-5' });
+    expect(requestContext.get('om.observer.selectionMode')).toBe('auto');
+    expect(requestContext.get('om.observer.effectiveModelId')).toBe('anthropic/claude-haiku-4-5');
+    expect(requestContext.get('om.reflector.selectionMode')).toBe('auto');
+    expect(requestContext.get('om.reflector.effectiveModelId')).toBe('anthropic/claude-haiku-4-5');
+
+    modelId = 'openai/gpt-5.6-sol';
+    expect(om.observation.model({ requestContext })).toEqual({ modelId: 'openai/gpt-5.4-mini' });
+    expect(om.reflection.model({ requestContext })).toEqual({ modelId: 'openai/gpt-5.4-mini' });
+  });
+
+  it('keeps an explicit role pinned while the auto role follows the main model', async () => {
+    const state: Record<string, unknown> = {
+      observerModelId: 'deepseek/deepseek-v4-flash',
+      observerModelSelection: { mode: 'model', modelId: 'deepseek/deepseek-v4-flash' },
+      reflectorModelSelection: { mode: 'auto' },
+    };
+    const getState = () => state;
+    let modelId = 'anthropic/claude-opus-4-8';
+    const attributes = new Map<string, unknown>();
+    const requestContext = {
+      get: vi.fn((key: string) =>
+        key === 'controller'
+          ? {
+              getState,
+              session: {
+                get modelId() {
+                  return modelId;
+                },
+                state: { get: getState },
+              },
+            }
+          : attributes.get(key),
+      ),
+      set: vi.fn((key: string, value: unknown) => attributes.set(key, value)),
+    } as RequestContextStub;
+    const { config } = await createMemoryConfig(state);
+    const om = config.options.observationalMemory;
+
+    expect(om.observation.model({ requestContext })).toEqual({ modelId: 'deepseek/deepseek-v4-flash' });
+    expect(om.reflection.model({ requestContext })).toEqual({ modelId: 'anthropic/claude-haiku-4-5' });
+    expect(requestContext.get('om.observer.selectionMode')).toBe('model');
+    expect(requestContext.get('om.observer.effectiveModelId')).toBe('deepseek/deepseek-v4-flash');
+    expect(requestContext.get('om.reflector.selectionMode')).toBe('auto');
+
+    modelId = 'custom-provider/custom-model';
+    expect(om.observation.model({ requestContext })).toEqual({ modelId: 'deepseek/deepseek-v4-flash' });
+    expect(om.reflection.model({ requestContext })).toEqual({ modelId: 'custom-provider/custom-model' });
   });
 
   it('uses controller state overrides and disables async buffering for resource-scoped OM', async () => {

@@ -79,15 +79,14 @@ import {
 } from './auth/account-rotation-processor.js';
 import { isKimiCodingDeviceId } from './auth/providers/kimi-coding.js';
 import { AuthStorage } from './auth/storage.js';
-import { DEFAULT_CONFIG_DIR, validateConfigDirName } from './constants.js';
+import { DEFAULT_CONFIG_DIR, DEFAULT_OM_MODEL_ID, validateConfigDirName } from './constants.js';
 import { createOutcomeScorer, createEfficiencyScorer } from './evals/scorers/index.js';
 import { HookManager } from './hooks/index.js';
 import { createKnowledgeInspector as createScopedKnowledgeInspector } from './knowledge-inspector.js';
 import { createMcpManager } from './mcp/index.js';
 import type { McpServerConfig } from './mcp/index.js';
-import { hasExplicitOMConfiguration } from './onboarding/om-settings.js';
 import type { ProviderAccess } from './onboarding/packs.js';
-import { getAvailableModePacks, getAvailableOmPacks, selectPreferredOMPack } from './onboarding/packs.js';
+import { getAvailableModePacks, getAvailableOmPacks, resolveAutoOMModelId } from './onboarding/packs.js';
 import {
   loadSettings,
   MASTRA_GATEWAY_PROVIDER,
@@ -641,7 +640,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
         // Agent settings:
         //   state.yolo, state.thinkingLevel, state.smartEditing
         // Observational memory settings:
-        //   state.omScope, state.observerModelId, state.reflectorModelId,
+        //   state.omScope, role selection intent/effective model,
         //   state.observationThreshold, state.reflectionThreshold
         requestContextKeys: [
           // Session identifiers
@@ -661,8 +660,10 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
           'controller.state.smartEditing',
           // Observational memory settings
           'controller.state.omScope',
-          'controller.state.observerModelId',
-          'controller.state.reflectorModelId',
+          'om.observer.selectionMode',
+          'om.observer.effectiveModelId',
+          'om.reflector.selectionMode',
+          'om.reflector.effectiveModelId',
           'controller.state.observationThreshold',
           'controller.state.reflectionThreshold',
         ],
@@ -1233,12 +1234,10 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   const builtinPacks = getAvailableModePacks(startupAccess);
   const builtinOmPacks = getAvailableOmPacks(startupAccess);
   const effectiveDefaults = resolveModelDefaults(globalSettings, builtinPacks);
-  const activeProviderId = effectiveDefaults.build?.split('/')[0];
-  const preferredOmModel = hasExplicitOMConfiguration(globalSettings)
-    ? undefined
-    : selectPreferredOMPack(startupAccess, activeProviderId)?.modelId;
-  const effectiveObserverModel = resolveOmRoleModel(globalSettings, 'observer', builtinOmPacks) || preferredOmModel;
-  const effectiveReflectorModel = resolveOmRoleModel(globalSettings, 'reflector', builtinOmPacks) || preferredOmModel;
+  const effectiveObserverModel = resolveOmRoleModel(globalSettings, 'observer', builtinOmPacks);
+  const effectiveReflectorModel = resolveOmRoleModel(globalSettings, 'reflector', builtinOmPacks);
+  const observerModelSelection = globalSettings.models.observerModelSelection;
+  const reflectorModelSelection = globalSettings.models.reflectorModelSelection;
   const effectiveObservationThreshold = globalSettings.models.omObservationThreshold ?? undefined;
   const effectiveReflectionThreshold = globalSettings.models.omReflectionThreshold ?? undefined;
   const effectiveCavemanObservations = globalSettings.models.omCavemanObservations ?? undefined;
@@ -1277,11 +1276,21 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   // machine-local settings.json never leaks into server sessions.
   const globalInitialState: Partial<MastraCodeState> = {};
   if (!config?.disableSettingsOmSeed) {
-    if (effectiveObserverModel) {
+    if (observerModelSelection?.mode === 'auto') {
+      globalInitialState.observerModelSelection = observerModelSelection;
+    } else if (effectiveObserverModel) {
       globalInitialState.observerModelId = effectiveObserverModel;
+      globalInitialState.observerModelSelection = { mode: 'model', modelId: effectiveObserverModel };
+    } else {
+      globalInitialState.observerModelSelection = { mode: 'auto' };
     }
-    if (effectiveReflectorModel) {
+    if (reflectorModelSelection?.mode === 'auto') {
+      globalInitialState.reflectorModelSelection = reflectorModelSelection;
+    } else if (effectiveReflectorModel) {
       globalInitialState.reflectorModelId = effectiveReflectorModel;
+      globalInitialState.reflectorModelSelection = { mode: 'model', modelId: effectiveReflectorModel };
+    } else {
+      globalInitialState.reflectorModelSelection = { mode: 'auto' };
     }
     if (effectiveObservationThreshold !== undefined) {
       globalInitialState.observationThreshold = effectiveObservationThreshold;
@@ -1335,6 +1344,13 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     memory,
     pubsub: signalsPubSub,
     stateSchema: typedStateSchema,
+    omConfig: {
+      defaultObserverModelId: DEFAULT_OM_MODEL_ID,
+      defaultObserverModelSelection: { mode: 'auto' },
+      defaultReflectorModelId: DEFAULT_OM_MODEL_ID,
+      defaultReflectorModelSelection: { mode: 'auto' },
+      resolveAutoModelId: ({ currentModelId }) => resolveAutoOMModelId(currentModelId),
+    },
     agent: codeAgent,
     subagents,
     gateways: [amazonBedrockGateway, mastraCodeGateway],

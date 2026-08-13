@@ -5,8 +5,9 @@ import type { MastraCompositeStore } from '@mastra/core/storage';
 import type { MastraVector } from '@mastra/core/vector';
 import { fastembed } from '@mastra/fastembed';
 import { Memory, Subconscious } from '@mastra/memory';
-import { DEFAULT_OM_MODEL_ID, DEFAULT_OBS_THRESHOLD, DEFAULT_REF_THRESHOLD } from '../constants.js';
+import { DEFAULT_OBS_THRESHOLD, DEFAULT_REF_THRESHOLD } from '../constants.js';
 import { LOCAL_KNOWLEDGE_ORG_ID, resolveKnowledgeScopeIdentity } from '../knowledge-scope.js';
+import { resolveAutoOMModelId } from '../onboarding/packs.js';
 import { loadSettings } from '../onboarding/settings.js';
 import type { MastraCodeState } from '../schema.js';
 import { getOmScope } from '../utils/project.js';
@@ -14,14 +15,9 @@ import { resolveModel, resolvePackMemoryModelChain } from './model.js';
 import type { PackMemoryModelChainEntry } from './model.js';
 
 /**
- * Resolve one OM role's model for this invocation. Lookup order:
- *   1. The explicit role override (`observerModelOverride` / `reflectorModelOverride`).
- *   2. The active mode pack's optional `models.memory`, walking the pack's fallback
- *      chain so OM fails over alongside (and independently of) the main agent.
- *      The pending pack-hop marker wins over the settled pack id so an immediate
- *      retrigger observes on the landed pack.
- *   3. The standalone OM configuration seeded into controller state
- *      (`observerModelId` / `reflectorModelId`), then the default OM model.
+ * Resolve one OM role's model for this invocation. Explicit per-role choices
+ * win. Automatic roles follow the active mode pack's memory fallback chain
+ * when present, then the low-cost model for the active main-model provider.
  */
 function resolveOmRoleModelForRequest(
   role: 'observer' | 'reflector',
@@ -38,7 +34,23 @@ function resolveOmRoleModelForRequest(
   const settings = loadSettings(settingsPath);
   const roleOverride =
     role === 'observer' ? settings.models?.observerModelOverride : settings.models?.reflectorModelOverride;
-  if (roleOverride) return resolveModel(roleOverride, resolveOptions);
+  const selection = state?.[`${role}ModelSelection`];
+  const legacyModelId = state?.[`${role}ModelId`];
+  const selectedModelId =
+    roleOverride ??
+    (typeof selection === 'string' && selection !== 'auto'
+      ? selection
+      : selection && typeof selection === 'object' && selection.mode === 'model'
+        ? selection.modelId
+        : !selection
+          ? legacyModelId
+          : undefined);
+
+  if (selectedModelId) {
+    requestContext.set(`om.${role}.selectionMode`, 'model');
+    requestContext.set(`om.${role}.effectiveModelId`, selectedModelId);
+    return resolveModel(selectedModelId, resolveOptions);
+  }
 
   const pendingState = state?.mastracodePendingPackFallback as
     | { toPackId?: unknown; threadId?: unknown }
@@ -54,11 +66,18 @@ function resolveOmRoleModelForRequest(
   const packId = pendingPackId ?? state?.activeModelPackId ?? settings.models?.activeModelPackId;
   if (typeof packId === 'string' && packId.length > 0) {
     const chained = resolvePackMemoryModelChain(settings, packId, resolveOptions);
-    if (chained) return chained;
+    if (chained) {
+      requestContext.set(`om.${role}.selectionMode`, 'auto');
+      requestContext.set(`om.${role}.effectiveModelId`, chained[0]?.model.modelId);
+      return chained;
+    }
   }
 
-  const stateModelId = role === 'observer' ? state?.observerModelId : state?.reflectorModelId;
-  return resolveModel(stateModelId ?? DEFAULT_OM_MODEL_ID, resolveOptions);
+  const currentModelId = controller?.session.modelId || (state?.currentModelId as string | undefined);
+  const effectiveModelId = resolveAutoOMModelId(currentModelId);
+  requestContext.set(`om.${role}.selectionMode`, 'auto');
+  requestContext.set(`om.${role}.effectiveModelId`, effectiveModelId);
+  return resolveModel(effectiveModelId, resolveOptions);
 }
 
 const DYNAMIC_AGENTS_MD_INSTRUCTION =

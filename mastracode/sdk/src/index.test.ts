@@ -324,16 +324,9 @@ describe('settings.json OM seeding', () => {
     }
   });
 
-  it('seeds provider-matched OM models when settings are untouched', async () => {
-    const { selectPreferredOMPack } = await import('./onboarding/packs.js');
+  it('preserves auto OM selection when settings are untouched', async () => {
     const { resolveOmRoleModel, loadSettings } = await import('./onboarding/settings.js');
     vi.mocked(resolveOmRoleModel).mockReturnValue(null);
-    vi.mocked(selectPreferredOMPack).mockReturnValue({
-      id: 'openai',
-      name: 'OpenAI Mini',
-      description: 'Via Codex subscription',
-      modelId: 'openai/gpt-5.4-mini',
-    });
     const baseSettings = vi.mocked(loadSettings)();
     const { createMastraCode } = await import('./index.js');
 
@@ -341,11 +334,12 @@ describe('settings.json OM seeding', () => {
       await createMastraCode({ cwd: '/tmp/project-provider-om-seed' });
 
       expect(controllerInitialStates).toHaveLength(1);
-      expect(controllerInitialStates[0]!.observerModelId).toBe('openai/gpt-5.4-mini');
-      expect(controllerInitialStates[0]!.reflectorModelId).toBe('openai/gpt-5.4-mini');
+      expect(controllerInitialStates[0]!.observerModelId).toBeUndefined();
+      expect(controllerInitialStates[0]!.reflectorModelId).toBeUndefined();
+      expect(controllerInitialStates[0]!.observerModelSelection).toEqual({ mode: 'auto' });
+      expect(controllerInitialStates[0]!.reflectorModelSelection).toEqual({ mode: 'auto' });
     } finally {
       vi.mocked(resolveOmRoleModel).mockReturnValue('');
-      vi.mocked(selectPreferredOMPack).mockReturnValue(undefined);
       vi.mocked(loadSettings).mockReturnValue(baseSettings);
     }
   });

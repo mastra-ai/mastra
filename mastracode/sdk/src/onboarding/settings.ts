@@ -7,6 +7,7 @@
 import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import type { OMModelSelection } from '@mastra/core/agent-controller';
 import type { MastraBrowser } from '@mastra/core/browser';
 import type { LSPConfig } from '@mastra/core/workspace';
 import { AuthStorage, PROVIDER_DEFAULT_MODELS } from '../auth/storage.js';
@@ -281,11 +282,15 @@ export interface GlobalSettings {
      * when set. Written by `/om` when the observer model is changed independently.
      */
     observerModelOverride: string | null;
+    /** Persisted Observer selection intent. Missing values use legacy-field compatibility. */
+    observerModelSelection: OMModelSelection | null;
     /**
      * Explicit Reflector model override — takes precedence over `omModelOverride`
      * when set. Written by `/om` when the reflector model is changed independently.
      */
     reflectorModelOverride: string | null;
+    /** Persisted Reflector selection intent. Missing values use legacy-field compatibility. */
+    reflectorModelSelection: OMModelSelection | null;
     /** Default OM observation threshold used for new threads unless overridden per-thread. */
     omObservationThreshold: number | null;
     /** Default OM reflection threshold used for new threads unless overridden per-thread. */
@@ -434,7 +439,9 @@ const DEFAULTS: GlobalSettings = {
     activeOmPackId: null,
     omModelOverride: null,
     observerModelOverride: null,
+    observerModelSelection: null,
     reflectorModelOverride: null,
+    reflectorModelSelection: null,
     omObservationThreshold: null,
     omReflectionThreshold: null,
     omCavemanObservations: null,
@@ -1340,7 +1347,18 @@ export function resolveOmRoleModel(
   role: 'observer' | 'reflector',
   builtinOmPacks: Array<{ id: string; modelId: string }>,
 ): string | null {
-  const { activeOmPackId, omModelOverride, observerModelOverride, reflectorModelOverride } = settings.models;
+  const {
+    activeOmPackId,
+    omModelOverride,
+    observerModelOverride,
+    observerModelSelection,
+    reflectorModelOverride,
+    reflectorModelSelection,
+  } = settings.models;
+  const selection = role === 'observer' ? observerModelSelection : reflectorModelSelection;
+  if (selection?.mode === 'auto') return null;
+  if (selection?.mode === 'model') return selection.modelId;
+
   const roleOverride = role === 'observer' ? observerModelOverride : reflectorModelOverride;
   if (roleOverride) return roleOverride;
 
