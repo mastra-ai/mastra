@@ -40,11 +40,18 @@ async function waitForCondition(predicate: () => boolean, timeoutMs = 2_000) {
  */
 class ControlledLeasePubSub extends PubSub implements LeaseProvider {
   owners = new Map<string, string>();
+  denyAcquire = false;
+  failAcquire = false;
+  failPublish = false;
+  failPublishAfterDelivery = false;
+  publishedTypes: string[] = [];
   #subscribers = new Map<string, Set<EventCallback>>();
   #pending = new Set<Promise<void>>();
   #index = 0;
 
   async publish(topic: string, event: any): Promise<void> {
+    if (this.failPublish) throw new Error('publish failed');
+    this.publishedTypes.push(event.type);
     const envelope = { ...event, id: `event-${this.#index}`, createdAt: new Date(), index: this.#index++ };
     const subscribers = [...(this.#subscribers.get(topic) ?? [])];
     const pending = new Promise<void>(resolve => {
@@ -55,6 +62,11 @@ class ControlledLeasePubSub extends PubSub implements LeaseProvider {
     });
     this.#pending.add(pending);
     void pending.finally(() => this.#pending.delete(pending));
+    await pending;
+    if (this.failPublishAfterDelivery) {
+      this.failPublishAfterDelivery = false;
+      throw new Error('publish acknowledgement failed');
+    }
   }
 
   async subscribe(topic: string, cb: EventCallback): Promise<void> {
@@ -72,8 +84,9 @@ class ControlledLeasePubSub extends PubSub implements LeaseProvider {
   }
 
   async acquireLease(key: string, owner: string): Promise<{ acquired: boolean; owner?: string }> {
+    if (this.failAcquire) throw new Error('acquire failed');
     const current = this.owners.get(key);
-    if (current && current !== owner) return { acquired: false, owner: current };
+    if (this.denyAcquire || (current && current !== owner)) return { acquired: false, owner: current };
     this.owners.set(key, owner);
     return { acquired: true, owner };
   }
@@ -146,5 +159,137 @@ describe('registerRun thread lease', () => {
     // Release is fire-and-forget inside the completion watcher's finally —
     // poll rather than asserting immediately.
     await waitForCondition(() => pubsub.owners.get(key) === undefined);
+  });
+
+  it('fails strict registration closed without installing a ghost record', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new ControlledLeasePubSub();
+    const agent = { id: 'strict-conflict-agent' } as Agent<any, any, any, any>;
+    const threadId = 'strict-conflict-thread';
+    const resourceId = 'strict-conflict-resource';
+    const key = [resourceId, threadId].join(AGENT_THREAD_KEY_SEPARATOR);
+    pubsub.owners.set(key, 'other-run');
+
+    const register = () =>
+      runtime.registerRun(
+        agent,
+        {
+          runId: 'strict-conflict-run',
+          status: 'running',
+          fullStream: new ReadableStream(),
+          _waitUntilFinished: () => new Promise<void>(() => {}),
+        } as any,
+        { memory: { thread: threadId, resource: resourceId } } as any,
+        pubsub,
+        { strict: true },
+      )!;
+
+    await expect(register()).rejects.toThrow('thread lease is held');
+    expect(runtime.getThreadState({ threadId, resourceId }, pubsub)).toBe('idle');
+    expect(pubsub.publishedTypes).not.toContain('run-registered');
+
+    pubsub.owners.delete(key);
+    pubsub.failAcquire = true;
+    await expect(register()).rejects.toThrow('acquire failed');
+    expect(runtime.getThreadState({ threadId, resourceId }, pubsub)).toBe('idle');
+  });
+
+  it('strict rollback removes only its registration and permits a new run', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new ControlledLeasePubSub();
+    const agent = { id: 'strict-rollback-agent' } as Agent<any, any, any, any>;
+    const threadId = 'strict-rollback-thread';
+    const resourceId = 'strict-rollback-resource';
+    const key = [resourceId, threadId].join(AGENT_THREAD_KEY_SEPARATOR);
+    const neverFinishes = () => new Promise<void>(() => {});
+    const register = (runId: string) =>
+      runtime.registerRun(
+        agent,
+        { runId, status: 'running', fullStream: new ReadableStream(), _waitUntilFinished: neverFinishes } as any,
+        { memory: { thread: threadId, resource: resourceId } } as any,
+        pubsub,
+        { strict: true },
+      )!;
+
+    const first = await register('strict-rollback-run-1');
+    expect(runtime.getThreadState({ threadId, resourceId }, pubsub)).toBe('active');
+    await first.rollback();
+    expect(runtime.getThreadState({ threadId, resourceId }, pubsub)).toBe('idle');
+    expect(pubsub.owners.get(key)).toBeUndefined();
+
+    const second = await register('strict-rollback-run-2');
+    expect(pubsub.owners.get(key)).toBe('strict-rollback-run-2');
+    expect(runtime.getThreadState({ threadId, resourceId }, pubsub)).toBe('active');
+    await second.rollback({ releaseLease: false });
+    expect(runtime.getThreadState({ threadId, resourceId }, pubsub)).toBe('idle');
+    expect(pubsub.owners.get(key)).toBe('strict-rollback-run-2');
+    await pubsub.releaseLease(key, 'strict-rollback-run-2');
+  });
+
+  it('rolls strict registration back and releases its lease when publishing fails', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new ControlledLeasePubSub();
+    const agent = { id: 'strict-publish-agent' } as Agent<any, any, any, any>;
+    const threadId = 'strict-publish-thread';
+    const resourceId = 'strict-publish-resource';
+    const key = [resourceId, threadId].join(AGENT_THREAD_KEY_SEPARATOR);
+    let streamPulled = false;
+    pubsub.failPublish = true;
+
+    const registered = runtime.registerRun(
+      agent,
+      {
+        runId: 'strict-publish-run',
+        status: 'running',
+        fullStream: {
+          getReader() {
+            streamPulled = true;
+            throw new Error('strict publish failure must not start the stream');
+          },
+        },
+        _waitUntilFinished: () => new Promise<void>(() => {}),
+      } as any,
+      { memory: { thread: threadId, resource: resourceId } } as any,
+      pubsub,
+      { strict: true },
+    )!;
+
+    await expect(registered).rejects.toThrow('publish failed');
+    expect(runtime.getThreadState({ threadId, resourceId }, pubsub)).toBe('idle');
+    expect(pubsub.owners.get(key)).toBeUndefined();
+    expect(streamPulled).toBe(false);
+  });
+
+  it('discards a delivered registration when its publish acknowledgement fails', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const observer = new AgentThreadStreamRuntime();
+    const pubsub = new ControlledLeasePubSub();
+    const agent = { id: 'strict-ack-agent' } as Agent<any, any, any, any>;
+    const threadId = 'strict-ack-thread';
+    const resourceId = 'strict-ack-resource';
+    const subscription = await observer.subscribeToThread(agent, { threadId, resourceId }, pubsub);
+    pubsub.failPublishAfterDelivery = true;
+
+    try {
+      await expect(
+        runtime.registerRun(
+          agent,
+          {
+            runId: 'strict-ack-run',
+            status: 'running',
+            fullStream: new ReadableStream(),
+            _waitUntilFinished: () => new Promise<void>(() => {}),
+          } as any,
+          { memory: { thread: threadId, resource: resourceId } } as any,
+          pubsub,
+          { strict: true },
+        )!,
+      ).rejects.toThrow('publish acknowledgement failed');
+      await pubsub.flush();
+      expect(observer.getThreadState({ threadId, resourceId }, pubsub)).toBe('idle');
+      expect(pubsub.publishedTypes).toEqual(['run-registered', 'run-discarded']);
+    } finally {
+      subscription.unsubscribe();
+    }
   });
 });

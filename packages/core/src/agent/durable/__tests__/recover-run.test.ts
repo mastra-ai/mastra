@@ -14,7 +14,7 @@
 
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import type { PubSub } from '../../../events/pubsub';
 import { Mastra } from '../../../mastra';
@@ -138,6 +138,10 @@ describe('DurableAgent.recover(runId)', () => {
 
   beforeEach(() => {
     ({ agent, store } = createDurableWithStore('agent-A'));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('rehydrates the run registry with memory + messageList so terminal steps can flush', async () => {
@@ -295,6 +299,31 @@ describe('DurableAgent.recover(runId)', () => {
     }
   });
 
+  it('fails closed without a ghost registration when another run owns the thread lease', async () => {
+    const runId = 'run-thread-lease-conflict';
+    const conflictStore = new InMemoryStore();
+    const conflictPubsub = new EventEmitterPubSub();
+    const { agent: conflictAgent } = createDurableWithStore('agent-thread-conflict', conflictStore, conflictPubsub);
+    await seed(conflictStore, runId, 'running', 'agent-thread-conflict');
+    const workflow = stubWorkflow(conflictAgent, 'success');
+    const threadKey = ['r', 't'].join('\u0000');
+    await conflictPubsub.acquireLease(threadKey, 'other-run', 30_000);
+
+    try {
+      await expect(conflictAgent.recover(runId)).rejects.toThrow('thread lease is held by other-run');
+      expect(workflow.createRun).not.toHaveBeenCalled();
+      expect(globalRunRegistry.get(runId)).toBeUndefined();
+      expect(conflictAgent.runRegistry.get(runId)).toBeUndefined();
+      expect(agentThreadStreamRuntime.getThreadState({ threadId: 't', resourceId: 'r' }, conflictPubsub)).toBe('idle');
+      await expect(conflictPubsub.acquireLease(threadKey, 'probe-run', 30_000)).resolves.toMatchObject({
+        acquired: false,
+        owner: 'other-run',
+      });
+    } finally {
+      await conflictPubsub.releaseLease(threadKey, 'other-run');
+    }
+  });
+
   it('does not let an older cleanup remove a newer recovery of the same run', async () => {
     const runId = 'run-cleanup-generation';
     await seed(store, runId, 'running', 'agent-A');
@@ -315,6 +344,7 @@ describe('DurableAgent.recover(runId)', () => {
 
     firstRecovery.cleanup();
     expect(globalRunRegistry.get(runId)).toBe(secondEntry);
+    expect(agent.runRegistry.get(runId)).toBe(secondEntry);
 
     await secondEntry?.workflowExecution;
     expect(firstRestart).toHaveBeenCalledTimes(1);
@@ -374,7 +404,6 @@ describe('DurableAgent.recover(runId)', () => {
       releaseRestart();
       await globalRunRegistry.get(runId)?.workflowExecution?.catch(() => {});
       recovery?.cleanup();
-      vi.useRealTimers();
     }
   });
 
@@ -433,7 +462,67 @@ describe('DurableAgent.recover(runId)', () => {
       releaseRegistration();
       await recovery.catch(() => {});
       registerRun.mockRestore();
-      vi.useRealTimers();
+    }
+  });
+
+  it('settles recovery promptly when lease loss abort is ignored by restart', async () => {
+    vi.useFakeTimers();
+    const runId = 'run-lease-loss-race';
+    const raceStore = new InMemoryStore();
+    const racePubsub = new EventEmitterPubSub();
+    const actualRenewLease = racePubsub.renewLease.bind(racePubsub);
+    vi.spyOn(racePubsub, 'renewLease').mockImplementation(async (key, owner, ttlMs) => {
+      if (key.startsWith('mastra:durable-agent-recovery:')) return false;
+      return actualRenewLease(key, owner, ttlMs);
+    });
+    const { agent: raceAgent } = createDurableWithStore('agent-lease-race', raceStore, racePubsub);
+    await seed(raceStore, runId, 'running', 'agent-lease-race');
+    let markRestartStarted!: () => void;
+    const restartStarted = new Promise<void>(resolve => {
+      markRestartStarted = resolve;
+    });
+    let releaseRestart!: () => void;
+    const restartGate = new Promise<void>(resolve => {
+      releaseRestart = resolve;
+    });
+    let resolveLatePublish!: (error: unknown) => void;
+    const latePublish = new Promise<unknown>(resolve => {
+      resolveLatePublish = resolve;
+    });
+    let workflowPubsub: PubSub | undefined;
+    const restart = vi.fn(async () => {
+      markRestartStarted();
+      await restartGate;
+      try {
+        await workflowPubsub!.publish('late-recovery-output', { type: 'late-output', runId, data: {} } as any);
+        resolveLatePublish(undefined);
+      } catch (error) {
+        resolveLatePublish(error);
+      }
+      return { status: 'suspended' as const };
+    });
+    vi.spyOn(raceAgent, 'getWorkflow').mockReturnValue({
+      createRun: vi.fn(async ({ pubsub }: { pubsub: PubSub }) => {
+        workflowPubsub = pubsub;
+        return { restart, runId };
+      }),
+    } as any);
+
+    let recovered: Awaited<ReturnType<typeof raceAgent.recover>> | undefined;
+    try {
+      recovered = await raceAgent.recover(runId);
+      const workflowExecution = globalRunRegistry.get(runId)?.workflowExecution;
+      await restartStarted;
+      await vi.advanceTimersByTimeAsync(RECOVERY_LEASE_RENEW_INTERVAL_MS_FOR_TEST);
+
+      await expect(workflowExecution).rejects.toMatchObject({ id: 'DURABLE_AGENT_RECOVER_LEASE_LOST' });
+      expect(globalRunRegistry.get(runId)).toBeUndefined();
+      expect(agentThreadStreamRuntime.getThreadState({ threadId: 't', resourceId: 'r' }, racePubsub)).toBe('idle');
+      releaseRestart();
+      await expect(latePublish).resolves.toMatchObject({ id: 'DURABLE_AGENT_RECOVER_LEASE_LOST' });
+    } finally {
+      releaseRestart();
+      recovered?.cleanup();
     }
   });
 
@@ -590,7 +679,35 @@ describe('DurableAgent.recover(runId)', () => {
     recovered.cleanup();
   });
 
-  it('reports a subscription setup failure via the pubsub error stream', async () => {
+  it('rolls back thread registration when terminal error publication fails', async () => {
+    const runId = 'run-terminal-publish-fail';
+    const failedStore = new InMemoryStore();
+    const failedPubsub = new EventEmitterPubSub();
+    const actualPublish = failedPubsub.publish.bind(failedPubsub);
+    vi.spyOn(failedPubsub, 'publish').mockImplementation(async (topic, event, options) => {
+      if (topic === AGENT_STREAM_TOPIC(runId) && event.type === AgentStreamEventTypes.ERROR) {
+        throw new Error('terminal error publication failed');
+      }
+      return actualPublish(topic, event, options);
+    });
+    const { agent: failedAgent } = createDurableWithStore('agent-terminal-publish-fail', failedStore, failedPubsub);
+    await seed(failedStore, runId, 'running', 'agent-terminal-publish-fail');
+    const restart = vi.fn(async () => ({ status: 'failed' as const, error: { message: 'workflow failed' } }));
+    vi.spyOn(failedAgent, 'getWorkflow').mockReturnValue({
+      createRun: vi.fn(async () => ({ restart, runId })),
+      deleteWorkflowRunById: vi.fn(async () => {}),
+    } as any);
+
+    const recovered = await failedAgent.recover(runId);
+    await expect(globalRunRegistry.get(runId)?.workflowExecution).rejects.toThrow('workflow failed');
+
+    expect(globalRunRegistry.get(runId)).toBeUndefined();
+    expect(failedAgent.runRegistry.get(runId)).toBeUndefined();
+    expect(agentThreadStreamRuntime.getThreadState({ threadId: 't', resourceId: 'r' }, failedPubsub)).toBe('idle');
+    recovered.cleanup();
+  });
+
+  it('rejects and rolls back when the recovered stream subscription fails', async () => {
     const runId = 'run-ready-fail';
     const failingStore = new InMemoryStore();
     const failingPubsub = new EventEmitterPubSub();
@@ -606,16 +723,14 @@ describe('DurableAgent.recover(runId)', () => {
     const workflow = stubWorkflow(failingAgent, 'success');
     const publish = vi.spyOn(failingPubsub, 'publish');
 
-    const recovered = await failingAgent.recover(runId);
-    const workflowExecution = globalRunRegistry.get(runId)?.workflowExecution;
-
-    await expect(workflowExecution).rejects.toThrow('pubsub subscription failed');
+    await expect(failingAgent.recover(runId)).rejects.toThrow('pubsub subscription failed');
     const errorEvents = publish.mock.calls.filter(
       ([topic, event]) => topic === AGENT_STREAM_TOPIC(runId) && event.type === AgentStreamEventTypes.ERROR,
     );
     expect(errorEvents).toHaveLength(1);
     expect((errorEvents[0]?.[1] as any).data.error.message).toBe('pubsub subscription failed');
     expect(workflow.createRun).not.toHaveBeenCalled();
-    recovered.cleanup();
+    expect(globalRunRegistry.get(runId)).toBeUndefined();
+    expect(failingAgent.runRegistry.get(runId)).toBeUndefined();
   });
 });
