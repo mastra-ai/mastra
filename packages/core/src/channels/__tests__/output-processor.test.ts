@@ -1319,6 +1319,39 @@ describe('ChatChannelOutputProcessor', () => {
   });
 
   describe('tool lifecycle', () => {
+    it("keeps the approval card when toolDisplay is 'hidden'", async () => {
+      const { channels, calls, chatThread } = makeChannels({ streaming: false, toolDisplay: 'hidden' });
+      await drive(
+        channels,
+        [
+          { type: 'tool-call', payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' } } },
+          { type: 'tool-call-approval', payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' } } },
+        ],
+        chatThread,
+      );
+
+      // Ordinary tool output stays hidden, but the approval card is still
+      // posted so the user can approve or deny the pending call.
+      expect(calls.filter(c => c.kind === 'post')).toHaveLength(1);
+    });
+
+    it('falls back to the approval card when a custom tool renderer returns undefined', async () => {
+      const { channels, calls, chatThread } = makeChannels({
+        streaming: false,
+        toolDisplay: () => undefined,
+      });
+      await drive(
+        channels,
+        [
+          { type: 'tool-call', payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' } } },
+          { type: 'tool-call-approval', payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' } } },
+        ],
+        chatThread,
+      );
+
+      expect(calls.filter(c => c.kind === 'post')).toHaveLength(1);
+    });
+
     it('posts running card on tool-call and edits it with the result on tool-result', async () => {
       const { channels, calls, chatThread } = makeChannels({ streaming: false });
       await drive(

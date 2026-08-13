@@ -76,7 +76,13 @@ export async function runStaticDriver({
   const renderToolEvent = (event: ToolDisplayEvent): PostableMessage | null => {
     if (toolDisplayFn) {
       const result = toolDisplayFn(event, { mode: 'static', platform });
-      if (result == null) return null;
+      // Approval requests must remain actionable even when a custom renderer
+      // intentionally suppresses ordinary tool chatter. A nullish result for
+      // an approval event falls back to the built-in card with Approve/Deny
+      // buttons; other events remain opt-out via `undefined`.
+      if (result == null) {
+        return event.kind === 'approval' ? renderBuiltInToolEvent(event, 'cards') : null;
+      }
       if (result.kind === 'post') {
         // Skip blank posts so a fn that intentionally returns "" doesn't
         // post an empty message into the chat.
@@ -94,7 +100,9 @@ export async function runStaticDriver({
       if (result.kind === 'stream') return chunkToFallbackMessage(result.chunk);
       return null;
     }
-    if (toolDisplay === 'hidden') return null;
+    if (toolDisplay === 'hidden') {
+      return event.kind === 'approval' ? renderBuiltInToolEvent(event, 'cards') : null;
+    }
     return renderBuiltInToolEvent(event, toolDisplay);
   };
 
