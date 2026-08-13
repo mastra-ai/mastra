@@ -4,6 +4,9 @@ import { MastraError } from '@mastra/core/error';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ALL_TABLE_NAMES,
+  DISCOVERY_PAIRS_MV_DDL,
+  DISCOVERY_VALUES_MV_DDL,
+  hasDiscoveryRefreshAppend,
   MV_DISCOVERY_PAIRS,
   MV_DISCOVERY_VALUES,
   MV_FEEDBACK_EVENTS_DELTA,
@@ -26,6 +29,20 @@ import {
   migrateSignalTables,
 } from './migration';
 import { ObservabilityStorageClickhouseVNext } from '.';
+
+describe('discovery refreshable MV APPEND', () => {
+  it('emits APPEND in discovery MV DDL', () => {
+    expect(DISCOVERY_VALUES_MV_DDL).toMatch(/REFRESH EVERY 1 MINUTE APPEND/);
+    expect(DISCOVERY_PAIRS_MV_DDL).toMatch(/REFRESH EVERY 5 MINUTE APPEND/);
+  });
+
+  it('hasDiscoveryRefreshAppend detects APPEND refresh clauses', () => {
+    expect(hasDiscoveryRefreshAppend(DISCOVERY_VALUES_MV_DDL)).toBe(true);
+    expect(hasDiscoveryRefreshAppend(DISCOVERY_PAIRS_MV_DDL)).toBe(true);
+    expect(hasDiscoveryRefreshAppend('REFRESH EVERY 1 MINUTE TO mastra_discovery_values')).toBe(false);
+    expect(hasDiscoveryRefreshAppend('REFRESH EVERY 5 MINUTE APPEND TO mastra_discovery_pairs')).toBe(true);
+  });
+});
 
 describe('isReplacingMergeTreeEngine', () => {
   it('accepts plain ReplacingMergeTree', () => {

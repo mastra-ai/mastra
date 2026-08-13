@@ -22,8 +22,6 @@ import {
   buildAllTableDDL,
   buildRetentionDDL,
   buildRetentionEntries,
-  DISCOVERY_PAIRS_MV_DDL,
-  DISCOVERY_VALUES_MV_DDL,
   hasDiscoveryRefreshAppend,
   MV_DISCOVERY_PAIRS,
   MV_DISCOVERY_VALUES,
@@ -437,15 +435,6 @@ describe('ObservabilityStorageClickhouseVNext', () => {
       expect(serialDdl).toContain(`generateSerialID('mastra_trace_roots_delta_cursor')`);
       expect(fallbackDdl).toContain('farmFingerprint64(');
       expect(fallbackDdl).not.toContain('generateSerialID(');
-    });
-
-    it('discovery refreshable MV DDL uses APPEND', () => {
-      expect(DISCOVERY_VALUES_MV_DDL).toMatch(/REFRESH EVERY 1 MINUTE APPEND/);
-      expect(DISCOVERY_PAIRS_MV_DDL).toMatch(/REFRESH EVERY 5 MINUTE APPEND/);
-      expect(hasDiscoveryRefreshAppend(DISCOVERY_VALUES_MV_DDL)).toBe(true);
-      expect(hasDiscoveryRefreshAppend(DISCOVERY_PAIRS_MV_DDL)).toBe(true);
-      expect(hasDiscoveryRefreshAppend('REFRESH EVERY 1 MINUTE TO mastra_discovery_values')).toBe(false);
-      expect(hasDiscoveryRefreshAppend('REFRESH EVERY 5 MINUTE APPEND TO mastra_discovery_pairs')).toBe(true);
     });
 
     it('supports fallback-mode delta polling for traces when forced', async () => {
