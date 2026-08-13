@@ -5,6 +5,7 @@ import {
   createVoyageTextEmbedding,
   createVoyageTextEmbeddingV2,
 } from '../text-embedding';
+import { TEXT_MODEL_INFO } from '../types';
 
 // Mock functions
 const mockEmbed = vi.fn();
@@ -291,5 +292,33 @@ describe('Factory functions', () => {
 
     expect(model.specificationVersion).toBe('v2');
     expect(model.modelId).toBe('voyage-3.5');
+  });
+
+  it('createVoyageTextEmbedding should create voyage-code-4 V3 model', () => {
+    const model = createVoyageTextEmbedding('voyage-code-4');
+
+    expect(model.specificationVersion).toBe('v3');
+    expect(model.modelId).toBe('voyage-code-4');
+  });
+
+  it('createVoyageTextEmbeddingV2 should create voyage-code-4 V2 model', () => {
+    const model = createVoyageTextEmbeddingV2('voyage-code-4');
+
+    expect(model.specificationVersion).toBe('v2');
+    expect(model.modelId).toBe('voyage-code-4');
+  });
+});
+
+describe('TEXT_MODEL_INFO metadata', () => {
+  it('should expose voyage-code-4 metadata mirroring voyage-code-3', () => {
+    const code4 = TEXT_MODEL_INFO['voyage-code-4'];
+
+    expect(code4).toBeDefined();
+    expect(code4).toEqual(TEXT_MODEL_INFO['voyage-code-3']);
+    expect(code4.maxInputTokens).toBe(32000);
+    expect(code4.defaultDimension).toBe(1024);
+    expect(code4.supportedDimensions).toEqual([256, 512, 1024, 2048]);
+    expect(code4.isMultimodal).toBe(false);
+    expect(code4.isContextualized).toBe(false);
   });
 });
