@@ -136,6 +136,12 @@ export abstract class SandboxProcessManager<TSandbox extends MastraSandbox = Mas
     return this._tracked.get(pid);
   }
 
+  /** Release a completed process handle and its retained output. */
+  release(pid: string): void {
+    this._tracked.delete(pid);
+    this._dismissed.add(pid);
+  }
+
   /** Kill a process by PID. Returns true if killed, false if not found. */
   async kill(pid: string): Promise<boolean> {
     const handle = await this.get(pid);
@@ -147,8 +153,7 @@ export abstract class SandboxProcessManager<TSandbox extends MastraSandbox = Mas
       await handle.wait().catch(() => {});
     }
     // Release tracked handle to free accumulated output buffers.
-    this._tracked.delete(handle.pid);
-    this._dismissed.add(handle.pid);
+    this.release(handle.pid);
     return killed;
   }
 }
