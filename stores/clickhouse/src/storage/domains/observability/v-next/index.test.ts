@@ -22,6 +22,9 @@ import {
   buildAllTableDDL,
   buildRetentionDDL,
   buildRetentionEntries,
+  DISCOVERY_PAIRS_MV_DDL,
+  DISCOVERY_VALUES_MV_DDL,
+  hasDiscoveryRefreshAppend,
   MV_DISCOVERY_PAIRS,
   MV_DISCOVERY_VALUES,
   parseTtlExpression,
@@ -434,6 +437,15 @@ describe('ObservabilityStorageClickhouseVNext', () => {
       expect(serialDdl).toContain(`generateSerialID('mastra_trace_roots_delta_cursor')`);
       expect(fallbackDdl).toContain('farmFingerprint64(');
       expect(fallbackDdl).not.toContain('generateSerialID(');
+    });
+
+    it('discovery refreshable MV DDL uses APPEND', () => {
+      expect(DISCOVERY_VALUES_MV_DDL).toMatch(/REFRESH EVERY 1 MINUTE APPEND/);
+      expect(DISCOVERY_PAIRS_MV_DDL).toMatch(/REFRESH EVERY 5 MINUTE APPEND/);
+      expect(hasDiscoveryRefreshAppend(DISCOVERY_VALUES_MV_DDL)).toBe(true);
+      expect(hasDiscoveryRefreshAppend(DISCOVERY_PAIRS_MV_DDL)).toBe(true);
+      expect(hasDiscoveryRefreshAppend('REFRESH EVERY 1 MINUTE TO mastra_discovery_values')).toBe(false);
+      expect(hasDiscoveryRefreshAppend('REFRESH EVERY 5 MINUTE APPEND TO mastra_discovery_pairs')).toBe(true);
     });
 
     it('supports fallback-mode delta polling for traces when forced', async () => {
@@ -2022,6 +2034,95 @@ describe('ObservabilityStorageClickhouseVNext', () => {
             })
           ).json()) as Array<{ name: string }>;
           expect(mvs.map(r => r.name).sort()).toEqual([MV_DISCOVERY_PAIRS, MV_DISCOVERY_VALUES].sort());
+        } finally {
+          await migratedStorage.dangerouslyClearAll();
+        }
+      } finally {
+        await scopedClient.close();
+        await adminClient.command({ query: `DROP DATABASE IF EXISTS ${database} SYNC` });
+        await adminClient.close();
+      }
+    });
+
+    it('init() recreates discovery MVs that lack APPEND while keeping ReplacingMergeTree helpers', async () => {
+      // Upgrade path for #21168: helper tables are already on ReplacingMergeTree
+      // (so engine reconciliation keeps them) but the refreshable MVs were created
+      // without APPEND. init() must drop/recreate only the MVs so refreshes use
+      // plain INSERT and succeed under Replicated* targets in Atomic databases.
+      const adminClient = createClient({
+        url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+        username: process.env.CLICKHOUSE_USERNAME || 'default',
+        password: process.env.CLICKHOUSE_PASSWORD || 'password',
+      });
+      const database = `mig_discovery_append_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+      await adminClient.command({ query: `CREATE DATABASE ${database}` });
+
+      const scopedClient = createClient({
+        url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+        username: process.env.CLICKHOUSE_USERNAME || 'default',
+        password: process.env.CLICKHOUSE_PASSWORD || 'password',
+        database,
+      });
+
+      try {
+        await scopedClient.command({
+          query: `CREATE TABLE ${TABLE_DISCOVERY_VALUES} (kind LowCardinality(String), key1 String, value String) ENGINE = ReplacingMergeTree ORDER BY (kind, key1, value)`,
+        });
+        await scopedClient.command({
+          query: `CREATE TABLE ${TABLE_DISCOVERY_PAIRS} (kind LowCardinality(String), key1 String, key2 String, value String) ENGINE = ReplacingMergeTree ORDER BY (kind, key1, key2, value)`,
+        });
+        await scopedClient.command({
+          query: `CREATE MATERIALIZED VIEW ${MV_DISCOVERY_VALUES} REFRESH EVERY 1 MINUTE TO ${TABLE_DISCOVERY_VALUES} AS SELECT CAST('' AS LowCardinality(String)) AS kind, '' AS key1, '' AS value WHERE 0`,
+        });
+        await scopedClient.command({
+          query: `CREATE MATERIALIZED VIEW ${MV_DISCOVERY_PAIRS} REFRESH EVERY 5 MINUTE TO ${TABLE_DISCOVERY_PAIRS} AS SELECT CAST('' AS LowCardinality(String)) AS kind, '' AS key1, '' AS key2, '' AS value WHERE 0`,
+        });
+
+        const beforeMvs = (await (
+          await scopedClient.query({
+            query: `SELECT name, create_table_query FROM system.tables WHERE database = currentDatabase() AND name IN ({mvs:Array(String)})`,
+            query_params: { mvs: [MV_DISCOVERY_VALUES, MV_DISCOVERY_PAIRS] },
+            format: 'JSONEachRow',
+          })
+        ).json()) as Array<{ name: string; create_table_query?: string }>;
+        expect(beforeMvs).toHaveLength(2);
+        for (const row of beforeMvs) {
+          expect(hasDiscoveryRefreshAppend(row.create_table_query ?? '')).toBe(false);
+        }
+
+        const migratedStorage = new ObservabilityStorageClickhouseVNext({ client: scopedClient });
+        try {
+          await migratedStorage.init();
+
+          const afterTables = (await (
+            await scopedClient.query({
+              query: `SELECT name, engine FROM system.tables WHERE database = currentDatabase() AND name IN ({tables:Array(String)}) ORDER BY name`,
+              query_params: { tables: [TABLE_DISCOVERY_VALUES, TABLE_DISCOVERY_PAIRS] },
+              format: 'JSONEachRow',
+            })
+          ).json()) as Array<{ name: string; engine: string }>;
+          expect(afterTables.map(r => r.name)).toEqual([TABLE_DISCOVERY_PAIRS, TABLE_DISCOVERY_VALUES]);
+          for (const row of afterTables) {
+            expect(
+              isReplacingMergeTreeEngine(row.engine),
+              `expected ${row.name} engine to satisfy isReplacingMergeTreeEngine but got '${row.engine}'`,
+            ).toBe(true);
+          }
+
+          const afterMvs = (await (
+            await scopedClient.query({
+              query: `SELECT name, create_table_query FROM system.tables WHERE database = currentDatabase() AND name IN ({mvs:Array(String)}) ORDER BY name`,
+              query_params: { mvs: [MV_DISCOVERY_VALUES, MV_DISCOVERY_PAIRS] },
+              format: 'JSONEachRow',
+            })
+          ).json()) as Array<{ name: string; create_table_query?: string }>;
+          expect(afterMvs.map(r => r.name).sort()).toEqual([MV_DISCOVERY_PAIRS, MV_DISCOVERY_VALUES].sort());
+          for (const row of afterMvs) {
+            expect(
+              hasDiscoveryRefreshAppend(row.create_table_query ?? ''),
+              `expected ${row.name} create_table_query to include APPEND refresh, got: ${row.create_table_query}`,
+            ).toBe(true);
+          }
         } finally {
           await migratedStorage.dangerouslyClearAll();
         }

@@ -922,10 +922,12 @@ FROM (
 // ---------------------------------------------------------------------------
 
 // ReplacingMergeTree with ORDER BY covering every column: the refreshable MV
-// below writes via `REFRESH EVERY ... TO <pre-created table>`, which in
-// ClickHouse appends a fresh copy of its result set on each refresh. Pairing
-// the helper table with ReplacingMergeTree lets background merges collapse
-// the identical rows so on-disk size tracks actual cardinality.
+// below writes via `REFRESH EVERY ... APPEND TO <pre-created table>`, which
+// inserts a fresh copy of its result set on each refresh (plain INSERT, not a
+// table-level swap). Pairing the helper table with ReplacingMergeTree lets
+// background merges collapse the identical rows so on-disk size tracks actual
+// cardinality. APPEND is required so refreshes succeed when the target uses a
+// Replicated*/Shared* engine inside a plain Atomic database (see #21168).
 export const DISCOVERY_VALUES_DDL = `
 CREATE TABLE IF NOT EXISTS ${TABLE_DISCOVERY_VALUES} (
   kind               LowCardinality(String),
@@ -977,7 +979,7 @@ function unionDistinctFromSignals(
 
 export const DISCOVERY_VALUES_MV_DDL = `
 CREATE MATERIALIZED VIEW IF NOT EXISTS ${MV_DISCOVERY_VALUES}
-REFRESH EVERY 1 MINUTE
+REFRESH EVERY 1 MINUTE APPEND
 TO ${TABLE_DISCOVERY_VALUES}
 AS
 SELECT DISTINCT kind, key1, value FROM (
@@ -1008,7 +1010,7 @@ SELECT DISTINCT kind, key1, value FROM (
 
 export const DISCOVERY_PAIRS_MV_DDL = `
 CREATE MATERIALIZED VIEW IF NOT EXISTS ${MV_DISCOVERY_PAIRS}
-REFRESH EVERY 5 MINUTE
+REFRESH EVERY 5 MINUTE APPEND
 TO ${TABLE_DISCOVERY_PAIRS}
 AS
 SELECT DISTINCT kind, key1, key2, value FROM (
@@ -1076,6 +1078,16 @@ export function buildAllMvDDL(strategy: ClickHouseDeltaCursorStrategy): string[]
 
 /** Discovery-specific refreshable MVs — created separately from core MVs. */
 export const DISCOVERY_MV_DDL = [DISCOVERY_VALUES_MV_DDL, DISCOVERY_PAIRS_MV_DDL];
+
+/**
+ * Returns true when a discovery refreshable MV's `create_table_query` (or our
+ * own DDL) uses `REFRESH EVERY ... APPEND`. Without APPEND, ClickHouse refreshes
+ * via an atomic table swap that fails (error 36) for Replicated or Shared
+ * MergeTree targets inside a plain Atomic database.
+ */
+export function hasDiscoveryRefreshAppend(createTableQuery: string): boolean {
+  return /REFRESH\s+EVERY\s+\d+\s+(SECOND|MINUTE|HOUR|DAY|WEEK|MONTH|YEAR)S?\s+APPEND\b/i.test(createTableQuery);
+}
 
 /**
  * Additive migrations for existing ClickHouse databases.
