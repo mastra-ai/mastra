@@ -68,6 +68,35 @@ async function invokeOnViolation(processor: Processor, error: TripWire): Promise
 }
 
 /**
+ * Response messages for processOutputResult: live unsaved ∪ already-persisted.
+ * Mid-run save flushes drain the live set but leave rows on the list and in
+ * getPersisted.response — processors still need those messages.
+ */
+function getProcessableResponseMessages(messageList: MessageList): MastraDBMessage[] {
+  const live = messageList.get.response.db();
+  const persisted = messageList.getPersisted.response.db();
+  if (persisted.length === 0) {
+    return [...live];
+  }
+  if (live.length === 0) {
+    return [...persisted];
+  }
+
+  const byId = new Map<string, MastraDBMessage>();
+  for (const message of persisted) {
+    byId.set(message.id, message);
+  }
+  for (const message of live) {
+    byId.set(message.id, message);
+  }
+
+  return messageList.get.all
+    .db()
+    .filter(message => byId.has(message.id))
+    .map(message => byId.get(message.id)!);
+}
+
+/**
  * Implementation of processor state management
  */
 /**
@@ -605,8 +634,10 @@ export class ProcessorRunner {
     result?: OutputResult,
   ): Promise<MessageList> {
     for (const [index, processorOrWorkflow] of this.outputProcessors.entries()) {
-      const allNewMessages = messageList.get.response.db();
-      let processableMessages: MastraDBMessage[] = [...allNewMessages];
+      // Mid-run memory flushes call drainUnsavedMessages(), which clears the live
+      // response set while leaving rows on the list and in getPersisted.response.
+      // Union both so processOutputResult still receives this turn's messages.
+      let processableMessages = getProcessableResponseMessages(messageList);
       const idsBeforeProcessing = processableMessages.map((m: MastraDBMessage) => m.id);
       const check = messageList.makeMessageSourceChecker();
 
@@ -705,7 +736,7 @@ export class ProcessorRunner {
             });
           }
           if (mutations.length > 0) {
-            processableMessages = processResult.get.response.db();
+            processableMessages = getProcessableResponseMessages(processResult);
           }
         } else {
           if (processResult) {
