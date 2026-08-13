@@ -21,7 +21,7 @@ import type { Event } from '../events/types';
 import type { IMastraLogger } from '../logger';
 import { RegisteredLogger } from '../logger';
 import type { Mastra } from '../mastra';
-import type { ObservabilityContext, TracingOptions, TracingPolicy } from '../observability';
+import type { ObservabilityContext, Span, TracingOptions, TracingPolicy } from '../observability';
 import {
   EntityType,
   SpanType,
@@ -3215,6 +3215,7 @@ export class Run<
   TRequestContext extends Record<string, any> | unknown = unknown,
 > {
   #abortController?: AbortController;
+  protected workflowRunSpan?: Span<SpanType.WORKFLOW_RUN>;
   protected pubsub: PubSub;
   /**
    * Unique identifier for this workflow
@@ -3362,6 +3363,8 @@ export class Run<
     // Abort any running execution and update in-memory status
     this.abortController.abort();
     this.workflowRunStatus = 'canceled';
+
+    this.workflowRunSpan?.endTree({ attributes: { status: 'canceled' } });
 
     // Update workflow status in storage to 'canceled'
     // This is necessary for suspended/waiting workflows where the abort signal won't be checked
@@ -3512,6 +3515,7 @@ export class Run<
       mastra: this.#mastra,
     });
 
+    this.workflowRunSpan = workflowSpan;
     const traceId = workflowSpan?.externalTraceId;
     const spanId = workflowSpan?.id;
 
@@ -4394,6 +4398,7 @@ export class Run<
       resumedFromSpanId,
     });
 
+    this.workflowRunSpan = workflowSpan;
     const traceId = workflowSpan?.externalTraceId;
     const spanId = workflowSpan?.id;
 
@@ -4548,6 +4553,7 @@ export class Run<
       mastra: this.#mastra,
     });
 
+    this.workflowRunSpan = workflowSpan;
     const traceId = workflowSpan?.externalTraceId;
     const spanId = workflowSpan?.id;
 
@@ -4686,6 +4692,7 @@ export class Run<
       mastra: this.#mastra,
     });
 
+    this.workflowRunSpan = workflowSpan;
     const traceId = workflowSpan?.externalTraceId;
     const spanId = workflowSpan?.id;
 

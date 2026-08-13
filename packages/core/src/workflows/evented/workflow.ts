@@ -1960,6 +1960,7 @@ export class EventedRun<
       requestContext,
       mastra: this.mastra,
     });
+    this.workflowRunSpan = workflowSpan;
     if (workflowSpan) {
       this.mastra?.__registerRunTracingContext(this.runId, { currentSpan: workflowSpan });
     }
@@ -2485,6 +2486,8 @@ export class EventedRun<
         status: 'canceled',
       },
     });
+
+    this.workflowRunSpan?.endTree({ attributes: { status: 'canceled' } });
 
     // Trigger abort signal - the abort handler will publish the workflow.cancel event
     // This ensures consistent behavior whether cancel() or abort() is called

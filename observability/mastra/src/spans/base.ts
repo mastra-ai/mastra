@@ -175,6 +175,8 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
   public isExcluded: boolean;
   /** Cached canonical correlation context for this live span */
   protected correlationContext?: CorrelationContext;
+  /** Child spans that have started but not yet ended */
+  #openChildren?: Set<BaseSpan<any>>;
 
   /**
    * Subclasses can override to unconditionally mark the span as excluded.
@@ -218,6 +220,10 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     this.isEvent = options.isEvent ?? false;
     this.tracingPolicy = options.tracingPolicy;
     this.traceState = options.traceState;
+    const parent = options.parent;
+    if (!this.isEvent && parent instanceof BaseSpan && parent.isValid) {
+      (parent.#openChildren ??= new Set()).add(this);
+    }
     // Tags are only set for root spans (spans without a parent)
     this.tags = !options.parent && options.tags?.length ? options.tags : undefined;
     // Entity identification - inherit from closest non-internal parent if not explicitly provided
@@ -250,6 +256,26 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
   // Methods for span lifecycle
   /** End the span */
   abstract end(options?: EndSpanOptions<TType>): void;
+
+  /** End the span and any descendant spans that are still open */
+  endTree(options?: EndSpanOptions<TType>): void {
+    if (this.#openChildren) {
+      for (const child of [...this.#openChildren]) {
+        child.endTree();
+      }
+    }
+    if (!this.endTime) {
+      this.end(options);
+    }
+  }
+
+  /** Release this span from its parent's open-child set once it has ended */
+  protected detachFromParent(): void {
+    const parent = this.parent;
+    if (parent instanceof BaseSpan) {
+      parent.#openChildren?.delete(this);
+    }
+  }
 
   /** Record an error for the span, optionally end the span as well */
   abstract error(options: ErrorSpanOptions<TType>): void;

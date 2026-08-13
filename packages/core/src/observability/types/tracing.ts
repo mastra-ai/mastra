@@ -857,6 +857,9 @@ export interface Span<TType extends SpanType> extends BaseSpan<TType> {
   /** End the span */
   end(options?: EndSpanOptions<TType>): void;
 
+  /** End the span and any descendant spans that are still open */
+  endTree(options?: EndSpanOptions<TType>): void;
+
   /** Record an error for the span, optionally end the span as well */
   error(options: ErrorSpanOptions<TType>): void;
 
