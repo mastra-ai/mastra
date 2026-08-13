@@ -561,6 +561,7 @@ describe('GitHub session workspace preparation', () => {
       undefined,
       {
         workingDirectory: workdirA,
+        actingUserId: 'user-1',
       },
     );
     expect(mocks.ensureSandbox).toHaveBeenNthCalledWith(
@@ -570,6 +571,7 @@ describe('GitHub session workspace preparation', () => {
       undefined,
       {
         workingDirectory: workdirB,
+        actingUserId: 'user-1',
       },
     );
     expect(mocks.materializeRepo).toHaveBeenNthCalledWith(
@@ -862,7 +864,7 @@ describe('GitHub session workspace preparation', () => {
       expect.any(Object),
       { GH_TOKEN: 'ghp_org_pat' },
       undefined,
-      expect.any(Object),
+      expect.objectContaining({ actingUserId: 'user-1' }),
     );
     // …but git materialization keeps the installation-scoped token.
     expect(mocks.materializeRepo).toHaveBeenCalledWith(expect.objectContaining({ token: 'repo-token-repository-1' }));

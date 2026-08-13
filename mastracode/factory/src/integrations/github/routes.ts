@@ -993,7 +993,7 @@ async function resolveProjectSandbox(options: {
   if (!sandboxRow.sandboxId) {
     throw new MaterializeError('Project sandbox is not provisioned. Open the project first.', 'clone-failed');
   }
-  return fleet.reattachSandbox(sandboxRow.sandboxId);
+  return fleet.reattachSandbox(sandboxRow.sandboxId, { actingUserId: sandboxRow.userId });
 }
 
 /**
@@ -1569,7 +1569,9 @@ function buildProjectGitRoutes({
 
         try {
           return await withSessionOperationLock(`sandbox:${sandboxRow.id}`, async () => {
-            const sandbox = await fleet.reattachSandbox(sandboxRow.sandboxId!);
+            const sandbox = await fleet.reattachSandbox(sandboxRow.sandboxId!, {
+              actingUserId: sandboxRow.userId,
+            });
             await teardownProjectSandbox({
               fleet,
               row: sandboxRow,

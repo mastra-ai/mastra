@@ -18,6 +18,7 @@
     "cosmos3-super-reasoner",
     "custom",
     "deepseek-v3.2",
+    "ernie-4.5-vl-424b-a47b",
     "fugu-ultra",
     "gemini-2.5-flash",
     "gemini-2.5-flash-lite",
@@ -138,6 +139,7 @@
     "deepseek-v4-flash",
     "deepseek-v4-pro",
     "devstral-2512",
+    "ernie-4.5-vl-424b-a47b",
     "fugu-ultra",
     "gemini-2.5-flash",
     "gemini-2.5-flash-lite",
@@ -270,6 +272,7 @@
     "seed-1-6-250915",
     "seed-1-6-flash-250715",
     "seed-1-8-251228",
+    "seed-2-1-turbo",
     "sonar",
     "sonar-pro",
     "sonar-reasoning-pro"

@@ -1,5 +1,18 @@
 # @mastra/playground-ui
 
+## 49.0.0-alpha.4
+
+### Patch Changes
+
+- Fixed code blocks flickering between colored and plain text while an agent streams a fenced snippet. The part already highlighted now keeps its colors, and only the characters that just landed show uncolored until highlighting catches up. ([#21415](https://github.com/mastra-ai/mastra/pull/21415))
+
+- Improved chat responsiveness on long conversations. `MarkdownRenderer` is memoized, so a streaming reply no longer re-parses the markdown of every message already on screen on each chunk it receives — only the message actually being written is re-parsed. ([#21416](https://github.com/mastra-ai/mastra/pull/21416))
+
+- Updated dependencies [[`be31796`](https://github.com/mastra-ai/mastra/commit/be3179624ad5f77cff5fa342cd08046bf7605283), [`79dd7c2`](https://github.com/mastra-ai/mastra/commit/79dd7c261ee6be1fafedd4651959394db21d2cba), [`b9a28ec`](https://github.com/mastra-ai/mastra/commit/b9a28ecf7acdc0cb7a543d5b660f9fbee301df9a), [`be31796`](https://github.com/mastra-ai/mastra/commit/be3179624ad5f77cff5fa342cd08046bf7605283)]:
+  - @mastra/client-js@1.40.0-alpha.4
+  - @mastra/core@1.59.0-alpha.4
+  - @mastra/react@1.4.3-alpha.4
+
 ## 49.0.0-alpha.3
 
 ### Patch Changes
