@@ -176,10 +176,11 @@ describe('ensureProjectSandbox', () => {
     await ensureProjectSandbox(makeRow({ sandboxId: 'railway-vm-existing' }));
 
     expect(calls).toEqual([
-      expect.objectContaining({ env: { GH_TOKEN: 'install-token' } }),
+      expect.objectContaining({ env: { GH_TOKEN: 'install-token' }, actingUserId: 'user-1' }),
       expect.objectContaining({
         providerSandboxId: 'railway-vm-existing',
         env: { GH_TOKEN: 'install-token' },
+        actingUserId: 'user-1',
       }),
     ]);
   });

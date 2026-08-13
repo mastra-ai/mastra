@@ -271,7 +271,6 @@
     "TEE/gpt-oss-120b",
     "TEE/gpt-oss-20b",
     "TEE/kimi-k2.6",
-    "TEE/minimax-m2.5",
     "TEE/muse-glimmer-30b",
     "TEE/qwen3.5-122b-a10b",
     "TEE/qwen3.5-27b",
@@ -474,6 +473,7 @@
   "structuredOutput": [
     "NousResearch/hermes-4-405b",
     "NousResearch/hermes-4-405b:thinking",
+    "TEE/deepseek-v4-flash",
     "TEE/gemma-4-26b-a4b-uncensored",
     "TEE/gemma4-31b",
     "TEE/gemma4-31b:thinking",
@@ -481,7 +481,6 @@
     "TEE/glm-5.2",
     "TEE/glm-5.2:thinking",
     "TEE/kimi-k3",
-    "TEE/minimax-m2.5",
     "TEE/muse-glimmer-30b",
     "TEE/qwen3.6-35b-a3b-uncensored",
     "anthropic/claude-fable-5",
