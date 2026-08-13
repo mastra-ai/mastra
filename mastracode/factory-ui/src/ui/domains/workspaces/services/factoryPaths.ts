@@ -8,14 +8,11 @@ export function factoryHomePath(factory: FactoryProject): string {
   return `/factories/${factory.id}`;
 }
 
-export function factorySwitchPath(
-  factory: FactoryProject,
-  location: { pathname: string; search: string; hash: string },
-): string {
+export function factorySwitchPath(factory: FactoryProject, location: { pathname: string; hash: string }): string {
   const homePath = factoryHomePath(factory);
   const factoryRouteSuffix = /^\/factories\/[^/]+(\/.*)?$/.exec(location.pathname)?.[1] ?? '';
 
   if (factoryRouteSuffix && !PRESERVED_FACTORY_ROUTE.test(factoryRouteSuffix)) return `${homePath}/overview`;
 
-  return `${homePath}${factoryRouteSuffix}${location.search}${location.hash}`;
+  return `${homePath}${factoryRouteSuffix}${location.hash}`;
 }

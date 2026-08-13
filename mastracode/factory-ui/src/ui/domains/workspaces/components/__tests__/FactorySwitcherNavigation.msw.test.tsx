@@ -53,15 +53,16 @@ describe('Factory switch navigation', () => {
     it.each([
       {
         tab: 'work',
-        initialEntry: '/factories/factory-current/work?status=ready#done',
-        expectedLocation: '/factories/factory-next/work?status=ready#done',
+        initialEntry: '/factories/factory-current/work?teammate=factory%3Auser-a&relevance=worked&label=bug#done',
+        expectedLocation: '/factories/factory-next/work#done',
       },
       {
         tab: 'review',
-        initialEntry: '/factories/factory-current/review?status=open#queue',
-        expectedLocation: '/factories/factory-next/review?status=open#queue',
+        initialEntry:
+          '/factories/factory-current/review?teammate=github%3Aoctocat&relevance=review-requested&label=needs-review#queue',
+        expectedLocation: '/factories/factory-next/review#queue',
       },
-    ])('keeps the $tab location', async ({ initialEntry, expectedLocation }) => {
+    ])('keeps the $tab location without the previous Factory filters', async ({ initialEntry, expectedLocation }) => {
       const { currentLocation } = renderFactorySwitcher(initialEntry);
 
       await switchToNextFactory();
