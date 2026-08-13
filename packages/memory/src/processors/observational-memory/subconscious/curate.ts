@@ -17,7 +17,7 @@ const DEFAULT_INSTRUCTIONS = `Maintain durable scoped knowledge from the committ
 
 Use the read tools to inspect existing entities, facts, mentions, backlinks, and pages. Use the write tools to merge true duplicates, repair names and links, soft-delete superseded facts, rescope facts only when justified and permitted by their ceilings, and synthesize useful pages. Never restore deleted facts. Never invent provenance, capture timestamps, scopes, ceilings, IDs, or versions; those are enforced by code. Resolve optimistic-concurrency conflicts by reading the latest record and retrying the intended mutation. Keep the reserved capture-guidance page concise and update it only with durable guidance that will improve future capture.
 
-Process the worklist in ID order. Your final response must end with <curation-complete through="FACT_ID" /> using the ID of the last fact you fully processed. If you cannot finish the batch, acknowledge only the last fact you did finish. Do not emit a completion marker when no fact was fully processed.`;
+Process the worklist in ID order. Every time you finish processing a fact, include <curation-complete through="FACT_ID" /> in your very next text response with that fact's ID, replacing the previous marker as you go; the latest marker you emit is your acknowledged cursor, so progress survives even if you run out of steps mid-batch. Your final response must end with the marker for the last fact you fully processed. If you cannot finish the batch, acknowledge only the last fact you did finish. Do not emit a completion marker when no fact was fully processed.`;
 
 export const PINNED_INSTRUCTIONS = `Maintain the pin set with knowledge_pin, knowledge_edit_pin, and knowledge_unpin. Pinned entries are delivered to the main agent on every turn, so they cost tokens permanently and must stay short. Pin only knowledge that should apply without being asked for, such as standing instructions, durable preferences, and hard constraints. Pin only knowledge that is BOTH costly to rediscover AND not the kind of thing a future agent would think to search for; anything a reminder can surface on demand does not belong in the pin set. Unpin an entry as soon as it stops being unconditionally true.`;
 
@@ -94,7 +94,10 @@ export function createCuratorHandler(
       );
 
       if (worklist.facts.length) {
-        const acknowledgedId = result.text.match(/<curation-complete\s+through=["']([^"']+)["']\s*\/>/i)?.[1];
+        // Markers are emitted incrementally as facts are processed; the LAST one is the
+        // acknowledged cursor, so partial progress survives step exhaustion mid-batch.
+        const markers = [...result.text.matchAll(/<curation-complete\s+through=["']([^"']+)["']\s*\/>/gi)];
+        const acknowledgedId = markers.at(-1)?.[1];
         if (!acknowledgedId || !worklist.facts.some(fact => fact.id === acknowledgedId)) {
           throw new Error('Curator did not acknowledge a valid processed fact cursor.');
         }

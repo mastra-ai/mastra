@@ -123,6 +123,39 @@ describe('Subconscious curator', () => {
     );
   });
 
+  it('honors the last incremental completion marker when the run ends without a final acknowledgment', async () => {
+    const memory = new Memory({ storage: new InMemoryStore() });
+    const store = (await memory.storage.getStore('knowledge'))!;
+    const entity = await store.createEntity({ name: 'Project Atlas', kind: 'project', scope });
+    const first = await store.appendFact({
+      parentEntityId: entity.id,
+      text: 'Atlas launches soon.',
+      scope,
+      sourceThreadId: 'alpha',
+      resolutionScope: scope,
+      defaultScope: scope,
+    });
+    const second = await store.appendFact({
+      parentEntityId: entity.id,
+      text: 'Atlas has a readiness review.',
+      scope,
+      sourceThreadId: 'alpha',
+      resolutionScope: scope,
+      defaultScope: scope,
+    });
+    // A step-exhausted run: markers were emitted incrementally per processed fact, but the
+    // run died mid-batch, so the aggregated text ends with tool chatter, not a final marker.
+    vi.spyOn(Agent.prototype, 'generate').mockResolvedValueOnce({
+      text: `Processed the first fact. <curation-complete through="${first.id}" />\nMoving on, merged a duplicate. <curation-complete through="${second.id}" />\nExploring the next entity now.`,
+    } as any);
+    const handler = createCuratorHandler(memory, resolved());
+
+    await handler(context());
+    expect(await store.getCurationCursor({ sourceThreadId: 'alpha', agent: 'curate' })).toMatchObject({
+      lastFactId: second.id,
+    });
+  });
+
   describe('model resolution', () => {
     async function seedFact(memory: Memory) {
       const store = (await memory.storage.getStore('knowledge'))!;
