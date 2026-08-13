@@ -148,7 +148,10 @@ export function SignInPage() {
   const auth = useFactoryAuth();
   const [searchParams] = useSearchParams();
   const [redirecting, setRedirecting] = useState(false);
-  const returnTo = safeReturnTo(searchParams.get('returnTo')?.toString());
+  const returnTo = safeReturnTo(searchParams.get('returnTo') ?? undefined);
+  const authError = searchParams.get('error');
+  const authErrorDescription = searchParams.get('error_description');
+  const accessDenied = authError === 'access_denied';
   const credentialForm = auth.data?.provider === 'better-auth';
   const studioAuth = auth.data?.provider === 'mastra-studio';
   const hostedLoginLabel = studioAuth ? 'Sign in with Mastra Platform' : 'Continue with GitHub';
@@ -178,6 +181,23 @@ export function SignInPage() {
           </Txt>
 
           <section aria-label="Authentication" className="mt-10 w-full max-w-md lg:mt-12">
+            {authError ? (
+              <div role="alert" className="border-accent2/30 bg-surface3 mb-6 rounded-lg border px-4 py-3">
+                <Txt as="p" variant="ui-md" className="text-accent2 font-medium">
+                  {accessDenied ? 'Access denied' : 'Sign-in failed'}
+                </Txt>
+                {authErrorDescription ? (
+                  <Txt as="p" variant="ui-sm" className="text-neutral4 mt-1 leading-5">
+                    {authErrorDescription}
+                  </Txt>
+                ) : null}
+                {accessDenied ? (
+                  <Txt as="p" variant="ui-sm" className="text-neutral3 mt-1 leading-5">
+                    Ask an organization admin to add your account, then sign in again.
+                  </Txt>
+                ) : null}
+              </div>
+            ) : null}
             {credentialForm ? (
               <>
                 <div className="mb-6">

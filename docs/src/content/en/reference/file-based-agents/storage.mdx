@@ -8,13 +8,19 @@ packages:
 
 # Storage
 
+:::beta
+
+Breaking changes may occur without a major version bump until the API is stable.
+
+:::
+
 Mastra sets the project's default [storage](/docs/storage/overview) from a `storage.ts` file directly under `src/mastra/`. The file default-exports a store, which replaces the built-in in-memory store used for memory, workflows, observability, and other storage domains.
 
 Use this page for the file-based convention. For backend choice, storage domains, retention, and provider details, see [storage overview](/docs/storage/overview).
 
 ## Quickstart
 
-Use [`LibSQLStore`](/reference/storage/libsql) for a local file-backed store:
+Use [`LibSQLStore`](/integrations/databases/libsql) for a local file-backed store:
 
 ```typescript title="src/mastra/storage.ts"
 import { LibSQLStore } from '@mastra/libsql'

@@ -418,7 +418,7 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
             },
             lastObservedMessageCursor: update.lastObservedMessageCursor,
           });
-          await this.storage.updateThread({
+          await this.storage.patchThread({
             id: update.threadId,
             ...(shouldUpdateThreadTitle ? { title: newTitle } : {}),
             metadata: newMetadata,

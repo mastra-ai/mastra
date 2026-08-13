@@ -15,6 +15,7 @@ import { useInvalidateWorkspaceChangesOnRunCompletion } from '../domains/workspa
 import { ChatHeader } from '../domains/chat/components/ChatHeader';
 import { FactorySessionHeader } from '../domains/factory/components/RelatedFactorySessions';
 import { ComposerPanel } from '../domains/chat/components/ComposerPanel';
+import { ActivityLine } from '../domains/chat/components/ActivityLine';
 import { ConnectionNotice } from '../domains/chat/components/ConnectionNotice';
 import { EmptyThreadState } from '../domains/chat/components/EmptyThreadState';
 import { GoalPanel } from '../domains/chat/components/GoalPanel';
@@ -25,6 +26,7 @@ import { ThreadRailLayer } from '../domains/chat/components/ThreadRailLayer';
 import { ChatMessageBoundary, ChatSessionBoundary } from '../domains/chat/context/ChatSessionProvider';
 import { useChatTranscript } from '../domains/chat/context/useChatTranscript';
 import { useGlobalShortcuts } from '../domains/chat/hooks/useGlobalShortcuts';
+import { useHandoffPrompt } from '../domains/chat/hooks/useHandoffPrompt';
 import { useRouteThreadSync } from '../../hooks/useRouteThreadSync';
 import { useFactoryQuery } from '../../hooks/useFactories';
 
@@ -74,6 +76,7 @@ function ThreadPageMain({
 }) {
   useGlobalShortcuts();
   useRouteThreadSync();
+  useHandoffPrompt();
   const railBoxRef = useRef<HTMLDivElement>(null);
   const railFits = useWiderThan(railBoxRef, RAIL_MIN_REM);
 
@@ -133,7 +136,7 @@ function ThreadShell({
     <ChatShell
       className={threadShellClass}
       scroller={{
-        autoScroll: true,
+        defaultScrollPosition: 'last-anchor',
         preserveScrollOnPrepend: true,
         onReachStart: canLoadMore ? loadMore.load : undefined,
       }}
@@ -150,7 +153,7 @@ function ThreadTranscript() {
     <>
       <TranscriptHistoryLoader />
       {transcript.entries.length === 0 && <EmptyThreadState />}
-      <Transcript />
+      <Transcript tail={<ActivityLine />} />
     </>
   );
 }

@@ -5,6 +5,8 @@ packages:
   - "@mastra/core"
 ---
 
+import { IntegrationGrid } from '@site/src/components/integrations/grid';
+
 # Filesystem
 
 Filesystems give agents persistent storage for source code, documents, datasets, and generated artifacts.
@@ -54,15 +56,17 @@ A data agent could also download reports from Google Drive with file tools, pass
 
 Use another filesystem when files need to persist outside the application host or already live in an external service:
 
-- [`AgentFSFilesystem`](/reference/workspace/agentfs-filesystem): Stores files in a Turso or SQLite database through AgentFS
-- [`ArchilFilesystem`](/reference/workspace/archil-filesystem): Stores files on Archil serverless disks
-- [`AzureBlobFilesystem`](/reference/workspace/azure-blob-filesystem): Stores files in Azure Blob Storage
-- [`FilesSDKFilesystem`](/reference/workspace/files-sdk-filesystem): Stores files through a [FilesSDK](https://files-sdk.dev) adapter
-- [`GCSFilesystem`](/reference/workspace/gcs-filesystem): Stores files in Google Cloud Storage
-- [`GoogleDriveFilesystem`](/reference/workspace/google-drive-filesystem): Stores files inside a Google Drive folder
-- [`MesaFilesystem`](/reference/workspace/mesa-filesystem): Stores files in versioned Mesa repositories
-- [`PlatformFilesystem`](/reference/workspace/platform-filesystem): Stores files in a Mastra Platform workspace bucket
-- [`S3Filesystem`](/reference/workspace/s3-filesystem): Stores files in Amazon S3 or S3-compatible storage such as R2, MinIO, or Tigris
+<IntegrationGrid
+  section="File storage"
+  additionalItems={[
+  {
+    type: 'link',
+    href: '/reference/workspace/platform-filesystem',
+    label: 'Mastra Platform',
+    customProps: { icon: '/img/integrations/mastra.svg', customCSS: 'dark:invert' },
+  },
+]}
+/>
 
 Workspace-only file tools work with the full provider list. FUSE mount support depends on both the filesystem and sandbox backend, so check both references before choosing a combination.
 

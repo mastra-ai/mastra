@@ -9,6 +9,12 @@ packages:
 
 # Workers
 
+:::beta
+
+Breaking changes may occur without a major version bump until the API is stable.
+
+:::
+
 For usage patterns and deployment topologies, see [Workers](/docs/deployment/workers).
 
 ## Environment variables
@@ -84,11 +90,11 @@ A deployment running all worker types requires a storage backend that implements
 
 | Backend | Package |
 | - | - |
-| PostgreSQL | [`@mastra/pg`](/reference/storage/postgresql) |
-| LibSQL | [`@mastra/libsql`](/reference/storage/libsql) |
+| PostgreSQL | [`@mastra/pg`](/integrations/databases/postgresql) |
+| LibSQL | [`@mastra/libsql`](/integrations/databases/libsql) |
 | MySQL | `@mastra/mysql` |
-| MongoDB | [`@mastra/mongodb`](/reference/storage/mongodb) |
-| Spanner | [`@mastra/spanner`](/reference/storage/spanner) |
-| Convex | [`@mastra/convex`](/reference/storage/convex) |
+| MongoDB | [`@mastra/mongodb`](/integrations/databases/mongodb) |
+| Spanner | [`@mastra/spanner`](/integrations/databases/spanner) |
+| Convex | [`@mastra/convex`](/integrations/databases/convex) |
 
 Other storage backends (Upstash, DynamoDB, Cloudflare D1, ClickHouse, Redis) support workflows and some worker features, but are missing the `schedules` domain. They can still be used for orchestration and background task workers if you don't deploy the scheduler.

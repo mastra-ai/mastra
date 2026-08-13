@@ -20,6 +20,7 @@ import { FactoryStartTransitionError } from '../rules/start-coordinator.js';
 import type { FactoryTransitionRequest, FactoryTransitionService } from '../rules/transition-service.js';
 import type { FactoryRuleBoard, FactoryRuleStage } from '../rules/types.js';
 import { FACTORY_RULE_BOARDS, FACTORY_RULE_STAGES } from '../rules/types.js';
+import type { LiveSessions } from '../session/live-sessions.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { QueueHealthStorage } from '../storage/domains/queue-health/base.js';
@@ -53,6 +54,19 @@ export interface WorkItemRoutesDeps extends RouteDependencies {
   transitionService?: Pick<FactoryTransitionService, 'transition' | 'ruleSetVersion'>;
   /** Coordinator that binds a Factory run before dispatching its kickoff. */
   startCoordinator?: Pick<FactoryStartCoordinator, 'prepare'>;
+  /** Materialized sessions, read to report which of the listed cards are being worked. */
+  liveSessions: Pick<LiveSessions, 'isRunning'>;
+}
+
+/** Session ids of the listed cards whose agent run is in flight. */
+function runningSessionIds(items: WorkItemRow[], liveSessions: Pick<LiveSessions, 'isRunning'>): string[] {
+  const running = new Set<string>();
+  for (const item of items) {
+    for (const { sessionId } of Object.values(item.sessions)) {
+      if (liveSessions.isRunning(sessionId)) running.add(sessionId);
+    }
+  }
+  return [...running];
 }
 
 function loose(c: unknown): Context {
@@ -298,7 +312,15 @@ function parseStartBody(
   };
 }
 
-const DECISION_STATUSES = new Set<FactoryDispatchStatus>(['pending', 'leased', 'retry', 'succeeded', 'failed']);
+const DECISION_STATUSES = new Set<FactoryDispatchStatus>([
+  'pending',
+  'proposed',
+  'dismissed',
+  'leased',
+  'retry',
+  'succeeded',
+  'failed',
+]);
 const DEFAULT_DECISION_PAGE_SIZE = 25;
 const MAX_DECISION_PAGE_SIZE = 50;
 
@@ -340,13 +362,17 @@ function parseDecisionCursor(raw: string | undefined): { createdAt: Date; id: st
   }
 }
 
+function decisionType(decision: FactoryDeferredDecisionRecord): string {
+  return typeof decision.decision.type === 'string' ? decision.decision.type.slice(0, 64) : 'unknown';
+}
+
 function decisionSummary(decision: FactoryDeferredDecisionRecord) {
-  const type = typeof decision.decision.type === 'string' ? decision.decision.type.slice(0, 64) : 'unknown';
   return {
     id: decision.id,
     evaluationId: decision.evaluationId,
     workItemId: decision.workItemId,
-    type,
+    type: decisionType(decision),
+    role: typeof decision.decision.role === 'string' ? decision.decision.role.slice(0, 32) : null,
     status: decision.status,
     attempts: decision.attempts,
     lastError: decision.lastError?.slice(0, 512) ?? null,
@@ -462,11 +488,53 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
     }
   }
 
+  /** Releasing a parked run and dropping it: same request, opposite outcomes, both audited as consent. */
+  #proposalRoute({
+    verb,
+    settle,
+  }: {
+    verb: 'approve' | 'dismiss';
+    settle: (
+      orgId: string,
+      factoryProjectId: string,
+      decisionId: string,
+      now: Date,
+    ) => Promise<FactoryDeferredDecisionRecord | null>;
+  }): ApiRoute {
+    const { audit, workItems } = this.deps;
+    return registerApiRoute(`/web/factory/projects/:id/decisions/:decisionId/${verb}`, {
+      method: 'POST',
+      requiresAuth: false,
+      handler: async c => {
+        const context = loose(c);
+        const resolved = await this.#resolveProject(context);
+        if ('response' in resolved) return resolved.response;
+        const decisionId = context.req.param('decisionId');
+        if (!decisionId || !UUID_RE.test(decisionId)) return c.json({ error: 'invalid_decision_id' }, 422);
+        await workItems.ensureReady();
+        const decision = await settle(resolved.orgId, resolved.factoryProjectId, decisionId, new Date());
+        if (!decision) return c.json({ error: 'decision_not_proposed' }, 409);
+        await audit.emit({
+          context,
+          input: {
+            action: verb === 'approve' ? 'factory.run.approved' : 'factory.run.dismissed',
+            factoryProjectId: resolved.factoryProjectId,
+            targets: decision.workItemId
+              ? [{ type: 'work_item', id: decision.workItemId }]
+              : [{ type: 'rule_decision', id: decision.id }],
+            metadata: { decisionId: decision.id, effect: decisionType(decision) },
+          },
+        });
+        return c.json({ decision: decisionSummary(decision) });
+      },
+    });
+  }
+
   /** Build the Factory work-item routes as Mastra `apiRoutes`. */
   routes(): ApiRoute[] {
-    const { audit, workItems, queueHealth, transitionService, startCoordinator } = this.deps;
+    const { audit, workItems, queueHealth, transitionService, startCoordinator, liveSessions } = this.deps;
     return [
-      // ── List the org's work items for a project ─────────────────────────────
+      // ── List the org's work items for a project, and which are being worked ─
       registerApiRoute('/web/factory/projects/:id/work-items', {
         method: 'GET',
         requiresAuth: false,
@@ -478,7 +546,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
             orgId: resolved.orgId,
             factoryProjectId: resolved.factoryProjectId,
           });
-          return c.json({ workItems: items });
+          return c.json({ workItems: items, runningSessionIds: runningSessionIds(items, liveSessions) });
         },
       }),
 
@@ -547,6 +615,9 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           });
         },
       }),
+
+      this.#proposalRoute({ verb: 'approve', settle: workItems.approveDeferredDecision.bind(workItems) }),
+      this.#proposalRoute({ verb: 'dismiss', settle: workItems.dismissDeferredDecision.bind(workItems) }),
 
       registerApiRoute('/web/factory/projects/:id/decisions/:decisionId/retry', {
         method: 'POST',

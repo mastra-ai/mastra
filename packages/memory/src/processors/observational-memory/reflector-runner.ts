@@ -98,7 +98,7 @@ async function persistThreadExtractedValues(
     threadTitle: metadataUpdate.threadTitle ?? previousOmMetadata?.threadTitle,
     extracted: { ...(previousOmMetadata?.extracted ?? {}), ...(metadataUpdate.extracted ?? {}) },
   });
-  await storage.updateThread({
+  await storage.patchThread({
     id: threadId,
     metadata: newMetadata,
   });

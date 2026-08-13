@@ -5,6 +5,8 @@ packages:
   - "@mastra/core"
 ---
 
+import { IntegrationGrid } from '@site/src/components/integrations/grid';
+
 # Sandbox
 
 Agents can generate code and run shell commands against filesystems. Because you can't predict every action an agent might take, its execution environment should be isolated from the host and its sensitive data. Sandboxes provide this boundary.
@@ -114,17 +116,7 @@ Use `LocalSandbox.detectIsolation()` to detect the recommended backend before co
 
 Use a remote or container backend when commands need a stronger boundary from the host application. Each backend has its own isolation, persistence, networking, and mount behavior:
 
-- [`AgentCoreRuntimeSandbox`](/reference/workspace/agentcore-runtime-sandbox): Executes commands in AWS Bedrock AgentCore Runtime sessions
-- [`AppleContainerSandbox`](/reference/workspace/apple-container-sandbox): Executes commands in local OCI Linux containers using Apple's `container` CLI
-- [`BlaxelSandbox`](/reference/workspace/blaxel-sandbox): Executes commands in isolated Blaxel cloud sandboxes
-- [`DaytonaSandbox`](/reference/workspace/daytona-sandbox): Executes commands in isolated Daytona cloud sandboxes
-- [`DockerSandbox`](/reference/workspace/docker-sandbox): Executes commands in long-lived Docker containers on the local machine
-- [`E2BSandbox`](/reference/workspace/e2b-sandbox): Executes commands in isolated E2B cloud sandboxes
-- [`ModalSandbox`](/reference/workspace/modal-sandbox): Executes commands in isolated Modal cloud sandboxes
-- [`PlatformSandbox`](/reference/workspace/platform-sandbox): Executes commands in a sandbox tied to a Mastra Platform environment
-- [`RailwaySandbox`](/reference/workspace/railway-sandbox): Executes commands in ephemeral, isolated Railway cloud sandboxes
-- [`VercelSandbox`](/reference/workspace/vercel-sandbox): Executes commands in an ephemeral Vercel Sandbox Firecracker MicroVM
-- [`VercelServerlessSandbox`](/reference/workspace/vercel-serverless): Executes commands as stateless Vercel serverless functions
+<IntegrationGrid section="Sandboxes" />
 
 To connect another execution backend, implement [`WorkspaceSandbox`](/reference/workspace/sandbox). Extend `MastraSandbox` when you want Mastra's lifecycle, mount handling, and process-management foundation.
 

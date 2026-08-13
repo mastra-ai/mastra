@@ -86,6 +86,7 @@ export class ExperimentBundler extends Bundler {
   async writeArtifactManifest(outputDirectory: string, cliVersion: string): Promise<void> {
     await Promise.all([
       removePnpmInstallMetadata(outputDirectory),
+      removeLocalStorageArtifacts(outputDirectory),
       rm(join(outputDirectory, this.analyzeOutputDir), { recursive: true, force: true }),
     ]);
     const files = await collectFileDigests(outputDirectory);
@@ -118,6 +119,7 @@ export class ExperimentBundler extends Bundler {
   protected getEntry(): string {
     const runtimePath = resolveRuntimePath();
     return `
+import { readFile } from 'node:fs/promises';
 import { runExperimentWorker } from ${JSON.stringify(runtimePath)};
 
 console.log = (...args) => console.error(...args);
@@ -129,10 +131,17 @@ const [{ runExperiment }, mastraModule] = await Promise.all([
 ]);
 const { mastra } = mastraModule;
 if (!mastra) throw new Error("#mastra does not provide an export named 'mastra'");
+const artifactManifest = JSON.parse(
+  await readFile(new URL('./experiment-worker-manifest.json', import.meta.url), 'utf8'),
+);
 const exitCode = await runExperimentWorker({
   mastra,
   runExperiment,
-  build: ${JSON.stringify(this.buildIdentity)},
+  build: {
+    buildId: artifactManifest.build.buildId,
+    protocolVersion: artifactManifest.protocol.versions[0],
+    datasetCanonicalizationVersion: artifactManifest.protocol.datasetCanonicalizationVersion,
+  },
 });
 await Promise.race([
   new Promise(resolve => process.stdout.end(resolve)),
@@ -153,6 +162,28 @@ export function resolveRuntimePath(
 }
 
 type ArtifactFileDigest = { path: string; sha256: string; type?: 'file' | 'symlink'; target?: string };
+
+const LOCAL_STORAGE_ARTIFACT_PATTERN = /(?:\.db(?:-.+)?|\.duckdb(?:\.wal)?|\.sqlite(?:-.+)?)$/;
+
+export async function removeLocalStorageArtifacts(root: string): Promise<void> {
+  const visit = async (directory: string): Promise<void> => {
+    const entries = await readdir(directory, { withFileTypes: true });
+    await Promise.all(
+      entries.map(async entry => {
+        const entryPath = join(directory, entry.name);
+        if (entry.isDirectory()) {
+          if (entry.name !== 'node_modules') await visit(entryPath);
+          return;
+        }
+        if (LOCAL_STORAGE_ARTIFACT_PATTERN.test(entry.name)) {
+          await rm(entryPath, { force: true });
+        }
+      }),
+    );
+  };
+
+  await visit(root);
+}
 
 export async function removePnpmInstallMetadata(root: string): Promise<void> {
   const nodeModules = join(root, 'node_modules');

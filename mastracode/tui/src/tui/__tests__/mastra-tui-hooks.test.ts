@@ -127,7 +127,8 @@ describe('MastraTUI hook wiring', () => {
     const runStop = vi.fn().mockResolvedValue(createHookResult());
     const runAgentStart = vi.fn().mockResolvedValue(createHookResult());
     const setRunId = vi.fn();
-    const tui = createBareTui({ runStop, runAgentStart, setRunId });
+    const getRunId = vi.fn(() => undefined);
+    const tui = createBareTui({ runStop, runAgentStart, setRunId, getRunId });
 
     await tui.handleEvent({ type: 'agent_start' });
 
@@ -250,8 +251,9 @@ describe('MastraTUI hook wiring', () => {
 
   it('generates a run_id and sets it before firing AgentStart on agent_start', async () => {
     const setRunId = vi.fn();
+    const getRunId = vi.fn(() => undefined);
     const runAgentStart = vi.fn().mockResolvedValue(createHookResult());
-    const tui = createBareTui({ setRunId, runAgentStart });
+    const tui = createBareTui({ setRunId, getRunId, runAgentStart });
 
     await tui.handleEvent({ type: 'agent_start' });
 

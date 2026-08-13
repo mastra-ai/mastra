@@ -92,6 +92,7 @@ const workspace = new Workspace({
   lsp: {
     diagnosticTimeout: 4000,
     initTimeout: 8000,
+    maxOpenClients: 4,
     disableServers: ['eslint'],
     binaryOverrides: {
       typescript: '/custom/path/to/typescript-language-server --stdio',
@@ -104,9 +105,35 @@ const workspace = new Workspace({
 Use custom configuration when you need to:
 
 - Increase timeouts for large repositories
+- Limit retained language server processes
 - Disable specific language servers
 - Point Mastra at custom language server binaries
 - Add extra binary search paths in constrained environments
+
+### Limit retained clients
+
+Set `maxOpenClients` to a positive integer to limit the language server clients retained by a workspace. When the limit is reached, the workspace closes the least recently used client that has no active query lease. If every retained client is active, the next acquisition waits up to five seconds for a lease to be released. If no lease becomes available, `prepareQuery()` and `getDiagnostics()` return `null`, while `getDiagnosticsMulti()` omits the unavailable server.
+
+Workspaces retain an unlimited number of clients when `maxOpenClients` is omitted. Mastra Code sets `maxOpenClients` to `4` by default.
+
+### Release prepared queries
+
+When you call `prepareQuery()` directly, close the file before releasing the client lease. Use a `finally` block so the client can be evicted even if the query fails:
+
+```typescript
+const query = await workspace.lsp?.prepareQuery(filePath)
+
+if (query) {
+  try {
+    const hover = await query.client.queryHover(query.uri, position)
+  } finally {
+    query.client.notifyClose(filePath)
+    query.release()
+  }
+}
+```
+
+During workspace teardown, Mastra waits up to five seconds for active leases to be released before it forces language server shutdown.
 
 ## Custom language servers
 

@@ -8,6 +8,7 @@ import { startWorkspaceSpan } from './tracing';
 export const mkdirTool = createTool({
   id: WORKSPACE_TOOLS.FILESYSTEM.MKDIR,
   description: 'Create a directory in the workspace filesystem',
+  outputSchema: z.string(),
   inputSchema: z.object({
     path: z.string().describe('The path of the directory to create'),
     recursive: z

@@ -3014,7 +3014,8 @@ export class Session<TState = unknown> {
   /**
    * Consume an agent stream response, folding chunks into this session's display
    * messages and usage and driving tool approval. Delegates to the per-session
-   * run engine. Used by the initial run path and tool resume.
+   * run engine. Production runs go through `processSubscribedThreadStream`;
+   * only tests call this directly.
    */
   processStream(
     response: { fullStream: AsyncIterable<any> },
@@ -3342,7 +3343,6 @@ export class Session<TState = unknown> {
       const threadId = this.thread.getId()!;
 
       const agent = this.machinery.getAgent();
-      this.runEngine.setRequestContext(requestContextInput);
       await this.thread.ensureSubscription(threadId);
 
       // A deferred abort (parked approval gate) leaves the AbortController
@@ -3438,7 +3438,6 @@ export class Session<TState = unknown> {
     const threadId = this.thread.getId()!;
 
     const agent = this.machinery.getAgent();
-    this.runEngine.setRequestContext(requestContextInput);
     await this.thread.ensureSubscription(threadId);
 
     if (this.run.getRunId() && this.stream.activeRunId()) {
@@ -3827,7 +3826,6 @@ export class Session<TState = unknown> {
       throw new Error('Cannot resume a suspended tool without a current thread');
     }
 
-    this.runEngine.setRequestContext(requestContextInput);
     await this.thread.ensureSubscription(threadId);
     const resumedSubscriptionBoundary = this.createSubscribedResumeBoundaryWaiter(
       suspension.toolName === 'submit_plan' ? toolCallId : undefined,

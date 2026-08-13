@@ -128,12 +128,24 @@ describe('PlatformGithubEventWorker', () => {
               },
               {
                 id: '1001-0',
+                deliveryId: 'delivery-sync',
+                event: 'pull_request',
+                payload: { action: 'synchronize' },
+              },
+              {
+                id: '1002-0',
+                deliveryId: 'delivery-review-requested',
+                event: 'pull_request',
+                payload: { action: 'review_requested' },
+              },
+              {
+                id: '1003-0',
                 deliveryId: 'delivery-1',
                 event: 'pull_request',
                 payload: { action: 'closed' },
               },
             ],
-            nextCursor: '1001-0',
+            nextCursor: '1003-0',
           });
         }
         return json({ events: [], nextCursor: null });
@@ -152,7 +164,17 @@ describe('PlatformGithubEventWorker', () => {
     await worker.start();
     await vi.advanceTimersByTimeAsync(0);
 
-    const parsedEvent = {
+    const parsedSynchronize = {
+      event: 'pull_request',
+      deliveryId: 'delivery-sync',
+      payload: { action: 'synchronize' },
+    };
+    const parsedReviewRequested = {
+      event: 'pull_request',
+      deliveryId: 'delivery-review-requested',
+      payload: { action: 'review_requested' },
+    };
+    const parsedClosed = {
       event: 'pull_request',
       deliveryId: 'delivery-1',
       payload: { action: 'closed' },
@@ -163,9 +185,14 @@ describe('PlatformGithubEventWorker', () => {
       retireSubscription: expect.any(Function),
       isAuthorizedSender: expect.any(Function),
     });
-    expect(ingestFactoryEvent).toHaveBeenCalledOnce();
-    expect(ingestFactoryEvent).toHaveBeenCalledWith(parsedEvent);
-    expect(dispatch).toHaveBeenCalledTimes(2);
+    // Synchronize and review_requested feed the re-review path; closed feeds
+    // the reconciler. opened is dispatched to subscribers but not ingested by
+    // the factory rules — the factory picks up new work through the reconciler.
+    expect(ingestFactoryEvent).toHaveBeenCalledTimes(3);
+    expect(ingestFactoryEvent).toHaveBeenNthCalledWith(1, parsedSynchronize);
+    expect(ingestFactoryEvent).toHaveBeenNthCalledWith(2, parsedReviewRequested);
+    expect(ingestFactoryEvent).toHaveBeenNthCalledWith(3, parsedClosed);
+    expect(dispatch).toHaveBeenCalledTimes(4);
     expect(dispatch).toHaveBeenNthCalledWith(
       1,
       {
@@ -175,12 +202,14 @@ describe('PlatformGithubEventWorker', () => {
       },
       dispatchDependencies,
     );
-    expect(dispatch).toHaveBeenNthCalledWith(2, parsedEvent, dispatchDependencies);
+    expect(dispatch).toHaveBeenNthCalledWith(2, parsedSynchronize, dispatchDependencies);
+    expect(dispatch).toHaveBeenNthCalledWith(3, parsedReviewRequested, dispatchDependencies);
+    expect(dispatch).toHaveBeenNthCalledWith(4, parsedClosed, dispatchDependencies);
     expect(eventRequests[0]?.searchParams.get('afterTimestamp')).toBe('999');
-    expect(eventRequests[1]?.searchParams.get('afterEventId')).toBe('1001-0');
+    expect(eventRequests[1]?.searchParams.get('afterEventId')).toBe('1003-0');
     expect(settings.read()).toEqual({
       version: 1,
-      repositories: { '101': { afterEventId: '1001-0' } },
+      repositories: { '101': { afterEventId: '1003-0' } },
     });
     await worker.stop();
 
@@ -190,16 +219,16 @@ describe('PlatformGithubEventWorker', () => {
     await resumed.start();
     await vi.advanceTimersByTimeAsync(0);
 
-    expect(eventRequests[0]?.searchParams.get('afterEventId')).toBe('1001-0');
+    expect(eventRequests[0]?.searchParams.get('afterEventId')).toBe('1003-0');
     expect(eventRequests[0]?.searchParams.has('afterTimestamp')).toBe(false);
     await resumed.stop();
   });
 
-  it('does not advance the cursor when delivery fails and replays the page on the next cycle', async () => {
+  it('advances the cursor when one subscription fails so the bad target does not poison later events', async () => {
     const settings = createSettingsStorage();
     const dispatch = vi
       .fn<typeof dispatchGithubWebhook>()
-      .mockResolvedValueOnce({ delivered: 0, failed: 1, ignored: false })
+      .mockResolvedValueOnce({ delivered: 1, failed: 1, ignored: false })
       .mockResolvedValue({ delivered: 1, failed: 0, ignored: false });
     const eventCursors: string[] = [];
     const fetchImpl = vi.fn<typeof fetch>(async input => {
@@ -210,14 +239,27 @@ describe('PlatformGithubEventWorker', () => {
       if (url.pathname.endsWith('/installations/7/repositories')) return json({ repositories: [{ id: 101 }] });
       if (url.pathname.endsWith('/repositories/101/events')) {
         eventCursors.push(url.search);
-        if (url.searchParams.has('afterEventId')) return json({ events: [], nextCursor: null });
+        if (url.searchParams.get('afterEventId') === '1002-0') return json({ events: [], nextCursor: null });
+        if (url.searchParams.get('afterEventId') === '1001-0') {
+          return json({
+            events: [
+              {
+                id: '1002-0',
+                deliveryId: 'delivery-2',
+                event: 'pull_request',
+                payload: { action: 'synchronize' },
+              },
+            ],
+            nextCursor: '1002-0',
+          });
+        }
         return json({
           events: [
             {
               id: '1001-0',
               deliveryId: 'delivery-1',
               event: 'pull_request',
-              payload: { action: 'closed' },
+              payload: { action: 'synchronize' },
             },
           ],
           nextCursor: '1001-0',
@@ -225,25 +267,34 @@ describe('PlatformGithubEventWorker', () => {
       }
       throw new Error(`Unexpected request: ${url}`);
     });
+    const deps = createDeps();
     const worker = createWorker({ fetchImpl, storage: settings.storage, intervalMs: 1_000, dispatch });
 
-    await worker.init(createDeps());
+    await worker.init(deps);
     await worker.start();
     await vi.advanceTimersByTimeAsync(0);
 
-    expect(settings.read()).toEqual({
-      version: 1,
-      repositories: { '101': expect.objectContaining({ afterTimestamp: expect.any(Number) }) },
-    });
-    await vi.advanceTimersByTimeAsync(1_000);
-
     expect(dispatch).toHaveBeenCalledTimes(2);
     expect(eventCursors[0]).toContain('afterTimestamp=');
-    expect(eventCursors[1]).toContain('afterTimestamp=');
+    expect(eventCursors[1]).toContain('afterEventId=1001-0');
+    expect(eventCursors[2]).toContain('afterEventId=1002-0');
     expect(settings.read()).toEqual({
       version: 1,
-      repositories: { '101': { afterEventId: '1001-0' } },
+      repositories: { '101': { afterEventId: '1002-0' } },
     });
+    expect(deps.logger.warn).toHaveBeenCalledWith(
+      'Platform GitHub event completed with failed subscription deliveries',
+      {
+        repositoryId: 101,
+        deliveryId: 'delivery-1',
+        delivered: 1,
+        failed: 1,
+      },
+    );
+    expect(deps.logger.error).not.toHaveBeenCalledWith(
+      'Platform GitHub repository event polling failed',
+      expect.anything(),
+    );
     await worker.stop();
   });
 

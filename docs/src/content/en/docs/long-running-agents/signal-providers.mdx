@@ -9,9 +9,9 @@ packages:
 
 **Added in:** `@mastra/core@1.39.0`
 
-:::experimental
+:::beta
 
-This feature is in beta. Breaking changes may occur without a major version bump until the API is stable.
+Breaking changes may occur without a major version bump until the API is stable.
 
 :::
 
@@ -55,7 +55,7 @@ export const supportAgent = new Agent({
 ```
 
 :::note
-Notification delivery requires a storage adapter with notification support, such as [libSQL](/reference/storage/libsql), [PostgreSQL](/reference/storage/postgresql), or [MongoDB](/reference/storage/mongodb). Configure storage on the Mastra instance so `notify()` can store notification records.
+Notification delivery requires a storage adapter with notification support, such as [libSQL](/integrations/databases/libsql), [PostgreSQL](/integrations/databases/postgresql), or [MongoDB](/integrations/databases/mongodb). Configure storage on the Mastra instance so `notify()` can store notification records.
 :::
 
 ## Quickstart
@@ -134,7 +134,7 @@ ciSignals.watch({ resourceId: 'user_123', threadId: 'thread_456' }, 'acme-app-ma
 Mastra calls `poll()` on the `pollInterval` with all active subscriptions. It skips a cycle when there are no subscriptions and doesn't overlap cycles, so a slow `poll()` doesn't run concurrently with itself.
 
 :::note
-For a complete polling-provider build with notification storage, agent registration, thread subscription, and testing, follow [Building a signal provider](/guides/guide/signal-provider).
+For a complete polling-provider build with notification storage, agent registration, thread subscription, and testing, follow [Building a signal provider](https://mastra.ai/blog/building-a-signal-provider).
 :::
 
 ## Polling and webhook providers
@@ -213,24 +213,11 @@ A provider can support more than event ingestion. Add only the capabilities your
 - **Lifecycle hooks:** Override [`start()`](/reference/signals/signal-provider#start) for async setup and [`stop()`](/reference/signals/signal-provider#stop) for cleanup. Call `super.stop()` when overriding `stop()` so the base provider can stop polling and clear its registry.
 - **Processors and tools:** Return processors from [`getInputProcessors()`](/reference/signals/signal-provider#getinputprocessors) or [`getOutputProcessors()`](/reference/signals/signal-provider#getoutputprocessors), and return agent-callable tools from [`getTools()`](/reference/signals/signal-provider#gettools).
 
-The `@mastra/github-signals` package is a production signal provider that watches GitHub pull requests and notifies threads about comments, review state, continuous integration status, and merges. Use it as a reference for polling, durable subscriptions, tools, processors, and lifecycle hooks.
-
-```typescript title="src/mastra/agents/dev-agent.ts"
-import { Agent } from '@mastra/core/agent'
-import { GithubSignals } from '@mastra/github-signals'
-
-export const devAgent = new Agent({
-  id: 'dev-agent',
-  name: 'Dev Agent',
-  instructions: 'Help triage pull request activity.',
-  model: '__GATEWAY_OPENAI_MODEL__',
-  signals: [new GithubSignals()],
-})
-```
+For a production provider that watches GitHub pull requests, see the [GitHub Channels integration](/integrations/channels/github).
 
 ## Related
 
-- [Guide: Building a signal provider](/guides/guide/signal-provider)
+- [Guide: Building a signal provider](https://mastra.ai/blog/building-a-signal-provider)
 - [Signals](/docs/long-running-agents/signals)
 - [Notification signals](/docs/long-running-agents/signals#notification-signals)
 - [`SignalProvider` reference](/reference/signals/signal-provider)
