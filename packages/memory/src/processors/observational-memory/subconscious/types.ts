@@ -98,6 +98,11 @@ export interface SubconsciousConfig {
    * hard constraints only and share the same budget.
    */
   pins?: boolean | { maxPins?: number; maxCharacters?: number; capturePinning?: boolean };
+  /**
+   * Run the curator after every N committed observation runs (in addition to any
+   * caller-driven `Memory.runCuration` triggers). Off by default.
+   */
+  curationCadence?: number;
   maxSteps?: number;
 }
 
@@ -119,4 +124,5 @@ export interface ResolvedSubconsciousConfig {
   tools: boolean;
   activity: false | { recentUpdates: number };
   pins: false | { maxPins: number; maxCharacters: number; capturePinning: boolean };
+  curationCadence?: number;
 }

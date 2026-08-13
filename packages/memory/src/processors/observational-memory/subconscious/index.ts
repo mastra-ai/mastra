@@ -116,6 +116,13 @@ export class Subconscious {
       }
     }
 
+    if (
+      config.curationCadence !== undefined &&
+      (!Number.isInteger(config.curationCadence) || config.curationCadence < 1)
+    ) {
+      throw new Error('Subconscious curationCadence must be a positive integer.');
+    }
+
     this.config = Object.freeze({ ...config, observation: [...observation], reflection: [...reflection] });
     this.resolved = Object.freeze({
       observation: observation.map(entry =>
@@ -130,6 +137,7 @@ export class Subconscious {
       tools: config.tools !== false,
       activity: recentUpdates === false ? false : { recentUpdates },
       pins,
+      curationCadence: config.curationCadence,
     });
   }
 

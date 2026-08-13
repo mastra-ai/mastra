@@ -55,9 +55,9 @@ export function createCuratorHandler(
   subconscious: ResolvedSubconsciousConfig,
   curatorMemory = memory,
   options?: { omModel?: ObservationalMemoryModel },
-): (context: ReflectionCommittedContext) => Promise<void> {
+): (context: ReflectionCommittedContext) => Promise<'ran' | 'no-op'> {
   const config = subconscious.reflection.find(agent => agent.name === CURATION_AGENT);
-  if (!config) return async () => {};
+  if (!config) return async () => 'no-op';
 
   return async context => {
     let store: KnowledgeStorage | undefined;
@@ -69,7 +69,7 @@ export function createCuratorHandler(
 
       const cursor = await store.getCurationCursor({ sourceThreadId: context.parentThreadId, agent: CURATION_AGENT });
       const worklist = await readWorklist(store, context.parentThreadId, scope, cursor?.lastFactId);
-      if (!worklist.facts.length && !context.observations.trim()) return;
+      if (!worklist.facts.length && !context.observations.trim()) return 'no-op';
 
       const agent = await createCuratorAgent(
         memory,
@@ -104,6 +104,7 @@ export function createCuratorHandler(
           lastFactId: acknowledgedId,
         });
       }
+      return 'ran';
     } catch (error) {
       const message = `curate: ${error instanceof Error ? error.message : String(error)}`;
       await context.writer?.custom({ type: 'data-subconscious-error', data: { agent: 'curate', error: message } });

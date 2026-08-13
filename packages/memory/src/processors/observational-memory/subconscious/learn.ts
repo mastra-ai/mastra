@@ -134,7 +134,7 @@ export function createLearnerRecordSkillTool(input: {
 }
 
 export function composeReflectionAgentHandlers(
-  handlers: Array<(context: ReflectionCommittedContext) => Promise<void>>,
+  handlers: Array<(context: ReflectionCommittedContext) => Promise<unknown>>,
 ): (context: ReflectionCommittedContext) => Promise<void> {
   return async context => {
     for (const handler of handlers) {
