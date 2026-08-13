@@ -103,13 +103,24 @@ export async function getWorkspaceInformation({
 export const collectTransitiveWorkspaceDependencies = ({
   workspaceMap,
   initialDependencies,
+  bundledPackages,
   logger,
 }: {
   workspaceMap: Map<string, WorkspacePackageInfo>;
   initialDependencies: Set<string>;
+  /**
+   * Workspace packages the bundler compiles into the output. Their code ships inside the bundle,
+   * so the deploy target has nothing to install for them — and a tarball reference would point at
+   * a file that does not exist yet when the target installs from the manifest alone.
+   *
+   * They are still traversed: a bundled package can depend on a workspace package that stays
+   * external (one without a root export), and that one does need to be installed.
+   */
+  bundledPackages?: Set<string>;
   logger: IMastraLogger;
 }): TransitiveDependencyResult => {
   const usedWorkspacePackages = new Set<string>();
+  const visited = new Set<string>();
   const queue: string[] = Array.from(initialDependencies);
   const resolutions: Record<string, string> = {};
 
@@ -117,31 +128,39 @@ export const collectTransitiveWorkspaceDependencies = ({
     const len = queue.length;
     for (let i = 0; i < len; i += 1) {
       const pkgName = queue.shift();
-      if (!pkgName || usedWorkspacePackages.has(pkgName)) {
+      if (!pkgName || visited.has(pkgName)) {
         continue;
       }
 
       const dep = workspaceMap.get(pkgName);
       if (!dep) continue;
 
-      const root = findWorkspacesRoot();
-      if (!root) {
-        throw new Error('Could not find workspace root');
+      visited.add(pkgName);
+
+      // Subpath-only packages are bundled for the entries that import them directly, but imports
+      // of their other subpaths stay external, so they need to be installed either way.
+      const isBundled = bundledPackages?.has(pkgName) && hasRootExport(dep.exports);
+
+      if (!isBundled) {
+        const root = findWorkspacesRoot();
+        if (!root) {
+          throw new Error('Could not find workspace root');
+        }
+
+        const depsService = new DepsService(root.location);
+        depsService.__setLogger(logger);
+        const sanitizedName = slugify(pkgName);
+
+        const tgzPath = depsService.getWorkspaceDependencyPath({
+          pkgName: sanitizedName,
+          version: dep.version!,
+        });
+        resolutions[pkgName] = tgzPath;
+        usedWorkspacePackages.add(pkgName);
       }
 
-      const depsService = new DepsService(root.location);
-      depsService.__setLogger(logger);
-      const sanitizedName = slugify(pkgName);
-
-      const tgzPath = depsService.getWorkspaceDependencyPath({
-        pkgName: sanitizedName,
-        version: dep.version!,
-      });
-      resolutions[pkgName] = tgzPath;
-      usedWorkspacePackages.add(pkgName);
-
       for (const [depName, _depVersion] of Object.entries(dep?.dependencies ?? {})) {
-        if (!usedWorkspacePackages.has(depName) && workspaceMap.has(depName)) {
+        if (!visited.has(depName) && workspaceMap.has(depName)) {
           queue.push(depName);
         }
       }

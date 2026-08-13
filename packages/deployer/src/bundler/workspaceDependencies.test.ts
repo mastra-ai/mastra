@@ -3,6 +3,7 @@ import * as pkg from 'empathic/package';
 import type { WorkspacesRoot } from 'find-workspaces';
 import { findWorkspacesRoot, findWorkspaces } from 'find-workspaces';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import type { WorkspacePackageInfo } from './workspaceDependencies';
 import {
   collectTransitiveWorkspaceDependencies,
   packWorkspaceDependencies,
@@ -148,6 +149,61 @@ describe('workspaceDependencies', () => {
 
       expect(result.usedWorkspacePackages.size).toBe(1);
       expect(result.usedWorkspacePackages.has('pkg-a')).toBe(true);
+    });
+
+    it('should skip packages the bundler compiles into the output', () => {
+      const workspaceMap = new Map<string, WorkspacePackageInfo>([
+        ['pkg-a', { location: '/pkg-a', dependencies: { 'pkg-b': '1.0.0' }, version: '1.0.0' }],
+        ['pkg-b', { location: '/pkg-b', dependencies: {}, version: '1.0.0' }],
+      ]);
+
+      const result = collectTransitiveWorkspaceDependencies({
+        workspaceMap,
+        initialDependencies: new Set(['pkg-a']),
+        bundledPackages: new Set(['pkg-a', 'pkg-b']),
+        logger: mockLogger,
+      });
+
+      expect(result.usedWorkspacePackages.size).toBe(0);
+      expect(result.resolutions).toEqual({});
+    });
+
+    it('should collect a dependency of a bundled package that stays external', () => {
+      const workspaceMap = new Map<string, WorkspacePackageInfo>([
+        ['pkg-a', { location: '/pkg-a', dependencies: { 'pkg-subpath': '1.0.0' }, version: '1.0.0' }],
+        // No root export, so the analyze step leaves imports of it external.
+        [
+          'pkg-subpath',
+          { location: '/pkg-subpath', dependencies: {}, version: '1.0.0', exports: { './value': './value.js' } },
+        ],
+      ]);
+
+      const result = collectTransitiveWorkspaceDependencies({
+        workspaceMap,
+        initialDependencies: new Set(['pkg-a']),
+        bundledPackages: new Set(['pkg-a']),
+        logger: mockLogger,
+      });
+
+      expect(result.usedWorkspacePackages).toEqual(new Set(['pkg-subpath']));
+    });
+
+    it('should collect a subpath-only package even when it was also bundled directly', () => {
+      const workspaceMap = new Map<string, WorkspacePackageInfo>([
+        [
+          'pkg-subpath',
+          { location: '/pkg-subpath', dependencies: {}, version: '1.0.0', exports: { './value': './value.js' } },
+        ],
+      ]);
+
+      const result = collectTransitiveWorkspaceDependencies({
+        workspaceMap,
+        initialDependencies: new Set(['pkg-subpath']),
+        bundledPackages: new Set(['pkg-subpath']),
+        logger: mockLogger,
+      });
+
+      expect(result.usedWorkspacePackages).toEqual(new Set(['pkg-subpath']));
     });
   });
 

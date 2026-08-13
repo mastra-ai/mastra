@@ -1,7 +1,7 @@
 import { it, describe, expect, beforeAll, afterAll, inject } from 'vitest';
 import { join } from 'path';
 import { setupMonorepo } from './prepare';
-import { mkdtemp, mkdir, rm, readFile, writeFile } from 'fs/promises';
+import { mkdtemp, mkdir, readdir, rm, readFile, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import getPort from 'get-port';
 import { execa, execaNode } from 'execa';
@@ -316,6 +316,59 @@ describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
       const hasWorkspaceMappedPath = content.includes('~/utils');
 
       expect(hasWorkspaceMappedPath).toBeFalsy();
+    });
+
+    // The tests above, and every server the suite boots, read the output directory with its
+    // node_modules already installed — where a packed tarball resolves fine. These three read the
+    // artifact the way a deploy target does, which is the only place mastra-ai/mastra#21129 shows up.
+    describe('deploy artifact', () => {
+      const outputDir = () => join(fixturePath, 'apps', 'custom', '.mastra', 'output');
+
+      const readManifest = async () =>
+        JSON.parse(await readFile(join(outputDir(), 'package.json'), 'utf-8')) as {
+          dependencies?: Record<string, string>;
+        };
+
+      const readPackedTarballs = async () => {
+        const entries = await readdir(join(outputDir(), 'workspace-module')).catch(() => [] as string[]);
+        return entries.filter(name => name.endsWith('.tgz')).sort();
+      };
+
+      it('does not declare workspace packages that were compiled into the bundle', async () => {
+        const { dependencies = {} } = await readManifest();
+
+        // Each of these has a root export, so the bundler inlines it and the deploy target has
+        // nothing left to install. Declaring one anyway points the install at a tarball that is
+        // not on disk yet, which fails the deploy.
+        for (const name of [
+          '@inner/hello-world',
+          '@inner/inner-tools',
+          '@inner/transitive-a',
+          '@inner/transitive-b',
+          '@inner/transitive-c',
+        ]) {
+          expect(dependencies).not.toHaveProperty(name);
+        }
+      });
+
+      it('packs exactly the workspace packages the bundle imports at runtime', async () => {
+        const packed = await readPackedTarballs();
+
+        // @inner/subpath-only has no "." entry in its exports map, so it cannot be compiled in.
+        // The bundle imports it at runtime, so it does have to be installed — and it is the only
+        // workspace package in the fixture that does.
+        expect(packed).toHaveLength(1);
+        expect(packed[0]).toMatch(/^inner-subpath-only-.*\.tgz$/);
+      });
+
+      it('points the manifest at the tarball it actually shipped', async () => {
+        const packed = await readPackedTarballs();
+        const subpathOnly = packed.find(name => name.startsWith('inner-subpath-only-'));
+        const { dependencies = {} } = await readManifest();
+
+        expect(subpathOnly).toBeDefined();
+        expect(dependencies['@inner/subpath-only']).toBe(`file:./workspace-module/${subpathOnly}`);
+      });
     });
 
     afterAll(async () => {
