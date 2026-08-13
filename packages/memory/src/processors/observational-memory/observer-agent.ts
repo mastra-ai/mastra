@@ -376,38 +376,6 @@ export const OBSERVER_GUIDELINES = `- Be specific enough for the assistant to ac
 - Observe WHAT the agent did and WHAT it means
 - If the user provides detailed messages or code snippets, observe all important details`;
 
-const CURRENT_TASK_SENTENCE =
-  'If the user asks a question or gives a new task, make it clear in <current-task> that this is the priority.';
-const SUGGESTED_RESPONSE_SENTENCE =
-  'If the assistant needs to respond to the user, indicate in <suggested-response> that it should pause for user reply before continuing other tasks.';
-
-/**
- * Undefined extractors mean the caller is on the legacy path, where
- * `buildObserverOutputFormat` still describes both continuation sections.
- */
-function hasContinuationSection(extractors: readonly Extractor<any>[] | undefined, slug: string): boolean {
-  return extractors === undefined || extractors.some(extractor => extractor.slug === slug);
-}
-
-/**
- * Build the closing guidance about continuation sections, naming only the sections the
- * prompt actually defines. Without this the prompt can reference `<current-task>` or
- * `<suggested-response>` tags that the output format has already omitted.
- */
-export function buildContinuationGuidance(
-  extractors: readonly Extractor<any>[] | undefined,
-  { includeSuggestedResponse }: { includeSuggestedResponse: boolean },
-): string {
-  const sentences = ['User messages are extremely important.'];
-  if (hasContinuationSection(extractors, 'current-task')) {
-    sentences.push(CURRENT_TASK_SENTENCE);
-  }
-  if (includeSuggestedResponse && hasContinuationSection(extractors, 'suggested-response')) {
-    sentences.push(SUGGESTED_RESPONSE_SENTENCE);
-  }
-  return sentences.join(' ');
-}
-
 /**
  * Build the complete observer system prompt.
  * @param multiThread - Whether this is for multi-thread batched observation (default: false)
@@ -426,7 +394,8 @@ export function buildObserverSystemPrompt(
   const customInstructions = instruction ? `\n\n=== CUSTOM INSTRUCTIONS ===\n\n${instruction}` : '';
   // `undefined` extractors = legacy caller that never opted into extractors; both built-in
   // continuation sections stay enabled on that path.
-  const currentTaskEnabled = extractors === undefined || extractors.some(extractor => extractor.slug === 'current-task');
+  const currentTaskEnabled =
+    extractors === undefined || extractors.some(extractor => extractor.slug === 'current-task');
   const suggestedResponseEnabled =
     extractors === undefined || extractors.some(extractor => extractor.slug === 'suggested-response');
   const multiThreadSections = [
@@ -522,7 +491,11 @@ ${OBSERVER_GUIDELINES}
 
 Remember: These observations are the assistant's ONLY memory. Make them count.
 
-${buildContinuationGuidance(extractors, { includeSuggestedResponse: false })}${customInstructions}`;
+User messages are extremely important.${
+      currentTaskEnabled
+        ? ' If the user asks a question or gives a new task, make it clear in <current-task> that this is the priority.'
+        : ''
+    }${customInstructions}`;
   }
 
   return `You are the memory consciousness of an AI assistant. Your observations will be the ONLY information the assistant has about past interactions with this user.
@@ -549,7 +522,15 @@ Simply output your observations without any thread-related markup.
 
 Remember: These observations are the assistant's ONLY memory. Make them count.
 
-${buildContinuationGuidance(extractors, { includeSuggestedResponse: true })}${customInstructions}`;
+User messages are extremely important.${
+    currentTaskEnabled
+      ? ' If the user asks a question or gives a new task, make it clear in <current-task> that this is the priority.'
+      : ''
+  }${
+    suggestedResponseEnabled
+      ? ' If the assistant needs to respond to the user, indicate in <suggested-response> that it should pause for user reply before continuing other tasks.'
+      : ''
+  }${customInstructions}`;
 }
 
 /**

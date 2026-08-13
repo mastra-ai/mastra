@@ -10,7 +10,6 @@ import { reconcileObservationGroupsFromReflection, stripObservationGroups } from
 import {
   OBSERVER_EXTRACTION_INSTRUCTIONS,
   OBSERVER_GUIDELINES,
-  buildContinuationGuidance,
   buildObserverOutputFormat,
   sanitizeObservationLines,
   detectDegenerateRepetition,
@@ -39,12 +38,15 @@ export interface ReflectorResult extends BaseReflectorResult {
  * @param instruction - Optional custom instructions to append to the prompt
  * @param extractors - Active extractors, used to decide which sections the prompt describes
  */
-export function buildReflectorSystemPrompt(
-  instruction?: string,
-  extractors?: readonly Extractor<any>[],
-): string {
+export function buildReflectorSystemPrompt(instruction?: string, extractors?: readonly Extractor<any>[]): string {
   const outputFormat = buildObserverOutputFormat(extractors);
   const customInstructions = instruction ? `\n\n=== CUSTOM INSTRUCTIONS ===\n\n${instruction}` : '';
+  // `undefined` extractors = legacy caller that never opted into extractors; both built-in
+  // continuation sections stay enabled on that path.
+  const currentTaskEnabled =
+    extractors === undefined || extractors.some(extractor => extractor.slug === 'current-task');
+  const suggestedResponseEnabled =
+    extractors === undefined || extractors.some(extractor => extractor.slug === 'suggested-response');
   return `You are the memory consciousness of an AI assistant. Your memory observation reflections will be the ONLY information the assistant has about past interactions with this user.
 
 The following instructions were given to another part of your psyche (the observer) to create memories.
@@ -121,7 +123,15 @@ Date: Dec 4, 2025
 
 ${outputFormat}
 
-${buildContinuationGuidance(extractors, { includeSuggestedResponse: true })}${customInstructions}`;
+User messages are extremely important.${
+    currentTaskEnabled
+      ? ' If the user asks a question or gives a new task, make it clear in <current-task> that this is the priority.'
+      : ''
+  }${
+    suggestedResponseEnabled
+      ? ' If the assistant needs to respond to the user, indicate in <suggested-response> that it should pause for user reply before continuing other tasks.'
+      : ''
+  }${customInstructions}`;
 }
 
 /**
