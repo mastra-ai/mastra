@@ -301,7 +301,42 @@ Use `transform` when a tool returns raw data your application needs, but browser
 
 If a transform is configured and it fails, Mastra doesn't fall back to the raw payload for display or transcript targets. Input deltas are suppressed when no safe `inputDelta` transform is available.
 
-See the [`createTool()` reference](/reference/tools/create-tool#example-with-transform) for a `transform` example. For shared rules across several tools, configure the agent-level `transform` policy in the [`Agent` constructor](/reference/agents/agent#constructor-parameters).
+The following example redacts a secret from both targets:
+
+```typescript title="src/mastra/tools/customer-tool.ts"
+import { createTool } from '@mastra/core/tools'
+import { z } from 'zod'
+
+export const customerTool = createTool({
+  id: 'lookup-customer',
+  description: 'Looks up a customer by id',
+  inputSchema: z.object({
+    customerId: z.string(),
+  }),
+  outputSchema: z.object({
+    apiKey: z.string(),
+  }),
+  execute: async () => {
+    return {
+      apiKey: 'secret-value',
+    }
+  },
+  // highlight-start
+  transform: {
+    display: {
+      output: () => ({ apiKey: '***' }),
+    },
+    transcript: {
+      output: () => ({ apiKey: '***' }),
+    },
+  },
+  // highlight-end
+})
+```
+
+Your application code still receives `apiKey: 'secret-value'` from the tool. Browser-facing streams get the `display` output, and user-visible transcript messages get the `transcript` output.
+
+For more phases, including `input`, `inputDelta`, `error`, `approval`, `suspend`, and `resume`, see the [`createTool()` reference](/reference/tools/create-tool#example-with-transform). For shared rules across several tools, configure the agent-level `transform` policy in the [`Agent` constructor](/reference/agents/agent#constructor-parameters).
 
 ## Run logic around tool calls
 
