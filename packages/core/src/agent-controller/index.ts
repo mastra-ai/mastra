@@ -18,7 +18,7 @@ export {
   taskUpdateTool,
   taskWriteTool,
 } from './tools';
-export { defaultDisplayState, defaultOMProgressState, omProgressSummary } from './types';
+export { defaultDisplayState, defaultOMProgressState } from './types';
 export type {
   ActiveSubagentState,
   ActiveToolState,
@@ -47,7 +47,6 @@ export type {
   ModelUseCountTracker,
   OMBufferedStatus,
   OMProgressState,
-  OMProgressSummary,
   OMStatus,
   PermissionPolicy,
   PermissionRules,

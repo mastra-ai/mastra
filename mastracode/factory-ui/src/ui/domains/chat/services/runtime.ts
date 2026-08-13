@@ -1,6 +1,5 @@
-import type { AgentControllerEvent, AgentControllerOMProgress } from '@mastra/client-js';
+import type { AgentControllerEvent, AgentControllerOMProgress, OMProgressState } from '@mastra/client-js';
 import { isKnownAgentControllerEvent } from '@mastra/client-js';
-import { omProgressSummary } from '@mastra/core/agent-controller/types';
 
 export interface UsageSnapshot {
   promptTokens?: number;
@@ -55,6 +54,22 @@ function budgetWork(buffering: boolean, blocking: boolean): OMWork {
   return blocking ? 'blocking' : 'idle';
 }
 
+/** The stream carries the full progress state, the session route the flat slice the status line reads. */
+function flattenOMProgress(om: OMProgressState): AgentControllerOMProgress {
+  const { observations, reflection } = om.buffered;
+  return {
+    status: om.status,
+    pendingTokens: om.pendingTokens,
+    threshold: om.threshold,
+    thresholdPercent: om.thresholdPercent,
+    observationTokens: om.observationTokens,
+    reflectionThreshold: om.reflectionThreshold,
+    reflectionThresholdPercent: om.reflectionThresholdPercent,
+    projectedMessageRemoval: observations.projectedMessageRemoval,
+    projectedReflectionSavings: Math.max(0, reflection.inputObservationTokens - reflection.observationTokens),
+  };
+}
+
 /** Buffering is level-triggered from the display state, so it outranks the start events a background retry also emits. */
 export function omWork(
   state: Pick<ChatRuntimeState, 'omPhase' | 'bufferingMessages' | 'bufferingObservations'>,
@@ -95,7 +110,7 @@ export function runtimeReducer(state: ChatRuntimeState, event: AgentControllerEv
       const om = event.displayState.omProgress;
       return {
         ...state,
-        omProgress: om?.buffered ? omProgressSummary(om) : state.omProgress,
+        omProgress: om?.buffered ? flattenOMProgress(om) : state.omProgress,
         usage: (event.displayState.tokenUsage as UsageSnapshot | undefined) ?? state.usage,
         bufferingMessages: event.displayState.bufferingMessages ?? state.bufferingMessages,
         bufferingObservations: event.displayState.bufferingObservations ?? state.bufferingObservations,

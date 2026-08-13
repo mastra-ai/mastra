@@ -1,3 +1,4 @@
+import type { AgentControllerEvent } from '@mastra/client-js';
 import { defaultOMProgressState } from '@mastra/core/agent-controller';
 import type { OMProgressState } from '@mastra/core/agent-controller';
 import { describe, expect, it, vi } from 'vitest';
@@ -83,6 +84,18 @@ describe('chat runtime reducer', () => {
 
     expect(streamed.omProgress?.projectedMessageRemoval).toBe(7_400);
     expect(streamed.omProgress?.projectedReflectionSavings).toBe(6_500);
+  });
+
+  it('keeps the figures a server too old to send the buffered pass would drop', () => {
+    const flatFromOlderServer: AgentControllerEvent = JSON.parse(
+      '{"type":"display_state_changed","displayState":{"omProgress":{"status":"idle","pendingTokens":11,"threshold":99}}}',
+    );
+    const seeded = runtimeReducer(initialChatRuntime, {
+      type: 'display_state_changed',
+      displayState: { omProgress: { ...defaultOMProgressState(), pendingTokens: 320 } },
+    });
+
+    expect(runtimeReducer(seeded, flatFromOlderServer).omProgress?.pendingTokens).toBe(320);
   });
 
   it('measures a streamed assistant decode window and tracks active runtime work', () => {

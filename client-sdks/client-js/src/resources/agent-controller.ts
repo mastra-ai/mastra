@@ -4,7 +4,6 @@ import type {
   MastraDBMessage,
   MastraMessagePart,
   OMProgressState,
-  OMProgressSummary,
 } from '@mastra/core/agent-controller';
 export type {
   MastraDBMessage,
@@ -37,8 +36,25 @@ export interface AgentControllerInfo {
   id: string;
 }
 
-/** What `session.state()` returns: the flat status-line slice. The event stream carries `OMProgressState` instead. */
-export type AgentControllerOMProgress = OMProgressSummary;
+/**
+ * What `session.state()` returns: the status-line slice of observational-memory
+ * progress, mirroring the TUI status line. The event stream carries the full
+ * `OMProgressState` instead. `msg` reads `pendingTokens/threshold ↓projectedMessageRemoval`
+ * (the active message window before an observation fires); `mem` reads
+ * `observationTokens/reflectionThreshold ↓projectedReflectionSavings`
+ * (accumulated observations before a reflection fires).
+ */
+export interface AgentControllerOMProgress {
+  status: string;
+  pendingTokens: number;
+  threshold: number;
+  thresholdPercent: number;
+  observationTokens: number;
+  reflectionThreshold: number;
+  reflectionThresholdPercent: number;
+  projectedMessageRemoval: number;
+  projectedReflectionSavings: number;
+}
 
 /**
  * AgentController events the SDK types explicitly. This is a discriminated union, so
