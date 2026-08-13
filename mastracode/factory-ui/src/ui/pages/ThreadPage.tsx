@@ -20,6 +20,7 @@ import { ConnectionNotice } from '../domains/chat/components/ConnectionNotice';
 import { EmptyThreadState } from '../domains/chat/components/EmptyThreadState';
 import { GoalPanel } from '../domains/chat/components/GoalPanel';
 import { TaskPanel } from '../domains/chat/components/TaskPanel';
+import { PageTitle } from '../domains/chat/components/PageTitle';
 import { SessionFaviconInitializing } from '../domains/chat/components/SessionFavicon';
 import { Transcript } from '../domains/chat/components/Transcript';
 import { TranscriptHistoryLoader } from '../domains/chat/components/TranscriptHistoryLoader';
@@ -60,6 +61,7 @@ export function ThreadPage() {
             </ChatShell>
           ) : (
             <ChatSessionBoundary threadId={threadId}>
+              <PageTitle />
               <WorkspaceFilesProvider>
                 <ThreadPageMain workspacePath={workspace.workspacePath} threadId={workspace.threadId} />
               </WorkspaceFilesProvider>
