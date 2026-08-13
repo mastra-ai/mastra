@@ -1,6 +1,6 @@
 import type { AgentControllerEvent, AgentControllerOMProgress } from '@mastra/client-js';
 import { isKnownAgentControllerEvent } from '@mastra/client-js';
-import { omProgressSummary } from '@mastra/core/agent-controller';
+import { omProgressSummary } from '@mastra/core/agent-controller/types';
 
 export interface UsageSnapshot {
   promptTokens?: number;
@@ -94,9 +94,7 @@ export function runtimeReducer(state: ChatRuntimeState, event: AgentControllerEv
     case 'display_state_changed':
       return {
         ...state,
-        omProgress: event.displayState.omProgress
-          ? omProgressSummary(event.displayState.omProgress)
-          : state.omProgress,
+        omProgress: event.displayState.omProgress ? omProgressSummary(event.displayState.omProgress) : state.omProgress,
         usage: (event.displayState.tokenUsage as UsageSnapshot | undefined) ?? state.usage,
         bufferingMessages: event.displayState.bufferingMessages ?? state.bufferingMessages,
         bufferingObservations: event.displayState.bufferingObservations ?? state.bufferingObservations,

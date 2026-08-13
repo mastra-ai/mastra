@@ -78,6 +78,7 @@ export default defineConfig({
     'src/vector/filter/index.ts',
     'src/test-utils/llm-mock.ts',
     'src/a2a/client.ts',
+    'src/agent-controller/types.ts',
     'src/a2a/v1.ts',
     'src/processors/index.ts',
     'src/zod-to-json.ts',

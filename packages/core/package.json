@@ -91,6 +91,16 @@
         "default": "./dist/agent-controller/index.cjs"
       }
     },
+    "./agent-controller/types": {
+      "import": {
+        "types": "./dist/agent-controller/types.d.ts",
+        "default": "./dist/agent-controller/types.js"
+      },
+      "require": {
+        "types": "./dist/agent-controller/types.d.ts",
+        "default": "./dist/agent-controller/types.cjs"
+      }
+    },
     "./auth": {
       "import": {
         "types": "./dist/auth/index.d.ts",
