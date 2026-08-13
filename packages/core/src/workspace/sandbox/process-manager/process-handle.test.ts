@@ -268,3 +268,58 @@ describe('ProcessHandle output retention', () => {
     expect(chunks.join('')).toBe('hello world');
   });
 });
+
+describe('ProcessHandle wait abortSignal', () => {
+  it('kills the process when the signal aborts during a blocking wait', async () => {
+    const handle = new TestProcessHandle();
+    const kill = vi.spyOn(handle, 'kill');
+    const controller = new AbortController();
+
+    const waiting = handle.wait({ abortSignal: controller.signal });
+    expect(kill).not.toHaveBeenCalled();
+
+    controller.abort();
+    expect(kill).toHaveBeenCalledTimes(1);
+
+    // The wait still settles through the normal exit path.
+    handle.finish();
+    const result = await waiting;
+    expect(result.exitCode).toBe(0);
+  });
+
+  it('kills immediately when the signal is already aborted', async () => {
+    const handle = new TestProcessHandle();
+    const kill = vi.spyOn(handle, 'kill');
+    const controller = new AbortController();
+    controller.abort();
+
+    const waiting = handle.wait({ abortSignal: controller.signal });
+    expect(kill).toHaveBeenCalledTimes(1);
+
+    handle.finish();
+    await waiting;
+  });
+
+  it('removes the abort listener once the wait settles', async () => {
+    const handle = new TestProcessHandle();
+    const kill = vi.spyOn(handle, 'kill');
+    const controller = new AbortController();
+
+    const waiting = handle.wait({ abortSignal: controller.signal });
+    handle.finish();
+    await waiting;
+
+    // Aborting after the wait resolved must not kill a process the caller
+    // is no longer waiting on.
+    controller.abort();
+    expect(kill).not.toHaveBeenCalled();
+  });
+
+  it('a wait without a signal is unaffected', async () => {
+    const handle = new TestProcessHandle();
+    const waiting = handle.wait();
+    handle.finish();
+    const result = await waiting;
+    expect(result.success).toBe(true);
+  });
+});
