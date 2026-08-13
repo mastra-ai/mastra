@@ -15,10 +15,13 @@
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { EventEmitterPubSub } from '../../../events/event-emitter';
+import type { PubSub } from '../../../events/pubsub';
 import { Mastra } from '../../../mastra';
 import { InMemoryStore } from '../../../storage';
 import type { WorkflowRunState, WorkflowRunStatus } from '../../../workflows/types';
 import { Agent } from '../../agent';
+import { agentThreadStreamRuntime } from '../../thread-stream-runtime';
 import { DurableStepIds } from '../constants';
 import { createDurableAgent } from '../create-durable-agent';
 import type { DurableAgent } from '../durable-agent';
@@ -63,18 +66,18 @@ function makeMockModel(): LanguageModelV2 {
   }) as unknown as LanguageModelV2;
 }
 
-function createDurableWithStore(agentId: string) {
+function createDurableWithStore(agentId: string, store = new InMemoryStore(), pubsub?: PubSub) {
   const baseAgent = new Agent({
     id: agentId,
     name: agentId,
     instructions: 'x',
     model: makeMockModel(),
   });
-  const store = new InMemoryStore();
-  const agent = createDurableAgent({ agent: baseAgent });
+  const agent = createDurableAgent({ agent: baseAgent, pubsub, ...(pubsub ? { cache: false } : {}) });
   void new Mastra({
     agents: { [agentId]: agent as any },
     storage: store,
+    ...(pubsub ? { pubsub } : {}),
   });
   return { agent, store };
 }
@@ -206,6 +209,51 @@ describe('DurableAgent.recover(runId)', () => {
     await globalRunRegistry.get(runId)?.workflowExecution;
     recovered.cleanup();
     subscription.unsubscribe();
+  });
+
+  it('allows only the recovery-lease holder to register and restart a run', async () => {
+    const runId = 'run-concurrent-recovery';
+    const sharedStore = new InMemoryStore();
+    const sharedPubsub = new EventEmitterPubSub();
+    const { agent: firstAgent } = createDurableWithStore('agent-race', sharedStore, sharedPubsub);
+    const { agent: secondAgent } = createDurableWithStore('agent-race', sharedStore, sharedPubsub);
+    await seed(sharedStore, runId, 'running', 'agent-race');
+
+    let markRestartStarted!: () => void;
+    const restartStarted = new Promise<void>(resolve => {
+      markRestartStarted = resolve;
+    });
+    let releaseRestart!: () => void;
+    const restartGate = new Promise<void>(resolve => {
+      releaseRestart = resolve;
+    });
+    const firstRestart = vi.fn(async () => {
+      markRestartStarted();
+      await restartGate;
+      return { status: 'suspended' as const };
+    });
+    const firstCreateRun = vi.fn(async () => ({ restart: firstRestart, runId }));
+    vi.spyOn(firstAgent, 'getWorkflow').mockReturnValue({ createRun: firstCreateRun } as any);
+    const secondWorkflow = stubWorkflow(secondAgent, 'success');
+    const registerRun = vi.spyOn(agentThreadStreamRuntime, 'registerRun');
+    let firstRecovery: Awaited<ReturnType<typeof firstAgent.recover>> | undefined;
+
+    try {
+      firstRecovery = await firstAgent.recover(runId);
+      await restartStarted;
+
+      await expect(secondAgent.recover(runId)).rejects.toMatchObject({
+        id: 'DURABLE_AGENT_RECOVER_ALREADY_IN_PROGRESS',
+      });
+      expect(registerRun).toHaveBeenCalledTimes(1);
+      expect(firstCreateRun).toHaveBeenCalledTimes(1);
+      expect(secondWorkflow.createRun).not.toHaveBeenCalled();
+    } finally {
+      releaseRestart();
+      await globalRunRegistry.get(runId)?.workflowExecution?.catch(() => {});
+      firstRecovery?.cleanup();
+      registerRun.mockRestore();
+    }
   });
 
   it('deletes both AGENTIC_LOOP and AGENTIC_EXECUTION snapshot rows on success', async () => {
