@@ -4,9 +4,8 @@ import { MockMemory } from '../../memory/mock';
 import { Agent } from '../agent';
 import type { MastraDBMessage } from '../message-list';
 
-function buildAbortingStreamModel(opts: { chunks: string[]; abortAfterChunk: number }) {
-  const { chunks, abortAfterChunk } = opts;
-  const abortController = new AbortController();
+function buildStreamModel(opts: { chunks: string[]; chunkDelayMs?: number }) {
+  const { chunks, chunkDelayMs = 5 } = opts;
   let index = 0;
 
   const allChunks = [
@@ -22,19 +21,17 @@ function buildAbortingStreamModel(opts: { chunks: string[]; abortAfterChunk: num
     },
   ];
 
-  const model = new MockLanguageModelV2({
+  return new MockLanguageModelV2({
     doStream: async () => ({
       rawCall: { rawPrompt: null, rawSettings: {} },
       warnings: [],
       stream: new ReadableStream({
-        pull(controller) {
+        async pull(controller) {
           if (index < allChunks.length) {
-            const chunk = allChunks[index++]!;
-            const textDeltasSoFar = allChunks.slice(0, index).filter(c => c.type === 'text-delta').length;
-            if (chunk.type === 'text-delta' && textDeltasSoFar === abortAfterChunk) {
-              abortController.abort();
+            if (chunkDelayMs > 0) {
+              await new Promise(resolve => setTimeout(resolve, chunkDelayMs));
             }
-            controller.enqueue(chunk);
+            controller.enqueue(allChunks[index++]!);
           } else {
             controller.close();
           }
@@ -42,12 +39,10 @@ function buildAbortingStreamModel(opts: { chunks: string[]; abortAfterChunk: num
       }),
     }),
   });
-
-  return { model, abortController };
 }
 
 async function waitFor(condition: () => boolean, opts: { timeout?: number; interval?: number } = {}): Promise<void> {
-  const { timeout = 2000, interval = 20 } = opts;
+  const { timeout = 3000, interval = 20 } = opts;
   const start = Date.now();
   while (!condition()) {
     if (Date.now() - start >= timeout) {
@@ -75,8 +70,9 @@ function extractAssistantText(messages: MastraDBMessage[]): string {
 
 describe('persistPartialOnAbort', () => {
   it('does NOT persist partial output on abort by default', async () => {
-    const chunks = ['hello', ' world', ' partial'];
-    const { model, abortController } = buildAbortingStreamModel({ chunks, abortAfterChunk: 2 });
+    const chunks = ['hello', ' world', ' partial', ' more'];
+    const abortController = new AbortController();
+    let textDeltas = 0;
 
     const mockMemory = new MockMemory();
     const savedMessages: MastraDBMessage[] = [];
@@ -89,7 +85,7 @@ describe('persistPartialOnAbort', () => {
     const agent = new Agent({
       id: 'test-no-persist-default',
       name: 'Test No Persist Default',
-      model,
+      model: buildStreamModel({ chunks }),
       instructions: 'Test agent',
       memory: mockMemory,
     });
@@ -97,6 +93,15 @@ describe('persistPartialOnAbort', () => {
     const stream = await agent.stream('Hello', {
       abortSignal: abortController.signal,
       memory: { thread: 'no-persist-thread', resource: 'no-persist-resource' },
+      onChunk: chunk => {
+        if (chunk.type === 'text-delta') {
+          textDeltas++;
+          // Abort after the client has already received some streamed text.
+          if (textDeltas === 2) {
+            abortController.abort();
+          }
+        }
+      },
     });
 
     try {
@@ -105,8 +110,9 @@ describe('persistPartialOnAbort', () => {
       // abort may reject consumeStream
     }
 
-    await waitFor(() => savedMessages.some(m => m.role === 'assistant'), { timeout: 300 });
+    await waitFor(() => savedMessages.some(m => m.role === 'assistant'), { timeout: 400 });
 
+    expect(textDeltas).toBeGreaterThan(0);
     expect(extractAssistantText(savedMessages)).toBe('');
 
     const recalled = await mockMemory.recall({
@@ -118,8 +124,10 @@ describe('persistPartialOnAbort', () => {
   });
 
   it('persists partial output on abort when persistPartialOnAbort is true', async () => {
-    const chunks = ['hello', ' world', ' partial'];
-    const { model, abortController } = buildAbortingStreamModel({ chunks, abortAfterChunk: 2 });
+    const chunks = ['hello', ' world', ' partial', ' more'];
+    const abortController = new AbortController();
+    let textDeltas = 0;
+    const receivedText: string[] = [];
 
     const mockMemory = new MockMemory();
     const savedMessages: MastraDBMessage[] = [];
@@ -132,7 +140,7 @@ describe('persistPartialOnAbort', () => {
     const agent = new Agent({
       id: 'test-persist-on-abort',
       name: 'Test Persist On Abort',
-      model,
+      model: buildStreamModel({ chunks }),
       instructions: 'Test agent',
       memory: mockMemory,
     });
@@ -141,6 +149,15 @@ describe('persistPartialOnAbort', () => {
       persistPartialOnAbort: true,
       abortSignal: abortController.signal,
       memory: { thread: 'persist-abort-thread', resource: 'persist-abort-resource' },
+      onChunk: chunk => {
+        if (chunk.type === 'text-delta') {
+          textDeltas++;
+          receivedText.push(chunk.payload.text);
+          if (textDeltas === 2) {
+            abortController.abort();
+          }
+        }
+      },
     });
 
     try {
@@ -151,6 +168,7 @@ describe('persistPartialOnAbort', () => {
 
     await waitFor(() => extractAssistantText(savedMessages).length > 0);
 
+    expect(receivedText.join('')).toContain('hello');
     const assistantText = extractAssistantText(savedMessages);
     expect(assistantText.length).toBeGreaterThan(0);
     expect(assistantText).toContain('hello');
@@ -160,13 +178,12 @@ describe('persistPartialOnAbort', () => {
       resourceId: 'persist-abort-resource',
       count: 100,
     });
-    const recalledText = extractAssistantText(recalled.messages);
-    expect(recalledText).toContain('hello');
+    expect(extractAssistantText(recalled.messages)).toContain('hello');
   });
 
   it('does not save empty text even when persistPartialOnAbort is true', async () => {
     const abortController = new AbortController();
-    let pulled = 0;
+    abortController.abort();
 
     const model = new MockLanguageModelV2({
       doStream: async () => ({
@@ -174,13 +191,7 @@ describe('persistPartialOnAbort', () => {
         warnings: [],
         stream: new ReadableStream({
           pull(controller) {
-            pulled++;
-            if (pulled === 1) {
-              abortController.abort();
-              controller.enqueue({ type: 'stream-start', warnings: [] });
-            } else {
-              controller.error(new DOMException('The user aborted a request.', 'AbortError'));
-            }
+            controller.error(new DOMException('The user aborted a request.', 'AbortError'));
           },
         }),
       }),
@@ -221,18 +232,27 @@ describe('persistPartialOnAbort', () => {
 
   it('streams without memory do not throw when persistPartialOnAbort is true', async () => {
     const chunks = ['hello', ' world'];
-    const { model, abortController } = buildAbortingStreamModel({ chunks, abortAfterChunk: 1 });
+    const abortController = new AbortController();
+    let textDeltas = 0;
 
     const agent = new Agent({
       id: 'test-persist-abort-no-memory',
       name: 'Test Persist Abort No Memory',
-      model,
+      model: buildStreamModel({ chunks }),
       instructions: 'Test agent',
     });
 
     const stream = await agent.stream('Hello', {
       persistPartialOnAbort: true,
       abortSignal: abortController.signal,
+      onChunk: chunk => {
+        if (chunk.type === 'text-delta') {
+          textDeltas++;
+          if (textDeltas === 1) {
+            abortController.abort();
+          }
+        }
+      },
     });
 
     await expect(stream.consumeStream().catch(() => undefined)).resolves.toBeUndefined();
