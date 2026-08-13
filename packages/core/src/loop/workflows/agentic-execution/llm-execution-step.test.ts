@@ -1691,11 +1691,7 @@ describe('createLLMExecutionStep gateway provider tools', () => {
       } as any,
     } as unknown as OuterLLMRun<{}>);
 
-    await expect(llmExecutionStep.execute(createExecuteParams(createIterationInput()))).rejects.toMatchObject({
-      id: 'TEST_USER_INPUT_ERROR',
-      category: ErrorCategory.USER,
-      details: { status: 400 },
-    });
+    await expect(llmExecutionStep.execute(createExecuteParams(createIterationInput()))).rejects.toBe(structuredError);
     expect(doStream).not.toHaveBeenCalled();
   });
 
