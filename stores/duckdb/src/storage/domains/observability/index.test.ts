@@ -106,11 +106,11 @@ describe('ObservabilityStorageDuckDB', () => {
 
     try {
       coreFeatures.add('observability-delta-polling');
-      expect(storage.getFeatures()).toEqual(['delta-polling']);
+      expect(storage.getFeatures()).toEqual(['metrics', 'logs', 'delta-polling']);
 
       coreFeatures.delete('observability-delta-polling');
 
-      expect(storage.getFeatures()).toBeUndefined();
+      expect(storage.getFeatures()).toEqual(['metrics', 'logs']);
       await expect(storage.listLogs({ mode: 'delta' })).rejects.toThrow(
         'This storage provider does not support observability delta polling',
       );
@@ -122,14 +122,14 @@ describe('ObservabilityStorageDuckDB', () => {
     }
   });
 
-  it('reports delta list capabilities through the lazy store facade before init', async () => {
+  it('reports metrics, logs, and delta list capabilities through the lazy store facade before init', async () => {
     const originalFeatures = new Set(coreFeatures);
     const lazyStore = new DuckDBStore({ path: ':memory:' });
 
     try {
       coreFeatures.add('observability-delta-polling');
 
-      expect(lazyStore.observability.getFeatures()).toEqual(['delta-polling']);
+      expect(lazyStore.observability.getFeatures()).toEqual(['metrics', 'logs', 'delta-polling']);
     } finally {
       coreFeatures.clear();
       for (const feature of originalFeatures) {

@@ -12,7 +12,8 @@ import type {
 const OBSERVABILITY_UPGRADE_MESSAGE =
   'DuckDB observability storage requires `@mastra/core` with observability storage support. Upgrade `@mastra/core` to use this store.';
 const OBSERVABILITY_DELTA_POLLING_FEATURE = 'observability-delta-polling';
-const DUCKDB_OBSERVABILITY_FEATURES = ['delta-polling'] as const;
+const DUCKDB_OBSERVABILITY_BASE_FEATURES = ['metrics', 'logs'] as const;
+const DUCKDB_OBSERVABILITY_FEATURES = [...DUCKDB_OBSERVABILITY_BASE_FEATURES, 'delta-polling'] as const;
 
 function isObservabilityCompatibilityError(error: unknown): boolean {
   if (!(error instanceof Error)) {
@@ -117,9 +118,9 @@ export class ObservabilityStorageDuckDB extends CoreObservabilityStorage {
 
   getFeatures(): ReturnType<ObservabilityStoreImpl['getFeatures']> {
     // Deliberately mirrored here so the lazy facade can advertise DuckDB's
-    // static delta polling feature before the delegate is instantiated.
+    // static features before the delegate is instantiated.
     if (!coreFeatures.has(OBSERVABILITY_DELTA_POLLING_FEATURE)) {
-      return undefined;
+      return DUCKDB_OBSERVABILITY_BASE_FEATURES;
     }
 
     return DUCKDB_OBSERVABILITY_FEATURES;

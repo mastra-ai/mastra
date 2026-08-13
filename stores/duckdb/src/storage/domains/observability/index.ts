@@ -201,11 +201,12 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
   }
 
   override getFeatures() {
+    const features = ['metrics', 'logs'] as const;
     if (!deltaPollingFeatureEnabled()) {
-      return undefined;
+      return features;
     }
 
-    return ['delta-polling'] as const;
+    return [...features, 'delta-polling'] as const;
   }
 
   // Tracing

@@ -647,11 +647,12 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
   }
 
   override getFeatures() {
+    const features = ['metrics', 'logs'] as const;
     if (!deltaPollingSupported(this.#deltaCursorStrategy)) {
-      return undefined;
+      return features;
     }
 
-    return ['delta-polling'] as const;
+    return [...features, 'delta-polling'] as const;
   }
 
   // -------------------------------------------------------------------------

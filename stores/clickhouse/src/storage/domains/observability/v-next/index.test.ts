@@ -183,15 +183,15 @@ describe('ObservabilityStorageClickhouseVNext', () => {
       }
     }
 
-    it('advertises delta list capabilities when the feature is enabled', () => {
-      expect(storage.getFeatures()).toEqual(['delta-polling']);
+    it('advertises metrics, logs, and delta list capabilities when the feature is enabled', () => {
+      expect(storage.getFeatures()).toEqual(['metrics', 'logs', 'delta-polling']);
     });
 
-    it('hides delta list capabilities when the feature is disabled', () => {
+    it('keeps metrics and logs when delta list capabilities are disabled', () => {
       coreFeatures.delete('observability-delta-polling');
 
       try {
-        expect(storage.getFeatures()).toBeUndefined();
+        expect(storage.getFeatures()).toEqual(['metrics', 'logs']);
       } finally {
         coreFeatures.add('observability-delta-polling');
       }
