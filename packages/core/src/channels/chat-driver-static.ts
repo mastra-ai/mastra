@@ -86,10 +86,9 @@ export async function runStaticDriver({
       if (result.kind === 'post') {
         // Skip blank posts so a fn that intentionally returns "" doesn't
         // post an empty message into the chat.
-        const fallbackApproval = () =>
-          event.kind === 'approval' ? renderBuiltInToolEvent(event, 'cards') : null;
+        const fallbackApproval = () => (event.kind === 'approval' ? renderBuiltInToolEvent(event, 'cards') : null);
         if (result.message == null) return fallbackApproval();
-        if (typeof result.message === 'string' && result.message.length === 0) return fallbackApproval();
+        if (typeof result.message === 'string' && result.message.trim().length === 0) return fallbackApproval();
         if (
           typeof result.message === 'object' &&
           'markdown' in result.message &&
