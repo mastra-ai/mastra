@@ -92,7 +92,7 @@ Processor methods run at different points in the agent execution lifecycle:
 | `processOutputStream` | On each streaming chunk during LLM response | Filter/modify streaming content, detect patterns in real-time |
 | `processLLMResponse` | After the LLM step completes and stream chunks are collected | Capture or cache the full response, run post-call side effects paired with `processLLMRequest` |
 | `processOutputStep` | After each LLM response, before tool execution | Validate output quality, implement guardrails with retry |
-| `processToolResult` | Per tool, after `tool.execute()` returns and before the result is added to the message list | Inspect tool output and enforce security policies |
+| `processToolResult` | Per tool, after a locally executed tool returns or a provider-executed result arrives, before the raw result is persisted to `messageList` | Inspect tool output and enforce security policies |
 | `processOutputResult` | Once after generation completes | Post-process final response, log results |
 
 ## Interface definition
@@ -1249,7 +1249,7 @@ export class QualityGuardrail implements Processor {
 
 ### `processToolResult`
 
-Processes a tool's result after `tool.execute()` returns and before the result is added to the message list or fed to the next LLM call. Symmetric with `processOutputStep`, which fires before tool execution. Use this method to enforce security policies on tool output. For example, scan for prompt injection or redact sensitive fields. Call `abort('reason', { retry: true })` to abort and retry the run.
+Processes a tool's result after a locally executed tool returns or a provider-executed result arrives, before the raw result is persisted to `messageList` or fed to the next LLM call. Symmetric with `processOutputStep`, which fires before tool execution. Use this method to enforce security policies on tool output. For example, scan for prompt injection or redact sensitive fields. Call `abort('reason', { retry: true })` to abort and retry the same step.
 
 To replace the tool's result, mutate `messageList` in place via `messageList.updateToolInvocation`. The runtime re-reads the post-processor result from the message list and overwrites the downstream tool-result stream chunk before it's enqueued, so streaming clients see the processed value.
 
