@@ -64,6 +64,7 @@ import {
 import { attachOMThreadStatePersistence, restoreOMThreadStateForCurrentThread } from './agents/thread-caveman-state.js';
 import { createDynamicTools, createToolHooks } from './agents/tools.js';
 import type { PostToolObserver, ToolLike } from './agents/tools.js';
+import { createMastraCodeWorkflowBuilderAgent } from './agents/workflow-builder-agent.js';
 
 import { getDynamicWorkspace, getGoalJudgeTools } from './agents/workspace.js';
 import { AuthStorage } from './auth/storage.js';
@@ -112,6 +113,7 @@ import type { StorageResult } from './utils/storage-factory.js';
 import { createStorageMaintenance, DEFAULT_RETENTION, resolveLocalDbFiles } from './utils/storage-maintenance.js';
 import type { StorageMaintenance } from './utils/storage-maintenance.js';
 import { acquireThreadLock, releaseThreadLock } from './utils/thread-lock.js';
+import type { DynamicWorkflowAccessPolicy } from './workflows/access-policy.js';
 import { registerWorkflowBuilderPrimitives } from './workflows/register-primitives.js';
 
 const CODE_AGENT_ID = 'code-agent';
@@ -257,6 +259,12 @@ export interface MastraCodeConfig {
   inputProcessors?: InputProcessor[];
   /** Tools removed from the dynamic tool set before exposure to the model */
   disabledTools?: string[];
+  /**
+   * Optional tenant policy for Dynamic Workflow discovery, authoring,
+   * execution, and deletion. Code-defined workflows remain globally visible.
+   * When configured, an unresolved author fails closed.
+   */
+  workflowAccessPolicy?: DynamicWorkflowAccessPolicy;
   /**
    * Custom storage config instead of auto-detected default, or a pre-built
    * store instance. An instance is used as-is: no connection test and no
@@ -821,6 +829,8 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     }
   };
 
+  const workflowToolOptions = { accessPolicy: config?.workflowAccessPolicy };
+  const workflowBuilderAgent = createMastraCodeWorkflowBuilderAgent(workflowToolOptions);
   const codeAgent: Agent = createCodingAgent({
     id: CODE_AGENT_ID,
     name: 'Code Agent',
@@ -855,7 +865,14 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
         },
       },
     },
-    tools: createDynamicTools(mcpManager, config?.extraTools, config?.disabledTools, storage, pluginTools),
+    tools: createDynamicTools(
+      mcpManager,
+      config?.extraTools,
+      config?.disabledTools,
+      storage,
+      pluginTools,
+      workflowToolOptions,
+    ),
     hooks: createToolHooks(hookManager, config?.postToolObserver),
     scorers: {
       outcome: {
@@ -1208,6 +1225,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     // orchestration to it — code-agent already has full workspace / MCP / web
     // access via its dynamic tool factory.
     codeAgent,
+    workflowBuilderAgent,
     // Lets the composition layer publish the created session back into the
     // config closures (e.g. notification stream options read it lazily).
     setActiveSession: (session: Session<MastraCodeState>) => {
@@ -1340,7 +1358,7 @@ export async function wireSessionConcerns(
  */
 export async function bootLocalAgentController(config?: MastraCodeConfig) {
   const base = await createMastraCodeAgentController(config);
-  const { controller, sessionId, ownerId, projectPath, codeAgent, mcpManager } = base;
+  const { controller, sessionId, ownerId, projectPath, codeAgent, workflowBuilderAgent, mcpManager } = base;
 
   await controller.init();
   // Register workflow primitives (sub-agent + workspace tools + code-agent
@@ -1348,7 +1366,9 @@ export async function bootLocalAgentController(config?: MastraCodeConfig) {
   // Mastra so the dynamic-workflow loading in startWorkers() can rehydrate
   // saved workflows against the right tool/agent registry.
   const mastra = controller.getMastra();
-  if (mastra) await registerWorkflowBuilderPrimitives(mastra, { projectPath, codeAgent, mcpManager });
+  if (mastra) {
+    await registerWorkflowBuilderPrimitives(mastra, { projectPath, codeAgent, workflowBuilderAgent, mcpManager });
+  }
   await mastra?.startWorkers();
   base.registerConfiguredProcessorsWithMastra();
   base.startPluginSignalProviders();
@@ -1434,7 +1454,7 @@ export async function prepareAgentControllerMount(
   finalize: () => Promise<void>;
 }> {
   const base = await createMastraCodeAgentController(config);
-  const { controller, storage, authStorage, projectPath, codeAgent, mcpManager } = base;
+  const { controller, storage, authStorage, projectPath, codeAgent, workflowBuilderAgent, mcpManager } = base;
   const controllerId = config?.controllerId ?? controller.id;
   const apiRoutes = config?.buildApiRoutes?.({ controller, authStorage });
   const extraServerConfig = config?.buildServerConfig?.({ controller, authStorage });
@@ -1462,7 +1482,9 @@ export async function prepareAgentControllerMount(
     await controller.init();
     if (weOwnTheMastra) {
       const mastra = controller.getMastra();
-      if (mastra) await registerWorkflowBuilderPrimitives(mastra, { projectPath, codeAgent, mcpManager });
+      if (mastra) {
+        await registerWorkflowBuilderPrimitives(mastra, { projectPath, codeAgent, workflowBuilderAgent, mcpManager });
+      }
     }
     await controller.getMastra()?.startWorkers();
     // Anchored here rather than at a `new Mastra(...)` call site: finalize runs

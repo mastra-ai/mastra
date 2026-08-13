@@ -16,6 +16,8 @@ import {
   type WorkflowBuilderDefinition,
 } from '@mastra/core/workflows/builder';
 import { z } from 'zod';
+import type { DynamicWorkflowAccessPolicy } from '../../workflows/access-policy.js';
+import { resolveDynamicWorkflowAuthorId } from '../../workflows/access-policy.js';
 
 export { WORKFLOW_BUILDER_MAPPING_CONFIG_DESCRIPTION as MAPPING_CONFIG_DESCRIPTION } from '@mastra/core/workflows/builder';
 
@@ -31,9 +33,12 @@ export interface SaveWorkflowAuthorizationContext {
    */
   definition: Readonly<WorkflowBuilderDefinition>;
   requestContext: RequestContext;
+  /** Trusted owner resolved from the request context when an access policy is configured. */
+  authorId?: string;
 }
 
 export interface CreateSaveWorkflowToolOptions {
+  accessPolicy?: DynamicWorkflowAccessPolicy;
   /**
    * Optional deny-only policy hook. Throw to reject the save. Return normally
    * to allow it. The callback cannot replace or rewrite the saved definition.
@@ -61,11 +66,20 @@ export function createSaveWorkflowTool(options: CreateSaveWorkflowToolOptions = 
       const m = mastra as Mastra;
       const normalizedDefinition = normalizeWorkflowBuilderDefinition(def);
 
+      if ((options.accessPolicy || options.authorize) && !requestContext) {
+        throw new Error('save-workflow authorization requires a request context.');
+      }
+
+      const authorId = await resolveDynamicWorkflowAuthorId(options.accessPolicy, requestContext);
+      if (options.accessPolicy && !authorId) {
+        throw new Error('Dynamic workflow not found.');
+      }
+
       if (options.authorize) {
         // Normalize again to give policy code a detached JSON-safe value. The
         // callback can inspect or reject, but cannot mutate the accepted input.
         const authorizationDefinition = normalizeWorkflowBuilderDefinition(normalizedDefinition);
-        await options.authorize({ definition: authorizationDefinition, requestContext });
+        await options.authorize({ definition: authorizationDefinition, requestContext: requestContext!, authorId });
       }
 
       // `mastra.addDynamicWorkflow` performs registry pre-flight — a mis-classified
@@ -73,7 +87,9 @@ export function createSaveWorkflowTool(options: CreateSaveWorkflowToolOptions = 
       // actionable message listing every offender. It also rejects JSON Schemas
       // that use keywords the storage-side converter can't rehydrate
       // (oneOf/anyOf/allOf/not/$ref/patternProperties/discriminator).
-      await m.addDynamicWorkflow(normalizedDefinition as Parameters<Mastra['addDynamicWorkflow']>[0]);
+      const definition = normalizedDefinition as Parameters<Mastra['addDynamicWorkflow']>[0];
+      if (authorId !== undefined) await m.addDynamicWorkflow(definition, { authorId });
+      else await m.addDynamicWorkflow(definition);
       return { ok: true as const, id: normalizedDefinition.id };
     },
   });

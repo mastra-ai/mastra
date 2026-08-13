@@ -189,4 +189,39 @@ describe('createSaveWorkflowTool — authorization', () => {
     ).rejects.toThrow(/workflow save not authorized/);
     expect(addDynamicWorkflow).not.toHaveBeenCalled();
   });
+
+  it('stamps the trusted policy author through the native registration options', async () => {
+    const requestContext = new RequestContext();
+    requestContext.set('verifiedAuthorId', 'tenant-a');
+    const addDynamicWorkflow = vi.fn().mockResolvedValue(undefined);
+    const authorize = vi.fn();
+    const tool = createSaveWorkflowTool({
+      accessPolicy: {
+        resolveAuthorId: ({ requestContext }) => requestContext.get('verifiedAuthorId') as string,
+      },
+      authorize,
+    });
+
+    expect((tool as any).inputSchema.safeParse({ ...loopGraphWithPredicate, authorId: 'forged-author' }).success).toBe(
+      false,
+    );
+    await expect(
+      (tool as any).execute(loopGraphWithPredicate, { mastra: { addDynamicWorkflow }, requestContext }),
+    ).resolves.toEqual({ ok: true, id: 'wf-loop' });
+    expect(authorize).toHaveBeenCalledWith(expect.objectContaining({ authorId: 'tenant-a', requestContext }));
+    expect(addDynamicWorkflow).toHaveBeenCalledWith(loopGraphWithPredicate, { authorId: 'tenant-a' });
+  });
+
+  it('does not mutate storage when the access policy cannot resolve a caller', async () => {
+    const addDynamicWorkflow = vi.fn().mockResolvedValue(undefined);
+    const tool = createSaveWorkflowTool({ accessPolicy: { resolveAuthorId: () => undefined } });
+
+    await expect(
+      (tool as any).execute(loopGraphWithPredicate, {
+        mastra: { addDynamicWorkflow },
+        requestContext: new RequestContext(),
+      }),
+    ).rejects.toThrow('Dynamic workflow not found.');
+    expect(addDynamicWorkflow).not.toHaveBeenCalled();
+  });
 });
