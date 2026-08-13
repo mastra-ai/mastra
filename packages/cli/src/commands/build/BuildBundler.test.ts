@@ -17,6 +17,7 @@ vi.mock('fs-extra', () => ({
 vi.mock('@mastra/deployer/build', () => {
   class MockFileService {
     getFirstExistingFile = vi.fn().mockReturnValue('.env');
+    getExistingFiles = vi.fn((files: string[]) => files);
   }
 
   return {
@@ -70,6 +71,14 @@ describe('BuildBundler', () => {
 
       const entry = (bundler as any).getEntry();
       expect(entry).toContain('studio: false');
+    });
+  });
+
+  describe('getEnvFiles', () => {
+    it('layers default dotenv files from base to production override', async () => {
+      const { BuildBundler } = await import('./BuildBundler');
+
+      await expect(new BuildBundler().getEnvFiles()).resolves.toEqual(['.env', '.env.local', '.env.production']);
     });
   });
 

@@ -60,8 +60,17 @@ vi.mock('@mastra/deployer/build', () => {
     getWatcherInputOptions: vi.fn().mockResolvedValue({ plugins: [] }),
     prepareFsAgentsEntry: vi.fn(),
     writeFsAgentsEntry: vi.fn(),
+    FileService: class {
+      getExistingFiles = vi.fn((files: string[]) => files);
+    },
   };
 });
+
+vi.mock('@mastra/deployer', () => ({
+  FileService: class {
+    getExistingFiles = vi.fn((files: string[]) => files);
+  },
+}));
 
 vi.mock('fs-extra', () => {
   return {
@@ -157,6 +166,20 @@ describe('DevBundler', () => {
         const { rm } = await import('node:fs/promises');
         await rm(tmpDir, { recursive: true, force: true });
       }
+    });
+  });
+
+  describe('getEnvFiles', () => {
+    it('layers default dotenv files from base to development override', async () => {
+      const bundler = new DevBundler();
+
+      await expect(bundler.getEnvFiles()).resolves.toEqual(['.env', '.env.local', '.env.development']);
+    });
+
+    it('uses only an explicit env file', async () => {
+      const bundler = new DevBundler('.env.custom');
+
+      await expect(bundler.getEnvFiles()).resolves.toEqual(['.env.custom']);
     });
   });
 
