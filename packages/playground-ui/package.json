@@ -149,6 +149,7 @@
     "react-resizable-panels": "^4.7.3",
     "recharts": "^3.8.0",
     "remark-gfm": "^4.0.1",
+    "remend": "^1.3.0",
     "shiki": "^1.29.2",
     "sonner": "^2.0.7",
     "use-debounce": "^10.1.0",

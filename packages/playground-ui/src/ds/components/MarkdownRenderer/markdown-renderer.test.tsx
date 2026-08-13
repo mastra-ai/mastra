@@ -219,6 +219,57 @@ describe('MarkdownRenderer', () => {
     expect([...words].map(node => node.textContent)).toEqual(['Hello', 'there,']);
   });
 
+  it('remounts no block as the reply grows past it', () => {
+    const { container, rerender } = render(<MarkdownRenderer streaming>{'First para.\n\nSecond'}</MarkdownRenderer>);
+
+    const paragraphs = [...container.querySelectorAll('p')];
+
+    rerender(<MarkdownRenderer streaming>{'First para.\n\nSecond para.'}</MarkdownRenderer>);
+
+    expect([...container.querySelectorAll('p')]).toEqual(paragraphs);
+  });
+
+  it('keeps every element on screen when a reply stops streaming', () => {
+    const reply = 'Intro para.\n\nSecond para.\n\n```ts\nconst ok = true;\n```\n';
+    const { container, rerender } = render(
+      <TooltipProvider>
+        <MarkdownRenderer streaming>{reply}</MarkdownRenderer>
+      </TooltipProvider>,
+    );
+
+    const before = [...container.querySelectorAll('p, figure')];
+
+    rerender(
+      <TooltipProvider>
+        <MarkdownRenderer>{reply}</MarkdownRenderer>
+      </TooltipProvider>,
+    );
+
+    expect([...container.querySelectorAll('p, figure')]).toEqual(before);
+    expect(container.querySelectorAll('.mastra-markdown-word')).toHaveLength(0);
+  });
+
+  it('reveals the last word of a block once the reply moves past it', () => {
+    const { container } = render(<MarkdownRenderer streaming>{'First para.\n\nSecond'}</MarkdownRenderer>);
+
+    const held = [...container.querySelectorAll('.mastra-markdown-word-pending')].map(node => node.textContent);
+
+    expect(held).toEqual(['Second']);
+  });
+
+  it('closes a marker the stream has not caught up with', () => {
+    const { container } = render(<MarkdownRenderer streaming>{'A **bold wo'}</MarkdownRenderer>);
+
+    expect(container.querySelector('strong')?.textContent).toBe('bold wo');
+  });
+
+  it('renders a half-written link as its text rather than a dead anchor', () => {
+    const { container } = render(<MarkdownRenderer streaming>{'See [the docs](https://mastra'}</MarkdownRenderer>);
+
+    expect(container.querySelector('a')).toBeNull();
+    expect(container.textContent).toContain('the docs');
+  });
+
   it('never sets a text-wrap style that re-breaks lines already on screen', () => {
     const css = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'markdown-renderer.css'), 'utf8');
 

@@ -29,19 +29,20 @@ function textOf(nodes: MarkdownChild[]): string {
  * The word still being typed is held invisible instead of faded: React reuses
  * its span as characters land, so a mount animation would never cover them.
  * Marking it complete swaps the class, which starts the fade on that same span.
- * Emphasis splits such a word across nodes (`Hel**lo**`), so its boundary is
- * read from the whole reply rather than from each text node.
+ * Emphasis splits such a word across nodes (`Hel**lo**`), so its boundary comes
+ * from the whole text, not from each text node. Only the block still growing has
+ * one at all — `complete` lets the settled ones reveal their last word.
  *
  * Only the tail is marked. A restructure — a paragraph becoming a list item
  * once the next character lands — remounts the subtree, so the window bounds
  * that re-fade rather than removing it.
  */
-export function rehypeWordSpans() {
+export function rehypeWordSpans({ complete = false }: { complete?: boolean } = {}) {
   return (tree: { children: MarkdownChild[] }) => {
     const reply = textOf(tree.children);
     const total = reply.length;
     const animateFrom = total - ANIMATED_TAIL_CHARS;
-    const pendingFrom = total - (/\S*$/.exec(reply)?.[0].length ?? 0);
+    const pendingFrom = complete ? Number.POSITIVE_INFINITY : total - (/\S*$/.exec(reply)?.[0].length ?? 0);
     let offset = 0;
 
     const wordProperties = (startsAt: number, endsAt: number) => {
