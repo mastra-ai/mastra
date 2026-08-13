@@ -3702,7 +3702,7 @@
     },
     {
       "source": "/docs/browser/recording/llms.txt",
-      "destination": "/docs/browser/overview/llms.txt#record-browser-sessions",
+      "destination": "/docs/browser/overview/llms.txt",
       "permanent": true
     }
   ]
