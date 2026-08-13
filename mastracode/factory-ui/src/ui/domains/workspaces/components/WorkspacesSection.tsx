@@ -18,11 +18,15 @@ import { usePinnedSessions } from '../hooks/usePinnedSessions';
 import type { FactoryUserSession } from '../services/github';
 import { getFactorySessionKind } from '../services/sessionPresentation';
 import { SessionNavRow } from './SessionNavRow';
+import type { SessionRowStatus } from './SessionNavRow';
 import type { SessionPreviewDetails } from './SessionPreviewCard';
 
-function workspaceStatus(row: FactoryWorkspaceRow): 'running' | 'attention' | undefined {
-  if (row.running) return 'running';
-  if (row.attention) return 'attention';
+function workspaceStatus(row: FactoryWorkspaceRow): SessionRowStatus | undefined {
+  // An active thread means work is happening even if the workspace record has
+  // not yet been stamped materialized — surface the more informative state.
+  if (row.running) return 'working';
+  if (row.initializing) return 'initializing';
+  if (row.attention) return 'ready';
   return undefined;
 }
 
@@ -73,6 +77,7 @@ export function WorkspacesSection() {
     const pullRequestNumber = pullRequest ? githubNumberForItem(pullRequest) : undefined;
     const active = workspace.sessionId === sessionId;
     const running = runningByPath[workspace.sessionId] === true;
+    const initializing = !workspace.materializedAt;
     const factorySession = !workspace.branch.startsWith('user/');
     if (!item && !active && !running && (!factorySession || !workItems.isFetched)) return [];
     return [
@@ -81,6 +86,7 @@ export function WorkspacesSection() {
         url: `/factories/${factoryId}/workspaces/${workspace.sessionId}`,
         label: titleByPath[workspace.sessionId],
         active,
+        initializing,
         running,
         attention: attentionByPath[workspace.sessionId] === true,
         review: getFactorySessionKind(workspace, item) === 'review',
@@ -224,6 +230,7 @@ interface FactoryWorkspaceRow {
   url: string;
   label?: string;
   active: boolean;
+  initializing: boolean;
   running: boolean;
   attention: boolean;
   review: boolean;
