@@ -2051,6 +2051,11 @@
       "permanent": true
     },
     {
+      "source": "/docs/browser/recording",
+      "destination": "/docs/browser/overview#record-browser-sessions",
+      "permanent": true
+    },
+    {
       "source": "/docs/editor/prompts/llms.txt",
       "destination": "/docs/editor/overview/llms.txt",
       "permanent": true
@@ -3693,6 +3698,11 @@
     {
       "source": "/guides/agent-frameworks/ai-sdk/llms.txt",
       "destination": "/reference/ai-sdk/overview/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/browser/recording/llms.txt",
+      "destination": "/docs/browser/overview/llms.txt#record-browser-sessions",
       "permanent": true
     }
   ]
