@@ -6,6 +6,7 @@ import type { WorkspacePackageInfo } from '../../bundler/workspaceDependencies';
 import type { DependencyMetadata } from '../types';
 import type * as UtilsModule from '../utils';
 import { createVirtualDependencies, bundleExternals } from './bundleExternals';
+import { normalizeExternals } from './externals';
 
 // Mock the utilities that bundleExternals depends on
 vi.mock('../utils', async importOriginal => {
@@ -479,7 +480,7 @@ describe('bundleExternals', () => {
     const result = await bundleExternals(depsToOptimize, testDir, {
       projectRoot: testDir,
       bundlerOptions: {
-        externals: ['custom-external'],
+        ...normalizeExternals(['custom-external']),
         transpilePackages: ['some-package'],
         isDev: true,
       },
@@ -512,8 +513,8 @@ describe('bundleExternals', () => {
     const result = await bundleExternals(depsToOptimize, testDir, {
       projectRoot: testDir,
       bundlerOptions: {
+        ...normalizeExternals(['some-external']),
         isDev: false,
-        externals: ['some-external'],
         transpilePackages: ['some-package'],
       },
     });
@@ -729,7 +730,7 @@ describe('bundleExternals', () => {
       testDir,
       {
         bundlerOptions: {
-          externals: ['test'],
+          ...normalizeExternals(['test']),
           transpilePackages: ['pkg'],
           isDev: false,
         },
@@ -763,7 +764,7 @@ describe('bundleExternals', () => {
       const result = await bundleExternals(depsToOptimize, testDir, {
         projectRoot: testDir,
         bundlerOptions: {
-          externals: true,
+          ...normalizeExternals(true),
         },
       });
 
@@ -827,7 +828,7 @@ describe('bundleExternals', () => {
         projectRoot: join(testDir, 'app'),
         workspaceMap,
         bundlerOptions: {
-          externals: true,
+          ...normalizeExternals(true),
           isDev: true,
         },
       });
@@ -882,7 +883,7 @@ describe('bundleExternals', () => {
         projectRoot: join(testDir, 'app'),
         workspaceMap,
         bundlerOptions: {
-          externals: true,
+          ...normalizeExternals(true),
           isDev: false,
         },
       });
@@ -923,7 +924,7 @@ describe('bundleExternals', () => {
       const result = await bundleExternals(depsToOptimize, testDir, {
         projectRoot: testDir,
         bundlerOptions: {
-          externals: true,
+          ...normalizeExternals(true),
         },
       });
 
@@ -969,7 +970,7 @@ describe('bundleExternals', () => {
       const result = await bundleExternals(depsToOptimize, testDir, {
         projectRoot: testDir,
         bundlerOptions: {
-          externals: true,
+          ...normalizeExternals(true),
         },
       });
 
@@ -1011,9 +1012,7 @@ describe('bundleExternals', () => {
 
       const result = await bundleExternals(depsToOptimize, testDir, {
         projectRoot: testDir,
-        bundlerOptions: {
-          externals: ['custom-external'],
-        },
+        bundlerOptions: normalizeExternals(['custom-external']),
       });
 
       // When externals is an array, deps should still be bundled

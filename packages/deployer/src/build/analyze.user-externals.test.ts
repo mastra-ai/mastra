@@ -35,8 +35,8 @@ afterEach(async () => {
   vi.mocked(validate).mockClear();
 });
 
-describe('validateOutput stubbedExternals (issue #16626)', () => {
-  it('passes user-configured externals to the validation stub list', async () => {
+describe('validateOutput stubbedExternals', () => {
+  it('passes normalized and user-configured externals to the validation stub list', async () => {
     await mkdir(tempRoot, { recursive: true });
     const tempDir = await mkdtemp(join(tempRoot, 'mastra-user-externals-'));
     tempDirs.push(tempDir);
@@ -69,7 +69,9 @@ describe('validateOutput stubbedExternals (issue #16626)', () => {
 
     expect(validate).toHaveBeenCalled();
     for (const [, opts] of vi.mocked(validate).mock.calls) {
-      expect(opts.stubbedExternals).toEqual(expect.arrayContaining(['drizzle-orm', 'pg']));
+      expect(opts.stubbedExternals).toEqual(
+        expect.arrayContaining(['drizzle-orm', 'pg', 'fastembed', 'nodemailer', 'jsdom', 'sqlite3']),
+      );
     }
     // Bundling a real @mastra/core entry through rollup is slow under parallel
     // suite load (observed up to ~30s locally), so give it generous headroom.
