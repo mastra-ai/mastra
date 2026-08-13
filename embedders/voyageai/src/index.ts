@@ -171,6 +171,7 @@ export const voyage: VoyageTextEmbeddingModelV3 & {
   large: VoyageTextEmbeddingModelV3;
   v35: VoyageTextEmbeddingModelV3;
   v35lite: VoyageTextEmbeddingModelV3;
+  code4: VoyageTextEmbeddingModelV3;
   code: VoyageTextEmbeddingModelV3;
   finance: VoyageTextEmbeddingModelV3;
   law: VoyageTextEmbeddingModelV3;
@@ -184,6 +185,7 @@ export const voyage: VoyageTextEmbeddingModelV3 & {
   largeV2: VoyageTextEmbeddingModelV2;
   v35V2: VoyageTextEmbeddingModelV2;
   v35liteV2: VoyageTextEmbeddingModelV2;
+  code4V2: VoyageTextEmbeddingModelV2;
   codeV2: VoyageTextEmbeddingModelV2;
   financeV2: VoyageTextEmbeddingModelV2;
   lawV2: VoyageTextEmbeddingModelV2;
@@ -254,6 +256,7 @@ export const voyage: VoyageTextEmbeddingModelV3 & {
     large: { get: () => lazy('large', () => createVoyageTextEmbedding('voyage-3-large')) },
     v35: { get: () => lazy('v35', () => createVoyageTextEmbedding('voyage-3.5')) },
     v35lite: { get: () => lazy('v35lite', () => createVoyageTextEmbedding('voyage-3.5-lite')) },
+    code4: { get: () => lazy('code4', () => createVoyageTextEmbedding('voyage-code-4')) },
     code: { get: () => lazy('code', () => createVoyageTextEmbedding('voyage-code-3')) },
     finance: { get: () => lazy('finance', () => createVoyageTextEmbedding('voyage-finance-2')) },
     law: { get: () => lazy('law', () => createVoyageTextEmbedding('voyage-law-2')) },
@@ -265,6 +268,7 @@ export const voyage: VoyageTextEmbeddingModelV3 & {
     largeV2: { get: () => lazy('largeV2', () => createVoyageTextEmbeddingV2('voyage-3-large')) },
     v35V2: { get: () => lazy('v35V2', () => createVoyageTextEmbeddingV2('voyage-3.5')) },
     v35liteV2: { get: () => lazy('v35liteV2', () => createVoyageTextEmbeddingV2('voyage-3.5-lite')) },
+    code4V2: { get: () => lazy('code4V2', () => createVoyageTextEmbeddingV2('voyage-code-4')) },
     codeV2: { get: () => lazy('codeV2', () => createVoyageTextEmbeddingV2('voyage-code-3')) },
     financeV2: { get: () => lazy('financeV2', () => createVoyageTextEmbeddingV2('voyage-finance-2')) },
     lawV2: { get: () => lazy('lawV2', () => createVoyageTextEmbeddingV2('voyage-law-2')) },

@@ -16,6 +16,7 @@ export type VoyageTextModel =
   | 'voyage-3-large'
   | 'voyage-3.5'
   | 'voyage-3.5-lite'
+  | 'voyage-code-4'
   | 'voyage-code-3'
   | 'voyage-finance-2'
   | 'voyage-law-2';
@@ -243,6 +244,13 @@ export const TEXT_MODEL_INFO: Record<VoyageTextModel, Omit<VoyageModelInfo, 'id'
   },
   'voyage-3.5-lite': {
     maxInputTokens: 1000000,
+    defaultDimension: 1024,
+    supportedDimensions: [256, 512, 1024, 2048],
+    isMultimodal: false,
+    isContextualized: false,
+  },
+  'voyage-code-4': {
+    maxInputTokens: 32000,
     defaultDimension: 1024,
     supportedDimensions: [256, 512, 1024, 2048],
     isMultimodal: false,
