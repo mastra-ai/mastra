@@ -70,8 +70,9 @@ Facts must be grounded in the conversation, concise, and written as prose. Do no
 Wrap every named entity mentioned in fact text in [[wikilinks]].
 Set a fact scope only when the conversation establishes where it applies. Use org for organization-wide facts, resource for facts shared across this resource's conversations, and thread for conversation-private facts.
 Omit scope when uncertain; omitted fact scopes stay private to the current thread.
-Emit when only when the conversation anchors the referred time. Resolve relative dates against the current date and use ISO 8601.
-When a fact is worth keeping for a non-obvious reason, set reason to one short sentence explaining why it is worth remembering (and for pinned facts, why it must stay in context).`;
+Emit when only when the conversation anchors the referred time. Resolve relative dates against the current date and use ISO 8601.`;
+
+const CAPTURE_REASON_INSTRUCTIONS = `When a fact is worth keeping for a non-obvious reason, set reason to one short sentence explaining why it is worth remembering (and for pinned facts, why it must stay in context).`;
 
 function clampScope(level: KnowledgeScopeLevel, ceiling?: KnowledgeScopeLevel): KnowledgeScopeLevel {
   return ceiling && SCOPE_ORDER[level] < SCOPE_ORDER[ceiling] ? ceiling : level;
@@ -197,6 +198,8 @@ export class SubconsciousCaptureExtractor extends Extractor<SubconsciousCaptureO
       instructions: async context => {
         const sections = [
           CAPTURE_INSTRUCTIONS,
+          // reason only exists on the default schemas; a custom schema gets no reason instruction.
+          !options.config?.schema ? CAPTURE_REASON_INSTRUCTIONS : undefined,
           capturePinning && !options.config?.schema ? CAPTURE_PINNING_INSTRUCTIONS : undefined,
           options.config?.instructions?.trim(),
         ];

@@ -488,4 +488,22 @@ describe('Subconscious capture-time pinning', () => {
     });
     expect(extractor.schema).toBe(custom);
   });
+
+  it('omits the reason and pin instructions when a custom schema is configured', async () => {
+    const custom = z.object({
+      entities: z.array(
+        z.object({ name: z.string(), kind: z.string(), facts: z.array(z.object({ text: z.string() })) }),
+      ),
+    });
+    const extractor = new SubconsciousCaptureExtractor({
+      defaultScope: 'resource',
+      learnedGuidance: false,
+      pins: pinsOn,
+      config: { name: 'capture', schema: custom as any },
+    });
+    const memory = new Memory({ storage: new InMemoryStore() });
+    const resolved = await extractor.resolve(createContext(memory, { entities: [] }));
+    expect(resolved.instructions).not.toContain('set reason');
+    expect(resolved.instructions).not.toContain('pin: true');
+  });
 });
