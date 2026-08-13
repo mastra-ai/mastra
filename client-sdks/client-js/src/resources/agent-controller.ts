@@ -318,6 +318,12 @@ export interface AgentControllerThreadInfo {
   state?: 'active' | 'idle';
 }
 
+export interface AgentControllerActiveRun {
+  runId: string;
+  resourceId?: string;
+  threadId: string;
+}
+
 export interface AgentControllerAvailableModel {
   id: string;
   provider: string;
@@ -991,6 +997,12 @@ export class AgentController extends BaseResource {
   async listModels(): Promise<AgentControllerAvailableModel[]> {
     const body = await this.request<{ models: AgentControllerAvailableModel[] }>(`${this.basePath()}/models`);
     return body.models;
+  }
+
+  /** List the runs in flight on this controller, across all resources. */
+  async listActiveRuns(): Promise<AgentControllerActiveRun[]> {
+    const body = await this.request<{ runs: AgentControllerActiveRun[] }>(`${this.basePath()}/active-runs`);
+    return body.runs;
   }
 
   /** Get workspace status for this agent controller. */
