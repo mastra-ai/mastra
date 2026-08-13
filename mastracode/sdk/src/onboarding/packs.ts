@@ -330,6 +330,17 @@ export function resolveProviderOMDefault(providerId: string, fallbackModelId = D
   };
 }
 
+/** Resolve the effective concrete OM model from a main-session model ID. */
+export function resolveAutoOMModelId(currentModelId?: string): string {
+  if (!currentModelId) return DEFAULT_OM_MODEL_ID;
+  const normalizedModelId = currentModelId.startsWith('mastracode/')
+    ? currentModelId.slice('mastracode/'.length)
+    : currentModelId;
+  const providerId = normalizedModelId.split('/', 1)[0];
+  if (!providerId) return DEFAULT_OM_MODEL_ID;
+  return resolveProviderOMDefault(providerId, normalizedModelId).modelId;
+}
+
 export function getAvailableOmPacks(access: ProviderAccess): OMPack[] {
   const packs = BUILTIN_OM_PACKS.flatMap(pack => {
     const providerAccess = access[pack.providerId];

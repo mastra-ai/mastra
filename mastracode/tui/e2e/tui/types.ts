@@ -155,6 +155,7 @@ export type ScenarioName =
   | 'notification-signal-rendering'
   | 'notify-input-request-hook'
   | 'om-settings'
+  | 'om-auto-selection'
   | 'om-attachment-observation'
   | 'om-global-settings-persistence'
   | 'om-model-override-reload'

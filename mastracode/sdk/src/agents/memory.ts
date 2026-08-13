@@ -6,13 +6,9 @@ import type { MastraCompositeStore } from '@mastra/core/storage';
 import type { MastraVector } from '@mastra/core/vector';
 import { fastembed } from '@mastra/fastembed';
 import { Memory, Subconscious } from '@mastra/memory';
-import {
-  DEFAULT_OM_MODEL_ID,
-  DEFAULT_OBS_THRESHOLD,
-  DEFAULT_REF_THRESHOLD,
-  MODEL_ROUTE_MAX_ENTRIES,
-} from '../constants.js';
+import { DEFAULT_OBS_THRESHOLD, DEFAULT_REF_THRESHOLD, MODEL_ROUTE_MAX_ENTRIES } from '../constants.js';
 import { LOCAL_KNOWLEDGE_ORG_ID, resolveKnowledgeScopeIdentity } from '../knowledge-scope.js';
+import { resolveAutoOMModelId } from '../onboarding/packs.js';
 import { loadSettings } from '../onboarding/settings.js';
 import { ANTHROPIC_PROMPT_CACHE_TTL } from '../providers/anthropic-prompt-cache.js';
 import type { MastraCodeState } from '../schema.js';
@@ -22,7 +18,47 @@ import { resolveModel } from './model.js';
 /** Route-backed OM fallback entry. */
 type MemoryModelRouteEntry = { id: string; model: GatewayLanguageModel };
 
-/** Resolve one OM role's model for this invocation. */
+/**
+ * Resolve the active model route's memory models, starting at a same-thread
+ * pending fallback hop. Returns `'auto'` when the route's first memory model is
+ * Auto, and `undefined` when the route sets no memory model.
+ */
+function resolveRouteMemoryModels(
+  state: MastraCodeState | undefined,
+  threadId: string | undefined,
+  resolve: (modelId: string) => GatewayLanguageModel,
+): MemoryModelRouteEntry[] | 'auto' | undefined {
+  const pending = state?.mastracodePendingModelFallback;
+  const sameThreadPending =
+    pending && (pending.threadId === undefined || pending.threadId === threadId) ? pending : undefined;
+  const routeEntries = state?.modelRoute?.entries?.slice(0, MODEL_ROUTE_MAX_ENTRIES) ?? [];
+  const pendingIndex = sameThreadPending
+    ? routeEntries.findIndex(entry => entry.id === sameThreadPending.toEntryId)
+    : -1;
+  const memoryRoute = pendingIndex >= 0 ? routeEntries.slice(pendingIndex) : routeEntries;
+  if (memoryRoute[0]?.memoryModelId === 'auto') return 'auto';
+  const seenModelIds = new Set<string>();
+  const appearances = new Map<string, number>();
+  const entries: MemoryModelRouteEntry[] = [];
+  for (const entry of memoryRoute) {
+    if (!entry.memoryModelId || entry.memoryModelId === 'auto' || seenModelIds.has(entry.memoryModelId)) continue;
+    seenModelIds.add(entry.memoryModelId);
+    const occurrence = (appearances.get(entry.id) ?? 0) + 1;
+    appearances.set(entry.id, occurrence);
+    try {
+      entries.push({ id: `${entry.id}:memory${occurrence === 1 ? '' : `#${occurrence}`}`, model: resolve(entry.memoryModelId) });
+    } catch {
+      break;
+    }
+  }
+  return entries.length > 0 ? entries : undefined;
+}
+
+/**
+ * Resolve one OM role's model for this invocation. Explicit per-role choices
+ * win. Automatic roles follow the active model route's memory models when
+ * present, then the low-cost model for the active main-model provider.
+ */
 function resolveOmRoleModelForRequest(
   role: 'observer' | 'reflector',
   requestContext: RequestContext,
@@ -33,43 +69,44 @@ function resolveOmRoleModelForRequest(
   const state = controller?.getState() as MastraCodeState | undefined;
   const resolveOptions = { remapForCodexOAuth: true, requestContext, anthropicPromptCacheScope: 'system' } as const;
 
-  if (!options?.disableSettingsOmSeed) {
-    const settings = loadSettings(settingsPath);
-    const roleOverride =
-      role === 'observer' ? settings.models?.observerModelOverride : settings.models?.reflectorModelOverride;
-    if (roleOverride) return resolveModel(roleOverride, resolveOptions);
+  // The configured settings file, not the default one: a caller that points the
+  // agent at another settings path must get the same pack/override resolution
+  // for observational memory as it does for the main model.
+  const settings = loadSettings(settingsPath);
+  const roleOverride =
+    role === 'observer' ? settings.models?.observerModelOverride : settings.models?.reflectorModelOverride;
+  const selection = state?.[`${role}ModelSelection`];
+  const legacyModelId = state?.[`${role}ModelId`];
+  const selectedModelId =
+    roleOverride ??
+    (typeof selection === 'string' && selection !== 'auto'
+      ? selection
+      : selection && typeof selection === 'object' && selection.mode === 'model'
+        ? selection.modelId
+        : !selection
+          ? legacyModelId
+          : undefined);
+
+  if (selectedModelId) {
+    requestContext.set(`om.${role}.selectionMode`, 'model');
+    requestContext.set(`om.${role}.effectiveModelId`, selectedModelId);
+    return resolveModel(selectedModelId, resolveOptions);
   }
 
-  const pending = state?.mastracodePendingModelFallback;
-  const sameThreadPending =
-    pending && (pending.threadId === undefined || pending.threadId === controller?.threadId) ? pending : undefined;
-  const routeEntries = state?.modelRoute?.entries?.slice(0, MODEL_ROUTE_MAX_ENTRIES) ?? [];
-  const pendingIndex = sameThreadPending
-    ? routeEntries.findIndex(entry => entry.id === sameThreadPending.toEntryId)
-    : -1;
-  const memoryRoute = pendingIndex >= 0 ? routeEntries.slice(pendingIndex) : routeEntries;
-  const seenModelIds = new Set<string>();
-  const appearances = new Map<string, number>();
-  const entries: MemoryModelRouteEntry[] = [];
-  for (const entry of memoryRoute) {
-    if (!entry.memoryModelId || seenModelIds.has(entry.memoryModelId)) continue;
-    seenModelIds.add(entry.memoryModelId);
-    const occurrence = (appearances.get(entry.id) ?? 0) + 1;
-    appearances.set(entry.id, occurrence);
-    try {
-      entries.push({
-        id: `${entry.id}:memory${occurrence === 1 ? '' : `#${occurrence}`}`,
-        model: resolveModel(entry.memoryModelId, resolveOptions),
-      });
-    } catch {
-      break;
-    }
+  const routeMemory = resolveRouteMemoryModels(state, controller?.threadId, modelId =>
+    resolveModel(modelId, resolveOptions),
+  );
+  if (routeMemory && routeMemory !== 'auto') {
+    requestContext.set(`om.${role}.selectionMode`, 'auto');
+    requestContext.set(`om.${role}.effectiveModelId`, routeMemory[0]?.model.modelId);
+    return routeMemory.length === 1 ? routeMemory[0]!.model : routeMemory;
   }
-  if (entries.length === 1) return entries[0]!.model;
-  if (entries.length > 1) return entries;
 
-  const stateModelId = role === 'observer' ? state?.observerModelId : state?.reflectorModelId;
-  return resolveModel(stateModelId ?? DEFAULT_OM_MODEL_ID, resolveOptions);
+  const currentModelId = controller?.session.modelId || (state?.currentModelId as string | undefined);
+  const effectiveModelId = resolveAutoOMModelId(currentModelId);
+  requestContext.set(`om.${role}.selectionMode`, 'auto');
+  requestContext.set(`om.${role}.effectiveModelId`, effectiveModelId);
+  return resolveModel(effectiveModelId, resolveOptions);
 }
 
 const DYNAMIC_AGENTS_MD_INSTRUCTION =

@@ -1,22 +1,18 @@
-import { seedProviderOMDefault } from '@mastra/code-sdk/onboarding/om-settings';
 import type { OMPack } from '@mastra/code-sdk/onboarding/packs';
 import type { TUIState } from './state.js';
 
-/** Point both live OM roles at one model, without pinning it to the current thread. */
-export async function applyOMModelToSession(state: TUIState, modelId: string): Promise<void> {
-  await state.session.state.set({ observerModelId: modelId, reflectorModelId: modelId });
+/** Reset both live OM roles to dynamic auto selection. */
+export async function applyOMModelToSession(state: TUIState, _modelId?: string): Promise<void> {
+  await state.session.om.observer.switchSelection({ selection: { mode: 'auto' } });
+  await state.session.om.reflector.switchSelection({ selection: { mode: 'auto' } });
 }
 
-/** Seed OM from a provider login, preserving explicit settings; undefined when nothing was seeded. */
+/** Provider connection changes reachability; auto roles resolve dynamically and stay unpinned. */
 export async function applyProviderOMDefaultIfUnconfigured(
-  state: TUIState,
-  providerId: string,
+  _state: TUIState,
+  _providerId: string,
 ): Promise<OMPack | undefined> {
-  const pack = seedProviderOMDefault(providerId);
-  if (!pack) return undefined;
-
-  await applyOMModelToSession(state, pack.modelId);
-  return pack;
+  return undefined;
 }
 
 // Never rejects: runs after the login success message, and the login .catch would
