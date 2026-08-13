@@ -55,14 +55,17 @@ describe('Subconscious pinned knowledge', () => {
     const explicit = await tools.knowledge_pin!.execute!({ text: 'explicit default' } as any, {} as any);
     expect(explicit.scope).toEqual(resourceScope);
     // An explicit org request is rejected by the tool schema: no second pin lands.
-    await tools.knowledge_pin!.execute!({ text: 'org ask', scope: 'org' } as any, {} as any).catch(() => undefined);
+    const rejected = await tools.knowledge_pin!.execute!({ text: 'org ask', scope: 'org' } as any, {} as any);
+    expect(rejected).toMatchObject({ error: true });
+    expect((rejected as { message: string }).message).toContain('scope');
     const { pins } = await listPinnedKnowledge({ store: await getStore(memory), scope: threadScope });
     expect(pins.map(pin => pin.text)).toEqual(['explicit default']);
   });
 
   it('honors a thread maxScope ceiling: the reserved entity itself is created at the thread level', async () => {
     const memory = createMemory();
-    const tools = createTools(memory, { defaultScope: 'thread', maxScope: 'thread' });
+    // defaultScope deliberately left at resource: an unscoped pin must narrow to the ceiling, not throw.
+    const tools = createTools(memory, { maxScope: 'thread' });
     const pinned = await tools.knowledge_pin!.execute!({ text: 'thread ceiling pin' } as any, {} as any);
     const store = await getStore(memory);
     const entity = await store.getEntity(pinned.parentEntityId);

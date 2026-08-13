@@ -127,7 +127,12 @@ function clampPinLevel(level: KnowledgeScopeLevel): KnowledgeScopeLevel {
 }
 
 function resolveWriteScope(options: PinnedToolsOptions, level?: KnowledgeScopeLevel): KnowledgeScope {
-  const scope = expandKnowledgeScope(options.scope, clampPinLevel(level ?? options.defaultScope));
+  // An unscoped pin under a thread ceiling narrows to the ceiling instead of
+  // failing the assert on every call: pins are model-driven, so a config that
+  // makes the default request throw would be a tool error every turn.
+  let effective = clampPinLevel(level ?? options.defaultScope);
+  if (!level && options.maxScope === 'thread') effective = 'thread';
+  const scope = expandKnowledgeScope(options.scope, effective);
   assertKnowledgeScopeWithinCeiling(scope, options.maxScope);
   return scope;
 }
