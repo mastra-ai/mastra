@@ -42,6 +42,7 @@ function normalizeScheduleId(rawId: string, prefix: string): string {
       id: 'SCHEDULES_INVALID_ID',
       domain: ErrorDomain.AGENT,
       category: ErrorCategory.USER,
+      details: { status: 400 },
       text: `schedules.create: id "${rawId}" is empty after normalization. Provide an id with at least one alphanumeric character.`,
     });
   }

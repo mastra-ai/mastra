@@ -1618,7 +1618,7 @@ describe('createLLMExecutionStep gateway provider tools', () => {
     });
   });
 
-  it('preserves structured errors when all fallback models fail', async () => {
+  it('preserves a structured error when fallback execution is exhausted', async () => {
     // Mirrors the observational-memory case: an input processor throws a
     // structured USER error before the model is ever called. The fallback loop
     // must rethrow the original MastraError (with details.status) instead of

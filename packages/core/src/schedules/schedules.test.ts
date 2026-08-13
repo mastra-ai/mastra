@@ -122,7 +122,7 @@ describe('mastra.schedules canonical service', () => {
     const { mastra } = makeMastra(['a']);
     await expect(
       mastra.schedules.create({ agentId: 'a', cron: '*/5 * * * *', prompt: 'A', id: '!!!' }),
-    ).rejects.toThrow(/empty after normalization/);
+    ).rejects.toMatchObject({ id: 'SCHEDULES_INVALID_ID', details: { status: 400 } });
   });
 
   it('list with no filter returns schedules across agents', async () => {
