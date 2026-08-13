@@ -30,7 +30,7 @@ const ACTION_GROUPS = [
   {
     key: 'runs',
     label: 'Runs',
-    actions: ['factory.run.started', 'factory.run.approved', 'factory.run.dismissed', 'factory.triage.started'],
+    actions: ['factory.run.started', 'factory.run.approved', 'factory.run.dismissed'],
   },
   { key: 'worktrees', label: 'Worktrees', actions: ['factory.worktree.created', 'factory.worktree.deleted'] },
   { key: 'git', label: 'Git', actions: ['factory.git.commit', 'factory.git.push', 'factory.git.pr_opened'] },

@@ -38,7 +38,10 @@ function invokeIssueInvestigation(context: FactoryStageRuleContext) {
 }
 
 function investigateTriagedIssue(context: FactoryStageRuleContext) {
-  if (context.cause === 'linked_item_materialized' && context.fromStage === 'intake' && context.toStage === 'triage') {
+  if (
+    context.cause === 'run_start' ||
+    (context.cause === 'linked_item_materialized' && context.fromStage === 'intake' && context.toStage === 'triage')
+  ) {
     return;
   }
   return invokeIssueInvestigation(context);
