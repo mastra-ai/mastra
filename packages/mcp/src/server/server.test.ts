@@ -2004,7 +2004,10 @@ describe('MCPServer - Agent to Tool Conversion', () => {
     );
 
     // Positive control: the direct tool receives this request's live MCP context.
-    expect(directToolOptions.mcp.extra).toBe(mockExtra);
+    expect(directToolOptions.mcp).toBeDefined();
+    expect(directToolOptions.mcp.extra.authInfo).toEqual(mockExtra.authInfo);
+    expect(directToolOptions.mcp.extra.sessionId).toBe(mockExtra.sessionId);
+    expect(directToolOptions.mcp.extra.requestId).toBe(mockExtra.requestId);
     expect(directElicitInput).toHaveBeenCalledWith(elicitationRequest, undefined);
 
     let agentToolOptions: any = null;
@@ -2131,7 +2134,11 @@ describe('MCPServer - Agent to Tool Conversion', () => {
     expect(agentToolOptions.requestContext.get('authInfo')).toEqual(mockExtra.authInfo);
     expect(agentToolOptions.requestContext.get('sessionId')).toBe(mockExtra.sessionId);
     expect(agentToolOptions.requestContext.get('requestId')).toBe(mockExtra.requestId);
-    expect(agentToolOptions.mcp.extra).toBe(mockExtra);
+    expect(agentToolOptions.mcp).toBeDefined();
+    expect(agentToolOptions.mcp.extra.authInfo).toEqual(mockExtra.authInfo);
+    expect(agentToolOptions.mcp.extra.sessionId).toBe(mockExtra.sessionId);
+    expect(agentToolOptions.mcp.extra.requestId).toBe(mockExtra.requestId);
+    expect(agentToolOptions.mcp.elicitation).toBeDefined();
     expect(agentElicitInput).toHaveBeenCalledWith(elicitationRequest, undefined);
   });
 });
