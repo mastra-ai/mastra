@@ -91,14 +91,16 @@ export function runtimeReducer(state: ChatRuntimeState, event: AgentControllerEv
       }
       return { ...state, usage, tokensPerSec, _decodeStartedAt: 0 };
     }
-    case 'display_state_changed':
+    case 'display_state_changed': {
+      const om = event.displayState.omProgress;
       return {
         ...state,
-        omProgress: event.displayState.omProgress ? omProgressSummary(event.displayState.omProgress) : state.omProgress,
+        omProgress: om?.buffered ? omProgressSummary(om) : state.omProgress,
         usage: (event.displayState.tokenUsage as UsageSnapshot | undefined) ?? state.usage,
         bufferingMessages: event.displayState.bufferingMessages ?? state.bufferingMessages,
         bufferingObservations: event.displayState.bufferingObservations ?? state.bufferingObservations,
       };
+    }
     case 'goal_evaluation':
       return {
         ...state,
