@@ -86,8 +86,8 @@ Write one concise **handoff** for whoever plans the fix. It must begin with the 
 | **Route**      | <Plan fix\|Await approval\|Ask author for info\|Close as duplicate/resolved/invalid/spam/out-of-scope\|Answer provided / close\|No transition / refresh\|Other> |
 | **Severity**   | <🔴 critical\|🟠 high\|🟡 medium\|🟢 low> — <short reason>                                                                                                      |
 | **Confidence** | <high\|medium\|low> — <short reason>                                                                                                                            |
-| **Effort**.    | <low                                                                                                                                                            | medium | high> — <short implementation-scope reason>      |
-| **Impact**     | <low                                                                                                                                                            | medium | high> — <short user/business-consequence reason> |
+| **Effort**     | <low\|medium\|high> — <short implementation-scope reason>                                                                                                       |
+| **Impact**     | <low\|medium\|high> — <short user/business-consequence reason>                                                                                                  |
 | **Next step**  | <concise maintainer-facing next action>                                                                                                                         |
 
 ### Understanding
@@ -104,7 +104,7 @@ Write one concise **handoff** for whoever plans the fix. It must begin with the 
 
 ### Reproduction
 
-<the exact steps on how to reproduce the bug>
+<for reproduced bugs: exact successful steps. Otherwise: attempted steps, environment, and result, or `Not applicable` / `Not reproduced` with a reason.>
 ```
 
 Severity guide:
