@@ -195,7 +195,7 @@ function SessionRowIndicator({ kind, name }: { kind: IndicatorKind; name: string
         role="status"
         aria-label={`Initializing ${name}`}
         title="Initializing"
-        className={cn('size-2 animate-pulse rounded-full bg-[oklch(0.627_0.265_303.9)]', yieldsToActions)}
+        className={cn('bg-notice-warning size-2 animate-pulse rounded-full', yieldsToActions)}
       />
     );
 
@@ -205,7 +205,7 @@ function SessionRowIndicator({ kind, name }: { kind: IndicatorKind; name: string
         role="status"
         aria-label={`Agent working in ${name}`}
         title="Working"
-        className={cn('bg-accent1 size-2 animate-pulse rounded-full', yieldsToActions)}
+        className={cn('bg-notice-success size-2 animate-pulse rounded-full', yieldsToActions)}
       />
     );
 
@@ -215,7 +215,7 @@ function SessionRowIndicator({ kind, name }: { kind: IndicatorKind; name: string
         role="status"
         aria-label={`${name} ready — open to dismiss`}
         title="Ready"
-        className={cn('bg-accent3 size-2 rounded-full', yieldsToActions)}
+        className={cn('bg-notice-info size-2 rounded-full', yieldsToActions)}
       />
     );
 

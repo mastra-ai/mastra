@@ -18,7 +18,9 @@ import { UserSessionsSection } from '../UserSessionsSection';
 const factoryId = 'fp-1';
 const projectRepositoryId = 'ghp-1';
 
-function makeSession(overrides: Partial<FactoryUserSession> & Pick<FactoryUserSession, 'sessionId' | 'branch'>): FactoryUserSession {
+function makeSession(
+  overrides: Partial<FactoryUserSession> & Pick<FactoryUserSession, 'sessionId' | 'branch'>,
+): FactoryUserSession {
   return {
     id: `row-${overrides.sessionId}`,
     projectRepositoryId,
@@ -69,9 +71,7 @@ function stubActiveSessions(activeIds: Set<string>) {
       const resourceId = String(params.resourceId);
       if (activeIds.has(resourceId)) {
         return HttpResponse.json({
-          threads: [
-            { id: `${resourceId}-thread`, state: 'active', tags: {}, createdAt: '2026-07-20T00:00:00.000Z' },
-          ],
+          threads: [{ id: `${resourceId}-thread`, state: 'active', tags: {}, createdAt: '2026-07-20T00:00:00.000Z' }],
         });
       }
       return HttpResponse.json({ threads: [] });
@@ -100,9 +100,7 @@ describe('User sessions sidebar activity', () => {
   });
 
   it('shows the initializing dot for a session that has not materialized yet', async () => {
-    stubProjectAndSessions([
-      makeSession({ sessionId: 'sess-2', branch: 'user/feature-b', materializedAt: null }),
-    ]);
+    stubProjectAndSessions([makeSession({ sessionId: 'sess-2', branch: 'user/feature-b', materializedAt: null })]);
     stubActiveSessions(new Set());
 
     renderSection();

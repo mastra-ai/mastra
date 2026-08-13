@@ -62,9 +62,7 @@ function stubBase({ workItems, threads }: { workItems: unknown[]; threads: unkno
         ],
       }),
     ),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
-      HttpResponse.json({ workItems }),
-    ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () => HttpResponse.json({ workItems })),
     http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/sessions`, () =>
       HttpResponse.json({ sessions: [workspaceSession] }),
     ),
@@ -141,7 +139,12 @@ describe('ThreadPage document title', () => {
           stages: ['review'],
           stageHistory: [],
           sessions: {
-            [SESSION_ID]: { sessionId: SESSION_ID, branch: 'factory/pr-1567', threadId: THREAD_ID, startedBy: 'user-1' },
+            [SESSION_ID]: {
+              sessionId: SESSION_ID,
+              branch: 'factory/pr-1567',
+              threadId: THREAD_ID,
+              startedBy: 'user-1',
+            },
           },
           metadata: { number: 1567 },
           revision: 1,
@@ -185,7 +188,12 @@ describe('ThreadPage document title', () => {
           stages: ['execute'],
           stageHistory: [],
           sessions: {
-            [SESSION_ID]: { sessionId: SESSION_ID, branch: 'factory/pr-1567', threadId: THREAD_ID, startedBy: 'user-1' },
+            [SESSION_ID]: {
+              sessionId: SESSION_ID,
+              branch: 'factory/pr-1567',
+              threadId: THREAD_ID,
+              startedBy: 'user-1',
+            },
           },
           metadata: { number: 42 },
           revision: 1,
@@ -219,7 +227,12 @@ describe('ThreadPage document title', () => {
           stages: ['execute'],
           stageHistory: [],
           sessions: {
-            [SESSION_ID]: { sessionId: SESSION_ID, branch: 'factory/pr-1567', threadId: THREAD_ID, startedBy: 'user-1' },
+            [SESSION_ID]: {
+              sessionId: SESSION_ID,
+              branch: 'factory/pr-1567',
+              threadId: THREAD_ID,
+              startedBy: 'user-1',
+            },
           },
           metadata: { identifier: 'COR-210' },
           revision: 1,
