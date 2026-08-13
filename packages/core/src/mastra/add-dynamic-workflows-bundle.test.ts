@@ -10,7 +10,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
-import { InMemoryStore } from '../storage';
+import { InMemoryStore, WorkflowDefinitionOwnershipConflictError } from '../storage';
 import { createTool } from '../tools';
 import { Mastra } from './index';
 
@@ -296,6 +296,26 @@ describe('Mastra.addDynamicWorkflows', () => {
     const definition = await store.get('lookup-first-customer');
 
     expect(definition?.authorId).toBe('verified-author');
+  });
+
+  it('rejects a different trusted author and restores the previous registration', async () => {
+    const storage = new InMemoryStore({ id: 'bundle-author-conflict' });
+    const mastra = new Mastra({ logger: false, tools: { 'lookup-customer': lookupCustomer } as any, storage });
+
+    await mastra.addDynamicWorkflow(helperDefinition('lookup-first-customer', 'email1'), {
+      authorId: 'verified-author',
+    });
+    const original = mastra.getWorkflow('lookup-first-customer');
+
+    await expect(
+      mastra.addDynamicWorkflow(helperDefinition('lookup-first-customer', 'email2'), {
+        authorId: 'other-author',
+      }),
+    ).rejects.toBeInstanceOf(WorkflowDefinitionOwnershipConflictError);
+
+    expect(mastra.getWorkflow('lookup-first-customer')).toBe(original);
+    const store = (await storage.getStore('workflowDefinitions'))!;
+    expect((await store.get('lookup-first-customer'))?.authorId).toBe('verified-author');
   });
 
   it('is a no-op for an empty bundle', async () => {

@@ -156,7 +156,7 @@ await mastra.addDynamicWorkflow(untrustedDefinition, {
 })
 ```
 
-Mastra stores `authorId` with the definition in the same write. This metadata doesn't enforce access control. Authorize the caller before registration and before later reads, updates, deletion, or execution.
+Mastra stores `authorId` with the definition in the same write. Once set, the author is immutable: replacing the definition without `authorId` retains its stored author, while using a different author fails with an ownership conflict. This metadata doesn't enforce access control. Authorize the caller before registration and before later reads, updates, deletion, or execution.
 
 ## Related
 

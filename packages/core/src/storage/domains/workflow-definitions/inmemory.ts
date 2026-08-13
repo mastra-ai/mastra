@@ -6,7 +6,7 @@ import type {
   UpdateWorkflowDefinitionInput,
   WorkflowDefinition,
 } from './base';
-import { WorkflowDefinitionsStorage } from './base';
+import { assertWorkflowDefinitionAuthor, WorkflowDefinitionsStorage } from './base';
 
 export class InMemoryWorkflowDefinitionsStorage extends WorkflowDefinitionsStorage {
   private db: InMemoryDB;
@@ -25,6 +25,7 @@ export class InMemoryWorkflowDefinitionsStorage extends WorkflowDefinitionsStora
     const existing = this.db.workflowDefinitions.get(input.id);
 
     if (existing) {
+      assertWorkflowDefinitionAuthor(existing, input);
       const merged: WorkflowDefinition = {
         ...existing,
         ...('description' in input && input.description !== undefined && { description: input.description }),
@@ -36,7 +37,6 @@ export class InMemoryWorkflowDefinitionsStorage extends WorkflowDefinitionsStora
           input.requestContextSchema !== undefined && { requestContextSchema: input.requestContextSchema }),
         ...('graph' in input && input.graph !== undefined && { graph: input.graph }),
         ...('status' in input && input.status !== undefined && { status: input.status }),
-        ...('authorId' in input && input.authorId !== undefined && { authorId: input.authorId }),
         updatedAt: now,
       };
       this.db.workflowDefinitions.set(input.id, merged);
