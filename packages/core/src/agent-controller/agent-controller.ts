@@ -389,8 +389,10 @@ export class AgentController<TState = {}> {
     });
     session.om.setResolver({
       getState: () => session.state.get() as Record<string, unknown>,
-      setState: updates => void session.state.set(updates as Partial<TState>),
+      getCurrentModelId: () => session.model.get() || undefined,
+      setState: updates => session.state.set(updates as Partial<TState>),
       setSetting: ({ key, value }) => session.thread.setSetting({ key, value }),
+      deleteSetting: ({ key }) => session.thread.deleteSetting({ key }),
       omConfig: this.config.omConfig,
       gateways: this.config.gateways ?? [],
     });

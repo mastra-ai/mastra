@@ -49,6 +49,7 @@ import type {
   AgentControllerRequestStateUpdater,
   AgentControllerThread,
   ModelUseCountTracker,
+  OMModelSelection,
   PermissionPolicy,
   PermissionRules,
   TokenUsage,
@@ -124,6 +125,20 @@ export const ABORTED_BY_USER_REASON = 'Aborted by the user';
  * in-memory only).
  */
 const PERSISTED_STATE_KEYS = ['thinkingLevel', 'notifications'] as const;
+
+function isOMModelSelection(value: unknown): value is OMModelSelection {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    (('mode' in value && value.mode === 'auto') ||
+      ('mode' in value &&
+        value.mode === 'model' &&
+        'modelId' in value &&
+        typeof value.modelId === 'string' &&
+        value.modelId.length > 0))
+  );
+}
+
 /** Persisted thread-setting key prefix for a mode's last-used model. */
 const modeModelKey = (modeId: string) => `modeModelId_${modeId}`;
 
@@ -140,6 +155,8 @@ const RESERVED_THREAD_METADATA_KEYS = [
   MODE_ID_KEY,
   'observerModelId',
   'reflectorModelId',
+  'observerModelSelection',
+  'reflectorModelSelection',
   'observationThreshold',
   'reflectionThreshold',
   'tokenUsage',
@@ -962,12 +979,23 @@ export class SessionThread {
         });
       }
 
-      // Restore observer/reflector model IDs
-      if (meta?.observerModelId) {
+      // Restore observer/reflector model IDs and selection intent. A legacy
+      // concrete ID without a selection remains an explicit selection.
+      const observerSelection = meta?.observerModelSelection;
+      if (isOMModelSelection(observerSelection)) {
+        updates.observerModelSelection = observerSelection;
+        updates.observerModelId = observerSelection.mode === 'model' ? observerSelection.modelId : undefined;
+      } else if (typeof meta?.observerModelId === 'string') {
         updates.observerModelId = meta.observerModelId;
+        updates.observerModelSelection = { mode: 'model', modelId: meta.observerModelId };
       }
-      if (meta?.reflectorModelId) {
+      const reflectorSelection = meta?.reflectorModelSelection;
+      if (isOMModelSelection(reflectorSelection)) {
+        updates.reflectorModelSelection = reflectorSelection;
+        updates.reflectorModelId = reflectorSelection.mode === 'model' ? reflectorSelection.modelId : undefined;
+      } else if (typeof meta?.reflectorModelId === 'string') {
         updates.reflectorModelId = meta.reflectorModelId;
+        updates.reflectorModelSelection = { mode: 'model', modelId: meta.reflectorModelId };
       }
       const hasObservationThreshold = typeof meta?.observationThreshold === 'number';
       const hasReflectionThreshold = typeof meta?.reflectionThreshold === 'number';
@@ -1877,10 +1905,14 @@ interface SessionOMRoleConfig {
   role: 'observer' | 'reflector';
   /** Session-state / thread-settings key holding this role's model id. */
   modelIdKey: 'observerModelId' | 'reflectorModelId';
+  /** Session-state / thread-settings key holding this role's selection intent. */
+  selectionKey: 'observerModelSelection' | 'reflectorModelSelection';
   /** Session-state key holding this role's threshold. */
   thresholdKey: 'observationThreshold' | 'reflectionThreshold';
   /** Resolve this role's default model id from `omConfig`. */
   defaultModelId: (omConfig: AgentControllerOMConfig | undefined) => string | undefined;
+  /** Resolve this role's default selection from `omConfig`. */
+  defaultSelection: (omConfig: AgentControllerOMConfig | undefined) => OMModelSelection | undefined;
   /** Resolve this role's default threshold from `omConfig`. */
   defaultThreshold: (omConfig: AgentControllerOMConfig | undefined) => number | undefined;
 }
@@ -1895,8 +1927,10 @@ class SessionOMRole {
   readonly #config: SessionOMRoleConfig;
   readonly #bus: SessionBus;
   #getState: (() => Record<string, unknown>) | undefined;
-  #setState: ((updates: Record<string, unknown>) => void) | undefined;
+  #getCurrentModelId: (() => string | undefined) | undefined;
+  #setState: ((updates: Record<string, unknown>) => Promise<void>) | undefined;
   #setSetting: ((args: { key: string; value: unknown }) => Promise<void>) | undefined;
+  #deleteSetting: ((args: { key: string }) => Promise<void>) | undefined;
   #omConfig: AgentControllerOMConfig | undefined;
   #gateways: MastraModelGatewayInterface[] | undefined;
 
@@ -1908,22 +1942,55 @@ class SessionOMRole {
   /** @internal Injected by {@link SessionOM.setResolver}. */
   setWiring(wiring: {
     getState: () => Record<string, unknown>;
-    setState: (updates: Record<string, unknown>) => void;
+    getCurrentModelId: () => string | undefined;
+    setState: (updates: Record<string, unknown>) => Promise<void>;
     setSetting: (args: { key: string; value: unknown }) => Promise<void>;
+    deleteSetting: (args: { key: string }) => Promise<void>;
     omConfig?: AgentControllerOMConfig;
     gateways?: MastraModelGatewayInterface[];
   }): void {
     this.#getState = wiring.getState;
+    this.#getCurrentModelId = wiring.getCurrentModelId;
     this.#setState = wiring.setState;
     this.#setSetting = wiring.setSetting;
+    this.#deleteSetting = wiring.deleteSetting;
     this.#omConfig = wiring.omConfig;
     this.#gateways = wiring.gateways;
   }
 
-  /** This role's model id from session state, falling back to `omConfig`. */
+  /** This role's persisted selection intent. */
+  selection(): OMModelSelection | undefined {
+    const state = this.#getState?.() ?? {};
+    const selection = state[this.#config.selectionKey];
+    if (isOMModelSelection(selection)) return selection;
+
+    const modelId = state[this.#config.modelIdKey];
+    if (typeof modelId === 'string') return { mode: 'model', modelId };
+
+    const defaultSelection = this.#config.defaultSelection(this.#omConfig);
+    if (defaultSelection) return defaultSelection;
+
+    const defaultModelId = this.#config.defaultModelId(this.#omConfig);
+    return defaultModelId ? { mode: 'model', modelId: defaultModelId } : undefined;
+  }
+
+  /** This role's effective concrete model id. */
   modelId(): string | undefined {
-    const fromState = this.#getState?.()[this.#config.modelIdKey];
-    return (typeof fromState === 'string' ? fromState : undefined) ?? this.#config.defaultModelId(this.#omConfig);
+    const selection = this.selection();
+    if (selection?.mode === 'model') return selection.modelId;
+    if (selection?.mode !== 'auto') return undefined;
+
+    try {
+      const resolved = this.#omConfig?.resolveAutoModelId?.({
+        role: this.#config.role,
+        currentModelId: this.#getCurrentModelId?.(),
+        state: this.#getState?.() ?? {},
+      });
+      if (resolved) return resolved;
+    } catch {
+      // Automatic resolution is fail-soft and falls through to the concrete default.
+    }
+    return this.#config.defaultModelId(this.#omConfig);
   }
 
   /** This role's threshold from session state, falling back to `omConfig`. */
@@ -1933,10 +2000,8 @@ class SessionOMRole {
   }
 
   /**
-   * Resolve this role's model id to a model instance via the configured
-   * gateways, or undefined when unset. The bare model id string is routed
-   * through {@link ModelRouterLanguageModel}, which selects the matching
-   * gateway (or the built-in defaults) and resolves provider auth.
+   * Resolve this role's effective model id to a model instance via the
+   * configured gateways, or undefined when unset.
    */
   resolvedModel(): MastraModelConfig | undefined {
     const modelId = this.modelId();
@@ -1944,11 +2009,32 @@ class SessionOMRole {
     return new ModelRouterLanguageModel(modelId as `${string}/${string}`, this.#gateways);
   }
 
-  /** Switch this role's model: update session state, persist, and emit. */
-  async switchModel({ modelId }: { modelId: string }): Promise<void> {
-    this.#setState?.({ [this.#config.modelIdKey]: modelId });
-    await this.#setSetting?.({ key: this.#config.modelIdKey, value: modelId });
-    this.#bus.emit({ type: 'om_model_changed', role: this.#config.role, modelId });
+  /** Switch this role's selection intent, persist it, and emit the effective concrete model. */
+  async switchSelection({ selection }: { selection: OMModelSelection }): Promise<void> {
+    if (selection.mode === 'auto') {
+      await this.#setState?.({
+        [this.#config.selectionKey]: selection,
+        [this.#config.modelIdKey]: undefined,
+      });
+      await this.#deleteSetting?.({ key: this.#config.modelIdKey });
+    } else {
+      await this.#setState?.({
+        [this.#config.selectionKey]: selection,
+        [this.#config.modelIdKey]: selection.modelId,
+      });
+      await this.#setSetting?.({ key: this.#config.modelIdKey, value: selection.modelId });
+    }
+    await this.#setSetting?.({ key: this.#config.selectionKey, value: selection });
+
+    const modelId = this.modelId();
+    if (modelId) {
+      this.#bus.emit({ type: 'om_model_changed', role: this.#config.role, modelId });
+    }
+  }
+
+  /** Switch this role to an explicit model selection. */
+  switchModel({ modelId }: { modelId: string }): Promise<void> {
+    return this.switchSelection({ selection: { mode: 'model', modelId } });
   }
 }
 
@@ -1968,8 +2054,10 @@ class SessionOM {
       {
         role: 'observer',
         modelIdKey: 'observerModelId',
+        selectionKey: 'observerModelSelection',
         thresholdKey: 'observationThreshold',
         defaultModelId: omConfig => omConfig?.defaultObserverModelId,
+        defaultSelection: omConfig => omConfig?.defaultObserverModelSelection,
         defaultThreshold: omConfig => omConfig?.defaultObservationThreshold,
       },
       bus,
@@ -1978,8 +2066,10 @@ class SessionOM {
       {
         role: 'reflector',
         modelIdKey: 'reflectorModelId',
+        selectionKey: 'reflectorModelSelection',
         thresholdKey: 'reflectionThreshold',
         defaultModelId: omConfig => omConfig?.defaultReflectorModelId,
+        defaultSelection: omConfig => omConfig?.defaultReflectorModelSelection,
         defaultThreshold: omConfig => omConfig?.defaultReflectionThreshold,
       },
       bus,
@@ -1993,8 +2083,10 @@ class SessionOM {
    */
   setResolver(options: {
     getState: () => Record<string, unknown>;
-    setState: (updates: Record<string, unknown>) => void;
+    getCurrentModelId: () => string | undefined;
+    setState: (updates: Record<string, unknown>) => Promise<void>;
     setSetting: (args: { key: string; value: unknown }) => Promise<void>;
+    deleteSetting: (args: { key: string }) => Promise<void>;
     omConfig?: AgentControllerOMConfig;
     gateways?: MastraModelGatewayInterface[];
   }): void {

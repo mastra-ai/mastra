@@ -398,6 +398,16 @@ export interface AgentControllerConfig<TState = {}> {
   observability?: ObservabilityEntrypoint;
 }
 
+/** A persisted observational-memory role selection. */
+export type OMModelSelection = { mode: 'auto' } | { mode: 'model'; modelId: string };
+
+/** Arguments supplied when resolving an automatic observational-memory model. */
+export interface ResolveAutoOMModelArgs {
+  role: 'observer' | 'reflector';
+  currentModelId?: string;
+  state: Readonly<Record<string, unknown>>;
+}
+
 /**
  * Default configuration for Observational Memory.
  * These values are used when controller state doesn't have explicit OM values
@@ -406,8 +416,14 @@ export interface AgentControllerConfig<TState = {}> {
 export interface AgentControllerOMConfig {
   /** Default model ID for the observer agent */
   defaultObserverModelId?: string;
+  /** Default model selection for the observer agent */
+  defaultObserverModelSelection?: OMModelSelection;
   /** Default model ID for the reflector agent */
   defaultReflectorModelId?: string;
+  /** Default model selection for the reflector agent */
+  defaultReflectorModelSelection?: OMModelSelection;
+  /** Resolve an automatic selection to a concrete model ID. */
+  resolveAutoModelId?: (args: ResolveAutoOMModelArgs) => string | undefined;
   /** Default observation threshold in tokens */
   defaultObservationThreshold?: number;
   /** Default reflection threshold in tokens */
