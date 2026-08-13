@@ -178,6 +178,7 @@ export const SOURCE_CONTROL_SCHEMAS: CollectionSchema[] = [
       branch: { type: 'text' },
       base_branch: { type: 'text' },
       title: { type: 'text', nullable: true },
+      visibility: { type: 'text', nullable: true },
       sandbox_id: { type: 'text', nullable: true },
       sandbox_workdir: { type: 'text', nullable: true },
       materialized_at: { type: 'timestamp', nullable: true },
@@ -352,6 +353,13 @@ export interface UpsertSourceControlWorktreeInput {
   worktreePath: string;
 }
 
+/**
+ * Who can open a session: 'org' sessions are visible to every member of the
+ * owning organization, 'private' sessions only to their owner. Stored at
+ * creation; rows created before the column existed read as 'org'.
+ */
+export type SourceControlSessionVisibility = 'org' | 'private';
+
 export interface SourceControlSession {
   id: string;
   sessionId: string;
@@ -360,6 +368,7 @@ export interface SourceControlSession {
   userId: string;
   branch: string;
   title: string | null;
+  visibility: SourceControlSessionVisibility;
   baseBranch: string;
   sandboxId: string | null;
   sandboxWorkdir: string | null;
@@ -379,6 +388,8 @@ export interface CreateSourceControlSessionInput {
   userId: string;
   branch: string;
   title?: string | null;
+  /** Defaults to 'org' when omitted, matching how NULL rows are read. */
+  visibility?: SourceControlSessionVisibility;
   baseBranch: string;
 }
 
@@ -582,6 +593,7 @@ interface SessionDbRow extends Record<string, unknown> {
   user_id: string;
   branch: string;
   title: string | null;
+  visibility: string | null;
   base_branch: string;
   sandbox_id: string | null;
   sandbox_workdir: string | null;
@@ -690,6 +702,7 @@ function toSession(row: SessionDbRow): SourceControlSession {
     userId: row.user_id,
     branch: row.branch,
     title: row.title,
+    visibility: row.visibility === 'private' ? 'private' : 'org',
     baseBranch: row.base_branch,
     sandboxId: row.sandbox_id,
     sandboxWorkdir: row.sandbox_workdir,
@@ -1248,6 +1261,7 @@ export class SourceControlStorage extends FactoryStorageDomain {
               user_id: input.userId,
               branch: input.branch,
               title: input.title ?? null,
+              visibility: input.visibility ?? 'org',
               base_branch: input.baseBranch,
               sandbox_id: null,
               sandbox_workdir: null,

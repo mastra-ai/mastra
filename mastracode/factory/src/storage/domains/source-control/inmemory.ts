@@ -490,6 +490,7 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
         id: randomUUID(),
         ...input,
         title: input.title ?? null,
+        visibility: input.visibility ?? 'org',
         sandboxId: null,
         sandboxWorkdir: null,
         materializedAt: null,
