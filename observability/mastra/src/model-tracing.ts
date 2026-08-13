@@ -38,7 +38,7 @@ function supportsModelInference(): boolean {
   return coreFeatures.has('model-inference-span');
 }
 
-import { extractOpenRouterCostContext, extractUsageMetrics } from './usage';
+import { extractOpenRouterCostContext, extractOpenRouterStepCostContext, extractUsageMetrics } from './usage';
 
 type StepInputPreview = Array<{ role: string; content: string }> | Record<string, unknown> | string | undefined;
 
@@ -398,12 +398,16 @@ export class ModelSpanTracker {
    */
   endGeneration(options?: EndGenerationOptions): void {
     const { usage, providerMetadata, stepProviderMetadata, ...spanOptions } = options ?? {};
-    const providerCostContext = extractOpenRouterCostContext(
-      providerMetadata,
+    const model =
       spanOptions.attributes?.responseModel ??
-        this.#modelSpan?.attributes?.responseModel ??
-        this.#modelSpan?.attributes?.model,
-    );
+      this.#modelSpan?.attributes?.responseModel ??
+      this.#modelSpan?.attributes?.model;
+    // Once per-step metadata is available, never substitute the final step's
+    // metadata for a generation total. The aggregate extractor deliberately
+    // returns undefined unless every completed step reports a valid cost.
+    const providerCostContext = stepProviderMetadata
+      ? extractOpenRouterStepCostContext(stepProviderMetadata, model)
+      : extractOpenRouterCostContext(providerMetadata, model);
 
     if (providerCostContext && !spanOptions.attributes) {
       spanOptions.attributes = {};

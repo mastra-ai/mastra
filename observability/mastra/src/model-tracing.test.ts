@@ -91,7 +91,7 @@ describe('ModelSpanTracker', () => {
   });
 
   describe('provider-reported costs', () => {
-    it('uses OpenRouter usage.cost without double-counting the upstream cost breakdown', () => {
+    it('aggregates OpenRouter costs across every completed model step', () => {
       const modelSpan = tracing.startSpan({
         type: SpanType.MODEL_GENERATION,
         name: 'test-generation',
@@ -104,24 +104,66 @@ describe('ModelSpanTracker', () => {
         providerMetadata: {
           openrouter: {
             usage: {
-              cost: 0.0123,
-              costDetails: { upstreamInferenceCost: 0.01 },
+              cost: 0.002,
             },
           },
         },
+        stepProviderMetadata: [{ openrouter: { usage: { cost: 0.001 } } }, { openrouter: { usage: { cost: 0.002 } } }],
       });
 
       const [span] = testExporter.getSpansByType(SpanType.MODEL_GENERATION);
       expect(span?.attributes?.costContext).toEqual({
         provider: 'openrouter',
         model: 'anthropic/claude-sonnet-4',
-        estimatedCost: 0.0123,
+        estimatedCost: 0.003,
         costUnit: 'USD',
         costMetadata: {
           source: 'provider_reported',
-          providerCostField: 'usage.cost',
+          providerCostFields: ['usage.cost'],
+          scope: 'query_total',
+          reportedStepCount: 2,
         },
       });
+    });
+
+    it('does not label a final-step OpenRouter cost as the exact multi-step total', () => {
+      const modelSpan = tracing.startSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'test-generation',
+        attributes: { model: 'anthropic/claude-sonnet-4', provider: 'openrouter' },
+      });
+      const tracker = new ModelSpanTracker(modelSpan);
+
+      tracker.endGeneration({
+        attributes: {},
+        providerMetadata: { openrouter: { usage: { cost: 0.002 } } },
+        stepProviderMetadata: [undefined, { openrouter: { usage: { cost: 0.002 } } }],
+      });
+
+      const [span] = testExporter.getSpansByType(SpanType.MODEL_GENERATION);
+      expect(span?.attributes?.costContext).toBeUndefined();
+    });
+
+    it('does not report the final OpenRouter step as the total when per-step metadata is incomplete', () => {
+      const modelSpan = tracing.startSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'test-generation',
+        attributes: { model: 'anthropic/claude-sonnet-4', provider: 'openrouter' },
+      });
+      const tracker = new ModelSpanTracker(modelSpan);
+
+      tracker.endGeneration({
+        attributes: {},
+        providerMetadata: {
+          openrouter: {
+            usage: { cost: 0.002 },
+          },
+        },
+        stepProviderMetadata: [undefined, undefined],
+      });
+
+      const [span] = testExporter.getSpansByType(SpanType.MODEL_GENERATION);
+      expect(span?.attributes?.costContext).toBeUndefined();
     });
 
     it('records the response model from the end attributes', () => {
@@ -175,7 +217,7 @@ describe('ModelSpanTracker', () => {
         estimatedCost: 0.0042,
         costMetadata: {
           source: 'provider_reported',
-          providerCostField: 'usage.costDetails.upstreamInferenceCost',
+          providerCostFields: ['usage.costDetails.upstreamInferenceCost'],
         },
       });
     });
@@ -204,7 +246,7 @@ describe('ModelSpanTracker', () => {
         estimatedCost: 0.0042,
         costMetadata: {
           source: 'provider_reported',
-          providerCostField: 'usage.cost',
+          providerCostFields: ['usage.cost'],
         },
       });
     });

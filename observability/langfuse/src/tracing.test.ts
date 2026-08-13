@@ -445,7 +445,7 @@ describe('LangfuseExporter', () => {
               provider: 'openrouter',
               estimatedCost: cost,
               costUnit: unit,
-              costMetadata: { source, providerCostField: 'usage.cost' },
+              costMetadata: { source, providerCostFields: ['usage.cost'] },
             },
           },
         }),
@@ -454,7 +454,7 @@ describe('LangfuseExporter', () => {
       expect(processedSpans[0].attributes['langfuse.observation.cost_details']).toBe(expected);
     });
 
-    it('maps the OpenRouter cost extracted by ModelSpanTracker', async () => {
+    it('maps combined OpenRouter and BYOK upstream spend extracted by ModelSpanTracker', async () => {
       exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
       const tracing = new DefaultObservabilityInstance({
         serviceName: 'test-tracing',
@@ -476,8 +476,8 @@ describe('LangfuseExporter', () => {
           providerMetadata: {
             openrouter: {
               usage: {
-                cost: 0.0123,
-                costDetails: { upstreamInferenceCost: 0.01 },
+                cost: 0.95,
+                costDetails: { upstreamInferenceCost: 19 },
               },
             },
           },
@@ -485,7 +485,7 @@ describe('LangfuseExporter', () => {
 
         await vi.waitFor(() => {
           expect(processedSpans[0]?.attributes['langfuse.observation.cost_details']).toBe(
-            JSON.stringify({ total: 0.0123 }),
+            JSON.stringify({ total: 19.95 }),
           );
         });
       } finally {

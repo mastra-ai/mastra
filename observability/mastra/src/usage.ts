@@ -25,8 +25,9 @@ interface GoogleMetadata {
 
 /**
  * Extracts OpenRouter's provider-reported generation cost.
- * `usage.cost` is the authoritative total when present; the upstream inference
- * cost is retained as a fallback for metadata shapes that omit the total.
+ * `usage.cost` is the amount charged to the OpenRouter account. For BYOK
+ * requests, `upstreamInferenceCost` is the separate amount charged directly by
+ * the model provider, so both fields contribute to the user's total spend.
  */
 export function extractOpenRouterCostContext(
   providerMetadata?: ProviderMetadata,
@@ -53,18 +54,34 @@ export function extractOpenRouterCostContext(
     return undefined;
   }
 
+  // OpenRouter documents null as the non-BYOK value, so treat it as absent.
+  const hasUpstreamInferenceCost =
+    costDetails !== undefined &&
+    Object.prototype.hasOwnProperty.call(costDetails, 'upstreamInferenceCost') &&
+    costDetails.upstreamInferenceCost != null;
   const upstreamInferenceCost =
-    costDetails &&
+    hasUpstreamInferenceCost &&
     typeof costDetails.upstreamInferenceCost === 'number' &&
     Number.isFinite(costDetails.upstreamInferenceCost) &&
     costDetails.upstreamInferenceCost >= 0
       ? costDetails.upstreamInferenceCost
       : undefined;
-
-  const totalCost = hasReportedCost ? reportedCost : upstreamInferenceCost;
-  if (totalCost === undefined) {
+  if (hasUpstreamInferenceCost && upstreamInferenceCost === undefined) {
     return undefined;
   }
+
+  if (reportedCost === undefined && upstreamInferenceCost === undefined) {
+    return undefined;
+  }
+  const totalCost = (reportedCost ?? 0) + (upstreamInferenceCost ?? 0);
+  if (!Number.isFinite(totalCost)) {
+    return undefined;
+  }
+
+  const providerCostFields = [
+    ...(reportedCost !== undefined ? ['usage.cost'] : []),
+    ...(upstreamInferenceCost !== undefined ? ['usage.costDetails.upstreamInferenceCost'] : []),
+  ];
 
   return {
     provider: 'openrouter',
@@ -73,7 +90,59 @@ export function extractOpenRouterCostContext(
     costUnit: 'USD',
     costMetadata: {
       source: 'provider_reported',
-      providerCostField: hasReportedCost ? 'usage.cost' : 'usage.costDetails.upstreamInferenceCost',
+      providerCostFields,
+    },
+  };
+}
+
+/**
+ * Aggregates exact OpenRouter spend for a multi-step generation. Returning no
+ * context when any step is incomplete prevents a partial total from being
+ * labeled as provider-reported for the whole generation.
+ */
+export function extractOpenRouterStepCostContext(
+  stepProviderMetadata: readonly (ProviderMetadata | undefined)[],
+  model?: string,
+): CostContext | undefined {
+  const stepContexts: CostContext[] = [];
+  const stepCosts: number[] = [];
+  for (const metadata of stepProviderMetadata) {
+    const context = extractOpenRouterCostContext(metadata, model);
+    if (!context || typeof context.estimatedCost !== 'number') {
+      return undefined;
+    }
+    stepContexts.push(context);
+    stepCosts.push(context.estimatedCost);
+  }
+
+  if (stepContexts.length === 0) {
+    return undefined;
+  }
+
+  const estimatedCost = stepCosts.reduce((total, cost) => total + cost, 0);
+  if (!Number.isFinite(estimatedCost)) {
+    return undefined;
+  }
+
+  const providerCostFields = [
+    ...new Set(
+      stepContexts.flatMap(context => {
+        const fields = context.costMetadata?.providerCostFields;
+        return Array.isArray(fields) ? fields.filter((field): field is string => typeof field === 'string') : [];
+      }),
+    ),
+  ];
+
+  return {
+    provider: 'openrouter',
+    model,
+    estimatedCost,
+    costUnit: 'USD',
+    costMetadata: {
+      source: 'provider_reported',
+      providerCostFields,
+      scope: 'query_total',
+      reportedStepCount: stepContexts.length,
     },
   };
 }

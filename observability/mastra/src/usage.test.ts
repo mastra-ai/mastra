@@ -3,14 +3,16 @@ import { describe, it, expect } from 'vitest';
 import { addUsageStats, extractOpenRouterCostContext, extractUsageMetrics } from './usage';
 
 describe('extractOpenRouterCostContext', () => {
-  it('prefers OpenRouter usage.cost over the upstream cost breakdown', () => {
+  it('includes both OpenRouter and BYOK upstream charges in the reported total', () => {
     expect(
       extractOpenRouterCostContext(
         {
           openrouter: {
             usage: {
-              cost: 0.0123,
-              costDetails: { upstreamInferenceCost: 0.01 },
+              // OpenRouter's usage-accounting documentation uses these values
+              // to distinguish the account charge from the BYOK provider charge.
+              cost: 0.95,
+              costDetails: { upstreamInferenceCost: 19 },
             },
           },
         },
@@ -19,11 +21,11 @@ describe('extractOpenRouterCostContext', () => {
     ).toEqual({
       provider: 'openrouter',
       model: 'anthropic/claude-sonnet-4',
-      estimatedCost: 0.0123,
+      estimatedCost: 19.95,
       costUnit: 'USD',
       costMetadata: {
         source: 'provider_reported',
-        providerCostField: 'usage.cost',
+        providerCostFields: ['usage.cost', 'usage.costDetails.upstreamInferenceCost'],
       },
     });
   });
@@ -40,8 +42,24 @@ describe('extractOpenRouterCostContext', () => {
     ).toMatchObject({
       estimatedCost: 0.0042,
       costMetadata: {
-        providerCostField: 'usage.costDetails.upstreamInferenceCost',
+        providerCostFields: ['usage.costDetails.upstreamInferenceCost'],
       },
+    });
+  });
+
+  it('treats OpenRouter’s documented null non-BYOK upstream cost as absent', () => {
+    expect(
+      extractOpenRouterCostContext({
+        openrouter: {
+          usage: {
+            cost: 0.0042,
+            costDetails: { upstreamInferenceCost: null },
+          },
+        },
+      }),
+    ).toMatchObject({
+      estimatedCost: 0.0042,
+      costMetadata: { providerCostFields: ['usage.cost'] },
     });
   });
 
@@ -52,6 +70,19 @@ describe('extractOpenRouterCostContext', () => {
           usage: {
             cost,
             costDetails: { upstreamInferenceCost: 0.0042 },
+          },
+        },
+      }),
+    ).toBeUndefined();
+  });
+
+  it.each([NaN, Infinity, -0.0042, '0.0042'])('rejects invalid BYOK upstream cost %p', upstreamInferenceCost => {
+    expect(
+      extractOpenRouterCostContext({
+        openrouter: {
+          usage: {
+            cost: 0.0042,
+            costDetails: { upstreamInferenceCost },
           },
         },
       }),
