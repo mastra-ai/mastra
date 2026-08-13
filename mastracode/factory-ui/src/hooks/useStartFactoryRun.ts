@@ -1,6 +1,7 @@
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { useMutation, useMutationState, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { ExternalLink } from 'lucide-react';
+import { createElement, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 
 import { useApiConfig } from '../api/config';
@@ -148,10 +149,25 @@ export function useStartFactoryRun() {
     // the run quietly and let the toast be the way in, so several reviews can
     // be kicked off back to back from the same board.
     onSuccess: ({ factoryId: id, sessionId, threadId, threadTitle: title }) => {
+      const sessionPath = `/factories/${id}/workspaces/${sessionId}/threads/${threadId}`;
       toast(`${title} is ready`, {
         action: {
           label: 'Open',
-          onClick: () => void navigate(`/factories/${id}/workspaces/${sessionId}/threads/${threadId}`),
+          onClick: () => void navigate(sessionPath),
+        },
+        cancel: {
+          label: createElement(
+            'span',
+            { className: 'inline-flex items-center gap-1' },
+            'New Tab',
+            createElement(ExternalLink, { size: 12, 'aria-hidden': true }),
+          ),
+          onClick: () => window.open(sessionPath, '_blank', 'noopener,noreferrer'),
+        },
+        cancelButtonStyle: {
+          border: '1px solid var(--color-border1)',
+          background: 'var(--color-surface3)',
+          color: 'var(--color-neutral5)',
         },
       });
     },

@@ -1,11 +1,12 @@
 import type { MastraDBMessage } from '@mastra/core/agent-controller';
 import type { ReactNode } from 'react';
-import { useEffect, useEffectEvent, useReducer, useState } from 'react';
+import { useEffect, useEffectEvent, useReducer } from 'react';
 
 import { useAgentControllerTranscript } from '../hooks/useAgentControllerTranscript';
 import { initialChatRuntime, runtimeReducer } from '../services/runtime';
 import type { ChatRuntimeState } from '../services/runtime';
 import type { TranscriptState } from '../services/transcript';
+import { SessionFavicon } from '../components/SessionFavicon';
 import { ChatConnectionProvider } from './ChatConnectionProvider';
 import { ChatRuntimeContext } from './ChatRuntimeContext';
 import { ChatTranscriptContext } from './ChatTranscriptContext';
@@ -93,10 +94,11 @@ function ChatTranscriptValueProvider({
 }) {
   const connection = useChatConnection();
   const { transcript, reset, localUser, resolvePrompt, clearPending, pushNotice } = transcriptApi;
+  const effectiveThreadId = transcript.threadId ?? threadId ?? connection.createdThreadId;
 
   const effectiveTranscript: TranscriptState = {
     ...transcript,
-    threadId: transcript.threadId ?? threadId ?? connection.createdThreadId,
+    threadId: effectiveThreadId,
     omProgress: transcript.omProgress ?? connection.state?.omProgress,
     usage: transcript.usage ?? connection.state?.tokenUsage,
   };
@@ -112,5 +114,10 @@ function ChatTranscriptValueProvider({
     loadMore,
   };
 
-  return <ChatTranscriptContext.Provider value={transcriptValue}>{children}</ChatTranscriptContext.Provider>;
+  return (
+    <ChatTranscriptContext.Provider value={transcriptValue}>
+      <SessionFavicon sessionOpen={Boolean(effectiveThreadId)} starting={connection.status === 'connecting'} busy={busy} />
+      {children}
+    </ChatTranscriptContext.Provider>
+  );
 }

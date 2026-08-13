@@ -766,7 +766,10 @@ export function createFactoryAuthGate(provider: IMastraAuthProvider) {
       path === '/signin' ||
       path.startsWith('/assets/') ||
       path === '/manifest.webmanifest' ||
-      path === '/mastra.svg'
+      path === '/mastra.svg' ||
+      path === '/favicon-session-starting.svg' ||
+      path === '/favicon-session-working.svg' ||
+      path === '/favicon-session-complete.svg'
     ) {
       return next();
     }

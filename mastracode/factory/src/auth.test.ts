@@ -141,7 +141,14 @@ describe('mountFactoryAuth gate (enabled)', () => {
     mockAuthenticate.mockResolvedValue(null);
     const { app } = buildApp();
 
-    for (const path of ['/assets/app.js', '/manifest.webmanifest', '/mastra.svg']) {
+    for (const path of [
+      '/assets/app.js',
+      '/manifest.webmanifest',
+      '/mastra.svg',
+      '/favicon-session-starting.svg',
+      '/favicon-session-working.svg',
+      '/favicon-session-complete.svg',
+    ]) {
       const res = await app.request(path, { headers: { Accept: '*/*' } });
       expect(res.status).toBe(200);
       expect(await res.text()).toBe('ok');
