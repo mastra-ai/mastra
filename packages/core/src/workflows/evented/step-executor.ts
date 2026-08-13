@@ -19,6 +19,7 @@ import type { SingleStepEntry, StepFlowEntry, StepResult } from '../types';
 import {
   validateStepInput,
   createDeprecationProxy,
+  omitPriorCompletionFields,
   runCountDeprecationMessage,
   validateStepSuspendData,
 } from '../utils';
@@ -104,7 +105,7 @@ export class StepExecutor extends MastraBase {
       resumedAt?: number;
       [key: string]: any;
     } = {
-      ...stepResults[stepId],
+      ...omitPriorCompletionFields((stepResults[stepId] ?? {}) as Record<string, unknown>),
       startedAt,
       payload: (typeof params.foreachIdx === 'number' ? params.input : inputData) ?? {},
     };
@@ -275,10 +276,11 @@ export class StepExecutor extends MastraBase {
       // Use stateUpdate if setState was called, otherwise use original state
       const finalState = stateUpdate ?? params.state;
 
+      const baseStepInfo = omitPriorCompletionFields(stepInfo);
       let finalResult: StepResult<any, any, any, any> & { __state?: Record<string, any> };
       if (suspended) {
         finalResult = {
-          ...stepInfo,
+          ...baseStepInfo,
           status: 'suspended',
           suspendedAt: endedAt,
           ...(stepOutput ? { suspendOutput: stepOutput } : {}),
@@ -290,7 +292,7 @@ export class StepExecutor extends MastraBase {
         }
       } else if (bailed) {
         finalResult = {
-          ...stepInfo,
+          ...baseStepInfo,
           // @ts-expect-error - bailed status not in type
           status: 'bailed',
           endedAt,
@@ -299,13 +301,13 @@ export class StepExecutor extends MastraBase {
         };
       } else if (nestedWflowStepPaused) {
         finalResult = {
-          ...stepInfo,
+          ...baseStepInfo,
           status: 'paused',
           __state: finalState,
         };
       } else {
         finalResult = {
-          ...stepInfo,
+          ...baseStepInfo,
           status: 'success',
           endedAt,
           output: stepOutput,
@@ -344,7 +346,7 @@ export class StepExecutor extends MastraBase {
       this.logger?.error(`Error executing step ${stepId}: ` + errorInstance?.stack);
 
       return {
-        ...stepInfo,
+        ...omitPriorCompletionFields(stepInfo),
         status: 'failed',
         endedAt,
         error: errorInstance,
