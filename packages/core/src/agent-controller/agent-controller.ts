@@ -878,19 +878,7 @@ export class AgentController<TState = {}> {
   setBrowser(browser: MastraBrowser | undefined): void {
     this.browser = browser;
 
-    // Collect unique agents: shared backing agent + any deprecated mode.agent
-    // instances so all receive the browser (signal providers may be attached to
-    // any of them).
-    const agents = new Set<Agent<any, any, any, any>>();
-    if (this.config.agent) {
-      agents.add(this.config.agent);
-    }
-    for (const mode of this.config.modes) {
-      if (mode.agent || !this.config.agent) {
-        agents.add(this.getAgentForMode(mode));
-      }
-    }
-    for (const agent of agents) {
+    for (const agent of this.backingAgents()) {
       agent.setBrowser(browser);
     }
   }
@@ -959,18 +947,7 @@ export class AgentController<TState = {}> {
 
     // Propagate harness-level Mastra, memory, workspace, browser, and pubsub
     // to the agent(s) that back each mode (after workspace init).
-    // Collect unique agents: shared backing agent + any deprecated mode.agent
-    // instances so all receive runtime services.
-    const agents = new Set<Agent<any, any, any, any>>();
-    if (this.config.agent) {
-      agents.add(this.config.agent);
-    }
-    for (const mode of this.config.modes) {
-      if (mode.agent || !this.config.agent) {
-        agents.add(this.getAgentForMode(mode));
-      }
-    }
-    for (const agent of agents) {
+    for (const agent of this.backingAgents()) {
       this.propagateRuntimeServicesToAgent(agent);
     }
 
@@ -1321,9 +1298,13 @@ export class AgentController<TState = {}> {
     this.#channels = channels;
     channels.__setController(this);
 
-    // Attach to every already-constructed backing agent: shared backing agent
-    // + any deprecated per-mode agent instances. Lazily-built mode agents
-    // receive channels on first run via `propagateRuntimeServicesToAgent`.
+    for (const agent of this.backingAgents()) {
+      agent.setChannels(channels);
+    }
+  }
+
+  /** The distinct agents backing this controller: the shared one plus any deprecated per-mode agent. */
+  private backingAgents(): Set<Agent<any, any, any, any>> {
     const agents = new Set<Agent<any, any, any, any>>();
     if (this.config.agent) {
       agents.add(this.config.agent);
@@ -1333,9 +1314,7 @@ export class AgentController<TState = {}> {
         agents.add(this.getAgentForMode(mode));
       }
     }
-    for (const agent of agents) {
-      agent.setChannels(channels);
-    }
+    return agents;
   }
 
   private getAgentForMode(mode: AgentControllerMode): Agent<any, any, any, any> {
@@ -1426,9 +1405,14 @@ export class AgentController<TState = {}> {
     return this.propagateRuntimeServicesToAgent(this.getAgentForMode(mode), session);
   }
 
-  /** Mode agents share one pubsub, so any of them sees every run on the controller. */
   listActiveThreadRuns(): ActiveThreadRun[] {
-    return this.propagateRuntimeServicesToAgent(this.getAgentForMode(this.#defaultMode)).listActiveThreadRuns();
+    const byRunId = new Map<string, ActiveThreadRun>();
+    for (const agent of this.backingAgents()) {
+      for (const run of this.propagateRuntimeServicesToAgent(agent).listActiveThreadRuns()) {
+        byRunId.set(run.runId, run);
+      }
+    }
+    return [...byRunId.values()];
   }
 
   /**

@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { createTestAgent, createTestController } from '../../agent-controller/test-utils';
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import type { MastraModelOutput } from '../../stream/base/output';
 import type { Agent } from '../agent';
-import { AgentThreadStreamRuntime } from '../thread-stream-runtime';
+import { agentThreadStreamRuntime, AgentThreadStreamRuntime } from '../thread-stream-runtime';
 
 const fakeAgent = { id: 'list-active-runs-test-agent' } as unknown as Agent<any, any, any, any>;
 
@@ -76,5 +77,47 @@ describe('listActiveThreadRuns', () => {
         { runId: 'run-a', resourceId: 'resource-a', threadId: 'thread-a' },
       ]),
     );
+  });
+});
+
+describe('AgentController.listActiveThreadRuns', () => {
+  it('covers modes whose agent carries its own pubsub', async () => {
+    const buildPubSub = new EventEmitterPubSub();
+    const planPubSub = new EventEmitterPubSub();
+    const buildAgent = createTestAgent({ id: 'build-agent', name: 'build-agent' });
+    const planAgent = createTestAgent({ id: 'plan-agent', name: 'plan-agent' });
+    buildAgent.__setPubSub(buildPubSub);
+    planAgent.__setPubSub(planPubSub);
+
+    const controller = createTestController({
+      modes: [
+        { id: 'build', name: 'Build', default: true, agent: buildAgent },
+        { id: 'plan', name: 'Plan', agent: planAgent },
+      ],
+    });
+    await controller.init();
+
+    await agentThreadStreamRuntime.registerRun(
+      buildAgent,
+      createFakeRun('run-build').output,
+      { memory: { thread: 'thread-build', resource: 'resource-build' } },
+      buildPubSub,
+    );
+    await agentThreadStreamRuntime.registerRun(
+      planAgent,
+      createFakeRun('run-plan').output,
+      { memory: { thread: 'thread-plan', resource: 'resource-plan' } },
+      planPubSub,
+    );
+
+    expect(controller.listActiveThreadRuns()).toEqual(
+      expect.arrayContaining([
+        { runId: 'run-build', resourceId: 'resource-build', threadId: 'thread-build' },
+        { runId: 'run-plan', resourceId: 'resource-plan', threadId: 'thread-plan' },
+      ]),
+    );
+
+    await buildPubSub.close();
+    await planPubSub.close();
   });
 });
