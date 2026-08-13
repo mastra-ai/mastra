@@ -536,7 +536,7 @@ const instructions = workspace.getInstructions({ requestContext })
 
 #### `getInstructionsAsync(opts?)`
 
-Returns combined workspace instructions. Use this when the workspace uses resolver-backed providers. A runtime-defined filesystem is resolved per request; a runtime-defined sandbox contributes stable placeholder text unless `instructions.dynamicSandbox` is set to `'resolve'`.
+Returns combined workspace instructions. Use this when the workspace uses resolver-backed providers. A runtime-defined filesystem is resolved per request. A runtime-defined sandbox contributes stable placeholder text unless `instructions.dynamicSandbox` is set to `'resolve'`.
 
 ```typescript
 const instructions = await workspace.getInstructionsAsync({ requestContext })

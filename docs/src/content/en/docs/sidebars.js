@@ -294,25 +294,9 @@ const sidebars = {
           ],
         },
         {
-          type: 'category',
+          type: 'doc',
+          id: 'browser/overview',
           label: 'Browser',
-          link: {
-            type: 'doc',
-            id: 'browser/overview',
-          },
-          customProps: {
-            contextualSidebar: true,
-          },
-          items: [
-            {
-              type: 'doc',
-              id: 'browser/recording',
-              label: 'Recording',
-              customProps: {
-                tags: ['new'],
-              },
-            },
-          ],
         },
         {
           type: 'category',
@@ -707,17 +691,11 @@ const sidebars = {
       type: 'doc',
       id: 'mastra-platform/deploy',
       label: 'Deploy',
-      customProps: {
-        tags: ['new'],
-      },
     },
     {
       type: 'doc',
       id: 'mastra-platform/environments',
       label: 'Environments',
-      customProps: {
-        tags: ['new'],
-      },
     },
     {
       type: 'doc',

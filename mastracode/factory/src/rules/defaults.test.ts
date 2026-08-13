@@ -180,6 +180,83 @@ describe('defaultFactoryRules', () => {
     ).toBeUndefined();
   });
 
+  it('transitions linked GitHub issue cards deterministically on closure', async () => {
+    const rule = defaultFactoryRules({ version: 'deployment-7' }).github.issueClosed?.onEvent;
+    const github = githubContext('issueClosed');
+    const done = await rule?.({
+      ...github,
+      item: { ...item, stages: ['planning'] },
+      board: 'work',
+      itemRevision: 4,
+    });
+    const canceled = await rule?.({
+      ...github,
+      ingress: { type: 'github', id: 'delivery-not-planned' },
+      item: { ...item, stages: ['planning'] },
+      board: 'work',
+      itemRevision: 4,
+      issue: {
+        number: 42,
+        title: 'Issue 42',
+        url: 'https://github.test/acme/repo/issues/42',
+        createdAt: '2026-07-01T00:00:00Z',
+        stateReason: 'not_planned',
+      },
+    });
+
+    expect(done).toMatchObject({
+      type: 'transition',
+      board: 'work',
+      stage: 'done',
+      idempotencyKey: 'delivery-1:issue-closed',
+      message: { text: 'GitHub issue #42 was closed; this Work card was moved to Done.' },
+    });
+    expect(canceled).toMatchObject({
+      type: 'transition',
+      stage: 'canceled',
+      idempotencyKey: 'delivery-not-planned:issue-closed',
+      message: { text: 'GitHub issue #42 was closed (not_planned); this Work card was moved to Canceled.' },
+    });
+  });
+
+  it('only closes non-terminal linked work-board issue cards', async () => {
+    const githubRule = defaultFactoryRules({ version: 'deployment-7' }).github.issueClosed?.onEvent;
+    const linearRule = defaultFactoryRules({ version: 'deployment-7' }).linear.issueClosed?.onEvent;
+    const github = githubContext('issueClosed');
+    const linear = linearContext();
+
+    expect(
+      githubRule?.({ ...github, item: { ...item, source: 'github-pr' }, board: 'review', itemRevision: 1 }),
+    ).toBeUndefined();
+    expect(
+      githubRule?.({ ...github, item: { ...item, stages: ['done'] }, board: 'work', itemRevision: 1 }),
+    ).toBeUndefined();
+    expect(
+      linearRule?.({
+        ...linear,
+        event: 'issueClosed',
+        item: { ...item, source: 'linear-issue', stages: ['planning'] },
+        board: 'work',
+        itemRevision: 1,
+        issue: { ...linear.issue, stateType: 'completed' },
+      }),
+    ).toMatchObject({
+      type: 'transition',
+      stage: 'done',
+      idempotencyKey: 'linear:issue-1:2026-07-02T00:00:00Z:issue-closed',
+    });
+    expect(
+      linearRule?.({
+        ...linear,
+        event: 'issueClosed',
+        item: { ...item, source: 'linear-issue', stages: ['canceled'] },
+        board: 'work',
+        itemRevision: 1,
+        issue: { ...linear.issue, stateType: 'canceled' },
+      }),
+    ).toBeUndefined();
+  });
+
   it('starts Linear investigation when a human moves an issue into Triage', async () => {
     const rule = defaultFactoryRules({ version: 'deployment-7' }).work.triage?.linearIssue?.onEnter;
     const context = {
@@ -223,6 +300,19 @@ describe('defaultFactoryRules', () => {
       });
     },
   );
+
+  it('does not duplicate investigation when a GitHub issue enters Triage through a governed run', async () => {
+    const rule = defaultFactoryRules({ version: 'deployment-7' }).work.triage?.issue?.onEnter;
+    const context = {
+      ...stageContext({ type: 'human', id: 'user-1' }, 'work'),
+      cause: 'run_start',
+      stage: 'triage',
+      fromStage: 'intake',
+      toStage: 'triage',
+    } as FactoryStageRuleContext;
+
+    expect(await rule?.(context)).toBeUndefined();
+  });
 
   it('does not duplicate investigation when a new GitHub issue is materialized into Triage', async () => {
     const rule = defaultFactoryRules({ version: 'deployment-7' }).work.triage?.issue?.onEnter;

@@ -21,7 +21,6 @@ const ACTION_LABELS: Record<string, string> = {
   'factory.run.started': 'Started a run',
   'factory.run.approved': 'Started a suggested run',
   'factory.run.dismissed': 'Dismissed a suggested run',
-  'factory.triage.started': 'Started triage',
 };
 
 function actionLabel(action: string): string {

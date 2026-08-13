@@ -15,7 +15,7 @@ Breaking changes may occur without a major version bump until the API is stable.
 
 `AgentController` is a shared runtime host for interactive agent applications. It coordinates modes, models, storage, workspaces, tool approvals, subagents, and channels. Each user or active task works through an isolated [`Session`](/reference/agent-controller/session).
 
-[Mastra Code](https://code.mastra.ai) is the flagship AgentController implementation. It's a terminal-based coding agent with multi-model support, persistent conversations, and plan-then-execute workflows. Read [Building a coding agent](https://mastra.ai/blog/building-a-coding-agent) for a step-by-step guide.
+[Mastra Code](https://code.mastra.ai) and [Mastra Factory](https://factory.mastra.ai) are the flagship AgentController implementations. They're coding agents with multi-model support, persistent conversations, and plan-then-execute workflows. Read [Building a coding agent](https://mastra.ai/blog/building-a-coding-agent) for a step-by-step TUI guide.
 
 ## When to use the Agent Controller
 
@@ -350,7 +350,7 @@ Point each platform webhook at the controller-specific route:
 /api/agent-controllers/<CONTROLLER_ID>/channels/<PLATFORM>/webhook
 ```
 
-Each external chat thread maps to one controller Session and Mastra thread. By default, new sessions use a resource ID derived from the adapter's chat-thread ID, prefixed with `channel:`. Use `resolveResourceId` to map direct messages to an existing application user or choose another memory owner. The callback only affects new threads; an existing thread keeps its stored resource ID.
+Each external chat thread maps to one controller Session and Mastra thread. By default, new sessions use a resource ID derived from the adapter's chat-thread ID, prefixed with `channel:`. Use `resolveResourceId` to map direct messages to an existing application user or choose another memory owner. The callback only affects new threads. An existing thread keeps its stored resource ID.
 
 Channel sessions are created by the controller rather than by your code, so `onSessionStart` is where you configure them. It runs once per session, after the session is bound to its mapped thread and before the first message is handled. A channel session starts with controller defaults, so this is where you set its model and memory settings. Later messages in the same thread reuse the session and don't call it again. Errors are logged and swallowed so a session that can't be configured still answers the message.
 

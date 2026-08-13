@@ -144,8 +144,9 @@ describe('Board card click starts the default run', () => {
 
     await waitFor(() => expect(startRequests).toHaveLength(1));
     expect(startRequests[0]).toMatchObject({
+      destinationStage: 'triage',
       invocation: { type: 'skill', skillName: 'factory-triage' },
-      workItem: { id: 'item-1', role: 'plan' },
+      workItem: { id: 'item-1', role: 'triage' },
     });
   });
 
@@ -193,8 +194,9 @@ describe('Board card click starts the default run', () => {
 
     await waitFor(() => expect(startRequests).toHaveLength(1));
     expect(startRequests[0]).toMatchObject({
+      destinationStage: 'triage',
       invocation: { type: 'skill', skillName: 'factory-triage' },
-      workItem: { role: 'plan' },
+      workItem: { role: 'triage' },
     });
   });
 });

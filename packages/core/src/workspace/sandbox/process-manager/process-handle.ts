@@ -196,12 +196,18 @@ export abstract class ProcessHandle {
    * while waiting. The callbacks are automatically removed when `wait()`
    * resolves, so there's no cleanup needed by the caller.
    *
-   * Subclasses implement `wait()` with platform-specific logic — the base
+   * Optionally pass an `abortSignal` to couple the blocking wait to a caller
+   * lifetime: on abort the process is killed (mirroring the spawn-time
+   * `abortSignal` convention in {@link CommandOptions}), which lets the wait
+   * settle with the killed process's result instead of blocking forever.
+   *
+   * Subclasses implement `wait()` with platform-specific logic; the base
    * constructor wraps it to handle the optional streaming callbacks.
    */
   async wait(_options?: {
     onStdout?: (data: string) => void;
     onStderr?: (data: string) => void;
+    abortSignal?: AbortSignal;
   }): Promise<CommandResult> {
     throw new Error(`${this.constructor.name} must implement wait()`);
   }
@@ -228,9 +234,22 @@ export abstract class ProcessHandle {
     // with a wrapper that handles optional streaming callbacks.
     const implWait = this.wait.bind(this);
 
-    this.wait = async (waitOptions?: { onStdout?: (data: string) => void; onStderr?: (data: string) => void }) => {
+    this.wait = async (waitOptions?: {
+      onStdout?: (data: string) => void;
+      onStderr?: (data: string) => void;
+      abortSignal?: AbortSignal;
+    }) => {
       if (waitOptions?.onStdout) this._stdoutListeners.add(waitOptions.onStdout);
       if (waitOptions?.onStderr) this._stderrListeners.add(waitOptions.onStderr);
+      // Abort kills the process (same convention as spawn-time `abortSignal`
+      // in the process manager) so the wait settles via the normal exit path
+      // instead of blocking past the caller's lifetime.
+      const abortSignal = waitOptions?.abortSignal;
+      const onAbort = () => {
+        void this.kill().catch(() => {});
+      };
+      if (abortSignal?.aborted) onAbort();
+      else abortSignal?.addEventListener('abort', onAbort, { once: true });
       try {
         const result = await implWait();
         return {
@@ -241,6 +260,7 @@ export abstract class ProcessHandle {
           stderrDroppedBytes: this.stderrDroppedBytes,
         };
       } finally {
+        abortSignal?.removeEventListener('abort', onAbort);
         if (waitOptions?.onStdout) this._stdoutListeners.delete(waitOptions.onStdout);
         if (waitOptions?.onStderr) this._stderrListeners.delete(waitOptions.onStderr);
       }

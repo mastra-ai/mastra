@@ -130,11 +130,33 @@ function stripTerminalOutputFields<T>(value: T): T {
   return pruned as T;
 }
 
+/**
+ * Drops `stepResult.request`: the raw provider request the engine echoes back
+ * into the iteration state, carrying the full serialized prompt and the entire
+ * tool JSON schema on BOTH sides of every step result, rewritten at every step
+ * boundary. Nothing reads it back (there are zero `stepResult.request` reads
+ * in the codebase) and resume rebuilds the next request from
+ * `messageListState`, never from this echo. The sibling `metadata.request` is
+ * already deleted unconditionally for exactly this reason; `stepResult` itself
+ * stays because core documents it as a preserved routing field, but `request`
+ * is the one member of it that carries no routing. Measured over 300 real
+ * production snapshots it was 86.7 MB of 360.7 MB persisted, 24% of
+ * everything written.
+ */
+function stripStepResultRequest<T>(value: T): T {
+  if (!isPlainObject(value) || !isPlainObject(value.stepResult)) return value;
+  if (!('request' in value.stepResult)) return value;
+  const { request: _request, ...stepResult } = value.stepResult;
+  return { ...value, stepResult } as T;
+}
+
 /** Applies the pruning rules to a single serialized step result. */
 function pruneStepResult(result: Record<string, any>): Record<string, any> {
   if (!isPlainObject(result) || typeof result.status !== 'string') return result;
 
   const pruned: Record<string, any> = { ...result };
+  pruned.payload = stripStepResultRequest(pruned.payload);
+  if ('output' in pruned) pruned.output = stripStepResultRequest(pruned.output);
   pruned.payload = stripHeavyIterationFields(pruned.payload);
   if ('prevOutput' in pruned) pruned.prevOutput = stripHeavyIterationFields(pruned.prevOutput);
 

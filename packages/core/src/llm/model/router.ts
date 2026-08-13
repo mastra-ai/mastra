@@ -509,6 +509,7 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
           modelId,
           providerId,
           this.config.url || '',
+          apiKey,
           stableHeaderKey(headers),
           resolvedTransport,
           websocketKey,

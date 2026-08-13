@@ -1,5 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+vi.mock('../issue-reconcile-worker.js', () => ({
+  IssueReconcileWorker: class {
+    readonly name = 'linear-issue-reconcile';
+
+    constructor(readonly config: unknown) {}
+  },
+}));
+
 import { LinearIntegration } from './integration.js';
 import type { LinearIssue, LinearIssueDetail } from './integration.js';
 
@@ -27,6 +35,7 @@ const issue: LinearIssue = {
 const connection = { type: 'oauth' as const, accessToken: 'linear-token' };
 
 afterEach(() => {
+  vi.unstubAllEnvs();
   vi.unstubAllGlobals();
 });
 
@@ -263,21 +272,72 @@ describe('LinearIntegration capability surface', () => {
 });
 
 describe('LinearIntegration workers', () => {
+  const context = {
+    controller: {},
+    storage: {
+      generic: {},
+      sourceControl: {},
+      projects: { listAll: async () => [] },
+      intake: {},
+    },
+    rules: { config: {}, workItems: {} },
+  };
+
   it('registers a standalone issue reconciler worker', () => {
     const linear = integration() as unknown as {
       workers(ctx: unknown): Array<{ name: string }>;
     };
-    const context = {
-      controller: {},
-      storage: {
-        generic: {},
-        sourceControl: {},
-        projects: { listAll: async () => [] },
-        intake: {},
-      },
-      rules: { config: {}, workItems: {} },
+
+    expect(linear.workers(context).map(worker => worker.name)).toEqual(['linear-issue-reconcile']);
+  });
+
+  it('uses the issue reconcile switch before the legacy switch', () => {
+    vi.stubEnv('MASTRACODE_LINEAR_RECONCILE_ENABLED', 'false');
+    vi.stubEnv('MASTRACODE_LINEAR_ISSUE_RECONCILE_ENABLED', 'true');
+    const linear = integration() as unknown as {
+      workers(ctx: unknown): Array<{ name: string }>;
     };
 
     expect(linear.workers(context).map(worker => worker.name)).toEqual(['linear-issue-reconcile']);
+  });
+
+  it('uses the issue reconcile interval before the legacy interval and falls back when invalid', () => {
+    vi.stubEnv('MASTRACODE_LINEAR_RECONCILE_INTERVAL_MS', '120000');
+    vi.stubEnv('MASTRACODE_LINEAR_ISSUE_RECONCILE_INTERVAL_MS', '60000');
+    const linear = integration() as unknown as {
+      workers(ctx: unknown): Array<{ config: { intervalMs?: number } }>;
+    };
+
+    expect(linear.workers(context)[0]?.config).toMatchObject({ intervalMs: 60000 });
+
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.stubEnv('MASTRACODE_LINEAR_ISSUE_RECONCILE_INTERVAL_MS', 'invalid');
+    expect(linear.workers(context)[0]?.config).toMatchObject({ intervalMs: 120000 });
+    expect(warn).toHaveBeenCalledWith(
+      '[Linear reconciliation] MASTRACODE_LINEAR_ISSUE_RECONCILE_INTERVAL_MS must be a positive integer; received "invalid".',
+    );
+  });
+
+  it('falls back from an invalid issue reconcile switch and warns', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.stubEnv('MASTRACODE_LINEAR_RECONCILE_ENABLED', 'false');
+    vi.stubEnv('MASTRACODE_LINEAR_ISSUE_RECONCILE_ENABLED', 'yes');
+    const linear = integration() as unknown as {
+      workers(ctx: unknown): Array<{ name: string }>;
+    };
+
+    expect(linear.workers(context)).toEqual([]);
+    expect(warn).toHaveBeenCalledWith(
+      '[Linear reconciliation] MASTRACODE_LINEAR_ISSUE_RECONCILE_ENABLED must be true or false; received "yes".',
+    );
+  });
+
+  it('does not register when issue reconciliation is disabled', () => {
+    vi.stubEnv('MASTRACODE_LINEAR_ISSUE_RECONCILE_ENABLED', 'false');
+    const linear = integration() as unknown as {
+      workers(ctx: unknown): Array<{ name: string }>;
+    };
+
+    expect(linear.workers(context)).toEqual([]);
   });
 });

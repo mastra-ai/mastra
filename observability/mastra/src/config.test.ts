@@ -198,6 +198,22 @@ describe('Observability Config Validation', () => {
       }).not.toThrow();
     });
 
+    it('should accept indexed redactionStyle', () => {
+      expect(() => {
+        new Observability({
+          configs: {
+            myTracing: {
+              serviceName: 'my-service',
+              exporters: [new TestExporter()],
+            },
+          },
+          sensitiveDataFilter: {
+            redactionStyle: 'indexed',
+          },
+        });
+      }).not.toThrow();
+    });
+
     it('should reject invalid sensitiveDataFilter value', () => {
       try {
         new Observability({
