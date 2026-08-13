@@ -117,6 +117,16 @@ It uses background agents for managing memory. When no model is set, the default
 
 :::
 
+### Automatic models in Mastra Code and Factory
+
+The generic `@mastra/memory` configuration above keeps its concrete default model. Mastra Code and Factory add a separate **Auto** selection for each Observational Memory role.
+
+An automatic Observer or Reflector follows the active main model provider. Mastra Code uses that provider's built-in low-cost Observational Memory model when one is configured. For custom providers and providers without a built-in choice, it uses the active main model. The effective model is resolved when the role runs, so changing the main model doesn't rewrite the saved automatic selection.
+
+Select an explicit model to pin one role independently. Reset that role to **Auto** to resume following the main model provider. Existing saved concrete model IDs remain explicit until you reset them.
+
+Factory stores automatic intent separately from the effective model shown in settings. A missing provider credential can mark that effective model unavailable, but it doesn't replace the saved selection or prevent Factory from starting.
+
 ## Temporal gap markers
 
 Temporal gap markers insert a short reminder before a new user message when enough time has passed since the previous message in the thread. They help the agent and the UI see that the conversation resumed after a useful pause.

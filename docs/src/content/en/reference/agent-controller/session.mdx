@@ -566,11 +566,24 @@ await session.model.switch({ modelId: '__GATEWAY_ANTHROPIC_MODEL_SONNET__' })
 
 ## Observational Memory
 
-The observational-memory model selection, grouped by role under `session.om.observer` and `session.om.reflector`. Both roles expose the same methods. Reads return the value from session state when set, falling back to the controller's `omConfig` defaults.
+The observational-memory model selection, grouped by role under `session.om.observer` and `session.om.reflector`. Both roles expose the same methods. Selection intent and the effective concrete model ID are separate values.
+
+### `session.om.observer.selection()` / `session.om.reflector.selection()`
+
+Return the role's persisted selection intent.
+
+```typescript
+const observerSelection = session.om.observer.selection()
+const reflectorSelection = session.om.reflector.selection()
+```
+
+Returns: `OMModelSelection | undefined`
+
+An automatic selection is `{ mode: 'auto' }`. An explicit selection is `{ mode: 'model', modelId: string }`. A legacy concrete model ID without selection metadata is treated as explicit.
 
 ### `session.om.observer.modelId()` / `session.om.reflector.modelId()`
 
-Return the role's model ID, or `undefined` when neither session state nor `omConfig` provides one.
+Return the role's effective concrete model ID. For an automatic selection, the controller calls `omConfig.resolveAutoModelId` with the role, current main model ID, and read-only session state. If that resolver returns no model or throws, the role uses its concrete `omConfig` fallback.
 
 ```typescript
 const observer = session.om.observer.modelId()
@@ -586,15 +599,25 @@ const observationThreshold = session.om.observer.threshold()
 const reflectionThreshold = session.om.reflector.threshold()
 ```
 
+### `session.om.observer.switchSelection({ selection })` / `session.om.reflector.switchSelection({ selection })`
+
+Switch one role between automatic and explicit selection. The selection is persisted to thread metadata. Automatic selection clears the role's stale concrete model ID. The other role is unchanged. The emitted `om_model_changed` event continues to contain the effective concrete `modelId`.
+
+```typescript
+await session.om.observer.switchSelection({
+  selection: { mode: 'auto' },
+})
+await session.om.reflector.switchSelection({
+  selection: { mode: 'model', modelId: '__GATEWAY_ANTHROPIC_MODEL_HAIKU__' },
+})
+```
+
 ### `session.om.observer.switchModel({ modelId })` / `session.om.reflector.switchModel({ modelId })`
 
-Switch the role's model. Persists the setting to thread metadata and emits an `om_model_changed` event.
+Switch the role to an explicit model. This compatibility method is equivalent to `switchSelection({ selection: { mode: 'model', modelId } })`.
 
 ```typescript
 await session.om.observer.switchModel({
-  modelId: '__GATEWAY_ANTHROPIC_MODEL_HAIKU__',
-})
-await session.om.reflector.switchModel({
   modelId: '__GATEWAY_ANTHROPIC_MODEL_HAIKU__',
 })
 ```
