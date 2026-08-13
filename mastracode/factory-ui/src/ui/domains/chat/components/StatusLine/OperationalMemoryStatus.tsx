@@ -40,16 +40,16 @@ export function OperationalMemoryStatus() {
 
   const messageTone = work.messages === 'blocking' ? 'warning' : 'messages';
   const observationTone = work.observations === 'blocking' ? 'warning' : 'memory';
-  /* A button hides its subtree from assistive tech, so the rings' own readings have to be spoken here. */
+  /* A button hides its subtree from assistive tech, so each ring's own label and reading have to be spoken here. */
   const spoken = [
-    showMsg && `messages ${reading(om.pendingTokens, om.threshold)}`,
-    showMem && `observations ${reading(om.observationTokens, om.reflectionThreshold)}`,
+    showMsg && `${messageLabel[work.messages]}, ${reading(om.pendingTokens, om.threshold)}`,
+    showMem && `${observationLabel[work.observations]}, ${reading(om.observationTokens, om.reflectionThreshold)}`,
   ].filter(Boolean);
 
   return (
     <Popover>
       <PopoverTrigger
-        aria-label={`Memory budgets: ${spoken.join(', ')}`}
+        aria-label={`Memory budgets: ${spoken.join('. ')}`}
         className={cn(buttonVariants({ variant: 'ghost', size: 'xs' }), 'gap-3')}
       >
         {showMsg && (

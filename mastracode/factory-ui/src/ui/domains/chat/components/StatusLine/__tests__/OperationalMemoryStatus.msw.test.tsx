@@ -52,6 +52,16 @@ describe('observational memory status', () => {
       );
       expect(screen.queryByText('consolidating memory')).toBeNull();
     });
+
+    it('names the working budget on the control, which hides the rings from assistive tech', () => {
+      renderStatus({ bufferingObservations: true });
+
+      expect(
+        screen.getByRole('button', {
+          name: 'Memory budgets: Message window until next observation, 14.9 of 30k. Consolidating observations in the background, 12 of 40k',
+        }),
+      ).toBeVisible();
+    });
   });
 
   describe('when a reflection holds the turn', () => {
@@ -86,12 +96,12 @@ describe('observational memory status', () => {
       expect(container.querySelector('[data-working]')).toBeNull();
     });
 
-    it('speaks both readings on the control, which hides the rings from assistive tech', () => {
+    it('speaks both budgets on the control, which hides the rings from assistive tech', () => {
       renderStatus({});
 
       expect(
         screen.getByRole('button', {
-          name: 'Memory budgets: messages 14.9 of 30k, observations 12 of 40k',
+          name: 'Memory budgets: Message window until next observation, 14.9 of 30k. Observations accumulated until next reflection, 12 of 40k',
         }),
       ).toBeVisible();
     });
