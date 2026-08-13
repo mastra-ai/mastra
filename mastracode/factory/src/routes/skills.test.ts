@@ -424,3 +424,53 @@ describe('workspace skill invocation route', () => {
     expect(harness.sendA).not.toHaveBeenCalled();
   });
 });
+
+describe('factory skills catalog route', () => {
+  function createCatalogApp(options: { authEnabled?: boolean; user?: TestAuthUser } = {}) {
+    const app = new Hono();
+    if (options.user) {
+      app.use('*', async (c, next) => {
+        c.set('factoryAuthUser' as never, options.user as never);
+        await next();
+      });
+    }
+    mountApiRoutes(
+      app as never,
+      new SkillRoutes({
+        auth: fakeRouteAuth({ enabled: options.authEnabled ?? true }),
+        controllerId: 'code',
+        controller: { getSessionByResource: vi.fn(async () => undefined) } as never,
+      }).routes(),
+    );
+    return app;
+  }
+
+  it('rejects unauthenticated callers when auth is enabled', async () => {
+    const app = createCatalogApp();
+    const response = await app.request('/web/factory/skills');
+    expect(response.status).toBe(401);
+    expect(await response.json()).toEqual({ error: 'unauthorized', message: 'Authentication required.' });
+  });
+
+  it('lists the bundled factory skills with descriptions and content', async () => {
+    const app = createCatalogApp({ authEnabled: false });
+    const response = await app.request('/web/factory/skills');
+    expect(response.status).toBe(200);
+    const { skills } = (await response.json()) as {
+      skills: { name: string; description: string; content: string }[];
+    };
+    const names = skills.map(s => s.name);
+    expect(names).toContain('factory-triage');
+    expect(names).toContain('factory-plan');
+    const triage = skills.find(s => s.name === 'factory-triage')!;
+    expect(triage.description.length).toBeGreaterThan(0);
+    expect(triage.content).toContain('# Factory Triage');
+    expect(triage.content).not.toContain('---\nname:');
+  });
+
+  it('serves the catalog to signed-in tenants', async () => {
+    const app = createCatalogApp({ user: { workosId: 'user-1', organizationId: 'org-1' } });
+    const response = await app.request('/web/factory/skills');
+    expect(response.status).toBe(200);
+  });
+});

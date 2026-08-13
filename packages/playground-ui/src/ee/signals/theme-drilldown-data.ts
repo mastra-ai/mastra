@@ -1,45 +1,97 @@
 import type { ThemeFlowResponse, ThemeNode, ThemePathsResponse, TraceSignalName } from './types';
 
-export type ThemeSelection = {
-  signalName: TraceSignalName;
-  themeId: string;
-  label: string;
-};
+export type ThemeSelection =
+  | {
+      kind: 'theme';
+      signalName: TraceSignalName;
+      themeId: string;
+      label: string;
+    }
+  | {
+      kind: 'noise';
+      signalName: TraceSignalName;
+    };
+
+export type SelectedTheme = Extract<ThemeSelection, { kind: 'theme' }>;
+
+export interface ThemeSelectionStats {
+  traceCount: number;
+  stageShare: number;
+}
+
+export function findSelectionStats(
+  flow: ThemeFlowResponse,
+  drillStack: ThemeSelection[],
+  selection: ThemeSelection | undefined,
+): ThemeSelectionStats | undefined {
+  if (!selection) return undefined;
+  if (drillStack.some(filter => filter.signalName === selection.signalName)) {
+    return { traceCount: flow.snapshot.traceCount, stageShare: flow.snapshot.traceCount > 0 ? 1 : 0 };
+  }
+  const stage = flow.stages.find(candidate => candidate.signalName === selection.signalName);
+  const node = stage?.nodes.find(candidate =>
+    selection.kind === 'theme'
+      ? candidate.kind === 'theme' && candidate.themeId === selection.themeId
+      : candidate.kind === 'noise',
+  );
+  return node ? { traceCount: node.traceCount, stageShare: node.stageShare } : { traceCount: 0, stageShare: 0 };
+}
+
+export function mergeVisibleSignalOrder(
+  signalNames: TraceSignalName[],
+  nextVisibleSignalNames: TraceSignalName[],
+): TraceSignalName[] {
+  const visibleSignalNames = new Set(nextVisibleSignalNames);
+  let nextVisibleIndex = 0;
+  return signalNames.map(signalName => {
+    if (!visibleSignalNames.has(signalName)) return signalName;
+    return nextVisibleSignalNames[nextVisibleIndex++] ?? signalName;
+  });
+}
 
 export function findThemeSelection(
   flow: ThemeFlowResponse,
   signalName: string,
   nodeId: string | number,
-): ThemeSelection | undefined {
+): SelectedTheme | undefined {
   const stage = flow.stages.find(candidate => candidate.signalName === signalName);
   if (!stage) return undefined;
   const node = stage.nodes.find(candidate => candidate.nodeId === String(nodeId));
   if (node?.kind !== 'theme' || !node.themeId || !/^\d+$/.test(node.themeId)) return undefined;
-  return { signalName: stage.signalName, themeId: node.themeId, label: node.label };
+  return { kind: 'theme', signalName: stage.signalName, themeId: node.themeId, label: node.label };
 }
 
-/** Resolves a chart node to its trace signal when the node is that stage's noise bucket. */
+/** Resolves a chart node to a noise selection when the node is that stage's noise bucket. */
 export function findNoiseSelection(
   flow: ThemeFlowResponse,
   signalName: string,
   nodeId: string | number,
-): TraceSignalName | undefined {
+): ThemeSelection | undefined {
   const stage = flow.stages.find(candidate => candidate.signalName === signalName);
   const node = stage?.nodes.find(candidate => candidate.nodeId === String(nodeId));
-  return node?.kind === 'noise' ? stage?.signalName : undefined;
+  return node?.kind === 'noise' && stage ? { kind: 'noise', signalName: stage.signalName } : undefined;
 }
 
 export function buildDrilledThemeFlow(
   flow: ThemeFlowResponse,
   pathsResponse: ThemePathsResponse,
-  selection: ThemeSelection,
+  selections: ThemeSelection[],
 ): ThemeFlowResponse {
-  const selectedNodeKey = Object.entries(pathsResponse.themes).find(
-    ([, theme]) => theme.signalName === selection.signalName && theme.themeId === selection.themeId,
-  )?.[0];
-  const filteredPaths = selectedNodeKey
-    ? pathsResponse.paths.filter(path => path.assignments[selection.signalName] === selectedNodeKey)
-    : [];
+  const selectedAssignments = selections.map(selection => {
+    if (selection.kind === 'noise') return { signalName: selection.signalName, assignment: 'noise' };
+
+    const assignment = Object.entries(pathsResponse.themes).find(
+      ([, theme]) => theme.signalName === selection.signalName && theme.themeId === selection.themeId,
+    )?.[0];
+    return { signalName: selection.signalName, assignment };
+  });
+  const filteredPaths = selectedAssignments.some(selection => selection.assignment === undefined)
+    ? []
+    : pathsResponse.paths.filter(path =>
+        selectedAssignments.every(selection => path.assignments[selection.signalName] === selection.assignment),
+      );
+  const drilledSignals = new Set(selections.map(selection => selection.signalName));
+  const visibleSignals = pathsResponse.signals.filter(signalName => !drilledSignals.has(signalName));
   const flowNodesBySignalAndTheme = new Map<TraceSignalName, Map<string, ThemeNode>>();
   const noiseNodeIds = new Map<TraceSignalName, string>();
 
@@ -52,7 +104,6 @@ export function buildDrilledThemeFlow(
     flowNodesBySignalAndTheme.set(stage.signalName, themes);
   }
 
-  let localThemeIndex = 0;
   const nodesBySignalAndAssignment = new Map<TraceSignalName, Map<string, ThemeNode>>();
   const nodeCounts = new Map<string, number>();
   const links = new Map<
@@ -70,7 +121,7 @@ export function buildDrilledThemeFlow(
     const flowNode = theme ? flowNodesBySignalAndTheme.get(signalName)?.get(theme.themeId) : undefined;
     const node: ThemeNode = theme
       ? {
-          nodeId: flowNode?.nodeId ?? `drilled-theme-${localThemeIndex++}`,
+          nodeId: flowNode?.nodeId ?? `drilled-theme-${signalName}-${theme.themeId}`,
           kind: 'theme',
           themeId: theme.themeId,
           label: theme.label,
@@ -90,15 +141,15 @@ export function buildDrilledThemeFlow(
   };
 
   for (const path of filteredPaths) {
-    for (let index = 0; index < pathsResponse.signals.length; index += 1) {
-      const signalName = pathsResponse.signals[index];
+    for (let index = 0; index < visibleSignals.length; index += 1) {
+      const signalName = visibleSignals[index];
       if (!signalName) continue;
       const assignment = path.assignments[signalName];
       if (!assignment) continue;
       const node = resolveNode(signalName, assignment);
       nodeCounts.set(node.nodeId, (nodeCounts.get(node.nodeId) ?? 0) + 1);
 
-      const targetSignalName = pathsResponse.signals[index + 1];
+      const targetSignalName = visibleSignals[index + 1];
       if (!targetSignalName) continue;
       const targetAssignment = path.assignments[targetSignalName];
       if (!targetAssignment) continue;
@@ -119,7 +170,7 @@ export function buildDrilledThemeFlow(
     }
   }
 
-  const stages = pathsResponse.signals.map(signalName => {
+  const stages = visibleSignals.map(signalName => {
     const traceCount = filteredPaths.filter(path => path.assignments[signalName] !== undefined).length;
     const uniqueNodes = new Map<string, ThemeNode>();
     for (const node of nodesBySignalAndAssignment.get(signalName)?.values() ?? []) uniqueNodes.set(node.nodeId, node);

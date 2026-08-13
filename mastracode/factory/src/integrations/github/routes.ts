@@ -235,7 +235,7 @@ function parseListPage(raw: string | undefined): number | null {
   return page >= 1 ? page : null;
 }
 
-const VALID_ISSUE_LABEL_FILTERS = new Set(['auto-triaged', 'needs-approval']);
+const VALID_ISSUE_LABEL_FILTERS = new Set(['status: auto-triaged', 'status: needs approval']);
 
 function parseIssueLabelFilter(raw: string | undefined): string | undefined | null {
   if (raw === undefined || raw === '') return undefined;
@@ -462,17 +462,25 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
         if (!input.resourceId || !input.projectPath) {
           throw new Error('GitHub issue triage requires an explicit Factory project repository');
         }
-        await github.addIssueLabels(input.installationId, input.repository, input.issueNumber, ['auto-triaged']);
-        if (input.labels.includes('status: needs triage')) {
-          await github.removeIssueLabel(input.installationId, input.repository, input.issueNumber, 'status: needs triage');
-        }
         const labels = input.labels.filter(label => label !== 'status: needs triage');
-        return runIssueTriage({
+        const result = await runIssueTriage({
           ...input,
           defaultModelId:
             input.defaultModelId ?? (await resolveFactoryDefaultModelId(options.projects, input.resourceId)),
-          labels: labels.includes('auto-triaged') ? labels : [...labels, 'auto-triaged'],
+          labels: labels.includes('status: auto-triaged') ? labels : [...labels, 'status: auto-triaged'],
         });
+        await github.addIssueLabels(input.installationId, input.repository, input.issueNumber, [
+          'status: auto-triaged',
+        ]);
+        if (input.labels.includes('status: needs triage')) {
+          await github.removeIssueLabel(
+            input.installationId,
+            input.repository,
+            input.issueNumber,
+            'status: needs triage',
+          );
+        }
+        return result;
       }
     : undefined;
 

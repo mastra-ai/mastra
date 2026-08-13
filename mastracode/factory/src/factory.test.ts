@@ -38,6 +38,11 @@ const controllerMock = {
   setChannels: vi.fn(),
 };
 
+const sessionNotifierStub = {
+  onSessionCreated: () => () => {},
+  onSessionDeleted: () => () => {},
+};
+
 const prepareMock = vi.fn(async (config: Record<string, unknown>) => ({
   base: { controller: controllerMock },
   mastraArgs: { __capturedConfig: config },
@@ -146,7 +151,7 @@ async function prepareIntegrationContext(config: ConstructorParameters<typeof Ma
     integrations: [...(config.integrations ?? []), fakeIntegration({ id: 'context-probe', routes })],
   });
   const buildApiRoutes = prepared.buildApiRoutes as (deps: object) => unknown;
-  buildApiRoutes({ controller: {}, authStorage: {} });
+  buildApiRoutes({ controller: sessionNotifierStub, authStorage: {} });
   expect(routes).toHaveBeenCalledOnce();
   return routes.mock.calls[0]![0];
 }
@@ -191,7 +196,7 @@ describe('MastraFactory.prepare', () => {
 
   it('threads conservative versioned Factory rules when the slot is omitted', async () => {
     const prepared = await prepareFactory({ storage: fakeStorage() });
-    (prepared.buildApiRoutes as (deps: object) => unknown)({ controller: {}, authStorage: {} });
+    (prepared.buildApiRoutes as (deps: object) => unknown)({ controller: sessionNotifierStub, authStorage: {} });
     expect(assembleFactoryApiRoutesSpy).toHaveBeenCalledOnce();
     const rules = assembleFactoryApiRoutesSpy.mock.calls[0]![0].rules;
     expect(rules?.version).toBe(DEFAULT_FACTORY_RULE_VERSION);
@@ -210,7 +215,7 @@ describe('MastraFactory.prepare', () => {
       overrides: { tools: { submit_plan: { onResult } } },
     });
     const prepared = await prepareFactory({ storage: fakeStorage(), rules });
-    (prepared.buildApiRoutes as (deps: object) => unknown)({ controller: {}, authStorage: {} });
+    (prepared.buildApiRoutes as (deps: object) => unknown)({ controller: sessionNotifierStub, authStorage: {} });
     expect(assembleFactoryApiRoutesSpy).toHaveBeenCalledOnce();
     const threaded = assembleFactoryApiRoutesSpy.mock.calls[0]![0].rules;
     expect(threaded).toBe(rules);
@@ -219,7 +224,7 @@ describe('MastraFactory.prepare', () => {
 
   it('forwards the configured dispatcher concurrency cap to the decision dispatcher', async () => {
     const prepared = await prepareFactory({ storage: fakeStorage(), dispatcher: { maxInFlight: 7 } });
-    (prepared.buildApiRoutes as (deps: object) => unknown)({ controller: {}, authStorage: {} });
+    (prepared.buildApiRoutes as (deps: object) => unknown)({ controller: sessionNotifierStub, authStorage: {} });
 
     const onFactoryRuntime = assembleFactoryApiRoutesSpy.mock.calls[0]![0].onFactoryRuntime;
     expect(onFactoryRuntime).toBeTypeOf('function');
@@ -395,7 +400,7 @@ describe('MastraFactory.prepare', () => {
   it('folds the provider /auth/* routes into buildApiRoutes when auth is configured', async () => {
     const config = await prepareFactory({ storage: fakeStorage(), auth: fakeProvider() });
     const buildApiRoutes = config.buildApiRoutes as (deps: object) => Array<{ path: string }>;
-    const paths = buildApiRoutes({ controller: {}, authStorage: {} }).map(r => r.path);
+    const paths = buildApiRoutes({ controller: sessionNotifierStub, authStorage: {} }).map(r => r.path);
     expect(paths).toContain('/auth/login');
     expect(paths).toContain('/auth/callback');
     expect(paths).toContain('/auth/logout');
@@ -443,7 +448,7 @@ describe('MastraFactory.prepare', () => {
     const buildApiRoutes = config.buildApiRoutes as (
       deps: object,
     ) => Array<{ path: string; method: string; handler: (c: unknown) => unknown }>;
-    const routes = buildApiRoutes({ controller: {}, authStorage: {} });
+    const routes = buildApiRoutes({ controller: sessionNotifierStub, authStorage: {} });
     const stub = routes.find(r => r.path === '/web/channel-accounts');
     expect(stub).toBeDefined();
     expect(stub!.method).toBe('GET');
@@ -460,14 +465,14 @@ describe('MastraFactory.prepare', () => {
       integrations: [fakeIntegration({ id: 'slack' })],
     });
     const buildApiRoutes = config.buildApiRoutes as (deps: object) => Array<{ path: string }>;
-    const paths = buildApiRoutes({ controller: {}, authStorage: {} }).map(r => r.path);
+    const paths = buildApiRoutes({ controller: sessionNotifierStub, authStorage: {} }).map(r => r.path);
     expect(paths).not.toContain('/web/channel-accounts');
   });
 
   it('omits auth routes when auth is explicitly disabled (auth: null)', async () => {
     const config = await prepareFactory({ storage: fakeStorage(), auth: null });
     const buildApiRoutes = config.buildApiRoutes as (deps: object) => Array<{ path: string }>;
-    const paths = buildApiRoutes({ controller: {}, authStorage: {} }).map(r => r.path);
+    const paths = buildApiRoutes({ controller: sessionNotifierStub, authStorage: {} }).map(r => r.path);
     expect(paths.some(p => p.startsWith('/auth/'))).toBe(false);
   });
 
@@ -533,7 +538,7 @@ describe('MastraFactory.prepare', () => {
     expect(provider).toBeDefined();
     expect(provider?.name).toBe('mastra-studio');
     const buildApiRoutes = config.buildApiRoutes as (deps: object) => Array<{ path: string }>;
-    const paths = buildApiRoutes({ controller: {}, authStorage: {} }).map(r => r.path);
+    const paths = buildApiRoutes({ controller: sessionNotifierStub, authStorage: {} }).map(r => r.path);
     expect(paths).toContain('/auth/login');
     expect(paths).toContain('/auth/callback');
     expect(paths).toContain('/auth/logout');
@@ -653,7 +658,7 @@ describe('MastraFactory.prepare audit-capable integrations', () => {
   it('mounts audit domain routes without an audit integration', async () => {
     const config = await prepareFactory({ storage: fakeStorage() });
     const buildApiRoutes = config.buildApiRoutes as (deps: object) => Array<{ path: string }>;
-    const paths = buildApiRoutes({ controller: {}, authStorage: {} }).map(r => r.path);
+    const paths = buildApiRoutes({ controller: sessionNotifierStub, authStorage: {} }).map(r => r.path);
     expect(paths).toContain('/web/factory/projects/:id/audit');
     expect(paths).not.toContain('/web/audit/portal-link');
   });
@@ -669,7 +674,7 @@ describe('MastraFactory.prepare audit-capable integrations', () => {
       ],
     });
     const buildApiRoutes = config.buildApiRoutes as (deps: object) => Array<{ path: string }>;
-    const paths = buildApiRoutes({ controller: {}, authStorage: {} }).map(r => r.path);
+    const paths = buildApiRoutes({ controller: sessionNotifierStub, authStorage: {} }).map(r => r.path);
     expect(paths).toContain('/web/factory/projects/:id/audit');
     expect(paths).toContain('/web/audit/portal-link');
   });
@@ -694,7 +699,7 @@ describe('MastraFactory.prepare audit-capable integrations', () => {
           : [],
       });
       const buildApiRoutes = config.buildApiRoutes as (deps: object) => Array<{ path: string }>;
-      const paths = buildApiRoutes({ controller: {}, authStorage: {} }).map(r => r.path);
+      const paths = buildApiRoutes({ controller: sessionNotifierStub, authStorage: {} }).map(r => r.path);
       expect(paths.includes('/web/audit/portal-link')).toBe(expectsPortal);
     },
   );
@@ -736,7 +741,7 @@ describe('MastraFactory.prepare integrations', () => {
       integrations: [fakeIntegration({ id: 'custom', routes })],
     });
     const buildApiRoutes = config.buildApiRoutes as (deps: object) => Array<{ path: string }>;
-    const paths = buildApiRoutes({ controller: {}, authStorage: {} }).map(r => r.path);
+    const paths = buildApiRoutes({ controller: sessionNotifierStub, authStorage: {} }).map(r => r.path);
     expect(paths).toContain('/web/custom/status');
     const ctx = routes.mock.calls[0]![0];
     expect(ctx.stateSigner).toBeDefined();
@@ -747,7 +752,7 @@ describe('MastraFactory.prepare integrations', () => {
   it('mounts disabled status stubs when no integrations are registered', async () => {
     const config = await prepareFactory({ storage: fakeStorage() });
     const buildApiRoutes = config.buildApiRoutes as (deps: object) => Array<{ path: string }>;
-    const paths = buildApiRoutes({ controller: {}, authStorage: {} }).map(r => r.path);
+    const paths = buildApiRoutes({ controller: sessionNotifierStub, authStorage: {} }).map(r => r.path);
     expect(paths).toContain('/web/github/status');
     expect(paths).toContain('/web/linear/status');
   });

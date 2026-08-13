@@ -69,6 +69,8 @@ function ChatRuntimeValueProvider({ children, runtime }: { children: ReactNode; 
         followUpCount: runtime.followUpCount,
         omProgress: runtime.omProgress ?? state?.omProgress,
         omPhase: runtime.omPhase,
+        bufferingMessages: runtime.bufferingMessages,
+        bufferingObservations: runtime.bufferingObservations,
         goal: runtime.goal,
         tokensPerSec: runtime.tokensPerSec,
       }}
