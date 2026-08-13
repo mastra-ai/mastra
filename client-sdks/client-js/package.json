@@ -21,6 +21,24 @@
         "default": "./dist/index.cjs"
       }
     },
+    "./workflows": {
+      "react-native": {
+        "types": "./dist/workflows/index.d.ts",
+        "default": "./dist/workflows/index.js"
+      },
+      "browser": {
+        "types": "./dist/workflows/index.d.ts",
+        "default": "./dist/workflows/index.js"
+      },
+      "import": {
+        "types": "./dist/workflows/index.d.ts",
+        "default": "./dist/workflows/index.js"
+      },
+      "require": {
+        "types": "./dist/workflows/index.d.ts",
+        "default": "./dist/workflows/index.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "repository": {

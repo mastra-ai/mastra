@@ -3,11 +3,51 @@ title: "Reference: Workflows API | Client SDK"
 description: Learn how to interact with and execute automated workflows in Mastra using the client-js SDK.
 packages:
   - "@mastra/client-js"
+  - "@mastra/react"
 ---
 
 # Workflows API
 
 The Workflows API provides methods to interact with and execute automated workflows in Mastra.
+
+## Expo and React Native
+
+Mobile applications can import the workflow-only client entrypoint and provide the platform's fetch implementation:
+
+```typescript
+import { fetch as expoFetch } from 'expo/fetch'
+import { createWorkflowClient } from '@mastra/client-js/workflows'
+
+const workflowClient = createWorkflowClient({
+  baseUrl: 'https://api.example.com',
+  fetch: expoFetch,
+})
+
+const workflow = workflowClient.getWorkflow('city-workflow')
+const run = await workflow.createRun()
+const stream = await run.stream({ inputData: { city: 'New York' } })
+```
+
+React Native applications can use the headless workflow provider and hooks. This entrypoint does not include web UI components:
+
+```tsx
+import { fetch as expoFetch } from 'expo/fetch'
+import { MastraWorkflowProvider, useCreateWorkflowRun } from '@mastra/react/workflows'
+
+export function App() {
+  return (
+    <MastraWorkflowProvider baseUrl="https://api.example.com" customFetch={expoFetch}>
+      <WorkflowScreen />
+    </MastraWorkflowProvider>
+  )
+}
+
+function WorkflowScreen() {
+  const createRun = useCreateWorkflowRun()
+  // Render your application UI and call createRun.mutateAsync when needed.
+  return null
+}
+```
 
 ## Getting all workflows
 
