@@ -1,13 +1,8 @@
-import { skipToken, useInfiniteQuery, useMutation, useMutationState, useQueryClient } from '@tanstack/react-query';
+import { skipToken, useInfiniteQuery } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
-import {
-  listRepositoryIssues,
-  listRepositoryPullRequests,
-  startRepositoryIssueTriage,
-} from '../ui/domains/factory/services/factory';
-import type { GithubIssue } from '../ui/domains/factory/services/factory';
+import { listRepositoryIssues, listRepositoryPullRequests } from '../ui/domains/factory/services/factory';
 
 /** Board intake candidates come from external APIs (GitHub / Linear via the
  * server) — poll on a gentler cadence than the DB-backed work-items list. */
@@ -41,36 +36,6 @@ export function useProjectIssuesQuery(projectRepositoryId: string | undefined, l
     refetchInterval: intakePollInterval,
     refetchOnWindowFocus: true,
   });
-}
-
-export function useStartIssueTriageMutation(projectRepositoryId: string | undefined, factoryProjectId?: string) {
-  const { baseUrl } = useApiConfig();
-  const queryClient = useQueryClient();
-  const mutationKey = ['factory', 'triage-issue', projectRepositoryId] as const;
-  const mutation = useMutation({
-    mutationKey,
-    mutationFn: (issue: GithubIssue) => startRepositoryIssueTriage(baseUrl, projectRepositoryId!, issue),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.githubIssues(projectRepositoryId) });
-      void queryClient.invalidateQueries({
-        queryKey: queryKeys.githubIssues(projectRepositoryId, 'status: auto-triaged'),
-      });
-      void queryClient.invalidateQueries({ queryKey: queryKeys.workItems(factoryProjectId) });
-    },
-  });
-  const pendingIssueNumbers = useMutationState({
-    filters: { mutationKey, status: 'pending' },
-    select: pending => {
-      const variables = pending.state.variables;
-      return isGithubIssue(variables) ? variables.number : undefined;
-    },
-  }).filter(number => number !== undefined);
-  return { triage: mutation, pendingIssueNumbers };
-}
-
-function isGithubIssue(value: unknown): value is GithubIssue {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
-  return 'number' in value && typeof value.number === 'number';
 }
 
 /** Open (non-draft) pull requests for a GitHub project, one page at a time. */

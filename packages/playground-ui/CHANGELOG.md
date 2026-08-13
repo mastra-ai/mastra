@@ -1,5 +1,91 @@
 # @mastra/playground-ui
 
+## 49.0.0-alpha.2
+
+### Minor Changes
+
+- Added two status-strip pieces so any app showing a chat runtime — Studio, Factory — reads the same way. `TokenBudget` draws a token budget as a ring with its reading beside it, and `TokenBudgetDetail` is that budget in full for a popover or panel: ([#21366](https://github.com/mastra-ai/mastra/pull/21366))
+
+  ```tsx
+  import { TokenBudget, TokenBudgetDetail } from '@mastra/playground-ui/components/TokenBudget';
+
+  <div className="flex items-center gap-1.5">
+    <TokenBudget label="Message window" tokens={14_900} threshold={30_000} working={isObserving} />
+    <TokenBudget label="Observations" tokens={5_200} threshold={8_000} tone="memory" />
+  </div>;
+
+  <TokenBudgetDetail
+    description="Read into memory once full"
+    icon={<MessageSquare />}
+    label="Messages"
+    projected={6_000}
+    tokens={14_900}
+    threshold={30_000}
+  />;
+  ```
+
+  The two are separate so the app decides how a budget opens — one trigger per budget, or one control for a whole group. `TokenBudgetDetail` hatches the slice a pending pass will free (`projected`) at the end of its bar, so the number and where it goes read together, and takes an `icon` it tints with the budget's own color so a detail row is recognizable as the ring it came from.
+
+  `working` runs a highlight around the ring, so a pass happening in the background is visible without a word for it. `tone` picks the budget's identity color (`messages`, `memory`, `warning`), which the memory panel's own progress bars now share instead of repeating the palette classes.
+
+  Fixed those same memory panel bars drawing a budget as completely full when its threshold was zero.
+
+- Improved process step indicators with theme-aware status colors and a plain embedded style. ([#21382](https://github.com/mastra-ai/mastra/pull/21382))
+
+  **Step labels now come from `title`.** `ProcessStepListItem` used to build its heading from the step id and ignore the `title` you passed, so display copy had to live in kebab-case ids. Give the step the label you want on screen:
+
+  ```tsx
+  const step = { id: 'clone-repo', title: 'Cloning repository', status: 'running', description: '', isActive: true };
+
+  <ProcessStepListItem step={step} isActive position={1} />;
+  // before: "Clone repo"
+  // after:  "Cloning repository"
+  ```
+
+  The `stepId` prop is now optional and ignored; drop it from your call sites.
+
+  **Added a `plain` variant to `ProcessStepListItem`** — for step lists that already sit inside a panel, where the boxed active card is one frame too many:
+
+  ```tsx
+  <ProcessStepListItem step={step} isActive={step.status === 'running'} position={1} variant="plain" />
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`898bba4`](https://github.com/mastra-ai/mastra/commit/898bba46d4806dd255a44e5dc3a3d5827eaefdfe), [`4539d73`](https://github.com/mastra-ai/mastra/commit/4539d737bea0e885dfc1e376def99bb7c35a9fbc), [`f9aab1c`](https://github.com/mastra-ai/mastra/commit/f9aab1cfc3fda03238a7fd7bd8b794e07497878c), [`e31421b`](https://github.com/mastra-ai/mastra/commit/e31421bc9c11c03c6e74f447ecb5820000e2b9d7), [`f9aab1c`](https://github.com/mastra-ai/mastra/commit/f9aab1cfc3fda03238a7fd7bd8b794e07497878c), [`aece0e7`](https://github.com/mastra-ai/mastra/commit/aece0e7cb124ae1eb1230689b887f5554b9a0bf0), [`f82f22f`](https://github.com/mastra-ai/mastra/commit/f82f22f56c58ab90e8a7501aaa5039a4e13cfe8b)]:
+  - @mastra/core@1.59.0-alpha.2
+  - @mastra/client-js@1.40.0-alpha.2
+  - @mastra/memory@1.26.2-alpha.1
+  - @mastra/react@1.4.3-alpha.2
+
+## 48.1.0-alpha.1
+
+### Minor Changes
+
+- Added animated Sankey layout transitions for column changes. Pass a changing perspective key to opt in: ([#20768](https://github.com/mastra-ai/mastra/pull/20768))
+
+  ```tsx
+  <SankeyChart geometryTransitionKey={columns.map(column => column.id).join(':')} />
+  ```
+
+- `CopyButton` takes a `showToast` option, so a button whose icon already flips to a checkmark on success can skip the toast on top of it. ([#21350](https://github.com/mastra-ai/mastra/pull/21350))
+
+  ```tsx
+  <CopyButton content={message} showToast={false} />
+  ```
+
+### Patch Changes
+
+- Reworked the markdown renderer's typography. Headings, lists, blockquotes, tables and horizontal rules now follow one consistent rhythm, list markers and task-list checkboxes render as expected, and long tables scroll instead of stretching their container. ([#21355](https://github.com/mastra-ai/mastra/pull/21355))
+
+  Fenced code blocks now get syntax highlighting, a copy button and a frame of their own, and yaml, diff, css, html, xml and sql joined the highlighted languages, so fences in those languages are no longer plain text.
+
+- Updated dependencies [[`aa3e7be`](https://github.com/mastra-ai/mastra/commit/aa3e7be30f8addb0278ea74429f4df054517a287), [`3cc1876`](https://github.com/mastra-ai/mastra/commit/3cc18767fb47ce9830ac4623a2304e2b09591605), [`3cc1876`](https://github.com/mastra-ai/mastra/commit/3cc18767fb47ce9830ac4623a2304e2b09591605), [`90822db`](https://github.com/mastra-ai/mastra/commit/90822dba08fb2169c518e4a6d7f127c098eb46b8), [`3700208`](https://github.com/mastra-ai/mastra/commit/37002080c7838267803a7e579a7d58b908d62f36), [`8b7131e`](https://github.com/mastra-ai/mastra/commit/8b7131eb0407f58f5205e68fb27b81f026488f28), [`79c4f82`](https://github.com/mastra-ai/mastra/commit/79c4f8295f568752eeadf8a9b50010a7d9ec06ae)]:
+  - @mastra/core@1.59.0-alpha.1
+  - @mastra/react@1.4.3-alpha.1
+  - @mastra/client-js@1.39.1-alpha.1
+  - @mastra/memory@1.26.2-alpha.0
+
 ## 48.1.0-alpha.0
 
 ### Minor Changes

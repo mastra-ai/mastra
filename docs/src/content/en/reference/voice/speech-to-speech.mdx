@@ -91,7 +91,7 @@ export const agent = new Agent({
 
 ## Listen for realtime events
 
-Realtime voice providers emit events you can use to update your UI, play assistant audio, log transcriptions, and handle errors:
+Realtime voice providers emit events you can use to update your UI and play assistant audio, while logging transcriptions and handling errors:
 
 ```typescript
 agent.voice.on('speaking', ({ audio }) => {

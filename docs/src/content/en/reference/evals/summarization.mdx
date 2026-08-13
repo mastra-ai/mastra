@@ -10,7 +10,7 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
 
 # Summarization scorer
 
-The `createSummarizationScorer()` function creates a scorer that evaluates a summary on two axes: whether every claim it makes is supported by the source text, and whether it preserves the information the source states. The final score is the lower of the two, so a summary can't pass by being faithful but empty, or thorough but wrong.
+The `createSummarizationScorer()` function creates a scorer that evaluates a summary on two axes: whether every claim has source-text support and whether the summary preserves the source information. The final score is the lower of the two. A summary can't pass by being faithful but empty or by being thorough but wrong.
 
 The summary is the agent's last message that carries text, and the source text defaults to the first user message of the run input. Pass `source` or `sourceExtractor` when the text being summarized lives somewhere else, such as a tool result.
 

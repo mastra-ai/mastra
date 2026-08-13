@@ -2034,6 +2034,16 @@
       "source": "/guides/agent-frameworks/ai-sdk",
       "destination": "/reference/ai-sdk/overview",
       "permanent": true
+    },
+    {
+      "source": "/docs/browser/recording",
+      "destination": "/docs/browser/overview#record-browser-sessions",
+      "permanent": true
+    },
+    {
+      "source": "/reference/processors/cost-guard-processor",
+      "destination": "/reference/processors/token-cost-control",
+      "permanent": true
     }
   ]
 }

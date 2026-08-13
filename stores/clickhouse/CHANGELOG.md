@@ -1,5 +1,14 @@
 # @mastra/clickhouse
 
+## 1.15.1-alpha.0
+
+### Patch Changes
+
+- Fixed ClickHouse schema operations to avoid socket warnings from unread responses. ([#21363](https://github.com/mastra-ai/mastra/pull/21363))
+
+- Updated dependencies [[`aa3e7be`](https://github.com/mastra-ai/mastra/commit/aa3e7be30f8addb0278ea74429f4df054517a287), [`90822db`](https://github.com/mastra-ai/mastra/commit/90822dba08fb2169c518e4a6d7f127c098eb46b8), [`3700208`](https://github.com/mastra-ai/mastra/commit/37002080c7838267803a7e579a7d58b908d62f36), [`8b7131e`](https://github.com/mastra-ai/mastra/commit/8b7131eb0407f58f5205e68fb27b81f026488f28), [`79c4f82`](https://github.com/mastra-ai/mastra/commit/79c4f8295f568752eeadf8a9b50010a7d9ec06ae)]:
+  - @mastra/core@1.59.0-alpha.1
+
 ## 1.15.0
 
 ### Minor Changes
