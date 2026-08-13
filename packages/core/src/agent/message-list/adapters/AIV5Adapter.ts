@@ -656,8 +656,11 @@ export class AIV5Adapter {
         if (AIV5.isToolUIPart(p)) {
           const toolName = getToolName(p);
           const callProviderMetadata = 'callProviderMetadata' in p ? p.callProviderMetadata : undefined;
+          // Preserve provider-executed so a hosted tool (e.g. OpenAI tool_search)
+          // stays inline in the assistant message on replay, matching fromModelMessage.
+          const toolProviderExecuted = (p as { providerExecuted?: boolean }).providerExecuted;
           if (p.state === 'output-available') {
-            return {
+            const toolInvocationPart: MastraToolInvocationPart = {
               type: 'tool-invocation' as const,
               toolInvocation: {
                 toolCallId: p.toolCallId,
@@ -671,9 +674,13 @@ export class AIV5Adapter {
               },
               providerMetadata: callProviderMetadata,
               createdAt: getMastraCreatedAt(callProviderMetadata),
-            } satisfies MastraToolInvocationPart;
+            };
+            if (toolProviderExecuted !== undefined) {
+              (toolInvocationPart as { providerExecuted?: boolean }).providerExecuted = toolProviderExecuted;
+            }
+            return toolInvocationPart;
           }
-          return {
+          const toolInvocationPart: MastraToolInvocationPart = {
             type: 'tool-invocation' as const,
             toolInvocation: {
               toolCallId: p.toolCallId,
@@ -683,7 +690,11 @@ export class AIV5Adapter {
             },
             providerMetadata: callProviderMetadata,
             createdAt: getMastraCreatedAt(callProviderMetadata),
-          } satisfies MastraToolInvocationPart;
+          };
+          if (toolProviderExecuted !== undefined) {
+            (toolInvocationPart as { providerExecuted?: boolean }).providerExecuted = toolProviderExecuted;
+          }
+          return toolInvocationPart;
         }
 
         if (p.type === 'reasoning') {
