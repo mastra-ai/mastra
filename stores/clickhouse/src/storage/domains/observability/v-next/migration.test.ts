@@ -7,6 +7,9 @@ import {
   DISCOVERY_PAIRS_MV_DDL,
   DISCOVERY_VALUES_MV_DDL,
   hasDiscoveryRefreshAppend,
+  isClickHouseVersionAtLeast,
+  parseClickHouseVersion,
+  supportsRefreshableMvAppend,
   MV_DISCOVERY_PAIRS,
   MV_DISCOVERY_VALUES,
   MV_FEEDBACK_EVENTS_DELTA,
@@ -41,6 +44,25 @@ describe('discovery refreshable MV APPEND', () => {
     expect(hasDiscoveryRefreshAppend(DISCOVERY_PAIRS_MV_DDL)).toBe(true);
     expect(hasDiscoveryRefreshAppend('REFRESH EVERY 1 MINUTE TO mastra_discovery_values')).toBe(false);
     expect(hasDiscoveryRefreshAppend('REFRESH EVERY 5 MINUTE APPEND TO mastra_discovery_pairs')).toBe(true);
+  });
+
+  it('parseClickHouseVersion reads dotted version() strings', () => {
+    expect(parseClickHouseVersion('24.9.1.1234')).toEqual({ major: 24, minor: 9, patch: 1 });
+    expect(parseClickHouseVersion(' 25.1.2 ')).toEqual({ major: 25, minor: 1, patch: 2 });
+    expect(parseClickHouseVersion('24.8')).toEqual({ major: 24, minor: 8, patch: 0 });
+    expect(parseClickHouseVersion('')).toBeNull();
+    expect(parseClickHouseVersion('unknown')).toBeNull();
+  });
+
+  it('supportsRefreshableMvAppend is true for ClickHouse 24.9+', () => {
+    expect(supportsRefreshableMvAppend('24.9.1.1234')).toBe(true);
+    expect(supportsRefreshableMvAppend('24.10.0')).toBe(true);
+    expect(supportsRefreshableMvAppend('25.1.0')).toBe(true);
+    expect(supportsRefreshableMvAppend('24.8.3.1')).toBe(false);
+    expect(supportsRefreshableMvAppend('23.12.1')).toBe(false);
+    expect(supportsRefreshableMvAppend('')).toBe(false);
+    expect(isClickHouseVersionAtLeast('24.9.0', { major: 24, minor: 9 })).toBe(true);
+    expect(isClickHouseVersionAtLeast('24.8.9', { major: 24, minor: 9 })).toBe(false);
   });
 });
 

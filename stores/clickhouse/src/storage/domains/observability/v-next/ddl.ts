@@ -1089,6 +1089,36 @@ export function hasDiscoveryRefreshAppend(createTableQuery: string): boolean {
   return /REFRESH\s+EVERY\s+\d+\s+(SECOND|MINUTE|HOUR|DAY|WEEK|MONTH|YEAR)S?\s+APPEND\b/i.test(createTableQuery);
 }
 
+/** ClickHouse 24.9 introduced `APPEND` for refreshable materialized views. */
+export const REFRESHABLE_MV_APPEND_MIN_VERSION = { major: 24, minor: 9 } as const;
+
+/**
+ * Parses a ClickHouse `version()` string (e.g. `24.9.1.1234`) into major/minor/patch.
+ * Returns null when the string is not a recognizable dotted version.
+ */
+export function parseClickHouseVersion(version: string): { major: number; minor: number; patch: number } | null {
+  const match = /^(\d+)\.(\d+)(?:\.(\d+))?/.exec(version.trim());
+  if (!match) return null;
+  return {
+    major: Number(match[1]),
+    minor: Number(match[2]),
+    patch: Number(match[3] ?? 0),
+  };
+}
+
+/** True when `version` is at least `{ major, minor }` (patch ignored). */
+export function isClickHouseVersionAtLeast(version: string, min: { major: number; minor: number }): boolean {
+  const parsed = parseClickHouseVersion(version);
+  if (!parsed) return false;
+  if (parsed.major !== min.major) return parsed.major > min.major;
+  return parsed.minor >= min.minor;
+}
+
+/** True when the server can create refreshable MVs with `APPEND` (ClickHouse ≥ 24.9). */
+export function supportsRefreshableMvAppend(version: string): boolean {
+  return isClickHouseVersionAtLeast(version, REFRESHABLE_MV_APPEND_MIN_VERSION);
+}
+
 /**
  * Additive migrations for existing ClickHouse databases.
  * ClickHouse's `CREATE TABLE IF NOT EXISTS` skips if the table already exists,

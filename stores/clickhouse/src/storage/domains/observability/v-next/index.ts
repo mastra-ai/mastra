@@ -108,6 +108,7 @@ import {
   DELTA_CURSOR_COUNTER_NAMES,
   DELTA_MV_NAMES,
   hasDiscoveryRefreshAppend,
+  supportsRefreshableMvAppend,
   MV_DISCOVERY_VALUES,
   MV_DISCOVERY_PAIRS,
   TABLE_DISCOVERY_VALUES,
@@ -279,10 +280,11 @@ async function assertExistingTablesCompatibleWithReplication(
  * recreate both with the current definitions.
  *
  * Also drops (and lets init recreate) discovery MVs whose refresh clause lacks
- * `APPEND`. Without APPEND, refreshes use an atomic table swap that fails with
+ * `APPEND`, but only when the ClickHouse server is ≥ 24.9 (APPEND support).
+ * Without APPEND, refreshes use an atomic table swap that fails with
  * ClickHouse error 36 when the target is a Replicated or Shared MergeTree
  * inside a plain Atomic database. The derived helper table is retained in that
- * case.
+ * case. On older servers, legacy non-APPEND MVs are left untouched.
  *
  * Silently returns if `system.tables` can't be queried — the rest of init
  * will still run and leave any existing tables untouched.
@@ -325,6 +327,25 @@ async function reconcileDiscoveryTables(
   // non-APPEND refreshable MVs. `CREATE MATERIALIZED VIEW IF NOT EXISTS` would
   // leave those definitions stale — drop only the MV so init recreates it with
   // APPEND while retaining the derived target table.
+  //
+  // APPEND landed in ClickHouse 24.9. On older servers, leave legacy non-APPEND
+  // MVs in place: dropping them would remove working refreshes that init cannot
+  // recreate with APPEND DDL.
+  let appendSupported = false;
+  try {
+    const result = await client.query({
+      query: `SELECT version() AS version`,
+      format: 'JSONEachRow',
+    });
+    const rows = (await result.json()) as Array<{ version?: string }>;
+    appendSupported = supportsRefreshableMvAppend(rows[0]?.version ?? '');
+  } catch {
+    // If version() is unavailable, skip the upgrade rather than risk dropping
+    // working MVs on an unsupported server.
+    return;
+  }
+  if (!appendSupported) return;
+
   let createQueries: Map<string, string>;
   try {
     const result = await client.query({
