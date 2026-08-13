@@ -3683,6 +3683,18 @@ ${formattedMessages}
       return { reflected: false, record, usage: undefined };
     }
 
+    // LOCKING: same guard as the turn-driven path (reflector-runner maybeReflect).
+    // An in-flight reflection in this process skips quietly; a flag left behind
+    // by a dead process is stale — clear it and proceed.
+    if (record.isReflecting) {
+      if (isOpActiveInProcess(record.id, 'reflecting')) {
+        omDebug(`[OM:reflect] isReflecting=true and active in this process, skipping`);
+        return { reflected: false, record, usage: undefined };
+      }
+      omDebug(`[OM:reflect] isReflecting=true but NOT active in this process — stale flag from dead process, clearing`);
+      await this.storage.setReflectingFlag(record.id, false);
+    }
+
     await this.storage.setReflectingFlag(record.id, true);
     registerOp(record.id, 'reflecting');
 

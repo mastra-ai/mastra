@@ -46,6 +46,7 @@ import {
   detectDegenerateRepetition,
 } from '../observer-agent';
 import { ObserverRunner } from '../observer-runner';
+import { registerOp, unregisterOp, isOpActiveInProcess } from '../operation-registry';
 import { ObservationalMemoryProcessor } from '../processor';
 import type { MemoryContextProvider } from '../processor';
 
@@ -6463,6 +6464,130 @@ describe('Locking Behavior', () => {
     // Verify the flag was cleared in storage
     const updatedRecord = await storage.getObservationalMemory('thread-1', 'resource-1');
     expect(updatedRecord!.isReflecting).toBe(false);
+  });
+
+  it('manual reflect() skips quietly when a reflection is already in flight in this process', async () => {
+    const storage = createInMemoryStorage();
+
+    let reflectorCalled = false;
+    const mockReflectorModel = createStreamCapableMockModel({
+      doGenerate: async () => {
+        reflectorCalled = true;
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
+          content: [
+            {
+              type: 'text' as const,
+              text: `<observations>
+- Consolidated observation
+</observations>
+<current-task>None</current-task>
+<suggested-response>Continue</suggested-response>`,
+            },
+          ],
+          warnings: [],
+        };
+      },
+    });
+
+    const om = new ObservationalMemory({
+      storage,
+      observation: { messageTokens: 100, model: mockReflectorModel as any },
+      reflection: { observationTokens: 100, model: mockReflectorModel as any },
+      scope: 'thread',
+    });
+
+    await storage.initializeObservationalMemory({
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      scope: 'thread',
+      config: {},
+    });
+    const record = await storage.getObservationalMemory('thread-1', 'resource-1');
+    await storage.updateActiveObservations({
+      id: record!.id,
+      observations: '- Some observation about the user',
+      tokenCount: 500,
+      lastObservedAt: new Date(),
+    });
+
+    // Simulate an IN-FLIGHT reflection in this process: flag set AND op registered.
+    await storage.setReflectingFlag(record!.id, true);
+    registerOp(record!.id, 'reflecting');
+    try {
+      const result = await om.reflect('thread-1', 'resource-1');
+
+      expect(result.reflected).toBe(false);
+      expect(reflectorCalled).toBe(false);
+
+      // The skip must not clobber the in-flight reflection's lock.
+      const after = await storage.getObservationalMemory('thread-1', 'resource-1');
+      expect(after!.isReflecting).toBe(true);
+      expect(isOpActiveInProcess(record!.id, 'reflecting')).toBe(true);
+    } finally {
+      unregisterOp(record!.id, 'reflecting');
+      await storage.setReflectingFlag(record!.id, false);
+    }
+  });
+
+  it('manual reflect() clears a stale isReflecting flag from a dead process and proceeds', async () => {
+    const storage = createInMemoryStorage();
+
+    let reflectorCalled = false;
+    const mockReflectorModel = createStreamCapableMockModel({
+      doGenerate: async () => {
+        reflectorCalled = true;
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
+          content: [
+            {
+              type: 'text' as const,
+              text: `<observations>
+- Consolidated observation
+</observations>
+<current-task>None</current-task>
+<suggested-response>Continue</suggested-response>`,
+            },
+          ],
+          warnings: [],
+        };
+      },
+    });
+
+    const om = new ObservationalMemory({
+      storage,
+      observation: { messageTokens: 100, model: mockReflectorModel as any },
+      reflection: { observationTokens: 100, model: mockReflectorModel as any },
+      scope: 'thread',
+    });
+
+    await storage.initializeObservationalMemory({
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      scope: 'thread',
+      config: {},
+    });
+    const record = await storage.getObservationalMemory('thread-1', 'resource-1');
+    await storage.updateActiveObservations({
+      id: record!.id,
+      observations: '- Some observation about the user',
+      tokenCount: 500,
+      lastObservedAt: new Date(),
+    });
+
+    // Stale scenario: flag set in storage but NO op registered in this process.
+    await storage.setReflectingFlag(record!.id, true);
+
+    const result = await om.reflect('thread-1', 'resource-1');
+
+    expect(result.reflected).toBe(true);
+    expect(reflectorCalled).toBe(true);
+    const after = await storage.getObservationalMemory('thread-1', 'resource-1');
+    expect(after!.isReflecting).toBe(false);
   });
 
   it('should not force reflection when activateAfterIdle has expired below threshold', async () => {
