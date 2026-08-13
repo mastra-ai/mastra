@@ -24,11 +24,14 @@ const execAsync = promisify(exec);
 /**
  * Characters that could enable shell injection attacks.
  * These are rejected when found in command input.
+ *
+ * Intentionally not global (`g`): `RegExp.prototype.test` is stateful with `/g`
+ * and advances `lastIndex`, which can fail open on later identical inputs.
  */
 const DANGEROUS_PATTERNS = [
-  /[;&|`$(){}[\]<>]/g, // Shell metacharacters
-  /\n|\r/g, // Newlines (command chaining)
-  /\\(?![ ])/g, // Backslashes (except escaped spaces)
+  /[;&|`$(){}[\]<>]/, // Shell metacharacters
+  /\n|\r/, // Newlines (command chaining)
+  /\\(?![ ])/, // Backslashes (except escaped spaces)
 ];
 
 /**
@@ -118,27 +121,57 @@ export interface RunCommandToolOptions {
 }
 
 /**
- * Validates that a path is under one of the allowed base paths.
+ * Normalizes path separators to POSIX forward slashes.
+ * Needed because `node:path` on Windows produces `\` separators that break
+ * prefix containment checks written against `/`.
+ *
+ * @internal Exported for unit tests.
  */
-function isPathAllowed(targetPath: string, allowedBasePaths: string[]): boolean {
+export function toPosixPath(candidatePath: string): string {
+  return candidatePath.replaceAll('\\', '/');
+}
+
+/**
+ * Returns true when `candidatePath` contains a `..` path segment.
+ *
+ * @internal Exported for unit tests.
+ */
+export function hasPathTraversal(candidatePath: string): boolean {
+  return toPosixPath(candidatePath)
+    .split('/')
+    .some(segment => segment === '..');
+}
+
+/**
+ * Validates that a path is under one of the allowed base paths.
+ *
+ * @internal Exported for unit tests.
+ */
+export function isPathAllowed(targetPath: string, allowedBasePaths: string[]): boolean {
   if (allowedBasePaths.length === 0) return true;
 
-  const normalizedTarget = normalize(resolve(targetPath));
+  // Normalize to POSIX separators so comparisons work on all platforms.
+  // On Windows, `normalize(resolve(...))` produces backslash paths, and
+  // `startsWith(base + '/')` would never match `base\sub`.
+  const normalizedTarget = toPosixPath(normalize(resolve(targetPath)));
   return allowedBasePaths.some(basePath => {
-    const normalizedBase = normalize(resolve(basePath));
-    return normalizedTarget === normalizedBase || normalizedTarget.startsWith(normalizedBase + '/');
+    const normalizedBase = toPosixPath(normalize(resolve(basePath)));
+    return normalizedTarget === normalizedBase || normalizedTarget.startsWith(`${normalizedBase}/`);
   });
 }
 
 /**
  * Extracts the base command from a command string.
+ * Splits on both `/` and `\` so Windows paths do not escape allow/block lists.
+ *
+ * @internal Exported for unit tests.
  */
-function extractBaseCommand(command: string): string {
+export function extractBaseCommand(command: string): string {
   const trimmed = command.trim();
   const firstSpace = trimmed.indexOf(' ');
   const baseCmd = firstSpace === -1 ? trimmed : trimmed.substring(0, firstSpace);
-  // Handle paths like /usr/bin/git -> git
-  const lastSlash = baseCmd.lastIndexOf('/');
+  // Handle paths like /usr/bin/git → git or C:\tools\git.exe → git.exe
+  const lastSlash = Math.max(baseCmd.lastIndexOf('/'), baseCmd.lastIndexOf('\\'));
   return lastSlash === -1 ? baseCmd : baseCmd.substring(lastSlash + 1);
 }
 
@@ -229,6 +262,17 @@ export function createRunCommandTool(options: RunCommandToolOptions = {}) {
             message: `Command rejected: '${baseCommand}' is not in the allowed commands list`,
           };
         }
+      }
+
+      // Validate: reject path traversal patterns (defense in depth; resolve() also collapses `..`)
+      if (cwd && hasPathTraversal(cwd)) {
+        return {
+          success: false,
+          exitCode: 1,
+          stdout: '',
+          stderr: '',
+          message: `Command rejected: working directory '${cwd}' contains path traversal`,
+        };
       }
 
       // Validate: check cwd against allowed base paths
