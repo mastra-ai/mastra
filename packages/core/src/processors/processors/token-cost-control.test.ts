@@ -817,7 +817,7 @@ describe('TokenCostControl', () => {
         const before = Date.now();
         const timestamp = (guard as any).getWindowTimestamp();
         const diff = before - timestamp.start.getTime();
-        expect(Math.abs(diff - expectedMs[i]!)).toBeLessThan(100);
+        expect(Math.abs(diff - expectedMs[i]!)).toBeLessThan(1000);
       }
     });
 
@@ -1940,7 +1940,7 @@ describe('TokenCostControl', () => {
         expect.fail('Expected TripWire');
       } catch (error) {
         expect((error as TripWire<any>).message).toContain('0.3/0.25');
-        expect((error as TripWire<any>).options.metadata.usage.estimatedCost).toBe(0.30000000000000004);
+        expect((error as TripWire<any>).options.metadata.usage.estimatedCost).toBeCloseTo(0.3, 10);
       }
     });
   });

@@ -174,7 +174,7 @@ const agent = new Agent({
     name: 'onViolation',
     type: '(violation: ProcessorViolation) => void | Promise<void>',
     description:
-      'Callback invoked when a cost violation is detected, regardless of strategy. For the warn strategy and for soft thresholds, the guard calls it with a TokenCostControlViolationDetail (usage, limit, threshold, and optional breakdown) at most once per request per threshold level. For the block strategy, the processor runner invokes it with the TripWire metadata as the detail (see Error behavior). Use for side effects like alerting, logging to external systems, or emailing users. Errors thrown by this callback are caught and logged through the Mastra logger.',
+      'Callback invoked when a cost violation is detected, regardless of strategy. For the warn strategy and for soft thresholds, the guard calls it with a TokenCostControlViolationDetail (usage, limit, threshold, and optional breakdown) at most once per request per threshold level. Errors thrown by the callback on this path are caught and logged through the Mastra logger. For the block strategy, the processor runner invokes it with the TripWire metadata as the detail (see Error behavior) and silently catches callback errors. Use for side effects like alerting, logging to external systems, or emailing users.',
     isOptional: true,
   },
   {
