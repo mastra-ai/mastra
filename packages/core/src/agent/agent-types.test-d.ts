@@ -172,13 +172,36 @@ describe('Agent Type Tests', () => {
           const documentId = requestContext.get('documentId');
           expectTypeOf(documentId).toEqualTypeOf<string>();
 
-          // Verify unknown keys are rejected
+          // Verify unknown keys are rejected on the strict API
           // @ts-expect-error - key does not exist in the request context schema
           requestContext.get('nonexistentKey');
+
+          // Runtime-only keys are available through the open-map escape hatch
+          const raw = requestContext.getRaw('nonexistentKey');
+          expectTypeOf(raw).toEqualTypeOf<unknown>();
 
           return [];
         },
       });
+    });
+
+    it('should keep a schema-typed agent assignable to Agent (issue #21286)', () => {
+      const schemaAgent = new Agent({
+        id: 'schema-agent',
+        name: 'Schema Agent',
+        model: {} as any,
+        instructions: 'You are a helpful assistant',
+        requestContextSchema: z.object({
+          tenantTier: z.enum(['free', 'pro']).optional(),
+          verbose: z.boolean().optional(),
+        }),
+      });
+
+      // Generic helpers typed as bare `Agent` must accept schema-narrowed agents.
+      expectTypeOf(schemaAgent).toExtend<Agent>();
+
+      const driveAgent = (_agent: Agent): Promise<void> => Promise.resolve();
+      void driveAgent(schemaAgent);
     });
   });
 
