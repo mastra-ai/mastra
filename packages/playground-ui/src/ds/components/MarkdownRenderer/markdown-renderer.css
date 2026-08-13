@@ -179,4 +179,28 @@
     max-width: 100%;
     border-radius: 8px;
   }
+
+  /* Streamed words. A CSS animation runs once, when its element mounts, so the
+   * words already on screen hold still while re-parsing the growing text and
+   * only the ones that just arrived fade. Opacity alone: it composites, so a
+   * long reply never reflows for the animation. */
+  .mastra-markdown-streaming .mastra-markdown-word {
+    animation: mastra-markdown-word-in 240ms ease-out both;
+  }
+
+  @keyframes mastra-markdown-word-in {
+    from {
+      opacity: 0;
+    }
+
+    to {
+      opacity: 1;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .mastra-markdown-streaming .mastra-markdown-word {
+      animation: none;
+    }
+  }
 }

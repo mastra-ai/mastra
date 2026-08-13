@@ -136,4 +136,41 @@ describe('MarkdownRenderer', () => {
     expect(link.target).toBe('');
     expect(link.rel).toBe('');
   });
+
+  it('leaves settled text as plain prose', () => {
+    const { container } = render(<MarkdownRenderer>{'Two words'}</MarkdownRenderer>);
+
+    expect(container.querySelectorAll('.mastra-markdown-word')).toHaveLength(0);
+  });
+
+  it('splits streamed text into one span per word', () => {
+    const { container } = render(<MarkdownRenderer streaming>{'Two **bold** words'}</MarkdownRenderer>);
+
+    const words = [...container.querySelectorAll('.mastra-markdown-word')].map(node => node.textContent);
+
+    expect(words).toEqual(['Two', 'bold', 'words']);
+  });
+
+  it('leaves a streamed code fence whole', () => {
+    render(
+      <TooltipProvider>
+        <MarkdownRenderer streaming>{'```ts\nconst ok = true;\n```'}</MarkdownRenderer>
+      </TooltipProvider>,
+    );
+
+    expect(screen.getByText('const ok = true;')).toBeDefined();
+  });
+
+  it('leaves the words already on screen in place when more text arrives', () => {
+    const { container, rerender } = render(<MarkdownRenderer streaming>{'Hello there'}</MarkdownRenderer>);
+
+    const [hello] = container.querySelectorAll('.mastra-markdown-word');
+
+    rerender(<MarkdownRenderer streaming>{'Hello there, friend'}</MarkdownRenderer>);
+
+    const words = container.querySelectorAll('.mastra-markdown-word');
+
+    expect(words[0]).toBe(hello);
+    expect([...words].map(node => node.textContent)).toEqual(['Hello', 'there,', 'friend']);
+  });
 });
