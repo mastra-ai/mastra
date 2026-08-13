@@ -2,6 +2,6 @@
 '@mastra/core': patch
 ---
 
-Fixed harness thread history dropping Anthropic thinking signatures so signed reasoning can round-trip on follow-up turns (#14559).
+Fixed Anthropic thinking signature preservation in thread history. Signed reasoning now works on follow-up turns (#14559).
 
-Also omit assistant messages that become empty after provider-history reasoning strips, avoiding Anthropic empty-content rejections.
+Fixed provider history handling for assistant messages that contain only reasoning. These messages are omitted when reasoning is stripped to prevent empty-content errors.
