@@ -21,7 +21,7 @@ import { beginGoalActivity, stopGoalActivity } from '../goal';
 import { MessageList } from '../message-list';
 import type { MessageListInput } from '../message-list';
 import { SaveQueueManager } from '../save-queue';
-import { agentThreadStreamRuntime } from '../thread-stream-runtime';
+import { AgentThreadLeaseConflictError, agentThreadStreamRuntime } from '../thread-stream-runtime';
 import type { AgentThreadRunRegistration } from '../thread-stream-runtime';
 import type { ToolsInput } from '../types';
 
@@ -851,7 +851,10 @@ export class DurableAgent<
 
   async #reportRecoveryFailure(runId: string, error: unknown): Promise<boolean> {
     const normalizedError = error instanceof Error ? error : new Error(String(error));
-    if (normalizedError instanceof MastraError && normalizedError.id === 'DURABLE_AGENT_RECOVER_LEASE_LOST') {
+    if (
+      (normalizedError instanceof MastraError && normalizedError.id === 'DURABLE_AGENT_RECOVER_LEASE_LOST') ||
+      normalizedError instanceof AgentThreadLeaseConflictError
+    ) {
       return false;
     }
 

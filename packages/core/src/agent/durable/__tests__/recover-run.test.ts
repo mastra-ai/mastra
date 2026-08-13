@@ -304,6 +304,7 @@ describe('DurableAgent.recover(runId)', () => {
     const conflictStore = new InMemoryStore();
     const conflictPubsub = new EventEmitterPubSub();
     const { agent: conflictAgent } = createDurableWithStore('agent-thread-conflict', conflictStore, conflictPubsub);
+    const publish = vi.spyOn(conflictPubsub, 'publish');
     await seed(conflictStore, runId, 'running', 'agent-thread-conflict');
     const workflow = stubWorkflow(conflictAgent, 'success');
     const threadKey = ['r', 't'].join('\u0000');
@@ -315,6 +316,11 @@ describe('DurableAgent.recover(runId)', () => {
       expect(globalRunRegistry.get(runId)).toBeUndefined();
       expect(conflictAgent.runRegistry.get(runId)).toBeUndefined();
       expect(agentThreadStreamRuntime.getThreadState({ threadId: 't', resourceId: 'r' }, conflictPubsub)).toBe('idle');
+      expect(
+        publish.mock.calls.filter(
+          ([topic, event]) => topic === AGENT_STREAM_TOPIC(runId) && event.type === AgentStreamEventTypes.ERROR,
+        ),
+      ).toHaveLength(0);
       await expect(conflictPubsub.acquireLease(threadKey, 'probe-run', 30_000)).resolves.toMatchObject({
         acquired: false,
         owner: 'other-run',

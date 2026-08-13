@@ -286,7 +286,7 @@ describe('registerRun thread lease', () => {
         )!,
       ).rejects.toThrow('publish acknowledgement failed');
       await pubsub.flush();
-      expect(observer.getThreadState({ threadId, resourceId }, pubsub)).toBe('idle');
+      await waitForCondition(() => observer.getThreadState({ threadId, resourceId }, pubsub) === 'idle');
       expect(pubsub.publishedTypes).toEqual(['run-registered', 'run-discarded']);
     } finally {
       subscription.unsubscribe();

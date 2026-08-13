@@ -4248,41 +4248,44 @@ describe('Agent signals', () => {
     }
   });
 
-  it('ends a remote wait on a terminal event before the lease deadline', async () => {
-    const pubsub = new ControlledLeasePubSub();
-    const runtime = new AgentThreadStreamRuntime();
-    const key = 'terminal-wait-resource\u0000terminal-wait-thread';
-    const topic = `agent.thread-stream.${encodeURIComponent(key)}`;
-    const runId = 'terminal-wait-run';
-    pubsub.owners.set(key, runId);
-    const subscription = await runtime.subscribeToThread(
-      { id: 'terminal-wait-owner' } as Agent<any, any, any, any>,
-      { resourceId: 'terminal-wait-resource', threadId: 'terminal-wait-thread' },
-      pubsub,
-    );
-    await pubsub.publish(topic, {
-      type: 'run-registered',
-      runId,
-      data: { type: 'run-registered', runId, streamId: 'terminal-wait-stream', streamSeq: 1 },
-    });
-    await pubsub.flush();
-    await waitForCondition(() => subscription.activeRunId() === runId);
+  it.each(['run-completed', 'run-discarded'] as const)(
+    'ends a remote wait on %s before the lease deadline',
+    async terminalType => {
+      const pubsub = new ControlledLeasePubSub();
+      const runtime = new AgentThreadStreamRuntime();
+      const key = 'terminal-wait-resource\u0000terminal-wait-thread';
+      const topic = `agent.thread-stream.${encodeURIComponent(key)}`;
+      const runId = 'terminal-wait-run';
+      pubsub.owners.set(key, runId);
+      const subscription = await runtime.subscribeToThread(
+        { id: 'terminal-wait-owner' } as Agent<any, any, any, any>,
+        { resourceId: 'terminal-wait-resource', threadId: 'terminal-wait-thread' },
+        pubsub,
+      );
+      await pubsub.publish(topic, {
+        type: 'run-registered',
+        runId,
+        data: { type: 'run-registered', runId, streamId: 'terminal-wait-stream', streamSeq: 1 },
+      });
+      await pubsub.flush();
+      await waitForCondition(() => subscription.activeRunId() === runId);
 
-    const wait = runtime.waitForCrossAgentThreadRun(
-      { id: 'terminal-wait-other' } as Agent<any, any, any, any>,
-      { memory: { resource: 'terminal-wait-resource', thread: 'terminal-wait-thread' } },
-      pubsub,
-    );
-    await pubsub.publish(topic, {
-      type: 'run-completed',
-      runId,
-      data: { type: 'run-completed', runId, streamId: 'terminal-wait-stream' },
-    });
-    await pubsub.flush();
-    await expect(wait).resolves.toBeUndefined();
-    expect(pubsub.unsubscribeCount).toBeGreaterThanOrEqual(1);
-    subscription.unsubscribe();
-  });
+      const wait = runtime.waitForCrossAgentThreadRun(
+        { id: 'terminal-wait-other' } as Agent<any, any, any, any>,
+        { memory: { resource: 'terminal-wait-resource', thread: 'terminal-wait-thread' } },
+        pubsub,
+      );
+      await pubsub.publish(topic, {
+        type: terminalType,
+        runId,
+        data: { type: terminalType, runId, streamId: 'terminal-wait-stream' },
+      });
+      await pubsub.flush();
+      await expect(wait).resolves.toBeUndefined();
+      expect(pubsub.unsubscribeCount).toBeGreaterThanOrEqual(1);
+      subscription.unsubscribe();
+    },
+  );
 
   it('routes remote abort requests to only the live lease owner', async () => {
     const pubsub = new ControlledLeasePubSub();

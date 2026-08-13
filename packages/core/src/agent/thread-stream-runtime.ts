@@ -60,6 +60,17 @@ const AGENT_THREAD_LEASE_RENEW_INTERVAL_MS = readPositiveIntEnv(
  */
 const AGENT_SUSPENDED_RUN_TTL_MS = readPositiveIntEnv('MASTRA_SUSPENDED_RUN_TTL_MS', 30 * 60 * 1000);
 
+export const AGENT_THREAD_LEASE_CONFLICT_CODE = 'AGENT_THREAD_LEASE_CONFLICT';
+
+export class AgentThreadLeaseConflictError extends Error {
+  readonly code = AGENT_THREAD_LEASE_CONFLICT_CODE;
+
+  constructor(runId: string, owner: string) {
+    super(`Cannot register run ${runId}: thread lease is held by ${owner}`);
+    this.name = 'AgentThreadLeaseConflictError';
+  }
+}
+
 export let defaultAgentThreadPubSub: PubSub = new EventEmitterPubSub();
 
 /**
@@ -1280,6 +1291,7 @@ export class AgentThreadStreamRuntime {
     await registrationOptions.validate?.();
 
     const state = this.#getState(pubsub);
+    this.#sweepStaleSuspendedRecords(state, pubsub);
     const key = this.#threadKey(resourceId, threadId);
     const activeRunId = state.activeThreadRunIds.get(key);
     const activeRecord = activeRunId ? state.threadRunsById.get(activeRunId) : undefined;
@@ -1290,7 +1302,7 @@ export class AgentThreadStreamRuntime {
     const leaseProvider = this.#getLeaseProvider(resolvedPubSub);
     const lease = await leaseProvider.acquireLease(key, output.runId, AGENT_THREAD_LEASE_TTL_MS);
     if (!lease.acquired) {
-      throw new Error(`Cannot register run ${output.runId}: thread lease is held by ${lease.owner ?? 'another owner'}`);
+      throw new AgentThreadLeaseConflictError(output.runId, lease.owner ?? 'another owner');
     }
 
     // A failed external-ownership validation means another recovery attempt may
@@ -1938,7 +1950,10 @@ export class AgentThreadStreamRuntime {
     const onEvent: EventCallback = async (event, ack) => {
       const data = event.data as AgentThreadStreamRuntimeEvent | undefined;
       const isTerminal =
-        (data?.type === 'run-completed' || data?.type === 'run-aborted' || data?.type === 'run-failed') &&
+        (data?.type === 'run-completed' ||
+          data?.type === 'run-aborted' ||
+          data?.type === 'run-failed' ||
+          data?.type === 'run-discarded') &&
         data.runId === runId;
       // Acknowledge every delivered event, not just the terminal one — this is a
       // private fan-out subscription, so anything left unacked stays pending on
