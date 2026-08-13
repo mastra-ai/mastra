@@ -189,6 +189,37 @@ describe('getDynamicMemory', () => {
     expect(requestContext.get('knowledgeResourceId')).toBe('project-1');
   });
 
+  it('enables capture-time pinning only for factory sessions', async () => {
+    const vector = { vector: true };
+    const { config } = await createMemoryConfig(
+      { projectPath: '/tmp/project', factoryProjectId: 'project-1' },
+      'thread',
+      vector,
+    );
+    expect(config.options.observationalMemory.subconscious?.config).toEqual({
+      defaultScope: 'resource',
+      maxScope: 'resource',
+      pins: { capturePinning: true },
+    });
+  });
+
+  it('splits the memory cache between factory and non-factory sessions', async () => {
+    vi.resetModules();
+    memoryConstructorMock.mockClear();
+    getOmScopeMock.mockReturnValue('thread');
+    const { getDynamicMemory } = await import('./memory.js');
+    const factory = getDynamicMemory({ storage: true } as never, undefined as never);
+    const nonFactoryMemory = factory({
+      requestContext: createRequestContext({ projectPath: '/tmp/project' }) as never,
+    });
+    const factoryMemory = factory({
+      requestContext: createRequestContext({ projectPath: '/tmp/project', factoryProjectId: 'project-1' }) as never,
+    });
+    // A factory-conditional config must not be cross-served from the cache.
+    expect(factoryMemory).not.toBe(nonFactoryMemory);
+    expect(memoryConstructorMock).toHaveBeenCalledTimes(2);
+  });
+
   it('uses controller state overrides and disables async buffering for resource-scoped OM', async () => {
     const { config, requestContext } = await createMemoryConfig({
       projectPath: '/tmp/project',

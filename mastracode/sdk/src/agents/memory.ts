@@ -100,7 +100,10 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
 
     const observerPreviousObservationTokens = 1000;
     const observeAttachments = state?.observeAttachments;
-    const cacheKey = `${obsThreshold}:${refThreshold}:${omScope}:${observerPreviousObservationTokens}:${caveman ? 1 : 0}:${observeAttachments}`;
+    // Factory sessions get a factory-only Subconscious config, so the cache key
+    // carries a factory presence bit to keep the two configs from cross-serving.
+    const isFactory = typeof factoryProjectId === 'string' && factoryProjectId.trim().length > 0;
+    const cacheKey = `${obsThreshold}:${refThreshold}:${omScope}:${observerPreviousObservationTokens}:${caveman ? 1 : 0}:${observeAttachments}:${isFactory ? 1 : 0}`;
     if (cachedMemory && cachedMemoryKey === cacheKey) {
       return cachedMemory;
     }
@@ -126,7 +129,9 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
             ? new Subconscious({
                 defaultScope: 'resource',
                 maxScope: 'resource',
-                pins: true,
+                // Capture-time pinning is a factory-only opinion; every other
+                // client keeps plain curator-maintained pins.
+                pins: isFactory ? { capturePinning: true } : true,
               })
             : undefined,
           scope: omScope,
