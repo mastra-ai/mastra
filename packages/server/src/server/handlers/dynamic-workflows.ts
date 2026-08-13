@@ -194,7 +194,7 @@ export const UPSERT_DYNAMIC_WORKFLOW_ROUTE = createRoute({
           // may extend an owned root with new helpers, but creating a new root
           // that references someone else's helper requires a separate,
           // explicit ownership design.
-          throwDynamicWorkflowConflict();
+          if (!existingOwners.has(principal.authorId)) throwDynamicWorkflowConflict();
         }
         registrationAuthorId = existingRoot?.authorId ?? principal.authorId;
       } else if (existingOwners.size > 1 || (existingOwners.size === 1 && !existingOwners.has(principal.authorId))) {
@@ -268,7 +268,7 @@ export const DELETE_DYNAMIC_WORKFLOW_ROUTE = createRoute({
         expectedAuthorId = existing.authorId;
       }
 
-      const deleted = await (mastra as Mastra).deleteDynamicWorkflow(dynamicWorkflowId, {
+      const deleted = await mastra.deleteDynamicWorkflow(dynamicWorkflowId, {
         authorId: expectedAuthorId,
       });
       if (!deleted) throwDynamicWorkflowNotFound();

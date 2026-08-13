@@ -102,13 +102,25 @@ export function createWorkflowDefinitionsTests({ storage }: WorkflowDefinitionsT
         stateSchema: { type: 'object' },
         authorId: 'author-1',
       });
-      const updated = await store.upsert({ id: 'wf-1', description: 'renamed' });
+      const updated = await store.upsert({ id: 'wf-1', authorId: 'author-1', description: 'renamed' });
       expect(updated.description).toBe('renamed');
       expect(updated.metadata).toEqual({ owner: 'me' });
       expect(updated.stateSchema).toEqual({ type: 'object' });
       expect(updated.authorId).toBe('author-1');
       expect(updated.inputSchema).toEqual(baseInput('wf-1').inputSchema);
       expect(updated.graph).toEqual(baseGraph);
+    });
+
+    it('rejects an unscoped update to an owned row', async () => {
+      await store.upsert({ ...baseInput('wf-owned'), authorId: 'author-1' });
+
+      await expect(store.upsert({ id: 'wf-owned', description: 'unscoped takeover' })).rejects.toBeInstanceOf(
+        WorkflowDefinitionOwnershipConflictError,
+      );
+      await expect(store.get('wf-owned')).resolves.toMatchObject({
+        authorId: 'author-1',
+        description: 'workflow wf-owned',
+      });
     });
 
     it('handles concurrent upserts of the same id without failing', async () => {

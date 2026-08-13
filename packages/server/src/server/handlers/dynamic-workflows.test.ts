@@ -384,6 +384,26 @@ describe('Dynamic Workflows handlers', () => {
       await expect(store.get('wf-helper')).resolves.toMatchObject({ authorId: 'user-b', description: 'original' });
     });
 
+    it('lets an admin create a new root from a helper owned by that same admin principal', async () => {
+      await UPSERT_DYNAMIC_WORKFLOW_ROUTE.handler({
+        ...ctx(mastra, { authorId: 'admin', admin: true }),
+        ...workflowDefinition('wf-admin-helper', 'original'),
+      });
+
+      await UPSERT_DYNAMIC_WORKFLOW_ROUTE.handler({
+        ...ctx(mastra, { authorId: 'admin', admin: true }),
+        ...workflowDefinition('wf-admin-root'),
+        dependencies: [workflowDefinition('wf-admin-helper', 'admin edit')],
+      });
+
+      const store = (await mastra.getStorage()!.getStore('workflowDefinitions'))!;
+      await expect(store.get('wf-admin-root')).resolves.toMatchObject({ authorId: 'admin' });
+      await expect(store.get('wf-admin-helper')).resolves.toMatchObject({
+        authorId: 'admin',
+        description: 'admin edit',
+      });
+    });
+
     it('keeps legacy unowned definitions hidden from users and read-only for admins', async () => {
       await mastra.addDynamicWorkflow(workflowDefinition('wf-legacy'));
 

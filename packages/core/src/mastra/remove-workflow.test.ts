@@ -196,6 +196,17 @@ describe('Mastra.deleteDynamicWorkflow', () => {
     await expect(store.get('stored-only')).resolves.toBeNull();
   });
 
+  it('removes a live-only dynamic workflow during an unscoped deletion', async () => {
+    const storage = new InMemoryStore({ id: 'delete-live-only' });
+    const mastra = new Mastra({ logger: false, tools: { 'double-tool': doubleTool } as any, storage });
+    await mastra.addDynamicWorkflow(storedDefinition('live-only', 'live'));
+    const store = (await storage.getStore('workflowDefinitions'))!;
+    await expect(store.delete('live-only')).resolves.toBe(true);
+
+    await expect(mastra.deleteDynamicWorkflow('live-only')).resolves.toBe(true);
+    expect(() => mastra.getWorkflow('live-only')).toThrow();
+  });
+
   it('serializes delete with same-id registration so the replacement remains live', async () => {
     const storage = new InMemoryStore({ id: 'delete-registration-race' });
     const mastra = new Mastra({ logger: false, tools: { 'double-tool': doubleTool } as any, storage });

@@ -112,16 +112,16 @@ export class WorkflowDefinitionOwnershipConflictError extends Error {
 }
 
 /**
- * Treat an explicitly supplied author as both creation ownership and the
- * expected owner on update. Omitting authorId preserves legacy/unscoped
- * behavior; supplying it can never create or transfer ownership after a row
- * already exists.
+ * Treat the supplied author as both creation ownership and the expected owner
+ * on update. Once a row has an owner, every update must supply that same owner;
+ * omitting it is not an unscoped bypass. Legacy unowned rows remain updatable
+ * only by callers that also omit ownership.
  */
 export function assertWorkflowDefinitionAuthor(
   existing: Pick<WorkflowDefinition, 'id' | 'authorId'>,
   input: Pick<UpdateWorkflowDefinitionInput, 'authorId'>,
 ): void {
-  if (input.authorId !== undefined && existing.authorId !== input.authorId) {
+  if (existing.authorId !== input.authorId) {
     throw new WorkflowDefinitionOwnershipConflictError(existing.id);
   }
 }

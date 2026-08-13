@@ -54,7 +54,7 @@ import { Schedules } from '../schedules/schedules';
 import type { SchedulesConfig, ScheduleHooks } from '../schedules/types';
 import type { MastraServerBase } from '../server/base';
 import type { ApiRoute, Middleware, ServerConfig, StudioConfig } from '../server/types';
-import type { MastraCompositeStore, WorkflowRuns } from '../storage';
+import type { MastraCompositeStore, WorkflowDefinition, WorkflowRuns } from '../storage';
 import { InMemoryStore, WorkflowDefinitionOwnershipConflictError } from '../storage';
 import { BackgroundTasksInMemory } from '../storage/domains/background-tasks/inmemory';
 import { InMemoryDB } from '../storage/domains/inmemory-db';
@@ -4858,7 +4858,7 @@ export class Mastra<
           id,
           options?.authorId !== undefined ? { authorId: options.authorId } : undefined,
         );
-        if (!deletedFromStorage) return false;
+        if (!deletedFromStorage && options?.authorId !== undefined) return false;
       }
 
       const unregistered = this.getWorkflowOrigin(id) === 'dynamic' ? this.removeWorkflow(id) : false;
@@ -4938,12 +4938,18 @@ export class Mastra<
           'A workflowDefinitions storage domain is required when registering an authored dynamic workflow.',
         );
       }
+      const existingDefinitions = new Map<string, WorkflowDefinition | null>();
+      if (store) {
+        for (const { normalized } of members) {
+          existingDefinitions.set(normalized.id, await store.get(normalized.id));
+        }
+      }
       if (options?.authorId !== undefined) {
         // Trusted ownership is validated before hydration changes the live
         // registry. Bundle members may only create or replace definitions for
         // the supplied owner.
         for (const { normalized } of members) {
-          const existing = await store.get(normalized.id);
+          const existing = existingDefinitions.get(normalized.id);
           if (
             this.getWorkflowOrigin(normalized.id) === 'code' ||
             (existing && existing.authorId !== options.authorId) ||
@@ -4966,11 +4972,11 @@ export class Mastra<
         // the caller. Missing or legacy ownership fails closed.
         for (const nestedId of externalNestedIds) {
           if (this.getWorkflowOrigin(nestedId) !== 'dynamic') continue;
-          const nested = await store.get(nestedId);
+          const nested = await store!.get(nestedId);
           if (!nested || nested.authorId !== options.authorId) {
             throw new WorkflowDefinitionOwnershipConflictError(nestedId);
           }
-      }
+        }
       }
 
       // Members may nest each other, so the index every member validates against
@@ -5039,6 +5045,7 @@ export class Mastra<
 
         if (store) {
           for (const { normalized } of ordered) {
+            const retainedAuthorId = options?.authorId ?? existingDefinitions.get(normalized.id)?.authorId;
             await store.upsert({
               id: normalized.id,
               description: normalized.description,
@@ -5048,7 +5055,7 @@ export class Mastra<
               stateSchema: normalized.stateSchema,
               requestContextSchema: normalized.requestContextSchema,
               graph: normalized.graph,
-              ...(options?.authorId !== undefined ? { authorId: options.authorId } : {}),
+              ...(retainedAuthorId !== undefined ? { authorId: retainedAuthorId } : {}),
             });
           }
         }
