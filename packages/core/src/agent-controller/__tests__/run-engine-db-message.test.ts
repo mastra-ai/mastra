@@ -112,6 +112,39 @@ describe('SessionRunEngine — MastraDBMessage contract', () => {
     expect(reasoningPart).toMatchObject({ type: 'reasoning', reasoning: 'thinking…' });
   });
 
+  it('Given Anthropic signed thinking, When reasoning-end carries the signature, Then the part keeps providerMetadata (#14559)', async () => {
+    const { engine, events } = createHarness();
+    const state = engine.createStreamState();
+    const ctx = requestContext();
+    const startMeta = { anthropic: { signature: 'start-sig' } };
+    const endMeta = { anthropic: { signature: 'end-sig' } };
+
+    await engine.processStreamChunk(
+      state,
+      chunk({ type: 'reasoning-start', payload: { id: 'r1', providerMetadata: startMeta } }),
+      ctx,
+    );
+    await engine.processStreamChunk(
+      state,
+      chunk({ type: 'reasoning-delta', payload: { id: 'r1', text: 'Signed thinking.' } }),
+      ctx,
+    );
+    await engine.processStreamChunk(
+      state,
+      chunk({ type: 'reasoning-end', payload: { id: 'r1', providerMetadata: endMeta } }),
+      ctx,
+    );
+
+    const message = lastMessageEvent(events);
+    const reasoningPart = message.content.parts.find(part => part.type === 'reasoning');
+    expect(reasoningPart).toMatchObject({
+      type: 'reasoning',
+      reasoning: 'Signed thinking.',
+      details: [{ type: 'text', text: 'Signed thinking.' }],
+      providerMetadata: endMeta,
+    });
+  });
+
   it('Given a tool call + result, When chunks arrive, Then it emits a tool-invocation part', async () => {
     const { engine, events } = createHarness();
     const state = engine.createStreamState();
