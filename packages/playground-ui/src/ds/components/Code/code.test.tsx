@@ -24,6 +24,16 @@ function lineTokens(code: string) {
   return code.split('\n').map(line => [{ content: line }]);
 }
 
+/** Highlighting that only lands when the test says so, like a pass trailing the streamed text. */
+function deferredHighlight() {
+  const pending: Array<() => void> = [];
+  vi.mocked(highlight).mockImplementation(
+    code => new Promise(resolve => pending.push(() => resolve(lineTokens(code)))),
+  );
+
+  return () => act(async () => pending.shift()?.());
+}
+
 beforeEach(() => {
   vi.mocked(highlight).mockImplementation(singleToken);
 });
@@ -61,13 +71,10 @@ describe('Code', () => {
   });
 
   it('keeps the settled colors and the full text while a streamed tail is still highlighting', async () => {
-    const pending: Array<() => void> = [];
-    vi.mocked(highlight).mockImplementation(
-      code => new Promise(resolve => pending.push(() => resolve(lineTokens(code)))),
-    );
+    const settle = deferredHighlight();
 
     const { container, rerender } = render(<Code code="const a" lang="typescript" />);
-    await act(async () => pending.shift()?.());
+    await settle();
 
     rerender(<Code code="const a = 1" lang="typescript" />);
 
@@ -78,18 +85,30 @@ describe('Code', () => {
   });
 
   it('falls back to plain text when the code is rewritten rather than appended to', async () => {
-    const pending: Array<() => void> = [];
-    vi.mocked(highlight).mockImplementation(
-      code => new Promise(resolve => pending.push(() => resolve(lineTokens(code)))),
-    );
+    const settle = deferredHighlight();
 
-    const { rerender } = render(<Code code="const a" lang="typescript" />);
-    await act(async () => pending.shift()?.());
+    const { container, rerender } = render(<Code code="const a" lang="typescript" />);
+    await settle();
 
     rerender(<Code code="let b" lang="typescript" />);
 
-    const pre = screen.getByText('let b');
+    const pre = container.querySelector('pre');
 
-    expect(pre.querySelector('.shiki-token')).toBeNull();
+    expect(pre?.querySelector('.shiki-token')).toBeNull();
+    expect(pre?.textContent).toBe('let b');
+  });
+
+  it('drops the colors when the language changes under unchanged code', async () => {
+    const settle = deferredHighlight();
+
+    const { container, rerender } = render(<Code code="const a" lang="typescript" />);
+    await settle();
+
+    rerender(<Code code="const a" lang="python" />);
+
+    const pre = container.querySelector('pre');
+
+    expect(pre?.querySelector('.shiki-token')).toBeNull();
+    expect(pre?.textContent).toBe('const a');
   });
 });
