@@ -376,7 +376,7 @@ export class MastraAuthBetterAuth
   /**
    * Ensure the user belongs to an organization, mirroring the WorkOS
    * personal-org bootstrap on better-auth's organization tables:
-   * ≥1 membership → first org id; 0 → create a personal org with an
+   * ≥1 membership → oldest org id; 0 → create a personal org with an
    * idempotent slug derived from the user id.
    *
    * Concurrent/retried first logins recover via the unique slug instead of
