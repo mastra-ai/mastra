@@ -123,6 +123,8 @@ export class SubconsciousCaptureExtractor extends Extractor<SubconsciousCaptureO
   constructor(options: CaptureExtractorOptions) {
     const capturePinning = options.pins !== false && options.pins !== undefined && options.pins.capturePinning;
     // Dropped-pin notes per extraction call, surfaced through the activity publish.
+    // Keyed on the extraction OUTPUT (context.current): a custom onExtracted hook
+    // receives a spread copy of the context, but `current` travels by reference.
     const pinNotes = new WeakMap<object, string[]>();
 
     const defaultImplementation: SubconsciousDefaultCapture = async context => {
@@ -176,7 +178,7 @@ export class SubconsciousCaptureExtractor extends Extractor<SubconsciousCaptureO
           });
         }
       }
-      if (droppedPins.length) pinNotes.set(context, droppedPins);
+      if (droppedPins.length) pinNotes.set(context.current, droppedPins);
     };
 
     super({
@@ -225,7 +227,9 @@ export class SubconsciousCaptureExtractor extends Extractor<SubconsciousCaptureO
           const result = options.config?.onExtracted
             ? await options.config.onExtracted({ ...context, defaultImplementation })
             : await defaultImplementation(context);
-          await publishActivity(pinNotes.get(context));
+          const droppedPinNotes = pinNotes.get(context.current);
+          pinNotes.delete(context.current);
+          await publishActivity(droppedPinNotes);
           return result ?? context.current;
         } catch (error) {
           await publishActivity([error instanceof Error ? error.message : String(error)]).catch(() => {});

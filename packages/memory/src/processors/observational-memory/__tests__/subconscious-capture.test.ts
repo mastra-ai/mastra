@@ -351,8 +351,10 @@ describe('Subconscious capture-time pinning', () => {
     const extractor = new SubconsciousCaptureExtractor({
       defaultScope: 'resource',
       learnedGuidance: false,
+      activityRecentUpdates: 3,
       pins: { maxPins: 20, maxCharacters: 10, capturePinning: true },
     });
+    const sendStateSignal = vi.fn(async (_signal: { contents: string }) => ({ skipped: 'unchanged' })) as any;
     const context = createContext(memory, {
       entities: [
         {
@@ -366,7 +368,7 @@ describe('Subconscious capture-time pinning', () => {
       ],
     });
 
-    await expect(extractor.onExtracted?.({ ...context, extractor })).resolves.toBeDefined();
+    await expect(extractor.onExtracted?.({ ...context, extractor, sendStateSignal })).resolves.toBeDefined();
 
     const store = (await memory.storage.getStore('knowledge'))!;
     const threadScope = ['org:acme', 'resource:user-42', 'thread:alpha'];
@@ -375,6 +377,41 @@ describe('Subconscious capture-time pinning', () => {
     const entity = await store.resolveEntity({ name: 'User Preferences', scope: threadScope });
     const facts = await store.factsAbout({ entityId: entity!.id, scope: threadScope });
     expect(facts.facts.map(fact => fact.text)).toEqual(['A regular fact that must survive.']);
+    // The drop is activity-visible, not silent.
+    const signal = sendStateSignal.mock.calls.at(-1)?.[0] as { contents: string } | undefined;
+    expect(signal?.contents).toContain('Capture-time pin dropped');
+  });
+
+  it('surfaces dropped-pin notes when a custom onExtracted hook delegates to the default implementation', async () => {
+    const memory = new Memory({ storage: new InMemoryStore() });
+    const extractor = new SubconsciousCaptureExtractor({
+      defaultScope: 'resource',
+      learnedGuidance: false,
+      activityRecentUpdates: 3,
+      pins: { maxPins: 20, maxCharacters: 10, capturePinning: true },
+      config: {
+        name: 'capture',
+        // The hook receives a SPREAD COPY of the context; the note must survive it.
+        onExtracted: async ctx => {
+          await ctx.defaultImplementation(ctx);
+        },
+      },
+    });
+    const sendStateSignal = vi.fn(async (_signal: { contents: string }) => ({ skipped: 'unchanged' })) as any;
+    const context = createContext(memory, {
+      entities: [
+        {
+          name: 'User Preferences',
+          kind: 'person',
+          facts: [{ text: 'This pin text is far beyond the ten character budget.', pin: true }],
+        },
+      ],
+    });
+
+    await extractor.onExtracted?.({ ...context, extractor, sendStateSignal });
+
+    const signal = sendStateSignal.mock.calls.at(-1)?.[0] as { contents: string } | undefined;
+    expect(signal?.contents).toContain('Capture-time pin dropped');
   });
 
   it('leaves the capture schema and instructions byte-for-byte unchanged when the flag is off', async () => {
