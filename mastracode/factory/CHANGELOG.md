@@ -1,5 +1,15 @@
 # @mastra/factory
 
+## 0.7.0-alpha.5
+
+### Patch Changes
+
+- Agent replies now fade in word by word as they stream, instead of snapping whole chunks of text into place. Each word appears whole, so the visible text trails the stream by at most one word. A block that changes shape while it grows — a paragraph turning into a list item — fades again. Text that has finished streaming renders as before. ([#21417](https://github.com/mastra-ai/mastra/pull/21417))
+
+- Updated dependencies [[`59d8898`](https://github.com/mastra-ai/mastra/commit/59d8898c8cb48b342fe5bcb5eee803cc8cc95060), [`a40f915`](https://github.com/mastra-ai/mastra/commit/a40f9157690d89ef13ce825cc88e30be581de5d4)]:
+  - @mastra/core@1.59.0-alpha.5
+  - @mastra/code-sdk@1.2.1-alpha.5
+
 ## 0.7.0-alpha.4
 
 ### Minor Changes
