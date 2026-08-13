@@ -113,6 +113,8 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   tracingOptions?: AgentExecutionOptions<OUTPUT>['tracingOptions'];
   /** Per-call actor signal forwarded to FGA checks and tool execution. */
   actor?: AgentExecutionOptions<OUTPUT>['actor'];
+  /** MCP protocol context forwarded to tools for in-process durable runs. */
+  mcp?: AgentExecutionOptions<OUTPUT>['mcp'];
   /**
    * Per-invocation tool payload transform policy. The closure rides on the
    * in-process run registry; only the JSON-safe `targets` shadow is serialized

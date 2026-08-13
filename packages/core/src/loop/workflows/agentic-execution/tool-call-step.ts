@@ -84,6 +84,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
   mastra,
   requireToolApproval: requireToolApprovalFromFactory,
   actor,
+  mcp,
 }: OuterLLMRun<Tools, OUTPUT>) {
   return createStep({
     id: 'toolCallStep',
@@ -688,6 +689,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           // Forward requestContext so tools receive values set by the workflow step
           requestContext,
           actor,
+          mcp,
           // Let tools that read thread history mid-stream (e.g. forked subagents
           // cloning the parent thread) drain the save queue so the store reflects
           // the latest user/assistant messages before they read.

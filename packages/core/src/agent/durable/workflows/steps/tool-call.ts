@@ -854,6 +854,7 @@ export function createDurableToolCallStep() {
         messages: [],
         workspace,
         requestContext,
+        mcp: registryEntry?.mcp,
         tracingContext: toolTracingContext,
         // Use the actor supplied for this workflow segment. A resumed segment
         // must never recover the initial actor from serialized agent options.

@@ -24,6 +24,7 @@ import type { RequestContext } from '../../request-context';
 import type { ChunkType } from '../../stream/types';
 import type {
   CoreTool,
+  MCPToolExecutionContext,
   RequireToolApproval,
   ToolPayloadTransformPolicy,
   ToolPayloadTransformTarget,
@@ -568,6 +569,8 @@ export interface RunRegistryEntry {
   workspace?: Workspace;
   /** Request context for forwarding auth data, feature flags, etc. to tools */
   requestContext?: RequestContext;
+  /** MCP protocol context for in-process tool execution (non-serializable). */
+  mcp?: MCPToolExecutionContext;
   /** Cleanup function to call when run completes */
   cleanup?: () => void;
   /** MessageList for tracking conversation messages (non-serializable) */
