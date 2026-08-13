@@ -40,7 +40,7 @@ At the end of this phase, please add a small summary to the issue as stated belo
 | **Next step**  | Pending                                                                                                                                              |
 ```
 
-Make sure the issue has the `status: needs triage` label. If not, add it using `gh issue edit "$ISSUE" --add-label "status: needs triage"`.
+For GitHub issues, make sure the issue has the `status: needs triage` label. If not, add it using `gh issue edit "$ISSUE" --add-label "status: needs triage"`. For Linear issues, skip this GitHub-only label mutation.
 
 ## Phase 2: Related Issues & Prior Work
 
@@ -84,10 +84,10 @@ Write one concise **handoff** for whoever plans the fix. It must begin with the 
 | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Type**       | <bug\|feature request\|docs\|question/support\|maintenance\|duplicate\|resolved\|invalid\|spam\|out-of-scope\|other> — <one-sentence classification>            |
 | **Route**      | <Plan fix\|Await approval\|Ask author for info\|Close as duplicate/resolved/invalid/spam/out-of-scope\|Answer provided / close\|No transition / refresh\|Other> |
-| **Severity**   | <🔴 critical\|🟠 high\|🟡 medium\|🟢 low> — <short reason>                                                                                                       |
+| **Severity**   | <🔴 critical\|🟠 high\|🟡 medium\|🟢 low> — <short reason>                                                                                                      |
 | **Confidence** | <high\|medium\|low> — <short reason>                                                                                                                            |
-| **Effort**.    | <low|medium|high> — <short implementation-scope reason>                                                                                                         |
-| **Impact**     | <low|medium|high> — <short user/business-consequence reason>                                                                                                    |
+| **Effort**.    | <low                                                                                                                                                            | medium | high> — <short implementation-scope reason>      |
+| **Impact**     | <low                                                                                                                                                            | medium | high> — <short user/business-consequence reason> |
 | **Next step**  | <concise maintainer-facing next action>                                                                                                                         |
 
 ### Understanding
