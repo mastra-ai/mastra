@@ -1,32 +1,39 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { renderWithProviders } from '../../../../../../e2e/ui/render';
-import { SessionFavicon } from '../SessionFavicon';
+import { SessionFavicon, SessionFaviconStarting } from '../SessionFavicon';
 
 function faviconHref() {
   return document.querySelector<HTMLLinkElement>('link[rel~="icon"]')?.getAttribute('href');
-}
-
-function renderFavicon(props: { sessionOpen: boolean; starting: boolean; busy: boolean }) {
-  return renderWithProviders(<SessionFavicon {...props} />);
 }
 
 beforeEach(() => {
   document.head.innerHTML = '<link rel="icon" type="image/svg+xml" href="/mastra.svg">';
 });
 
-describe('SessionFavicon', () => {
-  describe('when a session route is starting', () => {
+describe('SessionFaviconStarting', () => {
+  describe('when the session prepare stepper is showing', () => {
     it('shows the orange startup indicator', () => {
-      renderFavicon({ sessionOpen: true, starting: true, busy: false });
+      renderWithProviders(<SessionFaviconStarting />);
 
       expect(faviconHref()).toBe('/favicon-session-starting.svg');
     });
   });
 
+  describe('when the session prepare stepper unmounts', () => {
+    it('restores the normal Mastra favicon', () => {
+      const { unmount } = renderWithProviders(<SessionFaviconStarting />);
+      unmount();
+
+      expect(faviconHref()).toBe('/mastra.svg');
+    });
+  });
+});
+
+describe('SessionFavicon', () => {
   describe('when an agent is working', () => {
     it('shows the green activity indicator', () => {
-      renderFavicon({ sessionOpen: true, starting: false, busy: true });
+      renderWithProviders(<SessionFavicon sessionOpen busy />);
 
       expect(faviconHref()).toBe('/favicon-session-working.svg');
     });
@@ -34,7 +41,7 @@ describe('SessionFavicon', () => {
 
   describe('when the agent turn is complete', () => {
     it('shows the green completion check', () => {
-      renderFavicon({ sessionOpen: true, starting: false, busy: false });
+      renderWithProviders(<SessionFavicon sessionOpen busy={false} />);
 
       expect(faviconHref()).toBe('/favicon-session-complete.svg');
     });
@@ -42,7 +49,7 @@ describe('SessionFavicon', () => {
 
   describe('when no session is open', () => {
     it('keeps the normal Mastra favicon', () => {
-      renderFavicon({ sessionOpen: false, starting: false, busy: false });
+      renderWithProviders(<SessionFavicon sessionOpen={false} busy={false} />);
 
       expect(faviconHref()).toBe('/mastra.svg');
     });

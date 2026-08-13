@@ -1,0 +1,67 @@
+import { MainSidebarProvider } from '@mastra/playground-ui/components/MainSidebar';
+import { screen, waitFor } from '@testing-library/react';
+import { MemoryRouter, Route, Routes } from 'react-router';
+import { beforeEach, describe, expect, it } from 'vitest';
+
+import { renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
+import { OverlaysProvider } from '../../../../lib/overlays';
+import { ChatSessionTestProvider } from '../../context/ChatSessionTestProvider';
+import { FACTORY_ID, SESSION_ID, stubPreparingSession } from './composer-session-test-fixture';
+
+function faviconHref() {
+  return document.querySelector<HTMLLinkElement>('link[rel~="icon"]')?.getAttribute('href');
+}
+
+function renderDeferredThread() {
+  return renderWithProviders(
+    <MemoryRouter initialEntries={[`/factories/${FACTORY_ID}/user/threads/${SESSION_ID}`]}>
+      <Routes>
+        <Route
+          path="/factories/:factoryId/user/threads/:threadId"
+          element={
+            <MainSidebarProvider storageKey="favicon-starting-test">
+              <ChatSessionTestProvider threadId={SESSION_ID} userScoped>
+                <OverlaysProvider>
+                  <div data-testid="thread-body">ready</div>
+                </OverlaysProvider>
+              </ChatSessionTestProvider>
+            </MainSidebarProvider>
+          }
+        />
+      </Routes>
+    </MemoryRouter>,
+  );
+}
+
+beforeEach(() => {
+  document.head.innerHTML = '<link rel="icon" type="image/svg+xml" href="/mastra.svg">';
+});
+
+describe('Session favicon tracks the session prepare stepper', () => {
+  describe('when the session prepare stepper is showing', () => {
+    it('shows the orange starting indicator', async () => {
+      const session = stubPreparingSession({ ensurePending: true });
+      renderDeferredThread();
+
+      await waitFor(() => expect(screen.getByTestId('session-prepare-steps')).toBeInTheDocument());
+      expect(faviconHref()).toBe('/favicon-session-starting.svg');
+
+      session.finishEnsure();
+      session.finishWorkspace();
+    });
+  });
+
+  describe('when the workspace is ready and the agent is idle', () => {
+    it('flips to the completion indicator', async () => {
+      const session = stubPreparingSession();
+      const { client } = renderDeferredThread();
+
+      session.finishWorkspace();
+      await waitForMutationsIdle(client);
+      await waitFor(() => expect(screen.getByTestId('thread-body')).toBeInTheDocument());
+
+      expect(screen.queryByTestId('session-prepare-steps')).not.toBeInTheDocument();
+      await waitFor(() => expect(faviconHref()).toBe('/favicon-session-complete.svg'));
+    });
+  });
+});

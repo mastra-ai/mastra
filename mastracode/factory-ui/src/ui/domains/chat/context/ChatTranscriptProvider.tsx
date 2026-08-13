@@ -116,7 +116,7 @@ function ChatTranscriptValueProvider({
 
   return (
     <ChatTranscriptContext.Provider value={transcriptValue}>
-      <SessionFavicon sessionOpen={Boolean(effectiveThreadId)} starting={connection.status === 'connecting'} busy={busy} />
+      <SessionFavicon sessionOpen={Boolean(effectiveThreadId)} busy={busy} />
       {children}
     </ChatTranscriptContext.Provider>
   );
