@@ -132,6 +132,108 @@ describe('Mastra.addDynamicWorkflow replaces on re-save', () => {
   });
 });
 
+describe('Mastra.deleteDynamicWorkflow', () => {
+  function storedDefinition(id: string, template: string) {
+    return {
+      id,
+      description: template,
+      inputSchema: { type: 'object', properties: { value: { type: 'number' } }, required: ['value'] },
+      outputSchema: { type: 'object', properties: { message: { type: 'string' } }, required: ['message'] },
+      graph: JSON.parse(JSON.stringify(toStorableGraph(buildWorkflow(template).stepGraph))),
+    };
+  }
+
+  it('leaves storage and registry untouched when the expected owner does not match', async () => {
+    const storage = new InMemoryStore({ id: 'delete-owner-mismatch' });
+    const mastra = new Mastra({ logger: false, tools: { 'double-tool': doubleTool } as any, storage });
+    await mastra.addDynamicWorkflow(storedDefinition('owned-wf', 'original'), { authorId: 'author-1' });
+    const original = mastra.getWorkflow('owned-wf');
+
+    await expect(mastra.deleteDynamicWorkflow('owned-wf', { authorId: 'author-2' })).resolves.toBe(false);
+
+    expect(mastra.getWorkflow('owned-wf')).toBe(original);
+    const store = (await storage.getStore('workflowDefinitions'))!;
+    await expect(store.get('owned-wf')).resolves.toMatchObject({ authorId: 'author-1' });
+  });
+
+  it('deletes the expected owner from storage before unregistering the dynamic workflow', async () => {
+    const storage = new InMemoryStore({ id: 'delete-owner-match' });
+    const mastra = new Mastra({ logger: false, tools: { 'double-tool': doubleTool } as any, storage });
+    await mastra.addDynamicWorkflow(storedDefinition('owned-wf', 'original'), { authorId: 'author-1' });
+
+    await expect(mastra.deleteDynamicWorkflow('owned-wf', { authorId: 'author-1' })).resolves.toBe(true);
+
+    expect(() => mastra.getWorkflow('owned-wf')).toThrow();
+    const store = (await storage.getStore('workflowDefinitions'))!;
+    await expect(store.get('owned-wf')).resolves.toBeNull();
+  });
+
+  it('never unregisters a code-defined workflow when deleting a same-id stored shadow', async () => {
+    const storage = new InMemoryStore({ id: 'delete-code-shadow' });
+    const codeWorkflow = buildWorkflow('code');
+    const mastra = new Mastra({
+      logger: false,
+      tools: { 'double-tool': doubleTool } as any,
+      workflows: { wf: codeWorkflow } as any,
+      storage,
+    });
+    const store = (await storage.getStore('workflowDefinitions'))!;
+    await store.upsert({ ...storedDefinition('wf', 'shadow'), authorId: 'author-1' } as any);
+
+    await expect(mastra.deleteDynamicWorkflow('wf', { authorId: 'author-1' })).resolves.toBe(true);
+
+    expect(mastra.getWorkflow('wf')).toBe(codeWorkflow);
+    await expect(store.get('wf')).resolves.toBeNull();
+  });
+
+  it('reports a persisted deletion when no live workflow is registered', async () => {
+    const storage = new InMemoryStore({ id: 'delete-storage-only' });
+    const mastra = new Mastra({ logger: false, tools: { 'double-tool': doubleTool } as any, storage });
+    const store = (await storage.getStore('workflowDefinitions'))!;
+    await store.upsert({ ...storedDefinition('stored-only', 'stored'), authorId: 'author-1' } as any);
+
+    await expect(mastra.deleteDynamicWorkflow('stored-only', { authorId: 'author-1' })).resolves.toBe(true);
+    await expect(store.get('stored-only')).resolves.toBeNull();
+  });
+
+  it('serializes delete with same-id registration so the replacement remains live', async () => {
+    const storage = new InMemoryStore({ id: 'delete-registration-race' });
+    const mastra = new Mastra({ logger: false, tools: { 'double-tool': doubleTool } as any, storage });
+    await mastra.addDynamicWorkflow(storedDefinition('raced-wf', 'original'), { authorId: 'author-1' });
+
+    const store = (await storage.getStore('workflowDefinitions'))!;
+    const realDelete = store.delete.bind(store);
+    let releaseDelete!: () => void;
+    const deleteGate = new Promise<void>(resolve => {
+      releaseDelete = resolve;
+    });
+    let markDeleteEntered!: () => void;
+    const deleteEntered = new Promise<void>(resolve => {
+      markDeleteEntered = resolve;
+    });
+    store.delete = (async (...args: Parameters<typeof realDelete>) => {
+      markDeleteEntered();
+      await deleteGate;
+      return realDelete(...args);
+    }) as typeof store.delete;
+
+    const deletion = mastra.deleteDynamicWorkflow('raced-wf', { authorId: 'author-1' });
+    await deleteEntered;
+    const replacement = mastra.addDynamicWorkflow(storedDefinition('raced-wf', 'replacement'), {
+      authorId: 'author-1',
+    });
+    releaseDelete();
+
+    await expect(deletion).resolves.toBe(true);
+    await expect(replacement).resolves.toBeUndefined();
+    expect(mastra.getWorkflow('raced-wf').description).toBe('replacement');
+    await expect(store.get('raced-wf')).resolves.toMatchObject({
+      authorId: 'author-1',
+      description: 'replacement',
+    });
+  });
+});
+
 describe('Mastra.getWorkflowOrigin', () => {
   it("stamps 'code' for statically declared workflows and clears on remove", () => {
     const wf = buildWorkflow('v=${stepResults.double-tool.doubled}');

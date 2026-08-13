@@ -55,7 +55,7 @@ import type { SchedulesConfig, ScheduleHooks } from '../schedules/types';
 import type { MastraServerBase } from '../server/base';
 import type { ApiRoute, Middleware, ServerConfig, StudioConfig } from '../server/types';
 import type { MastraCompositeStore, WorkflowRuns } from '../storage';
-import { InMemoryStore } from '../storage';
+import { InMemoryStore, WorkflowDefinitionOwnershipConflictError } from '../storage';
 import { BackgroundTasksInMemory } from '../storage/domains/background-tasks/inmemory';
 import { InMemoryDB } from '../storage/domains/inmemory-db';
 import type { Schedule, ScheduleUpdate, SchedulesStorage } from '../storage/domains/schedules/base';
@@ -4840,6 +4840,33 @@ export class Mastra<
   }
 
   /**
+   * Deletes a persisted dynamic workflow and its live registration as one
+   * serialized instance operation. Supplying `authorId` makes storage perform
+   * an atomic owner-qualified delete; a missing or different owner returns
+   * `false` without touching the live registry.
+   *
+   * Code-defined workflows are never unregistered by this method.
+   */
+  public async deleteDynamicWorkflow(id: string, options?: DynamicWorkflowRegistrationOptions): Promise<boolean> {
+    return this.#serializeDynamicWorkflowRegistration(async () => {
+      const store = await this.#storage?.getStore('workflowDefinitions');
+      if (options?.authorId !== undefined && !store) return false;
+
+      let deletedFromStorage = false;
+      if (store) {
+        deletedFromStorage = await store.delete(
+          id,
+          options?.authorId !== undefined ? { authorId: options.authorId } : undefined,
+        );
+        if (!deletedFromStorage) return false;
+      }
+
+      const unregistered = this.getWorkflowOrigin(id) === 'dynamic' ? this.removeWorkflow(id) : false;
+      return deletedFromStorage || unregistered;
+    });
+  }
+
+  /**
    * Persist and live-register a set of dynamic workflow definitions that depend
    * on each other — typically a root workflow plus the helper workflows it
    * nests, none of which exist yet.
@@ -4910,6 +4937,40 @@ export class Mastra<
         throw new Error(
           'A workflowDefinitions storage domain is required when registering an authored dynamic workflow.',
         );
+      }
+      if (options?.authorId !== undefined) {
+        // Trusted ownership is validated before hydration changes the live
+        // registry. Bundle members may only create or replace definitions for
+        // the supplied owner.
+        for (const { normalized } of members) {
+          const existing = await store.get(normalized.id);
+          if (
+            this.getWorkflowOrigin(normalized.id) === 'code' ||
+            (existing && existing.authorId !== options.authorId) ||
+            (!existing && this.getWorkflowOrigin(normalized.id) === 'dynamic')
+          ) {
+            throw new WorkflowDefinitionOwnershipConflictError(normalized.id);
+          }
+        }
+
+        const bundleIds = new Set(members.map(member => member.normalized.id));
+        const externalNestedIds = new Set<string>();
+        for (const { normalized } of members) {
+          for (const nestedId of collectNestedWorkflowIds(normalized.graph)) {
+            if (!bundleIds.has(nestedId)) externalNestedIds.add(nestedId);
+          }
+        }
+
+        // Code-defined workflows are application-global registrations. A
+        // dynamic nested target, however, must have a stored owner matching
+        // the caller. Missing or legacy ownership fails closed.
+        for (const nestedId of externalNestedIds) {
+          if (this.getWorkflowOrigin(nestedId) !== 'dynamic') continue;
+          const nested = await store.get(nestedId);
+          if (!nested || nested.authorId !== options.authorId) {
+            throw new WorkflowDefinitionOwnershipConflictError(nestedId);
+          }
+      }
       }
 
       // Members may nest each other, so the index every member validates against

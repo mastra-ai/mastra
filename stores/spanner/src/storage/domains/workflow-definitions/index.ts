@@ -8,6 +8,7 @@ import {
 import type {
   CreateIndexOptions,
   CreateWorkflowDefinitionInput,
+  DeleteWorkflowDefinitionOptions,
   ListWorkflowDefinitionsInput,
   ListWorkflowDefinitionsOutput,
   UpdateWorkflowDefinitionInput,
@@ -192,10 +193,11 @@ export class WorkflowDefinitionsSpanner extends WorkflowDefinitionsStorage {
     return { definitions, total: definitions.length };
   }
 
-  async delete(id: string): Promise<void> {
-    await this.db.runDml({
-      sql: `DELETE FROM ${quoteIdent(TABLE_WORKFLOW_DEFINITIONS, 'table name')} WHERE id = @id`,
-      params: { id },
+  async delete(id: string, options?: DeleteWorkflowDefinitionOptions): Promise<boolean> {
+    const rowCount = await this.db.runDml({
+      sql: `DELETE FROM ${quoteIdent(TABLE_WORKFLOW_DEFINITIONS, 'table name')} WHERE id = @id${options?.authorId !== undefined ? ' AND authorId = @authorId' : ''}`,
+      params: { id, ...(options?.authorId !== undefined ? { authorId: options.authorId } : {}) },
     });
+    return rowCount > 0;
   }
 }

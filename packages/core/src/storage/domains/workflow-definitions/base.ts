@@ -91,6 +91,11 @@ export interface ListWorkflowDefinitionsOutput {
   total: number;
 }
 
+export interface DeleteWorkflowDefinitionOptions {
+  /** Expected immutable owner. When supplied, a different or missing owner is not deleted. */
+  authorId?: string;
+}
+
 /**
  * Thrown when an upsert attempts to claim a workflow definition that already
  * belongs to a different author. The message intentionally does not disclose
@@ -138,5 +143,9 @@ export abstract class WorkflowDefinitionsStorage extends StorageDomain {
   abstract upsert(input: CreateWorkflowDefinitionInput | UpdateWorkflowDefinitionInput): Promise<WorkflowDefinition>;
   abstract get(id: string): Promise<WorkflowDefinition | null>;
   abstract list(args?: ListWorkflowDefinitionsInput): Promise<ListWorkflowDefinitionsOutput>;
-  abstract delete(id: string): Promise<void>;
+  /**
+   * Deletes one definition and reports whether a row matched. When `authorId`
+   * is supplied, adapters must include it in the atomic delete predicate.
+   */
+  abstract delete(id: string, options?: DeleteWorkflowDefinitionOptions): Promise<boolean>;
 }

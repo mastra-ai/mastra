@@ -6,12 +6,13 @@ import {
 } from '@mastra/core/storage';
 import type {
   CreateWorkflowDefinitionInput,
+  DeleteWorkflowDefinitionOptions,
   ListWorkflowDefinitionsInput,
   ListWorkflowDefinitionsOutput,
   UpdateWorkflowDefinitionInput,
   WorkflowDefinition,
 } from '@mastra/core/storage';
-import type { Pool, RowDataPacket } from 'mysql2/promise';
+import type { Pool, ResultSetHeader, RowDataPacket } from 'mysql2/promise';
 
 import type { StoreOperationsMySQL } from '../operations';
 import { generateTableSQL } from '../operations';
@@ -175,10 +176,11 @@ export class WorkflowDefinitionsMySQL extends WorkflowDefinitionsStorage {
     return { definitions, total: definitions.length };
   }
 
-  async delete(id: string): Promise<void> {
-    await this.pool.execute(
-      `DELETE FROM ${formatTableName(TABLE_WORKFLOW_DEFINITIONS, this.database)} WHERE ${quoteIdentifier('id', 'column name')} = ?`,
-      [id],
+  async delete(id: string, options?: DeleteWorkflowDefinitionOptions): Promise<boolean> {
+    const [result] = await this.pool.execute<ResultSetHeader>(
+      `DELETE FROM ${formatTableName(TABLE_WORKFLOW_DEFINITIONS, this.database)} WHERE ${quoteIdentifier('id', 'column name')} = ?${options?.authorId !== undefined ? ` AND ${quoteIdentifier('authorId', 'column name')} = ?` : ''}`,
+      options?.authorId !== undefined ? [id, options.authorId] : [id],
     );
+    return result.affectedRows > 0;
   }
 }

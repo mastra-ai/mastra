@@ -211,11 +211,11 @@ Dynamic workflow definitions (beta) are workflows expressed as JSON, persisted t
 | `GET` | `/api/stored/workflows` | List the caller's dynamic workflow definitions. Admins can filter by `status` and `authorId` |
 | `GET` | `/api/stored/workflows/:dynamicWorkflowId` | Get a caller-owned dynamic workflow definition. Admins can read any definition |
 | `POST` | `/api/stored/workflows` | Upsert a caller-owned definition (plus optional helper `dependencies`) and live-register it |
-| `DELETE` | `/api/stored/workflows/:dynamicWorkflowId` | Delete a dynamic workflow definition and unregister the live workflow |
+| `DELETE` | `/api/stored/workflows/:dynamicWorkflowId` | Delete a caller-owned dynamic workflow definition and unregister the live workflow |
 
-On authenticated servers, the read routes require the `stored-workflows:read` permission and the write routes require `stored-workflows:write`. List, get, and upsert derive the author from the server-owned request context. Regular callers can't select another `authorId`. The `stored-workflows:admin` permission bypasses read scoping and preserves the existing author during updates. Legacy definitions without an author are hidden from regular callers and read-only for admins.
+On authenticated servers, the read routes require the `stored-workflows:read` permission and the write routes require `stored-workflows:write`. List, get, upsert, and delete derive the author from the server-owned request context. Regular callers can't select another `authorId`. The `stored-workflows:admin` permission bypasses read scoping and preserves the existing author during updates and owner-qualified deletion. Legacy definitions without an author are hidden from regular callers and read-only for admins.
 
-Deletion and execution aren't owner-scoped yet. Registered dynamic workflows are executed through the ordinary `/api/workflows/:workflowId` routes above, which require workflow permissions but don't enforce definition ownership.
+Execution isn't owner-scoped yet. Registered dynamic workflows are executed through the ordinary `/api/workflows/:workflowId` routes above, which require workflow permissions but don't enforce definition ownership.
 
 ### Create run request body
 

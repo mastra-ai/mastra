@@ -143,9 +143,9 @@ Applications don't need direct access to the `Mastra` instance to manage dynamic
 - [Client SDK workflows API](/reference/client-js/workflows): Call `upsertDynamicWorkflow()` from a JavaScript or TypeScript client.
 - [Server routes](/reference/server/routes): Send definitions to `POST /api/stored/workflows`.
 
-On authenticated servers, listing, reading, and upserting dynamic workflows derives the author from the server-owned request context. Regular callers can only list, read, and replace their own definitions. Callers with `stored-workflows:admin` can inspect every definition and can replace an owned definition without changing its author. Definitions created before ownership metadata was available are hidden from regular callers and read-only for admins.
+On authenticated servers, listing, reading, upserting, and deleting dynamic workflows derives the author from the server-owned request context. Regular callers can only manage their own definitions. Callers with `stored-workflows:admin` can inspect every definition and can replace or delete an owned definition without changing or bypassing its author. Definitions created before ownership metadata was available are hidden from regular callers and read-only for admins.
 
-These management routes still require `stored-workflows:read` or `stored-workflows:write`. Deletion and execution aren't owner-scoped yet. Running the registered workflow requires `workflows:execute`, but this permission doesn't establish tenant ownership by itself.
+These management routes still require `stored-workflows:read` or `stored-workflows:write`. Execution isn't owner-scoped yet. Running the registered workflow requires `workflows:execute`, but this permission doesn't establish tenant ownership by itself.
 
 ### Persist definitions
 
@@ -163,7 +163,9 @@ await mastra.addDynamicWorkflow(untrustedDefinition, {
 })
 ```
 
-Mastra stores `authorId` with the definition in the same write. Once set, the author is immutable: replacing the definition without `authorId` retains its stored author, while using a different author fails with an ownership conflict. The authenticated server's list, get, and upsert routes enforce this ownership. Direct Core calls, deletion, execution, and nested workflow references still require application-level authorization.
+Mastra stores `authorId` with the definition in the same write. Once set, the author is immutable: replacing the definition without `authorId` retains its stored author, while using a different author fails with an ownership conflict. A trusted definition can only nest dynamic workflows with the same stored author; code-defined workflows remain application-level registrations. The authenticated server's list, get, upsert, and delete routes enforce definition ownership. Execution and direct Core calls without trusted author metadata still require application-level authorization.
+
+Delete through `Mastra.deleteDynamicWorkflow(id, { authorId })` when using Core directly. Storage compares the expected author in the delete operation, and Mastra unregisters the live dynamic workflow only after that row is deleted. Code-defined workflows are never unregistered by this method.
 
 ## Related
 

@@ -7,6 +7,7 @@ import {
 import type {
   CreateIndexOptions,
   CreateWorkflowDefinitionInput,
+  DeleteWorkflowDefinitionOptions,
   ListWorkflowDefinitionsInput,
   ListWorkflowDefinitionsOutput,
   UpdateWorkflowDefinitionInput,
@@ -225,11 +226,16 @@ export class WorkflowDefinitionsPG extends WorkflowDefinitionsStorage {
     return { definitions, total: definitions.length };
   }
 
-  async delete(id: string): Promise<void> {
+  async delete(id: string, options?: DeleteWorkflowDefinitionOptions): Promise<boolean> {
     const tableName = getTableName({
       indexName: TABLE_WORKFLOW_DEFINITIONS,
       schemaName: getSchemaName(this.#schema),
     });
-    await this.#db.client.none(`DELETE FROM ${tableName} WHERE "id" = $1`, [id]);
+    const params = options?.authorId !== undefined ? [id, options.authorId] : [id];
+    const result = await this.#db.client.query(
+      `DELETE FROM ${tableName} WHERE "id" = $1${options?.authorId !== undefined ? ' AND "authorId" = $2' : ''}`,
+      params,
+    );
+    return (result.rowCount ?? 0) > 0;
   }
 }

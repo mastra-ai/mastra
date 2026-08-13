@@ -12,6 +12,7 @@ import { describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { InMemoryStore, WorkflowDefinitionOwnershipConflictError } from '../storage';
 import { createTool } from '../tools';
+import { createWorkflow } from '../workflows/create';
 import { Mastra } from './index';
 
 const lookupCustomer = createTool({
@@ -48,6 +49,15 @@ function helperDefinition(id: string, sourceField: string) {
   };
 }
 
+function nestedDefinition(id: string, workflowId: string) {
+  return {
+    id,
+    inputSchema: objectSchema({ email1: stringSchema, email2: stringSchema }, ['email1', 'email2']),
+    outputSchema: customerSchema,
+    graph: [{ type: 'workflow' as const, id: `${id}-call`, workflowId }],
+  };
+}
+
 /** The root: a real parallel over both helpers, merged by call-site id. */
 const rootDefinition = {
   id: 'parallel-customer-lookup',
@@ -79,6 +89,16 @@ function createMastra(id: string) {
     tools: { 'lookup-customer': lookupCustomer } as any,
     storage: new InMemoryStore({ id }),
   });
+}
+
+function codeWorkflow() {
+  return createWorkflow({
+    id: 'code-workflow',
+    inputSchema: z.object({ email1: z.string(), email2: z.string() }),
+    outputSchema: z.object({ customerId: z.string(), email: z.string() }),
+  })
+    .tool(lookupCustomer)
+    .commit();
 }
 
 describe('Mastra.addDynamicWorkflows', () => {
@@ -332,6 +352,85 @@ describe('Mastra.addDynamicWorkflows', () => {
     expect(mastra.getWorkflow('lookup-first-customer')).toBe(original);
     const store = (await storage.getStore('workflowDefinitions'))!;
     expect((await store.get('lookup-first-customer'))?.authorId).toBe('verified-author');
+  });
+
+  it('allows a trusted definition to nest a dynamic workflow owned by the same author', async () => {
+    const mastra = createMastra('bundle-nested-same-owner');
+    await mastra.addDynamicWorkflow(helperDefinition('owned-helper', 'email1'), { authorId: 'author-1' });
+
+    await expect(
+      mastra.addDynamicWorkflow(nestedDefinition('owned-root', 'owned-helper'), { authorId: 'author-1' }),
+    ).resolves.toBeUndefined();
+
+    expect(mastra.getWorkflow('owned-root')).toBeDefined();
+  });
+
+  it('rejects a cross-owner dynamic nested workflow before mutating the registry', async () => {
+    const mastra = createMastra('bundle-nested-cross-owner');
+    await mastra.addDynamicWorkflow(helperDefinition('private-helper', 'email1'), { authorId: 'author-1' });
+    const originalHelper = mastra.getWorkflow('private-helper');
+
+    await expect(
+      mastra.addDynamicWorkflow(nestedDefinition('foreign-root', 'private-helper'), { authorId: 'author-2' }),
+    ).rejects.toBeInstanceOf(WorkflowDefinitionOwnershipConflictError);
+
+    expect(mastra.getWorkflow('private-helper')).toBe(originalHelper);
+    expect(() => mastra.getWorkflow('foreign-root')).toThrow();
+    const store = (await mastra.getStorage()!.getStore('workflowDefinitions'))!;
+    await expect(store.get('foreign-root')).resolves.toBeNull();
+  });
+
+  it('rejects a legacy unowned dynamic nested workflow for a trusted author', async () => {
+    const mastra = createMastra('bundle-nested-legacy-owner');
+    await mastra.addDynamicWorkflow(helperDefinition('legacy-helper', 'email1'));
+
+    await expect(
+      mastra.addDynamicWorkflow(nestedDefinition('owned-root', 'legacy-helper'), { authorId: 'author-1' }),
+    ).rejects.toBeInstanceOf(WorkflowDefinitionOwnershipConflictError);
+
+    expect(() => mastra.getWorkflow('owned-root')).toThrow();
+  });
+
+  it('rejects a trusted definition that collides with a code-defined workflow', async () => {
+    const storage = new InMemoryStore({ id: 'bundle-code-collision' });
+    const code = codeWorkflow();
+    const mastra = new Mastra({
+      logger: false,
+      tools: { 'lookup-customer': lookupCustomer } as any,
+      workflows: { 'code-workflow': code } as any,
+      storage,
+    });
+
+    await expect(
+      mastra.addDynamicWorkflow(helperDefinition('code-workflow', 'email1'), { authorId: 'author-1' }),
+    ).rejects.toBeInstanceOf(WorkflowDefinitionOwnershipConflictError);
+
+    expect(mastra.getWorkflow('code-workflow')).toBe(code);
+    const store = (await storage.getStore('workflowDefinitions'))!;
+    await expect(store.get('code-workflow')).resolves.toBeNull();
+  });
+
+  it('rejects a code-defined collision even when a same-owner stored shadow exists', async () => {
+    const storage = new InMemoryStore({ id: 'bundle-code-shadow-collision' });
+    const code = codeWorkflow();
+    const mastra = new Mastra({
+      logger: false,
+      tools: { 'lookup-customer': lookupCustomer } as any,
+      workflows: { 'code-workflow': code } as any,
+      storage,
+    });
+    const store = (await storage.getStore('workflowDefinitions'))!;
+    await store.upsert({ ...helperDefinition('code-workflow', 'email1'), authorId: 'author-1' } as any);
+
+    await expect(
+      mastra.addDynamicWorkflow(helperDefinition('code-workflow', 'email2'), { authorId: 'author-1' }),
+    ).rejects.toBeInstanceOf(WorkflowDefinitionOwnershipConflictError);
+
+    expect(mastra.getWorkflow('code-workflow')).toBe(code);
+    await expect(store.get('code-workflow')).resolves.toMatchObject({
+      authorId: 'author-1',
+      description: 'Looks up the customer named by "email1".',
+    });
   });
 
   it('serializes overlapping bundles so a rejected owner cannot roll back the winner', async () => {

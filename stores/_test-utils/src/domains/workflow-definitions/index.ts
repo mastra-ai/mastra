@@ -163,8 +163,19 @@ export function createWorkflowDefinitionsTests({ storage }: WorkflowDefinitionsT
 
     it('deletes a workflow definition', async () => {
       await store.upsert(baseInput('wf-1'));
-      await store.delete('wf-1');
+      await expect(store.delete('wf-1')).resolves.toBe(true);
       expect(await store.get('wf-1')).toBeNull();
+      await expect(store.delete('wf-1')).resolves.toBe(false);
+    });
+
+    it('atomically deletes only the expected owner', async () => {
+      await store.upsert({ ...baseInput('wf-1'), authorId: 'author-1' });
+
+      await expect(store.delete('wf-1', { authorId: 'author-2' })).resolves.toBe(false);
+      await expect(store.get('wf-1')).resolves.toMatchObject({ authorId: 'author-1' });
+
+      await expect(store.delete('wf-1', { authorId: 'author-1' })).resolves.toBe(true);
+      await expect(store.get('wf-1')).resolves.toBeNull();
     });
 
     it('preserves optional metadata and schemas across round-trip', async () => {

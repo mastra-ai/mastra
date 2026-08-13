@@ -894,12 +894,70 @@ describe('Dynamic Workflows handlers', () => {
       ).rejects.toBeInstanceOf(HTTPException);
     });
 
-    it('is idempotent on a missing id', async () => {
-      const result = await DELETE_DYNAMIC_WORKFLOW_ROUTE.handler({
-        ...ctx(mastra),
-        dynamicWorkflowId: 'never-existed',
+    it('returns the same 404 for missing and cross-owner ids without deleting the owner', async () => {
+      await UPSERT_DYNAMIC_WORKFLOW_ROUTE.handler({
+        ...ctx(mastra, { authorId: 'user-b' }),
+        ...workflowDefinition('wf-private'),
       });
-      expect(result.success).toBe(true);
+
+      for (const dynamicWorkflowId of ['never-existed', 'wf-private']) {
+        await expect(
+          DELETE_DYNAMIC_WORKFLOW_ROUTE.handler({
+            ...ctx(mastra, { authorId: 'user-a' }),
+            dynamicWorkflowId,
+          }),
+        ).rejects.toMatchObject({ status: 404, message: 'Not found' });
+      }
+
+      const row = await GET_DYNAMIC_WORKFLOW_ROUTE.handler({
+        ...ctx(mastra, { authorId: 'admin', admin: true }),
+        dynamicWorkflowId: 'wf-private',
+      });
+      expect(row.authorId).toBe('user-b');
+      expect(mastra.getWorkflow('wf-private')).toBeDefined();
+    });
+
+    it('lets an admin delete an owned definition without accepting a caller-supplied owner', async () => {
+      await UPSERT_DYNAMIC_WORKFLOW_ROUTE.handler({
+        ...ctx(mastra, { authorId: 'user-b' }),
+        ...workflowDefinition('wf-admin-delete'),
+      });
+
+      await expect(
+        DELETE_DYNAMIC_WORKFLOW_ROUTE.handler({
+          ...ctx(mastra, { authorId: 'admin', admin: true }),
+          dynamicWorkflowId: 'wf-admin-delete',
+        }),
+      ).resolves.toMatchObject({ success: true });
+      expect(() => mastra.getWorkflow('wf-admin-delete')).toThrow();
+    });
+
+    it('keeps legacy unowned definitions mutation-quarantined for users and admins', async () => {
+      await mastra.addDynamicWorkflow(workflowDefinition('wf-legacy-delete'));
+
+      await expect(
+        DELETE_DYNAMIC_WORKFLOW_ROUTE.handler({
+          ...ctx(mastra, { authorId: 'user-a' }),
+          dynamicWorkflowId: 'wf-legacy-delete',
+        }),
+      ).rejects.toMatchObject({ status: 404 });
+      await expect(
+        DELETE_DYNAMIC_WORKFLOW_ROUTE.handler({
+          ...ctx(mastra, { authorId: 'admin', admin: true }),
+          dynamicWorkflowId: 'wf-legacy-delete',
+        }),
+      ).rejects.toMatchObject({ status: 409 });
+
+      expect(mastra.getWorkflow('wf-legacy-delete')).toBeDefined();
+    });
+
+    it('requires a stable caller before delete', async () => {
+      await expect(
+        DELETE_DYNAMIC_WORKFLOW_ROUTE.handler({
+          ...ctx(mastra, { authorId: null }),
+          dynamicWorkflowId: 'missing',
+        }),
+      ).rejects.toMatchObject({ status: 401 });
     });
   });
 

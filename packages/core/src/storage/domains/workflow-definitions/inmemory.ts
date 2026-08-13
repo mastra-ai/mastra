@@ -1,6 +1,7 @@
 import type { InMemoryDB } from '../inmemory-db';
 import type {
   CreateWorkflowDefinitionInput,
+  DeleteWorkflowDefinitionOptions,
   ListWorkflowDefinitionsInput,
   ListWorkflowDefinitionsOutput,
   UpdateWorkflowDefinitionInput,
@@ -90,8 +91,10 @@ export class InMemoryWorkflowDefinitionsStorage extends WorkflowDefinitionsStora
     return { definitions: cloned, total: cloned.length };
   }
 
-  async delete(id: string): Promise<void> {
-    this.db.workflowDefinitions.delete(id);
+  async delete(id: string, options?: DeleteWorkflowDefinitionOptions): Promise<boolean> {
+    const existing = this.db.workflowDefinitions.get(id);
+    if (!existing || (options?.authorId !== undefined && existing.authorId !== options.authorId)) return false;
+    return this.db.workflowDefinitions.delete(id);
   }
 
   private deepCopy(def: WorkflowDefinition): WorkflowDefinition {

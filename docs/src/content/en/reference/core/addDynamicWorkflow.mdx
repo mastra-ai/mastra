@@ -81,7 +81,8 @@ A promise that resolves once the definition is validated, registered, and persis
 
 - The definition is fully validated (structure, references, schema flow) before anything is mutated. Agents, tools, and workflows referenced by the graph must already be registered on the instance.
 - Adding a definition with an existing ID replaces both the stored definition and the live registration. In-flight runs keep the graph they started with.
-- `options.authorId` is stored on the definition in the same write and becomes immutable. When replacing an existing definition, omitting `options.authorId` retains its stored author, while using a different author fails with an ownership conflict. It records a verified author but doesn't restrict reads, writes, or execution by itself. Enforce access before calling this method.
+- `options.authorId` is stored on the definition in the same write and becomes immutable. When replacing an existing definition, omitting `options.authorId` retains its stored author, while using a different author fails with an ownership conflict.
+- When `options.authorId` is present, dynamic nested workflows must have the same stored author. Code-defined nested workflows remain available as application-level registrations. Ownership is checked before the live registry changes.
 - Without a storage adapter that supports the `workflowDefinitions` domain, the workflow is still validated and registered in memory, but the definition is lost on restart.
 - To add a root workflow together with helper workflows it nests, use [`addDynamicWorkflows()`](/reference/core/addDynamicWorkflows).
 

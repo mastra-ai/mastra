@@ -5,6 +5,7 @@ import {
 } from '@mastra/core/storage';
 import type {
   CreateWorkflowDefinitionInput,
+  DeleteWorkflowDefinitionOptions,
   ListWorkflowDefinitionsInput,
   ListWorkflowDefinitionsOutput,
   UpdateWorkflowDefinitionInput,
@@ -184,8 +185,12 @@ export class MongoDBWorkflowDefinitionsStore extends WorkflowDefinitionsStorage 
     return { definitions, total: definitions.length };
   }
 
-  async delete(id: string): Promise<void> {
+  async delete(id: string, options?: DeleteWorkflowDefinitionOptions): Promise<boolean> {
     const collection = await this.getCollection(TABLE_WORKFLOW_DEFINITIONS);
-    await collection.deleteOne({ id });
+    const result = await collection.deleteOne({
+      id,
+      ...(options?.authorId !== undefined ? { authorId: options.authorId } : {}),
+    });
+    return result.deletedCount > 0;
   }
 }

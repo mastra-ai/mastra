@@ -1,6 +1,7 @@
 import type { Client, InValue } from '@libsql/client';
 import type {
   CreateWorkflowDefinitionInput,
+  DeleteWorkflowDefinitionOptions,
   ListWorkflowDefinitionsInput,
   ListWorkflowDefinitionsOutput,
   UpdateWorkflowDefinitionInput,
@@ -188,10 +189,11 @@ export class WorkflowDefinitionsLibSQL extends WorkflowDefinitionsStorage {
     return { definitions, total: definitions.length };
   }
 
-  async delete(id: string): Promise<void> {
-    await this.#client.execute({
-      sql: `DELETE FROM "${TABLE_WORKFLOW_DEFINITIONS}" WHERE id = ?`,
-      args: [id],
+  async delete(id: string, options?: DeleteWorkflowDefinitionOptions): Promise<boolean> {
+    const result = await this.#client.execute({
+      sql: `DELETE FROM "${TABLE_WORKFLOW_DEFINITIONS}" WHERE id = ?${options?.authorId !== undefined ? ' AND authorId = ?' : ''}`,
+      args: options?.authorId !== undefined ? [id, options.authorId] : [id],
     });
+    return (result.rowsAffected ?? 0) > 0;
   }
 }

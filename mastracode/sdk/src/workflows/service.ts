@@ -1,7 +1,7 @@
 /**
- * Thin wrapper around `mastra.getStorage().getStore('workflowDefinitions')` and
- * `mastra.getWorkflow(id).createRun().stream(...)` so both the parent-mode
- * tools and the `/workflows` slash command go through one implementation.
+ * Thin wrapper around Mastra's dynamic workflow and run APIs so both the
+ * parent-mode tools and the `/workflows` slash command go through one
+ * implementation.
  */
 import type { Mastra } from '@mastra/core/mastra';
 
@@ -40,7 +40,6 @@ interface WorkflowRunOutputLike {
 interface WorkflowDefinitionsStore {
   list: (args?: { status?: 'active' | 'archived' }) => Promise<{ definitions: StoredWorkflowRow[]; total: number }>;
   get: (id: string) => Promise<StoredWorkflowRow | null>;
-  delete: (id: string) => Promise<void>;
 }
 
 async function workflowDefinitionsStore(mastra: Mastra): Promise<WorkflowDefinitionsStore> {
@@ -68,12 +67,7 @@ export async function getWorkflow(mastra: Mastra, id: string): Promise<StoredWor
 }
 
 export async function deleteWorkflow(mastra: Mastra, id: string): Promise<{ ok: true; id: string }> {
-  const store = await workflowDefinitionsStore(mastra);
-  await store.delete(id);
-  // Also unregister the live in-process Workflow instance so a subsequent
-  // save-workflow with the same id re-registers cleanly instead of getting
-  // no-op'd by addWorkflow's first-write-wins guard.
-  mastra.removeWorkflow(id);
+  await mastra.deleteDynamicWorkflow(id);
   return { ok: true, id };
 }
 

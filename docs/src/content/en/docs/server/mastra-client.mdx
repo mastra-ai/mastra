@@ -120,9 +120,9 @@ Durable storage requires a configured storage adapter that supports the `workflo
 
 Stored definitions support declarative agent, tool, mapping, nested workflow, parallel, foreach, sleep, sleep-until, conditional, and loop entries. They can't contain JavaScript closures. Conditional and loop logic must use the declarative predicate format, and referenced agents, tools, and nested workflows must already be registered.
 
-Authenticated servers derive the author for list, get, and upsert operations from the server-owned request context. Regular callers only list, get, and upsert their own definitions. Callers with `stored-workflows:admin` can inspect every definition and update an owned definition without transferring it. Definitions without ownership metadata are hidden from regular callers and read-only for admins.
+Authenticated servers derive the author for list, get, upsert, and delete operations from the server-owned request context. Regular callers only manage their own definitions. Callers with `stored-workflows:admin` can inspect every definition and update or delete an owned definition without transferring or bypassing its owner. Definitions without ownership metadata are hidden from regular callers and read-only for admins.
 
-These routes require `stored-workflows:read` or `stored-workflows:write`. Deletion and execution aren't owner-scoped yet. The `workflows:execute` permission can run a registered workflow, but it doesn't establish definition ownership.
+These routes require `stored-workflows:read` or `stored-workflows:write`. Execution isn't owner-scoped yet. The `workflows:execute` permission can run a registered workflow, but it doesn't establish definition ownership.
 
 :::
 

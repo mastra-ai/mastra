@@ -237,8 +237,8 @@ export const UPSERT_DYNAMIC_WORKFLOW_ROUTE = createRoute({
 /**
  * DELETE /stored/workflows/:dynamicWorkflowId — delete a dynamic workflow.
  *
- * Removes the row from storage AND un-registers the live Workflow instance so
- * a subsequent POST with the same id starts from a clean slate. Idempotent.
+ * Removes the caller-owned row from storage and un-registers the matching live
+ * dynamic Workflow instance. Missing and cross-owner ids are indistinguishable.
  */
 export const DELETE_DYNAMIC_WORKFLOW_ROUTE = createRoute({
   method: 'DELETE',
@@ -247,20 +247,31 @@ export const DELETE_DYNAMIC_WORKFLOW_ROUTE = createRoute({
   pathParamSchema: dynamicWorkflowIdPathParams,
   responseSchema: deleteDynamicWorkflowResponseSchema,
   summary: 'Delete a dynamic workflow definition',
-  description: 'Removes a dynamic workflow definition and unregisters the live workflow instance. Idempotent.',
+  description: 'Removes a caller-owned dynamic workflow definition and unregisters its live workflow instance.',
   tags: ['Dynamic Workflows'],
   requiresAuth: true,
   requiresPermission: 'stored-workflows:write',
-  handler: async ({ mastra, dynamicWorkflowId }) => {
+  handler: async ({ mastra, requestContext, dynamicWorkflowId }) => {
     try {
+      const principal = getDynamicWorkflowPrincipal(requestContext);
       const storage = mastra.getStorage();
       if (!storage) throw new HTTPException(500, { message: 'Storage is not configured' });
 
       const store = await storage.getStore('workflowDefinitions');
       if (!store) throw new HTTPException(500, { message: 'workflowDefinitions storage domain is not available' });
 
-      await store.delete(dynamicWorkflowId);
-      (mastra as Mastra).removeWorkflow(dynamicWorkflowId);
+      let expectedAuthorId = principal.authorId;
+      if (principal.isAdmin) {
+        const existing = await store.get(dynamicWorkflowId);
+        if (!existing) throwDynamicWorkflowNotFound();
+        if (!existing.authorId) throwDynamicWorkflowConflict();
+        expectedAuthorId = existing.authorId;
+      }
+
+      const deleted = await (mastra as Mastra).deleteDynamicWorkflow(dynamicWorkflowId, {
+        authorId: expectedAuthorId,
+      });
+      if (!deleted) throwDynamicWorkflowNotFound();
       return { success: true as const, message: `Workflow ${dynamicWorkflowId} deleted` };
     } catch (error) {
       return handleError(error, 'Error deleting dynamic workflow');
