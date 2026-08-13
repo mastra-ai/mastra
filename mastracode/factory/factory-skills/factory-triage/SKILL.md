@@ -53,6 +53,8 @@ Choose one **effort** and one **impact** level independently from the completed 
 
 When multiple explanations remain plausible, pick the one the evidence best supports, record the ranking and why as an assumption, and list what would discriminate between them. Do not present candidates and wait — decide and move.
 
+For `mastra-ai/mastra`, add `@mastra/core` only when the issue reports broken existing behavior and its primary fix traces to `packages/core` or the published package. A core mention or stack frame is not enough; skip features, adjacent packages, and uncertain ownership.
+
 ## Output contract
 
 Write one concise **handoff** for whoever plans the fix. It must begin with the existing marker and then this classification header, followed by the detailed investigation:
@@ -112,7 +114,7 @@ Find the existing marker-owned comment deterministically; never use `gh issue co
 export FACTORY_COMMENT_AUTHOR=$(gh api user --jq .login)
 COMMENT_ID=$(gh api --paginate "repos/$OWNER/$REPO/issues/$ISSUE/comments" \
   --jq '.[] | select(.user.login == env.FACTORY_COMMENT_AUTHOR and (.body | contains("<!-- mastra-factory-triage -->"))) | .id' | sort -n | head -n1)
-if [ -n "$COMMENT_ID" ]; then
+if [ -n "$COMMENT_ID" ]; thenhttps://github.com/mastra-ai/mastra/pull/21401/conflict?name=mastracode%252Ffactory%252Fsrc%252Fworkspace.test.ts&ancestor_oid=1c57f730bbd4d58a0f273485c2d24f2cac7c7c24&base_oid=6a2eb941a15ded90730b761e9d8ba1fb42010eb4&head_oid=2362f011ec3a13de8d7eb976ae043d8fe1f8d877
   gh api --method PATCH "repos/$OWNER/$REPO/issues/comments/$COMMENT_ID" -f body="$COMMENT_BODY"
 else
   gh api --method POST "repos/$OWNER/$REPO/issues/$ISSUE/comments" -f body="$COMMENT_BODY"
@@ -128,6 +130,14 @@ After a GitHub comment is posted or updated, reconcile the labels before the ter
 - Add `status: needs approval` when `Route: Await approval`, or when the recommended next action needs maintainer approval or prep before someone should investigate, implement, close, or reject: `gh issue edit "$ISSUE" --add-label "status: needs approval"`.
 - Add the selected `effort:<level>` and `impact:<level>` labels from the handoff.
 - Remove only conflicting alternatives from these explicit labels: `effort:low`, `effort:medium`, `effort:high`, `impact:low`, `impact:medium`, and `impact:high`. On every initial run and refresh, keep exactly the selected effort label and exactly the selected impact label.
+- For confirmed direct core bugs in `mastra-ai/mastra`, ensure `@mastra/core` exists before adding it; never remove it:
+
+  ```bash
+  if ! gh label list --repo mastra-ai/mastra --limit 1000 --json name --jq '.[].name' | grep -Fxq '@mastra/core'; then
+    gh label create '@mastra/core' --repo mastra-ai/mastra --color '1D76DB' --description 'Issues whose primary fix belongs in @mastra/core'
+  fi
+  gh issue edit "$ISSUE" --repo mastra-ai/mastra --add-label '@mastra/core'
+  ```
 
 Apply only these label mutations. Do not remove `status: needs approval` merely because a later refresh has a different route. Do not add, remove, or derive any `trio-*` labels; leave all type, area, ownership, and unrelated labels untouched. For Linear issues, use the same structured handoff without attempting GitHub publication or label mutations.
 
