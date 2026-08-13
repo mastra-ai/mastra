@@ -22,7 +22,7 @@ import { InMemoryStore } from '../../../storage';
 import type { WorkflowRunState, WorkflowRunStatus } from '../../../workflows/types';
 import { Agent } from '../../agent';
 import { agentThreadStreamRuntime } from '../../thread-stream-runtime';
-import { AGENT_STREAM_TOPIC, DurableStepIds } from '../constants';
+import { AGENT_STREAM_TOPIC, AgentStreamEventTypes, DurableStepIds } from '../constants';
 import { createDurableAgent } from '../create-durable-agent';
 import type { DurableAgent } from '../durable-agent';
 import { globalRunRegistry } from '../run-registry';
@@ -159,6 +159,32 @@ describe('DurableAgent.recover(runId)', () => {
     cleanup();
   });
 
+  it('re-reads the authoritative snapshot after acquiring recovery ownership', async () => {
+    const runId = 'run-fresh-snapshot';
+    await seed(store, runId, 'running', 'agent-A');
+    const workflows = (await store.getStore('workflows'))!;
+    const getWorkflowRunById = workflows.getWorkflowRunById.bind(workflows);
+    let loopSnapshotReads = 0;
+    vi.spyOn(workflows, 'getWorkflowRunById').mockImplementation(async args => {
+      const persisted = await getWorkflowRunById(args);
+      if (args.workflowName !== DurableStepIds.AGENTIC_LOOP || !persisted || ++loopSnapshotReads !== 2) {
+        return persisted;
+      }
+      const claimedSnapshot = makeSnapshot(runId, 'running', 'agent-A');
+      (claimedSnapshot.context.input as any).requestContextEntries = { userId: 'u-2' };
+      return { ...persisted, snapshot: claimedSnapshot };
+    });
+    stubWorkflow(agent, 'success');
+
+    const recovered = await agent.recover(runId);
+    const entry = globalRunRegistry.get(runId);
+
+    expect(loopSnapshotReads).toBe(2);
+    expect(entry?.requestContext?.get?.('userId')).toBe('u-2');
+    await entry?.workflowExecution;
+    recovered.cleanup();
+  });
+
   it('re-subscribes to the pubsub topic and returns a live fullStream', async () => {
     await seed(store, 'run-stream', 'running', 'agent-A');
     stubWorkflow(agent, 'success');
@@ -269,6 +295,33 @@ describe('DurableAgent.recover(runId)', () => {
     }
   });
 
+  it('does not let an older cleanup remove a newer recovery of the same run', async () => {
+    const runId = 'run-cleanup-generation';
+    await seed(store, runId, 'running', 'agent-A');
+    const firstRestart = vi.fn(async () => ({ status: 'suspended' as const }));
+    const secondRestart = vi.fn(async () => ({ status: 'suspended' as const }));
+    const createRun = vi
+      .fn()
+      .mockResolvedValueOnce({ restart: firstRestart, runId })
+      .mockResolvedValueOnce({ restart: secondRestart, runId });
+    vi.spyOn(agent, 'getWorkflow').mockReturnValue({ createRun } as any);
+
+    const firstRecovery = await agent.recover(runId);
+    await globalRunRegistry.get(runId)?.workflowExecution;
+
+    const secondRecovery = await agent.recover(runId);
+    const secondEntry = globalRunRegistry.get(runId);
+    expect(secondEntry).toBeDefined();
+
+    firstRecovery.cleanup();
+    expect(globalRunRegistry.get(runId)).toBe(secondEntry);
+
+    await secondEntry?.workflowExecution;
+    expect(firstRestart).toHaveBeenCalledTimes(1);
+    expect(secondRestart).toHaveBeenCalledTimes(1);
+    secondRecovery.cleanup();
+  });
+
   it('retries a transient recovery-lease renewal error without aborting the run', async () => {
     vi.useFakeTimers();
     const runId = 'run-renewal-retry';
@@ -323,6 +376,81 @@ describe('DurableAgent.recover(runId)', () => {
       recovery?.cleanup();
       vi.useRealTimers();
     }
+  });
+
+  it('rolls back before restart when the recovery lease is definitively lost', async () => {
+    vi.useFakeTimers();
+    const runId = 'run-renewal-lost';
+    const lossStore = new InMemoryStore();
+    const lossPubsub = new EventEmitterPubSub();
+    const actualRenewLease = lossPubsub.renewLease.bind(lossPubsub);
+    const renewLease = vi.spyOn(lossPubsub, 'renewLease').mockImplementation(async (key, owner, ttlMs) => {
+      if (key.startsWith('mastra:durable-agent-recovery:')) return false;
+      return actualRenewLease(key, owner, ttlMs);
+    });
+    const releaseLease = vi.spyOn(lossPubsub, 'releaseLease');
+    const publish = vi.spyOn(lossPubsub, 'publish');
+    const { agent: lossAgent } = createDurableWithStore('agent-renewal-lost', lossStore, lossPubsub);
+    await seed(lossStore, runId, 'running', 'agent-renewal-lost');
+    const workflow = stubWorkflow(lossAgent, 'success');
+
+    let markRegistrationStarted!: () => void;
+    const registrationStarted = new Promise<void>(resolve => {
+      markRegistrationStarted = resolve;
+    });
+    let releaseRegistration!: () => void;
+    const registrationGate = new Promise<void>(resolve => {
+      releaseRegistration = resolve;
+    });
+    const registerRun = vi.spyOn(agentThreadStreamRuntime, 'registerRun').mockImplementation(async () => {
+      markRegistrationStarted();
+      await registrationGate;
+    });
+    const recovery = lossAgent.recover(runId);
+
+    try {
+      await registrationStarted;
+      await vi.advanceTimersByTimeAsync(RECOVERY_LEASE_RENEW_INTERVAL_MS_FOR_TEST);
+
+      expect(globalRunRegistry.get(runId)?.abortController?.signal.aborted).toBe(true);
+      releaseRegistration();
+      await expect(recovery).rejects.toMatchObject({ id: 'DURABLE_AGENT_RECOVER_LEASE_LOST' });
+
+      expect(workflow.createRun).not.toHaveBeenCalled();
+      expect(releaseLease.mock.calls.filter(([key]) => key.startsWith('mastra:durable-agent-recovery:'))).toHaveLength(
+        1,
+      );
+      expect(
+        publish.mock.calls.filter(
+          ([topic, event]) => topic === AGENT_STREAM_TOPIC(runId) && event.type === AgentStreamEventTypes.ERROR,
+        ),
+      ).toHaveLength(0);
+
+      await vi.advanceTimersByTimeAsync(RECOVERY_LEASE_RENEW_INTERVAL_MS_FOR_TEST * 2);
+      expect(renewLease.mock.calls.filter(([key]) => key.startsWith('mastra:durable-agent-recovery:'))).toHaveLength(1);
+      expect(workflow.createRun).not.toHaveBeenCalled();
+    } finally {
+      releaseRegistration();
+      await recovery.catch(() => {});
+      registerRun.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
+  it('releases recovery ownership when workflow construction throws synchronously', async () => {
+    const runId = 'run-workflow-construction-fail';
+    const failureStore = new InMemoryStore();
+    const failurePubsub = new EventEmitterPubSub();
+    const releaseLease = vi.spyOn(failurePubsub, 'releaseLease');
+    const { agent: failureAgent } = createDurableWithStore('agent-workflow-fail', failureStore, failurePubsub);
+    await seed(failureStore, runId, 'running', 'agent-workflow-fail');
+    vi.spyOn(failureAgent, 'getWorkflow').mockImplementation(() => {
+      throw new Error('workflow construction failed');
+    });
+
+    await expect(failureAgent.recover(runId)).rejects.toThrow('workflow construction failed');
+    expect(releaseLease.mock.calls.filter(([key]) => key.startsWith('mastra:durable-agent-recovery:'))).toHaveLength(1);
+    expect(globalRunRegistry.get(runId)).toBeUndefined();
   });
 
   it('deletes both AGENTIC_LOOP and AGENTIC_EXECUTION snapshot rows on success', async () => {
@@ -437,6 +565,31 @@ describe('DurableAgent.recover(runId)', () => {
     expect(seenError?.message).toBe('workflow blew up');
   });
 
+  it('publishes a failed workflow result exactly once', async () => {
+    const runId = 'run-failed-result';
+    const failedStore = new InMemoryStore();
+    const failedPubsub = new EventEmitterPubSub();
+    const publish = vi.spyOn(failedPubsub, 'publish');
+    const { agent: failedAgent } = createDurableWithStore('agent-failed-result', failedStore, failedPubsub);
+    await seed(failedStore, runId, 'running', 'agent-failed-result');
+    const restart = vi.fn(async () => ({ status: 'failed' as const, error: { message: 'terminal failure' } }));
+    const createRun = vi.fn(async () => ({ restart, runId }));
+    vi.spyOn(failedAgent, 'getWorkflow').mockReturnValue({
+      createRun,
+      deleteWorkflowRunById: vi.fn(async () => {}),
+    } as any);
+
+    const recovered = await failedAgent.recover(runId);
+    await expect(globalRunRegistry.get(runId)?.workflowExecution).rejects.toThrow('terminal failure');
+
+    const errorEvents = publish.mock.calls.filter(
+      ([topic, event]) => topic === AGENT_STREAM_TOPIC(runId) && event.type === AgentStreamEventTypes.ERROR,
+    );
+    expect(errorEvents).toHaveLength(1);
+    expect((errorEvents[0]?.[1] as any).data.error.message).toBe('terminal failure');
+    recovered.cleanup();
+  });
+
   it('reports a subscription setup failure via the pubsub error stream', async () => {
     const runId = 'run-ready-fail';
     const failingStore = new InMemoryStore();
@@ -451,13 +604,17 @@ describe('DurableAgent.recover(runId)', () => {
     const { agent: failingAgent } = createDurableWithStore('agent-ready-fail', failingStore, failingPubsub);
     await seed(failingStore, runId, 'running', 'agent-ready-fail');
     const workflow = stubWorkflow(failingAgent, 'success');
-    const emitError = vi.spyOn(failingAgent as any, 'emitError').mockResolvedValue(undefined);
+    const publish = vi.spyOn(failingPubsub, 'publish');
 
     const recovered = await failingAgent.recover(runId);
     const workflowExecution = globalRunRegistry.get(runId)?.workflowExecution;
 
     await expect(workflowExecution).rejects.toThrow('pubsub subscription failed');
-    expect(emitError).toHaveBeenCalledWith(runId, expect.objectContaining({ message: 'pubsub subscription failed' }));
+    const errorEvents = publish.mock.calls.filter(
+      ([topic, event]) => topic === AGENT_STREAM_TOPIC(runId) && event.type === AgentStreamEventTypes.ERROR,
+    );
+    expect(errorEvents).toHaveLength(1);
+    expect((errorEvents[0]?.[1] as any).data.error.message).toBe('pubsub subscription failed');
     expect(workflow.createRun).not.toHaveBeenCalled();
     recovered.cleanup();
   });
