@@ -97,27 +97,35 @@ describe('AgentController.listActiveThreadRuns', () => {
     });
     await controller.init();
 
-    await agentThreadStreamRuntime.registerRun(
-      buildAgent,
-      createFakeRun('run-build').output,
-      { memory: { thread: 'thread-build', resource: 'resource-build' } },
-      buildPubSub,
-    );
-    await agentThreadStreamRuntime.registerRun(
-      planAgent,
-      createFakeRun('run-plan').output,
-      { memory: { thread: 'thread-plan', resource: 'resource-plan' } },
-      planPubSub,
-    );
+    const buildRun = createFakeRun('run-build');
+    const planRun = createFakeRun('run-plan');
+    try {
+      await agentThreadStreamRuntime.registerRun(
+        buildAgent,
+        buildRun.output,
+        { memory: { thread: 'thread-build', resource: 'resource-build' } },
+        buildPubSub,
+      );
+      await agentThreadStreamRuntime.registerRun(
+        planAgent,
+        planRun.output,
+        { memory: { thread: 'thread-plan', resource: 'resource-plan' } },
+        planPubSub,
+      );
 
-    expect(controller.listActiveThreadRuns()).toEqual(
-      expect.arrayContaining([
-        { runId: 'run-build', resourceId: 'resource-build', threadId: 'thread-build' },
-        { runId: 'run-plan', resourceId: 'resource-plan', threadId: 'thread-plan' },
-      ]),
-    );
-
-    await buildPubSub.close();
-    await planPubSub.close();
+      const runs = controller.listActiveThreadRuns();
+      expect(runs).toHaveLength(2);
+      expect(runs).toEqual(
+        expect.arrayContaining([
+          { runId: 'run-build', resourceId: 'resource-build', threadId: 'thread-build' },
+          { runId: 'run-plan', resourceId: 'resource-plan', threadId: 'thread-plan' },
+        ]),
+      );
+    } finally {
+      buildRun.settle();
+      planRun.settle();
+      await buildPubSub.close();
+      await planPubSub.close();
+    }
   });
 });
