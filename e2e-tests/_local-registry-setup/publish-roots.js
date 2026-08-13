@@ -129,12 +129,12 @@ function getCreateMastraBuildRoots(rootDir) {
 }
 
 function getFactoryScaffoldRoots(rootDir) {
-  execFileSync(process.execPath, ['mastracode/mastra-factory/scripts/generate-scaffold.mjs'], {
+  execFileSync(process.execPath, ['packages/cli/scripts/generate-factory-scaffold.mjs'], {
     cwd: rootDir,
     stdio: 'inherit',
   });
 
-  const manifest = readJson(join(rootDir, 'mastracode/mastra-factory/generated/scaffold/package.json'));
+  const manifest = readJson(join(rootDir, 'packages/cli/src/commands/factory/generated/scaffold/package.json'));
   const dependencies = { ...manifest.dependencies, ...manifest.devDependencies };
   return Object.keys(dependencies).filter(name => name === 'mastra' || name.startsWith('@mastra/'));
 }
