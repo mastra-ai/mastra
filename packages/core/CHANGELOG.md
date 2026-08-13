@@ -1,5 +1,70 @@
 # @mastra/core
 
+## 1.59.0-alpha.4
+
+### Minor Changes
+
+- Added `Agent.listActiveThreadRuns()` and `AgentController.listActiveThreadRuns()`. They list every run currently in flight across resources and threads, from the same in-process tracking as `getActiveThreadRunId()`. ([#21353](https://github.com/mastra-ai/mastra/pull/21353))
+
+  ```ts
+  const runs = agent.listActiveThreadRuns();
+  // [{ runId: 'run-1', resourceId: 'workspace-a', threadId: 'thread-1' }]
+  ```
+
+### Patch Changes
+
+- Fixed memory growth from completed foreground workspace commands retaining process handles and their output. ([#21438](https://github.com/mastra-ai/mastra/pull/21438))
+
+- Send opaque acting-user subjects with Platform sandbox requests, including Factory creation and reattachment flows. ([#20754](https://github.com/mastra-ai/mastra/pull/20754))
+
+  ```typescript
+  import { PlatformSandbox } from '@mastra/platform-workspace';
+
+  const sandbox = new PlatformSandbox({
+    environmentId: 'env_abc',
+    actingUserId: auth.user.id,
+  });
+  ```
+
+## 1.59.0-alpha.3
+
+### Minor Changes
+
+- Renamed CostGuardProcessor to TokenCostControl, improved its reliability and diagnostics, and added new budgeting options. ([#21372](https://github.com/mastra-ai/mastra/pull/21372))
+
+  **Rename**
+
+  - `CostGuardProcessor` is now `TokenCostControl` with processor id `'token-cost-control'`. The `CostGuardProcessor` export (and the `CostGuardOptions`, `CostGuardUsage`, `CostGuardBreakdownEntry`, `CostGuardTripwireMetadata`, and `CostGuardViolationDetail` types) remains available as a deprecated alias for the same class and will be removed in a future major version.
+
+  **Improvements**
+
+  - Each cost check now issues fewer queries against observability storage.
+  - Diagnostics now go through the Mastra logger, and failed cost queries now log diagnostics and allow the request to continue instead of failing silently.
+  - With the warn strategy, warnings and the onViolation callback now fire at most once per request instead of on every step.
+  - Violation messages no longer contain float precision artifacts (e.g. 0.30000000000000004 now renders as 0.3).
+
+  **New options**
+
+  - `warnAtPercent`: soft threshold that warns (without blocking) when cost reaches a percentage of the limit.
+  - `maxCost` now also accepts a function of RequestContext for per-tier or per-user budgets.
+  - New scopes `user`, `organization`, and `session` track cumulative cost per userId, organizationId, and sessionId (read from the matching RequestContext keys; traces must carry the matching span metadata).
+  - `includeBreakdown`: attaches a per-provider/model cost breakdown to violations.
+
+  ```typescript
+  const tokenCostControl = new TokenCostControl({
+    maxCost: requestContext => (requestContext?.get('tier') === 'pro' ? 10.0 : 1.0),
+    scope: 'user',
+    warnAtPercent: 80,
+    includeBreakdown: true,
+  });
+  ```
+
+### Patch Changes
+
+- Fixed model routing to use rotated gateway API keys. ([#21364](https://github.com/mastra-ai/mastra/pull/21364))
+
+- Reduced persisted agent-loop snapshot size by no longer storing duplicated provider request data (measured at 24% of all persisted snapshot bytes in production). Resume behavior and step routing data are unchanged. ([#21390](https://github.com/mastra-ai/mastra/pull/21390))
+
 ## 1.59.0-alpha.2
 
 ### Patch Changes

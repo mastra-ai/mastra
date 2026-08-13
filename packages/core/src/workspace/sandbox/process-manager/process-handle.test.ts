@@ -55,6 +55,7 @@ class TestProcessHandle extends ProcessHandle {
 class TestProcessManager extends SandboxProcessManager {
   spawnCalls = 0;
   ensureRunningCalls = 0;
+  private readonly handle = new TestProcessHandle();
 
   constructor() {
     super();
@@ -67,7 +68,9 @@ class TestProcessManager extends SandboxProcessManager {
 
   async spawn(_command: string, options?: SpawnProcessOptions): Promise<ProcessHandle> {
     this.spawnCalls += 1;
-    return new TestProcessHandle(options);
+    const handle = options ? new TestProcessHandle(options) : this.handle;
+    this._tracked.set(handle.pid, handle);
+    return handle;
   }
 
   async list(): Promise<[]> {
@@ -124,6 +127,16 @@ describe('ProcessHandle output retention', () => {
     await expect(manager.spawn('sleep 60', { maxRetainedBytes: -1 })).rejects.toThrow(RangeError);
     expect(manager.ensureRunningCalls).toBe(0);
     expect(manager.spawnCalls).toBe(0);
+  });
+
+  it('makes a reused process ID visible after its previous handle was released', async () => {
+    const manager = new TestProcessManager();
+    const previousHandle = await manager.spawn('first');
+    manager.release(previousHandle.pid);
+
+    const reusedHandle = await manager.spawn('second');
+
+    await expect(manager.get(reusedHandle.pid)).resolves.toBe(reusedHandle);
   });
 
   it('retains everything when maxRetainedBytes is Infinity', () => {

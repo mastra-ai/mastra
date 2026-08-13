@@ -26,7 +26,27 @@ describe('PlatformClient', () => {
     const [url, init] = fetchMock.mock.calls[0]!;
     expect(String(url)).toBe('https://proxy.test/v1/projects/proj_123/sandbox?dryRun=true');
     expect((init.headers as Headers).get('authorization')).toBe('Bearer sk_test');
+    expect((init.headers as Headers).get('x-acting-user-id')).toBeNull();
     expect(init.method).toBe('POST');
+  });
+
+  it('sends an opaque acting-user subject on every request', async () => {
+    vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+    const fetchMock = vi.fn().mockResolvedValue(response('{}', { status: 200 }));
+    const client = new PlatformClient({
+      accessToken: 'sk_test',
+      projectId: 'proj_123',
+      actingUserId: '  external-user-42  ',
+      fetch: fetchMock,
+    });
+
+    await client.request('/sandbox');
+    await client.request('/sandbox/sbx_1/exec-lease', { method: 'POST' });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    for (const [, init] of fetchMock.mock.calls) {
+      expect((init.headers as Headers).get('x-acting-user-id')).toBe('external-user-42');
+    }
   });
 
   it('sends advisory session/thread correlation headers when configured', async () => {

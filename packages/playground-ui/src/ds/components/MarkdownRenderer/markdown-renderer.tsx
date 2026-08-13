@@ -1,8 +1,10 @@
+import { memo } from 'react';
 import type { MouseEvent, MouseEventHandler, ReactNode } from 'react';
 import Markdown from 'react-markdown';
 import type { Components, ExtraProps } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
+import { rehypeWordSpans } from './word-spans';
 import { CodeBlock } from '@/ds/components/CodeBlock';
 import { cn } from '@/lib/utils';
 
@@ -14,24 +16,36 @@ export interface MarkdownRendererProps {
   children: string;
   className?: string;
   externalLinkTarget?: MarkdownExternalLinkTarget;
+  /** The text is still being written: fade each word in as it lands. */
+  streaming?: boolean;
 }
 
 /**
  * Renders a markdown string. Agent output can carry attacker-influenced text
  * (file contents, tool output, web pages): react-markdown escapes raw HTML and
  * drops dangerous link schemes, so nothing here reaches the DOM as markup.
+ *
+ * Memoized because react-markdown re-parses on every render and a streaming
+ * reply re-renders its whole transcript on every delta: without this, each
+ * chunk re-parses every settled message on the page as well as the live one.
  */
-export function MarkdownRenderer({ children, className, externalLinkTarget = 'tab' }: MarkdownRendererProps) {
+export const MarkdownRenderer = memo(function MarkdownRenderer({
+  children,
+  className,
+  externalLinkTarget = 'tab',
+  streaming = false,
+}: MarkdownRendererProps) {
   return (
     <Markdown
-      remarkPlugins={[remarkGfm]}
+      remarkPlugins={REMARK_PLUGINS}
+      rehypePlugins={streaming ? WORD_SPAN_PLUGINS : undefined}
       components={externalLinkTarget === 'window' ? WINDOW_COMPONENTS : COMPONENTS}
-      className={cn('mastra-markdown', className)}
+      className={cn('mastra-markdown', streaming && 'mastra-markdown-streaming', className)}
     >
       {decodeEscapedNewlines(children)}
     </Markdown>
   );
-}
+});
 
 // Agent networks emit their text with literal `\n`. Only unescape when the text
 // has no real newline, otherwise a `"a\nb"` inside a code fence gets shredded.
@@ -105,6 +119,9 @@ function markdownLink(externalLinkTarget: MarkdownExternalLinkTarget): NonNullab
     );
   };
 }
+
+const REMARK_PLUGINS = [remarkGfm];
+const WORD_SPAN_PLUGINS = [rehypeWordSpans];
 
 // Elements are listed one by one: react-markdown also passes its `node`, which
 // React would forward to the DOM as a stray attribute. Everything else is

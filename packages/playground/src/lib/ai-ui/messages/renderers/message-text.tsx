@@ -13,6 +13,7 @@ export interface MessageTextProps {
   text: string;
   metadata: MessageMetadata | undefined;
   externalLinkTarget?: MarkdownExternalLinkTarget;
+  streaming?: boolean;
 }
 
 /**
@@ -20,7 +21,7 @@ export interface MessageTextProps {
  * error/completion handling previously in `ErrorAwareText` (which read part
  * metadata).
  */
-export const MessageText = ({ text, metadata, externalLinkTarget }: MessageTextProps) => {
+export const MessageText = ({ text, metadata, externalLinkTarget, streaming }: MessageTextProps) => {
   const [collapsedCompletionCheck, setCollapsedCompletionCheck] = useState(false);
 
   if (metadata?.status === 'tripwire') {
@@ -78,5 +79,9 @@ export const MessageText = ({ text, metadata, externalLinkTarget }: MessageTextP
     );
   }
 
-  return <MarkdownRenderer externalLinkTarget={externalLinkTarget}>{text}</MarkdownRenderer>;
+  return (
+    <MarkdownRenderer externalLinkTarget={externalLinkTarget} streaming={streaming}>
+      {text}
+    </MarkdownRenderer>
+  );
 };
