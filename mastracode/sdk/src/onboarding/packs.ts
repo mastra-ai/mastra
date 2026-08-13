@@ -333,9 +333,8 @@ export function resolveProviderOMDefault(providerId: string, fallbackModelId = D
 /** Resolve the effective concrete OM model from a main-session model ID. */
 export function resolveAutoOMModelId(currentModelId?: string): string {
   if (!currentModelId) return DEFAULT_OM_MODEL_ID;
-  const normalizedModelId = currentModelId.startsWith('mastracode/')
-    ? currentModelId.slice('mastracode/'.length)
-    : currentModelId;
+  const gatewayPrefix = ['mastracode/', 'mastra/'].find(prefix => currentModelId.startsWith(prefix));
+  const normalizedModelId = gatewayPrefix ? currentModelId.slice(gatewayPrefix.length) : currentModelId;
   const providerId = normalizedModelId.split('/', 1)[0];
   if (!providerId) return DEFAULT_OM_MODEL_ID;
   return resolveProviderOMDefault(providerId, normalizedModelId).modelId;

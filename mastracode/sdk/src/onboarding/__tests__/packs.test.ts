@@ -122,6 +122,7 @@ describe('OM packs', () => {
     ['anthropic/claude-opus-4-8', 'anthropic/claude-haiku-4-5'],
     ['openai-codex/gpt-5.6-sol', 'openai/gpt-5.4-mini'],
     ['mastracode/google/gemini-3.1-pro-preview', 'google/gemini-3.5-flash'],
+    ['mastra/openai/gpt-5.5', 'openai/gpt-5.4-mini'],
     ['custom-provider/custom-model', 'custom-provider/custom-model'],
   ])('resolves auto from main model %s to %s', (mainModelId, expected) => {
     expect(resolveAutoOMModelId(mainModelId)).toBe(expected);
