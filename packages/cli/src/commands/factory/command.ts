@@ -19,6 +19,16 @@ export function configureFactoryCreateCommand(command: Command) {
     .option('--org <id-or-name>', 'Mastra organization ID or name');
 }
 
+export function getFactoryCreateCommandAnalyticsArgs(options: FactoryCreateOptions): Record<string, unknown> {
+  const validRegion = options.region === 'eu' || options.region === 'us' ? options.region : undefined;
+  return {
+    scaffold_source: options.template ? 'custom_template' : 'built_in',
+    no_platform: !options.platform,
+    has_org: Boolean(options.org),
+    region: validRegion ?? (options.region ? 'invalid' : undefined),
+  };
+}
+
 export async function runFactoryCreateCommand(
   projectName: string | undefined,
   options: FactoryCreateOptions,

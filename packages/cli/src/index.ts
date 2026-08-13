@@ -1,7 +1,6 @@
 #! /usr/bin/env node
 import { coreFeatures } from '@mastra/core/features';
 import { Command } from 'commander';
-import { configureFactoryCreateCommand, runFactoryCreateCommand } from 'create-factory/command';
 import pc from 'picocolors';
 import type { PackageJson } from 'type-fest';
 
@@ -28,6 +27,7 @@ import { registerEnvDbCommands } from './commands/db/index.js';
 import { unifiedDeployAction } from './commands/deploy/index.js';
 import { registerEnvCommands } from './commands/env/index.js';
 import { buildExperimentWorker } from './commands/experiment/build';
+import { configureFactoryCreateCommand, runFactoryCreateCommand } from './commands/factory/command';
 import { COMPONENTS, LLMProvider } from './commands/init/utils';
 import { serverDeployAction } from './commands/server/deploy';
 import { serverSuggestionsAction } from './commands/server/deploy-suggestions';

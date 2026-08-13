@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const SCAFFOLD_DIRECTORY = fileURLToPath(new URL('../generated/scaffold/', import.meta.url));
+const SCAFFOLD_DIRECTORY = fileURLToPath(new URL('./generated/scaffold/', import.meta.url));
 
 /** The generated scaffold and create-factory package are published as one release unit. */
 export function writeFactoryScaffold(projectPath: string, projectName: string): void {

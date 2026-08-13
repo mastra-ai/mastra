@@ -1,4 +1,12 @@
 {
   "extends": "../../tsconfig.node.json",
-  "exclude": ["node_modules", "**/*.test.ts", "src/public/**/*.ts", "dist/**", "eslint.config.js", "oxlint.config.ts"]
+  "exclude": [
+    "node_modules",
+    "**/*.test.ts",
+    "src/public/**/*.ts",
+    "src/commands/factory/generated/**",
+    "dist/**",
+    "eslint.config.js",
+    "oxlint.config.ts"
+  ]
 }

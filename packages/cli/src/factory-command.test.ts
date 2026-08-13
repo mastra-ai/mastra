@@ -1,6 +1,6 @@
 import { Command } from 'commander';
-import { configureFactoryCreateCommand, type FactoryCreateOptions } from 'create-factory/command';
 import { describe, expect, it, vi } from 'vitest';
+import { configureFactoryCreateCommand, type FactoryCreateOptions } from './commands/factory/command';
 
 function quiet(command: Command): Command {
   return command.exitOverride().configureOutput({

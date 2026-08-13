@@ -138,11 +138,13 @@ function envExampleFromSchema(schema) {
 export function generateScaffold(options = {}) {
   const packageRoot = path.resolve(options.packageRoot ?? defaultPackageRoot);
   const monorepoRoot = path.resolve(options.monorepoRoot ?? path.resolve(packageRoot, '../..'));
-  const webRoot = path.resolve(options.webRoot ?? path.resolve(packageRoot, '../web'));
-  const outputDir = path.resolve(options.outputDir ?? path.join(packageRoot, 'generated/scaffold'));
-  const packageManifest = readJson(path.join(packageRoot, 'package.json'), 'create-factory manifest');
+  const webRoot = path.resolve(options.webRoot ?? path.join(monorepoRoot, 'mastracode/web'));
+  const outputDir = path.resolve(
+    options.outputDir ?? path.join(packageRoot, 'src/commands/factory/generated/scaffold'),
+  );
+  const packageManifest = readJson(path.join(packageRoot, 'package.json'), 'mastra CLI manifest');
   const webManifest = readJson(path.join(webRoot, 'package.json'), 'mastracode/web manifest');
-  const readmePath = path.join(packageRoot, 'scripts/scaffold-readme.md');
+  const readmePath = path.join(packageRoot, 'scripts/factory-scaffold-readme.md');
   if (!fs.existsSync(readmePath)) throw new Error(`generate-scaffold: missing README template: ${readmePath}`);
 
   const sourcePaths = new Map();

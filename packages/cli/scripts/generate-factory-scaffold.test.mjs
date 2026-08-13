@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { dependencyVersionSpec, generateScaffold } from './generate-scaffold.mjs';
+import { dependencyVersionSpec, generateScaffold } from './generate-factory-scaffold.mjs';
 
 const tempDirectories = [];
 
@@ -20,13 +20,13 @@ function writeJson(filePath, value) {
 function createFixture({ createFactoryVersion = '1.0.0', coreVersion = '2.0.0', mastraVersion = '3.0.0' } = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'factory-scaffold-generator-'));
   tempDirectories.push(root);
-  const packageRoot = path.join(root, 'mastracode/mastra-factory');
+  const packageRoot = path.join(root, 'packages/cli');
   const webRoot = path.join(root, 'mastracode/web');
-  const outputDir = path.join(packageRoot, 'generated/scaffold');
+  const outputDir = path.join(packageRoot, 'src/commands/factory/generated/scaffold');
 
-  writeJson(path.join(packageRoot, 'package.json'), { name: 'create-factory', version: createFactoryVersion });
+  writeJson(path.join(packageRoot, 'package.json'), { name: 'mastra', version: createFactoryVersion });
   fs.mkdirSync(path.join(packageRoot, 'scripts'), { recursive: true });
-  fs.writeFileSync(path.join(packageRoot, 'scripts/scaffold-readme.md'), '# Factory\n');
+  fs.writeFileSync(path.join(packageRoot, 'scripts/factory-scaffold-readme.md'), '# Factory\n');
   writeJson(path.join(webRoot, 'package.json'), {
     dependencies: {
       '@mastra/core': 'link:../../packages/core',

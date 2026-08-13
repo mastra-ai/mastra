@@ -1,0 +1,38 @@
+{
+  "name": "mastra-factory",
+  "version": "0.1.0",
+  "description": "Mastra Factory: an agent-powered software delivery environment. Intake GitHub/Linear issues, work them with coding agents, and ship pull requests — all from your own deployable web app.",
+  "private": true,
+  "type": "module",
+  "license": "Apache-2.0",
+  "scripts": {
+    "dev": "mastra factory dev --dir src/mastra",
+    "db:up": "docker compose up -d --wait",
+    "db:down": "docker compose down",
+    "check": "tsc --noEmit",
+    "build": "mastra build --dir src/mastra",
+    "start": "varlock run -- mastra start",
+    "deploy": "mastra deploy"
+  },
+  "dependencies": {
+    "@mastra/auth-workos": "^1.6.4",
+    "@mastra/code-sdk": "1.2.0-alpha.12",
+    "@mastra/core": "1.58.0-alpha.11",
+    "@mastra/factory": "0.6.0-alpha.13",
+    "@mastra/libsql": "1.20.0-alpha.2",
+    "@mastra/memory": "1.26.1-alpha.5",
+    "@mastra/pg": "1.20.0-alpha.3",
+    "@mastra/platform-workspace": "1.2.0-alpha.1",
+    "@mastra/redis-streams": "^0.3.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.1",
+    "mastra": "1.24.0-alpha.12",
+    "varlock": "^1.9.0",
+    "typescript": "^5.9.2"
+  },
+  "engines": {
+    "node": ">=22.19.0"
+  }
+}
