@@ -173,8 +173,20 @@ describe('getDynamicMemory', () => {
     expect(config.options.observationalMemory.subconscious?.config).toEqual({
       defaultScope: 'resource',
       maxScope: 'resource',
+      pins: true,
     });
     expect(requestContext.get('organizationId')).toBe('mastracode-owner');
+    // Outside the factory there is no project id, so the knowledge scope is untouched.
+    expect(requestContext.get('knowledgeResourceId')).toBeUndefined();
+  });
+
+  it('anchors the knowledge scope on the factory project id when present', async () => {
+    const { requestContext } = await createMemoryConfig({
+      projectPath: '/tmp/project',
+      factoryProjectId: 'project-1',
+    });
+    expect(requestContext.set).toHaveBeenCalledWith('knowledgeResourceId', 'project-1');
+    expect(requestContext.get('knowledgeResourceId')).toBe('project-1');
   });
 
   it('uses controller state overrides and disables async buffering for resource-scoped OM', async () => {

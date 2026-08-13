@@ -85,6 +85,12 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
     const state = controller?.getState() as MastraCodeState | undefined;
     const ownerId = controller?.session.ownerId;
     if (ownerId) requestContext.set('organizationId', ownerId);
+    // Factory runs share one knowledge graph per project: anchor the
+    // subconscious knowledge scope's resource rung on the project id.
+    const factoryProjectId = state?.factoryProjectId;
+    if (typeof factoryProjectId === 'string' && factoryProjectId.trim()) {
+      requestContext.set('knowledgeResourceId', factoryProjectId);
+    }
 
     const omScope = state?.omScope ?? getOmScope(state?.projectPath);
 
@@ -120,6 +126,7 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
             ? new Subconscious({
                 defaultScope: 'resource',
                 maxScope: 'resource',
+                pins: true,
               })
             : undefined,
           scope: omScope,
