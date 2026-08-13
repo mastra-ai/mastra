@@ -1,4 +1,5 @@
 import type { AgentControllerEvent, AgentControllerSessionState } from '@mastra/client-js';
+import { isKnownAgentControllerEvent } from '@mastra/client-js';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRef, useState } from 'react';
 import { queryKeys } from '../../../../api/keys';
@@ -89,20 +90,26 @@ export function useAgentControllerConnection({
   };
 
   const handleEvent = (event: AgentControllerEvent) => {
+    const knownEvent = isKnownAgentControllerEvent(event) ? event : undefined;
     const displayStateRunning =
-      event.type === 'display_state_changed' &&
-      typeof event.displayState === 'object' &&
-      event.displayState !== null &&
-      'isRunning' in event.displayState
-        ? event.displayState.isRunning
+      knownEvent?.type === 'display_state_changed' &&
+      typeof knownEvent.displayState === 'object' &&
+      knownEvent.displayState !== null &&
+      'isRunning' in knownEvent.displayState
+        ? knownEvent.displayState.isRunning
         : undefined;
-    const running = event.type === 'agent_start' ? true : event.type === 'agent_end' ? false : displayStateRunning;
-    if (typeof running === 'boolean') {
+    const running =
+      knownEvent?.type === 'agent_start' ? true : knownEvent?.type === 'agent_end' ? false : displayStateRunning;
+    const tasks = knownEvent?.type === 'task_updated' ? knownEvent.tasks : undefined;
+    if (typeof running === 'boolean' || tasks) {
       const stateQueryKey = queryKeys.agentControllerConnectionState(agentControllerId, resourceId, scope);
       const updatedAt = queryClient.getQueryState(stateQueryKey)?.dataUpdatedAt;
       queryClient.setQueryData<AgentControllerSessionState>(
         stateQueryKey,
-        current => (current ? { ...current, running } : current),
+        current =>
+          current
+            ? { ...current, ...(typeof running === 'boolean' ? { running } : {}), ...(tasks ? { tasks } : {}) }
+            : current,
         { updatedAt },
       );
     }

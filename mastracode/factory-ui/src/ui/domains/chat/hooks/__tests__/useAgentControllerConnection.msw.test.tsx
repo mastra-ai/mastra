@@ -42,6 +42,14 @@ describe('useAgentControllerConnection', () => {
           modeId: 'build',
           modelId: 'openai/gpt-4o-mini',
           threadId: 'state-thread',
+          tasks: [
+            {
+              id: 'fix-task-sync',
+              content: 'Fix task-list synchronization',
+              status: 'in_progress',
+              activeForm: 'Fixing task-list synchronization',
+            },
+          ],
           settings: { yolo: false, thinkingLevel: 'medium', notifications: 'bell', smartEditing: true },
         });
       }),
@@ -77,6 +85,14 @@ describe('useAgentControllerConnection', () => {
     await waitFor(() => expect(result.current.status).toBe('ready'), { timeout: 2000 });
 
     expect(result.current.threadId).toBe('state-thread');
+    expect(result.current.state?.tasks).toEqual([
+      {
+        id: 'fix-task-sync',
+        content: 'Fix task-list synchronization',
+        status: 'in_progress',
+        activeForm: 'Fixing task-list synchronization',
+      },
+    ]);
     expect(observedStatuses).toContain('connecting');
     expect(observedStatuses).not.toContain('reconnecting');
     expect(onCreate).toHaveBeenCalledTimes(1);

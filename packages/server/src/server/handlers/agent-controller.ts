@@ -278,6 +278,14 @@ const sessionStateResponseSchema = z.object({
   modelId: z.string(),
   /** Whether the agent is currently executing a run (for initial UI hydration). */
   running: z.boolean().optional(),
+  tasks: z.array(
+    z.object({
+      id: z.string(),
+      content: z.string(),
+      status: z.enum(['pending', 'in_progress', 'completed']),
+      activeForm: z.string(),
+    }),
+  ),
   omProgress: omProgressSummarySchema.optional(),
   tokenUsage: z.record(z.string(), z.unknown()).optional(),
   settings: sessionSettingsSchema.optional(),
@@ -786,6 +794,7 @@ export const GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE = createRoute({
         modeId: session.mode.get(),
         modelId: session.model.get(),
         running: ds.isRunning === true,
+        tasks: ds.tasks,
         omProgress: {
           status: om.status,
           pendingTokens: om.pendingTokens,

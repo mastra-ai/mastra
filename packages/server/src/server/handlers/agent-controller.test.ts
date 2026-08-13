@@ -545,6 +545,25 @@ describe('agent-controller routes', () => {
       expect(res.running).toBe(false);
     });
 
+    it('returns the current task list for initial UI hydration', async () => {
+      const controller = mastra.getAgentController('code')!;
+      await controller.init();
+      const session = await controller.createSession({ resourceId: 'user-1', id: 'user-1', ownerId: controller.id });
+      const tasks = [
+        { id: 'fix-bug', content: 'Fix bug', status: 'in_progress' as const, activeForm: 'Fixing bug' },
+        { id: 'write-tests', content: 'Write tests', status: 'pending' as const, activeForm: 'Writing tests' },
+      ];
+      session.displayState.restoreTasks(tasks);
+
+      const res = (await GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-1',
+      } as any)) as { tasks: typeof tasks };
+
+      expect(res.tasks).toEqual(tasks);
+    });
+
     it('reports running: true while a run is active', async () => {
       const controller = mastra.getAgentController('code')!;
       await controller.init();
