@@ -485,16 +485,20 @@ Note that for subagents, you'll see two different identifiers in stream response
 
 Mastra includes agent-agnostic built-in tools in `@mastra/core/tools` that add interactive and organizational capabilities to any agent.
 
-| Tool | Purpose |
-| - | - |
-| `ask_user` | Ask the user a question and wait for their answer |
-| `submit_plan` | Submit a plan file for user approval |
-| `task_write` | Create or replace a structured task list |
-| `task_update` | Update one tracked task by ID |
-| `task_complete` | Mark one tracked task completed |
-| `task_check` | Check task list completion status |
-| `webSearchTool` | Run provider-native web search with the active model |
-| `webFetchTool` | Fetch a web page by URL and return its text content |
+Each tool has two names: the export you import, and the tool ID the model sees in tool calls, traces, and `toolName` fields.
+
+| Export | Tool ID | Purpose |
+| - | - | - |
+| `askUserTool` | `ask_user` | Ask the user a question and wait for their answer |
+| `submitPlanTool` | `submit_plan` | Submit a plan file for user approval |
+| `taskWriteTool` | `task_write` | Create or replace a structured task list |
+| `taskUpdateTool` | `task_update` | Update one tracked task by ID |
+| `taskCompleteTool` | `task_complete` | Mark one tracked task completed |
+| `taskCheckTool` | `task_check` | Check task list completion status |
+| `webSearchTool` | Provider-defined | Run provider-native web search with the active model |
+| `webFetchTool` | `web_fetch` | Fetch a web page by URL and return its text content |
+
+`webSearchTool` has no Mastra tool ID. It resolves to the active provider's own web search tool, so the ID depends on the provider: `openai.web_search`, `anthropic.web_search_20250305`, `google.google_search`, or `xai.web_search`.
 
 ### Use provider web search
 
