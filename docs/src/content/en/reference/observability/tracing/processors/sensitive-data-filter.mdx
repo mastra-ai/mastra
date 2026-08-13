@@ -80,8 +80,8 @@ new SensitiveDataFilter(options?: SensitiveDataFilterOptions)
   },
   {
     name: 'redactionStyle',
-    type: "'full' | 'partial'",
-    description: 'Controls whether matched values are fully or partially redacted.',
+    type: "'full' | 'partial' | 'indexed'",
+    description: 'Controls how matched values are redacted.',
     isOptional: true,
     defaultValue: "'full'",
   },
@@ -95,7 +95,7 @@ interface SensitiveDataFilterOptions {
   redactionStyle?: RedactionStyle
 }
 
-type RedactionStyle = 'full' | 'partial'
+type RedactionStyle = 'full' | 'partial' | 'indexed'
 ```
 
 ## Redaction styles
@@ -129,6 +129,30 @@ const filter = new SensitiveDataFilter({
 // After
 { "apiKey": "sk-…789" }
 ```
+
+### Indexed redaction
+
+Indexed redaction replaces each unique value with a stable token derived from the first field name that matched it, for example `[APIKEY_1]`. The same value maps to the same token across the spans of a trace while the trace's mapping is retained, so redacted values stay correlatable without exposing the raw value. Later occurrences under other sensitive fields reuse the first token.
+
+```typescript
+const filter = new SensitiveDataFilter({
+  redactionStyle: 'indexed',
+})
+```
+
+```jsonc prettier:false
+// Before (two spans in the same trace)
+[{ "apiKey": "sk-alice-key" }, { "apiKey": "sk-bob-key" }]
+
+// After
+[{ "apiKey": "[APIKEY_1]" }, { "apiKey": "[APIKEY_2]" }]
+```
+
+The mapping is scoped per trace. Numbering restarts for each trace, so tokens from different traces can't be linked.
+
+State is bounded in two ways. The filter keeps mappings for the 1000 most recently used traces. The least recently used trace is evicted beyond that, and spans arriving for an evicted trace start a fresh mapping, so later values may receive new tokens. Each trace also tracks up to 1000 unique values. Once that cap is reached, already-tracked values keep their tokens and new values are redacted with `redactionToken`.
+
+Non-string values are converted to strings before a token is assigned.
 
 ## Field matching
 
@@ -202,7 +226,7 @@ Returns: `AnySpan`
 
 #### `shutdown()`
 
-Completes processor shutdown. The current processor has no resources or state to clean up.
+Completes processor shutdown and clears the per-trace state used by indexed redaction.
 
 ```typescript
 await filter.shutdown()
