@@ -105,7 +105,7 @@ export const queryKeys = {
     resourceId: string | undefined,
     projectPath: string | undefined,
   ) => [...queryKeys.agentControllerConnection(agentControllerId, resourceId, projectPath), 'state'] as const,
-  // No session in the key: a reset on navigation reads as every run going idle, and fires completion sounds.
+  // Session state must stay out of the key: it would reset the query on navigation, and a reset reads as every run going idle.
   agentControllerActivity: (agentControllerId: string | undefined) =>
     ['agent-controller', agentControllerId ?? null, 'activity'] as const,
   agentControllerSettings: (
