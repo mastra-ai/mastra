@@ -217,9 +217,9 @@ const workspace = new Workspace({
 })
 ```
 
-The config object has two parts:
+The config object has two types of settings:
 
-- **Global defaults** (`enabled`, `requireApproval`): Apply to all workspace tools unless overridden
+- **Global settings**: `enabled` and `requireApproval` apply to all workspace tools unless overridden. `hooks` and `writeLockTimeoutMs` are global-only and can't be configured per tool.
 - **Per-tool overrides**: Use `WORKSPACE_TOOLS` constants as keys to configure individual tools
 
 Per-tool overrides accept the following options:
@@ -270,7 +270,7 @@ import { Workspace, WORKSPACE_TOOLS } from '@mastra/core/workspace'
 const workspace = new Workspace({
   id: 'my-workspace',
   tools: {
-    enabled: ({ requestContext }) => requestContext['workspace-tools'] === true,
+    enabled: ({ requestContext }) => requestContext.get('workspace-tools') === true,
     [WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE]: {
       requireApproval: ({ args }) => (args.path as string).startsWith('/protected'),
       requireReadBeforeWrite: true,
