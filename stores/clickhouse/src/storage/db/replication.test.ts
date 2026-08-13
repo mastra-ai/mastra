@@ -205,10 +205,15 @@ ORDER BY id`;
       },
     };
     const db = new ClickhouseDB({ client: client as any, ttl: undefined, replication: { cluster: 'cluster-a' } });
+    const warnings: string[] = [];
+    db.__setLogger({ warn: (msg: string) => warnings.push(msg) } as any);
 
     await db.createTable({ tableName: TABLE_SPANS, schema: TABLE_SCHEMAS[TABLE_SPANS] });
     expect(queries[0]).toContain('FROM system.tables');
     expect(queries[1]).toContain(`CREATE TABLE IF NOT EXISTS ${TABLE_SPANS} ON CLUSTER 'cluster-a'`);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain(TABLE_SPANS);
+    expect(warnings[0]).toContain('ReplacingMergeTree');
   });
 
   it('emits ON CLUSTER syntax accepted by ClickHouse', async () => {

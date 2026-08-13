@@ -2032,7 +2032,7 @@ describe('ObservabilityStorageClickhouseVNext', () => {
       }
     });
 
-    it('fails before creating vNext tables when replication is enabled with existing local tables', async () => {
+    it('logs a warning and proceeds when replication is enabled over existing local tables', async () => {
       const adminClient = createClient({
         url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
         username: process.env.CLICKHOUSE_USERNAME || 'default',
@@ -2049,26 +2049,51 @@ describe('ObservabilityStorageClickhouseVNext', () => {
       });
 
       try {
-        await scopedClient.command({
-          query: `CREATE TABLE ${TABLE_SPAN_EVENTS} (id String) ENGINE = MergeTree ORDER BY id`,
-        });
+        // First boot without replication creates the full set of local tables.
+        const localStorage = new ObservabilityStorageClickhouseVNext({ client: scopedClient });
+        await localStorage.init();
 
-        const replicatedStorage = new ObservabilityStorageClickhouseVNext({
-          client: scopedClient,
-          replication: { cluster: 'company_cluster' },
-        });
-
-        await expect(replicatedStorage.init()).rejects.toThrow(
-          /existing Mastra tables use non-replicated local engines/,
-        );
-
-        const tables = (await (
+        const enginesBefore = (await (
           await scopedClient.query({
-            query: `SELECT name FROM system.tables WHERE database = currentDatabase() ORDER BY name`,
+            query: `SELECT name, engine FROM system.tables WHERE database = currentDatabase() AND name = {name:String}`,
+            query_params: { name: TABLE_SPAN_EVENTS },
             format: 'JSONEachRow',
           })
-        ).json()) as Array<{ name: string }>;
-        expect(tables.map(table => table.name)).toEqual([TABLE_SPAN_EVENTS]);
+        ).json()) as Array<{ name: string; engine: string }>;
+        expect(enginesBefore).toHaveLength(1);
+
+        const warnings: string[] = [];
+        const logger = {
+          warn: (msg: string) => warnings.push(msg),
+          info: () => {},
+          error: () => {},
+          debug: () => {},
+        };
+        // Cluster omitted so the second boot runs against the single-node test
+        // container, with replicated DDL coordinated via the embedded Keeper.
+        const replicatedStorage = new ObservabilityStorageClickhouseVNext({
+          client: scopedClient,
+          replication: {
+            zookeeperPath: `/clickhouse/tables/test/${database}/{table}`,
+            replicaName: 'replica1',
+          },
+          logger: logger as any,
+        });
+
+        await replicatedStorage.init();
+
+        expect(
+          warnings.some(w => w.includes('pre-existing observability table') && w.includes('uses local engine')),
+        ).toBe(true);
+
+        const enginesAfter = (await (
+          await scopedClient.query({
+            query: `SELECT name, engine FROM system.tables WHERE database = currentDatabase() AND name = {name:String}`,
+            query_params: { name: TABLE_SPAN_EVENTS },
+            format: 'JSONEachRow',
+          })
+        ).json()) as Array<{ name: string; engine: string }>;
+        expect(enginesAfter).toEqual(enginesBefore);
       } finally {
         await scopedClient.close();
         await adminClient.command({ query: `DROP DATABASE IF EXISTS ${database} SYNC` });
@@ -2133,8 +2158,8 @@ describe('ObservabilityStorageClickhouseVNext', () => {
       const client = {
         query: async ({ query }: { query: string }) => {
           queries.push(query);
-          if (query.includes('system.tables')) {
-            return { json: async () => [{ name: 'mastra_ai_spans', engine: 'ReplacingMergeTree' }] };
+          if (query.includes('system.tables') && query.includes('{tables:Array(String)}')) {
+            return { json: async () => [{ name: TABLE_SPAN_EVENTS, engine: 'MergeTree' }] };
           }
           return { json: async () => [] };
         },
@@ -2155,7 +2180,7 @@ describe('ObservabilityStorageClickhouseVNext', () => {
       });
 
       await expect(storage.init()).resolves.not.toThrow();
-      expect(warnings.some(w => w.includes("pre-existing observability table 'mastra_ai_spans'"))).toBe(true);
+      expect(warnings.some(w => w.includes(`pre-existing observability table '${TABLE_SPAN_EVENTS}'`))).toBe(true);
     });
   });
 
