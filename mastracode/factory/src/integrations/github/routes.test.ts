@@ -1574,6 +1574,26 @@ describe('issues route', () => {
     });
   });
 
+  it('keeps GitHub triage labels unchanged when triage fails', async () => {
+    seedMaterializedProject();
+    const runIssueTriage = vi.fn(async () => {
+      throw new Error('triage failed');
+    });
+    const res = await buildApp({ workosId: 'u1' }, { runIssueTriage }).request('/web/github/projects/p1/issues/5/triage', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        title: 'Keep labels retryable',
+        url: 'https://github.com/octo/hello/issues/5',
+        labels: ['status: needs triage'],
+      }),
+    });
+
+    expect(res.status).toBe(500);
+    expect(addIssueLabels).not.toHaveBeenCalled();
+    expect(removeIssueLabel).not.toHaveBeenCalled();
+  });
+
   it('normalises labels through the shared wrapper and resolves the default model', async () => {
     seedMaterializedProject();
     const runIssueTriage = vi.fn(async () => ({ threadId: 'thread-triage' }));
