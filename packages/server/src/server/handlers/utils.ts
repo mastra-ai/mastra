@@ -1,9 +1,10 @@
 import type { MastraFGAPermissionInput } from '@mastra/core/auth/ee';
 import type { RequestContext } from '@mastra/core/di';
 import { MastraMemory } from '@mastra/core/memory';
-import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../constants';
+import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, MASTRA_USER_KEY } from '../constants';
 import { MastraFGAPermissions } from '../fga-permissions';
 import { HTTPException } from '../http-exception';
+import { hasAdminBypass } from './authorship';
 
 // Validation helper
 export function validateBody(body: Record<string, unknown>) {
@@ -97,6 +98,51 @@ export function requireEffectiveResourceId(
 }
 
 /**
+ * True when an auth provider ran and accepted the caller. `coreAuthMiddleware`
+ * writes both `MASTRA_USER_KEY` and the legacy `user` key, so either is enough.
+ */
+export function hasAuthenticatedUser(requestContext: RequestContext | undefined): boolean {
+  const user = requestContext?.get(MASTRA_USER_KEY) ?? requestContext?.get('user');
+  return !!user && typeof user === 'object';
+}
+
+/**
+ * Fails closed when an authenticated caller cannot be scoped to a resource.
+ *
+ * `getEffectiveResourceId` returns undefined when auth is configured without
+ * `mapUserToResourceId` and the caller passes no `resourceId`. Handlers that
+ * read that as "no filter" widen access to every resource, so any authenticated
+ * user can list, read or mutate another user's threads — in auth-only mode
+ * (no RBAC) the route layer has already granted full access by then.
+ *
+ * With no auth provider (local dev, Studio) there is no identity to scope to,
+ * so behaviour is unchanged.
+ */
+export function requireResourceScope({
+  mastra,
+  requestContext,
+  effectiveResourceId,
+  resource = 'memory',
+}: {
+  mastra?: any;
+  requestContext?: RequestContext;
+  effectiveResourceId?: string;
+  resource?: string;
+}): void {
+  if (effectiveResourceId) return;
+  if (!hasAuthenticatedUser(requestContext)) return;
+  // A configured FGA provider authorizes every thread individually, so an
+  // unscoped request is still checked record by record.
+  if (mastra?.getServer?.()?.fga) return;
+  if (requestContext && hasAdminBypass(requestContext, resource)) return;
+
+  throw new HTTPException(403, {
+    message:
+      'Access denied: request could not be scoped to a resource. Configure server auth with mapUserToResourceId, or pass an explicit resourceId.',
+  });
+}
+
+/**
  * Gets the effective threadId, preferring the reserved key from requestContext
  * over client-provided values for security.
  */
@@ -141,6 +187,7 @@ export async function enforceThreadAccess({
   effectiveResourceId?: string;
   permission?: MastraFGAPermissionInput;
 }): Promise<void> {
+  requireResourceScope({ mastra, requestContext, effectiveResourceId });
   await validateThreadOwnership(thread, effectiveResourceId);
 
   const fgaProvider = mastra?.getServer?.()?.fga;

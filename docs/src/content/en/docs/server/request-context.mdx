@@ -258,6 +258,8 @@ auth: {
 
 When the resource ID is derived this way, clients can omit `memory.resource` from agent generate and stream request bodies, the server-derived value is used instead (and always takes precedence over any client-provided value). If a request uses memory and neither the body nor the request context provides a resource ID, the server responds with a 400 error.
 
+Deriving the resource ID is what scopes the memory API to a single user. When auth is configured without `mapUserToResourceId` and the client sends no `resourceId`, the server cannot tell whose data a request is for, so the memory routes reject it with a 403 instead of falling back to every resource's threads. Servers with no auth provider, and callers holding a `memory:*` or `memory:admin` permission, are unaffected.
+
 You can also set these keys manually in middleware:
 
 ```typescript
