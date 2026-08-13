@@ -47,8 +47,8 @@ export function ThreadContextProgress({
   memoryThreshold,
   memoryLabel = 'Memory',
 }: ThreadContextProgressProps) {
-  const showMessages = messageTokens != null && messageThreshold != null;
-  const showMemory = memoryTokens != null && memoryThreshold != null;
+  const showMessages = messageTokens != null && messageThreshold != null && messageThreshold > 0;
+  const showMemory = memoryTokens != null && memoryThreshold != null && memoryThreshold > 0;
 
   if (!showMessages && !showMemory) {
     return null;
