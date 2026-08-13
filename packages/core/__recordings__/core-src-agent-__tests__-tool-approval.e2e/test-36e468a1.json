@@ -5,7 +5,7 @@
     "testName": "tool approval and suspension > suspension > should call findUserTool with suspend and resume via generate when autoResumeSuspendedTools is true",
     "model": "gpt-4o-mini",
     "createdAt": "2026-05-18T10:52:11.721Z",
-    "updatedAt": "2026-08-06T09:04:01.644Z"
+    "updatedAt": "2026-08-12T23:59:53.851Z"
   },
   "recordings": [
     {
@@ -126,7 +126,7 @@
           ],
           "tool_choice": "auto"
         },
-        "timestamp": 1786007029345
+        "timestamp": 1786579189986
       },
       "response": {
         "status": 200,
@@ -135,35 +135,35 @@
           "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "a26cdedd5e3f1849-DEL",
+          "cf-ray": "a2a36fa19d48cf2e-SJC",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Thu, 06 Aug 2026 09:03:51 GMT",
-          "openai-organization": "redacted",
-          "openai-processing-ms": "1605",
-          "openai-project": "redacted",
+          "date": "Wed, 12 Aug 2026 23:59:51 GMT",
+          "openai-organization": "work-kxidzh",
+          "openai-processing-ms": "1250",
+          "openai-project": "proj_FCyHAyf1sRhVrYbrkAklMIPx",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
           "x-content-type-options": "nosniff",
-          "x-ratelimit-limit-requests": "10000",
-          "x-ratelimit-limit-tokens": "200000",
-          "x-ratelimit-remaining-requests": "9966",
-          "x-ratelimit-remaining-tokens": "199587",
-          "x-ratelimit-reset-requests": "4m45.989s",
-          "x-ratelimit-reset-tokens": "123ms",
-          "x-request-id": "req_df95d4225256499ab9b23777dace2b0b"
+          "x-ratelimit-limit-requests": "5000",
+          "x-ratelimit-limit-tokens": "2000000",
+          "x-ratelimit-remaining-requests": "4999",
+          "x-ratelimit-remaining-tokens": "1999587",
+          "x-ratelimit-reset-requests": "12ms",
+          "x-ratelimit-reset-tokens": "12ms",
+          "x-request-id": "req_1944318de8f74f83b1fd4beac135a2c6"
         },
         "body": {
-          "id": "resp_0af7168fa26ec439006a744df5879481998e826e090630e148",
+          "id": "resp_08a2fe7469e6328b006a7d08f62e588199b57a9756de8da2db",
           "object": "response",
-          "created_at": 1786007029,
+          "created_at": 1786579190,
           "status": "completed",
           "background": false,
           "billing": {
             "payer": "developer"
           },
-          "completed_at": 1786007031,
+          "completed_at": 1786579191,
           "error": null,
           "frequency_penalty": 0,
           "incomplete_details": null,
@@ -174,19 +174,19 @@
           "moderation": null,
           "output": [
             {
-              "id": "fc_0af7168fa26ec439006a744df702e08199bbe46d2b0a4bc464",
+              "id": "fc_08a2fe7469e6328b006a7d08f72a848199957b1a9cd723583a",
               "type": "function_call",
               "status": "completed",
               "arguments": "{\"name\":\"Dero Israel\",\"suspendedToolRunId\":null,\"resumeData\":null}",
-              "call_id": "call_OhjCufikBw28Z3ewBGLSIB9T",
+              "call_id": "call_GEe6EEmSmSgFafyCAP2iMEMh",
               "name": "findUserTool"
             },
             {
-              "id": "fc_0af7168fa26ec439006a744df702ec8199a827a49bd6d37557",
+              "id": "fc_08a2fe7469e6328b006a7d08f72a94819984f850dfc678cf77",
               "type": "function_call",
               "status": "completed",
               "arguments": "{\"name\":\"Dero Israel\",\"suspendedToolRunId\":null,\"resumeData\":null}",
-              "call_id": "call_wUWX3qIBbUTnuVyfOU7JQeo6",
+              "call_id": "call_VF3YrBGpfo0wdRVn1dXUSnrI",
               "name": "findUserProfessionTool"
             }
           ],
@@ -347,7 +347,7 @@
       }
     },
     {
-      "hash": "1652d8ce0d48b4da",
+      "hash": "71617f04de8e4e37",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -356,7 +356,7 @@
           "input": [
             {
               "role": "system",
-              "content": "You are an agent that can get list of users using findUserTool.\n\nAnalyse the suspended tools: [{\"toolCallId\":\"call_OhjCufikBw28Z3ewBGLSIB9T\",\"toolName\":\"findUserTool\",\"args\":{\"name\":\"Dero Israel\",\"suspendedToolRunId\":null},\"type\":\"suspension\",\"runId\":\"00000000-0000-4000-8000-000000000003\",\"suspendPayload\":{\"message\":\"Please provide the age of the user\"},\"resumeSchema\":\"{\\\"$schema\\\":\\\"http://json-schema.org/draft-07/schema#\\\",\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"age\\\":{\\\"type\\\":\\\"number\\\"}},\\\"required\\\":[\\\"age\\\"],\\\"additionalProperties\\\":false}\"}], using the messages available to you and the resumeSchema of each suspended tool, find the tool whose resumeData you can construct properly.\n                      resumeData can not be an empty object nor null/undefined.\n                      When you find that and call that tool, add the resumeData to the tool call arguments/input.\n                      Also, add the runId of the suspended tool as suspendedToolRunId to the tool call arguments/input.\n                      If the suspendedTool.type is 'approval', resumeData will be an object that contains 'approved' which can either be true or false depending on the user's message. If you can't construct resumeData from the message for approval type, set approved to true and add resumeData: { approved: true } to the tool call arguments/input.\n\n                      IMPORTANT: If you're able to construct resumeData and get suspendedToolRunId, get the previous arguments/input of the tool call from args in the suspended tool, and spread it in the new arguments/input created, do not add duplicate data. \n                      "
+              "content": "You are an agent that can get list of users using findUserTool.\n\nAnalyse the suspended tools: [{\"toolCallId\":\"call_GEe6EEmSmSgFafyCAP2iMEMh\",\"toolName\":\"findUserTool\",\"args\":{\"name\":\"Dero Israel\",\"suspendedToolRunId\":null},\"type\":\"suspension\",\"runId\":\"00000000-0000-4000-8000-000000000003\",\"suspendPayload\":{\"message\":\"Please provide the age of the user\"},\"resumeSchema\":\"{\\\"$schema\\\":\\\"http://json-schema.org/draft-07/schema#\\\",\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"age\\\":{\\\"type\\\":\\\"number\\\"}},\\\"required\\\":[\\\"age\\\"],\\\"additionalProperties\\\":false}\"}], using the messages available to you and the resumeSchema of each suspended tool, find the tool whose resumeData you can construct properly.\n                      resumeData can not be an empty object nor null/undefined.\n                      When you find that and call that tool, add the resumeData to the tool call arguments/input.\n                      Also, add the runId of the suspended tool as suspendedToolRunId to the tool call arguments/input.\n                      If the suspendedTool.type is 'approval', resumeData will be an object that contains 'approved' which can either be true or false depending on the user's message. If you can't construct resumeData from the message for approval type, set approved to true and add resumeData: { approved: true } to the tool call arguments/input.\n\n                      IMPORTANT: If you're able to construct resumeData and get suspendedToolRunId, get the previous arguments/input of the tool call from args in the suspended tool, and spread it in the new arguments/input created, do not add duplicate data. \n                      "
             },
             {
               "role": "user",
@@ -473,7 +473,7 @@
           ],
           "tool_choice": "auto"
         },
-        "timestamp": 1786007031259
+        "timestamp": 1786579191484
       },
       "response": {
         "status": 200,
@@ -482,35 +482,35 @@
           "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "a26cdee959211849-DEL",
+          "cf-ray": "a2a36faaff4fcf2e-SJC",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Thu, 06 Aug 2026 09:03:59 GMT",
-          "openai-organization": "redacted",
-          "openai-processing-ms": "8171",
-          "openai-project": "redacted",
+          "date": "Wed, 12 Aug 2026 23:59:52 GMT",
+          "openai-organization": "work-kxidzh",
+          "openai-processing-ms": "1112",
+          "openai-project": "proj_FCyHAyf1sRhVrYbrkAklMIPx",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
           "x-content-type-options": "nosniff",
-          "x-ratelimit-limit-requests": "10000",
-          "x-ratelimit-limit-tokens": "200000",
-          "x-ratelimit-remaining-requests": "9966",
-          "x-ratelimit-remaining-tokens": "199233",
-          "x-ratelimit-reset-requests": "4m52.291s",
-          "x-ratelimit-reset-tokens": "230ms",
-          "x-request-id": "req_7032d1b9123a4e658eb966e5af284da3"
+          "x-ratelimit-limit-requests": "5000",
+          "x-ratelimit-limit-tokens": "2000000",
+          "x-ratelimit-remaining-requests": "4999",
+          "x-ratelimit-remaining-tokens": "1999234",
+          "x-ratelimit-reset-requests": "12ms",
+          "x-ratelimit-reset-tokens": "22ms",
+          "x-request-id": "req_e09e59350cd0443c9896e176981d4125"
         },
         "body": {
-          "id": "resp_0152a0970fcfe2ab006a744df7cec48198865c691afb6eb024",
+          "id": "resp_0e40ffa164670c1a006a7d08f78f7481999bd5322e864fb5a4",
           "object": "response",
-          "created_at": 1786007031,
+          "created_at": 1786579191,
           "status": "completed",
           "background": false,
           "billing": {
             "payer": "developer"
           },
-          "completed_at": 1786007039,
+          "completed_at": 1786579192,
           "error": null,
           "frequency_penalty": 0,
           "incomplete_details": null,
@@ -521,20 +521,12 @@
           "moderation": null,
           "output": [
             {
-              "id": "fc_0152a0970fcfe2ab006a744dff5c548198865e060d37cffd0a",
+              "id": "fc_0e40ffa164670c1a006a7d08f82f9481999a866946e7173cc4",
               "type": "function_call",
               "status": "completed",
               "arguments": "{\"name\":\"Dero Israel\",\"suspendedToolRunId\":\"00000000-0000-4000-8000-000000000003\",\"resumeData\":{\"age\":25}}",
-              "call_id": "call_dbmBu37eNQvlMPvDal1VNXRO",
+              "call_id": "call_ENQq0saqgfoOARq02CJqeQnp",
               "name": "findUserTool"
-            },
-            {
-              "id": "fc_0152a0970fcfe2ab006a744dff5c648198bc3fc38520d7638f",
-              "type": "function_call",
-              "status": "completed",
-              "arguments": "{\"name\":\"Dero Israel\",\"suspendedToolRunId\":null,\"resumeData\":null}",
-              "call_id": "call_ezY6gkA5qTENcRnzYkI6BGFZ",
-              "name": "findUserProfessionTool"
             }
           ],
           "parallel_tool_calls": true,
@@ -676,16 +668,16 @@
           "top_p": 1,
           "truncation": "disabled",
           "usage": {
-            "input_tokens": 550,
+            "input_tokens": 549,
             "input_tokens_details": {
               "cache_write_tokens": 0,
               "cached_tokens": 0
             },
-            "output_tokens": 96,
+            "output_tokens": 49,
             "output_tokens_details": {
               "reasoning_tokens": 0
             },
-            "total_tokens": 646
+            "total_tokens": 598
           },
           "user": null,
           "metadata": {}
@@ -694,7 +686,7 @@
       }
     },
     {
-      "hash": "768e25d5e10e7e03",
+      "hash": "943f5234b0baa179",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -725,21 +717,12 @@
             },
             {
               "type": "item_reference",
-              "id": "fc_0152a0970fcfe2ab006a744dff5c548198865e060d37cffd0a"
-            },
-            {
-              "type": "item_reference",
-              "id": "fc_0152a0970fcfe2ab006a744dff5c648198bc3fc38520d7638f"
+              "id": "fc_0e40ffa164670c1a006a7d08f82f9481999a866946e7173cc4"
             },
             {
               "type": "function_call_output",
-              "call_id": "call_dbmBu37eNQvlMPvDal1VNXRO",
+              "call_id": "call_ENQq0saqgfoOARq02CJqeQnp",
               "output": "{\"name\":\"Dero Israel\",\"age\":25,\"email\":\"test@test.com\"}"
-            },
-            {
-              "type": "function_call_output",
-              "call_id": "call_ezY6gkA5qTENcRnzYkI6BGFZ",
-              "output": "{\"profession\":\"Software Engineer\"}"
             }
           ],
           "tools": [
@@ -838,7 +821,7 @@
           ],
           "tool_choice": "auto"
         },
-        "timestamp": 1786007039835
+        "timestamp": 1786579192806
       },
       "response": {
         "status": 200,
@@ -847,35 +830,35 @@
           "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "a26cdf1efa591849-DEL",
+          "cf-ray": "a2a36fb33edccf2e-SJC",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Thu, 06 Aug 2026 09:04:01 GMT",
-          "openai-organization": "redacted",
-          "openai-processing-ms": "903",
-          "openai-project": "redacted",
+          "date": "Wed, 12 Aug 2026 23:59:53 GMT",
+          "openai-organization": "work-kxidzh",
+          "openai-processing-ms": "816",
+          "openai-project": "proj_FCyHAyf1sRhVrYbrkAklMIPx",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
           "x-content-type-options": "nosniff",
-          "x-ratelimit-limit-requests": "10000",
-          "x-ratelimit-limit-tokens": "200000",
-          "x-ratelimit-remaining-requests": "9966",
-          "x-ratelimit-remaining-tokens": "199460",
-          "x-ratelimit-reset-requests": "4m52.067s",
-          "x-ratelimit-reset-tokens": "162ms",
-          "x-request-id": "req_c791bccdd9cd42ae8c1bac32d1140c39"
+          "x-ratelimit-limit-requests": "5000",
+          "x-ratelimit-limit-tokens": "2000000",
+          "x-ratelimit-remaining-requests": "4999",
+          "x-ratelimit-remaining-tokens": "1999502",
+          "x-ratelimit-reset-requests": "12ms",
+          "x-ratelimit-reset-tokens": "14ms",
+          "x-request-id": "req_c4fde73447db4f628fbb0bacb9446d6c"
         },
         "body": {
-          "id": "resp_0152a0970fcfe2ab006a744e00a4408198ad6ae3257bca46f2",
+          "id": "resp_0e40ffa164670c1a006a7d08f8e2d08199a9caa393d32981f5",
           "object": "response",
-          "created_at": 1786007040,
+          "created_at": 1786579192,
           "status": "completed",
           "background": false,
           "billing": {
             "payer": "developer"
           },
-          "completed_at": 1786007041,
+          "completed_at": 1786579193,
           "error": null,
           "frequency_penalty": 0,
           "incomplete_details": null,
@@ -886,7 +869,7 @@
           "moderation": null,
           "output": [
             {
-              "id": "msg_0152a0970fcfe2ab006a744e012d5c8198bef2cc068b20335e",
+              "id": "msg_0e40ffa164670c1a006a7d08f94f30819993207b6bd8a83985",
               "type": "message",
               "status": "completed",
               "content": [
@@ -894,7 +877,7 @@
                   "type": "output_text",
                   "annotations": [],
                   "logprobs": [],
-                  "text": "The user Dero Israel is 25 years old and works as a Software Engineer."
+                  "text": "The user Dero Israel is 25 years old. His email is test@test.com. If you need information about his profession, please let me know!"
                 }
               ],
               "role": "assistant"
@@ -1039,16 +1022,16 @@
           "top_p": 1,
           "truncation": "disabled",
           "usage": {
-            "input_tokens": 323,
+            "input_tokens": 281,
             "input_tokens_details": {
               "cache_write_tokens": 0,
               "cached_tokens": 0
             },
-            "output_tokens": 19,
+            "output_tokens": 33,
             "output_tokens_details": {
               "reasoning_tokens": 0
             },
-            "total_tokens": 342
+            "total_tokens": 314
           },
           "user": null,
           "metadata": {}
