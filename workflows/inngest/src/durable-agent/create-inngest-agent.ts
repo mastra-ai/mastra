@@ -45,6 +45,7 @@ import {
   runResumeDurableStreamUntilIdle,
   globalRunRegistry,
   publishAbortRequest,
+  DurableStepIds,
 } from '@mastra/core/agent/durable';
 import type { AgentStepFinishEventData, AgentSuspendedEventData } from '@mastra/core/agent/durable';
 import type { MessageListInput } from '@mastra/core/agent/message-list';
@@ -54,6 +55,7 @@ import { CachingPubSub } from '@mastra/core/events';
 import type { PubSub } from '@mastra/core/events';
 import type { Mastra } from '@mastra/core/mastra';
 import { SpanType, EntityType } from '@mastra/core/observability';
+import type { RequestContext } from '@mastra/core/request-context';
 import type { MastraModelOutput, ChunkType, FullOutput, MastraOnFinishCallback } from '@mastra/core/stream';
 import type { Workflow } from '@mastra/core/workflows';
 import type { Inngest } from 'inngest';
@@ -267,6 +269,13 @@ export interface InngestAgentStreamResult<OUTPUT = undefined> {
 export interface InngestAgentResumeOptions<OUTPUT = undefined> {
   threadId?: string;
   resourceId?: string;
+  /**
+   * Request context shipped with the resume event, merged over the
+   * snapshot's persisted context. The durable loop rebuilds each step
+   * execution's RequestContext from the event payload, so the resuming
+   * request must re-supply anything it derives from its own auth.
+   */
+  requestContext?: RequestContext;
   onChunk?: (chunk: ChunkType<OUTPUT>) => void | Promise<void>;
   onStepFinish?: (result: AgentStepFinishEventData) => void | Promise<void>;
   onFinish?: MastraOnFinishCallback<OUTPUT>;
@@ -1003,39 +1012,51 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       // and sends an event to the same trigger name (not a .resume suffix)
       const eventName = `workflow.${InngestDurableStepIds.AGENTIC_LOOP}`;
 
-      const workflowExecution = ready
-        .then(async () => {
-          const workflowsStore = await mastra?.getStorage()?.getStore('workflows');
-          const snapshot: any = await workflowsStore?.loadWorkflowSnapshot({
-            workflowName: InngestDurableStepIds.AGENTIC_LOOP,
-            runId,
-          });
-
-          // Find the suspended step from the snapshot
-          const suspendedStepIds = snapshot?.suspendedPaths ? Object.keys(snapshot.suspendedPaths) : [];
-          const steps = suspendedStepIds.length > 0 ? suspendedStepIds : [];
-
-          await inngest.send({
-            name: eventName,
-            data: {
-              inputData: resumeData,
-              initialState: snapshot?.value ?? {},
-              runId,
-              resourceId: resumeOptions?.resourceId,
-              requestContext: snapshot?.requestContext ?? {},
-              stepResults: snapshot?.context,
-              resume: {
-                steps,
-                stepResults: snapshot?.context,
-                resumePayload: resumeData,
-                resumePath: steps[0] ? snapshot?.suspendedPaths?.[steps[0]] : undefined,
-              },
-            },
-          });
-        })
-        .catch(error => {
-          void emitError(runId, error);
+      const workflowExecution = ready.then(async () => {
+        const workflowsStore = await mastra?.getStorage()?.getStore('workflows');
+        const snapshot: any = await workflowsStore?.loadWorkflowSnapshot({
+          workflowName: InngestDurableStepIds.AGENTIC_LOOP,
+          runId,
         });
+
+        // Find the suspended step from the snapshot. A suspend()-based tool
+        // suspension is NESTED — the loop snapshot's suspendedPaths names
+        // only its execution step, while the resume must reach that
+        // workflow's tool-call step (the handler forwards steps.slice(1) to
+        // the nested workflow, and the Inngest engine never records
+        // resumeLabels to resolve the leaf from). A top-level-only path
+        // restarts the iteration WITHOUT delivering the tool result — the
+        // model re-runs its turn and asks again. Target the nested
+        // tool-call leaf explicitly.
+        const suspendedStepIds = snapshot?.suspendedPaths ? Object.keys(snapshot.suspendedPaths) : [];
+        const steps = suspendedStepIds.length > 0 ? [suspendedStepIds[0]!, DurableStepIds.TOOL_CALL] : [];
+
+        await inngest.send({
+          name: eventName,
+          data: {
+            inputData: resumeData,
+            initialState: snapshot?.value ?? {},
+            runId,
+            resourceId: resumeOptions?.resourceId,
+            // Merge a caller-supplied request context over the snapshot's
+            // persisted one. The durable loop rebuilds each step
+            // execution's RequestContext from this event payload; without
+            // the merge, context supplied on the resume call is silently
+            // dropped.
+            requestContext: {
+              ...(snapshot?.requestContext ?? {}),
+              ...(resumeOptions?.requestContext ? Object.fromEntries(resumeOptions.requestContext.entries()) : {}),
+            },
+            stepResults: snapshot?.context,
+            resume: {
+              steps,
+              stepResults: snapshot?.context,
+              resumePayload: resumeData,
+              resumePath: steps[0] ? snapshot?.suspendedPaths?.[steps[0]] : undefined,
+            },
+          },
+        });
+      });
 
       existingEntry.workflowExecution = workflowExecution;
 
@@ -1051,6 +1072,19 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         streamCleanup();
         finalizeResumeRegistry();
       };
+
+      // Await the dispatch so send-time failures (snapshot store down,
+      // Inngest unreachable) reject this call — releasing the just-opened
+      // stream and registry entry — instead of being converted into a
+      // terminal stream error event, which would mark a still-parked run
+      // errored and unresumable. The stream attached before dispatch, so a
+      // successful send misses no continuation events.
+      try {
+        await workflowExecution;
+      } catch (error) {
+        cleanup();
+        throw error;
+      }
 
       return {
         output,
