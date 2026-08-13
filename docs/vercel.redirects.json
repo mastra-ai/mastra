@@ -2034,6 +2034,11 @@
       "source": "/guides/agent-frameworks/ai-sdk",
       "destination": "/reference/ai-sdk/overview",
       "permanent": true
+    },
+    {
+      "source": "/docs/browser/recording",
+      "destination": "/docs/browser/overview#record-browser-sessions",
+      "permanent": true
     }
   ]
 }
