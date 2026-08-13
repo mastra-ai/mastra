@@ -40,9 +40,9 @@ describe('create-factory scaffold', () => {
       stdio: 'inherit',
     });
 
-    // Pack and extract the standalone artifact so the E2E exercises the exact
-    // command implementation and generated scaffold assets users receive.
-    await execa('npm', ['pack', '--pack-destination', workDir], {
+    // Pack with pnpm, matching the release pipeline, so workspace dependency
+    // ranges are rewritten to installable registry versions in the artifact.
+    await execa('pnpm', ['pack', '--pack-destination', workDir], {
       cwd: cliRoot,
       stdio: 'inherit',
     });
