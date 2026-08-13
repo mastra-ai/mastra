@@ -44,14 +44,22 @@ export {
 } from './system-prompt-scrubber';
 
 export {
+  TokenCostControl,
+  type TokenCostControlOptions,
+  type TokenCostControlUsage,
+  type TokenCostControlBreakdownEntry,
+  type TokenCostControlTripwireMetadata,
+  type TokenCostControlViolationDetail,
+  type CostScope,
+  type CostWindow,
+  // Deprecated alias for the previous API name
   CostGuardProcessor,
   type CostGuardOptions,
   type CostGuardUsage,
+  type CostGuardBreakdownEntry,
   type CostGuardTripwireMetadata,
   type CostGuardViolationDetail,
-  type CostScope,
-  type CostWindow,
-} from './cost-guard';
+} from './token-cost-control';
 
 export {
   RegexFilterProcessor,
