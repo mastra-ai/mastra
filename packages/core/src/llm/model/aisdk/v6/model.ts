@@ -1,4 +1,6 @@
+import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 import type { LanguageModelV3, LanguageModelV3CallOptions } from '@ai-sdk/provider-v6';
+import { aiV5PromptToAIV6Prompt } from '../../../../agent/message-list/conversion/to-prompt';
 import type { MastraLanguageModelV3 } from '../../shared.types';
 import { createStreamFromGenerateResult } from '../generate-to-stream';
 
@@ -26,6 +28,28 @@ function remapToolsToV3(options: LanguageModelV3CallOptions): LanguageModelV3Cal
     ...options,
     tools: remappedTools as typeof options.tools,
   };
+}
+
+/**
+ * Convert v2 tool-result `media` parts to v3 `image-data`/`file-data`.
+ *
+ * The agentic loop picks the prompt converter from `model.specificationVersion`,
+ * but `ModelRouterLanguageModel` always reports `'v2'`. Router-wrapped native v3
+ * providers therefore receive the plain v5 prompt; remap at this adapter boundary
+ * using the same conversion the direct-model path already applies.
+ *
+ * @see https://github.com/mastra-ai/mastra/issues/21183
+ */
+function remapToolResultMediaPartsToV3(options: LanguageModelV3CallOptions): LanguageModelV3CallOptions {
+  const remappedPrompt = aiV5PromptToAIV6Prompt(options.prompt as LanguageModelV2Prompt);
+  return {
+    ...options,
+    prompt: remappedPrompt as typeof options.prompt,
+  };
+}
+
+function remapCallOptionsToV3(options: LanguageModelV3CallOptions): LanguageModelV3CallOptions {
+  return remapToolsToV3(remapToolResultMediaPartsToV3(options));
 }
 
 /**
@@ -66,7 +90,7 @@ export class AISDKV6LanguageModel implements MastraLanguageModelV3 {
   }
 
   async doGenerate(options: LanguageModelV3CallOptions) {
-    const result = await this.#model.doGenerate(remapToolsToV3(options));
+    const result = await this.#model.doGenerate(remapCallOptionsToV3(options));
 
     return {
       ...result,
@@ -77,7 +101,7 @@ export class AISDKV6LanguageModel implements MastraLanguageModelV3 {
   }
 
   async doStream(options: LanguageModelV3CallOptions) {
-    return await this.#model.doStream(remapToolsToV3(options));
+    return await this.#model.doStream(remapCallOptionsToV3(options));
   }
 
   /**
