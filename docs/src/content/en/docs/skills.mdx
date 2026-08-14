@@ -9,7 +9,7 @@ packages:
 
 Skills are reusable instructions that teach agents how to perform specific tasks. They follow the [Agent Skills specification](https://agentskills.io).
 
-You can attach skills directly to an agent through its `skills` config, or configure them on a [workspace](/docs/workspace/skills). Attach them to the agent when the skills belong to that specific agent and you want to define them in code with no workspace required. Use a workspace when you want skills discovered from the filesystem and shared across every agent that uses it. This page covers the agent-level approach, defining skills in code and loading them from files, plus resolving them per request.
+You can attach skills directly to an agent through its `skills` config, or configure them on a [workspace](/docs/sandbox/skills). Attach them to the agent when the skills belong to that specific agent and you want to define them in code with no workspace required. Use a workspace when you want skills discovered from the filesystem and shared across every agent that uses it. This page covers the agent-level approach, defining skills in code and loading them from files, plus resolving them per request.
 
 ## When to use agent-level skills
 
@@ -20,7 +20,7 @@ Use agent-level skills when:
 - You're building packages or libraries that contain agent capabilities
 - You need per-request skill resolution based on context
 
-For filesystem-based skill discovery across a project, use [workspace skills](/docs/workspace/skills) instead.
+For filesystem-based skill discovery across a project, use [workspace skills](/docs/sandbox/skills) instead.
 
 ## Quickstart
 
@@ -96,7 +96,7 @@ export const agent = new Agent({
 })
 ```
 
-Filesystem paths use `LocalSkillSource` under the hood, which reads `SKILL.md` files following the same format as [workspace skills](/docs/workspace/skills#skillmd-format).
+Filesystem paths use `LocalSkillSource` under the hood, which reads `SKILL.md` files following the same format as [workspace skills](/docs/sandbox/skills#skillmd-format).
 
 ## Dynamic skills
 
@@ -201,7 +201,7 @@ Visit [`.getSkill()` reference](/reference/agents/getSkill) and [`.listSkills()`
 
 ## Related
 
-- [Workspace skills](/docs/workspace/skills)
+- [Workspace skills](/docs/sandbox/skills)
 - [`createSkill()` reference](/reference/agents/createSkill)
 - [`.getSkill()` reference](/reference/agents/getSkill)
 - [`.listSkills()` reference](/reference/agents/listSkills)

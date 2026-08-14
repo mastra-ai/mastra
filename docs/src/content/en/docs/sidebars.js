@@ -265,7 +265,7 @@ const sidebars = {
           label: 'Sandbox',
           link: {
             type: 'doc',
-            id: 'workspace/sandbox',
+            id: 'sandbox/overview',
           },
           customProps: {
             contextualSidebar: true,
@@ -273,22 +273,22 @@ const sidebars = {
           items: [
             {
               type: 'doc',
-              id: 'workspace/filesystem',
+              id: 'sandbox/filesystem',
               label: 'Filesystem',
             },
             {
               type: 'doc',
-              id: 'workspace/search',
+              id: 'sandbox/search',
               label: 'Search',
             },
             {
               type: 'doc',
-              id: 'workspace/skills',
+              id: 'sandbox/skills',
               label: 'Skills',
             },
             {
               type: 'doc',
-              id: 'workspace/lsp',
+              id: 'sandbox/lsp',
               label: 'LSP',
             },
           ],

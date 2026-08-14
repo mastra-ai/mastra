@@ -9,7 +9,7 @@ packages:
 
 Search lets agents find relevant content in indexed workspace files. When an agent needs to answer a question or find information, it can search the indexed content instead of reading every file.
 
-Search works with both [`mounts`](/docs/workspace/filesystem#mounts) and a [workspace-only filesystem](/docs/workspace/filesystem#workspace-only-filesystem). With `mounts`, paths from every mounted filesystem are available through one composite filesystem. With `filesystem`, search uses that provider directly. In both cases, queries search the workspace index rather than reading live files on demand.
+Search works with both [`mounts`](/docs/sandbox/filesystem#mounts) and a [workspace-only filesystem](/docs/sandbox/filesystem#workspace-only-filesystem). With `mounts`, paths from every mounted filesystem are available through one composite filesystem. With `filesystem`, search uses that provider directly. In both cases, queries search the workspace index rather than reading live files on demand.
 
 ## When to use search
 
@@ -335,6 +335,6 @@ See [workspace class reference](/reference/workspace/workspace-class#search-tool
 
 ## Related
 
-- [Sandbox](/docs/workspace/sandbox)
+- [Sandbox](/docs/sandbox/overview)
 - [RAG overview](/reference/rag/overview)
 - [Workspace class reference](/reference/workspace/workspace-class)

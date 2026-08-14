@@ -2,7 +2,7 @@
   "redirects": [
     {
       "source": "/docs/workspace/overview",
-      "destination": "/docs/workspace/sandbox",
+      "destination": "/docs/sandbox/overview",
       "permanent": true
     },
     {
@@ -2133,6 +2133,31 @@
     {
       "source": "/docs/storage/overview",
       "destination": "/docs/storage",
+      "permanent": true
+    },
+    {
+      "source": "/docs/workspace/sandbox",
+      "destination": "/docs/sandbox/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/workspace/filesystem",
+      "destination": "/docs/sandbox/filesystem",
+      "permanent": true
+    },
+    {
+      "source": "/docs/workspace/search",
+      "destination": "/docs/sandbox/search",
+      "permanent": true
+    },
+    {
+      "source": "/docs/workspace/skills",
+      "destination": "/docs/sandbox/skills",
+      "permanent": true
+    },
+    {
+      "source": "/docs/workspace/lsp",
+      "destination": "/docs/sandbox/lsp",
       "permanent": true
     }
   ]

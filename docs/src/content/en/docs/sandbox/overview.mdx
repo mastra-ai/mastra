@@ -147,7 +147,7 @@ const workspace = new Workspace({
 
 The agent receives filesystem tools for the mounted storage, and commands in the sandbox can access the same files under `/data`. This lets you seed an ephemeral sandbox with existing files and persist its output after the sandbox stops.
 
-Mount support varies by sandbox backend. See [Filesystem](/docs/workspace/filesystem) for supported storage backends, detailed mount configuration, and how to mount multiple filesystems.
+Mount support varies by sandbox backend. See [Filesystem](/docs/sandbox/filesystem) for supported storage backends, detailed mount configuration, and how to mount multiple filesystems.
 
 ## Multi-tenant sandboxes
 
@@ -202,7 +202,7 @@ Workspace-level `mounts` can't be combined with a sandbox resolver. This is a kn
 
 The workspace doesn't own sandboxes returned by a resolver. Return a sandbox that's ready to use, and destroy it through your application's lifecycle code when it's no longer needed. `workspace.destroy()` doesn't destroy resolver-returned sandboxes.
 
-Resolvers are incompatible with `mounts` and [`lsp: true`](/docs/workspace/lsp), because both require a static sandbox when the workspace is constructed. Using a resolver with `mounts` throws an `INVALID_CONFIG` error. With `lsp: true`, Mastra disables LSP and logs a warning.
+Resolvers are incompatible with `mounts` and [`lsp: true`](/docs/sandbox/lsp), because both require a static sandbox when the workspace is constructed. Using a resolver with `mounts` throws an `INVALID_CONFIG` error. With `lsp: true`, Mastra disables LSP and logs a warning.
 
 ### Tool availability
 
@@ -337,4 +337,4 @@ await sandbox.executeCommand('node', ['scripts/download-reports.js'], {
 
 - [`SandboxProcessManager` reference](/reference/workspace/process-manager)
 - [`WorkspaceSandbox` reference](/reference/workspace/sandbox)
-- [Filesystem](/docs/workspace/filesystem)
+- [Filesystem](/docs/sandbox/filesystem)

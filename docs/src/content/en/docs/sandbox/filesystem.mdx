@@ -178,7 +178,7 @@ const workspace = new Workspace({
 
 ### Per-user or per-thread mounts
 
-Workspace-level `mounts` require a sandbox provider object and can't be combined with a sandbox resolver. For one sandbox and storage prefix per user or thread, create and mount the filesystem inside the sandbox resolver. See [Multi-tenant sandboxes](/docs/workspace/sandbox#multi-tenant-sandboxes) for a complete example.
+Workspace-level `mounts` require a sandbox provider object and can't be combined with a sandbox resolver. For one sandbox and storage prefix per user or thread, create and mount the filesystem inside the sandbox resolver. See [Multi-tenant sandboxes](/docs/sandbox/overview#multi-tenant-sandboxes) for a complete example.
 
 ## Workspace-only filesystem
 
@@ -275,6 +275,6 @@ Each tenant's prefix seeds its own workspace view. Workspace tools resolve the f
 
 ## Related
 
-- [Sandbox](/docs/workspace/sandbox)
+- [Sandbox](/docs/sandbox/overview)
 - [`WorkspaceFilesystem` reference](/reference/workspace/filesystem)
 - [`Workspace` reference](/reference/workspace/workspace-class)
