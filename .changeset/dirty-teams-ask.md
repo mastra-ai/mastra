@@ -2,7 +2,7 @@
 '@mastra/client-js': patch
 ---
 
-Added thread-specific task hydration to agent controller session state requests.
+`session.state()` now accepts a `threadId`, so reopening a chat can load the durable task list for that specific thread.
 
 ```ts
 const state = await session.state({ threadId: 'thread-123' });
