@@ -22,7 +22,6 @@ import { streamSSE } from 'hono/streaming';
 import type { RouteAuth } from '../../routes/route.js';
 import { SandboxBudgetError } from '../../sandbox/fleet.js';
 import type { MaterializationSandbox, PrepareProgress, ProgressFn, SandboxFleet } from '../../sandbox/fleet.js';
-import { resolveFactoryDefaultModelId } from '../../session/factory-session.js';
 import type { StateSigner } from '../../state-signing.js';
 import type { AuditEmitter } from '../../storage/domains/audit/domain.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
@@ -78,7 +77,7 @@ function withSessionOperationLock<T>(sessionId: string, fn: () => Promise<T>): P
 }
 import { listPullRequestSubscriptionsForThread, subscribeToPullRequest } from './subscriptions.js';
 import { handleGithubWebhook } from './webhook.js';
-import type { GithubIssueTriageRunInput, GithubIssueTriageRunResult, ParsedGithubWebhook } from './webhook.js';
+import type { ParsedGithubWebhook } from './webhook.js';
 
 /**
  * Loose Hono context accepted by the shared GitHub route helpers. The
@@ -126,8 +125,6 @@ export interface MountGithubRoutesOptions {
   redirectUri?: string;
   /** Controller used to route verified webhook notifications to exact subscribed sessions. */
   controller?: MountedMastraCode['controller'];
-  /** Run seam used by GitHub webhooks and manual Intake triage. */
-  runIssueTriage?: (input: GithubIssueTriageRunInput) => Promise<GithubIssueTriageRunResult>;
   /** Best-effort audit emission supplied by the factory-owned audit domain. */
   emitAudit?: AuditEmitter['emit'];
   /** Factory projects domain — resolves a project's default triage model. */
@@ -151,22 +148,6 @@ function pullRequestNumberFromUrl(value: string, expectedRepo: string): number |
     return Number.isInteger(number) && number > 0 ? number : undefined;
   } catch {
     return undefined;
-  }
-}
-
-function isCanonicalGithubIssueUrl(value: string, repoFullName: string, issueNumber: number): boolean {
-  try {
-    const url = new URL(value);
-    const [owner, repo] = repoFullName.split('/');
-    return (
-      url.protocol === 'https:' &&
-      url.hostname === 'github.com' &&
-      url.pathname === `/${owner}/${repo}/issues/${issueNumber}` &&
-      url.search === '' &&
-      url.hash === ''
-    );
-  } catch {
-    return false;
   }
 }
 
@@ -235,23 +216,12 @@ function parseListPage(raw: string | undefined): number | null {
   return page >= 1 ? page : null;
 }
 
-const VALID_ISSUE_LABEL_FILTERS = new Set(['auto-triaged', 'needs-approval']);
+const VALID_ISSUE_LABEL_FILTERS = new Set(['status: auto-triaged', 'status: needs approval']);
 
 function parseIssueLabelFilter(raw: string | undefined): string | undefined | null {
   if (raw === undefined || raw === '') return undefined;
   if (VALID_ISSUE_LABEL_FILTERS.has(raw)) return raw;
   return null;
-}
-
-function parseIssueNumberParam(raw: string | undefined): number | null {
-  if (!raw || !/^\d{1,10}$/.test(raw)) return null;
-  const issueNumber = Number(raw);
-  return Number.isSafeInteger(issueNumber) && issueNumber > 0 ? issueNumber : null;
-}
-
-function parseStringList(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
-  return value.filter((item): item is string => typeof item === 'string' && item.length > 0);
 }
 
 interface ResolvedProjectRepository extends ProjectRepository {
@@ -387,7 +357,7 @@ async function ingestPolledEvents(
  */
 export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[] {
   const routes: ApiRoute[] = [];
-  const { auth, fleet, storage, github, stateSigner, emitAudit } = options;
+  const { auth, fleet, storage, github, stateSigner, controller, emitAudit } = options;
   const diagnostics = () =>
     getGithubFeatureDiagnostics({ github, auth, appDbConfigured: storage !== undefined, stateSigner, fleet });
 
@@ -456,22 +426,6 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
   const signState = (orgId: string, userId: string): string => stateSigner.sign(orgId, userId);
   const verifyState = (state: string | undefined) => stateSigner.verify(state);
 
-  const { runIssueTriage } = options;
-  const runBoardIssueTriage = runIssueTriage
-    ? async (input: GithubIssueTriageRunInput): Promise<GithubIssueTriageRunResult> => {
-        if (!input.resourceId || !input.projectPath) {
-          throw new Error('GitHub issue triage requires an explicit Factory project repository');
-        }
-        await github.addIssueLabels(input.installationId, input.repository, input.issueNumber, ['auto-triaged']);
-        return runIssueTriage({
-          ...input,
-          defaultModelId:
-            input.defaultModelId ?? (await resolveFactoryDefaultModelId(options.projects, input.resourceId)),
-          labels: input.labels.includes('auto-triaged') ? input.labels : [...input.labels, 'auto-triaged'],
-        });
-      }
-    : undefined;
-
   routes.push(
     registerApiRoute('/web/github/subscriptions', {
       method: 'GET',
@@ -511,7 +465,6 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
       handler: async c => {
         const result = await handleGithubWebhook(loose(c), {
           github,
-          runIssueTriage: runBoardIssueTriage,
           ingestFactoryEvent: options.ingestFactoryEvent,
           ...(options.controller
             ? {
@@ -822,73 +775,6 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
     }),
   );
 
-  // ── Manually run issue triage using the same run seam as webhooks ──
-  routes.push(
-    registerApiRoute('/web/github/projects/:id/issues/:number/triage', {
-      method: 'POST',
-      requiresAuth: false,
-      handler: async c => {
-        const owned = await loadOwnedProject({ github, auth, fleet, c: loose(c) });
-        if ('response' in owned) return owned.response;
-        const { project, sandboxRow } = owned;
-        const issueNumber = parseIssueNumberParam(c.req.param('number'));
-        if (issueNumber === null) return c.json({ error: 'invalid_issue_number' }, 400);
-
-        let body: { title?: unknown; url?: unknown; labels?: unknown };
-        try {
-          body = await c.req.json();
-        } catch {
-          return c.json({ error: 'Invalid JSON body' }, 400);
-        }
-        if (typeof body.title !== 'string' || body.title.trim().length === 0 || body.title.length > 5000) {
-          return c.json({ error: 'invalid_title' }, 400);
-        }
-        if (
-          typeof body.url !== 'string' ||
-          body.url.trim().length === 0 ||
-          body.url.length > 2048 ||
-          !isCanonicalGithubIssueUrl(body.url, project.repository.slug, issueNumber)
-        ) {
-          return c.json({ error: 'invalid_url' }, 400);
-        }
-
-        if (!runBoardIssueTriage) return c.json({ error: 'triage_unavailable' }, 503);
-        const branch = `factory/issue-${issueNumber}`;
-        const projectPath = computeWorktreePath(sandboxRow.sandboxWorkdir, branch);
-        const result = await runBoardIssueTriage({
-          repository: project.repository.slug,
-          issueNumber,
-          issueTitle: body.title,
-          issueUrl: body.url,
-          labels: parseStringList(body.labels),
-          installationId: Number(project.installation.externalId),
-          resourceId: project.factoryProjectId,
-          projectPath,
-          branch,
-        });
-        await emitAudit?.({
-          context: loose(c),
-          input: {
-            action: 'factory.triage.started',
-            factoryProjectId: project.factoryProjectId,
-            projectRepositoryId: project.id,
-            targets: [{ type: 'issue', id: String(issueNumber), name: body.title }],
-            metadata: { issueNumber, branch, threadId: result.threadId },
-          },
-        });
-        return c.json(
-          {
-            ok: true,
-            threadId: result.threadId,
-            projectPath: result.projectPath ?? projectPath,
-            branch: result.branch ?? branch,
-          },
-          202,
-        );
-      },
-    }),
-  );
-
   // ── List a project's open (non-draft) pull requests ─────────────────────
   routes.push(
     registerApiRoute('/web/github/projects/:id/prs', {
@@ -1056,7 +942,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
   );
 
   // ── Sessions / commit / push / PR ────────────────────────────────────────
-  routes.push(...buildProjectGitRoutes({ github, auth, fleet, emitAudit }));
+  routes.push(...buildProjectGitRoutes({ github, auth, fleet, controller, emitAudit }));
 
   return routes;
 }
@@ -1107,7 +993,7 @@ async function resolveProjectSandbox(options: {
   if (!sandboxRow.sandboxId) {
     throw new MaterializeError('Project sandbox is not provisioned. Open the project first.', 'clone-failed');
   }
-  return fleet.reattachSandbox(sandboxRow.sandboxId);
+  return fleet.reattachSandbox(sandboxRow.sandboxId, { actingUserId: sandboxRow.userId });
 }
 
 /**
@@ -1283,11 +1169,13 @@ function buildProjectGitRoutes({
   github,
   auth,
   fleet,
+  controller,
   emitAudit,
 }: {
   github: GithubIntegration;
   auth: RouteAuth;
   fleet: SandboxFleet;
+  controller?: MountedMastraCode['controller'];
   emitAudit?: AuditEmitter['emit'];
 }): ApiRoute[] {
   return [
@@ -1431,6 +1319,14 @@ function buildProjectGitRoutes({
         // a large repository — the caller must not sit through that for a
         // workspace that has already been removed.
         await github.sourceControlStorage.sessions.delete(session.id);
+        try {
+          await controller?.deleteSession({ resourceId: session.sessionId });
+        } catch (error) {
+          console.error('[GitHub Sessions] Failed to tear down live controller session', {
+            sessionId: session.sessionId,
+            error,
+          });
+        }
         void reclaimDeletedSessionSandbox({
           fleet,
           sourceControl: github.sourceControlStorage,
@@ -1673,7 +1569,9 @@ function buildProjectGitRoutes({
 
         try {
           return await withSessionOperationLock(`sandbox:${sandboxRow.id}`, async () => {
-            const sandbox = await fleet.reattachSandbox(sandboxRow.sandboxId!);
+            const sandbox = await fleet.reattachSandbox(sandboxRow.sandboxId!, {
+              actingUserId: sandboxRow.userId,
+            });
             await teardownProjectSandbox({
               fleet,
               row: sandboxRow,

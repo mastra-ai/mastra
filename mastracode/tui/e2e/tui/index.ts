@@ -4,16 +4,19 @@ import { apiKeyDeleteEnvScenario } from './api-key-delete-env.js';
 import { apiKeyMultiProviderDeleteScenario } from './api-key-multi-provider-delete.js';
 import { apiKeyPromptScenario } from './api-key-prompt.js';
 import { apiKeyReopenStoredScenario } from './api-key-reopen-stored.js';
+import { approvalOverlayFocusScenario } from './approval-overlay-focus.js';
 import { askUserAdvancedPromptsScenario } from './ask-user-advanced-prompts.js';
 import { autocompleteWrappingNavigationScenario } from './autocomplete-wrapping-navigation.js';
 import { automatedChatScenario } from './automated-chat.js';
 import { branchContextLongNameScenario } from './branch-context-long-name.js';
 import { browserActivePendingStatusScenario } from './browser-active-pending-status.js';
+import { browserModelPickerScenario } from './browser-model-picker.js';
 import { browserProfileProviderMismatchScenario } from './browser-profile-provider-mismatch.js';
 import { browserSettingsPersistenceScenario } from './browser-settings-persistence.js';
 import { browserStartupRestoreScenario } from './browser-startup-restore.js';
 import { browserToggleAttachScenario } from './browser-toggle-attach.js';
 import { browserToolUnavailableScenario } from './browser-tool-unavailable.js';
+import { browserViewportScenario } from './browser-viewport.js';
 import { browserWizardBrowserbaseScenario } from './browser-wizard-browserbase.js';
 import { browserWizardExportScenario } from './browser-wizard-export.js';
 import { browserbaseStartupRestoreScenario } from './browserbase-startup-restore.js';
@@ -44,9 +47,11 @@ import { githubSignalsPollingInboxScenario } from './github-signals-polling-inbo
 import { githubSignalsUnsubscribeReloadScenario } from './github-signals-unsubscribe-reload.js';
 import { goalApiErrorStopsLoopScenario } from './goal-api-error-stops-loop.js';
 import { goalDurationToolApprovalScenario } from './goal-duration-tool-approval.js';
+import { goalFreshThreadPersistenceScenario } from './goal-fresh-thread-persistence.js';
 import { goalJudgeOmModelIsolationScenario } from './goal-judge-om-model-isolation.js';
 import { goalJudgeSingleRenderScenario } from './goal-judge-single-render.js';
 import { headlessMcpToolAvailabilityScenario } from './headless-mcp-tool-availability.js';
+import { hiddenReasoningSingleLabelScenario } from './hidden-reasoning-single-label.js';
 import { integrationCommandsScenario } from './integration-commands.js';
 import { lifecycleHooksConfiguredScenario } from './lifecycle-hooks-configured.js';
 import { lifecycleHooksEventsScenario } from './lifecycle-hooks-events.js';
@@ -97,6 +102,7 @@ import {
   pluginsGithubInstallPnpm10Scenario,
   pluginsGithubInstallPnpm11Scenario,
   pluginsGithubPollUpdateScenario,
+  pluginsGithubProviderSwapScenario,
   pluginsLocalHotReloadScenario,
   pluginsLocalToolScenario,
   pluginsScaffoldInstallToolScenario,
@@ -133,6 +139,7 @@ import { stateCommandsScenario } from './state-commands.js';
 import { stateSignalBrowserProcessorScenario } from './state-signal-browser-processor.js';
 import { stateSignalReloadScenario } from './state-signal-reload.js';
 import { stateSignalRenderingScenario } from './state-signal-rendering.js';
+import { steerDrainFailureRecoveryScenario } from './steer-drain-failure-recovery.js';
 import { storageFallbackHistoryReloadScenario } from './storage-fallback-history-reload.js';
 import { storageSettingsScenario } from './storage-settings.js';
 import { storageStartupPgFallbackScenario } from './storage-startup-pg-fallback.js';
@@ -156,6 +163,7 @@ import { updateStartupPromptScenario } from './update-startup-prompt.js';
 import { visibleCommandsScenario } from './visible-commands.js';
 import { webSearchRenderingScenario } from './web-search-rendering.js';
 import { workIdleStatusScenario } from './work-idle-status.js';
+import { workflowsCommandScenario } from './workflows-command.js';
 import { workspaceCommandsScenario } from './workspace-commands.js';
 import { workspacePlanModeToolsScenario } from './workspace-plan-mode-tools.js';
 import { workspaceToolNamesScenario } from './workspace-tool-names.js';
@@ -173,12 +181,15 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'autocomplete-wrapping-navigation': autocompleteWrappingNavigationScenario,
   'api-key-delete-env': apiKeyDeleteEnvScenario,
   'api-key-multi-provider-delete': apiKeyMultiProviderDeleteScenario,
+  'approval-overlay-focus': approvalOverlayFocusScenario,
   'api-key-prompt': apiKeyPromptScenario,
   'api-key-reopen-stored': apiKeyReopenStoredScenario,
   'ask-user-advanced-prompts': askUserAdvancedPromptsScenario,
   'automated-chat': automatedChatScenario,
   'browser-active-pending-status': browserActivePendingStatusScenario,
   'browser-profile-provider-mismatch': browserProfileProviderMismatchScenario,
+  'browser-model-picker': browserModelPickerScenario,
+  'browser-viewport': browserViewportScenario,
   'browser-settings-persistence': browserSettingsPersistenceScenario,
   'browser-startup-restore': browserStartupRestoreScenario,
   'browser-tool-unavailable': browserToolUnavailableScenario,
@@ -212,10 +223,12 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'github-signals-unsubscribe-reload': githubSignalsUnsubscribeReloadScenario,
   'goal-api-error-stops-loop': goalApiErrorStopsLoopScenario,
   'goal-duration-tool-approval': goalDurationToolApprovalScenario,
+  'goal-fresh-thread-persistence': goalFreshThreadPersistenceScenario,
   'goal-judge-om-model-isolation': goalJudgeOmModelIsolationScenario,
   'goal-judge-single-render': goalJudgeSingleRenderScenario,
   'controller-api-config': controllerApiConfigScenario,
   'headless-mcp-tool-availability': headlessMcpToolAvailabilityScenario,
+  'hidden-reasoning-single-label': hiddenReasoningSingleLabelScenario,
   'visible-commands': visibleCommandsScenario,
   'integration-commands': integrationCommandsScenario,
   'lifecycle-hooks-configured': lifecycleHooksConfiguredScenario,
@@ -265,6 +278,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'plugins-github-install-missing-corepack': pluginsGithubInstallMissingCorepackScenario,
   'plugins-github-install-invalid-package-manager': pluginsGithubInstallInvalidPackageManagerScenario,
   'plugins-github-poll-update': pluginsGithubPollUpdateScenario,
+  'plugins-github-provider-swap': pluginsGithubProviderSwapScenario,
   'plugins-blocked-config': pluginsBlockedConfigScenario,
   'plugins-scaffold-install-tool': pluginsScaffoldInstallToolScenario,
   'plugins-streaming-tool-output': pluginsStreamingToolOutputScenario,
@@ -285,6 +299,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'state-signal-browser-processor': stateSignalBrowserProcessorScenario,
   'state-signal-reload': stateSignalReloadScenario,
   'state-signal-rendering': stateSignalRenderingScenario,
+  'steer-drain-failure-recovery': steerDrainFailureRecoveryScenario,
   'setup-completion-persistence': setupCompletionPersistenceScenario,
   'setup-custom-pack-completion': setupCustomPackCompletionScenario,
   'setup-login-refresh': setupLoginRefreshScenario,
@@ -322,6 +337,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'workspace-plan-mode-tools': workspacePlanModeToolsScenario,
   'workspace-tool-names': workspaceToolNamesScenario,
   'workspace-tool-output-rendering': workspaceToolOutputRenderingScenario,
+  'workflows-command': workflowsCommandScenario,
   'work-idle-status': workIdleStatusScenario,
   'resourceid-drift-prompt-accept': resourceidDriftPromptAcceptScenario,
   'resourceid-drift-prompt-decline': resourceidDriftPromptDeclineScenario,

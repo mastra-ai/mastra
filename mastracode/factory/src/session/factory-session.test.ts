@@ -46,10 +46,10 @@ function createSessionDouble() {
   const calls: string[] = [];
   const session = {
     om: {
-      observer: { switchModel: vi.fn(async () => void calls.push('observer')) },
-      reflector: { switchModel: vi.fn(async () => void calls.push('reflector')) },
+      observer: { modelId: () => undefined, switchModel: vi.fn(async () => void calls.push('observer')) },
+      reflector: { modelId: () => undefined, switchModel: vi.fn(async () => void calls.push('reflector')) },
     },
-    state: { set: vi.fn(async () => void calls.push('state')) },
+    state: { get: () => ({}), set: vi.fn(async () => void calls.push('state')) },
     model: { switch: vi.fn(async () => void calls.push('model')) },
   };
   return { session: session as unknown as FactorySessionHandle, double: session, calls };
@@ -312,6 +312,106 @@ describe('resolveFactorySourceRepository', () => {
     await expect(
       resolveFactorySourceRepository({ sourceControl, orgId: 'org-1', factoryProjectId: project.id }),
     ).resolves.toMatchObject({ found: true });
+  });
+
+  // A provider-app reinstall deletes the installation but leaves the old
+  // connection row behind. That stale connection must not shadow the healthy
+  // one created for the new installation.
+  it('skips a stale connection whose installation was deleted and resolves through the healthy one', async () => {
+    const seeded = await createFactoryStorageForTests();
+    const sourceControl = seeded.sourceControl.forIntegration('github');
+    const project = await seeded.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Mastra' } });
+
+    const staleInstallation = await sourceControl.installations.upsert({
+      orgId: 'org-1',
+      connectedByUserId: 'user-1',
+      externalId: 'old-install',
+    });
+    const staleRepository = await sourceControl.repositories.upsert({
+      orgId: 'org-1',
+      input: {
+        installationId: staleInstallation.id,
+        externalId: '456',
+        slug: 'mastra-ai/mastra',
+        defaultBranch: 'main',
+      },
+    });
+    const staleConnection = await sourceControl.connections.create({
+      orgId: 'org-1',
+      factoryProjectId: project.id,
+      installationId: staleInstallation.id,
+      createdByUserId: 'user-1',
+    });
+    await sourceControl.projectRepositories.link({
+      orgId: 'org-1',
+      connectionId: staleConnection.id,
+      repositoryId: staleRepository.id,
+      createdByUserId: 'user-1',
+      sandboxProvider: 'local',
+      sandboxWorkdir: '/sandbox/mastra',
+    });
+    // The reinstall: the installation row goes away, the connection stays.
+    await sourceControl.installations.delete({ orgId: 'org-1', id: staleInstallation.id });
+
+    const freshInstallation = await sourceControl.installations.upsert({
+      orgId: 'org-1',
+      connectedByUserId: 'user-2',
+      externalId: 'new-install',
+    });
+    const freshRepository = await sourceControl.repositories.upsert({
+      orgId: 'org-1',
+      input: {
+        installationId: freshInstallation.id,
+        externalId: '456',
+        slug: 'mastra-ai/mastra',
+        defaultBranch: 'main',
+      },
+    });
+    const freshConnection = await sourceControl.connections.create({
+      orgId: 'org-1',
+      factoryProjectId: project.id,
+      installationId: freshInstallation.id,
+      createdByUserId: 'user-2',
+    });
+    const freshProjectRepository = await sourceControl.projectRepositories.link({
+      orgId: 'org-1',
+      connectionId: freshConnection.id,
+      repositoryId: freshRepository.id,
+      createdByUserId: 'user-2',
+      sandboxProvider: 'local',
+      sandboxWorkdir: '/sandbox/mastra',
+    });
+
+    await expect(
+      resolveFactorySourceRepository({ sourceControl, orgId: 'org-1', factoryProjectId: project.id }),
+    ).resolves.toEqual({
+      found: true,
+      projectRepositoryId: freshProjectRepository.id,
+      baseBranch: 'main',
+      connectedByUserId: 'user-2',
+    });
+  });
+
+  it('reports a repository miss instead of throwing when every connection is stale', async () => {
+    const seeded = await createFactoryStorageForTests();
+    const sourceControl = seeded.sourceControl.forIntegration('github');
+    const project = await seeded.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Mastra' } });
+    const installation = await sourceControl.installations.upsert({
+      orgId: 'org-1',
+      connectedByUserId: 'user-1',
+      externalId: 'old-install',
+    });
+    await sourceControl.connections.create({
+      orgId: 'org-1',
+      factoryProjectId: project.id,
+      installationId: installation.id,
+      createdByUserId: 'user-1',
+    });
+    await sourceControl.installations.delete({ orgId: 'org-1', id: installation.id });
+
+    await expect(
+      resolveFactorySourceRepository({ sourceControl, orgId: 'org-1', factoryProjectId: project.id }),
+    ).resolves.toEqual({ found: false, reason: 'repository' });
   });
 });
 

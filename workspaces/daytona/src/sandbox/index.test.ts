@@ -186,7 +186,7 @@ describe('DaytonaSandbox', () => {
       expect((sandbox as any).resources).toEqual({ cpu: 2, memory: 4, disk: 6 });
     });
 
-    it('stores new options: name, user, public, autoDeleteInterval, networkBlockAll, networkAllowList, image', () => {
+    it('stores new options: name, user, public, autoDeleteInterval, networkBlockAll, networkAllowList, domainAllowList, image', () => {
       const sandbox = new DaytonaSandbox({
         name: 'my-sandbox',
         user: 'ubuntu',
@@ -194,6 +194,7 @@ describe('DaytonaSandbox', () => {
         autoDeleteInterval: 60,
         networkBlockAll: true,
         networkAllowList: '10.0.0.0/8,192.168.0.0/16',
+        domainAllowList: 'registry.npmjs.org',
         image: 'debian:12.9',
       });
 
@@ -203,6 +204,7 @@ describe('DaytonaSandbox', () => {
       expect((sandbox as any).autoDeleteInterval).toBe(60);
       expect((sandbox as any).networkBlockAll).toBe(true);
       expect((sandbox as any).networkAllowList).toBe('10.0.0.0/8,192.168.0.0/16');
+      expect((sandbox as any).domainAllowList).toBe('registry.npmjs.org');
       expect((sandbox as any).image).toBe('debian:12.9');
     });
 
@@ -335,6 +337,7 @@ describe('DaytonaSandbox', () => {
         autoDeleteInterval: 60,
         networkBlockAll: true,
         networkAllowList: '10.0.0.0/8',
+        domainAllowList: 'registry.npmjs.org,*.githubusercontent.com',
       });
 
       await sandbox._start();
@@ -347,8 +350,22 @@ describe('DaytonaSandbox', () => {
           autoDeleteInterval: 60,
           networkBlockAll: true,
           networkAllowList: '10.0.0.0/8',
+          domainAllowList: 'registry.npmjs.org,*.githubusercontent.com',
         }),
       );
+    });
+
+    it('forwards domainAllowList without requiring a CIDR allow list', async () => {
+      const sandbox = new DaytonaSandbox({
+        networkBlockAll: true,
+        domainAllowList: 'api.example.com',
+      });
+
+      await sandbox._start();
+
+      const createCall = mockDaytona.create.mock.calls[0]![0];
+      expect(createCall).toMatchObject({ networkBlockAll: true, domainAllowList: 'api.example.com' });
+      expect(createCall).not.toHaveProperty('networkAllowList');
     });
 
     it('does not include undefined params in create call', async () => {
@@ -363,6 +380,7 @@ describe('DaytonaSandbox', () => {
       expect(createCall).not.toHaveProperty('autoDeleteInterval');
       expect(createCall).not.toHaveProperty('networkBlockAll');
       expect(createCall).not.toHaveProperty('networkAllowList');
+      expect(createCall).not.toHaveProperty('domainAllowList');
       expect(createCall).not.toHaveProperty('autoArchiveInterval');
       expect(createCall).not.toHaveProperty('snapshot');
     });
@@ -1645,6 +1663,23 @@ describe('DaytonaSandbox.clone', () => {
       apiKey: 'dt-key',
       snapshot: 'base-snap',
       env: { GITHUB_TOKEN: 'ghs_abc' },
+    });
+  });
+
+  it('preserves the network policy so clones cannot silently widen network access', () => {
+    const template = new DaytonaSandbox({
+      apiKey: 'dt-key',
+      networkBlockAll: true,
+      networkAllowList: '10.0.0.0/8',
+      domainAllowList: 'registry.npmjs.org',
+    });
+
+    const child = template.clone({ id: 'mc-project-1' });
+
+    expect(child['_constructorOptions']).toMatchObject({
+      networkBlockAll: true,
+      networkAllowList: '10.0.0.0/8',
+      domainAllowList: 'registry.npmjs.org',
     });
   });
 

@@ -1,11 +1,14 @@
 ---
-title: "Auth overview | Auth"
+title: "Auth"
 description: Learn about different auth options for securing your Mastra API and Studio.
 packages:
   - "@mastra/auth"
 ---
 
-# Auth overview
+import { IntegrationGrid } from '@site/src/components/integrations/grid';
+import { CardGrid, CardGridItem } from "@site/src/components/cards/card-grid";
+
+# Auth
 
 Mastra lets you choose how you handle authentication, so you can secure access to your API and [Studio](/docs/studio/overview) using the identity system that fits your stack.
 
@@ -22,6 +25,10 @@ Authentication is optional. If no auth is configured, all routes and Studio are 
 
 See [Custom API Routes](/docs/server/custom-api-routes#authentication) for controlling authentication on custom endpoints. Visit the [Studio Auth docs](/docs/studio/auth) for more on securing your Studio deployment.
 
+:::warning
+The default auth configuration protects `/api/*` and treats `/api`, `/api/auth/*` as public. When you set a custom `server.apiPrefix`, those defaults no longer match and built-in routes fall outside the protected pattern. Update `server.auth.protected` and `server.auth.public` to reference your new prefix.
+:::
+
 :::note
 
 Authentication for Studio is currently supported by the following providers: Simple Auth, JWT, WorkOS, Better Auth, and Google.
@@ -32,21 +39,32 @@ Authentication for Studio is currently supported by the following providers: Sim
 
 ### Built-in
 
-- [Simple Auth](/docs/server/auth/simple-auth): Token-to-user mapping for development and API keys
-- [JSON Web Token (JWT)](/docs/server/auth/jwt): HMAC-signed JWT verification
+<CardGrid>
+  <CardGridItem
+    title="Simple Auth"
+    href="/docs/server/auth/simple-auth"
+    description="Token-to-user mapping for development and API keys"
+  />
+
+  <CardGridItem title="JSON Web Token" href="/docs/server/auth/jwt" description="HMAC-signed JWT verification" />
+</CardGrid>
 
 ### Third-party integrations
 
-- [Auth0](/docs/server/auth/auth0)
-- [Better Auth](/docs/server/auth/better-auth)
-- [Clerk](/docs/server/auth/clerk)
-- [Firebase](/docs/server/auth/firebase)
-- [Google](/docs/server/auth/google)
-- [Okta](/docs/server/auth/okta)
-- [Supabase](/docs/server/auth/supabase)
-- [WorkOS](/docs/server/auth/workos)
+<IntegrationGrid section="Auth" />
 
 ### Advanced
 
-- [Composite Auth](/docs/server/auth/composite-auth): Combine multiple auth providers
-- [Custom Auth Provider](/docs/server/auth/custom-auth-provider): Build your own provider
+<CardGrid>
+  <CardGridItem
+    title="Composite Auth"
+    href="/docs/server/auth/composite-auth"
+    description="Combine multiple auth providers"
+  />
+
+  <CardGridItem
+    title="Custom Provider"
+    href="/docs/server/auth/custom-auth-provider"
+    description="Build your own provider"
+  />
+</CardGrid>

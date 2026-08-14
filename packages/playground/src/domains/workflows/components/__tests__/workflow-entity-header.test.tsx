@@ -38,19 +38,19 @@ function renderHeader(workflowId = 'demo-workflow') {
 afterEach(() => cleanup());
 
 describe('WorkflowEntityHeader', () => {
-  it("renders the Stored badge when the workflow's origin is 'stored'", async () => {
+  it("renders the Dynamic badge when the workflow's origin is 'dynamic'", async () => {
     server.use(
       http.get(`${BASE_URL}/api/workflows/demo-workflow`, () =>
-        HttpResponse.json({ ...baseWorkflow, origin: 'stored' } satisfies GetWorkflowResponse),
+        HttpResponse.json({ ...baseWorkflow, origin: 'dynamic' } satisfies GetWorkflowResponse),
       ),
     );
 
     renderHeader();
 
-    await waitFor(() => expect(screen.getByText('Stored')).not.toBeNull());
+    await waitFor(() => expect(screen.getByText('Dynamic')).not.toBeNull());
   });
 
-  it("does not render the Stored badge when the workflow's origin is 'code'", async () => {
+  it("does not render the Dynamic badge when the workflow's origin is 'code'", async () => {
     server.use(
       http.get(`${BASE_URL}/api/workflows/demo-workflow`, () =>
         HttpResponse.json({ ...baseWorkflow, origin: 'code' } satisfies GetWorkflowResponse),
@@ -61,6 +61,6 @@ describe('WorkflowEntityHeader', () => {
 
     // Header always renders the workflowId badge — wait for that to prove the query resolved.
     await waitFor(() => expect(screen.getByText('demo-workflow')).not.toBeNull());
-    expect(screen.queryByText('Stored')).toBeNull();
+    expect(screen.queryByText('Dynamic')).toBeNull();
   });
 });

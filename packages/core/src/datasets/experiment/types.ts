@@ -68,6 +68,50 @@ export interface DataItem<I = unknown, E = unknown> {
 }
 
 /**
+ * The subset of a dataset item exposed to experiment lifecycle hooks.
+ * Mirrors the fields a hook can meaningfully act on without letting hooks
+ * mutate execution-control fields (tool mocks, resume data, scorer selection).
+ */
+export interface ExperimentHookItem<I = unknown, E = unknown> {
+  /** ID of the dataset item */
+  id: string;
+  /** Input data that will be passed to the target */
+  input: I;
+  /** Ground truth for scoring, when the item declares one */
+  groundTruth?: E;
+  /** Item metadata */
+  metadata?: Record<string, unknown>;
+}
+
+/** Arguments passed to run-level and item-level experiment hooks. */
+export interface ExperimentHookArgs {
+  /** ID of the experiment being run */
+  experimentId: string;
+  /** The Mastra instance the experiment is running against */
+  mastra: Mastra;
+  /** Run-level abort signal, when the run is cancellable */
+  signal?: AbortSignal;
+}
+
+/** Arguments passed to `beforeEach`. */
+export interface ExperimentItemHookArgs<I = unknown, E = unknown> extends ExperimentHookArgs {
+  /** The item about to be executed */
+  item: ExperimentHookItem<I, E>;
+}
+
+/** Arguments passed to `afterEach`. */
+export interface ExperimentItemResultHookArgs<I = unknown, E = unknown> extends ExperimentItemHookArgs<I, E> {
+  /** The completed item result, including scores */
+  result: ItemWithScores;
+}
+
+/** Arguments passed to `afterAll`. */
+export interface ExperimentRunResultHookArgs extends ExperimentHookArgs {
+  /** The summary that is about to be returned from `runExperiment` */
+  summary: ExperimentSummary;
+}
+
+/**
  * Per-domain persistence selection for a single experiment run.
  *
  * - `default` — write through the `Mastra` instance's configured storage (current behavior).
@@ -124,6 +168,54 @@ export interface ExperimentConfig<I = unknown, O = unknown, E = unknown> {
   scorers?: (MastraScorer<any, any, any, any> | string)[] | AgentScorerConfig | WorkflowScorerConfig;
 
   // === Options ===
+
+  // === Lifecycle hooks ===
+
+  /**
+   * Runs once before any item executes — use it to seed fixtures the target
+   * depends on (files, database rows, sandbox state).
+   *
+   * A throw or rejection aborts the run before any item executes: the
+   * experiment finishes with status `failed`, every item counted as skipped.
+   *
+   * @example
+   * ```ts
+   * await runExperiment(mastra, {
+   *   data: items,
+   *   targetType: 'agent',
+   *   targetId: 'my-agent',
+   *   beforeAll: async () => { await seedWorkspace(); },
+   *   afterAll: async () => { await clearWorkspace(); },
+   * });
+   * ```
+   */
+  beforeAll?: (args: ExperimentHookArgs) => void | Promise<void>;
+  /**
+   * Runs once after every item has settled, immediately before `runExperiment`
+   * returns — including when the run failed or was cancelled. Receives the
+   * summary that is about to be returned.
+   *
+   * Errors are logged and swallowed so teardown cannot mask the run outcome.
+   */
+  afterAll?: (args: ExperimentRunResultHookArgs) => void | Promise<void>;
+  /**
+   * Runs before each item executes, inside the item's concurrency slot, so it
+   * respects `maxConcurrency`. Runs once per item, not once per retry attempt.
+   *
+   * A throw or rejection fails that item without executing the target and
+   * without retrying; the error is recorded on the item result. Other items
+   * are unaffected. `afterEach` is skipped for the item, on the assumption
+   * that a failed setup owns its own cleanup.
+   */
+  beforeEach?: (args: ExperimentItemHookArgs<I, E>) => void | Promise<void>;
+  /**
+   * Runs after each item completes (including failed items), once its result
+   * and scores are final. Use it to tear down whatever `beforeEach` set up.
+   *
+   * Errors are logged and swallowed so teardown cannot change an item's
+   * recorded outcome.
+   */
+  afterEach?: (args: ExperimentItemResultHookArgs<I, E>) => void | Promise<void>;
 
   /** Pin to specific dataset version (default: latest). Only applies when datasetId is used. */
   version?: number;

@@ -7,7 +7,25 @@ import type {
 export type { MastraDBMessage, MastraMessageContentV2, MastraMessagePart } from '@mastra/core/agent-controller';
 import type { RequestContext } from '@mastra/core/request-context';
 
-import type { ClientOptions } from '../types';
+import type {
+  AgentControllerActiveRun,
+  AgentControllerAvailableModel,
+  AgentControllerGoalRecord,
+  AgentControllerModeInfo,
+  AgentControllerOMProgress,
+  AgentControllerSessionState,
+  AgentControllerTaskSnapshot,
+  AgentControllerThreadInfo,
+  AgentControllerWorkspaceStatus,
+  ClientOptions,
+  CreateAgentControllerSessionResponse,
+  CreateAgentControllerThreadResponse,
+  PermissionPolicy,
+  PermissionRules,
+  SendNotificationInput,
+  SendNotificationResult,
+  ToolCategory,
+} from '../types';
 import { parseClientRequestContext } from '../utils';
 import { BaseResource } from './base';
 
@@ -25,29 +43,6 @@ import { BaseResource } from './base';
  *   POST /agent-controller/:id/sessions/:resourceId/abort           session().abort()
  *   POST /agent-controller/:id/sessions/:resourceId/tool-approval   session().approveTool()
  */
-
-export interface AgentControllerInfo {
-  id: string;
-}
-
-/**
- * Status-line relevant slice of observational-memory progress, mirroring the
- * TUI status line. `msg` reads `pendingTokens/threshold ↓projectedMessageRemoval`
- * (the active message window before an observation fires); `mem` reads
- * `observationTokens/reflectionThreshold ↓projectedReflectionSavings`
- * (accumulated observations before a reflection fires).
- */
-export interface AgentControllerOMProgress {
-  status: string;
-  pendingTokens: number;
-  threshold: number;
-  thresholdPercent: number;
-  observationTokens: number;
-  reflectionThreshold: number;
-  reflectionThresholdPercent: number;
-  projectedMessageRemoval: number;
-  projectedReflectionSavings: number;
-}
 
 /**
  * AgentController events the SDK types explicitly. This is a discriminated union, so
@@ -113,6 +108,10 @@ export type KnownAgentControllerEvent =
       displayState: {
         isRunning?: boolean;
         omProgress?: AgentControllerOMProgress;
+        /** A buffered observation is running: the message window is being observed in the background. */
+        bufferingMessages?: boolean;
+        /** A buffered reflection is running: observations are being consolidated in the background. */
+        bufferingObservations?: boolean;
         tokenUsage?: Record<string, unknown>;
         /** Active tool executions keyed by toolCallId. */
         activeTools?: Record<string, ActiveToolState>;
@@ -251,136 +250,6 @@ function hydrateEventMessage(event: AgentControllerEvent): AgentControllerEvent 
     ...event,
     message: hydrateMessage(event.message as SerializedMastraDBMessage),
   } as AgentControllerEvent;
-}
-
-/** Response from creating or resuming an agent controller session. */
-export interface CreateAgentControllerSessionResponse {
-  controllerId: string;
-  resourceId: string;
-  threadId?: string;
-}
-
-/** Agent behavior settings, mirroring the TUI's `/settings` toggles. */
-export interface AgentControllerSessionSettings {
-  /** Auto-approve all tool calls (no per-tool prompt). */
-  yolo: boolean;
-  /** Extended-thinking budget (session override). Absent when the session inherits a configured default. */
-  thinkingLevel?: 'off' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
-  /** How completion/notification alerts are delivered. */
-  notifications: 'off' | 'bell' | 'system' | 'both';
-  /** Use AST-aware smart editing when available. */
-  smartEditing: boolean;
-}
-
-/** State snapshot for an agent controller session. */
-export interface AgentControllerSessionState {
-  controllerId: string;
-  resourceId: string;
-  threadId?: string;
-  modeId: string;
-  modelId: string;
-  /** Whether the agent is currently executing a run (for initial UI hydration). */
-  running?: boolean;
-  /** OM progress snapshot for the status line (initial hydration). */
-  omProgress?: AgentControllerOMProgress;
-  /** Cumulative token usage for the current thread. */
-  tokenUsage?: Record<string, unknown>;
-  /** Agent behavior settings (yolo, thinking, notifications, smart editing). */
-  settings?: AgentControllerSessionSettings;
-}
-
-export interface AgentControllerModeInfo {
-  id: string;
-  name?: string;
-}
-
-export interface AgentControllerThreadInfo {
-  id: string;
-  title?: string;
-  resourceId?: string;
-  createdAt?: string;
-  updatedAt?: string;
-  /**
-   * The session scoping tags this thread was stamped with at creation (e.g.
-   * `{ projectPath }`). Present on `listThreads()` results; used to tell which
-   * worktree/scope a thread belongs to when a resourceId is shared.
-   */
-  tags?: Record<string, string>;
-  /**
-   * Whether a run is currently executing on this thread (`'active'`) or not
-   * (`'idle'`). Present on `listThreads()` results; lets one listing report
-   * activity across every worktree/scope sharing the resourceId.
-   */
-  state?: 'active' | 'idle';
-}
-
-export interface AgentControllerAvailableModel {
-  id: string;
-  provider: string;
-  modelName: string;
-  hasApiKey: boolean;
-  apiKeyEnvVar?: string;
-  useCount: number;
-}
-
-export interface AgentControllerWorkspaceStatus {
-  hasWorkspace: boolean;
-  isReady: boolean;
-}
-
-export interface AgentControllerGoalRecord {
-  id?: string;
-  objective: string;
-  status: 'active' | 'paused' | 'done';
-  runsUsed: number;
-  maxRuns?: number;
-  judgeModelId?: string;
-  startedAt: number;
-  updatedAt: number;
-  pausedReason?: string;
-}
-
-/** Permission policy for a tool or category. */
-export type PermissionPolicy = 'allow' | 'ask' | 'deny';
-
-/** Tool category for permission grouping. */
-export type ToolCategory = 'read' | 'edit' | 'execute' | 'mcp' | 'other';
-
-/** Permission rules for controlling tool approval behavior. */
-export interface PermissionRules {
-  categories?: Partial<Record<ToolCategory, PermissionPolicy>>;
-  tools?: Partial<Record<string, PermissionPolicy>>;
-}
-
-/** Snapshot of a single task item from the task tools. */
-export interface AgentControllerTaskSnapshot {
-  id: string;
-  content: string;
-  status: 'pending' | 'in_progress' | 'completed';
-  activeForm: string;
-}
-
-/** Input for sending a notification signal to a session. */
-export interface SendNotificationInput {
-  source: string;
-  kind: string;
-  summary: string;
-  priority?: 'low' | 'medium' | 'high' | 'urgent';
-  payload?: unknown;
-  sourceId?: string;
-  dedupeKey?: string;
-  coalesceKey?: string;
-  attributes?: Record<string, string | number | boolean | null | undefined>;
-  metadata?: Record<string, unknown>;
-}
-
-/** Result of sending a notification signal. */
-export interface SendNotificationResult {
-  accepted: boolean;
-  notificationId?: string;
-  /** Delivery decision: deliver, queue, defer, summarize, persist, or discard. */
-  decision?: string;
-  runId?: string;
 }
 
 /** Resume payload for the built-in `submit_plan` suspension. */
@@ -819,7 +688,7 @@ export class AgentControllerSession extends BaseResource {
   }
 
   /** Create a new thread (unbinds previous, binds the new one). */
-  async createThread(title?: string): Promise<AgentControllerThreadInfo> {
+  async createThread(title?: string): Promise<CreateAgentControllerThreadResponse> {
     return this.request(this.url(`${this.base()}/threads`), {
       method: 'POST',
       body: { title },
@@ -842,7 +711,10 @@ export class AgentControllerSession extends BaseResource {
   }
 
   /** Clone a thread (and its messages). The session binds to the clone. */
-  async cloneThread(options?: { sourceThreadId?: string; title?: string }): Promise<AgentControllerThreadInfo> {
+  async cloneThread(options?: {
+    sourceThreadId?: string;
+    title?: string;
+  }): Promise<CreateAgentControllerThreadResponse> {
     return this.request(this.url(`${this.base()}/threads/clone`), {
       method: 'POST',
       body: options ?? {},
@@ -987,6 +859,12 @@ export class AgentController extends BaseResource {
   async listModels(): Promise<AgentControllerAvailableModel[]> {
     const body = await this.request<{ models: AgentControllerAvailableModel[] }>(`${this.basePath()}/models`);
     return body.models;
+  }
+
+  /** List the runs in flight on this controller, across all resources. */
+  async listActiveRuns(): Promise<AgentControllerActiveRun[]> {
+    const body = await this.request<{ runs: AgentControllerActiveRun[] }>(`${this.basePath()}/active-runs`);
+    return body.runs;
   }
 
   /** Get workspace status for this agent controller. */

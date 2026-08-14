@@ -361,6 +361,21 @@ Hooks are user-configured shell commands that run at specific lifecycle events. 
 | `SubagentStart` | When a subagent begins a delegated task | No |
 | `SubagentEnd` | When a subagent finishes its delegated task | No |
 
+`SessionStart` and `SessionEnd` also describe the checkout the session is running in. When the project directory is a git worktree, both events include `worktree_path`, and `branch` and `main_repo_path` when git can resolve them. The fields are omitted entirely in a main checkout, so a hook can tell the two apart and provision or tear down per-worktree resources such as a database, a bucket, or a dev server:
+
+```json
+{
+  "session_id": "thread-abc123",
+  "cwd": "/repos/myapp-worktrees/feature",
+  "hook_event_name": "SessionEnd",
+  "worktree_path": "/repos/myapp-worktrees/feature",
+  "branch": "feature/my-branch",
+  "main_repo_path": "/repos/myapp"
+}
+```
+
+These fire on session boundaries, not on worktree creation and removal. Mastra Code detects the worktree it is started in; it does not create or delete worktrees, so a session that ends is not necessarily a worktree that is going away.
+
 `UserPromptSubmit` runs before a non-command prompt is sent to the agent. If a hook blocks, the prompt is not sent.
 
 `PreToolUse` and `PostToolUse` are emitted by the agent tool hook wrapper around tool execution. Run, permission, interrupt, and subagent events are emitted by the TUI lifecycle dispatcher.

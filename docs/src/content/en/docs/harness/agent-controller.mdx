@@ -1,25 +1,25 @@
 ---
-title: "AgentController | Harness"
+title: "Agent Controller | Harness"
 description: "Build interactive agent applications with isolated sessions, persistent threads, modes, approvals, subagents, and channels."
 packages:
   - "@mastra/core"
 ---
 
-# AgentController
+# Agent Controller
 
-:::experimental
+:::beta
 
-The [`AgentController`](/reference/agent-controller/agent-controller-class) feature is in beta stage and subject to breaking changes in minor versions until it graduates from its beta status.
+Breaking changes may occur without a major version bump until the API is stable.
 
 :::
 
 `AgentController` is a shared runtime host for interactive agent applications. It coordinates modes, models, storage, workspaces, tool approvals, subagents, and channels. Each user or active task works through an isolated [`Session`](/reference/agent-controller/session).
 
-[Mastra Code](https://code.mastra.ai) is the flagship AgentController implementation. It's a terminal-based coding agent with multi-model support, persistent conversations, and plan-then-execute workflows. Read [Building a coding agent](/guides/guide/coding-agent) for a step-by-step guide.
+[Mastra Code](https://code.mastra.ai) and [Mastra Factory](https://factory.mastra.ai) are the flagship AgentController implementations. They're coding agents with multi-model support, persistent conversations, and plan-then-execute workflows. Read [Building a coding agent](https://mastra.ai/blog/building-a-coding-agent) for a step-by-step TUI guide.
 
-## When to use the AgentController
+## When to use the Agent Controller
 
-Use the AgentController when your application needs:
+Use the Agent Controller when your application needs:
 
 - Multiple agent modes that share one conversation thread (e.g., plan → build → review)
 - A control layer between your UI and the agent loop (model switching, state persistence, thread management)
@@ -350,13 +350,54 @@ Point each platform webhook at the controller-specific route:
 /api/agent-controllers/<CONTROLLER_ID>/channels/<PLATFORM>/webhook
 ```
 
-Each external chat thread maps to one controller Session and Mastra thread. By default, new sessions use a resource ID derived from the adapter's chat-thread ID, prefixed with `channel:`. Use `resolveResourceId` to map direct messages to an existing application user or choose another memory owner. The callback only affects new threads; an existing thread keeps its stored resource ID.
+Each external chat thread maps to one controller Session and Mastra thread. By default, new sessions use a resource ID derived from the adapter's chat-thread ID, prefixed with `channel:`. Use `resolveResourceId` to map direct messages to an existing application user or choose another memory owner. The callback only affects new threads. An existing thread keeps its stored resource ID.
 
-Channel sessions are created by the controller rather than by your code, so `onSessionStart` is where you configure them. It runs once per session, after the session is bound to its mapped thread and before the first message is handled. Use it to apply a model, memory settings, or session state that a channel session would otherwise miss. Later messages in the same thread reuse the session and don't call it again. Errors are logged and swallowed so a session that can't be configured still answers the message.
+Channel sessions are created by the controller rather than by your code, so `onSessionStart` is where you configure them. It runs once per session, after the session is bound to its mapped thread and before the first message is handled. A channel session starts with controller defaults, so this is where you set its model and memory settings. Later messages in the same thread reuse the session and don't call it again. Errors are logged and swallowed so a session that can't be configured still answers the message.
+
+### Authorize and route channel sessions
+
+`onSessionStart` runs after the session exists and swallows errors, so it can't refuse a request. Use `resolveSession` when your host decides whether a session may exist. It replaces the built-in session creation and runs before any session exists. Throwing refuses the request before the controller creates a session or calls the model. Mastra logs the refusal and leaves the chat thread silent, so your authorization message never reaches the channel.
+
+```typescript
+channels: {
+  adapters: { slack: createSlackAdapter() },
+  resolveSession: async ({ controller, thread, requestContext }) => {
+    const install = await installs.authorize(requestContext.get('teamId'))
+
+    return controller.createSession({
+      resourceId: thread.resourceId,
+      scope: install.id,
+      ownerId: controller.id,
+      requestContext,
+    })
+  },
+}
+```
+
+Create the session under `thread.resourceId`. A session can only bind threads it owns, so use `resolveResourceId` if you want a different owner for the mapped thread. Sessions are get-or-create per `resourceId` and `scope`, so pass `scope` when one thread needs separate sessions per install or principal.
+
+Failures that aren't refusals (a storage outage, a bug in your resolver's dependencies) still post an error to the thread, so a broken bot doesn't look like a silent one. If you need to tell them apart in your own code, a refusal is a `ChannelSessionRejectedError` with the original error as its `cause`.
+
+`resolveSession` also runs when a user answers an approval card, with that action's request context, so a shared install revalidates the person approving rather than trusting the person who sent the original message.
+
+### Handle stale approvals
+
+An approval gate lives in memory, so every approval answered after a restart is stale. Mastra never runs the tool for a stale action. Use `onStaleToolApproval` to settle the attempt the user answered, instead of dropping it:
+
+```typescript
+channels: {
+  adapters: { slack: createSlackAdapter() },
+  onStaleToolApproval: async ({ decision, toolCallId, runId, memory }) => {
+    await runs.markInterrupted({ runId, toolCallId, decision, threadId: memory.thread })
+  },
+}
+```
+
+`runId` is the run the approval card was rendered for, which is the attempt the user answered and the one you settle against after a restart. The session's own run is passed separately as `currentRunId`, and is usually `null` or a different run by then.
 
 Controller channel sessions and auto-approval state are held in memory, so use a long-lived server. Pending approvals and live Session state don't survive process restarts. Adapters that can't render approval controls automatically run tools without an approval prompt so the run doesn't remain suspended.
 
-See [Channels](/docs/capabilities/channels/overview) for adapter setup and platform-specific webhook configuration.
+See [Channels](/docs/capabilities/channels) for adapter setup and platform-specific webhook configuration.
 
 ## Connect a UI
 
@@ -375,11 +416,11 @@ render(session.displayState.get())
 unsubscribe()
 ```
 
-Subscriptions are isolated by Session. Events from another Session on the same controller aren't delivered to this listener. Read the [Building a coding agent](/guides/guide/coding-agent) guide for a complete TUI example.
+Subscriptions are isolated by Session. Events from another Session on the same controller aren't delivered to this listener. Read the [Building a coding agent](https://mastra.ai/blog/building-a-coding-agent) guide for a complete TUI example.
 
 ## Related
 
 - [Agents](/docs/agents/overview)
-- [Workspace](/docs/workspace/overview)
+- [Workspace](/docs/workspace/sandbox)
 - [Observational memory](/docs/memory/observational-memory)
-- [Channels](/docs/capabilities/channels/overview)
+- [Channels](/docs/capabilities/channels)

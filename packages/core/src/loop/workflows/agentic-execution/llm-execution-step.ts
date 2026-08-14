@@ -7,6 +7,7 @@ import type { StructuredOutputOptions } from '../../../agent';
 import type { MessageList } from '../../../agent/message-list';
 import { TripWire } from '../../../agent/trip-wire';
 import { isSupportedLanguageModel, supportedLanguageModelSpecifications } from '../../../agent/utils';
+import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
 import { getErrorFromUnknown } from '../../../error/utils.js';
 import { mergeProviderOptions } from '../../../llm/model/provider-options';
 import { ModelRouterLanguageModel } from '../../../llm/model/router';
@@ -827,11 +828,12 @@ async function processOutputStream<OUTPUT = undefined>({
         break;
       }
 
-      case 'finish':
+      case 'finish': {
         runState.setState({
           providerOptions: chunk.payload.metadata?.providerMetadata ?? chunk.payload.providerMetadata,
           stepResult: {
             reason: chunk.payload.reason,
+            rawReason: chunk.payload.stepResult.rawReason,
             logprobs: chunk.payload.logprobs,
             warnings: responseFromModel.warnings,
             totalUsage: chunk.payload.totalUsage,
@@ -841,7 +843,41 @@ async function processOutputStream<OUTPUT = undefined>({
             request: responseFromModel.request,
           },
         });
+
+        // A provider can end the stream with finishReason 'error' without ever enqueueing
+        // an error part (e.g. Google reports MALFORMED_FUNCTION_CALL this way). Without a
+        // synthesized error the run would close silently: no error chunk, no onError, and
+        // callers could not tell this apart from a turn that simply produced no text.
+        // Route it through the same deferred-error path as a real error part so error
+        // processors still get a chance to intercept and retry.
+        if (chunk.payload.stepResult.reason === 'error' && !runState.state.hasErrored) {
+          const rawReason = chunk.payload.stepResult.rawReason;
+          const syntheticError = new MastraError({
+            id: 'AGENT_STREAM_ERROR',
+            text: rawReason
+              ? `Agent stream finished with finishReason "error" (provider reported "${rawReason}") but no error payload was provided`
+              : 'Agent stream finished with finishReason "error" but no error payload was provided',
+            domain: ErrorDomain.AGENT,
+            category: ErrorCategory.SYSTEM,
+            details: {
+              runId: chunk.runId,
+              ...(rawReason && { rawFinishReason: rawReason }),
+            },
+          });
+
+          runState.setState({
+            hasErrored: true,
+            apiError: syntheticError,
+            deferredErrorChunk: {
+              type: 'error',
+              runId: chunk.runId,
+              from: chunk.from,
+              payload: { error: syntheticError },
+            },
+          });
+        }
         break;
+      }
 
       case 'error':
         if (isAbortError(chunk.payload.error) && options?.abortSignal?.aborted) {
@@ -1058,10 +1094,9 @@ function executeStreamWithFallbackModels<T>(
       }
     }
     if (typeof finalResult === 'undefined') {
-      const lastErrMsg = lastError instanceof Error ? lastError.message : String(lastError);
-      const errorMessage = `Exhausted all fallback models. Last error: ${lastErrMsg}`;
-      logger?.error(errorMessage);
-      throw new Error(errorMessage, { cause: lastError });
+      const fatalError = lastError ?? new Error('Exhausted all fallback models without receiving a result.');
+      logger?.error('Exhausted all fallback models.', fatalError);
+      throw fatalError;
     }
     return finalResult;
   };
@@ -2350,6 +2385,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         messageId: outputStream.messageId,
         stepResult: {
           reason: stepReason,
+          ...(runState.state.stepResult?.rawReason && { rawReason: runState.state.stepResult.rawReason }),
           warnings,
           isContinued: shouldContinue,
           // Pass retry metadata for tracking

@@ -45,6 +45,10 @@ function renderSection() {
           // exactly the state in which the old cascade had something to delete.
           resourceId: 'resource-1',
           sessionEnabled: true,
+          resourceReady: true,
+          sandboxReady: true,
+          sandboxPreparing: false,
+          sandboxProgress: undefined,
           resourceEnabled: true,
           factorySessionState: { factoryProjectId: 'fp-1', projectRepositoryId },
           baseUrl: TEST_BASE_URL,

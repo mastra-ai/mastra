@@ -7,26 +7,27 @@ description: "Use AI models through Netlify."
 
 import { NetlifyLogo } from '@site/src/components/logos/NetlifyLogo';
 
+
 # <NetlifyLogo className="inline w-8 h-8 mr-2 align-middle" />Netlify
 
-Netlify AI Gateway provides unified access to multiple providers with built-in caching and observability. Access 66 models through Mastra's model router.
+Netlify AI Gateway provides unified access to multiple providers with built-in caching and observability. Access 67 models through Mastra's model router.
 
 Learn more in the [Netlify documentation](https://docs.netlify.com/build/ai-gateway/overview/).
 
 ## Usage
 
 ```typescript title="src/mastra/agents/my-agent.ts"
-import { Agent } from '@mastra/core/agent'
+import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  id: 'my-agent',
-  name: 'My Agent',
-  instructions: 'You are a helpful assistant',
-  model: 'netlify/anthropic/claude-fable-5',
-})
+  id: "my-agent",
+  name: "My Agent",
+  instructions: "You are a helpful assistant",
+  model: "netlify/anthropic/claude-fable-5"
+});
 ```
 
-:::info
+:::note
 
 Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-specific features may not be available. Check the [Netlify documentation](https://docs.netlify.com/build/ai-gateway/overview/) for details.
 
@@ -44,10 +45,11 @@ OPENAI_API_KEY=sk-...
 ANTHROPIC_API_KEY=ant-...
 ```
 
+
 ## Available models
 
 | Model |
-| - |
+|-------|
 | `anthropic/claude-fable-5` |
 | `anthropic/claude-haiku-4-5` |
 | `anthropic/claude-haiku-4-5-20251001` |
@@ -75,6 +77,7 @@ ANTHROPIC_API_KEY=ant-...
 | `gemini/gemini-3.5-flash` |
 | `gemini/gemini-3.5-flash-lite` |
 | `gemini/gemini-3.6-flash` |
+| `gemini/gemini-3.7-flash` |
 | `gemini/gemini-flash-latest` |
 | `gemini/gemini-flash-lite-latest` |
 | `openai/chat-latest` |
@@ -114,3 +117,4 @@ ANTHROPIC_API_KEY=ant-...
 | `openai/o3` |
 | `openai/o3-mini` |
 | `openai/o4-mini` |
+

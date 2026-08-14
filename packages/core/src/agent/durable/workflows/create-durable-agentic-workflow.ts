@@ -1,6 +1,4 @@
 import { z } from 'zod';
-import type { MastraScorer, MastraScorerEntry } from '../../../evals/base';
-import { runScorer } from '../../../evals/hooks';
 import type { PubSub } from '../../../events/pubsub';
 import { pruneAgentLoopSnapshot } from '../../../loop/workflows/prune-snapshot';
 import type { Mastra } from '../../../mastra';
@@ -19,8 +17,8 @@ import type {
   DurableAgenticExecutionOutput,
   DurableLLMStepOutput,
   DurableToolCallOutput,
-  SerializableScorersConfig,
 } from '../types';
+import { runDurableFinishSideEffects } from './finalize-run';
 import {
   modelConfigSchema,
   modelListEntrySchema,
@@ -28,6 +26,7 @@ import {
   baseIterationStateSchema,
   createBaseIterationStateUpdate,
   resolveDurableToolCallConcurrency,
+  executeDurableAgentScorers,
 } from './shared';
 import {
   createDurableBackgroundTaskCheckStep,
@@ -162,6 +161,7 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
       // resume never reads before persisting.
       pruneSnapshot: pruneAgentLoopSnapshot,
       validateInputs: false,
+      emitStepEvents: false,
       sharePubsub: true,
       // Internal durable-agent execution plumbing — hide workflow spans;
       // the agent/tool/model spans within still surface for users.
@@ -185,6 +185,7 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
           options: state.options,
           state: state.state,
           messageId: state.messageId,
+          requestContextEntries: state.requestContextEntries,
           stepIndex: state.iterationCount,
           agentSpanData: state.agentSpanData,
           modelSpanData: state.modelSpanData,
@@ -302,6 +303,7 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
         // resume never reads before persisting.
         pruneSnapshot: pruneAgentLoopSnapshot,
         validateInputs: false,
+        emitStepEvents: false,
         // Internal durable-agent execution plumbing — see singleIterationWorkflow.
         tracingPolicy: {
           internal: InternalSpans.WORKFLOW,
@@ -623,104 +625,30 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
 
           // Extract final text from last step
           const lastStep = state.accumulatedSteps[state.accumulatedSteps.length - 1];
-          const finalText = lastStep?.text;
+          let finalText = lastStep?.text;
 
-          // Run output processors (processOutputResult) if available
-          const registryEntry = globalRunRegistry.get(state.runId);
-          if (registryEntry?.outputProcessors?.length) {
-            try {
-              const { ProcessorRunner } = await import('../../../processors/runner');
-              const runner = new ProcessorRunner({
-                inputProcessors: registryEntry.inputProcessors ?? [],
-                outputProcessors: registryEntry.outputProcessors,
-                errorProcessors: registryEntry.errorProcessors ?? [],
-                logger: logger as any,
-                agentName: initData.agentName ?? initData.agentId,
-                processorStates: registryEntry.processorStates,
-              });
-              const outputMessageList = new MessageList();
-              outputMessageList.deserialize(state.messageListState);
-              // Forward the step's tracingContext so processor_run spans parent
-              // to the AGENT_RUN ancestor via ProcessorRunner's findParent walk.
-              await runner.runOutputProcessors(
-                outputMessageList,
-                createObservabilityContext(tracingContext),
-                requestContext ?? new RequestContext(),
-                0,
-              );
-            } catch (error) {
-              logger?.warn?.(`[DurableAgent] Error running output processors: ${error}`);
-            }
-          }
-
-          // Memory persistence (executeOnFinish equivalent)
-          const durableState = initData.state;
-          if (
-            registryEntry?.saveQueueManager &&
-            registryEntry.memory &&
-            durableState?.threadId &&
-            durableState?.resourceId &&
-            !durableState.observationalMemory &&
-            // Respect readOnly memory config ("read memory but don't save new
-            // messages"). Mirrors the non-durable executeOnFinish `!readOnlyMemory`
-            // guard and the MessageHistory output processor's readOnly check.
-            !durableState.memoryConfig?.readOnly
-          ) {
-            try {
-              const memoryMessageList = new MessageList();
-              memoryMessageList.deserialize(state.messageListState);
-
-              if (!durableState.threadExists) {
-                await registryEntry.memory.createThread?.({
-                  threadId: durableState.threadId,
-                  resourceId: durableState.resourceId,
-                  memoryConfig: durableState.memoryConfig,
-                });
-              }
-
-              await registryEntry.saveQueueManager.flushMessages(
-                memoryMessageList,
-                durableState.threadId,
-                durableState.memoryConfig,
-              );
-            } catch (error) {
-              logger?.warn?.(`[DurableAgent] Error persisting messages: ${error}`);
-            }
-          }
-
-          // Thread title generation (executeOnFinish equivalent).
-          // The non-durable `#executeOnFinish` generates a thread title from the first user
-          // message when `memory.options.generateTitle` is set. That branch was never ported
-          // to the durable path, so `generateTitle` silently never fired for durable/evented
-          // agents (and Inngest). The `generateThreadTitle` closure — parked on the registry
-          // entry during preparation, where the agent instance is in scope — runs it here.
-          //
-          // Kept OUTSIDE the `!observationalMemory` guard above: OM handles its own message
-          // persistence, but title generation is orthogonal and should still run when OM is on.
-          // Non-serializable (a closure), so like the other registry closures it only fires for
-          // in-process durable runs; cross-process engines (Inngest after a restart) skip it.
-          if (
-            registryEntry?.generateThreadTitle &&
-            durableState?.threadId &&
-            durableState?.resourceId &&
-            !durableState.memoryConfig?.readOnly
-          ) {
-            try {
-              await registryEntry.generateThreadTitle({
-                threadId: durableState.threadId,
-                resourceId: durableState.resourceId,
-                memoryConfig: durableState.memoryConfig,
-                messageListState: state.messageListState,
-                requestContext,
-                tracingContext,
-              });
-            } catch (error) {
-              logger?.warn?.(`[DurableAgent] Error generating thread title: ${error}`);
-            }
+          const finishResult = await runDurableFinishSideEffects({
+            runId: state.runId,
+            initData,
+            messageListState: state.messageListState,
+            mastra: mastra as Mastra | undefined,
+            requestContext,
+            tracingContext,
+            logger,
+            outputResult: {
+              text: finalText ?? '',
+              usage: state.accumulatedUsage,
+              finishReason: state.lastStepResult?.reason ?? 'unknown',
+              steps: state.accumulatedSteps,
+            },
+          });
+          if (lastStep && finishResult.outputText && finishResult.outputText !== (finalText ?? '')) {
+            lastStep.text = finishResult.outputText;
+            finalText = finishResult.outputText;
           }
 
           const finalOutput = {
-            messageListState: state.messageListState,
+            messageListState: finishResult.messageListState,
             messageId: state.messageId,
             stepResult: state.lastStepResult || {
               reason: 'stop',
@@ -777,107 +705,16 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
       )
       // Execute scorers (fire-and-forget, doesn't affect main result)
       .map(
-        async params => {
-          const { inputData, getInitData, mastra, requestContext, tracingContext } = params;
-          const finalOutput = inputData;
-          const initData = getInitData() as DurableAgenticWorkflowInput;
+        async ({ inputData, getInitData, mastra, requestContext, tracingContext }) => {
+          executeDurableAgentScorers({
+            initData: getInitData() as DurableAgenticWorkflowInput,
+            finalOutput: inputData,
+            mastra: mastra as Mastra | undefined,
+            requestContext,
+            tracingContext,
+          });
 
-          // If no scorers configured, skip
-          const scorers = initData.scorers as SerializableScorersConfig | undefined;
-          if (!scorers || Object.keys(scorers).length === 0) {
-            return finalOutput;
-          }
-
-          const logger = mastra?.getLogger?.();
-
-          // Reconstruct input MessageList to extract scorer input
-          const inputMessageList = new MessageList();
-          inputMessageList.deserialize(initData.messageListState);
-
-          // Build scorer input (messages before generation)
-          const scorerInput = {
-            inputMessages: inputMessageList.getPersisted.input.db(),
-            rememberedMessages: inputMessageList.getPersisted.remembered.db(),
-            systemMessages: inputMessageList.getSystemMessages(),
-            taggedSystemMessages: inputMessageList.getPersisted.taggedSystemMessages,
-          };
-
-          // Reconstruct output MessageList to extract scorer output
-          const outputMessageList = new MessageList();
-          outputMessageList.deserialize(finalOutput.messageListState);
-          const scorerOutput = outputMessageList.getPersisted.response.db();
-
-          // Create request context for scorer resolution
-          const resolveContext = requestContext ?? new RequestContext();
-
-          // Execute each scorer (fire-and-forget)
-          for (const [scorerKey, scorerEntry] of Object.entries(scorers)) {
-            const { scorerName, sampling } = scorerEntry;
-
-            try {
-              // Resolve the scorer from Mastra. We serialize scorers by name,
-              // and `getScorerById` searches by id-or-name without throwing
-              // on the common path, so try it first. Fall back to the
-              // registration-key-keyed `getScorer` for older configs.
-              let scorer: MastraScorer | undefined;
-              try {
-                scorer = (mastra as Mastra)?.getScorerById?.(scorerName) as MastraScorer | undefined;
-              } catch {
-                scorer = undefined;
-              }
-              if (!scorer) {
-                try {
-                  scorer = (mastra as Mastra)?.getScorer?.(scorerName) as MastraScorer | undefined;
-                } catch {
-                  scorer = undefined;
-                }
-              }
-
-              if (!scorer) {
-                logger?.warn?.(`Scorer ${scorerName} not found in Mastra, skipping`, {
-                  runId: initData.runId,
-                  scorerKey,
-                });
-                continue;
-              }
-
-              // Create the scorer entry expected by runScorer
-              const scorerObject: MastraScorerEntry = {
-                scorer,
-                sampling,
-              };
-
-              // Call runScorer (fire-and-forget via hooks)
-              runScorer({
-                mastra: mastra as Mastra | undefined,
-                runId: initData.runId,
-                scorerId: scorerKey,
-                scorerObject,
-                input: scorerInput,
-                output: scorerOutput,
-                requestContext: resolveContext as any,
-                entity: {
-                  id: initData.agentId,
-                  name: initData.agentName ?? initData.agentId,
-                },
-                structuredOutput: false,
-                source: 'LIVE',
-                entityType: 'AGENT',
-                threadId: initData.state?.threadId,
-                resourceId: initData.state?.resourceId,
-                ...createObservabilityContext(tracingContext),
-              });
-            } catch (error) {
-              // Log but don't fail - scorer errors shouldn't affect main execution
-              logger?.warn?.(`Error executing scorer ${scorerName}`, {
-                error,
-                runId: initData.runId,
-                scorerKey,
-              });
-            }
-          }
-
-          return finalOutput;
+          return inputData;
         },
         { id: 'execute-scorers' },
       )

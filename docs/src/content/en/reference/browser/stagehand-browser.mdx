@@ -47,8 +47,9 @@ Use stagehand_extract to get data from pages.`,
   },
   {
     name: 'viewport',
-    type: '{ width: number; height: number }',
-    description: 'Browser viewport dimensions.',
+    type: "{ width: number; height: number } | 'window'",
+    description:
+      "Browser viewport dimensions. 'window' matches the real browser window and only applies when connecting over CDP; a locally launched browser falls back to the default size.",
     isOptional: true,
     defaultValue: '{ width: 1280, height: 720 }',
   },
@@ -150,7 +151,7 @@ Use stagehand_extract to get data from pages.`,
     name: 'recording',
     type: 'BrowserRecordingOptions',
     description:
-      'Alpha option for adding browser recording tools. Provide outputDir to add browser_record and browser_record_caption to the toolset. You can also set maxDurationMs, maxWidth, and maxHeight as defaults for every recording.',
+      'Beta option for adding browser recording tools. Provide outputDir to add browser_record and browser_record_caption to the toolset. You can also set maxDurationMs, maxWidth, and maxHeight as defaults for every recording.',
     isOptional: true,
   },
   {
@@ -167,7 +168,7 @@ Use stagehand_extract to get data from pages.`,
 
 `StagehandBrowser` provides 7 AI-powered tools for browser automation.
 
-When `recording` is configured, `StagehandBrowser` also adds the alpha `browser_record` and `browser_record_caption` tools. See [Browser recording (alpha)](/docs/browser/recording).
+When `recording` is configured, `StagehandBrowser` also adds the Beta `browser_record` and `browser_record_caption` tools. See [Browser recording (Beta)](/docs/browser/overview#record-browser-sessions).
 
 Core tools:
 
@@ -414,4 +415,4 @@ Choose `AgentBrowser` for precise, reproducible automation. Choose `StagehandBro
 - [MastraBrowser](/reference/browser/mastra-browser): Base class reference
 - [AgentBrowser](/reference/browser/agent-browser): Deterministic alternative
 - [Browser overview](/docs/browser/overview): Conceptual guide
-- [Stagehand guide](/docs/browser/stagehand): Usage guide
+- [Stagehand guide](/integrations/browsers/stagehand): Usage guide

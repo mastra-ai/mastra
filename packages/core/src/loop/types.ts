@@ -41,12 +41,35 @@ import type {
   StreamChunkType,
   StreamTransportRef,
 } from '../stream/types';
-import type { RequireToolApproval, ToolPayloadTransformPolicy } from '../tools';
+import type { MCPToolExecutionContext, RequireToolApproval, ToolPayloadTransformPolicy } from '../tools';
 import type { MastraIdGenerator } from '../types';
 import type { OutputWriter } from '../workflows/types';
 import type { Workspace } from '../workspace/workspace';
 
 type StopCondition = StopConditionV5<any> | StopConditionV6<any>;
+
+/**
+ * Strategy for deciding whether a step's tool-call batch must run sequentially
+ * when an approval/suspend-capable tool is involved.
+ *
+ * - `'available'` (default): any approval/suspend tool available in the step
+ *   forces sequential execution, even if the model did not call it this step.
+ *   Conservative — preserves the historical default.
+ * - `'called'`: concurrency is resolved from the tools the model actually
+ *   called this step. A batch of only safe tools parallelizes even while an
+ *   approval/suspend tool stays registered; a batch that calls an
+ *   approval/suspend tool still runs sequentially. A run-wide
+ *   `requireToolApproval` policy still forces sequential.
+ */
+export type ToolCallConcurrencyStrategy = 'available' | 'called';
+
+/**
+ * Tool-call concurrency configuration.
+ *
+ * - `number`: the concurrency limit, using the default `'available'` strategy.
+ * - object: pick the `limit` and/or `strategy` explicitly.
+ */
+export type ToolCallConcurrency = number | { limit?: number; strategy?: ToolCallConcurrencyStrategy };
 
 /**
  * Goal configuration threaded into the loop, resolved from the agent's `goal`
@@ -216,11 +239,13 @@ export type LoopOptions<TOOLS extends ToolSet = ToolSet, OUTPUT = undefined> = {
   requireToolApproval?: RequireToolApproval;
   autoResumeSuspendedTools?: boolean;
   agentId: string;
-  toolCallConcurrency?: number;
+  toolCallConcurrency?: ToolCallConcurrency;
   agentName?: string;
   requestContext?: RequestContext;
   /** Trusted server-side signal for this loop's FGA checks. */
   actor?: ActorSignal;
+  /** MCP protocol context forwarded to tools executed by this loop. */
+  mcp?: MCPToolExecutionContext;
   methodType: ModelMethodType;
   /**
    * Maximum number of processor-triggered retries allowed for this generation.

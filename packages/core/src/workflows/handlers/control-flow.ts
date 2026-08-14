@@ -34,9 +34,18 @@ import {
   runCountDeprecationMessage,
   getResumeLabelsByStepId,
   getSingleStepEntryId,
+  omitPriorCompletionFields,
   resolveForeachConcurrency,
 } from '../utils';
 import type { ExecuteStepParams } from './step';
+
+function publishStepEvent(
+  engine: DefaultExecutionEngine,
+  pubsub: PubSub,
+  ...args: Parameters<PubSub['publish']>
+): Promise<void> {
+  return engine.options.emitStepEvents === false ? Promise.resolve() : pubsub.publish(...args);
+}
 
 /**
  * Runs one child of a parallel/conditional block by dispatching on its step type
@@ -950,14 +959,14 @@ export async function executeForeach(
     executionContext,
   });
 
-  await pubsub.publish(`workflow.events.v2.${runId}`, {
+  await publishStepEvent(engine, pubsub, `workflow.events.v2.${runId}`, {
     type: 'watch',
     runId,
     data: {
       type: 'workflow-step-start',
       payload: {
         id: stepId,
-        ...stepInfo,
+        ...omitPriorCompletionFields(stepInfo),
         status: 'running',
       },
     },
@@ -1004,7 +1013,7 @@ export async function executeForeach(
     iterationStatus: 'success' | 'suspended' | 'failed',
     iterationOutput?: unknown,
   ) =>
-    pubsub.publish(`workflow.events.v2.${runId}`, {
+    publishStepEvent(engine, pubsub, `workflow.events.v2.${runId}`, {
       type: 'watch',
       runId,
       data: {
@@ -1254,7 +1263,7 @@ export async function executeForeach(
       errorOptions: { error: finalErrorResult.error },
     });
 
-    await pubsub.publish(`workflow.events.v2.${runId}`, {
+    await publishStepEvent(engine, pubsub, `workflow.events.v2.${runId}`, {
       type: 'watch',
       runId,
       data: {
@@ -1266,7 +1275,7 @@ export async function executeForeach(
       },
     });
 
-    await pubsub.publish(`workflow.events.v2.${runId}`, {
+    await publishStepEvent(engine, pubsub, `workflow.events.v2.${runId}`, {
       type: 'watch',
       runId,
       data: {
@@ -1290,7 +1299,7 @@ export async function executeForeach(
       },
     });
 
-    await pubsub.publish(`workflow.events.v2.${runId}`, {
+    await publishStepEvent(engine, pubsub, `workflow.events.v2.${runId}`, {
       type: 'watch',
       runId,
       data: {
@@ -1302,7 +1311,7 @@ export async function executeForeach(
       },
     });
 
-    await pubsub.publish(`workflow.events.v2.${runId}`, {
+    await publishStepEvent(engine, pubsub, `workflow.events.v2.${runId}`, {
       type: 'watch',
       runId,
       data: {
@@ -1328,7 +1337,7 @@ export async function executeForeach(
       endOptions: { output: foreachIndexObj[foreachIndex] },
     });
 
-    await pubsub.publish(`workflow.events.v2.${runId}`, {
+    await publishStepEvent(engine, pubsub, `workflow.events.v2.${runId}`, {
       type: 'watch',
       runId,
       data: {
@@ -1362,7 +1371,7 @@ export async function executeForeach(
     } as StepSuspended<any, any, any>;
   }
 
-  await pubsub.publish(`workflow.events.v2.${runId}`, {
+  await publishStepEvent(engine, pubsub, `workflow.events.v2.${runId}`, {
     type: 'watch',
     runId,
     data: {
@@ -1376,7 +1385,7 @@ export async function executeForeach(
     },
   });
 
-  await pubsub.publish(`workflow.events.v2.${runId}`, {
+  await publishStepEvent(engine, pubsub, `workflow.events.v2.${runId}`, {
     type: 'watch',
     runId,
     data: {

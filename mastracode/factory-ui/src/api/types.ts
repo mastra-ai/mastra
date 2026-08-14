@@ -28,6 +28,7 @@ import type {
   WorkspaceChangeStatus,
   WorkspaceDiff,
   WorkspaceFile,
+  WorkspaceFilesListing,
   WorkspaceRenderedEntry,
   WorkspaceRenderedListing,
 } from '@mastra/factory/routes/fs';
@@ -51,6 +52,7 @@ export type {
   WorkspaceChangeStatus,
   WorkspaceDiff,
   WorkspaceFile,
+  WorkspaceFilesListing,
   WorkspaceRenderedEntry,
   WorkspaceRenderedListing,
 };
@@ -74,6 +76,18 @@ export interface ModelPacksResponse {
 
 export interface OMResponse {
   config: OMConfigInfo;
+}
+
+/** A bundled Factory skill (`GET /web/factory/skills`). */
+export interface FactorySkillInfo {
+  name: string;
+  description: string;
+  /** SKILL.md body with the frontmatter removed. */
+  content: string;
+}
+
+export interface FactorySkillsResponse {
+  skills: FactorySkillInfo[];
 }
 
 // ── Mutation request bodies ────────────────────────────────────────────────

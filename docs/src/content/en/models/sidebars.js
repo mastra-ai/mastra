@@ -271,6 +271,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/coralbricks',
+          label: 'CoralBricks',
+        },
+        {
+          type: 'doc',
           id: 'providers/cortecs',
           label: 'Cortecs',
         },
@@ -283,6 +288,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/crossmodel',
           label: 'CrossModel',
+        },
+        {
+          type: 'doc',
+          id: 'providers/crusoe',
+          label: 'Crusoe',
         },
         {
           type: 'doc',
@@ -318,6 +328,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/ebcloud',
           label: 'EBCloud',
+        },
+        {
+          type: 'doc',
+          id: 'providers/edenai',
+          label: 'Eden AI',
         },
         {
           type: 'doc',
@@ -498,6 +513,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/meganova',
           label: 'Meganova',
+        },
+        {
+          type: 'doc',
+          id: 'providers/merge-gateway',
+          label: 'Merge Gateway',
         },
         {
           type: 'doc',

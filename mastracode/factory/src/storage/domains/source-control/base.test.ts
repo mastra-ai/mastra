@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { FactoryProjectsStorage } from '../projects/base.js';
 import { SourceControlStorage } from './base.js';
 import type { ProjectRepository, SourceControlStorageHandle } from './base.js';
+import { SourceControlStorageInMemory } from './inmemory.js';
 
 const repositoryInput = {
   externalId: 'repository-34',
@@ -438,6 +439,89 @@ describe('SourceControlStorage', () => {
     );
   });
 
+  it('records first_message_at write-once via markFirstMessage', async () => {
+    const project = await createProject();
+    const link = await linkRepository({ factoryProjectId: project.id });
+    const session = await github.sessions.create({
+      sessionId: '00000000-0000-4000-8000-000000000003',
+      projectRepositoryId: link.id,
+      orgId: 'org-1',
+      userId: 'user-1',
+      branch: 'user/session-00000000-0000-4000-8000-000000000003',
+      baseBranch: 'main',
+    });
+    expect(session.firstMessageAt).toBeNull();
+
+    await github.sessions.markFirstMessage({ sessionId: session.sessionId });
+    const marked = await github.sessions.getBySessionId(session.sessionId);
+    expect(marked?.firstMessageAt).toBeInstanceOf(Date);
+
+    // A later call must not move the timestamp: the guarded update only
+    // matches rows where the column is still NULL.
+    await new Promise(resolve => setTimeout(resolve, 5));
+    await github.sessions.markFirstMessage({ sessionId: session.sessionId });
+    const again = await github.sessions.getBySessionId(session.sessionId);
+    expect(again?.firstMessageAt?.getTime()).toBe(marked!.firstMessageAt!.getTime());
+
+    // Sessions without a source-control row are a zero-row no-op.
+    await expect(github.sessions.markFirstMessage({ sessionId: 'missing-session' })).resolves.toBeUndefined();
+  });
+
+  it('records first_meaningful_exec_at write-once via markFirstMeaningfulExec', async () => {
+    const project = await createProject();
+    const link = await linkRepository({ factoryProjectId: project.id });
+    const session = await github.sessions.create({
+      sessionId: '00000000-0000-4000-8000-000000000004',
+      projectRepositoryId: link.id,
+      orgId: 'org-1',
+      userId: 'user-1',
+      branch: 'user/session-00000000-0000-4000-8000-000000000004',
+      baseBranch: 'main',
+    });
+    expect(session.firstMeaningfulExecAt).toBeNull();
+
+    await github.sessions.markFirstMeaningfulExec({ sessionId: session.sessionId });
+    const marked = await github.sessions.getBySessionId(session.sessionId);
+    expect(marked?.firstMeaningfulExecAt).toBeInstanceOf(Date);
+
+    // A later call must not move the timestamp: the guarded update only
+    // matches rows where the column is still NULL.
+    await new Promise(resolve => setTimeout(resolve, 5));
+    await github.sessions.markFirstMeaningfulExec({ sessionId: session.sessionId });
+    const again = await github.sessions.getBySessionId(session.sessionId);
+    expect(again?.firstMeaningfulExecAt?.getTime()).toBe(marked!.firstMeaningfulExecAt!.getTime());
+
+    // Sessions without a source-control row are a zero-row no-op.
+    await expect(github.sessions.markFirstMeaningfulExec({ sessionId: 'missing-session' })).resolves.toBeUndefined();
+  });
+
+  it('records materialized_at write-once via sessions.markMaterialized', async () => {
+    const project = await createProject();
+    const link = await linkRepository({ factoryProjectId: project.id });
+    const session = await github.sessions.create({
+      sessionId: '00000000-0000-4000-8000-000000000005',
+      projectRepositoryId: link.id,
+      orgId: 'org-1',
+      userId: 'user-1',
+      branch: 'user/session-00000000-0000-4000-8000-000000000005',
+      baseBranch: 'main',
+    });
+    expect(session.materializedAt).toBeNull();
+
+    await github.sessions.markMaterialized({ id: session.id });
+    const marked = await github.sessions.getBySessionId(session.sessionId);
+    expect(marked?.materializedAt).toBeInstanceOf(Date);
+
+    // A resume (second markMaterialized call) must not move the timestamp:
+    // the guarded update only matches rows where the column is still NULL.
+    // Without this, `materialize_s = materialized_at - created_at` counts the
+    // entire idle-and-resume duration as initial-materialize latency.
+    await new Promise(resolve => setTimeout(resolve, 5));
+    await github.sessions.markMaterialized({ id: session.id });
+    const again = await github.sessions.getBySessionId(session.sessionId);
+    expect(again?.materializedAt?.getTime()).toBe(marked!.materializedAt!.getTime());
+  });
+
   it('clears every owned source-control collection', async () => {
     const project = await createProject();
     const link = await linkRepository({ factoryProjectId: project.id });
@@ -454,5 +538,29 @@ describe('SourceControlStorage', () => {
 
     expect(await github.installations.list({ orgId: 'org-1' })).toEqual([]);
     expect(await github.projectRepositories.get({ orgId: 'org-1', id: link.id })).toBeNull();
+  });
+});
+
+describe('SourceControlStorageInMemory sessions.markMaterialized', () => {
+  it('records materialized_at write-once', async () => {
+    const store = new SourceControlStorageInMemory();
+    const session = await store.sessions.create({
+      sessionId: '00000000-0000-4000-8000-00000000aaaa',
+      projectRepositoryId: 'proj-1',
+      orgId: 'org-1',
+      userId: 'user-1',
+      branch: 'user/session-00000000-0000-4000-8000-00000000aaaa',
+      baseBranch: 'main',
+    });
+    expect(session.materializedAt).toBeNull();
+
+    await store.sessions.markMaterialized({ id: session.id });
+    const first = await store.sessions.getBySessionId(session.sessionId);
+    expect(first?.materializedAt).toBeInstanceOf(Date);
+
+    await new Promise(resolve => setTimeout(resolve, 5));
+    await store.sessions.markMaterialized({ id: session.id });
+    const second = await store.sessions.getBySessionId(session.sessionId);
+    expect(second?.materializedAt?.getTime()).toBe(first!.materializedAt!.getTime());
   });
 });

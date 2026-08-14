@@ -876,7 +876,8 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
   }
 
   async registerCustomApiRoutes(): Promise<void> {
-    if (!(await this.buildCustomRouteHandler())) return;
+    const routes = await this.registerSchemaApiRoutes();
+    if (!(await this.buildCustomRouteHandler(routes))) return;
 
     const server = this;
     this.app.use(async function mastraCustomRouteDispatcher(ctx: Context, next: Next) {

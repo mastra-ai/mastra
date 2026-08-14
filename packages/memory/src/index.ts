@@ -720,12 +720,12 @@ export class Memory extends MastraMemory {
     memoryConfig,
   }: {
     id: string;
-    title: string;
-    metadata: Record<string, unknown>;
+    title?: string;
+    metadata?: Record<string, unknown>;
     memoryConfig?: MemoryConfigInternal;
   }): Promise<StorageThreadType> {
     const memoryStore = await this.getMemoryStore();
-    const updatedThread = await memoryStore.updateThread({
+    const updatedThread = await memoryStore.patchThread({
       id,
       title,
       metadata,
@@ -871,9 +871,8 @@ export class Memory extends MastraMemory {
             throw new Error(`Thread ${threadId} not found`);
           }
 
-          await memoryStore.updateThread({
+          await memoryStore.patchThread({
             id: threadId,
-            title: thread.title || '',
             metadata: {
               ...thread.metadata,
               workingMemory,
@@ -1023,9 +1022,8 @@ ${workingMemory}`;
           throw new Error(`Thread ${threadId} not found`);
         }
 
-        await memoryStore.updateThread({
+        await memoryStore.patchThread({
           id: threadId,
-          title: thread.title || '',
           metadata: {
             ...thread.metadata,
             workingMemory,

@@ -32,6 +32,7 @@ import type {
 import {
   validateStepInput,
   createDeprecationProxy,
+  omitPriorCompletionFields,
   runCountDeprecationMessage,
   validateStepResumeData,
   validateStepSuspendData,
@@ -86,7 +87,7 @@ export async function executeStep(
     abortController,
     requestContext,
     actor,
-    skipEmits = false,
+    skipEmits: skipEmitsParam = false,
     outputWriter,
     disableScorers,
     serializedStepGraph,
@@ -94,6 +95,7 @@ export async function executeStep(
     perStep,
     ...rest
   } = params;
+  const skipEmits = skipEmitsParam || engine.options.emitStepEvents === false;
   const observabilityContext = resolveObservabilityContext(rest);
 
   const stepCallId = randomUUID();
@@ -516,7 +518,10 @@ export async function executeStep(
       await emitStepResultEvents({
         stepId: step.id,
         stepCallId,
-        execResults: { ...stepInfo, ...execResults } as StepResult<any, any, any, any>,
+        // The persisted step result keeps the full prior-result spread (see
+        // `stepResult` below); the emitted event must not re-publish the
+        // previous completion's state blobs alongside the fresh execResults.
+        execResults: { ...omitPriorCompletionFields(stepInfo), ...execResults } as StepResult<any, any, any, any>,
         pubsub,
         runId,
       });

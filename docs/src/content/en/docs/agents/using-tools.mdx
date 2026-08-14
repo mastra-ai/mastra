@@ -10,7 +10,7 @@ import TabItem from "@theme/TabItem";
 
 # Tools
 
-Agents use tools to call APIs, query databases, or run custom functions from your codebase. Tools give agents capabilities beyond language generation by providing structured access to data and performing clearly defined operations. You can also load tools from remote [MCP servers](/docs/mcp/overview) to expand an agent's capabilities.
+Agents use tools to call APIs or query databases. They can also run custom functions from your codebase. Tools give agents capabilities beyond language generation by providing structured access to data and performing clearly defined operations. You can also load tools from remote [MCP servers](/docs/mcp/overview) to expand an agent's capabilities.
 
 <Inject>
   **For AI agents:** Run `npx mastra api tool execute weather-tool '{"location":"San Francisco"}'` to test this tool directly instead of writing a temporary script. The command requires a running Mastra server; start the local server with `npx mastra dev`, or pass the reachable server's base URL with `--url`. Run `npx mastra api tool execute --schema` before constructing different input. Install Mastra's skill with `npx skills add mastra-ai/skills --skill mastra` for complete API CLI discovery, targeting, schema, authentication, and error-handling guidance.
@@ -301,11 +301,48 @@ Use `transform` when a tool returns raw data your application needs, but browser
 
 If a transform is configured and it fails, Mastra doesn't fall back to the raw payload for display or transcript targets. Input deltas are suppressed when no safe `inputDelta` transform is available.
 
-See the [`createTool()` reference](/reference/tools/create-tool#example-with-transform) for a `transform` example. For shared rules across several tools, configure the agent-level `transform` policy in the [`Agent` constructor](/reference/agents/agent#constructor-parameters).
+The following example redacts a secret from both targets:
+
+```typescript title="src/mastra/tools/customer-tool.ts"
+import { createTool } from '@mastra/core/tools'
+import { z } from 'zod'
+
+export const customerTool = createTool({
+  id: 'lookup-customer',
+  description: 'Looks up a customer by id',
+  inputSchema: z.object({
+    customerId: z.string(),
+  }),
+  outputSchema: z.object({
+    ssn: z.string(),
+  }),
+  execute: async ({ customerId }) => {
+    // const response = await fetch(`https://your-crm.example.com/customers/${customerId}`)
+    // const { ssn } = await response.json()
+    return {
+      ssn: '123-45-6789',
+    }
+  },
+  // highlight-start
+  transform: {
+    display: {
+      output: () => ({ ssn: '***-**-****' }),
+    },
+    transcript: {
+      output: () => ({ ssn: '***-**-****' }),
+    },
+  },
+  // highlight-end
+})
+```
+
+Your application code still receives the raw `ssn` from the tool. Browser-facing streams get the `display` output, and user-visible transcript messages get the `transcript` output.
+
+For more phases, including `input`, `inputDelta`, `error`, `approval`, `suspend`, and `resume`, see the [`createTool()` reference](/reference/tools/create-tool#example-with-transform). For shared rules across several tools, configure the agent-level `transform` policy in the [`Agent` constructor](/reference/agents/agent#constructor-parameters).
 
 ## Run logic around tool calls
 
-Use `hooks` to run custom logic before and after every tool call an agent makes. Hooks apply to all tool sources: assigned tools, memory tools, toolsets, client tools, agent and workflow tools, and [workspace tools](/docs/workspace/overview#tool-hooks). Common uses include logging, auditing, input validation, and blocking specific calls.
+Use `hooks` to run custom logic before and after every tool call an agent makes. Hooks apply to all tool sources: assigned tools, memory tools, toolsets, client tools, agent and workflow tools, and [workspace tools](/reference/workspace/workspace-class#tool-hooks). Common uses include logging, auditing, input validation, and blocking specific calls.
 
 ```typescript title="src/mastra/agents/support-agent.ts"
 import { Agent } from '@mastra/core/agent'
@@ -369,7 +406,7 @@ Agent-level and per-execution hooks merge per key: passing only `beforeToolCall`
 
 Tools support lifecycle hooks that allow you to monitor different stages of tool execution during streaming. These hooks are particularly useful for logging or analytics.
 
-For generic `writer` API usage, see [Streaming](/guides/concepts/streaming#writer-api).
+For generic `writer` API usage, see [Streaming](/docs/guides/streaming#writer-api).
 
 ### Available Hooks
 
@@ -485,16 +522,18 @@ Note that for subagents, you'll see two different identifiers in stream response
 
 Mastra includes agent-agnostic built-in tools in `@mastra/core/tools` that add interactive and organizational capabilities to any agent.
 
-| Tool | Purpose |
-| - | - |
-| `ask_user` | Ask the user a question and wait for their answer |
-| `submit_plan` | Submit a plan file for user approval |
-| `task_write` | Create or replace a structured task list |
-| `task_update` | Update one tracked task by ID |
-| `task_complete` | Mark one tracked task completed |
-| `task_check` | Check task list completion status |
-| `webSearchTool` | Run provider-native web search with the active model |
-| `webFetchTool` | Fetch a web page by URL and return its text content |
+Each tool has two names: the export you import, and the tool ID the model sees in tool calls, traces, and `toolName` fields.
+
+| Export | Tool ID | Purpose |
+| - | - | - |
+| `askUserTool` | `ask_user` | Ask the user a question and wait for their answer |
+| `submitPlanTool` | `submit_plan` | Submit a plan file for user approval |
+| `taskWriteTool` | `task_write` | Create or replace a structured task list |
+| `taskUpdateTool` | `task_update` | Update one tracked task by ID |
+| `taskCompleteTool` | `task_complete` | Mark one tracked task completed |
+| `taskCheckTool` | `task_check` | Check task list completion status |
+| `webSearchTool` | `<provider.defined>` | Run the active provider's native web search |
+| `webFetchTool` | `web_fetch` | Fetch a web page by URL and return its text content |
 
 ### Use provider web search
 
@@ -516,6 +555,8 @@ export const researchAgent = new Agent({
 ```
 
 `webSearchTool` supports OpenAI, Anthropic, Google Gemini, and xAI models. If Mastra can't infer one of those providers from the active model, the agent run fails with a `MastraError`.
+
+The resolved tool ID comes from the provider: `openai.web_search`, `anthropic.web_search_20250305`, `google.google_search`, or `xai.web_search`.
 
 The `search` key is only the agent-local tool name. Use any key. The `webSearchTool` value tells Mastra to use provider web search.
 

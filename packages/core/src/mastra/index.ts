@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Agent } from '../agent';
 import { createDurableAgent } from '../agent/durable/create-durable-agent';
+import { getActiveDurableAgentWorkflowExecutions } from '../agent/durable/run-registry';
 import { agentThreadStreamRuntime } from '../agent/thread-stream-runtime';
 import type { DurableAgentLike } from '../agent/types';
 import { isDurableAgentLike } from '../agent/types';
@@ -74,16 +75,17 @@ import { OrchestrationWorker, SchedulerWorker, BackgroundTaskWorker } from '../w
 import type { MastraWorker, WorkerDeps } from '../worker';
 import type { AnyWorkflow, Workflow } from '../workflows';
 import { normalizeWorkflowBuilderDefinition } from '../workflows/builder';
-import { WorkflowEventProcessor } from '../workflows/evented/workflow-event-processor';
-import { computeNextFireAt } from '../workflows/scheduler';
-import type { WorkflowScheduleConfig, SchedulerConfig, Scheduler } from '../workflows/scheduler';
-import type { StoredWorkflowGraph, WorkflowRegistryIndex, WorkflowRegistrySchemas } from '../workflows/stored';
+import type { WorkflowBuilderDefinitionInput } from '../workflows/builder';
+import type { DynamicWorkflowGraph, WorkflowRegistryIndex, WorkflowRegistrySchemas } from '../workflows/dynamic';
 import {
-  assertValidStoredWorkflow,
+  assertValidDynamicWorkflow,
   collectNestedWorkflowIds,
   rehydrateWorkflow,
   toJsonSchemaOrUndefined,
-} from '../workflows/stored';
+} from '../workflows/dynamic';
+import { WorkflowEventProcessor } from '../workflows/evented/workflow-event-processor';
+import { computeNextFireAt } from '../workflows/scheduler';
+import type { WorkflowScheduleConfig, SchedulerConfig, Scheduler } from '../workflows/scheduler';
 import type { AnyWorkspace, RegisteredWorkspace, Workspace } from '../workspace';
 import {
   declaredSchedulesOf,
@@ -445,10 +447,9 @@ export interface Config<
    * Maps event topics to handler functions for event-driven architectures.
    */
   events?: {
-    [topic: string]: (
-      event: Event,
-      cb?: () => Promise<void>,
-    ) => Promise<void> | ((event: Event, cb?: () => Promise<void>) => Promise<void>)[];
+    // Listeners receive only the event. Acknowledgement is handled for them:
+    // the delivery is acked once the listener resolves and nacked if it throws.
+    [topic: string]: ((event: Event) => Promise<void> | void) | ((event: Event) => Promise<void> | void)[];
   };
 
   /**
@@ -794,11 +795,11 @@ export class Mastra<
   // must not double-subscribe the same listener.
   #userEventSubscriptions: Array<{
     topic: string;
-    cb: (event: Event, ack?: () => Promise<void>) => Promise<void>;
+    cb: EventCallback;
   }> = [];
 
   #events: {
-    [topic: string]: ((event: Event, cb?: () => Promise<void>) => Promise<void>)[];
+    [topic: string]: ((event: Event) => Promise<void> | void)[];
   } = {};
   #internalMastraWorkflows: Record<string, AnyWorkflow> = {};
   // Tracks registration timestamps for run-scoped internal workflows so a lazy
@@ -4598,7 +4599,7 @@ export class Mastra<
 
   /**
    * Removes a workflow from the Mastra instance by its key or ID.
-   * Used when stored workflows are updated/deleted so subsequent saves can
+   * Used when dynamic workflows are updated/deleted so subsequent saves can
    * re-register the same id cleanly.
    *
    * Note: this only clears the live in-process registration. In-flight runs
@@ -4638,15 +4639,15 @@ export class Mastra<
 
   /**
    * Returns how a workflow was registered — `'code'` for statically declared
-   * or `addWorkflow()`-added workflows, `'stored'` for anything added via
-   * `addStoredWorkflow()` (either at boot or through the HTTP/SDK surface).
+   * or `addWorkflow()`-added workflows, `'dynamic'` for anything added via
+   * `addDynamicWorkflow()` (either at boot or through the HTTP/SDK surface).
    * Returns `undefined` if no workflow is registered under that key/id.
    *
-   * Reads `workflow.origin`, which is set to `'stored'` by `rehydrateWorkflow`
+   * Reads `workflow.origin`, which is set to `'dynamic'` by `rehydrateWorkflow`
    * at construction time and defaults to `'code'` otherwise. Used by the HTTP
-   * layer to surface a visual distinction (e.g. a "Stored" badge in Studio).
+   * layer to surface a visual distinction (e.g. a "Dynamic" badge in Studio).
    */
-  public getWorkflowOrigin(keyOrId: string): 'code' | 'stored' | undefined {
+  public getWorkflowOrigin(keyOrId: string): 'code' | 'dynamic' | undefined {
     const workflows = this.#workflows as Record<string, AnyWorkflow>;
     const workflow = workflows[keyOrId] ?? Object.values(workflows).find(wf => wf?.id === keyOrId);
     return workflow?.origin;
@@ -4727,7 +4728,7 @@ export class Mastra<
     }
   }
 
-  #replaceStoredWorkflow(workflow: AnyWorkflow, key: string): void {
+  #replaceDynamicWorkflow(workflow: AnyWorkflow, key: string): void {
     workflow.__registerMastra(this);
     workflow.__registerPrimitives({
       logger: this.getLogger(),
@@ -4743,7 +4744,7 @@ export class Mastra<
   }
 
   /**
-   * Flattens this instance's registries into the index the stored-workflow
+   * Flattens this instance's registries into the index the dynamic-workflow
    * validation core resolves references and schemas against. Registered keys
    * and canonical ids both count as valid references. Schemas are converted
    * best-effort — an unconvertible schema degrades to "unknown", never to a
@@ -4780,12 +4781,12 @@ export class Mastra<
   /**
    * Persist a static workflow definition to storage and live-register it on
    * this Mastra instance so it becomes immediately runnable. The same path is
-   * used by `loadStoredWorkflows()` at boot to re-materialize previously saved
+   * used by `loadDynamicWorkflows()` at boot to re-materialize previously saved
    * workflows.
    *
    * @example
    * ```typescript
-   * await mastra.addStoredWorkflow({
+   * await mastra.addDynamicWorkflow({
    *   id: 'cli-weather-v1',
    *   inputSchema:  { type: 'object', properties: { location: { type: 'string' } }, required: ['location'] },
    *   outputSchema: { type: 'object', properties: { report:   { type: 'string' } }, required: ['report'] },
@@ -4796,12 +4797,12 @@ export class Mastra<
    * await run.start({ inputData: { location: 'Helsinki' } });
    * ```
    */
-  public async addStoredWorkflow(def: StoredWorkflowGraph): Promise<void> {
-    await this.addStoredWorkflows([def]);
+  public async addDynamicWorkflow(def: DynamicWorkflowGraph | WorkflowBuilderDefinitionInput): Promise<void> {
+    await this.addDynamicWorkflows([def]);
   }
 
   /**
-   * Persist and live-register a set of stored workflow definitions that depend
+   * Persist and live-register a set of dynamic workflow definitions that depend
    * on each other — typically a root workflow plus the helper workflows it
    * nests, none of which exist yet.
    *
@@ -4820,37 +4821,39 @@ export class Mastra<
    *   one residual window where rows can be partially written; the registry is
    *   still rolled back, and the orphaned rows are inert until the next boot.
    *
-   * `addStoredWorkflow()` is the single-member case.
+   * `addDynamicWorkflow()` is the single-member case.
    *
    * @example
    * ```typescript
-   * await mastra.addStoredWorkflows([
+   * await mastra.addDynamicWorkflows([
    *   { id: 'lookup-first-customer', ... },  // helper — order is derived, not assumed
    *   { id: 'parallel-customer-lookup', ... }, // root, nests the helper above
    * ]);
    * ```
    */
-  public async addStoredWorkflows(defs: readonly StoredWorkflowGraph[]): Promise<void> {
+  public async addDynamicWorkflows(
+    defs: readonly (DynamicWorkflowGraph | WorkflowBuilderDefinitionInput)[],
+  ): Promise<void> {
     if (defs.length === 0) return;
 
     const seen = new Set<string>();
     for (const def of defs) {
       if (seen.has(def.id)) {
         throw new Error(
-          `Stored workflow bundle contains more than one definition with id "${def.id}". Ids must be unique within a bundle.`,
+          `Dynamic workflow bundle contains more than one definition with id "${def.id}". Ids must be unique within a bundle.`,
         );
       }
       seen.add(def.id);
     }
 
-    // Save-path is strict (boot-time load is lenient — see #loadStoredWorkflows).
+    // Save-path is strict (boot-time load is lenient — see #loadDynamicWorkflows).
     // Normalization coerces the wire shape; one validation call per member
     // covers structure, JSON-Schema keywords, references, and schema-flow.
     const members = defs.map(def => ({
-      def,
       normalized: normalizeWorkflowBuilderDefinition({
         id: def.id,
         description: def.description,
+        metadata: def.metadata,
         inputSchema: def.inputSchema,
         outputSchema: def.outputSchema,
         stateSchema: def.stateSchema,
@@ -4862,7 +4865,7 @@ export class Mastra<
     // Members may nest each other, so the index every member validates against
     // is the live registries plus the bundle itself — not the registry alone.
     const index = this.#buildWorkflowRegistryIndex();
-    const bundleIds = new Set(members.map(member => member.def.id));
+    const bundleIds = new Set(members.map(member => member.normalized.id));
     for (const { normalized } of members) {
       (index.workflows ??= {})[normalized.id] = {
         inputSchema: normalized.inputSchema,
@@ -4870,19 +4873,19 @@ export class Mastra<
       } as WorkflowRegistrySchemas;
     }
     for (const { normalized } of members) {
-      assertValidStoredWorkflow(normalized, index);
+      assertValidDynamicWorkflow(normalized, index);
     }
 
     // Hydration resolves nested workflows through the live registry, so a
     // member cannot be hydrated before the bundle members it nests.
     const ordered: typeof members = [];
-    const remaining = new Map(members.map(member => [member.def.id, member] as const));
+    const remaining = new Map(members.map(member => [member.normalized.id, member] as const));
     const hydrated = new Set<string>();
     let progress = true;
     while (remaining.size > 0 && progress) {
       progress = false;
       for (const [id, member] of Array.from(remaining)) {
-        const pending = Array.from(collectNestedWorkflowIds(member.def.graph)).filter(
+        const pending = Array.from(collectNestedWorkflowIds(member.normalized.graph)).filter(
           dependency => dependency !== id && bundleIds.has(dependency) && !hydrated.has(dependency),
         );
         if (pending.length > 0) continue;
@@ -4894,7 +4897,7 @@ export class Mastra<
     }
     if (remaining.size > 0) {
       throw new Error(
-        `Stored workflow bundle has a circular nested-workflow dependency among: ${Array.from(remaining.keys())
+        `Dynamic workflow bundle has a circular nested-workflow dependency among: ${Array.from(remaining.keys())
           .sort()
           .join(', ')}.`,
       );
@@ -4905,9 +4908,9 @@ export class Mastra<
     const registry = this.#workflows as Record<string, AnyWorkflow>;
     const priorWorkflows = new Map<string, AnyWorkflow | undefined>();
     const priorHiddenKeys = new Set<string>();
-    for (const { def } of ordered) {
-      priorWorkflows.set(def.id, registry[def.id]);
-      if (this.#hiddenWorkflowKeys.has(def.id)) priorHiddenKeys.add(def.id);
+    for (const { normalized } of ordered) {
+      priorWorkflows.set(normalized.id, registry[normalized.id]);
+      if (this.#hiddenWorkflowKeys.has(normalized.id)) priorHiddenKeys.add(normalized.id);
     }
     const restoreRegistry = () => {
       for (const [id, prior] of priorWorkflows) {
@@ -4918,23 +4921,23 @@ export class Mastra<
     };
 
     try {
-      for (const { def } of ordered) {
-        const { workflow } = await rehydrateWorkflow(def, this);
-        this.#replaceStoredWorkflow(workflow as AnyWorkflow, def.id);
+      for (const { normalized } of ordered) {
+        const { workflow } = await rehydrateWorkflow(normalized, this);
+        this.#replaceDynamicWorkflow(workflow as AnyWorkflow, normalized.id);
       }
 
       const store = await this.#storage?.getStore('workflowDefinitions');
       if (store) {
-        for (const { def } of ordered) {
+        for (const { normalized } of ordered) {
           await store.upsert({
-            id: def.id,
-            description: def.description,
-            metadata: def.metadata,
-            inputSchema: def.inputSchema,
-            outputSchema: def.outputSchema,
-            stateSchema: def.stateSchema,
-            requestContextSchema: def.requestContextSchema,
-            graph: def.graph,
+            id: normalized.id,
+            description: normalized.description,
+            metadata: normalized.metadata,
+            inputSchema: normalized.inputSchema,
+            outputSchema: normalized.outputSchema,
+            stateSchema: normalized.stateSchema,
+            requestContextSchema: normalized.requestContextSchema,
+            graph: normalized.graph,
           });
         }
       }
@@ -4951,7 +4954,7 @@ export class Mastra<
    * the rest.
    * @internal
    */
-  async #loadStoredWorkflows(): Promise<void> {
+  async #loadDynamicWorkflows(): Promise<void> {
     const store = await this.#storage?.getStore('workflowDefinitions');
     if (!store) return;
 
@@ -4996,20 +4999,20 @@ export class Mastra<
             // Lenient at boot (save path is strict): degrade to z.any() + warn.
             {
               onUnsupportedSchema: 'warn',
-              onUnsupported: message => this.#logger?.warn?.(`Stored workflow "${def.id}": ${message}`),
+              onUnsupported: message => this.#logger?.warn?.(`Dynamic workflow "${def.id}": ${message}`),
             },
           );
           this.addWorkflow(workflow as AnyWorkflow, def.id);
           loaded.add(def.id);
         } catch (error) {
-          this.#logger?.error?.(`Failed to load stored workflow "${def.id}"`, { error });
+          this.#logger?.error?.(`Failed to load dynamic workflow "${def.id}"`, { error });
         }
       }
     }
     if (remaining.size > 0) {
       const stuck = Array.from(remaining.keys()).join(', ');
       this.#logger?.error?.(
-        `Failed to load stored workflows (cycle or unresolved nested-workflow reference): ${stuck}`,
+        `Failed to load dynamic workflows (cycle or unresolved nested-workflow reference): ${stuck}`,
       );
     }
   }
@@ -5801,12 +5804,45 @@ export class Mastra<
     }
   }
 
+  /**
+   * Wrap a user-provided topic listener so the delivery is acknowledged once
+   * the listener resolves. User listeners take only the event, so nothing
+   * would ever call `ack` for them — and on a durable transport (Redis
+   * consumer groups) an unacknowledged delivery stays pending for the life of
+   * the subscription. A throwing listener nacks instead so the transport can
+   * redeliver rather than assume success.
+   *
+   * The wrapper is memoized per listener so `removeTopicListener` can
+   * unsubscribe the exact callback `addTopicListener` registered.
+   */
+  #ackingTopicListeners = new WeakMap<(event: any) => Promise<void> | void, EventCallback>();
+
+  #ackingTopicListener(listener: (event: any) => Promise<void> | void): EventCallback {
+    const existing = this.#ackingTopicListeners.get(listener);
+    if (existing) return existing;
+    const wrapped: EventCallback = async (event, ack, nack) => {
+      try {
+        await listener(event);
+      } catch (err) {
+        this.#logger?.error?.('Error in topic listener; nacking event', {
+          eventType: event.type,
+          err: err instanceof Error ? err.message : err,
+        });
+        await nack?.();
+        return;
+      }
+      await ack?.();
+    };
+    this.#ackingTopicListeners.set(listener, wrapped);
+    return wrapped;
+  }
+
   public async addTopicListener(topic: string, listener: (event: any) => Promise<void>) {
-    await this.#pubsub.subscribe(topic, listener);
+    await this.#pubsub.subscribe(topic, this.#ackingTopicListener(listener));
   }
 
   public async removeTopicListener(topic: string, listener: (event: any) => Promise<void>) {
-    await this.#pubsub.unsubscribe(topic, listener);
+    await this.#pubsub.unsubscribe(topic, this.#ackingTopicListener(listener));
   }
 
   /**
@@ -5849,10 +5885,12 @@ export class Mastra<
     // must run after storage.init() above.
     //
     // Skip the read when the flag cannot change the outcome: it is already
-    // set, or the app opted out of the scheduler and nothing may start it.
-    // Reading the store anyway is a useless boot-time query, and storage
-    // adapters that need request/tenant context warn on it (see #20550).
-    if (!name && !this.#schedulerRequested && !this.#schedulerDisabled()) {
+    // set, the app opted out of the scheduler and nothing may start it, or an
+    // explicit worker filter already forces injection (see below). Reading the
+    // store anyway is a useless boot-time query, and storage adapters that
+    // need request/tenant context warn on it (see #20550).
+    const schedulerExplicitlyRequested = (this.#workerFilter?.has('scheduler') ?? false) && !this.#schedulerDisabled();
+    if (!name && !this.#schedulerRequested && !schedulerExplicitlyRequested && !this.#schedulerDisabled()) {
       await this.#detectPersistedSchedulerWork();
     }
 
@@ -5861,7 +5899,14 @@ export class Mastra<
     // This runs after all workflows have been registered (unlike the
     // constructor's default-workers block), so #hasScheduledWorkflow is
     // accurate.
-    if (!name && this.#shouldEnableScheduler() && this.#storage) {
+    //
+    // An explicit worker filter naming the scheduler role (e.g.
+    // `MASTRA_WORKERS=scheduler` on a dedicated scheduler deployment) always
+    // injects it: a standalone scheduler process polls storage for rows
+    // created by *other* processes, so boot-time heuristics like
+    // #hasScheduledWorkflow or persisted-row probes can't see the work it
+    // exists to serve. Only `#schedulerDisabled()` overrides the request.
+    if (!name && (this.#shouldEnableScheduler() || schedulerExplicitlyRequested) && this.#storage) {
       if (!this.#findSchedulerWorker()) {
         const sw = new SchedulerWorker(this.#schedulerConfig);
         sw.__registerMastra(this);
@@ -5901,7 +5946,7 @@ export class Mastra<
 
     // Rehydrate persisted workflow definitions (after storage.init() above).
     if (this.#storage) {
-      await this.#loadStoredWorkflows();
+      await this.#loadDynamicWorkflows();
     }
 
     // When explicitly starting the backgroundTasks worker (e.g.
@@ -5943,12 +5988,11 @@ export class Mastra<
 
         const listeners = Array.isArray(this.#events[topic]) ? this.#events[topic] : [this.#events[topic]];
         for (const listener of listeners) {
-          const alreadySubscribed = this.#userEventSubscriptions.some(
-            sub => sub.topic === topic && sub.cb === listener,
-          );
+          const cb = this.#ackingTopicListener(listener);
+          const alreadySubscribed = this.#userEventSubscriptions.some(sub => sub.topic === topic && sub.cb === cb);
           if (alreadySubscribed) continue;
-          await this.#pubsub.subscribe(topic, listener);
-          this.#userEventSubscriptions.push({ topic, cb: listener });
+          await this.#pubsub.subscribe(topic, cb);
+          this.#userEventSubscriptions.push({ topic, cb });
         }
       }
     }
@@ -6455,6 +6499,17 @@ export class Mastra<
 
     // SchedulerWorker is stopped as part of stopWorkers().
     await this.stopWorkers();
+
+    // Durable workflows may still be persisting their next terminal or suspended
+    // snapshot. Keep storage and other shared resources alive until they settle.
+    const durableExecutionResults = await Promise.allSettled(getActiveDurableAgentWorkflowExecutions(this));
+    durableExecutionResults.forEach(result => {
+      if (result.status === 'rejected') {
+        this.#logger?.error('Durable agent execution failed during shutdown', {
+          error: result.reason,
+        });
+      }
+    });
 
     const workspaceIds = Object.keys(this.#workspaces);
     const teardownResults = await Promise.allSettled(

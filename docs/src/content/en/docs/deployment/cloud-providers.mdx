@@ -1,11 +1,13 @@
 ---
-title: "Deploy to cloud providers | Deployment"
+title: "Cloud providers | Deploy"
 description: Deploy your Mastra applications to cloud providers
 packages:
   - "@mastra/deployer"
 ---
 
-# Deploy to cloud providers
+import { IntegrationGrid } from '@site/src/components/integrations/grid';
+
+# Cloud providers
 
 Mastra applications can be deployed to cloud providers and serverless platforms. Mastra includes optional built-in deployers for Vercel, Netlify, and Cloudflare to automate the deployment process.
 
@@ -15,14 +17,6 @@ Mastra provides a platform to deploy your server to the cloud. Read the [Mastra 
 
 ## Cloud providers
 
-The following guides show how to deploy Mastra to specific cloud providers:
+The following pages show you how to deploy Mastra to specific cloud providers.
 
-- [Amazon Bedrock AgentCore](/guides/deployment/aws-bedrock-agentcore)
-- [Amazon EC2](/guides/deployment/amazon-ec2)
-- [AWS Lambda](/guides/deployment/aws-lambda)
-- [Azure App Services](/guides/deployment/azure-app-services)
-- [Cloudflare](/guides/deployment/cloudflare)
-- [Digital Ocean](/guides/deployment/digital-ocean)
-- [Kubernetes](/guides/deployment/kubernetes)
-- [Netlify](/guides/deployment/netlify)
-- [Vercel](/guides/deployment/vercel)
+<IntegrationGrid section="Deploy" blocklist={['/docs/mastra-platform/deploy']} />

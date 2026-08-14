@@ -229,6 +229,9 @@ export function createDurableAgentStream<OUTPUT = undefined>(
   // Track the last error message seen in an 'error' chunk, so we can
   // surface it in onError when the FINISH event arrives with reason 'error'.
   let lastErrorMessage: string | undefined;
+  let lastErrorStack: string | undefined;
+  let lastErrorName: string | undefined;
+  let lastErrorCause: unknown;
 
   // Idle/liveness watchdog. A durable run whose driving process crashed stops
   // emitting chunks but never publishes a terminal FINISH/ERROR/ABORT event, so
@@ -333,6 +336,9 @@ export function createDurableAgentStream<OUTPUT = undefined>(
           if ((chunk as any).type === 'error') {
             const errPayload = (chunk as any).payload;
             lastErrorMessage = errPayload?.error?.message || errPayload?.message || 'LLM execution error';
+            lastErrorStack = typeof errPayload?.error?.stack === 'string' ? errPayload.error.stack : undefined;
+            lastErrorName = typeof errPayload?.error?.name === 'string' ? errPayload.error.name : undefined;
+            lastErrorCause = errPayload?.error ?? errPayload;
           }
           safeEnqueue(controller, chunk as ChunkType<OUTPUT>);
           await onChunk?.(chunk as ChunkType<OUTPUT>);
@@ -422,7 +428,11 @@ export function createDurableAgentStream<OUTPUT = undefined>(
           // event never fires.
           if (onError && data.stepResult?.reason === 'error') {
             try {
-              await onError({ error: new Error(lastErrorMessage || 'LLM execution error') });
+              const error = new Error(lastErrorMessage || 'LLM execution error', { cause: lastErrorCause });
+              // Preserve the producer's stack and name so the failure stays attributable and classifiable.
+              if (lastErrorStack) error.stack = lastErrorStack;
+              if (lastErrorName) error.name = lastErrorName;
+              await onError({ error });
             } catch (callbackError) {
               logError(`[DurableAgentStream] onError (from FINISH) callback error:`, callbackError);
             }
@@ -530,14 +540,16 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     start(ctrl) {
       controller = ctrl;
 
-      // Subscribe to pubsub with replay support for resumable streams
-      // If offset is specified, use indexed replay for efficiency
-      // Otherwise use full replay
+      // Subscribe to pubsub with replay support for resumable streams.
+      // Use indexed replay when supported. Transports without numeric offsets
+      // must live-tail so resume/recovery does not replay pre-resume events.
       const topic = AGENT_STREAM_TOPIC(runId);
       const subscribePromise =
-        offset !== undefined
-          ? pubsub.subscribeFromOffset(topic, offset, handleEvent)
-          : pubsub.subscribeWithReplay(topic, handleEvent);
+        offset === undefined
+          ? pubsub.subscribeWithReplay(topic, handleEvent)
+          : pubsub.supportsOffsets
+            ? pubsub.subscribeFromOffset(topic, offset, handleEvent)
+            : pubsub.subscribe(topic, handleEvent, { startFrom: 'latest' });
 
       subscribePromise
         .then(() => {

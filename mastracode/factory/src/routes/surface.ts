@@ -12,13 +12,16 @@ import type { FactoryBindingPreparationInput } from '../rules/dispatcher.js';
 import { FactoryStartCoordinator } from '../rules/start-coordinator.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
 import type { FactoryRules } from '../rules/types.js';
+import { isFactoryRuleStage } from '../rules/types.js';
 import type { SandboxFleet } from '../sandbox/fleet.js';
 import { ensureFactorySourceSession, resolveFactoryDefaultModelId } from '../session/factory-session.js';
+import { LiveSessions } from '../session/live-sessions.js';
 import type { StateSigner } from '../state-signing.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
 import type { ChannelIdentityStorage } from '../storage/domains/channel-identity/base.js';
 import type { ModelCredentialsStorage } from '../storage/domains/credentials/base.js';
 import type { CustomProvidersStorage } from '../storage/domains/custom-providers/base.js';
+import type { FilesystemStorage } from '../storage/domains/filesystem/base.js';
 import type { IntakeStorage } from '../storage/domains/intake/base.js';
 import type { IntegrationStorage } from '../storage/domains/integrations/base.js';
 import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
@@ -65,6 +68,7 @@ export interface FactoryApiRoutesDeps {
     modelCredentials: ModelCredentialsStorage;
     memorySettings: MemorySettingsStorage;
     customProviders: CustomProvidersStorage;
+    filesystem: FilesystemStorage;
     modelPacks: ModelPacksStorage;
     projects: FactoryProjectsStorage;
     queueHealth: QueueHealthStorage;
@@ -178,7 +182,8 @@ export async function prepareFactoryRuleBinding(
     branch,
   });
   const destinationStage = input.item.stages.length === 1 ? input.item.stages[0] : undefined;
-  if (!destinationStage) throw new Error('Factory skill invocation requires one exclusive board stage.');
+  if (!isFactoryRuleStage(destinationStage))
+    throw new Error('Factory skill invocation requires one exclusive board stage.');
 
   await coordinator.prepare({
     orgId: input.record.orgId,
@@ -188,7 +193,7 @@ export async function prepareFactoryRuleBinding(
     defaultModelId: await resolveFactoryDefaultModelId(projects, input.record.factoryProjectId),
     threadTitle: `${input.role === 'review' ? 'PR' : 'Issue'}: ${input.item.title}`,
     kickoffKey: input.record.id,
-    destinationStage: destinationStage as 'intake' | 'triage' | 'planning' | 'execute' | 'review' | 'done',
+    destinationStage,
     workItem: {
       id: input.item.id,
       role: input.role,
@@ -399,6 +404,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
         auth: deps.auth,
         fleet: deps.fleet,
         sessions: deps.sourceControlStorage.forIntegration('github').sessions,
+        filesystem: deps.domains.filesystem,
       },
     }),
     ...new ConfigRoutes({
@@ -447,6 +453,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           queueHealth: deps.domains.queueHealth,
           transitionService,
           startCoordinator,
+          liveSessions: new LiveSessions(deps.controller),
         }).routes()
       : []),
   ];

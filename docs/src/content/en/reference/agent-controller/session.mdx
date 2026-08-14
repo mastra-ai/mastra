@@ -8,9 +8,9 @@ toc_max_heading_level: 2
 
 # Session
 
-:::experimental
+:::beta
 
-The `AgentController` feature is in beta stage and subject to breaking changes in minor versions until it graduates from its beta status.
+Breaking changes may occur without a major version bump until the API is stable.
 
 :::
 
@@ -205,12 +205,14 @@ session.abort()
 
 Return the workspace resolved for this session. This preserves session-level overrides and workspaces selected from the session scope.
 
+A workspace is optional. When neither the session nor the `AgentController` configures one, the session still runs without filesystem or sandbox access, and this returns `undefined`. Check the result before using it.
+
 ```typescript
 const workspace = session.getWorkspace()
-const skill = await workspace.skills?.get('code-review')
+const skill = await workspace?.skills?.get('code-review')
 ```
 
-Returns: `Workspace`
+Returns: `Workspace | undefined`
 
 ### Session grants
 
@@ -309,7 +311,7 @@ const usage = session.getTokenUsage()
 
 ## Identity
 
-`session.identity` owns the stable identifiers for the conversation: the resource ID, a session `id`, and an `ownerId`. The `id` and `ownerId` are stable for the life of the session and don't change when the resource ID is switched. They mirror the `id` and `ownerId` fields on `SessionRecord` in storage.
+`session.identity` owns the stable identifiers for the conversation: the resource ID and session `id`, plus an `ownerId`. The `id` and `ownerId` are stable for the life of the session and don't change when the resource ID is switched. They mirror the `id` and `ownerId` fields on `SessionRecord` in storage.
 
 ### `session.identity.getId()`
 

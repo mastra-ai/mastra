@@ -645,23 +645,23 @@ export type ListWorkflowRunCountsResponse = Record<string, WorkflowRunCounts>;
 
 export type GetWorkflowRunByIdResponse = WorkflowState;
 
-export type ListStoredWorkflowsParams = GeneratedRequest<QueryParams<'GET /stored/workflows'>>;
-export type ListStoredWorkflowsResponse = GeneratedResponse<'GET /stored/workflows'>;
-export type UpsertStoredWorkflowParams = GeneratedRequest<Body<'POST /stored/workflows'>>;
-export type UpsertStoredWorkflowResponse = GeneratedResponse<'POST /stored/workflows'>;
-type StoredWorkflowDefinitionField =
+export type ListDynamicWorkflowsParams = GeneratedRequest<QueryParams<'GET /stored/workflows'>>;
+export type ListDynamicWorkflowsResponse = GeneratedResponse<'GET /stored/workflows'>;
+export type UpsertDynamicWorkflowParams = GeneratedRequest<Body<'POST /stored/workflows'>>;
+export type UpsertDynamicWorkflowResponse = GeneratedResponse<'POST /stored/workflows'>;
+type DynamicWorkflowDefinitionField =
   | 'description'
   | 'inputSchema'
   | 'outputSchema'
   | 'stateSchema'
   | 'requestContextSchema'
   | 'graph';
-export type StoredWorkflowDefinition = Omit<
-  GeneratedResponse<'GET /stored/workflows/:storedWorkflowId'>,
-  StoredWorkflowDefinitionField
+export type DynamicWorkflowDefinition = Omit<
+  GeneratedResponse<'GET /stored/workflows/:dynamicWorkflowId'>,
+  DynamicWorkflowDefinitionField
 > &
-  Pick<UpsertStoredWorkflowParams, StoredWorkflowDefinitionField>;
-export type DeleteStoredWorkflowResponse = GeneratedResponse<'DELETE /stored/workflows/:storedWorkflowId'>;
+  Pick<UpsertDynamicWorkflowParams, DynamicWorkflowDefinitionField>;
+export type DeleteDynamicWorkflowResponse = GeneratedResponse<'DELETE /stored/workflows/:dynamicWorkflowId'>;
 
 export interface GetWorkflowResponse {
   name: string;
@@ -702,10 +702,10 @@ export interface GetWorkflowResponse {
   isProcessorWorkflow?: boolean;
   /**
    * How this workflow got into the live registry. `'code'` for statically
-   * authored or `addWorkflow()`-added workflows, `'stored'` for anything
-   * hydrated or added via `addStoredWorkflow()`. Absent on older servers.
+   * authored or `addWorkflow()`-added workflows, `'dynamic'` for anything
+   * hydrated or added via `addDynamicWorkflow()`. Absent on older servers.
    */
-  origin?: 'code' | 'stored';
+  origin?: 'code' | 'dynamic';
 }
 
 export type WorkflowRunResult = WorkflowResult<any, any, any, any>;
@@ -3576,3 +3576,72 @@ export interface BuilderRegistryInstallResponse {
   name: string;
   filesWritten: number;
 }
+
+// ============================================================================
+// AgentController
+// ============================================================================
+
+// Wire shapes derive from the published route contracts, vocabulary from core.
+// Event-stream types can't derive this way (SSE routes carry no response
+// schema) and stay hand-written in `resources/agent-controller`.
+export type { PermissionPolicy, ToolCategory } from '@mastra/core/agent-controller';
+export type { TaskItemSnapshot as AgentControllerTaskSnapshot } from '@mastra/core/tools';
+
+export type AgentControllerInfo = GeneratedResponse<'GET /agent-controller'>['agentControllers'][number];
+
+export type CreateAgentControllerSessionResponse = GeneratedResponse<'POST /agent-controller/:controllerId/sessions'>;
+
+export type AgentControllerSessionState = GeneratedResponse<'GET /agent-controller/:controllerId/sessions/:resourceId'>;
+
+/**
+ * Agent behavior settings, mirroring the TUI's `/settings` toggles. An absent
+ * `thinkingLevel` means the session inherits the configured default rather than
+ * overriding it.
+ */
+export type AgentControllerSessionSettings = NonNullable<AgentControllerSessionState['settings']>;
+
+/**
+ * Status-line relevant slice of observational-memory progress, mirroring the
+ * TUI status line. `msg` reads `pendingTokens/threshold ↓projectedMessageRemoval`
+ * (the active message window before an observation fires); `mem` reads
+ * `observationTokens/reflectionThreshold ↓projectedReflectionSavings`
+ * (accumulated observations before a reflection fires).
+ */
+export type AgentControllerOMProgress = NonNullable<AgentControllerSessionState['omProgress']>;
+
+export type AgentControllerModeInfo = GeneratedResponse<'GET /agent-controller/:controllerId/modes'>['modes'][number];
+
+export type AgentControllerAvailableModel =
+  GeneratedResponse<'GET /agent-controller/:controllerId/models'>['models'][number];
+
+export type AgentControllerActiveRun =
+  GeneratedResponse<'GET /agent-controller/:controllerId/active-runs'>['runs'][number];
+
+/**
+ * A thread as it appears in `listThreads()`. Carries the session scoping tags
+ * it was stamped with (e.g. `{ projectPath }`) and whether a run is currently
+ * executing on it, so one listing can report activity across every scope
+ * sharing the resourceId.
+ */
+export type AgentControllerThreadInfo =
+  GeneratedResponse<'GET /agent-controller/:controllerId/sessions/:resourceId/threads'>['threads'][number];
+
+/** A thread as returned by `createThread()` and `cloneThread()`. */
+export type CreateAgentControllerThreadResponse =
+  GeneratedResponse<'POST /agent-controller/:controllerId/sessions/:resourceId/threads'>;
+
+export type AgentControllerWorkspaceStatus = GeneratedResponse<'GET /agent-controller/:controllerId/workspace'>;
+
+export type AgentControllerGoalRecord = NonNullable<
+  GeneratedResponse<'GET /agent-controller/:controllerId/sessions/:resourceId/goal'>['goal']
+>;
+
+/** Per-category and per-tool approval policies. */
+export type PermissionRules = GeneratedResponse<'GET /agent-controller/:controllerId/sessions/:resourceId/permissions'>;
+
+export type SendNotificationInput = GeneratedRequest<
+  Body<'POST /agent-controller/:controllerId/sessions/:resourceId/notifications'>
+>;
+
+export type SendNotificationResult =
+  GeneratedResponse<'POST /agent-controller/:controllerId/sessions/:resourceId/notifications'>;

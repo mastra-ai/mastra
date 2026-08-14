@@ -53,7 +53,7 @@ let origFlush: any;
 // global LLMObs span processor lazily and `shutdown()` would `disable()` it —
 // tearing it down for every later test — so we create it once and never shut it
 // down between tests.
-let exporter: DatadogExporter;
+let exporter: DatadogExporter | undefined;
 
 beforeAll(async () => {
   origAppend = SpanWriter.prototype.append;
@@ -68,12 +68,22 @@ beforeAll(async () => {
   __setObservabilityFeaturesForTest(new Set(['model-inference-span']));
   const { DatadogExporter } = await import('./tracing');
   exporter = new DatadogExporter({ mlApp: 'compliance', apiKey: 'fake-key', agentless: true });
-});
+  // dd-trace is a large module and this is its first load in the worker, so a
+  // cold, contended CI runner can take much longer than the default hook
+  // timeout to resolve the import above.
+}, 60_000);
 
 afterAll(async () => {
-  await exporter.shutdown();
-  SpanWriter.prototype.append = origAppend;
-  SpanWriter.prototype.flush = origFlush;
+  // The prototype patches are process-wide: restore them even if setup failed
+  // part-way or shutdown throws, or every later file sharing this worker
+  // inherits our append/flush stubs. Guarding the exporter also keeps a failed
+  // `beforeAll` visible instead of masking it with a teardown TypeError.
+  try {
+    await exporter?.shutdown();
+  } finally {
+    SpanWriter.prototype.append = origAppend;
+    SpanWriter.prototype.flush = origFlush;
+  }
 });
 
 beforeEach(() => {
@@ -106,6 +116,7 @@ function ended(span: AnyExportedSpan): TracingEvent {
 
 /** Runs a single span through the real exporter + dd-trace and returns the compliant event. */
 async function emit(span: AnyExportedSpan): Promise<any> {
+  if (!exporter) throw new Error('Exporter was never constructed — beforeAll failed.');
   await exporter.exportTracingEvent(ended(span));
   expect(captured.length).toBeGreaterThan(0);
   return captured[captured.length - 1];

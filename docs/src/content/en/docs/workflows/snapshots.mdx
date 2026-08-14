@@ -87,13 +87,14 @@ Each snapshot includes the `runId`, input, step status (`success`, `suspended`, 
 
 ## How snapshots are saved and retrieved
 
-Snapshots are saved to the configured storage system. By default, they use libSQL, but you can configure Upstash or PostgreSQL instead. Each snapshot is saved in the `workflow_snapshots` table and identified by the workflow's `runId`.
+Snapshots are saved to the configured storage system. By default, they use libSQL, but you can configure Upstash, PostgreSQL, or OracleDB instead. Each snapshot is saved in the `workflow_snapshots` table and identified by the workflow's `runId`.
 
 Read more about:
 
-- [libSQL Storage](/reference/storage/libsql)
-- [Upstash Storage](/reference/storage/upstash)
-- [PostgreSQL Storage](/reference/storage/postgresql)
+- [libSQL Storage](/integrations/databases/libsql)
+- [Upstash Storage](/integrations/databases/upstash)
+- [PostgreSQL Storage](/integrations/databases/postgresql)
+- [OracleDB Storage](/integrations/databases/oracledb)
 
 ### Saving snapshots
 
@@ -145,12 +146,13 @@ export const mastra = new Mastra({
 })
 ```
 
-- [libSQL Storage](/reference/storage/libsql)
-- [PostgreSQL Storage](/reference/storage/postgresql)
-- [MongoDB Storage](/reference/storage/mongodb)
-- [Upstash Storage](/reference/storage/upstash)
-- [Cloudflare D1](/reference/storage/cloudflare-d1)
-- [DynamoDB](/reference/storage/dynamodb)
+- [libSQL Storage](/integrations/databases/libsql)
+- [PostgreSQL Storage](/integrations/databases/postgresql)
+- [OracleDB Storage](/integrations/databases/oracledb)
+- [MongoDB Storage](/integrations/databases/mongodb)
+- [Upstash Storage](/integrations/databases/upstash)
+- [Cloudflare D1](/integrations/databases/cloudflare-d1)
+- [DynamoDB](/integrations/databases/dynamodb)
 - [More storage providers](/docs/storage/overview)
 
 ## Best practices

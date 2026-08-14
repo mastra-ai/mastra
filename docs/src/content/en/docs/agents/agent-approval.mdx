@@ -1,5 +1,5 @@
 ---
-title: "Agent approval | Agents"
+title: "Human-in-the-loop | Agents"
 description: Learn how to require approvals and suspend tool execution, plus automatically resume suspended tools while keeping humans in control of agent workflows.
 packages:
   - "@mastra/core"
@@ -7,11 +7,11 @@ packages:
   - "@mastra/memory"
 ---
 
-# Agent approval
+# Human-in-the-loop
 
-Agents sometimes require the same [human-in-the-loop](/docs/workflows/human-in-the-loop) oversight used in workflows when calling tools that handle sensitive operations, like deleting resources or running long processes. With agent approval you can suspend a tool call before it executes so a human can approve or decline it, or let tools suspend themselves to request additional context from the user.
+Agents sometimes require the same [human-in-the-loop (HITL)](/docs/workflows/human-in-the-loop) oversight used in workflows when calling tools that handle sensitive operations, like deleting resources or running long processes. With human-in-the-loop you can suspend a tool call before it executes so a human can approve or decline it, or let tools suspend themselves to request additional context from the user.
 
-## When to use agent approval
+## When to use human-in-the-loop
 
 - **Destructive or irreversible actions** such as deleting records or sending emails, or alternatively processing payments.
 - **Cost-heavy operations** like calling expensive third-party APIs where you want to verify arguments first.
@@ -19,7 +19,7 @@ Agents sometimes require the same [human-in-the-loop](/docs/workflows/human-in-t
 
 ## Quickstart
 
-Mark a tool with `requireApproval: true`, then check for the `tool-call-approval` chunk in the stream to approve or decline:
+Mark a tool with `requireApproval: true`, then check for the `tool-call-approval` chunk in the stream to approve or decline the action:
 
 ```typescript title="src/mastra/agents/index.ts"
 import { Agent } from '@mastra/core/agent'
@@ -57,7 +57,7 @@ for await (const chunk of stream.fullStream) {
 
 :::note
 
-Agent approval uses snapshots to capture request state. Configure a [storage provider](/docs/storage/overview) on your Mastra instance or you'll see a "snapshot not found" error.
+Human-in-the-loop uses snapshots to capture request state. Configure a [storage provider](/docs/storage/overview) on your Mastra instance or you'll see a "snapshot not found" error.
 
 Snapshots for agent runs are minimal resume artifacts: they hold only what's needed to resume the suspended run and are deleted once the run finishes. Use [tracing](/docs/observability/overview) for the execution record and [memory](/docs/memory/overview) for the conversation history.
 
@@ -100,6 +100,20 @@ for await (const chunk of stream.fullStream) {
   }
 }
 ```
+
+#### Explaining a decline
+
+`declineToolCall()`, `declineToolCallGenerate()`, and `declineNetworkToolCall()` accept an optional `reason`. The reason is returned to the model in place of the tool result, so the model can adjust instead of retrying blindly. It's also stored on the tool call's `approval` metadata, so it's still there when the conversation is recalled.
+
+```typescript
+const declined = await agent.declineToolCall({
+  runId: stream.runId,
+  toolCallId,
+  reason: 'Reading other users PII is not allowed, ask the user for their own email instead',
+})
+```
+
+Without a `reason`, the model receives the default message `Tool call was not approved by the user`.
 
 #### Conditional approval with a function
 
@@ -397,6 +411,8 @@ const agent = new Agent({
 ```
 
 When enabled, the agent detects suspended tools from message history on the next user message. It extracts `resumeData` based on the tool's `resumeSchema`, then automatically resumes the tool.
+
+Automatic resumption applies to data-bearing `suspend()` flows. It doesn't approve tools that use `requireApproval`; those tools remain suspended until an explicit approval or decline is submitted through `approveToolCall()`, `declineToolCall()`, `resumeStream({ approved: boolean })`, or an equivalent UI or API action.
 
 The following example shows a complete conversational flow:
 

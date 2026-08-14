@@ -73,6 +73,10 @@ export class CachingPubSub extends PubSub {
     return this.inner.supportsNativeBatching;
   }
 
+  get supportsOffsets(): boolean {
+    return true;
+  }
+
   /**
    * Log an error message using the configured logger or console.error.
    */
@@ -223,8 +227,10 @@ export class CachingPubSub extends PubSub {
 
     const wrappedCb: EventCallback = (event, ack, nack) => {
       // Drop events strictly before the requested offset on the live path.
+      // Dropped deliveries are still acknowledged: the consumer will never see
+      // them, so leaving them unacknowledged would strand them on the backend.
       if (typeof event.index === 'number' && event.index < offset) {
-        return;
+        return ack?.();
       }
 
       if (bootstrapping) {
@@ -237,13 +243,16 @@ export class CachingPubSub extends PubSub {
       // deliveryAttempt > 1, and the consumer must see them to retry processing.
       const isRetry = typeof event.deliveryAttempt === 'number' && event.deliveryAttempt > 1;
       if (typeof event.index === 'number' && event.index <= lastDelivered && !isRetry) {
-        return;
+        // Already delivered via history or the buffer drain. Acknowledge the
+        // duplicate so it doesn't stay pending on the backend.
+        return ack?.();
       }
 
       if (typeof event.index === 'number' && event.index > lastDelivered) {
         lastDelivered = event.index;
       }
-      cb(event, ack, nack);
+      // Hand the consumer's outcome back to the backend so it can ack or nack.
+      return cb(event, ack, nack);
     };
 
     this.callbackMap.set(cb, wrappedCb);
@@ -259,7 +268,10 @@ export class CachingPubSub extends PubSub {
         if (typeof event.index === 'number') {
           lastDelivered = event.index;
         }
-        cb(event);
+        // Awaited so history is delivered in order before the buffer drain.
+        // History comes from storage, not the transport, so there is nothing
+        // to acknowledge.
+        await cb(event);
       }
 
       // --- Phase 3: drain buffer, suppressing duplicates history already covered ---
@@ -272,7 +284,14 @@ export class CachingPubSub extends PubSub {
         if (typeof event.index === 'number') {
           lastDelivered = event.index;
         }
-        cb(event, ack, nack);
+        // The consumer settles these itself through the ack/nack it was handed
+        // on the live path. Awaited so a rejection can still reach nack, which
+        // the backend would otherwise have routed.
+        try {
+          await cb(event, ack, nack);
+        } catch {
+          await nack?.();
+        }
       }
 
       // --- Phase 4: flip to passthrough ---

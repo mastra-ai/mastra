@@ -14,6 +14,7 @@ import { InMemoryStore } from '../../storage';
 import { createTool } from '../../tools';
 import type { WorkflowRunState } from '../../workflows/types';
 import { Agent } from '../agent';
+import { DurableStepIds } from '../durable/constants';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from './mock-model';
 
 const mockFindUser = vi.fn().mockImplementation(async (data: { name: string }) => {
@@ -1015,6 +1016,46 @@ describe('suspended-run discovery', () => {
           approved: true,
         }),
       ).rejects.toThrow('storage outage');
+    }, 30000);
+  });
+
+  describe('durable-agentic-loop snapshots', () => {
+    /**
+     * Durable/evented agents persist their agentic-loop snapshot under
+     * `durable-agentic-loop` rather than `agentic-loop`. Rather than standing up
+     * a full evented agent, these tests move a suspended snapshot to the durable
+     * key and delete the legacy row, which is exactly the storage shape a
+     * `createEventedAgent()` run leaves behind.
+     */
+    async function relocateSnapshotToDurableName(storage: InMemoryStore, runId: string, resourceId: string) {
+      const workflowsStore = (await storage.getStore('workflows'))!;
+      const run = await workflowsStore.getWorkflowRunById({ runId, workflowName: 'agentic-loop' });
+      expect(run).not.toBeNull();
+
+      await workflowsStore.persistWorkflowSnapshot({
+        workflowName: DurableStepIds.AGENTIC_LOOP,
+        runId,
+        resourceId,
+        snapshot: run!.snapshot as WorkflowRunState,
+      });
+      await workflowsStore.deleteWorkflowRunById({ runId, workflowName: 'agentic-loop' });
+    }
+
+    it('discovers a suspended run persisted under the durable workflow name', async () => {
+      const storage = new InMemoryStore();
+      const { agent } = createSuspendedSetup({ storage });
+      const { runId, toolCallId } = await suspendRun(agent, 'thread-1', 'resource-1');
+      await relocateSnapshotToDurableName(storage, runId, 'resource-1');
+
+      const { agent: restartedAgent } = createSuspendedSetup({ storage, toolCallOnFirstCall: false });
+      const { runs } = await restartedAgent.listSuspendedRuns({ threadId: 'thread-1', resourceId: 'resource-1' });
+
+      expect(runs).toEqual([
+        expect.objectContaining({
+          runId,
+          toolCalls: [expect.objectContaining({ toolCallId })],
+        }),
+      ]);
     }, 30000);
   });
 });

@@ -1,4 +1,4 @@
-import type { Processor } from '..';
+import type { OutputResult, Processor } from '..';
 import type { MastraDBMessage, MessageList } from '../../agent';
 import { isTransientSignalMessage } from '../../agent/signals';
 import { parseMemoryRequestContext } from '../../memory';
@@ -232,9 +232,10 @@ export class MessageHistory implements Processor {
       messageList: MessageList;
       abort: (reason?: string) => never;
       requestContext?: RequestContext;
+      result?: OutputResult;
     } & Partial<ObservabilityContext>,
   ): Promise<MessageList> {
-    const { messageList, requestContext, ...observabilityContext } = args;
+    const { messageList, requestContext, result, ...observabilityContext } = args;
 
     // Get memory context from RequestContext or MessageList
     const context = this.getMemoryContext(requestContext, messageList);
@@ -254,6 +255,12 @@ export class MessageHistory implements Processor {
     const messagesToSave = [...newInput, ...newOutput];
 
     if (messagesToSave.length === 0) {
+      return messageList;
+    }
+
+    // Don't persist an input-only failed turn: if the provider errored before
+    // producing any output, saving the user message would orphan it in history.
+    if (result?.finishReason === 'error' && newOutput.length === 0) {
       return messageList;
     }
 
@@ -297,15 +304,11 @@ export class MessageHistory implements Processor {
       return;
     }
 
-    // Ensure thread exists (create if needed) before saving messages
+    // Ensure thread exists (create if needed) before saving messages.
+    // Nothing to write when it already exists: re-writing the row we just read
+    // would clobber a title generated concurrently with this save.
     const thread = await this.storage.getThreadById({ threadId });
-    if (thread) {
-      await this.storage.updateThread({
-        id: threadId,
-        title: thread.title || '',
-        metadata: thread.metadata || {},
-      });
-    } else {
+    if (!thread) {
       // Auto-create thread if it doesn't exist
       await this.storage.saveThread({
         thread: {
