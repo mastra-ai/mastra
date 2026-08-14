@@ -347,11 +347,12 @@ function KnowledgeGraphInner({
         ...mapped.nodes.map(node => ({
           id: node.id,
           size: node.data.size,
-          fixed: pinnedPositions.current.get(node.id),
-          // Warm start: existing nodes keep their settled spot; a brand-new
-          // node spawns near its first neighbor instead of at the spiral seed.
-          initial:
-            lastCenters.current.get(node.id) ?? (arrivals?.nodes.has(node.id) ? neighborOf(node.id) : undefined),
+          // Position capture: a node that has ever settled STAYS there —
+          // polls, filter toggles, and re-renders must not rearrange an
+          // unchanged graph. Only brand-new nodes get simulated (spawned
+          // near their first neighbor instead of at the spiral seed).
+          fixed: pinnedPositions.current.get(node.id) ?? lastCenters.current.get(node.id),
+          initial: arrivals?.nodes.has(node.id) ? neighborOf(node.id) : undefined,
         })),
         // Memory markers: tiny padding so they nestle into their cluster,
         // spawned beside their first entity so they never fly in from origin.
@@ -361,9 +362,9 @@ function KnowledgeGraphInner({
             id: marker.id,
             size: marker.size,
             padding: 6,
-            fixed: pinnedPositions.current.get(marker.id),
-            initial:
-              lastCenters.current.get(marker.id) ?? (anchor ? { x: anchor.x + 30, y: anchor.y + 30 } : undefined),
+            // Same position capture as entities: settled markers never move.
+            fixed: pinnedPositions.current.get(marker.id) ?? lastCenters.current.get(marker.id),
+            initial: anchor ? { x: anchor.x + 30, y: anchor.y + 30 } : undefined,
           };
         }),
       ],
@@ -376,7 +377,10 @@ function KnowledgeGraphInner({
           }))
         : filtered.edges,
     );
-    lastCenters.current = positions;
+    // MERGE into the cache — never replace it: an ego/filter subset run must
+    // not wipe the settled positions of currently-hidden nodes, or leaving
+    // the filter would rearrange everything again.
+    for (const [id, center] of positions) lastCenters.current.set(id, center);
     const entityFlow = toFlowGraph(filtered.nodes, filtered.edges, positions, focusedId);
     if (memories.length === 0) return entityFlow; // pre-A11 payload fallback
     const memoryFlow = toMemoryFlow(memoryNodes, memoryEdges, positions);

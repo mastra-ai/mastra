@@ -295,4 +295,14 @@ describe('runLayout', () => {
     const positions = runLayout(pinned, edges);
     expect(positions.get('a')).toEqual({ x: 500, y: -500 });
   });
+
+  it('position capture: a fully-fixed node set comes back exactly where it settled', () => {
+    // Re-running the layout with every node fixed at its settled position
+    // must be a no-op — polls and filter toggles on unchanged data never
+    // rearrange the graph.
+    const settled = runLayout(nodes, edges);
+    const fixedNodes = nodes.map(node => ({ ...node, fixed: settled.get(node.id) }));
+    const rerun = runLayout(fixedNodes, edges);
+    for (const node of nodes) expect(rerun.get(node.id)).toEqual(settled.get(node.id));
+  });
 });
