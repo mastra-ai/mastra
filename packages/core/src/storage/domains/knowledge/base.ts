@@ -268,14 +268,27 @@ export function assertKnowledgeScopeWithinCeiling(scope: KnowledgeScope, maxScop
 export function parseKnowledgeWikilinks(text: string): string[] {
   const names: string[] = [];
   const seen = new Set<string>();
-  for (const match of text.matchAll(/\[\[\s*([^\[\]]+?)\s*\]\]/g)) {
-    const name = match[1]!.trim();
+  let contentStart = -1;
+
+  for (let index = 0; index < text.length - 1; index++) {
+    const pair = text.slice(index, index + 2);
+    if (pair === '[[') {
+      contentStart = index + 2;
+      index++;
+      continue;
+    }
+    if (pair !== ']]' || contentStart < 0) continue;
+
+    const name = text.slice(contentStart, index).trim();
     const key = name.toLocaleLowerCase();
     if (name && !seen.has(key)) {
       seen.add(key);
       names.push(name);
     }
+    contentStart = -1;
+    index++;
   }
+
   return names;
 }
 

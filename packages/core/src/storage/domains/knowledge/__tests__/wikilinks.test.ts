@@ -14,6 +14,11 @@ describe('knowledge wikilinks and semantic ids', () => {
     expect(parseKnowledgeWikilinks('[[]] [[valid]] [[nested [[bad]]')).toEqual(['valid', 'bad']);
   });
 
+  it('parses long uncontrolled input without regex backtracking', () => {
+    const padding = ' '.repeat(100_000);
+    expect(parseKnowledgeWikilinks(`[[${padding}]] [[stable]]`)).toEqual(['stable']);
+  });
+
   it('builds stable typed semantic document and operation ids', () => {
     const documentId = knowledgeSemanticDocumentId('fact', '01ABC');
     expect(documentId).toBe('knowledge:fact:01ABC');
