@@ -17,7 +17,7 @@ import { useMatch, useNavigate, useParams } from 'react-router';
 
 import { INITIAL_THREAD_MESSAGE_LIMIT, queryKeys } from '../../../../api/keys';
 import { useChatCommands } from '../context/ChatCommandsProvider';
-import { useChatMessagesInitializing } from '../context/ChatSessionProvider';
+import { useChatMessagesInitializing } from '../context/useChatMessagesInitializing';
 import { useChatConnection } from '../context/useChatConnection';
 import { useChatModels } from '../context/useChatModels';
 import { useChatModes } from '../context/useChatModes';

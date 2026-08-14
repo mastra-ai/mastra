@@ -266,6 +266,8 @@ When an organization has exhausted its observability quota, the Mastra platform 
 
 The probe timer doesn't keep the Node.js process alive, so short-lived and serverless processes exit normally while paused.
 
+Every request the exporter sends (batch uploads for all five signal types, plus the traces recovery probe) includes the `x-mastra-observability-capabilities: quota-pause-v1` header. This tells the platform that the client understands the quota-pause contract, so it can safely respond with `402` instead of silently dropping telemetry for older clients that would retry it.
+
 ### Endpoint routing
 
 - Base origins derive signal endpoints automatically

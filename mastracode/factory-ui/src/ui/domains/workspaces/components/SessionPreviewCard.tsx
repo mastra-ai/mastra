@@ -5,6 +5,7 @@ import type { ReactNode, RefObject } from 'react';
 
 import { relativeTime } from '../../../../lib/date/relativeTime';
 import { PullRequestStatusIcon } from '../../factory/components/PullRequestStatusIcon';
+import type { SessionRowStatus } from './SessionNavRow';
 
 export interface SessionPreviewDetails {
   kind: 'Work session' | 'Review session';
@@ -15,9 +16,10 @@ export interface SessionPreviewDetails {
   updatedAt: string;
 }
 
-function getStatusLabel(status: 'running' | 'attention' | undefined) {
-  if (status === 'running') return 'Agent working';
-  if (status === 'attention') return 'Agent finished';
+function getStatusLabel(status: SessionRowStatus | undefined) {
+  if (status === 'initializing') return 'Initializing';
+  if (status === 'working') return 'Agent working';
+  if (status === 'ready') return 'Ready';
   return undefined;
 }
 
@@ -44,7 +46,7 @@ export function SessionPreviewCard({
   name: string;
   /** The sidebar row box — a stable anchor, unlike the label whose width follows the hover-revealed actions. */
   anchor: RefObject<HTMLElement | null>;
-  status?: 'running' | 'attention';
+  status?: SessionRowStatus;
   merged?: boolean;
   details: SessionPreviewDetails;
 }) {

@@ -1,6 +1,11 @@
 {
   "redirects": [
     {
+      "source": "/docs/workspace/overview",
+      "destination": "/docs/workspace/sandbox",
+      "permanent": true
+    },
+    {
       "source": "/docs/editor/prompts",
       "destination": "/docs/editor/overview",
       "permanent": true

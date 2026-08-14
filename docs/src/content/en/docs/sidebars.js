@@ -265,7 +265,7 @@ const sidebars = {
           label: 'Sandbox',
           link: {
             type: 'doc',
-            id: 'workspace/overview',
+            id: 'workspace/sandbox',
           },
           customProps: {
             contextualSidebar: true,
@@ -278,13 +278,8 @@ const sidebars = {
             },
             {
               type: 'doc',
-              id: 'workspace/sandbox',
-              label: 'Sandbox',
-            },
-            {
-              type: 'doc',
-              id: 'workspace/lsp',
-              label: 'LSP Inspection',
+              id: 'workspace/search',
+              label: 'Search',
             },
             {
               type: 'doc',
@@ -293,8 +288,8 @@ const sidebars = {
             },
             {
               type: 'doc',
-              id: 'workspace/search',
-              label: 'Search and Indexing',
+              id: 'workspace/lsp',
+              label: 'LSP',
             },
           ],
         },
@@ -696,17 +691,11 @@ const sidebars = {
       type: 'doc',
       id: 'mastra-platform/deploy',
       label: 'Deploy',
-      customProps: {
-        tags: ['new'],
-      },
     },
     {
       type: 'doc',
       id: 'mastra-platform/environments',
       label: 'Environments',
-      customProps: {
-        tags: ['new'],
-      },
     },
     {
       type: 'doc',
