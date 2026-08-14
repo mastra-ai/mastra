@@ -83,12 +83,11 @@ function EntityNodeComponent({ data, selected }: NodeProps<EntityFlowNode>) {
 const EntityNode = memo(EntityNodeComponent);
 
 function PinBadge({ size }: { size: number }) {
-  // Rendered OUTSIDE the clipped circle so the badge stays visible.
   const offset = Math.max(2, Math.round(size * 0.08));
   return (
     <span
       className="absolute rounded-full bg-amber-400 p-1 text-[#1a1305] shadow-md shadow-amber-500/40"
-      style={{ top: offset, right: offset }}
+      style={{ top: offset, left: offset }}
     >
       <Pin size={11} aria-label="Pinned" />
     </span>
