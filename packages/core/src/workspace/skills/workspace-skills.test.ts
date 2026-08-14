@@ -991,6 +991,51 @@ This skill helps with endpoint design and API patterns.`;
       expect(await skills.getScoped({ requestContext: requestB })).toBe(scopedB);
       expect(resolver).toHaveBeenCalledTimes(2);
     });
+
+    it('prevents foreign search documents from crowding out scoped results', async () => {
+      const filesystem = createMockFilesystem({
+        'tenant-a/alpha/SKILL.md': `---\nname: alpha\ndescription: Alpha skill\n---\n\nShared search term`,
+        'tenant-b/beta/SKILL.md': `---\nname: beta\ndescription: Beta skill\n---\n\nShared search term`,
+      });
+      const indexedDocs: IndexDocument[] = [];
+      const searchEngine: MockSearchEngine = {
+        index: vi.fn(async doc => {
+          indexedDocs.push(doc);
+        }),
+        search: vi.fn(async (_query, options) =>
+          indexedDocs
+            .map(doc => ({
+              id: doc.id,
+              content: doc.content,
+              score: doc.metadata?.skillPath === 'tenant-b/beta' ? 2 : 1,
+              metadata: doc.metadata,
+            }))
+            .sort((a, b) => b.score - a.score)
+            .slice(0, options?.topK ?? 10),
+        ),
+        clear: vi.fn(),
+        canBM25: true,
+        canVector: false,
+        canHybrid: false,
+      };
+      const requestA = {};
+      const requestB = {};
+      const skills = new WorkspaceSkillsImpl({
+        source: filesystem,
+        skills: async ({ requestContext }) => (requestContext === requestA ? ['tenant-a'] : ['tenant-b']),
+        searchEngine,
+      });
+
+      const [scopedA, scopedB] = await Promise.all([
+        skills.getScoped({ requestContext: requestA }),
+        skills.getScoped({ requestContext: requestB }),
+      ]);
+      await Promise.all([scopedA.list(), scopedB.list()]);
+
+      expect((await scopedA.search('Shared', { topK: 1 })).map(result => result.skillName)).toEqual(['alpha']);
+      expect((await scopedB.search('Shared', { topK: 1 })).map(result => result.skillName)).toEqual(['beta']);
+      expect(new Set(indexedDocs.map(doc => doc.id)).size).toBe(2);
+    });
   });
 
   describe('maybeRefresh', () => {
