@@ -265,14 +265,23 @@ export interface FactoryUpsertLinkedWorkItemDecision extends FactoryCommitDecisi
   metadata?: Record<string, FactoryRuleJsonValue>;
 }
 
-export interface FactoryInvokeSkillDecision extends FactoryCommitDecisionBase {
+interface FactoryInvokeSkillDecisionBase extends FactoryCommitDecisionBase {
   type: 'invokeSkill';
   role: string;
-  skillName: string;
   arguments?: string;
   precedingMessage?: string;
   cancelInFlight?: boolean;
 }
+
+/**
+ * Starting an agent run. Most runs activate a skill, because the skill carries
+ * the handoff contract later rules match on. A run whose completion is already
+ * signalled some other way — Building finishes by opening a pull request, which
+ * arrives as its own event — needs no contract, so it can carry a plain prompt
+ * instead of an otherwise empty skill.
+ */
+export type FactoryInvokeSkillDecision = FactoryInvokeSkillDecisionBase &
+  ({ skillName: string; prompt?: never } | { prompt: string; skillName?: never });
 
 export interface FactorySendMessageDecision extends FactoryCommitDecisionBase {
   type: 'sendMessage';

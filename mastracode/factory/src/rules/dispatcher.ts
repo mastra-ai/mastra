@@ -4,7 +4,7 @@ import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentController, AgentControllerEventListener } from '@mastra/core/agent-controller';
 import { RequestContext } from '@mastra/core/request-context';
 
-import { resolveSkillInvocation } from '../skills/service.js';
+import { resolvePromptInvocation, resolveSkillInvocation } from '../skills/service.js';
 import type { SkillSession } from '../skills/service.js';
 import type {
   FactoryDeferredDecisionRecord,
@@ -424,11 +424,17 @@ export class FactoryDecisionDispatcher {
         await this.#primeCredentials?.({ orgId: record.orgId, userId: startedBy });
         const requestContext = new RequestContext();
         requestContext.set('user', { workosId: startedBy, organizationId: record.orgId });
-        const resolved = await resolveSkillInvocation(this.#controller, {
-          resourceId: binding.resourceId,
-          name: decision.skillName,
-          arguments: decision.arguments,
-        });
+        const resolved =
+          decision.skillName === undefined
+            ? await resolvePromptInvocation(this.#controller, {
+                resourceId: binding.resourceId,
+                prompt: decision.prompt,
+              })
+            : await resolveSkillInvocation(this.#controller, {
+                resourceId: binding.resourceId,
+                name: decision.skillName,
+                arguments: decision.arguments,
+              });
         const session = resolved.session as DispatcherSession;
         await this.#switchThread(session, binding);
         const delivered = await session.thread.listActiveMessages();

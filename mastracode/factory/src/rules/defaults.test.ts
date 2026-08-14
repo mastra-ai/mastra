@@ -458,6 +458,34 @@ describe('defaultFactoryRules', () => {
     });
   });
 
+  it.each([
+    ['issue', 'github-issue'],
+    ['linearIssue', 'linear-issue'],
+    ['manual', 'manual'],
+  ] as const)('starts building a %s item from a prompt, with no skill to activate', async (source, itemSource) => {
+    // The approved plan is the specification, and opening the pull request is
+    // what signals the stage is done, so this run needs no skill contract.
+    const rule = defaultFactoryRules({ version: 'deployment-7' }).work.execute?.[source]?.onEnter;
+    const context = {
+      ...stageContext({ type: 'human', id: 'user-1' }, 'work'),
+      item: { ...item, source: itemSource },
+      source,
+      stage: 'execute',
+      fromStage: 'planning',
+      toStage: 'execute',
+    } as FactoryStageRuleContext;
+
+    const decision = await rule?.(context);
+    expect(decision).toMatchObject({
+      type: 'invokeSkill',
+      idempotencyKey: 'delivery-1:build',
+      role: 'work',
+      prompt:
+        'Implement the approved plan for https://github.test/acme/repo/issues/42. Open a pull request when the work is ready for review.',
+    });
+    expect(decision).not.toHaveProperty('skillName');
+  });
+
   it('keys the planning skill invocation once per ingress', async () => {
     const rule = defaultFactoryRules({ version: 'deployment-7' }).work.planning?.issue?.onEnter;
     const context = {

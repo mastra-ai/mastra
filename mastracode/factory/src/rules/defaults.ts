@@ -95,6 +95,22 @@ function planWorkItem(context: FactoryStageRuleContext) {
   } as const;
 }
 
+/**
+ * Building carries a prompt rather than a skill. The approved plan is already
+ * the specification, so there is nothing for a skill document to add, and the
+ * handoff a skill would define is unnecessary here: Building ends by opening a
+ * pull request, which arrives as its own event and raises the Review card.
+ */
+function buildWorkItem(context: FactoryStageRuleContext) {
+  const subject = context.item.url ? `the approved plan for ${context.item.url}` : 'the approved plan';
+  return {
+    type: 'invokeSkill',
+    idempotencyKey: `${context.ingress.id}:build`,
+    role: 'work',
+    prompt: `Implement ${subject}. Open a pull request when the work is ready for review.`,
+  } as const;
+}
+
 function completeIssue(context: FactoryStageRuleContext) {
   return {
     type: 'invokeSkill',
@@ -472,6 +488,11 @@ const BUILT_IN_DEFAULTS: FactoryRulesOverrides = {
       issue: { onEnter: planWorkItem },
       linearIssue: { onEnter: planWorkItem },
       manual: { onEnter: planWorkItem },
+    },
+    execute: {
+      issue: { onEnter: buildWorkItem },
+      linearIssue: { onEnter: buildWorkItem },
+      manual: { onEnter: buildWorkItem },
     },
     done: {
       issue: { onEnter: completeIssue },
