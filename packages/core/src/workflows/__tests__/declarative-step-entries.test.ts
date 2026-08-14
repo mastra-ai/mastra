@@ -130,6 +130,23 @@ describe('declarative step entries - construction & serialized graph shape', () 
     expect(wf.serializedStepGraph[0]!.type).toBe('tool');
   });
 
+  it('.then(createStep(tool)) detects spread-copied tools via the marker symbol', () => {
+    // `resolveStoredToolProviders` renames tools with `{ ...tool, id }`, which
+    // loses the Tool prototype; the shared marker symbol must still be honored.
+    const spreadCopy = { ...doubleTool, id: 'renamed-double' } as unknown as typeof doubleTool;
+    const wf = createWorkflow({
+      id: 'wf-then-spread-tool',
+      inputSchema: z.object({ value: z.number() }),
+      outputSchema: z.any(),
+    })
+      .then(createStep(spreadCopy))
+      .commit();
+
+    const entry = wf.serializedStepGraph[0] as Extract<SerializedStepFlowEntry, { type: 'tool' }>;
+    expect(entry.type).toBe('tool');
+    expect(entry.id).toBe('renamed-double');
+  });
+
   it('agent/tool nested in .parallel() serialize as declarative child entries', () => {
     const agent = textAgent('par-agent', 'hi');
     const wf = createWorkflow({
@@ -256,6 +273,28 @@ describe.each(ENGINES)('declarative step runtime ($name engine)', ({ evented }) 
     expect(result.status).toBe('success');
     if (result.status === 'success') {
       expect((result.steps['double-tool'] as any).output).toEqual({ doubled: 10 });
+    }
+  });
+
+  it('createStep() of a spread-copied tool executes with (inputData, context)', async () => {
+    // Without marker-based detection the spread copy falls through to the
+    // StepParams branch, whose execute passes the whole params object as the
+    // tool input — the tool then fails input validation.
+    const spreadCopy = { ...doubleTool, id: 'renamed-double' } as unknown as typeof doubleTool;
+    const wf = createWorkflow({
+      id: 'rt-spread-tool',
+      inputSchema: z.object({ value: z.number() }),
+      outputSchema: z.any(),
+    })
+      .then(createStep(spreadCopy))
+      .commit();
+    bind(wf);
+
+    const run = await wf.createRun();
+    const result = await run.start({ inputData: { value: 5 } });
+    expect(result.status).toBe('success');
+    if (result.status === 'success') {
+      expect((result.steps['renamed-double'] as any).output).toEqual({ doubled: 10 });
     }
   });
 
