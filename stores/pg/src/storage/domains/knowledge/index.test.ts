@@ -38,6 +38,24 @@ describe('PostgreSQL knowledge concurrency and indexes', () => {
     }
   });
 
+  it('round-trips fact timestamps as UTC regardless of the process timezone', async () => {
+    const store = createStore();
+    await store.init();
+    const scope = ['org:tz-probe'];
+    const entity = await store.createEntity({ name: `TZ probe ${Date.now()}`, kind: 'test', scope });
+    const appended = await store.appendFact({
+      parentEntityId: entity.id,
+      text: 'utc round-trip probe',
+      scope,
+      resolutionScope: scope,
+      defaultScope: scope,
+      sourceThreadId: 'tz-thread',
+    });
+    const read = await store.getFact({ id: appended.id });
+    expect(read?.capturedAt.toISOString()).toBe(appended.capturedAt.toISOString());
+    expect(Math.abs((read?.capturedAt.getTime() ?? 0) - Date.now())).toBeLessThan(60_000);
+  });
+
   it('initializes and operates in a custom schema', async () => {
     const schemaName = 'mastra_knowledge_runtime_test';
     await pool.query(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
