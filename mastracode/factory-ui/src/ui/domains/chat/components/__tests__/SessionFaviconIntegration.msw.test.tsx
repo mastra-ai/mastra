@@ -1,9 +1,11 @@
 import { MainSidebarProvider } from '@mastra/playground-ui/components/MainSidebar';
 import { screen, waitFor } from '@testing-library/react';
+import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
+import { server } from '../../../../../../e2e/ui/msw-server';
+import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import { OverlaysProvider } from '../../../../lib/overlays';
 import { ChatMessageBoundary } from '../../context/ChatSessionProvider';
 import { ChatSessionTestProvider } from '../../context/ChatSessionTestProvider';
@@ -46,13 +48,14 @@ describe('Session favicon tracks the session lifecycle', () => {
   describe('when the session prepare stepper is showing', () => {
     it('shows the purple initializing indicator', async () => {
       const session = stubPreparingSession({ ensurePending: true });
-      renderThread();
+      const { client } = renderThread();
 
       await waitFor(() => expect(screen.getByTestId('session-prepare-steps')).toBeInTheDocument());
       expect(faviconHref()).toBe('/favicon-session-initializing.svg');
 
       session.finishEnsure();
       session.finishWorkspace();
+      await waitForMutationsIdle(client);
     });
   });
 
@@ -67,6 +70,25 @@ describe('Session favicon tracks the session lifecycle', () => {
 
       expect(screen.queryByTestId('session-prepare-steps')).not.toBeInTheDocument();
       await waitFor(() => expect(faviconHref()).toBe('/favicon-session-awaiting.svg'));
+    });
+  });
+
+  describe('when the thread history fails to load', () => {
+    it('shows the red error indicator alongside the failure notice', async () => {
+      const session = stubPreparingSession();
+      server.use(
+        http.get(
+          `${TEST_BASE_URL}/api/agent-controller/code/sessions/:resourceId/threads/:threadId/messages`,
+          () => new HttpResponse(null, { status: 500 }),
+        ),
+      );
+      const { client } = renderThread();
+
+      session.finishWorkspace();
+      await waitForMutationsIdle(client);
+
+      expect(await screen.findByText(/Failed to load messages/)).toBeInTheDocument();
+      await waitFor(() => expect(faviconHref()).toBe('/favicon-session-error.svg'));
     });
   });
 });

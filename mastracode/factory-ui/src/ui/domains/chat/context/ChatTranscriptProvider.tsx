@@ -13,6 +13,7 @@ import { ChatRuntimeContext } from './ChatRuntimeContext';
 import { ChatTranscriptContext } from './ChatTranscriptContext';
 import type { ChatTranscriptApi, LoadMoreHistory } from './ChatTranscriptContext';
 import { useChatConnection } from './useChatConnection';
+import { useChatMessagesError } from './useChatMessagesError';
 import { useChatMessagesInitializing } from './useChatMessagesInitializing';
 import { useChatSessionContext } from './useChatSessionContext';
 
@@ -89,19 +90,19 @@ function faviconStateFor({
   hasThread,
   sessionError,
   initializing,
-  connectionError,
+  threadError,
   busy,
 }: {
   hasThread: boolean;
   sessionError: boolean;
   initializing: boolean;
-  connectionError: boolean;
+  threadError: boolean;
   busy: boolean;
 }): SessionFaviconState | undefined {
   if (sessionError) return 'error';
   if (initializing) return 'initializing';
   if (!hasThread) return undefined;
-  if (connectionError) return 'error';
+  if (threadError) return 'error';
   return busy ? 'working' : 'awaiting';
 }
 
@@ -119,6 +120,7 @@ function ChatTranscriptValueProvider({
   const connection = useChatConnection();
   const { sessionError, sandboxPreparing } = useChatSessionContext();
   const messagesInitializing = useChatMessagesInitializing();
+  const messagesError = useChatMessagesError();
   const { transcript, reset, localUser, resolvePrompt, clearPending, pushNotice } = transcriptApi;
   const effectiveThreadId = transcript.threadId ?? threadId ?? connection.createdThreadId;
 
@@ -144,7 +146,7 @@ function ChatTranscriptValueProvider({
     hasThread: Boolean(effectiveThreadId),
     sessionError: Boolean(sessionError),
     initializing: sandboxPreparing || messagesInitializing,
-    connectionError: connection.status === 'error',
+    threadError: messagesError || connection.status === 'error',
     busy,
   });
 

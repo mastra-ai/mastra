@@ -10,7 +10,7 @@ import { act, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
@@ -121,6 +121,10 @@ function startRun(current: () => ReturnType<typeof useStartFactoryRun>, role: st
     });
   });
 }
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 describe('useStartFactoryRun', () => {
   it('advances the pending run phase workspace → kickoff → cleared, then offers the thread from a toast', async () => {

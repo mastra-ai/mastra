@@ -2,4 +2,10 @@
 '@mastra/factory': patch
 ---
 
-Surface Factory session state in the browser without switching to the window. The favicon on session tabs is color-coded by lifecycle state (amber initializing, green working, blue awaiting user input, red errored). Sidebar dots now cover all sessions — workspaces and user sessions alike — with tooltip labels (Initializing / Working / Ready), reusing the same three colors so a tab and its sidebar row read the same at a glance; errors are shown on the favicon only. Browser tab titles show the session's canonical identifier (`#1567` for GitHub PRs and issues, `COR-210` for Linear) or the thread title for user sessions, so a wall of session tabs is easy to identify. Board kickoff toasts also gain a secondary **New Tab** action so a ready session can be opened without leaving the review or work board.
+Added Factory session state to browser tabs and the sidebar, so a running session can be followed without switching to its window.
+
+- Session tab favicons are color-coded: amber while initializing, green while the agent works, blue when it is your turn, red on failure.
+- Sidebar status dots now cover workspaces and user sessions alike, with Initializing / Working / Ready tooltips in the same three colors, so a tab and its sidebar row read the same.
+- Failures show on the favicon only; the sidebar has no error dot yet.
+- Tab titles show the session's identifier — `#1567` for GitHub pull requests and issues, `COR-210` for Linear — or the thread title for user sessions.
+- Board kickoff toasts gained a **New Tab** action, so a ready session opens without leaving the board.
