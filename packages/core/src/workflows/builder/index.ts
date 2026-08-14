@@ -1,5 +1,5 @@
+import type { ValidatableStepFlowEntry, WorkflowValidationInput } from '../dynamic/validate/types';
 import type { Predicate } from '../predicate';
-import type { ValidatableStepFlowEntry, WorkflowValidationInput } from '../stored/validate/types';
 import type { SerializedSingleStepEntry, SerializedStepOptions } from '../types';
 
 export type WorkflowBuilderJsonValue =
@@ -122,6 +122,8 @@ export const WORKFLOW_BUILDER_SUPPORTED_STEP_TYPES = [
 
 export type WorkflowBuilderSupportedStepType = (typeof WORKFLOW_BUILDER_SUPPORTED_STEP_TYPES)[number];
 
+export { WORKFLOW_BUILDER_AUTHORING_CONSTRAINTS, WORKFLOW_BUILDER_AUTHORING_PLAYBOOK } from './authoring-playbook';
+
 function normalizeJsonValue(value: unknown, path: string, seen: Set<object>): WorkflowBuilderJsonValue {
   if (value === null || typeof value === 'string' || typeof value === 'boolean') return value;
   if (typeof value === 'number') {
@@ -146,17 +148,40 @@ function normalizeJsonValue(value: unknown, path: string, seen: Set<object>): Wo
   }
 }
 
+// OpenAI strict-schema compatibility makes every optional property required and
+// nullable, so strict-provider models are forced to emit `null` for fields they
+// would otherwise omit. Strip null at exactly the optional structural slots the
+// canonical schema declares — never blanket-strip, because a mapping constant
+// source `{ "value": null }` is a legitimate null.
+const OPTIONAL_ENTRY_KEYS = ['description', 'outputSchema', 'options', 'opts'] as const;
+const OPTIONAL_STEP_OPTION_KEYS = ['retries', 'metadata'] as const;
+const OPTIONAL_FOREACH_OPT_KEYS = ['concurrency'] as const;
+
+function dropNullKeys(target: WorkflowBuilderJsonObject, keys: readonly string[]): void {
+  for (const key of keys) {
+    if (target[key] === null) delete target[key];
+  }
+}
+
 function normalizeEntry(entry: Record<string, unknown>): WorkflowBuilderGraphEntry {
   const normalized = normalizeJsonValue(entry, 'graph entry', new Set()) as WorkflowBuilderJsonObject;
-  if (normalized.type === 'agent' && typeof normalized.agentId !== 'string' && typeof normalized.agent === 'string') {
-    normalized.agentId = normalized.agent;
-    delete normalized.agent;
+  dropNullKeys(normalized, OPTIONAL_ENTRY_KEYS);
+  if (normalized.options && typeof normalized.options === 'object' && !Array.isArray(normalized.options)) {
+    dropNullKeys(normalized.options as WorkflowBuilderJsonObject, OPTIONAL_STEP_OPTION_KEYS);
+    if (Object.keys(normalized.options).length === 0) delete normalized.options;
   }
-  if (normalized.type === 'mapping' && typeof normalized.mapConfig !== 'string') {
-    const mapConfig =
-      normalized.mapConfig ?? (normalized.output === undefined ? undefined : { output: normalized.output });
-    if (mapConfig !== undefined) normalized.mapConfig = JSON.stringify(mapConfig);
-    delete normalized.output;
+  if (normalized.opts && typeof normalized.opts === 'object' && !Array.isArray(normalized.opts)) {
+    dropNullKeys(normalized.opts as WorkflowBuilderJsonObject, OPTIONAL_FOREACH_OPT_KEYS);
+    // Canonical foreach opts requires concurrency, so an emptied opts is invalid.
+    if (Object.keys(normalized.opts).length === 0) delete normalized.opts;
+  }
+  if (
+    normalized.type === 'mapping' &&
+    typeof normalized.mapConfig !== 'string' &&
+    normalized.mapConfig !== null &&
+    normalized.mapConfig !== undefined
+  ) {
+    normalized.mapConfig = JSON.stringify(normalized.mapConfig);
   }
   if ((normalized.type === 'parallel' || normalized.type === 'conditional') && Array.isArray(normalized.steps)) {
     normalized.steps = normalized.steps.map(step =>
@@ -171,6 +196,8 @@ function normalizeEntry(entry: Record<string, unknown>): WorkflowBuilderGraphEnt
 
 export function normalizeWorkflowBuilderDefinition(input: unknown): WorkflowBuilderDefinition {
   const normalized = normalizeJsonValue(input, 'workflow definition', new Set()) as WorkflowBuilderJsonObject;
+  if (normalized.description === null) delete normalized.description;
+  if (normalized.metadata === null) delete normalized.metadata;
   if (normalized.stateSchema === null) delete normalized.stateSchema;
   if (normalized.requestContextSchema === null) delete normalized.requestContextSchema;
   if (!Array.isArray(normalized.graph)) throw new TypeError('Workflow definition graph must be an array.');
@@ -179,3 +206,8 @@ export function normalizeWorkflowBuilderDefinition(input: unknown): WorkflowBuil
   ) as unknown as WorkflowBuilderJsonValue[];
   return normalized as unknown as WorkflowBuilderDefinition;
 }
+
+export * from './preflight';
+export * from './inspection';
+export * from './authoring-schema';
+export * from './agent';

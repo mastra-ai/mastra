@@ -79,7 +79,7 @@ export const workflowInfoSchema = z.object({
   stateSchema: z.string().optional(),
   options: z.object({}).optional(),
   isProcessorWorkflow: z.boolean().optional(),
-  origin: z.enum(['code', 'stored']).optional(),
+  origin: z.enum(['code', 'dynamic']).optional(),
 });
 
 /**
@@ -120,6 +120,13 @@ export const listWorkflowRunsQuerySchema = createCombinedPaginationSchema().exte
   resourceId: z.string().optional(),
   status: workflowRunStatusSchema.optional(),
 });
+
+export const workflowRunCountsEntrySchema = z.object({
+  running: z.number(),
+  suspended: z.number(),
+});
+
+export const workflowRunCountsResponseSchema = z.record(z.string(), workflowRunCountsEntrySchema);
 
 /**
  * Base schema for workflow execution with input data and tracing

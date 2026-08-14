@@ -37,14 +37,10 @@ pnpm --dir mastracode/web dev
 
 Open `http://localhost:5873`.
 
-For UI work with hot module replacement, run these in separate terminals:
+For UI work with hot module replacement, run the Docker services, the API, and the Vite dev server together:
 
 ```shell
-pnpm --dir mastracode/web api
+pnpm --dir mastracode/web dev:ui
 ```
 
-```shell
-pnpm --filter ./mastracode/factory-ui web
-```
-
-Open `http://localhost:5173`.
+Open `http://localhost:5173`. To run them in separate terminals instead, start the Docker services with `pnpm --dir mastracode/web db:up`, then run `pnpm --dir mastracode/web api` and `pnpm --filter ./mastracode/factory-ui dev`.

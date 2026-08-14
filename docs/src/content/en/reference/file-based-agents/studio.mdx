@@ -8,6 +8,12 @@ packages:
 
 # Studio
 
+:::beta
+
+Breaking changes may occur without a major version bump until the API is stable.
+
+:::
+
 Mastra configures [Studio](/docs/studio/overview) from a `studio.ts` file directly under `src/mastra/`. The file default-exports a `StudioConfig` object for Studio authentication and authorization: who can access Studio, and what authenticated users can do.
 
 Use this page for the file-based convention. For auth providers, role-based access control (RBAC), and fine-grained authorization (FGA), see [Studio auth](/docs/studio/auth).
@@ -24,7 +30,7 @@ Studio opens without authentication in local development. Add `studio.ts` when y
 
 ## Add authentication
 
-Use an auth provider to require sign-in before users can access Studio. This example uses [WorkOS](/docs/server/auth/workos):
+Use an auth provider to require sign-in before users can access Studio. This example uses [WorkOS](/integrations/auth/workos):
 
 ```typescript title="src/mastra/studio.ts"
 import { MastraAuthWorkos } from '@mastra/auth-workos'

@@ -37,6 +37,11 @@ export function deepMergeWorkingMemory(
     const updateValue = update[key];
     const existingValue = result[key];
 
+    // undefined means the field was omitted - leave existing value untouched
+    if (updateValue === undefined) {
+      continue;
+    }
+
     // null means delete the property
     if (updateValue === null) {
       delete result[key];
@@ -147,9 +152,14 @@ export const updateWorkingMemoryTool = (memoryConfig?: MemoryConfigInternal) => 
           // stripping nulls from the raw value and validating it as the memory payload.
           const hasWrapper =
             !!value && typeof value === 'object' && !Array.isArray(value) && 'memory' in (value as object);
-          const memoryValue = hasWrapper
-            ? (value as { memory: unknown }).memory
-            : stripNullsFromOptional(value, jsonSchema as Record<string, unknown>);
+          // Strict-mode providers (e.g. OpenAI) require every property to be listed in
+          // `required`, so models must emit an explicit `null` for fields they are not
+          // updating. Since `null` means "delete this field" to the merge, those padded
+          // nulls would wipe unrelated sections. Drop nulls for fields the user's schema
+          // marks optional so they are treated as "not provided", matching the tool's
+          // documented contract that omitted fields preserve existing data.
+          const rawMemoryValue = hasWrapper ? (value as { memory: unknown }).memory : value;
+          const memoryValue = stripNullsFromOptional(rawMemoryValue, jsonSchema as Record<string, unknown>);
 
           const result = validateMemory(memoryValue);
           return result instanceof Promise ? result.then(toWrappedResult) : toWrappedResult(result);
@@ -182,6 +192,10 @@ export const updateWorkingMemoryTool = (memoryConfig?: MemoryConfigInternal) => 
     id: 'update-working-memory',
     description,
     inputSchema,
+    // Merge semantics depend on the model being able to omit fields it is not updating.
+    // Strict structured outputs would force every field into `required`, so the model has to
+    // emit placeholder values for untouched sections, which then overwrite stored data.
+    ...(usesMergeSemantics ? { strict: false as const } : {}),
     execute: async (inputData, context) => {
       const workingMemoryInput = inputData as { memory: any };
       const threadId = context?.agent?.threadId;

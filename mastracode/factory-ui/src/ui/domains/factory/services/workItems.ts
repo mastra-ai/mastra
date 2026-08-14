@@ -6,6 +6,10 @@
  * org-wide, so every member of the org reads and moves the same cards.
  */
 
+import type { FactoryRuleStage } from '@mastra/factory/rules/types';
+
+import { requestJson } from './request';
+
 export type WorkItemSource = 'github-issue' | 'github-pr' | 'linear-issue' | 'slack-thread' | 'manual';
 
 export interface WorkItemSessionRef {
@@ -131,7 +135,6 @@ function fromWireWorkItem(item: WireWorkItem): WorkItem {
 }
 
 export type FactoryBoard = 'work' | 'review';
-export type FactoryStage = 'intake' | 'triage' | 'planning' | 'execute' | 'review' | 'done' | 'canceled';
 
 export type FactoryTransitionResult =
   | {
@@ -139,7 +142,7 @@ export type FactoryTransitionResult =
       transitionId: string;
       itemId: string;
       revision: number;
-      stage: FactoryStage;
+      stage: FactoryRuleStage;
       decisions: unknown[];
     }
   | { status: 'rejected'; transitionId: string; itemId: string; code: string; reason: string };
@@ -151,24 +154,14 @@ export interface UpdateWorkItemInput {
   metadata?: Record<string, unknown>;
 }
 
-async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, {
-    headers: { Accept: 'application/json', ...(init?.body ? { 'content-type': 'application/json' } : {}) },
-    credentials: 'include',
-    ...init,
-  });
-  if (!res.ok) {
-    let message = `Request failed (${res.status})`;
-    try {
-      const body = (await res.json()) as { error?: string; message?: string };
-      if (body.message) message = body.message;
-      else if (body.error) message = body.error;
-    } catch {
-      /* ignore non-JSON */
-    }
-    throw new Error(message);
-  }
-  return (await res.json()) as T;
+/**
+ * The board as of one read: its cards, plus the sessions running on them right
+ * then. Both come from the same response so a card and its run marker can
+ * never disagree.
+ */
+export interface BoardSnapshot {
+  workItems: WorkItem[];
+  runningSessionIds: string[];
 }
 
 /** List the org's work items for a Factory project. */
@@ -176,12 +169,12 @@ export async function listWorkItems(
   baseUrl: string,
   factoryProjectId: string,
   signal?: AbortSignal,
-): Promise<WorkItem[]> {
-  const data = await requestJson<{ workItems: WireWorkItem[] }>(
+): Promise<BoardSnapshot> {
+  const data = await requestJson<{ workItems: WireWorkItem[]; runningSessionIds?: string[] }>(
     `${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/work-items`,
     { signal },
   );
-  return data.workItems.map(fromWireWorkItem);
+  return { workItems: data.workItems.map(fromWireWorkItem), runningSessionIds: data.runningSessionIds ?? [] };
 }
 
 /** Create a work item; the server upserts on its external source identity so repeats reuse the card. */
@@ -201,7 +194,7 @@ export async function transitionWorkItem(
   baseUrl: string,
   githubProjectId: string,
   id: string,
-  input: { board: FactoryBoard; stage: FactoryStage; expectedRevision: number; requestId: string; cause: string },
+  input: { board: FactoryBoard; stage: FactoryRuleStage; expectedRevision: number; requestId: string; cause: string },
 ): Promise<FactoryTransitionResult> {
   const res = await fetch(
     `${baseUrl}/web/factory/projects/${encodeURIComponent(githubProjectId)}/work-items/${encodeURIComponent(id)}/transition`,
@@ -232,7 +225,7 @@ export interface StartFactoryRunRequest {
   threadTags?: Record<string, string>;
   kickoffKey: string;
   invocation?: { type: 'prompt'; prompt: string } | { type: 'skill'; skillName: string; arguments: string };
-  destinationStage: FactoryStage;
+  destinationStage: FactoryRuleStage;
   workItem: {
     id?: string;
     role: string;

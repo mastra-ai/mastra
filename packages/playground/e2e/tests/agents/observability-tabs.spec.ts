@@ -172,7 +172,7 @@ test.describe('Agent observability tabs', () => {
       // Why this matters: TracesPage passes a per-agent localStorage key
       // (`mastra:traces:saved-filters:agent:<id>`) so that filter preferences saved
       // while reviewing weather-agent traces never bleed into another agent's tab
-      // or the global /observability view. If someone reverts the scoped key (or
+      // or the global /traces view. If someone reverts the scoped key (or
       // hardcodes the default), this test fails — the regression is otherwise
       // silent and only surfaces when two users blame each other for "ghost"
       // filters.
@@ -180,7 +180,7 @@ test.describe('Agent observability tabs', () => {
       await mockTraceLists(page);
 
       // Land on a page first so we have an origin to seed localStorage against.
-      await page.goto('/observability');
+      await page.goto('/traces');
       await page.evaluate(() => {
         localStorage.setItem('mastra:traces:saved-filters:agent:weather-agent', 'filterEnvironment=weather-prod');
       });
@@ -197,18 +197,18 @@ test.describe('Agent observability tabs', () => {
 
       // The global view uses the default (unscoped) key, so it must not read the
       // agent-scoped saved set either.
-      await page.goto('/observability');
+      await page.goto('/traces');
       await expect(page).not.toHaveURL(/filterEnvironment=weather-prod/);
     });
   });
 
-  test.describe('when the global /observability traces page is visited', () => {
+  test.describe('when the global /traces page is visited', () => {
     test('keeps the filter pills editable', async ({ page }) => {
       await mockSystemPackages(page, true);
 
       await mockTraceLists(page);
 
-      await page.goto('/observability');
+      await page.goto('/traces');
 
       // The Add Filter dropdown surfaces the entity-type field that the agent
       // scope hides — guards against accidentally hiding it everywhere.

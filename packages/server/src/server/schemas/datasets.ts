@@ -337,6 +337,9 @@ export const updateItemBodySchema = z.object({
 export const triggerExperimentBodySchema = z.object({
   targetType: z.enum(['agent', 'workflow', 'scorer']).describe('Type of target to run against'),
   targetId: z.string().describe('ID of the target'),
+  name: z.string().optional().describe('Name of the experiment'),
+  description: z.string().optional().describe('Description of the experiment'),
+  metadata: z.record(z.string(), z.unknown()).optional().describe('Additional metadata'),
   scorerIds: z.array(z.string()).optional().describe('IDs of scorers to apply'),
   version: z.coerce.number().int().optional().describe('Pin to specific dataset version'),
   agentVersion: z.string().optional().describe('Agent version ID to use for experiment'),

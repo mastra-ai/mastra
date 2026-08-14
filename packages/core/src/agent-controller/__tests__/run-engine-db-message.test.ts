@@ -138,7 +138,95 @@ describe('SessionRunEngine — MastraDBMessage contract', () => {
     expect(toolPart.toolInvocation.toolName).toBe('read');
     expect(toolPart.toolInvocation.state).toBe('result');
     expect(toolPart.toolInvocation.result).toBe('ok');
-    expect((toolPart.toolInvocation as { isError?: boolean }).isError).toBe(true);
+    expect(toolPart.toolInvocation.isError).toBe(true);
+  });
+
+  it('Given a tool call whose execution throws, When the tool-error chunk arrives, Then the part reaches a terminal errored state and the message is re-emitted', async () => {
+    const { engine, events } = createHarness();
+    const state = engine.createStreamState();
+    const ctx = requestContext();
+
+    await engine.processStreamChunk(
+      state,
+      chunk({ type: 'tool-call', payload: { toolCallId: 'tc1', toolName: 'read', args: { path: 'a.ts' } } }),
+      ctx,
+    );
+    const updatesBefore = events.filter(event => event.type === 'message_update').length;
+    await engine.processStreamChunk(
+      state,
+      chunk({ type: 'tool-error', payload: { toolCallId: 'tc1', toolName: 'read', error: 'boom' } }),
+      ctx,
+    );
+
+    const message = lastMessageEvent(events);
+    const toolPart = message.content.parts.find(part => part.type === 'tool-invocation');
+    if (!toolPart || toolPart.type !== 'tool-invocation') throw new Error('no tool invocation part emitted');
+    expect(toolPart.toolInvocation.state).toBe('result');
+    expect(toolPart.toolInvocation.result).toBe('boom');
+    expect(toolPart.toolInvocation.isError).toBe(true);
+    expect(events).toContainEqual({ type: 'tool_end', toolCallId: 'tc1', result: 'boom', isError: true });
+    expect(events.filter(event => event.type === 'message_update').length).toBe(updatesBefore + 1);
+  });
+
+  it('Given a denied tool call, When the denial chunk arrives, Then the invocation reaches output-denied state', async () => {
+    const { engine, events } = createHarness();
+    const state = engine.createStreamState();
+    const ctx = requestContext();
+
+    await engine.processStreamChunk(
+      state,
+      chunk({ type: 'tool-call', payload: { toolCallId: 'tc1', toolName: 'write', args: { path: 'a.ts' } } }),
+      ctx,
+    );
+    await engine.processStreamChunk(
+      state,
+      chunk({
+        type: 'tool-output-denied',
+        payload: {
+          toolCallId: 'tc1',
+          toolName: 'write',
+          args: { path: 'a.ts' },
+          approval: { id: 'approval-1', approved: false, reason: 'Not allowed' },
+        },
+      }),
+      ctx,
+    );
+
+    const message = lastMessageEvent(events);
+    const toolPart = message.content.parts.find(part => part.type === 'tool-invocation');
+    if (!toolPart || toolPart.type !== 'tool-invocation') throw new Error('no tool invocation part emitted');
+    expect(toolPart.toolInvocation).toMatchObject({
+      state: 'output-denied',
+      toolCallId: 'tc1',
+      toolName: 'write',
+      args: { path: 'a.ts' },
+      approval: { id: 'approval-1', approved: false, reason: 'Not allowed' },
+    });
+    expect(events).toContainEqual({ type: 'tool_end', toolCallId: 'tc1', result: 'Not allowed', isError: false });
+  });
+
+  it('Given a tool-error carrying an Error instance, When it folds, Then the failure message survives JSON serialization', async () => {
+    const { engine, events } = createHarness();
+    const state = engine.createStreamState();
+    const ctx = requestContext();
+
+    await engine.processStreamChunk(
+      state,
+      chunk({ type: 'tool-call', payload: { toolCallId: 'tc1', toolName: 'read', args: { path: 'a.ts' } } }),
+      ctx,
+    );
+    await engine.processStreamChunk(
+      state,
+      chunk({ type: 'tool-error', payload: { toolCallId: 'tc1', toolName: 'read', error: new Error('boom') } }),
+      ctx,
+    );
+
+    const message = lastMessageEvent(events);
+    const toolPart = message.content.parts.find(part => part.type === 'tool-invocation');
+    if (!toolPart || toolPart.type !== 'tool-invocation') throw new Error('no tool invocation part emitted');
+    const wire = JSON.parse(JSON.stringify(toolPart));
+    expect(wire.toolInvocation.result).toBe('boom');
+    expect(wire.toolInvocation.isError).toBe(true);
   });
 
   it('Given a signal data chunk, When it arrives, Then it emits a DB-native signal message', async () => {
@@ -220,6 +308,56 @@ describe('SessionRunEngine — MastraDBMessage contract', () => {
     if (!callPart || callPart.type !== 'tool-invocation') throw new Error('no tool invocation part in snapshot');
     expect(callPart.toolInvocation.state).toBe('call');
     expect(callPart.toolInvocation).not.toHaveProperty('result');
+  });
+
+  it('Given a step-start carrying the response message id, When the turn streams, Then emitted messages adopt that id', async () => {
+    const { engine, events } = createHarness();
+    const state = engine.createStreamState();
+    const ctx = requestContext();
+
+    await engine.processStreamChunk(state, chunk({ type: 'step-start', payload: { messageId: 'response-1' } }), ctx);
+    await engine.processStreamChunk(state, chunk({ type: 'text-start', payload: { id: 't1' } }), ctx);
+    await engine.processStreamChunk(state, chunk({ type: 'text-delta', payload: { id: 't1', text: 'Hello' } }), ctx);
+
+    expect(lastMessageEvent(events).id).toBe('response-1');
+  });
+
+  it('Given a steer rotation, When the next step starts with a rotated id, Then the new message adopts it', async () => {
+    const { engine, events } = createHarness();
+    const state = engine.createStreamState();
+    const ctx = requestContext();
+
+    await engine.processStreamChunk(state, chunk({ type: 'step-start', payload: { messageId: 'response-1' } }), ctx);
+    await engine.processStreamChunk(state, chunk({ type: 'text-start', payload: { id: 't1' } }), ctx);
+    await engine.processStreamChunk(state, chunk({ type: 'text-delta', payload: { id: 't1', text: 'first' } }), ctx);
+    await engine.processStreamChunk(state, chunk({ type: 'data-user-message', data: { id: 'sig-1' } }), ctx);
+    await engine.processStreamChunk(state, chunk({ type: 'step-start', payload: { messageId: 'response-2' } }), ctx);
+    await engine.processStreamChunk(state, chunk({ type: 'text-start', payload: { id: 't2' } }), ctx);
+    await engine.processStreamChunk(state, chunk({ type: 'text-delta', payload: { id: 't2', text: 'second' } }), ctx);
+
+    const assistantEnds = events.filter(event => event.type === 'message_end' && event.message.role === 'assistant');
+    expect(assistantEnds[0]?.message.id).toBe('response-1');
+    expect(lastMessageEvent(events).id).toBe('response-2');
+  });
+
+  it('Given an id already emitted or content already streamed, When step-start arrives, Then the engine keeps its own id', async () => {
+    const { engine, events } = createHarness();
+    const state = engine.createStreamState();
+    const ctx = requestContext();
+
+    // Content before step-start: the id was already observable, must not change.
+    await engine.processStreamChunk(state, chunk({ type: 'text-start', payload: { id: 't1' } }), ctx);
+    const mintedId = lastMessageEvent(events).id;
+    await engine.processStreamChunk(state, chunk({ type: 'step-start', payload: { messageId: 'response-1' } }), ctx);
+    await engine.processStreamChunk(state, chunk({ type: 'text-delta', payload: { id: 't1', text: 'first' } }), ctx);
+    expect(lastMessageEvent(events).id).toBe(mintedId);
+
+    // A reused id after rotation would collapse two display messages into one.
+    await engine.processStreamChunk(state, chunk({ type: 'data-user-message', data: { id: 'sig-1' } }), ctx);
+    await engine.processStreamChunk(state, chunk({ type: 'step-start', payload: { messageId: 'response-1' } }), ctx);
+    await engine.processStreamChunk(state, chunk({ type: 'text-start', payload: { id: 't2' } }), ctx);
+    expect(lastMessageEvent(events).id).not.toBe('response-1');
+    expect(lastMessageEvent(events).id).not.toBe(mintedId);
   });
 
   it('Given a non-success finish reason, When the stream finishes, Then terminal state lives on message metadata', async () => {

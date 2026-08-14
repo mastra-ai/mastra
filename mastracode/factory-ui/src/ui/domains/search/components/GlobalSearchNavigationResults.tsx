@@ -1,6 +1,6 @@
 import { CommandGroup } from '@mastra/playground-ui/components/Command';
 import { CommandPaletteItem } from '@mastra/playground-ui/components/CommandPalette';
-import { ChartLine, GitPullRequest, ListChecks, ScrollText, Settings, SquareKanban } from 'lucide-react';
+import { Gauge, GitPullRequest, ListChecks, ScrollText, Settings, SquareKanban } from 'lucide-react';
 
 import type { GlobalSearchSelectHandler } from '../services/searchNavigation';
 import { SETTINGS_SECTION_LABELS, settingsSectionPath } from '../../settings/settingsSections';
@@ -15,6 +15,13 @@ export function GlobalSearchNavigationResults({
   return (
     <CommandGroup heading="Navigation">
       <CommandPaletteItem
+        icon={<Gauge />}
+        title="Overview"
+        subtitle="Factory navigation"
+        value={`Overview Factory navigation /factories/${factoryId}/overview`}
+        onSelect={() => onSelect(`/factories/${factoryId}/overview`, false)}
+      />
+      <CommandPaletteItem
         icon={<SquareKanban />}
         title="Work"
         subtitle="Factory navigation"
@@ -27,13 +34,6 @@ export function GlobalSearchNavigationResults({
         subtitle="Factory navigation"
         value={`Review Factory navigation /factories/${factoryId}/review`}
         onSelect={() => onSelect(`/factories/${factoryId}/review`, false)}
-      />
-      <CommandPaletteItem
-        icon={<ChartLine />}
-        title="Metrics"
-        subtitle="Factory navigation"
-        value={`Metrics Factory navigation /factories/${factoryId}/metrics`}
-        onSelect={() => onSelect(`/factories/${factoryId}/metrics`, false)}
       />
       <CommandPaletteItem
         icon={<ListChecks />}

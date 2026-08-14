@@ -179,7 +179,7 @@ export const FLAGS: FlagSpec[] = [
     field: 'thinkingLevel',
     coerce: validate.enum<ThinkingLevel>('--thinking-level', VALID_THINKING_LEVELS),
     placeholder: '<level>',
-    help: 'Thinking level: off, low, medium, high, xhigh',
+    help: 'Thinking level: off, low, medium, high, xhigh, max',
   },
   {
     key: 'settings',

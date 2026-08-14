@@ -1,16 +1,19 @@
 /**
- * The kickoff sequence (`createUserSession → startFactoryRun → navigate`) takes
- * multiple seconds; cards narrate it via `pendingRuns[].phase`. These tests gate
- * each endpoint to pin the phase the hook reports at every step.
+ * The kickoff sequence (`createUserSession → startFactoryRun`) takes multiple
+ * seconds; cards narrate it via `pendingRuns[].phase`. These tests gate each
+ * endpoint to pin the phase the hook reports at every step, and to pin that the
+ * run lands as a toast rather than yanking the board to the new thread.
  */
+import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { QueryClient } from '@tanstack/react-query';
-import { act, waitFor } from '@testing-library/react';
+import { act, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../e2e/ui/msw-server';
-import { renderWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
+import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
 import { useWorkspacesQuery } from '../useWorkspaces';
 import { useStartFactoryRun } from '../useStartFactoryRun';
 
@@ -61,13 +64,16 @@ function stubKickoffEndpoints() {
       sessions.push(session);
       return HttpResponse.json({ session });
     }),
-    http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/runs/start`, async () => {
+    http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/runs/start`, async ({ request }) => {
+      // Thread ids track the role so a test that starts two cards at once can
+      // tell the two toasts apart.
+      const body = (await request.json()) as { workItem: { role: string } };
       await runGate.promise;
       return HttpResponse.json({
         prepared: {
           workItemId: 'item-1',
           bindingId: 'binding-1',
-          threadId: 'thread-1',
+          threadId: `thread-${body.workItem.role}`,
           resourceId: 'resource-1',
           sessionId: 'session-1',
           branch: 'feat/investigate-1',
@@ -85,11 +91,12 @@ function stubKickoffEndpoints() {
 /** The hook reads `:factoryId` and navigates, so it renders inside a real router. */
 function renderStartFactoryRun(client?: QueryClient) {
   // The sidebar's workspace list is mounted alongside the hook, so the test sees
-  // exactly what a user staring at the sidebar during kickoff would see.
+  // exactly what a user staring at the sidebar during kickoff would see. The
+  // Toaster rides along because the toast is the only way into a started run.
   let latest!: ReturnType<typeof useStartFactoryRun> & { workspaces: ReturnType<typeof useWorkspacesQuery> };
   function Probe() {
     latest = { ...useStartFactoryRun(), workspaces: useWorkspacesQuery(REPO_ID) };
-    return null;
+    return <Toaster position="bottom-right" />;
   }
   const router = createMemoryRouter([{ path: '/factories/:factoryId/*', element: <Probe /> }], {
     initialEntries: [`/factories/${FACTORY_ID}/work`],
@@ -98,27 +105,35 @@ function renderStartFactoryRun(client?: QueryClient) {
   return { ...rendered, router, current: () => latest };
 }
 
+function startRun(current: () => ReturnType<typeof useStartFactoryRun>, role: string) {
+  act(() => {
+    current().start.mutate({
+      branch: 'feat/investigate-1',
+      threadTitle: `Investigate #1 (${role})`,
+      workItem: {
+        id: 'item-1',
+        role,
+        stages: ['triage'],
+        source: 'github-issue',
+        sourceKey: 'github-issue:1',
+        title: 'Investigate #1',
+      },
+    });
+  });
+}
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
 describe('useStartFactoryRun', () => {
-  it('advances the pending run phase workspace → kickoff → cleared, then navigates to the thread', async () => {
+  it('advances the pending run phase workspace → kickoff → cleared, then offers the thread from a toast', async () => {
     const { sessionGate, runGate } = stubKickoffEndpoints();
-    const { router, current } = renderStartFactoryRun();
+    const { router, current, client } = renderStartFactoryRun();
 
     await waitFor(() => expect(current().enabled).toBe(true));
 
-    act(() => {
-      current().start.mutate({
-        branch: 'feat/investigate-1',
-        threadTitle: 'Investigate #1',
-        workItem: {
-          id: 'item-1',
-          role: 'investigator',
-          stages: ['triage'],
-          source: 'github-issue',
-          sourceKey: 'github-issue:1',
-          title: 'Investigate #1',
-        },
-      });
-    });
+    startRun(current, 'investigator');
 
     // Phase 1: waiting on the workspace session.
     await waitFor(() => expect(current().pendingRuns).toHaveLength(1));
@@ -133,12 +148,64 @@ describe('useStartFactoryRun', () => {
     sessionGate.resolve();
     await waitFor(() => expect(current().pendingRuns[0]?.phase).toBe('kickoff'));
 
-    // Settled: the pending run clears and the router lands on the new thread.
+    // Settled: the pending run clears and the board stays exactly where it was.
     runGate.resolve();
-    await waitFor(() => expect(current().pendingRuns).toHaveLength(0));
+    await waitForMutationsIdle(client);
+    expect(current().pendingRuns).toHaveLength(0);
+    await screen.findByText('Investigate #1 (investigator) is ready');
+    expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/work`);
+
+    // The toast is the way in.
+    await userEvent.click(await screen.findByRole('button', { name: 'Open' }));
     await waitFor(() =>
-      expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/workspaces/session-1/threads/thread-1`),
+      expect(router.state.location.pathname).toBe(
+        `/factories/${FACTORY_ID}/workspaces/session-1/threads/thread-investigator`,
+      ),
     );
+  });
+
+  it('opens a ready session in a new browser tab without leaving the board', async () => {
+    const { sessionGate, runGate } = stubKickoffEndpoints();
+    const { router, current, client } = renderStartFactoryRun();
+    const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+
+    await waitFor(() => expect(current().enabled).toBe(true));
+    startRun(current, 'reviewer');
+    sessionGate.resolve();
+    runGate.resolve();
+    await waitForMutationsIdle(client);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'New Tab' }));
+
+    expect(open).toHaveBeenCalledWith(
+      `/factories/${FACTORY_ID}/workspaces/session-1/threads/thread-reviewer`,
+      '_blank',
+      'noopener,noreferrer',
+    );
+    expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/work`);
+  });
+
+  it('keeps the board available so several runs can be started back to back', async () => {
+    const { sessionGate, runGate } = stubKickoffEndpoints();
+    const { router, current, client } = renderStartFactoryRun();
+
+    await waitFor(() => expect(current().enabled).toBe(true));
+
+    startRun(current, 'investigator');
+    startRun(current, 'reviewer');
+
+    // Both runs are in flight at once — the first one never navigated away.
+    await waitFor(() => expect(current().pendingRuns).toHaveLength(2));
+    expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/work`);
+
+    sessionGate.resolve();
+    runGate.resolve();
+
+    await waitForMutationsIdle(client);
+    expect(current().pendingRuns).toHaveLength(0);
+    await screen.findByText('Investigate #1 (investigator) is ready');
+    await screen.findByText('Investigate #1 (reviewer) is ready');
+    expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/work`);
   });
 
   it('refreshes the sidebar workspace list as soon as the kickoff creates its session', async () => {
@@ -172,10 +239,9 @@ describe('useStartFactoryRun', () => {
     sessionGate.resolve();
     runGate.resolve();
 
-    await waitFor(() =>
-      expect(current().workspaces.data?.workspaces).toEqual([
-        expect.objectContaining({ sessionId: 'session-1', branch: 'feat/investigate-1' }),
-      ]),
-    );
+    await waitForMutationsIdle(client);
+    expect(current().workspaces.data?.workspaces).toEqual([
+      expect.objectContaining({ sessionId: 'session-1', branch: 'feat/investigate-1' }),
+    ]);
   });
 });

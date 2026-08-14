@@ -1,4 +1,4 @@
-import type { SerializedStepFlowEntry } from '../../../workflows/types';
+import type { ValidatableStepFlowEntry } from '../../../workflows/dynamic/validate/types';
 import { StorageDomain } from '../base';
 
 /**
@@ -22,11 +22,20 @@ export interface WorkflowDefinition {
   requestContextSchema?: unknown;
 
   /**
-   * The workflow graph in its JSON-safe form. Same shape the engine already
-   * emits via `serializedStepGraph` — but with full mapping configs preserved
-   * (no truncation) and all step/agent/tool references stored as ids.
+   * The workflow graph in its JSON-safe form: close to what the engine emits
+   * via `serializedStepGraph`, but with full mapping configs preserved (no
+   * truncation) and all step/agent/tool references stored as ids.
+   *
+   * Typed as `ValidatableStepFlowEntry` rather than `SerializedStepFlowEntry`
+   * because a persisted row is deliberately not the runtime shape: dates are
+   * ISO strings, and the `serializedConditions`/`serializedCondition` debug
+   * labels are absent because rehydration derives them from the stored
+   * predicates instead of persisting them.
+   *
+   * Rows are written already normalized (see `normalizeWorkflowBuilderDefinition`),
+   * so mapping configs arrive here as JSON strings.
    */
-  graph: SerializedStepFlowEntry[];
+  graph: ValidatableStepFlowEntry[];
 
   /** Lifecycle status. Only 'active' definitions are loaded at startWorkers(). */
   status: 'active' | 'archived';
@@ -48,7 +57,7 @@ export interface CreateWorkflowDefinitionInput {
   outputSchema: unknown;
   stateSchema?: unknown;
   requestContextSchema?: unknown;
-  graph: SerializedStepFlowEntry[];
+  graph: ValidatableStepFlowEntry[];
   authorId?: string;
 }
 
@@ -61,7 +70,7 @@ export interface UpdateWorkflowDefinitionInput {
   outputSchema?: unknown;
   stateSchema?: unknown;
   requestContextSchema?: unknown;
-  graph?: SerializedStepFlowEntry[];
+  graph?: ValidatableStepFlowEntry[];
   status?: 'active' | 'archived';
   authorId?: string;
 }

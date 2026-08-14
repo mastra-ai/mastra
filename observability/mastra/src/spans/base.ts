@@ -20,11 +20,16 @@ import type {
 } from '@mastra/core/observability';
 
 import { ModelSpanTracker } from '../model-tracing';
+import { isPlainRecord, mergeMetadata as mergeSpanMetadata } from './metadata';
 import { deepClean, mergeSerializationOptions } from './serialization';
 import type { DeepCleanOptions } from './serialization';
 
 /** Extended span type that includes getParentSpan method available on BaseSpan instances */
-type AnyBaseSpan = AnySpan & { getParentSpan(includeInternalSpans?: boolean): AnySpan | undefined };
+type AnyBaseSpan = AnySpan & {
+  getParentSpan(includeInternalSpans?: boolean): AnySpan | undefined;
+  /** True when the span is dropped before export (excludeSpanTypes / internal / alwaysExcluded) */
+  readonly isExcluded?: boolean;
+};
 
 /**
  * Determines if a span type should be considered internal based on flags.
@@ -73,12 +78,12 @@ function isSpanInternal(spanType: SpanType, flags?: InternalSpans): boolean {
 /**
  * Get the external parent span ID from CreateSpanOptions.
  *
- * If the parent is internal, walks up the parent chain to find
- * the closest external ancestor. If the parent is already external,
- * returns its ID directly.
+ * If the parent is internal or excluded from export (`excludeSpanTypes`),
+ * walks up the parent chain to find the closest exported ancestor.
+ * If the parent is already exportable, returns its ID directly.
  *
  * This is useful when exporting spans to external observability systems
- * that shouldn't include internal framework spans.
+ * that shouldn't include internal framework spans or excluded types.
  *
  * @param options - Span creation options
  * @returns The external parent span ID, or undefined if no external parent exists
@@ -102,13 +107,12 @@ export function getExternalParentId(options: CreateSpanOptions<any>): string | u
     return undefined;
   }
 
-  if (options.parent.isInternal) {
-    // Parent is internal, find its external ancestor
-    return options.parent.getParentSpanId(false);
-  } else {
-    // Parent is already external, use it directly
-    return options.parent.id;
+  const parent = options.parent as AnyBaseSpan;
+  if (parent.isInternal || parent.isExcluded) {
+    // Parent won't reach exporters — walk to the closest exported ancestor
+    return parent.getParentSpanId(false);
   }
+  return parent.id;
 }
 
 export abstract class BaseSpan<TType extends SpanType = any> implements Span<TType> {
@@ -146,8 +150,10 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
   public entityId?: string;
   /** Entity name that created the span */
   public entityName?: string;
-  /** Parent span ID (for root spans that are children of external spans) */
+  /** Parent span within this Mastra trace: a span Mastra created (the span-tree parent, or a prior Mastra span such as the suspended run a resume links back to) */
   protected parentSpanId?: string;
+  /** Parent from an external tracing system (ambient OTel / dd-trace span) that Mastra did not create; carried for external correlation, not part of Mastra's own parent/child linkage */
+  protected externalParentSpanId?: string;
   /** Deep clean options for serialization */
   protected deepCleanOptions: DeepCleanOptions;
   /**
@@ -159,11 +165,15 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
    * when the span is internal and includeInternalSpans is false, or when
    * the subclass is always excluded (e.g., NoOpSpan).
    *
+   * Public so parent-chain walks (`getParentSpan`) can skip ancestors that
+   * exporters will never receive — otherwise descendants export a
+   * `parentSpanId` pointing at a dropped span and become orphans.
+   *
    * Note: metadata is still attached and deepCleaned because it is read in
    * process by getCorrelationContext() and by getLoggerContext() /
    * getMetricsContext() (which structuredClone it).
    */
-  protected isExcluded: boolean;
+  public isExcluded: boolean;
   /** Cached canonical correlation context for this live span */
   protected correlationContext?: CorrelationContext;
 
@@ -199,7 +209,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     // getMetricsContext() (which structuredClone it), and non-filtered
     // child spans inherit it via options.parent?.metadata.
     this.metadata = deepClean(
-      options.parent?.metadata || options.metadata ? { ...options.parent?.metadata, ...options.metadata } : undefined,
+      this.prepareSpanMetadata(mergeSpanMetadata(options.parent?.metadata, options.metadata)),
       this.deepCleanOptions,
     );
 
@@ -232,9 +242,46 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     if (this.isEvent) {
       // Event spans don't have endTime or input.
       // Event spans are immediately emitted by the BaseObservability class via the end() event.
-      this.output = deepClean(options.output, this.deepCleanOptions);
+      this.output = deepClean(this.prepareSpanOutput(options.output), this.deepCleanOptions);
     } else {
       this.input = deepClean(options.input, this.deepCleanOptions);
+    }
+  }
+
+  protected prepareSpanOutput<T>(value: T): T {
+    if (!isPlainRecord(value)) {
+      return value;
+    }
+
+    if (this.type !== SpanType.MODEL_STEP && this.type !== SpanType.MODEL_INFERENCE) {
+      return value;
+    }
+
+    try {
+      const prepared = { ...value };
+      delete prepared.steps;
+      return prepared as T;
+    } catch {
+      return value;
+    }
+  }
+
+  protected prepareSpanMetadata<T>(value: T): T {
+    if (!isPlainRecord(value)) {
+      return value;
+    }
+
+    if (this.type !== SpanType.MODEL_STEP) {
+      return value;
+    }
+
+    try {
+      const prepared = { ...value };
+      delete prepared.providerMetadata;
+      delete prepared.experimental_providerMetadata;
+      return prepared as T;
+    } catch {
+      return value;
     }
   }
 
@@ -278,17 +325,25 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
   /** Returns `TRUE` if the span is a valid span (not a NO-OP Span) */
   abstract get isValid(): boolean;
 
-  /** Get the closest parent span, optionally skipping internal spans */
+  /**
+   * Get the closest parent span.
+   * Always skips ancestors dropped by `excludeSpanTypes` (`isExcluded`), so
+   * exported `parentSpanId` values never point at spans exporters omit.
+   * When `includeInternalSpans` is false/undefined, also skips `isInternal`
+   * ancestors.
+   */
   public getParentSpan(includeInternalSpans?: boolean): AnySpan | undefined {
     if (!this.parent) {
       return undefined;
     }
-    if (includeInternalSpans) return this.parent;
-    if (this.parent.isInternal) return (this.parent as AnyBaseSpan).getParentSpan(includeInternalSpans);
+    const parent = this.parent as AnyBaseSpan;
+    if (parent.isExcluded || (!includeInternalSpans && parent.isInternal)) {
+      return parent.getParentSpan(includeInternalSpans);
+    }
     return this.parent;
   }
 
-  /** Get the closest parent spanId that isn't an internal span */
+  /** Get the closest parent spanId that will reach exporters (unless includeInternalSpans) */
   public getParentSpanId(includeInternalSpans?: boolean): string | undefined {
     if (!this.parent) {
       // Return parent span ID if available (for root spans with external parent)
@@ -298,8 +353,24 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     if (parentSpan) {
       return parentSpan.id;
     }
-    // All ancestors are internal, recurse to get root's parentSpanId
+    // All ancestors are internal/excluded, recurse to get root's parentSpanId
     return this.parent.getParentSpanId(includeInternalSpans);
+  }
+
+  /**
+   * External (foreign tracing-system) parent id to export alongside
+   * {@link getParentSpanId}. When every Mastra ancestor is dropped from
+   * export, the span is exported at the root's position, so the root's
+   * external parent must travel with it.
+   */
+  protected getExportedExternalParentSpanId(includeInternalSpans?: boolean): string | undefined {
+    if (!this.parent) {
+      return this.externalParentSpanId;
+    }
+    if (this.getParentSpan(includeInternalSpans)) {
+      return this.externalParentSpanId;
+    }
+    return (this.parent as unknown as BaseSpan).getExportedExternalParentSpanId(includeInternalSpans);
   }
 
   /** Find the closest parent span of a specific type by walking up the parent chain */
@@ -395,6 +466,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
       isEvent: this.isEvent,
       isRootSpan: this.isRootSpan,
       parentSpanId: this.getParentSpanId(includeInternalSpans),
+      externalParentSpanId: this.getExportedExternalParentSpanId(includeInternalSpans),
       // Tags are only included for root spans
       ...(this.isRootSpan && this.tags?.length ? { tags: this.tags } : {}),
     };

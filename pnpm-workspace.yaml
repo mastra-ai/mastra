@@ -13,6 +13,7 @@ packages:
   - deployers/*
   - stores/*
   - browser/*
+  - code-mode/*
   - voice/*
   - examples/voice/aws-nova-sonic-test
   - workflows/*
@@ -51,7 +52,9 @@ catalog:
 patchedDependencies:
   '@changesets/get-dependents-graph@2.1.4': patches/@changesets__get-dependents-graph@2.1.4.patch
   '@earendil-works/pi-tui@0.80.6': patches/@earendil-works__pi-tui@0.80.6.patch
+  '@manypkg/tools@2.1.1': patches/@manypkg__tools@2.1.1.patch
   gray-matter@4.0.3: patches/gray-matter@4.0.3.patch
+  read-yaml-file@1.1.0: patches/read-yaml-file@1.1.0.patch
 
 packageExtensions:
   '@ai-sdk/provider-utils@3.0.25':
@@ -183,13 +186,6 @@ overrides:
   better-auth: ^1.6.23
   js-yaml: ^5.2.2
   glob@<=10.5.0: 10.5.0
-  # image-size 2.x (incl. 2.0.2 latest) has unpatched DoS infinite-loop flaws
-  # (CVE-2025-71330 / GHSA-w3rx-r6r6-pgpr). No fixed 2.x exists, so pin to the
-  # maintained legacy 1.2.1 release, which predates the vulnerable code paths
-  # and is API-compatible (default imageSize(buffer) usage). See issue #17975.
-  # Scoped to @mastra/memory only — a global override breaks the docs build,
-  # which relies on the `image-size/fromFile` subpath export added in 2.x.
-  '@mastra/memory>image-size': 1.2.1
   body-parser@<=2.2.1: 2.3.0
   inngest: ^4.2.2
   fast-xml-parser@<5.5.7: ^5.10.1
@@ -375,4 +371,6 @@ allowBuilds:
   node-liblzma: false
   workerd: false
   braintrust: false
+  # node-oracledb runs in Thin mode (pure JS); its install script is a no-op stub.
+  oracledb: false
   isolated-vm: true

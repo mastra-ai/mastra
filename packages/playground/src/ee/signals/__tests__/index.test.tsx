@@ -10,6 +10,7 @@ import { navHandleWithChildren } from '../../../lib/nav';
 import { RouteHeader } from '../../../lib/route-header/route-header';
 import { SignalsEntityCrumb } from '../signals-entity-crumb';
 import {
+  allThemePathsResponse,
   drilldownThemeFlowResponse,
   firstThemeExamplesResponse,
   themeDetailResponse,
@@ -32,10 +33,31 @@ import { server } from '@/test/msw-server';
 
 const BASE_URL = window.location.origin;
 
-function renderSignalsPage() {
+// Chart nodes only render once the responsive container observes a real size.
+class ChartResizeObserver implements ResizeObserver {
+  constructor(private readonly callback: ResizeObserverCallback) {}
+
+  observe(target: Element) {
+    const size = { blockSize: 680, inlineSize: 800 };
+    const entry = {
+      target,
+      contentRect: new DOMRectReadOnly(0, 0, 800, 680),
+      borderBoxSize: [size],
+      contentBoxSize: [size],
+      devicePixelContentBoxSize: [size],
+    } satisfies ResizeObserverEntry;
+    this.callback([entry], this);
+  }
+
+  unobserve() {}
+
+  disconnect() {}
+}
+
+function renderSignalsPage(initialEntry = '/') {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={[initialEntry]}>
       <QueryClientProvider client={queryClient}>
         <SignalsOverviewPage />
       </QueryClientProvider>
@@ -68,6 +90,12 @@ function renderSignalsPageWithShell() {
 function headerAgentSelector() {
   return within(screen.getByRole('navigation', { name: 'Breadcrumb' })).getByRole('combobox');
 }
+
+beforeEach(() => {
+  vi.stubGlobal('ResizeObserver', ChartResizeObserver);
+  vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(800);
+  vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(680);
+});
 
 afterEach(() => {
   cleanup();
@@ -169,6 +197,21 @@ describe('Trace Intelligence page', () => {
       expect(await screen.findByRole('region', { name: 'Trace signal theme flow' })).not.toBeNull();
     });
 
+    it('requests signals in processing order: goal, sentiment, behavior, outcome', async () => {
+      const snapshotSignalNames: Array<string | undefined> = [];
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, ({ request }) => {
+          snapshotSignalNames.push(new URL(request.url).searchParams.get('signalNames') ?? undefined);
+          return HttpResponse.json(themeSnapshotsResponse);
+        }),
+      );
+
+      renderSignalsPage();
+
+      await screen.findByRole('region', { name: 'Trace signal theme flow' });
+      expect(snapshotSignalNames[0]).toBe('goal,sentiment,behavior,outcome');
+    });
+
     it('keeps exactly one Trace intelligence documentation action across the shell and page', async () => {
       renderSignalsPageWithShell();
       await screen.findByRole('region', { name: 'Trace signal theme flow' });
@@ -268,6 +311,52 @@ describe('Trace Intelligence page', () => {
     });
   });
 
+  describe('when the page loads with a snapshot date query parameter', () => {
+    it('restores the selected range and requests snapshots for it', async () => {
+      vi.spyOn(Date, 'now').mockReturnValue(new Date('2026-07-27T12:00:00.000Z').getTime());
+      const snapshotRequests: URL[] = [];
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities`, () => HttpResponse.json(populatedThemeEntitiesResponse)),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, ({ request }) => {
+          snapshotRequests.push(new URL(request.url));
+          return HttpResponse.json(themeSnapshotsResponse);
+        }),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-flow`, () =>
+          HttpResponse.json(themeFlowResponse),
+        ),
+      );
+
+      renderSignalsPage('/?datePreset=last-14d');
+
+      expect(await screen.findByRole('button', { name: 'Last 14 days' })).not.toBeNull();
+      await waitFor(() => expect(snapshotRequests).toHaveLength(1));
+      expect(snapshotRequests[0]?.searchParams.get('from')).toBe('2026-07-13T12:00:00.000Z');
+    });
+  });
+
+  describe('when the page loads with custom date query parameters', () => {
+    it('restores the custom range and requests snapshots for it', async () => {
+      const snapshotRequests: URL[] = [];
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities`, () => HttpResponse.json(populatedThemeEntitiesResponse)),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, ({ request }) => {
+          snapshotRequests.push(new URL(request.url));
+          return HttpResponse.json(themeSnapshotsResponse);
+        }),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-flow`, () =>
+          HttpResponse.json(themeFlowResponse),
+        ),
+      );
+
+      renderSignalsPage('/?datePreset=custom&dateFrom=2026-07-01T00:00:00.000Z&dateTo=2026-07-15T00:00:00.000Z');
+
+      expect(await screen.findByRole('region', { name: 'Trace signal theme flow' })).not.toBeNull();
+      await waitFor(() => expect(snapshotRequests).toHaveLength(1));
+      expect(snapshotRequests[0]?.searchParams.get('from')).toBe('2026-07-01T00:00:00.000Z');
+      expect(snapshotRequests[0]?.searchParams.get('to')).toBe('2026-07-15T00:00:00.000Z');
+    });
+  });
+
   describe('when the snapshot date preset changes', () => {
     it('requests and renders flows only for snapshots returned in the new range', async () => {
       vi.spyOn(Date, 'now').mockReturnValue(new Date('2026-07-27T12:00:00.000Z').getTime());
@@ -321,8 +410,12 @@ describe('Trace Intelligence page', () => {
         http.get(`${BASE_URL}/api/learning/entities/support-agent/themes/:themeId/history`, () =>
           HttpResponse.json(themeHistoryResponse),
         ),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-paths`, () =>
+          HttpResponse.json(allThemePathsResponse),
+        ),
       );
       renderSignalsPage();
+      fireEvent.click(await screen.findByRole('button', { name: /Add transcript.+2 traces \(67%\)/ }));
       fireEvent.click(await screen.findByRole('button', { name: 'View theme details for Add transcript' }));
       await screen.findByRole('dialog', { name: 'Add transcript' });
 
@@ -352,10 +445,14 @@ describe('Trace Intelligence page', () => {
         http.get(`${BASE_URL}/api/learning/entities/support-agent/themes/:themeId/history`, () =>
           HttpResponse.json(themeHistoryResponse),
         ),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-paths`, () =>
+          HttpResponse.json(allThemePathsResponse),
+        ),
         http.get(`${BASE_URL}/api/learning/traces/trace-1/summary`, () => HttpResponse.json(traceInsightResponse)),
       );
       renderSignalsPage();
 
+      fireEvent.click(await screen.findByRole('button', { name: /Add transcript.+2 traces \(67%\)/ }));
       fireEvent.click(await screen.findByRole('button', { name: 'View theme details for Add transcript' }));
       await screen.findByRole('dialog', { name: 'Add transcript' });
       fireEvent.click(
@@ -467,8 +564,7 @@ describe('Trace Intelligence page', () => {
   });
 
   describe('when switching between eligible agents', () => {
-    it("loads the selected agent's latest snapshot", async () => {
-      let billingFlowSnapshotId: string | null = null;
+    it("loads the selected agent's first snapshot", async () => {
       server.use(
         http.get(`${BASE_URL}/api/learning/entities`, () => HttpResponse.json(multiEligibleThemeEntitiesResponse)),
         http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, () =>
@@ -481,11 +577,10 @@ describe('Trace Intelligence page', () => {
           HttpResponse.json(billingThemeSnapshotsResponse),
         ),
         http.get(`${BASE_URL}/api/learning/entities/billing-agent/theme-flow`, ({ request }) => {
-          billingFlowSnapshotId = new URL(request.url).searchParams.get('snapshotId');
-          return HttpResponse.json({
-            ...themeFlowResponse,
-            snapshot: billingThemeSnapshotsResponse.snapshots[1],
-          });
+          const snapshotId = new URL(request.url).searchParams.get('snapshotId');
+          const snapshot = billingThemeSnapshotsResponse.snapshots.find(item => item.snapshotId === snapshotId);
+          if (!snapshot) return HttpResponse.json({ error: 'Unknown snapshot' }, { status: 400 });
+          return HttpResponse.json({ ...themeFlowResponse, snapshot });
         }),
       );
       renderSignalsPageWithShell();
@@ -496,8 +591,7 @@ describe('Trace Intelligence page', () => {
       fireEvent.pointerDown(billingAgent, { pointerType: 'mouse' });
       fireEvent.click(billingAgent, { detail: 1 });
 
-      expect(await screen.findByText('Snapshot 2/2 · Jul 8–15, 2026 · 30 traces')).not.toBeNull();
-      expect(billingFlowSnapshotId).toBe('billing-snapshot-2');
+      expect(await screen.findByText('Snapshot 1/2 · Jul 1–8, 2026 · 20 traces')).not.toBeNull();
     });
   });
 

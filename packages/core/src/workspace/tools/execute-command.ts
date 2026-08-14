@@ -3,11 +3,9 @@ import { browserCliHandler } from '../../browser/cli-handler';
 import { createTool } from '../../tools';
 import { WORKSPACE_TOOLS } from '../constants';
 import { SandboxFeatureNotSupportedError } from '../errors';
-import { emitWorkspaceMetadata, requireSandbox } from './helpers';
+import { coerceNumericString, emitWorkspaceMetadata, requireSandbox } from './helpers';
 import { DEFAULT_TAIL_LINES, truncateOutput, sandboxToModelOutput } from './output-helpers';
 import { startWorkspaceSpan } from './tracing';
-
-const NUMERIC_TIMEOUT_STRING_REGEX = /^\d+(?:\.\d+)?$/;
 
 /**
  * Base input schema for execute_command (no background param).
@@ -18,18 +16,12 @@ export const executeCommandInputSchema = z.object({
     .string()
     .describe('The shell command to execute (e.g., "npm install", "ls -la src/", "cat file.txt | grep error")'),
   timeout: z
-    .preprocess(value => {
-      if (typeof value !== 'string') {
-        return value;
-      }
-      const trimmed = value.trim();
-      return NUMERIC_TIMEOUT_STRING_REGEX.test(trimmed) ? Number(trimmed) : value;
-    }, z.number())
+    .preprocess(coerceNumericString, z.number())
     .nullish()
     .describe('Maximum execution time in seconds. Example: 60 for 1 minute.'),
   cwd: z.string().nullish().describe('Working directory for the command'),
   tail: z
-    .number()
+    .preprocess(coerceNumericString, z.number())
     .nullish()
     .describe(
       `For foreground commands: limit output to the last N lines, similar to tail -n. Defaults to ${DEFAULT_TAIL_LINES}. Use 0 for no limit.`,
@@ -67,6 +59,30 @@ function extractTailPipe(command: string): { command: string; tail?: number } {
     }
   }
   return { command };
+}
+
+/** Format command streams consistently with get_process_output. */
+function formatCommandOutput(stdout: string, stderr: string): string[] {
+  const parts: string[] = [];
+
+  if (stdout && stderr) {
+    parts.push('stdout:', stdout, '', 'stderr:', stderr);
+  } else if (stdout) {
+    parts.push(stdout);
+  } else if (stderr) {
+    parts.push('stderr:', stderr);
+  }
+
+  return parts;
+}
+
+/** Append a terminal status after one blank line without altering streamed output. */
+function appendTerminalLine(parts: string[], terminalLine: string): string {
+  if (parts.length === 0) return terminalLine;
+
+  const output = parts.join('\n');
+  const separator = output.endsWith('\n\n') ? '' : output.endsWith('\n') ? '\n' : '\n\n';
+  return `${output}${separator}${terminalLine}`;
 }
 
 /** Shared execute function used by both foreground-only and background-capable tool variants. */
@@ -241,12 +257,11 @@ async function executeCommand(input: Record<string, any>, context: any) {
     span.end({ success: result.success }, { exitCode: result.exitCode });
 
     if (!result.success) {
-      const parts = [
+      const parts = formatCommandOutput(
         await truncateOutput(result.stdout, tail, tokenLimit, tokenFrom),
         await truncateOutput(result.stderr, tail, tokenLimit, tokenFrom),
-      ].filter(Boolean);
-      parts.push(`Exit code: ${result.exitCode}`);
-      return parts.join('\n');
+      );
+      return appendTerminalLine(parts, `Exit code: ${result.exitCode}`);
     }
 
     return (await truncateOutput(result.stdout, tail, tokenLimit, tokenFrom)) || '(no output)';
@@ -261,13 +276,12 @@ async function executeCommand(input: Record<string, any>, context: any) {
       },
     });
     span.end({ success: false }, { exitCode: -1 });
-    const parts = [
+    const parts = formatCommandOutput(
       await truncateOutput(stdout, tail, tokenLimit, tokenFrom),
       await truncateOutput(stderr, tail, tokenLimit, tokenFrom),
-    ].filter(Boolean);
+    );
     const errorMessage = error instanceof Error ? error.message : String(error);
-    parts.push(`Error: ${errorMessage}`);
-    return parts.join('\n');
+    return appendTerminalLine(parts, `Error: ${errorMessage}`);
   }
 }
 
@@ -290,6 +304,7 @@ export const executeCommandTool = createTool({
   id: WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND,
   description: baseDescription,
   inputSchema: executeCommandInputSchema,
+  outputSchema: z.string(),
   execute: executeCommand,
   toModelOutput: sandboxToModelOutput,
 });
@@ -301,6 +316,7 @@ export const executeCommandWithBackgroundTool = createTool({
 
 Set background: true to run long-running commands (dev servers, watchers) without blocking. You'll get a PID to track the process.`,
   inputSchema: executeCommandWithBackgroundSchema,
+  outputSchema: z.string(),
   execute: executeCommand,
   toModelOutput: sandboxToModelOutput,
 });

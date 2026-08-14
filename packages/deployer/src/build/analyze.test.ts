@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
+import { access, mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { noopLogger } from '@mastra/core/logger';
@@ -66,7 +66,10 @@ describe('external dependency versions', () => {
       join(externalPackageDir, 'package.json'),
       JSON.stringify({ name: 'external-only-from-workspace', version: '4.5.6', type: 'module', main: './index.js' }),
     );
-    await writeFile(join(externalPackageDir, 'index.js'), `export const externalValue = 'external';`);
+    await writeFile(
+      join(externalPackageDir, 'index.js'),
+      `throw new Error('external dependency loaded during validation');`,
+    );
     await writeFile(
       join(workspacePackageDir, 'src', 'index.js'),
       `import { externalValue } from 'external-only-from-workspace';\nexport const workspaceValue = externalValue;`,
@@ -263,6 +266,66 @@ describe('external dependency versions', () => {
       expect(result.externalDependencies.has('@internal/a')).toBe(false);
       expect(result.externalDependencies.has('@internal/b')).toBe(false);
       expect(result.externalDependencies.has('@internal/c')).toBe(false);
+    } finally {
+      process.chdir(originalCwd);
+    }
+  }, 15000);
+
+  it('declares a configured native package without importing its binary during validation', async () => {
+    await mkdir(tempRoot, { recursive: true });
+    const tempDir = await mkdtemp(join(tempRoot, 'mastra-native-external-'));
+    tempDirs.push(tempDir);
+
+    const nativePackageDir = join(tempDir, 'node_modules', 'better-sqlite3');
+    const entryFile = join(tempDir, 'index.ts');
+    const outputDir = join(tempDir, '.mastra', '.build');
+    const loadedSentinel = join(tempDir, 'native-package-loaded');
+
+    await mkdir(join(nativePackageDir, 'lib'), { recursive: true });
+    await mkdir(outputDir, { recursive: true });
+    await writeFile(
+      join(tempDir, 'package.json'),
+      JSON.stringify({
+        name: 'native-external-app',
+        version: '1.0.0',
+        type: 'module',
+        dependencies: { 'better-sqlite3': '11.10.0' },
+      }),
+    );
+    await writeFile(
+      join(nativePackageDir, 'package.json'),
+      JSON.stringify({ name: 'better-sqlite3', version: '11.10.0', main: './lib/database.js' }),
+    );
+    await writeFile(
+      join(nativePackageDir, 'lib', 'database.js'),
+      `require('node:fs').writeFileSync(${JSON.stringify(loadedSentinel)}, 'loaded'); require('../build/Release/better_sqlite3.node'); module.exports = class Database {};`,
+    );
+    await writeFile(entryFile, `import Database from 'better-sqlite3';\nexport const database = Database;`);
+
+    const originalCwd = process.cwd();
+    process.chdir(tempDir);
+    try {
+      const result = await analyzeBundle(
+        [entryFile],
+        entryFile,
+        {
+          outputDir,
+          projectRoot: tempDir,
+          platform: 'node',
+          isDev: true,
+          bundlerOptions: {
+            externals: ['better-sqlite3'],
+            enableSourcemap: false,
+          },
+        },
+        noopLogger,
+      );
+
+      expect(result.externalDependencies.get('better-sqlite3')).toEqual({
+        version: '11.10.0',
+        packageSpec: undefined,
+      });
+      await expect(access(loadedSentinel)).rejects.toMatchObject({ code: 'ENOENT' });
     } finally {
       process.chdir(originalCwd);
     }

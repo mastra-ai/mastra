@@ -202,6 +202,7 @@ import {
   findLastCompletedObservationBoundary,
   getUnobservedParts,
   getBufferedChunks,
+  getObservableMessages,
   stripThreadTags,
 } from './message-utils';
 import { ModelByInputTokens } from './model-by-input-tokens';
@@ -1162,7 +1163,7 @@ export class ObservationalMemory {
     resourceId?: string,
   ): Promise<void> {
     if (!messageList) return;
-    const allMsgs = messageList.get.all.db();
+    const allMsgs = getObservableMessages(messageList);
     // Find the last assistant message to attach the marker to
     for (let i = allMsgs.length - 1; i >= 0; i--) {
       const msg = allMsgs[i];
@@ -2398,7 +2399,9 @@ ${formattedMessages}
   }): Promise<MastraDBMessage[]> {
     const { threadId, resourceId, observedMessageIds, retentionFloor, preserveMessageIds } = opts;
     const messageList = this.isMessageList(opts.messages) ? opts.messages : undefined;
-    const allMsgs: MastraDBMessage[] = messageList ? messageList.get.all.db() : (opts.messages as MastraDBMessage[]);
+    const allMsgs: MastraDBMessage[] = messageList
+      ? getObservableMessages(messageList)
+      : (opts.messages as MastraDBMessage[]);
 
     let markerIdx = -1;
     let markerMsg: MastraDBMessage | null = null;
@@ -3442,9 +3445,9 @@ ${formattedMessages}
         const oldTitle = thread.title?.trim();
         const newTitle = chunkThreadTitle?.trim();
         const shouldUpdateThreadTitle = !!newTitle && newTitle.length >= 3 && newTitle !== oldTitle;
-        await this.storage.updateThread({
+        await this.storage.patchThread({
           id: threadId,
-          title: shouldUpdateThreadTitle ? newTitle : (thread.title ?? ''),
+          ...(shouldUpdateThreadTitle ? { title: newTitle } : {}),
           metadata: newMetadata,
         });
       }
@@ -3719,9 +3722,8 @@ ${formattedMessages}
           threadTitle: metadataUpdate.threadTitle ?? previousOmMetadata?.threadTitle,
           extracted: { ...(previousOmMetadata?.extracted ?? {}), ...(metadataUpdate.extracted ?? {}) },
         });
-        await this.storage.updateThread({
+        await this.storage.patchThread({
           id: threadId,
-          title: thread.title ?? '',
           metadata: newMetadata,
         });
       }

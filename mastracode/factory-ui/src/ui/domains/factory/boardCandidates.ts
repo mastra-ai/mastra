@@ -1,12 +1,8 @@
-import { CircleDot, GitCompareArrows } from 'lucide-react';
-import type { ComponentType } from 'react';
-
 import { relativeTime } from '../../../lib/date/relativeTime';
 import { AUTO_TRIAGED_LABEL, NEEDS_APPROVAL_LABEL, hasLabel } from './boardItems';
 import { LINEAR_FETCH_HINT, approvalRunAction, guidedPrompt, issueRunActions, reviewRunAction } from './boardRunSpecs';
 import type { RunAction } from './boardRunSpecs';
 import { itemAppearsInStage } from './boardStages';
-import { IssueSourceIcon } from './components/BoardIcons';
 import type { GithubIssue, GithubPullRequest } from './services/factory';
 import type { LinearIssue } from './services/linear';
 import type { WorkItem, WorkItemSource } from './services/workItems';
@@ -33,8 +29,6 @@ export interface BoardCandidate {
   url: string;
   /** Meta line under the title, e.g. `#12 · alice · opened 3 days ago`. */
   meta: string;
-  icon: ComponentType<{ size?: number; className?: string }>;
-  iconClassName: string;
   /** Column the candidate is offered in: everything starts in Intake (auto-triaged issues in Triage). */
   column: BoardStageId;
   /** Runs the candidate can start; the first is the one-click default. */
@@ -43,7 +37,6 @@ export interface BoardCandidate {
   threadTitle: string;
   customPrompt: (instructions: string) => string;
   metadata: Record<string, unknown>;
-  issue?: GithubIssue;
 }
 
 export function issueCandidate(issue: GithubIssue): BoardCandidate {
@@ -58,16 +51,13 @@ export function issueCandidate(issue: GithubIssue): BoardCandidate {
     source: 'github-issue',
     title: issue.title,
     url: issue.url,
-    meta: `#${issue.number}${issue.author ? ` · ${issue.author}` : ''} · opened ${relativeTime(issue.createdAt)}`,
-    icon: IssueSourceIcon,
-    iconClassName: '',
+    meta: `#${issue.number}${issue.author ? ` · ${issue.author}` : ''} · ${relativeTime(issue.createdAt)}`,
     column: autoTriaged ? 'triage' : 'intake',
-    runActions: needsApproval ? [approvalRunAction(ref, issue.number)] : issueRunActions(ref),
+    runActions: needsApproval ? [approvalRunAction(ref, issue.number)] : issueRunActions(ref, { triage: true }),
     branch: `factory/issue-${issue.number}`,
     threadTitle: needsApproval ? `Triage #${issue.number}: ${issue.title}` : `Issue #${issue.number}: ${issue.title}`,
     customPrompt: instructions => guidedPrompt(needsApproval ? approvalBase : investigateBase, instructions),
     metadata: { number: issue.number, author: issue.author, assignee: issue.assignee, labels },
-    issue,
   };
 }
 
@@ -80,8 +70,6 @@ export function pullRequestCandidate(pr: GithubPullRequest): BoardCandidate {
     title: pr.title,
     url: pr.url,
     meta: `#${pr.number}${pr.author ? ` · ${pr.author}` : ''} · ${pr.headBranch} → ${pr.baseBranch}`,
-    icon: GitCompareArrows,
-    iconClassName: 'text-accent1',
     column: 'intake',
     runActions: [reviewRunAction(ref, checkout)],
     branch: `factory/pr-${pr.number}`,
@@ -106,8 +94,6 @@ export function linearCandidate(issue: LinearIssue): BoardCandidate {
     title: issue.title,
     url: issue.url,
     meta: `${issue.identifier} · ${issue.state}${issue.assignee ? ` · ${issue.assignee}` : ''}`,
-    icon: CircleDot,
-    iconClassName: 'text-accent3',
     column: 'intake',
     runActions: issueRunActions(ref, { context: LINEAR_FETCH_HINT }),
     branch: `factory/linear-${issue.identifier.toLowerCase()}`,

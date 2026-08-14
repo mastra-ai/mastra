@@ -125,6 +125,25 @@ const CREATE_MAX_ATTEMPTS = 3;
 const CREATE_RETRY_BASE_DELAY_MS = 2_000;
 
 /**
+ * How long to wait for the in-sandbox sidecar's `/health` endpoint to respond
+ * before giving up and leaving the address registry unpopulated (execs fall
+ * back to the lease path). This bounds the fire-and-forget probe that runs
+ * after `start()` resolves; the sandbox is usable immediately — the probe
+ * only controls whether early execs go via private-net or lease.
+ */
+const SIDECAR_PROBE_TIMEOUT_MS = 30_000;
+/** Delay between sidecar probe attempts. */
+const SIDECAR_PROBE_INTERVAL_MS = 250;
+/**
+ * How long `executeCommand` waits for the transport to become ready before
+ * falling back to the lease path. This is much shorter than
+ * `SIDECAR_PROBE_TIMEOUT_MS` because we want execs to proceed quickly if
+ * the sidecar is slow to boot — the probe continues in the background and
+ * later execs will use private-net once it succeeds.
+ */
+const TRANSPORT_READY_WAIT_MS = 5_000;
+
+/**
  * Diagnostic error thrown when the direct-exec WebSocket transport fails
  * twice in a row (opening handshake refused or socket closed mid-stream
  * without an `exit` frame). Distinguishes "the sandbox transport is broken"
@@ -166,6 +185,29 @@ export class SandboxExecTransportError extends Error {
     this.wsEndpoint = diagnostics.wsEndpoint;
   }
 }
+
+/**
+ * Outcome of {@link PlatformSandbox.captureCheckpoint}. Mirrors the shape of
+ * the OSS `@mastra/railway` `RailwaySandbox.captureCheckpoint()` return so a
+ * caller (e.g. the factory fleet) can branch on `status`/`reason` uniformly
+ * across providers without knowing which one is underneath.
+ *
+ * `captured` and `coalesced` both represent a successful capture the caller
+ * can persist against — they carry the checkpoint name inline so callers
+ * don't have to reach back into the sandbox instance to learn what was
+ * written. `skipped` carries a machine-readable `reason` so the discriminant
+ * set stays extensible.
+ *
+ * Note: the platform proxy's own `skipped` (returned when the upstream
+ * sandbox is already destroyed) is mapped to `sandbox-not-running` here to
+ * keep the discriminant identical to the OSS provider. The diagnostic
+ * distinction (pre-flight vs post-hoc discovery) is preserved in log lines,
+ * not the return type — see {@link PlatformSandbox.captureCheckpoint}.
+ */
+export type CaptureCheckpointResult =
+  | { status: 'captured'; checkpointName: string }
+  | { status: 'coalesced'; checkpointName: string }
+  | { status: 'skipped'; reason: 'no-checkpoint-name-configured' | 'sandbox-not-running' };
 
 /**
  * Thrown when `/exec-lease` returns 410 Gone — the sandbox has been destroyed
@@ -324,9 +366,55 @@ export class PlatformSandbox extends MastraSandbox {
    * Cleared (regardless of success or failure) when the request settles.
    */
   private _leaseInFlight: Promise<ExecLease & { expiresAtMs: number | null }> | null = null;
+  /**
+   * True when this sandbox was constructed with a caller-supplied `id` (the
+   * recovery key the proxy hashes into an on-provider checkpoint name).
+   * `captureCheckpoint()` needs this to distinguish "no checkpoint intent"
+   * (auto-generated random id — capture would land under a name no future
+   * boot would look for) from "capture on demand". Cloned sandboxes route
+   * `checkpointName` through `id`, so both entry points set this the same
+   * way.
+   */
+  private readonly _hasRecoveryKey: boolean;
+  /**
+   * In-flight `captureCheckpoint()` request. Concurrent callers on the same
+   * instance coalesce onto this single promise so we don't burn N `POST
+   * /checkpoint` round-trips when the fleet fires several turn-end captures
+   * before the first one resolves. Cleared when the request settles.
+   */
+  private _captureInFlight: Promise<CaptureCheckpointResult> | null = null;
+  /**
+   * In-flight `start()` attempt. Concurrent callers on a fresh instance
+   * coalesce onto this single promise so a `POST /sandbox` is not fired
+   * N times when N fleet callers race to bring the same logical sandbox
+   * up. Published **synchronously** with `??=` before the first `await`
+   * so a later caller cannot slip through the null check while the
+   * originator is mid-round-trip. Cleared when the shared attempt
+   * settles (success or failure) so the next call sees a clean slot.
+   *
+   * Mirrors OSS `@mastra/railway` `RailwaySandbox._startInFlight`.
+   */
+  private _startInFlight: Promise<void> | null = null;
+  /**
+   * Generation token for the sidecar probe. Incremented on every `start()`
+   * and on teardown. The probe captures this value when it begins; if the
+   * generation has changed by the time the probe succeeds, the probe skips
+   * the `set()` to avoid re-populating a deleted or superseded sandbox entry.
+   */
+  private _probeGeneration = 0;
+  /**
+   * In-flight sidecar probe promise. Concurrent `executeCommand` callers that
+   * arrive before the registry is populated all await this single promise so
+   * we don't fire N independent lease requests during the sidecar boot window.
+   * Once the probe resolves (success or timeout), callers check the registry
+   * and proceed — either via private-net (probe succeeded) or via lease (probe
+   * failed/timed out, but now coalesced via `_leaseInFlight`).
+   */
+  private _transportReadyPromise: Promise<void> | null = null;
 
   constructor(options: PlatformSandboxOptions = {}) {
     super({ ...options, name: 'PlatformSandbox', processes: new PlatformProcessManager() });
+    this._hasRecoveryKey = options.id !== undefined;
     this.id = options.id ?? this.generateId();
     this._client = new PlatformClient(options);
     this._environmentId = options.environmentId ?? process.env.MASTRA_ENVIRONMENT_ID ?? '';
@@ -370,6 +458,9 @@ export class PlatformSandbox extends MastraSandbox {
       ...(id !== undefined && { id }),
       accessToken: this._client.accessToken,
       projectId: this._client.projectId,
+      actingUserId: options.actingUserId ?? this._client.actingUserId,
+      ...(this._client.sessionId !== undefined && { sessionId: this._client.sessionId }),
+      ...(this._client.threadId !== undefined && { threadId: this._client.threadId }),
       fetch: this._client.fetch,
       environmentId: this._environmentId,
       ...(options.sandboxId !== undefined && { sandboxId: options.sandboxId }),
@@ -389,9 +480,36 @@ export class PlatformSandbox extends MastraSandbox {
   }
 
   async start(): Promise<void> {
+    // Coalesce concurrent callers onto a single in-flight attempt. `??=`
+    // publishes the promise **synchronously** before the first `await`
+    // below, so a second caller entering `start()` while the first is
+    // mid-round-trip sees a populated `_startInFlight` and joins it
+    // instead of racing to `POST /sandbox` alongside the originator. On
+    // settle (success or failure) the slot is cleared so the next call
+    // starts fresh — a failed attempt is not a permanent latch.
+    // Mirrors OSS @mastra/railway RailwaySandbox._startInFlight.
+    this._startInFlight ??= this._doStart().finally(() => {
+      this._startInFlight = null;
+    });
+    return this._startInFlight;
+  }
+
+  /**
+   * The single `start` attempt behind {@link start}'s coalescing wrapper.
+   *
+   * Split out so the wrapper can install a shared in-flight promise
+   * synchronously (before the first `await`) without inlining the reattach
+   * / retry logic. Joined callers observe whatever outcome this method
+   * produces — success returns normally, failures propagate to every
+   * awaiter.
+   */
+  private async _doStart(): Promise<void> {
+    const startedAt = Date.now();
     if (this._sandboxId) {
       try {
+        const requestStartedAt = Date.now();
         const response = await this._client.request(`/sandbox/${encodeURIComponent(this._sandboxId)}`);
+        const requestMs = Date.now() - requestStartedAt;
         const json = (await response.json()) as CreateSandboxResponse;
         // A destroyed record (idle GC, manual delete) is not reattachable —
         // treat it like a missing sandbox so we fall through to a fresh
@@ -399,6 +517,7 @@ export class PlatformSandbox extends MastraSandbox {
         if (!json.destroyedAt) {
           this._createdAt = json.createdAt ? new Date(json.createdAt) : new Date();
           this._populateAddressFromResponse(json);
+          this._logStartComplete(json.id, startedAt, requestMs, 'reattach');
           return;
         }
         this._sandboxId = undefined;
@@ -427,6 +546,7 @@ export class PlatformSandbox extends MastraSandbox {
     // 5xx responses with a short backoff is safe and keeps a single flaky
     // window from killing the caller's whole workflow.
     let response: Response | undefined;
+    const requestStartedAt = Date.now();
     for (let attempt = 1; ; attempt++) {
       try {
         response = await this._client.request('/sandbox', {
@@ -441,10 +561,33 @@ export class PlatformSandbox extends MastraSandbox {
         await new Promise(resolve => setTimeout(resolve, CREATE_RETRY_BASE_DELAY_MS * attempt));
       }
     }
+    const requestMs = Date.now() - requestStartedAt;
     const json = (await response.json()) as CreateSandboxResponse;
     this._sandboxId = json.id;
     this._createdAt = json.createdAt ? new Date(json.createdAt) : new Date();
     this._populateAddressFromResponse(json);
+    this._logStartComplete(json.id, startedAt, requestMs, 'provision');
+  }
+
+  /**
+   * One timing summary per completed `start()` — the whole
+   * `PlatformSandbox`-visible boot in a single greppable line.
+   *
+   * `requestMs` is the proxy round-trip (`GET /sandbox/:id` on reattach,
+   * `POST /sandbox` including transient-5xx retries on provision) — a black
+   * box from this side that rolls up Railway RPC, sidecar launch, and the
+   * proxy's discovery exec. Sidecar probe cost is intentionally NOT here: the
+   * probe is fire-and-forget and outlives `start()` by design, so its
+   * duration lands on the `platform-workspace probe ok` line instead.
+   */
+  private _logStartComplete(sandboxId: string, startedAt: number, requestMs: number, mode: string): void {
+    this.logger.info('platform-workspace start complete', {
+      sandboxId,
+      sessionId: this._client.sessionId,
+      mode,
+      totalMs: Date.now() - startedAt,
+      requestMs,
+    });
   }
 
   /**
@@ -466,16 +609,197 @@ export class PlatformSandbox extends MastraSandbox {
   private _populateAddressFromResponse(json: CreateSandboxResponse): void {
     if (!this._addressRegistry) return;
     if (!json.instanceUrl) return;
-    this._addressRegistry.set(json.id, json.instanceUrl);
+    // Clear any stale entry before probing. On reattach, the registry may have
+    // the old sandbox's address; execs should fall back to lease until the new
+    // probe succeeds rather than dialing the stale address.
+    this._addressRegistry.delete(json.id);
+    // Start the sidecar probe and expose it so executeCommand can await it.
+    // Early execs wait for the probe (up to TRANSPORT_READY_WAIT_MS) rather
+    // than all racing to the lease path independently.
+    const generation = ++this._probeGeneration;
+    this._transportReadyPromise = this._probeSidecarThenRegister(json.id, json.instanceUrl, generation);
   }
 
+  /**
+   * Fire-and-forget probe that polls the sidecar's `/health` endpoint until
+   * it responds, then populates the address registry. Runs detached from
+   * `start()` so sandbox provision latency is unchanged; early execs simply
+   * fall back to the lease path until the probe succeeds.
+   *
+   * If the sidecar never comes up within {@link SIDECAR_PROBE_TIMEOUT_MS},
+   * the registry stays unpopulated and all execs go via lease for this
+   * sandbox's lifetime (or until a future `start()` re-runs the probe).
+   *
+   * @param generation - The probe generation captured at call time. If this
+   *   no longer matches `_probeGeneration` when the probe succeeds, the probe
+   *   was superseded by a teardown or a new `start()`, so we skip the `set()`.
+   */
+  private async _probeSidecarThenRegister(sandboxId: string, instanceUrl: string, generation: number): Promise<void> {
+    const probeStartedAt = Date.now();
+    const deadline = probeStartedAt + SIDECAR_PROBE_TIMEOUT_MS;
+    const fetchFn = this._privateNetFetch ?? fetch;
+    let attempts = 0;
+    while (Date.now() < deadline) {
+      // Teardown or new start() superseded this probe — bail out early.
+      if (generation !== this._probeGeneration) return;
+      attempts++;
+      try {
+        const res = await fetchFn(`${instanceUrl}/health`, {
+          method: 'GET',
+          signal: AbortSignal.timeout(1_000),
+        });
+        const ok = res.ok;
+        // Release the response body so the connection returns to the pool.
+        await res.body?.cancel().catch(() => {});
+        if (ok) {
+          // A ~1-attempt probe means the sidecar was ready when the proxy
+          // returned; hundreds of ms means it was still booting — the exact
+          // window that used to silently fall back to the lease path.
+          this.logger.info('platform-workspace probe ok', {
+            sandboxId,
+            sessionId: this._client.sessionId,
+            probeDurationMs: Date.now() - probeStartedAt,
+            attempts,
+          });
+          // Sidecar is listening. Only populate if this probe is still current.
+          if (generation === this._probeGeneration && this._sandboxId === sandboxId) {
+            this._addressRegistry?.set(sandboxId, instanceUrl);
+          }
+          return;
+        }
+      } catch {
+        // Connection refused / timeout — keep polling.
+      }
+      await new Promise(r => setTimeout(r, SIDECAR_PROBE_INTERVAL_MS));
+    }
+    // Sidecar never came up. Leave registry entry unset — every exec goes lease.
+    this.logger.warn('platform-workspace probe timed out', {
+      sandboxId,
+      sessionId: this._client.sessionId,
+      timeoutMs: SIDECAR_PROBE_TIMEOUT_MS,
+      attempts,
+    });
+  }
+
+  /**
+   * Wait for the transport to become ready (sidecar probe succeeds) or time
+   * out. Concurrent callers all await the same probe promise, coalescing the
+   * cold-start storm into a single warmup attempt.
+   *
+   * If no probe is in flight (no registry, or registry already populated),
+   * this returns immediately. After the wait (success or timeout), callers
+   * check the registry and proceed — either via private-net or lease. The
+   * lease path is still coalesced via `_leaseInFlight`, so even if the probe
+   * times out, we only mint one lease for all concurrent execs.
+   */
+  private async _awaitTransportReady(): Promise<void> {
+    // Fast path: registry already has an entry, transport is warm.
+    if (this._sandboxId && this._addressRegistry?.get(this._sandboxId)) {
+      return;
+    }
+    // No probe in flight — nothing to wait for, proceed to lease path.
+    if (!this._transportReadyPromise) {
+      return;
+    }
+    // Race the probe against a timeout. We don't want to block execs forever
+    // if the sidecar is slow to boot — they can proceed via lease after a
+    // short wait, and later execs will use private-net once the probe succeeds.
+    await Promise.race([this._transportReadyPromise, new Promise<void>(r => setTimeout(r, TRANSPORT_READY_WAIT_MS))]);
+  }
+
+  /**
+   * Stop the sandbox while **preserving its recovery checkpoint**.
+   *
+   * Semantic parity with `@mastra/railway` `RailwaySandbox.stop()`: the VM
+   * is released but the on-provider checkpoint survives, so a subsequent
+   * `start()` on a sandbox constructed with the same `id` can restore from
+   * it. Any in-flight capture is awaited first so the preserved checkpoint
+   * reflects the latest disk state we asked for.
+   *
+   * Corresponds to `DELETE /v1/projects/:pid/sandbox/:sandboxId` on
+   * workspace-proxy, which by contract does not touch the checkpoint. Use
+   * {@link destroy} when you want the checkpoint released too.
+   */
   async stop(): Promise<void> {
-    await this.destroy();
+    // Await any in-flight capture so the preserved checkpoint reflects the
+    // latest capture the caller triggered. Never rethrow — a failing capture
+    // must not block teardown; the proxy's safety-net refresh timer is a
+    // fallback for the checkpoint state.
+    if (this._captureInFlight) {
+      await this._captureInFlight.catch(error => {
+        this.logger.warn(`stop(): failed to flush in-flight capture before teardown:`, error);
+      });
+    }
+    await this._teardownSandbox();
   }
 
+  /**
+   * Destroy the sandbox **and release its recovery checkpoint**.
+   *
+   * Semantic parity with `@mastra/railway` `RailwaySandbox.destroy()`:
+   * cancels any in-flight capture (the checkpoint is about to be deleted
+   * — no reason to burn a capture on state we're releasing), asks the
+   * proxy to delete the checkpoint, then releases the VM. Both remote
+   * operations are best-effort logged failures — a stray checkpoint or a
+   * transient proxy error must not leave the caller with a half-torn-down
+   * sandbox they can't safely retry.
+   *
+   * Requires the caller to have constructed with a recovery `id` (there is
+   * no checkpoint to delete otherwise); callers without one skip the
+   * checkpoint DELETE and behave identically to {@link stop}.
+   */
   async destroy(): Promise<void> {
     if (!this._sandboxId) return;
     const destroyedSandboxId = this._sandboxId;
+
+    // Drop the in-flight capture promise — we're about to delete the
+    // checkpoint, so completing an in-flight capture is at best a wasted
+    // round-trip and at worst races with the delete. Callers get whatever
+    // resolution the pending capture already had; we don't rethrow.
+    this._captureInFlight = null;
+
+    if (this._hasRecoveryKey) {
+      // Body mirrors the POST /checkpoint shape (`{ id }`) so the proxy
+      // can hash the same recovery key into the same checkpoint name.
+      // Best-effort: a proxy 404/410 means the checkpoint is already
+      // absent (idle GC, prior delete) and we can proceed with the VM
+      // teardown; other failures are surfaced in logs but do not abort
+      // — the VM DELETE below is the operation the caller most needs.
+      try {
+        await this._client.request(`/sandbox/${encodeURIComponent(destroyedSandboxId)}/checkpoint`, {
+          method: 'DELETE',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ id: this.id }),
+        });
+      } catch (error) {
+        if (error instanceof PlatformApiError && (error.status === 404 || error.status === 410)) {
+          this.logger.debug(`destroy(): checkpoint already absent upstream (status=${error.status})`);
+        } else {
+          this.logger.warn(`destroy(): failed to delete checkpoint upstream:`, error);
+        }
+      }
+    }
+
+    await this._teardownSandbox();
+  }
+
+  /**
+   * Release the remote sandbox VM and clear the local state pointing at it.
+   *
+   * Shared body of {@link stop} and {@link destroy} — both funnel through
+   * here after they've dealt with the checkpoint (preserve vs release).
+   * The VM DELETE is safe to issue in either mode: the proxy's DELETE
+   * route does not touch the checkpoint on its own, so `stop()` correctly
+   * leaves the checkpoint intact and `destroy()` has already removed it
+   * before this call.
+   */
+  private async _teardownSandbox(): Promise<void> {
+    if (!this._sandboxId) return;
+    const destroyedSandboxId = this._sandboxId;
+    // Invalidate any in-flight probe so it doesn't re-populate the registry
+    // after we've deleted the entry below. The probe checks this generation
+    // before calling set().
+    this._probeGeneration++;
     await this._client.request(`/sandbox/${encodeURIComponent(destroyedSandboxId)}`, { method: 'DELETE' });
     // Clear local state so a subsequent start() creates a fresh remote sandbox
     // instead of taking the reattach branch and pointing exec at a deleted resource.
@@ -491,6 +815,138 @@ export class PlatformSandbox extends MastraSandbox {
     // or reattach) will re-populate the entry from the workspace-proxy's
     // response.
     this._addressRegistry?.delete(destroyedSandboxId);
+  }
+
+  /** Persist the configured recovery checkpoint when available. */
+  async snapshot(): Promise<void> {
+    await this.captureCheckpoint();
+  }
+
+  /**
+   * Capture the sandbox's checkpoint on demand, outside any refresh timer the
+   * workspace-proxy owns internally.
+   *
+   * Intended for callers (e.g. a factory-side scheduler) that want to refresh
+   * the recovery checkpoint at semantic moments — turn end, session-idle,
+   * pre-teardown — rather than only just before the upstream's idle destroy.
+   *
+   * Mirrors the OSS `@mastra/railway` `RailwaySandbox.captureCheckpoint()`
+   * shape so factory can call `sandbox.captureCheckpoint()` uniformly and
+   * branch on `status`/`reason` without knowing which provider is underneath.
+   * Both `captured` and `coalesced` carry the checkpoint name inline so the
+   * caller can persist a session→checkpoint binding atomically with the
+   * awaited capture.
+   *
+   * Skip semantics:
+   *  - No caller-supplied `id`: returns `{ status: 'skipped', reason:
+   *    'no-checkpoint-name-configured' }`. An auto-generated random id is
+   *    never a meaningful recovery key (no future boot would look for a
+   *    checkpoint under it), so capturing would silently produce dead data.
+   *  - Not started (no `_sandboxId`): returns `{ status: 'skipped', reason:
+   *    'sandbox-not-running' }` without a round-trip.
+   *  - Upstream 410 (workspace-proxy or Railway reports the sandbox is
+   *    already destroyed): returns the same `sandbox-not-running` skip so
+   *    the discriminant matches the pre-flight case. Local state
+   *    (`_sandboxId`, `_lease`, sidecar address) is cleared as a side
+   *    effect so the next `start()` provisions fresh instead of reattaching
+   *    to a dead id. The diagnostic distinction (pre-flight vs post-hoc)
+   *    is preserved in log level: debug for the expected pre-flight skip,
+   *    warn for the surprise upstream destroy.
+   *
+   * Concurrent callers on the same instance coalesce onto a single in-flight
+   * `POST /checkpoint` so N simultaneous turn-end fires (e.g. several tabs)
+   * do not each round-trip the proxy. Both the originator and joiners
+   * receive `{ status: 'coalesced', ... }` for the joined result — the
+   * outer contract does not distinguish who started the request, only that
+   * one upstream capture was made.
+   *
+   * Never throws for expected outcomes. Transport failures (5xx, 4xx other
+   * than 410) propagate as {@link PlatformApiError}; a 410 is normalized
+   * to a skip as described above.
+   */
+  async captureCheckpoint(): Promise<CaptureCheckpointResult> {
+    if (!this._hasRecoveryKey) {
+      this.logger.debug(
+        `captureCheckpoint skipped: no recovery key configured for sandbox ${this._sandboxId ?? '(unstarted)'}`,
+      );
+      return { status: 'skipped', reason: 'no-checkpoint-name-configured' };
+    }
+
+    if (!this._sandboxId) {
+      this.logger.debug(`captureCheckpoint skipped: sandbox not running (local pre-flight, id=${this.id})`);
+      return { status: 'skipped', reason: 'sandbox-not-running' };
+    }
+
+    if (this._captureInFlight) {
+      return this._captureInFlight;
+    }
+
+    const sandboxId = this._sandboxId;
+    const capture = this._doCaptureCheckpoint(sandboxId).finally(() => {
+      if (this._captureInFlight === capture) {
+        this._captureInFlight = null;
+      }
+    });
+    this._captureInFlight = capture;
+    return capture;
+  }
+
+  /**
+   * The single `POST /checkpoint` attempt behind {@link captureCheckpoint}.
+   *
+   * Split out so the coalescing wrapper can install a shared in-flight
+   * promise without inlining the transport + response-mapping logic.
+   * Joined callers observe `{ status: 'coalesced', ... }` — the initiator
+   * sees the underlying `captured` / `coalesced` / `skipped` result the
+   * proxy returned. Both are legitimate: the OSS mirror uses the same
+   * "initiator sees the truth, joiners see coalesced" split.
+   */
+  private async _doCaptureCheckpoint(sandboxId: string): Promise<CaptureCheckpointResult> {
+    let response: Response;
+    try {
+      response = await this._client.request(`/sandbox/${encodeURIComponent(sandboxId)}/checkpoint`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ id: this.id }),
+      });
+    } catch (error) {
+      if (error instanceof PlatformApiError && error.status === 410) {
+        this.logger.warn(`captureCheckpoint skipped: sandbox destroyed upstream (proxy 410, sandboxId=${sandboxId})`);
+        this._clearDestroyedState(sandboxId);
+        return { status: 'skipped', reason: 'sandbox-not-running' };
+      }
+      throw error;
+    }
+    const json = (await response.json()) as { checkpointName: string; status: 'captured' | 'coalesced' | 'skipped' };
+    if (json.status === 'skipped') {
+      // Proxy's own `skipped` means the upstream sandbox is already
+      // destroyed — same actionable outcome as a 410, so normalize to
+      // the same discriminant + clear local state.
+      this.logger.warn(
+        `captureCheckpoint skipped: sandbox destroyed upstream (proxy reported skipped, sandboxId=${sandboxId})`,
+      );
+      this._clearDestroyedState(sandboxId);
+      return { status: 'skipped', reason: 'sandbox-not-running' };
+    }
+    return { status: json.status, checkpointName: json.checkpointName };
+  }
+
+  /**
+   * Clear local state that would otherwise let the caller keep exec'ing
+   * against a sandbox the upstream has already destroyed. Mirrors what
+   * `destroy()` does minus the outbound DELETE — the sandbox is already
+   * gone, so all that remains is to stop pointing at it.
+   *
+   * Also resets `status` to `'pending'` so a subsequent `_start()` on this
+   * reused instance re-runs provisioning instead of short-circuiting on
+   * the cached `'running'` state (see `MastraSandbox._start`).
+   */
+  private _clearDestroyedState(destroyedSandboxId: string): void {
+    this._sandboxId = undefined;
+    this._createdAt = null;
+    this._lease = null;
+    this._addressRegistry?.delete(destroyedSandboxId);
+    this.status = 'pending';
   }
 
   /**
@@ -520,6 +976,14 @@ export class PlatformSandbox extends MastraSandbox {
     // default. `_runDirectExec` omits `timeoutMs` from the exec payload when
     // the value is 0, which disables the client-side timer entirely.
     const effectiveTimeout = options?.timeout ?? this._timeout;
+
+    // Wait for the transport to become ready before proceeding. During the
+    // sidecar boot window (immediately after start()), concurrent execs all
+    // await the same probe promise rather than each independently racing to
+    // the lease path — this coalesces the cold-start storm into a single
+    // warmup attempt. Once the probe resolves (or times out after
+    // TRANSPORT_READY_WAIT_MS), we check the registry and proceed.
+    await this._awaitTransportReady();
 
     // Preferred path: dial the in-sandbox sidecar over Railway's private
     // network (~16 ms p50). No GraphQL, no lease mint, no public tcp-proxy.

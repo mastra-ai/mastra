@@ -195,16 +195,16 @@ Visit [`PIIDetector()`](/reference/processors/pii-detector) reference for a full
 
 ### Enforce cost limits
 
-The `CostGuardProcessor()` monitors cumulative estimated cost across the agentic loop, blocking or warning when a monetary limit is exceeded. It queries cost data from observability storage before each LLM call. Cost checks are approximate, metrics are persisted asynchronously, so fast-running agents may briefly exceed the configured limit before the guard triggers.
+The `TokenCostControl()` monitors cumulative estimated cost across the agentic loop, blocking or warning when a monetary limit is exceeded. It queries cost data from observability storage before each LLM call. Cost checks are approximate, metrics are persisted asynchronously, so fast-running agents may briefly exceed the configured limit before the guard triggers.
 
 ```typescript {7-11} title="src/mastra/agents/budgeted-agent.ts"
-import { CostGuardProcessor } from '@mastra/core/processors'
+import { TokenCostControl } from '@mastra/core/processors'
 
 export const budgetedAgent = new Agent({
   id: 'budgeted-agent',
   name: 'Budgeted Agent',
   inputProcessors: [
-    new CostGuardProcessor({
+    new TokenCostControl({
       maxCost: 5.0,
       scope: 'thread',
       window: '24h',
@@ -213,7 +213,7 @@ export const budgetedAgent = new Agent({
 })
 ```
 
-Visit [`CostGuardProcessor()`](/reference/processors/cost-guard-processor) reference for scoping modes, time windows, metric persistence delays, and the `onViolation` callback. Requires observability storage with `getMetricAggregate` support.
+Visit [`TokenCostControl()`](/reference/processors/token-cost-control) reference for scoping modes, time windows, metric persistence delays, and the `onViolation` callback. Requires observability storage with `getMetricAggregate` support.
 
 ## Processor strategies
 
@@ -239,18 +239,19 @@ All processors support an `onViolation` callback that fires when a policy violat
 The callback receives a `ProcessorViolation` object with `processorId`, `message`, and `detail` (processor-specific metadata).
 
 ```typescript
-import { CostGuardProcessor, ModerationProcessor, PIIDetector } from '@mastra/core/processors'
+import { TokenCostControl, ModerationProcessor, PIIDetector } from '@mastra/core/processors'
 
 // Alert when cost limits are exceeded
-const costGuard = new CostGuardProcessor({
+const tokenCostControl = new TokenCostControl({
   maxCost: 10.0,
   scope: 'resource',
   window: '30d',
+  strategy: 'warn',
 })
 
-costGuard.onViolation = ({ processorId, message, detail }) => {
+tokenCostControl.onViolation = ({ processorId, message, detail }) => {
   alertSystem.notify(`[${processorId}] ${message}`)
-  // detail contains: { usage, limit, totalUsage, scope, scopeKey }
+  // detail contains: { usage, limit, totalUsage, scope, scopeKey, threshold }
 }
 
 // Log moderation violations
@@ -264,9 +265,9 @@ moderation.onViolation = ({ processorId, message, detail }) => {
 }
 ```
 
-The `onViolation` property is part of the base [`Processor` interface](/reference/processors/processor-interface), so any processor, including custom ones, can use it. The runner automatically invokes `onViolation` when any processor calls `abort()`. For processors using a `warn` strategy (like `CostGuardProcessor`), the callback also fires on warnings without blocking the request.
+The `onViolation` property is part of the base [`Processor` interface](/reference/processors/processor-interface), so any processor, including custom ones, can use it. The runner automatically invokes `onViolation` when any processor calls `abort()`. For processors using a `warn` strategy (like `TokenCostControl`), the callback also fires on warnings without blocking the request.
 
-Errors thrown by the callback are silently caught to prevent interfering with the processor's main logic.
+Errors thrown by runner-invoked callbacks after `abort()` are silently caught to prevent interfering with the processor's main logic. On the `TokenCostControl` warning path, callback errors are caught and logged through the Mastra logger.
 
 For more on how violation callbacks integrate with the processor pipeline, see [Violation callbacks](/docs/agents/processors#violation-callbacks) in the Processors documentation.
 

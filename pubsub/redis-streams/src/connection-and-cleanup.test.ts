@@ -205,6 +205,43 @@ describe('RedisStreamsPubSub connection resilience and topic cleanup', () => {
       }
     });
 
+    it('stamps a TTL when subscribe() creates the stream and nothing is ever published', async () => {
+      const ps = createPubSub({ streamIdleTtlMs: 60_000 });
+      const topic = `ttl-subscribe-${randomUUID()}`;
+      const streamKey = `mastra:topic:${topic}`;
+
+      // Subscribe only — no publish. MKSTREAM creates the (empty) stream, and
+      // without a TTL stamped in the same MULTI it would sit in Redis forever
+      // (the NOGROUP recovery path never runs for a successfully created
+      // group, and publish never happens to self-heal it).
+      await ps.subscribe(topic, (_event, ack) => void ack?.());
+
+      const inspector = await createInspector();
+      const pttl = await inspector.pTTL(streamKey);
+      expect(pttl).toBeGreaterThan(0);
+      expect(pttl).toBeLessThanOrEqual(60_000);
+    }, 15_000);
+
+    it('tolerates a second same-group subscriber (BUSYGROUP in the subscribe MULTI) and refreshes the TTL', async () => {
+      const ps1 = createPubSub({ streamIdleTtlMs: 60_000 });
+      const ps2 = createPubSub({ streamIdleTtlMs: 60_000 });
+      const topic = `ttl-subscribe-race-${randomUUID()}`;
+      const group = 'workers';
+      const streamKey = `mastra:topic:${topic}`;
+      const inspector = await createInspector();
+
+      await ps1.subscribe(topic, (_event, ack) => void ack?.(), { group });
+      // Age the TTL down so the second subscribe's refresh is observable.
+      await inspector.pExpire(streamKey, 1000);
+
+      // The second subscriber's XGROUP CREATE hits BUSYGROUP inside the MULTI
+      // (a MultiErrorReply whose message does not contain "BUSYGROUP" — it
+      // lives in err.replies). subscribe() must treat that as success, and the
+      // PEXPIRE in the same transaction still applies.
+      await expect(ps2.subscribe(topic, (_event, ack) => void ack?.(), { group })).resolves.not.toThrow();
+      expect(await inspector.pTTL(streamKey)).toBeGreaterThan(5000);
+    }, 15_000);
+
     it('refreshes the TTL on a nack retry republish', async () => {
       const ps = createPubSub({ streamIdleTtlMs: 60_000, maxDeliveryAttempts: 3 });
       const topic = `ttl-nack-${randomUUID()}`;

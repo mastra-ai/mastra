@@ -3,16 +3,23 @@ import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { HoverCard, HoverCardTrigger } from '@mastra/playground-ui/components/HoverCard';
 import { MainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
-import { GitBranch, GitMerge, MoreHorizontal, Trash2 } from 'lucide-react';
+import { cn } from '@mastra/playground-ui/utils/cn';
+import { GitBranch, MoreHorizontal, Pin, PinOff, Trash2 } from 'lucide-react';
+import { useRef } from 'react';
+import type { RefObject } from 'react';
 
+import { PullRequestStatusIcon } from '../../factory/components/PullRequestStatusIcon';
 import { SessionPreviewCard } from './SessionPreviewCard';
 import type { SessionPreviewDetails } from './SessionPreviewCard';
 
 /**
  * Shared sidebar row for workspace/user sessions. Built on `MainSidebar.NavLink`
  * so every session list (work, review, user) renders with identical density,
- * hover, and active states. The optional status dot (agent running/finished)
- * hides on hover so the actions menu can take its place.
+ * hover, and active states. Spinner, status dot and actions menu share one
+ * trailing slot beside the label: they swap in place, and the slot collapses
+ * when there is nothing to show so the label gets the full row. Because that
+ * slot comes and goes, the menu and the preview card anchor to the row box
+ * instead — a resized or hidden anchor would drag them across the screen.
  */
 export function SessionNavRow({
   name,
@@ -24,7 +31,9 @@ export function SessionNavRow({
   status,
   merged,
   preview,
+  pinned = false,
   onSelect,
+  onPinChange,
   onDelete,
 }: {
   name: string;
@@ -37,11 +46,14 @@ export function SessionNavRow({
   loading?: boolean;
   /** Merged pull request for this session's branch — shown only when the row is otherwise idle. */
   merged?: boolean;
-  status?: 'running' | 'attention';
+  status?: SessionRowStatus;
   preview?: SessionPreviewDetails;
+  pinned?: boolean;
   onSelect: () => void;
+  onPinChange: (pinned: boolean) => void;
   onDelete: () => void;
 }) {
+  const anchor = useRef<HTMLLIElement>(null);
   const button = (
     <button
       type="button"
@@ -52,61 +64,31 @@ export function SessionNavRow({
       title={preview ? undefined : title}
     >
       <GitBranch />
-      <MainSidebar.NavLabel>{name}</MainSidebar.NavLabel>
-      {loading ? (
-        <Spinner size="sm" aria-label={`Opening ${name}`} className="text-icon3 ml-auto shrink-0" />
-      ) : status === 'running' ? (
-        <span
-          role="status"
-          aria-label={`Agent working in ${name}`}
-          title="Agent working"
-          className="bg-accent1 ml-auto size-2 shrink-0 animate-pulse rounded-full group-hover/session:opacity-0"
-        />
-      ) : status === 'attention' ? (
-        <span
-          role="status"
-          aria-label={`Agent finished in ${name}`}
-          title="Agent finished — open to dismiss"
-          className="bg-accent1 ml-auto size-2 shrink-0 rounded-full group-hover/session:opacity-0"
-        />
-      ) : merged ? (
-        <span
-          role="img"
-          aria-label={`Pull request merged for ${name}`}
-          title="Pull request merged"
-          className="ml-auto flex shrink-0 group-hover/session:opacity-0"
-        >
-          <GitMerge aria-hidden className="text-accent3!" />
-        </span>
+      <MainSidebar.NavLabel className="flex-initial">{name}</MainSidebar.NavLabel>
+      {pinned && !loading ? (
+        <Pin aria-label={`${name} pinned`} className="text-icon3/70 size-2 shrink-0 rotate-45" />
       ) : null}
     </button>
   );
-  const action = loading ? undefined : (
-    <DropdownMenu>
-      <DropdownMenu.Trigger
-        render={
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            aria-label={`Session actions for ${name}`}
-            disabled={disabled}
-            className="opacity-0 group-focus-within/session:opacity-100 group-hover/session:opacity-100 data-[popup-open]:opacity-100"
-          >
-            <MoreHorizontal />
-          </Button>
-        }
-      />
-      <DropdownMenu.Content align="end" className="min-w-28">
-        <DropdownMenu.Item variant="destructive" onClick={onDelete}>
-          <Trash2 />
-          Delete
-        </DropdownMenu.Item>
-      </DropdownMenu.Content>
-    </DropdownMenu>
+  const indicator = indicatorKind({ loading, status, merged });
+  const action = (
+    <span className={cn(trailingSlot, indicator ? 'grid' : revealedSlot)}>
+      {indicator ? <SessionRowIndicator kind={indicator} name={name} /> : null}
+      {indicator === 'loading' ? null : (
+        <SessionActionsMenu
+          name={name}
+          anchor={anchor}
+          disabled={disabled}
+          pinned={pinned}
+          onPinChange={onPinChange}
+          onDelete={onDelete}
+        />
+      )}
+    </span>
   );
   const row = (
     <MainSidebar.NavLink
+      ref={anchor}
       link={{ name, url }}
       isActive={active}
       className="group/session"
@@ -121,7 +103,130 @@ export function SessionNavRow({
   return (
     <HoverCard>
       {row}
-      <SessionPreviewCard name={name} status={status} details={preview} />
+      <SessionPreviewCard name={name} anchor={anchor} status={status} merged={merged} details={preview} />
     </HoverCard>
+  );
+}
+
+const trailingSlot = 'size-form-sm shrink-0 place-items-center *:col-start-1 *:row-start-1';
+
+// An empty slot claims no width, so the label runs the full row until there is something to show.
+const revealedSlot =
+  'hidden group-focus-within/session:grid group-hover/session:grid group-has-[[data-popup-open]]/session:grid';
+
+/**
+ * Session lifecycle states surfaced by the row's status dot. The color scheme
+ * mirrors `SessionFavicon` so the sidebar and the tab-favicon read the same
+ * way at a glance.
+ */
+export type SessionRowStatus = 'initializing' | 'working' | 'ready';
+
+type IndicatorKind = 'loading' | SessionRowStatus | 'merged';
+
+function indicatorKind({
+  loading,
+  status,
+  merged,
+}: {
+  loading?: boolean;
+  status?: SessionRowStatus;
+  merged?: boolean;
+}): IndicatorKind | undefined {
+  if (loading) return 'loading';
+  if (status) return status;
+  return merged ? 'merged' : undefined;
+}
+
+function SessionActionsMenu({
+  name,
+  anchor,
+  disabled,
+  pinned,
+  onPinChange,
+  onDelete,
+}: {
+  name: string;
+  anchor: RefObject<HTMLElement | null>;
+  disabled: boolean;
+  pinned: boolean;
+  onPinChange: (pinned: boolean) => void;
+  onDelete: () => void;
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenu.Trigger
+        render={
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            aria-label={`Session actions for ${name}`}
+            disabled={disabled}
+            className="hidden group-focus-within/session:flex group-hover/session:flex data-[popup-open]:flex"
+          >
+            <MoreHorizontal />
+          </Button>
+        }
+      />
+      <DropdownMenu.Content anchor={anchor} align="end" className="min-w-28">
+        <DropdownMenu.Item onClick={() => onPinChange(!pinned)}>
+          {pinned ? <PinOff /> : <Pin />}
+          {pinned ? 'Unpin' : 'Pin session'}
+        </DropdownMenu.Item>
+        <DropdownMenu.Item variant="destructive" onClick={onDelete}>
+          <Trash2 />
+          Delete
+        </DropdownMenu.Item>
+      </DropdownMenu.Content>
+    </DropdownMenu>
+  );
+}
+
+// The actions menu owns the slot as soon as the row is hovered, focused, or its menu is open.
+const yieldsToActions =
+  'group-hover/session:hidden group-focus-within/session:hidden group-has-[[data-popup-open]]/session:hidden';
+
+function SessionRowIndicator({ kind, name }: { kind: IndicatorKind; name: string }) {
+  if (kind === 'loading') return <Spinner size="sm" aria-label={`Opening ${name}`} className="text-icon3" />;
+
+  if (kind === 'initializing')
+    return (
+      <span
+        role="status"
+        aria-label={`Initializing ${name}`}
+        title="Initializing"
+        className={cn('bg-warning1 size-2 animate-pulse rounded-full', yieldsToActions)}
+      />
+    );
+
+  if (kind === 'working')
+    return (
+      <span
+        role="status"
+        aria-label={`Agent working in ${name}`}
+        title="Working"
+        className={cn('bg-positive1 size-2 animate-pulse rounded-full', yieldsToActions)}
+      />
+    );
+
+  if (kind === 'ready')
+    return (
+      <span
+        role="status"
+        aria-label={`${name} ready — open to dismiss`}
+        title="Ready"
+        className={cn('bg-accent3 size-2 rounded-full', yieldsToActions)}
+      />
+    );
+
+  return (
+    <span
+      role="img"
+      aria-label={`Pull request merged for ${name}`}
+      title="Pull request merged"
+      className={cn('flex', yieldsToActions)}
+    >
+      <PullRequestStatusIcon status="merged" className="size-3!" decorative />
+    </span>
   );
 }

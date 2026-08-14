@@ -1,18 +1,20 @@
 ---
-title: "Storage overview"
+title: "Storage"
 description: Configure storage for Mastra to persist runtime state across agents, workflows, observability, evals, schedules, and memory.
 packages:
   - "@mastra/core"
   - "@mastra/libsql"
   - "@mastra/memory"
   - "@mastra/mongodb"
+  - "@mastra/oracledb"
   - "@mastra/pg"
 ---
 
 import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
+import { IntegrationGrid } from '@site/src/components/integrations/grid';
 
-# Storage overview
+# Storage
 
 Storage is the persistence layer for the Mastra runtime. It keeps memory, workflow state, observability data, eval results, schedules, and long-running agent state available after a process restarts.
 
@@ -206,26 +208,9 @@ You can also route `observability` to a dedicated analytics backend. See the [ob
 
 ## Supported providers
 
-Each provider page includes installation instructions, configuration parameters, and usage examples:
+Each provider page includes installation instructions, configuration parameters, and usage examples. libSQL is the fastest path for local development because it doesn't require running a separate database server.
 
-- [libSQL](/reference/storage/libsql)
-- [PostgreSQL](/reference/storage/postgresql)
-- [MongoDB](/reference/storage/mongodb)
-- [Upstash](/reference/storage/upstash)
-- [Redis](/reference/storage/redis)
-- [Cloudflare D1](/reference/storage/cloudflare-d1)
-- [Cloudflare KV & Durable Objects](/reference/storage/cloudflare)
-- [Convex](/reference/storage/convex)
-- [DynamoDB](/reference/storage/dynamodb)
-- [LanceDB](/reference/storage/lance)
-- [Microsoft SQL Server](/reference/storage/mssql)
-- [Google Cloud Spanner](/reference/storage/spanner)
-
-:::tip
-
-libSQL is the fastest path for local development because it doesn't require running a separate database server.
-
-:::
+<IntegrationGrid section="Databases" />
 
 ## Next steps
 

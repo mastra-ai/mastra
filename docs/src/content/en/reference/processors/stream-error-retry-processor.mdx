@@ -54,7 +54,7 @@ For retryable errors with a `Retry-After` response header, the processor reads c
 
 ## Retry unknown errors
 
-Set `retryUnknownErrors` to retry errors that don't match provider metadata, the built-in OpenAI matcher, or a custom matcher. Unknown-error retries use the processor-level `maxRetries` and `delayMs` values. Known authorization failures, including HTTP `401` and `403` responses, aren't retried:
+Set `retryUnknownErrors` to retry errors that don't match provider metadata or the built-in OpenAI matcher, including a custom matcher. Unknown-error retries use the processor-level `maxRetries` and `delayMs` values. Known authorization failures, including HTTP `401` and `403` responses, aren't retried:
 
 ```typescript title="src/mastra/agents/resilient-agent.ts"
 import { Agent } from '@mastra/core/agent'
@@ -110,7 +110,7 @@ export const agent = new Agent({
 
 ## Default OpenAI Responses matcher
 
-`isRetryableOpenAIResponsesStreamError` matches OpenAI Responses stream error chunks with `type: 'error'` or `type: 'response.failed'`. It retries known transient OpenAI error codes and, as a fallback, errors with explicit retry guidance such as `You can retry your request`.
+`isRetryableOpenAIResponsesStreamError` matches OpenAI Responses stream error chunks with `type: 'error'` or `type: 'response.failed'`. It retries known transient OpenAI error codes. As a fallback, it retries errors with explicit retry guidance such as `You can retry your request`.
 
 `StreamErrorRetryProcessor` includes this matcher by default. You can also import it and reuse it in custom retry logic.
 

@@ -1,6 +1,6 @@
 import type { IMastraLogger } from '@mastra/core/logger';
-import { ErrorCode } from '@modelcontextprotocol/sdk/types.js';
-import type { Resource, ResourceTemplate } from '@modelcontextprotocol/sdk/types.js';
+import type { Resource, ResourceTemplateType } from '@modelcontextprotocol/client';
+import { ProtocolErrorCode } from '@modelcontextprotocol/client';
 import type { InternalMastraMCPClient } from '../client';
 
 interface ResourceClientActionsConfig {
@@ -57,7 +57,7 @@ export class ResourceClientActions {
       }
     } catch (e: any) {
       // MCP Server might not support resources, so we return an empty array
-      if (e.code === ErrorCode.MethodNotFound) {
+      if (e.code === ProtocolErrorCode.MethodNotFound) {
         return [];
       }
       this.logger.error('Error getting resources from server', {
@@ -87,7 +87,7 @@ export class ResourceClientActions {
    * });
    * ```
    */
-  public async templates(): Promise<ResourceTemplate[]> {
+  public async templates(): Promise<ResourceTemplateType[]> {
     try {
       const response = await this.client.listResourceTemplates();
       if (response && response.resourceTemplates && Array.isArray(response.resourceTemplates)) {
@@ -101,7 +101,7 @@ export class ResourceClientActions {
       }
     } catch (e: any) {
       // MCP Server might not support resources, so we return an empty array
-      if (e.code === ErrorCode.MethodNotFound) {
+      if (e.code === ProtocolErrorCode.MethodNotFound) {
         return [];
       }
       this.logger.error('Error getting resource templates from server', {

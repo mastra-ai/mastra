@@ -246,6 +246,60 @@ describe('input-request notifications fire at event receipt (#20398)', () => {
     releaseBlocker.resolve();
   });
 
+  it('notifies agent_done at receipt for agent_end reason complete while the queue is blocked (#20860)', async () => {
+    const { listener, releaseBlocker, handled } = createHarness();
+
+    const blocked = listener({ type: 'blocking_prompt' });
+    await Promise.resolve();
+    expect(handled).toEqual(['start:blocking_prompt']);
+
+    const second = listener({ type: 'agent_end', reason: 'complete' });
+
+    // The queue is still blocked — the completion ping must already have fired.
+    expect(handled).toEqual(['start:blocking_prompt']);
+    expect(mocks.sendNotification).toHaveBeenCalledTimes(1);
+    expect(mocks.sendNotification).toHaveBeenCalledWith('agent_done', expect.objectContaining({ mode: 'off' }));
+    // Reason only, no message — parity with the old queued call shape; the
+    // default 'Agent finished' text comes from reasonToMessage in notify.ts.
+    expect(mocks.sendNotification.mock.calls[0]?.[1]?.message).toBeUndefined();
+
+    releaseBlocker.resolve();
+    await blocked;
+    await second;
+    expect(handled).toEqual(['start:blocking_prompt', 'end:blocking_prompt', 'start:agent_end', 'end:agent_end']);
+  });
+
+  it('notifies agent_done at receipt when agent_end carries no reason (#20860)', async () => {
+    const { listener, releaseBlocker } = createHarness();
+
+    void listener({ type: 'blocking_prompt' });
+    await Promise.resolve();
+
+    void listener({ type: 'agent_end' });
+
+    expect(mocks.sendNotification).toHaveBeenCalledTimes(1);
+    expect(mocks.sendNotification).toHaveBeenCalledWith('agent_done', expect.anything());
+    releaseBlocker.resolve();
+  });
+
+  // Scope note: this harness uses a fake handleEvent, so these cases observe
+  // only the receipt-time tap. The removal of the queued handler's notify is
+  // pinned separately in mastra-tui-queueing.test.ts.
+  it.each(['suspended', 'aborted', 'error'] as const)(
+    'does not notify agent_done at receipt for agent_end reason %s (#20860)',
+    async reason => {
+      const { listener, releaseBlocker } = createHarness();
+
+      void listener({ type: 'blocking_prompt' });
+      await Promise.resolve();
+
+      void listener({ type: 'agent_end', reason });
+
+      expect(mocks.sendNotification).not.toHaveBeenCalled();
+      releaseBlocker.resolve();
+    },
+  );
+
   it('keeps delivering events when notification state access throws', async () => {
     let listener: ((event: any) => Promise<void>) | undefined;
     const poisonedState = {

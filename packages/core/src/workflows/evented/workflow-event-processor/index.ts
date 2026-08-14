@@ -24,6 +24,7 @@ import {
   getSingleStepEntryId,
   getStepIds,
   isSingleStepEntry,
+  omitPriorCompletionFields,
   validateStepResumeData,
 } from '../../utils';
 import { resolveCurrentState } from '../helpers';
@@ -112,6 +113,30 @@ function readForeachResult(
 ): ForeachStepResult | undefined {
   const result = stepResults[id] as (StepResult<any, any, any, any> & ForeachStepResult) | undefined;
   return result;
+}
+
+/**
+ * True when the workflow opts out of persisting snapshots for *every* status,
+ * including the resumable 'suspended' one — i.e. it wants no durable trace at
+ * all (the notification dispatcher, internal fire-and-forget runs).
+ *
+ * Such a run still gets a 'running' row written unconditionally at start, so
+ * without an explicit terminal cleanup it would accumulate one dead row per
+ * run forever (issue #20254). Workflows that persist *some* statuses keep
+ * their existing behavior: the last persisted snapshot is left in place.
+ */
+function neverPersistsSnapshots({
+  workflow,
+  stepResults,
+}: {
+  workflow?: { options?: { shouldPersistSnapshot?: (params: any) => boolean } };
+  stepResults: Record<string, StepResult<any, any, any, any>>;
+}): boolean {
+  const shouldPersistSnapshot = workflow?.options?.shouldPersistSnapshot;
+  if (!shouldPersistSnapshot) return false;
+  return (['running', 'suspended', 'pending', 'waiting'] as const).every(
+    workflowStatus => !shouldPersistSnapshot({ stepResults, workflowStatus }),
+  );
 }
 
 export class WorkflowEventProcessor extends EventProcessor {
@@ -611,18 +636,22 @@ export class WorkflowEventProcessor extends EventProcessor {
           activeStepsPath: activeStepsPath,
         },
       });
-    } else if (parentWorkflow && finalStatus !== 'paused') {
-      // The nested run reached a terminal state its workflow opted not to
-      // persist (e.g. the internal `executionWorkflow` inside `agentic-loop`).
-      // A row may still exist from an earlier persisted phase — 'pending' at
-      // nested-run start or 'suspended' before a resume — and without the
-      // terminal update it would leak as a stale, resumable-looking record.
-      // Terminal runs can't be resumed, so drop the row entirely. Best-effort:
-      // a storage failure here must not abort run completion.
+    } else if (
+      finalStatus !== 'paused' &&
+      (parentWorkflow || neverPersistsSnapshots({ workflow, stepResults: stepResults ?? {} }))
+    ) {
+      // The run reached a terminal state its workflow opted not to persist
+      // (e.g. the internal `executionWorkflow` inside `agentic-loop`, or the
+      // notification dispatcher). A row may still exist from an earlier phase —
+      // 'pending' at nested-run start, 'suspended' before a resume, or the
+      // 'running' record every run writes at start — and without the terminal
+      // update it would leak as a stale, resumable-looking record. Terminal
+      // runs can't be resumed, so drop the row entirely. Best-effort: a storage
+      // failure here must not abort run completion.
       try {
         await workflowsStore?.deleteWorkflowRunById({ runId, workflowName: workflowId });
       } catch (e) {
-        this.mastra.getLogger()?.warn('Failed to clean up nested workflow snapshot', { workflowId, runId, error: e });
+        this.mastra.getLogger()?.warn('Failed to clean up workflow snapshot', { workflowId, runId, error: e });
       }
     }
 
@@ -895,15 +924,15 @@ export class WorkflowEventProcessor extends EventProcessor {
           activeStepsPath: activeStepsPath,
         },
       });
-    } else if (parentWorkflow) {
-      // Mirrors endWorkflow: a nested run whose workflow opted out of
-      // persisting the terminal 'failed' status would otherwise leak its
-      // earlier-phase ('pending'/'suspended') snapshot row forever.
+    } else if (parentWorkflow || neverPersistsSnapshots({ workflow, stepResults: stepResults ?? {} })) {
+      // Mirrors endWorkflow: a run whose workflow opted out of persisting the
+      // terminal 'failed' status would otherwise leak its earlier-phase
+      // ('running'/'pending'/'suspended') snapshot row forever.
       // Best-effort: a storage failure here must not abort run completion.
       try {
         await workflowsStore?.deleteWorkflowRunById({ runId, workflowName: workflowId });
       } catch (e) {
-        this.mastra.getLogger()?.warn('Failed to clean up nested workflow snapshot', { workflowId, runId, error: e });
+        this.mastra.getLogger()?.warn('Failed to clean up workflow snapshot', { workflowId, runId, error: e });
       }
     }
 
@@ -2539,9 +2568,13 @@ export class WorkflowEventProcessor extends EventProcessor {
           type: 'workflow-step-suspended',
           payload: {
             id: stepId,
-            ...prevResult,
+            // Strip completion fields of the step's *previous* run (a stale
+            // `output` would otherwise re-publish state blobs), then re-add
+            // the fields describing the current suspension.
+            ...omitPriorCompletionFields(prevResult),
             suspendedAt: Date.now(),
             suspendPayload: prevResult.suspendPayload,
+            ...(prevResult.suspendOutput !== undefined ? { suspendOutput: prevResult.suspendOutput } : {}),
           },
         },
       });
@@ -2648,7 +2681,11 @@ export class WorkflowEventProcessor extends EventProcessor {
           type: 'workflow-step-result',
           payload: {
             id: stepId,
-            ...prevResult,
+            // Strip completion fields of the step's *previous* run (stale
+            // suspend state, errors), then re-add this run's own result.
+            ...omitPriorCompletionFields(prevResult),
+            ...('output' in prevResult ? { output: prevResult.output } : {}),
+            ...('endedAt' in prevResult && prevResult.endedAt !== undefined ? { endedAt: prevResult.endedAt } : {}),
           },
         },
       });

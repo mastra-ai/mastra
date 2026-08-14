@@ -1,5 +1,21 @@
 # @mastra/voice-aws-nova-sonic
 
+## 0.2.1
+
+### Patch Changes
+
+- dependencies updates: ([#20406](https://github.com/mastra-ai/mastra/pull/20406))
+  - Updated dependency [`@aws-sdk/client-bedrock-runtime@^3.1095.0` ↗︎](https://www.npmjs.com/package/@aws-sdk/client-bedrock-runtime/v/3.1095.0) (from `^3.1058.0`, in `dependencies`)
+  - Updated dependency [`@aws-sdk/credential-provider-node@^3.972.72` ↗︎](https://www.npmjs.com/package/@aws-sdk/credential-provider-node/v/3.972.72) (from `^3.972.48`, in `dependencies`)
+
+## 0.2.1-alpha.0
+
+### Patch Changes
+
+- dependencies updates: ([#20406](https://github.com/mastra-ai/mastra/pull/20406))
+  - Updated dependency [`@aws-sdk/client-bedrock-runtime@^3.1095.0` ↗︎](https://www.npmjs.com/package/@aws-sdk/client-bedrock-runtime/v/3.1095.0) (from `^3.1058.0`, in `dependencies`)
+  - Updated dependency [`@aws-sdk/credential-provider-node@^3.972.72` ↗︎](https://www.npmjs.com/package/@aws-sdk/credential-provider-node/v/3.972.72) (from `^3.972.48`, in `dependencies`)
+
 ## 0.2.0
 
 ### Minor Changes

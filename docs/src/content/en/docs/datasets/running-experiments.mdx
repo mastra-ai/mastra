@@ -81,7 +81,7 @@ Because the threads belong to the caller's resource, resource-scoped memory feat
 - Resource-scoped working memory updates persist to the resource, and later items in the run see updates made by earlier items.
 - Resource-scoped semantic recall can surface the resource's prior conversations to the experiment, and experiment transcripts become recallable in that resource's later conversations.
 
-This is useful when you want to evaluate an agent against a real user's accumulated context. If you don't want experiment runs touching real user state, run the experiment with a dedicated evaluation resource id instead.
+Use this approach to evaluate an agent against a real user's accumulated context. To keep experiment runs from touching real user state, use a dedicated evaluation resource id instead.
 
 Thread injection is skipped in the following cases:
 
@@ -264,6 +264,55 @@ The `experiment.run.finished` event is awaited before Mastra persists the final 
 
 The exported event types are `ExperimentEvent`, `ExperimentRunStartedEvent`, `ExperimentItemCompletedEvent`, and `ExperimentRunFinishedEvent`. Use the discriminated `type` field to narrow an event before reading event-specific properties.
 
+## Lifecycle hooks
+
+Use lifecycle hooks to prepare state before a target runs and clean it up afterwards. This is useful when an item can't be evaluated against an empty environment. A run might need a fixture file copied into the agent's workspace, or a sandbox provisioned before the agent can touch it.
+
+Hooks run at two levels. `beforeAll` and `afterAll` run once per experiment, and `beforeEach` and `afterEach` run once per item:
+
+```typescript title="src/mastra/experiments/hooks.ts"
+const summary = await dataset.startExperiment({
+  targetType: 'agent',
+  targetId: 'document-agent',
+  scorers: ['accuracy'],
+  beforeAll: async ({ experimentId }) => {
+    await createWorkspace(experimentId)
+  },
+  beforeEach: async ({ item }) => {
+    await copyFixture(item.metadata?.fixture)
+  },
+  afterEach: async ({ item, result }) => {
+    await clearWorkspaceFiles(item.id)
+  },
+  afterAll: async ({ summary }) => {
+    await deleteWorkspace(summary.experimentId)
+  },
+})
+```
+
+Every hook can be async. Each one receives the `experimentId`, the `mastra` instance, and the run-level `signal`, so long-running setup can be cancelled along with the experiment. The per-item hooks also receive `item`. The teardown hooks receive the result they follow: `afterEach` receives the item's `result` including scores, and `afterAll` receives the `summary` that's about to be returned.
+
+The item passed to hooks exposes `id`, `input`, `groundTruth`, and `metadata`. Fields that control execution, such as tool mocks and scorer selection, aren't exposed, so a hook can't change how the item runs.
+
+### Hook failures
+
+Each hook has a different consequence when it throws, based on how much of the run depends on it:
+
+| Hook | On failure |
+| - | - |
+| `beforeAll` | Fails the experiment. No items run. |
+| `beforeEach` | Fails that item with `EXPERIMENT_ITEM_BEFORE_EACH_FAILED`. Other items continue. |
+| `afterEach` | Logged. The item's recorded outcome doesn't change. |
+| `afterAll` | Logged. The returned summary doesn't change. |
+
+When `beforeAll` fails, the experiment is marked failed and the `experiment.run.finished` event is still emitted before the error propagates.
+
+When `beforeEach` fails, the target and its scorers are skipped for that item, since the item's preconditions were never met. `afterEach` is also skipped for that item, on the basis that setup which didn't finish owns its own cleanup.
+
+Teardown failures are logged rather than propagated. By the time `afterEach` runs, the target has already produced a real result, and discarding it because cleanup was untidy would lose the data the experiment was run to collect.
+
+`afterAll` runs on every exit path, including when the experiment fails, when `beforeAll` fails, and when an [event observer](#observe-experiment-events) fails, so teardown isn't skipped when something goes wrong. It runs at most once per experiment.
+
 ## Tool mocks
 
 When an experiment runs an agent that calls side-effecting tools, attach static tool mocks to individual dataset items to make the run deterministic. During the experiment, a mocked tool returns its declared output instead of executing. Tools without a mock on the item run live by default.
@@ -362,7 +411,7 @@ In [Studio](/docs/studio/overview), edit a dataset item to author tool mocks as 
 ### Limitations
 
 - **No tool span for mocked calls.** A mocked call returns its output before the tool executes, so it doesn't create a tool span. Trajectory scorers backed by stored traces may therefore not see mocked tool calls. Trajectory extraction that falls back to the agent's message output still sees them, so trajectory scoring can differ depending on your observability configuration.
-- **Storage support.** Tool mocks and tool mock reports are persisted by the LibSQL, PostgreSQL, MongoDB, and Spanner adapters. The MySQL adapter doesn't support them and rejects writes that carry tool mocks or a tool mock report. All dataset storage adapters persist `unmockedToolPolicy`.
+- **Storage support.** The LibSQL, PostgreSQL, MongoDB, and Spanner adapters persist tool mocks and tool mock reports, while the MySQL adapter rejects writes that carry either one. All dataset storage adapters persist `unmockedToolPolicy`.
 
 ## Async experiments
 

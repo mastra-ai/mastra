@@ -1,10 +1,12 @@
 import React, { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import clsx from 'clsx'
-import { ThemeClassNames } from '@docusaurus/theme-common'
+import { prefersReducedMotion, ThemeClassNames } from '@docusaurus/theme-common'
 import { useAnnouncementBar, useScrollPosition } from '@docusaurus/theme-common/internal'
 import { translate } from '@docusaurus/Translate'
 import DocSidebarItems from '@theme/DocSidebarItems'
+import type { PropSidebarItem } from '@docusaurus/plugin-content-docs'
 import type { Props } from '@theme/DocSidebar/Desktop/Content'
+import VersionControl from '@site/src/components/version-control'
 import ContextualContent from '../../ContextualContent'
 import { useContextualSidebar } from '../../../contextual-sidebar-context'
 
@@ -28,29 +30,56 @@ function useShowAnnouncementBar() {
 export default function DocSidebarDesktopContent({ path, sidebar, className }: Props): ReactNode {
   const showAnnouncementBar = useShowAnnouncementBar()
   const navigationRef = useRef<HTMLElement>(null)
-  const bottomFadeRef = useRef<HTMLDivElement>(null)
-  const { activateSidebar, clearSidebar, resolveSidebar } = useContextualSidebar()
+  const versionControlRef = useRef<HTMLDivElement>(null)
+  const { activateSidebar, clearSidebar, resolveSidebar, rootScrollState } = useContextualSidebar()
   const contextualSidebar = resolveSidebar(sidebar)
+  const [exitingContextualSidebar, setExitingContextualSidebar] = useState<typeof contextualSidebar>()
+  const renderedContextualSidebar = contextualSidebar ?? exitingContextualSidebar
+  const isContextualSidebarExiting = !contextualSidebar && Boolean(exitingContextualSidebar)
   const paneKey = contextualSidebar?.state.categoryHref ?? 'root'
   const previousPaneKey = useRef(paneKey)
+  const shouldAnimateContextualEntry = previousPaneKey.current === 'root' && paneKey !== 'root'
 
   useLayoutEffect(() => {
-    if (previousPaneKey.current !== paneKey) {
-      if (navigationRef.current) {
-        navigationRef.current.scrollTop = 0
+    const navigation = navigationRef.current
+    const previousPane = previousPaneKey.current
+    if (!navigation || previousPane === paneKey) return
+
+    if (paneKey === 'root') {
+      if (rootScrollState.current.restorePending) {
+        navigation.scrollTop = rootScrollState.current.scrollTop
+        rootScrollState.current.restorePending = false
       }
-      previousPaneKey.current = paneKey
+    } else {
+      navigation.scrollTop = 0
     }
-  }, [paneKey])
+    previousPaneKey.current = paneKey
+  }, [paneKey, rootScrollState])
+
+  useLayoutEffect(() => {
+    const navigation = navigationRef.current
+    if (!navigation) return
+
+    const updateScrollbarGutter = () => {
+      const gutterWidth = navigation.offsetWidth - navigation.clientWidth
+      navigation.style.setProperty('--sidebar-scrollbar-gutter', `${gutterWidth}px`)
+    }
+
+    updateScrollbarGutter()
+    const resizeObserver = new ResizeObserver(updateScrollbarGutter)
+    resizeObserver.observe(navigation)
+
+    return () => resizeObserver.disconnect()
+  }, [])
 
   useEffect(() => {
     const navigation = navigationRef.current
-    const bottomFade = bottomFadeRef.current
-    if (!navigation || !bottomFade) return
+    const versionControl = versionControlRef.current
+    if (!navigation || !versionControl) return
 
     const updateBottomFade = () => {
       const hasMoreContent = navigation.scrollTop + navigation.clientHeight < navigation.scrollHeight - 1
-      bottomFade.dataset.visible = String(hasMoreContent)
+      versionControl.dataset.fadeVisible = String(hasMoreContent)
     }
 
     updateBottomFade()
@@ -66,11 +95,37 @@ export default function DocSidebarDesktopContent({ path, sidebar, className }: P
       navigation.removeEventListener('scroll', updateBottomFade)
       resizeObserver.disconnect()
     }
-  }, [contextualSidebar, sidebar])
+  }, [renderedContextualSidebar, sidebar])
+
+  const finishContextualExit = () => {
+    setExitingContextualSidebar(undefined)
+    requestAnimationFrame(() => navigationRef.current?.focus())
+  }
+
+  const handleRootItemClick = (item: PropSidebarItem) => {
+    if (item.type === 'category' && item.customProps?.contextualSidebar === true && navigationRef.current) {
+      rootScrollState.current = {
+        restorePending: true,
+        scrollTop: navigationRef.current.scrollTop,
+      }
+    }
+  }
 
   const handleBack = () => {
+    if (!contextualSidebar || prefersReducedMotion()) {
+      clearSidebar()
+      requestAnimationFrame(() => navigationRef.current?.focus())
+      return
+    }
+
+    setExitingContextualSidebar(contextualSidebar)
     clearSidebar()
-    requestAnimationFrame(() => navigationRef.current?.focus())
+  }
+
+  const handleContextualExitAnimationEnd: React.AnimationEventHandler<HTMLDivElement> = event => {
+    if (exitingContextualSidebar && event.target === event.currentTarget) {
+      finishContextualExit()
+    }
   }
 
   return (
@@ -97,29 +152,33 @@ export default function DocSidebarDesktopContent({ path, sidebar, className }: P
             ThemeClassNames.docs.docSidebarMenu,
             'menu__list',
             styles.pane,
-            contextualSidebar && styles.rootPaneInactive,
+            contextualSidebar && styles['root-pane-inactive'],
           )}
+          aria-hidden={contextualSidebar ? true : undefined}
+          inert={contextualSidebar ? true : undefined}
         >
-          <DocSidebarItems items={sidebar} activePath={path} level={1} />
+          <DocSidebarItems items={sidebar} activePath={path} level={1} onItemClick={handleRootItemClick} />
         </ul>
-        {contextualSidebar && (
+        {renderedContextualSidebar && (
           <ContextualContent
+            key={paneKey}
             activePath={path}
-            items={contextualSidebar.items}
-            label={contextualSidebar.state.categoryLabel}
+            items={renderedContextualSidebar.items}
+            label={renderedContextualSidebar.state.categoryLabel}
             onBack={handleBack}
-            onItemClick={() => activateSidebar(contextualSidebar.state)}
+            onItemClick={() => activateSidebar(renderedContextualSidebar.state)}
             paneClassName={styles.pane}
-            entryAnimationClassName={styles.contextualPane}
-            animateEntry={contextualSidebar.state.phase === 'pending'}
+            entryAnimationClassName={styles['contextual-pane-enter']}
+            exitAnimationClassName={styles['contextual-pane-exit']}
+            animateEntry={shouldAnimateContextualEntry}
+            isExiting={isContextualSidebarExiting}
+            onExitAnimationEnd={handleContextualExitAnimationEnd}
           />
         )}
+        <div ref={versionControlRef} className={styles.versionControl}>
+          <VersionControl />
+        </div>
       </nav>
-      <div
-        ref={bottomFadeRef}
-        className={clsx(styles.bottomFade, showAnnouncementBar && styles.bottomFadeWithAnnouncementBar)}
-        aria-hidden="true"
-      />
     </div>
   )
 }

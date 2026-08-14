@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { UniqueViolationError } from '@mastra/core/storage';
 
 import type {
   ConfiguredExternalRepositoryKey,
@@ -481,13 +482,19 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
     create: async (input: CreateSourceControlSessionInput): Promise<SourceControlSession> => {
       const existing = await this.sessions.getForBranch(input);
       if (existing) return existing;
+      if (this.sessionsRows.some(row => row.sessionId === input.sessionId)) {
+        throw new UniqueViolationError('Source-control session ID already exists');
+      }
       const now = new Date();
       const session: SourceControlSession = {
         id: randomUUID(),
         ...input,
+        title: input.title ?? null,
         sandboxId: null,
         sandboxWorkdir: null,
         materializedAt: null,
+        firstMessageAt: null,
+        firstMeaningfulExecAt: null,
         createdAt: now,
         updatedAt: now,
       };
@@ -508,7 +515,17 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
     },
     markMaterialized: async ({ id }: { id: string }) => {
       const row = this.sessionsRows.find(candidate => candidate.id === id);
-      if (row) Object.assign(row, { materializedAt: new Date(), updatedAt: new Date() });
+      if (row && row.materializedAt === null) Object.assign(row, { materializedAt: new Date(), updatedAt: new Date() });
+    },
+    markFirstMessage: async ({ sessionId }: { sessionId: string }) => {
+      const row = this.sessionsRows.find(candidate => candidate.sessionId === sessionId);
+      if (row && row.firstMessageAt === null) Object.assign(row, { firstMessageAt: new Date(), updatedAt: new Date() });
+    },
+    markFirstMeaningfulExec: async ({ sessionId }: { sessionId: string }) => {
+      const row = this.sessionsRows.find(candidate => candidate.sessionId === sessionId);
+      if (row && row.firstMeaningfulExecAt === null) {
+        Object.assign(row, { firstMeaningfulExecAt: new Date(), updatedAt: new Date() });
+      }
     },
     delete: async (id: string) => {
       this.sessionsRows.splice(0, this.sessionsRows.length, ...this.sessionsRows.filter(row => row.id !== id));

@@ -2,11 +2,16 @@ import { describe, expect, it } from 'vitest';
 
 import { issueCandidate, linearCandidate, pullRequestCandidate } from './boardCandidates';
 import {
+  boardLabels,
+  boardLabelsFromQuery,
+  boardLabelsQueryValues,
   boardParticipants,
   boardRelevanceFromQuery,
   boardRelevanceOptions,
   boardRelevanceQueryValue,
+  candidateMatchesLabels,
   candidateMatchesRelevance,
+  workItemMatchesLabels,
   workItemMatchesRelevance,
   workItemRelevance,
 } from './boardRelevance';
@@ -158,6 +163,47 @@ describe('board relevance', () => {
     expect(boardRelevanceQueryValue(new Set(['worked', 'assigned']), 'work')).toBe('worked,assigned');
     expect(boardRelevanceQueryValue(new Set(), 'review')).toBe('none');
     expect(boardRelevanceQueryValue(new Set(['worked', 'authored', 'assigned']), 'work')).toBeUndefined();
+  });
+
+  it('collects and matches labels across items and candidates and serializes the label query', () => {
+    const labelled: WorkItem = { ...item, metadata: { ...item.metadata, labels: ['bug', 'p1'] } };
+    const candidate = issueCandidate({
+      number: 8,
+      title: 'Fix cache',
+      url: 'https://github.com/acme/app/issues/8',
+      author: 'hubot',
+      assignee: null,
+      labels: ['ux', 'p1'],
+      comments: 0,
+      createdAt: '2026-08-01T09:00:00.000Z',
+      updatedAt: '2026-08-01T09:00:00.000Z',
+    });
+
+    expect(boardLabels({ items: [labelled], candidates: [candidate] })).toEqual(['bug', 'p1', 'ux']);
+    expect(workItemMatchesLabels(labelled, new Set())).toBe(true);
+    expect(workItemMatchesLabels(labelled, new Set(['bug', 'p1']))).toBe(true);
+    expect(workItemMatchesLabels(labelled, new Set(['bug', 'missing']))).toBe(false);
+    expect(candidateMatchesLabels(candidate, new Set(['p1']))).toBe(true);
+    expect(candidateMatchesLabels(candidate, new Set(['bug']))).toBe(false);
+    expect(boardLabelsFromQuery([])).toEqual(new Set());
+    expect([...boardLabelsFromQuery(['bug', 'p1'])]).toEqual(['bug', 'p1']);
+    expect(boardLabelsQueryValues(new Set())).toEqual([]);
+    expect(boardLabelsQueryValues(new Set(['p1', 'bug']))).toEqual(['bug', 'p1']);
+  });
+
+  it('round-trips labels containing commas through repeated query values', () => {
+    // Regression: a single-value comma-joined format would split `needs,review`
+    // into two labels on reload and never match the original.
+    const selected = new Set(['needs,review', 'priority:p0']);
+    const values = boardLabelsQueryValues(selected);
+    // Repeated params preserve each label as its own value.
+    const params = new URLSearchParams();
+    for (const value of values) params.append('label', value);
+    const restored = boardLabelsFromQuery(params.getAll('label'));
+    expect(restored).toEqual(selected);
+    // And a URL-encoded round trip.
+    const encoded = new URLSearchParams(params.toString());
+    expect(boardLabelsFromQuery(encoded.getAll('label'))).toEqual(selected);
   });
 
   it('offers review-requested only on review boards', () => {

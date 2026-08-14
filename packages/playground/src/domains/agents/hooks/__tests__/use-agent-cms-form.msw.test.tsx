@@ -380,8 +380,12 @@ describe('useAgentCmsForm — blocksWouldPreventSave guard', () => {
         await result.current.handleSaveDraft();
       });
 
-      // The save was blocked — no create request was sent
+      // The save was blocked — no create request was sent — and the failure
+      // was reported as an unresolved reference.
       expect(sink.body).toBeNull();
+      expect(toastError).toHaveBeenCalledWith(
+        'Unable to verify referenced prompt block: error-block. Resolve these references or try again before continuing.',
+      );
     });
   });
 
@@ -390,10 +394,12 @@ describe('useAgentCmsForm — blocksWouldPreventSave guard', () => {
       const sink: { body: Record<string, unknown> | null } = { body: null };
       captureCreateBody(sink);
 
+      let activationRequested = false;
       server.use(
-        http.post(`${BASE_URL}/api/stored/agents/${AGENT_ID}/versions/v1/activate`, () =>
-          HttpResponse.json({ success: true, message: 'Version activated', activeVersionId: 'v1' }),
-        ),
+        http.post(`${BASE_URL}/api/stored/agents/${AGENT_ID}/versions/v1/activate`, () => {
+          activationRequested = true;
+          return HttpResponse.json({ success: true, message: 'Version activated', activeVersionId: 'v1' });
+        }),
       );
 
       const { result } = renderHook(
@@ -420,8 +426,11 @@ describe('useAgentCmsForm — blocksWouldPreventSave guard', () => {
         await result.current.handlePublish('v1');
       });
 
-      // Publishing a specific version bypasses the guard
-      await waitFor(() => expect(sink.body).toBeNull());
+      // Publishing a specific version bypasses the guard: the activation request
+      // was sent, no create request happened, and no guard toast fired.
+      await waitFor(() => expect(activationRequested).toBe(true));
+      expect(sink.body).toBeNull();
+      expect(toastError).not.toHaveBeenCalled();
     });
   });
 });

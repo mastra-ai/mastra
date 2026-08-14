@@ -558,6 +558,100 @@ describe('MessageHistory', () => {
       });
     });
 
+    it('should not persist an input-only failed run', async () => {
+      const mockStorage = {
+        saveMessages: vi.fn().mockResolvedValue(undefined),
+        getThreadById: vi.fn().mockResolvedValue({
+          id: 'thread-1',
+          title: 'Test Thread',
+          metadata: {},
+        }),
+        listMessages: vi.fn().mockResolvedValue({ messages: [], total: 0 }),
+        updateThread: vi.fn().mockResolvedValue(undefined),
+      } as unknown as MemoryStorage;
+
+      const processor = new MessageHistory({
+        storage: mockStorage,
+      });
+
+      const messages: MastraDBMessage[] = [
+        {
+          role: 'user',
+          content: { format: 2, parts: [{ type: 'text', text: 'User message' }] },
+          id: 'msg-2',
+          createdAt: new Date(),
+        },
+      ];
+
+      // Provider errored before producing any output: only input exists.
+      const messageList = new MessageList().add(messages, `input`);
+      const result = await processor.processOutputResult({
+        messageList,
+        messages,
+        result: {
+          text: '',
+          usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+          finishReason: 'error',
+          steps: [],
+        },
+        abort: ((reason?: string) => {
+          throw new Error(reason || 'Aborted');
+        }) as (reason?: string) => never,
+        requestContext: createRuntimeContextWithMemory('thread-1'),
+      });
+
+      expect(result).toBe(messageList);
+      expect(mockStorage.saveMessages).not.toHaveBeenCalled();
+    });
+
+    it('should persist a failed run that produced output', async () => {
+      const mockStorage = {
+        saveMessages: vi.fn().mockResolvedValue(undefined),
+        getThreadById: vi.fn().mockResolvedValue({
+          id: 'thread-1',
+          title: 'Test Thread',
+          metadata: {},
+        }),
+        listMessages: vi.fn().mockResolvedValue({ messages: [], total: 0 }),
+        updateThread: vi.fn().mockResolvedValue(undefined),
+      } as unknown as MemoryStorage;
+
+      const processor = new MessageHistory({
+        storage: mockStorage,
+      });
+
+      const userMessage: MastraDBMessage = {
+        role: 'user',
+        content: { format: 2, parts: [{ type: 'text', text: 'User message' }] },
+        id: 'msg-2',
+        createdAt: new Date(),
+      };
+      const assistantMessage: MastraDBMessage = {
+        role: 'assistant',
+        content: { format: 2, parts: [{ type: 'text', text: 'Partial response' }] },
+        id: 'msg-3',
+        createdAt: new Date(),
+      };
+
+      const messageList = new MessageList().add([userMessage], `input`).add([assistantMessage], `response`);
+      await processor.processOutputResult({
+        messageList,
+        messages: [userMessage, assistantMessage],
+        result: {
+          text: 'Partial response',
+          usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+          finishReason: 'error',
+          steps: [],
+        },
+        abort: ((reason?: string) => {
+          throw new Error(reason || 'Aborted');
+        }) as (reason?: string) => never,
+        requestContext: createRuntimeContextWithMemory('thread-1'),
+      });
+
+      expect(mockStorage.saveMessages).toHaveBeenCalled();
+    });
+
     it('should filter out ONLY system messages', async () => {
       const mockStorage = {
         saveMessages: vi.fn().mockResolvedValue(undefined),
@@ -738,7 +832,7 @@ describe('MessageHistory', () => {
       );
     });
 
-    it('should update thread metadata', async () => {
+    it('should not rewrite an existing thread row when persisting messages', async () => {
       const mockStorage = {
         saveMessages: vi.fn().mockResolvedValue(undefined),
         getThreadById: vi.fn().mockResolvedValue({
@@ -773,13 +867,9 @@ describe('MessageHistory', () => {
         messageList,
       });
 
-      expect(mockStorage.updateThread).toHaveBeenCalledWith({
-        id: 'thread-1',
-        title: 'Test Thread',
-        metadata: expect.objectContaining({
-          createdAt: expect.any(Date),
-        }),
-      });
+      // Writing back the row we just read would clobber a title generated
+      // concurrently with this save.
+      expect(mockStorage.updateThread).not.toHaveBeenCalled();
     });
 
     it('should return original messages when no threadId', async () => {

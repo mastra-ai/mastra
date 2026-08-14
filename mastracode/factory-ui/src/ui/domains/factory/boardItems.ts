@@ -1,8 +1,8 @@
 import { relativeTime } from '../../../lib/date/relativeTime';
 import type { WorkItem, WorkItemSessionRef, WorkItemSource } from './services/workItems';
 
-export const AUTO_TRIAGED_LABEL = 'auto-triaged';
-export const NEEDS_APPROVAL_LABEL = 'needs-approval';
+export const AUTO_TRIAGED_LABEL = 'status: auto-triaged';
+export const NEEDS_APPROVAL_LABEL = 'status: needs approval';
 export const HIDDEN_CARD_LABELS = new Set([AUTO_TRIAGED_LABEL, NEEDS_APPROVAL_LABEL]);
 
 export const SOURCE_LABELS: Record<WorkItemSource, string> = {
@@ -30,6 +30,17 @@ export function githubNumberForItem(item: Pick<WorkItem, 'source' | 'metadata'>)
   return itemNumber;
 }
 
+export type PullRequestStatus = 'draft' | 'open' | 'closed' | 'merged';
+
+export function pullRequestStatusForItem(item: Pick<WorkItem, 'metadata' | 'stages'>): PullRequestStatus {
+  if (item.metadata.merged === true) return 'merged';
+  if (item.metadata.state === 'closed') return 'closed';
+  if (item.metadata.state === 'open') return item.metadata.draft === true ? 'draft' : 'open';
+  if (item.stages.includes('done')) return 'merged';
+  if (item.stages.includes('canceled')) return 'closed';
+  return item.metadata.draft === true ? 'draft' : 'open';
+}
+
 export function candidateSourceKeyForItem(item: WorkItem): string | undefined {
   const itemNumber = githubNumberForItem(item);
   if (itemNumber === undefined) return;
@@ -48,7 +59,7 @@ export function externalLinkLabel(source: WorkItemSource): string {
 
 export function workItemMeta(item: WorkItem): string {
   const author = typeof item.metadata.author === 'string' ? item.metadata.author : undefined;
-  const age = `added ${relativeTime(item.createdAt)}`;
+  const age = relativeTime(item.createdAt);
   const githubNumber = githubNumberForItem(item);
   if (githubNumber !== undefined) return `#${githubNumber}${author ? ` · ${author}` : ''} · ${age}`;
   if (item.source === 'linear-issue' && typeof item.metadata.identifier === 'string') {

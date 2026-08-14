@@ -172,8 +172,7 @@ export const mainNav: NavSection[] = [
       },
       {
         name: 'Traces',
-        url: '/observability',
-        activePaths: ['/traces'],
+        url: '/traces',
         Icon: TraceIcon,
         docs: { href: 'https://mastra.ai/en/docs/observability/tracing/overview', label: 'Traces documentation' },
         isOnMastraPlatform: true,

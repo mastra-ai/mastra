@@ -98,7 +98,7 @@ Force flushes any pending spans to Sentry without shutting down the exporter. Wa
 async shutdown(): Promise<void>
 ```
 
-Ends all active spans, clears internal state, and closes the Sentry connection. Waits up to 2 seconds for pending data to be sent.
+Ends all active spans and clears internal state before closing the Sentry connection. Waits up to 2 seconds for pending data to be sent.
 
 ## Usage
 

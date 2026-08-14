@@ -94,10 +94,12 @@ export interface LanguageDetectorOptions extends LastMessageOnlyOption {
   includeDetectionDetails?: boolean;
 
   /**
-   * Translation quality preference:
-   * - 'speed': Prioritize fast translation
-   * - 'quality': Prioritize translation accuracy (default)
-   * - 'balanced': Balance between speed and quality
+   * @deprecated Previously selected prompt-level "Quality Level" guidance, but that behavior was
+   * removed when the detection and translation prompts were streamlined. This option now has no
+   * effect, but existing configurations keep type-checking.
+   *
+   * For model-specific speed and quality controls, use `providerOptions` when supported by your
+   * provider, for example `{ openai: { reasoningEffort: 'low' } }`.
    */
   translationQuality?: 'speed' | 'quality' | 'balanced';
 
@@ -133,7 +135,6 @@ export class LanguageDetector implements Processor<'language-detector'> {
   private preserveOriginal: boolean;
   private minTextLength: number;
   private includeDetectionDetails: boolean;
-  private translationQuality: 'speed' | 'quality' | 'balanced';
   private lastMessageOnly: boolean;
   private providerOptions?: ProviderOptions;
 
@@ -188,7 +189,6 @@ export class LanguageDetector implements Processor<'language-detector'> {
     this.preserveOriginal = options.preserveOriginal ?? true;
     this.minTextLength = options.minTextLength ?? 10;
     this.includeDetectionDetails = options.includeDetectionDetails ?? false;
-    this.translationQuality = options.translationQuality || 'quality';
     this.lastMessageOnly = options.lastMessageOnly ?? false;
     this.providerOptions = options.providerOptions;
 

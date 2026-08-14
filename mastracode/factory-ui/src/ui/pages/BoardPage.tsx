@@ -2,6 +2,7 @@ import { Button, buttonVariants } from '@mastra/playground-ui/components/Button'
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
+import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Plus } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router';
@@ -12,6 +13,7 @@ import { INTAKE_SOURCES, stageContentCount } from '../domains/factory/boardCandi
 import type { IntakeSource } from '../domains/factory/boardCandidates';
 import { boardLoadingStages, boardStages, itemAppearsInStage } from '../domains/factory/boardStages';
 import type { BoardKind } from '../domains/factory/boardStages';
+import { BoardAutoRunToggle } from '../domains/factory/components/BoardAutoRunToggle';
 import { BoardColumn } from '../domains/factory/components/BoardColumn';
 import { BoardColumnEmptyState } from '../domains/factory/components/BoardColumnEmptyState';
 import { BoardRelevanceFilters } from '../domains/factory/components/BoardRelevanceFilters';
@@ -27,17 +29,21 @@ import { useBoardItems } from '../domains/factory/hooks/useBoardItems';
 import { useBoardRuns } from '../domains/factory/hooks/useBoardRuns';
 import { useBoardScroll } from '../domains/factory/hooks/useBoardScroll';
 import {
+  boardLabels,
+  boardLabelsFromQuery,
+  boardLabelsQueryValues,
   boardParticipants,
   boardRelevanceFromQuery,
   boardRelevanceQueryValue,
+  candidateMatchesLabels,
   candidateMatchesRelevance,
+  workItemMatchesLabels,
   workItemMatchesRelevance,
 } from '../domains/factory/boardRelevance';
 import type { BoardRelevanceType } from '../domains/factory/boardRelevance';
 import { workItemHumanActorIds } from '../domains/factory/workItemActivity';
 import type { FactoryProject, LinkedRepositoryPayload } from '../domains/workspaces/services/github';
 import { SkeletonRows } from '../ui/SkeletonRows';
-import { GithubIcon } from '../ui/icons';
 import { settingsSectionPath } from '../domains/settings/settingsSections';
 
 /**
@@ -66,7 +72,7 @@ function Board({ factory, kind }: { factory: FactoryProject; kind: BoardKind }) 
       <div className="flex min-h-0 flex-1 items-center justify-center overflow-y-auto py-8">
         <EmptyState
           as="h2"
-          iconSlot={<GithubIcon size={40} className="text-icon3" />}
+          iconSlot={<GithubIcon className="text-icon3 size-10" />}
           titleSlot={review ? 'Connect a repository to start reviewing' : 'Connect a repository to start intake'}
           descriptionSlot={
             review
@@ -104,6 +110,7 @@ function BoardContent({
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedParticipantId = searchParams.get('teammate') || undefined;
   const selectedRelevanceTypes = boardRelevanceFromQuery(searchParams.get('relevance'), kind);
+  const selectedLabels = boardLabelsFromQuery(searchParams.getAll('label'));
 
   const auth = useFactoryAuth();
   const items = useBoardItems({ factoryProjectId, kind });
@@ -128,8 +135,11 @@ function BoardContent({
   const participantCandidateBySourceKey = new Map(
     intake.participantCandidates.map(candidate => [candidate.sourceKey, candidate]),
   );
-  const filteredCandidates = intake.candidates.filter(candidate =>
-    candidateMatchesRelevance(candidate, selectedParticipantId, selectedRelevanceTypes),
+  const availableLabels = boardLabels({ items: items.all, candidates: intake.participantCandidates });
+  const filteredCandidates = intake.candidates.filter(
+    candidate =>
+      candidateMatchesRelevance(candidate, selectedParticipantId, selectedRelevanceTypes) &&
+      candidateMatchesLabels(candidate, selectedLabels),
   );
   const setParticipant = (participantId: string | undefined) => {
     const next = new URLSearchParams(searchParams);
@@ -150,10 +160,20 @@ function BoardContent({
     else next.delete('relevance');
     setSearchParams(next, { replace: true });
   };
+  const setLabel = (label: string, selected: boolean) => {
+    const nextLabels = new Set(selectedLabels);
+    if (selected) nextLabels.add(label);
+    else nextLabels.delete(label);
+    const next = new URLSearchParams(searchParams);
+    next.delete('label');
+    for (const value of boardLabelsQueryValues(nextLabels)) next.append('label', value);
+    setSearchParams(next, { replace: true });
+  };
   const resetFilters = () => {
     const next = new URLSearchParams(searchParams);
     next.delete('teammate');
     next.delete('relevance');
+    next.delete('label');
     setSearchParams(next, { replace: true });
   };
   const loadingStages = boardLoadingStages({
@@ -166,15 +186,13 @@ function BoardContent({
     boardKey: `${factoryProjectId}:${kind}`,
     settled: loadingStages.size === 0,
     stages,
-    workItems: items.visible.filter(item =>
-      workItemMatchesRelevance(
-        item,
-        activityPage,
-        selectedParticipantId,
-        selectedRelevanceTypes,
-        item.sourceKey ? participantCandidateBySourceKey.get(item.sourceKey) : undefined,
-      ),
-    ),
+    workItems: items.visible.filter(item => {
+      const liveCandidate = item.sourceKey ? participantCandidateBySourceKey.get(item.sourceKey) : undefined;
+      return (
+        workItemMatchesRelevance(item, activityPage, selectedParticipantId, selectedRelevanceTypes, liveCandidate) &&
+        workItemMatchesLabels(item, selectedLabels, liveCandidate)
+      );
+    }),
     candidates: filteredCandidates,
   });
 
@@ -195,21 +213,20 @@ function BoardContent({
       return false;
     });
   const workItemsForStage = (stage: (typeof stages)[number]['id']) =>
-    unfilteredWorkItemsForStage(stage).filter(item =>
-      workItemMatchesRelevance(
-        item,
-        activityPage,
-        selectedParticipantId,
-        selectedRelevanceTypes,
-        item.sourceKey ? participantCandidateBySourceKey.get(item.sourceKey) : undefined,
-      ),
-    );
-  const mutationError = runs.error ?? items.mutationError;
+    unfilteredWorkItemsForStage(stage).filter(item => {
+      const liveCandidate = item.sourceKey ? participantCandidateBySourceKey.get(item.sourceKey) : undefined;
+      return (
+        workItemMatchesRelevance(item, activityPage, selectedParticipantId, selectedRelevanceTypes, liveCandidate) &&
+        workItemMatchesLabels(item, selectedLabels, liveCandidate)
+      );
+    });
+  const mutationError = runs.error ?? decisions.error ?? items.mutationError;
   const visibleWorkItems = new Set(stages.flatMap(stage => workItemsForStage(stage.id)));
   const unfilteredVisibleWorkItems = new Set(stages.flatMap(stage => unfilteredWorkItemsForStage(stage.id)));
   const totalTaskCount = visibleWorkItems.size + filteredCandidates.length;
   const unfilteredTaskCount = unfilteredVisibleWorkItems.size + intake.candidates.length;
-  const filtersExcludeAll = selectedParticipantId !== undefined && totalTaskCount === 0 && unfilteredTaskCount > 0;
+  const anyFilterActive = selectedParticipantId !== undefined || selectedLabels.size > 0;
+  const filtersExcludeAll = anyFilterActive && totalTaskCount === 0 && unfilteredTaskCount > 0;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
@@ -218,16 +235,22 @@ function BoardContent({
           {mutationError instanceof Error ? mutationError.message : 'Board action failed'}
         </Notice>
       )}
-      <BoardRelevanceFilters
-        kind={kind}
-        participants={participants}
-        selectedParticipantId={selectedParticipantId}
-        selectedTypes={selectedRelevanceTypes}
-        currentUserId={auth.data?.user?.userId}
-        onParticipantChange={setParticipant}
-        onTypeChange={setRelevanceType}
-        onReset={resetFilters}
-      />
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <BoardRelevanceFilters
+          kind={kind}
+          participants={participants}
+          selectedParticipantId={selectedParticipantId}
+          selectedTypes={selectedRelevanceTypes}
+          availableLabels={availableLabels}
+          selectedLabels={selectedLabels}
+          currentUserId={auth.data?.user?.userId}
+          onParticipantChange={setParticipant}
+          onTypeChange={setRelevanceType}
+          onLabelChange={setLabel}
+          onReset={resetFilters}
+        />
+        <BoardAutoRunToggle factoryProjectId={factoryProjectId} enabled={factory.autoRunEnabled ?? false} />
+      </div>
       <ScrollArea
         viewportRef={scroll.containerRef}
         orientation="horizontal"
@@ -301,33 +324,34 @@ function BoardContent({
                     preparing={runs.preparingFor(item.id)}
                     evaluatingStage={items.evaluatingStages.get(item.id)}
                     transitionReason={items.transitionReasons[item.id]}
-                    decision={decisions.byItem.get(item.id)}
+                    decision={decisions.effectByItem.get(item.id)}
+                    proposal={decisions.proposalByItem.get(item.id)}
+                    approvingDecisionId={decisions.approvingId}
                     retryingDecisionId={decisions.retryingId}
+                    onApproveProposal={decisions.approve}
+                    onDismissProposal={decisions.dismiss}
                     onRetryDecision={decisions.retry}
                     pendingRunRoles={runs.pendingRolesFor(item.id)}
                     onCreateSession={() => void runs.openOrCreateSession(item, stage.id)}
                     onStartRun={(_spec, action) => void runs.openOrStartRun(item, action.role)}
+                    onRestartRun={(_spec, action) => void runs.restartRun(item, action.role)}
                     onMove={toStage => items.move(item.id, toStage)}
                     onRemove={() => items.remove(item.id)}
                   />
                 ))}
                 {filteredCandidates
                   .filter(candidate => candidate.column === stage.id)
-                  .map(candidate => {
-                    const issue = candidate.issue;
-                    return (
-                      <CandidateCard
-                        key={candidate.sourceKey}
-                        candidate={candidate}
-                        pendingRunRoles={runs.pendingRolesForSource(candidate.sourceKey)}
-                        triageStarting={issue !== undefined && runs.triagingIssueNumbers.has(issue.number)}
-                        disabled={!runs.enabled}
-                        onRun={(action, prompt) => runs.startCandidateRun(candidate, action, prompt)}
-                        onFile={() => items.handleDrop({ kind: 'candidate', candidate }, candidate.column)}
-                        onTriage={issue ? () => runs.triageCandidate(issue) : undefined}
-                      />
-                    );
-                  })}
+                  .map(candidate => (
+                    <CandidateCard
+                      key={candidate.sourceKey}
+                      candidate={candidate}
+                      pendingRunRoles={runs.pendingRolesForSource(candidate.sourceKey)}
+                      preparing={runs.preparingForSource(candidate.sourceKey)}
+                      disabled={!runs.enabled}
+                      onRun={(action, prompt) => runs.startCandidateRun(candidate, action, prompt)}
+                      onFile={() => items.handleDrop({ kind: 'candidate', candidate }, candidate.column)}
+                    />
+                  ))}
                 {loading && (
                   <SkeletonRows label={`Loading ${stage.label} column`} rows={3} rowClassName="h-24 w-full" />
                 )}

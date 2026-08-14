@@ -7,7 +7,7 @@ packages:
 
 # ChannelProvider
 
-`ChannelProvider` is the interface that platform integrations implement to connect agents to a messaging platform. A provider owns the full lifecycle of an integration: app provisioning and OAuth, webhook routing and event handling, adapter creation and agent wiring, and credential management.
+`ChannelProvider` is the interface that platform integrations implement to connect agents to a messaging platform. A provider owns the full integration lifecycle. This includes app provisioning with OAuth, webhook routing with event handling, adapter creation and agent wiring, and credential management.
 
 Register providers on the `Mastra` constructor under `channels`, keyed by an id you choose. Each provider's routes are merged into the server's API routes automatically, and `initialize()` runs during Mastra startup.
 
@@ -115,4 +115,4 @@ const all = mastra.getChannelProviders()
 ## Related
 
 - [SlackProvider](/reference/channels/slack-provider)
-- [Channels](/docs/capabilities/channels/overview)
+- [Channels](/docs/capabilities/channels)
