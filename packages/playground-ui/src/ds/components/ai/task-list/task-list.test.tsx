@@ -37,6 +37,14 @@ describe('TaskList', () => {
       expect(bars[2]).toContain('bg-surface6');
     });
 
+    it('reveals the exact count on hover', async () => {
+      render(<TaskList tasks={mixedTasks} />);
+
+      fireEvent.mouseEnter(screen.getByRole('progressbar'));
+
+      expect((await screen.findByRole('tooltip')).textContent).toBe('1/3 completed');
+    });
+
     it('renders the active form instead of the task content', () => {
       render(<TaskList tasks={mixedTasks} />);
 
@@ -83,6 +91,7 @@ describe('TaskList', () => {
 
       expect(screen.queryByText('Inspect code')).toBeNull();
       expect(screen.queryByText('Build package')).toBeNull();
+      expect(screen.getByRole('progressbar').children).toHaveLength(3);
       expect(screen.getByRole('progressbar').getAttribute('aria-valuenow')).toBe('1');
     });
 
