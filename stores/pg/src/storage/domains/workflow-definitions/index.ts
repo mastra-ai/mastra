@@ -198,6 +198,9 @@ export class WorkflowDefinitionsPG extends WorkflowDefinitionsStorage {
       } catch (error) {
         // A concurrent upsert may have created the row after our existence
         // check; fall back to updating it so the upsert stays idempotent.
+        // A failed statement aborts the transaction, so querying it again
+        // would mask the original persistence error.
+        if (transaction) throw error;
         if (!(await this.loadDefinition(input.id, transaction))) throw error;
         return this.applyUpdate(input, now, transaction);
       }

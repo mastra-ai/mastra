@@ -22,10 +22,8 @@ function isDeadlockVictim(error: unknown): boolean {
   let current: unknown = error;
   while (current && typeof current === 'object' && !seen.has(current)) {
     seen.add(current);
-    const candidate = current as { number?: number; code?: number | string; cause?: unknown };
-    if (candidate.number === 1205 || candidate.code === 1205 || candidate.code === 'EREQUEST') {
-      if (candidate.number === 1205 || String((current as { message?: string }).message).includes('1205')) return true;
-    }
+    const candidate = current as { number?: number; cause?: unknown };
+    if (candidate.number === 1205) return true;
     current = candidate.cause;
   }
   return false;

@@ -65,7 +65,7 @@ A promise that resolves once every member is validated, registered, and persiste
 - `options.authorId` is stored with every bundle member and becomes immutable. When replacing existing members, omitting `options.authorId` retains each member's stored author, while a member whose ID belongs to another author fails with an ownership conflict. It records a verified author but doesn't restrict access by itself. Authorize registration and every later read, update, deletion, and execution at the server boundary.
 - MongoDB requires a replica set or sharded cluster for multi-member registration because `upsertMany()` uses a transaction. Standalone MongoDB supports only single-member registration.
 - A rejected bundle registers and persists nothing. Duplicate IDs, invalid members, and dependency cycles are detected before anything is mutated. Registration is rolled back if persistence fails.
-- Storage writes happen last through `WorkflowDefinitionsStorage.upsertMany()`, which commits every member atomically. Custom workflow-definition stores must provide the same all-or-nothing guarantee.
+- Storage writes happen last. Multi-member bundles use `WorkflowDefinitionsStorage.upsertMany()` to commit every member atomically; a single-member array uses `upsert()`. Custom workflow-definition stores must provide the same all-or-nothing guarantee.
 
 ## Related
 
