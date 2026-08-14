@@ -15,5 +15,4 @@ export * from './console';
 export * from './default';
 export * from './mastra-platform';
 export * from './mastra-storage';
-export * from './pulse';
 export * from './test';

@@ -22,7 +22,7 @@ import { routeToHandler } from './bus/route-event';
 import { createClientObservabilityProxy } from './client';
 import { SamplingStrategyType, observabilityRegistryConfigSchema, observabilityConfigValueSchema } from './config';
 import type { ObservabilityInstanceConfig, ObservabilityRegistryConfig } from './config';
-import { MastraPlatformExporter, MastraStorageExporter, PulseExporter } from './exporters';
+import { MastraPlatformExporter, MastraStorageExporter } from './exporters';
 import { BaseObservabilityInstance, DefaultObservabilityInstance } from './instances';
 import {
   buildFeedbackEvent,
@@ -150,7 +150,7 @@ export class Observability extends MastraBase implements ObservabilityEntrypoint
         serviceName: 'mastra',
         name: 'default',
         sampling: { type: SamplingStrategyType.ALWAYS },
-        exporters: [new MastraStorageExporter(), new MastraPlatformExporter(), new PulseExporter()],
+        exporters: [new MastraStorageExporter(), new MastraPlatformExporter()],
         spanOutputProcessors: autoFilter ? [autoFilter] : [],
       });
 
@@ -189,17 +189,9 @@ export class Observability extends MastraBase implements ObservabilityEntrypoint
           // user processors (e.g. enrichment that copies headers/config into
           // attributes) is still redacted before export.
           const spanOutputProcessors = autoFilter ? [...userProcessors, autoFilter] : userProcessors;
-          // Hidden Pulse prototype: auto-attach PulseExporter (self-disables unless
-          // MASTRA_PULSE=1) so it is present without any user configuration. Dedupe
-          // so an explicitly-configured PulseExporter is not doubled.
-          const existingExporters = tracingDef.exporters ?? [];
-          const pulseExporters = existingExporters.some(e => e instanceof PulseExporter)
-            ? existingExporters
-            : [...existingExporters, new PulseExporter()];
           instance = new DefaultObservabilityInstance({
             ...tracingDef,
             name,
-            exporters: pulseExporters,
             spanOutputProcessors,
           });
         }
