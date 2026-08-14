@@ -106,7 +106,13 @@ describe('MastraAuthBetterAuth', () => {
       });
       const findMany = vi.fn(async () => [{ organizationId: 'org_member' }]);
       const auth = new MastraAuthBetterAuth({
-        auth: { ...mockAuth, $context: Promise.resolve({ authCookies: { sessionToken: { name: 'better-auth.session_token' } }, adapter: { findMany } }) } as any,
+        auth: {
+          ...mockAuth,
+          $context: Promise.resolve({
+            authCookies: { sessionToken: { name: 'better-auth.session_token' } },
+            adapter: { findMany },
+          }),
+        } as any,
       });
 
       const result = await auth.authenticateToken('test-token', mockRawRequest());
@@ -127,7 +133,13 @@ describe('MastraAuthBetterAuth', () => {
       });
       const findMany = vi.fn(async () => [{ organizationId: 'org_member' }]);
       const auth = new MastraAuthBetterAuth({
-        auth: { ...mockAuth, $context: Promise.resolve({ authCookies: { sessionToken: { name: 'better-auth.session_token' } }, adapter: { findMany } }) } as any,
+        auth: {
+          ...mockAuth,
+          $context: Promise.resolve({
+            authCookies: { sessionToken: { name: 'better-auth.session_token' } },
+            adapter: { findMany },
+          }),
+        } as any,
       });
 
       await auth.authenticateToken('test-token', mockRawRequest());
@@ -164,7 +176,13 @@ describe('MastraAuthBetterAuth', () => {
       // The adapter is asked to sort by createdAt asc; the first row wins.
       const findMany = vi.fn(async () => [{ organizationId: 'org_oldest' }, { organizationId: 'org_newer' }]);
       const auth = new MastraAuthBetterAuth({
-        auth: { ...mockAuth, $context: Promise.resolve({ authCookies: { sessionToken: { name: 'better-auth.session_token' } }, adapter: { findMany } }) } as any,
+        auth: {
+          ...mockAuth,
+          $context: Promise.resolve({
+            authCookies: { sessionToken: { name: 'better-auth.session_token' } },
+            adapter: { findMany },
+          }),
+        } as any,
       });
 
       const result = await auth.authenticateToken('test-token', mockRawRequest());
@@ -180,7 +198,13 @@ describe('MastraAuthBetterAuth', () => {
       });
       const findMany = vi.fn(async () => [{ organizationId: 'org_member' }]);
       const auth = new MastraAuthBetterAuth({
-        auth: { ...mockAuth, $context: Promise.resolve({ authCookies: { sessionToken: { name: 'better-auth.session_token' } }, adapter: { findMany } }) } as any,
+        auth: {
+          ...mockAuth,
+          $context: Promise.resolve({
+            authCookies: { sessionToken: { name: 'better-auth.session_token' } },
+            adapter: { findMany },
+          }),
+        } as any,
       });
 
       const result = await auth.authenticateToken('test-token', mockRawRequest());
@@ -195,7 +219,13 @@ describe('MastraAuthBetterAuth', () => {
         user: mockUser,
       });
       const auth = new MastraAuthBetterAuth({
-        auth: { ...mockAuth, $context: Promise.resolve({ authCookies: { sessionToken: { name: 'better-auth.session_token' } }, adapter: { findMany: vi.fn(async () => []) } }) } as any,
+        auth: {
+          ...mockAuth,
+          $context: Promise.resolve({
+            authCookies: { sessionToken: { name: 'better-auth.session_token' } },
+            adapter: { findMany: vi.fn(async () => []) },
+          }),
+        } as any,
       });
 
       const result = await auth.authenticateToken('test-token', mockRawRequest());
@@ -212,7 +242,10 @@ describe('MastraAuthBetterAuth', () => {
       const auth = new MastraAuthBetterAuth({
         auth: {
           ...mockAuth,
-          $context: Promise.resolve({ authCookies: { sessionToken: { name: 'better-auth.session_token' } }, adapter: { findMany: vi.fn(async () => Promise.reject(new Error('db down'))) } }),
+          $context: Promise.resolve({
+            authCookies: { sessionToken: { name: 'better-auth.session_token' } },
+            adapter: { findMany: vi.fn(async () => Promise.reject(new Error('db down'))) },
+          }),
         } as any,
       });
 
