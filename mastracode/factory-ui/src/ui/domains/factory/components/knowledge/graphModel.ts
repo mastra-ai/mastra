@@ -105,6 +105,7 @@ export function egoGraph(
   nodes: KnowledgeGraphNode[],
   edges: KnowledgeGraphEdge[],
   focusId: string,
+  memories?: KnowledgeGraphMemory[],
 ): { nodes: KnowledgeGraphNode[]; edges: KnowledgeGraphEdge[] } {
   const keep = new Set([focusId]);
   const keptEdges = edges.filter(edge => edge.source === focusId || edge.target === focusId);
@@ -112,7 +113,17 @@ export function egoGraph(
     keep.add(edge.source);
     keep.add(edge.target);
   }
-  return { nodes: nodes.filter(node => keep.has(node.id)), edges: keptEdges };
+  // A memory's whole entity set is one neighborhood: a junction memory that
+  // touches the focus must keep ALL its entities, or the memory element gets
+  // dropped downstream (its entities no longer all survive) and a neighbor
+  // strands with no visible connection.
+  for (const memory of memories ?? []) {
+    if (memory.entityIds.includes(focusId)) for (const id of memory.entityIds) keep.add(id);
+  }
+  return {
+    nodes: nodes.filter(node => keep.has(node.id)),
+    edges: edges.filter(edge => keep.has(edge.source) && keep.has(edge.target)),
+  };
 }
 
 /** A11: memories render by arity — tiny dots, connecting lines, junctions. */

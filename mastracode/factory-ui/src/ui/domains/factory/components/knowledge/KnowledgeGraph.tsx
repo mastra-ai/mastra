@@ -325,7 +325,7 @@ function KnowledgeGraphInner({
     const pairEdges = memories.length > 0 ? memoryPairEdges(memories) : payload.edges;
     let filtered = filterGraph(payload.nodes, pairEdges, filters);
     if (focusedId) {
-      const focused = egoGraph(filtered.nodes, filtered.edges, focusedId);
+      const focused = egoGraph(filtered.nodes, filtered.edges, focusedId, memories);
       // A stale focus id (filtered away or gone from the payload) falls back
       // to the full view rather than an empty canvas.
       if (focused.nodes.some(node => node.id === focusedId)) filtered = focused;
@@ -393,7 +393,7 @@ function KnowledgeGraphInner({
     if (focusedFactId)
       mapped = mapped.map(node =>
         node.type === 'knowledgeMemory' && (node as MemoryFlowNode).data.memory.id === focusedFactId
-          ? { ...node, data: { ...node.data, focused: true } }
+          ? ({ ...node, data: { ...node.data, focused: true } } as MemoryFlowNode)
           : node,
       );
     return mapped;

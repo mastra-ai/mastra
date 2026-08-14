@@ -204,6 +204,17 @@ describe('egoGraph (Amendment A5)', () => {
     expect(result.nodes.map(node => node.id).sort()).toEqual(['a', 'b', 'c']);
     expect(result.edges.map(e => e.id).sort()).toEqual(['wikilink:a:b', 'wikilink:c:b']);
   });
+
+  it('keeps the full entity set of a junction memory touching the focus', () => {
+    // A 3+-entity memory is one neighborhood: dropping any of its entities
+    // makes deriveMemoryElements discard the memory, stranding a neighbor
+    // with no visible connection (the far-left orphan bug).
+    const nodes = [entity('a'), entity('b'), entity('c'), entity('d'), entity('e')];
+    const memories = [{ id: 'm1', entityIds: ['b', 'a', 'c', 'd'], pinned: false, text: 'memory m1' }];
+    const edges = memoryPairEdges(memories);
+    const result = egoGraph(nodes, edges, 'a', memories);
+    expect(result.nodes.map(node => node.id).sort()).toEqual(['a', 'b', 'c', 'd']);
+  });
 });
 
 describe('toFlowGraph', () => {
