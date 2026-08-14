@@ -1,6 +1,6 @@
 import { MainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Gauge, GitPullRequest, ListChecks, ScrollText, SquareKanban } from 'lucide-react';
+import { Brain, Gauge, GitPullRequest, ListChecks, ScrollText, SquareKanban } from 'lucide-react';
 import type { ComponentType, ReactNode } from 'react';
 import { NavLink, useLocation, useParams } from 'react-router';
 
@@ -31,6 +31,7 @@ export function FactorySection({ children }: { children?: ReactNode }) {
         <FactoryLink to={`/factories/${factoryId}/review`} icon={GitPullRequest} label="Review" />
         <FactoryLink to={`/factories/${factoryId}/rules`} icon={ListChecks} label="Rules" />
         <FactoryLink to={`/factories/${factoryId}/audit`} icon={ScrollText} label="Audit log" />
+        <FactoryLink to={`/factories/${factoryId}/knowledge`} icon={Brain} label="Knowledge" />
       </MainSidebar.NavList>
       {children}
     </nav>
