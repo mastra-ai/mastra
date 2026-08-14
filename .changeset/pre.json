@@ -178,5 +178,9 @@
     "@mastra/s3": "0.6.1",
     "@mastra/vercel": "1.3.0"
   },
-  "changesets": []
+  "changesets": [
+    "automated-provider-registry-20260814-003830",
+    "green-birds-knock",
+    "smooth-contextual-sidebars"
+  ]
 }
