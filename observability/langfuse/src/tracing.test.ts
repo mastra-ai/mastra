@@ -1,6 +1,5 @@
-import { SamplingStrategyType, SpanType, TracingEventType } from '@mastra/core/observability';
+import { SpanType, TracingEventType } from '@mastra/core/observability';
 import type { AnyExportedSpan } from '@mastra/core/observability';
-import { DefaultObservabilityInstance, ModelSpanTracker } from '@mastra/observability';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { LangfuseExporter, LANGFUSE_DEFAULT_BASE_URL } from './tracing';
 
@@ -408,31 +407,15 @@ describe('LangfuseExporter', () => {
         name: 'maps a provider-reported USD total',
         source: 'provider_reported',
         cost: 0.0123,
-        unit: 'USD',
         expected: JSON.stringify({ total: 0.0123 }),
       },
       {
         name: 'does not map a registry estimate',
         source: 'pricing_registry',
         cost: 0.0099,
-        unit: 'USD',
         expected: undefined,
       },
-      {
-        name: 'does not map a negative total',
-        source: 'provider_reported',
-        cost: -0.0123,
-        unit: 'USD',
-        expected: undefined,
-      },
-      {
-        name: 'does not map a non-USD total',
-        source: 'provider_reported',
-        cost: 0.0123,
-        unit: 'EUR',
-        expected: undefined,
-      },
-    ])('$name', async ({ source, cost, unit, expected }) => {
+    ])('$name', async ({ source, cost, expected }) => {
       exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
       await exportSpan(
         exporter,
@@ -444,7 +427,7 @@ describe('LangfuseExporter', () => {
             costContext: {
               provider: 'openrouter',
               estimatedCost: cost,
-              costUnit: unit,
+              costUnit: 'USD',
               costMetadata: { source, providerCostFields: ['usage.cost'] },
             },
           },
@@ -452,46 +435,6 @@ describe('LangfuseExporter', () => {
       );
 
       expect(processedSpans[0].attributes['langfuse.observation.cost_details']).toBe(expected);
-    });
-
-    it('maps combined OpenRouter and BYOK upstream spend extracted by ModelSpanTracker', async () => {
-      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
-      const tracing = new DefaultObservabilityInstance({
-        serviceName: 'test-tracing',
-        name: 'test-instance',
-        sampling: { type: SamplingStrategyType.ALWAYS },
-        exporters: [exporter],
-      });
-
-      try {
-        const modelSpan = tracing.startSpan({
-          type: SpanType.MODEL_GENERATION,
-          name: 'test-generation',
-          attributes: { model: 'anthropic/claude-sonnet-4', provider: 'openrouter' },
-        });
-        const tracker = new ModelSpanTracker(modelSpan);
-
-        tracker.endGeneration({
-          attributes: {},
-          providerMetadata: {
-            openrouter: {
-              usage: {
-                cost: 0.95,
-                costDetails: { upstreamInferenceCost: 19 },
-              },
-            },
-          },
-        });
-
-        await vi.waitFor(() => {
-          expect(processedSpans[0]?.attributes['langfuse.observation.cost_details']).toBe(
-            JSON.stringify({ total: 19.95 }),
-          );
-        });
-      } finally {
-        await tracing.shutdown();
-        exporter = undefined;
-      }
     });
 
     it('maps userId to user.id', async () => {

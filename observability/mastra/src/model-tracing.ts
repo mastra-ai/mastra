@@ -38,7 +38,7 @@ function supportsModelInference(): boolean {
   return coreFeatures.has('model-inference-span');
 }
 
-import { extractOpenRouterCostContext, extractOpenRouterStepCostContext, extractUsageMetrics } from './usage';
+import { extractOpenRouterCost, extractUsageMetrics } from './usage';
 
 type StepInputPreview = Array<{ role: string; content: string }> | Record<string, unknown> | string | undefined;
 
@@ -84,6 +84,28 @@ function getGatewayCostContext({ stepProviderMetadata }: Pick<EndGenerationOptio
       source: 'provider_reported',
       sdkProvider: 'vercel_ai_gateway',
       sdkCostField: 'gateway.cost',
+      scope: 'query_total',
+      reportedStepCount: costs.length,
+    },
+  };
+}
+
+function getOpenRouterCostContext({ providerMetadata, stepProviderMetadata }: EndGenerationOptions, model?: string) {
+  const metadata = stepProviderMetadata ?? (providerMetadata ? [providerMetadata] : undefined);
+  if (!metadata?.some(step => step?.openrouter !== undefined)) return undefined;
+
+  const costs = metadata.map(extractOpenRouterCost);
+  if (costs.some(cost => cost === undefined)) return undefined;
+
+  return {
+    provider: 'openrouter',
+    model,
+    estimatedCost: (costs as number[]).reduce((total, cost) => total + cost, 0),
+    costUnit: 'USD',
+    costMetadata: {
+      source: 'provider_reported',
+      sdkProvider: 'openrouter',
+      sdkCostField: 'openrouter.usage.cost + openrouter.usage.costDetails.upstreamInferenceCost',
       scope: 'query_total',
       reportedStepCount: costs.length,
     },
@@ -402,12 +424,7 @@ export class ModelSpanTracker {
       spanOptions.attributes?.responseModel ??
       this.#modelSpan?.attributes?.responseModel ??
       this.#modelSpan?.attributes?.model;
-    // Once per-step metadata is available, never substitute the final step's
-    // metadata for a generation total. The aggregate extractor deliberately
-    // returns undefined unless every completed step reports a valid cost.
-    const providerCostContext = stepProviderMetadata
-      ? extractOpenRouterStepCostContext(stepProviderMetadata, model)
-      : extractOpenRouterCostContext(providerMetadata, model);
+    const providerCostContext = getOpenRouterCostContext({ providerMetadata, stepProviderMetadata }, model);
 
     if (providerCostContext && !spanOptions.attributes) {
       spanOptions.attributes = {};
