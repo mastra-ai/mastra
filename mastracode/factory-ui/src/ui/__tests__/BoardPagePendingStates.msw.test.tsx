@@ -328,13 +328,14 @@ describe('Board card pending states', () => {
       }),
     );
     const user = userEvent.setup();
-    renderWorkBoard();
+    const { client } = renderWorkBoard();
 
     // A terminal rule effect is only recoverable from the card, so the failure
     // row has to carry the action out of it.
     await user.click(await screen.findByRole('button', { name: 'Retry' }));
 
     await waitFor(() => expect(retried).toEqual(['decision-1']));
+    await waitForMutationsIdle(client);
   });
 
   it('uses the whole card as the thread link without rendering a separate thread action', async () => {
