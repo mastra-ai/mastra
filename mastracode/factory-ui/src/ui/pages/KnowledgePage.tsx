@@ -4,6 +4,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useKnowledgeGraph } from '../../hooks/useKnowledgeGraph';
 import { SkeletonRows } from '../ui/SkeletonRows';
 import { FactoryPageShell } from '../domains/factory/components/FactoryPageShell';
+import { KnowledgeGraph } from '../domains/factory/components/knowledge/KnowledgeGraph';
 
 /**
  * The Knowledge page: a live force-directed graph of the project's knowledge —
@@ -35,16 +36,22 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
 
   const graph = graphQuery.data;
   return (
-    <section className="flex min-h-0 flex-1 flex-col gap-2" aria-label="Knowledge graph">
+    <section className="flex min-h-0 flex-1 flex-col gap-4 pt-2" aria-label="Knowledge graph">
+      <header className="shrink-0">
+        <Txt as="h1" variant="header-md" className="font-semibold text-icon6">
+          Knowledge Graph
+        </Txt>
+        <Txt as="p" variant="ui-md" className="mt-1 text-icon3">
+          Explore entities and the relationships captured by the agent over time.
+        </Txt>
+      </header>
       {graph.nodes.length === 0 ? (
         <Txt as="p" variant="ui-md" className="text-icon3">
           No knowledge captured yet — the graph fills in as factory sessions work.
         </Txt>
       ) : (
         <div className="min-h-0 flex-1" data-testid="knowledge-graph-container">
-          <Txt as="p" variant="ui-md" className="text-icon3">
-            {graph.nodes.length} entities · {graph.edges.length} relationships
-          </Txt>
+          <KnowledgeGraph payload={graph} />
         </div>
       )}
     </section>
