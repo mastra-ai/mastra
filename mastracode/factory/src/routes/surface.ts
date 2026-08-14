@@ -12,6 +12,7 @@ import type { FactoryBindingPreparationInput } from '../rules/dispatcher.js';
 import { FactoryStartCoordinator } from '../rules/start-coordinator.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
 import type { FactoryRules } from '../rules/types.js';
+import { isFactoryRuleStage } from '../rules/types.js';
 import type { BaseCheckpointTriggers } from '../sandbox/base-checkpoint-triggers.js';
 import type { SandboxFleet } from '../sandbox/fleet.js';
 import { ensureFactorySourceSession, resolveFactoryDefaultModelId } from '../session/factory-session.js';
@@ -184,7 +185,8 @@ export async function prepareFactoryRuleBinding(
     branch,
   });
   const destinationStage = input.item.stages.length === 1 ? input.item.stages[0] : undefined;
-  if (!destinationStage) throw new Error('Factory skill invocation requires one exclusive board stage.');
+  if (!isFactoryRuleStage(destinationStage))
+    throw new Error('Factory skill invocation requires one exclusive board stage.');
 
   await coordinator.prepare({
     orgId: input.record.orgId,
@@ -194,7 +196,7 @@ export async function prepareFactoryRuleBinding(
     defaultModelId: await resolveFactoryDefaultModelId(projects, input.record.factoryProjectId),
     threadTitle: `${input.role === 'review' ? 'PR' : 'Issue'}: ${input.item.title}`,
     kickoffKey: input.record.id,
-    destinationStage: destinationStage as 'intake' | 'triage' | 'planning' | 'execute' | 'review' | 'done',
+    destinationStage,
     workItem: {
       id: input.item.id,
       role: input.role,

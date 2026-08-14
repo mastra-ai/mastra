@@ -71,6 +71,7 @@ import { observeSessionCheckpoint } from './session/checkpoint-capture.js';
 import { observeSessionFilesystem } from './session/filesystem-capture.js';
 import { observeSessionFirstExec } from './session/first-exec-capture.js';
 import { observeSessionFirstMessage } from './session/first-message-capture.js';
+import { hydrateSessionMemorySettings } from './session/memory-settings-hydration.js';
 import { createSpaStaticMiddleware, resolveUiDistDir } from './spa-static.js';
 import { createStateSigner } from './state-signing.js';
 import { observeAgentGitAction } from './storage/domains/audit/agent-audit.js';
@@ -859,6 +860,19 @@ export class MastraFactory {
         sourceControl: sourceControlStorage.forIntegration('github'),
       });
     });
+
+    // Blocking: `createSession` awaits this seed, so when hydration succeeds
+    // a session's first run starts with the owner's stored OM settings.
+    // Best-effort — failures are logged inside the helper, never thrown, and
+    // the session then falls back to its persisted/default OM configuration.
+    prepared.base.controller.onSessionCreated(
+      session =>
+        hydrateSessionMemorySettings(session, {
+          sourceControl: sourceControlStorage.forIntegration('github'),
+          memorySettings: memorySettingsStorage,
+        }),
+      { blocking: true },
+    );
 
     this.#prepared = prepared;
     this.#factoryProcessor = factoryProcessor;

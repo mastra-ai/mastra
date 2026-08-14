@@ -1,20 +1,11 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
-import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import {
-  ArrowUpRight,
-  CircleSlash,
-  EllipsisVertical,
-  Link2,
-  MessageSquare,
-  MessagesSquare,
-  Play,
-  Trash2,
-} from 'lucide-react';
+import { ArrowUpRight, CircleSlash, EllipsisVertical, Link2, MessagesSquare, Trash2 } from 'lucide-react';
 import { Link, useParams } from 'react-router';
 
 import type { FactoryRunPhase } from '../../../../hooks/useStartFactoryRun';
+import { boardCardStatus } from '../boardCardStatus';
 import { setDragPayload } from '../boardDrag';
 import {
   externalLinkLabel,
@@ -24,7 +15,7 @@ import {
   pullRequestStatusForItem,
   workItemMeta,
 } from '../boardItems';
-import { RUN_PHASE_LABELS, itemRunSpec, itemSessionSpec } from '../boardRunSpecs';
+import { itemRunSpec, itemSessionSpec } from '../boardRunSpecs';
 import type { ItemRunSpec, RunAction } from '../boardRunSpecs';
 import { itemStageLabel, itemStageOptions } from '../boardStages';
 import type { AuditEventPage } from '../services/audit';
@@ -33,9 +24,8 @@ import { relatedWorkItems, relationshipLabel, relationshipPath } from '../servic
 import type { WorkItem } from '../services/workItems';
 import type { BoardStageId } from '../stages';
 import { workItemActivity } from '../workItemActivity';
-import { CardDecisionStatus, CardLabels, CardTitleTooltip, SourceTitle } from './BoardCardParts';
-import { BoardStageIcon, SourceIcon } from './BoardIcons';
-import { actionIcon } from './FactoryItemActions';
+import { CardLabels, CardStatus, CardTitleTooltip, REVEAL_ON_CARD_HOVER, SourceTitle } from './BoardCardParts';
+import { BoardStageIcon, SourceIcon, actionIcon } from './BoardIcons';
 import { PullRequestStatusIcon } from './PullRequestStatusIcon';
 import { WorkItemActivity } from './WorkItemActivity';
 
@@ -177,6 +167,24 @@ export function WorkItemCard({
   const relatedItems = relatedWorkItems(item, allItems);
   const labels = metadataLabels(item.metadata);
   const activity = workItemActivity(item, activityPage);
+  const status = boardCardStatus({
+    idle:
+      threadSession !== undefined
+        ? { label: 'Open session', affordance: 'open' }
+        : { label: primaryAction.label, affordance: 'run' },
+    moving:
+      evaluatingStage === undefined
+        ? undefined
+        : { stage: evaluatingStage, label: itemStageLabel(item, evaluatingStage) },
+    runs: [...pendingRunRoles].map(([role, phase]) => ({
+      label: runSpec?.actions.find(action => action.role === role)?.label ?? 'Starting run',
+      phase,
+    })),
+    preparing: busyLabel,
+    decision,
+    transitionReason,
+  });
+  const retryDecisionId = status.kind === 'error' ? status.retryDecisionId : undefined;
 
   return (
     <CardTitleTooltip title={item.title}>
@@ -223,6 +231,7 @@ export function WorkItemCard({
                   size="icon-xs"
                   disabled={evaluating}
                   aria-label={`Actions for ${item.title}`}
+                  className={REVEAL_ON_CARD_HOVER}
                 >
                   <EllipsisVertical size={13} aria-hidden />
                 </Button>
@@ -313,7 +322,6 @@ export function WorkItemCard({
           </div>
         </div>
         <CardLabels labels={labels} />
-        <WorkItemActivity activity={activity} actors={activityPage?.actors ?? {}} />
         {threadSession !== undefined && (
           <span className="text-ui-xs text-accent1 flex items-center gap-1">
             <MessagesSquare size={11} aria-hidden />
@@ -348,55 +356,14 @@ export function WorkItemCard({
             ))}
           </div>
         )}
-        {evaluatingStage !== undefined && (
-          <span role="status" aria-live="polite" className="text-ui-xs text-icon4 flex items-center gap-1.5">
-            <Spinner size="sm" aria-hidden className="size-3" />
-            {evaluatingStage === 'done' ? 'Marking done…' : `Moving to ${itemStageLabel(item, evaluatingStage)}…`}
-          </span>
-        )}
-        {pendingRunRoles.size === 0 && busyLabel !== undefined && (
-          <span role="status" aria-live="polite" className="text-ui-xs text-icon4 flex items-center gap-1.5">
-            <Spinner size="sm" aria-hidden className="size-3" />
-            {busyLabel}
-          </span>
-        )}
-        {[...pendingRunRoles].map(([role, phase]) => (
-          <span key={role} role="status" aria-live="polite" className="text-ui-xs text-icon4 flex items-center gap-1.5">
-            <Spinner size="sm" aria-hidden className="size-3" />
-            {runSpec?.actions.find(action => action.role === role)?.label ?? 'Starting run'} —{' '}
-            {phase !== undefined ? RUN_PHASE_LABELS[phase] : 'starting…'}
-          </span>
-        ))}
-        {!evaluating && !runPending && (
-          <span
-            aria-hidden
-            className="text-ui-xs text-icon3 group-hover:text-icon5 group-focus-within:text-icon5 flex items-center gap-1.5 transition-colors motion-reduce:transition-none"
-          >
-            {threadSession !== undefined ? (
-              <>
-                <MessageSquare size={11} aria-hidden />
-                Open session
-              </>
-            ) : (
-              <>
-                <Play size={11} aria-hidden />
-                {primaryAction.label}
-              </>
-            )}
-          </span>
-        )}
-        {!evaluating && decision !== undefined && (
-          <CardDecisionStatus
-            decision={decision}
-            retrying={retryingDecisionId === decision.id}
-            onRetry={() => onRetryDecision(decision.id)}
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
+          <WorkItemActivity activity={activity} actors={activityPage?.actors ?? {}} />
+          <CardStatus
+            status={status}
+            onRetry={retryDecisionId === undefined ? undefined : () => onRetryDecision(retryDecisionId)}
+            retrying={retryDecisionId !== undefined && retryDecisionId === retryingDecisionId}
           />
-        )}
-        {!evaluating && transitionReason !== undefined && (
-          <span role="alert" className="text-ui-xs text-error">
-            {transitionReason}
-          </span>
-        )}
+        </div>
       </article>
     </CardTitleTooltip>
   );

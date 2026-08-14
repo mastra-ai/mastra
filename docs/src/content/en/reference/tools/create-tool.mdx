@@ -302,7 +302,7 @@ The first `execute` parameter is the validated value from `inputSchema`. Destruc
     name: 'onOutput',
     type: 'function',
     description:
-      "Optional callback invoked after the tool has successfully executed and returned output. Signature: `({ output, toolName, ...options }: { output: TSchemaOut; toolName: string } & Omit<ToolCallOptions, 'messages'>) => void | PromiseLike<void>`.",
+      "Optional callback invoked after a server-executed tool returns output or after a successful client-executed tool result arrives on a follow-up request. Error results don't invoke the hook. For client-executed results, `TSchemaOut` is a static type only: the server doesn't validate the result against `outputSchema`, so treat the output as untrusted. Signature: `({ output, toolName, ...options }: { output: TSchemaOut; toolName: string } & Omit<ToolCallOptions, 'messages'>) => void | PromiseLike<void>`.",
     isOptional: true,
   },
 ]}
@@ -667,7 +667,7 @@ export const tool = createTool({
 
 #### `onOutput`
 
-Called after the tool has successfully executed and returned output. Useful for logging results, triggering follow-up actions, or analytics.
+Called after a server-executed tool returns output or after a successful client-executed tool result arrives on a follow-up request. Use it to log results or trigger follow-up actions.
 
 ```typescript
 export const tool = createTool({
@@ -686,15 +686,23 @@ export const tool = createTool({
 })
 ```
 
+Client-executed tools don't define an `execute` function. The browser runs the tool and sends the result on a follow-up request. `onOutput` then runs on the server. Only a correlated successful result invokes the hook: error results, such as the AI SDK `error-text` and `error-json` output types, don't invoke `onOutput`.
+
+For client-executed results, the follow-up request must include both the assistant tool call and the tool result, which `@mastra/client-js` sends automatically. A request that carries only the tool result doesn't fire the hook. In this case the callback receives `{ toolCallId, toolName, output, abortSignal }` only.
+
+Delivery is at least once, so a retried request runs the hook again. Keep the hook idempotent and treat client output as untrusted data: the server doesn't validate the result against `outputSchema`, so the `output` type is a static type only.
+
 ### Hook execution order
 
-For a typical streaming tool call, the hooks are invoked in this order:
+For a typical streaming tool call on a server-executed tool, the hooks are invoked in this order:
 
 1. **onInputStart**: Input streaming begins
 1. **onInputDelta**: Called multiple times as chunks arrive
 1. **onInputAvailable**: Complete input is parsed and validated
 1. Tool's **execute** function runs
 1. **onOutput**: Tool has completed successfully
+
+For a client-executed tool, steps 1-3 run while the model streams the tool call, the client runs the tool instead of a server-side `execute`, and `onOutput` runs on the follow-up request that carries a successful result.
 
 ### Hook parameters
 

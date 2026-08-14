@@ -296,6 +296,15 @@ describe('LocalSandbox', () => {
       expect(result.executionTimeMs).toBeGreaterThanOrEqual(0);
     });
 
+    it('should release the completed foreground process handle', async () => {
+      if (os.platform() === 'win32') return; // Uses POSIX commands
+
+      const result = await sandbox.executeCommand!('echo', ['released']);
+
+      expect(result.stdout.trim()).toBe('released');
+      await expect(sandbox.processes!.list()).resolves.toEqual([]);
+    });
+
     it('should handle command failure', async () => {
       if (os.platform() === 'win32') return; // Uses POSIX commands
       const result = await sandbox.executeCommand('ls', ['nonexistent-directory-12345']);

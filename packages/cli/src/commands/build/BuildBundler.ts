@@ -2,7 +2,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Config } from '@mastra/core/mastra';
 import { FileService } from '@mastra/deployer/build';
-import { Bundler, IS_DEFAULT } from '@mastra/deployer/bundler';
+import { Bundler } from '@mastra/deployer/bundler';
 import { copy } from 'fs-extra';
 import { shouldSkipDotenvLoading } from '../utils.js';
 
@@ -21,14 +21,18 @@ export class BuildBundler extends Bundler {
     outputDirectory: string,
   ): Promise<NonNullable<Config['bundler']>> {
     const bundlerOptions = await super.getUserBundlerOptions(mastraEntryFile, outputDirectory);
+    const configuredExternals = Array.isArray(bundlerOptions.externals) ? bundlerOptions.externals : [];
 
-    if (!bundlerOptions?.[IS_DEFAULT]) {
+    if (bundlerOptions.externals === true || bundlerOptions.externals === false) {
       return bundlerOptions;
     }
+
+    const dynamicPackages = [...new Set([...(bundlerOptions.dynamicPackages ?? []), ...configuredExternals])];
 
     return {
       ...bundlerOptions,
       externals: true,
+      ...(dynamicPackages.length > 0 ? { dynamicPackages } : {}),
     };
   }
 

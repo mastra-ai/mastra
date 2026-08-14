@@ -95,6 +95,16 @@ function planWorkItem(context: FactoryStageRuleContext) {
   } as const;
 }
 
+function completeIssue(context: FactoryStageRuleContext) {
+  return {
+    type: 'invokeSkill',
+    idempotencyKey: `${context.ingress.id}:factory-complete-issue`,
+    role: 'triage',
+    skillName: 'factory-complete-issue',
+    arguments: context.item.url ? `GitHub issue (${context.item.url})` : context.item.title,
+  } as const;
+}
+
 function reviewPullRequest(context: FactoryStageRuleContext) {
   // A re-entry into Review (from any post-intake stage) supersedes whichever
   // review pass previously ran on this card: cancel any in-flight run before
@@ -421,6 +431,9 @@ const BUILT_IN_DEFAULTS: FactoryRulesOverrides = {
       issue: { onEnter: planWorkItem },
       linearIssue: { onEnter: planWorkItem },
       manual: { onEnter: planWorkItem },
+    },
+    done: {
+      issue: { onEnter: completeIssue },
     },
   },
   review: { review: { pullRequest: { onEnter: reviewPullRequest } } },
