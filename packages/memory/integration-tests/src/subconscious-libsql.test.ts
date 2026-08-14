@@ -84,15 +84,27 @@ describe('Subconscious LibSQL integration', () => {
                         name: 'Project Atlas',
                         kind: 'project',
                         facts: [
-                          { text: '[[Maya Chen]] owns [[Project Atlas]].' },
-                          { text: 'The staging region is cobalt.' },
+                          {
+                            text: '[[Maya Chen]] owns [[Project Atlas]].',
+                            reason: 'The ownership relationship determines who can answer project questions.',
+                          },
+                          {
+                            text: 'The staging region is cobalt.',
+                            reason: 'The deployment region is required for later staging operations.',
+                          },
                         ],
                       },
                       {
                         name: 'Alpha Secret',
                         kind: 'note',
                         scope: 'thread',
-                        facts: [{ text: 'Only the alpha thread may see this.', scope: 'thread' }],
+                        facts: [
+                          {
+                            text: 'Only the alpha thread may see this.',
+                            scope: 'thread',
+                            reason: 'The secret must remain scoped to the thread where it was disclosed.',
+                          },
+                        ],
                       },
                     ]
                   : [],
@@ -269,7 +281,7 @@ describe('Subconscious LibSQL integration', () => {
       parentEntityId: atlas.id,
       text: '[[Project Atlas]] launches January 15.',
       scope: scope.slice(0, 2),
-      sourceThreadId: threadId,
+      sourceThreadId: 'source-thread',
       resolutionScope: scope,
       defaultScope: scope.slice(0, 2),
     });
@@ -290,7 +302,7 @@ describe('Subconscious LibSQL integration', () => {
     });
 
     expect(result.observed).toBe(true);
-    expect(getModel).toHaveBeenCalled();
+    expect(getModel).not.toHaveBeenCalled();
     expect(streamCall).toBe(1);
     expect(sendSignal).toHaveBeenCalledOnce();
     expect(sendSignal).toHaveBeenCalledWith(
@@ -355,7 +367,7 @@ describe('Subconscious LibSQL integration', () => {
       parentEntityId: entity.id,
       text: '[[Project Atlas]] launches January 15.',
       scope: ['org:acme', `resource:${resourceId}`],
-      sourceThreadId: threadIds[0]!,
+      sourceThreadId: 'source-thread',
       resolutionScope: ['org:acme', `resource:${resourceId}`, `thread:${threadIds[0]}`],
       defaultScope: ['org:acme', `resource:${resourceId}`],
     });
@@ -391,7 +403,7 @@ describe('Subconscious LibSQL integration', () => {
     });
 
     expect(result.observed).toBe(true);
-    expect(getModel).toHaveBeenCalled();
+    expect(getModel).not.toHaveBeenCalled();
     expect(targetedDeliveries).toEqual([
       expect.objectContaining({
         resourceId,
@@ -584,6 +596,7 @@ describe('Subconscious LibSQL integration', () => {
       learnedGuidance: true,
       tools: true,
       activity: { recentUpdates: 10 },
+      pins: { maxPins: 20, maxCharacters: 2_000, capturePinning: false },
     };
     const requestContext = new RequestContext();
     requestContext.set('organizationId', 'acme');
