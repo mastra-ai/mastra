@@ -2,4 +2,4 @@
 '@mastra/libsql': patch
 ---
 
-Added cursor pagination and hidden-parent protection to LibSQL knowledge reads.
+Added cursor pagination and hidden-node protection to LibSQL knowledge reads.

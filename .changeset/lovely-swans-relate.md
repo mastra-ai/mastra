@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Improved knowledge record pagination and protected hidden parent identities in visible fact search results.
+Improved knowledge node pagination and protected hidden node identities in visible KnowledgeItem search results.
