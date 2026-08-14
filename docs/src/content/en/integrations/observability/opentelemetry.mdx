@@ -13,13 +13,13 @@ Mastra supports OpenTelemetry (OTEL) through an exporter for sending traces and 
 
 ## Exporter
 
-The OpenTelemetry exporter sends your traces and logs using standardized [OpenTelemetry Semantic Conventions for GenAI](https://opentelemetry.io/docs/specs/semconv/gen-ai/). This ensures broad compatibility with platforms like Datadog, New Relic, SigNoz, MLflow, Latitude, Dash0, Traceloop, Laminar, telemetry.dev, and more.
+The OpenTelemetry exporter sends your traces and logs using standardized [OpenTelemetry Semantic Conventions for GenAI](https://opentelemetry.io/docs/specs/semconv/gen-ai/). This ensures broad compatibility with platforms like Datadog, New Relic, Sentry, SigNoz, MLflow, Latitude, Dash0, Traceloop, Laminar, telemetry.dev, and more.
 
 ### Installation
 
 Each provider requires specific protocol packages. Install the base exporter plus the protocol package for your provider:
 
-#### For HTTP/Protobuf Providers (SigNoz, New Relic, Laminar, MLflow, Latitude, telemetry.dev)
+#### For HTTP/Protobuf Providers (SigNoz, New Relic, Sentry, Laminar, MLflow, Latitude, telemetry.dev)
 
 ```bash npm2yarn
 npm install @mastra/otel-exporter@latest @opentelemetry/exporter-trace-otlp-proto
@@ -50,6 +50,10 @@ All providers support zero-config setup via environment variables. Set the appro
 | Laminar | `LMNR_PROJECT_API_KEY` (required), `LAMINAR_ENDPOINT` (optional) |
 
 ### Provider configurations
+
+#### Sentry
+
+[Sentry](https://sentry.io/) accepts OpenTelemetry traces and logs through its OTLP endpoints. For Sentry-specific span mapping and AI monitoring attributes, use Mastra's dedicated [Sentry exporter](/integrations/observability/sentry).
 
 #### MLflow
 
