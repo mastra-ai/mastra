@@ -551,14 +551,16 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           (suspendData as { requireToolApproval?: unknown }).requireToolApproval &&
           !isDelegatedApproval,
         );
-        const isApprovalResume =
-          resumeData != null && typeof resumeData === 'object' && 'approved' in (resumeData as Record<string, unknown>);
+        const approvalDecision =
+          workflowResumeData != null &&
+          typeof workflowResumeData === 'object' &&
+          typeof (workflowResumeData as Record<string, unknown>).approved === 'boolean'
+            ? (workflowResumeData as { approved: boolean; reason?: string })
+            : undefined;
         // Gate the resume branch on either a live policy or a prior outer approval suspend.
-        // Without this, `declineToolCall` falls through to `execute` when the policy was
-        // lost (#20470). Do not key only on `approved` in resumeData — generic tool
-        // resumes can carry that field for unrelated reasons (same guard as durable).
-        const approvalGated =
-          !isDelegatedApproval && (toolRequiresApproval || (suspendedForApproval && isApprovalResume));
+        // Approval decisions must come from the workflow resume boundary; model-authored
+        // resumeData is untrusted and cannot grant or decline consent.
+        const approvalGated = !isDelegatedApproval && (toolRequiresApproval || suspendedForApproval);
 
         // Schema for tool call approval - used for both streaming and metadata
         const approvalSchema = toStandardSchema(
@@ -576,7 +578,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         );
 
         if (approvalGated) {
-          if (!resumeData) {
+          if (!approvalDecision) {
             await stopGoalActivity({
               agentId,
               runId,
@@ -633,7 +635,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             // Remove approval metadata since we're resuming (either approved or declined)
             await removeToolMetadata({ toolCallId: inputData.toolCallId, toolName: inputData.toolName }, 'approval');
 
-            if (!resumeData.approved) {
+            if (!approvalDecision.approved) {
               // Return the approval decision (not a `result` string) so it persists as
               // `state: 'output-denied'` with `approval`. The denial reason carries the
               // caller-supplied reason when one was provided, otherwise the default string
@@ -642,7 +644,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 approval: {
                   id: inputData.toolCallId,
                   approved: false,
-                  reason: resolveDeclineReason(resumeData),
+                  reason: resolveDeclineReason(approvalDecision),
                 },
                 ...inputData,
               };
@@ -654,7 +656,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         // approval decision so it round-trips through persistence as `approval: { approved: true }`.
         // Use `approvalGated` (not only the live policy) so approve-after-policy-loss still tags.
         const approvalGrant =
-          approvalGated && resumeData && (resumeData as { approved?: boolean }).approved === true
+          approvalGated && approvalDecision?.approved === true
             ? ({ approval: { id: inputData.toolCallId, approved: true as const } } as const)
             : undefined;
 

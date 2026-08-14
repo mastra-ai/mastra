@@ -107,16 +107,18 @@ export function extractSuspendedToolsFromMessages(
 export function buildAutoResumeSystemMessageSuffix(
   suspendedTools: ReadonlyArray<Record<string, unknown>>,
 ): string | null {
-  if (suspendedTools.length === 0) return null;
+  // Approval is a consent boundary and must only be resolved through the
+  // explicit approval APIs, never reconstructed by the model from a message.
+  const resumableTools = suspendedTools.filter(tool => tool.type !== 'approval');
+  if (resumableTools.length === 0) return null;
   // parentRunId is internal bookkeeping for channel resume routing; the model
   // only needs runId (as suspendedToolRunId). Omitting it keeps the prompt
   // byte-identical to existing LLM recordings.
-  const toolsForPrompt = suspendedTools.map(({ parentRunId: _parentRunId, ...rest }) => rest);
+  const toolsForPrompt = resumableTools.map(({ parentRunId: _parentRunId, ...rest }) => rest);
   return `\n\nAnalyse the suspended tools: ${JSON.stringify(toolsForPrompt)}, using the messages available to you and the resumeSchema of each suspended tool, find the tool whose resumeData you can construct properly.
                       resumeData can not be an empty object nor null/undefined.
                       When you find that and call that tool, add the resumeData to the tool call arguments/input.
                       Also, add the runId of the suspended tool as suspendedToolRunId to the tool call arguments/input.
-                      If the suspendedTool.type is 'approval', resumeData will be an object that contains 'approved' which can either be true or false depending on the user's message. If you can't construct resumeData from the message for approval type, set approved to true and add resumeData: { approved: true } to the tool call arguments/input.
 
                       IMPORTANT: If you're able to construct resumeData and get suspendedToolRunId, get the previous arguments/input of the tool call from args in the suspended tool, and spread it in the new arguments/input created, do not add duplicate data. 
                       `;
