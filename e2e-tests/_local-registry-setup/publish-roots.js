@@ -42,7 +42,7 @@ const SHARED_REGISTRY_SUITES = {
   softwarefactory: {
     tag: 'softwarefactory-e2e-test',
     manifestGlobs: [],
-    extraRoots: ['create-factory'],
+    selfOnlyRoots: ['create-factory'],
     includeFactoryScaffoldRoots: true,
   },
 };
@@ -139,8 +139,9 @@ function getFactoryScaffoldRoots(rootDir) {
   return Object.keys(dependencies).filter(name => name === 'mastra' || name.startsWith('@mastra/'));
 }
 
-function rootsToFilters(roots) {
-  return [...new Set(roots)].map(root => `--filter="${root}..."`);
+function rootsToFilters(roots, selfOnlyRoots = []) {
+  const selfOnly = new Set(selfOnlyRoots);
+  return [...new Set(roots)].map(root => `--filter="${root}${selfOnly.has(root) ? '' : '...'}"`);
 }
 
 export async function getSuitePublishRoots(rootDir, suiteName) {
@@ -149,7 +150,11 @@ export async function getSuitePublishRoots(rootDir, suiteName) {
     throw new Error(`Unknown shared E2E registry suite: ${suiteName}`);
   }
 
-  const roots = [...(suite.extraRoots || []), ...(await getFixtureRoots(rootDir, suite))];
+  const roots = [
+    ...(suite.extraRoots || []),
+    ...(suite.selfOnlyRoots || []),
+    ...(await getFixtureRoots(rootDir, suite)),
+  ];
   if (suite.includeCreateMastraBuildRoots) {
     roots.push(...getCreateMastraBuildRoots(rootDir));
   }
@@ -161,7 +166,8 @@ export async function getSuitePublishRoots(rootDir, suiteName) {
 }
 
 export async function getSuitePublishFilters(rootDir, suiteName) {
-  return rootsToFilters(await getSuitePublishRoots(rootDir, suiteName));
+  const suite = SHARED_REGISTRY_SUITES[suiteName];
+  return rootsToFilters(await getSuitePublishRoots(rootDir, suiteName), suite.selfOnlyRoots);
 }
 
 export async function getSharedRegistryPublishRoots(rootDir) {
@@ -173,7 +179,8 @@ export async function getSharedRegistryPublishRoots(rootDir) {
 }
 
 export async function getSharedRegistryPublishFilters(rootDir) {
-  return rootsToFilters(await getSharedRegistryPublishRoots(rootDir));
+  const selfOnlyRoots = Object.values(SHARED_REGISTRY_SUITES).flatMap(suite => suite.selfOnlyRoots || []);
+  return rootsToFilters(await getSharedRegistryPublishRoots(rootDir), selfOnlyRoots);
 }
 
 export async function getSharedRegistryPublishGroups(rootDir) {

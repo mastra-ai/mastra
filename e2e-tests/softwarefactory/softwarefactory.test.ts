@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, readdir, realpath } from 'node:fs/promises';
+import { mkdtemp, readFile, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -8,7 +8,6 @@ import { afterAll, beforeAll, describe, expect, inject, it } from 'vitest';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = join(__dirname, '..', '..');
-const cliRoot = join(rootDir, 'mastracode', 'mastra-factory');
 
 /**
  * Validates the artifacts users receive from `npm create factory`
@@ -20,7 +19,6 @@ const cliRoot = join(rootDir, 'mastracode', 'mastra-factory');
 describe('create-factory scaffold', () => {
   let workDir: string;
   let scaffoldDir: string;
-  let packedCliRoot: string;
   let registryEnv: Record<string, string>;
 
   beforeAll(async () => {
@@ -40,29 +38,33 @@ describe('create-factory scaffold', () => {
       stdio: 'inherit',
     });
 
-    // Pack with pnpm, matching the release pipeline, so workspace dependency
-    // ranges are rewritten to installable registry versions in the artifact.
-    await execa('pnpm', ['pack', '--pack-destination', workDir], {
-      cwd: cliRoot,
-      stdio: 'inherit',
-    });
-    const tarball = (await readdir(workDir)).find(file => file.endsWith('.tgz'));
-    if (!tarball) {
-      throw new Error('create-factory pack did not produce a tarball');
-    }
-    const runnerDir = join(workDir, 'runner');
-    await mkdir(runnerDir);
-    await execa('npm', ['install', join(workDir, tarball), '--ignore-scripts', '--omit=dev'], {
-      cwd: runnerDir,
-      stdio: 'inherit',
-      env: { ...process.env, ...registryEnv },
-    });
-    packedCliRoot = join(runnerDir, 'node_modules', 'create-factory');
-
-    // Exercise the package-owned default scaffold shipped to users. The
-    // dependency-tag override points its Mastra packages at this E2E run's
-    // isolated registry snapshot without changing the packaged release ranges.
-    await execa('node', [join(packedCliRoot, 'dist', 'index.js'), 'factory', '--no-platform'], {
+    // Exercise the published create-factory artifact from the same isolated
+    // registry snapshot as its Mastra dependency graph. Install into this
+    // temporary project rather than using pnpm dlx, whose cache is shared
+    // across registries for a given package tag.
+    const storeDir = join(workDir, '.pnpm-store');
+    const cacheDir = join(workDir, '.pnpm-cache');
+    const packageMetadata = (await fetch(`${registry}/create-factory`).then(response => response.json())) as {
+      'dist-tags': Record<string, string>;
+    };
+    const packageVersion = packageMetadata['dist-tags'][tag];
+    await execa(
+      'pnpm',
+      [
+        'add',
+        `--config.registry=${registry}`,
+        `--config.store-dir=${storeDir}`,
+        `--config.cache-dir=${cacheDir}`,
+        '--allow-build=esbuild',
+        `create-factory@${packageVersion}`,
+      ],
+      {
+        cwd: workDir,
+        stdio: 'inherit',
+        env: { ...process.env, ...registryEnv },
+      },
+    );
+    await execa(join(workDir, 'node_modules/.bin/create-factory'), ['factory', '--no-platform'], {
       cwd: workDir,
       stdio: 'inherit',
       env: {
